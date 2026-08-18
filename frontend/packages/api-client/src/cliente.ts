@@ -89,7 +89,28 @@ export interface OpcionesDeSolicitud {
   senal?: AbortSignal;
 }
 
+/**
+ * Quien sabe renovar el token cuando el servidor dice que caduco.
+ *
+ * Lo registra la sesion al arrancar. Vive aqui porque el 401 llega aqui, y
+ * porque asi **ninguna pantalla tiene que acordarse** de renovar: una peticion
+ * que se topa con un token vencido se reintenta una vez, y solo una.
+ */
+let renovarElToken: (() => Promise<boolean>) | null = null;
+
+export function configurarRenovacion(renovar: (() => Promise<boolean>) | null): void {
+  renovarElToken = renovar;
+}
+
 export async function solicitar<T>(ruta: string, opciones: OpcionesDeSolicitud = {}): Promise<T> {
+  return pedir<T>(ruta, opciones, true);
+}
+
+async function pedir<T>(
+  ruta: string,
+  opciones: OpcionesDeSolicitud,
+  puedeRenovar: boolean,
+): Promise<T> {
   const url = new URL(`${BASE}${ruta}`, window.location.origin);
   for (const [clave, valor] of Object.entries(opciones.consulta ?? {})) {
     if (valor !== undefined && valor !== '') url.searchParams.set(clave, String(valor));
@@ -123,6 +144,14 @@ export async function solicitar<T>(ruta: string, opciones: OpcionesDeSolicitud =
       detail:
         'Revisa la conexion de la municipalidad y vuelve a intentarlo. Si la red esta bien, puede que el servicio este detenido.',
     });
+  }
+
+  if (respuesta.status === 401 && puedeRenovar && renovarElToken !== null) {
+    // El token caduco mientras se trabajaba. Se renueva **una vez** y se repite
+    // la peticion; si la escritura llevaba clave de idempotencia, repetirla es
+    // seguro, que para eso esta. Si la renovacion falla, el 401 sigue su camino
+    // y la sesion lleva a autenticar conservando la ruta de vuelta.
+    if (await renovarElToken()) return pedir<T>(ruta, opciones, false);
   }
 
   if (!respuesta.ok) {

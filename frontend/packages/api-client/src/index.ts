@@ -1,4 +1,21 @@
-export { solicitar, guardarToken, hayToken, nuevaClaveDeIdempotencia } from './cliente';
+export {
+  solicitar,
+  guardarToken,
+  hayToken,
+  nuevaClaveDeIdempotencia,
+  configurarRenovacion,
+} from './cliente';
+export {
+  configuracionDeIdentidad,
+  irAAutenticar,
+  canjearSiVuelve,
+  renovar,
+  cerrarSesion,
+  leerToken,
+  nuevoVerificador,
+  retoDe,
+} from './sesion';
+export type { ConfiguracionDeIdentidad, Sesion, DatosDelToken } from './sesion';
 export { ProblemaDeApi } from './cliente';
 export type { ProblemDetails, OpcionesDeSolicitud } from './cliente';
 export { pedirDatosDePantalla } from './pantallas';

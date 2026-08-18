@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 import type { RenderResult } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ProveedorDePreferencias } from '../app/preferencias';
+import { ProveedorDeSesion } from '../app/sesion/ProveedorDeSesion';
 import { Shell } from '../app/Shell';
 import { HubDeModulo } from '../pantallas/HubDeModulo';
 import { Pantalla } from '../pantallas/Pantalla';
@@ -30,17 +31,19 @@ export const clienteDePruebas = (): QueryClient =>
 export function montarEnRuta(ruta: string, cliente = clienteDePruebas()): RenderResult {
   return render(
     <QueryClientProvider client={cliente}>
-      <ProveedorDePreferencias>
-        <MemoryRouter initialEntries={[ruta]}>
-          <Routes>
-            <Route element={<Shell />}>
-              <Route path="/:moduloId" element={<HubDeModulo />} />
-              <Route path="/:moduloId/:ranura" element={<Pantalla />} />
-              <Route path="/:moduloId/:ranura/:codigo" element={<Pantalla />} />
-            </Route>
-          </Routes>
-        </MemoryRouter>
-      </ProveedorDePreferencias>
+      <ProveedorDeSesion>
+        <ProveedorDePreferencias>
+          <MemoryRouter initialEntries={[ruta]}>
+            <Routes>
+              <Route element={<Shell />}>
+                <Route path="/:moduloId" element={<HubDeModulo />} />
+                <Route path="/:moduloId/:ranura" element={<Pantalla />} />
+                <Route path="/:moduloId/:ranura/:codigo" element={<Pantalla />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </ProveedorDePreferencias>
+      </ProveedorDeSesion>
     </QueryClientProvider>,
   );
 }

@@ -137,6 +137,44 @@ ventanilla no es un problema de rendimiento sino mostrar cifras de un año como 
 Un adaptador que pierda la `fechaCalculo` **no compila**: `DatosDePantalla` la exige, y
 `verificaciones/muestras/adaptador-sin-fecha.ts` lo demuestra compilando con `tsc`.
 
+## La sesión: PKCE, token en memoria y renovación que no se lleva el formulario
+
+Authorization Code con **PKCE** contra el proveedor OIDC (ADR-0005, FRO-01 §5). Sin secreto de
+cliente: no hay dónde guardarlo en un navegador.
+
+| Regla                         | Cómo                                                                                    |
+| ----------------------------- | --------------------------------------------------------------------------------------- |
+| Token **en memoria**          | Nunca `localStorage`, `sessionStorage` ni la URL: la barra se limpia al canjear         |
+| Renovación silenciosa         | Con refresh token en cookie `HttpOnly`; la petición no manda ningún secreto             |
+| Expiración durante el trabajo | Se avisa y se renueva **sin desmontar nada**                                            |
+| Cierre de sesión              | Vacía la caché de TanStack Query y el estado en memoria                                 |
+| Cambio de municipalidad       | **Vacía la caché antes** de pedir el token nuevo                                        |
+| `401` durante el trabajo      | Se renueva una vez y se repite la petición; si falla, a la puerta con la ruta de vuelta |
+
+Lo único que se guarda en el navegador es el **verificador de PKCE**, mientras el navegador va y
+vuelve del proveedor. No es el token: es de un solo uso, sin su código de autorización no abre
+nada, y se borra al canjearlo. Guardarlo en memoria no es una opción —la redirección recarga la
+página— y la alternativa sería no usar PKCE.
+
+**Que la renovación no desmonte nada** no es un detalle de implementación: el manual describe
+fichas y declaraciones que se llenan en varios minutos, y perder una por expiración es el defecto
+que más duele de los que se pueden cometer aquí. Hay una prueba que escribe en un formulario,
+caduca el token y comprueba que el texto sigue ahí.
+
+Del token se lee el nombre del usuario, el nombre de la municipalidad y hasta cuándo dura. **No hay
+identificador de municipalidad que mandar**, así que no se puede mandar (regla 2, FRO-01 §4).
+
+```bash
+# Con proveedor de identidad:
+VITE_SGTM_OIDC_CLIENTE=sgtm-backoffice \
+VITE_SGTM_OIDC_AUTORIZACION=https://identidad.gob.pe/oauth2/authorize \
+VITE_SGTM_OIDC_TOKEN=https://identidad.gob.pe/oauth2/token \
+VITE_SGTM_OIDC_FIN_DE_SESION=https://identidad.gob.pe/oauth2/logout yarn dev
+```
+
+Sin esas variables no hay proveedor y la aplicación arranca igual, que es como se trabaja contra el
+proxy de datos. En producción, un despliegue sin ellas es un despliegue mal configurado.
+
 ## La escritura: sin observación no se guarda
 
 **Toda modificación de datos exige observación del usuario** (regla 10 de CLAUDE.md, RNF-052). No
@@ -280,7 +318,6 @@ dice en la misma frase en que excluye el token.
 - **Ninguna operación va contra el backend real**, porque el backend aún no sirve ninguna: la
   opción conectada pide su operación tipada, y hoy la contesta el proxy. Es el paso 4 de FRO-03 §7
   y se hace opción por opción.
-- No hay autenticación real: falta el flujo con PKCE contra el proveedor OIDC (ADR-0005).
 - No hay pruebas de extremo a extremo (Playwright) ni presupuesto de tamaño de paquete en CI. El
   paquete son 149 KB comprimidos, casi todos catálogo: falta partirlo por ruta.
 - Las tres familias tipográficas se cargan de Google Fonts; para una red mala conviene autoalojarlas.
