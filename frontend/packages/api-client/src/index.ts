@@ -15,7 +15,14 @@ export type {
   FilaDePanel,
   Total,
 } from './pantallas';
-export { descriptorDe, rutaDeOperacion, consultaDeOperacion, pedirOperacion } from './operaciones';
+export {
+  descriptorDe,
+  rutaDeOperacion,
+  consultaDeOperacion,
+  pedirOperacion,
+  enviarOperacion,
+  escribe,
+} from './operaciones';
 export { OPERACIONES } from './operaciones.generado';
 export type {
   VerboDeOperacion,

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Aviso, Boton, Esqueleto } from '@sgtm/design-system';
-import { descriptorDe } from '@sgtm/api-client';
+import { descriptorDe, escribe } from '@sgtm/api-client';
 import type { ValorDeCampo } from '@sgtm/api-client';
 import { opcionPorRuta, pantallaDe, seccionesDe } from '../catalogo';
 import {
@@ -9,10 +9,12 @@ import {
   conCambio,
   leerBusqueda,
   operacionDe,
+  parametrosDeBusqueda,
   registroQueFalta,
   PAGINA,
 } from './busqueda';
 import { SIN_PERMISO, estadoDePantalla, textoDeError } from './estados';
+import { useEscritura } from './escritura';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
 import { useDatosDeOperacion } from './useDatosDeOperacion';
@@ -116,11 +118,19 @@ function Bloques({
   const [cerradas, fijarCerradas] = useState<Readonly<Record<string, boolean>>>({});
   const [busqueda, fijarBusqueda] = useSearchParams();
   const navegar = useNavigate();
-  const { moduloId = '', ranura = '' } = useParams();
+  const { moduloId = '', ranura = '', codigo } = useParams();
 
   const busquedaActiva = leerBusqueda(busqueda);
-  const estado = estadoDePantalla(consulta, faltaRegistro);
   const operacion = operacionDe(estructura);
+  // Una operacion que escribe no se pide al abrir la pantalla: abrir «Copias de
+  // seguridad» no puede lanzar un respaldo. La pantalla se dibuja de su catalogo
+  // y espera a que alguien pulse.
+  const pide = operacion !== undefined && !escribe(operacion);
+  const estado = estadoDePantalla(consulta, faltaRegistro, pide);
+  const escritura = useEscritura(
+    operacion !== undefined && escribe(operacion) ? operacion : undefined,
+    operacion === undefined ? {} : parametrosDeBusqueda(operacion, codigo, busqueda),
+  );
   // El registro que abre esta pantalla, si abre alguno: `codRefCatastral`, `placa`…
   const registro =
     operacion === undefined ? undefined : descriptorDe(operacion).parametrosDeRuta[0];
@@ -271,7 +281,9 @@ function Bloques({
         <Esqueleto alto={120} />
       )}
 
-      {estructura.acciones && <BarraDeAcciones acciones={estructura.acciones} />}
+      {estructura.acciones && (
+        <BarraDeAcciones acciones={estructura.acciones} escritura={escritura} />
+      )}
     </>
   );
 }

@@ -84,6 +84,11 @@ const PROHIBICIONES: { prohibicion: string; muestra: string; delata: RegExp }[] 
     muestra: 'fetch-directo.ts',
     delata: /pasan por «solicitar»/,
   },
+  {
+    prohibicion: 'escritura sin observacion del usuario (regla 10, RNF-052)',
+    muestra: 'escritura-sin-observacion.tsx',
+    delata: /sin observación del usuario no se guarda/,
+  },
 ];
 
 describe('toda prohibicion del frontend tiene una regla que la detecta', () => {

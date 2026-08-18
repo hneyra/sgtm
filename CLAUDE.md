@@ -183,8 +183,10 @@ todos del renderizador; el prototipo ya fija las medidas exactas, y un component
 su pantalla es un componente que nadie pidió.
 
 **Ninguna acción de pantalla que escriba sin su campo de observación.** Toda modificación de datos
-lo exige (regla 10, RNF-052), así que las barras de acciones están deshabilitadas hasta que su
-operación se conecte con él.
+lo exige (regla 10, RNF-052). El camino de escritura vive en un solo sitio —`useEscritura`— y pide
+la observación antes de habilitar la acción; **`useMutation` fuera de ahí no pasa el lint**, con su
+muestra que lo viola. Una acción cuya operación es de lectura sigue deshabilitada: no hay a dónde
+escribir.
 
 ## Decisiones abiertas que bloquean
 
