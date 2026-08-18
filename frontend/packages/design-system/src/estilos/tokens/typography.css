@@ -1,0 +1,55 @@
+/* ============================================================
+   Typography — Juris PE
+   Family tokens + a semantic type scale.
+   Editorial pairing: Source Serif 4 for voice, Inter for UI,
+   JetBrains Mono for legal references.
+   ============================================================ */
+:root {
+  /* —— Family tokens —— */
+  --font-serif: "Source Serif 4", "Source Serif Pro", Georgia, serif;
+  --font-sans:  "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:  "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* —— Semantic type sizes —— */
+  --text-display: 60px;   /* hero / page openers (clamp in use) */
+  --text-h1: 36px;        /* section openers (serif) */
+  --text-h2: 24px;        /* sub-sections */
+  --text-h3: 19px;        /* card titles */
+  --text-lead: 19px;      /* serif intro paragraph */
+  --text-body: 15px;      /* UI body */
+  --text-read: 17px;      /* serif reading body (sentence text) */
+  --text-sm: 13px;        /* dense UI */
+  --text-xs: 11px;        /* eyebrows, metadata, chips */
+
+  --leading-tight: 1.1;
+  --leading-snug: 1.3;
+  --leading-body: 1.55;
+  --leading-read: 1.7;
+
+  /* —— Tracking —— */
+  --track-display: -0.025em;  /* large serif tightens */
+  --track-eyebrow: 0.14em;    /* uppercase eyebrow opens up */
+}
+
+/* Typography variants exposed as data attributes on <html> ---------------- */
+/* mix (default) — serif titles + sans UI */
+[data-type="mix"] { /* default, no overrides */ }
+/* sans — everything Inter */
+[data-type="sans"] { --font-serif: "Inter", -apple-system, BlinkMacSystemFont, sans-serif; }
+/* serif — everything Source Serif 4 */
+[data-type="serif"] { --font-sans: "Source Serif 4", Georgia, serif; }
+
+/* —— Family helper classes —— */
+.serif { font-family: var(--font-serif); font-feature-settings: "ss01","onum","liga","dlig"; }
+.sans  { font-family: var(--font-sans); }
+.mono  { font-family: var(--font-mono); }
+
+/* —— Eyebrow: the recurring section label —— */
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow);
+  color: var(--ink-3);
+  font-weight: 500;
+}

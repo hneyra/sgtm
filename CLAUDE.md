@@ -20,13 +20,17 @@ Gradle, el esquema como migraciones Flyway, el camino del contexto de tenant (to
 → RLS) y las verificaciones bloqueantes. **Ninguna funcionalidad de negocio todavía**, y es
 deliberado: primero las barreras, después el negocio.
 
-La **interfaz web** no está construida. Su diseño de referencia —12 módulos, 134 pantallas,
-design system Juris PE— está en [`design/`](design/design_handoff_sgtm_web/README.md)
-y se implementa en su propia iteración. El contrato que backend y frontend comparten está en
-[`docs/50-api/openapi/sgtm-v1.yaml`](docs/50-api/openapi/sgtm-v1.yaml), derivado de los
+De la **interfaz web** existe el espacio de trabajo, no las pantallas:
+[`frontend/`](frontend/README.md) monta yarn workspaces, los tres paquetes compartidos
+(`dominio`, `api-client`, `design-system`) y las reglas verificadas con ESLint. **Ninguna de las
+134 pantallas está implementada**, y es el mismo orden del backend: primero las barreras. Su
+diseño de referencia —12 módulos, 134 pantallas, design system Juris PE— está en
+[`design/`](design/design_handoff_sgtm_web/README.md). El contrato que backend y frontend comparten
+está en [`docs/50-api/openapi/sgtm-v1.yaml`](docs/50-api/openapi/sgtm-v1.yaml), derivado de los
 `endpoint` que declara cada pantalla del prototipo.
 
 **Stack:** Spring Boot 4 · Java 25 · Gradle Kotlin DSL · PostgreSQL · Flyway · Spring Modulith
+· React 19 · TypeScript · Vite · yarn workspaces
 
 ## Lo primero que había que construir
 
@@ -72,13 +76,18 @@ Las reglas 1, 2, 6, 7 y las fechas están escritas como pruebas de ArchUnit; `SE
 agrega también la clase de muestra que la viola**, en `verificaciones/muestras/`: una regla que
 no puede fallar no protege nada.
 
+En el frontend, las que le tocan —1, 2, 8, 9 y el idioma— están como **reglas de ESLint**, con la
+misma exigencia: `frontend/verificaciones/muestras/` tiene una muestra por prohibición y
+`reglas-de-eslint.test.ts` exige que la regla la detecte.
+
 Lista completa con su justificación:
-[`docs/30-arquitectura/estandares-de-codigo-backend.md`](docs/30-arquitectura/estandares-de-codigo-backend.md).
+[`docs/30-arquitectura/estandares-de-codigo-backend.md`](docs/30-arquitectura/estandares-de-codigo-backend.md)
+y [`docs/60-frontend/estandares-de-codigo-frontend.md`](docs/60-frontend/estandares-de-codigo-frontend.md).
 
 ## Idioma
 
 Español en el dominio, inglés en lo técnico (heredado de `ADR-0004` del SRTM). **Sin tildes en
-identificadores**; Checkstyle lo revisa.
+identificadores**: Checkstyle lo revisa en el backend, ESLint en el frontend.
 
 ```java
 public final class Papeleta { … }                  // dominio: español
@@ -94,14 +103,20 @@ Comentarios, pruebas y mensajes de commit en español.
 
 ```
 backend/      Spring Boot 4, multi-módulo. Monolito modular con Spring Modulith    ← existe
+frontend/     React sobre Vite, yarn workspaces. Espacio de trabajo sin pantallas  ← existe
 docs/         Documentación (fuente de verdad del diseño)                          ← existe
-design/  Prototipo navegable del que derivará la interfaz                     ← referencia
+design/       Prototipo navegable del que derivará la interfaz                     ← referencia
 ```
 
 Módulos del backend hoy: `sgtm-dominio-compartido`, `sgtm-esquema` (migraciones y prueba de
 aislamiento), `sgtm-plataforma` (filtro del token, `SET LOCAL`, guardia del pool), los **doce**
 contextos acotados vacíos y `sgtm-aplicacion` (ensambla y aloja las verificaciones).
 Límites de cada contexto: [`docs/30-arquitectura/contextos-acotados.md`](docs/30-arquitectura/contextos-acotados.md).
+
+Workspaces del frontend hoy: `apps/backoffice` (andamio, sin pantallas) y los paquetes
+`@sgtm/dominio`, `@sgtm/api-client` y `@sgtm/design-system`. Una sola aplicación: en el SGTM el
+flujo público es **una** de las 134 opciones, no un producto aparte; el criterio para separar
+`apps/portal` está en [`ADR-0009`](docs/30-arquitectura/adr/ADR-0009-plataforma-frontend.md).
 
 ## Antes de escribir código, leer
 
@@ -112,7 +127,7 @@ Límites de cada contexto: [`docs/30-arquitectura/contextos-acotados.md`](docs/3
 | Backend | [`docs/30-arquitectura/estandares-de-codigo-backend.md`](docs/30-arquitectura/estandares-de-codigo-backend.md) |
 | Requisitos | [`docs/20-requisitos/requisitos-funcionales.md`](docs/20-requisitos/requisitos-funcionales.md) |
 | API | [`docs/50-api/openapi/sgtm-v1.yaml`](docs/50-api/openapi/sgtm-v1.yaml) |
-| Interfaz | [`design/design_handoff_sgtm_web/README.md`](SGTM-design/design_handoff_sgtm_web/README.md) |
+| Interfaz | [`docs/60-frontend/estandares-de-codigo-frontend.md`](docs/60-frontend/estandares-de-codigo-frontend.md), y el diseño en [`design/design_handoff_sgtm_web/README.md`](design/design_handoff_sgtm_web/README.md) |
 
 Índice completo: [`docs/README.md`](docs/README.md). Decisiones: [`docs/30-arquitectura/adr/`](docs/30-arquitectura/adr/).
 
@@ -126,6 +141,10 @@ aranceles y depreciación. Están marcados `‹VERIFICAR›` en
 
 Un tramo equivocado produce deuda mal calculada en todo un padrón, con devoluciones masivas y
 nulidad de valores. **No implementar reglas de cálculo hasta cerrar D-02.**
+
+**Ningún componente del design system antes de la pantalla que lo use.** `frontend/packages/design-system`
+tiene hoy los tokens y nada más, a propósito: el prototipo ya fija las medidas exactas, y un
+componente escrito antes de su pantalla es un componente que nadie pidió.
 
 ## Decisiones abiertas que bloquean
 
@@ -156,6 +175,13 @@ el teclado en español, son los **identificadores con tilde**: `alicuota`, nunca
 Las pruebas de persistencia requieren Docker. Sin motor de base de datos **fallan**, no se
 omiten: una prueba bloqueante que se salta a sí misma deja el build en verde.
 
+```bash
+cd frontend
+yarn verificar                    # lint, tipos y pruebas. Lo que hay que pasar antes de un PR
+yarn test                         # incluye la prueba de que cada regla de ESLint muerde
+yarn format                       # Prettier; mismo trato que spotlessApply
+```
+
 ## Verificar antes de afirmar
 
 Precedente heredado del SRTM: el DDL se **ejecutó** contra PostgreSQL en lugar de revisarse, y
@@ -174,6 +200,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Guardia del pool | Prueba gemela **sin** guardia | La fuga ocurre de verdad |
 | Reglas de ArchUnit (7) | Clase de muestra que viola cada una | Las siete muerden |
 | Escáner del código fuente | Muestras con `SET SESSION`, `DELETE` y `UPDATE` prohibidos | Las detecta |
+| Reglas de ESLint del frontend (9) | Quitando la regla de tildes: su prueba se pone roja | Las nueve muerden |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con
 `-Dsgtm.pruebas.postgres.url` ([`backend/README.md`](backend/README.md)).
