@@ -1,6 +1,8 @@
 /**
- * Entidades, objetos de valor y reglas del catastro (ARQ-04 §1). Sin Spring y sin JPA: se prueba
- * sin levantar contexto.
+ * Catastro: el predio, su codigo de referencia y los catalogos territoriales.
+ *
+ * <p>Sin Spring y sin JPA (regla 7). Ninguna regla de calculo: el autovaluo es de rentas y esta
+ * bloqueado por D-02.
  */
 @org.jspecify.annotations.NullMarked
 package pe.gob.sgtm.catastro.dominio;

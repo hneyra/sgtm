@@ -281,6 +281,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | El catálogo vial conectado (4 pruebas) | Rellenando las columnas que el recurso no publica, y conectando una opción sin backend | Las dos lo ponen rojo |
 | Padron de contribuyentes (15 pruebas) | Sustituyendo la aproximación por igualdad exacta, y bajando el umbral de parecido a cero | Rojo: el nombre mal escrito no encuentra a nadie; rojo: devuelve el padrón entero |
 | Ficha del contribuyente (12 pruebas) | No cerrando el domicilio anterior al mudar, y resolviendo «la última» en vez de la vigente a la fecha | Rojo: dos domicilios abiertos; rojo: una notificación de marzo usaría la dirección de setiembre |
+| Predio, catálogos y titularidad (17 pruebas) | Cambiando el disparador de la titularidad de diferido a inmediato, contra PostgreSQL | Rojo: una transferencia legítima —cerrar una titularidad y abrir otra— se vuelve imposible |
 | Las guardas del generador de operaciones (6) | Un contrato de muestra que viola cada una | Las seis muerden |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con
