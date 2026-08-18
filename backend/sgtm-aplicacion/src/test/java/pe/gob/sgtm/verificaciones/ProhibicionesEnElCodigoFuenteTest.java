@@ -191,6 +191,35 @@ class ProhibicionesEnElCodigoFuenteTest {
         assertThat(RevisorDeCodigoFuente.revisarJava("Bueno.java", fuente)).isEmpty();
     }
 
+    @Test
+    @DisplayName("el escaner detecta la muestra de repositorio que borra de una tabla protegida")
+    void elEscanerDetectaLaMuestraDeRepositorioQueBorra() throws IOException {
+        // La muestra no vive en un literal de esta prueba sino en un archivo propio,
+        // y se lee del disco: asi se verifica el escaner sobre un archivo de verdad,
+        // con su javadoc mencionando DELETE, UPDATE y SET SESSION. Si el escaner
+        // contara los comentarios, esta prueba encontraria seis hallazgos y no tres.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/infraestructura/MuestraDeRepositorioQueBorra.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los tres literales que viola, y ninguno de los comentarios que los explican")
+                .hasSize(3);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from recibo"))
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update cuenta_corriente_asiento"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("set session"));
+    }
+
     private static List<Path> fuentesDeProduccion(Path raiz) throws IOException {
         try (Stream<Path> rutas = Files.walk(raiz)) {
             return rutas.filter(Files::isRegularFile)
