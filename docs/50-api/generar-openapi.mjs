@@ -1,5 +1,5 @@
 /* Genera docs/50-api/openapi/sgtm-v1.yaml a partir de los `endpoint` que declara
-   cada pantalla del prototipo de interfaz (SGTM-design/sgtm-data-*.js).
+   cada pantalla del prototipo de interfaz (design/sgtm-data-*.js).
 
    Por que se genera y no se escribe a mano: el contrato tiene 134 operaciones y
    su fuente de verdad son las pantallas. Escribirlo a mano garantizaria que se
@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const raiz = new URL('../../', import.meta.url);
-const origen = new URL('SGTM-design/', raiz);
+const origen = new URL('design/', raiz);
 const destino = new URL('docs/50-api/openapi/sgtm-v1.yaml', raiz);
 
 const ventana = {};
@@ -75,7 +75,7 @@ for (const op of operaciones) {
 
 const lineas = [];
 lineas.push('# ARCHIVO GENERADO — no editar a mano.');
-lineas.push('# Origen: los `endpoint` de SGTM-design/sgtm-data-{1..5}.js.');
+lineas.push('# Origen: los `endpoint` de design/sgtm-data-{1..5}.js.');
 lineas.push('# Regenerar con: node docs/50-api/generar-openapi.mjs');
 lineas.push('#');
 lineas.push('# Es el contrato PROPUESTO: define verbo, ruta y parametros de las 134');

@@ -21,7 +21,7 @@ Gradle, el esquema como migraciones Flyway, el camino del contexto de tenant (to
 deliberado: primero las barreras, después el negocio.
 
 La **interfaz web** no está construida. Su diseño de referencia —12 módulos, 134 pantallas,
-design system Juris PE— está en [`SGTM-design/`](SGTM-design/design_handoff_sgtm_web/README.md)
+design system Juris PE— está en [`design/`](design/design_handoff_sgtm_web/README.md)
 y se implementa en su propia iteración. El contrato que backend y frontend comparten está en
 [`docs/50-api/openapi/sgtm-v1.yaml`](docs/50-api/openapi/sgtm-v1.yaml), derivado de los
 `endpoint` que declara cada pantalla del prototipo.
@@ -95,7 +95,7 @@ Comentarios, pruebas y mensajes de commit en español.
 ```
 backend/      Spring Boot 4, multi-módulo. Monolito modular con Spring Modulith    ← existe
 docs/         Documentación (fuente de verdad del diseño)                          ← existe
-SGTM-design/  Prototipo navegable del que derivará la interfaz                     ← referencia
+design/  Prototipo navegable del que derivará la interfaz                     ← referencia
 ```
 
 Módulos del backend hoy: `sgtm-dominio-compartido`, `sgtm-esquema` (migraciones y prueba de
@@ -112,7 +112,7 @@ Límites de cada contexto: [`docs/30-arquitectura/contextos-acotados.md`](docs/3
 | Backend | [`docs/30-arquitectura/estandares-de-codigo-backend.md`](docs/30-arquitectura/estandares-de-codigo-backend.md) |
 | Requisitos | [`docs/20-requisitos/requisitos-funcionales.md`](docs/20-requisitos/requisitos-funcionales.md) |
 | API | [`docs/50-api/openapi/sgtm-v1.yaml`](docs/50-api/openapi/sgtm-v1.yaml) |
-| Interfaz | [`SGTM-design/design_handoff_sgtm_web/README.md`](SGTM-design/design_handoff_sgtm_web/README.md) |
+| Interfaz | [`design/design_handoff_sgtm_web/README.md`](SGTM-design/design_handoff_sgtm_web/README.md) |
 
 Índice completo: [`docs/README.md`](docs/README.md). Decisiones: [`docs/30-arquitectura/adr/`](docs/30-arquitectura/adr/).
 

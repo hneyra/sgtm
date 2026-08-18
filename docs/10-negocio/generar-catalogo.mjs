@@ -1,5 +1,5 @@
 /* Genera docs/10-negocio/catalogo-de-opciones.md a partir del catalogo de
-   pantallas del prototipo de interfaz (SGTM-design/sgtm-data-*.js).
+   pantallas del prototipo de interfaz (design/sgtm-data-*.js).
 
    Son 134 opciones: escribir la tabla a mano garantizaria que se desincronizara
    con el prototipo. La clasificacion en bloques es la misma que usa la
@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const raiz = new URL('../../', import.meta.url);
-const origen = new URL('SGTM-design/', raiz);
+const origen = new URL('design/', raiz);
 const destino = new URL('docs/10-negocio/catalogo-de-opciones.md', raiz);
 
 const ventana = {};

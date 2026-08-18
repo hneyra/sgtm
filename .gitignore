@@ -12,6 +12,4 @@ backend/buildSrc/.gradle/
 # Sistema
 .DS_Store
 
-# El zip es el mismo contenido que SGTM-design/, ya versionado
-SGTM-design.zip
 .thumbnail

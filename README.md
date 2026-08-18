@@ -15,7 +15,7 @@ los estándares de código y la forma de verificar.
 |---|---|
 | `docs/` | Arquitectura, datos, requisitos y contrato de API |
 | `backend/` | Esqueleto Gradle, esquema en migraciones Flyway, contexto de tenant y verificaciones bloqueantes. **Sin funcionalidad de negocio** |
-| `SGTM-design/` | Prototipo de la interfaz web (referencia de diseño; la implementación es otra iteración) |
+| `design/` | Prototipo de la interfaz web (referencia de diseño; la implementación es otra iteración) |
 
 Primero las barreras, después el negocio: el aislamiento entre municipalidades es el riesgo
 número uno del proyecto y se construye antes que cualquier caso de uso.

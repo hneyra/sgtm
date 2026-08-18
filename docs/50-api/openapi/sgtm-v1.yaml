@@ -1,5 +1,5 @@
 # ARCHIVO GENERADO — no editar a mano.
-# Origen: los `endpoint` de SGTM-design/sgtm-data-{1..5}.js.
+# Origen: los `endpoint` de design/sgtm-data-{1..5}.js.
 # Regenerar con: node docs/50-api/generar-openapi.mjs
 #
 # Es el contrato PROPUESTO: define verbo, ruta y parametros de las 134
