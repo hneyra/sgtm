@@ -3,8 +3,8 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { compilar } from './compilar';
 
 /**
  * El generador de operaciones muerde.
@@ -198,24 +198,6 @@ describe('la comprobacion de que lo generado cuadra con el contrato', () => {
 
 /* ── La prueba del issue: el contrato manda sobre la compilacion ────────── */
 
-const OPCIONES_DE_COMPILACION: ts.CompilerOptions = {
-  strict: true,
-  noEmit: true,
-  target: ts.ScriptTarget.ES2022,
-  module: ts.ModuleKind.ESNext,
-  moduleResolution: ts.ModuleResolutionKind.Bundler,
-  skipLibCheck: true,
-  baseUrl: RAIZ,
-  paths: { '@sgtm/dominio': ['packages/dominio/src/index.ts'] },
-};
-
-function compilar(archivos: readonly string[]): string[] {
-  const programa = ts.createProgram([...archivos], OPCIONES_DE_COMPILACION);
-  return ts
-    .getPreEmitDiagnostics(programa)
-    .map((diagnostico) => ts.flattenDiagnosticMessageText(diagnostico.messageText, ' '));
-}
-
 /** Genera desde un contrato dado y devuelve el archivo, con un consumidor que lo usa. */
 function generarYConsumir(yaml: string, nombre: string): { generado: string; consumidor: string } {
   const rutaDelContrato = join(taller, `${nombre}.yaml`);
@@ -246,7 +228,7 @@ describe('un cambio del contrato es un error de compilacion', () => {
       readFileSync(CONTRATO, 'utf8'),
       'contrato-vigente',
     );
-    expect(compilar([generado, consumidor])).toEqual([]);
+    expect(compilar([generado, consumidor], RAIZ)).toEqual([]);
   });
 
   it('renombrar un campo en el yaml deja de compilar el codigo que usaba el nombre viejo', () => {
@@ -256,7 +238,7 @@ describe('un cambio del contrato es un error de compilacion', () => {
     );
     const { generado, consumidor } = generarYConsumir(renombrado, 'contrato-renombrado');
 
-    const quejas = compilar([generado, consumidor]);
+    const quejas = compilar([generado, consumidor], RAIZ);
     expect(quejas.join('\n')).toMatch(/codRefCatastral/);
     expect(quejas.length).toBeGreaterThan(0);
   });

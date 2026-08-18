@@ -1,5 +1,11 @@
+import { solicitar } from './cliente';
 import { OPERACIONES } from './operaciones.generado';
-import type { DescriptorDeOperacion, IdDeOperacion, ParametrosDe } from './operaciones.generado';
+import type {
+  DescriptorDeOperacion,
+  IdDeOperacion,
+  ParametrosDe,
+  RespuestaDe,
+} from './operaciones.generado';
 
 /**
  * Lo poco que hace falta para pedir una operacion del contrato: su descriptor,
@@ -63,4 +69,36 @@ export function consultaDeOperacion<O extends IdDeOperacion>(
     if (valor !== undefined && valor !== '') consulta[nombre] = valor;
   }
   return consulta;
+}
+
+/**
+ * Pide una operacion del contrato y devuelve **su** respuesta, no la de todas.
+ *
+ * Es la puerta lateral de FRO-03 §7: junto a `pedirDatosDePantalla`, que sirve
+ * a las 134 con una sola forma, esta pide una operacion concreta con sus
+ * parametros y su tipo. Una ficha catastral versionada, un cobro de caja y un
+ * padron paginado no son la misma respuesta, y forzarlos a serlo obligaria al
+ * backend a aplanar su dominio para caber en el renderizador.
+ *
+ * El verbo, el camino y que parametros admite salen del contrato (#61), no de
+ * quien llama: una operacion de lectura se pide con `GET` porque el contrato lo
+ * dice, y un parametro que el contrato no declara no viaja.
+ */
+export function pedirOperacion<O extends IdDeOperacion>(
+  id: O,
+  parametros: ParametrosDe<O>,
+  senal?: AbortSignal,
+): Promise<RespuestaDe<O>> {
+  const descriptor = OPERACIONES[id] as DescriptorDeOperacion;
+  if (descriptor.metodo === 'DELETE') {
+    // En el SGTM no se borra: se anula, se da de baja o se reversa (regla 4,
+    // RNF-051). Un DELETE en el contrato es un defecto del contrato.
+    throw new Error(`La operacion «${id}» es un DELETE, y en el SGTM no se borra (regla 4).`);
+  }
+
+  return solicitar<RespuestaDe<O>>(rutaDeOperacion(id, parametros), {
+    metodo: descriptor.metodo,
+    consulta: consultaDeOperacion(id, parametros),
+    senal,
+  });
 }

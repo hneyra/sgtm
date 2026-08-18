@@ -70,6 +70,35 @@ tiene su contrato de muestra que la viola en `verificaciones/generador-de-operac
 verbo, ruta y parámetros; el esquema de cada recurso se escribe cuando su backend existe, y hasta
 entonces la respuesta se tipa como `CuerpoSinEsquema`, que es exactamente lo que el `yaml` dice.
 
+## La puerta lateral: una opción con operación propia
+
+Las 134 pantallas piden la misma forma —`DatosDePantalla`— porque comparten renderizador. Fue la
+decisión correcta para dibujarlas todas, pero **no sobrevive al backend real**: una ficha catastral
+versionada, un cobro de caja y un padrón paginado no son la misma respuesta.
+
+Así que junto a `useDatosDePantalla` hay un camino por opción, y las dos conviven:
+
+```
+operación tipada (del contrato) → leer → adaptar → los mismos bloques
+```
+
+| Pieza        | Qué hace                                                              | Dónde vive               |
+| ------------ | --------------------------------------------------------------------- | ------------------------ |
+| `parametros` | De dónde salen los valores de la petición: ruta y consulta            | La conexión de la opción |
+| `leer`       | **La frontera.** Valida el cuerpo que el contrato todavía no describe | La conexión de la opción |
+| `adaptar`    | Traduce el recurso del dominio a lo que dibujan los bloques. **Puro** | La conexión de la opción |
+
+`leer` es lo único que cambia el día que el backend sirva su recurso de verdad: el adaptador ya
+trabaja sobre el dominio, no sobre el transporte.
+
+La primera conectada es el **panel de recaudación** (`pantallas/inicio/recaudacion.ts`). Su
+ejercicio sale de la URL y **entra en la clave de cache**: `['operacion', 'inicio', { ejercicio }]`.
+Con la clave vieja —`['pantalla', id]`— consultar 2026 y después 2025 devolvería lo primero, que en
+ventanilla no es un problema de rendimiento sino mostrar cifras de un año como si fueran de otro.
+
+Un adaptador que pierda la `fechaCalculo` **no compila**: `DatosDePantalla` la exige, y
+`verificaciones/muestras/adaptador-sin-fecha.ts` lo demuestra compilando con `tsc`.
+
 ## El proxy de datos
 
 `@sgtm/api-mock` sustituye `fetch` e intercepta lo que cuelga de `/api/v1`. Responde las 134
@@ -95,7 +124,8 @@ frontend/
 ├── apps/backoffice/src/
 │   ├── app/             Shell, cabecera, barra lateral de dos niveles, paleta de comandos
 │   ├── catalogo/        Las 134 pantallas como datos tipados (generado)
-│   ├── pantallas/       El renderizador y sus diez bloques de contenido
+│   ├── pantallas/       El renderizador, sus diez bloques y las opciones conectadas
+│   │   └── inicio/      Primera opción con operación tipada y adaptador propios
 │   └── estilos/         Shell y bloques, con los tokens de Juris PE
 ├── packages/
 │   ├── design-system/   Tokens y los componentes que usan las pantallas
@@ -106,10 +136,10 @@ frontend/
 └── verificaciones/      Las reglas del proyecto, con una muestra que viola cada una
 ```
 
-**No hay un directorio por módulo del manual**, y es una diferencia deliberada con
-[FRO-01 §2](../docs/60-frontend/arquitectura-frontend.md): las 134 pantallas son un catálogo y un
-renderizador, así que `modulos/catastro/` estaría vacío. El día que una opción necesite código
-propio más allá del renderizador, aparece su directorio con el nombre de su módulo.
+**Los directorios por módulo aparecen cuando una opción necesita código propio, y no antes**, que
+es la diferencia deliberada con [FRO-01 §2](../docs/60-frontend/arquitectura-frontend.md): las 134
+pantallas son un catálogo y un renderizador, así que `modulos/catastro/` vacío no sirve a nadie. El
+primero en aparecer ha sido `pantallas/inicio/`, con la conexión del panel de recaudación.
 
 ## Las diez plantillas de contenido
 
@@ -155,8 +185,9 @@ dice en la misma frase en que excluye el token.
 
 ## Lo que todavía no está
 
-- **Ninguna operación va contra el backend real**, porque el backend aún no sirve ninguna. Es el
-  paso 4 de FRO-03 §7 y se hace opción por opción.
+- **Ninguna operación va contra el backend real**, porque el backend aún no sirve ninguna: la
+  opción conectada pide su operación tipada, y hoy la contesta el proxy. Es el paso 4 de FRO-03 §7
+  y se hace opción por opción.
 - **Los parámetros de ruta no están resueltos.** `/rentas/vehiculos/{placa}` se pide con un valor
   de relleno: el catálogo describe la operación, no un caso concreto.
 - **Ninguna acción escribe.** Toda modificación exige observación del usuario (RNF-052) y ese campo
