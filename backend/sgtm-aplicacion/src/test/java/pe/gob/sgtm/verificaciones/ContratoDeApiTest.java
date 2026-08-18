@@ -52,7 +52,14 @@ class ContratoDeApiTest {
      * <p>Se agrega una linea por endpoint nuevo. Es deliberado que cueste una linea: asi el diff de
      * un endpoint nuevo dice que operacion del manual cubre.
      */
-    private static final Set<String> IMPLEMENTADAS = Set.of("GET /catastro/vias");
+    private static final Set<String> IMPLEMENTADAS =
+            Set.of(
+                    "GET /catastro/vias",
+                    "GET /seguridad/modulos",
+                    "GET /seguridad/accesos",
+                    "GET /seguridad/grupos",
+                    "GET /seguridad/usuarios",
+                    "POST /seguridad/grupos/{grupo}/miembros");
 
     /** {@code "/ruta":} seguido de {@code verbo:} en el YAML generado. */
     private static final Pattern OPERACION_DEL_CONTRATO =
