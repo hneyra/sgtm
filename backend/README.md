@@ -23,8 +23,8 @@ teclado en español, son los **identificadores con tilde**: `alicuota`, nunca `a
 
 ## Pruebas que necesitan PostgreSQL
 
-Las de `sgtm-esquema` y `sgtm-plataforma` necesitan un **PostgreSQL real**: una base en memoria no
-tiene Row Level Security y daría falsos verdes (CAL-01 §2).
+Las de `sgtm-esquema`, `sgtm-plataforma` y `sgtm-catastro` necesitan un **PostgreSQL real**: una
+base en memoria no tiene Row Level Security y daría falsos verdes (CAL-01 §2).
 
 Por omisión levantan un contenedor con Testcontainers, así que hacen falta Docker y la imagen
 `postgres:16-alpine`.
@@ -33,7 +33,7 @@ Por omisión levantan un contenedor con Testcontainers, así que hacen falta Doc
 la prueba:
 
 ```bash
-./gradlew verificarAislamiento \
+./gradlew verificarAislamiento --max-workers=1 \
   -Dsgtm.pruebas.postgres.url=jdbc:postgresql://localhost:5432/postgres \
   -Dsgtm.pruebas.postgres.usuario=postgres \
   -Dsgtm.pruebas.postgres.clave=…
@@ -42,6 +42,13 @@ la prueba:
 El usuario debe ser superusuario: la prueba crea los cuatro roles, les asigna claves efímeras y
 crea una base nueva por corrida. También sirven las variables de entorno equivalentes
 (`SGTM_PRUEBAS_POSTGRES_URL`, …) y `-Dsgtm.pruebas.postgres.imagen` para cambiar la imagen.
+
+**`--max-workers=1` no es decorativo en este camino.** Cada módulo crea su propia base, pero los
+**roles de PostgreSQL son del clúster, no de la base**: dos módulos de prueba en paralelo sobre el
+mismo motor se pisan la clave efímera de `sgtm_owner`, y el fallo aparece como
+`password authentication failed`, que no se parece en nada a su causa. Con Testcontainers el
+problema no existe —cada módulo levanta su propio motor—, así que es un detalle exclusivo de esta
+salida de emergencia.
 
 **Sin motor, las pruebas fallan; no se saltan.** Una prueba bloqueante que se omite a sí misma
 deja el build en verde sin haber verificado nada.
@@ -52,13 +59,17 @@ deja el build en verde sin haber verificado nada.
 sgtm-dominio-compartido   Objetos de valor (pe.gob.sgtm.dominio) y TenantContext. Sin Spring
 sgtm-esquema              Migraciones Flyway + la prueba de aislamiento. Sin Spring
 sgtm-plataforma           Filtro del token, SET LOCAL por transaccion, guardia del pool
-sgtm-<contexto> × 12      Los contextos acotados de ARQ-01 §3. Hoy vacios
+                          y el patron de repositorio (pe.gob.sgtm.persistencia)
+sgtm-<contexto> × 12      Los contextos acotados de ARQ-01 §3. Solo catastro tiene codigo
 sgtm-aplicacion           Ensambla, y aloja ArchUnit, el escaner y Spring Modulith
 ```
 
 Los doce contextos son `contribuyentes`, `catastro`, `rentas`, `parametros`, `fiscalizacion`,
 `sanciones`, `cuentacorriente`, `tesoreria`, `valores`, `coactiva`, `licencias` y `seguridad`.
-Están vacíos a propósito: la estructura fija los límites antes de que haya código que los cruce.
+Están vacíos a propósito —la estructura fija los límites antes de que haya código que los cruce—
+salvo `catastro`, que aloja el catálogo vial: es el repositorio de ejemplo del patrón de
+persistencia, elegido porque no arrastra ninguna regla de cálculo y sí tiene `municipalidad_id` y
+política RLS, que es lo que hay que demostrar.
 
 `sgtm-dominio-compartido` contiene **dos** paquetes, y la separación importa:
 

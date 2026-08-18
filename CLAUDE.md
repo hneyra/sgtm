@@ -239,6 +239,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Aislamiento del esquema (19 pruebas) | Quitando `WITH CHECK` de la política de tenant | Rojo en las 63 tablas |
 | Privilegios sobre particiones | `GRANT SELECT ON determinacion_2026 TO sgtm_app` | Rojo en dos pruebas |
 | Guardia del pool | Prueba gemela **sin** guardia | La fuga ocurre de verdad |
+| Patrón de repositorio (11 pruebas) | Conectando como superusuario en vez de `sgtm_app` | Rojo en 7 de las 11 |
 | Reglas de ArchUnit (7) | Clase de muestra que viola cada una | Las siete muerden, ya sobre dominio real |
 | Escáner del código fuente | Muestras con `SET SESSION`, `DELETE`, `UPDATE` prohibidos y con una política de redondeo escrita a mano | Las detecta |
 | Reglas de ESLint del frontend (10) | Quitando la regla de tildes, y la de `fetch`: sus pruebas se ponen rojas | Las diez muerden |
