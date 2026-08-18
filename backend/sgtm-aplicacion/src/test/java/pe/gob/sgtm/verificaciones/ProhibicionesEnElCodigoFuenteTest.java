@@ -192,6 +192,55 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el revisor detecta una alicuota construida desde un literal (regla 5)")
+    void elRevisorDetectaUnaAlicuotaLiteral() {
+        String fuente =
+                """
+                class Ejemplo {
+                    // Ni este comentario sobre la alicuota del 0.6 % cuenta.
+                    pe.gob.sgtm.dominio.Alicuota predial() {
+                        return pe.gob.sgtm.dominio.Alicuota.de("0.6");
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarValoresTributarios("Ejemplo.java", fuente))
+                .as(
+                        "un tramo compilado solo se cambia desplegando, con lo que se acaba sin cambiar")
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("el revisor detecta una constante con nombre de valor normativo y una cifra")
+    void elRevisorDetectaUnaConstanteNormativa() {
+        String fuente =
+                """
+                class Ejemplo {
+                    private static final java.math.BigDecimal UIT_2026 = new java.math.BigDecimal("5350");
+                    private static final int TRAMO_PRIMERO = 15;
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarValoresTributarios("Ejemplo.java", fuente))
+                .as("el nombre delata la intencion; por eso la lista es de nombres y no de tipos")
+                .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("el revisor no se queja de un valor leido de los parametros")
+    void elRevisorNoSeQuejaDeUnValorLeido() {
+        String fuente =
+                """
+                class Bueno {
+                    pe.gob.sgtm.dominio.ValorNormativo alicuota(Parametros p) {
+                        return p.exigirNumero("ALICUOTA_PREDIAL", "tramo-1");
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarValoresTributarios("Bueno.java", fuente))
+                .as("leerlo del conjunto sellado es exactamente lo que la regla 5 pide")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra de repositorio que borra de una tabla protegida")
     void elEscanerDetectaLaMuestraDeRepositorioQueBorra() throws IOException {
         // La muestra no vive en un literal de esta prueba sino en un archivo propio,
@@ -218,6 +267,26 @@ class ProhibicionesEnElCodigoFuenteTest {
                 .anySatisfy(
                         f -> assertThat(f).containsIgnoringCase("update cuenta_corriente_asiento"))
                 .anySatisfy(f -> assertThat(f).containsIgnoringCase("set session"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra con valores tributarios compilados (regla 5)")
+    void elEscanerDetectaLaMuestraDeValoresCompilados() throws IOException {
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeValoresTributariosCompilados.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("la UIT, el tramo y la alicuota; y ninguno de los comentarios que los explican")
+                .hasSize(3);
     }
 
     private static List<Path> fuentesDeProduccion(Path raiz) throws IOException {
