@@ -157,8 +157,11 @@ describe('cargando: esqueleto, y del tamano de lo que sustituye', () => {
   it('el panel dibuja las mismas tarjetas antes y despues de la respuesta', async () => {
     montarEnRuta('/inicio/inicio');
 
-    // Antes de la respuesta ya hay cuatro tarjetas: si fueran menos, la pantalla
-    // saltaria al llegar los datos.
+    // En cuanto llega el modulo —antes que la respuesta— ya hay cuatro tarjetas:
+    // si fueran menos, la pantalla saltaria al llegar los datos.
+    await waitFor(() =>
+      expect(document.querySelectorAll('.sgtm-kpis__tarjeta').length).toBeGreaterThan(0),
+    );
     const antes = document.querySelectorAll('.sgtm-kpis__tarjeta').length;
     expect(antes).toBe(4);
 
@@ -169,7 +172,7 @@ describe('cargando: esqueleto, y del tamano de lo que sustituye', () => {
   it('la tabla carga con sus columnas, no con un girador', async () => {
     montarEnRuta('/catastro/calles');
 
-    const columnas = screen.getAllByRole('columnheader');
+    const columnas = await screen.findAllByRole('columnheader');
     expect(columnas.length).toBeGreaterThan(0);
     // Cada fila del esqueleto ocupa una celda por columna: el ancho de las
     // columnas no cambia al llegar las filas.

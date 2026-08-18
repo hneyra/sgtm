@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen } from '@testing-library/react';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
-import { OPCIONES, PANTALLAS } from '../catalogo';
+import { OPCIONES } from '../catalogo';
 import { montarEnRuta } from '../pruebas/montar';
 
 /**
@@ -24,7 +24,7 @@ describe('el renderizador aguanta el catalogo entero', () => {
     '$modulo · $id',
     async ({ id, ruta }) => {
       montarEnRuta(ruta);
-      const titulo = PANTALLAS[id]?.title;
+      const titulo = OPCIONES.find((o) => o.id === id)?.title;
       expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(titulo ?? '');
     },
   );

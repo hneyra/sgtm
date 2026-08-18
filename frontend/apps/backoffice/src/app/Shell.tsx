@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { moduloPorId, opcionPorRuta, pantallaDe } from '../catalogo';
+import { descriptorDe } from '@sgtm/api-client';
+import { moduloPorId, opcionPorRuta } from '../catalogo';
+import { operacionDe } from '../pantallas/busqueda';
 import { BarraLateral } from './BarraLateral';
 import { CabeceraDeApp } from './CabeceraDeApp';
 import { PaletaDeComandos } from './PaletaDeComandos';
@@ -29,7 +31,10 @@ export function Shell() {
   const [, moduloId = '', ranura = ''] = pathname.split('/');
   const opcion = opcionPorRuta(moduloId, ranura);
   const modulo = opcion?.modulo ?? moduloPorId(moduloId) ?? null;
-  const pantalla = opcion ? pantallaDe(opcion.id) : undefined;
+  // El titulo y el modulo salen de la navegacion, y la operacion del contrato:
+  // la cabecera no necesita la estructura de la pantalla, que viaja aparte.
+  const operacion = opcion ? operacionDe(opcion.id) : undefined;
+  const descriptor = operacion === undefined ? undefined : descriptorDe(operacion);
 
   /* Navegar cierra la paleta y el cajon movil, y devuelve la barra lateral al
      modulo de la ruta: es el comportamiento del prototipo al abrir una opcion. */
@@ -84,9 +89,9 @@ export function Shell() {
           `<main>` acota lo que un lector de pantalla debe saltar a leer. */}
       <div className="sgtm-shell__principal">
         <CabeceraDeApp
-          modulo={pantalla?.mod ?? (modulo ? 'Módulo' : 'SGTM')}
-          titulo={pantalla?.title ?? modulo?.label ?? 'Sistema de Gestión Tributaria Municipal'}
-          endpoint={pantalla?.endpoint}
+          modulo={opcion?.modulo.label ?? (modulo ? 'Módulo' : 'SGTM')}
+          titulo={opcion?.title ?? modulo?.label ?? 'Sistema de Gestión Tributaria Municipal'}
+          endpoint={descriptor && `${descriptor.metodo} /api/v1${descriptor.ruta}`}
           onAbrirNavegacion={() => fijarNavAbierta(true)}
           onAbrirPaleta={() => fijarPaletaAbierta(true)}
         />

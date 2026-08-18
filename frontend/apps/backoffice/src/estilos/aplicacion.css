@@ -1215,6 +1215,9 @@
 /* —— Impresion: A4 vertical, una hoja por reporte (RNF-084) ————— */
 
 @media print {
+  /* Lo que sale de la municipalidad es la hoja y nada mas (RNF-084). Todo lo que
+     es interfaz lleva `data-no-imprimible` y lo esconde `base.css` del design
+     system; aqui van las dos piezas del shell que no lo llevan. */
   .sgtm-nav,
   .sgtm-cabecera {
     display: none !important;

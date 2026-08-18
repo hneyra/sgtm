@@ -125,7 +125,11 @@ Tres merecen validación con usuarios reales antes de darlas por buenas:
 | **Portal ciudadano** | Lo usa quien no conoce el sistema, una vez al año, desde un móvil con red mala |
 | **Reportes** | Se imprimen en A4 y salen de la municipalidad con firma (RNF-084) |
 
-Ninguna está validada. Es un pendiente declarado, no un olvido.
+**Ninguna está validada con usuarios reales.** Es un pendiente declarado, no un olvido, y sigue
+abierto: las tres se recorren ahora en Chromium (`yarn e2e`) —el cobro solo con teclado, el portal
+en 360 px y el reporte en una A4 con sus firmas—, pero **automatizar un camino no es validarlo**.
+La prueba dice que se puede completar; no dice que sea el camino que quien atiende en ventanilla
+usaría, ni que los nombres de los campos signifiquen para él lo que creemos.
 
 ## 7. Orden sugerido de implementación
 

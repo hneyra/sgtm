@@ -17,16 +17,17 @@ beforeEach(() => instalarProxyDeDatos());
 afterEach(() => desinstalarProxyDeDatos());
 
 describe('la estructura se ve antes que los datos', () => {
-  it('las columnas de la tabla estan desde el primer fotograma; las filas llegan despues', async () => {
+  it('las columnas llegan con el modulo; las filas, cuando responde la API', async () => {
     // Con el registro en la ruta: esta pantalla abre una ficha, y sin codigo no
     // pide nada —antes se pedia con un valor de relleno—.
     montarEnRuta('/catastro/ficha-urbana/200601010150010101001');
 
-    // El catalogo ya sabe que columnas hay: no hay que esperar a nadie.
-    expect(screen.getByRole('columnheader', { name: 'Nombre Calle' })).toBeInTheDocument();
+    // El catalogo sigue sin preguntarle nada a la API: la estructura viaja con
+    // el trozo del modulo, que el navegador cachea, y llega antes que los datos.
+    expect(await screen.findByRole('columnheader', { name: 'Nombre Calle' })).toBeInTheDocument();
+    expect(screen.queryByText('SANTA ROSA')).not.toBeInTheDocument();
 
     // Las filas son de la API, y llegan cuando llegan.
-    expect(screen.queryByText('SANTA ROSA')).not.toBeInTheDocument();
     expect(await screen.findByText('SANTA ROSA')).toBeInTheDocument();
   });
 });
@@ -43,7 +44,7 @@ describe('los bloques del descriptor', () => {
   it('una celda con tono se pinta como insignia, con su texto dentro', async () => {
     montarEnRuta('/transito/papeletas');
 
-    const tabla = (await screen.findAllByRole('table'))[0];
+    const tabla = (await screen.findAllByRole('table', {}, { timeout: 3000 }))[0];
     expect(tabla).toBeDefined();
     if (!tabla) return;
     // El encabezado de la tabla existe desde el principio; las insignias llegan

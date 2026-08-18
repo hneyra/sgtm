@@ -256,6 +256,48 @@ Cinco de los diez bloques se dibujan del catálogo —descripción, portal, filt
 de acciones— y no esperan a nadie: no tienen carga ni vacío. El formulario vacío tampoco es un
 error: es un formulario listo para llenarse.
 
+## Lo que se descarga, y lo que cuesta
+
+El catálogo de las 134 pantallas son 445 KB de fuente: **más que la aplicación**. Servido de una
+vez, una municipalidad con red mala espera por las 134 para abrir una. Así que va **partido por
+módulo** y se carga al entrar en él:
+
+|                     | Antes       | Ahora           |
+| ------------------- | ----------- | --------------- |
+| Arranque            | 162,7 KB gz | **117,8 KB gz** |
+| Entrar en Catastro  | —           | 7,4 KB gz       |
+| Entrar en Tesorería | —           | 4,4 KB gz       |
+
+Lo que viaja siempre es la **navegación** —el menú, los títulos y los resúmenes—, porque los
+necesitan el hub, la cabecera y la paleta de comandos: si el título viviera en el archivo del
+módulo, buscar «papeleta» obligaría a descargar los doce.
+
+`yarn comprobar-compilaciones` mide el arranque y cada trozo contra un **presupuesto** y falla al
+superarlo. Subir el umbral es una decisión, no un trámite: se cambia en el script y se dice en el
+PR por qué vale la pena.
+
+Las **tres familias tipográficas se sirven desde el propio proyecto** (`estilos/tipografias/`,
+subconjuntos `latin` y `latin-ext`): una municipalidad con red mala no debería depender de un
+tercero para que su sistema se vea legible. Se regeneran con `node scripts/traer-tipografias.mjs`.
+
+## Los tres caminos completos
+
+Las 134 pantallas se comprueban montadas, y eso vale para la estructura. Lo que no dice nada de un
+camino de usuario —buscar, elegir, llenar, guardar, imprimir— es justo el que rompe una
+integración. `yarn e2e` recorre en Chromium los tres que más cuestan si fallan (FRO-03 §6):
+
+| Camino                      | Qué exige                                                                           |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| **Cobro en caja**           | Se completa **sin tocar el ratón** (RNF-082): la prueba solo escribe y pulsa teclas |
+| **Consulta del portal**     | Cabe en un viewport de 360 px, sin desplazamiento horizontal                        |
+| **Impresión de un reporte** | Una hoja A4 vertical, con sus dos líneas de firma y sin la interfaz (RNF-084)       |
+
+La primera encontró un hueco real: **la paleta de comandos no se podía operar con el teclado** —se
+escribía, y luego había que apuntar y hacer clic—. Ahora se elige con ↑ ↓ y se abre con Enter.
+
+> **Las tres pantallas siguen sin validar con usuarios reales** (FRO-03 §6). Automatizar un camino
+> no es validarlo: dice que se puede completar, no que sea el camino que quien atiende usaría.
+
 ## El proxy de datos
 
 `@sgtm/api-mock` sustituye `fetch` e intercepta lo que cuelga de `/api/v1`. Responde las 134

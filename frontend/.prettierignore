@@ -8,3 +8,5 @@ packages/design-system/src/estilos/tokens/
 # de CI que exige que el catalogo cuadre con `design/` no puede pasar nunca.
 # Mismo criterio que los tokens de arriba: lo copiado y lo generado no se toca.
 **/*.generado.ts
+**/*.generado.css
+packages/design-system/src/estilos/tipografias/
