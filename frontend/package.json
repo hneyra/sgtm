@@ -20,7 +20,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --build --force",
-    "verificar": "yarn lint && yarn typecheck && yarn test"
+    "verificar": "yarn lint && yarn typecheck && yarn test",
+    "portar-catalogo": "node scripts/portar-catalogo.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
