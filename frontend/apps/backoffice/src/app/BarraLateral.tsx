@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Icono, IconoDeModulo } from '@sgtm/design-system';
-import { MODULOS, bloquesDe, opcionPorId, rutaDeModulo, rutaDeOpcion } from '../catalogo';
+import { bloquesDe, rutaDeModulo, rutaDeOpcion } from '../catalogo';
+import { useCatalogoVisible } from './sesion/useCatalogoVisible';
 import type { ModuloDelCatalogo } from '../catalogo';
 import { usePreferencias } from './preferencias';
 
@@ -36,9 +37,13 @@ export function BarraLateral({
   const { preferencias } = usePreferencias();
   const [cerrados, fijarCerrados] = useState<Readonly<Record<string, boolean>>>({});
   const navegar = useNavigate();
+  const catalogo = useCatalogoVisible();
 
+  // Los recientes se guardan en el navegador y sobreviven a un cambio de
+  // permisos: se cruzan con lo que el usuario puede ver **ahora**, o «Recientes»
+  // resucitaria una opcion que ya no le toca.
   const visitados = recientes
-    .map((id) => opcionPorId(id))
+    .map((id) => catalogo.opciones.find((o) => o.id === id))
     .filter((o): o is NonNullable<typeof o> => o !== undefined);
 
   return (
@@ -86,7 +91,7 @@ export function BarraLateral({
             </>
           )}
           <p className="sgtm-nav__eyebrow">Módulos</p>
-          {MODULOS.map((m) => (
+          {catalogo.modulos.map((m) => (
             <button
               key={m.id}
               type="button"

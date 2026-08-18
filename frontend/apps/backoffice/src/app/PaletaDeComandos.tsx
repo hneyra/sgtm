@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icono } from '@sgtm/design-system';
-import { OPCIONES, buscarOpciones } from '../catalogo';
+import { buscarOpciones } from '../catalogo';
+import { useCatalogoVisible } from './sesion/useCatalogoVisible';
 
 /**
  * Paleta de comandos: `Ctrl/Cmd + K`.
@@ -18,6 +19,7 @@ export function PaletaDeComandos({ abierta, onCerrar }: PaletaDeComandosProps) {
   const [consulta, fijarConsulta] = useState('');
   const navegar = useNavigate();
   const entrada = useRef<HTMLInputElement>(null);
+  const catalogo = useCatalogoVisible();
 
   useEffect(() => {
     if (abierta) {
@@ -28,7 +30,10 @@ export function PaletaDeComandos({ abierta, onCerrar }: PaletaDeComandosProps) {
 
   if (!abierta) return null;
 
-  const resultados = buscarOpciones(consulta);
+  // La paleta es el camino mas rapido a una opcion, y por eso es la que se
+  // olvida al filtrar por permisos: una paleta que encuentra lo que el menu
+  // esconde no esconde nada (REQ-03 §5).
+  const resultados = buscarOpciones(consulta, catalogo.opciones);
 
   return (
     <>
@@ -69,7 +74,7 @@ export function PaletaDeComandos({ abierta, onCerrar }: PaletaDeComandosProps) {
         </ul>
         <div className="sgtm-paleta__pie">
           <span>
-            {resultados.length} de {OPCIONES.length} opciones
+            {resultados.length} de {catalogo.opciones.length} opciones
           </span>
           <span>Ctrl K abre y cierra este buscador</span>
         </div>

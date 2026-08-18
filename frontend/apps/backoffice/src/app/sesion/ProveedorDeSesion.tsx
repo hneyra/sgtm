@@ -19,6 +19,8 @@ import {
   renovar,
 } from '@sgtm/api-client';
 import type { ConfiguracionDeIdentidad, DatosDelToken } from '@sgtm/api-client';
+import { NINGUNO, SIN_PROVEEDOR, permisosDelClaim } from './permisos';
+import type { PermisosEfectivos } from './permisos';
 
 /**
  * La sesion de trabajo: quien entra, cuanto le dura y como se renueva.
@@ -42,6 +44,12 @@ export type EstadoDeSesion = 'sin-proveedor' | 'anonima' | 'entrando' | 'abierta
 export interface Sesion {
   readonly estado: EstadoDeSesion;
   readonly datos: DatosDelToken | null;
+  /**
+   * Lo que este usuario puede ver y hacer. Sin proveedor de identidad no hay
+   * permisos que aplicar —se trabaja como contra el proxy—; con proveedor y sin
+   * claim, no se ve nada: la autorizacion del manual es de negacion por omision.
+   */
+  readonly permisos: PermisosEfectivos;
   /** Faltan menos de un minuto para que el token expire. */
   readonly porExpirar: boolean;
   readonly entrar: () => void;
@@ -121,10 +129,16 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
     };
   }, [configuracion, programar, renovarAhora]);
 
+  const permisos: PermisosEfectivos = useMemo(() => {
+    if (configuracion === null) return SIN_PROVEEDOR;
+    return datos === null ? NINGUNO : permisosDelClaim(datos.permisos);
+  }, [configuracion, datos]);
+
   const sesion: Sesion = useMemo(
     () => ({
       estado,
       datos,
+      permisos,
       porExpirar,
       entrar: () => {
         if (configuracion === null) return;
@@ -149,7 +163,7 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
         programar(nueva.dura, () => void renovarAhora());
       },
     }),
-    [estado, datos, porExpirar, configuracion, clientes, programar, renovarAhora],
+    [estado, datos, permisos, porExpirar, configuracion, clientes, programar, renovarAhora],
   );
 
   return <Contexto.Provider value={sesion}>{children}</Contexto.Provider>;

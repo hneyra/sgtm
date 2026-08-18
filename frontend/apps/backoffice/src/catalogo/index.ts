@@ -23,15 +23,30 @@ export const rutaDeModulo = (modulo: ModuloDelCatalogo): string => `/${modulo.id
 export const rutaDeOpcion = (modulo: ModuloDelCatalogo, opcion: OpcionDelCatalogo): string =>
   `/${modulo.id}/${opcion.ranura}`;
 
-/** Las 134, aplanadas una sola vez. La paleta de comandos busca sobre esto. */
-export const OPCIONES: readonly OpcionSituada[] = MODULOS.flatMap((modulo) =>
-  modulo.opciones.map((opcion) => ({
-    ...opcion,
-    modulo,
-    ruta: rutaDeOpcion(modulo, opcion),
-    title: PANTALLAS[opcion.id]?.title ?? opcion.label,
-  })),
-);
+/**
+ * Aplana los modulos en opciones situadas: cada una con su modulo, su ruta y el
+ * titulo de su pantalla.
+ *
+ * Toma los modulos por parametro y no de la constante porque el usuario ve **su**
+ * catalogo, no el entero: la barra lateral y la paleta trabajan sobre los
+ * modulos que sus permisos dejan ver (REQ-03 §5).
+ */
+export function situarOpciones(
+  modulos: readonly ModuloDelCatalogo[],
+  pantallas: Readonly<Record<string, EstructuraDePantalla>> = PANTALLAS,
+): readonly OpcionSituada[] {
+  return modulos.flatMap((modulo) =>
+    modulo.opciones.map((opcion) => ({
+      ...opcion,
+      modulo,
+      ruta: rutaDeOpcion(modulo, opcion),
+      title: pantallas[opcion.id]?.title ?? opcion.label,
+    })),
+  );
+}
+
+/** Las 134, aplanadas una sola vez. */
+export const OPCIONES: readonly OpcionSituada[] = situarOpciones(MODULOS);
 
 const POR_ID = new Map(OPCIONES.map((o) => [o.id, o]));
 const POR_RUTA = new Map(OPCIONES.map((o) => [o.ruta, o]));
@@ -54,12 +69,15 @@ export const OPCION_INICIAL = OPCIONES[0] as OpcionSituada;
  * en minusculas y sin tildes, como en el prototipo. Sin consulta devuelve las
  * primeras diez; con consulta, hasta catorce resultados.
  */
-export function buscarOpciones(consulta: string): readonly OpcionSituada[] {
+export function buscarOpciones(
+  consulta: string,
+  entre: readonly OpcionSituada[] = OPCIONES,
+): readonly OpcionSituada[] {
   const q = normalizar(consulta.trim());
-  if (q === '') return OPCIONES.slice(0, 10);
-  return OPCIONES.filter((o) =>
-    normalizar(`${o.label} ${o.title} ${o.modulo.label}`).includes(q),
-  ).slice(0, 14);
+  if (q === '') return entre.slice(0, 10);
+  return entre
+    .filter((o) => normalizar(`${o.label} ${o.title} ${o.modulo.label}`).includes(q))
+    .slice(0, 14);
 }
 
 /** «Fiscalización» y «fiscalizacion» tienen que encontrarse la una a la otra. */

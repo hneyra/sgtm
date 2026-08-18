@@ -219,6 +219,14 @@ export interface DatosDelToken {
   readonly municipalidad: string;
   /** Instante de expiracion, en segundos desde la epoca. */
   readonly expira: number;
+  /**
+   * Los permisos efectivos, tal como los manda el servidor.
+   *
+   * Se devuelve **sin interpretar**: quien sabe que significa cada privilegio es
+   * la aplicacion, no el cliente HTTP. Que los traiga el token o una operacion
+   * del contrato lo deciden #9 y #12; el sitio donde se leen es este.
+   */
+  readonly permisos: unknown;
 }
 
 export function leerToken(token: string): DatosDelToken | null {
@@ -233,6 +241,7 @@ export function leerToken(token: string): DatosDelToken | null {
       municipalidad:
         typeof json['municipalidad_nombre'] === 'string' ? json['municipalidad_nombre'] : '',
       expira: typeof json['exp'] === 'number' ? json['exp'] : 0,
+      permisos: json['permisos'] ?? null,
     };
   } catch {
     return null;

@@ -175,6 +175,34 @@ VITE_SGTM_OIDC_FIN_DE_SESION=https://identidad.gob.pe/oauth2/logout yarn dev
 Sin esas variables no hay proveedor y la aplicación arranca igual, que es como se trabaja contra el
 proxy de datos. En producción, un despliegue sin ellas es un despliegue mal configurado.
 
+## Visibilidad por rol
+
+> **Que la interfaz oculte una opción es comodidad, no seguridad** (REQ-03 §5). La comprobación es
+> del servidor, que responde `403` igual. Esto reduce el error y la superficie de exploración; no
+> protege nada por sí solo.
+
+**Las 134 opciones son 134 accesos**: el identificador de la opción del catálogo **es** la clave
+del permiso, así que una opción nueva es permisible sin tocar una línea de permisos. Hay una prueba
+que lo verifica contando.
+
+| Qué se filtra                 | Dónde                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| La navegación de dos niveles  | Los módulos y sus opciones                                                |
+| El hub de cada módulo         | Un módulo sin opciones visibles **no existe** para ese usuario            |
+| La paleta de comandos         | Es la que se olvida: si encuentra lo que el menú esconde, no esconde nada |
+| «Recientes» de `localStorage` | Se cruza con lo que se puede ver **ahora**: no resucita lo perdido        |
+| Las acciones de escritura     | `registro` o `modificación`; ver sin poder tocar es un perfil normal      |
+
+**Negación por omisión** (REQ-03 §1, regla 5): sin permiso explícito no hay acceso. Sin proveedor
+de identidad no hay permisos que aplicar —se trabaja como contra el proxy—; con proveedor y sin
+claim, no se ve nada, que dice la verdad mucho mejor que un menú completo que falla en cada
+pulsación.
+
+Los permisos efectivos —la unión de los del usuario y los de sus grupos, ya recortados por vigencia
+y habilitación— los calcula **el servidor**. Aquí llega el resultado, y **el sitio donde se lee es
+uno solo**: si #9 y #12 deciden que viajen por una operación del contrato en vez de por el token,
+cambia esa función y nada más.
+
 ## La escritura: sin observación no se guarda
 
 **Toda modificación de datos exige observación del usuario** (regla 10 de CLAUDE.md, RNF-052). No

@@ -14,6 +14,7 @@ import {
   PAGINA,
 } from './busqueda';
 import { SIN_PERMISO, estadoDePantalla, textoDeError } from './estados';
+import { useCatalogoVisible } from '../app/sesion/useCatalogoVisible';
 import { useEscritura } from './escritura';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
@@ -49,6 +50,14 @@ export function Pantalla() {
   const { moduloId = '', ranura = '' } = useParams();
   const opcion = opcionPorRuta(moduloId, ranura);
   const estructura = opcion ? pantallaDe(opcion.id) : undefined;
+  const catalogo = useCatalogoVisible();
+
+  // Entrar por la URL a una opcion ajena no puede filtrar **ni el titulo ni los
+  // campos** de lo que hay detras: no se dibuja la estructura, y punto. El
+  // servidor responde 403 de todos modos —esto es comodidad, no seguridad—.
+  if (estructura && !catalogo.puedeVer(estructura.id)) {
+    return <Aviso tipo="sin-permiso" titulo={SIN_PERMISO.titulo} detalle={SIN_PERMISO.detalle} />;
+  }
 
   if (!estructura) {
     return (
@@ -118,6 +127,7 @@ function Bloques({
   const [cerradas, fijarCerradas] = useState<Readonly<Record<string, boolean>>>({});
   const [busqueda, fijarBusqueda] = useSearchParams();
   const navegar = useNavigate();
+  const catalogo = useCatalogoVisible();
   const { moduloId = '', ranura = '', codigo } = useParams();
 
   const busquedaActiva = leerBusqueda(busqueda);
@@ -127,8 +137,11 @@ function Bloques({
   // y espera a que alguien pulse.
   const pide = operacion !== undefined && !escribe(operacion);
   const estado = estadoDePantalla(consulta, faltaRegistro, pide);
+  // Los niveles de accesibilidad apagan **acciones**, no solo opciones: ver una
+  // ficha sin poder modificarla es un perfil de consulta, no un error.
+  const puedeEscribirAqui = catalogo.puedeEscribir(estructura.id);
   const escritura = useEscritura(
-    operacion !== undefined && escribe(operacion) ? operacion : undefined,
+    operacion !== undefined && escribe(operacion) && puedeEscribirAqui ? operacion : undefined,
     operacion === undefined ? {} : parametrosDeBusqueda(operacion, codigo, busqueda),
   );
   // El registro que abre esta pantalla, si abre alguno: `codRefCatastral`, `placa`…
