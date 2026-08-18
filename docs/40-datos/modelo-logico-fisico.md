@@ -107,14 +107,37 @@ Es la exigencia del manual (cap. 2 §Actualización del Catastro), y aquí es el
   `valor_unitario_edificacion`, versionado por ejercicio.
 
 `titularidad` tiene un **trigger diferido** que exige que los porcentajes vigentes de un predio
-sumen 100. Diferido porque una transferencia cierra una titularidad y abre otra en la misma
-transacción, y en el intermedio la suma no cuadra.
+**no excedan** 100 —no que sumen exactamente 100—. Diferido porque una transferencia cierra una
+titularidad y abre otra en la misma transacción, y en el intermedio la suma no cuadra.
+
+> **Por qué «no excede» y no «suma 100».** Es la regla que el SRTM del MEF valida, heredada
+> verificada de [`../srtm` DAT-02 §4.2](../../../srtm/docs/40-datos/modelo-logico-fisico.md)
+> (allí es D-36). Un padrón real tiene predios con titularidad parcialmente identificada;
+> exigir que sume 100 obligaría al operador a **inventar un titular para cuadrar**, que es peor
+> que registrar el 60 % que efectivamente se conoce. Queda abierto si el resto del autovalúo se
+> determina a alguien o no se cobra.
+
+Complemento: un `CHECK` exige que el `PROPIETARIO_UNICO` tenga porcentaje 100 —lo es por el
+total, su porcentaje no se declara—.
 
 ### 4.3 Determinación: reproducible o no sirve
 
 `determinacion` guarda `conjunto_id` —con qué conjunto de parámetros se calculó— y
 `reglas_aplicadas`. Sin eso, recalcular un ejercicio pasado no da el mismo resultado y el sistema
 no sirve como prueba de nada (ADR-0007). Está **particionada por ejercicio**.
+
+> ⚠ **Falta el detalle por predio, y la tabla sola invita al error.** El predial se determina
+> **por contribuyente, no por predio**: los tramos progresivos se aplican al conjunto de sus
+> predios, y un contribuyente con tres predios pequeños puede caer en un tramo superior
+> (`../srtm` NEG-05 §1, confirmado contra el manual M02 del MEF). Hoy `determinacion` admite
+> `predio_id`, así que nada impide emitir una fila por predio —que es exactamente el error
+> sistemático **a la baja en todo el padrón**—.
+>
+> Lo que falta es la grilla de «detalle de los predios» dentro de una determinación, con el
+> aporte de cada uno a la base: `autovalúo → × % actualización → × % propiedad →
+> base_imponible_predio`, y `base_contribuyente = Σ base_imponible_predio`. Se modela junto con
+> la primera regla de cálculo, no antes: `% actualización` es uno de los cuatro factores que
+> NEG-05 §0.1 marca **sin fuente identificada**.
 
 ### 4.4 Cuenta corriente: solo se agrega
 
