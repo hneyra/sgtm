@@ -85,6 +85,29 @@ paths:
           required: false
           schema: { type: string }
           example: "44218937"
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -106,6 +129,49 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: codigoDeRefCatastral
+          in: query
+          required: false
+          description: "Filtro «Código de Ref. Catastral» de la pantalla"
+          schema: { type: string }
+        - name: codContribuyenteRentas
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente Rentas» de la pantalla"
+          schema: { type: string }
+        - name: nroFicha
+          in: query
+          required: false
+          description: "Filtro «Nro. Ficha» de la pantalla"
+          schema: { type: string }
+        - name: uso
+          in: query
+          required: false
+          description: "Filtro «Uso» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -126,6 +192,21 @@ paths:
         - name: codRefCatastral
           in: path
           required: true
+          schema: { type: string }
+        - name: codigoDeRefCatastral
+          in: query
+          required: false
+          description: "Filtro «Código de Ref. Catastral» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: ciiu
+          in: query
+          required: false
+          description: "Filtro «CIIU» de la pantalla"
           schema: { type: string }
       responses:
         200:
@@ -148,6 +229,34 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: denominacion
+          in: query
+          required: false
+          description: "Filtro «Denominación» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -169,6 +278,21 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: codUnidadCatastralUc
+          in: query
+          required: false
+          description: "Filtro «Cod. Unidad Catastral (UC)» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: valleSector
+          in: query
+          required: false
+          description: "Filtro «Valle / sector» de la pantalla"
+          schema: { type: string }
       responses:
         200:
           description: Operacion realizada
@@ -185,6 +309,55 @@ paths:
       summary: "Consulta de fichas catastrales"
       description: "Búsqueda transversal de fichas por código, titular o ubicación, con el estado de conciliación entre catastro y el padrón de rentas."
       tags: ["Catastro"]
+      parameters:
+        - name: codRefCatastral
+          in: query
+          required: false
+          description: "Filtro «Cod. Ref. Catastral» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: manzana
+          in: query
+          required: false
+          description: "Filtro «Manzana» de la pantalla"
+          schema: { type: string }
+        - name: lote
+          in: query
+          required: false
+          description: "Filtro «Lote» de la pantalla"
+          schema: { type: string }
+        - name: conciliadaConRentas
+          in: query
+          required: false
+          description: "Filtro «Conciliada con rentas» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -205,6 +378,26 @@ paths:
         - name: codigo
           in: path
           required: true
+          schema: { type: string }
+        - name: codRefCatastral
+          in: query
+          required: false
+          description: "Filtro «Cod. Ref. Catastral» de la pantalla"
+          schema: { type: string }
+        - name: nDeFicha
+          in: query
+          required: false
+          description: "Filtro «Nº de ficha» de la pantalla"
+          schema: { type: string }
+        - name: sector
+          in: query
+          required: false
+          description: "Filtro «Sector» de la pantalla"
+          schema: { type: string }
+        - name: tipoDeActualizacion
+          in: query
+          required: false
+          description: "Filtro «Tipo de actualización» de la pantalla"
           schema: { type: string }
       requestBody:
         required: true
@@ -248,6 +441,50 @@ paths:
       summary: "Mantenimiento de vías y calles"
       description: "Nomenclatura vial que alimenta el domicilio fiscal y la ubicación del predio. Cada vía guarda su tipo, sector y arancel unitario por tramo."
       tags: ["Catastro"]
+      parameters:
+        - name: codigoDeVia
+          in: query
+          required: false
+          description: "Filtro «Código de vía» de la pantalla"
+          schema: { type: string }
+        - name: nombreDeCalle
+          in: query
+          required: false
+          description: "Filtro «Nombre de calle» de la pantalla"
+          schema: { type: string }
+        - name: tipoDeVia
+          in: query
+          required: false
+          description: "Filtro «Tipo de vía» de la pantalla"
+          schema: { type: string }
+        - name: sector
+          in: query
+          required: false
+          description: "Filtro «Sector» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -264,6 +501,40 @@ paths:
       summary: "Sectores, manzanas y lotes"
       description: "Estructura territorial sobre la que se arma el código de referencia catastral y se agrupan los padrones por zona."
       tags: ["Catastro"]
+      parameters:
+        - name: sector
+          in: query
+          required: false
+          description: "Filtro «Sector» de la pantalla"
+          schema: { type: string }
+        - name: manzana
+          in: query
+          required: false
+          description: "Filtro «Manzana» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -286,6 +557,44 @@ paths:
           required: false
           schema: { type: string }
           example: "2026"
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Filtro «Ejercicio» de la pantalla"
+          schema: { type: string }
+        - name: via
+          in: query
+          required: false
+          description: "Filtro «Vía» de la pantalla"
+          schema: { type: string }
+        - name: zona
+          in: query
+          required: false
+          description: "Filtro «Zona» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -308,6 +617,39 @@ paths:
           required: false
           schema: { type: string }
           example: "2026"
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Filtro «Ejercicio» de la pantalla"
+          schema: { type: string }
+        - name: region
+          in: query
+          required: false
+          description: "Filtro «Región» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -330,6 +672,39 @@ paths:
           required: false
           schema: { type: string }
           example: "2026"
+        - name: materialMep
+          in: query
+          required: false
+          description: "Filtro «Material (MEP)» de la pantalla"
+          schema: { type: string }
+        - name: uso
+          in: query
+          required: false
+          description: "Filtro «Uso» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -346,6 +721,50 @@ paths:
       summary: "Contribuyentes"
       description: "Padrón único del contribuyente. Su código enlaza predios, vehículos, licencias, papeletas y la cuenta corriente."
       tags: ["Rentas · Registro"]
+      parameters:
+        - name: codigo
+          in: query
+          required: false
+          description: "Filtro «Código» de la pantalla"
+          schema: { type: string }
+        - name: nombreRazonSocial
+          in: query
+          required: false
+          description: "Filtro «Nombre / razón social» de la pantalla"
+          schema: { type: string }
+        - name: dNI
+          in: query
+          required: false
+          description: "Filtro «D.N.I.» de la pantalla"
+          schema: { type: string }
+        - name: rUC
+          in: query
+          required: false
+          description: "Filtro «R.U.C.» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -368,6 +787,49 @@ paths:
           required: false
           schema: { type: string }
           example: "codigo"
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: codigoPredial
+          in: query
+          required: false
+          description: "Filtro «Código predial» de la pantalla"
+          schema: { type: string }
+        - name: sector
+          in: query
+          required: false
+          description: "Filtro «Sector» de la pantalla"
+          schema: { type: string }
+        - name: condicion
+          in: query
+          required: false
+          description: "Filtro «Condición» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -384,6 +846,32 @@ paths:
       summary: "Cálculo individual del impuesto predial"
       description: "Determina el impuesto de un contribuyente sobre el autovalúo acumulado de todos sus predios en el distrito, con la escala progresiva acumulativa y el mínimo imponible de 0.6 % de la UIT."
       tags: ["Rentas · Registro"]
+      parameters:
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: ano
+          in: query
+          required: false
+          description: "Filtro «Año» de la pantalla"
+          schema: { type: string }
+        - name: djN
+          in: query
+          required: false
+          description: "Filtro «DJ N°» de la pantalla"
+          schema: { type: string }
+        - name: tipoDeDeclaracion
+          in: query
+          required: false
+          description: "Filtro «Tipo de declaración» de la pantalla"
+          schema: { type: string }
+        - name: fechaDeDeclaracion
+          in: query
+          required: false
+          description: "Filtro «Fecha de declaración» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -431,6 +919,49 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: djN
+          in: query
+          required: false
+          description: "Filtro «DJ N°» de la pantalla"
+          schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: ano
+          in: query
+          required: false
+          description: "Filtro «Año» de la pantalla"
+          schema: { type: string }
+        - name: tipo
+          in: query
+          required: false
+          description: "Filtro «Tipo» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -453,6 +984,49 @@ paths:
           required: false
           schema: { type: string }
           example: "2026"
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Filtro «Ejercicio» de la pantalla"
+          schema: { type: string }
+        - name: codigoPredial
+          in: query
+          required: false
+          description: "Filtro «Código predial» de la pantalla"
+          schema: { type: string }
+        - name: zona
+          in: query
+          required: false
+          description: "Filtro «Zona» de la pantalla"
+          schema: { type: string }
+        - name: uso
+          in: query
+          required: false
+          description: "Filtro «Uso» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -516,6 +1090,49 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: nombre
+          in: query
+          required: false
+          description: "Filtro «Nombre» de la pantalla"
+          schema: { type: string }
+        - name: nroDocumento
+          in: query
+          required: false
+          description: "Filtro «Nro. Documento» de la pantalla"
+          schema: { type: string }
+        - name: nroMotor
+          in: query
+          required: false
+          description: "Filtro «Nro. Motor» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -532,6 +1149,22 @@ paths:
       summary: "Cálculo del impuesto vehicular"
       description: "Aplica el 1 % sobre la base imponible con un mínimo del 1.5 % de la UIT, por los tres ejercicios en que el vehículo permanece afecto."
       tags: ["Rentas · Registro"]
+      parameters:
+        - name: placa
+          in: query
+          required: false
+          description: "Filtro «Placa» de la pantalla"
+          schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Filtro «Ejercicio» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -574,6 +1207,27 @@ paths:
       summary: "Espectáculos públicos no deportivos"
       description: "Grava el monto que se abona por presenciar el espectáculo. La tasa depende del tipo de evento y el organizador actúa como agente perceptor."
       tags: ["Rentas · Registro"]
+      parameters:
+        - name: nDeExpediente
+          in: query
+          required: false
+          description: "Filtro «Nº de expediente» de la pantalla"
+          schema: { type: string }
+        - name: organizador
+          in: query
+          required: false
+          description: "Filtro «Organizador» de la pantalla"
+          schema: { type: string }
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -595,6 +1249,45 @@ paths:
       summary: "Beneficios y exoneraciones"
       description: "Deducciones, inafectaciones y amnistías. La deducción de 50 UIT para pensionistas y adultos mayores exige predio único destinado a vivienda."
       tags: ["Rentas · Registro"]
+      parameters:
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: tipo
+          in: query
+          required: false
+          description: "Filtro «Tipo» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -632,6 +1325,22 @@ paths:
       summary: "Baja de deuda"
       description: "Extingue deuda de la cuenta corriente por prescripción, resolución que la deja sin efecto, error material o compensación. Requiere resolución y queda en la bitácora de auditoría."
       tags: ["Rentas · Registro"]
+      parameters:
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: ano
+          in: query
+          required: false
+          description: "Filtro «Año» de la pantalla"
+          schema: { type: string }
+        - name: tributo
+          in: query
+          required: false
+          description: "Filtro «Tributo» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -653,6 +1362,27 @@ paths:
       summary: "Programación de fiscalización"
       description: "Selección de la muestra a inspeccionar por sector y criterio de riesgo, con el fiscalizador asignado y el plazo del programa."
       tags: ["Fiscalización"]
+      parameters:
+        - name: nDePrograma
+          in: query
+          required: false
+          description: "Filtro «Nº de programa» de la pantalla"
+          schema: { type: string }
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Filtro «Ejercicio» de la pantalla"
+          schema: { type: string }
+        - name: tipo
+          in: query
+          required: false
+          description: "Filtro «Tipo» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -695,6 +1425,27 @@ paths:
       summary: "Fiscalización vehicular"
       description: "Cruce del padrón vehicular con la información registral y de SUNAT para detectar vehículos afectos no declarados o con valor subvaluado."
       tags: ["Fiscalización"]
+      parameters:
+        - name: placa
+          in: query
+          required: false
+          description: "Filtro «Placa» de la pantalla"
+          schema: { type: string }
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Filtro «Ejercicio» de la pantalla"
+          schema: { type: string }
+        - name: origenDelCruce
+          in: query
+          required: false
+          description: "Filtro «Origen del cruce» de la pantalla"
+          schema: { type: string }
+        - name: hallazgo
+          in: query
+          required: false
+          description: "Filtro «Hallazgo» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -716,6 +1467,45 @@ paths:
       summary: "Resultados y determinaciones"
       description: "Diferencias detectadas, deuda omitida por ejercicio y estado del valor emitido a partir de cada acta."
       tags: ["Fiscalización"]
+      parameters:
+        - name: programa
+          in: query
+          required: false
+          description: "Filtro «Programa» de la pantalla"
+          schema: { type: string }
+        - name: hallazgo
+          in: query
+          required: false
+          description: "Filtro «Hallazgo» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -732,6 +1522,45 @@ paths:
       summary: "Omisos y subvaluadores"
       description: "Contribuyentes con predio en catastro pero sin declaración en rentas, y declaraciones cuyo autovalúo está por debajo del valor catastral verificado."
       tags: ["Fiscalización"]
+      parameters:
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Filtro «Ejercicio» de la pantalla"
+          schema: { type: string }
+        - name: sector
+          in: query
+          required: false
+          description: "Filtro «Sector» de la pantalla"
+          schema: { type: string }
+        - name: condicion
+          in: query
+          required: false
+          description: "Filtro «Condición» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -754,6 +1583,44 @@ paths:
           required: false
           schema: { type: string }
           example: "codigo"
+        - name: tipoDePapeleta
+          in: query
+          required: false
+          description: "Filtro «Tipo de papeleta» de la pantalla"
+          schema: { type: string }
+        - name: papeleta
+          in: query
+          required: false
+          description: "Filtro «Papeleta» de la pantalla"
+          schema: { type: string }
+        - name: placa
+          in: query
+          required: false
+          description: "Filtro «Placa» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -770,6 +1637,50 @@ paths:
       summary: "Histórico de fiscalización predial"
       description: "Versiones de un proceso fiscalizador: qué característica cambió, quién la modificó y en qué momento. Cada liquidación conserva su estado y su versión."
       tags: ["Fiscalización"]
+      parameters:
+        - name: nLiquidacion
+          in: query
+          required: false
+          description: "Filtro «Nº Liquidación» de la pantalla"
+          schema: { type: string }
+        - name: codCont
+          in: query
+          required: false
+          description: "Filtro «Cód. Cont.» de la pantalla"
+          schema: { type: string }
+        - name: nNotificacion
+          in: query
+          required: false
+          description: "Filtro «Nº Notificación» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -807,6 +1718,60 @@ paths:
       summary: "Papeletas de infracción de tránsito"
       description: "Papeletas levantadas por el inspector municipal, con el código del Reglamento Nacional de Tránsito, la sanción en porcentaje de UIT y la medida preventiva aplicada."
       tags: ["Tránsito"]
+      parameters:
+        - name: nroPapeleta
+          in: query
+          required: false
+          description: "Filtro «Nro. Papeleta» de la pantalla"
+          schema: { type: string }
+        - name: placa
+          in: query
+          required: false
+          description: "Filtro «Placa» de la pantalla"
+          schema: { type: string }
+        - name: documentoDelInfractor
+          in: query
+          required: false
+          description: "Filtro «Documento del infractor» de la pantalla"
+          schema: { type: string }
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -823,6 +1788,50 @@ paths:
       summary: "Búsqueda de infracciones"
       description: "Búsqueda avanzada de papeletas por número, placa, infractor, propietario, rango de fechas y estado de deuda. Muestra el estado de coactiva, el último pago y el usuario que registró la papeleta."
       tags: ["Tránsito"]
+      parameters:
+        - name: papeleta
+          in: query
+          required: false
+          description: "Filtro «Papeleta» de la pantalla"
+          schema: { type: string }
+        - name: nPlaca
+          in: query
+          required: false
+          description: "Filtro «Nº Placa» de la pantalla"
+          schema: { type: string }
+        - name: estadoDeDeuda
+          in: query
+          required: false
+          description: "Filtro «Estado de deuda» de la pantalla"
+          schema: { type: string }
+        - name: ingresadoPor
+          in: query
+          required: false
+          description: "Filtro «Ingresado por» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -839,6 +1848,45 @@ paths:
       summary: "Tabla de códigos de infracción de tránsito"
       description: "Catálogo del Reglamento Nacional de Tránsito con la sanción, los puntos y la medida preventiva que el sistema aplica al registrar cada papeleta."
       tags: ["Tránsito"]
+      parameters:
+        - name: codigo
+          in: query
+          required: false
+          description: "Filtro «Código» de la pantalla"
+          schema: { type: string }
+        - name: gravedad
+          in: query
+          required: false
+          description: "Filtro «Gravedad» de la pantalla"
+          schema: { type: string }
+        - name: textoDeLaInfraccion
+          in: query
+          required: false
+          description: "Filtro «Texto de la infracción» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -855,6 +1903,22 @@ paths:
       summary: "Descargos y reclamos de papeletas"
       description: "Escrito de descargo presentado dentro del plazo, su evaluación y la resolución que declara fundada o infundada la impugnación."
       tags: ["Tránsito"]
+      parameters:
+        - name: nDeExpediente
+          in: query
+          required: false
+          description: "Filtro «Nº de expediente» de la pantalla"
+          schema: { type: string }
+        - name: papeleta
+          in: query
+          required: false
+          description: "Filtro «Papeleta» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -876,6 +1940,45 @@ paths:
       summary: "Internamiento vehicular"
       description: "Control de vehículos en el depósito municipal, con el cómputo diario de la tasa de custodia y los requisitos para la liberación."
       tags: ["Tránsito"]
+      parameters:
+        - name: placa
+          in: query
+          required: false
+          description: "Filtro «Placa» de la pantalla"
+          schema: { type: string }
+        - name: deposito
+          in: query
+          required: false
+          description: "Filtro «Depósito» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -897,6 +2000,49 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: papeletaN
+          in: query
+          required: false
+          description: "Filtro «Papeleta Nº» de la pantalla"
+          schema: { type: string }
+        - name: placaN
+          in: query
+          required: false
+          description: "Filtro «Placa Nº» de la pantalla"
+          schema: { type: string }
+        - name: expediente
+          in: query
+          required: false
+          description: "Filtro «Expediente» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -913,6 +2059,12 @@ paths:
       summary: "Generación de valores de tránsito"
       description: "Genera masivamente los valores por papeletas de tránsito pendientes de pago. El criterio define el tipo de recaudo, la oficina y el vencimiento; las papeletas se agregan por selección o manualmente."
       tags: ["Tránsito"]
+      parameters:
+        - name: codigoDescripcionDelCriterio
+          in: query
+          required: false
+          description: "Filtro «Código / descripción del criterio» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -1034,6 +2186,50 @@ paths:
       summary: "Padrón de papeletas de tránsito"
       description: "Listado de las papeletas registradas en un intervalo de fechas, filtrable por estado de deuda, infracción y placa."
       tags: ["Tránsito"]
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: ordenadoPor
+          in: query
+          required: false
+          description: "Filtro «Ordenado por» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1050,6 +2246,50 @@ paths:
       summary: "Estado de cuenta de infracciones"
       description: "Papeletas pendientes de pago de un conductor o de un vehículo, con importe, beneficio aplicable y situación de coactiva."
       tags: ["Tránsito"]
+      parameters:
+        - name: conductor
+          in: query
+          required: false
+          description: "Filtro «Conductor» de la pantalla"
+          schema: { type: string }
+        - name: placa
+          in: query
+          required: false
+          description: "Filtro «Placa» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: fechaDeCalculo
+          in: query
+          required: false
+          description: "Filtro «Fecha de cálculo» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1129,6 +2369,50 @@ paths:
       summary: "Padrón de papeletas enviadas a coactiva"
       description: "Control de las papeletas derivadas al área de cobranza coactiva por intervalo de fechas."
       tags: ["Tránsito"]
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: ejecutor
+          in: query
+          required: false
+          description: "Filtro «Ejecutor» de la pantalla"
+          schema: { type: string }
+        - name: estadoDelExpediente
+          in: query
+          required: false
+          description: "Filtro «Estado del expediente» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1145,6 +2429,50 @@ paths:
       summary: "Padrón de constancias libres de infracciones"
       description: "Padrón general de constancias libres de infracciones emitidas por la unidad competente."
       tags: ["Tránsito"]
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: nDeConstancia
+          in: query
+          required: false
+          description: "Filtro «Nº de constancia» de la pantalla"
+          schema: { type: string }
+        - name: usuarioQueEmitio
+          in: query
+          required: false
+          description: "Filtro «Usuario que emitió» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1161,6 +2489,50 @@ paths:
       summary: "Resumen de recaudación de tránsito"
       description: "Recaudación por papeletas organizada por tipo de cobranza, año y mes."
       tags: ["Tránsito"]
+      parameters:
+        - name: ano
+          in: query
+          required: false
+          description: "Filtro «Año» de la pantalla"
+          schema: { type: string }
+        - name: tipoDeCobranza
+          in: query
+          required: false
+          description: "Filtro «Tipo de cobranza» de la pantalla"
+          schema: { type: string }
+        - name: agrupadoPor
+          in: query
+          required: false
+          description: "Filtro «Agrupado por» de la pantalla"
+          schema: { type: string }
+        - name: caja
+          in: query
+          required: false
+          description: "Filtro «Caja» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1177,6 +2549,50 @@ paths:
       summary: "Resumen de papeletas pendientes y pagadas"
       description: "Cantidades e importes de papeletas pendientes y pagadas, diferenciando cobranza ordinaria de cobranza coactiva."
       tags: ["Tránsito"]
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: agrupadoPor
+          in: query
+          required: false
+          description: "Filtro «Agrupado por» de la pantalla"
+          schema: { type: string }
+        - name: cobranza
+          in: query
+          required: false
+          description: "Filtro «Cobranza» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1193,6 +2609,50 @@ paths:
       summary: "Resumen de papeletas por código de infracción"
       description: "Cantidades e importes de papeletas pendientes y pagadas de una infracción determinada."
       tags: ["Tránsito"]
+      parameters:
+        - name: codigoDeInfraccion
+          in: query
+          required: false
+          description: "Filtro «Código de infracción» de la pantalla"
+          schema: { type: string }
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1209,6 +2669,50 @@ paths:
       summary: "Resumen de papeletas por iniciales de placa"
       description: "Resumen de papeletas filtrado por las dos letras iniciales del número de placa del vehículo."
       tags: ["Tránsito"]
+      parameters:
+        - name: iniciales2Letras
+          in: query
+          required: false
+          description: "Filtro «Iniciales (2 letras)» de la pantalla"
+          schema: { type: string }
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1225,6 +2729,27 @@ paths:
       summary: "Notificación administrativa"
       description: "Registro previo de la notificación emitida en la vivienda o el negocio inspeccionado. Es el paso anterior a la generación de la multa administrativa."
       tags: ["Infracciones administrativas"]
+      parameters:
+        - name: serie
+          in: query
+          required: false
+          description: "Filtro «Serie» de la pantalla"
+          schema: { type: string }
+        - name: ano
+          in: query
+          required: false
+          description: "Filtro «Año» de la pantalla"
+          schema: { type: string }
+        - name: numero
+          in: query
+          required: false
+          description: "Filtro «Número» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -1246,6 +2771,50 @@ paths:
       summary: "Infracción administrativa"
       description: "Procedimiento sancionador municipal: notificación preventiva, acta de constatación y resolución de infracción y sanción con multa y medida complementaria."
       tags: ["Infracciones administrativas"]
+      parameters:
+        - name: nroDeActa
+          in: query
+          required: false
+          description: "Filtro «Nro. de acta» de la pantalla"
+          schema: { type: string }
+        - name: administrado
+          in: query
+          required: false
+          description: "Filtro «Administrado» de la pantalla"
+          schema: { type: string }
+        - name: codigoCuis
+          in: query
+          required: false
+          description: "Filtro «Código CUIS» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1262,6 +2831,40 @@ paths:
       summary: "Cuadro único de infracciones y sanciones (CUIS)"
       description: "Catálogo aprobado por ordenanza con el porcentaje de UIT y la medida complementaria de cada infracción administrativa."
       tags: ["Infracciones administrativas"]
+      parameters:
+        - name: codigo
+          in: query
+          required: false
+          description: "Filtro «Código» de la pantalla"
+          schema: { type: string }
+        - name: materia
+          in: query
+          required: false
+          description: "Filtro «Materia» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1278,6 +2881,50 @@ paths:
       summary: "Reporte de códigos de infracción administrativa"
       description: "Relación impresa del cuadro único de infracciones y sanciones vigente, con la base de cálculo y la sanción no pecuniaria de cada código."
       tags: ["Infracciones administrativas"]
+      parameters:
+        - name: codigo
+          in: query
+          required: false
+          description: "Filtro «Código» de la pantalla"
+          schema: { type: string }
+        - name: descripcionContiene
+          in: query
+          required: false
+          description: "Filtro «Descripción contiene» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: ordenadoPor
+          in: query
+          required: false
+          description: "Filtro «Ordenado por» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1294,6 +2941,12 @@ paths:
       summary: "Generación de valores administrativa"
       description: "Selecciona un conjunto de papeletas administrativas con deuda según un criterio y genera masivamente un valor por papeleta para su impresión y notificación posterior."
       tags: ["Infracciones administrativas"]
+      parameters:
+        - name: codigoDescripcionDelCriterio
+          in: query
+          required: false
+          description: "Filtro «Código / descripción del criterio» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -1315,6 +2968,50 @@ paths:
       summary: "Estado de cuenta de papeleta administrativa"
       description: "Deuda de una papeleta administrativa con su insoluto, reajuste, interés y gastos, y el importe con beneficio vigente."
       tags: ["Infracciones administrativas"]
+      parameters:
+        - name: papeleta
+          in: query
+          required: false
+          description: "Filtro «Papeleta» de la pantalla"
+          schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: fechaDeCalculo
+          in: query
+          required: false
+          description: "Filtro «Fecha de cálculo» de la pantalla"
+          schema: { type: string }
+        - name: incluirGastos
+          in: query
+          required: false
+          description: "Filtro «Incluir gastos» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1399,6 +3096,50 @@ paths:
       summary: "Padrón de notificaciones"
       description: "Relación de las notificaciones emitidas por el sistema y el estado de la deuda cuando ya existe papeleta."
       tags: ["Infracciones administrativas"]
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: agrupadoPor
+          in: query
+          required: false
+          description: "Filtro «Agrupado por» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1415,6 +3156,50 @@ paths:
       summary: "Notificaciones vencidas"
       description: "Notificaciones cuyo plazo de subsanación venció sin acreditarse el cumplimiento; habilitan la generación de la papeleta administrativa."
       tags: ["Infracciones administrativas"]
+      parameters:
+        - name: vencidasAl
+          in: query
+          required: false
+          description: "Filtro «Vencidas al» de la pantalla"
+          schema: { type: string }
+        - name: fiscalizador
+          in: query
+          required: false
+          description: "Filtro «Fiscalizador» de la pantalla"
+          schema: { type: string }
+        - name: infraccion
+          in: query
+          required: false
+          description: "Filtro «Infracción» de la pantalla"
+          schema: { type: string }
+        - name: conPapeleta
+          in: query
+          required: false
+          description: "Filtro «Con papeleta» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1431,6 +3216,50 @@ paths:
       summary: "Notificaciones por contribuyente"
       description: "Papeletas administrativas agrupadas por año y mes de cometida la infracción, con el estado de la multa y los datos de su pago."
       tags: ["Infracciones administrativas"]
+      parameters:
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: ano
+          in: query
+          required: false
+          description: "Filtro «Año» de la pantalla"
+          schema: { type: string }
+        - name: estadoDeDeuda
+          in: query
+          required: false
+          description: "Filtro «Estado de deuda» de la pantalla"
+          schema: { type: string }
+        - name: agrupadoPor
+          in: query
+          required: false
+          description: "Filtro «Agrupado por» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1447,6 +3276,50 @@ paths:
       summary: "Resumen de recaudación de papeletas"
       description: "Recaudación por multas administrativas por año y mes, diferenciando cobranza ordinaria, coactiva y por convenio."
       tags: ["Infracciones administrativas"]
+      parameters:
+        - name: ano
+          in: query
+          required: false
+          description: "Filtro «Año» de la pantalla"
+          schema: { type: string }
+        - name: agrupadoPor
+          in: query
+          required: false
+          description: "Filtro «Agrupado por» de la pantalla"
+          schema: { type: string }
+        - name: tipoDeCobranza
+          in: query
+          required: false
+          description: "Filtro «Tipo de cobranza» de la pantalla"
+          schema: { type: string }
+        - name: caja
+          in: query
+          required: false
+          description: "Filtro «Caja» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1484,6 +3357,22 @@ paths:
       summary: "Caja de tasas y derechos administrativos"
       description: "Cobro de conceptos del TUPA que no forman parte de la cuenta corriente: constancias, copias, certificados y derechos de trámite."
       tags: ["Tesorería"]
+      parameters:
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: partida
+          in: query
+          required: false
+          description: "Filtro «Partida» de la pantalla"
+          schema: { type: string }
+        - name: conceptoTupa
+          in: query
+          required: false
+          description: "Filtro «Concepto TUPA» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -1526,6 +3415,55 @@ paths:
       summary: "Consulta de convenios"
       description: "Seguimiento de los convenios suscritos, con las cuotas pagadas, las vencidas y los que están por quebrarse."
       tags: ["Tesorería"]
+      parameters:
+        - name: nroDeConvenio
+          in: query
+          required: false
+          description: "Filtro «Nro. de convenio» de la pantalla"
+          schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1547,6 +3485,49 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: nroDeRecibo
+          in: query
+          required: false
+          description: "Filtro «Nro. de recibo» de la pantalla"
+          schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: fecha
+          in: query
+          required: false
+          description: "Filtro «Fecha» de la pantalla"
+          schema: { type: string }
+        - name: caja
+          in: query
+          required: false
+          description: "Filtro «Caja» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1594,6 +3575,26 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: numConv
+          in: query
+          required: false
+          description: "Filtro «Num. Conv.» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: estadoDelConvenio
+          in: query
+          required: false
+          description: "Filtro «Estado del convenio» de la pantalla"
+          schema: { type: string }
+        - name: fechaDeAnulacion
+          in: query
+          required: false
+          description: "Filtro «Fecha de anulación» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -1636,6 +3637,50 @@ paths:
       summary: "Avance de recaudación"
       description: "Comparación de lo emitido contra lo recaudado por tributo y periodo, base del seguimiento de la meta anual."
       tags: ["Tesorería"]
+      parameters:
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Filtro «Ejercicio» de la pantalla"
+          schema: { type: string }
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: tributo
+          in: query
+          required: false
+          description: "Filtro «Tributo» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1652,6 +3697,55 @@ paths:
       summary: "Recaudación por área"
       description: "Recaudación desagregada por partida presupuestal y unidad orgánica generadora, para el reporte mensual a la gerencia de administración."
       tags: ["Tesorería"]
+      parameters:
+        - name: area
+          in: query
+          required: false
+          description: "Filtro «Área» de la pantalla"
+          schema: { type: string }
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: agruparPorArea
+          in: query
+          required: false
+          description: "Filtro «Agrupar por Área» de la pantalla"
+          schema: { type: string }
+        - name: agruparPorTributo
+          in: query
+          required: false
+          description: "Filtro «Agrupar por Tributo» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1673,6 +3767,49 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Filtro «Ejercicio» de la pantalla"
+          schema: { type: string }
+        - name: tributo
+          in: query
+          required: false
+          description: "Filtro «Tributo» de la pantalla"
+          schema: { type: string }
+        - name: situacion
+          in: query
+          required: false
+          description: "Filtro «Situación» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1689,6 +3826,50 @@ paths:
       summary: "Consulta de deuda"
       description: "Deuda exigible a una fecha de corte, con el interés moratorio calculado al día y el desglose por fase de cobranza."
       tags: ["Consultas"]
+      parameters:
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: fechaDeCorte
+          in: query
+          required: false
+          description: "Filtro «Fecha de corte» de la pantalla"
+          schema: { type: string }
+        - name: fase
+          in: query
+          required: false
+          description: "Filtro «Fase» de la pantalla"
+          schema: { type: string }
+        - name: incluyeConvenios
+          in: query
+          required: false
+          description: "Filtro «Incluye convenios» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1711,6 +3892,34 @@ paths:
           required: false
           schema: { type: string }
           example: "codigo"
+        - name: impresion
+          in: query
+          required: false
+          description: "Filtro «Impresión» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1727,6 +3936,50 @@ paths:
       summary: "Consulta resumen predial-arbitrios"
       description: "Resumen por predio: impuesto predial de cada ejercicio con su valúo afecto y el saldo de deuda, más el valúo de arbitrios y los movimientos del predio."
       tags: ["Consultas"]
+      parameters:
+        - name: codCatastral
+          in: query
+          required: false
+          description: "Filtro «Cod. Catastral» de la pantalla"
+          schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: uso
+          in: query
+          required: false
+          description: "Filtro «Uso» de la pantalla"
+          schema: { type: string }
+        - name: palabra
+          in: query
+          required: false
+          description: "Filtro «Palabra» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1743,6 +3996,50 @@ paths:
       summary: "Consulta de altas y bajas"
       description: "Movimientos de alta y baja de deuda de un contribuyente, automáticos o manuales, con el documento que los aprueba y el detalle de las deudas afectadas."
       tags: ["Consultas"]
+      parameters:
+        - name: tipoDeConsulta
+          in: query
+          required: false
+          description: "Filtro «Tipo de consulta» de la pantalla"
+          schema: { type: string }
+        - name: codigoCont
+          in: query
+          required: false
+          description: "Filtro «Código Cont.» de la pantalla"
+          schema: { type: string }
+        - name: altaBaja
+          in: query
+          required: false
+          description: "Filtro «Alta / Baja» de la pantalla"
+          schema: { type: string }
+        - name: autoManual
+          in: query
+          required: false
+          description: "Filtro «Auto / Manual» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1759,6 +4056,50 @@ paths:
       summary: "Consulta de deudas con beneficio"
       description: "Simula el acogimiento de la deuda a un beneficio vigente: muestra la deuda total, la deuda acogida y la deuda con beneficio, con la tasa aplicada y el ahorro resultante."
       tags: ["Consultas"]
+      parameters:
+        - name: tipoDePapeleta
+          in: query
+          required: false
+          description: "Filtro «Tipo de papeleta» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: formaDePago
+          in: query
+          required: false
+          description: "Filtro «Forma de pago» de la pantalla"
+          schema: { type: string }
+        - name: benefAplicable
+          in: query
+          required: false
+          description: "Filtro «Benef. aplicable» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1775,6 +4116,50 @@ paths:
       summary: "Consulta de pagos"
       description: "Historial de pagos con el recibo, la caja y el concepto imputado."
       tags: ["Consultas"]
+      parameters:
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: medioDePago
+          in: query
+          required: false
+          description: "Filtro «Medio de pago» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1791,6 +4176,55 @@ paths:
       summary: "Consulta de predios"
       description: "Búsqueda de predios por titular, ubicación o código, con el autovalúo vigente y la deuda asociada a cada unidad."
       tags: ["Consultas"]
+      parameters:
+        - name: codigoPredial
+          in: query
+          required: false
+          description: "Filtro «Código predial» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: calle
+          in: query
+          required: false
+          description: "Filtro «Calle» de la pantalla"
+          schema: { type: string }
+        - name: manzana
+          in: query
+          required: false
+          description: "Filtro «Manzana» de la pantalla"
+          schema: { type: string }
+        - name: lote
+          in: query
+          required: false
+          description: "Filtro «Lote» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1807,6 +4241,50 @@ paths:
       summary: "Consulta de vehículos"
       description: "Padrón vehicular consultable por placa, motor o titular, con los ejercicios afectos y la deuda vigente."
       tags: ["Consultas"]
+      parameters:
+        - name: placa
+          in: query
+          required: false
+          description: "Filtro «Placa» de la pantalla"
+          schema: { type: string }
+        - name: nroMotor
+          in: query
+          required: false
+          description: "Filtro «Nro. Motor» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1823,6 +4301,50 @@ paths:
       summary: "Consulta de valores emitidos"
       description: "Órdenes de pago, resoluciones de determinación y de multa emitidas a un contribuyente, con su estado de notificación y firmeza."
       tags: ["Consultas"]
+      parameters:
+        - name: nroDeValor
+          in: query
+          required: false
+          description: "Filtro «Nro. de valor» de la pantalla"
+          schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: tipo
+          in: query
+          required: false
+          description: "Filtro «Tipo» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1875,6 +4397,55 @@ paths:
       summary: "Búsqueda y mantenimiento de valores"
       description: "Localiza un valor por número, contribuyente o periodo para consultarlo, anularlo o derivarlo a cobranza coactiva."
       tags: ["Valores"]
+      parameters:
+        - name: nroDeValor
+          in: query
+          required: false
+          description: "Filtro «Nro. de valor» de la pantalla"
+          schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: tipo
+          in: query
+          required: false
+          description: "Filtro «Tipo» de la pantalla"
+          schema: { type: string }
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Filtro «Ejercicio» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -1916,6 +4487,21 @@ paths:
         - name: nro
           in: path
           required: true
+          schema: { type: string }
+        - name: nroDeValor
+          in: query
+          required: false
+          description: "Filtro «Nro. de valor» de la pantalla"
+          schema: { type: string }
+        - name: notificador
+          in: query
+          required: false
+          description: "Filtro «Notificador» de la pantalla"
+          schema: { type: string }
+        - name: resultado
+          in: query
+          required: false
+          description: "Filtro «Resultado» de la pantalla"
           schema: { type: string }
       requestBody:
         required: true
@@ -1964,6 +4550,26 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: contrib
+          in: query
+          required: false
+          description: "Filtro «Contrib.» de la pantalla"
+          schema: { type: string }
+        - name: tipoDeValor
+          in: query
+          required: false
+          description: "Filtro «Tipo de valor» de la pantalla"
+          schema: { type: string }
+        - name: tipoMov
+          in: query
+          required: false
+          description: "Filtro «Tipo Mov.» de la pantalla"
+          schema: { type: string }
+        - name: nroValor
+          in: query
+          required: false
+          description: "Filtro «Nro. Valor» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -1985,6 +4591,50 @@ paths:
       summary: "Expedientes coactivos"
       description: "Cobranza coactiva de valores firmes: resolución de ejecución, medidas cautelares, costas y gastos, y causales de suspensión."
       tags: ["Coactiva"]
+      parameters:
+        - name: nroDeExpediente
+          in: query
+          required: false
+          description: "Filtro «Nro. de expediente» de la pantalla"
+          schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: ejecutor
+          in: query
+          required: false
+          description: "Filtro «Ejecutor» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2001,6 +4651,27 @@ paths:
       summary: "Importación de valores a coactiva"
       description: "Ingresa a coactiva un valor ya generado en el módulo de valores y le asigna número de expediente coactivo, auxiliar y ejecutor para su tratamiento posterior."
       tags: ["Coactiva"]
+      parameters:
+        - name: tipoDeDeuda
+          in: query
+          required: false
+          description: "Filtro «Tipo de deuda» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: codUnidad
+          in: query
+          required: false
+          description: "Filtro «Cod. Unidad» de la pantalla"
+          schema: { type: string }
+        - name: filtro
+          in: query
+          required: false
+          description: "Filtro «Filtro» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -2027,6 +4698,49 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: expedienteAno
+          in: query
+          required: false
+          description: "Filtro «Expediente — año» de la pantalla"
+          schema: { type: string }
+        - name: expedienteNumero
+          in: query
+          required: false
+          description: "Filtro «Expediente — número» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2043,6 +4757,27 @@ paths:
       summary: "Impresión de resolución de ejecución coactiva"
       description: "Genera e imprime la REC de los expedientes pendientes de pago, con la deuda proyectada al día elegido. Permite imprimir la carátula y la REC 2."
       tags: ["Coactiva"]
+      parameters:
+        - name: tipoDeDeuda
+          in: query
+          required: false
+          description: "Filtro «Tipo de deuda» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: ano
+          in: query
+          required: false
+          description: "Filtro «Año» de la pantalla"
+          schema: { type: string }
+        - name: proyectarInteresAl
+          in: query
+          required: false
+          description: "Filtro «Proyectar interés al» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -2068,6 +4803,26 @@ paths:
         - name: numero
           in: path
           required: true
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: nExpediente
+          in: query
+          required: false
+          description: "Filtro «Nº Expediente» de la pantalla"
+          schema: { type: string }
+        - name: estadoActual
+          in: query
+          required: false
+          description: "Filtro «Estado actual» de la pantalla"
+          schema: { type: string }
+        - name: ano
+          in: query
+          required: false
+          description: "Filtro «Año» de la pantalla"
           schema: { type: string }
       requestBody:
         required: true
@@ -2116,6 +4871,27 @@ paths:
       summary: "Liquidación de costas procesales"
       description: "Liquida las costas y gastos del procedimiento coactivo por expediente, según el arancel de costas aprobado."
       tags: ["Coactiva"]
+      parameters:
+        - name: nroLiquidacion
+          in: query
+          required: false
+          description: "Filtro «Nro. Liquidación» de la pantalla"
+          schema: { type: string }
+        - name: nroExpedCoact
+          in: query
+          required: false
+          description: "Filtro «Nro. Exped. Coact.» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -2137,6 +4913,27 @@ paths:
       summary: "Fraccionamiento coactivo"
       description: "Convenio tributario coactivo. Se inicia con un pago inicial y sobre el saldo se elabora el cronograma de cuotas, con el beneficio aplicable a la deuda acogida."
       tags: ["Coactiva"]
+      parameters:
+        - name: formaDePago
+          in: query
+          required: false
+          description: "Filtro «Forma de pago» de la pantalla"
+          schema: { type: string }
+        - name: benefAplicable
+          in: query
+          required: false
+          description: "Filtro «Benef. aplicable» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: coact
+          in: query
+          required: false
+          description: "Filtro «Coact.» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -2163,6 +4960,26 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: expAno
+          in: query
+          required: false
+          description: "Filtro «Exp. — año» de la pantalla"
+          schema: { type: string }
+        - name: expNumero
+          in: query
+          required: false
+          description: "Filtro «Exp. — número» de la pantalla"
+          schema: { type: string }
+        - name: contrib
+          in: query
+          required: false
+          description: "Filtro «Contrib.» de la pantalla"
+          schema: { type: string }
+        - name: tributo
+          in: query
+          required: false
+          description: "Filtro «Tributo» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -2184,6 +5001,27 @@ paths:
       summary: "Emisión de notificaciones coactivas"
       description: "Registra y emite las notificaciones de las resoluciones de ejecución coactiva. Admite una o varias notificaciones por expediente según el tratamiento del caso."
       tags: ["Coactiva"]
+      parameters:
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: tipoDeValor
+          in: query
+          required: false
+          description: "Filtro «Tipo de valor» de la pantalla"
+          schema: { type: string }
+        - name: valorN
+          in: query
+          required: false
+          description: "Filtro «Valor Nº» de la pantalla"
+          schema: { type: string }
+        - name: expCoac
+          in: query
+          required: false
+          description: "Filtro «Exp. Coac.» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -2205,6 +5043,50 @@ paths:
       summary: "Consulta de deudas en coactiva"
       description: "Deuda en cobranza coactiva por contribuyente y expediente, con su estado procesal y la última actuación registrada."
       tags: ["Coactiva"]
+      parameters:
+        - name: tipoDeDeuda
+          in: query
+          required: false
+          description: "Filtro «Tipo de deuda» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: nExpediente
+          in: query
+          required: false
+          description: "Filtro «Nº Expediente» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2221,6 +5103,50 @@ paths:
       summary: "Consulta de deudas en beneficio (coactiva)"
       description: "Deuda en cobranza coactiva acogible a un beneficio vigente, con las costas procesales incorporadas al cálculo."
       tags: ["Coactiva"]
+      parameters:
+        - name: tipoDeDeuda
+          in: query
+          required: false
+          description: "Filtro «Tipo de deuda» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: benefAplicable
+          in: query
+          required: false
+          description: "Filtro «Benef. aplicable» de la pantalla"
+          schema: { type: string }
+        - name: fechaDeCalculo
+          in: query
+          required: false
+          description: "Filtro «Fecha de cálculo» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2237,6 +5163,60 @@ paths:
       summary: "Anuncio y propaganda"
       description: "Autorización para instalar elementos publicitarios. La tasa resulta del área del anuncio, el número de lados y su clase."
       tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: nroAutorizacion
+          in: query
+          required: false
+          description: "Filtro «Nro. Autorización» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: rUC
+          in: query
+          required: false
+          description: "Filtro «R.U.C.» de la pantalla"
+          schema: { type: string }
+        - name: nExpediente
+          in: query
+          required: false
+          description: "Filtro «Nº Expediente» de la pantalla"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "Filtro «Dirección» de la pantalla"
+          schema: { type: string }
+        - name: dNI
+          in: query
+          required: false
+          description: "Filtro «D.N.I.» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2274,6 +5254,55 @@ paths:
       summary: "Licencia de funcionamiento"
       description: "Registro y seguimiento de licencias comerciales, con giros CIIU, zonificación, aforo, inspección técnica de seguridad y arbitrios del establecimiento."
       tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: nroLicencia
+          in: query
+          required: false
+          description: "Filtro «Nro. Licencia» de la pantalla"
+          schema: { type: string }
+        - name: nExpediente
+          in: query
+          required: false
+          description: "Filtro «Nº Expediente» de la pantalla"
+          schema: { type: string }
+        - name: nombreDelContribuyente
+          in: query
+          required: false
+          description: "Filtro «Nombre del Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: denominacionComercial
+          in: query
+          required: false
+          description: "Filtro «Denominación Comercial» de la pantalla"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "Filtro «Dirección» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2311,6 +5340,50 @@ paths:
       summary: "Resumen de licencias por año"
       description: "Cantidades de licencias emitidas, canceladas y duplicadas por año, con la recaudación por derecho de trámite."
       tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: desdeElAno
+          in: query
+          required: false
+          description: "Filtro «Desde el año» de la pantalla"
+          schema: { type: string }
+        - name: hastaElAno
+          in: query
+          required: false
+          description: "Filtro «Hasta el año» de la pantalla"
+          schema: { type: string }
+        - name: tipoDeLicencia
+          in: query
+          required: false
+          description: "Filtro «Tipo de licencia» de la pantalla"
+          schema: { type: string }
+        - name: agrupadoPor
+          in: query
+          required: false
+          description: "Filtro «Agrupado por» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2379,6 +5452,60 @@ paths:
       summary: "Formulario único de edificación (FUE)"
       description: "Licencia de obra bajo la Ley 29090. La modalidad de aprobación determina si basta la verificación administrativa o se requiere comisión técnica."
       tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: nroExpediente
+          in: query
+          required: false
+          description: "Filtro «NRO EXPEDIENTE» de la pantalla"
+          schema: { type: string }
+        - name: nroLicencia
+          in: query
+          required: false
+          description: "Filtro «NRO LICENCIA» de la pantalla"
+          schema: { type: string }
+        - name: nombreContribuyente
+          in: query
+          required: false
+          description: "Filtro «NOMBRE CONTRIBUYENTE» de la pantalla"
+          schema: { type: string }
+        - name: lugarMz
+          in: query
+          required: false
+          description: "Filtro «LUGAR — Mz.» de la pantalla"
+          schema: { type: string }
+        - name: lugarLt
+          in: query
+          required: false
+          description: "Filtro «LUGAR — Lt.» de la pantalla"
+          schema: { type: string }
+        - name: tipoTramite
+          in: query
+          required: false
+          description: "Filtro «TIPO TRAMITE» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2395,6 +5522,50 @@ paths:
       summary: "Reporte general de licencias de edificación"
       description: "Relación de licencias de edificación por modalidad, con el área a construir, el valor de obra declarado y el estado del expediente."
       tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: modalidad
+          in: query
+          required: false
+          description: "Filtro «Modalidad» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2411,6 +5582,45 @@ paths:
       summary: "Catálogo CIIU de giros"
       description: "Clasificación industrial internacional uniforme. Determina la compatibilidad del giro con la zonificación y el nivel de riesgo de la ITSE."
       tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: codigoCiiu
+          in: query
+          required: false
+          description: "Filtro «Código CIIU» de la pantalla"
+          schema: { type: string }
+        - name: descripcion
+          in: query
+          required: false
+          description: "Filtro «Descripción» de la pantalla"
+          schema: { type: string }
+        - name: seccion
+          in: query
+          required: false
+          description: "Filtro «Sección» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2427,6 +5637,22 @@ paths:
       summary: "Certificados de numeración y zonificación"
       description: "Emisión de los certificados que acreditan el número municipal asignado y los parámetros urbanísticos del predio."
       tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: nDeCertificado
+          in: query
+          required: false
+          description: "Filtro «Nº de certificado» de la pantalla"
+          schema: { type: string }
+        - name: tipo
+          in: query
+          required: false
+          description: "Filtro «Tipo» de la pantalla"
+          schema: { type: string }
+        - name: predio
+          in: query
+          required: false
+          description: "Filtro «Predio» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -2448,6 +5674,35 @@ paths:
       summary: "Módulos del sistema"
       description: "Sistemas controlados por el módulo de seguridad integrada. Cada módulo agrupa sus grupos, accesos y permisos."
       tags: ["Seguridad"]
+      parameters:
+        - name: modulo
+          in: query
+          required: false
+          description: "Filtro «Módulo» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2464,6 +5719,45 @@ paths:
       summary: "Usuarios del sistema"
       description: "Alta de usuarios con su unidad orgánica, la caja asignada y el grupo de acceso que define qué opciones del menú puede ejecutar."
       tags: ["Seguridad"]
+      parameters:
+        - name: usuario
+          in: query
+          required: false
+          description: "Filtro «Usuario» de la pantalla"
+          schema: { type: string }
+        - name: unidadOrganica
+          in: query
+          required: false
+          description: "Filtro «Unidad orgánica» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2480,6 +5774,40 @@ paths:
       summary: "Grupos de usuarios"
       description: "Agrupación jerárquica de cuentas. El grupo concentra los accesos y todo usuario hereda los permisos del grupo al que pertenece."
       tags: ["Seguridad"]
+      parameters:
+        - name: grupo
+          in: query
+          required: false
+          description: "Filtro «Grupo» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2496,6 +5824,40 @@ paths:
       summary: "Accesos y políticas"
       description: "Opciones de menú y políticas del sistema controlado. La búsqueda admite filtrar por tipo y por parte del nombre del acceso."
       tags: ["Seguridad"]
+      parameters:
+        - name: tipo
+          in: query
+          required: false
+          description: "Filtro «Tipo» de la pantalla"
+          schema: { type: string }
+        - name: nombreDelAcceso
+          in: query
+          required: false
+          description: "Filtro «Nombre del acceso» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2516,6 +5878,21 @@ paths:
         - name: grupo
           in: path
           required: true
+          schema: { type: string }
+        - name: usuario
+          in: query
+          required: false
+          description: "Filtro «Usuario» de la pantalla"
+          schema: { type: string }
+        - name: modulo
+          in: query
+          required: false
+          description: "Filtro «Modulo» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla"
           schema: { type: string }
       requestBody:
         required: true
@@ -2542,6 +5919,21 @@ paths:
         - name: id
           in: path
           required: true
+          schema: { type: string }
+        - name: buscarPor
+          in: query
+          required: false
+          description: "Filtro «Buscar por» de la pantalla"
+          schema: { type: string }
+        - name: grupoUsuario
+          in: query
+          required: false
+          description: "Filtro «Grupo / Usuario» de la pantalla"
+          schema: { type: string }
+        - name: acceso
+          in: query
+          required: false
+          description: "Filtro «Acceso» de la pantalla"
           schema: { type: string }
       requestBody:
         required: true
@@ -2611,6 +6003,50 @@ paths:
       summary: "Auditoría del sistema"
       description: "Bitácora de operaciones sensibles: anulaciones, extornos, bajas de deuda, cambios de valor y accesos fallidos."
       tags: ["Seguridad"]
+      parameters:
+        - name: usuario
+          in: query
+          required: false
+          description: "Filtro «Usuario» de la pantalla"
+          schema: { type: string }
+        - name: accion
+          in: query
+          required: false
+          description: "Filtro «Acción» de la pantalla"
+          schema: { type: string }
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, empezando en 1"
+          schema: { type: string }
+          example: "1"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "50"
+        - name: orden
+          in: query
+          required: false
+          description: "Campo por el que se ordena"
+          schema: { type: string }
+        - name: sentido
+          in: query
+          required: false
+          description: "ascendente | descendente"
+          schema: { type: string }
+          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -2643,6 +6079,22 @@ paths:
       summary: "Copias de seguridad"
       description: "Respaldo de la base de datos. El manual exige una copia diaria al cierre de caja y una copia mensual fuera del servidor."
       tags: ["Seguridad"]
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: "Filtro «Desde» de la pantalla"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Filtro «Hasta» de la pantalla"
+          schema: { type: string }
+        - name: tipo
+          in: query
+          required: false
+          description: "Filtro «Tipo» de la pantalla"
+          schema: { type: string }
       requestBody:
         required: true
         content:

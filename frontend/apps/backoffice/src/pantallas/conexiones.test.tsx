@@ -50,7 +50,7 @@ describe('una opcion conectada y una sin conectar conviven', () => {
       .getAll()
       .map((consulta) => consulta.queryKey);
     expect(claves).toContainEqual(['operacion', 'inicio', {}]);
-    expect(claves).toContainEqual(['pantalla', 'calles']);
+    expect(claves).toContainEqual(['pantalla', 'calles', {}]);
 
     expect(alaOperacion('/api/v1/indicadores/recaudacion')).toHaveLength(1);
     expect(alaOperacion('/api/v1/catastro/vias')).toHaveLength(1);

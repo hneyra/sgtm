@@ -306,6 +306,43 @@ textarea.sgtm-campo__control {
   color: var(--ink);
 }
 
+/* Cabecera que ordena. Hereda todo de la `th` para no inventar una tipografia
+   nueva: lo unico que cambia es que se puede pulsar y enfocar. */
+.sgtm-tabla__orden {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.sgtm-tabla__orden:hover,
+.sgtm-tabla__orden[data-activa='1'] {
+  color: var(--ink);
+}
+
+/* `all: unset` borra el contorno, y el global de base.css tiene la misma
+   especificidad: hay que devolverlo aqui o el foco se pierde (RNF-082). */
+.sgtm-tabla__orden:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sgtm-paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+
+.sgtm-paginacion__estado {
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
 .sgtm-tabla .sgtm-tabla--numerica {
   text-align: right;
   font-family: var(--font-mono);

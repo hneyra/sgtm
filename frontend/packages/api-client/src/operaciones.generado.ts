@@ -58,49 +58,49 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/portal/deuda',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['doc'],
+    parametrosDeConsulta: ['doc', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Ficha catastral urbana individual — `GET /catastro/fichas/urbana/{codRefCatastral}` */
   ficha_urbana: {
     metodo: 'GET',
     ruta: '/catastro/fichas/urbana/{codRefCatastral}',
     parametrosDeRuta: ['codRefCatastral'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codigoDeRefCatastral', 'codContribuyenteRentas', 'nroFicha', 'uso', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Ficha catastral económica — `GET /catastro/fichas/economica/{codRefCatastral}` */
   ficha_economica: {
     metodo: 'GET',
     ruta: '/catastro/fichas/economica/{codRefCatastral}',
     parametrosDeRuta: ['codRefCatastral'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codigoDeRefCatastral', 'contribuyente', 'ciiu'],
   },
   /** Ficha de bienes comunes — `GET /catastro/fichas/bienes-comunes/{codEdificacion}` */
   ficha_bienes: {
     metodo: 'GET',
     ruta: '/catastro/fichas/bienes-comunes/{codEdificacion}',
     parametrosDeRuta: ['codEdificacion'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['denominacion', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Ficha catastral rural — `GET /catastro/fichas/rural/{codUnidad}` */
   ficha_rural: {
     metodo: 'GET',
     ruta: '/catastro/fichas/rural/{codUnidad}',
     parametrosDeRuta: ['codUnidad'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codUnidadCatastralUc', 'contribuyente', 'valleSector'],
   },
   /** Consulta de fichas catastrales — `GET /catastro/fichas` */
   consulta_fichas: {
     metodo: 'GET',
     ruta: '/catastro/fichas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codRefCatastral', 'contribuyente', 'manzana', 'lote', 'conciliadaConRentas', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Actualización del catastro — `PUT /catastro/fichas/{codigo}/actualizacion` */
   actualizacion_catastro: {
     metodo: 'PUT',
     ruta: '/catastro/fichas/{codigo}/actualizacion',
     parametrosDeRuta: ['codigo'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codRefCatastral', 'nDeFicha', 'sector', 'tipoDeActualizacion'],
   },
   /** Reporte de ficha del contribuyente — `GET /catastro/contribuyentes/{codigo}/ficha.pdf` */
   ficha_contribuyente_reporte: {
@@ -114,56 +114,56 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/catastro/vias',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codigoDeVia', 'nombreDeCalle', 'tipoDeVia', 'sector', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Sectores, manzanas y lotes — `GET /catastro/sectores` */
   sectores: {
     metodo: 'GET',
     ruta: '/catastro/sectores',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['sector', 'manzana', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Aranceles de terreno — `GET /catastro/tablas/aranceles` */
   aranceles: {
     metodo: 'GET',
     ruta: '/catastro/tablas/aranceles',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['anio'],
+    parametrosDeConsulta: ['anio', 'ejercicio', 'via', 'zona', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Valores unitarios de edificación — `GET /catastro/tablas/valores-unitarios` */
   valores_unitarios: {
     metodo: 'GET',
     ruta: '/catastro/tablas/valores-unitarios',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['anio'],
+    parametrosDeConsulta: ['anio', 'ejercicio', 'region', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Tabla de depreciación — `GET /catastro/tablas/depreciacion` */
   depreciacion: {
     metodo: 'GET',
     ruta: '/catastro/tablas/depreciacion',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['anio'],
+    parametrosDeConsulta: ['anio', 'materialMep', 'uso', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Contribuyentes — `GET /rentas/contribuyentes` */
   contribuyentes: {
     metodo: 'GET',
     ruta: '/rentas/contribuyentes',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codigo', 'nombreRazonSocial', 'dNI', 'rUC', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Predios del contribuyente — `GET /rentas/predios` */
   predios_rentas: {
     metodo: 'GET',
     ruta: '/rentas/predios',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['contribuyente'],
+    parametrosDeConsulta: ['contribuyente', 'codContribuyente', 'codigoPredial', 'sector', 'condicion', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Cálculo individual del impuesto predial — `POST /rentas/predial/calculo-individual` */
   predial_individual: {
     metodo: 'POST',
     ruta: '/rentas/predial/calculo-individual',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codContribuyente', 'ano', 'djN', 'tipoDeDeclaracion', 'fechaDeDeclaracion'],
   },
   /** Cálculo masivo del impuesto predial — `POST /rentas/predial/calculo-masivo` */
   predial_masivo: {
@@ -177,14 +177,14 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/rentas/declaraciones/{djNro}',
     parametrosDeRuta: ['djNro'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['djN', 'codContribuyente', 'ano', 'tipo', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Arbitrios municipales — `GET /rentas/arbitrios` */
   arbitrios: {
     metodo: 'GET',
     ruta: '/rentas/arbitrios',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['anio'],
+    parametrosDeConsulta: ['anio', 'ejercicio', 'codigoPredial', 'zona', 'uso', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Transferencia de predio — `POST /rentas/transferencias/predio` */
   transferencia_predio: {
@@ -205,14 +205,14 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/rentas/vehiculos/{placa}',
     parametrosDeRuta: ['placa'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codContribuyente', 'nombre', 'nroDocumento', 'nroMotor', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Cálculo del impuesto vehicular — `POST /rentas/vehicular/calculo` */
   vehicular_calculo: {
     metodo: 'POST',
     ruta: '/rentas/vehicular/calculo',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['placa', 'codContribuyente', 'ejercicio'],
   },
   /** Transferencia de vehículo — `POST /rentas/transferencias/vehiculo` */
   transferencia_vehiculo: {
@@ -226,14 +226,14 @@ export const OPERACIONES = {
     metodo: 'POST',
     ruta: '/rentas/espectaculos',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nDeExpediente', 'organizador', 'desde', 'hasta'],
   },
   /** Beneficios y exoneraciones — `GET /rentas/beneficios` */
   beneficios: {
     metodo: 'GET',
     ruta: '/rentas/beneficios',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['contribuyente', 'tipo', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Alta de deuda — `POST /rentas/deuda/altas` */
   alta_deuda: {
@@ -247,14 +247,14 @@ export const OPERACIONES = {
     metodo: 'POST',
     ruta: '/rentas/deuda/bajas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codContribuyente', 'ano', 'tributo'],
   },
   /** Programación de fiscalización — `POST /fiscalizacion/programas` */
   fisc_programa: {
     metodo: 'POST',
     ruta: '/fiscalizacion/programas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nDePrograma', 'ejercicio', 'tipo', 'estado'],
   },
   /** Fiscalización predial — acta de inspección — `POST /fiscalizacion/predial/actas` */
   fisc_predial: {
@@ -268,35 +268,35 @@ export const OPERACIONES = {
     metodo: 'POST',
     ruta: '/fiscalizacion/vehicular',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['placa', 'ejercicio', 'origenDelCruce', 'hallazgo'],
   },
   /** Resultados y determinaciones — `GET /fiscalizacion/resultados` */
   fisc_resultados: {
     metodo: 'GET',
     ruta: '/fiscalizacion/resultados',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['programa', 'hallazgo', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Omisos y subvaluadores — `GET /fiscalizacion/omisos` */
   fisc_omisos: {
     metodo: 'GET',
     ruta: '/fiscalizacion/omisos',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['ejercicio', 'sector', 'condicion', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Estado de cuenta de fiscalización — `GET /fiscalizacion/estado-cuenta` */
   fisc_estado_cuenta: {
     metodo: 'GET',
     ruta: '/fiscalizacion/estado-cuenta',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['contribuyente'],
+    parametrosDeConsulta: ['contribuyente', 'tipoDePapeleta', 'papeleta', 'placa', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Histórico de fiscalización predial — `GET /fiscalizacion/predial/historico` */
   fisc_historico: {
     metodo: 'GET',
     ruta: '/fiscalizacion/predial/historico',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nLiquidacion', 'codCont', 'nNotificacion', 'contribuyente', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Resolución de determinación de fiscalización — `GET /fiscalizacion/resoluciones/{numero}` */
   resolucion_determinacion_fisc: {
@@ -310,49 +310,49 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/transito/papeletas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nroPapeleta', 'placa', 'documentoDelInfractor', 'desde', 'hasta', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Búsqueda de infracciones — `GET /transito/papeletas/busqueda` */
   transito_busqueda: {
     metodo: 'GET',
     ruta: '/transito/papeletas/busqueda',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['papeleta', 'nPlaca', 'estadoDeDeuda', 'ingresadoPor', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Tabla de códigos de infracción de tránsito — `GET /transito/codigos` */
   codigos_transito: {
     metodo: 'GET',
     ruta: '/transito/codigos',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codigo', 'gravedad', 'textoDeLaInfraccion', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Descargos y reclamos de papeletas — `POST /transito/descargos` */
   transito_descargos: {
     metodo: 'POST',
     ruta: '/transito/descargos',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nDeExpediente', 'papeleta', 'estado'],
   },
   /** Internamiento vehicular — `GET /transito/internamientos` */
   internamiento: {
     metodo: 'GET',
     ruta: '/transito/internamientos',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['placa', 'deposito', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Emisión de resoluciones y otros documentos — `GET /transito/papeletas/{numero}/actos` */
   transito_documentos: {
     metodo: 'GET',
     ruta: '/transito/papeletas/{numero}/actos',
     parametrosDeRuta: ['numero'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['contribuyente', 'papeletaN', 'placaN', 'expediente', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Generación de valores de tránsito — `POST /transito/valores/generacion-masiva` */
   transito_valores: {
     metodo: 'POST',
     ruta: '/transito/valores/generacion-masiva',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codigoDescripcionDelCriterio'],
   },
   /** Cambio de número de papeleta de tránsito — `PATCH /transito/papeletas/{numero}/codigo` */
   transito_cambio_numero: {
@@ -394,14 +394,14 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/transito/reportes/padron',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['desde', 'hasta', 'estado', 'ordenadoPor', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Estado de cuenta de infracciones — `GET /transito/estado-cuenta` */
   transito_estado_cuenta: {
     metodo: 'GET',
     ruta: '/transito/estado-cuenta',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['conductor', 'placa', 'estado', 'fechaDeCalculo', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Reporte papeleta de infracción — `GET /transito/papeletas/{numero}/hoja-informativa` */
   transito_papeleta_reporte: {
@@ -429,84 +429,84 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/transito/reportes/padron-coactiva',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['desde', 'hasta', 'ejecutor', 'estadoDelExpediente', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Padrón de constancias libres de infracciones — `GET /transito/reportes/padron-constancias` */
   transito_padron_constancias: {
     metodo: 'GET',
     ruta: '/transito/reportes/padron-constancias',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['desde', 'hasta', 'nDeConstancia', 'usuarioQueEmitio', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Resumen de recaudación de tránsito — `GET /transito/reportes/resumen-recaudacion` */
   transito_resumen_recaudacion: {
     metodo: 'GET',
     ruta: '/transito/reportes/resumen-recaudacion',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['ano', 'tipoDeCobranza', 'agrupadoPor', 'caja', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Resumen de papeletas pendientes y pagadas — `GET /transito/reportes/resumen-papeletas` */
   transito_resumen_papeletas: {
     metodo: 'GET',
     ruta: '/transito/reportes/resumen-papeletas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['desde', 'hasta', 'agrupadoPor', 'cobranza', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Resumen de papeletas por código de infracción — `GET /transito/reportes/resumen-por-codigo` */
   transito_resumen_codigo: {
     metodo: 'GET',
     ruta: '/transito/reportes/resumen-por-codigo',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codigoDeInfraccion', 'desde', 'hasta', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Resumen de papeletas por iniciales de placa — `GET /transito/reportes/resumen-por-placa` */
   transito_resumen_placa: {
     metodo: 'GET',
     ruta: '/transito/reportes/resumen-por-placa',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['iniciales2Letras', 'desde', 'hasta', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Notificación administrativa — `POST /infracciones/administrativas/notificaciones` */
   adm_notificacion: {
     metodo: 'POST',
     ruta: '/infracciones/administrativas/notificaciones',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['serie', 'ano', 'numero', 'estado'],
   },
   /** Infracción administrativa — `GET /infracciones/actas` */
   infracciones_adm: {
     metodo: 'GET',
     ruta: '/infracciones/actas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nroDeActa', 'administrado', 'codigoCuis', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Cuadro único de infracciones y sanciones (CUIS) — `GET /infracciones/cuis` */
   codigos_cuis: {
     metodo: 'GET',
     ruta: '/infracciones/cuis',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codigo', 'materia', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Reporte de códigos de infracción administrativa — `GET /infracciones/administrativas/codigos/reporte` */
   adm_codigos_reporte: {
     metodo: 'GET',
     ruta: '/infracciones/administrativas/codigos/reporte',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codigo', 'descripcionContiene', 'estado', 'ordenadoPor', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Generación de valores administrativa — `POST /infracciones/administrativas/valores/generacion-masiva` */
   adm_valores: {
     metodo: 'POST',
     ruta: '/infracciones/administrativas/valores/generacion-masiva',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codigoDescripcionDelCriterio'],
   },
   /** Estado de cuenta de papeleta administrativa — `GET /infracciones/administrativas/estado-cuenta` */
   adm_estado_cuenta: {
     metodo: 'GET',
     ruta: '/infracciones/administrativas/estado-cuenta',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['papeleta', 'codContribuyente', 'fechaDeCalculo', 'incluirGastos', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Resolución de gerencia — `POST /infracciones/administrativas/resoluciones` */
   adm_resolucion_gerencia: {
@@ -534,28 +534,28 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/infracciones/administrativas/reportes/padron-notificaciones',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['desde', 'hasta', 'agrupadoPor', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Notificaciones vencidas — `GET /infracciones/administrativas/reportes/vencidas` */
   adm_notificaciones_vencidas: {
     metodo: 'GET',
     ruta: '/infracciones/administrativas/reportes/vencidas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['vencidasAl', 'fiscalizador', 'infraccion', 'conPapeleta', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Notificaciones por contribuyente — `GET /infracciones/administrativas/reportes/por-contribuyente` */
   adm_notificaciones_contribuyente: {
     metodo: 'GET',
     ruta: '/infracciones/administrativas/reportes/por-contribuyente',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codContribuyente', 'ano', 'estadoDeDeuda', 'agrupadoPor', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Resumen de recaudación de papeletas — `GET /infracciones/administrativas/reportes/resumen-recaudacion` */
   adm_resumen_recaudacion: {
     metodo: 'GET',
     ruta: '/infracciones/administrativas/reportes/resumen-recaudacion',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['ano', 'agrupadoPor', 'tipoDeCobranza', 'caja', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Caja tributaria — `POST /tesoreria/caja/cobranza` */
   caja_tributaria: {
@@ -569,7 +569,7 @@ export const OPERACIONES = {
     metodo: 'POST',
     ruta: '/tesoreria/caja/tasas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codContribuyente', 'partida', 'conceptoTupa'],
   },
   /** Fraccionamiento tributario — `POST /tesoreria/fraccionamientos` */
   fraccionamiento: {
@@ -583,14 +583,14 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/tesoreria/convenios',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nroDeConvenio', 'codContribuyente', 'estado', 'desde', 'hasta', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Duplicado de recibo — `GET /tesoreria/recibos/{nro}/duplicado` */
   duplicado_recibo: {
     metodo: 'GET',
     ruta: '/tesoreria/recibos/{nro}/duplicado',
     parametrosDeRuta: ['nro'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nroDeRecibo', 'codContribuyente', 'fecha', 'caja', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Anulación de recibo — `POST /tesoreria/recibos/{nro}/anulacion` */
   anulacion_recibo: {
@@ -604,7 +604,7 @@ export const OPERACIONES = {
     metodo: 'POST',
     ruta: '/tesoreria/convenios/{numero}/anulacion',
     parametrosDeRuta: ['numero'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['numConv', 'contribuyente', 'estadoDelConvenio', 'fechaDeAnulacion'],
   },
   /** Cierre y arqueo de caja — `POST /tesoreria/caja/cierre` */
   cierre_caja: {
@@ -618,84 +618,84 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/tesoreria/recaudacion/avance',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['ejercicio', 'desde', 'hasta', 'tributo', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Recaudación por área — `GET /tesoreria/recaudacion/por-area` */
   recaudacion_area: {
     metodo: 'GET',
     ruta: '/tesoreria/recaudacion/por-area',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['area', 'desde', 'hasta', 'agruparPorArea', 'agruparPorTributo', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Estado de cuenta corriente — `GET /consultas/cuenta-corriente/{codigo}` */
   cuenta_corriente: {
     metodo: 'GET',
     ruta: '/consultas/cuenta-corriente/{codigo}',
     parametrosDeRuta: ['codigo'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codContribuyente', 'ejercicio', 'tributo', 'situacion', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Consulta de deuda — `GET /consultas/deuda` */
   consulta_deuda: {
     metodo: 'GET',
     ruta: '/consultas/deuda',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codContribuyente', 'fechaDeCorte', 'fase', 'incluyeConvenios', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Consulta unificada predial-arbitrios — `GET /consultas/unificada` */
   consulta_unificada: {
     metodo: 'GET',
     ruta: '/consultas/unificada',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['contribuyente'],
+    parametrosDeConsulta: ['contribuyente', 'impresion', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Consulta resumen predial-arbitrios — `GET /consultas/resumen-predial` */
   consulta_resumen_predial: {
     metodo: 'GET',
     ruta: '/consultas/resumen-predial',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codCatastral', 'codContribuyente', 'uso', 'palabra', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Consulta de altas y bajas — `GET /consultas/altas-bajas` */
   consulta_altas_bajas: {
     metodo: 'GET',
     ruta: '/consultas/altas-bajas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['tipoDeConsulta', 'codigoCont', 'altaBaja', 'autoManual', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Consulta de deudas con beneficio — `GET /consultas/deudas-con-beneficio` */
   consulta_deudas_beneficio: {
     metodo: 'GET',
     ruta: '/consultas/deudas-con-beneficio',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['tipoDePapeleta', 'contribuyente', 'formaDePago', 'benefAplicable', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Consulta de pagos — `GET /consultas/pagos` */
   consulta_pagos: {
     metodo: 'GET',
     ruta: '/consultas/pagos',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codContribuyente', 'desde', 'hasta', 'medioDePago', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Consulta de predios — `GET /consultas/predios` */
   consulta_predios: {
     metodo: 'GET',
     ruta: '/consultas/predios',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codigoPredial', 'contribuyente', 'calle', 'manzana', 'lote', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Consulta de vehículos — `GET /consultas/vehiculos` */
   consulta_vehiculos: {
     metodo: 'GET',
     ruta: '/consultas/vehiculos',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['placa', 'nroMotor', 'contribuyente', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Consulta de valores emitidos — `GET /consultas/valores` */
   consulta_valores: {
     metodo: 'GET',
     ruta: '/consultas/valores',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nroDeValor', 'codContribuyente', 'tipo', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Constancia de no adeudo — `GET /consultas/constancias/no-adeudo` */
   constancia: {
@@ -709,7 +709,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/valores',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nroDeValor', 'codContribuyente', 'tipo', 'ejercicio', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Generación individual de valores — `POST /valores` */
   valores_individual: {
@@ -730,7 +730,7 @@ export const OPERACIONES = {
     metodo: 'POST',
     ruta: '/valores/{nro}/notificacion',
     parametrosDeRuta: ['nro'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nroDeValor', 'notificador', 'resultado'],
   },
   /** Prescripción de la deuda — `POST /coactiva/prescripcion` */
   prescripcion: {
@@ -744,42 +744,42 @@ export const OPERACIONES = {
     metodo: 'POST',
     ruta: '/valores/{numero}/movimientos',
     parametrosDeRuta: ['numero'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['contrib', 'tipoDeValor', 'tipoMov', 'nroValor'],
   },
   /** Expedientes coactivos — `GET /coactiva/expedientes` */
   coactiva_expedientes: {
     metodo: 'GET',
     ruta: '/coactiva/expedientes',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nroDeExpediente', 'codContribuyente', 'ejecutor', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Importación de valores a coactiva — `POST /coactiva/expedientes/importacion` */
   importacion_valores: {
     metodo: 'POST',
     ruta: '/coactiva/expedientes/importacion',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['tipoDeDeuda', 'contribuyente', 'codUnidad', 'filtro'],
   },
   /** Proceso coactivo — `GET /coactiva/expedientes/{numero}/proceso` */
   proceso_coactivo: {
     metodo: 'GET',
     ruta: '/coactiva/expedientes/{numero}/proceso',
     parametrosDeRuta: ['numero'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['contribuyente', 'expedienteAno', 'expedienteNumero', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Impresión de resolución de ejecución coactiva — `POST /coactiva/rec/impresion` */
   rec_impresion: {
     metodo: 'POST',
     ruta: '/coactiva/rec/impresion',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['tipoDeDeuda', 'contribuyente', 'ano', 'proyectarInteresAl'],
   },
   /** Gestionar historial del expediente — `PATCH /coactiva/expedientes/{numero}/estados` */
   expediente_historial: {
     metodo: 'PATCH',
     ruta: '/coactiva/expedientes/{numero}/estados',
     parametrosDeRuta: ['numero'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['contribuyente', 'nExpediente', 'estadoActual', 'ano'],
   },
   /** Cambiar dirección referencial — `PATCH /coactiva/expedientes/{numero}/direccion-referencial` */
   cambiar_direccion_ref: {
@@ -793,49 +793,49 @@ export const OPERACIONES = {
     metodo: 'POST',
     ruta: '/coactiva/liquidaciones-costas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nroLiquidacion', 'nroExpedCoact', 'contribuyente', 'estado'],
   },
   /** Fraccionamiento coactivo — `POST /coactiva/convenios` */
   fraccionamiento_coactivo: {
     metodo: 'POST',
     ruta: '/coactiva/convenios',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['formaDePago', 'benefAplicable', 'contribuyente', 'coact'],
   },
   /** Registro de actos coactivos — `POST /coactiva/expedientes/{numero}/actos` */
   actos_coactivos: {
     metodo: 'POST',
     ruta: '/coactiva/expedientes/{numero}/actos',
     parametrosDeRuta: ['numero'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['expAno', 'expNumero', 'contrib', 'tributo'],
   },
   /** Emisión de notificaciones coactivas — `POST /coactiva/notificaciones` */
   notificaciones_coactivas: {
     metodo: 'POST',
     ruta: '/coactiva/notificaciones',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['contribuyente', 'tipoDeValor', 'valorN', 'expCoac'],
   },
   /** Consulta de deudas en coactiva — `GET /coactiva/deudas` */
   coactiva_consulta_deudas: {
     metodo: 'GET',
     ruta: '/coactiva/deudas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['tipoDeDeuda', 'contribuyente', 'nExpediente', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Consulta de deudas en beneficio (coactiva) — `GET /coactiva/deudas-en-beneficio` */
   coactiva_deudas_beneficio: {
     metodo: 'GET',
     ruta: '/coactiva/deudas-en-beneficio',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['tipoDeDeuda', 'contribuyente', 'benefAplicable', 'fechaDeCalculo', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Anuncio y propaganda — `GET /autorizaciones/anuncios` */
   anuncios: {
     metodo: 'GET',
     ruta: '/autorizaciones/anuncios',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nroAutorizacion', 'contribuyente', 'rUC', 'nExpediente', 'direccion', 'dNI', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Reportes de anuncio y propaganda — `POST /autorizaciones/anuncios/reportes` */
   anuncios_reportes: {
@@ -849,7 +849,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/licencias/funcionamiento',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nroLicencia', 'nExpediente', 'nombreDelContribuyente', 'denominacionComercial', 'direccion', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Padrón de licencias de funcionamiento — `POST /licencias/funcionamiento/reportes/padron` */
   licencia_padron: {
@@ -863,7 +863,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/licencias/funcionamiento/reportes/resumen-anual',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['desdeElAno', 'hastaElAno', 'tipoDeLicencia', 'agrupadoPor', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Resolución de cancelación de licencia — `POST /licencias/funcionamiento/{id}/cancelacion` */
   licencia_resolucion_cancelacion: {
@@ -884,70 +884,70 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/licencias/edificacion',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nroExpediente', 'nroLicencia', 'nombreContribuyente', 'lugarMz', 'lugarLt', 'tipoTramite', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Reporte general de licencias de edificación — `GET /licencias/edificacion/reportes/general` */
   edificacion_reporte: {
     metodo: 'GET',
     ruta: '/licencias/edificacion/reportes/general',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['desde', 'hasta', 'modalidad', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Catálogo CIIU de giros — `GET /licencias/ciiu` */
   ciiu: {
     metodo: 'GET',
     ruta: '/licencias/ciiu',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['codigoCiiu', 'descripcion', 'seccion', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Certificados de numeración y zonificación — `POST /licencias/certificados` */
   certificados: {
     metodo: 'POST',
     ruta: '/licencias/certificados',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['nDeCertificado', 'tipo', 'predio'],
   },
   /** Módulos del sistema — `GET /seguridad/modulos` */
   modulos: {
     metodo: 'GET',
     ruta: '/seguridad/modulos',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['modulo', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Usuarios del sistema — `GET /seguridad/usuarios` */
   usuarios: {
     metodo: 'GET',
     ruta: '/seguridad/usuarios',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['usuario', 'unidadOrganica', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Grupos de usuarios — `GET /seguridad/grupos` */
   grupos: {
     metodo: 'GET',
     ruta: '/seguridad/grupos',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['grupo', 'estado', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Accesos y políticas — `GET /seguridad/accesos` */
   accesos: {
     metodo: 'GET',
     ruta: '/seguridad/accesos',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['tipo', 'nombreDelAcceso', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Gestión de miembros — `POST /seguridad/grupos/{grupo}/miembros` */
   miembros: {
     metodo: 'POST',
     ruta: '/seguridad/grupos/{grupo}/miembros',
     parametrosDeRuta: ['grupo'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['usuario', 'modulo', 'estado'],
   },
   /** Permisos y niveles de accesibilidad — `PUT /seguridad/grupos/{id}/permisos` */
   permisos: {
     metodo: 'PUT',
     ruta: '/seguridad/grupos/{id}/permisos',
     parametrosDeRuta: ['id'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['buscarPor', 'grupoUsuario', 'acceso'],
   },
   /** Cambiar el año de trabajo — `PUT /seguridad/sesion/ejercicio` */
   cambiar_anio: {
@@ -968,7 +968,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/seguridad/auditoria',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['usuario', 'accion', 'desde', 'hasta', 'pagina', 'tamano', 'orden', 'sentido'],
   },
   /** Parámetros del sistema — `GET /seguridad/parametros` */
   parametros: {
@@ -982,7 +982,7 @@ export const OPERACIONES = {
     metodo: 'POST',
     ruta: '/seguridad/respaldos',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['desde', 'hasta', 'tipo'],
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
@@ -1004,66 +1004,177 @@ export interface ParametrosPorOperacion {
   /** `GET /portal/deuda` */
   readonly portal: {
     readonly doc?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `GET /catastro/fichas/urbana/{codRefCatastral}` */
   readonly ficha_urbana: {
     readonly codRefCatastral: string;
+    readonly codigoDeRefCatastral?: string;
+    readonly codContribuyenteRentas?: string;
+    readonly nroFicha?: string;
+    readonly uso?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `GET /catastro/fichas/economica/{codRefCatastral}` */
   readonly ficha_economica: {
     readonly codRefCatastral: string;
+    readonly codigoDeRefCatastral?: string;
+    readonly contribuyente?: string;
+    readonly ciiu?: string;
   };
   /** `GET /catastro/fichas/bienes-comunes/{codEdificacion}` */
   readonly ficha_bienes: {
     readonly codEdificacion: string;
+    readonly denominacion?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `GET /catastro/fichas/rural/{codUnidad}` */
   readonly ficha_rural: {
     readonly codUnidad: string;
+    readonly codUnidadCatastralUc?: string;
+    readonly contribuyente?: string;
+    readonly valleSector?: string;
   };
   /** `GET /catastro/fichas` */
-  readonly consulta_fichas: Readonly<Record<string, never>>;
+  readonly consulta_fichas: {
+    readonly codRefCatastral?: string;
+    readonly contribuyente?: string;
+    readonly manzana?: string;
+    readonly lote?: string;
+    readonly conciliadaConRentas?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `PUT /catastro/fichas/{codigo}/actualizacion` */
   readonly actualizacion_catastro: {
     readonly codigo: string;
+    readonly codRefCatastral?: string;
+    readonly nDeFicha?: string;
+    readonly sector?: string;
+    readonly tipoDeActualizacion?: string;
   };
   /** `GET /catastro/contribuyentes/{codigo}/ficha.pdf` */
   readonly ficha_contribuyente_reporte: {
     readonly codigo: string;
   };
   /** `GET /catastro/vias` */
-  readonly calles: Readonly<Record<string, never>>;
+  readonly calles: {
+    readonly codigoDeVia?: string;
+    readonly nombreDeCalle?: string;
+    readonly tipoDeVia?: string;
+    readonly sector?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /catastro/sectores` */
-  readonly sectores: Readonly<Record<string, never>>;
+  readonly sectores: {
+    readonly sector?: string;
+    readonly manzana?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /catastro/tablas/aranceles` */
   readonly aranceles: {
     readonly anio?: string;
+    readonly ejercicio?: string;
+    readonly via?: string;
+    readonly zona?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `GET /catastro/tablas/valores-unitarios` */
   readonly valores_unitarios: {
     readonly anio?: string;
+    readonly ejercicio?: string;
+    readonly region?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `GET /catastro/tablas/depreciacion` */
   readonly depreciacion: {
     readonly anio?: string;
+    readonly materialMep?: string;
+    readonly uso?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `GET /rentas/contribuyentes` */
-  readonly contribuyentes: Readonly<Record<string, never>>;
+  readonly contribuyentes: {
+    readonly codigo?: string;
+    readonly nombreRazonSocial?: string;
+    readonly dNI?: string;
+    readonly rUC?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /rentas/predios` */
   readonly predios_rentas: {
     readonly contribuyente?: string;
+    readonly codContribuyente?: string;
+    readonly codigoPredial?: string;
+    readonly sector?: string;
+    readonly condicion?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `POST /rentas/predial/calculo-individual` */
-  readonly predial_individual: Readonly<Record<string, never>>;
+  readonly predial_individual: {
+    readonly codContribuyente?: string;
+    readonly ano?: string;
+    readonly djN?: string;
+    readonly tipoDeDeclaracion?: string;
+    readonly fechaDeDeclaracion?: string;
+  };
   /** `POST /rentas/predial/calculo-masivo` */
   readonly predial_masivo: Readonly<Record<string, never>>;
   /** `GET /rentas/declaraciones/{djNro}` */
   readonly declaracion_jurada: {
     readonly djNro: string;
+    readonly djN?: string;
+    readonly codContribuyente?: string;
+    readonly ano?: string;
+    readonly tipo?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `GET /rentas/arbitrios` */
   readonly arbitrios: {
     readonly anio?: string;
+    readonly ejercicio?: string;
+    readonly codigoPredial?: string;
+    readonly zona?: string;
+    readonly uso?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `POST /rentas/transferencias/predio` */
   readonly transferencia_predio: Readonly<Record<string, never>>;
@@ -1072,55 +1183,176 @@ export interface ParametrosPorOperacion {
   /** `GET /rentas/vehiculos/{placa}` */
   readonly vehiculos: {
     readonly placa: string;
+    readonly codContribuyente?: string;
+    readonly nombre?: string;
+    readonly nroDocumento?: string;
+    readonly nroMotor?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `POST /rentas/vehicular/calculo` */
-  readonly vehicular_calculo: Readonly<Record<string, never>>;
+  readonly vehicular_calculo: {
+    readonly placa?: string;
+    readonly codContribuyente?: string;
+    readonly ejercicio?: string;
+  };
   /** `POST /rentas/transferencias/vehiculo` */
   readonly transferencia_vehiculo: Readonly<Record<string, never>>;
   /** `POST /rentas/espectaculos` */
-  readonly espectaculos: Readonly<Record<string, never>>;
+  readonly espectaculos: {
+    readonly nDeExpediente?: string;
+    readonly organizador?: string;
+    readonly desde?: string;
+    readonly hasta?: string;
+  };
   /** `GET /rentas/beneficios` */
-  readonly beneficios: Readonly<Record<string, never>>;
+  readonly beneficios: {
+    readonly contribuyente?: string;
+    readonly tipo?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /rentas/deuda/altas` */
   readonly alta_deuda: Readonly<Record<string, never>>;
   /** `POST /rentas/deuda/bajas` */
-  readonly baja_deuda: Readonly<Record<string, never>>;
+  readonly baja_deuda: {
+    readonly codContribuyente?: string;
+    readonly ano?: string;
+    readonly tributo?: string;
+  };
   /** `POST /fiscalizacion/programas` */
-  readonly fisc_programa: Readonly<Record<string, never>>;
+  readonly fisc_programa: {
+    readonly nDePrograma?: string;
+    readonly ejercicio?: string;
+    readonly tipo?: string;
+    readonly estado?: string;
+  };
   /** `POST /fiscalizacion/predial/actas` */
   readonly fisc_predial: Readonly<Record<string, never>>;
   /** `POST /fiscalizacion/vehicular` */
-  readonly fisc_vehicular: Readonly<Record<string, never>>;
+  readonly fisc_vehicular: {
+    readonly placa?: string;
+    readonly ejercicio?: string;
+    readonly origenDelCruce?: string;
+    readonly hallazgo?: string;
+  };
   /** `GET /fiscalizacion/resultados` */
-  readonly fisc_resultados: Readonly<Record<string, never>>;
+  readonly fisc_resultados: {
+    readonly programa?: string;
+    readonly hallazgo?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /fiscalizacion/omisos` */
-  readonly fisc_omisos: Readonly<Record<string, never>>;
+  readonly fisc_omisos: {
+    readonly ejercicio?: string;
+    readonly sector?: string;
+    readonly condicion?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /fiscalizacion/estado-cuenta` */
   readonly fisc_estado_cuenta: {
     readonly contribuyente?: string;
+    readonly tipoDePapeleta?: string;
+    readonly papeleta?: string;
+    readonly placa?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `GET /fiscalizacion/predial/historico` */
-  readonly fisc_historico: Readonly<Record<string, never>>;
+  readonly fisc_historico: {
+    readonly nLiquidacion?: string;
+    readonly codCont?: string;
+    readonly nNotificacion?: string;
+    readonly contribuyente?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /fiscalizacion/resoluciones/{numero}` */
   readonly resolucion_determinacion_fisc: {
     readonly numero: string;
   };
   /** `GET /transito/papeletas` */
-  readonly papeletas: Readonly<Record<string, never>>;
+  readonly papeletas: {
+    readonly nroPapeleta?: string;
+    readonly placa?: string;
+    readonly documentoDelInfractor?: string;
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /transito/papeletas/busqueda` */
-  readonly transito_busqueda: Readonly<Record<string, never>>;
+  readonly transito_busqueda: {
+    readonly papeleta?: string;
+    readonly nPlaca?: string;
+    readonly estadoDeDeuda?: string;
+    readonly ingresadoPor?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /transito/codigos` */
-  readonly codigos_transito: Readonly<Record<string, never>>;
+  readonly codigos_transito: {
+    readonly codigo?: string;
+    readonly gravedad?: string;
+    readonly textoDeLaInfraccion?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /transito/descargos` */
-  readonly transito_descargos: Readonly<Record<string, never>>;
+  readonly transito_descargos: {
+    readonly nDeExpediente?: string;
+    readonly papeleta?: string;
+    readonly estado?: string;
+  };
   /** `GET /transito/internamientos` */
-  readonly internamiento: Readonly<Record<string, never>>;
+  readonly internamiento: {
+    readonly placa?: string;
+    readonly deposito?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /transito/papeletas/{numero}/actos` */
   readonly transito_documentos: {
     readonly numero: string;
+    readonly contribuyente?: string;
+    readonly papeletaN?: string;
+    readonly placaN?: string;
+    readonly expediente?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `POST /transito/valores/generacion-masiva` */
-  readonly transito_valores: Readonly<Record<string, never>>;
+  readonly transito_valores: {
+    readonly codigoDescripcionDelCriterio?: string;
+  };
   /** `PATCH /transito/papeletas/{numero}/codigo` */
   readonly transito_cambio_numero: {
     readonly numero: string;
@@ -1134,9 +1366,27 @@ export interface ParametrosPorOperacion {
   /** `POST /transito/constancias-libres` */
   readonly transito_constancia_libre: Readonly<Record<string, never>>;
   /** `GET /transito/reportes/padron` */
-  readonly transito_padron: Readonly<Record<string, never>>;
+  readonly transito_padron: {
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly estado?: string;
+    readonly ordenadoPor?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /transito/estado-cuenta` */
-  readonly transito_estado_cuenta: Readonly<Record<string, never>>;
+  readonly transito_estado_cuenta: {
+    readonly conductor?: string;
+    readonly placa?: string;
+    readonly estado?: string;
+    readonly fechaDeCalculo?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /transito/papeletas/{numero}/hoja-informativa` */
   readonly transito_papeleta_reporte: {
     readonly numero: string;
@@ -1146,29 +1396,124 @@ export interface ParametrosPorOperacion {
   /** `POST /transito/resoluciones/sancionadora` */
   readonly transito_rg_sancionadora: Readonly<Record<string, never>>;
   /** `GET /transito/reportes/padron-coactiva` */
-  readonly transito_padron_coactiva: Readonly<Record<string, never>>;
+  readonly transito_padron_coactiva: {
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly ejecutor?: string;
+    readonly estadoDelExpediente?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /transito/reportes/padron-constancias` */
-  readonly transito_padron_constancias: Readonly<Record<string, never>>;
+  readonly transito_padron_constancias: {
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly nDeConstancia?: string;
+    readonly usuarioQueEmitio?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /transito/reportes/resumen-recaudacion` */
-  readonly transito_resumen_recaudacion: Readonly<Record<string, never>>;
+  readonly transito_resumen_recaudacion: {
+    readonly ano?: string;
+    readonly tipoDeCobranza?: string;
+    readonly agrupadoPor?: string;
+    readonly caja?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /transito/reportes/resumen-papeletas` */
-  readonly transito_resumen_papeletas: Readonly<Record<string, never>>;
+  readonly transito_resumen_papeletas: {
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly agrupadoPor?: string;
+    readonly cobranza?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /transito/reportes/resumen-por-codigo` */
-  readonly transito_resumen_codigo: Readonly<Record<string, never>>;
+  readonly transito_resumen_codigo: {
+    readonly codigoDeInfraccion?: string;
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /transito/reportes/resumen-por-placa` */
-  readonly transito_resumen_placa: Readonly<Record<string, never>>;
+  readonly transito_resumen_placa: {
+    readonly iniciales2Letras?: string;
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /infracciones/administrativas/notificaciones` */
-  readonly adm_notificacion: Readonly<Record<string, never>>;
+  readonly adm_notificacion: {
+    readonly serie?: string;
+    readonly ano?: string;
+    readonly numero?: string;
+    readonly estado?: string;
+  };
   /** `GET /infracciones/actas` */
-  readonly infracciones_adm: Readonly<Record<string, never>>;
+  readonly infracciones_adm: {
+    readonly nroDeActa?: string;
+    readonly administrado?: string;
+    readonly codigoCuis?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /infracciones/cuis` */
-  readonly codigos_cuis: Readonly<Record<string, never>>;
+  readonly codigos_cuis: {
+    readonly codigo?: string;
+    readonly materia?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /infracciones/administrativas/codigos/reporte` */
-  readonly adm_codigos_reporte: Readonly<Record<string, never>>;
+  readonly adm_codigos_reporte: {
+    readonly codigo?: string;
+    readonly descripcionContiene?: string;
+    readonly estado?: string;
+    readonly ordenadoPor?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /infracciones/administrativas/valores/generacion-masiva` */
-  readonly adm_valores: Readonly<Record<string, never>>;
+  readonly adm_valores: {
+    readonly codigoDescripcionDelCriterio?: string;
+  };
   /** `GET /infracciones/administrativas/estado-cuenta` */
-  readonly adm_estado_cuenta: Readonly<Record<string, never>>;
+  readonly adm_estado_cuenta: {
+    readonly papeleta?: string;
+    readonly codContribuyente?: string;
+    readonly fechaDeCalculo?: string;
+    readonly incluirGastos?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /infracciones/administrativas/resoluciones` */
   readonly adm_resolucion_gerencia: Readonly<Record<string, never>>;
   /** `POST /infracciones/administrativas/resoluciones/{id}/notificacion` */
@@ -1178,24 +1523,82 @@ export interface ParametrosPorOperacion {
   /** `POST /infracciones/administrativas/reportes` */
   readonly adm_reportes: Readonly<Record<string, never>>;
   /** `GET /infracciones/administrativas/reportes/padron-notificaciones` */
-  readonly adm_padron_notificaciones: Readonly<Record<string, never>>;
+  readonly adm_padron_notificaciones: {
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly agrupadoPor?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /infracciones/administrativas/reportes/vencidas` */
-  readonly adm_notificaciones_vencidas: Readonly<Record<string, never>>;
+  readonly adm_notificaciones_vencidas: {
+    readonly vencidasAl?: string;
+    readonly fiscalizador?: string;
+    readonly infraccion?: string;
+    readonly conPapeleta?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /infracciones/administrativas/reportes/por-contribuyente` */
-  readonly adm_notificaciones_contribuyente: Readonly<Record<string, never>>;
+  readonly adm_notificaciones_contribuyente: {
+    readonly codContribuyente?: string;
+    readonly ano?: string;
+    readonly estadoDeDeuda?: string;
+    readonly agrupadoPor?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /infracciones/administrativas/reportes/resumen-recaudacion` */
-  readonly adm_resumen_recaudacion: Readonly<Record<string, never>>;
+  readonly adm_resumen_recaudacion: {
+    readonly ano?: string;
+    readonly agrupadoPor?: string;
+    readonly tipoDeCobranza?: string;
+    readonly caja?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /tesoreria/caja/cobranza` */
   readonly caja_tributaria: Readonly<Record<string, never>>;
   /** `POST /tesoreria/caja/tasas` */
-  readonly caja_tasas: Readonly<Record<string, never>>;
+  readonly caja_tasas: {
+    readonly codContribuyente?: string;
+    readonly partida?: string;
+    readonly conceptoTupa?: string;
+  };
   /** `POST /tesoreria/fraccionamientos` */
   readonly fraccionamiento: Readonly<Record<string, never>>;
   /** `GET /tesoreria/convenios` */
-  readonly consulta_convenios: Readonly<Record<string, never>>;
+  readonly consulta_convenios: {
+    readonly nroDeConvenio?: string;
+    readonly codContribuyente?: string;
+    readonly estado?: string;
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /tesoreria/recibos/{nro}/duplicado` */
   readonly duplicado_recibo: {
     readonly nro: string;
+    readonly nroDeRecibo?: string;
+    readonly codContribuyente?: string;
+    readonly fecha?: string;
+    readonly caja?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `POST /tesoreria/recibos/{nro}/anulacion` */
   readonly anulacion_recibo: {
@@ -1204,41 +1607,160 @@ export interface ParametrosPorOperacion {
   /** `POST /tesoreria/convenios/{numero}/anulacion` */
   readonly anulacion_convenio: {
     readonly numero: string;
+    readonly numConv?: string;
+    readonly contribuyente?: string;
+    readonly estadoDelConvenio?: string;
+    readonly fechaDeAnulacion?: string;
   };
   /** `POST /tesoreria/caja/cierre` */
   readonly cierre_caja: Readonly<Record<string, never>>;
   /** `GET /tesoreria/recaudacion/avance` */
-  readonly avance_recaudacion: Readonly<Record<string, never>>;
+  readonly avance_recaudacion: {
+    readonly ejercicio?: string;
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly tributo?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /tesoreria/recaudacion/por-area` */
-  readonly recaudacion_area: Readonly<Record<string, never>>;
+  readonly recaudacion_area: {
+    readonly area?: string;
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly agruparPorArea?: string;
+    readonly agruparPorTributo?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /consultas/cuenta-corriente/{codigo}` */
   readonly cuenta_corriente: {
     readonly codigo: string;
+    readonly codContribuyente?: string;
+    readonly ejercicio?: string;
+    readonly tributo?: string;
+    readonly situacion?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `GET /consultas/deuda` */
-  readonly consulta_deuda: Readonly<Record<string, never>>;
+  readonly consulta_deuda: {
+    readonly codContribuyente?: string;
+    readonly fechaDeCorte?: string;
+    readonly fase?: string;
+    readonly incluyeConvenios?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /consultas/unificada` */
   readonly consulta_unificada: {
     readonly contribuyente?: string;
+    readonly impresion?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `GET /consultas/resumen-predial` */
-  readonly consulta_resumen_predial: Readonly<Record<string, never>>;
+  readonly consulta_resumen_predial: {
+    readonly codCatastral?: string;
+    readonly codContribuyente?: string;
+    readonly uso?: string;
+    readonly palabra?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /consultas/altas-bajas` */
-  readonly consulta_altas_bajas: Readonly<Record<string, never>>;
+  readonly consulta_altas_bajas: {
+    readonly tipoDeConsulta?: string;
+    readonly codigoCont?: string;
+    readonly altaBaja?: string;
+    readonly autoManual?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /consultas/deudas-con-beneficio` */
-  readonly consulta_deudas_beneficio: Readonly<Record<string, never>>;
+  readonly consulta_deudas_beneficio: {
+    readonly tipoDePapeleta?: string;
+    readonly contribuyente?: string;
+    readonly formaDePago?: string;
+    readonly benefAplicable?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /consultas/pagos` */
-  readonly consulta_pagos: Readonly<Record<string, never>>;
+  readonly consulta_pagos: {
+    readonly codContribuyente?: string;
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly medioDePago?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /consultas/predios` */
-  readonly consulta_predios: Readonly<Record<string, never>>;
+  readonly consulta_predios: {
+    readonly codigoPredial?: string;
+    readonly contribuyente?: string;
+    readonly calle?: string;
+    readonly manzana?: string;
+    readonly lote?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /consultas/vehiculos` */
-  readonly consulta_vehiculos: Readonly<Record<string, never>>;
+  readonly consulta_vehiculos: {
+    readonly placa?: string;
+    readonly nroMotor?: string;
+    readonly contribuyente?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /consultas/valores` */
-  readonly consulta_valores: Readonly<Record<string, never>>;
+  readonly consulta_valores: {
+    readonly nroDeValor?: string;
+    readonly codContribuyente?: string;
+    readonly tipo?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /consultas/constancias/no-adeudo` */
   readonly constancia: Readonly<Record<string, never>>;
   /** `GET /valores` */
-  readonly valores_busqueda: Readonly<Record<string, never>>;
+  readonly valores_busqueda: {
+    readonly nroDeValor?: string;
+    readonly codContribuyente?: string;
+    readonly tipo?: string;
+    readonly ejercicio?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /valores` */
   readonly valores_individual: Readonly<Record<string, never>>;
   /** `POST /valores/masivo` */
@@ -1246,55 +1768,160 @@ export interface ParametrosPorOperacion {
   /** `POST /valores/{nro}/notificacion` */
   readonly notificacion_valores: {
     readonly nro: string;
+    readonly nroDeValor?: string;
+    readonly notificador?: string;
+    readonly resultado?: string;
   };
   /** `POST /coactiva/prescripcion` */
   readonly prescripcion: Readonly<Record<string, never>>;
   /** `POST /valores/{numero}/movimientos` */
   readonly pase_coactiva: {
     readonly numero: string;
+    readonly contrib?: string;
+    readonly tipoDeValor?: string;
+    readonly tipoMov?: string;
+    readonly nroValor?: string;
   };
   /** `GET /coactiva/expedientes` */
-  readonly coactiva_expedientes: Readonly<Record<string, never>>;
+  readonly coactiva_expedientes: {
+    readonly nroDeExpediente?: string;
+    readonly codContribuyente?: string;
+    readonly ejecutor?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /coactiva/expedientes/importacion` */
-  readonly importacion_valores: Readonly<Record<string, never>>;
+  readonly importacion_valores: {
+    readonly tipoDeDeuda?: string;
+    readonly contribuyente?: string;
+    readonly codUnidad?: string;
+    readonly filtro?: string;
+  };
   /** `GET /coactiva/expedientes/{numero}/proceso` */
   readonly proceso_coactivo: {
     readonly numero: string;
+    readonly contribuyente?: string;
+    readonly expedienteAno?: string;
+    readonly expedienteNumero?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
   };
   /** `POST /coactiva/rec/impresion` */
-  readonly rec_impresion: Readonly<Record<string, never>>;
+  readonly rec_impresion: {
+    readonly tipoDeDeuda?: string;
+    readonly contribuyente?: string;
+    readonly ano?: string;
+    readonly proyectarInteresAl?: string;
+  };
   /** `PATCH /coactiva/expedientes/{numero}/estados` */
   readonly expediente_historial: {
     readonly numero: string;
+    readonly contribuyente?: string;
+    readonly nExpediente?: string;
+    readonly estadoActual?: string;
+    readonly ano?: string;
   };
   /** `PATCH /coactiva/expedientes/{numero}/direccion-referencial` */
   readonly cambiar_direccion_ref: {
     readonly numero: string;
   };
   /** `POST /coactiva/liquidaciones-costas` */
-  readonly costas_procesales: Readonly<Record<string, never>>;
+  readonly costas_procesales: {
+    readonly nroLiquidacion?: string;
+    readonly nroExpedCoact?: string;
+    readonly contribuyente?: string;
+    readonly estado?: string;
+  };
   /** `POST /coactiva/convenios` */
-  readonly fraccionamiento_coactivo: Readonly<Record<string, never>>;
+  readonly fraccionamiento_coactivo: {
+    readonly formaDePago?: string;
+    readonly benefAplicable?: string;
+    readonly contribuyente?: string;
+    readonly coact?: string;
+  };
   /** `POST /coactiva/expedientes/{numero}/actos` */
   readonly actos_coactivos: {
     readonly numero: string;
+    readonly expAno?: string;
+    readonly expNumero?: string;
+    readonly contrib?: string;
+    readonly tributo?: string;
   };
   /** `POST /coactiva/notificaciones` */
-  readonly notificaciones_coactivas: Readonly<Record<string, never>>;
+  readonly notificaciones_coactivas: {
+    readonly contribuyente?: string;
+    readonly tipoDeValor?: string;
+    readonly valorN?: string;
+    readonly expCoac?: string;
+  };
   /** `GET /coactiva/deudas` */
-  readonly coactiva_consulta_deudas: Readonly<Record<string, never>>;
+  readonly coactiva_consulta_deudas: {
+    readonly tipoDeDeuda?: string;
+    readonly contribuyente?: string;
+    readonly nExpediente?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /coactiva/deudas-en-beneficio` */
-  readonly coactiva_deudas_beneficio: Readonly<Record<string, never>>;
+  readonly coactiva_deudas_beneficio: {
+    readonly tipoDeDeuda?: string;
+    readonly contribuyente?: string;
+    readonly benefAplicable?: string;
+    readonly fechaDeCalculo?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /autorizaciones/anuncios` */
-  readonly anuncios: Readonly<Record<string, never>>;
+  readonly anuncios: {
+    readonly nroAutorizacion?: string;
+    readonly contribuyente?: string;
+    readonly rUC?: string;
+    readonly nExpediente?: string;
+    readonly direccion?: string;
+    readonly dNI?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /autorizaciones/anuncios/reportes` */
   readonly anuncios_reportes: Readonly<Record<string, never>>;
   /** `GET /licencias/funcionamiento` */
-  readonly licencia_funcionamiento: Readonly<Record<string, never>>;
+  readonly licencia_funcionamiento: {
+    readonly nroLicencia?: string;
+    readonly nExpediente?: string;
+    readonly nombreDelContribuyente?: string;
+    readonly denominacionComercial?: string;
+    readonly direccion?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /licencias/funcionamiento/reportes/padron` */
   readonly licencia_padron: Readonly<Record<string, never>>;
   /** `GET /licencias/funcionamiento/reportes/resumen-anual` */
-  readonly licencia_resumen_anual: Readonly<Record<string, never>>;
+  readonly licencia_resumen_anual: {
+    readonly desdeElAno?: string;
+    readonly hastaElAno?: string;
+    readonly tipoDeLicencia?: string;
+    readonly agrupadoPor?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /licencias/funcionamiento/{id}/cancelacion` */
   readonly licencia_resolucion_cancelacion: {
     readonly id: string;
@@ -1304,28 +1931,94 @@ export interface ParametrosPorOperacion {
     readonly id: string;
   };
   /** `GET /licencias/edificacion` */
-  readonly fue_edificacion: Readonly<Record<string, never>>;
+  readonly fue_edificacion: {
+    readonly nroExpediente?: string;
+    readonly nroLicencia?: string;
+    readonly nombreContribuyente?: string;
+    readonly lugarMz?: string;
+    readonly lugarLt?: string;
+    readonly tipoTramite?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /licencias/edificacion/reportes/general` */
-  readonly edificacion_reporte: Readonly<Record<string, never>>;
+  readonly edificacion_reporte: {
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly modalidad?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /licencias/ciiu` */
-  readonly ciiu: Readonly<Record<string, never>>;
+  readonly ciiu: {
+    readonly codigoCiiu?: string;
+    readonly descripcion?: string;
+    readonly seccion?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /licencias/certificados` */
-  readonly certificados: Readonly<Record<string, never>>;
+  readonly certificados: {
+    readonly nDeCertificado?: string;
+    readonly tipo?: string;
+    readonly predio?: string;
+  };
   /** `GET /seguridad/modulos` */
-  readonly modulos: Readonly<Record<string, never>>;
+  readonly modulos: {
+    readonly modulo?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /seguridad/usuarios` */
-  readonly usuarios: Readonly<Record<string, never>>;
+  readonly usuarios: {
+    readonly usuario?: string;
+    readonly unidadOrganica?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /seguridad/grupos` */
-  readonly grupos: Readonly<Record<string, never>>;
+  readonly grupos: {
+    readonly grupo?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /seguridad/accesos` */
-  readonly accesos: Readonly<Record<string, never>>;
+  readonly accesos: {
+    readonly tipo?: string;
+    readonly nombreDelAcceso?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `POST /seguridad/grupos/{grupo}/miembros` */
   readonly miembros: {
     readonly grupo: string;
+    readonly usuario?: string;
+    readonly modulo?: string;
+    readonly estado?: string;
   };
   /** `PUT /seguridad/grupos/{id}/permisos` */
   readonly permisos: {
     readonly id: string;
+    readonly buscarPor?: string;
+    readonly grupoUsuario?: string;
+    readonly acceso?: string;
   };
   /** `PUT /seguridad/sesion/ejercicio` */
   readonly cambiar_anio: Readonly<Record<string, never>>;
@@ -1334,11 +2027,24 @@ export interface ParametrosPorOperacion {
     readonly id: string;
   };
   /** `GET /seguridad/auditoria` */
-  readonly auditoria: Readonly<Record<string, never>>;
+  readonly auditoria: {
+    readonly usuario?: string;
+    readonly accion?: string;
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly orden?: string;
+    readonly sentido?: string;
+  };
   /** `GET /seguridad/parametros` */
   readonly parametros: Readonly<Record<string, never>>;
   /** `POST /seguridad/respaldos` */
-  readonly respaldo: Readonly<Record<string, never>>;
+  readonly respaldo: {
+    readonly desde?: string;
+    readonly hasta?: string;
+    readonly tipo?: string;
+  };
 }
 
 /** El cuerpo de cada operacion que escribe. Las de lectura no llevan: `undefined`. */

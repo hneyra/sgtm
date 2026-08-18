@@ -82,6 +82,12 @@ export type TipoDeCampo = 'text' | 'date' | 'sel' | 'area' | 'chk' | 'ro';
 export interface EstructuraDeTabla {
   readonly title: string;
   readonly cols: readonly string[];
+  /**
+   * Como se llama cada columna cuando hay que nombrarla: `Nombre Calle` →
+   * `nombreCalle`. Es lo que viaja en `?orden=`, porque ordenar es del servidor
+   * (ordenar en el cliente una pagina de un padron ordena media tabla).
+   */
+  readonly claves: readonly string[];
   /** Indices de columna numerica: a la derecha y en monoespaciada. */
   readonly num?: readonly number[];
   readonly note?: string;

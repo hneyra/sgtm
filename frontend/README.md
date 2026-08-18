@@ -70,6 +70,44 @@ tiene su contrato de muestra que la viola en `verificaciones/generador-de-operac
 verbo, ruta y parámetros; el esquema de cada recurso se escribe cuando su backend existe, y hasta
 entonces la respuesta se tipa como `CuerpoSinEsquema`, que es exactamente lo que el `yaml` dice.
 
+## La pantalla se usa: registro en la ruta, búsqueda en la URL
+
+`GET /api/v1/rentas/vehiculos/{placa}` se pedía con la cadena `ejemplo`, así que la pantalla
+parecía funcionar mientras mostraba un registro que no era de nadie. Ya no: **sin placa no hay
+petición**, y quien la trae es la ruta.
+
+```
+/rentas-registro/vehiculos                 la pantalla, esperando un registro
+/rentas-registro/vehiculos/ABC-123         la ficha de esa placa, y su enlace se comparte
+/catastro/calles?nombreDeCalle=SANTA+ROSA&orden=nombre&pagina=2
+```
+
+**Todo el estado de la búsqueda vive en la URL** (FRO-04 §5): los filtros, el orden y la página.
+Recargar no lo pierde, el botón «atrás» funciona, y quien atiende en ventanilla puede pegar el
+enlace de lo que está mirando. Lo único que se queda en el componente es el borrador de lo que se
+está escribiendo y aún no se ha buscado.
+
+| Qué                 | Dónde vive                    | Qué viaja                                 |
+| ------------------- | ----------------------------- | ----------------------------------------- |
+| El registro abierto | `/:modulo/:opcion/:codigo`    | Siempre: es el parámetro de la ruta       |
+| Filtros             | `?nombreDeCalle=…`            | Solo si el contrato declara ese parámetro |
+| Orden y página      | `?orden=…&sentido=…&pagina=…` | Solo si el contrato los declara           |
+
+**Filtrar, ordenar y paginar son del servidor.** Ordenar en el cliente una página de un padrón de
+cientos de miles de filas ordena media tabla y miente. Por eso la cabecera pide otro orden y el
+paginador aparece **solo cuando la respuesta trae paginación**: cuántas filas hay solo lo sabe
+quien las tiene.
+
+Para que eso pueda viajar, el contrato declara ahora **los filtros de cada pantalla** y —en las de
+lectura con tabla— `pagina`, `tamano`, `orden` y `sentido`. Los nombres los calculan dos
+generadores en árboles distintos, y una prueba exige que coincidan.
+
+**Buscar por el identificador abre el registro**: si la búsqueda trae un valor para el parámetro de
+la ruta —`placa` en vehículos—, la pantalla navega a esa ficha. Donde el catálogo no dice cuál de
+los filtros es el identificador, el registro se abre por URL hasta que su módulo lo decida; y las
+filas de la tabla **no** enlazan a ninguna ficha, porque de las quince pantallas que abren registro
+y traen tabla, la primera columna es ese registro en una.
+
 ## La puerta lateral: una opción con operación propia
 
 Las 134 pantallas piden la misma forma —`DatosDePantalla`— porque comparten renderizador. Fue la
@@ -188,8 +226,6 @@ dice en la misma frase en que excluye el token.
 - **Ninguna operación va contra el backend real**, porque el backend aún no sirve ninguna: la
   opción conectada pide su operación tipada, y hoy la contesta el proxy. Es el paso 4 de FRO-03 §7
   y se hace opción por opción.
-- **Los parámetros de ruta no están resueltos.** `/rentas/vehiculos/{placa}` se pide con un valor
-  de relleno: el catálogo describe la operación, no un caso concreto.
 - **Ninguna acción escribe.** Toda modificación exige observación del usuario (RNF-052) y ese campo
   se conecta junto con su operación; un botón que guardara sin ella sería un defecto.
 - No hay autenticación real: falta el flujo con PKCE contra el proveedor OIDC (ADR-0005).

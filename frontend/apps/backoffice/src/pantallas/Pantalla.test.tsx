@@ -18,7 +18,9 @@ afterEach(() => desinstalarProxyDeDatos());
 
 describe('la estructura se ve antes que los datos', () => {
   it('las columnas de la tabla estan desde el primer fotograma; las filas llegan despues', async () => {
-    montarEnRuta('/catastro/ficha-urbana');
+    // Con el registro en la ruta: esta pantalla abre una ficha, y sin codigo no
+    // pide nada —antes se pedia con un valor de relleno—.
+    montarEnRuta('/catastro/ficha-urbana/200601010150010101001');
 
     // El catalogo ya sabe que columnas hay: no hay que esperar a nadie.
     expect(screen.getByRole('columnheader', { name: 'Nombre Calle' })).toBeInTheDocument();
@@ -53,14 +55,14 @@ describe('los bloques del descriptor', () => {
   });
 
   it('los campos de solo lectura muestran el valor que sirvio la API', async () => {
-    montarEnRuta('/catastro/ficha-urbana');
+    montarEnRuta('/catastro/ficha-urbana/200601010150010101001');
     await waitFor(() =>
       expect(screen.getAllByText('200601010150010101001').length).toBeGreaterThan(0),
     );
   });
 
   it('la barra de acciones deja la ultima como primaria', async () => {
-    montarEnRuta('/catastro/ficha-urbana');
+    montarEnRuta('/catastro/ficha-urbana/200601010150010101001');
     // El catalogo declara «Nuevo · Modificar · Deshacer · Imprimir · Guardar»,
     // y la ultima es la primaria (FRO-03 §5).
     const primaria = await screen.findByRole('button', { name: 'Guardar' });

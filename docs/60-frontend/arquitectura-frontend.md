@@ -171,8 +171,10 @@ con el esqueleto de carga del design system y un mensaje centrado entre hairline
 - **El servidor de datos de ejemplo es un proxy en el navegador**, no un proceso aparte:
   `@sgtm/api-mock` sustituye `fetch` y responde las 134 operaciones. Se reabre si hace falta
   simular volumen o escrituras con estado (ADR-0010).
-- **Los parámetros de ruta no están resueltos.** `/rentas/vehiculos/{placa}` se pide con un valor
-  de relleno: el catálogo describe la operación, no un caso concreto.
+- ~~**Los parámetros de ruta no están resueltos.**~~ **Hecho:** el registro abierto va en la ruta
+  (`/rentas-registro/vehiculos/ABC-123`) y los filtros, el orden y la página en la consulta. Sin
+  registro no hay petición. Lo que queda por decidir, opción por opción, es **qué búsqueda abre qué
+  ficha** cuando el catálogo no lo dice.
 - **No hay pruebas de extremo a extremo.** Playwright, para la caja y la consulta del portal.
 - **No hay presupuesto de tamaño de paquete en CI.**
 - **Las tres familias tipográficas se cargan de Google Fonts.** Para una municipalidad con red
