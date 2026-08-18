@@ -2,7 +2,9 @@ package pe.gob.sgtm.seguridad.infraestructura;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -18,13 +20,12 @@ import pe.gob.sgtm.seguridad.dominio.PermisoRepository;
 /**
  * Persistencia de los permisos.
  *
- * <p>Las siete columnas booleanas se escriben desde el conjunto de privilegios: lo que no esta en
- * el conjunto queda en falso. Escribirlas todas y no solo las otorgadas es deliberado —un {@code
- * UPDATE} que solo tocara las presentes dejaria activos privilegios que el administrador acaba de
- * quitar de la pantalla, y ese es exactamente el defecto que nadie nota hasta que alguien entra
- * donde no debia—.
+ * <p>Las siete columnas booleanas se escriben <b>siempre</b>, tanto al insertar como al actualizar:
+ * lo que no esta en el conjunto queda en falso. Un {@code UPDATE} que solo tocara los privilegios
+ * presentes dejaria activos los que el administrador acaba de quitar de la pantalla, y ese es el
+ * defecto que no se nota hasta que alguien entra donde no debia.
  *
- * <p>{@code usuario_registro} sale de {@link OrigenContext}, no de un argumento: es el mismo dato
+ * <p>{@code usuario_registro} sale de {@link OrigenContext} y no de un argumento: es el mismo dato
  * que la auditoria, y tenerlo en la firma invitaria a que dos sitios dijeran cosas distintas sobre
  * quien hizo el cambio.
  */
@@ -34,6 +35,12 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
     private static final String COLUMNAS =
             "id, acceso_id, grupo_id, usuario_id,"
                     + " ejecucion, lectura, registro, modificacion, eliminacion, impresion, especial";
+
+    /**
+     * El acceso que gobierna la propia administracion de permisos, y el privilegio que hace falta
+     * para ejercerla. Es el id de esa pantalla en el catalogo (NEG-03).
+     */
+    static final String ACCESO_DE_ADMINISTRACION = "permisos";
 
     public PermisoRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
@@ -45,15 +52,64 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
     }
 
     @Override
-    public Optional<Permiso> findByAccesoYGrupo(long accesoId, long grupoId) {
-        return jdbc().sql(
-                        "SELECT "
-                                + COLUMNAS
-                                + " FROM permiso WHERE acceso_id = :acceso AND grupo_id = :grupo")
+    public Optional<Permiso> deGrupo(long accesoId, long grupoId) {
+        return uno("acceso_id = :acceso AND grupo_id = :sujeto", accesoId, grupoId);
+    }
+
+    @Override
+    public Optional<Permiso> deUsuario(long accesoId, long usuarioId) {
+        return uno("acceso_id = :acceso AND usuario_id = :sujeto", accesoId, usuarioId);
+    }
+
+    private Optional<Permiso> uno(String condicion, long accesoId, long sujeto) {
+        return jdbc().sql("SELECT " + COLUMNAS + " FROM permiso WHERE " + condicion)
                 .param("acceso", accesoId)
-                .param("grupo", grupoId)
+                .param("sujeto", sujeto)
                 .query(PermisoRepositoryJdbc::mapear)
                 .optional();
+    }
+
+    @Override
+    public List<Permiso> todosLosDeGrupo(long grupoId) {
+        return jdbc().sql("SELECT " + COLUMNAS + " FROM permiso WHERE grupo_id = :grupo")
+                .param("grupo", grupoId)
+                .query(PermisoRepositoryJdbc::mapear)
+                .list();
+    }
+
+    /**
+     * Cuenta los usuarios que hoy pueden administrar permisos, con la <b>misma precedencia</b> que
+     * usa el guardia: la excepcion del usuario decide, y si no la hay manda la union de sus grupos.
+     *
+     * <p>Contar con otra regla que la del guardia seria peor que no contar: dejaria pasar un cambio
+     * que en la practica si deja el sistema sin administrador, y con la tranquilidad de haberlo
+     * comprobado.
+     */
+    @Override
+    public long usuariosQuePuedenAdministrarPermisos(LocalDate fecha) {
+        String sql =
+                "SELECT count(*) FROM usuario u"
+                        + " WHERE u.habilitado"
+                        + "   AND (u.vigencia_desde IS NULL OR u.vigencia_desde <= :fecha)"
+                        + "   AND (u.vigencia_hasta IS NULL OR u.vigencia_hasta >= :fecha)"
+                        + "   AND COALESCE("
+                        + "        (SELECT p.registro FROM permiso p"
+                        + "           JOIN acceso a ON a.id = p.acceso_id AND a.codigo = :acceso"
+                        + "          WHERE p.usuario_id = u.id),"
+                        + "        EXISTS (SELECT 1 FROM miembro m"
+                        + "                  JOIN grupo g ON g.id = m.grupo_id AND g.habilitado"
+                        + "                   AND (g.vigencia_desde IS NULL OR g.vigencia_desde <= :fecha)"
+                        + "                   AND (g.vigencia_hasta IS NULL OR g.vigencia_hasta >= :fecha)"
+                        + "                  JOIN permiso p ON p.grupo_id = g.id"
+                        + "                  JOIN acceso a ON a.id = p.acceso_id AND a.codigo = :acceso"
+                        + "                 WHERE m.usuario_id = u.id AND m.activo AND p.registro))";
+
+        return Objects.requireNonNull(
+                jdbc().sql(sql)
+                        .param("fecha", fecha)
+                        .param("acceso", ACCESO_DE_ADMINISTRACION)
+                        .query(Long.class)
+                        .single());
     }
 
     private Permiso insertar(Permiso permiso) {
