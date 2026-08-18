@@ -148,6 +148,51 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el revisor detecta una observacion escrita a mano (regla 10, ADR-0008)")
+    void elRevisorDetectaUnaObservacionEscrita() {
+        String fuente =
+                """
+                class Ejemplo {
+                    // Este comentario menciona Observacion.de("...") y no debe contar.
+                    void malo(pe.gob.sgtm.auditoria.AuditoriaService auditoria) {
+                        auditoria.registrar(
+                                new pe.gob.sgtm.auditoria.RegistroDeAuditoria(
+                                        "via", "1",
+                                        pe.gob.sgtm.auditoria.Operacion.MODIFICACION,
+                                        pe.gob.sgtm.dominio.Observacion.de("listo"),
+                                        null, null));
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarJava("Ejemplo.java", fuente))
+                .hasSize(1)
+                .allSatisfy(h -> assertThat(h.regla()).contains("regla 10"));
+    }
+
+    @Test
+    @DisplayName("el revisor deja pasar la observacion recibida como argumento")
+    void elRevisorDejaPasarLaObservacionRecibida() {
+        String fuente =
+                """
+                class Bueno {
+                    void bueno(
+                            pe.gob.sgtm.auditoria.AuditoriaService auditoria,
+                            pe.gob.sgtm.dominio.Observacion observacion) {
+                        auditoria.registrar(
+                                new pe.gob.sgtm.auditoria.RegistroDeAuditoria(
+                                        "via", "1",
+                                        pe.gob.sgtm.auditoria.Operacion.MODIFICACION,
+                                        observacion,
+                                        null, null));
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarJava("Bueno.java", fuente))
+                .as("recibir la observacion del llamador es exactamente lo que la regla 10 exige")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("UNNECESSARY no es una politica de redondeo y no cuenta")
     void unnecessaryNoCuenta() {
         String fuente =
@@ -218,6 +263,34 @@ class ProhibicionesEnElCodigoFuenteTest {
                 .anySatisfy(
                         f -> assertThat(f).containsIgnoringCase("update cuenta_corriente_asiento"))
                 .anySatisfy(f -> assertThat(f).containsIgnoringCase("set session"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra de escritura sin observacion (regla 10, ADR-0008)")
+    void elEscanerDetectaLaMuestraDeEscrituraSinObservacion() throws IOException {
+        // Mismo patron que la muestra de repositorio que borra: el archivo vive
+        // aparte y se lee del disco, para revisar el escaner sobre un archivo de
+        // verdad y no sobre un fragmento inline.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/infraestructura/MuestraDeEscrituraSinObservacion.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as(
+                        "un unico hallazgo: la observacion escrita, y ninguno de los comentarios que"
+                                + " la explican ni de las cadenas \"via\"/\"MODIFICACION\" del propio"
+                                + " codigo")
+                .hasSize(1);
+        assertThat(hallazgos.get(0).regla()).contains("regla 10");
+        assertThat(hallazgos.get(0).fragmento()).containsIgnoringCase("observacion.de(\"");
     }
 
     private static List<Path> fuentesDeProduccion(Path raiz) throws IOException {

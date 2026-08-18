@@ -10,7 +10,8 @@ import java.util.regex.Pattern;
 /**
  * Las reglas de ARQ-04 §2 que viven en el texto del SQL y no en la estructura de las clases: {@code
  * SET SESSION}, el {@code DELETE} sobre tablas protegidas y el {@code UPDATE} sobre las inmutables.
- * Y una que vive en el texto del Java: la politica de redondeo escrita a mano, que D-03 prohibe.
+ * Y dos que viven en el texto del Java: la politica de redondeo escrita a mano (D-03), y la
+ * observacion escrita a mano en vez de recibida como argumento (regla 10, ADR-0008).
  *
  * <p>ArchUnit no las ve porque no son dependencias entre tipos, sino cadenas.
  *
@@ -90,6 +91,23 @@ public final class RevisorDeCodigoFuente {
     private static final Pattern ESCALA_ESCRITA =
             Pattern.compile("\\.\\s*setScale\\s*\\(\\s*[0-9]");
 
+    /**
+     * {@code Observacion.de("...")} o {@code new Observacion("...")}: la observacion escrita como
+     * literal dentro del metodo que la usa, en vez de recibida como argumento (regla 10, ADR-0008).
+     *
+     * <p>Un {@code Observacion.de("listo")} compila y pasa la validacion del tipo —"listo" tiene
+     * cinco caracteres—, y eso es exactamente el problema: esconde una escritura sin observacion
+     * real detras de una observacion de mentira que nadie escribio para explicar el cambio. Por eso
+     * el patron no mira el contenido del literal, solo que haya uno: la unica forma correcta es que
+     * el texto entre por parametro.
+     *
+     * <p>A diferencia de {@link #MODO_DE_REDONDEO_ESCRITO}, este patron necesita ver la comilla que
+     * abre el literal, asi que se aplica sobre el codigo con los comentarios de bloque quitados
+     * pero <b>sin</b> quitar los literales.
+     */
+    private static final Pattern OBSERVACION_ESCRITA =
+            Pattern.compile("\\b(?:Observacion\\s*\\.\\s*de|new\\s+Observacion)\\s*\\(\\s*\"");
+
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
     private static final Pattern COMENTARIO_DE_BLOQUE = Pattern.compile("(?s)/\\*.*?\\*/");
 
@@ -111,6 +129,35 @@ public final class RevisorDeCodigoFuente {
         }
         List<Hallazgo> hallazgos = new ArrayList<>(revisarTexto(archivo, literales.toString()));
         hallazgos.addAll(revisarRedondeo(archivo, contenido));
+        hallazgos.addAll(revisarObservacion(archivo, contenido));
+        return hallazgos;
+    }
+
+    /**
+     * Regla 10 (ADR-0008): mientras no se reciba como argumento, ninguna observacion viaja escrita
+     * a mano dentro del metodo que la usa.
+     *
+     * <p>Igual que {@link #revisarRedondeo}, quita los comentarios —de bloque y de linea— para no
+     * denunciarse a si mismo cuando un javadoc o un {@code //} cita el patron como ejemplo. A
+     * diferencia de {@link #revisarRedondeo}, no pasa por {@link #soloCodigo}: ese metodo borra el
+     * contenido de los literales, y aqui lo que hace falta ver es precisamente que hay uno, con
+     * {@link #sinComentarios}.
+     */
+    public static List<Hallazgo> revisarObservacion(String archivo, String contenido) {
+        String codigo = sinComentarios(contenido);
+        List<Hallazgo> hallazgos = new ArrayList<>();
+
+        Matcher observacion = OBSERVACION_ESCRITA.matcher(codigo);
+        while (observacion.find()) {
+            hallazgos.add(
+                    new Hallazgo(
+                            archivo,
+                            "regla 10 (ADR-0008): la observacion viaja como argumento del caso de"
+                                    + " uso que escribe, nunca como literal dentro del metodo que la"
+                                    + " usa",
+                            observacion.group()));
+        }
+
         return hallazgos;
     }
 
@@ -157,7 +204,23 @@ public final class RevisorDeCodigoFuente {
      * viene detras en la misma linea.
      */
     static String soloCodigo(String contenido) {
-        StringBuilder codigo = new StringBuilder(contenido.length());
+        return recorrer(contenido, false);
+    }
+
+    /**
+     * El contenido sin comentarios de bloque ni de linea, <b>con</b> los literales intactos.
+     *
+     * <p>Comparte el recorrido caracter a caracter con {@link #soloCodigo}, y difere solo en que no
+     * descarta lo que hay entre comillas. La usa {@link #revisarObservacion}, que necesita ver la
+     * comilla que abre un literal —al reves que {@link #revisarRedondeo}, a quien le basta con
+     * saber que hubo una llamada.
+     */
+    private static String sinComentarios(String contenido) {
+        return recorrer(contenido, true);
+    }
+
+    private static String recorrer(String contenido, boolean conservarLiterales) {
+        StringBuilder resultado = new StringBuilder(contenido.length());
         int i = 0;
         while (i < contenido.length()) {
             char actual = contenido.charAt(i);
@@ -175,21 +238,29 @@ public final class RevisorDeCodigoFuente {
                 }
                 i = Math.min(i + 2, contenido.length());
             } else if (actual == '"' && contenido.startsWith("\"\"\"", i)) {
+                int inicio = i;
                 int cierre = contenido.indexOf("\"\"\"", i + 3);
                 i = cierre < 0 ? contenido.length() : cierre + 3;
+                if (conservarLiterales) {
+                    resultado.append(contenido, inicio, i);
+                }
             } else if (actual == '"' || actual == '\'') {
                 char comilla = actual;
+                int inicio = i;
                 i++;
                 while (i < contenido.length() && contenido.charAt(i) != comilla) {
                     i += contenido.charAt(i) == '\\' ? 2 : 1;
                 }
-                i++;
+                i = Math.min(i + 1, contenido.length());
+                if (conservarLiterales) {
+                    resultado.append(contenido, inicio, i);
+                }
             } else {
-                codigo.append(actual);
+                resultado.append(actual);
                 i++;
             }
         }
-        return codigo.toString();
+        return resultado.toString();
     }
 
     public static List<Hallazgo> revisarSql(String archivo, String contenido) {
