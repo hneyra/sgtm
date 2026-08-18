@@ -26,7 +26,7 @@ class ProhibicionesEnElCodigoFuenteTest {
 
     @Test
     @DisplayName(
-            "ningun modulo usa SET SESSION, borra de una tabla protegida ni edita una inmutable")
+            "ningun modulo usa SET SESSION, borra de una tabla protegida, edita una inmutable ni escribe una politica de redondeo")
     void ningunModuloIncumpleLasProhibicionesDeTexto() throws IOException {
         Path raiz = raizDelBackend();
         List<Path> archivos = fuentesDeProduccion(raiz);
@@ -108,6 +108,75 @@ class ProhibicionesEnElCodigoFuenteTest {
         assertThat(RevisorDeCodigoFuente.revisarSql("V9__malo.sql", sql))
                 .as("contribuyente si se puede actualizar; el asiento y la auditoria no")
                 .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("el revisor detecta un modo de redondeo escrito en el codigo (D-03)")
+    void elRevisorDetectaUnModoDeRedondeoEscrito() {
+        String fuente =
+                """
+                import java.math.RoundingMode;
+
+                class Ejemplo {
+                    // Este comentario menciona RoundingMode.HALF_UP y no debe contar.
+                    java.math.BigDecimal malo(java.math.BigDecimal base) {
+                        return base.setScale(2, RoundingMode.HALF_UP);
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarJava("Ejemplo.java", fuente))
+                .as("el modo y la escala son dos decisiones, y las dos las bloquea D-03")
+                .hasSize(2)
+                .allSatisfy(h -> assertThat(h.regla()).contains("D-03"));
+    }
+
+    @Test
+    @DisplayName("el revisor deja pasar la politica recibida como argumento")
+    void elRevisorDejaPasarLaPoliticaRecibida() {
+        String fuente =
+                """
+                class Bueno {
+                    java.math.BigDecimal redondear(java.math.BigDecimal v, int escala,
+                            java.math.RoundingMode modo) {
+                        return v.setScale(escala, modo);
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarJava("Bueno.java", fuente))
+                .as("recibir la politica es exactamente lo que D-03 obliga a hacer")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("UNNECESSARY no es una politica de redondeo y no cuenta")
+    void unnecessaryNoCuenta() {
+        String fuente =
+                """
+                class Bueno {
+                    boolean esPolitica(java.math.RoundingMode modo) {
+                        return modo != java.math.RoundingMode.UNNECESSARY;
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarJava("Bueno.java", fuente)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("un // dentro de una cadena no borra el resto de la linea")
+    void unaBarraDobleEnUnaCadenaNoBorraLaLinea() {
+        String fuente =
+                """
+                class Ejemplo {
+                    void malo(java.math.BigDecimal v) {
+                        String url = "https://ejemplo.pe"; v.setScale(4, null);
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarJava("Ejemplo.java", fuente))
+                .as(
+                        "si el revisor tratara ese // como comentario, la llamada de al lado"
+                                + " desapareceria y la regla no protegeria nada")
+                .hasSize(1);
     }
 
     @Test

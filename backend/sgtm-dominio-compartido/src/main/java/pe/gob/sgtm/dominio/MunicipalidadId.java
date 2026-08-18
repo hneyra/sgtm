@@ -1,4 +1,4 @@
-package pe.gob.sgtm.compartido;
+package pe.gob.sgtm.dominio;
 
 /**
  * Identidad de una municipalidad dentro del producto.
@@ -8,7 +8,7 @@ package pe.gob.sgtm.compartido;
  * si alguna vez hubiera que reabrir ADR-0002.
  *
  * <p>No aparece en la firma de ningun metodo de dominio: sale del token y se fija una sola vez en
- * {@link TenantContext} (ARQ-03 §3.1). Lo verifica ArchUnit.
+ * {@link pe.gob.sgtm.compartido.TenantContext} (ARQ-03 §3.1). Lo verifica ArchUnit.
  */
 public record MunicipalidadId(long valor) {
 

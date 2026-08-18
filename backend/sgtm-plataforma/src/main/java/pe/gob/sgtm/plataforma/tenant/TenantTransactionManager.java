@@ -5,8 +5,8 @@ import java.sql.PreparedStatement;
 import javax.sql.DataSource;
 import org.springframework.jdbc.support.JdbcTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
-import pe.gob.sgtm.compartido.MunicipalidadId;
 import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.dominio.MunicipalidadId;
 
 /**
  * Emite {@code SET LOCAL app.municipalidad_id} al abrir cada transaccion.

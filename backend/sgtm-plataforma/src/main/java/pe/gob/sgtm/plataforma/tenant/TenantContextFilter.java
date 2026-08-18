@@ -12,8 +12,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.filter.OncePerRequestFilter;
-import pe.gob.sgtm.compartido.MunicipalidadId;
 import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.dominio.MunicipalidadId;
 
 /**
  * Traduce el claim del token validado a {@link TenantContext}. Es el primer eslabon del camino de

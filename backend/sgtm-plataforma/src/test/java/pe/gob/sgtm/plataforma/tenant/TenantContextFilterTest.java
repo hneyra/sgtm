@@ -20,8 +20,8 @@ import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-import pe.gob.sgtm.compartido.MunicipalidadId;
 import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.dominio.MunicipalidadId;
 
 /**
  * El identificador de municipalidad sale <b>solo</b> del token validado (ADR-0005, RNF-033).

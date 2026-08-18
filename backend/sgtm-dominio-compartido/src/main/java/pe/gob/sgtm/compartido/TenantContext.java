@@ -1,6 +1,7 @@
 package pe.gob.sgtm.compartido;
 
 import java.util.Optional;
+import pe.gob.sgtm.dominio.MunicipalidadId;
 
 /**
  * Contexto de municipalidad de la peticion en curso.

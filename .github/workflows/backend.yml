@@ -1,0 +1,71 @@
+# Verificacion del backend. Lo que este workflow ejecuta es exactamente lo que
+# CLAUDE.md pide antes de un PR, sin atajos:
+#
+#   ./gradlew verificarAislamiento    aislamiento multi-tenant. Requiere Docker.
+#   ./gradlew verificarArquitectura   ArchUnit, escaner de fuentes y Spring Modulith.
+#   ./gradlew build                   compilacion, Spotless, Checkstyle y NullAway.
+#
+# Van en pasos separados a proposito, aunque `build` acabe ejecutando las mismas
+# pruebas: cuando algo se rompe, el nombre del paso ya dice que barrera cayo.
+#
+# Las pruebas de persistencia NO se omiten sin Docker: fallan. Una verificacion
+# bloqueante que se salta a si misma deja el build en verde sin haber verificado
+# nada, que es peor que no tenerla. El runner de GitHub trae Docker.
+
+name: Backend
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Un push nuevo sobre la misma rama cancela la ejecucion anterior.
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: Verificaciones bloqueantes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ADR-0001 fija Java 25. La propiedad `sgtm.java.version` existe para poder
+      # construir en una maquina que todavia no lo tenga; aqui se usa el valor por
+      # omision, que es el unico admitido.
+      - name: Instalar JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Preparar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Aislamiento multi-tenant
+        run: ./gradlew verificarAislamiento --no-daemon
+
+      - name: Arquitectura, escaner de fuentes y limites de modulo
+        run: ./gradlew verificarArquitectura --no-daemon
+
+      - name: Build completo, con Spotless, Checkstyle y NullAway
+        run: ./gradlew build --no-daemon
+
+      - name: Publicar los informes de prueba
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informes-de-prueba
+          path: backend/**/build/reports/tests/**
+          retention-days: 7
