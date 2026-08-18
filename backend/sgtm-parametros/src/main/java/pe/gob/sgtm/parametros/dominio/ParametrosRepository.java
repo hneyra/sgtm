@@ -25,7 +25,17 @@ public interface ParametrosRepository {
 
     Optional<ConjuntoDeParametros> conjunto(long id);
 
-    Optional<ConjuntoDeParametros> selladoDe(Ejercicio ejercicio);
+    /**
+     * El conjunto sellado de mayor version del ejercicio: el que rige hoy. Puede haber mas de uno
+     * sellado —ARQ-09 §3 lo exige— y entonces el vigente es el ultimo.
+     */
+    Optional<ConjuntoDeParametros> selladoVigenteDe(Ejercicio ejercicio);
+
+    /**
+     * El conjunto sellado con ese identificador, sea o no el vigente. Devuelve vacio si no existe o
+     * si sigue abierto: un conjunto abierto no se lee para calcular.
+     */
+    Optional<ConjuntoDeParametros> selladoPorId(long id);
 
     /** La ultima version del ejercicio, sellada o no. 0 si no hay ninguna. */
     int ultimaVersionDe(Ejercicio ejercicio);

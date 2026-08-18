@@ -175,8 +175,8 @@ class AdministrarParametrosTest {
         }
 
         @Test
-        @DisplayName("dos conjuntos del mismo ejercicio no pueden estar sellados a la vez")
-        void dosSelladosDelMismoEjercicioNo() throws SQLException {
+        @DisplayName("ARQ-09 §3: dos conjuntos del mismo ejercicio si pueden estar sellados")
+        void dosSelladosDelMismoEjercicioSi() throws SQLException {
             Ejercicio ejercicio = new Ejercicio(2028);
 
             ConjuntoDeParametros primero =
@@ -187,26 +187,46 @@ class AdministrarParametrosTest {
                     Observacion.de("Parametro de la primera version"));
             administrar.sellar(primero.id(), Observacion.de("Se sella la primera version de 2028"));
 
+            // Un arancel corregido a mitad de ejercicio: version nueva, sellada al lado de la
+            // anterior. Las determinaciones ya emitidas siguen apuntando a la primera.
             ConjuntoDeParametros segundo =
                     administrar.abrirVersion(ejercicio, Observacion.de("Segunda version de 2028"));
             administrar.agregarParametro(
                     segundo.id(),
                     parametroFicticio("SEGUNDO_2028"),
                     Observacion.de("Parametro de la segunda version"));
-
-            assertThatThrownBy(
-                            () ->
-                                    administrar.sellar(
-                                            segundo.id(),
-                                            Observacion.de("Intento de sellar la segunda")))
-                    .as("con dos sellados, ninguna consulta podria decir cual se aplico")
-                    .isNotNull();
+            administrar.sellar(segundo.id(), Observacion.de("Se sella la correccion de 2028"));
 
             assertThat(
                             contar(
                                     "SELECT count(*) FROM conjunto_parametros WHERE ejercicio ="
                                             + " 2028 AND estado = 'SELLADO'"))
-                    .isEqualTo(1);
+                    .as(
+                            "quien dice cual se aplico no es una consulta por ejercicio: es la"
+                                    + " determinacion, que guarda su conjunto_id")
+                    .isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("un conjunto sellado sigue sin poder sellarse dos veces")
+        void unConjuntoNoSeSellaDosVeces() throws SQLException {
+            Ejercicio ejercicio = new Ejercicio(2029);
+
+            ConjuntoDeParametros conjunto =
+                    administrar.abrirVersion(ejercicio, Observacion.de("Version unica de 2029"));
+            administrar.agregarParametro(
+                    conjunto.id(),
+                    parametroFicticio("UNICO_2029"),
+                    Observacion.de("Parametro de la version unica"));
+            administrar.sellar(conjunto.id(), Observacion.de("Se sella 2029"));
+
+            assertThatThrownBy(
+                            () ->
+                                    administrar.sellar(
+                                            conjunto.id(),
+                                            Observacion.de("Intento de sellarlo otra vez")))
+                    .as("levantar el indice unico no levanta la inmutabilidad de lo sellado")
+                    .isNotNull();
         }
 
         @Test

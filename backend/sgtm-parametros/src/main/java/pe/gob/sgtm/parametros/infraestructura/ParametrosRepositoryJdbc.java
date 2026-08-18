@@ -64,13 +64,30 @@ public class ParametrosRepositoryJdbc extends RepositorioJdbc implements Paramet
     }
 
     @Override
-    public Optional<ConjuntoDeParametros> selladoDe(Ejercicio ejercicio) {
+    public Optional<ConjuntoDeParametros> selladoVigenteDe(Ejercicio ejercicio) {
+        // ORDER BY version DESC LIMIT 1: desde V10 puede haber varias versiones selladas del mismo
+        // ejercicio (ARQ-09 §3), y la que rige es la ultima. Sin el orden, la consulta devolveria
+        // una cualquiera.
         return jdbc().sql(
                         "SELECT "
                                 + COLUMNAS_CONJUNTO
                                 + " FROM conjunto_parametros"
-                                + " WHERE ejercicio = :ejercicio AND estado = 'SELLADO'")
+                                + " WHERE ejercicio = :ejercicio AND estado = 'SELLADO'"
+                                + " ORDER BY version DESC"
+                                + " LIMIT 1")
                 .param("ejercicio", ejercicio.valor())
+                .query(ParametrosRepositoryJdbc::mapearConjunto)
+                .optional();
+    }
+
+    @Override
+    public Optional<ConjuntoDeParametros> selladoPorId(long id) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS_CONJUNTO
+                                + " FROM conjunto_parametros"
+                                + " WHERE id = :id AND estado = 'SELLADO'")
+                .param("id", id)
                 .query(ParametrosRepositoryJdbc::mapearConjunto)
                 .optional();
     }
