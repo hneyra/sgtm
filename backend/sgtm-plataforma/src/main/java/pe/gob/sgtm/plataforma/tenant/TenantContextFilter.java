@@ -1,0 +1,127 @@
+package pe.gob.sgtm.plataforma.tenant;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.filter.OncePerRequestFilter;
+import pe.gob.sgtm.compartido.MunicipalidadId;
+import pe.gob.sgtm.compartido.TenantContext;
+
+/**
+ * Traduce el claim del token validado a {@link TenantContext}. Es el primer eslabon del camino de
+ * ARQ-03 §2:
+ *
+ * <pre>
+ *   token validado → claim municipalidad_id → TenantContext → SET LOCAL → RLS
+ * </pre>
+ *
+ * <h2>La regla central de seguridad del sistema</h2>
+ *
+ * <p>ADR-0005: el identificador de municipalidad se obtiene <b>exclusivamente</b> del token de
+ * acceso validado. Nunca de un parametro de consulta, de un encabezado, de un campo del cuerpo ni
+ * de la sesion del navegador.
+ *
+ * <p>Este filtro solo lee de {@link SecurityContextHolder}, es decir, de lo que Spring Security ya
+ * valido criptograficamente. No toca la peticion. Hay una prueba dedicada que manda el
+ * identificador de otra municipalidad como encabezado y como parametro a la vez y verifica que no
+ * llega a ninguna parte: si alguien anadiera "por comodidad" esa lectura, se pone en rojo.
+ *
+ * <h2>Un token sin el claim se rechaza</h2>
+ *
+ * <p>No existe un valor por omision ni un modo "sin municipalidad" (ADR-0005, RNF-032). Una
+ * peticion autenticada con un token que no trae el claim recibe 403 y no llega al controlador.
+ *
+ * <p>Una peticion <b>sin</b> token pasa sin contexto: son los recursos publicos, y que puedan o no
+ * llegar a datos de tenant lo decide la configuracion de seguridad, no este filtro. Si alguna
+ * llegara, la consulta fallaria en la base por falta de contexto, que es el comportamiento
+ * correcto.
+ *
+ * <h2>Lo que este filtro todavia no hace</h2>
+ *
+ * <ul>
+ *   <li>El token de un usuario con acceso a varias municipalidades llevara la lista de autorizadas
+ *       ademas de la activa. Verificar que la activa esta en la lista es una defensa barata, pero
+ *       el nombre de ese claim no esta fijado todavia: es la decision D-06.
+ *   <li>El portal del contribuyente no pasa por aqui. Su token no lleva municipalidad y el contexto
+ *       tiene que salir del objeto consultado, tras verificar pertenencia. Ese camino es el punto
+ *       debil declarado del diseno (D-07) y necesita su propio componente y sus propias pruebas.
+ * </ul>
+ */
+public final class TenantContextFilter extends OncePerRequestFilter {
+
+    /** Nombre del claim, fijado por ADR-0005. */
+    public static final String CLAIM = "municipalidad_id";
+
+    private static final Logger log = LoggerFactory.getLogger(TenantContextFilter.class);
+
+    @Override
+    protected void doFilterInternal(
+            HttpServletRequest peticion, HttpServletResponse respuesta, FilterChain cadena)
+            throws ServletException, IOException {
+
+        Jwt token = tokenDeLaAutenticacion();
+        if (token == null) {
+            // Sin token: recurso publico. Sigue sin contexto, a proposito.
+            cadena.doFilter(peticion, respuesta);
+            return;
+        }
+
+        MunicipalidadId municipalidadId;
+        try {
+            municipalidadId = delClaim(token);
+        } catch (IllegalArgumentException e) {
+            log.warn(
+                    "Token sin claim {} utilizable ({}). Se rechaza la peticion: no hay valor por"
+                            + " omision ni modo sin municipalidad (ADR-0005, RNF-032)",
+                    CLAIM,
+                    e.getMessage());
+            respuesta.sendError(
+                    HttpServletResponse.SC_FORBIDDEN, "El token no identifica una municipalidad");
+            return;
+        }
+
+        TenantContext.fijar(municipalidadId);
+        try {
+            cadena.doFilter(peticion, respuesta);
+        } finally {
+            // Siempre, incluso si la cadena lanza: el hilo vuelve al pool de hilos
+            // igual que la conexion vuelve al suyo.
+            TenantContext.limpiar();
+        }
+    }
+
+    private static @Nullable Jwt tokenDeLaAutenticacion() {
+        Authentication autenticacion = SecurityContextHolder.getContext().getAuthentication();
+        if (autenticacion == null || !autenticacion.isAuthenticated()) {
+            return null;
+        }
+        return autenticacion.getPrincipal() instanceof Jwt token ? token : null;
+    }
+
+    private static MunicipalidadId delClaim(Jwt token) {
+        Object valor = token.getClaim(CLAIM);
+        if (valor == null) {
+            throw new IllegalArgumentException("el claim no esta presente");
+        }
+        long identificador;
+        if (valor instanceof Number numero) {
+            identificador = numero.longValue();
+        } else {
+            try {
+                identificador = Long.parseLong(valor.toString().trim());
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("el claim no es un numero: " + valor);
+            }
+        }
+        // MunicipalidadId rechaza el cero y los negativos.
+        return new MunicipalidadId(identificador);
+    }
+}
