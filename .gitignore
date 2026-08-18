@@ -9,6 +9,11 @@ backend/buildSrc/.gradle/
 .idea/
 *.iml
 
+# Frontend
+node_modules/
+dist/
+*.tsbuildinfo
+
 # Sistema
 .DS_Store
 

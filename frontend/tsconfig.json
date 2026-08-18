@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [
+    "apps/*/src/**/*.ts",
+    "apps/*/src/**/*.tsx",
+    "packages/*/src/**/*.ts",
+    "packages/*/src/**/*.tsx",
+    "verificaciones/*.ts",
+    "*.config.ts",
+    "apps/*/vite.config.ts"
+  ],
+  "exclude": ["verificaciones/muestras/**"],
+  "compilerOptions": {
+    "types": ["vite/client", "node", "@testing-library/jest-dom"]
+  }
+}
