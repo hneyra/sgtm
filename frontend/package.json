@@ -23,7 +23,8 @@
     "verificar": "yarn comprobar-operaciones && yarn lint && yarn typecheck && yarn test",
     "portar-catalogo": "node scripts/portar-catalogo.mjs",
     "generar-operaciones": "node scripts/generar-operaciones.mjs",
-    "comprobar-operaciones": "node scripts/generar-operaciones.mjs --comprobar"
+    "comprobar-operaciones": "node scripts/generar-operaciones.mjs --comprobar",
+    "comprobar-compilaciones": "node scripts/comprobar-compilaciones.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

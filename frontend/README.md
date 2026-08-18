@@ -270,6 +270,39 @@ VITE_SGTM_PROXY_DE_DATOS=false SGTM_API=http://localhost:8080 yarn dev
 Con la bandera apagada el empaquetador descarta la rama entera: el juego de datos **no se compila
 en producción**. Se comprobó midiendo las dos compilaciones.
 
+### Apagarlo operación por operación
+
+El backend no va a existir de golpe: llega contexto por contexto, en seis ondas. Apagar el proxy
+entero dejaría las 134 pantallas sin nadie que conteste, así que hay un modo intermedio —**backend
+real donde exista, proxy donde todavía no**—: `packages/api-mock/src/servidas.ts` lista las rutas
+que el backend ya sirve, y esas el proxy las deja pasar.
+
+```ts
+export const YA_SERVIDAS: readonly OperacionServida[] = []; // hoy, ninguna
+```
+
+**Una ruta declarada que el backend no sirve falla ruidosamente** —`502` con el nombre del archivo
+que hay que corregir— en vez de caer al proxy en silencio: un respaldo callado esconde justo lo que
+se quiere ver.
+
+La lista **crece hasta cubrir las 134 y entonces desaparece**: con el backend sirviéndolo todo, se
+apaga el proxy y se borra el archivo. El modo intermedio es transitorio y su final es parte del
+trabajo.
+
+### Los dos procesos, juntos
+
+```bash
+# Terminal 1 — el backend
+cd backend && ./gradlew bootRun
+
+# Terminal 2 — la interfaz, con el reenvío de Vite a Spring Boot
+cd frontend && SGTM_API=http://localhost:8080 yarn dev
+```
+
+`yarn dev` sirve en `http://localhost:5173` y reenvía `/api` a `SGTM_API`; el proxy de datos sigue
+instalado y contesta todo lo que no esté en `servidas.ts`. Para trabajar **solo** contra el backend:
+`VITE_SGTM_PROXY_DE_DATOS=false`.
+
 **Lo que el proxy no hace, a propósito:** no filtra, no ordena, no pagina, no valida y no persiste.
 Fingir la semántica de `?uso=Comercio` sería inventar un comportamiento que el backend no ha
 decidido, y la interfaz acabaría construida contra esa invención.
