@@ -90,6 +90,34 @@ public final class RevisorDeCodigoFuente {
     private static final Pattern ESCALA_ESCRITA =
             Pattern.compile("\\.\\s*setScale\\s*\\(\\s*[0-9]");
 
+    /**
+     * Un valor tributario construido desde un literal.
+     *
+     * <p>Regla 5: ninguna cifra normativa vive en el codigo. Una alicuota, un porcentaje o un valor
+     * normativo construidos desde una cadena literal en {@code src/main} son exactamente eso: un
+     * tramo, una tasa o una UIT compilados dentro del artefacto, que solo se pueden cambiar
+     * desplegando —con lo que se acaban sin cambiar, y calculando con los del ano pasado—.
+     *
+     * <p>{@code Dinero} no entra en la lista: un importe literal en produccion casi siempre es un
+     * cero o un tope tecnico, y prohibirlo daria mas falsos positivos que hallazgos. Lo que si es
+     * casi siempre normativo es lo otro.
+     */
+    private static final Pattern VALOR_TRIBUTARIO_LITERAL =
+            Pattern.compile(
+                    "\\b(Alicuota|Porcentaje|ValorNormativo)\\s*\\.\\s*de\\s*\\(\\s*[\"0-9]");
+
+    /**
+     * Una constante con nombre de valor normativo y una cifra dentro.
+     *
+     * <p>Es la otra forma en que aparece: no llamando a {@code Alicuota.de}, sino declarando {@code
+     * private static final BigDecimal UIT = new BigDecimal("5350")}. El nombre delata la intencion,
+     * y por eso la lista es de nombres y no de tipos.
+     */
+    private static final Pattern CONSTANTE_NORMATIVA =
+            Pattern.compile(
+                    "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
+                            + "|INTERES_MORATORIO|REAJUSTE)\\w*\\s*=\\s*[^;\\n]*[0-9]");
+
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
     private static final Pattern COMENTARIO_DE_BLOQUE = Pattern.compile("(?s)/\\*.*?\\*/");
 
@@ -111,6 +139,45 @@ public final class RevisorDeCodigoFuente {
         }
         List<Hallazgo> hallazgos = new ArrayList<>(revisarTexto(archivo, literales.toString()));
         hallazgos.addAll(revisarRedondeo(archivo, contenido));
+        hallazgos.addAll(revisarValoresTributarios(archivo, contenido));
+        return hallazgos;
+    }
+
+    /**
+     * Regla 5: ningun literal numerico tributario en el codigo.
+     *
+     * <p>UIT, tramos, alicuotas, valores unitarios, aranceles y tablas de depreciacion viven en
+     * datos versionados con su documento fuente y su vigencia (ADR-0007). Compilados dentro del
+     * artefacto solo se pueden cambiar desplegando, y un tramo equivocado produce deuda mal
+     * calculada en todo un padron.
+     *
+     * <p>Como el redondeo, mira el codigo y no los literales de cadena, y descarta los comentarios:
+     * este mismo archivo explica la prohibicion nombrando UIT y tramos.
+     */
+    public static List<Hallazgo> revisarValoresTributarios(String archivo, String contenido) {
+        List<Hallazgo> hallazgos = new ArrayList<>();
+
+        Matcher valor = VALOR_TRIBUTARIO_LITERAL.matcher(sinComentariosDeBloque(contenido));
+        while (valor.find()) {
+            hallazgos.add(
+                    new Hallazgo(
+                            archivo,
+                            "regla 5: una alicuota o un valor normativo construido desde un literal"
+                                    + " es una cifra de norma compilada; va en datos versionados"
+                                    + " con su documento fuente (ADR-0007)",
+                            valor.group()));
+        }
+
+        Matcher constante = CONSTANTE_NORMATIVA.matcher(sinComentariosNiMas(contenido));
+        while (constante.find()) {
+            hallazgos.add(
+                    new Hallazgo(
+                            archivo,
+                            "regla 5: esa constante lleva nombre de valor normativo y una cifra"
+                                    + " dentro; cambiarla no debe exigir un despliegue (ADR-0007)",
+                            constante.group()));
+        }
+
         return hallazgos;
     }
 
@@ -157,6 +224,21 @@ public final class RevisorDeCodigoFuente {
      * viene detras en la misma linea.
      */
     static String soloCodigo(String contenido) {
+        return sinComentarios(contenido, false);
+    }
+
+    /**
+     * El contenido sin comentarios pero <b>con</b> las cadenas.
+     *
+     * <p>Lo necesita la regla 5: {@code UIT_2026 = new BigDecimal("5350")} lleva la cifra dentro de
+     * un literal, asi que descartar las cadenas la haria invisible. Lo que sigue descartandose son
+     * los comentarios, porque este mismo archivo explica la prohibicion nombrando la UIT.
+     */
+    static String sinComentariosNiMas(String contenido) {
+        return sinComentarios(contenido, true);
+    }
+
+    private static String sinComentarios(String contenido, boolean conservarCadenas) {
         StringBuilder codigo = new StringBuilder(contenido.length());
         int i = 0;
         while (i < contenido.length()) {
@@ -176,14 +258,22 @@ public final class RevisorDeCodigoFuente {
                 i = Math.min(i + 2, contenido.length());
             } else if (actual == '"' && contenido.startsWith("\"\"\"", i)) {
                 int cierre = contenido.indexOf("\"\"\"", i + 3);
-                i = cierre < 0 ? contenido.length() : cierre + 3;
+                int fin = cierre < 0 ? contenido.length() : cierre + 3;
+                if (conservarCadenas) {
+                    codigo.append(contenido, i, fin);
+                }
+                i = fin;
             } else if (actual == '"' || actual == '\'') {
                 char comilla = actual;
+                int inicio = i;
                 i++;
                 while (i < contenido.length() && contenido.charAt(i) != comilla) {
                     i += contenido.charAt(i) == '\\' ? 2 : 1;
                 }
                 i++;
+                if (conservarCadenas) {
+                    codigo.append(contenido, inicio, Math.min(i, contenido.length()));
+                }
             } else {
                 codigo.append(actual);
                 i++;

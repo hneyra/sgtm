@@ -253,7 +253,9 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Permisos y precedencia (9 pruebas) | Quitando la guarda del último administrador | Rojo: el sistema se queda sin quien administre |
 | Sesión y auditoría (15 pruebas) | Consultando `auditoria_2026` en vez de la tabla padre | La aplicación no tiene privilegio sobre la partición |
 | Sellado de parámetros (9 pruebas) | Quitando el disparador de inmutabilidad de `V9` | Rojo: un conjunto sellado se deja editar |
-| Escáner del código fuente | Muestras con `SET SESSION`, `DELETE`, `UPDATE` prohibidos y con una política de redondeo escrita a mano | Las detecta |
+| Lectura sellada por ejercicio (3 pruebas) | Quitando `AND estado = 'SELLADO'` de la consulta | Rojo: un conjunto abierto se deja leer |
+| Motor de reglas (10 pruebas, sin base ni reloj) | Invirtiendo el orden de aplicación en `vigentesEn` | Rojo: 220.00 donde el orden correcto da 210.00 |
+| Escáner del código fuente | Muestras con `SET SESSION`, `DELETE`, `UPDATE` prohibidos, con una política de redondeo escrita a mano y con la UIT, un tramo y una alícuota compilados (regla 5) | Las detecta; neutralizando el patrón de la regla 5, rojo |
 | Reglas de ESLint del frontend (10) | Quitando la regla de tildes, y la de `fetch`: sus pruebas se ponen rojas | Las diez muerden |
 | Las 134 pantallas se dibujan | Montando cada una contra el proxy, y recorriéndolas en Chromium | 134 en verde, 0 errores |
 | El juego de datos simulado no llega a producción | Comparando las dos compilaciones, con y sin la bandera | El chunk desaparece |
