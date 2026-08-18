@@ -7,10 +7,10 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.auditoria.Auditoria;
 import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
+import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.seguridad.dominio.Permiso;
 import pe.gob.sgtm.seguridad.dominio.PermisoRepository;
-import pe.gob.sgtm.seguridad.dominio.Privilegio;
 
 /**
  * Otorga privilegios a un grupo o a un usuario sobre un acceso.

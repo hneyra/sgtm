@@ -242,6 +242,25 @@ public final class ReglasDeArquitectura {
                             "una cifra de deuda sin su fecha es una cifra que manana es otra"
                                     + " (RNF-075, regla 9)");
 
+    /**
+     * RF-121: todo endpoint declara que acceso y que privilegio exige.
+     *
+     * <p>La comprobacion la hace el servidor —{@code GuardiaDeAcceso}—, pero solo puede comprobar
+     * lo que el endpoint declara. Un controlador sin {@code @RequiereAcceso} es un endpoint sin
+     * guardia, y no se descubre revisando: se descubre cuando alguien lo encuentra.
+     *
+     * <p>El guardia ademas <b>niega</b> si la anotacion falta, en lugar de dejar pasar «porque no
+     * dice nada». Las dos cosas juntas —negar en ejecucion y romper el build— hacen que el olvido
+     * sea imposible de convertir en una puerta abierta.
+     */
+    public static final ArchRule TODO_ENDPOINT_DECLARA_SU_ACCESO =
+            ArchRuleDefinition.classes()
+                    .that(new EsControlador())
+                    .should(new ConAccesoDeclarado())
+                    .because(
+                            "que la interfaz oculte una opcion es comodidad, no seguridad: la"
+                                    + " peticion se puede hacer igual con curl (RF-121, ADR-0005)");
+
     public static List<ArchRule> todas() {
         return List.of(
                 EL_DOMINIO_NO_CONOCE_FRAMEWORKS,
@@ -253,7 +272,8 @@ public final class ReglasDeArquitectura {
                 EL_DOMINIO_NO_DEPENDE_DE_LAS_CAPAS_EXTERNAS,
                 TODO_CASO_DE_USO_DE_ESCRITURA_EXIGE_OBSERVACION,
                 NINGUN_CONTROLADOR_RECIBE_LA_MUNICIPALIDAD,
-                TODA_CIFRA_DE_LA_WEB_LLEVA_SU_FECHA);
+                TODA_CIFRA_DE_LA_WEB_LLEVA_SU_FECHA,
+                TODO_ENDPOINT_DECLARA_SU_ACCESO);
     }
 
     /** Clases del sistema, sin las de prueba ni las de fixtures. */
@@ -448,6 +468,52 @@ public final class ReglasDeArquitectura {
             return anotacion.getProperties().values().stream()
                     .map(Object::toString)
                     .anyMatch(v -> v.toLowerCase(java.util.Locale.ROOT).contains("municipalidad"));
+        }
+    }
+
+    private static final class ConAccesoDeclarado extends ArchCondition<JavaClass> {
+
+        private static final String REQUIERE_ACCESO = PAQUETE_RAIZ + ".autorizacion.RequiereAcceso";
+
+        /** Lo que hace de un metodo un endpoint: cualquiera de los mapeos de Spring MVC. */
+        private static final Set<String> MAPEOS =
+                Set.of(
+                        "org.springframework.web.bind.annotation.RequestMapping",
+                        "org.springframework.web.bind.annotation.GetMapping",
+                        "org.springframework.web.bind.annotation.PostMapping",
+                        "org.springframework.web.bind.annotation.PutMapping",
+                        "org.springframework.web.bind.annotation.PatchMapping",
+                        "org.springframework.web.bind.annotation.DeleteMapping");
+
+        ConAccesoDeclarado() {
+            super("declarar @RequiereAcceso en la clase o en cada endpoint");
+        }
+
+        @Override
+        public void check(JavaClass clase, ConditionEvents eventos) {
+            if (tieneRequiereAcceso(clase.getAnnotations())) {
+                return;
+            }
+            for (JavaMethod metodo : clase.getMethods()) {
+                boolean esEndpoint =
+                        metodo.getAnnotations().stream()
+                                .anyMatch(a -> MAPEOS.contains(a.getRawType().getName()));
+                if (esEndpoint && !tieneRequiereAcceso(metodo.getAnnotations())) {
+                    eventos.add(
+                            SimpleConditionEvent.violated(
+                                    metodo,
+                                    "el endpoint "
+                                            + metodo.getFullName()
+                                            + " no declara @RequiereAcceso: sin declararlo no hay"
+                                            + " nada que el servidor pueda comprobar (RF-121)"));
+                }
+            }
+        }
+
+        private static boolean tieneRequiereAcceso(
+                Set<? extends com.tngtech.archunit.core.domain.JavaAnnotation<?>> anotaciones) {
+            return anotaciones.stream()
+                    .anyMatch(a -> a.getRawType().getName().equals(REQUIERE_ACCESO));
         }
     }
 

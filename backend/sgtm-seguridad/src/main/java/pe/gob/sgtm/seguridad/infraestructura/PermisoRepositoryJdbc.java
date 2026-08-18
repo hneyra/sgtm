@@ -10,10 +10,10 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 import pe.gob.sgtm.seguridad.dominio.Permiso;
 import pe.gob.sgtm.seguridad.dominio.PermisoRepository;
-import pe.gob.sgtm.seguridad.dominio.Privilegio;
 
 /**
  * Persistencia de los permisos.
