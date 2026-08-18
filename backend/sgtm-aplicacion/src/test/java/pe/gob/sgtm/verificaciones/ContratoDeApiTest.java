@@ -60,7 +60,11 @@ class ContratoDeApiTest {
                     "GET /seguridad/grupos",
                     "GET /seguridad/usuarios",
                     "POST /seguridad/grupos/{grupo}/miembros",
-                    "PUT /seguridad/grupos/{id}/permisos");
+                    "PUT /seguridad/grupos/{id}/permisos",
+                    "PUT /seguridad/sesion/ejercicio",
+                    "PUT /seguridad/usuarios/{id}/clave",
+                    "GET /seguridad/auditoria",
+                    "POST /seguridad/respaldos");
 
     /** {@code "/ruta":} seguido de {@code verbo:} en el YAML generado. */
     private static final Pattern OPERACION_DEL_CONTRATO =
