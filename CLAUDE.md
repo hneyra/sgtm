@@ -111,7 +111,8 @@ docs/         Documentación (fuente de verdad del diseño)                     
 design/       Prototipo navegable del que derivará la interfaz                     ← referencia
 ```
 
-Módulos del backend hoy: `sgtm-dominio-compartido`, `sgtm-esquema` (migraciones y prueba de
+Módulos del backend hoy: `sgtm-dominio-compartido` (objetos de valor en `pe.gob.sgtm.dominio` y
+`TenantContext` en `pe.gob.sgtm.compartido`), `sgtm-esquema` (migraciones y prueba de
 aislamiento), `sgtm-plataforma` (filtro del token, `SET LOCAL`, guardia del pool), los **doce**
 contextos acotados vacíos y `sgtm-aplicacion` (ensambla y aloja las verificaciones).
 Límites de cada contexto: [`docs/30-arquitectura/contextos-acotados.md`](docs/30-arquitectura/contextos-acotados.md).
@@ -238,8 +239,8 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Aislamiento del esquema (19 pruebas) | Quitando `WITH CHECK` de la política de tenant | Rojo en las 63 tablas |
 | Privilegios sobre particiones | `GRANT SELECT ON determinacion_2026 TO sgtm_app` | Rojo en dos pruebas |
 | Guardia del pool | Prueba gemela **sin** guardia | La fuga ocurre de verdad |
-| Reglas de ArchUnit (7) | Clase de muestra que viola cada una | Las siete muerden |
-| Escáner del código fuente | Muestras con `SET SESSION`, `DELETE` y `UPDATE` prohibidos | Las detecta |
+| Reglas de ArchUnit (7) | Clase de muestra que viola cada una | Las siete muerden, ya sobre dominio real |
+| Escáner del código fuente | Muestras con `SET SESSION`, `DELETE`, `UPDATE` prohibidos y con una política de redondeo escrita a mano | Las detecta |
 | Reglas de ESLint del frontend (10) | Quitando la regla de tildes, y la de `fetch`: sus pruebas se ponen rojas | Las diez muerden |
 | Las 134 pantallas se dibujan | Montando cada una contra el proxy, y recorriéndolas en Chromium | 134 en verde, 0 errores |
 | El juego de datos simulado no llega a producción | Comparando las dos compilaciones, con y sin la bandera | El chunk desaparece |

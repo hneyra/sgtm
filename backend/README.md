@@ -49,7 +49,7 @@ deja el build en verde sin haber verificado nada.
 ## Módulos
 
 ```
-sgtm-dominio-compartido   MunicipalidadId, Ejercicio, TenantContext. Sin Spring
+sgtm-dominio-compartido   Objetos de valor (pe.gob.sgtm.dominio) y TenantContext. Sin Spring
 sgtm-esquema              Migraciones Flyway + la prueba de aislamiento. Sin Spring
 sgtm-plataforma           Filtro del token, SET LOCAL por transaccion, guardia del pool
 sgtm-<contexto> × 12      Los contextos acotados de ARQ-01 §3. Hoy vacios
@@ -59,6 +59,19 @@ sgtm-aplicacion           Ensambla, y aloja ArchUnit, el escaner y Spring Moduli
 Los doce contextos son `contribuyentes`, `catastro`, `rentas`, `parametros`, `fiscalizacion`,
 `sanciones`, `cuentacorriente`, `tesoreria`, `valores`, `coactiva`, `licencias` y `seguridad`.
 Están vacíos a propósito: la estructura fija los límites antes de que haya código que los cruce.
+
+`sgtm-dominio-compartido` contiene **dos** paquetes, y la separación importa:
+
+| Paquete | Qué hay | Por qué separado |
+|---|---|---|
+| `pe.gob.sgtm.dominio` | `Dinero`, `Periodo`, `Alicuota`, `Porcentaje`, `AreaM2`, `Ejercicio`, `MunicipalidadId`, `CodigoContribuyente`, `CodigoReferenciaCatastral`, `Placa`, `DocumentoIdentidad`, `Observacion` | Es dominio: le aplican las siete reglas de ArchUnit sin excepción |
+| `pe.gob.sgtm.compartido` | `TenantContext` | Es una utilidad técnica con un `ThreadLocal` dentro; no es vocabulario tributario |
+
+El paquete de dominio cuelga de `pe.gob.sgtm` y **no** de `pe.gob.sgtm.compartido` por una razón
+concreta: para Spring Modulith un subpaquete es interno a su módulo, y un objeto de valor que
+ningún contexto puede importar no sirve de vocabulario común. Como módulo propio queda expuesto
+sin anotar el paquete, y así este módulo Gradle sigue sin depender de Spring —ni siquiera de una
+anotación—, que es la regla 7 en su forma más literal.
 
 ## Convenciones del build
 

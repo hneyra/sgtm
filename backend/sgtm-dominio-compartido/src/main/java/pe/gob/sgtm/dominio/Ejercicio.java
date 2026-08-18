@@ -1,4 +1,4 @@
-package pe.gob.sgtm.compartido;
+package pe.gob.sgtm.dominio;
 
 import java.time.LocalDate;
 

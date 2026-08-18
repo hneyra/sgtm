@@ -44,16 +44,20 @@ public final class ReglasDeArquitectura {
             Set.of("double", "float", "java.lang.Double", "java.lang.Float");
 
     /**
-     * Las reglas acotadas a {@code ..dominio..} todavia no encuentran ninguna clase: los contextos
-     * acotados estan vacios. ArchUnit falla ante una regla que no revisa nada, y hace bien, porque
-     * una regla que dejo de coincidir es indistinguible de una que se cumple.
+     * Los objetos de valor del dominio compartido que envuelven un decimal.
      *
-     * <p>Se permite el vacio <b>solo</b> mientras no haya dominio, y con dos contrapesos: {@link
-     * ReglasDeArquitecturaMuerdenTest} demuestra que los patrones coinciden con clases reales, y
-     * {@link ArquitecturaTest} falla en cuanto aparezca la primera clase de dominio, para obligar a
-     * quitar este permiso.
+     * <p>Son la excepcion a {@link #NINGUNA_FIRMA_DE_DOMINIO_EXPONE_BIGDECIMAL}, y la unica: la
+     * regla existe para que las reglas tributarias no manejen {@code BigDecimal} suelto, no para
+     * impedir que el tipo que lo guarda pueda devolverlo. Sin esta lista, la alternativa seria que
+     * la persistencia leyera los importes como texto, que es peor y ademas invita a reconstruirlos
+     * con {@code Double.parseDouble}.
      */
-    static final boolean SIN_DOMINIO_TODAVIA = true;
+    private static final Set<String> ENVOLTORIOS_DE_DECIMAL =
+            Set.of(
+                    PAQUETE_RAIZ + ".dominio.Dinero",
+                    PAQUETE_RAIZ + ".dominio.Alicuota",
+                    PAQUETE_RAIZ + ".dominio.Porcentaje",
+                    PAQUETE_RAIZ + ".dominio.AreaM2");
 
     private ReglasDeArquitectura() {}
 
@@ -72,8 +76,7 @@ public final class ReglasDeArquitectura {
                             "javax.sql..")
                     .because(
                             "las reglas tributarias deben probarse sin Spring ni base de datos, para"
-                                    + " que recalcular 2027 en 2037 siga funcionando (ARQ-04 §1)")
-                    .allowEmptyShould(SIN_DOMINIO_TODAVIA);
+                                    + " que recalcular 2027 en 2037 siga funcionando (ARQ-04 §1)");
 
     /** Regla 1: importes en BigDecimal, jamas en coma flotante (RNF-055). */
     public static final ArchRule NINGUN_IMPORTE_EN_COMA_FLOTANTE =
@@ -87,11 +90,13 @@ public final class ReglasDeArquitectura {
 
     /**
      * {@code BigDecimal} desnudo no aparece en una firma de dominio; se usa {@code Dinero}, que
-     * lleva dentro la escala y el redondeo.
+     * recibe la escala y el modo de redondeo (D-03).
      *
-     * <p>Hoy no hay nada que violarla porque {@code Dinero} todavia no existe: lo bloquea D-03. La
-     * regla se escribe igual, para que el dia que alguien escriba la primera regla de calculo la
-     * encuentre puesta.
+     * <p>Se exceptuan los propios envoltorios de decimal del dominio compartido —{@link
+     * ReglasDeArquitectura#ENVOLTORIOS_DE_DECIMAL}—: son justamente los tipos que existen para que
+     * nadie mas maneje un {@code BigDecimal}, y tienen que poder entregar el suyo a la capa de
+     * persistencia. La excepcion es una lista corta y explicita, para que agregar un tipo a ella se
+     * vea en el diff.
      */
     public static final ArchRule NINGUNA_FIRMA_DE_DOMINIO_EXPONE_BIGDECIMAL =
             ArchRuleDefinition.classes()
@@ -100,8 +105,7 @@ public final class ReglasDeArquitectura {
                     .should(new SinBigDecimalEnLaFirma())
                     .because(
                             "la escala y el modo de redondeo viven dentro de Dinero, no dispersos en"
-                                    + " las reglas (D-03)")
-                    .allowEmptyShould(SIN_DOMINIO_TODAVIA);
+                                    + " las reglas (D-03)");
 
     /** Un instante lleva zona; una fecha tributaria es LocalDate. */
     public static final ArchRule NADIE_USA_LOCALDATETIME =
@@ -140,8 +144,7 @@ public final class ReglasDeArquitectura {
                             })
                     .because(
                             "recalcular el ejercicio 2027 en 2037 debe dar el mismo centimo: la"
-                                    + " fecha entra como argumento (regla 6)")
-                    .allowEmptyShould(SIN_DOMINIO_TODAVIA);
+                                    + " fecha entra como argumento (regla 6)");
 
     /**
      * Regla 2: ningun metodo recibe el identificador de municipalidad.
@@ -170,8 +173,7 @@ public final class ReglasDeArquitectura {
                     .should()
                     .dependOnClassesThat()
                     .resideInAnyPackage("..infraestructura..", "..aplicacion..")
-                    .because("la dependencia apunta hacia el dominio, no desde el (ARQ-04 §1)")
-                    .allowEmptyShould(SIN_DOMINIO_TODAVIA);
+                    .because("la dependencia apunta hacia el dominio, no desde el (ARQ-04 §1)");
 
     public static List<ArchRule> todas() {
         return List.of(
@@ -240,11 +242,14 @@ public final class ReglasDeArquitectura {
     private static final class SinBigDecimalEnLaFirma extends ArchCondition<JavaClass> {
 
         SinBigDecimalEnLaFirma() {
-            super("no exponer BigDecimal desnudo en su firma");
+            super("no exponer BigDecimal desnudo en su firma, salvo los envoltorios de decimal");
         }
 
         @Override
         public void check(JavaClass clase, ConditionEvents eventos) {
+            if (ENVOLTORIOS_DE_DECIMAL.contains(clase.getFullName())) {
+                return;
+            }
             for (JavaMethod metodo : clase.getMethods()) {
                 if (!metodo.getModifiers()
                         .contains(com.tngtech.archunit.core.domain.JavaModifier.PUBLIC)) {
@@ -271,7 +276,7 @@ public final class ReglasDeArquitectura {
 
     private static final class SinMunicipalidadIdComoParametro extends ArchCondition<JavaClass> {
 
-        private static final String TIPO = PAQUETE_RAIZ + ".compartido.MunicipalidadId";
+        private static final String TIPO = PAQUETE_RAIZ + ".dominio.MunicipalidadId";
 
         SinMunicipalidadIdComoParametro() {
             super("no recibir MunicipalidadId como parametro");

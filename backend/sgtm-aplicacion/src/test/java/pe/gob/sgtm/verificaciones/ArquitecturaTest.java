@@ -2,8 +2,10 @@ package pe.gob.sgtm.verificaciones;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.lang.ArchRule;
+import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,16 +35,21 @@ class ArquitecturaTest {
     }
 
     @Test
-    @DisplayName("mientras no haya dominio, las reglas acotadas a el pueden estar vacias")
-    void mientrasNoHayaDominioLasReglasAcotadasAElPuedenEstarVacias() {
-        boolean hayDominio = clases.stream().anyMatch(c -> c.getPackageName().contains(".dominio"));
-        assertThat(hayDominio)
-                .as(
-                        "ya existe la primera clase de dominio: hay que poner SIN_DOMINIO_TODAVIA"
-                                + " en false en ReglasDeArquitectura, para que esas reglas vuelvan a"
-                                + " fallar si algun dia dejan de encontrar clases. Un recordatorio en un"
-                                + " comentario no se lee; esta asercion si")
-                .isFalse();
+    @DisplayName("las reglas acotadas al dominio encuentran clases de verdad")
+    void lasReglasAcotadasAlDominioEncuentranClasesDeVerdad() {
+        // Hasta el issue #4 esto no se podia exigir: los contextos estaban vacios y
+        // las reglas de `..dominio..` llevaban `allowEmptyShould`, que es lo mismo que
+        // no tener regla. Ahora existe el dominio compartido, el permiso se retiro, y
+        // esta asercion es la que impide que vuelva a colarse: si algun dia el
+        // importador deja de ver el dominio, falla aqui y no en silencio.
+        List<JavaClass> delDominio =
+                clases.stream().filter(c -> c.getPackageName().contains(".dominio")).toList();
+
+        assertThat(delDominio)
+                .as("las reglas acotadas a ..dominio.. tienen que tener algo que revisar")
+                .isNotEmpty();
+        assertThat(delDominio.stream().map(JavaClass::getPackageName).distinct().toList())
+                .contains("pe.gob.sgtm.dominio");
     }
 
     @Test

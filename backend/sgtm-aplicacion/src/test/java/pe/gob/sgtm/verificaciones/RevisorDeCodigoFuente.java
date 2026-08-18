@@ -10,6 +10,7 @@ import java.util.regex.Pattern;
 /**
  * Las reglas de ARQ-04 §2 que viven en el texto del SQL y no en la estructura de las clases: {@code
  * SET SESSION}, el {@code DELETE} sobre tablas protegidas y el {@code UPDATE} sobre las inmutables.
+ * Y una que vive en el texto del Java: la politica de redondeo escrita a mano, que D-03 prohibe.
  *
  * <p>ArchUnit no las ve porque no son dependencias entre tipos, sino cadenas.
  *
@@ -70,6 +71,25 @@ public final class RevisorDeCodigoFuente {
     /** Literal de cadena de Java, incluidos los escapes. */
     private static final Pattern LITERAL_JAVA = Pattern.compile("\"(?:[^\"\\\\\\n]|\\\\.)*\"");
 
+    /**
+     * Un modo de redondeo escrito en el codigo.
+     *
+     * <p>D-03 no esta cerrada: no esta decidido con cuantos decimales se redondea, con que modo, ni
+     * —lo que mas pesa— en que puntos del calculo. Un {@code HALF_UP} escrito hoy es esa decision
+     * tomada por descuido, repartida por el codigo y dificil de encontrar despues. La politica se
+     * recibe como argumento: {@code PoliticaDeRedondeo}.
+     *
+     * <p>{@code UNNECESSARY} queda fuera a proposito: no es una politica de redondeo sino su
+     * negacion, y es lo que el propio tipo usa para rechazarla.
+     */
+    private static final Pattern MODO_DE_REDONDEO_ESCRITO =
+            Pattern.compile(
+                    "\\bRoundingMode\\s*\\.\\s*(HALF_UP|HALF_DOWN|HALF_EVEN|CEILING|FLOOR|UP|DOWN)\\b");
+
+    /** {@code setScale(2, ...)}: la escala escrita a mano. Mismo motivo, misma decision (D-03). */
+    private static final Pattern ESCALA_ESCRITA =
+            Pattern.compile("\\.\\s*setScale\\s*\\(\\s*[0-9]");
+
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
     private static final Pattern COMENTARIO_DE_BLOQUE = Pattern.compile("(?s)/\\*.*?\\*/");
 
@@ -89,7 +109,87 @@ public final class RevisorDeCodigoFuente {
         while (matcher.find()) {
             literales.append(matcher.group()).append('\n');
         }
-        return revisarTexto(archivo, literales.toString());
+        List<Hallazgo> hallazgos = new ArrayList<>(revisarTexto(archivo, literales.toString()));
+        hallazgos.addAll(revisarRedondeo(archivo, contenido));
+        return hallazgos;
+    }
+
+    /**
+     * D-03: mientras la escala, el modo y los puntos de redondeo no esten decididos, no hay ninguna
+     * politica de redondeo escrita en el codigo. Se recibe como argumento.
+     *
+     * <p>Mira el codigo y no los literales —al reves que el resto del revisor—, porque lo que se
+     * busca es una llamada, no una cadena. Los comentarios se descartan: este mismo archivo explica
+     * la prohibicion nombrandola, y una regla que se denuncia a si misma acaba desactivada.
+     */
+    public static List<Hallazgo> revisarRedondeo(String archivo, String contenido) {
+        String codigo = soloCodigo(contenido);
+        List<Hallazgo> hallazgos = new ArrayList<>();
+
+        Matcher modo = MODO_DE_REDONDEO_ESCRITO.matcher(codigo);
+        while (modo.find()) {
+            hallazgos.add(
+                    new Hallazgo(
+                            archivo,
+                            "D-03 sigue abierta: el modo de redondeo se recibe en una"
+                                    + " PoliticaDeRedondeo, no se escribe en el codigo",
+                            modo.group()));
+        }
+
+        Matcher escala = ESCALA_ESCRITA.matcher(codigo);
+        while (escala.find()) {
+            hallazgos.add(
+                    new Hallazgo(
+                            archivo,
+                            "D-03 sigue abierta: la escala se recibe en una PoliticaDeRedondeo, no"
+                                    + " se escribe en el codigo",
+                            escala.group()));
+        }
+
+        return hallazgos;
+    }
+
+    /**
+     * El contenido sin comentarios ni literales, para poder buscar llamadas y no texto.
+     *
+     * <p>Recorre caracter a caracter en lugar de aplicar expresiones regulares: un {@code //}
+     * dentro de una cadena no abre un comentario, y borrarlo se llevaria por delante el codigo que
+     * viene detras en la misma linea.
+     */
+    static String soloCodigo(String contenido) {
+        StringBuilder codigo = new StringBuilder(contenido.length());
+        int i = 0;
+        while (i < contenido.length()) {
+            char actual = contenido.charAt(i);
+            char siguiente = i + 1 < contenido.length() ? contenido.charAt(i + 1) : '\0';
+
+            if (actual == '/' && siguiente == '/') {
+                while (i < contenido.length() && contenido.charAt(i) != '\n') {
+                    i++;
+                }
+            } else if (actual == '/' && siguiente == '*') {
+                i += 2;
+                while (i + 1 < contenido.length()
+                        && !(contenido.charAt(i) == '*' && contenido.charAt(i + 1) == '/')) {
+                    i++;
+                }
+                i = Math.min(i + 2, contenido.length());
+            } else if (actual == '"' && contenido.startsWith("\"\"\"", i)) {
+                int cierre = contenido.indexOf("\"\"\"", i + 3);
+                i = cierre < 0 ? contenido.length() : cierre + 3;
+            } else if (actual == '"' || actual == '\'') {
+                char comilla = actual;
+                i++;
+                while (i < contenido.length() && contenido.charAt(i) != comilla) {
+                    i += contenido.charAt(i) == '\\' ? 2 : 1;
+                }
+                i++;
+            } else {
+                codigo.append(actual);
+                i++;
+            }
+        }
+        return codigo.toString();
     }
 
     public static List<Hallazgo> revisarSql(String archivo, String contenido) {
