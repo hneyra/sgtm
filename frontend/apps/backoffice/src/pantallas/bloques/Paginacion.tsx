@@ -16,19 +16,20 @@ export interface PaginacionProps {
 }
 
 export function Paginacion({ datos, onPagina }: PaginacionProps) {
-  const paginas = Math.max(1, Math.ceil(datos.filas / Math.max(1, datos.tamano)));
-  const primera = datos.pagina <= 1;
-  const ultima = datos.pagina >= paginas;
+  // El backend cuenta desde 0 y la gente desde 1. Lo que se ensena y lo que se
+  // pide van en el mismo idioma que quien lo lee.
+  const actual = datos.pagina + 1;
+  const paginas = Math.max(1, datos.totalPaginas);
 
   return (
     <nav className="sgtm-paginacion" aria-label="Paginación de la tabla">
-      <Boton menudo disabled={primera} onClick={() => onPagina(datos.pagina - 1)}>
+      <Boton menudo disabled={actual <= 1} onClick={() => onPagina(actual - 1)}>
         Anterior
       </Boton>
       <span className="sgtm-paginacion__estado" aria-live="polite">
-        Página {datos.pagina} de {paginas}
+        Página {actual} de {paginas}
       </span>
-      <Boton menudo disabled={ultima} onClick={() => onPagina(datos.pagina + 1)}>
+      <Boton menudo disabled={!datos.hayMas} onClick={() => onPagina(actual + 1)}>
         Siguiente
       </Boton>
     </nav>

@@ -19,7 +19,7 @@ const url = (consulta: string): URLSearchParams => new URLSearchParams(consulta)
 
 describe('lo buscado se lee de la URL', () => {
   it('los filtros son la consulta menos lo que la busqueda se reserva', () => {
-    const estado = leerBusqueda(url('sector=01&uso=Comercio&orden=nombre&pagina=3'));
+    const estado = leerBusqueda(url('sector=01&uso=Comercio&ordenarPor=nombre&pagina=3'));
     expect(estado.filtros).toEqual({ sector: '01', uso: 'Comercio' });
     expect(estado.orden).toBe('nombre');
     expect(estado.pagina).toBe(3);
@@ -38,8 +38,8 @@ describe('lo buscado se lee de la URL', () => {
   });
 
   it('el sentido solo puede ser uno de los dos', () => {
-    expect(leerBusqueda(url('sentido=descendente')).sentido).toBe('descendente');
-    expect(leerBusqueda(url('sentido=vaya')).sentido).toBe('ascendente');
+    expect(leerBusqueda(url('direccion=DESCENDENTE')).sentido).toBe('DESCENDENTE');
+    expect(leerBusqueda(url('direccion=vaya')).sentido).toBe('ASCENDENTE');
   });
 });
 
@@ -55,17 +55,17 @@ describe('cambiar de pagina o de orden no pierde los filtros', () => {
     // La pagina 7 de otro orden no es ninguna pagina.
     const siguiente = conOrden(url('sector=01&pagina=7'), 'nombreCalle');
     expect(siguiente.get('sector')).toBe('01');
-    expect(siguiente.get('orden')).toBe('nombreCalle');
-    expect(siguiente.get('sentido')).toBe('ascendente');
+    expect(siguiente.get('ordenarPor')).toBe('nombreCalle');
+    expect(siguiente.get('direccion')).toBe('ASCENDENTE');
     expect(siguiente.has('pagina')).toBe(false);
   });
 
   it('la misma columna alterna el sentido; otra empieza ascendente', () => {
-    const descendente = conOrden(url('orden=nombreCalle&sentido=ascendente'), 'nombreCalle');
-    expect(descendente.get('sentido')).toBe('descendente');
+    const descendente = conOrden(url('ordenarPor=nombreCalle&direccion=ASCENDENTE'), 'nombreCalle');
+    expect(descendente.get('direccion')).toBe('DESCENDENTE');
     const otra = conOrden(descendente, 'sector');
-    expect(otra.get('orden')).toBe('sector');
-    expect(otra.get('sentido')).toBe('ascendente');
+    expect(otra.get('ordenarPor')).toBe('sector');
+    expect(otra.get('direccion')).toBe('ASCENDENTE');
   });
 });
 
@@ -94,15 +94,17 @@ describe('que se manda y que se queda en la URL', () => {
     expect(parametrosDeBusqueda('calles', undefined, url('inventado=1'))).toEqual({});
   });
 
-  it('la primera pagina no viaja: es la que hay sin pedir nada', () => {
+  it('la primera pagina no viaja, y la segunda viaja como la cuenta el backend', () => {
+    // En la URL la primera es la 1 —como la cuenta quien la lee— y en la
+    // peticion la primera es la 0 —como la cuenta el backend—.
     expect(parametrosDeBusqueda('calles', undefined, url('pagina=1'))).toEqual({});
-    expect(parametrosDeBusqueda('calles', undefined, url('pagina=2'))).toEqual({ pagina: '2' });
+    expect(parametrosDeBusqueda('calles', undefined, url('pagina=2'))).toEqual({ pagina: '1' });
   });
 
-  it('el orden viaja con su sentido', () => {
+  it('el orden viaja con su direccion, con los nombres del backend', () => {
     expect(
-      parametrosDeBusqueda('calles', undefined, url('orden=sector&sentido=descendente')),
-    ).toEqual({ orden: 'sector', sentido: 'descendente' });
+      parametrosDeBusqueda('calles', undefined, url('ordenarPor=sector&direccion=DESCENDENTE')),
+    ).toEqual({ ordenarPor: 'sector', direccion: 'DESCENDENTE' });
   });
 
   it('ninguna peticion lleva la municipalidad, ni como filtro de conveniencia', () => {

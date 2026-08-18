@@ -112,9 +112,9 @@ describe('orden y pagina, contra el servidor', () => {
 
     await usuario.click(screen.getByRole('button', { name: 'Nombre' }));
 
-    await waitFor(() => expect(aCatastro().at(-1) ?? '').toContain('orden=nombre'));
+    await waitFor(() => expect(aCatastro().at(-1) ?? '').toContain('ordenarPor=nombre'));
     const ultima = aCatastro().at(-1) ?? '';
-    expect(ultima).toContain('sentido=ascendente');
+    expect(ultima).toContain('direccion=ASCENDENTE');
     // Cambiar de orden no puede perder lo que se estaba buscando.
     expect(ultima).toContain('sector=01');
     expect(screen.getByRole('columnheader', { name: 'Nombre' })).toHaveAttribute(
@@ -143,6 +143,7 @@ describe('orden y pagina, contra el servidor', () => {
     expect(claves).toHaveLength(2);
     expect(claves.some((clave) => clave.includes('"sector":"01"'))).toBe(true);
     expect(claves.some((clave) => clave.includes('"sector":"02"'))).toBe(true);
-    expect(claves.every((clave) => clave.includes('"pagina":"2"'))).toBe(true);
+    // La 2 de la URL es la 1 del backend.
+    expect(claves.every((clave) => clave.includes('"pagina":"1"'))).toBe(true);
   });
 });

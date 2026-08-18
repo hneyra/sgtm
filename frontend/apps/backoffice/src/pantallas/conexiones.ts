@@ -1,6 +1,7 @@
 import type { DatosDePantalla, IdDeOperacion, ParametrosDe, RespuestaDe } from '@sgtm/api-client';
 import { pedirOperacion } from '@sgtm/api-client';
 import { conexionDeRecaudacion } from './inicio/recaudacion';
+import { CONEXIONES_DE_SEGURIDAD } from './seguridad';
 
 /**
  * La puerta lateral: una opcion con operacion tipada y adaptador propios.
@@ -31,6 +32,15 @@ import { conexionDeRecaudacion } from './inicio/recaudacion';
 export interface ContextoDePantalla {
   readonly ruta: Readonly<Record<string, string | undefined>>;
   readonly busqueda: URLSearchParams;
+  /**
+   * El ejercicio de trabajo de la sesion, no el de la pantalla.
+   *
+   * Va aqui porque hay operaciones que lo exigen: la bitacora esta particionada
+   * por ejercicio y su controlador lo pide obligatorio (#13). No es un filtro
+   * que el usuario elija en esta pantalla; es el ano sobre el que trabaja la
+   * sesion entera, y se ve en la cabecera.
+   */
+  readonly ejercicio: number;
 }
 
 /** Una conexion ya montada, sin los tipos de su operacion: es lo que guarda el registro. */
@@ -94,6 +104,7 @@ function sinVacios(parametros: object): Readonly<Record<string, string>> {
  */
 const CONEXIONES: Readonly<Record<string, Conexion>> = {
   inicio: conexionDeRecaudacion,
+  ...CONEXIONES_DE_SEGURIDAD,
 };
 
 export const conexionDe = (opcion: string): Conexion | undefined => CONEXIONES[opcion];

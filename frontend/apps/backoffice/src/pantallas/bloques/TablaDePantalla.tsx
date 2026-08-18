@@ -37,7 +37,7 @@ export interface TablaDePantallaProps {
   readonly hayFiltros?: boolean;
 }
 
-const ARIA_SENTIDO = { ascendente: 'ascending', descendente: 'descending' } as const;
+const ARIA_SENTIDO = { ASCENDENTE: 'ascending', DESCENDENTE: 'descending' } as const;
 
 export function TablaDePantalla({
   estructura,
@@ -83,7 +83,7 @@ export function TablaDePantalla({
                     <th
                       key={columna}
                       className={numericas.has(i) ? 'sgtm-tabla--numerica' : undefined}
-                      aria-sort={activa ? ARIA_SENTIDO[sentido ?? 'ascendente'] : undefined}
+                      aria-sort={activa ? ARIA_SENTIDO[sentido ?? 'ASCENDENTE'] : undefined}
                     >
                       {ordenable ? (
                         <button
@@ -94,7 +94,7 @@ export function TablaDePantalla({
                         >
                           {columna}
                           <span aria-hidden="true">
-                            {activa ? (sentido === 'descendente' ? ' ↓' : ' ↑') : ''}
+                            {activa ? (sentido === 'DESCENDENTE' ? ' ↓' : ' ↑') : ''}
                           </span>
                         </button>
                       ) : (

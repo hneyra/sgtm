@@ -137,6 +137,35 @@ ventanilla no es un problema de rendimiento sino mostrar cifras de un año como 
 Un adaptador que pierda la `fechaCalculo` **no compila**: `DatosDePantalla` la exige, y
 `verificaciones/muestras/adaptador-sin-fecha.ts` lo demuestra compilando con `tsc`.
 
+**El primer módulo entero conectado es Seguridad** (`pantallas/seguridad/`), y es el primero porque
+los demás dependen de él: sin usuarios, grupos y permisos reales el filtrado por rol no tiene de
+dónde leer, y sin ejercicio de trabajo ninguna consulta sabe de qué año habla. Sus seis lecturas
+—módulos, accesos, grupos, usuarios, auditoría y parámetros— leen **el recurso que publica el
+backend**: `RespuestaPaginada` con su `contenido`, su página contada desde 0 y su `totalElementos`,
+no la forma que comparten las 134.
+
+Lo que el recurso no trae sale con **«—»**, no con un valor inventado: la unidad orgánica de un
+usuario, la caja en la que atiende, cuántos accesos tiene un grupo. Que se vea el hueco es el punto
+—dice qué falta y a quién le toca—, y el prototipo dibujaba esas columnas llenas.
+
+La bitácora manda **siempre** el ejercicio, aunque nadie lo escriba en un filtro: es la clave de
+partición de la tabla y su controlador lo exige. No sale de la URL, sale de la sesión.
+
+## El ejercicio de trabajo es de la sesión, y se ve siempre
+
+Cambiarlo en «Cambiar el año de trabajo» cambia lo que muestran los otros once módulos, así que no
+vive en esa pantalla: vive en `app/ejercicio.tsx`, por encima de las rutas, y se pinta en la
+cabecera de las 134 —también en móvil, donde el resto de la cabecera derecha se oculta—. Una cifra
+de 2025 mostrada como si fuera de 2026 no es un fallo de formato: es una respuesta equivocada a
+quien vino a preguntar cuánto debe.
+
+Y **vaciar la caché es parte de cambiarlo**, en el mismo turno. Es el mismo caso que cambiar de
+municipalidad (FRO-01 §4) con otra cara: lo guardado se pidió con el año anterior, y si sobrevive
+al cambio la primera pantalla que se dibuje enseña cifras del año viejo bajo el rótulo del nuevo.
+El valor inicial sale del reloj del cliente, y es una carencia anotada: el backend guarda el
+ejercicio en la sesión pero solo lo publica como respuesta del `PUT` que lo cambia —no hay
+`GET /seguridad/sesion`—, así que al recargar la pestaña no hay a quién preguntárselo.
+
 ## La sesión: PKCE, token en memoria y renovación que no se lleva el formulario
 
 Authorization Code con **PKCE** contra el proveedor OIDC (ADR-0005, FRO-01 §5). Sin secreto de
@@ -230,6 +259,27 @@ pulsa.
 Lo hace cumplir una regla de ESLint: **`useMutation` fuera de `escritura.ts` no pasa el lint**, con
 su muestra en `verificaciones/muestras/escritura-sin-observacion.tsx`. No se puede pedirle a ESLint
 que compruebe que un formulario «tiene» un campo; lo que sí se puede es dejar un solo camino.
+
+### La lista blanca: lo que no está declarado no viaja
+
+El cuerpo lleva la observación y **nada más**, salvo los campos que la opción declare uno a uno en
+`pantallas/escrituras.ts`. Mientras una opción no esté ahí, su formulario **no se puede escribir**:
+negación por omisión, como la autorización del manual.
+
+```ts
+cambiar_anio: { campos: { cambiarAlAno: { campo: 'ejercicio', entero: true } }, … }
+cambiar_clave: { campos: {}, … }   // ninguno, y esa ausencia es la función
+```
+
+Dos nombres por campo porque son dos vocabularios: la clave del catálogo sale del prototipo
+—`cambiarAlAno`, de «Cambiar al año»— y el nombre del cuerpo lo declara el backend —`ejercicio`—.
+Ninguno cede; la traducción vive en el registro.
+
+**Cambiar contraseña es el caso que justifica el mecanismo.** El backend no acepta ninguna clave: su
+cuerpo es solo la observación, y lo que devuelve es a dónde tiene que ir la interfaz —el proveedor
+de identidad (ADR-0005)—. Con la lista blanca vacía, los tres campos de clave que el prototipo
+dibuja no se pueden escribir, así que el valor **no llega al estado de React**, ni a la caché de
+consultas, ni a la URL, ni a ningún almacenamiento: no existe. No se borra después; nunca entra.
 
 ## Los cuatro estados
 
@@ -415,15 +465,22 @@ dice en la misma frase en que excluye el token.
 | El catálogo está completo               | 17 pruebas: 12 módulos, 134 opciones, bloques, rutas y endpoints únicos | En verde                      |
 | El juego de datos no llega a producción | Dos compilaciones, con y sin la bandera                                 | 145 KB menos, chunk ausente   |
 | Las reglas de ESLint muerden            | Quitando la de `fetch`: su prueba se pone roja                          | Muerde                        |
+| Los seis listados leen el recurso real  | Quitando la guarda de `leerPaginado`: pinta media pantalla en silencio  | Roja                          |
+| La bitácora manda el ejercicio          | Quitándolo de la conexión                                               | Roja                          |
+| Cambiar de ejercicio vacía la caché     | Quitando `clear()`: la petición nueva encuentra lo viejo                | Rojas, dos                    |
+| La lista blanca filtra el cuerpo        | Mandando el borrador entero: viajan campos que el backend no acepta     | Rojas, dos                    |
+| La contraseña no se puede teclear       | Quitando `bloqueado` de los campos no declarados                        | Roja                          |
 
 ## Lo que todavía no está
 
-- **Ninguna operación va contra el backend real**, porque el backend aún no sirve ninguna: la
-  opción conectada pide su operación tipada, y hoy la contesta el proxy. Es el paso 4 de FRO-03 §7
-  y se hace opción por opción.
-- No hay pruebas de extremo a extremo (Playwright) ni presupuesto de tamaño de paquete en CI. El
-  paquete son 149 KB comprimidos, casi todos catálogo: falta partirlo por ruta.
-- Las tres familias tipográficas se cargan de Google Fonts; para una red mala conviene autoalojarlas.
+- **Ninguna operación sale todavía al backend real**: las conexiones ya hablan su idioma —el
+  recurso paginado de Seguridad, no la forma que comparten las 134— y quien lo contesta hoy es el
+  proxy, que también lo habla. Encenderlo es mover esas rutas a `servidas.ts` con un Spring Boot
+  levantado; sin él, una ruta ahí falla ruidosamente y por eso la lista sigue vacía.
+- **De las once opciones de Seguridad quedan tres sin conectar**, y las tres por lo mismo:
+  `permisos` no tiene `GET` con el que cargar la matriz —solo `PUT` para fijarla—, `miembros`
+  necesita elegir un usuario y el prototipo no dibuja ese selector, y `respaldo` es un `POST` que
+  consulta, así que abrir la pantalla no puede pedirlo (#64). Están detalladas en #70.
 - Las tres pantallas que [FRO-03 §6](../docs/60-frontend/mapa-de-pantallas.md) marca —caja, portal
   y reportes— **no están validadas con usuarios reales**. Es un pendiente declarado.
 

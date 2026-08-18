@@ -1,5 +1,6 @@
 import type { DatosDePantalla, ProblemDetails } from '@sgtm/api-client';
 import { RESPUESTAS, RUTAS } from './respuestas.generado';
+import { escrituraDe, paginadoDe } from './seguridad';
 import { YA_SERVIDAS, laSirveElBackend } from './servidas';
 import type { OperacionServida } from './servidas';
 
@@ -75,6 +76,16 @@ function pantallaDe(metodo: string, camino: string): string | null {
 }
 
 const esperar = (ms: number) => new Promise((listo) => setTimeout(listo, ms));
+
+/** El cuerpo JSON de una peticion, si lo trae. Nada mas: el proxy no persiste. */
+function cuerpoDe(opciones?: RequestInit): unknown {
+  if (typeof opciones?.body !== 'string') return undefined;
+  try {
+    return JSON.parse(opciones.body);
+  } catch {
+    return undefined;
+  }
+}
 
 function json(cuerpo: unknown, estado: number): Response {
   return new Response(JSON.stringify(cuerpo), {
@@ -172,6 +183,18 @@ export function instalarProxyDeDatos({
     if (latenciaActiva) {
       await esperar(LATENCIA_MINIMA_MS + Math.random() * (LATENCIA_MAXIMA_MS - LATENCIA_MINIMA_MS));
     }
+
+    // Las seis lecturas de seguridad salen con la forma del backend, no con la
+    // que comparten las 134: para esas el backend ya existe, y la pantalla ya
+    // habla su idioma (ver `seguridad.ts`).
+    const paginado = paginadoDe(metodo, url.pathname);
+    if (paginado) return json(paginado, 200);
+
+    // Y las dos escrituras de sesion devuelven el recurso que devuelve el
+    // backend, no los datos de la pantalla: la cabecera adopta el ejercicio que
+    // responde el servidor, asi que la respuesta tiene que traerlo.
+    const escrita = escrituraDe(metodo, url.pathname, cuerpoDe(opciones));
+    if (escrita) return json(escrita, 200);
 
     const pantalla = pantallaDe(metodo, url.pathname);
     if (!pantalla) return noEncontrada(metodo, url.pathname);

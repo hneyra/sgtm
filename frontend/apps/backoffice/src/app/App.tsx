@@ -3,6 +3,7 @@ import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-d
 import { OPCION_INICIAL } from '../catalogo';
 import { HubDeModulo } from '../pantallas/HubDeModulo';
 import { Pantalla } from '../pantallas/Pantalla';
+import { ProveedorDeEjercicio } from './ejercicio';
 import { ProveedorDePreferencias } from './preferencias';
 import { ProveedorDeSesion } from './sesion/ProveedorDeSesion';
 import { PuertaDeSesion } from './sesion/PuertaDeSesion';
@@ -38,22 +39,26 @@ export function App() {
   return (
     <QueryClientProvider client={cliente}>
       <ProveedorDeSesion>
-        <ProveedorDePreferencias>
-          <PuertaDeSesion>
-            <Router>
-              <Routes>
-                <Route element={<Shell />}>
-                  <Route path="/" element={<Navigate to={OPCION_INICIAL.ruta} replace />} />
-                  <Route path="/:moduloId" element={<HubDeModulo />} />
-                  <Route path="/:moduloId/:ranura" element={<Pantalla />} />
-                  {/* El registro abierto va en la ruta, no en el estado: pegar el
+        {/* El ejercicio de trabajo va por encima de las rutas: es de la sesion,
+            no de la pantalla, y cambiarlo vacia la cache de todas (#70). */}
+        <ProveedorDeEjercicio>
+          <ProveedorDePreferencias>
+            <PuertaDeSesion>
+              <Router>
+                <Routes>
+                  <Route element={<Shell />}>
+                    <Route path="/" element={<Navigate to={OPCION_INICIAL.ruta} replace />} />
+                    <Route path="/:moduloId" element={<HubDeModulo />} />
+                    <Route path="/:moduloId/:ranura" element={<Pantalla />} />
+                    {/* El registro abierto va en la ruta, no en el estado: pegar el
                       enlace de una ficha en otra pestana abre esa misma ficha. */}
-                  <Route path="/:moduloId/:ranura/:codigo" element={<Pantalla />} />
-                </Route>
-              </Routes>
-            </Router>
-          </PuertaDeSesion>
-        </ProveedorDePreferencias>
+                    <Route path="/:moduloId/:ranura/:codigo" element={<Pantalla />} />
+                  </Route>
+                </Routes>
+              </Router>
+            </PuertaDeSesion>
+          </ProveedorDePreferencias>
+        </ProveedorDeEjercicio>
       </ProveedorDeSesion>
     </QueryClientProvider>
   );

@@ -25,6 +25,19 @@ export interface CampoProps {
   readonly ancho?: boolean;
   readonly cargando?: boolean;
   /**
+   * El control se ve, pero no se escribe.
+   *
+   * No es lo mismo que `ro`: un campo `ro` es un valor que el sistema calcula y
+   * nunca se teclea, y este es un campo que **esta pantalla** todavia no puede
+   * mandar —o no debe—. La pantalla de contrasena lo usa para sus tres campos
+   * de clave, que el backend no acepta a proposito (#70).
+   *
+   * Donde el HTML lo permite se usa `readonly` y no `disabled`: un campo
+   * deshabilitado sale del recorrido del tabulador, y en ventanilla se trabaja
+   * con teclado (RNF-082).
+   */
+  readonly bloqueado?: boolean;
+  /**
    * Mensaje del backend para **este** campo (`ProblemaDeApi.errores`).
    *
    * Va tal cual: el servidor ya lo redacto en castellano y en lenguaje del
@@ -47,6 +60,7 @@ export function Campo({
   opciones,
   ancho = false,
   cargando = false,
+  bloqueado = false,
   error,
   onCambio,
 }: CampoProps) {
@@ -77,7 +91,7 @@ export function Campo({
           id={id}
           className="sgtm-campo__control"
           value={valor}
-          disabled={cargando}
+          disabled={cargando || bloqueado}
           aria-invalid={error === undefined ? undefined : true}
           aria-describedby={error === undefined ? undefined : idDelError}
           onChange={(e) => onCambio?.(e.target.value)}
@@ -99,6 +113,8 @@ export function Campo({
           rows={3}
           value={valor}
           placeholder={ph}
+          readOnly={bloqueado}
+          aria-readonly={bloqueado || undefined}
           disabled={cargando}
           aria-invalid={error === undefined ? undefined : true}
           aria-describedby={error === undefined ? undefined : idDelError}
@@ -114,7 +130,7 @@ export function Campo({
             id={id}
             type="checkbox"
             checked={marcado}
-            disabled={cargando}
+            disabled={cargando || bloqueado}
             onChange={(e) => onCambio?.(e.target.checked ? 'si' : '')}
           />
           <span>{ph ?? etiqueta}</span>
@@ -137,6 +153,8 @@ export function Campo({
         className="sgtm-campo__control"
         value={valor}
         placeholder={ph}
+        readOnly={bloqueado}
+        aria-readonly={bloqueado || undefined}
         disabled={cargando}
         aria-invalid={error === undefined ? undefined : true}
         aria-describedby={error === undefined ? undefined : idDelError}

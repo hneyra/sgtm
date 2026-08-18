@@ -88,26 +88,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -152,26 +152,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -237,26 +237,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -338,26 +338,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -465,26 +465,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -515,26 +515,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -575,26 +575,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -630,26 +630,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -685,26 +685,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -745,26 +745,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -810,26 +810,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -942,26 +942,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -1007,26 +1007,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -1113,26 +1113,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -1268,26 +1268,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -1486,26 +1486,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -1541,26 +1541,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -1601,26 +1601,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -1661,26 +1661,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -1752,26 +1752,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -1812,26 +1812,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -1867,26 +1867,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -1959,26 +1959,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2023,26 +2023,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2210,26 +2210,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2270,26 +2270,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2393,26 +2393,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2453,26 +2453,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2513,26 +2513,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2573,26 +2573,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2633,26 +2633,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2693,26 +2693,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2795,26 +2795,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2845,26 +2845,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2905,26 +2905,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -2992,26 +2992,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -3120,26 +3120,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -3180,26 +3180,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -3240,26 +3240,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -3300,26 +3300,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -3444,26 +3444,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -3508,26 +3508,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -3661,26 +3661,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -3726,26 +3726,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -3790,26 +3790,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -3850,26 +3850,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -3900,26 +3900,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -3960,26 +3960,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -4020,26 +4020,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -4080,26 +4080,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -4140,26 +4140,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -4205,26 +4205,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -4265,26 +4265,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -4325,26 +4325,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -4426,26 +4426,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -4615,26 +4615,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -4721,26 +4721,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -5067,26 +5067,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -5127,26 +5127,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -5197,26 +5197,20 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
-          in: query
-          required: false
-          description: "ascendente | descendente"
-          schema: { type: string }
-          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -5283,26 +5277,20 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
-          in: query
-          required: false
-          description: "ascendente | descendente"
-          schema: { type: string }
-          example: "ascendente"
       responses:
         200:
           description: Operacion realizada
@@ -5364,26 +5352,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -5486,26 +5474,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -5546,26 +5534,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -5601,26 +5589,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -5683,26 +5671,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -5738,26 +5726,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -5788,26 +5776,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -5838,26 +5826,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada
@@ -6004,6 +5992,12 @@ paths:
       description: "Bitácora de operaciones sensibles: anulaciones, extornos, bajas de deuda, cambios de valor y accesos fallidos."
       tags: ["Seguridad"]
       parameters:
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Ejercicio de trabajo. Obligatorio: es la clave de particion de la bitacora"
+          schema: { type: string }
+          example: "2026"
         - name: usuario
           in: query
           required: false
@@ -6027,26 +6021,26 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: "Pagina que se pide, empezando en 1"
+          description: "Pagina que se pide, contada desde 0"
           schema: { type: string }
-          example: "1"
+          example: "0"
         - name: tamano
           in: query
           required: false
           description: "Filas por pagina"
           schema: { type: string }
-          example: "50"
-        - name: orden
+          example: "20"
+        - name: ordenarPor
           in: query
           required: false
-          description: "Campo por el que se ordena"
+          description: "Campo por el que se ordena, en camelCase"
           schema: { type: string }
-        - name: sentido
+        - name: direccion
           in: query
           required: false
-          description: "ascendente | descendente"
+          description: "ASCENDENTE | DESCENDENTE"
           schema: { type: string }
-          example: "ascendente"
+          example: "ASCENDENTE"
       responses:
         200:
           description: Operacion realizada

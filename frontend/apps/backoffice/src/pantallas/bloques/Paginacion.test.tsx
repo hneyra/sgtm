@@ -35,11 +35,11 @@ describe('el paginador', () => {
     expect(screen.queryByRole('navigation', { name: /Paginación/ })).not.toBeInTheDocument();
   });
 
-  it('dice en que pagina se esta, de cuantas', () => {
+  it('dice en que pagina se esta, de cuantas —contando como cuenta la gente—', () => {
     render(
       <TablaDePantalla
         estructura={ESTRUCTURA}
-        datos={{ ...FILAS, paginacion: { pagina: 2, tamano: 50, filas: 320 } }}
+        datos={{ ...FILAS, paginacion: { pagina: 1, tamano: 50, totalPaginas: 7, hayMas: true } }}
         cargando={false}
         onPagina={() => {}}
       />,
@@ -51,7 +51,7 @@ describe('el paginador', () => {
     const { unmount } = render(
       <TablaDePantalla
         estructura={ESTRUCTURA}
-        datos={{ ...FILAS, paginacion: { pagina: 1, tamano: 50, filas: 60 } }}
+        datos={{ ...FILAS, paginacion: { pagina: 0, tamano: 50, totalPaginas: 2, hayMas: true } }}
         cargando={false}
         onPagina={() => {}}
       />,
@@ -63,7 +63,7 @@ describe('el paginador', () => {
     render(
       <TablaDePantalla
         estructura={ESTRUCTURA}
-        datos={{ ...FILAS, paginacion: { pagina: 2, tamano: 50, filas: 60 } }}
+        datos={{ ...FILAS, paginacion: { pagina: 1, tamano: 50, totalPaginas: 2, hayMas: false } }}
         cargando={false}
         onPagina={() => {}}
       />,
@@ -77,7 +77,7 @@ describe('el paginador', () => {
     render(
       <TablaDePantalla
         estructura={ESTRUCTURA}
-        datos={{ ...FILAS, paginacion: { pagina: 2, tamano: 50, filas: 320 } }}
+        datos={{ ...FILAS, paginacion: { pagina: 1, tamano: 50, totalPaginas: 7, hayMas: true } }}
         cargando={false}
         onPagina={pedida}
       />,

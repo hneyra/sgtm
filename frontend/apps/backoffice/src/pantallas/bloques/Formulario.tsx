@@ -10,6 +10,12 @@ import { Icono } from '@sgtm/design-system';
  * Las secciones marcadas `Opcional`, `Solo lectura` o `Colapsado` arrancan
  * cerradas. El colapso se guarda por clave `seccion|pestana` para que cambiar
  * de pestana no arrastre el estado de la anterior.
+ *
+ * **Que campos se pueden escribir no lo decide el catalogo: lo decide la
+ * escritura de la opcion** (`pantallas/escrituras.ts`). Un campo que la opcion
+ * no declara se dibuja bloqueado, y lo tecleado en el no se guarda en ningun
+ * sitio. Es lo que hace que la pantalla de contrasena no pueda retener una
+ * clave: no es que se borre despues, es que nunca entra.
  */
 export interface FormularioProps {
   readonly secciones: readonly SeccionDePantalla[];
@@ -18,6 +24,13 @@ export interface FormularioProps {
   readonly cerradas: Readonly<Record<string, boolean>>;
   readonly onAlternar: (clave: string, cerrada: boolean) => void;
   readonly pestana: number;
+  /** Los campos que esta pantalla declara escribibles. Vacio si no escribe nada. */
+  readonly escribibles?: ReadonlySet<string>;
+  /** Lo tecleado y todavia sin enviar. Solo tiene claves de `escribibles`. */
+  readonly borrador?: Readonly<Record<string, string>>;
+  readonly onCampo?: (campo: string, valor: string) => void;
+  /** Mensaje por campo que devolvio el backend (`ProblemaDeApi.errores`). */
+  readonly errorPorCampo?: Readonly<Record<string, string>>;
 }
 
 export function Formulario({
@@ -27,6 +40,10 @@ export function Formulario({
   cerradas,
   onAlternar,
   pestana,
+  escribibles,
+  borrador = {},
+  onCampo,
+  errorPorCampo = {},
 }: FormularioProps) {
   return (
     <div className="sgtm-formulario">
@@ -50,7 +67,13 @@ export function Formulario({
             {!cerrada && (
               <div className="sgtm-seccion__rejilla">
                 {seccion.campos.map((campo) => {
-                  const valor = valores[campo.clave];
+                  const escribible = escribibles?.has(campo.clave) ?? false;
+                  // El borrador manda sobre lo que sirvio la API: lo que el
+                  // usuario acaba de teclear es mas nuevo que lo que se pidio.
+                  const valor = escribible
+                    ? (borrador[campo.clave] ?? valores[campo.clave])
+                    : valores[campo.clave];
+                  const error = errorPorCampo[campo.clave];
                   return (
                     <Campo
                       key={campo.clave}
@@ -62,6 +85,11 @@ export function Formulario({
                       opciones={campo.opts}
                       ancho={campo.ancho}
                       cargando={cargando}
+                      bloqueado={!escribible}
+                      {...(error === undefined ? {} : { error })}
+                      {...(escribible && onCampo
+                        ? { onCambio: (nuevo: string) => onCampo(campo.clave, nuevo) }
+                        : {})}
                     />
                   );
                 })}

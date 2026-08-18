@@ -23,6 +23,7 @@ export type {
   DatosDePantalla,
   DatosDeTabla,
   Paginacion,
+  Paginado,
   DatosDeReporte,
   ValorDeCampo,
   Celda,

@@ -15,9 +15,16 @@
  * y este archivo se borra. El modo intermedio es transitorio, y su final es
  * parte del trabajo, no un pendiente que se queda.
  *
- * Hoy esta vacia porque el backend todavia no sirve ninguna operacion
- * (`backend/README.md`). Una ruta aqui que el backend no sirva **falla
- * ruidosamente**: es lo unico peor que no tener el modo intermedio.
+ * Sigue vacia aunque el backend ya sirva las once operaciones de seguridad
+ * (#9, #12, #13), y eso es deliberado: una ruta aqui que el backend no conteste
+ * **falla ruidosamente**, y las pruebas y la compilacion del frontend corren sin
+ * ningun Spring Boot al lado. Encenderlas es cosa de quien tiene los dos
+ * procesos levantados —ver «Los dos procesos, juntos» en `frontend/README.md`—.
+ *
+ * Lo que si esta hecho es lo que hacia falta para poder encenderlas: las
+ * pantallas de seguridad **ya leen el recurso que publica el backend**, y el
+ * proxy lo publica con esa misma forma (`seguridad.ts`). El dia que se muevan
+ * aqui no cambia ni una linea de la interfaz.
  */
 export interface OperacionServida {
   readonly metodo: string;

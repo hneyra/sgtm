@@ -4,6 +4,7 @@ backend/build/
 backend/*/build/
 backend/buildSrc/build/
 backend/buildSrc/.gradle/
+backend/buildSrc/.kotlin/
 
 # IDE
 .idea/
