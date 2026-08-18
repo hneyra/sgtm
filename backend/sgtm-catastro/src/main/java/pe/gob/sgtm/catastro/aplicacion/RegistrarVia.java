@@ -1,0 +1,81 @@
+package pe.gob.sgtm.catastro.aplicacion;
+
+import java.time.Clock;
+import java.time.LocalDate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import pe.gob.sgtm.auditoria.Auditoria;
+import pe.gob.sgtm.auditoria.Operacion;
+import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
+import pe.gob.sgtm.catastro.dominio.Via;
+import pe.gob.sgtm.catastro.dominio.ViaRepository;
+import pe.gob.sgtm.dominio.Observacion;
+
+/**
+ * Da de alta una via del catalogo vial.
+ *
+ * <p>Es el primer caso de uso de escritura del sistema, y esta escrito para servir de plantilla.
+ * Tres cosas que conviene copiar tal cual:
+ *
+ * <ol>
+ *   <li><b>La {@link Observacion} esta en la firma.</b> No es un campo opcional del cuerpo de la
+ *       peticion: es un argumento sin el cual el metodo no se puede llamar. La regla de ArchUnit
+ *       {@code TODO_CASO_DE_USO_DE_ESCRITURA_EXIGE_OBSERVACION} lo verifica sobre todos los
+ *       {@code @Transactional} de escritura, para que el dia que alguien escriba el caso de uso
+ *       numero cuarenta no dependa de que se acuerde.
+ *   <li><b>La auditoria va en la misma transaccion</b>, no en otra ni despues. Si el alta se
+ *       deshace, su auditoria se deshace con ella; si la auditoria no se puede escribir, el alta se
+ *       deshace entera.
+ *   <li><b>El reloj se inyecta.</b> La fecha decide en que particion cae la auditoria, y una prueba
+ *       tiene que poder fijarla.
+ * </ol>
+ *
+ * <p>Ningun argumento es el identificador de municipalidad (regla 2): sale del token y lo aplica la
+ * politica RLS.
+ */
+@Service
+public class RegistrarVia {
+
+    private final ViaRepository repositorio;
+    private final Auditoria auditoria;
+    private final Clock reloj;
+
+    public RegistrarVia(ViaRepository repositorio, Auditoria auditoria, Clock reloj) {
+        this.repositorio = repositorio;
+        this.auditoria = auditoria;
+        this.reloj = reloj;
+    }
+
+    @Transactional
+    public Via registrar(Via via, Observacion observacion) {
+        Via guardada = repositorio.save(via);
+
+        auditoria.registrar(
+                RegistroDeAuditoria.enLaFechaDe(
+                                LocalDate.now(reloj),
+                                "via",
+                                String.valueOf(guardada.id()),
+                                via.esNueva() ? Operacion.ALTA : Operacion.MODIFICACION,
+                                observacion)
+                        .con(null, descripcion(guardada)));
+
+        return guardada;
+    }
+
+    /**
+     * Un JSON escrito a mano y no un serializador: son cinco campos, y traer Jackson hasta aqui
+     * ataria la capa de aplicacion a la de presentacion. Cuando haya mas de dos casos de uso que lo
+     * necesiten, saldra a un componente propio.
+     */
+    private static String descripcion(Via via) {
+        return "{\"codigo\":\""
+                + via.codigo()
+                + "\",\"tipo\":\""
+                + via.tipo()
+                + "\",\"nombre\":\""
+                + via.nombre().replace("\"", "\\\"")
+                + "\",\"activa\":"
+                + via.activa()
+                + "}";
+    }
+}

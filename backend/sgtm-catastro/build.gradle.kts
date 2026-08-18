@@ -17,5 +17,10 @@ dependencies {
     // superusuario que entrega Testcontainers (CAL-01 §3.2).
     testImplementation(testFixtures(project(":sgtm-esquema")))
     testImplementation("org.springframework.boot:spring-boot-starter-jdbc")
+
+    // El caso de uso se prueba envuelto en un proxy transaccional de verdad, para
+    // que lo que se verifique sea la anotacion y no un TransactionTemplate escrito
+    // por la propia prueba.
+    testImplementation("org.springframework:spring-aop")
     testRuntimeOnly(libs.postgresql)
 }

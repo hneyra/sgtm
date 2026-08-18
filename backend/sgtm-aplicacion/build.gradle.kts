@@ -40,5 +40,9 @@ dependencies {
     runtimeOnly(libs.postgresql)
 
     testImplementation(libs.archunit)
+
+    // La muestra de caso de uso que viola la regla 10 lleva @Transactional: sin
+    // spring-tx no compilaria, y sin ella la regla no tendria como demostrarse.
+    testImplementation("org.springframework:spring-tx")
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
 }
