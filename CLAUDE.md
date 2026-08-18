@@ -108,7 +108,8 @@ Límites de cada contexto: [`docs/30-arquitectura/contextos-acotados.md`](docs/3
 | Si vas a tocar… | Lee |
 |---|---|
 | Cualquier cosa | [`docs/30-arquitectura/estrategia-multitenant.md`](docs/30-arquitectura/estrategia-multitenant.md) — es el riesgo número uno |
-| Base de datos | [`docs/40-datos/modelo-logico-fisico.md`](docs/40-datos/modelo-logico-fisico.md) §0 primero |
+| Base de datos | [`docs/40-datos/modelo-logico-fisico.md`](docs/40-datos/modelo-logico-fisico.md) §0 primero, y **`../srtm/docs/40-datos/ddl/esquema-verificado.sql`** para tipos y longitudes |
+| Cálculo tributario | **`../srtm/docs/10-negocio/reglas-impuesto-predial.md`** (NEG-05) y **`../srtm/docs/30-arquitectura/motor-de-reglas-y-parametrizacion.md`** (ARQ-09) |
 | Backend | [`docs/30-arquitectura/estandares-de-codigo-backend.md`](docs/30-arquitectura/estandares-de-codigo-backend.md) |
 | Requisitos | [`docs/20-requisitos/requisitos-funcionales.md`](docs/20-requisitos/requisitos-funcionales.md) |
 | API | [`docs/50-api/openapi/sgtm-v1.yaml`](docs/50-api/openapi/sgtm-v1.yaml) |
@@ -116,16 +117,45 @@ Límites de cada contexto: [`docs/30-arquitectura/contextos-acotados.md`](docs/3
 
 Índice completo: [`docs/README.md`](docs/README.md). Decisiones: [`docs/30-arquitectura/adr/`](docs/30-arquitectura/adr/).
 
-## No implementar todavía
+## El cálculo tributario lo define `../srtm`
 
-**Ninguna regla de cálculo tributario.** El manual describe *qué* calcula el sistema —impuesto
-predial, arbitrios, patrimonio vehicular, alcabala, espectáculos, multas— pero **no los valores
-normativos**: tramos, alícuotas, UIT, deducciones, plazos, tablas de valores unitarios,
-aranceles y depreciación. Están marcados `‹VERIFICAR›` en
+**No se rediseña aquí.** La estructura del cálculo —qué reglas existen, en qué orden se aplican,
+qué parámetros consume cada una, cómo se identifican (`RT-xxx`) y qué casos borde hay— está
+resuelta y verificada contra los manuales del MEF en `../srtm`. Este proyecto la **implementa**,
+no la reinventa:
+
+| Qué | Dónde vive en `../srtm` |
+|---|---|
+| Reglas del predial: `RT-001`…`RT-016`, fórmulas, orden, casos borde | `docs/10-negocio/reglas-impuesto-predial.md` (NEG-05) |
+| Motor de reglas: pureza, versión por ejercicio, redondeo, parámetros sellados | `docs/30-arquitectura/motor-de-reglas-y-parametrizacion.md` (ARQ-09) |
+| Frontera estructura/valor y estrategia por ejercicio | `ADR-0006`, `ADR-0015` |
+| Plantilla de una regla | `docs/_plantillas/regla-tributaria.md` |
+
+Lo que de ahí no se negocia: la base del predial es **por contribuyente, no por predio** (los
+tramos progresivos se aplican al conjunto de sus predios; calcular predio por predio produce un
+error sistemático a la baja en todo el padrón); el `% propiedad` pondera la base de cada predio;
+la secuencia de la construcción es *valor unitario → +5 % → − depreciación → × área*; y una
+implementación que ya se usó en una emisión **no se modifica nunca** —se crea otra con su rango
+de vigencia—.
+
+**Las longitudes y tipos de las columnas también vienen de ahí.** Los dominios (`dinero
+numeric(15,2)`, `monto_calc numeric(18,6)`, `alicuota`, `porcentaje`, `area_m2`, `ejercicio`) y
+el largo de cada campo se toman de `../srtm/docs/40-datos/ddl/esquema-verificado.sql`. Una
+columna que existe en ambos esquemas tiene el mismo tipo en los dos; si hay motivo para
+apartarse, se anota en el diff. Nunca `numeric(15,2)` suelto donde hay dominio.
+
+### No implementar todavía
+
+**Ninguna regla de cálculo.** Lo que falta no es la estructura: son **los valores normativos**
+—tramos, alícuotas, UIT, deducciones, plazos, tablas de valores unitarios, aranceles y
+depreciación—, marcados `‹VERIFICAR›` en NEG-05 §6 y en
 [`docs/10-negocio/marco-normativo.md`](docs/10-negocio/marco-normativo.md).
 
 Un tramo equivocado produce deuda mal calculada en todo un padrón, con devoluciones masivas y
-nulidad de valores. **No implementar reglas de cálculo hasta cerrar D-02.**
+nulidad de valores. **No implementar reglas de cálculo hasta cerrar D-02.** Tampoco los cuatro
+factores que NEG-05 §0.1 marca sin fuente identificada —deducción de Amazonía, `% actualización`,
+incremento del 5 %, factor de oficialización—: multiplican importes, y un valor inventado escala
+el error.
 
 ## Decisiones abiertas que bloquean
 
@@ -135,7 +165,8 @@ Registro completo en [`docs/00-gobierno/decisiones-abiertas.md`](docs/00-gobiern
 |---|---|---|
 | D-01 | Municipalidad piloto y validador funcional | La primera iteración de negocio |
 | D-02 | Valores normativos verificados (UIT, tramos, alícuotas, tablas) | Toda regla de cálculo |
-| D-03 | Escala y modo de redondeo de importes | La primera regla de cálculo |
+| D-03 | Escala, modo y **puntos** de redondeo de importes —hay redondeo intermedio, no solo al cierre de cada regla— | La primera regla de cálculo |
+| D-11 | Origen y valor de los cuatro factores que M02 revela sin fuente | `RT-002`, `RT-005`, `RT-011` |
 | D-04 | Migración desde la base SQL Server existente | Implantación |
 | D-05 | Régimen de firma digital de valores y resoluciones | La capa de documentos |
 

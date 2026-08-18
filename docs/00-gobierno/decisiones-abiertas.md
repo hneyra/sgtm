@@ -7,7 +7,7 @@ sale de esta tabla y entra como ADR o como cambio en el documento que correspond
 |---|---|---|---|---|
 | **D-01** | Municipalidad piloto y validador funcional de reglas tributarias | Dirección del proyecto | La primera iteración de negocio completa | Abierta |
 | **D-02** | **Valores normativos verificados**: UIT, tramos y alícuotas del predial, deducción del pensionista, tasas de arbitrios, valores unitarios, aranceles, depreciación, valores referenciales vehiculares, porcentajes de multa | Unidad de Rentas del piloto + asesoría legal | **Toda regla de cálculo** | Abierta |
-| **D-03** | Escala y modo de redondeo de importes (`numeric(15,2)` provisional; redondeo por céntimo y punto de aplicación) | Rentas + contabilidad | La primera regla de cálculo y el cierre de caja | Abierta |
+| **D-03** | Escala, modo y **puntos** de redondeo de importes (`numeric(15,2)` provisional). No basta con redondear al cierre de cada regla: `../srtm` NEG-05 §RT-005 encontró **redondeo intermedio** —el «metrado redondeado» de obras complementarias—, así que hay que inventariar *dónde* redondea el sistema del MEF, no solo con qué modo | Rentas + contabilidad | La primera regla de cálculo y el cierre de caja | Abierta |
 | **D-04** | Estrategia de migración desde la base SQL Server del sistema actual: alcance, corte, conciliación de saldos | Dirección + TI municipal | Implantación | Abierta |
 | **D-05** | Régimen de firma digital de valores, resoluciones y constancias | Asesoría legal | La capa de generación de documentos | Abierta |
 | **D-06** | Nombre del claim que lleva la lista de municipalidades autorizadas de un usuario con acceso a varias | Arquitectura + operación de identidad | La verificación de pertenencia en `TenantContextFilter` | Abierta |
@@ -15,6 +15,8 @@ sale de esta tabla y entra como ADR o como cambio en el documento que correspond
 | **D-08** | Retención de la auditoría y del histórico de fichas: años en línea, política de archivado | Rentas + TI | El plan de particionado a largo plazo | Abierta |
 | **D-09** | Numeración de valores y expedientes: correlativo por municipalidad y ejercicio, con qué formato y qué reinicio | Rentas del piloto | La emisión de valores | Abierta |
 | **D-10** | **Longitud exacta del código de referencia catastral.** La plantilla del manual (`DDPPddSSMMMLLLEEeeppUUU`) da 23 posiciones; los ejemplos del prototipo de interfaz traen 21 | Catastro del piloto | La validación del código y la carga de fichas | Abierta |
+| **D-11** | **Origen y valor de los cuatro factores sin fuente** que reveló el manual M02 del MEF (`../srtm` NEG-05 §0.1): deducción de Amazonía, `% actualización`, incremento del 5 % sobre el valor unitario **antes** de depreciar, y factor de oficialización de obras complementarias. Los cuatro multiplican o restan sobre importes | Rentas del piloto + asesoría legal | `RT-002`, `RT-005` y `RT-011`; se suma a D-02 | Abierta |
+| **D-12** | **Qué pasa con el autovalúo cuya titularidad no llega a 100 %.** El esquema ya admite titularidad parcial —valida «no excede 100», como el SRTM del MEF—; falta decidir si la porción sin titular identificado se determina a alguien o simplemente no se cobra | Rentas + asesoría legal | La base imponible del predial (`RT-011`) | Abierta |
 
 ## Por qué D-02 bloquea de verdad
 

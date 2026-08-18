@@ -327,13 +327,19 @@ CREATE TABLE titularidad (
     CONSTRAINT titularidad_predio_fk FOREIGN KEY (municipalidad_id, predio_id)
         REFERENCES predio (municipalidad_id, id),
     CONSTRAINT titularidad_contribuyente_fk FOREIGN KEY (municipalidad_id, contribuyente_id)
-        REFERENCES contribuyente (municipalidad_id, id)
+        REFERENCES contribuyente (municipalidad_id, id),
+    -- el titular unico lo es por el total: su porcentaje no se declara, es 100
+    CONSTRAINT titularidad_unico_ck
+        CHECK (condicion <> 'PROPIETARIO_UNICO' OR porcentaje = 100)
 );
 
--- Invariante: los porcentajes vigentes de un predio suman 100.
+-- Invariante: los porcentajes vigentes de un predio NO EXCEDEN 100.
+-- El SRTM del MEF valida "no exceder", no "sumar exactamente" (../srtm DAT-02 §4.2,
+-- D-36): un padron real tiene predios con titularidad parcialmente identificada, y
+-- exigir que sume 100 obligaria al operador a inventar un titular para cuadrar.
 -- Diferido, porque una transferencia cierra una titularidad y abre otra dentro
 -- de la misma transaccion y en el intermedio la suma no cuadra.
-CREATE OR REPLACE FUNCTION verificar_titularidad_completa() RETURNS trigger
+CREATE OR REPLACE FUNCTION verificar_titularidad_no_excede() RETURNS trigger
 LANGUAGE plpgsql AS $fn$
 DECLARE
     v_muni   bigint := COALESCE(NEW.municipalidad_id, OLD.municipalidad_id);
@@ -345,19 +351,19 @@ BEGIN
      WHERE municipalidad_id = v_muni
        AND predio_id = v_predio
        AND vigencia_hasta IS NULL;
-    IF v_total <> 100 THEN
+    IF v_total > 100 THEN
         RAISE EXCEPTION
-          'Los porcentajes de titularidad vigentes del predio % suman %, deben sumar 100',
+          'Los porcentajes de titularidad vigentes del predio % suman %, no pueden exceder 100',
           v_predio, v_total;
     END IF;
     RETURN NULL;
 END
 $fn$;
 
-CREATE CONSTRAINT TRIGGER titularidad_completa_trg
+CREATE CONSTRAINT TRIGGER titularidad_no_excede_trg
     AFTER INSERT OR UPDATE OR DELETE ON titularidad
     DEFERRABLE INITIALLY DEFERRED
-    FOR EACH ROW EXECUTE FUNCTION verificar_titularidad_completa();
+    FOR EACH ROW EXECUTE FUNCTION verificar_titularidad_no_excede();
 
 -- Inquilinos: el manual los registra para la cobranza de arbitrios.
 CREATE TABLE inquilino (
