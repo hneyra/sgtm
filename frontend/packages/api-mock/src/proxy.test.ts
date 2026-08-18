@@ -75,9 +75,21 @@ describe('instalar y desinstalar', () => {
 describe('la aplicacion pide por HTTP y el proxy contesta', () => {
   it('sirve una pantalla con tabla por su ruta del contrato', async () => {
     instalarProxyDeDatos();
-    const datos = await solicitar<DatosDePantalla>('/catastro/vias');
+    const datos = await solicitar<DatosDePantalla>('/catastro/sectores');
     expect(datos.tabla?.filas.length).toBeGreaterThan(0);
     expect(datos.fechaCalculo).toBe('2026-08-13');
+  });
+
+  it('y las doce que el backend ya sirve salen con **su** forma, no con esa', async () => {
+    instalarProxyDeDatos();
+    // El sobre de `RespuestaPaginada`, con la pagina contada desde 0. Sin esto,
+    // la pantalla se estaria construyendo contra una forma que el servidor no
+    // usa, y el dia de la integracion habria que rehacerla.
+    const vias = await solicitar<Record<string, unknown>>('/catastro/vias');
+    expect(Array.isArray(vias['contenido'])).toBe(true);
+    expect(vias['pagina']).toBe(0);
+    expect(vias['totalElementos']).toBeGreaterThan(0);
+    expect(vias['tabla']).toBeUndefined();
   });
 
   it('resuelve rutas con parametro, venga el valor que venga', async () => {
@@ -88,8 +100,8 @@ describe('la aplicacion pide por HTTP y el proxy contesta', () => {
 
   it('los parametros de consulta no cambian la respuesta: filtrar es del backend', async () => {
     instalarProxyDeDatos();
-    const sinFiltro = await solicitar<DatosDePantalla>('/catastro/vias');
-    const conFiltro = await solicitar<DatosDePantalla>('/catastro/vias', {
+    const sinFiltro = await solicitar<DatosDePantalla>('/catastro/sectores');
+    const conFiltro = await solicitar<DatosDePantalla>('/catastro/sectores', {
       consulta: { nombre: 'SANTA ROSA' },
     });
     expect(conFiltro).toEqual(sinFiltro);
