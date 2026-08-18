@@ -1,8 +1,10 @@
 package pe.gob.sgtm.parametros.aplicacion;
 
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.parametros.IdentificadorDeConjunto;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.parametros.dominio.ConjuntoDeParametros;
@@ -10,15 +12,9 @@ import pe.gob.sgtm.parametros.dominio.ParametroTributario;
 import pe.gob.sgtm.parametros.dominio.ParametrosRepository;
 
 /**
- * Lee de la base el conjunto sellado de un ejercicio y lo entrega como objeto inmutable.
- *
- * <p>Es el unico punto del sistema donde los valores normativos pasan de la base a la memoria.
- * Despues de aqui viajan como argumento —{@link ParametrosSellados} dentro de la entrada del
- * calculo— y ninguna regla vuelve a consultar nada, que es lo que hace el calculo reproducible.
- *
- * <p>Es {@code readOnly}: leer parametros no modifica nada y por tanto no exige observacion. Lo que
- * si exige es el contexto de municipalidad, porque los parametros locales son datos de tenant; los
- * de ambito nacional se ven igual, por la politica RLS de {@code parametro_tributario}.
+ * Lee conjuntos <b>sellados</b>, y solo sellados. Un conjunto ABIERTO no se lee aunque tenga todos
+ * sus parametros: recalcular 2027 en 2037 debe dar el mismo centimo, y para eso lo leido tiene que
+ * ser inmutable.
  */
 @Service
 public class LectorDeParametrosSellados implements LectorDeParametros {
@@ -31,17 +27,30 @@ public class LectorDeParametrosSellados implements LectorDeParametros {
 
     @Override
     @Transactional(readOnly = true)
-    public ParametrosSellados delEjercicio(Ejercicio ejercicio) {
+    public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
         ConjuntoDeParametros conjunto =
                 repositorio
-                        .selladoDe(ejercicio)
+                        .selladoVigenteDe(ejercicio)
                         .orElseThrow(() -> new EjercicioSinSellar(ejercicio));
+        return armar(conjunto);
+    }
 
+    @Override
+    @Transactional(readOnly = true)
+    public ParametrosSellados porConjunto(IdentificadorDeConjunto identificador) {
+        ConjuntoDeParametros conjunto =
+                repositorio
+                        .selladoPorId(identificador.valor())
+                        .orElseThrow(() -> new ConjuntoNoSellado(identificador));
+        return armar(conjunto);
+    }
+
+    private ParametrosSellados armar(ConjuntoDeParametros conjunto) {
         ParametrosSellados.Constructor constructor =
                 ParametrosSellados.de(conjunto.ejercicio(), conjunto.version());
 
         for (ParametroTributario parametro :
-                repositorio.parametrosDe(java.util.Objects.requireNonNull(conjunto.id()))) {
+                repositorio.parametrosDe(Objects.requireNonNull(conjunto.id()))) {
             parametro
                     .numero()
                     .ifPresent(v -> constructor.numero(parametro.tipo(), parametro.clave(), v));

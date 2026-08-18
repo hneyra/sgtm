@@ -30,6 +30,7 @@ import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
+import pe.gob.sgtm.parametros.IdentificadorDeConjunto;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.parametros.dominio.ConjuntoDeParametros;
@@ -105,7 +106,7 @@ class LectorDeParametrosSelladosTest {
     @Test
     @DisplayName("pedir un ejercicio sin conjunto sellado falla")
     void sinSelladoFalla() {
-        assertThatThrownBy(() -> lector.delEjercicio(new Ejercicio(2035)))
+        assertThatThrownBy(() -> lector.vigenteEn(new Ejercicio(2035)))
                 .as(
                         "calcular con un conjunto abierto produce una cifra que manana puede ser otra,"
                                 + " y el contribuyente ya tendria el recibo")
@@ -124,7 +125,7 @@ class LectorDeParametrosSelladosTest {
                 parametroFicticio("ABIERTO_2036"),
                 Observacion.de("Se incorpora un parametro mientras se prepara"));
 
-        assertThatThrownBy(() -> lector.delEjercicio(ejercicio))
+        assertThatThrownBy(() -> lector.vigenteEn(ejercicio))
                 .as("tener parametros no es estar sellado")
                 .isInstanceOf(LectorDeParametros.EjercicioSinSellar.class);
     }
@@ -141,7 +142,7 @@ class LectorDeParametrosSelladosTest {
                 Observacion.de("Se incorpora el parametro de la ordenanza ficticia"));
         administrar.sellar(conjunto.id(), Observacion.de("Se sella 2037 tras la revision"));
 
-        ParametrosSellados sellados = lector.delEjercicio(ejercicio);
+        ParametrosSellados sellados = lector.vigenteEn(ejercicio);
 
         assertThat(sellados.ejercicio()).isEqualTo(ejercicio);
         assertThat(sellados.version()).isEqualTo(conjunto.version());
@@ -149,6 +150,73 @@ class LectorDeParametrosSelladosTest {
                 .as("el valor sale del conjunto, no de ninguna constante del codigo")
                 .isPresent();
         assertThat(sellados.numero("FICTICIO", "no-existe")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("ARQ-09 §3: dos versiones selladas del mismo ejercicio conviven")
+    void dosVersionesSelladasConviven() throws SQLException {
+        Ejercicio ejercicio = new Ejercicio(2038);
+
+        ConjuntoDeParametros primera =
+                administrar.abrirVersion(ejercicio, Observacion.de("Se abre 2038 por primera vez"));
+        administrar.agregarParametro(
+                primera.id(),
+                parametroFicticio("ARANCEL_FICTICIO_V1"),
+                Observacion.de("Se incorpora el arancel ficticio inicial"));
+        administrar.sellar(primera.id(), Observacion.de("Se sella 2038 para emitir"));
+
+        // A mitad de ejercicio se corrige el arancel: version nueva, no correccion de la anterior.
+        ConjuntoDeParametros segunda =
+                administrar.abrirVersion(
+                        ejercicio, Observacion.de("Se corrige el arancel ficticio a mitad de ano"));
+        administrar.agregarParametro(
+                segunda.id(),
+                parametroFicticio("ARANCEL_FICTICIO_V2"),
+                Observacion.de("Se incorpora el arancel ficticio corregido"));
+        administrar.sellar(segunda.id(), Observacion.de("Se sella la correccion de 2038"));
+
+        assertThat(segunda.version())
+                .as("la correccion es una version nueva, no una edicion de la anterior")
+                .isGreaterThan(primera.version());
+
+        ParametrosSellados vigente = lector.vigenteEn(ejercicio);
+        assertThat(vigente.version())
+                .as("una determinacion nueva usa la ultima version sellada")
+                .isEqualTo(segunda.version());
+        assertThat(vigente.numero("FICTICIO", "ARANCEL_FICTICIO_V2")).isPresent();
+
+        ParametrosSellados original = lector.porConjunto(IdentificadorDeConjunto.de(primera.id()));
+        assertThat(original.version())
+                .as(
+                        "recalcular la determinacion emitida en junio recupera SU conjunto, no el"
+                                + " que rige hoy: si no, la cifra cambiaria sin ningun error")
+                .isEqualTo(primera.version());
+        assertThat(original.numero("FICTICIO", "ARANCEL_FICTICIO_V1")).isPresent();
+        assertThat(original.numero("FICTICIO", "ARANCEL_FICTICIO_V2"))
+                .as("el conjunto original no conoce la correccion posterior")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("un conjunto abierto no se recupera ni por su identificador")
+    void unConjuntoAbiertoNoSeRecuperaPorId() throws SQLException {
+        ConjuntoDeParametros abierto =
+                administrar.abrirVersion(
+                        new Ejercicio(2039), Observacion.de("Se prepara el ejercicio 2039"));
+
+        assertThatThrownBy(() -> lector.porConjunto(IdentificadorDeConjunto.de(abierto.id())))
+                .as(
+                        "que una determinacion apunte a un conjunto abierto significa que se emitio"
+                                + " sin sellar: no se calcula sobre eso, se investiga")
+                .isInstanceOf(LectorDeParametros.ConjuntoNoSellado.class);
+    }
+
+    @Test
+    @DisplayName("un conjunto que no existe no se sustituye por el vigente del ejercicio")
+    void unConjuntoInexistenteFalla() {
+        assertThatThrownBy(() -> lector.porConjunto(IdentificadorDeConjunto.de(999_999L)))
+                .as("sustituirlo daria una cifra plausible y equivocada")
+                .isInstanceOf(LectorDeParametros.ConjuntoNoSellado.class);
     }
 
     // ------------------------------------------------------------------
