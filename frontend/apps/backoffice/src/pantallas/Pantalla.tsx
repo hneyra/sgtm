@@ -4,6 +4,9 @@ import { Aviso, Esqueleto } from '@sgtm/design-system';
 import { ProblemaDeApi } from '@sgtm/api-client';
 import type { ValorDeCampo } from '@sgtm/api-client';
 import { opcionPorRuta, pantallaDe, seccionesDe } from '../catalogo';
+import { conexionDe } from './conexiones';
+import type { Conexion } from './conexiones';
+import { useDatosDeOperacion } from './useDatosDeOperacion';
 import { useDatosDePantalla } from './useDatosDePantalla';
 import { BarraDeAcciones } from './bloques/BarraDeAcciones';
 import { Filtros } from './bloques/Filtros';
@@ -48,14 +51,53 @@ export function Pantalla() {
   return <Contenido key={estructura.id} estructura={estructura} />;
 }
 
-function Contenido({
+type Estructura = NonNullable<ReturnType<typeof pantallaDe>>;
+
+/**
+ * Los dos caminos, y por que hay dos.
+ *
+ * Una opcion **conectada** declara su operacion tipada y su adaptador
+ * (`pantallas/conexiones.ts`); una opcion **sin conectar** pide por
+ * `useDatosDePantalla` la forma que comparten las 134. Conviven a proposito:
+ * conectar una no puede obligar a conectar las otras 133 el mismo dia.
+ *
+ * La eleccion se hace aqui, en dos componentes hermanos, y no dentro de uno con
+ * un `if`: un hook no se llama a veces.
+ */
+function Contenido({ estructura }: { readonly estructura: Estructura }) {
+  const conexion = conexionDe(estructura.id);
+  return conexion === undefined ? (
+    <ContenidoDelCatalogo estructura={estructura} />
+  ) : (
+    <ContenidoConectado estructura={estructura} conexion={conexion} />
+  );
+}
+
+function ContenidoDelCatalogo({ estructura }: { readonly estructura: Estructura }) {
+  const consulta = useDatosDePantalla(estructura);
+  return <Bloques estructura={estructura} consulta={consulta} />;
+}
+
+function ContenidoConectado({
   estructura,
+  conexion,
 }: {
-  readonly estructura: NonNullable<ReturnType<typeof pantallaDe>>;
+  readonly estructura: Estructura;
+  readonly conexion: Conexion;
+}) {
+  const consulta = useDatosDeOperacion(conexion);
+  return <Bloques estructura={estructura} consulta={consulta} />;
+}
+
+function Bloques({
+  estructura,
+  consulta,
+}: {
+  readonly estructura: Estructura;
+  readonly consulta: ReturnType<typeof useDatosDePantalla>;
 }) {
   const [pestana, fijarPestana] = useState(0);
   const [cerradas, fijarCerradas] = useState<Readonly<Record<string, boolean>>>({});
-  const consulta = useDatosDePantalla(estructura);
 
   const cargando = consulta.isPending;
   const datos = consulta.data;

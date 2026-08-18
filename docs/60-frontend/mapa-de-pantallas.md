@@ -144,8 +144,10 @@ cuestan un renderizador; hechas a mano, cuestan 134 archivos que nadie mantiene.
 estructura del valor**: la estructura va a la aplicación y el valor lo sirve la API. Las diez
 plantillas están implementadas y las 134 pantallas se comprueban en cada `yarn test`.
 
-**Paso 4: pendiente**, y no por falta de interfaz: el backend todavía no sirve ninguna operación.
-Cada opción se conectará cuando la suya exista, apagando el proxy para esa ruta.
+**Paso 4: empezado.** El camino existe y la primera opción lo usa: junto a `useDatosDePantalla`,
+una opción puede declarar su **operación tipada** —generada del contrato— y su **adaptador**, y
+las otras 133 no se enteran. Lo que sigue pendiente es el backend: cada opción se conectará de
+verdad cuando su operación exista, apagando el proxy para esa ruta.
 
 ## 8. Documentos relacionados
 

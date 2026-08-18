@@ -8,17 +8,26 @@ import { HubDeModulo } from '../pantallas/HubDeModulo';
 import { Pantalla } from '../pantallas/Pantalla';
 
 /**
- * Monta la aplicacion en una ruta, con los mismos proveedores que en produccion
- * y con el enrutador en memoria.
+ * Un cliente de consultas para pruebas.
  *
  * Las consultas no reintentan: en una prueba un reintento convierte un fallo en
  * un tiempo de espera agotado, que dice mucho menos.
  */
-export function montarEnRuta(ruta: string): RenderResult {
-  const cliente = new QueryClient({
+export const clienteDePruebas = (): QueryClient =>
+  new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
+/**
+ * Monta la aplicacion en una ruta, con los mismos proveedores que en produccion
+ * y con el enrutador en memoria.
+ *
+ * El cliente se puede compartir entre dos montajes: es la unica forma de
+ * comprobar que la cache **no** mezcla dos peticiones distintas de la misma
+ * pantalla. Sin compartirlo, cada montaje empieza con la cache vacia y la
+ * prueba no diria nada.
+ */
+export function montarEnRuta(ruta: string, cliente = clienteDePruebas()): RenderResult {
   return render(
     <QueryClientProvider client={cliente}>
       <ProveedorDePreferencias>
