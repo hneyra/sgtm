@@ -1,0 +1,333 @@
+package pe.gob.sgtm.seguridad.infraestructura;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import org.jspecify.annotations.Nullable;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.persistencia.OrdenSeguro;
+import pe.gob.sgtm.persistencia.RepositorioJdbc;
+import pe.gob.sgtm.seguridad.dominio.Acceso;
+import pe.gob.sgtm.seguridad.dominio.AdministracionRepository;
+import pe.gob.sgtm.seguridad.dominio.Grupo;
+import pe.gob.sgtm.seguridad.dominio.Miembro;
+import pe.gob.sgtm.seguridad.dominio.Modulo;
+import pe.gob.sgtm.seguridad.dominio.TipoDeAcceso;
+import pe.gob.sgtm.seguridad.dominio.Usuario;
+import pe.gob.sgtm.seguridad.dominio.Vigencia;
+
+/**
+ * Persistencia del modelo de administracion.
+ *
+ * <p>Ninguna consulta filtra por municipalidad: lo hace la politica RLS con el contexto de la
+ * transaccion. Por eso un usuario de otra municipalidad no aparece en ningun listado de esta —no
+ * porque se le excluya, sino porque desde aqui no existe—.
+ */
+@Repository
+public class AdministracionRepositoryJdbc extends RepositorioJdbc
+        implements AdministracionRepository {
+
+    // `id` esta en todas las listas blancas a proposito: es el unico orden que
+    // siempre desempata, y sin un orden total dos paginas consecutivas pueden
+    // repetir una fila y omitir otra cuando hay valores iguales en la columna
+    // pedida —dos grupos con el mismo nombre, dos accesos del mismo tipo—.
+    private static final OrdenSeguro ORDEN_MODULO =
+            OrdenSeguro.sobre("codigo", "nombre", "orden", "id");
+    private static final OrdenSeguro ORDEN_ACCESO =
+            OrdenSeguro.sobre("codigo", "nombre", "tipo", "id");
+    private static final OrdenSeguro ORDEN_GRUPO = OrdenSeguro.sobre("nombre", "id");
+    private static final OrdenSeguro ORDEN_USUARIO = OrdenSeguro.sobre("cuenta", "nombre", "id");
+
+    public AdministracionRepositoryJdbc(JdbcClient jdbc) {
+        super(jdbc);
+    }
+
+    // ------------------------------------------------------------------ modulos
+
+    @Override
+    public Pagina<Modulo> modulos(Paginacion paginacion) {
+        return paginar(
+                "SELECT id, codigo, nombre, orden, activo FROM modulo_sistema",
+                "SELECT count(*) FROM modulo_sistema",
+                Map.of(),
+                paginacion,
+                ORDEN_MODULO,
+                AdministracionRepositoryJdbc::mapearModulo);
+    }
+
+    // ------------------------------------------------------------------ accesos
+
+    @Override
+    public Pagina<Acceso> accesos(Paginacion paginacion) {
+        return paginar(
+                "SELECT id, modulo_id, tipo, codigo, nombre, activo FROM acceso",
+                "SELECT count(*) FROM acceso",
+                Map.of(),
+                paginacion,
+                ORDEN_ACCESO,
+                AdministracionRepositoryJdbc::mapearAcceso);
+    }
+
+    @Override
+    public Optional<Acceso> accesoPorCodigo(String codigo) {
+        return jdbc().sql(
+                        "SELECT id, modulo_id, tipo, codigo, nombre, activo FROM acceso"
+                                + " WHERE codigo = :codigo")
+                .param("codigo", codigo)
+                .query(AdministracionRepositoryJdbc::mapearAcceso)
+                .optional();
+    }
+
+    // ------------------------------------------------------------------ grupos
+
+    @Override
+    public Pagina<Grupo> grupos(Paginacion paginacion) {
+        return paginar(
+                "SELECT id, nombre, descripcion, habilitado, vigencia_desde, vigencia_hasta"
+                        + " FROM grupo",
+                "SELECT count(*) FROM grupo",
+                Map.of(),
+                paginacion,
+                ORDEN_GRUPO,
+                AdministracionRepositoryJdbc::mapearGrupo);
+    }
+
+    @Override
+    public Optional<Grupo> grupo(long id) {
+        return jdbc().sql(
+                        "SELECT id, nombre, descripcion, habilitado, vigencia_desde, vigencia_hasta"
+                                + " FROM grupo WHERE id = :id")
+                .param("id", id)
+                .query(AdministracionRepositoryJdbc::mapearGrupo)
+                .optional();
+    }
+
+    @Override
+    public Grupo guardar(Grupo grupo) {
+        if (grupo.id() == null) {
+            Long id =
+                    jdbc().sql(
+                                    "INSERT INTO grupo (municipalidad_id, nombre, descripcion,"
+                                            + " habilitado, vigencia_desde, vigencia_hasta)"
+                                            + " VALUES ("
+                                            + MUNICIPALIDAD_ACTUAL
+                                            + ", :nombre, :descripcion, :habilitado, :desde,"
+                                            + " :hasta) RETURNING id")
+                            .param("nombre", grupo.nombre())
+                            .param("descripcion", grupo.descripcion())
+                            .param("habilitado", grupo.habilitado())
+                            .param("desde", grupo.vigencia().desde())
+                            .param("hasta", grupo.vigencia().hasta())
+                            .query(Long.class)
+                            .single();
+            return new Grupo(
+                    id, grupo.nombre(), grupo.descripcion(), grupo.habilitado(), grupo.vigencia());
+        }
+
+        long id = Objects.requireNonNull(grupo.id());
+        int filas =
+                jdbc().sql(
+                                "UPDATE grupo SET nombre = :nombre, descripcion = :descripcion,"
+                                        + " habilitado = :habilitado, vigencia_desde = :desde,"
+                                        + " vigencia_hasta = :hasta WHERE id = :id")
+                        .param("id", id)
+                        .param("nombre", grupo.nombre())
+                        .param("descripcion", grupo.descripcion())
+                        .param("habilitado", grupo.habilitado())
+                        .param("desde", grupo.vigencia().desde())
+                        .param("hasta", grupo.vigencia().hasta())
+                        .update();
+        if (filas == 0) {
+            throw new IllegalStateException("No hay ningun grupo " + id + " en esta municipalidad");
+        }
+        return grupo;
+    }
+
+    // ------------------------------------------------------------------ usuarios
+
+    @Override
+    public Pagina<Usuario> usuarios(Paginacion paginacion) {
+        return paginar(
+                "SELECT id, cuenta, sujeto_oidc, nombre, correo, habilitado, vigencia_desde,"
+                        + " vigencia_hasta FROM usuario",
+                "SELECT count(*) FROM usuario",
+                Map.of(),
+                paginacion,
+                ORDEN_USUARIO,
+                AdministracionRepositoryJdbc::mapearUsuario);
+    }
+
+    @Override
+    public Optional<Usuario> usuario(long id) {
+        return unUsuario("id = :clave", id);
+    }
+
+    @Override
+    public Optional<Usuario> usuarioPorCuenta(String cuenta) {
+        return unUsuario("cuenta = :clave", cuenta);
+    }
+
+    private Optional<Usuario> unUsuario(String condicion, Object clave) {
+        return jdbc().sql(
+                        "SELECT id, cuenta, sujeto_oidc, nombre, correo, habilitado,"
+                                + " vigencia_desde, vigencia_hasta FROM usuario WHERE "
+                                + condicion)
+                .param("clave", clave)
+                .query(AdministracionRepositoryJdbc::mapearUsuario)
+                .optional();
+    }
+
+    @Override
+    public Usuario guardar(Usuario usuario) {
+        if (usuario.id() == null) {
+            Long id =
+                    jdbc().sql(
+                                    "INSERT INTO usuario (municipalidad_id, cuenta, sujeto_oidc,"
+                                            + " nombre, correo, habilitado, vigencia_desde,"
+                                            + " vigencia_hasta) VALUES ("
+                                            + MUNICIPALIDAD_ACTUAL
+                                            + ", :cuenta, :sujeto, :nombre, :correo, :habilitado,"
+                                            + " :desde, :hasta) RETURNING id")
+                            .param("cuenta", usuario.cuenta())
+                            .param("sujeto", usuario.sujetoOidc())
+                            .param("nombre", usuario.nombre())
+                            .param("correo", usuario.correo())
+                            .param("habilitado", usuario.habilitado())
+                            .param("desde", usuario.vigencia().desde())
+                            .param("hasta", usuario.vigencia().hasta())
+                            .query(Long.class)
+                            .single();
+            return new Usuario(
+                    id,
+                    usuario.cuenta(),
+                    usuario.sujetoOidc(),
+                    usuario.nombre(),
+                    usuario.correo(),
+                    usuario.habilitado(),
+                    usuario.vigencia());
+        }
+
+        long id = Objects.requireNonNull(usuario.id());
+        int filas =
+                jdbc().sql(
+                                "UPDATE usuario SET cuenta = :cuenta, sujeto_oidc = :sujeto,"
+                                        + " nombre = :nombre, correo = :correo,"
+                                        + " habilitado = :habilitado, vigencia_desde = :desde,"
+                                        + " vigencia_hasta = :hasta WHERE id = :id")
+                        .param("id", id)
+                        .param("cuenta", usuario.cuenta())
+                        .param("sujeto", usuario.sujetoOidc())
+                        .param("nombre", usuario.nombre())
+                        .param("correo", usuario.correo())
+                        .param("habilitado", usuario.habilitado())
+                        .param("desde", usuario.vigencia().desde())
+                        .param("hasta", usuario.vigencia().hasta())
+                        .update();
+        if (filas == 0) {
+            throw new IllegalStateException(
+                    "No hay ningun usuario " + id + " en esta municipalidad");
+        }
+        return usuario;
+    }
+
+    // ------------------------------------------------------------------ miembros
+
+    @Override
+    public Optional<Miembro> miembro(long grupoId, long usuarioId) {
+        return jdbc().sql(
+                        "SELECT grupo_id, usuario_id, activo FROM miembro"
+                                + " WHERE grupo_id = :grupo AND usuario_id = :usuario")
+                .param("grupo", grupoId)
+                .param("usuario", usuarioId)
+                .query(AdministracionRepositoryJdbc::mapearMiembro)
+                .optional();
+    }
+
+    /**
+     * Alta o baja de la pertenencia, en una sola sentencia.
+     *
+     * <p>{@code ON CONFLICT ... DO UPDATE} y no un {@code DELETE} seguido de un {@code INSERT}: la
+     * fila es la constancia de que esa persona estuvo en el grupo, y ademas la aplicacion no tiene
+     * el privilegio de borrar (V7). Reafiliar a alguien que salio reactiva su fila y conserva la
+     * fecha de alta original.
+     */
+    @Override
+    public Miembro guardar(Miembro miembro) {
+        jdbc().sql(
+                        "INSERT INTO miembro (municipalidad_id, grupo_id, usuario_id,"
+                                + " usuario_alta, activo, fecha_baja, usuario_baja)"
+                                + " VALUES ("
+                                + MUNICIPALIDAD_ACTUAL
+                                + ", :grupo, :usuario, :usuarioAlta, :activo, NULL, NULL)"
+                                + " ON CONFLICT (municipalidad_id, grupo_id, usuario_id)"
+                                + " DO UPDATE SET activo = EXCLUDED.activo,"
+                                + "               fecha_baja = CASE WHEN EXCLUDED.activo"
+                                + "                                 THEN NULL ELSE now() END,"
+                                + "               usuario_baja = CASE WHEN EXCLUDED.activo"
+                                + "                                   THEN NULL"
+                                + "                                   ELSE EXCLUDED.usuario_alta END")
+                .param("grupo", miembro.grupoId())
+                .param("usuario", miembro.usuarioId())
+                .param("usuarioAlta", pe.gob.sgtm.auditoria.OrigenContext.actual().usuario())
+                .param("activo", miembro.activo())
+                .update();
+        return miembro;
+    }
+
+    // ------------------------------------------------------------------ mapeos
+
+    private static Modulo mapearModulo(ResultSet fila, int numero) throws SQLException {
+        return new Modulo(
+                fila.getLong("id"),
+                fila.getString("codigo"),
+                fila.getString("nombre"),
+                fila.getInt("orden"),
+                fila.getBoolean("activo"));
+    }
+
+    private static Acceso mapearAcceso(ResultSet fila, int numero) throws SQLException {
+        return new Acceso(
+                fila.getLong("id"),
+                fila.getLong("modulo_id"),
+                TipoDeAcceso.valueOf(fila.getString("tipo")),
+                fila.getString("codigo"),
+                fila.getString("nombre"),
+                fila.getBoolean("activo"));
+    }
+
+    private static Grupo mapearGrupo(ResultSet fila, int numero) throws SQLException {
+        return new Grupo(
+                fila.getLong("id"),
+                fila.getString("nombre"),
+                fila.getString("descripcion"),
+                fila.getBoolean("habilitado"),
+                new Vigencia(fecha(fila, "vigencia_desde"), fecha(fila, "vigencia_hasta")));
+    }
+
+    private static Usuario mapearUsuario(ResultSet fila, int numero) throws SQLException {
+        return new Usuario(
+                fila.getLong("id"),
+                fila.getString("cuenta"),
+                fila.getString("sujeto_oidc"),
+                fila.getString("nombre"),
+                fila.getString("correo"),
+                fila.getBoolean("habilitado"),
+                new Vigencia(fecha(fila, "vigencia_desde"), fecha(fila, "vigencia_hasta")));
+    }
+
+    private static Miembro mapearMiembro(ResultSet fila, int numero) throws SQLException {
+        return new Miembro(
+                fila.getLong("grupo_id"), fila.getLong("usuario_id"), fila.getBoolean("activo"));
+    }
+
+    private static @Nullable LocalDate fecha(ResultSet fila, String columna) throws SQLException {
+        java.sql.Date valor = fila.getDate(columna);
+        return valor == null ? null : valor.toLocalDate();
+    }
+}
