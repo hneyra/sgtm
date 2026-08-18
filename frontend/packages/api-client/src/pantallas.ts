@@ -76,17 +76,29 @@ export interface DatosDeTabla {
 }
 
 export interface Paginacion {
-  /** Empieza en 1, como en `?pagina=`. */
+  /** La que se esta viendo, **contada desde 0** como la cuenta el backend. */
   readonly pagina: number;
   readonly tamano: number;
-  /**
-   * Cuantas filas hay en la busqueda entera, no en esta pagina.
-   *
-   * Se llama `filas` y no `total` porque `total` es vocabulario de dinero en
-   * este sistema —y la regla que prohibe la aritmetica con importes lo trata
-   * como tal, con razon—.
-   */
-  readonly filas: number;
+  /** Cuantas paginas hay en la busqueda entera. */
+  readonly totalPaginas: number;
+  /** Si queda alguna despues de esta. */
+  readonly hayMas: boolean;
+}
+
+/**
+ * El sobre en el que el backend manda un listado (`RespuestaPaginada` de #6).
+ *
+ * Lleva el total y el numero de paginas aunque se puedan deducir: sin ellos la
+ * interfaz no puede dibujar «1 de 47» y acaba pidiendo la pagina siguiente para
+ * saber si existe.
+ */
+export interface Paginado<T> {
+  readonly contenido: readonly T[];
+  readonly pagina: number;
+  readonly tamano: number;
+  readonly totalElementos: number;
+  readonly totalPaginas: number;
+  readonly hayMas: boolean;
 }
 
 /** Una celda es texto; si trae `tono`, se pinta como insignia de estado. */

@@ -20,7 +20,8 @@ Gradle, el esquema como migraciones Flyway, el camino del contexto de tenant (to
 → RLS) y las verificaciones bloqueantes. **Ninguna funcionalidad de negocio todavía**, y es
 deliberado: primero las barreras, después el negocio.
 
-De la **interfaz web** existen **las 134 pantallas**, y ninguna conectada al backend real:
+De la **interfaz web** existen **las 134 pantallas**, con el módulo de seguridad ya hablando el
+idioma del backend y las otras 123 todavía en la forma común:
 [`frontend/`](frontend/README.md) porta el catálogo del prototipo a datos tipados y lo compone con
 **un** renderizador, sobre un shell con navegación de dos niveles y paleta de comandos. Los datos
 llegan por HTTP desde un **proxy que simula la API** ([`ADR-0010`](docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md));
@@ -188,6 +189,11 @@ la observación antes de habilitar la acción; **`useMutation` fuera de ahí no 
 muestra que lo viola. Una acción cuya operación es de lectura sigue deshabilitada: no hay a dónde
 escribir.
 
+**Ningún campo del formulario que la opción no haya declarado.** El cuerpo de una escritura lleva la
+observación y solo los campos que la opción lista en `pantallas/escrituras.ts`; mientras no esté
+ahí, su formulario no se puede escribir. Es lo que impide que una contraseña acabe en el estado de
+React —y de ahí en cualquier sitio— cuando el backend no la pide.
+
 ## Decisiones abiertas que bloquean
 
 Registro completo en [`docs/00-gobierno/decisiones-abiertas.md`](docs/00-gobierno/decisiones-abiertas.md).
@@ -264,6 +270,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | El presupuesto de paquete muerde | Bajándolo por debajo de lo que mide el arranque | Rojo, con el número y qué hacer |
 | El juego de datos simulado no llega a producción | Comparando las dos compilaciones, con y sin la bandera | El chunk desaparece |
 | Un cambio del contrato rompe la compilación | Renombrando `codRefCatastral` en `sgtm-v1.yaml` y compilando con `tsc` | Rojo; al devolverlo, verde |
+| El módulo de seguridad conectado (11 pruebas) | Quitando la guarda de `leerPaginado`, el ejercicio de la bitácora, el vaciado de la caché, la lista blanca del cuerpo y el bloqueo de los campos de clave | Las cinco lo ponen rojo |
 | Las guardas del generador de operaciones (6) | Un contrato de muestra que viola cada una | Las seis muerden |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con

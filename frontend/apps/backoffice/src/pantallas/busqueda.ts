@@ -17,12 +17,18 @@ import { OPERACIONES } from '@sgtm/api-client';
  *   consulta            filtros, orden y pagina: `?sector=01&orden=nombre`
  */
 
-/** Nombres que la busqueda se reserva; el resto de la consulta son filtros. */
-export const ORDEN = 'orden';
-export const SENTIDO = 'sentido';
+/**
+ * Nombres que la busqueda se reserva; el resto de la consulta son filtros.
+ *
+ * Son **los del backend** (`ParametrosDePaginacion` de #6): `ordenarPor` y no
+ * `orden`, `direccion` y no `sentido`. La interfaz los propuso primero, cuando
+ * no habia capa web; ahora la hay y manda ella.
+ */
+export const ORDEN = 'ordenarPor';
+export const SENTIDO = 'direccion';
 export const PAGINA = 'pagina';
 
-export type Sentido = 'ascendente' | 'descendente';
+export type Sentido = 'ASCENDENTE' | 'DESCENDENTE';
 
 export interface EstadoDeBusqueda {
   readonly filtros: Readonly<Record<string, string>>;
@@ -48,7 +54,8 @@ export function leerBusqueda(consulta: URLSearchParams): EstadoDeBusqueda {
   return {
     filtros,
     ...(orden === '' ? {} : { orden }),
-    sentido: consulta.get(SENTIDO) === 'descendente' ? 'descendente' : 'ascendente',
+    sentido: consulta.get(SENTIDO) === 'DESCENDENTE' ? 'DESCENDENTE' : 'ASCENDENTE',
+    // En la URL la primera pagina es la 1, que es como las cuenta quien las lee.
     pagina: Number.isInteger(pagina) && pagina > 0 ? pagina : PRIMERA_PAGINA,
   };
 }
@@ -75,10 +82,10 @@ export function conCambio(
 /** Ordenar por una columna: la misma columna alterna el sentido, otra empieza ascendente. */
 export function conOrden(consulta: URLSearchParams, columna: string): URLSearchParams {
   const estado = leerBusqueda(consulta);
-  const invertir = estado.orden === columna && estado.sentido === 'ascendente';
+  const invertir = estado.orden === columna && estado.sentido === 'ASCENDENTE';
   return conCambio(consulta, {
     [ORDEN]: columna,
-    [SENTIDO]: invertir ? 'descendente' : 'ascendente',
+    [SENTIDO]: invertir ? 'DESCENDENTE' : 'ASCENDENTE',
     // Un orden nuevo devuelve a la primera pagina: la pagina 7 de otro orden no
     // es ninguna pagina.
     [PAGINA]: undefined,
@@ -119,7 +126,9 @@ export function parametrosDeBusqueda(
     if (declarados.has(SENTIDO)) parametros[SENTIDO] = estado.sentido;
   }
   if (estado.pagina !== PRIMERA_PAGINA && declarados.has(PAGINA)) {
-    parametros[PAGINA] = String(estado.pagina);
+    // El backend cuenta las paginas desde 0 y la URL desde 1: la traduccion vive
+    // aqui, en una linea, y no en cada pantalla.
+    parametros[PAGINA] = String(estado.pagina - 1);
   }
 
   return parametros;

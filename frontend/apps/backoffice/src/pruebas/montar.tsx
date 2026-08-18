@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import type { RenderResult } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { ProveedorDeEjercicio } from '../app/ejercicio';
 import { ProveedorDePreferencias } from '../app/preferencias';
 import { ProveedorDeSesion } from '../app/sesion/ProveedorDeSesion';
 import { Shell } from '../app/Shell';
@@ -32,17 +33,19 @@ export function montarEnRuta(ruta: string, cliente = clienteDePruebas()): Render
   return render(
     <QueryClientProvider client={cliente}>
       <ProveedorDeSesion>
-        <ProveedorDePreferencias>
-          <MemoryRouter initialEntries={[ruta]}>
-            <Routes>
-              <Route element={<Shell />}>
-                <Route path="/:moduloId" element={<HubDeModulo />} />
-                <Route path="/:moduloId/:ranura" element={<Pantalla />} />
-                <Route path="/:moduloId/:ranura/:codigo" element={<Pantalla />} />
-              </Route>
-            </Routes>
-          </MemoryRouter>
-        </ProveedorDePreferencias>
+        <ProveedorDeEjercicio>
+          <ProveedorDePreferencias>
+            <MemoryRouter initialEntries={[ruta]}>
+              <Routes>
+                <Route element={<Shell />}>
+                  <Route path="/:moduloId" element={<HubDeModulo />} />
+                  <Route path="/:moduloId/:ranura" element={<Pantalla />} />
+                  <Route path="/:moduloId/:ranura/:codigo" element={<Pantalla />} />
+                </Route>
+              </Routes>
+            </MemoryRouter>
+          </ProveedorDePreferencias>
+        </ProveedorDeEjercicio>
       </ProveedorDeSesion>
     </QueryClientProvider>,
   );

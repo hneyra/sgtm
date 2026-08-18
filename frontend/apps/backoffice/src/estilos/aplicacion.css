@@ -423,6 +423,29 @@
   white-space: nowrap;
 }
 
+/* El ejercicio de trabajo va en la cabecera y **no se oculta en movil**: es
+   global a la sesion, y una cifra de 2025 leida como si fuera de 2026 es un
+   error de atencion al contribuyente, no un detalle de pantalla estrecha. */
+.sgtm-cabecera__ejercicio {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 11px;
+  white-space: nowrap;
+}
+
+.sgtm-cabecera__ejercicio strong {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-1);
+  font-weight: 600;
+}
+
 .sgtm-cabecera__usuario {
   display: flex;
   align-items: center;

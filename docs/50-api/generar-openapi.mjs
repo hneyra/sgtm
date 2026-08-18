@@ -78,19 +78,45 @@ function filtrosDe(pantalla) {
 /**
  * Paginacion y orden, para las operaciones de lectura que traen tabla.
  *
- * Es lo que la interfaz espera; el backend lo confirma al implementarlo (#6).
- * `sentido` va en castellano como todo el resto de la API.
+ * **Los nombres son los del backend, no los que la interfaz propuso.** Cuando
+ * se escribieron aqui el backend todavia no tenia capa web; ahora la tiene
+ * (`ParametrosDePaginacion` de #6) y manda ella: `ordenarPor` y no `orden`,
+ * `direccion` y no `sentido`, y la pagina contada desde 0. Que la interfaz
+ * proponga esta bien; que siga proponiendo cuando ya hay respuesta, no.
  */
 const PAGINACION = [
-  { nombre: 'pagina', ejemplo: '1', descripcion: 'Pagina que se pide, empezando en 1' },
-  { nombre: 'tamano', ejemplo: '50', descripcion: 'Filas por pagina' },
-  { nombre: 'orden', ejemplo: '', descripcion: 'Campo por el que se ordena' },
+  { nombre: 'pagina', ejemplo: '0', descripcion: 'Pagina que se pide, contada desde 0' },
+  { nombre: 'tamano', ejemplo: '20', descripcion: 'Filas por pagina' },
+  { nombre: 'ordenarPor', ejemplo: '', descripcion: 'Campo por el que se ordena, en camelCase' },
   {
-    nombre: 'sentido',
-    ejemplo: 'ascendente',
-    descripcion: 'ascendente | descendente',
+    nombre: 'direccion',
+    ejemplo: 'ASCENDENTE',
+    descripcion: 'ASCENDENTE | DESCENDENTE',
   },
 ];
+
+/**
+ * Parametros que el backend **exige** y la pantalla no dibuja.
+ *
+ * Misma regla que `PAGINACION`: cuando el backend ya existe, manda el backend.
+ * La bitacora esta particionada por ejercicio y su controlador lo pide
+ * obligatorio (`SesionController#auditoria`, #13); sin el, la consulta recorre
+ * todas las particiones, y con el volumen que alcanza esa tabla la diferencia
+ * es entre una pantalla que responde y una que hay que cancelar.
+ *
+ * Esta lista es corta a proposito. Un parametro aqui es una divergencia entre
+ * lo que la pantalla dibuja y lo que el servicio necesita, y cada una se anota
+ * con el controlador que la impone.
+ */
+const EXIGE_EL_BACKEND = {
+  auditoria: [
+    {
+      nombre: 'ejercicio',
+      ejemplo: '2026',
+      descripcion: 'Ejercicio de trabajo. Obligatorio: es la clave de particion de la bitacora',
+    },
+  ],
+};
 
 /* ── Recoger las operaciones ──────────────────────────────────────────── */
 
@@ -118,6 +144,7 @@ for (const grupo of NAV) {
       // Parametros de consulta del ejemplo del prototipo, mas los filtros que
       // dibuja la pantalla y —si trae tabla— la paginacion y el orden.
       parametrosDeConsulta: reunir(parametrosDeRuta, [
+        ...(EXIGE_EL_BACKEND[id] ?? []),
         ...(consulta
           ? consulta.split('&').map((p) => {
               const [nombre, ejemplo] = p.split('=');

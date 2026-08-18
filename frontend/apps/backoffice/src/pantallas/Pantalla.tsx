@@ -18,6 +18,8 @@ import {
 import { SIN_PERMISO, estadoDePantalla, textoDeError } from './estados';
 import { useCatalogoVisible } from '../app/sesion/useCatalogoVisible';
 import { useEscritura } from './escritura';
+import { escrituraDe } from './escrituras';
+import { useEjercicio } from '../app/ejercicio';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
 import { useDatosDeOperacion } from './useDatosDeOperacion';
@@ -177,16 +179,28 @@ function Bloques({
   // Los niveles de accesibilidad apagan **acciones**, no solo opciones: ver una
   // ficha sin poder modificarla es un perfil de consulta, no un error.
   const puedeEscribirAqui = catalogo.puedeEscribir(estructura.id);
+  // Que campos puede mandar esta opcion, y si lo que guarda es global a la
+  // sesion. Sin declaracion, el formulario no se escribe y solo viaja la
+  // observacion: negacion por omision, como la autorizacion del manual.
+  const declarada = escrituraDe(estructura.id);
+  const trabajo = useEjercicio();
   const escritura = useEscritura(
     operacion !== undefined && escribe(operacion) && puedeEscribirAqui ? operacion : undefined,
     operacion === undefined ? {} : parametrosDeBusqueda(operacion, codigo, busqueda),
+    {
+      campos: declarada?.campos ?? {},
+      ...(declarada?.cambiaElEjercicio === true ? { alGuardar: trabajo.adoptar } : {}),
+    },
   );
   // El registro que abre esta pantalla, si abre alguno: `codRefCatastral`, `placa`…
   const registro =
     operacion === undefined ? undefined : descriptorDe(operacion).parametrosDeRuta[0];
-  // Sin registro no hay peticion, asi que tampoco hay carga que esperar: lo que
-  // toca es decir que falta elegir uno.
-  const cargando = consulta.isPending && faltaRegistro === undefined;
+  // Sin peticion no hay carga que esperar, y hay dos formas de no tener
+  // peticion: que falte el registro que abre la pantalla, o que la operacion
+  // escriba —esas no se piden al abrir—. Sin este `pide`, una pantalla que
+  // escribe se quedaba con todos sus campos en esqueleto y deshabilitados para
+  // siempre, porque su consulta nunca deja de estar pendiente.
+  const cargando = pide && consulta.isPending && faltaRegistro === undefined;
   const datos = consulta.data;
   const valores: Readonly<Record<string, ValorDeCampo>> = datos?.campos ?? {};
   const secciones = seccionesDe(estructura, pestana);
@@ -215,6 +229,13 @@ function Bloques({
   return (
     <>
       {estructura.desc && <p className="sgtm-descripcion">{estructura.desc}</p>}
+
+      {/* Lo que esta pantalla **no** manda, dicho antes de que alguien lo
+          teclee. Sale de la escritura declarada, no del catalogo: es una
+          propiedad de la operacion, no del dibujo. */}
+      {declarada?.nota !== undefined && (
+        <Aviso titulo="Cómo funciona esta pantalla" detalle={declarada.nota} />
+      )}
 
       {estructura.kind === 'dash' && (
         <Indicadores kpis={datos?.kpis} paneles={datos?.paneles} cargando={cargando} />
@@ -317,6 +338,10 @@ function Bloques({
           cargando={cargando}
           cerradas={cerradas}
           pestana={pestana}
+          escribibles={escritura.campos}
+          borrador={escritura.borrador}
+          onCampo={escritura.fijarCampo}
+          errorPorCampo={escritura.errorPorCampo}
           onAlternar={(clave, cerrada) =>
             fijarCerradas((previas) => ({ ...previas, [clave]: cerrada }))
           }

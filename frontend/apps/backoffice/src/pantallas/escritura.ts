@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ProblemaDeApi, enviarOperacion, nuevaClaveDeIdempotencia } from '@sgtm/api-client';
 import type { CuerpoDe, IdDeOperacion, ParametrosDe } from '@sgtm/api-client';
@@ -24,10 +24,22 @@ import type { CuerpoDe, IdDeOperacion, ParametrosDe } from '@sgtm/api-client';
  * - **Errores por campo.** `ProblemaDeApi.errores` trae `{ campo, mensaje }`;
  *   el mensaje se pinta junto a su campo **sin reescribirlo** (RNF-080).
  * - **Un envio por pulsacion.** Pulsar dos veces rapido no manda dos veces.
+ * - **Lista blanca de campos.** El cuerpo lleva la observacion y **nada mas**,
+ *   salvo los campos que la opcion declare uno a uno en `pantallas/escrituras.ts`.
+ *   No es una comodidad: es lo que impide que una contrasena escrita en un
+ *   formulario acabe viajando a un servidor que no la pide y no sabria que
+ *   hacer con ella. Lo que no esta declarado no se guarda ni se manda, asi que
+ *   tampoco esta en el estado de React cuando termina el envio.
  */
 export interface Escritura {
   /** Que operacion se va a escribir, si la pantalla escribe alguna. */
   readonly operacion?: IdDeOperacion;
+  /** Los campos del formulario que esta pantalla puede escribir. Los demas, no. */
+  readonly campos: ReadonlySet<string>;
+  /** Lo escrito en esos campos, todavia sin enviar. */
+  readonly borrador: Readonly<Record<string, string>>;
+  /** Escribe un campo. Uno que no este declarado se ignora, y no se guarda. */
+  readonly fijarCampo: (campo: string, valor: string) => void;
   readonly observacion: string;
   readonly fijarObservacion: (texto: string) => void;
   /** Sin observacion no se habilita la accion. Esa es toda la regla. */
@@ -41,13 +53,62 @@ export interface Escritura {
   readonly clave: string;
 }
 
+/**
+ * Un campo del formulario, visto desde el cuerpo de la peticion.
+ *
+ * `entero` existe porque el formulario solo produce texto y hay campos que el
+ * backend declara numericos —`int ejercicio`—. **Nunca se usa para importes**:
+ * esos son cadenas decimales de punta a punta (regla 1, RNF-055), y convertir
+ * uno a `number` perderia centimos. Aqui solo pasan enteros de dominio: anos,
+ * codigos, contadores.
+ */
+export interface CampoDelCuerpo {
+  /** Como se llama en el cuerpo que espera el backend. */
+  readonly campo: string;
+  /** El backend lo declara entero, no cadena. Nunca para importes. */
+  readonly entero?: boolean;
+}
+
+/** Sin campos declarados. Constante para que la lista blanca no cambie cada render. */
+const SIN_CAMPOS: Readonly<Record<string, CampoDelCuerpo>> = {};
+
+export interface OpcionesDeEscritura {
+  /**
+   * Los unicos campos del formulario que viajan, **por su clave del catalogo**,
+   * con el nombre que llevan en el cuerpo.
+   *
+   * Los dos nombres hacen falta porque no coinciden y no tienen por que: el
+   * catalogo sale del prototipo —«Cambiar al año» es `cambiarAlAno`— y el
+   * cuerpo lo declara el backend —`ejercicio`—. Traducir aqui es lo que permite
+   * que ninguno de los dos tenga que ceder.
+   *
+   * Vacio por omision: **una pantalla que no declara campos manda solo su
+   * observacion**, y sus controles no se pueden escribir.
+   */
+  readonly campos?: Readonly<Record<string, CampoDelCuerpo>>;
+  /**
+   * Que hacer con la respuesta cuando lo guardado cambia algo global a la
+   * sesion —hoy, el ejercicio de trabajo—.
+   *
+   * Si devuelve `'cache-vaciada'`, la invalidacion general no se ejecuta: ya se
+   * vacio entera, y volver a invalidar pediria otra vez lo que se acaba de
+   * pedir.
+   */
+  readonly alGuardar?: (respuesta: unknown) => 'cache-vaciada' | void;
+}
+
 export function useEscritura(
   operacion: IdDeOperacion | undefined,
   parametros: Readonly<Record<string, string>>,
+  { campos = SIN_CAMPOS, alGuardar }: OpcionesDeEscritura = {},
 ): Escritura {
   const [observacion, fijarTexto] = useState('');
+  const [borrador, fijarBorrador] = useState<Readonly<Record<string, string>>>({});
   const clave = useRef(nuevaClaveDeIdempotencia());
   const clientes = useQueryClient();
+  // La lista blanca en forma de conjunto, estable entre renders: entra en la
+  // dependencia de lo que se manda y en si un control se puede escribir.
+  const declarados = useMemo(() => new Set(Object.keys(campos)), [campos]);
 
   // Este es el unico sitio del frontend donde se escribe, y es el que exige la
   // observacion: la regla de ESLint protege a todos los demas de saltarsela.
@@ -58,21 +119,38 @@ export function useEscritura(
       return enviarOperacion(
         operacion,
         parametros as ParametrosDe<IdDeOperacion>,
-        { observacion } as CuerpoDe<IdDeOperacion>,
+        // La observacion va siempre; lo demas, solo lo declarado. Un campo que
+        // el formulario dibuja y la opcion no declaro no llega hasta aqui.
+        { ...soloDeclarados(borrador, campos), observacion } as CuerpoDe<IdDeOperacion>,
         clave.current,
       );
     },
-    onSuccess: async () => {
+    onSuccess: async (respuesta) => {
       // El intento termino: el siguiente es otro, con otra clave.
       clave.current = nuevaClaveDeIdempotencia();
       fijarTexto('');
-      // Lo que se acaba de escribir cambia lo que las consultas muestran.
+      // Y el borrador se vacia: lo que se escribio ya esta guardado, y dejarlo
+      // en memoria es exactamente lo que la pantalla de contrasena no permite.
+      fijarBorrador({});
+      // Lo global a la sesion se atiende primero y puede quedarse con la cache
+      // entera; si no lo hace, se invalida lo que este afectado.
+      if (alGuardar?.(respuesta) === 'cache-vaciada') return;
       await clientes.invalidateQueries();
     },
   });
 
   return {
     ...(operacion === undefined ? {} : { operacion }),
+    campos: declarados,
+    borrador,
+    fijarCampo: (campo: string, valor: string) => {
+      // Un campo que la opcion no declaro no entra en el estado. Es la misma
+      // regla que impide que viaje, aplicada un paso antes: si nunca se guarda,
+      // no hay valor que se pueda filtrar despues.
+      if (!declarados.has(campo)) return;
+      if (borrador[campo] !== valor) clave.current = nuevaClaveDeIdempotencia();
+      fijarBorrador((previo) => ({ ...previo, [campo]: valor }));
+    },
     observacion,
     fijarObservacion: (texto: string) => {
       // Cambiar lo que se manda empieza un intento nuevo: con la clave anterior,
@@ -94,6 +172,33 @@ export function useEscritura(
     },
     clave: clave.current,
   };
+}
+
+/**
+ * El cuerpo, filtrado por la lista blanca.
+ *
+ * Se filtra **al enviar** y no solo al escribir: las dos barreras protegen de
+ * cosas distintas. La de escritura evita que el valor exista; esta evita que
+ * viaje si alguien un dia rellena el borrador por otro camino.
+ */
+function soloDeclarados(
+  borrador: Readonly<Record<string, string>>,
+  campos: Readonly<Record<string, CampoDelCuerpo>>,
+): Readonly<Record<string, string | number>> {
+  const cuerpo: Record<string, string | number> = {};
+  for (const [campo, valor] of Object.entries(borrador)) {
+    const declarado = campos[campo];
+    if (declarado === undefined || valor === '') continue;
+    if (declarado.entero === true) {
+      const entero = Number.parseInt(valor, 10);
+      // Un entero que no lo es no viaja: mandar `NaN` produciria un 400 con un
+      // mensaje del deserializador en vez de un error del dominio.
+      if (Number.isInteger(entero)) cuerpo[declarado.campo] = entero;
+    } else {
+      cuerpo[declarado.campo] = valor;
+    }
+  }
+  return cuerpo;
 }
 
 function erroresPorCampo(error: unknown): Readonly<Record<string, string>> {

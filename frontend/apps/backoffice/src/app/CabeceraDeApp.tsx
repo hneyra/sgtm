@@ -1,4 +1,5 @@
 import { Icono } from '@sgtm/design-system';
+import { useEjercicio } from './ejercicio';
 import { usePreferencias } from './preferencias';
 import { useSesion } from './sesion/ProveedorDeSesion';
 
@@ -9,6 +10,11 @@ import { useSesion } from './sesion/ProveedorDeSesion';
  * El chip con el endpoint se puede apagar (`mostrarEndpoint`): en desarrollo
  * dice contra que operacion se esta trabajando, y en ventanilla no le dice nada
  * a nadie.
+ *
+ * **El ejercicio de trabajo se ve siempre**, tambien en movil: es global a la
+ * sesion (#70), y una cifra de 2025 mostrada como si fuera de 2026 no es un
+ * fallo de formato sino una respuesta equivocada a quien vino a preguntar
+ * cuanto debe.
  *
  * Quien esta en la caja sale del token, y con el la municipalidad activa —que
  * es para lo unico que el frontend lee ese claim (FRO-01 §4)—. Sin proveedor de
@@ -32,6 +38,7 @@ export function CabeceraDeApp({
 }: CabeceraDeAppProps) {
   const { preferencias } = usePreferencias();
   const sesion = useSesion();
+  const { ejercicio } = useEjercicio();
   const quien = sesion.datos?.usuario ?? 'Sin sesión';
   const donde = sesion.datos?.municipalidad ?? preferencias.entidad;
 
@@ -57,6 +64,10 @@ export function CabeceraDeApp({
       >
         <Icono nombre="lupa" tamano={16} />
       </button>
+      <p className="sgtm-cabecera__ejercicio">
+        <span>Ejercicio</span>
+        <strong>{ejercicio}</strong>
+      </p>
       <div className="sgtm-cabecera__derecha" data-oculto-en-movil="1">
         {preferencias.mostrarEndpoint && endpoint && (
           <code className="sgtm-cabecera__endpoint">{endpoint}</code>
