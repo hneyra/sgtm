@@ -151,6 +151,17 @@ public final class DatosDePrueba {
                 muni,
                 titular,
                 "contribuyente" + sufijo + "@ejemplo.pe");
+        // El segundo responde solidariamente por el titular: sirve para la prueba de
+        // aislamiento y de paso deja sembrado el caso que la cobranza consulta.
+        ejecutar(
+                app,
+                "INSERT INTO responsable_solidario (municipalidad_id, contribuyente_id,"
+                        + " responsable_id, vinculo, vigencia_desde, documento_origen)"
+                        + " VALUES (?, ?, ?, 'CONYUGE', ?, 'Partida de matrimonio')",
+                muni,
+                titular,
+                segundo,
+                VIGENCIA);
         return new long[] {titular, segundo};
     }
 
