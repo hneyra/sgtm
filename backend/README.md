@@ -60,8 +60,9 @@ deja el build en verde sin haber verificado nada.
 sgtm-dominio-compartido   Objetos de valor (pe.gob.sgtm.dominio) y TenantContext. Sin Spring
 sgtm-esquema              Migraciones Flyway + la prueba de aislamiento. Sin Spring
 sgtm-plataforma           Filtro del token, SET LOCAL por transaccion, guardia del pool,
-                          el patron de repositorio (pe.gob.sgtm.persistencia) y la
-                          auditoria de ADR-0008 (pe.gob.sgtm.auditoria)
+                          el patron de repositorio (pe.gob.sgtm.persistencia), la
+                          auditoria de ADR-0008 (pe.gob.sgtm.auditoria) y la capa
+                          web comun (pe.gob.sgtm.web)
 sgtm-<contexto> × 12      Los contextos acotados de ARQ-01 §3. Solo catastro tiene codigo
 sgtm-aplicacion           Ensambla, y aloja ArchUnit, el escaner y Spring Modulith
 ```

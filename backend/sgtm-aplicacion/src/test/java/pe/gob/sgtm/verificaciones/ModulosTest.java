@@ -38,6 +38,7 @@ class ModulosTest {
                         "plataforma",
                         "persistencia",
                         "auditoria",
+                        "web",
                         "catastro",
                         "seguridad");
     }
