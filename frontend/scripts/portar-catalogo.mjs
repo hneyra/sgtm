@@ -229,7 +229,14 @@ for (const grupo of NAV) {
       estructura.secciones = p.sections.map((s) => partirSeccion(s, clavesUsadas, valores));
     }
     if (p.table) {
-      estructura.tabla = { title: p.table.title, cols: p.table.cols };
+      // `claves` es como se llama cada columna cuando hay que nombrarla: para
+      // ordenar por ella hay que decirselo al servidor, y el titulo —«Nombre
+      // Calle»— no es un nombre de campo.
+      estructura.tabla = {
+        title: p.table.title,
+        cols: p.table.cols,
+        claves: p.table.cols.map((columna) => aClave(columna)),
+      };
       if (p.table.num) estructura.tabla.num = p.table.num;
       if (p.table.note) estructura.tabla.note = p.table.note;
       if (p.table.actions) estructura.tabla.acciones = p.table.actions;

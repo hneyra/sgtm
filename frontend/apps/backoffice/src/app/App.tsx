@@ -10,8 +10,9 @@ import { Shell } from './Shell';
  * Raiz de la aplicacion: proveedores y rutas.
  *
  * Una ruta por opcion del menu (FRO-01 §3), derivada del catalogo: `/:modulo`
- * abre el hub y `/:modulo/:opcion` la pantalla. No hay 134 declaraciones de
- * ruta porque no hay 134 componentes: hay un renderizador y un catalogo.
+ * abre el hub, `/:modulo/:opcion` la pantalla y `/:modulo/:opcion/:codigo` la
+ * pantalla con un registro abierto. No hay 134 declaraciones de ruta porque no
+ * hay 134 componentes: hay un renderizador y un catalogo.
  */
 export function crearClienteDeConsultas(): QueryClient {
   return new QueryClient({
@@ -41,6 +42,9 @@ export function App() {
               <Route path="/" element={<Navigate to={OPCION_INICIAL.ruta} replace />} />
               <Route path="/:moduloId" element={<HubDeModulo />} />
               <Route path="/:moduloId/:ranura" element={<Pantalla />} />
+              {/* El registro abierto va en la ruta, no en el estado: pegar el
+                  enlace de una ficha en otra pestana abre esa misma ficha. */}
+              <Route path="/:moduloId/:ranura/:codigo" element={<Pantalla />} />
             </Route>
           </Routes>
         </Router>

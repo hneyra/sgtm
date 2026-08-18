@@ -5,6 +5,7 @@ export { pedirDatosDePantalla } from './pantallas';
 export type {
   DatosDePantalla,
   DatosDeTabla,
+  Paginacion,
   DatosDeReporte,
   ValorDeCampo,
   Celda,

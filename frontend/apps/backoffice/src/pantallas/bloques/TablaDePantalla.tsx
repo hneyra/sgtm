@@ -1,6 +1,8 @@
 import { Boton, Esqueleto, Insignia, TONO_DE_INSIGNIA } from '@sgtm/design-system';
 import type { DatosDeTabla } from '@sgtm/api-client';
 import type { EstructuraDeTabla } from '../../catalogo';
+import { Paginacion } from './Paginacion';
+import type { Sentido } from '../busqueda';
 
 /**
  * Bloque de tabla (FRO-03 §5, bloque 5).
@@ -9,14 +11,40 @@ import type { EstructuraDeTabla } from '../../catalogo';
  * de `num` alinean a la derecha y usan monoespaciada, la primera columna va en
  * peso 500 y una celda con tono se pinta como insignia —con su texto dentro,
  * nunca solo color—.
+ *
+ * Dos cosas que la tabla **no** hace, y las dos por el mismo motivo: no ordena
+ * ni pagina en el cliente. Lo que tiene delante es una pagina de un padron que
+ * puede tener cientos de miles de filas; ordenar esa pagina ordena media tabla
+ * y **miente**. Pulsar una cabecera pide otro orden al servidor.
+ *
+ * Lo que **no** hace es convertir la primera celda en el enlace al registro de
+ * la pantalla. Seria comodo, pero el catalogo no lo sostiene: de las quince
+ * pantallas que abren un registro y traen tabla, la primera columna es ese
+ * registro en **una**. En las demas la tabla es parte de la ficha —las vias de
+ * un predio, las cuotas de un convenio—, y enlazarla llevaria a abrir una via
+ * como si fuera un predio. Que busqueda abre que ficha lo decide cada modulo.
  */
 export interface TablaDePantallaProps {
   readonly estructura: EstructuraDeTabla;
   readonly datos?: DatosDeTabla;
   readonly cargando: boolean;
+  readonly orden?: string;
+  readonly sentido?: Sentido;
+  readonly onOrdenar?: (clave: string) => void;
+  readonly onPagina?: (pagina: number) => void;
 }
 
-export function TablaDePantalla({ estructura, datos, cargando }: TablaDePantallaProps) {
+const ARIA_SENTIDO = { ascendente: 'ascending', descendente: 'descending' } as const;
+
+export function TablaDePantalla({
+  estructura,
+  datos,
+  cargando,
+  orden,
+  sentido,
+  onOrdenar,
+  onPagina,
+}: TablaDePantallaProps) {
   const numericas = new Set(estructura.num ?? []);
   const filas = datos?.filas ?? [];
 
@@ -39,11 +67,34 @@ export function TablaDePantalla({ estructura, datos, cargando }: TablaDePantalla
         <table className="sgtm-tabla">
           <thead>
             <tr>
-              {estructura.cols.map((columna, i) => (
-                <th key={columna} className={numericas.has(i) ? 'sgtm-tabla--numerica' : undefined}>
-                  {columna}
-                </th>
-              ))}
+              {estructura.cols.map((columna, i) => {
+                const clave = estructura.claves[i];
+                const ordenable = onOrdenar !== undefined && clave !== undefined;
+                const activa = ordenable && clave === orden;
+                return (
+                  <th
+                    key={columna}
+                    className={numericas.has(i) ? 'sgtm-tabla--numerica' : undefined}
+                    aria-sort={activa ? ARIA_SENTIDO[sentido ?? 'ascendente'] : undefined}
+                  >
+                    {ordenable ? (
+                      <button
+                        type="button"
+                        className="sgtm-tabla__orden"
+                        data-activa={activa ? '1' : '0'}
+                        onClick={() => onOrdenar(clave)}
+                      >
+                        {columna}
+                        <span aria-hidden="true">
+                          {activa ? (sentido === 'descendente' ? ' ↓' : ' ↑') : ''}
+                        </span>
+                      </button>
+                    ) : (
+                      columna
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -78,6 +129,7 @@ export function TablaDePantalla({ estructura, datos, cargando }: TablaDePantalla
           </tbody>
         </table>
       </div>
+      {datos?.paginacion && onPagina && <Paginacion datos={datos.paginacion} onPagina={onPagina} />}
       {estructura.note && <p className="sgtm-tarjeta__pie">{estructura.note}</p>}
     </section>
   );

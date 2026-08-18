@@ -79,6 +79,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Interés S/",
         "Total S/"
       ],
+      "claves": [
+        "campo",
+        "concepto",
+        "periodo",
+        "vencimiento",
+        "insolutoS",
+        "interesS",
+        "totalS"
+      ],
       "num": [
         4,
         5,
@@ -1104,6 +1113,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Número",
         "Num. Adicional",
         "Nom. Tipo Num."
+      ],
+      "claves": [
+        "nombreCalle",
+        "tipoVia",
+        "tipPuerta",
+        "numero",
+        "numAdicional",
+        "nomTipoNum"
       ]
     },
     "acciones": [
@@ -1291,6 +1308,13 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Área exclusiva m²",
         "% participación",
         "Valor asignado S/"
+      ],
+      "claves": [
+        "unidad",
+        "contribuyente",
+        "areaExclusivaM",
+        "participacion",
+        "valorAsignadoS"
       ],
       "num": [
         2,
@@ -1514,6 +1538,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Área terreno m²",
         "Área const. m²",
         "Conciliada"
+      ],
+      "claves": [
+        "codRefCatastral",
+        "codPredialRentas",
+        "titular",
+        "uso",
+        "areaTerrenoM",
+        "areaConstM",
+        "conciliada"
       ],
       "num": [
         4,
@@ -1842,6 +1875,24 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Área verificada",
         "UCA"
       ],
+      "claves": [
+        "numPiso",
+        "mes",
+        "ano",
+        "mpe",
+        "ecs",
+        "ecc",
+        "muro",
+        "tech",
+        "piso",
+        "puer",
+        "rev",
+        "ban",
+        "instele",
+        "areaDeclarada",
+        "areaVerificada",
+        "uca"
+      ],
       "num": [
         13,
         14
@@ -2004,6 +2055,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Arancel S/ m²",
         "Estado"
       ],
+      "claves": [
+        "codigo",
+        "tipoVia",
+        "nombre",
+        "sector",
+        "zona",
+        "arancelSM",
+        "estado"
+      ],
       "num": [
         5
       ]
@@ -2050,6 +2110,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Predios inscritos",
         "Zona de arbitrios",
         "Estado"
+      ],
+      "claves": [
+        "sector",
+        "denominacion",
+        "manzanas",
+        "lotes",
+        "prediosInscritos",
+        "zonaDeArbitrios",
+        "estado"
       ],
       "num": [
         2,
@@ -2111,6 +2180,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Arancel S/ m²",
         "Variación vs. 2025"
       ],
+      "claves": [
+        "via",
+        "cuadraDesde",
+        "cuadraHasta",
+        "zona",
+        "arancelSM",
+        "variacionVs2025"
+      ],
       "num": [
         1,
         2,
@@ -2168,6 +2245,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Baños",
         "Inst. eléct. y sanit."
       ],
+      "claves": [
+        "cat",
+        "murosYColumnas",
+        "techos",
+        "pisos",
+        "puertasYVentanas",
+        "revestimientos",
+        "banos",
+        "instElectYSanit"
+      ],
       "num": [
         1,
         2,
@@ -2221,6 +2308,13 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Bueno %",
         "Regular %",
         "Malo %"
+      ],
+      "claves": [
+        "antiguedad",
+        "muyBueno",
+        "bueno",
+        "regular",
+        "malo"
       ],
       "num": [
         1,
@@ -2752,6 +2846,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Predios",
         "Deuda S/"
       ],
+      "claves": [
+        "est",
+        "codigo",
+        "nombreRazonSocial",
+        "dNI",
+        "rUC",
+        "direccion",
+        "predios",
+        "deudaS"
+      ],
       "num": [
         6,
         7
@@ -2922,6 +3026,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "% prop.",
         "Autovalúo S/",
         "Condición"
+      ],
+      "claves": [
+        "codigoPredial",
+        "ubicacion",
+        "uso",
+        "terrenoM",
+        "constM",
+        "prop",
+        "autovaluoS",
+        "condicion"
       ],
       "num": [
         3,
@@ -3125,6 +3239,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Valuo Exonerado S/",
         "Valuo Afecto S/"
       ],
+      "claves": [
+        "codigoPredial",
+        "ubicacion",
+        "uso",
+        "prop",
+        "valuoTotalS",
+        "valuoExoneradoS",
+        "valuoAfectoS"
+      ],
       "num": [
         3,
         4,
@@ -3245,6 +3368,13 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Observados",
         "Estado"
       ],
+      "claves": [
+        "etapa",
+        "registros",
+        "montoS",
+        "observados",
+        "estado"
+      ],
       "num": [
         1,
         2,
@@ -3355,6 +3485,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Valuo afecto S/",
         "Estado"
       ],
+      "claves": [
+        "djN",
+        "ano",
+        "contribuyente",
+        "tipo",
+        "fecha",
+        "predios",
+        "valuoAfectoS",
+        "estado"
+      ],
       "num": [
         5,
         6
@@ -3424,6 +3564,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Tasa mensual S/",
         "Anual S/",
         "Condición"
+      ],
+      "claves": [
+        "servicio",
+        "criterioDeDistribucion",
+        "frecuencia",
+        "tasaMensualS",
+        "anualS",
+        "condicion"
       ],
       "num": [
         3,
@@ -4121,6 +4269,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Año fab.",
         "Contribuyente",
         "Afectación"
+      ],
+      "claves": [
+        "est",
+        "placa",
+        "clase",
+        "marca",
+        "modelo",
+        "anoFab",
+        "contribuyente",
+        "afectacion"
       ]
     },
     "acciones": [
@@ -4172,6 +4330,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Impuesto S/",
         "Cuotas",
         "Estado"
+      ],
+      "claves": [
+        "ejercicio",
+        "baseImponibleS",
+        "tasa",
+        "impuestoS",
+        "cuotas",
+        "estado"
       ],
       "num": [
         1,
@@ -4431,6 +4597,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Tasa",
         "Impuesto S/"
       ],
+      "claves": [
+        "expediente",
+        "organizador",
+        "espectaculo",
+        "fecha",
+        "aforo",
+        "recaudacionS",
+        "tasa",
+        "impuestoS"
+      ],
       "num": [
         4,
         5,
@@ -4564,6 +4740,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Vigencia",
         "Deducción",
         "Estado"
+      ],
+      "claves": [
+        "expediente",
+        "contribuyente",
+        "tipo",
+        "resolucion",
+        "vigencia",
+        "deduccion",
+        "estado"
       ]
     },
     "acciones": [
@@ -4807,6 +4992,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Interés S/",
         "Total S/"
       ],
+      "claves": [
+        "campo",
+        "ano",
+        "unidad",
+        "cuota",
+        "tributo",
+        "insolutoS",
+        "interesS",
+        "totalS"
+      ],
       "num": [
         5,
         6,
@@ -4979,6 +5174,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Área decl. m²",
         "Riesgo",
         "Estado"
+      ],
+      "claves": [
+        "predio",
+        "contribuyente",
+        "usoDeclarado",
+        "areaDeclM",
+        "riesgo",
+        "estado"
       ],
       "num": [
         3
@@ -5267,6 +5470,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Hallazgo",
         "Deuda omitida S/"
       ],
+      "claves": [
+        "placa",
+        "contribuyente",
+        "origen",
+        "valorDeclaradoS",
+        "valorReferencialS",
+        "hallazgo",
+        "deudaOmitidaS"
+      ],
       "num": [
         3,
         4,
@@ -5332,6 +5544,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Ejercicios",
         "Deuda omitida S/",
         "Estado"
+      ],
+      "claves": [
+        "acta",
+        "predio",
+        "hallazgo",
+        "difM",
+        "ejercicios",
+        "deudaOmitidaS",
+        "estado"
       ],
       "num": [
         3,
@@ -5417,6 +5638,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Valor declarado S/",
         "Diferencia S/",
         "Impuesto omitido S/"
+      ],
+      "claves": [
+        "codRefCatastral",
+        "titular",
+        "condicion",
+        "valorCatastralS",
+        "valorDeclaradoS",
+        "diferenciaS",
+        "impuestoOmitidoS"
       ],
       "num": [
         3,
@@ -5585,6 +5815,21 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Estad.",
         "Papeleta",
         "UnidIden"
+      ],
+      "claves": [
+        "deuda",
+        "codContri",
+        "ano",
+        "unidad",
+        "convenio",
+        "cuota",
+        "codTri",
+        "nomTrib",
+        "fase",
+        "concepto",
+        "estad",
+        "papeleta",
+        "unididen"
       ],
       "num": [],
       "note": "Tributo 500.00 · Reajuste 12.50 · Interés 58.35 · Gastos 10.80"
@@ -5891,6 +6136,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Nº Liquidación",
         "Nº Notificación",
         "Versión"
+      ],
+      "claves": [
+        "est",
+        "codCont",
+        "contribuyente",
+        "nLiquidacion",
+        "nNotificacion",
+        "version"
       ],
       "num": [
         5
@@ -6257,6 +6510,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Multa S/",
         "Estado"
       ],
+      "claves": [
+        "nroPapeleta",
+        "fecha",
+        "placa",
+        "infractor",
+        "codigo",
+        "gravedad",
+        "multaS",
+        "estado"
+      ],
       "num": [
         6
       ]
@@ -6357,6 +6620,20 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Importe",
         "A pagar"
       ],
+      "claves": [
+        "aCoa",
+        "coact",
+        "fecReg",
+        "deuda",
+        "serie",
+        "numero",
+        "placa",
+        "fecha",
+        "infraccion",
+        "conductor",
+        "importe",
+        "aPagar"
+      ],
       "num": [
         10,
         11
@@ -6409,6 +6686,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Multa S/",
         "Puntos",
         "Medida preventiva"
+      ],
+      "claves": [
+        "codigo",
+        "descripcion",
+        "gravedad",
+        "uit",
+        "multaS",
+        "puntos",
+        "medidaPreventiva"
       ],
       "num": [
         3,
@@ -6644,6 +6930,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Custodia S/",
         "Estado"
       ],
+      "claves": [
+        "placa",
+        "papeleta",
+        "fechaDeIngreso",
+        "dias",
+        "tasaDiariaS",
+        "custodiaS",
+        "estado"
+      ],
       "num": [
         3,
         4,
@@ -6823,6 +7118,13 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Código",
         "Obligado"
       ],
+      "claves": [
+        "placa",
+        "papeleta",
+        "expediente",
+        "codigo",
+        "obligado"
+      ],
       "num": []
     },
     "acciones": [
@@ -6926,6 +7228,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Fec. Ini.",
         "Fec. Fin.",
         "Est."
+      ],
+      "claves": [
+        "codCriterio",
+        "descripcion",
+        "tipoRec",
+        "fecIni",
+        "fecFin",
+        "est"
       ],
       "num": []
     },
@@ -7268,6 +7578,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "A pagar S/",
         "Estado"
       ],
+      "claves": [
+        "papeleta",
+        "fecInfraccion",
+        "placa",
+        "conductor",
+        "infraccion",
+        "importeS",
+        "aPagarS",
+        "estado"
+      ],
       "num": [
         5,
         6
@@ -7325,6 +7645,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "A pagar S/",
         "Coactiva",
         "Estado"
+      ],
+      "claves": [
+        "papeleta",
+        "fecha",
+        "infraccion",
+        "importeS",
+        "descuento",
+        "aPagarS",
+        "coactiva",
+        "estado"
       ],
       "num": [
         3,
@@ -7449,6 +7779,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Deuda S/",
         "Estado"
       ],
+      "claves": [
+        "expediente",
+        "papeleta",
+        "fecPase",
+        "placa",
+        "obligado",
+        "deudaS",
+        "estado"
+      ],
       "num": [
         5
       ]
@@ -7502,6 +7841,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Recibo",
         "Importe S/",
         "Usuario"
+      ],
+      "claves": [
+        "nConstancia",
+        "fecha",
+        "placa",
+        "solicitante",
+        "recibo",
+        "importeS",
+        "usuario"
       ],
       "num": [
         5
@@ -7576,6 +7924,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Papeletas pagadas",
         "Total S/"
       ],
+      "claves": [
+        "mes",
+        "ordinariaS",
+        "coactivaS",
+        "conveniosS",
+        "papeletasPagadas",
+        "totalS"
+      ],
       "num": [
         1,
         2,
@@ -7639,6 +7995,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "En coactiva",
         "Importe coactiva S/"
       ],
+      "claves": [
+        "ano",
+        "pendientes",
+        "importePendienteS",
+        "pagadas",
+        "importePagadoS",
+        "enCoactiva",
+        "importeCoactivaS"
+      ],
       "num": [
         1,
         2,
@@ -7699,6 +8064,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Pagadas",
         "Pagado S/"
       ],
+      "claves": [
+        "codigo",
+        "descripcion",
+        "pendientes",
+        "pendienteS",
+        "pagadas",
+        "pagadoS"
+      ],
       "num": [
         2,
         3,
@@ -7756,6 +8129,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Pendiente S/",
         "Pagadas",
         "Pagado S/"
+      ],
+      "claves": [
+        "iniciales",
+        "papeletas",
+        "pendientes",
+        "pendienteS",
+        "pagadas",
+        "pagadoS"
       ],
       "num": [
         1,
@@ -7968,6 +8349,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Infracción",
         "Vence",
         "Estado"
+      ],
+      "claves": [
+        "serieN",
+        "fecha",
+        "infractor",
+        "direccionDelPredio",
+        "ciiu",
+        "infraccion",
+        "vence",
+        "estado"
       ],
       "num": []
     },
@@ -8249,6 +8640,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Medida complementaria",
         "Estado"
       ],
+      "claves": [
+        "nroActa",
+        "administrado",
+        "cuis",
+        "infraccion",
+        "uit",
+        "multaS",
+        "medidaComplementaria",
+        "estado"
+      ],
       "num": [
         4,
         5
@@ -8297,6 +8698,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "% UIT",
         "Multa S/",
         "Medida complementaria"
+      ],
+      "claves": [
+        "codigo",
+        "materia",
+        "descripcion",
+        "uit",
+        "multaS",
+        "medidaComplementaria"
       ],
       "num": [
         3,
@@ -8356,6 +8765,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Multa S/",
         "Sanción no pecuniaria",
         "Estado"
+      ],
+      "claves": [
+        "codigo",
+        "infraccion",
+        "base",
+        "uit",
+        "multaS",
+        "sancionNoPecuniaria",
+        "estado"
       ],
       "num": [
         3,
@@ -8460,6 +8878,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Fec. Fin.",
         "Est."
       ],
+      "claves": [
+        "codCriterio",
+        "descripcion",
+        "tipoRec",
+        "fecIni",
+        "fecFin",
+        "est"
+      ],
       "num": []
     },
     "acciones": [
@@ -8513,6 +8939,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Interés S/",
         "Gastos S/",
         "Total S/"
+      ],
+      "claves": [
+        "concepto",
+        "cuota",
+        "vencimiento",
+        "insolutoS",
+        "interesS",
+        "gastosS",
+        "totalS"
       ],
       "num": [
         3,
@@ -8769,6 +9204,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Papeleta",
         "Deuda S/"
       ],
+      "claves": [
+        "serieN",
+        "fecha",
+        "infractor",
+        "infraccion",
+        "fiscalizador",
+        "vence",
+        "papeleta",
+        "deudaS"
+      ],
       "num": [
         7
       ]
@@ -8827,6 +9272,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Infracción",
         "Venció",
         "Días vencidos"
+      ],
+      "claves": [
+        "serieN",
+        "fecha",
+        "infractor",
+        "direccion",
+        "infraccion",
+        "vencio",
+        "diasVencidos"
       ],
       "num": [
         6
@@ -8901,6 +9355,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Fec. pago",
         "Estado"
       ],
+      "claves": [
+        "ano",
+        "mes",
+        "papeleta",
+        "infraccion",
+        "multaS",
+        "recibo",
+        "fecPago",
+        "estado"
+      ],
       "num": [
         4
       ]
@@ -8973,6 +9437,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Coactiva S/",
         "Convenios S/",
         "Total S/"
+      ],
+      "claves": [
+        "mes",
+        "papeletasPagadas",
+        "ordinariaS",
+        "coactivaS",
+        "conveniosS",
+        "totalS"
       ],
       "num": [
         1,
@@ -9166,6 +9638,19 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Gastos",
         "Total"
       ],
+      "claves": [
+        "campo",
+        "ano",
+        "unidad",
+        "cuota",
+        "tributo",
+        "fase",
+        "insoluto",
+        "reajuste",
+        "interes",
+        "gastos",
+        "total"
+      ],
       "num": [
         6,
         7,
@@ -9236,6 +9721,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Cantidad",
         "Precio S/",
         "Importe S/"
+      ],
+      "claves": [
+        "campo",
+        "partida",
+        "conceptoTupa",
+        "area",
+        "cantidad",
+        "precioS",
+        "importeS"
       ],
       "num": [
         4,
@@ -9419,6 +9913,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Gasto.Cuota",
         "Vencimiento"
       ],
+      "claves": [
+        "nro",
+        "cuota",
+        "capital",
+        "interes",
+        "gastoConv",
+        "gastoCuota",
+        "vencimiento"
+      ],
       "num": [
         1,
         2,
@@ -9505,6 +10008,17 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Saldo S/",
         "Estado"
       ],
+      "claves": [
+        "nroConvenio",
+        "contribuyente",
+        "fecha",
+        "deudaAcogidaS",
+        "cuotas",
+        "pagadas",
+        "vencidas",
+        "saldoS",
+        "estado"
+      ],
       "num": [
         3,
         4,
@@ -9583,6 +10097,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Importe S/",
         "Duplicados",
         "Estado"
+      ],
+      "claves": [
+        "nroRecibo",
+        "fecha",
+        "hora",
+        "contribuyente",
+        "concepto",
+        "importeS",
+        "duplicados",
+        "estado"
       ],
       "num": [
         5,
@@ -9788,6 +10312,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Motivo",
         "Responsable"
       ],
+      "claves": [
+        "numAnul",
+        "numConv",
+        "fechaAnul",
+        "contribuyente",
+        "motivo",
+        "responsable"
+      ],
       "num": []
     },
     "acciones": [
@@ -9966,6 +10498,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Meta S/",
         "% de meta"
       ],
+      "claves": [
+        "tributo",
+        "emitidoS",
+        "recaudadoS",
+        "saldoS",
+        "avance",
+        "metaS",
+        "deMeta"
+      ],
       "num": [
         1,
         2,
@@ -10052,6 +10593,11 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Descripción",
         "Monto S/"
       ],
+      "claves": [
+        "partida",
+        "descripcion",
+        "montoS"
+      ],
       "num": [
         2
       ],
@@ -10124,6 +10670,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Pagado S/",
         "Saldo S/",
         "Fase"
+      ],
+      "claves": [
+        "ano",
+        "tributo",
+        "unidad",
+        "cuota",
+        "emitidoS",
+        "pagadoS",
+        "saldoS",
+        "fase"
       ],
       "num": [
         4,
@@ -10204,6 +10760,17 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Gastos S/",
         "Total S/",
         "Fase"
+      ],
+      "claves": [
+        "ano",
+        "tributo",
+        "cuota",
+        "insolutoS",
+        "reajusteS",
+        "interesS",
+        "gastosS",
+        "totalS",
+        "fase"
       ],
       "num": [
         3,
@@ -10547,6 +11114,21 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Rell. sanitario",
         "Serenazgo"
       ],
+      "claves": [
+        "ano",
+        "numeroHr",
+        "numcalculo",
+        "direccion",
+        "numpredios",
+        "valuoAfecto",
+        "valuoExonerado",
+        "valuoTotal",
+        "imptoPredial",
+        "limpPublica",
+        "parqYJardines",
+        "rellSanitario",
+        "serenazgo"
+      ],
       "num": [
         4,
         5,
@@ -10729,6 +11311,12 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Nombre del propietario",
         "Dirección del predio"
       ],
+      "claves": [
+        "codCatastral",
+        "codPropietario",
+        "nombreDelPropietario",
+        "direccionDelPredio"
+      ],
       "num": []
     },
     "acciones": [
@@ -10870,6 +11458,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Fec. Doc. Aprob.",
         "Fecha Reg.",
         "Est."
+      ],
+      "claves": [
+        "numDocum",
+        "aB",
+        "aM",
+        "codMunicipal",
+        "docAprob",
+        "fecDocAprob",
+        "fechaReg",
+        "est"
       ],
       "num": []
     },
@@ -11093,6 +11691,22 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Gastos",
         "Total"
       ],
+      "claves": [
+        "ano",
+        "unidad",
+        "convenio",
+        "cuota",
+        "trib",
+        "nomTrib",
+        "fase",
+        "conc",
+        "est",
+        "insoluto",
+        "reajuste",
+        "interes",
+        "gastos",
+        "total"
+      ],
       "num": [
         9,
         10,
@@ -11155,6 +11769,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Caja",
         "Importe S/"
       ],
+      "claves": [
+        "fecha",
+        "recibo",
+        "concepto",
+        "ano",
+        "medio",
+        "caja",
+        "importeS"
+      ],
       "num": [
         6
       ]
@@ -11208,6 +11831,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Const. m²",
         "Autovalúo S/",
         "Deuda S/"
+      ],
+      "claves": [
+        "codigoPredial",
+        "titular",
+        "direccion",
+        "uso",
+        "terrenoM",
+        "constM",
+        "autovaluoS",
+        "deudaS"
       ],
       "num": [
         4,
@@ -11267,6 +11900,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Afectación",
         "Base imponible S/",
         "Deuda S/"
+      ],
+      "claves": [
+        "placa",
+        "clase",
+        "marcaYModelo",
+        "anoFab",
+        "titular",
+        "afectacion",
+        "baseImponibleS",
+        "deudaS"
       ],
       "num": [
         6,
@@ -11332,6 +11975,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Monto S/",
         "Notificado",
         "Estado"
+      ],
+      "claves": [
+        "nroValor",
+        "tipo",
+        "contribuyente",
+        "tributo",
+        "periodo",
+        "montoS",
+        "notificado",
+        "estado"
       ],
       "num": [
         5
@@ -11605,6 +12258,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Interés S/",
         "Total S/"
       ],
+      "claves": [
+        "tributo",
+        "ejercicios",
+        "contribuyentes",
+        "valores",
+        "insolutoS",
+        "interesS",
+        "totalS"
+      ],
       "num": [
         2,
         3,
@@ -11725,6 +12387,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Monto S/",
         "Notificación",
         "Estado"
+      ],
+      "claves": [
+        "nroValor",
+        "tipo",
+        "contribuyente",
+        "tributo",
+        "periodo",
+        "montoS",
+        "notificacion",
+        "estado"
       ],
       "num": [
         5
@@ -12149,6 +12821,18 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Mov",
         "Est."
       ],
+      "claves": [
+        "recaudo",
+        "anoRec",
+        "tipo",
+        "codContrib",
+        "nombre",
+        "anoDeu",
+        "vence",
+        "coac",
+        "mov",
+        "est"
+      ],
       "num": []
     },
     "acciones": [
@@ -12420,6 +13104,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Medida cautelar",
         "Estado"
       ],
+      "claves": [
+        "expediente",
+        "contribuyente",
+        "valores",
+        "deudaS",
+        "costasS",
+        "medidaCautelar",
+        "estado"
+      ],
       "num": [
         2,
         3,
@@ -12647,6 +13340,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "CodPapel",
         "Total recaudo",
         "Cod. Contribuyente"
+      ],
+      "claves": [
+        "seleccione",
+        "anoRecaudo",
+        "numero",
+        "recaudo",
+        "tipomov",
+        "codpapel",
+        "totalRecaudo",
+        "codContribuyente"
       ],
       "num": [
         6
@@ -12905,6 +13608,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "CodTipoRecaudo",
         "ExpedAnt"
       ],
+      "claves": [
+        "expcoact",
+        "codigo",
+        "nombre",
+        "asunto",
+        "estado",
+        "codtiporecaudo",
+        "expedant"
+      ],
       "num": []
     },
     "acciones": [
@@ -13079,6 +13791,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Estado",
         "Asunto"
       ],
+      "claves": [
+        "seleccione",
+        "numero",
+        "ano",
+        "codcontribuyente",
+        "nombre",
+        "estado",
+        "asunto"
+      ],
       "num": []
     },
     "acciones": [
@@ -13237,6 +13958,13 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Cod. Contribuyente",
         "Contribuyente",
         "Exped. Ant."
+      ],
+      "claves": [
+        "numero",
+        "ano",
+        "codContribuyente",
+        "contribuyente",
+        "expedAnt"
       ],
       "num": []
     },
@@ -13418,6 +14146,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Exped. Coact.",
         "Observación",
         "Estado"
+      ],
+      "claves": [
+        "nroLiquidacion",
+        "codContrib",
+        "fecha",
+        "expedCoact",
+        "observacion",
+        "estado"
       ],
       "num": []
     },
@@ -13614,6 +14350,21 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Interés",
         "Gastos",
         "Total"
+      ],
+      "claves": [
+        "ano",
+        "unidad",
+        "cuota",
+        "trib",
+        "nomTrib",
+        "fase",
+        "conc",
+        "est",
+        "insoluto",
+        "reajuste",
+        "interes",
+        "gastos",
+        "total"
       ],
       "num": [
         8,
@@ -13822,6 +14573,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Referencia",
         "Tributo"
       ],
+      "claves": [
+        "expediente",
+        "codigo",
+        "obligado",
+        "deudaS",
+        "referencia",
+        "tributo"
+      ],
       "num": [
         3
       ]
@@ -14007,6 +14766,17 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Tipo Recaudo",
         "Exp. Coac."
       ],
+      "claves": [
+        "tipoNotif",
+        "codMunicipal",
+        "contribuyente",
+        "tipo",
+        "ano",
+        "nValor",
+        "fecEmision",
+        "tipoRecaudo",
+        "expCoac"
+      ],
       "num": []
     },
     "acciones": [
@@ -14073,6 +14843,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Última actuación",
         "Estado"
       ],
+      "claves": [
+        "expediente",
+        "ano",
+        "contribuyente",
+        "tributo",
+        "deudaS",
+        "costasS",
+        "ultimaActuacion",
+        "estado"
+      ],
       "num": [
         4,
         5
@@ -14134,6 +14914,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Costas S/",
         "Total S/",
         "Con beneficio S/"
+      ],
+      "claves": [
+        "expediente",
+        "ano",
+        "tributo",
+        "insolutoS",
+        "interesS",
+        "costasS",
+        "totalS",
+        "conBeneficioS"
       ],
       "num": [
         3,
@@ -14471,6 +15261,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Dirección",
         "Tasa S/"
       ],
+      "claves": [
+        "est",
+        "nroAutorizacion",
+        "nroExpediente",
+        "contribuyente",
+        "dNI",
+        "rUC",
+        "direccion",
+        "tasaS"
+      ],
       "num": [
         7
       ]
@@ -14564,6 +15364,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Tasa S/",
         "Vigencia",
         "Estado"
+      ],
+      "claves": [
+        "nAutorizacion",
+        "contribuyente",
+        "direccion",
+        "tipoDeAnuncio",
+        "areaM",
+        "tasaS",
+        "vigencia",
+        "estado"
       ],
       "num": [
         4,
@@ -15039,6 +15849,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Nº Expediente",
         "Denominación Comercial",
         "Dirección"
+      ],
+      "claves": [
+        "est",
+        "nroLicencia",
+        "contribuyente",
+        "nExpediente",
+        "denominacionComercial",
+        "direccion"
       ]
     },
     "acciones": [
@@ -15199,6 +16017,16 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Dirección",
         "Estado"
       ],
+      "claves": [
+        "nLicencia",
+        "fecha",
+        "contribuyente",
+        "nombreComercial",
+        "ciiu",
+        "giro",
+        "direccion",
+        "estado"
+      ],
       "num": []
     },
     "acciones": [
@@ -15275,6 +16103,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Duplicados",
         "Vigentes al cierre",
         "Derecho de trámite S/"
+      ],
+      "claves": [
+        "ano",
+        "emitidas",
+        "canceladas",
+        "duplicados",
+        "vigentesAlCierre",
+        "derechoDeTramiteS"
       ],
       "num": [
         1,
@@ -15814,6 +16650,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Tipo Tramite",
         "Nro Licencia",
         "Modalidad"
+      ],
+      "claves": [
+        "nroExpedient",
+        "contribuyente",
+        "nombreContribuyente",
+        "tipoTramite",
+        "nroLicencia",
+        "modalidad"
       ]
     },
     "acciones": [
@@ -15880,6 +16724,17 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Valor de obra S/",
         "Estado"
       ],
+      "claves": [
+        "nLicencia",
+        "expediente",
+        "fecha",
+        "administrado",
+        "predio",
+        "modalidad",
+        "areaAConstruirM",
+        "valorDeObraS",
+        "estado"
+      ],
       "num": [
         6,
         7
@@ -15930,6 +16785,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Riesgo ITSE",
         "Zonificación compatible",
         "Requiere sectorial"
+      ],
+      "claves": [
+        "codigo",
+        "descripcion",
+        "seccion",
+        "riesgoItse",
+        "zonificacionCompatible",
+        "requiereSectorial"
       ]
     },
     "acciones": [
@@ -16046,6 +16909,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Derecho S/",
         "Estado"
       ],
+      "claves": [
+        "nCertificado",
+        "tipo",
+        "predio",
+        "solicitante",
+        "fecha",
+        "derechoS",
+        "estado"
+      ],
       "num": [
         5
       ]
@@ -16114,6 +16986,12 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Abreviatura",
         "Nombre del módulo",
         "Estado"
+      ],
+      "claves": [
+        "codigo",
+        "abreviatura",
+        "nombreDelModulo",
+        "estado"
       ],
       "num": []
     },
@@ -16262,6 +17140,15 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Caja",
         "Último acceso",
         "Estado"
+      ],
+      "claves": [
+        "usuario",
+        "nombre",
+        "unidadOrganica",
+        "grupo",
+        "caja",
+        "ultimoAcceso",
+        "estado"
       ]
     },
     "acciones": [
@@ -16339,6 +17226,13 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Usuarios",
         "Accesos asignados",
         "Estado"
+      ],
+      "claves": [
+        "grupo",
+        "descripcion",
+        "usuarios",
+        "accesosAsignados",
+        "estado"
       ],
       "num": [
         2,
@@ -16486,6 +17380,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Nivel",
         "Estado"
       ],
+      "claves": [
+        "codigo",
+        "tipo",
+        "nombreDelAcceso",
+        "modulo",
+        "nivel",
+        "estado"
+      ],
       "num": []
     },
     "acciones": [
@@ -16584,6 +17486,13 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Fec. Baja",
         "Estado"
       ],
+      "claves": [
+        "usuario",
+        "grupo",
+        "fecAlta",
+        "fecBaja",
+        "estado"
+      ],
       "num": []
     },
     "acciones": [
@@ -16641,6 +17550,18 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Anula",
         "Imprime",
         "Estado"
+      ],
+      "claves": [
+        "usuario",
+        "acceso",
+        "total",
+        "ejecuta",
+        "consulta",
+        "ingresa",
+        "modifica",
+        "anula",
+        "imprime",
+        "estado"
       ],
       "note": "Los cambios se aplican en el siguiente inicio de sesión de los usuarios del grupo.",
       "acciones": [
@@ -16812,6 +17733,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Acción",
         "Registro afectado",
         "Terminal / IP"
+      ],
+      "claves": [
+        "fechaYHora",
+        "usuario",
+        "opcion",
+        "accion",
+        "registroAfectado",
+        "terminalIp"
       ]
     },
     "acciones": [
@@ -17013,6 +17942,14 @@ export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = {
         "Destino",
         "Ejecutado por",
         "Estado"
+      ],
+      "claves": [
+        "fechaYHora",
+        "tipo",
+        "tamano",
+        "destino",
+        "ejecutadoPor",
+        "estado"
       ],
       "note": "El respaldo del 10/08 falló por falta de espacio en el servidor de destino."
     },

@@ -36,6 +36,7 @@ export function montarEnRuta(ruta: string, cliente = clienteDePruebas()): Render
             <Route element={<Shell />}>
               <Route path="/:moduloId" element={<HubDeModulo />} />
               <Route path="/:moduloId/:ranura" element={<Pantalla />} />
+              <Route path="/:moduloId/:ranura/:codigo" element={<Pantalla />} />
             </Route>
           </Routes>
         </MemoryRouter>

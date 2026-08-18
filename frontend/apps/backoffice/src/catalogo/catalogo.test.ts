@@ -165,6 +165,26 @@ describe('el catalogo y el contrato hablan de las mismas operaciones', () => {
     }
   });
 
+  it('cada filtro de una pantalla es un parametro que su operacion declara', () => {
+    // El nombre del filtro lo calculan **dos** generadores que viven en arboles
+    // distintos: el portador del catalogo y el del contrato. Si se separan, la
+    // interfaz manda `?nombreDeCalle=` y el backend espera otra cosa; aqui se
+    // ponen de acuerdo o se pone rojo.
+    for (const opcion of OPCIONES) {
+      const pantalla = PANTALLAS[opcion.id];
+      const operacion = OPERACIONES[opcion.id as keyof typeof OPERACIONES];
+      if (!pantalla?.filtros || !operacion) continue;
+      const declarados = new Set<string>(operacion.parametrosDeConsulta);
+      const deLaRuta = new Set<string>(operacion.parametrosDeRuta);
+      for (const filtro of pantalla.filtros) {
+        expect(
+          declarados.has(filtro.clave) || deLaRuta.has(filtro.clave),
+          `${opcion.id}: el filtro «${filtro.clave}» no es parametro de su operacion`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it('la operacion del contrato se llama como la opcion del catalogo', () => {
     const identificadores = new Set(Object.keys(OPERACIONES));
     for (const opcion of OPCIONES) {

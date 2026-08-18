@@ -84,10 +84,10 @@ hace de verdad y la respuesta es siempre el juego de datos del prototipo.
 
 **Negativas / costos aceptados**
 
-- **Los parámetros de ruta no están resueltos.** `GET /api/v1/rentas/vehiculos/{placa}` se pide con
-  un valor de relleno, porque el catálogo describe la operación y no un caso concreto. Conectar
-  cada opción a su registro es el paso 4 de [FRO-03 §7](../../60-frontend/mapa-de-pantallas.md), y
-  se hace opción por opción.
+- ~~**Los parámetros de ruta no están resueltos.**~~ **Resuelto:** el registro abierto va en la
+  ruta y sin él no hay petición; el valor de relleno ya no existe. Lo que sigue pendiente es qué
+  búsqueda abre qué ficha en las pantallas cuyo catálogo no lo dice —paso 4 de
+  [FRO-03 §7](../../60-frontend/mapa-de-pantallas.md), opción por opción—.
 - **El contrato de respuesta es genérico.** `DatosDePantalla` sirve a las 134 porque las 134
   comparten renderizador. Cuando una operación tenga esquema propio en el contrato, mandará el
   esquema y esta forma quedará como el caso por omisión.

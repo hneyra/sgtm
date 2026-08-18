@@ -1,9 +1,17 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Aviso, Esqueleto } from '@sgtm/design-system';
-import { ProblemaDeApi } from '@sgtm/api-client';
+import { ProblemaDeApi, descriptorDe } from '@sgtm/api-client';
 import type { ValorDeCampo } from '@sgtm/api-client';
 import { opcionPorRuta, pantallaDe, seccionesDe } from '../catalogo';
+import {
+  conOrden,
+  conCambio,
+  leerBusqueda,
+  operacionDe,
+  registroQueFalta,
+  PAGINA,
+} from './busqueda';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
 import { useDatosDeOperacion } from './useDatosDeOperacion';
@@ -74,8 +82,12 @@ function Contenido({ estructura }: { readonly estructura: Estructura }) {
 }
 
 function ContenidoDelCatalogo({ estructura }: { readonly estructura: Estructura }) {
+  const { codigo } = useParams();
+  const operacion = operacionDe(estructura);
   const consulta = useDatosDePantalla(estructura);
-  return <Bloques estructura={estructura} consulta={consulta} />;
+  const falta = operacion === undefined ? undefined : registroQueFalta(operacion, codigo);
+
+  return <Bloques estructura={estructura} consulta={consulta} faltaRegistro={falta} />;
 }
 
 function ContenidoConectado({
@@ -92,14 +104,27 @@ function ContenidoConectado({
 function Bloques({
   estructura,
   consulta,
+  faltaRegistro,
 }: {
   readonly estructura: Estructura;
   readonly consulta: ReturnType<typeof useDatosDePantalla>;
+  /** Nombre del parametro que la pantalla necesita y todavia no tiene. */
+  readonly faltaRegistro?: string;
 }) {
   const [pestana, fijarPestana] = useState(0);
   const [cerradas, fijarCerradas] = useState<Readonly<Record<string, boolean>>>({});
+  const [busqueda, fijarBusqueda] = useSearchParams();
+  const navegar = useNavigate();
+  const { moduloId = '', ranura = '' } = useParams();
 
-  const cargando = consulta.isPending;
+  const estado = leerBusqueda(busqueda);
+  const operacion = operacionDe(estructura);
+  // El registro que abre esta pantalla, si abre alguno: `codRefCatastral`, `placa`…
+  const registro =
+    operacion === undefined ? undefined : descriptorDe(operacion).parametrosDeRuta[0];
+  // Sin registro no hay peticion, asi que tampoco hay carga que esperar: lo que
+  // toca es decir que falta elegir uno.
+  const cargando = consulta.isPending && faltaRegistro === undefined;
   const datos = consulta.data;
   const valores: Readonly<Record<string, ValorDeCampo>> = datos?.campos ?? {};
   const secciones = seccionesDe(estructura, pestana);
@@ -128,17 +153,60 @@ function Bloques({
 
       {estructura.kind === 'portal' && <Portal pasos={estructura.steps ?? []} />}
 
+      {faltaRegistro !== undefined && (
+        <Aviso
+          titulo="Elige un registro para abrirlo"
+          detalle={`Esta pantalla abre un registro por su «${faltaRegistro}». Búscalo abajo y ábrelo desde la tabla; el enlace que quede en la barra de direcciones es el de ese registro.`}
+        />
+      )}
+
       {estructura.filtros && (
         <Filtros
           campos={estructura.filtros}
-          valores={valores}
+          buscado={estado.filtros}
           cargando={consulta.isFetching}
-          onBuscar={() => void consulta.refetch()}
+          // Buscar reescribe la URL: es donde vive lo buscado. Y devuelve a la
+          // primera pagina, porque la pagina 7 de otra busqueda no es ninguna.
+          onBuscar={(valores) => {
+            const siguiente = conCambio(new URLSearchParams(busqueda), {
+              ...vaciar(estado.filtros),
+              ...valores,
+              [PAGINA]: undefined,
+            });
+
+            // Buscar por el identificador del registro **abre** ese registro: se
+            // va a la ruta de la ficha, no a la lista filtrada. El resto de la
+            // busqueda se conserva, y el enlace que queda es compartible.
+            const elegido = registro === undefined ? undefined : valores[registro];
+            if (registro !== undefined && elegido !== undefined && elegido !== '') {
+              siguiente.delete(registro);
+              const consulta = siguiente.toString();
+              navegar(
+                `/${moduloId}/${ranura}/${encodeURIComponent(elegido)}${consulta === '' ? '' : `?${consulta}`}`,
+              );
+              return;
+            }
+            fijarBusqueda(siguiente);
+          }}
         />
       )}
 
       {estructura.tabla && (
-        <TablaDePantalla estructura={estructura.tabla} datos={datos?.tabla} cargando={cargando} />
+        <TablaDePantalla
+          estructura={estructura.tabla}
+          datos={datos?.tabla}
+          cargando={cargando}
+          {...(estado.orden === undefined ? {} : { orden: estado.orden })}
+          sentido={estado.sentido}
+          onOrdenar={(clave) => fijarBusqueda(conOrden(new URLSearchParams(busqueda), clave))}
+          onPagina={(pagina) =>
+            fijarBusqueda(
+              conCambio(new URLSearchParams(busqueda), {
+                [PAGINA]: pagina <= 1 ? undefined : String(pagina),
+              }),
+            )
+          }
+        />
       )}
 
       {estructura.totales && (
@@ -195,4 +263,12 @@ function Bloques({
       {estructura.acciones && <BarraDeAcciones acciones={estructura.acciones} />}
     </>
   );
+}
+
+/**
+ * Los filtros de antes, puestos a `undefined`, para que una busqueda nueva
+ * **quite** los que ya no estan en vez de dejarlos pegados en la URL.
+ */
+function vaciar(filtros: Readonly<Record<string, string>>): Record<string, undefined> {
+  return Object.fromEntries(Object.keys(filtros).map((nombre) => [nombre, undefined]));
 }

@@ -1,5 +1,6 @@
 import type { Fecha } from '@sgtm/dominio';
-import { nuevaClaveDeIdempotencia, solicitar } from './cliente';
+import { pedirOperacion } from './operaciones';
+import type { IdDeOperacion, ParametrosDe } from './operaciones.generado';
 
 /**
  * El contrato de datos de una pantalla.
@@ -63,6 +64,29 @@ export interface DatosDeTabla {
   readonly filas: readonly (readonly Celda[])[];
   /** Texto del conteo tal como lo redacta el backend: «3 vías registradas». */
   readonly conteo?: string;
+  /**
+   * La pagina que se esta viendo, cuando el backend pagina.
+   *
+   * Va en la **respuesta** y no en el catalogo porque solo el servidor sabe
+   * cuantas filas hay: un padron del manual son cientos de miles, y el cliente
+   * no puede saber si hay pagina siguiente sin preguntarselo. Mientras la
+   * respuesta no la traiga, no hay paginador que dibujar.
+   */
+  readonly paginacion?: Paginacion;
+}
+
+export interface Paginacion {
+  /** Empieza en 1, como en `?pagina=`. */
+  readonly pagina: number;
+  readonly tamano: number;
+  /**
+   * Cuantas filas hay en la busqueda entera, no en esta pagina.
+   *
+   * Se llama `filas` y no `total` porque `total` es vocabulario de dinero en
+   * este sistema —y la regla que prohibe la aritmetica con importes lo trata
+   * como tal, con razon—.
+   */
+  readonly filas: number;
 }
 
 /** Una celda es texto; si trae `tono`, se pinta como insignia de estado. */
@@ -87,49 +111,31 @@ export interface DatosDeReporte {
 }
 
 /**
- * Valor con el que se resuelve un parametro de ruta mientras la opcion no esta
- * conectada a un registro real.
+ * Pide los datos de una pantalla a **su operacion del contrato**.
  *
- * `GET /api/v1/rentas/vehiculos/{placa}` tiene que ser una URL para poder
- * pedirse, y hoy ninguna pantalla llega con una placa en la mano: el catalogo
- * describe la operacion, no un caso concreto. Conectar cada opcion a su
- * registro —la placa que el usuario busco, la ficha que abrio— es justamente el
- * trabajo del paso 4 de FRO-03 §7, y se hace opcion por opcion.
- */
-const PARAMETRO_SIN_RESOLVER = 'ejemplo';
-
-/**
- * Pide los datos de una pantalla a la operacion que declara su catalogo.
+ * El identificador de la opcion del catalogo es el `operationId` del contrato
+ * —`catalogo.test.ts` lo verifica para las 134—, asi que el verbo, el camino y
+ * que parametros admite salen de ahi y no de una cadena que esta funcion tenga
+ * que interpretar.
  *
- * `endpoint` es la cadena del contrato: `"GET /api/v1/catastro/fichas?anio=2026"`.
- * Se parte en verbo, camino y parametros, y se pide por el mismo cliente que
- * usara la interfaz cuando el backend responda de verdad.
+ * Ya no existe el parametro de relleno. Antes, `GET /rentas/vehiculos/{placa}`
+ * se pedia con la cadena `ejemplo` y la pantalla parecia funcionar mientras
+ * mostraba un registro inventado; ahora, sin placa no hay peticion. Quien la
+ * trae es la ruta: `/rentas/vehiculos/ABC-123`.
+ *
+ * El cuerpo se tipa como `DatosDePantalla` porque es lo que responden las 134
+ * operaciones mientras comparten renderizador; el contrato todavia no describe
+ * el recurso de ninguna, y la opcion que ya no quepa aqui se conecta por su
+ * propia operacion tipada y su adaptador.
  */
 export function pedirDatosDePantalla(
-  endpoint: string,
+  operacion: IdDeOperacion,
+  parametros: Readonly<Record<string, string>>,
   senal?: AbortSignal,
 ): Promise<DatosDePantalla> {
-  const [verbo = 'GET', completa = ''] = endpoint.split(/\s+/);
-  const [camino = '', consulta = ''] = completa.split('?');
-
-  const ruta = camino.replace(/^\/api\/v1/, '').replace(/\{\w+\}/g, PARAMETRO_SIN_RESOLVER);
-
-  const parametros: Record<string, string> = {};
-  for (const par of consulta.split('&').filter(Boolean)) {
-    const [nombre = '', valor = ''] = par.split('=');
-    if (nombre) parametros[nombre] = valor.replace(/[{}]/g, '');
-  }
-
-  const metodo = verbo.toUpperCase();
-  return solicitar<DatosDePantalla>(ruta, {
-    metodo:
-      metodo === 'GET' || metodo === 'POST' || metodo === 'PUT' || metodo === 'PATCH'
-        ? metodo
-        : 'GET',
-    consulta: parametros,
-    // Una escritura desde una pantalla del catalogo todavia no manda cuerpo:
-    // los formularios se conectan uno a uno (FRO-03 §7).
-    ...(metodo === 'GET' ? {} : { cuerpo: {}, claveDeIdempotencia: nuevaClaveDeIdempotencia() }),
+  return pedirOperacion(
+    operacion,
+    parametros as ParametrosDe<IdDeOperacion>,
     senal,
-  });
+  ) as Promise<unknown> as Promise<DatosDePantalla>;
 }
