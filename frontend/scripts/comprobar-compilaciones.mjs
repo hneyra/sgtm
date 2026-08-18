@@ -1,4 +1,9 @@
-/* Comprueba que el juego de datos de ejemplo **no llega a produccion**.
+/* Comprueba lo que llega al navegador de una municipalidad, y lo que no.
+ *
+ * Dos cosas, y las dos hay que medirlas porque las dos se pierden sin avisar:
+ *
+ *   1. Que el juego de datos de ejemplo **no llega a produccion**.
+ *   2. Que el paquete no pasa de su presupuesto, ni el arranque ni cada modulo.
  *
  * El proxy de datos pesa mas que la aplicacion entera: son las respuestas de
  * las 134 operaciones. Se carga con `import()` y detras de una bandera para que
@@ -12,7 +17,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
@@ -30,6 +36,26 @@ const HUELLAS = [
   { que: 'el codigo del proxy', texto: 'El proxy de datos no conoce' },
 ];
 
+/**
+ * Presupuesto, en KB **comprimidos**, que es lo que viaja por la red.
+ *
+ * Sin un umbral que muerda, el paquete solo crece: nadie agrega 40 KB de golpe,
+ * se agregan de dos en dos. Los numeros salen de lo que hay hoy con un margen
+ * corto a proposito —subirlos tiene que costar una linea de este archivo y una
+ * frase en el PR que diga por que—.
+ *
+ * En una municipalidad con red mala, el arranque es lo que separa «lento» de
+ * «no abre».
+ */
+const PRESUPUESTO = {
+  /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
+  arranque: 130,
+  /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
+  modulo: 11,
+};
+
+const comprimido = (contenido) => gzipSync(contenido).length / 1024;
+
 function compilar(conProxy) {
   rmSync(salida, { recursive: true, force: true });
   execFileSync('yarn', ['build'], {
@@ -40,14 +66,27 @@ function compilar(conProxy) {
 
   const activos = join(salida, 'assets');
   let bytes = 0;
+  let arranque = 0;
   const trae = new Set();
+  const modulos = [];
+
   for (const archivo of readdirSync(activos)) {
-    if (!archivo.endsWith('.js')) continue;
-    bytes += statSync(join(activos, archivo)).size;
-    const contenido = readFileSync(join(activos, archivo), 'utf8');
-    for (const huella of HUELLAS) if (contenido.includes(huella.texto)) trae.add(huella.que);
+    if (!archivo.endsWith('.js') && !archivo.endsWith('.css')) continue;
+    const contenido = readFileSync(join(activos, archivo));
+    const kb = comprimido(contenido);
+
+    if (archivo.endsWith('.js')) {
+      bytes += contenido.length;
+      const texto = contenido.toString('utf8');
+      for (const huella of HUELLAS) if (texto.includes(huella.texto)) trae.add(huella.que);
+    }
+
+    // Los trozos por modulo llevan el nombre de su archivo generado; lo demas
+    // —el indice, las dependencias y la hoja de estilos— es el arranque.
+    if (archivo.includes('.generado-')) modulos.push({ archivo, kb });
+    else arranque += kb;
   }
-  return { bytes, trae };
+  return { bytes, trae, arranque, modulos };
 }
 
 const con = compilar(true);
@@ -75,4 +114,41 @@ if (sin.bytes >= con.bytes) {
 
 console.log(
   `Ni el juego de datos ni el proxy llegan a produccion: ${kb(con.bytes - sin.bytes)} menos.`,
+);
+
+/* ── Presupuesto ─────────────────────────────────────────────────────────── */
+
+const excedidos = [];
+if (sin.arranque > PRESUPUESTO.arranque) {
+  excedidos.push(
+    `el arranque ocupa ${sin.arranque.toFixed(1)} KB comprimidos y el presupuesto son ${PRESUPUESTO.arranque}`,
+  );
+}
+for (const modulo of sin.modulos) {
+  if (modulo.kb > PRESUPUESTO.modulo) {
+    excedidos.push(
+      `«${modulo.archivo}» ocupa ${modulo.kb.toFixed(1)} KB comprimidos y el presupuesto por modulo son ${PRESUPUESTO.modulo}`,
+    );
+  }
+}
+
+if (sin.modulos.length !== 12) {
+  console.error(
+    `\n✗ Deberia haber un trozo por modulo —doce— y hay ${sin.modulos.length}. Si el catalogo dejo de partirse, abrir una opcion de Catastro descarga tambien Transito.\n`,
+  );
+  process.exit(1);
+}
+
+if (excedidos.length > 0) {
+  console.error(`\n✗ El paquete pasa de su presupuesto:\n  - ${excedidos.join('\n  - ')}`);
+  console.error(
+    '\n  Subir el umbral es una decision, no un tramite: se cambia en «scripts/comprobar-compilaciones.mjs» y se dice en el PR por que vale la pena.\n',
+  );
+  process.exit(1);
+}
+
+const mayor = sin.modulos.reduce((a, b) => (a.kb > b.kb ? a : b));
+console.log(
+  `Arranque: ${sin.arranque.toFixed(1)} KB comprimidos de ${PRESUPUESTO.arranque}. ` +
+    `Doce trozos por modulo, el mayor ${mayor.kb.toFixed(1)} KB de ${PRESUPUESTO.modulo}.`,
 );

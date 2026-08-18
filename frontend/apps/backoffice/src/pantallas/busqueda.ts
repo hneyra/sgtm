@@ -1,7 +1,6 @@
 import { descriptorDe } from '@sgtm/api-client';
 import type { IdDeOperacion } from '@sgtm/api-client';
 import { OPERACIONES } from '@sgtm/api-client';
-import type { EstructuraDePantalla } from '../catalogo';
 
 /**
  * El estado de una busqueda vive en la URL, no en `useState` (FRO-04 §5).
@@ -127,8 +126,8 @@ export function parametrosDeBusqueda(
 }
 
 /** La opcion del catalogo es una operacion del contrato: lo verifica `catalogo.test.ts`. */
-export function operacionDe(estructura: EstructuraDePantalla): IdDeOperacion | undefined {
-  return estructura.id in OPERACIONES ? (estructura.id as IdDeOperacion) : undefined;
+export function operacionDe(opcion: string): IdDeOperacion | undefined {
+  return opcion in OPERACIONES ? (opcion as IdDeOperacion) : undefined;
 }
 
 /** Que registro le falta a la pantalla para poder pedir sus datos. */

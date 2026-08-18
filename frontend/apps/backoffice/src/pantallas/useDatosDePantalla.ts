@@ -31,7 +31,7 @@ export function useDatosDePantalla(pantalla: EstructuraDePantalla) {
   const { codigo } = useParams();
   const [consulta] = useSearchParams();
 
-  const operacion = operacionDe(pantalla);
+  const operacion = operacionDe(pantalla.id);
   const parametros =
     operacion === undefined ? {} : parametrosDeBusqueda(operacion, codigo, consulta);
   const falta = operacion === undefined ? undefined : registroQueFalta(operacion, codigo);

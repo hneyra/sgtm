@@ -115,7 +115,10 @@ Regla de entrada: **un componente sube aquí cuando lo usan dos módulos**, no a
 
 ## 5. Pendientes
 
-- [ ] Autoalojar las tres familias (`woff2`) en lugar de cargarlas de Google Fonts.
+- [x] Autoalojar las tres familias (`woff2`) en lugar de cargarlas de Google Fonts. **Hecho:**
+      viven en `packages/design-system/src/estilos/tipografias/` con los subconjuntos `latin` y
+      `latin-ext` —el resto no pinta nada en un padrón peruano y era la mitad del peso—, y se
+      regeneran con `node scripts/traer-tipografias.mjs`.
 - [ ] Confirmar el separador de millares con el área de Rentas (FRO-01 §6).
 - [x] Verificar el contraste de la insignia de advertencia `#f6ecd9`/`#8a6420` contra 4,5:1.
       **4,61:1**, calculado en `verificaciones/contraste.test.ts` y no supuesto. Al hacerlo se vio

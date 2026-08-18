@@ -80,10 +80,12 @@ describe('la clave de cache lleva los parametros de la peticion', () => {
     expect(peticiones.some((u) => u.includes('ejercicio=2026'))).toBe(true);
     expect(peticiones.some((u) => u.includes('ejercicio=2025'))).toBe(true);
 
+    // Solo las de datos: la del catalogo del modulo es otra cosa y se comparte.
     const claves = cliente
       .getQueryCache()
       .getAll()
-      .map((consulta) => JSON.stringify(consulta.queryKey));
+      .map((consulta) => JSON.stringify(consulta.queryKey))
+      .filter((clave) => clave.startsWith('["operacion"'));
     expect(claves).toHaveLength(2);
     expect(claves.some((clave) => clave.includes('2026'))).toBe(true);
     expect(claves.some((clave) => clave.includes('2025'))).toBe(true);
@@ -96,6 +98,12 @@ describe('la clave de cache lleva los parametros de la peticion', () => {
     montada.unmount();
 
     expect(peticiones.some((u) => u.includes('ejercicio='))).toBe(false);
-    expect(cliente.getQueryCache().getAll()[0]?.queryKey).toEqual(['operacion', 'inicio', {}]);
+    expect(
+      cliente
+        .getQueryCache()
+        .getAll()
+        .map((consulta) => consulta.queryKey)
+        .find((clave) => clave[0] === 'operacion'),
+    ).toEqual(['operacion', 'inicio', {}]);
   });
 });

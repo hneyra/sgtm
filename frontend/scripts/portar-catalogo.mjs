@@ -24,7 +24,7 @@
  */
 
 import { createContext, runInContext } from 'node:vm';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const raiz = new URL('../../', import.meta.url);
@@ -290,6 +290,10 @@ const modulos = NAV.map((grupo) => {
     label,
     ranura: aRanura(id.replace(/_/g, '-')),
     bloque: bloqueDe(PANTALLAS[id], label),
+    // El titulo y el resumen viajan **siempre**: son el menu, el hub y lo que
+    // busca la paleta de comandos. La estructura de la pantalla no: esa llega
+    // cuando se entra en su modulo.
+    title: PANTALLAS[id]?.title ?? label,
     resumen: PANTALLAS[id]?.desc ?? '',
   }));
   return {
@@ -328,6 +332,9 @@ const cabecera = (que, destino) => `/* ARCHIVO GENERADO — no editar a mano.
  */
 `;
 
+// Los archivos por modulo se rehacen enteros: un modulo que desapareciera del
+// prototipo no puede quedarse en el disco como un fantasma que todavia compila.
+rmSync(fileURLToPath(new URL('pantallas/', catalogo)), { recursive: true, force: true });
 mkdirSync(fileURLToPath(catalogo), { recursive: true });
 mkdirSync(fileURLToPath(simulada), { recursive: true });
 
@@ -344,15 +351,50 @@ export const MODULOS: readonly ModuloDelCatalogo[] = ${json(modulos)};
   'utf8',
 );
 
+/* La estructura de las pantallas, **un archivo por modulo**.
+ *
+ * Son 445 KB de fuente: el catalogo entero pesa mas que la aplicacion. Servido
+ * de una vez, una municipalidad con red mala espera por las 134 pantallas para
+ * abrir una. Partido por modulo, entrar en Catastro no descarga Transito. */
+mkdirSync(fileURLToPath(new URL('pantallas/', catalogo)), { recursive: true });
+
+const importadores = [];
+for (const modulo of modulos) {
+  const suyas = Object.fromEntries(
+    modulo.opciones.map((opcion) => [opcion.id, estructuras[opcion.id]]),
+  );
+  writeFileSync(
+    fileURLToPath(new URL(`pantallas/${modulo.id}.generado.ts`, catalogo)),
+    `${cabecera(
+      `La ESTRUCTURA de las ${modulo.opciones.length} pantallas de ${modulo.label}: que pestanas, que\n * secciones, que campos, que columnas.`,
+      'Se carga al entrar en el modulo, no antes. Los VALORES no estan aqui: los\n * sirve la API (packages/api-mock hoy, el backend manana).',
+    )}
+import type { EstructuraDePantalla } from '../tipos';
+
+export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = ${json(suyas)};
+`,
+    'utf8',
+  );
+  importadores.push(
+    `  ${JSON.stringify(modulo.id)}: () => import('./pantallas/${modulo.id}.generado'),`,
+  );
+}
+
 writeFileSync(
   fileURLToPath(new URL('pantallas.generado.ts', catalogo)),
   `${cabecera(
-    'La ESTRUCTURA de las 134 pantallas: que pestanas, que secciones, que campos,\n * que columnas. Lo que la interfaz sabe sin preguntarle a nadie.',
-    'Los VALORES no estan aqui: los sirve la API (packages/api-mock hoy, el\n * backend manana). Ver scripts/portar-catalogo.mjs.',
+    'Como se carga la estructura de cada modulo: un `import()` por modulo, que el\n * empaquetador convierte en un trozo aparte.',
+    'Lo que viaja siempre es la navegacion —el menu, los titulos y los resumenes—;\n * la estructura de las pantallas llega al entrar en su modulo.',
   )}
 import type { EstructuraDePantalla } from './tipos';
 
-export const PANTALLAS: Readonly<Record<string, EstructuraDePantalla>> = ${json(estructuras)};
+export type PantallasDeUnModulo = Readonly<Record<string, EstructuraDePantalla>>;
+
+export const CARGADORES: Readonly<
+  Record<string, () => Promise<{ readonly PANTALLAS: PantallasDeUnModulo }>>
+> = {
+${importadores.join('\n')}
+};
 `,
   'utf8',
 );

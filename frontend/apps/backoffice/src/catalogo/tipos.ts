@@ -30,6 +30,14 @@ export interface OpcionDelCatalogo {
   readonly ranura: string;
   /** Bloque de navegacion, ya clasificado en el build (FRO-03 §4). */
   readonly bloque: string;
+  /**
+   * Titulo de la pantalla, que no siempre coincide con la etiqueta del menu.
+   *
+   * Viaja con la navegacion y no con la estructura porque lo necesitan el menu,
+   * el hub, la cabecera y la paleta de comandos: si viviera en el archivo del
+   * modulo, buscar «papeleta» obligaria a descargar los doce.
+   */
+  readonly title: string;
   /** Descripcion de la pantalla; el hub del modulo la recorta. */
   readonly resumen: string;
 }

@@ -7,8 +7,10 @@
 #      se exige que no haya diferencias: un `design/` que cambia sin regenerar
 #      deja la interfaz describiendo pantallas que ya no son las del manual, y
 #      eso no lo detecta ninguna prueba.
-#   2. Que la aplicación compile para producción **y** que el juego de datos de
-#      ejemplo no llegue a ella.
+#   2. Que la aplicación compile para producción, que el juego de datos de
+#      ejemplo no llegue a ella y que el paquete no pase de su presupuesto.
+#
+# Y un segundo trabajo con navegador: los tres caminos completos de FRO-03 §6.
 #
 # El contrato (`docs/50-api/openapi/sgtm-v1.yaml`) entra en los caminos que
 # disparan este flujo porque los tipos de la API se generan de él: un cambio de
@@ -70,3 +72,40 @@ jobs:
       # el paso se pone rojo.
       - name: Compilar, y que el juego de datos no llegue a produccion
         run: yarn comprobar-compilaciones
+
+  # Los tres caminos que mas cuestan si fallan (FRO-03 §6): el cobro en caja
+  # solo con teclado, el portal en un movil y la impresion de un reporte en A4.
+  # Van en su propio trabajo porque necesitan navegador, y el resto no.
+  extremo-a-extremo:
+    name: Caminos completos
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Instalar dependencias
+        run: yarn install --frozen-lockfile
+
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Los tres caminos, en un navegador de verdad
+        run: yarn e2e
+
+      - name: Publicar la traza de lo que fallara
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trazas-de-extremo-a-extremo
+          path: frontend/test-results/
+          retention-days: 7

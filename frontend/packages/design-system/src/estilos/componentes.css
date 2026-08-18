@@ -440,6 +440,12 @@ textarea.sgtm-campo__control {
 /* La caja de escritura: la observacion pegada a la accion primaria, porque sin
    ella no se guarda (regla 10, RNF-052). */
 /* La puerta de sesion: lo unico que se ve cuando no hay sesion abierta. */
+/* El resultado elegido con las flechas se ve: sin esto, operar la paleta con el
+   teclado es adivinar cual se va a abrir (RNF-082). */
+.sgtm-paleta__resultados button[data-elegido='1'] {
+  background: var(--accent-soft);
+}
+
 .sgtm-puerta {
   display: grid;
   place-items: center;

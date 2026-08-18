@@ -6,6 +6,7 @@
     "packages/*/src/**/*.ts",
     "packages/*/src/**/*.tsx",
     "verificaciones/*.ts",
+    "e2e/**/*.ts",
     "*.config.ts",
     "apps/*/vite.config.ts"
   ],

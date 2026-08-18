@@ -1,5 +1,6 @@
 import { MODULOS } from './navegacion.generado';
-import { PANTALLAS } from './pantallas.generado';
+import { CARGADORES } from './pantallas.generado';
+import type { PantallasDeUnModulo } from './pantallas.generado';
 import type {
   EstructuraDePantalla,
   ModuloDelCatalogo,
@@ -7,15 +8,14 @@ import type {
   SeccionDePantalla,
 } from './tipos';
 
-export { MODULOS, PANTALLAS };
+export { MODULOS };
+export type { PantallasDeUnModulo };
 export type * from './tipos';
 
 /** Una opcion del menu con el modulo al que pertenece, para buscar y enrutar. */
 export interface OpcionSituada extends OpcionDelCatalogo {
   readonly modulo: ModuloDelCatalogo;
   readonly ruta: string;
-  /** Titulo de la pantalla, que no siempre coincide con la etiqueta del menu. */
-  readonly title: string;
 }
 
 export const rutaDeModulo = (modulo: ModuloDelCatalogo): string => `/${modulo.id}`;
@@ -31,17 +31,9 @@ export const rutaDeOpcion = (modulo: ModuloDelCatalogo, opcion: OpcionDelCatalog
  * catalogo, no el entero: la barra lateral y la paleta trabajan sobre los
  * modulos que sus permisos dejan ver (REQ-03 §5).
  */
-export function situarOpciones(
-  modulos: readonly ModuloDelCatalogo[],
-  pantallas: Readonly<Record<string, EstructuraDePantalla>> = PANTALLAS,
-): readonly OpcionSituada[] {
+export function situarOpciones(modulos: readonly ModuloDelCatalogo[]): readonly OpcionSituada[] {
   return modulos.flatMap((modulo) =>
-    modulo.opciones.map((opcion) => ({
-      ...opcion,
-      modulo,
-      ruta: rutaDeOpcion(modulo, opcion),
-      title: pantallas[opcion.id]?.title ?? opcion.label,
-    })),
+    modulo.opciones.map((opcion) => ({ ...opcion, modulo, ruta: rutaDeOpcion(modulo, opcion) })),
   );
 }
 
@@ -59,7 +51,37 @@ export const opcionPorRuta = (moduloId: string, ranura: string): OpcionSituada |
 
 export const moduloPorId = (id: string): ModuloDelCatalogo | undefined => MODULOS_POR_ID.get(id);
 
-export const pantallaDe = (id: string): EstructuraDePantalla | undefined => PANTALLAS[id];
+/**
+ * La estructura de las pantallas de un modulo, cargada **al entrar en el**.
+ *
+ * El catalogo entero son 445 KB de fuente, mas que la aplicacion: servido de una
+ * vez, una municipalidad con red mala espera por las 134 pantallas para abrir
+ * una. Partido por modulo, abrir Catastro no descarga Transito.
+ *
+ * La promesa se guarda, no el resultado: `use()` necesita **la misma** promesa
+ * en cada render, y ademas asi dos pantallas del mismo modulo comparten la
+ * descarga en vez de pedirla dos veces.
+ */
+const cargas = new Map<string, Promise<PantallasDeUnModulo>>();
+
+export function pantallasDelModulo(moduloId: string): Promise<PantallasDeUnModulo> {
+  const encurso = cargas.get(moduloId);
+  if (encurso !== undefined) return encurso;
+
+  const cargador = CARGADORES[moduloId];
+  const carga =
+    cargador === undefined
+      ? Promise.resolve<PantallasDeUnModulo>({})
+      : cargador().then((modulo) => modulo.PANTALLAS);
+  cargas.set(moduloId, carga);
+  return carga;
+}
+
+/** Todas, para las pruebas y para el hub que las lista. No se usa en la aplicacion. */
+export async function todasLasPantallas(): Promise<PantallasDeUnModulo> {
+  const porModulo = await Promise.all(MODULOS.map((modulo) => pantallasDelModulo(modulo.id)));
+  return Object.assign({}, ...porModulo) as PantallasDeUnModulo;
+}
 
 /** La primera opcion del catalogo: el panel de recaudacion. Es la portada. */
 export const OPCION_INICIAL = OPCIONES[0] as OpcionSituada;

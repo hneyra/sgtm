@@ -45,7 +45,7 @@ describe('el registro abierto vive en la ruta', () => {
     // La pantalla se dibuja entera —el catalogo la conoce— y dice que falta
     // elegir un registro, en vez de pedir uno de relleno.
     expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument();
-    expect(screen.getByText(/Elige un registro/)).toBeInTheDocument();
+    expect(await screen.findByText(/Elige un registro/)).toBeInTheDocument();
     expect(aCatastro()).toEqual([]);
   });
 
@@ -134,10 +134,12 @@ describe('orden y pagina, contra el servidor', () => {
     await screen.findByText('SANTA ROSA');
     segunda.unmount();
 
+    // Solo las de datos: la del catalogo del modulo es otra cosa y se comparte.
     const claves = cliente
       .getQueryCache()
       .getAll()
-      .map((consulta) => JSON.stringify(consulta.queryKey));
+      .map((consulta) => JSON.stringify(consulta.queryKey))
+      .filter((clave) => clave.startsWith('["pantalla"'));
     expect(claves).toHaveLength(2);
     expect(claves.some((clave) => clave.includes('"sector":"01"'))).toBe(true);
     expect(claves.some((clave) => clave.includes('"sector":"02"'))).toBe(true);

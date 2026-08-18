@@ -24,10 +24,12 @@
     "portar-catalogo": "node scripts/portar-catalogo.mjs",
     "generar-operaciones": "node scripts/generar-operaciones.mjs",
     "comprobar-operaciones": "node scripts/generar-operaciones.mjs --comprobar",
-    "comprobar-compilaciones": "node scripts/comprobar-compilaciones.mjs"
+    "comprobar-compilaciones": "node scripts/comprobar-compilaciones.mjs",
+    "e2e": "playwright test"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
+    "@playwright/test": "^1.62.1",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.9.0",
     "@testing-library/react": "^16.3.0",

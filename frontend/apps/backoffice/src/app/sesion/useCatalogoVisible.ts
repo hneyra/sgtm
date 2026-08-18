@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { MODULOS, PANTALLAS, situarOpciones } from '../../catalogo';
+import { MODULOS, situarOpciones } from '../../catalogo';
 import type { ModuloDelCatalogo, OpcionSituada } from '../../catalogo';
 import { catalogoVisible, puedeEscribir, puedeVer } from './permisos';
 import { useSesion } from './ProveedorDeSesion';
@@ -26,7 +26,7 @@ export function useCatalogoVisible(): CatalogoVisible {
     const modulos = catalogoVisible(MODULOS, permisos);
     return {
       modulos,
-      opciones: situarOpciones(modulos, PANTALLAS),
+      opciones: situarOpciones(modulos),
       puedeVer: (opcion: string) => puedeVer(permisos, opcion),
       puedeEscribir: (opcion: string) => puedeEscribir(permisos, opcion),
     };

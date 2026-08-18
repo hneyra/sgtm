@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { OPERACIONES } from '@sgtm/api-client';
+import { beforeAll } from 'vitest';
 import {
   MODULOS,
   OPCIONES,
-  PANTALLAS,
   bloquesDe,
   buscarOpciones,
   opcionPorRuta,
   seccionesDe,
+  todasLasPantallas,
 } from './index';
+import type { PantallasDeUnModulo } from './index';
 
 /**
  * El catalogo portado es completo y coherente.
@@ -19,6 +21,15 @@ import {
  * faltarian trámites del manual, que es el defecto mas caro y mas silencioso
  * que este proyecto puede tener—. Esto lo hace ruidoso.
  */
+
+/**
+ * La estructura de las pantallas viaja por modulo, asi que aqui se cargan los
+ * doce: esto comprueba el catalogo entero, y es el unico sitio que lo necesita.
+ */
+let PANTALLAS: PantallasDeUnModulo = {};
+beforeAll(async () => {
+  PANTALLAS = await todasLasPantallas();
+});
 
 const BLOQUES_VALIDOS = new Set([
   'Registro y mantenimiento',

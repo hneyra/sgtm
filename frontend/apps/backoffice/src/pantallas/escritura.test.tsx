@@ -51,8 +51,9 @@ afterEach(() => {
   globalThis.fetch = original;
 });
 
-const observacion = (): HTMLElement =>
-  within(screen.getByRole('region', { name: 'Observación del usuario' })).getByLabelText(
+/** La caja de escritura, cuando ya llego el trozo del modulo. */
+const observacion = async (): Promise<HTMLElement> =>
+  within(await screen.findByRole('region', { name: 'Observación del usuario' })).getByLabelText(
     'Observación',
   );
 
@@ -79,11 +80,11 @@ describe('sin observacion no se guarda', () => {
       const accion = await screen.findByRole('button', { name: primaria });
       expect(accion).toBeDisabled();
 
-      await usuario.type(observacion(), 'Corrección solicitada por el contribuyente.');
+      await usuario.type(await observacion(), 'Corrección solicitada por el contribuyente.');
       expect(accion).toBeEnabled();
 
       // Y si se borra, vuelve a deshabilitarse: no es una puerta que se abre una vez.
-      await usuario.clear(observacion());
+      await usuario.clear(await observacion());
       expect(accion).toBeDisabled();
     },
   );
@@ -93,8 +94,8 @@ describe('sin observacion no se guarda', () => {
     laApiResponde(201);
     montarEnRuta(MASIVO);
 
-    await usuario.type(observacion(), 'Emisión anual 2026.');
-    await usuario.click(screen.getByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.type(await observacion(), 'Emisión anual 2026.');
+    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
 
     await waitFor(() => expect(peticiones).toHaveLength(1));
     expect(peticiones[0]?.metodo).toBe('POST');
@@ -114,11 +115,11 @@ describe('idempotencia: una clave por intento', () => {
     });
     montarEnRuta(MASIVO);
 
-    await usuario.type(observacion(), 'Emisión anual 2026.');
-    await usuario.click(screen.getByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.type(await observacion(), 'Emisión anual 2026.');
+    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
     await waitFor(() => expect(peticiones).toHaveLength(1));
 
-    await usuario.click(screen.getByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
     await waitFor(() => expect(peticiones).toHaveLength(2));
 
     // Dos envios del mismo intento: para el servidor es **uno**. Regenerar la
@@ -136,12 +137,12 @@ describe('idempotencia: una clave por intento', () => {
     });
     montarEnRuta(MASIVO);
 
-    await usuario.type(observacion(), 'Emisión anual.');
-    await usuario.click(screen.getByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.type(await observacion(), 'Emisión anual.');
+    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
     await waitFor(() => expect(peticiones).toHaveLength(1));
 
-    await usuario.type(observacion(), ' Corregida.');
-    await usuario.click(screen.getByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.type(await observacion(), ' Corregida.');
+    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
     await waitFor(() => expect(peticiones).toHaveLength(2));
 
     // Con la clave anterior, el servidor devolveria el resultado del intento que
@@ -165,8 +166,8 @@ describe('una escritura no se reintenta sola', () => {
     // `retry: false`, esta prueba no diria nada.
     montarEnRuta(MASIVO, crearClienteDeConsultas());
 
-    await usuario.type(observacion(), 'Emisión anual.');
-    await usuario.click(screen.getByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.type(await observacion(), 'Emisión anual.');
+    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
 
     await screen.findByText('No se pudo.');
     // Un reintento automatico de un cobro es un cobro doble (FRO-04 §5).
@@ -178,8 +179,8 @@ describe('una escritura no se reintenta sola', () => {
     laApiResponde(201);
     montarEnRuta(MASIVO);
 
-    await usuario.type(observacion(), 'Emisión anual.');
-    const accion = screen.getByRole('button', { name: 'Ejecutar proceso' });
+    await usuario.type(await observacion(), 'Emisión anual.');
+    const accion = await screen.findByRole('button', { name: 'Ejecutar proceso' });
     await usuario.dblClick(accion);
 
     await waitFor(() => expect(peticiones.length).toBeGreaterThan(0));
@@ -200,14 +201,14 @@ describe('los errores se cuentan donde toca', () => {
     });
     montarEnRuta(MASIVO);
 
-    await usuario.type(observacion(), 'x');
-    await usuario.click(screen.getByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.type(await observacion(), 'x');
+    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
 
     const mensaje = await screen.findByText('La observación debe explicar el motivo del cálculo.');
     expect(mensaje).toBeInTheDocument();
     // Pegado a su campo, no en un aviso suelto arriba.
-    expect(observacion()).toHaveAttribute('aria-describedby', mensaje.id);
-    expect(observacion()).toHaveAttribute('aria-invalid', 'true');
+    expect(await observacion()).toHaveAttribute('aria-describedby', mensaje.id);
+    expect(await observacion()).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('un 403 dice que falta permiso y no que hay detras', async () => {
@@ -219,8 +220,8 @@ describe('los errores se cuentan donde toca', () => {
     });
     montarEnRuta(MASIVO);
 
-    await usuario.type(observacion(), 'Emisión anual.');
-    await usuario.click(screen.getByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.type(await observacion(), 'Emisión anual.');
+    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
 
     expect(await screen.findByText('Sin permiso')).toBeInTheDocument();
     expect(
@@ -235,8 +236,8 @@ describe('lo irreversible se confirma diciendo que va a pasar', () => {
     laApiResponde(201);
     montarEnRuta(CUPONERA);
 
-    await usuario.type(observacion(), 'Emisión anual 2026.');
-    await usuario.click(screen.getByRole('button', { name: 'Emitir cuponera' }));
+    await usuario.type(await observacion(), 'Emisión anual 2026.');
+    await usuario.click(await screen.findByRole('button', { name: 'Emitir cuponera' }));
 
     // Todavia no se ha mandado nada.
     expect(peticiones).toEqual([]);
@@ -252,8 +253,8 @@ describe('lo irreversible se confirma diciendo que va a pasar', () => {
     laApiResponde(201);
     montarEnRuta(CUPONERA);
 
-    await usuario.type(observacion(), 'Emisión anual 2026.');
-    await usuario.click(screen.getByRole('button', { name: 'Emitir cuponera' }));
+    await usuario.type(await observacion(), 'Emisión anual 2026.');
+    await usuario.click(await screen.findByRole('button', { name: 'Emitir cuponera' }));
     await usuario.click(screen.getByRole('button', { name: 'Cancelar' }));
 
     expect(peticiones).toEqual([]);

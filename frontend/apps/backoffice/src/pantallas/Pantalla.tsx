@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Aviso, Boton, Esqueleto } from '@sgtm/design-system';
 import { descriptorDe, escribe } from '@sgtm/api-client';
 import type { ValorDeCampo } from '@sgtm/api-client';
-import { opcionPorRuta, pantallaDe, seccionesDe } from '../catalogo';
+import { opcionPorRuta, pantallasDelModulo, seccionesDe } from '../catalogo';
+import type { EstructuraDePantalla } from '../catalogo';
 import {
   conOrden,
   conCambio,
@@ -49,15 +51,50 @@ import { Totales } from './bloques/Totales';
 export function Pantalla() {
   const { moduloId = '', ranura = '' } = useParams();
   const opcion = opcionPorRuta(moduloId, ranura);
-  const estructura = opcion ? pantallaDe(opcion.id) : undefined;
   const catalogo = useCatalogoVisible();
 
   // Entrar por la URL a una opcion ajena no puede filtrar **ni el titulo ni los
   // campos** de lo que hay detras: no se dibuja la estructura, y punto. El
   // servidor responde 403 de todos modos —esto es comodidad, no seguridad—.
-  if (estructura && !catalogo.puedeVer(estructura.id)) {
+  if (opcion && !catalogo.puedeVer(opcion.id)) {
     return <Aviso tipo="sin-permiso" titulo={SIN_PERMISO.titulo} detalle={SIN_PERMISO.detalle} />;
   }
+
+  if (!opcion) {
+    return (
+      <Aviso
+        titulo="Esa opción no existe en el catálogo"
+        detalle="El sistema tiene 134 opciones, las del manual. Usa Ctrl K para buscar la que necesitas."
+      />
+    );
+  }
+
+  // La estructura de un modulo llega en su propio trozo: entrar en Catastro no
+  // descarga Transito.
+  return <PantallaDelModulo key={opcion.id} moduloId={moduloId} opcion={opcion.id} />;
+}
+
+function PantallaDelModulo({
+  moduloId,
+  opcion,
+}: {
+  readonly moduloId: string;
+  readonly opcion: string;
+}) {
+  /* El trozo del modulo se pide como cualquier otra cosa que tarda, y se queda:
+     `staleTime` infinito porque el catalogo no cambia mientras la pestana este
+     abierta —cambia cuando cambia la aplicacion, y entonces cambia su hash—. */
+  const catalogo = useQuery({
+    queryKey: ['catalogo', moduloId],
+    queryFn: () => pantallasDelModulo(moduloId),
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+  const estructura = catalogo.data?.[opcion];
+
+  // Mientras llega el trozo, el esqueleto: es lo que se veria de todos modos
+  // hasta que respondiera la API.
+  if (catalogo.isPending) return <Esqueleto alto={220} />;
 
   if (!estructura) {
     return (
@@ -68,10 +105,10 @@ export function Pantalla() {
     );
   }
 
-  return <Contenido key={estructura.id} estructura={estructura} />;
+  return <Contenido estructura={estructura} />;
 }
 
-type Estructura = NonNullable<ReturnType<typeof pantallaDe>>;
+type Estructura = EstructuraDePantalla;
 
 /**
  * Los dos caminos, y por que hay dos.
@@ -95,7 +132,7 @@ function Contenido({ estructura }: { readonly estructura: Estructura }) {
 
 function ContenidoDelCatalogo({ estructura }: { readonly estructura: Estructura }) {
   const { codigo } = useParams();
-  const operacion = operacionDe(estructura);
+  const operacion = operacionDe(estructura.id);
   const consulta = useDatosDePantalla(estructura);
   const falta = operacion === undefined ? undefined : registroQueFalta(operacion, codigo);
 
@@ -131,7 +168,7 @@ function Bloques({
   const { moduloId = '', ranura = '', codigo } = useParams();
 
   const busquedaActiva = leerBusqueda(busqueda);
-  const operacion = operacionDe(estructura);
+  const operacion = operacionDe(estructura.id);
   // Una operacion que escribe no se pide al abrir la pantalla: abrir «Copias de
   // seguridad» no puede lanzar un respaldo. La pantalla se dibuja de su catalogo
   // y espera a que alguien pulse.
