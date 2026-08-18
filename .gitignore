@@ -1,0 +1,17 @@
+# Gradle
+backend/.gradle/
+backend/build/
+backend/*/build/
+backend/buildSrc/build/
+backend/buildSrc/.gradle/
+
+# IDE
+.idea/
+*.iml
+
+# Sistema
+.DS_Store
+
+# El zip es el mismo contenido que SGTM-design/, ya versionado
+SGTM-design.zip
+.thumbnail
