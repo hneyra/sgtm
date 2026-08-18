@@ -26,6 +26,12 @@ contraparte que demuestra que muerde.**
 ./gradlew build                   # ademas: Spotless, Checkstyle y NullAway
 ```
 
+En cada pull request que toca `backend/` las tres corren como **un job por barrera** en
+[`.github/workflows/backend.yml`](../../.github/workflows/backend.yml) —`calidad`, `arquitectura`
+y `aislamiento`—, con el JDK 25 de ADR-0001 (el job `calidad` falla si `gradle.properties`
+declarara otro) y con Docker comprobado antes de la prueba de aislamiento. Detalle en
+[`backend/README.md`](../../backend/README.md).
+
 **Una prueba bloqueante no se omite a sí misma.** Sin motor de base de datos, las pruebas de
 persistencia **fallan**; no se saltan. Una prueba que se salta sola deja el build en verde y da
 por verificado lo que nadie verificó.

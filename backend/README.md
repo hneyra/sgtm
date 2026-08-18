@@ -46,6 +46,29 @@ crea una base nueva por corrida. También sirven las variables de entorno equiva
 **Sin motor, las pruebas fallan; no se saltan.** Una prueba bloqueante que se omite a sí misma
 deja el build en verde sin haber verificado nada.
 
+## Integración continua
+
+Cada pull request que toca `backend/` corre
+[`.github/workflows/backend.yml`](../.github/workflows/backend.yml), con **un job por barrera**
+para que el nombre del check diga qué se rompió sin abrir el log:
+
+| Job | Comando | Necesita Docker |
+|---|---|---|
+| `calidad` | `./gradlew build -x test` — Spotless, Checkstyle, NullAway | No |
+| `arquitectura` | `./gradlew verificarArquitectura` | No |
+| `aislamiento` | `./gradlew verificarAislamiento` | **Sí** |
+
+El runner instala el **JDK 25** de ADR-0001; el job `calidad` falla si `gradle.properties`
+declarara otra versión, porque construir en CI con una distinta de la del despliegue verifica
+otra cosa que la que se despliega.
+
+El job de aislamiento comprueba que hay Docker y descarga `postgres:16-alpine` **antes** de la
+prueba: así un runner sin Docker no se confunde con un fallo de aislamiento de verdad. Lo que no
+hace en ningún caso es omitir la prueba.
+
+Cuando algo falla en rojo, los reportes de Checkstyle y de las pruebas quedan como artefactos de
+la corrida.
+
 ## Módulos
 
 ```
