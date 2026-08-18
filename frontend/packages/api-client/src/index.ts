@@ -14,3 +14,17 @@ export type {
   FilaDePanel,
   Total,
 } from './pantallas';
+export { descriptorDe, rutaDeOperacion, consultaDeOperacion } from './operaciones';
+export { OPERACIONES } from './operaciones.generado';
+export type {
+  VerboDeOperacion,
+  DescriptorDeOperacion,
+  CuerpoSinEsquema,
+  IdDeOperacion,
+  ParametrosPorOperacion,
+  CuerpoPorOperacion,
+  RespuestaPorOperacion,
+  ParametrosDe,
+  CuerpoDe,
+  RespuestaDe,
+} from './operaciones.generado';

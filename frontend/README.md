@@ -15,15 +15,16 @@ yarn dev            # http://localhost:5173
 
 Requiere Node 22 o superior.
 
-| Comando                | Qué hace                                                       |
-| ---------------------- | -------------------------------------------------------------- |
-| `yarn verificar`       | Lint, tipos y pruebas. **Lo que hay que pasar antes de un PR** |
-| `yarn lint`            | ESLint, con las prohibiciones del proyecto                     |
-| `yarn typecheck`       | `tsc --build`, en modo estricto                                |
-| `yarn test`            | Vitest: dominio, cliente, proxy, catálogo, shell y las 134     |
-| `yarn format`          | Prettier. Si el build se queja del formato, no lo pelees       |
-| `yarn build`           | Construye la aplicación                                        |
-| `yarn portar-catalogo` | Regenera el catálogo desde `design/`                           |
+| Comando                    | Qué hace                                                       |
+| -------------------------- | -------------------------------------------------------------- |
+| `yarn verificar`           | Lint, tipos y pruebas. **Lo que hay que pasar antes de un PR** |
+| `yarn lint`                | ESLint, con las prohibiciones del proyecto                     |
+| `yarn typecheck`           | `tsc --build`, en modo estricto                                |
+| `yarn test`                | Vitest: dominio, cliente, proxy, catálogo, shell y las 134     |
+| `yarn format`              | Prettier. Si el build se queja del formato, no lo pelees       |
+| `yarn build`               | Construye la aplicación                                        |
+| `yarn portar-catalogo`     | Regenera el catálogo desde `design/`                           |
+| `yarn generar-operaciones` | Regenera los tipos de la API desde el contrato                 |
 
 ## El catálogo se porta; no se escriben 134 pantallas
 
@@ -42,6 +43,32 @@ Boot. Por eso la pantalla se dibuja entera antes de que llegue la respuesta, y p
 backend no es reescribir nada.
 
 Los archivos generados llevan `.generado.ts` en el nombre y **no se editan a mano**: se regeneran.
+
+## El contrato manda sobre los tipos
+
+Los tipos de las 134 operaciones **no se escriben**: los genera `scripts/generar-operaciones.mjs`
+desde [`sgtm-v1.yaml`](../docs/50-api/openapi/sgtm-v1.yaml) hacia
+`packages/api-client/src/operaciones.generado.ts`. `yarn verificar` regenera y compara, así que el
+contrato y la interfaz no pueden divergir en silencio:
+
+```bash
+yarn generar-operaciones      # escribe operaciones.generado.ts
+yarn comprobar-operaciones    # falla si no cuadra con el yaml (lo corre `yarn verificar`)
+```
+
+Un campo renombrado en el `yaml` renombra la propiedad generada, y el código escrito contra el
+nombre viejo **deja de compilar**. Se comprobó renombrando `codRefCatastral` de verdad y
+compilando con `tsc`: el error es `'codRefCatastral' does not exist in type
+'{ readonly renombrado: string; }'`.
+
+El generador además **rechaza el contrato** antes de generar nada si viola una regla del proyecto:
+un parámetro o campo de municipalidad (regla 2), un importe declarado como número (regla 1,
+RNF-055) o una respuesta con cifras de deuda sin `fechaCalculo` (regla 9, RNF-075). Cada guarda
+tiene su contrato de muestra que la viola en `verificaciones/generador-de-operaciones.test.ts`.
+
+**Lo que el generador no inventa:** los esquemas de cuerpo y respuesta. El contrato de hoy declara
+verbo, ruta y parámetros; el esquema de cada recurso se escribe cuando su backend existe, y hasta
+entonces la respuesta se tipa como `CuerpoSinEsquema`, que es exactamente lo que el `yaml` dice.
 
 ## El proxy de datos
 
@@ -75,7 +102,7 @@ frontend/
 │   ├── dominio/         Importe, Fecha, Estado y su formateo
 │   ├── api-client/      Cliente HTTP tipado y el contrato de datos de una pantalla
 │   └── api-mock/        El proxy de datos (generado + 130 líneas de encaminamiento)
-├── scripts/             El portador del catálogo
+├── scripts/             El portador del catálogo y el generador de operaciones
 └── verificaciones/      Las reglas del proyecto, con una muestra que viola cada una
 ```
 
@@ -134,8 +161,6 @@ dice en la misma frase en que excluye el token.
   de relleno: el catálogo describe la operación, no un caso concreto.
 - **Ninguna acción escribe.** Toda modificación exige observación del usuario (RNF-052) y ese campo
   se conecta junto con su operación; un botón que guardara sin ella sería un defecto.
-- Los tipos de la API se escriben a mano; falta generarlos desde
-  [`sgtm-v1.yaml`](../docs/50-api/openapi/sgtm-v1.yaml).
 - No hay autenticación real: falta el flujo con PKCE contra el proveedor OIDC (ADR-0005).
 - No hay pruebas de extremo a extremo (Playwright) ni presupuesto de tamaño de paquete en CI. El
   paquete son 149 KB comprimidos, casi todos catálogo: falta partirlo por ruta.
