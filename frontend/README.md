@@ -137,6 +137,34 @@ ventanilla no es un problema de rendimiento sino mostrar cifras de un año como 
 Un adaptador que pierda la `fechaCalculo` **no compila**: `DatosDePantalla` la exige, y
 `verificaciones/muestras/adaptador-sin-fecha.ts` lo demuestra compilando con `tsc`.
 
+## La escritura: sin observación no se guarda
+
+**Toda modificación de datos exige observación del usuario** (regla 10 de CLAUDE.md, RNF-052). No
+es un `placeholder` amable: es la condición de guardado, y por eso vive en **un solo sitio**
+—`pantallas/escritura.ts`— y no en cada pantalla. Una pantalla que se olvidara de pedirla no podría
+guardar, porque no hay otra forma de guardar.
+
+| Qué resuelve             | Cómo                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------ |
+| Observación obligatoria  | Sin texto, la acción primaria no se habilita                                         |
+| Idempotencia             | Una clave por intento, **estable mientras dure**; cambia al corregir lo que se manda |
+| Sin reintento automático | `mutations: { retry: false }`, con la prueba que lo fija                             |
+| Errores por campo        | `ProblemaDeApi.errores` pintado junto a su campo, sin reescribirlo                   |
+| Un envío por pulsación   | Pulsar dos veces rápido manda una vez                                                |
+| Lo irreversible          | Se confirma diciendo **qué** va a pasar, no «¿estás seguro?»                         |
+
+La clave de idempotencia es la que más cuesta si se hace mal en las dos direcciones: regenerarla en
+cada reintento convierte un reintento en un segundo cobro, y no regenerarla nunca hace que corregir
+un dato devuelva el resultado del intento anterior. Cambia **cuando cambia lo que se manda**.
+
+**Abrir una pantalla que escribe ya no escribe**: las 54 operaciones con verbo de escritura no se
+piden al montar —abrir «Copias de seguridad» no puede lanzar un respaldo—, se piden cuando alguien
+pulsa.
+
+Lo hace cumplir una regla de ESLint: **`useMutation` fuera de `escritura.ts` no pasa el lint**, con
+su muestra en `verificaciones/muestras/escritura-sin-observacion.tsx`. No se puede pedirle a ESLint
+que compruebe que un formulario «tiene» un campo; lo que sí se puede es dejar un solo camino.
+
 ## Los cuatro estados
 
 El prototipo no los diseña: dibuja la pantalla con datos y ya. Contra el proxy eso se nota poco;
@@ -215,6 +243,7 @@ tabla, totales, pestañas, formulario por secciones, hoja de reporte y barra de 
 | Regla                                           | Muestra que la viola                                 |
 | ----------------------------------------------- | ---------------------------------------------------- |
 | La interfaz no hace aritmética con importes     | `verificaciones/muestras/aritmetica-con-importes.ts` |
+| **Sin observación no se guarda**                | `escritura-sin-observacion.tsx`                      |
 | Un importe es texto, nunca `number`             | `importe-como-number.ts`                             |
 | El frontend jamás envía `municipalidadId`       | `municipalidad-en-el-cliente.ts`                     |
 | El token vive en memoria                        | `token-en-almacenamiento.ts`                         |
@@ -251,8 +280,6 @@ dice en la misma frase en que excluye el token.
 - **Ninguna operación va contra el backend real**, porque el backend aún no sirve ninguna: la
   opción conectada pide su operación tipada, y hoy la contesta el proxy. Es el paso 4 de FRO-03 §7
   y se hace opción por opción.
-- **Ninguna acción escribe.** Toda modificación exige observación del usuario (RNF-052) y ese campo
-  se conecta junto con su operación; un botón que guardara sin ella sería un defecto.
 - No hay autenticación real: falta el flujo con PKCE contra el proveedor OIDC (ADR-0005).
 - No hay pruebas de extremo a extremo (Playwright) ni presupuesto de tamaño de paquete en CI. El
   paquete son 149 KB comprimidos, casi todos catálogo: falta partirlo por ruta.

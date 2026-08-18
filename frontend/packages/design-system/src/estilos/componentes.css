@@ -425,6 +425,32 @@ textarea.sgtm-campo__control {
   font-style: italic;
 }
 
+/* El mensaje que el backend devolvio para un campo. Rojo y **texto**: el color
+   solo no es informacion (FRO-02 §2.1). */
+.sgtm-campo__error {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--error-texto);
+}
+
+.sgtm-campo--con-error .sgtm-campo__control {
+  border-color: var(--error-texto);
+}
+
+/* La caja de escritura: la observacion pegada a la accion primaria, porque sin
+   ella no se guarda (regla 10, RNF-052). */
+.sgtm-escritura {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.sgtm-escritura__hecho {
+  font-size: 12.5px;
+  color: var(--ok-fg);
+}
+
 .sgtm-aviso__acciones {
   display: flex;
   gap: 8px;

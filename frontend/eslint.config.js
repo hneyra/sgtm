@@ -116,6 +116,19 @@ export default tseslint.config(
             'Las peticiones pasan por «solicitar» de @sgtm/api-client: ahi viven el token, la clave de idempotencia y el formato de error (FRO-01 §5, FRO-04 §5).',
         },
 
+        // —— Regla 10 de CLAUDE.md: sin observacion no se guarda (RNF-052) ——
+        // No se puede pedirle a ESLint que compruebe que un formulario «tiene»
+        // un campo; lo que si se puede es dejar **un solo camino** para
+        // escribir. `useEscritura` pide la observacion y sin ella no habilita la
+        // accion, asi que una mutacion suelta es una escritura que se salta la
+        // regla. El unico sitio donde se permite es el propio `escritura.ts`,
+        // con su justificacion escrita al lado.
+        {
+          selector: "CallExpression[callee.name='useMutation']",
+          message:
+            'Toda escritura pasa por «useEscritura»: sin observación del usuario no se guarda (regla 10, RNF-052).',
+        },
+
         // —— Regla 9 de CLAUDE.md: no existe «la deuda», existe la deuda a una fecha (RNF-075) ——
         {
           selector:

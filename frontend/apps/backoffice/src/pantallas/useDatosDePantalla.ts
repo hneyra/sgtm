@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { pedirDatosDePantalla } from '@sgtm/api-client';
+import { escribe, pedirDatosDePantalla } from '@sgtm/api-client';
 import type { DatosDePantalla } from '@sgtm/api-client';
 import type { EstructuraDePantalla } from '../catalogo';
 import { operacionDe, parametrosDeBusqueda, registroQueFalta } from './busqueda';
@@ -17,6 +17,8 @@ import { operacionDe, parametrosDeBusqueda, registroQueFalta } from './busqueda'
  * - **No inventa el registro.** Una pantalla que abre una ficha necesita su
  *   codigo, y sin el no pide nada. Antes se pedia con la cadena `ejemplo` y la
  *   pantalla parecia funcionar mostrando un registro que no era de nadie.
+ * - **No pide una operacion que escribe.** Abrir una pantalla no puede lanzar
+ *   un respaldo ni emitir un valor.
  * - **No manda un filtro que el contrato no declara.** La semantica de un
  *   filtro la decide el backend (ADR-0010): mientras no exista, el valor vive
  *   en la URL y no viaja.
@@ -42,6 +44,9 @@ export function useDatosDePantalla(pantalla: EstructuraDePantalla) {
       }
       return pedirDatosDePantalla(operacion, parametros, signal);
     },
-    enabled: operacion !== undefined && falta === undefined,
+    // Una operacion que escribe no se pide al abrir: abrir la pantalla de
+    // respaldos no puede lanzar un respaldo. Se pide cuando alguien pulsa, y
+    // entonces va por el camino de escritura, con su observacion.
+    enabled: operacion !== undefined && falta === undefined && !escribe(operacion),
   });
 }

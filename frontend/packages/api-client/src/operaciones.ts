@@ -1,6 +1,7 @@
 import { solicitar } from './cliente';
 import { OPERACIONES } from './operaciones.generado';
 import type {
+  CuerpoDe,
   DescriptorDeOperacion,
   IdDeOperacion,
   ParametrosDe,
@@ -102,3 +103,40 @@ export function pedirOperacion<O extends IdDeOperacion>(
     senal,
   });
 }
+
+/**
+ * Escribe: manda el cuerpo de una operacion del contrato con su clave de
+ * idempotencia.
+ *
+ * **La clave la trae quien llama, y eso es deliberado.** Generarla aqui la
+ * haria nueva en cada llamada, y entonces un reintento del mismo intento del
+ * usuario seria un cobro distinto para el servidor: dos recibos por un pago.
+ * Quien sabe cuando empieza y acaba un intento es la pantalla, no el cliente
+ * HTTP (FRO-04 §5).
+ */
+export function enviarOperacion<O extends IdDeOperacion>(
+  id: O,
+  parametros: ParametrosDe<O>,
+  cuerpo: CuerpoDe<O>,
+  claveDeIdempotencia: string,
+  senal?: AbortSignal,
+): Promise<RespuestaDe<O>> {
+  const descriptor = OPERACIONES[id] as DescriptorDeOperacion;
+  if (descriptor.metodo === 'GET') {
+    throw new Error(`La operacion «${id}» es de lectura: no se escribe con ella.`);
+  }
+  if (descriptor.metodo === 'DELETE') {
+    throw new Error(`La operacion «${id}» es un DELETE, y en el SGTM no se borra (regla 4).`);
+  }
+
+  return solicitar<RespuestaDe<O>>(rutaDeOperacion(id, parametros), {
+    metodo: descriptor.metodo,
+    consulta: consultaDeOperacion(id, parametros),
+    cuerpo,
+    claveDeIdempotencia,
+    senal,
+  });
+}
+
+/** Una operacion que escribe: su verbo no es de lectura. */
+export const escribe = (id: IdDeOperacion): boolean => OPERACIONES[id].metodo !== 'GET';

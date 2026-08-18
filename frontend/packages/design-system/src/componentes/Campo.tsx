@@ -24,6 +24,14 @@ export interface CampoProps {
   readonly opciones?: readonly string[];
   readonly ancho?: boolean;
   readonly cargando?: boolean;
+  /**
+   * Mensaje del backend para **este** campo (`ProblemaDeApi.errores`).
+   *
+   * Va tal cual: el servidor ya lo redacto en castellano y en lenguaje del
+   * dominio (RNF-080), y reescribirlo aqui produce dos versiones del mismo
+   * mensaje que se separan a la primera correccion.
+   */
+  readonly error?: string;
   readonly onCambio?: (valor: string) => void;
 }
 
@@ -39,11 +47,14 @@ export function Campo({
   opciones,
   ancho = false,
   cargando = false,
+  error,
   onCambio,
 }: CampoProps) {
   const id = useId();
+  const idDelError = `${id}-error`;
   const clases = ['sgtm-campo'];
   if (ancho) clases.push('sgtm-campo--ancho');
+  if (error !== undefined) clases.push('sgtm-campo--con-error');
 
   return (
     <div className={clases.join(' ')}>
@@ -51,6 +62,11 @@ export function Campo({
         {etiqueta}
       </label>
       {control()}
+      {error !== undefined && (
+        <p className="sgtm-campo__error" id={idDelError}>
+          {error}
+        </p>
+      )}
     </div>
   );
 
@@ -62,6 +78,8 @@ export function Campo({
           className="sgtm-campo__control"
           value={valor}
           disabled={cargando}
+          aria-invalid={error === undefined ? undefined : true}
+          aria-describedby={error === undefined ? undefined : idDelError}
           onChange={(e) => onCambio?.(e.target.value)}
         >
           {(opciones ?? []).map((opcion) => (
@@ -82,6 +100,8 @@ export function Campo({
           value={valor}
           placeholder={ph}
           disabled={cargando}
+          aria-invalid={error === undefined ? undefined : true}
+          aria-describedby={error === undefined ? undefined : idDelError}
           onChange={(e) => onCambio?.(e.target.value)}
         />
       );
@@ -118,6 +138,8 @@ export function Campo({
         value={valor}
         placeholder={ph}
         disabled={cargando}
+        aria-invalid={error === undefined ? undefined : true}
+        aria-describedby={error === undefined ? undefined : idDelError}
         onChange={(e) => onCambio?.(e.target.value)}
       />
     );

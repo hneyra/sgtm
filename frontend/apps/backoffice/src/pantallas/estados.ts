@@ -24,9 +24,16 @@ export interface ConsultaDeLaPantalla {
 export function estadoDePantalla(
   consulta: ConsultaDeLaPantalla,
   faltaRegistro?: string,
+  /**
+   * Si la pantalla pide sus datos al abrirse. Las que escriben no lo hacen:
+   * abrir «Copias de seguridad» no puede lanzar un respaldo, asi que no estan
+   * cargando —estan esperando a que alguien pulse—.
+   */
+  pide = true,
 ): EstadoDePantalla {
   if (faltaRegistro !== undefined) return 'sin-registro';
   if (consulta.isError) return esSinPermiso(consulta.error) ? 'sin-permiso' : 'error';
+  if (!pide) return 'con-datos';
   if (consulta.isPending) return 'cargando';
   return 'con-datos';
 }
