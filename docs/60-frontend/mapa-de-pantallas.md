@@ -2,7 +2,8 @@
 
 **Fuente:** el prototipo `design/SGTM.dc.html` y el catálogo `design/sgtm-data-{1..5}.js`
 **Catálogo de opciones:** [NEG-03](../10-negocio/catalogo-de-opciones.md)
-**Estado:** ninguna pantalla implementada; este documento es el plan
+**Estado:** las 134 implementadas contra el proxy de datos; falta conectarlas al backend
+([`ADR-0010`](../30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md))
 
 ## 1. Doce módulos, 134 opciones
 
@@ -138,6 +139,13 @@ Ninguna está validada. Es un pendiente declarado, no un olvido.
 
 El paso 2 es el que decide el coste de todo lo demás: hecho como catálogo, las 134 pantallas
 cuestan un renderizador; hechas a mano, cuestan 134 archivos que nadie mantiene.
+
+**Pasos 1 a 3: hechos.** El catálogo se porta con `yarn portar-catalogo`, que además **separa la
+estructura del valor**: la estructura va a la aplicación y el valor lo sirve la API. Las diez
+plantillas están implementadas y las 134 pantallas se comprueban en cada `yarn test`.
+
+**Paso 4: pendiente**, y no por falta de interfaz: el backend todavía no sirve ninguna operación.
+Cada opción se conectará cuando la suya exista, apagando el proxy para esa ruta.
 
 ## 8. Documentos relacionados
 

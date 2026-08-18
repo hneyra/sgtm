@@ -2,3 +2,9 @@ dist/
 node_modules/
 yarn.lock
 packages/design-system/src/estilos/tokens/
+
+# Los archivos generados los formatea su generador, no Prettier: si Prettier
+# los reescribe, regenerarlos deja de dar el mismo resultado y la comprobacion
+# de CI que exige que el catalogo cuadre con `design/` no puede pasar nunca.
+# Mismo criterio que los tokens de arriba: lo copiado y lo generado no se toca.
+**/*.generado.ts

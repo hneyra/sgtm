@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@sgtm/api-client": "0.1.0",
+    "@sgtm/api-mock": "0.1.0",
     "@sgtm/design-system": "0.1.0",
     "@sgtm/dominio": "0.1.0",
     "@tanstack/react-query": "^5.90.0",

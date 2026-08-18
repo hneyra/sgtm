@@ -79,6 +79,11 @@ const PROHIBICIONES: { prohibicion: string; muestra: string; delata: RegExp }[] 
     muestra: 'tabindex-positivo.tsx',
     delata: /Sin tabIndex positivo/,
   },
+  {
+    prohibicion: 'fetch suelto fuera de @sgtm/api-client (FRO-01 §5)',
+    muestra: 'fetch-directo.ts',
+    delata: /pasan por «solicitar»/,
+  },
 ];
 
 describe('toda prohibicion del frontend tiene una regla que la detecta', () => {

@@ -20,11 +20,12 @@ Gradle, el esquema como migraciones Flyway, el camino del contexto de tenant (to
 → RLS) y las verificaciones bloqueantes. **Ninguna funcionalidad de negocio todavía**, y es
 deliberado: primero las barreras, después el negocio.
 
-De la **interfaz web** existe el espacio de trabajo, no las pantallas:
-[`frontend/`](frontend/README.md) monta yarn workspaces, los tres paquetes compartidos
-(`dominio`, `api-client`, `design-system`) y las reglas verificadas con ESLint. **Ninguna de las
-134 pantallas está implementada**, y es el mismo orden del backend: primero las barreras. Su
-diseño de referencia —12 módulos, 134 pantallas, design system Juris PE— está en
+De la **interfaz web** existen **las 134 pantallas**, y ninguna conectada al backend real:
+[`frontend/`](frontend/README.md) porta el catálogo del prototipo a datos tipados y lo compone con
+**un** renderizador, sobre un shell con navegación de dos niveles y paleta de comandos. Los datos
+llegan por HTTP desde un **proxy que simula la API** ([`ADR-0010`](docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md));
+conectar el backend es apagarlo, no reescribir la interfaz. Su diseño de referencia —12 módulos,
+134 pantallas, design system Juris PE— está en
 [`design/`](design/design_handoff_sgtm_web/README.md). El contrato que backend y frontend comparten
 está en [`docs/50-api/openapi/sgtm-v1.yaml`](docs/50-api/openapi/sgtm-v1.yaml), derivado de los
 `endpoint` que declara cada pantalla del prototipo.
@@ -78,7 +79,9 @@ no puede fallar no protege nada.
 
 En el frontend, las que le tocan —1, 2, 8, 9 y el idioma— están como **reglas de ESLint**, con la
 misma exigencia: `frontend/verificaciones/muestras/` tiene una muestra por prohibición y
-`reglas-de-eslint.test.ts` exige que la regla la detecte.
+`reglas-de-eslint.test.ts` exige que la regla la detecte. A ellas se suma una propia de la
+interfaz: **ninguna petición sale por `fetch` suelto**, todas pasan por `solicitar()` de
+`@sgtm/api-client`. Es lo que permite cambiar el proxy de datos por el backend con una bandera.
 
 Lista completa con su justificación:
 [`docs/30-arquitectura/estandares-de-codigo-backend.md`](docs/30-arquitectura/estandares-de-codigo-backend.md)
@@ -114,8 +117,10 @@ aislamiento), `sgtm-plataforma` (filtro del token, `SET LOCAL`, guardia del pool
 contextos acotados vacíos y `sgtm-aplicacion` (ensambla y aloja las verificaciones).
 Límites de cada contexto: [`docs/30-arquitectura/contextos-acotados.md`](docs/30-arquitectura/contextos-acotados.md).
 
-Workspaces del frontend hoy: `apps/backoffice` (andamio, sin pantallas) y los paquetes
-`@sgtm/dominio`, `@sgtm/api-client` y `@sgtm/design-system`. Una sola aplicación: en el SGTM el
+Workspaces del frontend hoy: `apps/backoffice` (shell, catálogo y renderizador) y los paquetes
+`@sgtm/dominio`, `@sgtm/api-client`, `@sgtm/design-system` y `@sgtm/api-mock` (el proxy de datos).
+**El catálogo se regenera con `yarn portar-catalogo`; los archivos `.generado.ts` no se editan a
+mano.** Una sola aplicación: en el SGTM el
 flujo público es **una** de las 134 opciones, no un producto aparte; el criterio para separar
 `apps/portal` está en [`ADR-0009`](docs/30-arquitectura/adr/ADR-0009-plataforma-frontend.md).
 
@@ -173,9 +178,13 @@ factores que NEG-05 §0.1 marca sin fuente identificada —deducción de Amazon�
 incremento del 5 %, factor de oficialización—: multiplican importes, y un valor inventado escala
 el error.
 
-**Ningún componente del design system antes de la pantalla que lo use.** `frontend/packages/design-system`
-tiene hoy los tokens y nada más, a propósito: el prototipo ya fija las medidas exactas, y un
-componente escrito antes de su pantalla es un componente que nadie pidió.
+**Ningún componente del design system antes de la pantalla que lo use.** Los que hay salieron
+todos del renderizador; el prototipo ya fija las medidas exactas, y un componente escrito antes de
+su pantalla es un componente que nadie pidió.
+
+**Ninguna acción de pantalla que escriba sin su campo de observación.** Toda modificación de datos
+lo exige (regla 10, RNF-052), así que las barras de acciones están deshabilitadas hasta que su
+operación se conecte con él.
 
 ## Decisiones abiertas que bloquean
 
@@ -232,7 +241,9 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Guardia del pool | Prueba gemela **sin** guardia | La fuga ocurre de verdad |
 | Reglas de ArchUnit (7) | Clase de muestra que viola cada una | Las siete muerden, ya sobre dominio real |
 | Escáner del código fuente | Muestras con `SET SESSION`, `DELETE`, `UPDATE` prohibidos y con una política de redondeo escrita a mano | Las detecta |
-| Reglas de ESLint del frontend (9) | Quitando la regla de tildes: su prueba se pone roja | Las nueve muerden |
+| Reglas de ESLint del frontend (10) | Quitando la regla de tildes, y la de `fetch`: sus pruebas se ponen rojas | Las diez muerden |
+| Las 134 pantallas se dibujan | Montando cada una contra el proxy, y recorriéndolas en Chromium | 134 en verde, 0 errores |
+| El juego de datos simulado no llega a producción | Comparando las dos compilaciones, con y sin la bandera | El chunk desaparece |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con
 `-Dsgtm.pruebas.postgres.url` ([`backend/README.md`](backend/README.md)).
