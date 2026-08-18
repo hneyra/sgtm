@@ -119,8 +119,8 @@ Límites de cada contexto: [`docs/30-arquitectura/contextos-acotados.md`](docs/3
 
 Workspaces del frontend hoy: `apps/backoffice` (shell, catálogo y renderizador) y los paquetes
 `@sgtm/dominio`, `@sgtm/api-client`, `@sgtm/design-system` y `@sgtm/api-mock` (el proxy de datos).
-**El catálogo se regenera con `yarn portar-catalogo`; los archivos `.generado.ts` no se editan a
-mano.** Una sola aplicación: en el SGTM el
+**El catálogo se regenera con `yarn portar-catalogo` y los tipos de la API con
+`yarn generar-operaciones`, desde el contrato; los archivos `.generado.ts` no se editan a mano.** Una sola aplicación: en el SGTM el
 flujo público es **una** de las 134 opciones, no un producto aparte; el criterio para separar
 `apps/portal` está en [`ADR-0009`](docs/30-arquitectura/adr/ADR-0009-plataforma-frontend.md).
 
@@ -218,8 +218,9 @@ omiten: una prueba bloqueante que se salta a sí misma deja el build en verde.
 
 ```bash
 cd frontend
-yarn verificar                    # lint, tipos y pruebas. Lo que hay que pasar antes de un PR
+yarn verificar                    # contrato, lint, tipos y pruebas. Lo que hay que pasar antes de un PR
 yarn test                         # incluye la prueba de que cada regla de ESLint muerde
+yarn generar-operaciones          # regenera los tipos de la API desde sgtm-v1.yaml
 yarn format                       # Prettier; mismo trato que spotlessApply
 ```
 
@@ -245,6 +246,8 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Reglas de ESLint del frontend (10) | Quitando la regla de tildes, y la de `fetch`: sus pruebas se ponen rojas | Las diez muerden |
 | Las 134 pantallas se dibujan | Montando cada una contra el proxy, y recorriéndolas en Chromium | 134 en verde, 0 errores |
 | El juego de datos simulado no llega a producción | Comparando las dos compilaciones, con y sin la bandera | El chunk desaparece |
+| Un cambio del contrato rompe la compilación | Renombrando `codRefCatastral` en `sgtm-v1.yaml` y compilando con `tsc` | Rojo; al devolverlo, verde |
+| Las guardas del generador de operaciones (6) | Un contrato de muestra que viola cada una | Las seis muerden |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con
 `-Dsgtm.pruebas.postgres.url` ([`backend/README.md`](backend/README.md)).

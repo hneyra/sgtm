@@ -20,8 +20,10 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --build --force",
-    "verificar": "yarn lint && yarn typecheck && yarn test",
-    "portar-catalogo": "node scripts/portar-catalogo.mjs"
+    "verificar": "yarn comprobar-operaciones && yarn lint && yarn typecheck && yarn test",
+    "portar-catalogo": "node scripts/portar-catalogo.mjs",
+    "generar-operaciones": "node scripts/generar-operaciones.mjs",
+    "comprobar-operaciones": "node scripts/generar-operaciones.mjs --comprobar"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

@@ -160,9 +160,12 @@ con el esqueleto de carga del design system y un mensaje centrado entre hairline
 
 ## 8. Lo que todavía no está
 
-- **Los tipos de la API se escriben a mano.** Falta generar el cliente desde
-  [`sgtm-v1.yaml`](../50-api/openapi/sgtm-v1.yaml) para que un cambio de contrato rompa la
-  compilación. El contrato ya existe; falta enchufar la generación al build.
+- ~~**Los tipos de la API se escriben a mano.**~~ **Hecho:** los tipos de las 134 operaciones se
+  generan desde [`sgtm-v1.yaml`](../50-api/openapi/sgtm-v1.yaml) hacia `operaciones.generado.ts`,
+  y `yarn verificar` regenera y compara. Un campo renombrado en el contrato deja de compilar el
+  código que usaba el nombre viejo. **Lo que sigue pendiente son los esquemas de cuerpo y
+  respuesta**: el contrato declara verbo, ruta y parámetros, y el esquema de cada recurso se
+  escribe cuando su backend existe.
 - **No hay autenticación real.** El flujo con PKCE contra el proveedor OIDC (ADR-0005) sustituirá
   al `guardarToken` manual.
 - **El servidor de datos de ejemplo es un proxy en el navegador**, no un proceso aparte:

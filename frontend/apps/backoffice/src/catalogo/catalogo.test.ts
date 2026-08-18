@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { OPERACIONES } from '@sgtm/api-client';
 import {
   MODULOS,
   OPCIONES,
@@ -144,5 +145,30 @@ describe('las secciones que se muestran', () => {
     const conPestanas = OPCIONES.map((o) => PANTALLAS[o.id]).find((p) => p?.tabs !== undefined);
     if (!conPestanas?.tabs) return;
     expect(seccionesDe(conPestanas, 99)).toEqual(conPestanas.tabs.at(-1)?.secciones);
+  });
+});
+
+describe('el catalogo y el contrato hablan de las mismas operaciones', () => {
+  // Los dos se generan del prototipo, pero por caminos distintos: el catalogo
+  // con `yarn portar-catalogo` y el contrato con `generar-openapi.mjs`. Que
+  // salgan del mismo sitio no garantiza que sigan cuadrando; esto si.
+  const DEL_CONTRATO = new Set(
+    Object.values(OPERACIONES).map((operacion) => `${operacion.metodo} ${operacion.ruta}`),
+  );
+
+  it('el endpoint que declara cada pantalla existe en el contrato', () => {
+    for (const opcion of OPCIONES) {
+      const endpoint = PANTALLAS[opcion.id]?.endpoint ?? '';
+      const [metodo = '', completa = ''] = endpoint.split(/\s+/);
+      const camino = (completa.split('?')[0] ?? '').replace(/^\/api\/v1/, '');
+      expect(DEL_CONTRATO, `${opcion.id}: ${endpoint}`).toContain(`${metodo} ${camino}`);
+    }
+  });
+
+  it('la operacion del contrato se llama como la opcion del catalogo', () => {
+    const identificadores = new Set(Object.keys(OPERACIONES));
+    for (const opcion of OPCIONES) {
+      expect(identificadores, opcion.id).toContain(opcion.id);
+    }
   });
 });
