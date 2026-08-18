@@ -44,9 +44,13 @@ class AislamientoMultiTenantTest {
     /**
      * Catalogos: no llevan {@code municipalidad_id NOT NULL}, pero si RLS con politica propia
      * (ARQ-03 §5). Se enumeran para que una tabla nueva no pueda quedar sin clasificar.
+     *
+     * <p>{@code respaldo} entra aqui porque una copia de seguridad es del cluster entero, no de una
+     * municipalidad. La aplicacion solo la lee (V8): quien hace la copia es el proceso de
+     * despliegue.
      */
     private static final Set<String> TABLAS_DE_CATALOGO =
-            Set.of("municipalidad", "parametro_tributario");
+            Set.of("municipalidad", "parametro_tributario", "respaldo");
 
     private static BaseDeDatosDePrueba base;
     private static long municipalidadA;
