@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { Aviso, Icono, IconoDeModulo } from '@sgtm/design-system';
-import { bloquesDe, moduloPorId, rutaDeOpcion } from '../catalogo';
+import { bloquesDe, rutaDeOpcion } from '../catalogo';
+import { useCatalogoVisible } from '../app/sesion/useCatalogoVisible';
 
 /** Lo que cabe de la descripcion en una fila del hub, segun el prototipo. */
 const RECORTE = 108;
@@ -17,7 +18,11 @@ const recortar = (texto: string): string =>
  */
 export function HubDeModulo() {
   const { moduloId = '' } = useParams();
-  const modulo = moduloPorId(moduloId);
+  const catalogo = useCatalogoVisible();
+  // El modulo que este usuario ve, con las opciones que este usuario ve. Un
+  // modulo cuyas opciones estan todas ocultas no esta en esta lista, y entonces
+  // no existe para el —que es lo mismo que dice el menu— (REQ-03 §5).
+  const modulo = catalogo.modulos.find((m) => m.id === moduloId);
 
   if (!modulo) {
     return (

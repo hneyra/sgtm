@@ -330,7 +330,11 @@ describe('la municipalidad del token es para mostrarla, no para mandarla', () =>
 
     // Lo que el token deja ver: quien es, donde trabaja y hasta cuando. No hay
     // identificador que mandar, asi que no se puede mandar (regla 2, FRO-01 §4).
-    expect(screen.getByTestId('datos')).toHaveTextContent('["usuario","municipalidad","expira"]');
+    // Lo que hay: quien es, donde trabaja, hasta cuando, y que puede hacer. No
+    // hay identificador de municipalidad, asi que no se puede mandar.
+    expect(screen.getByTestId('datos')).toHaveTextContent(
+      '["usuario","municipalidad","expira","permisos"]',
+    );
 
     await solicitar('/catastro/vias', { consulta: { sector: '01' } });
     const alBackend = peticiones.filter((u) => !u.startsWith('https://identidad'));
