@@ -126,12 +126,12 @@ describe('orden y pagina, contra el servidor', () => {
   it('la cache no mezcla paginas: la pagina 2 de una busqueda no es la de otra', async () => {
     const cliente = clienteDePruebas();
 
-    const primera = montarEnRuta('/catastro/calles?sector=01&pagina=2', cliente);
-    await screen.findByText('SANTA ROSA');
+    const primera = montarEnRuta('/catastro/sectores?sector=01&pagina=2', cliente);
+    await screen.findByText('CERCADO DE SULLANA');
     primera.unmount();
 
-    const segunda = montarEnRuta('/catastro/calles?sector=02&pagina=2', cliente);
-    await screen.findByText('SANTA ROSA');
+    const segunda = montarEnRuta('/catastro/sectores?sector=02&pagina=2', cliente);
+    await screen.findByText('CERCADO DE SULLANA');
     segunda.unmount();
 
     // Solo las de datos: la del catalogo del modulo es otra cosa y se comparte.

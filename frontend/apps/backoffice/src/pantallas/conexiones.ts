@@ -1,5 +1,6 @@
 import type { DatosDePantalla, IdDeOperacion, ParametrosDe, RespuestaDe } from '@sgtm/api-client';
 import { pedirOperacion } from '@sgtm/api-client';
+import { CONEXIONES_DE_CATASTRO } from './catastro';
 import { conexionDeRecaudacion } from './inicio/recaudacion';
 import { CONEXIONES_DE_SEGURIDAD } from './seguridad';
 
@@ -105,6 +106,7 @@ function sinVacios(parametros: object): Readonly<Record<string, string>> {
 const CONEXIONES: Readonly<Record<string, Conexion>> = {
   inicio: conexionDeRecaudacion,
   ...CONEXIONES_DE_SEGURIDAD,
+  ...CONEXIONES_DE_CATASTRO,
 };
 
 export const conexionDe = (opcion: string): Conexion | undefined => CONEXIONES[opcion];

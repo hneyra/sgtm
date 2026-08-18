@@ -151,6 +151,18 @@ usuario, la caja en la que atiende, cuántos accesos tiene un grupo. Que se vea 
 La bitácora manda **siempre** el ejercicio, aunque nadie lo escriba en un filtro: es la clave de
 partición de la tabla y su controlador lo exige. No sale de la URL, sale de la sesión.
 
+De **Catastro** hay conectada **una opción de doce**: `calles`, que es el único endpoint del módulo
+publicado hoy. Sus siete columnas salen de un recurso que publica cuatro; las otras tres —sector,
+zona de arancel y arancel por m²— salen con «—». La del arancel importa más que las otras dos:
+es una **cifra** que alimenta la valuación de un predio, y una cifra inventada ahí acaba en un
+valor mal emitido. Que falte se ve; que esté mal, no.
+
+**Las conexiones no crecen por delante del backend.** Hoy son doce operaciones, las mismas que
+enumera `IMPLEMENTADAS` en el `ContratoDeApiTest`. Conectar una opción cuyo endpoint no existe
+obligaría a inventarse su respuesta en el proxy, que es lo que [ADR-0010](../docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md)
+decidió no hacer, y hay una prueba que lo comprueba enumerando las once de Catastro que siguen
+sin conectar.
+
 ## El ejercicio de trabajo es de la sesión, y se ve siempre
 
 Cambiarlo en «Cambiar el año de trabajo» cambia lo que muestran los otros once módulos, así que no
@@ -470,6 +482,8 @@ dice en la misma frase en que excluye el token.
 | Cambiar de ejercicio vacía la caché     | Quitando `clear()`: la petición nueva encuentra lo viejo                | Rojas, dos                    |
 | La lista blanca filtra el cuerpo        | Mandando el borrador entero: viajan campos que el backend no acepta     | Rojas, dos                    |
 | La contraseña no se puede teclear       | Quitando `bloqueado` de los campos no declarados                        | Roja                          |
+| El catálogo vial no inventa columnas    | Rellenando sector, zona y arancel con lo del prototipo                  | Roja                          |
+| Las conexiones no van por delante       | Conectando `sectores`, que no tiene backend                             | Rojas, dos                    |
 
 ## Lo que todavía no está
 
@@ -481,6 +495,9 @@ dice en la misma frase en que excluye el token.
   `permisos` no tiene `GET` con el que cargar la matriz —solo `PUT` para fijarla—, `miembros`
   necesita elegir un usuario y el prototipo no dibuja ese selector, y `respaldo` es un `POST` que
   consulta, así que abrir la pantalla no puede pedirlo (#64). Están detalladas en #70.
+- **Los diez módulos restantes esperan a su backend**, que todavía no existe: de las 134
+  operaciones del contrato el servidor publica doce. No es un pendiente del frontend y no tiene
+  atajo — fingirlas en el proxy sería construir la interfaz contra una invención.
 - Las tres pantallas que [FRO-03 §6](../docs/60-frontend/mapa-de-pantallas.md) marca —caja, portal
   y reportes— **no están validadas con usuarios reales**. Es un pendiente declarado.
 

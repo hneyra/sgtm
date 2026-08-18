@@ -1,15 +1,21 @@
 import { RESPUESTAS } from './respuestas.generado';
 
 /**
- * Las seis lecturas de seguridad, con la forma que **el backend ya publica**.
+ * Las operaciones que el backend **ya publica**, con la forma con la que las
+ * publica.
  *
  * El resto del proxy contesta `DatosDePantalla` —la forma que comparten las 134
  * pantallas— porque es lo que las pantallas piden mientras no hay backend. Para
- * estas seis si lo hay (#9, #12, #13), y lo que publica no es esa forma: es un
- * recurso del dominio dentro del sobre paginado de `RespuestaPaginada`. La
- * interfaz habla ya ese idioma, asi que el proxy tambien tiene que hablarlo; si
- * no, se estaria construyendo la pantalla contra una forma que el servidor no
- * usa, que es justo lo que este modo intermedio existe para evitar.
+ * estas si lo hay, y lo que publica no es esa forma: es un recurso del dominio
+ * dentro del sobre paginado de `RespuestaPaginada`. La interfaz habla ya ese
+ * idioma, asi que el proxy tambien tiene que hablarlo; si no, se estaria
+ * construyendo la pantalla contra una forma que el servidor no usa, que es justo
+ * lo que este modo intermedio existe para evitar.
+ *
+ * Son doce, las mismas que enumera `IMPLEMENTADAS` en el `ContratoDeApiTest` del
+ * backend: las once de seguridad (#9, #12, #13) y el catalogo vial (#16). **Esta
+ * lista crece cuando crece aquella**, no antes: publicar aqui una forma que el
+ * backend todavia no sirve seria inventarsela.
  *
  * **Los valores siguen siendo los del prototipo.** Aqui no se inventa ni un
  * dato: se leen las mismas filas que dibuja el catalogo portado y se les pone
@@ -68,6 +74,25 @@ function origen(texto = ''): { equipo: string | null; ip: string | null } {
 }
 
 /* ── Una funcion por recurso, con los campos que declara su `Resource` ──── */
+
+/**
+ * El catalogo vial (`ViaResource`, #16).
+ *
+ * El prototipo dibuja siete columnas y el recurso publica cuatro de ellas: no
+ * trae sector, zona de arancel ni el arancel por metro cuadrado. Aqui no se
+ * rellenan —el `Resource` manda—, y la pantalla los ensena con «—».
+ */
+const vias = (): Paginado =>
+  unaPagina(
+    filasDe('calles').map(([codigo, tipo, nombre, , , , estado], i) => ({
+      id: i + 1,
+      codigo,
+      tipo,
+      nombre,
+      ubigeo: null,
+      activa: activo(estado),
+    })),
+  );
 
 const modulos = (): Paginado =>
   unaPagina(
@@ -163,6 +188,7 @@ const parametros = (): Paginado => {
 
 /** Por camino del contrato, relativo a `/api/v1`. Solo `GET`: ninguna escribe. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
+  '/catastro/vias': vias,
   '/seguridad/modulos': modulos,
   '/seguridad/accesos': accesos,
   '/seguridad/grupos': grupos,

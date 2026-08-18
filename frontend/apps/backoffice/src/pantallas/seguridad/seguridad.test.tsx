@@ -79,7 +79,7 @@ describe('los listados leen el recurso que publica el backend', () => {
 
 describe('el ejercicio de trabajo es de la sesion', () => {
   it('se ve en la cabecera de cualquier pantalla, tambien de una sin conectar', async () => {
-    montarEnRuta('/catastro/calles');
+    montarEnRuta('/catastro/sectores');
     const cabecera = await screen.findByRole('banner');
     expect(within(cabecera).getByText('Ejercicio')).toBeInTheDocument();
     expect(within(cabecera).getByText(String(new Date().getFullYear()))).toBeInTheDocument();

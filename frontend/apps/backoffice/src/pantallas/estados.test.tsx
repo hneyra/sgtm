@@ -140,12 +140,14 @@ describe('vacio: no es lo mismo un padron vacio que un filtro sin resultados', (
   });
 
   it('sin filtros: todavia no hay nada que buscar', async () => {
-    montarEnRuta('/catastro/calles');
+    // Una opcion **sin conectar**: aqui se prueba el vacio de la forma que
+    // comparten las 134, y `calles` ya pide su recurso propio (#71).
+    montarEnRuta('/catastro/sectores');
     expect(await screen.findByText(/Todavía no hay/)).toBeInTheDocument();
   });
 
   it('con un filtro puesto: hay algo que hacer, y se dice cual', async () => {
-    montarEnRuta('/catastro/calles?nombreDeCalle=SANTA+ROSA');
+    montarEnRuta('/catastro/sectores?manzana=A');
     expect(await screen.findByText('Ningún resultado para esta búsqueda')).toBeInTheDocument();
     expect(screen.getByText(/Quita alguno o corrige el valor/)).toBeInTheDocument();
   });

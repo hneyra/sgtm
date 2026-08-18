@@ -271,6 +271,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | El juego de datos simulado no llega a producción | Comparando las dos compilaciones, con y sin la bandera | El chunk desaparece |
 | Un cambio del contrato rompe la compilación | Renombrando `codRefCatastral` en `sgtm-v1.yaml` y compilando con `tsc` | Rojo; al devolverlo, verde |
 | El módulo de seguridad conectado (11 pruebas) | Quitando la guarda de `leerPaginado`, el ejercicio de la bitácora, el vaciado de la caché, la lista blanca del cuerpo y el bloqueo de los campos de clave | Las cinco lo ponen rojo |
+| El catálogo vial conectado (4 pruebas) | Rellenando las columnas que el recurso no publica, y conectando una opción sin backend | Las dos lo ponen rojo |
 | Las guardas del generador de operaciones (6) | Un contrato de muestra que viola cada una | Las seis muerden |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con
