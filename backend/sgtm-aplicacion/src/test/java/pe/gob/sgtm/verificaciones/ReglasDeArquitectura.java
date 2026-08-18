@@ -57,7 +57,8 @@ public final class ReglasDeArquitectura {
                     PAQUETE_RAIZ + ".dominio.Dinero",
                     PAQUETE_RAIZ + ".dominio.Alicuota",
                     PAQUETE_RAIZ + ".dominio.Porcentaje",
-                    PAQUETE_RAIZ + ".dominio.AreaM2");
+                    PAQUETE_RAIZ + ".dominio.AreaM2",
+                    PAQUETE_RAIZ + ".dominio.ValorNormativo");
 
     private ReglasDeArquitectura() {}
 

@@ -36,11 +36,11 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.dominio.Vigencia;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.seguridad.dominio.Grupo;
 import pe.gob.sgtm.seguridad.dominio.Usuario;
-import pe.gob.sgtm.seguridad.dominio.Vigencia;
 import pe.gob.sgtm.seguridad.infraestructura.AdministracionRepositoryJdbc;
 import pe.gob.sgtm.seguridad.infraestructura.ComprobadorDeAccesoJdbc;
 

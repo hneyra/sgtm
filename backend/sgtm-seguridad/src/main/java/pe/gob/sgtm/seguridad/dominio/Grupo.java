@@ -3,6 +3,7 @@ package pe.gob.sgtm.seguridad.dominio;
 import java.time.LocalDate;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.dominio.Vigencia;
 
 /**
  * Un grupo de usuarios, que es donde viven los permisos en la practica.
