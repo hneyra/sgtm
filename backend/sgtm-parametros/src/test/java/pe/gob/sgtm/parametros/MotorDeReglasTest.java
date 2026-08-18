@@ -4,10 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.RoundingMode;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -15,353 +13,482 @@ import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
 import pe.gob.sgtm.dominio.ValorNormativo;
-import pe.gob.sgtm.dominio.Vigencia;
 
 /**
  * El motor, sin Spring, sin Docker y sin reloj.
  *
  * <h2>Aviso sobre las cifras</h2>
  *
- * <p><b>Todos los valores de esta prueba son ficticios y estan declarados como tales.</b> El factor
- * {@code 2} de la regla de muestra no es una alicuota, ni un tramo, ni nada que aparezca en ninguna
- * norma: es el numero que hace facil comprobar que la secuencia se aplico. Las cifras de verdad son
- * D-02 y no entran hasta que se verifiquen.
+ * <p><b>Todos los valores de esta prueba son ficticios y estan declarados como tales.</b> Los
+ * factores {@code 2} y {@code 3} de las reglas de muestra no son alicuotas, ni tramos, ni nada que
+ * aparezca en ninguna norma: son numeros que hacen facil comprobar que el grafo se resolvio. Las
+ * cifras de verdad son D-02 y no entran hasta que se verifiquen.
  *
- * <p>Ninguna de esas cifras esta escrita en el codigo de la regla: <b>salen de los parametros</b>,
- * que es justamente lo que la regla 5 exige y lo que este motor existe para hacer posible.
+ * <p>Ninguna esta escrita en el codigo de las reglas: <b>salen de los parametros</b>, que es lo que
+ * la regla 5 exige y lo que este motor existe para hacer posible.
+ *
+ * <p>Los identificadores van en el rango {@code RT-9xx} para que no se confundan con los reales de
+ * NEG-05, que van de {@code RT-001} a {@code RT-016}.
  */
 @DisplayName("ADR-0007 — Motor de reglas")
 class MotorDeReglasTest {
 
     private static final Ejercicio EJERCICIO = new Ejercicio(2026);
-    private static final LocalDate FECHA = LocalDate.of(2026, 3, 31);
 
     /** Ficticia. No representa ninguna decision sobre D-03; la prueba necesita una cualquiera. */
     private static final PoliticaDeRedondeo REDONDEO_DE_PRUEBA =
             new PoliticaDeRedondeo(2, RoundingMode.HALF_UP);
 
-    private static final IdentificadorDeRegla DOBLE = IdentificadorDeRegla.de("RT-901");
-    private static final IdentificadorDeRegla SUMA = IdentificadorDeRegla.de("RT-902");
+    // Los conceptos de la muestra imitan la forma del grafo real —dos ramas que convergen—
+    // sin usar sus nombres, para que nadie los confunda con el calculo del predial.
+    private static final Concepto AREA = Concepto.de("AREA_FICTICIA");
+    private static final Concepto RAMA_UNO = Concepto.de("RAMA_UNO");
+    private static final Concepto RAMA_DOS = Concepto.de("RAMA_DOS");
+    private static final Concepto CONVERGENCIA = Concepto.de("CONVERGENCIA");
+    private static final Concepto TOTAL_DEL_CONJUNTO = Concepto.de("TOTAL_DEL_CONJUNTO");
 
     private static ParametrosSellados parametrosFicticios() {
         return ParametrosSellados.de(EJERCICIO, 1)
-                .numero("FICTICIO", "factor", ValorNormativo.de("2"))
-                .numero("FICTICIO", "sumando", ValorNormativo.de("10.00"))
+                .numero("FICTICIO", "factor-uno", ValorNormativo.de("2"))
+                .numero("FICTICIO", "factor-dos", ValorNormativo.de("3"))
                 .construir();
     }
 
-    private static EntradaDeCalculo entrada(Dinero base) {
-        return new EntradaDeCalculo(base, FECHA, parametrosFicticios(), REDONDEO_DE_PRUEBA);
+    private static EntradaDeCalculo entrada(String area) {
+        return new EntradaDeCalculo(
+                EJERCICIO,
+                EstadoDelCalculo.con(AREA, Dinero.de(area)),
+                parametrosFicticios(),
+                REDONDEO_DE_PRUEBA);
     }
 
-    @Nested
-    @DisplayName("Una regla de muestra, pura")
-    class ReglaPura {
+    // ------------------------------------------------------------------
+    // Reglas de muestra. Ninguna lleva una cifra dentro.
+    // ------------------------------------------------------------------
 
-        @Test
-        @DisplayName("se ejecuta sin Spring, sin Docker y sin reloj")
-        void seEjecutaSinNada() {
-            MotorDeReglas motor = new MotorDeReglas(CatalogoDeReglas.de(new MultiplicaPorFactor()));
+    /** Multiplica el area por un factor que sale de los parametros. */
+    private static ReglaTributaria rama(
+            String id, Concepto produce, String claveDelFactor, RangoDeEjercicios vigencia) {
+        return new ReglaTributaria() {
+            @Override
+            public IdentificadorDeRegla identificador() {
+                return IdentificadorDeRegla.de(id);
+            }
 
-            ResultadoDelCalculo resultado = motor.aplicar(entrada(Dinero.de("100.00")));
+            @Override
+            public RangoDeEjercicios vigencia() {
+                return vigencia;
+            }
 
-            assertThat(resultado.importe()).isEqualTo(Dinero.de("200.00"));
-            assertThat(resultado.reglasComoTexto()).containsExactly("RT-901");
-            assertThat(resultado.ejercicio()).isEqualTo(EJERCICIO);
-            assertThat(resultado.versionDeParametros()).isEqualTo(1);
-        }
+            @Override
+            public String descripcion() {
+                return "Regla ficticia de prueba; no representa ninguna norma";
+            }
 
-        @Test
-        @DisplayName("cambiar el reloj del sistema no cambia ningun resultado")
-        void cambiarElRelojNoCambiaNada() {
-            MotorDeReglas motor = new MotorDeReglas(CatalogoDeReglas.de(new MultiplicaPorFactor()));
+            @Override
+            public Set<Concepto> requiere() {
+                return Set.of(AREA);
+            }
 
-            // Dos relojes con diez anios de diferencia. La entrada es la misma, asi que
-            // el resultado tiene que serlo: la fecha viaja en la entrada y ninguna
-            // regla puede leer la hora.
-            Clock enDosMilVeintiseis =
-                    Clock.fixed(Instant.parse("2026-03-31T09:00:00Z"), ZoneId.of("America/Lima"));
-            Clock enDosMilTreintaYSeis =
-                    Clock.fixed(Instant.parse("2036-11-02T23:00:00Z"), ZoneId.of("America/Lima"));
+            @Override
+            public Concepto produce() {
+                return produce;
+            }
 
-            ResultadoDelCalculo ahora = conReloj(motor, enDosMilVeintiseis);
-            ResultadoDelCalculo dentroDeDiezAnios = conReloj(motor, enDosMilTreintaYSeis);
-
-            assertThat(dentroDeDiezAnios.importe())
-                    .as("recalcular 2026 en 2036 tiene que dar el mismo centimo (regla 6)")
-                    .isEqualTo(ahora.importe());
-            assertThat(dentroDeDiezAnios.reglasComoTexto()).isEqualTo(ahora.reglasComoTexto());
-        }
-
-        private ResultadoDelCalculo conReloj(MotorDeReglas motor, Clock reloj) {
-            // El reloj se usa solo para demostrar que NO interviene: la fecha del
-            // calculo sigue siendo la del ejercicio, no la de hoy.
-            assertThat(LocalDate.now(reloj)).isNotNull();
-            return motor.aplicar(entrada(Dinero.de("100.00")));
-        }
-
-        @Test
-        @DisplayName("recalcular dos veces el mismo caso da el mismo centimo")
-        void recalcularDaLoMismo() {
-            MotorDeReglas motor =
-                    new MotorDeReglas(
-                            CatalogoDeReglas.de(new MultiplicaPorFactor(), new SumaUnMonto()));
-
-            ResultadoDelCalculo primera = motor.aplicar(entrada(Dinero.de("33.33")));
-            ResultadoDelCalculo segunda = motor.aplicar(entrada(Dinero.de("33.33")));
-
-            assertThat(segunda.importe()).isEqualTo(primera.importe());
-            assertThat(segunda.reglasComoTexto()).isEqualTo(primera.reglasComoTexto());
-        }
-
-        @Test
-        @DisplayName("la secuencia se aplica en orden y queda registrada")
-        void laSecuenciaQuedaRegistrada() {
-            MotorDeReglas motor =
-                    new MotorDeReglas(
-                            CatalogoDeReglas.de(new MultiplicaPorFactor(), new SumaUnMonto()));
-
-            ResultadoDelCalculo resultado = motor.aplicar(entrada(Dinero.de("100.00")));
-
-            assertThat(resultado.importe())
-                    .as("primero multiplica y despues suma: (100 x 2) + 10")
-                    .isEqualTo(Dinero.de("210.00"));
-            assertThat(resultado.reglasComoTexto())
-                    .as("es lo que va a determinacion.reglas_aplicadas (ADR-0007)")
-                    .containsExactly("RT-901", "RT-902");
-        }
-
-        @Test
-        @DisplayName("sin ninguna regla vigente falla, en vez de devolver la base sin tocar")
-        void sinReglasVigentesFalla() {
-            MotorDeReglas motor = new MotorDeReglas(CatalogoDeReglas.vacio());
-
-            assertThatThrownBy(() -> motor.aplicar(entrada(Dinero.de("100.00"))))
-                    .as("devolver la base produciria una cifra plausible y equivocada")
-                    .isInstanceOf(MotorDeReglas.SinReglasVigentes.class);
-        }
+            @Override
+            public Dinero calcular(InsumosDeLaRegla insumos) {
+                return insumos.de(AREA).por(insumos.numero("FICTICIO", claveDelFactor).valor());
+            }
+        };
     }
 
+    /** Suma las dos ramas: la convergencia que una cadena lineal no puede expresar. */
+    private static ReglaTributaria convergencia(String id) {
+        return new ReglaTributaria() {
+            @Override
+            public IdentificadorDeRegla identificador() {
+                return IdentificadorDeRegla.de(id);
+            }
+
+            @Override
+            public RangoDeEjercicios vigencia() {
+                return RangoDeEjercicios.desde(new Ejercicio(2004));
+            }
+
+            @Override
+            public String descripcion() {
+                return "Convergencia ficticia de dos ramas; no representa ninguna norma";
+            }
+
+            @Override
+            public Set<Concepto> requiere() {
+                return Set.of(RAMA_UNO, RAMA_DOS);
+            }
+
+            @Override
+            public Concepto produce() {
+                return CONVERGENCIA;
+            }
+
+            @Override
+            public Dinero calcular(InsumosDeLaRegla insumos) {
+                return insumos.de(RAMA_UNO).mas(insumos.de(RAMA_DOS));
+            }
+        };
+    }
+
+    private static ReglaDeAgregacion sumaDelConjunto(String id) {
+        return new ReglaDeAgregacion() {
+            @Override
+            public IdentificadorDeRegla identificador() {
+                return IdentificadorDeRegla.de(id);
+            }
+
+            @Override
+            public RangoDeEjercicios vigencia() {
+                return RangoDeEjercicios.desde(new Ejercicio(2004));
+            }
+
+            @Override
+            public String descripcion() {
+                return "Agregacion ficticia sobre el conjunto; no representa ninguna norma";
+            }
+
+            @Override
+            public Concepto deCadaPartida() {
+                return CONVERGENCIA;
+            }
+
+            @Override
+            public Concepto produce() {
+                return TOTAL_DEL_CONJUNTO;
+            }
+
+            @Override
+            public Dinero agregar(List<Dinero> aportes, InsumosDeLaAgregacion insumos) {
+                Dinero total = Dinero.de("0");
+                for (Dinero aporte : aportes) {
+                    total = total.mas(aporte);
+                }
+                return total;
+            }
+        };
+    }
+
+    private static CatalogoDeReglas catalogoCompleto() {
+        return CatalogoDeReglas.vacio()
+                .con(convergencia("RT-903"))
+                .con(rama("RT-901", RAMA_UNO, "factor-uno", RangoDeEjercicios.desde(EJERCICIO)))
+                .con(rama("RT-902", RAMA_DOS, "factor-dos", RangoDeEjercicios.desde(EJERCICIO)));
+    }
+
+    // ------------------------------------------------------------------
+
     @Nested
-    @DisplayName("Los parametros son argumento, no configuracion")
-    class LosParametrosSonArgumento {
+    @DisplayName("El grafo, no la cadena")
+    class ElGrafo {
 
         @Test
-        @DisplayName("un parametro que falta no se sustituye por cero: falla y dice cual")
-        void unParametroQueFaltaFalla() {
-            ParametrosSellados incompletos =
-                    ParametrosSellados.de(EJERCICIO, 1)
-                            .numero("FICTICIO", "otra-cosa", ValorNormativo.de("1"))
-                            .construir();
-            MotorDeReglas motor = new MotorDeReglas(CatalogoDeReglas.de(new MultiplicaPorFactor()));
+        @DisplayName("dos ramas independientes convergen en una tercera regla")
+        void dosRamasConvergen() {
+            // El catalogo se registra con la convergencia PRIMERO, a proposito: si el motor
+            // aplicara en orden de registro fallaria, porque RT-903 necesita lo que RT-901 y
+            // RT-902 todavia no calcularon.
+            ResultadoDelCalculo resultado =
+                    new MotorDeReglas(catalogoCompleto()).aplicarA(entrada("100.00"));
 
-            assertThatThrownBy(
-                            () ->
-                                    motor.aplicar(
-                                            new EntradaDeCalculo(
-                                                    Dinero.de("100.00"),
-                                                    FECHA,
-                                                    incompletos,
-                                                    REDONDEO_DE_PRUEBA)))
+            assertThat(resultado.exigir(RAMA_UNO)).isEqualTo(Dinero.de("200.00"));
+            assertThat(resultado.exigir(RAMA_DOS)).isEqualTo(Dinero.de("300.00"));
+            assertThat(resultado.exigir(CONVERGENCIA))
+                    .as("la convergencia suma las dos ramas, no encadena una tras otra")
+                    .isEqualTo(Dinero.de("500.00"));
+        }
+
+        @Test
+        @DisplayName("el resultado conserva todos los conceptos, no solo el ultimo")
+        void conservaElDesarrollo() {
+            ResultadoDelCalculo resultado =
+                    new MotorDeReglas(catalogoCompleto()).aplicarA(entrada("100.00"));
+
+            assertThat(resultado.estado().conceptos())
+                    .as("una determinacion muestra su desarrollo, no solo el total")
+                    .contains(AREA, RAMA_UNO, RAMA_DOS, CONVERGENCIA);
+        }
+
+        @Test
+        @DisplayName("la convergencia se aplica despues de las dos ramas, registrelas como sea")
+        void elOrdenSaleDeLasDependencias() {
+            ResultadoDelCalculo resultado =
+                    new MotorDeReglas(catalogoCompleto()).aplicarA(entrada("100.00"));
+
+            List<String> aplicadas = resultado.reglasComoTexto();
+            assertThat(aplicadas).hasSize(3).endsWith("RT-903");
+            assertThat(aplicadas.indexOf("RT-903"))
+                    .as("el orden lo deduce el motor de lo declarado, no de la lista")
+                    .isGreaterThan(aplicadas.indexOf("RT-901"))
+                    .isGreaterThan(aplicadas.indexOf("RT-902"));
+        }
+
+        @Test
+        @DisplayName("si falta un dato declarado, el motor dice cual y no emite")
+        void faltaUnDatoDeclarado() {
+            EntradaDeCalculo sinArea =
+                    new EntradaDeCalculo(
+                            EJERCICIO,
+                            EstadoDelCalculo.vacio(),
+                            parametrosFicticios(),
+                            REDONDEO_DE_PRUEBA);
+
+            assertThatThrownBy(() -> new MotorDeReglas(catalogoCompleto()).aplicarA(sinArea))
+                    .as("emitir con lo que hay daria una cifra que nadie distingue de una correcta")
+                    .isInstanceOf(MotorDeReglas.ElGrafoNoCierra.class)
+                    .hasMessageContaining("AREA_FICTICIA");
+        }
+
+        @Test
+        @DisplayName("dos reglas vigentes no pueden producir el mismo concepto")
+        void dosReglasNoProducenLoMismo() {
+            CatalogoDeReglas ambiguo =
+                    CatalogoDeReglas.vacio()
+                            .con(
+                                    rama(
+                                            "RT-901",
+                                            RAMA_UNO,
+                                            "factor-uno",
+                                            RangoDeEjercicios.desde(EJERCICIO)))
+                            .con(
+                                    rama(
+                                            "RT-904",
+                                            RAMA_UNO,
+                                            "factor-dos",
+                                            RangoDeEjercicios.desde(EJERCICIO)));
+
+            assertThatThrownBy(() -> new MotorDeReglas(ambiguo).aplicarA(entrada("100.00")))
+                    .as("el importe dependeria de cual gane")
+                    .isInstanceOf(MotorDeReglas.DosReglasProducenLoMismo.class);
+        }
+
+        @Test
+        @DisplayName("una regla no puede leer un concepto que no declaro")
+        void nadieLeeLoQueNoDeclaro() {
+            ReglaTributaria tramposa =
+                    new ReglaTributaria() {
+                        @Override
+                        public IdentificadorDeRegla identificador() {
+                            return IdentificadorDeRegla.de("RT-905");
+                        }
+
+                        @Override
+                        public RangoDeEjercicios vigencia() {
+                            return RangoDeEjercicios.desde(EJERCICIO);
+                        }
+
+                        @Override
+                        public String descripcion() {
+                            return "Regla ficticia que lee lo que no declaro";
+                        }
+
+                        @Override
+                        public Set<Concepto> requiere() {
+                            return Set.of(AREA);
+                        }
+
+                        @Override
+                        public Concepto produce() {
+                            return CONVERGENCIA;
+                        }
+
+                        @Override
+                        public Dinero calcular(InsumosDeLaRegla insumos) {
+                            return insumos.de(RAMA_UNO);
+                        }
+                    };
+
+            CatalogoDeReglas catalogo =
+                    CatalogoDeReglas.vacio()
+                            .con(
+                                    rama(
+                                            "RT-901",
+                                            RAMA_UNO,
+                                            "factor-uno",
+                                            RangoDeEjercicios.desde(EJERCICIO)))
+                            .con(tramposa);
+
+            assertThatThrownBy(() -> new MotorDeReglas(catalogo).aplicarA(entrada("100.00")))
                     .as(
-                            "calcular con cero produciria un padron entero de importes bajos, sin"
-                                    + " ningun error de por medio")
-                    .isInstanceOf(ParametrosSellados.ParametroAusente.class)
-                    .hasMessageContaining("FICTICIO:factor");
-        }
-
-        @Test
-        @DisplayName("dos versiones del conjunto dan dos cifras, y el resultado dice cual se uso")
-        void dosVersionesDanDosCifras() {
-            MotorDeReglas motor = new MotorDeReglas(CatalogoDeReglas.de(new MultiplicaPorFactor()));
-
-            ParametrosSellados version2 =
-                    ParametrosSellados.de(EJERCICIO, 2)
-                            .numero("FICTICIO", "factor", ValorNormativo.de("3"))
-                            .construir();
-
-            ResultadoDelCalculo conLaUno = motor.aplicar(entrada(Dinero.de("100.00")));
-            ResultadoDelCalculo conLaDos =
-                    motor.aplicar(
-                            new EntradaDeCalculo(
-                                    Dinero.de("100.00"), FECHA, version2, REDONDEO_DE_PRUEBA));
-
-            assertThat(conLaUno.versionDeParametros()).isEqualTo(1);
-            assertThat(conLaDos.versionDeParametros()).isEqualTo(2);
-            assertThat(conLaDos.importe())
-                    .as("las dos son legitimas; por eso el resultado dice con cual se calculo")
-                    .isNotEqualTo(conLaUno.importe());
-        }
-
-        @Test
-        @DisplayName("la politica de redondeo se recibe: no hay ninguna por omision (D-03)")
-        void laPoliticaSeRecibe() {
-            assertThatThrownBy(
-                            () ->
-                                    new EntradaDeCalculo(
-                                            Dinero.de("100.00"),
-                                            FECHA,
-                                            parametrosFicticios(),
-                                            null))
-                    .isInstanceOf(NullPointerException.class);
+                            "si la regla usa otra cosa, el orden que el motor calculo no es el que hace"
+                                    + " falta")
+                    .isInstanceOf(InsumosDeLaRegla.ConceptoNoDeclarado.class)
+                    .hasMessageContaining("RT-905");
         }
     }
 
     @Nested
-    @DisplayName("Una implementacion ya usada no se modifica: se sucede")
+    @DisplayName("Por contribuyente, no por predio")
+    class PorContribuyente {
+
+        @Test
+        @DisplayName("la base agrega el aporte de todas las partidas")
+        void laBaseEsLaDelConjunto() {
+            MotorDeReglas motor =
+                    new MotorDeReglas(catalogoCompleto().con(sumaDelConjunto("RT-910")));
+
+            ResultadoDelContribuyente resultado =
+                    motor.aplicarAlContribuyente(
+                            List.of(entrada("100.00"), entrada("40.00"), entrada("10.00")));
+
+            assertThat(resultado.cantidadDePartidas()).isEqualTo(3);
+            assertThat(resultado.exigir(TOTAL_DEL_CONJUNTO))
+                    .as(
+                            "aplicar los tramos predio por predio produce un error sistematico a la"
+                                    + " baja en todo el padron (NEG-05 §1)")
+                    .isEqualTo(Dinero.de("750.00"));
+        }
+
+        @Test
+        @DisplayName("el detalle de cada partida se conserva junto al total")
+        void seConservaElDetalle() {
+            MotorDeReglas motor =
+                    new MotorDeReglas(catalogoCompleto().con(sumaDelConjunto("RT-910")));
+
+            ResultadoDelContribuyente resultado =
+                    motor.aplicarAlContribuyente(List.of(entrada("100.00"), entrada("40.00")));
+
+            assertThat(resultado.porPartida().get(0).exigir(CONVERGENCIA))
+                    .isEqualTo(Dinero.de("500.00"));
+            assertThat(resultado.porPartida().get(1).exigir(CONVERGENCIA))
+                    .as("la determinacion muestra el aporte de cada predio a la base")
+                    .isEqualTo(Dinero.de("200.00"));
+        }
+
+        @Test
+        @DisplayName("un contribuyente sin partidas no produce una base de cero")
+        void sinPartidasNoHayCero() {
+            MotorDeReglas motor = new MotorDeReglas(catalogoCompleto());
+
+            assertThatThrownBy(() -> motor.aplicarAlContribuyente(List.of()))
+                    .as("emitir un valor de cero es un acto distinto")
+                    .isInstanceOf(MotorDeReglas.SinPartidas.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("Versiones de una regla")
     class VersionesDeUnaRegla {
 
         @Test
-        @DisplayName("registrar otra implementacion sobre la misma vigencia se rechaza")
-        void sobreLaMismaVigenciaSeRechaza() {
-            CatalogoDeReglas catalogo = CatalogoDeReglas.de(new MultiplicaPorFactor());
+        @DisplayName("se aplica la version del ejercicio del hecho imponible, no la ultima")
+        void laDelEjercicioDelHecho() {
+            CatalogoDeReglas catalogo =
+                    CatalogoDeReglas.vacio()
+                            .con(
+                                    rama(
+                                            "RT-901",
+                                            RAMA_UNO,
+                                            "factor-uno",
+                                            RangoDeEjercicios.entre(
+                                                    new Ejercicio(2004), new Ejercicio(2026))))
+                            .con(
+                                    rama(
+                                            "RT-901",
+                                            RAMA_UNO,
+                                            "factor-dos",
+                                            RangoDeEjercicios.desde(new Ejercicio(2027))));
 
-            assertThatThrownBy(() -> catalogo.con(new MultiplicaPorFactorCorregida()))
-                    .as(
-                            "si se pudiera, recalcular un ejercicio pasado daria una cifra distinta de"
-                                    + " la que se notifico")
-                    .isInstanceOf(CatalogoDeReglas.VigenciasQueSeSolapan.class)
-                    .hasMessageContaining("RT-901");
+            ResultadoDelCalculo resultado = new MotorDeReglas(catalogo).aplicarA(entrada("100.00"));
+
+            assertThat(resultado.exigir(RAMA_UNO))
+                    .as("una implementacion que ya se uso en una emision no se modifica nunca")
+                    .isEqualTo(Dinero.de("200.00"));
         }
 
         @Test
-        @DisplayName("sucederla con una vigencia posterior si se admite, y cada fecha usa la suya")
-        void sucederlaSiSeAdmite() {
-            ReglaTributaria hasta2026 =
-                    new MultiplicaPorFactor(
-                            new Vigencia(LocalDate.of(2020, 1, 1), LocalDate.of(2026, 12, 31)));
-            ReglaTributaria desde2027 =
-                    new SumaUnMonto(DOBLE, new Vigencia(LocalDate.of(2027, 1, 1), null));
+        @DisplayName("dos versiones de la misma regla no pueden solaparse")
+        void nadaDeSolapes() {
+            CatalogoDeReglas conUna =
+                    CatalogoDeReglas.vacio()
+                            .con(
+                                    rama(
+                                            "RT-901",
+                                            RAMA_UNO,
+                                            "factor-uno",
+                                            RangoDeEjercicios.desde(new Ejercicio(2004))));
 
-            CatalogoDeReglas catalogo = CatalogoDeReglas.de(hasta2026).con(desde2027);
-            MotorDeReglas motor = new MotorDeReglas(catalogo);
+            assertThatThrownBy(
+                            () ->
+                                    conUna.con(
+                                            rama(
+                                                    "RT-901",
+                                                    RAMA_UNO,
+                                                    "factor-dos",
+                                                    RangoDeEjercicios.desde(new Ejercicio(2026)))))
+                    .as("con dos vigentes, recalcular el pasado dejaria de ser reproducible")
+                    .isInstanceOf(CatalogoDeReglas.VigenciasQueSeSolapan.class);
+        }
 
-            ParametrosSellados de2027 =
-                    ParametrosSellados.de(new Ejercicio(2027), 1)
-                            .numero("FICTICIO", "factor", ValorNormativo.de("2"))
-                            .numero("FICTICIO", "sumando", ValorNormativo.de("10.00"))
-                            .construir();
+        @Test
+        @DisplayName("un ejercicio sin ninguna regla vigente no devuelve la base sin tocar")
+        void sinReglasVigentes() {
+            CatalogoDeReglas soloDesde2030 =
+                    CatalogoDeReglas.vacio()
+                            .con(
+                                    rama(
+                                            "RT-901",
+                                            RAMA_UNO,
+                                            "factor-uno",
+                                            RangoDeEjercicios.desde(new Ejercicio(2030))));
 
-            assertThat(motor.aplicar(entrada(Dinero.de("100.00"))).importe())
-                    .as("en 2026 rige la primera")
-                    .isEqualTo(Dinero.de("200.00"));
-            assertThat(
-                            motor.aplicar(
-                                            new EntradaDeCalculo(
-                                                    Dinero.de("100.00"),
-                                                    LocalDate.of(2027, 3, 31),
-                                                    de2027,
-                                                    REDONDEO_DE_PRUEBA))
-                                    .importe())
-                    .as("en 2027 rige la que la sucede, y la anterior sigue intacta")
-                    .isEqualTo(Dinero.de("110.00"));
+            assertThatThrownBy(() -> new MotorDeReglas(soloDesde2030).aplicarA(entrada("100.00")))
+                    .isInstanceOf(MotorDeReglas.SinReglasVigentes.class)
+                    .hasMessageContaining("2026");
         }
     }
 
-    // ------------------------------------------------------------------
-    // Reglas de muestra. Sus factores salen de los parametros, no del codigo.
-    // ------------------------------------------------------------------
+    @Nested
+    @DisplayName("Los parametros son argumento")
+    class LosParametrosSonArgumento {
 
-    /** Multiplica la base por un factor <b>ficticio</b> leido de los parametros. */
-    private static final class MultiplicaPorFactor implements ReglaTributaria {
+        @Test
+        @DisplayName("un parametro ausente no produce importe")
+        void unParametroAusenteNoProduceImporte() {
+            EntradaDeCalculo sinElFactor =
+                    new EntradaDeCalculo(
+                            EJERCICIO,
+                            EstadoDelCalculo.con(AREA, Dinero.de("100.00")),
+                            ParametrosSellados.de(EJERCICIO, 1).construir(),
+                            REDONDEO_DE_PRUEBA);
 
-        private final Vigencia vigencia;
-
-        MultiplicaPorFactor() {
-            this(Vigencia.SIEMPRE);
+            assertThatThrownBy(() -> new MotorDeReglas(catalogoCompleto()).aplicarA(sinElFactor))
+                    .as("un calculo al que le falta un factor no debe producir un importe")
+                    .isInstanceOf(ParametrosSellados.ParametroAusente.class);
         }
 
-        MultiplicaPorFactor(Vigencia vigencia) {
-            this.vigencia = vigencia;
+        @Test
+        @DisplayName("no se calcula un ejercicio con el conjunto sellado de otro")
+        void nadaDeCruzarEjercicios() {
+            assertThatThrownBy(
+                            () ->
+                                    new EntradaDeCalculo(
+                                            new Ejercicio(2027),
+                                            EstadoDelCalculo.con(AREA, Dinero.de("100.00")),
+                                            parametrosFicticios(),
+                                            REDONDEO_DE_PRUEBA))
+                    .as("cruzarlos produce una cifra plausible y equivocada")
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("2027");
         }
 
-        @Override
-        public IdentificadorDeRegla identificador() {
-            return DOBLE;
-        }
+        @Test
+        @DisplayName("el mismo calculo repetido da el mismo centimo")
+        void reproducible() {
+            MotorDeReglas motor = new MotorDeReglas(catalogoCompleto());
 
-        @Override
-        public Vigencia vigencia() {
-            return vigencia;
-        }
+            Dinero primera = motor.aplicarA(entrada("123.45")).exigir(CONVERGENCIA);
+            Dinero segunda = motor.aplicarA(entrada("123.45")).exigir(CONVERGENCIA);
 
-        @Override
-        public String descripcion() {
-            return "Multiplica la base por el factor ficticio del conjunto";
-        }
-
-        @Override
-        public Dinero aplicar(EntradaDeCalculo entrada) {
-            // El factor NO esta en el codigo: sale del conjunto sellado (regla 5).
-            String factor = entrada.parametros().exigirNumero("FICTICIO", "factor").toString();
-            Dinero resultado = entrada.base();
-            for (int i = 1; i < Integer.parseInt(factor); i++) {
-                resultado = resultado.mas(entrada.base());
-            }
-            return resultado.redondeadoCon(entrada.redondeo());
-        }
-    }
-
-    /** La «correccion» de la anterior: mismo identificador, misma vigencia. No se admite. */
-    private static final class MultiplicaPorFactorCorregida implements ReglaTributaria {
-
-        @Override
-        public IdentificadorDeRegla identificador() {
-            return DOBLE;
-        }
-
-        @Override
-        public Vigencia vigencia() {
-            return Vigencia.SIEMPRE;
-        }
-
-        @Override
-        public String descripcion() {
-            return "La misma regla, corregida: exactamente lo que no se puede hacer";
-        }
-
-        @Override
-        public Dinero aplicar(EntradaDeCalculo entrada) {
-            return entrada.base();
-        }
-    }
-
-    /** Suma un monto <b>ficticio</b> leido de los parametros. */
-    private static final class SumaUnMonto implements ReglaTributaria {
-
-        private final IdentificadorDeRegla identificador;
-        private final Vigencia vigencia;
-
-        SumaUnMonto() {
-            this(SUMA, Vigencia.SIEMPRE);
-        }
-
-        SumaUnMonto(IdentificadorDeRegla identificador, Vigencia vigencia) {
-            this.identificador = identificador;
-            this.vigencia = vigencia;
-        }
-
-        @Override
-        public IdentificadorDeRegla identificador() {
-            return identificador;
-        }
-
-        @Override
-        public Vigencia vigencia() {
-            return vigencia;
-        }
-
-        @Override
-        public String descripcion() {
-            return "Suma el monto ficticio del conjunto";
-        }
-
-        @Override
-        public Dinero aplicar(EntradaDeCalculo entrada) {
-            ValorNormativo sumando = entrada.parametros().exigirNumero("FICTICIO", "sumando");
-            return entrada.base()
-                    .mas(Dinero.de(sumando.toString()))
-                    .redondeadoCon(entrada.redondeo());
+            assertThat(primera)
+                    .as("sin reloj ni base de datos, repetir el calculo no puede dar otra cosa")
+                    .isEqualTo(segunda);
         }
     }
 }

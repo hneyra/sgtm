@@ -64,6 +64,21 @@ public record Dinero(BigDecimal valor) implements Comparable<Dinero> {
         return new Dinero(valor.negate());
     }
 
+    /**
+     * El importe multiplicado por un factor, <b>sin redondear</b>.
+     *
+     * <p>Casi todo el calculo tributario es una multiplicacion —area por arancel, base por
+     * alicuota, valor unitario por metrado— y el producto trae mas decimales que los dos operandos.
+     * Devolverlo redondeado obligaria a esta clase a elegir escala y modo, que es justo lo que D-03
+     * no ha decidido, y a redondear en cada operacion intermedia en vez de al cierre de cada regla
+     * (ARQ-09 §1.4). Quien multiplica decide cuando redondear, con {@link
+     * #redondeadoCon(PoliticaDeRedondeo)} y la politica que recibio.
+     */
+    public Dinero por(BigDecimal factor) {
+        Objects.requireNonNull(factor, "Multiplicar exige su factor");
+        return new Dinero(valor.multiply(factor));
+    }
+
     /** Valor absoluto. Util para presentar un abono, que en el libro va en negativo. */
     public Dinero absoluto() {
         return new Dinero(valor.abs());

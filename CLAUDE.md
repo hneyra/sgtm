@@ -146,6 +146,13 @@ qué parámetros consume cada una, cómo se identifican (`RT-xxx`) y qué casos 
 resuelta y verificada contra los manuales del MEF en `../srtm`. Este proyecto la **implementa**,
 no la reinventa:
 
+> **Si `../srtm` no está en el disco, se clona: `git clone https://github.com/hneyra/srtm`.**
+> No es opcional. El motor de reglas se escribió una vez sin poder leer NEG-05 ni ARQ-09, a partir
+> de lo que este archivo resume, y salieron dos defectos estructurales: una cadena lineal donde
+> NEG-05 §1 describe un grafo, y la lectura de parámetros por ejercicio que ARQ-09 §3 nombra
+> como el modelo que falla en silencio. Los dos estaban en verde y ninguno lo habría encontrado
+> una revisión. Leer el documento cuesta menos que corregir lo que se construyó sin leerlo.
+
 | Qué | Dónde vive en `../srtm` |
 |---|---|
 | Reglas del predial: `RT-001`…`RT-016`, fórmulas, orden, casos borde | `docs/10-negocio/reglas-impuesto-predial.md` (NEG-05) |
@@ -262,7 +269,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Sesión y auditoría (15 pruebas) | Consultando `auditoria_2026` en vez de la tabla padre | La aplicación no tiene privilegio sobre la partición |
 | Sellado de parámetros (9 pruebas) | Quitando el disparador de inmutabilidad de `V9` | Rojo: un conjunto sellado se deja editar |
 | Lectura sellada (6 pruebas) | Quitando `AND estado = 'SELLADO'` de la consulta, y resolviendo por ejercicio en vez de por conjunto | Rojo: se deja leer un conjunto abierto; rojo: el recálculo devuelve la v2 donde la determinación usó la v1 |
-| Motor de reglas (10 pruebas, sin base ni reloj) | Invirtiendo el orden de aplicación en `vigentesEn` | Rojo: 220.00 donde el orden correcto da 210.00 |
+| Motor de reglas como grafo (15 pruebas, sin base ni reloj) | Volviendo a la cadena lineal: aplicar en orden de registro sin mirar las dependencias | Rojo en 8 de las 15: la convergencia de dos ramas no se puede expresar encadenando |
 | Escáner del código fuente | Muestras con `SET SESSION`, `DELETE`, `UPDATE` prohibidos, con una política de redondeo escrita a mano y con la UIT, un tramo y una alícuota compilados (regla 5) | Las detecta; neutralizando el patrón de la regla 5, rojo |
 | Reglas de ESLint del frontend (10) | Quitando la regla de tildes, y la de `fetch`: sus pruebas se ponen rojas | Las diez muerden |
 | Las 134 pantallas se dibujan | Montando cada una contra el proxy, y recorriéndolas en Chromium | 134 en verde, 0 errores |

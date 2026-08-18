@@ -1,92 +1,79 @@
 package pe.gob.sgtm.parametros;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import pe.gob.sgtm.dominio.Ejercicio;
 
 /**
- * Las implementaciones de reglas disponibles, con su vigencia.
+ * Las reglas disponibles, con sus versiones.
  *
- * <h2>La regla que gobierna esta clase</h2>
+ * <p>Guarda por separado las que operan sobre una partida y las que agregan el conjunto de predios
+ * del contribuyente, porque el motor las aplica en dos fases distintas.
  *
- * <p><b>Dos implementaciones de la misma regla no pueden tener vigencias que se solapen.</b> De ahi
- * salen las dos garantias que ADR-0007 necesita:
- *
- * <ul>
- *   <li>Para una fecha dada hay <b>una</b> implementacion de cada regla, asi que el calculo es
- *       determinista. Con solape habria dos candidatas y el resultado dependeria del orden en que
- *       se registraron, que es la peor clase de dependencia porque no se ve.
- *   <li>Una implementacion ya usada <b>no se puede editar</b>: intentar sustituirla es intentar
- *       registrar otra sobre su mismo rango, y eso se rechaza. La unica salida es cerrarle la
- *       vigencia y abrir la siguiente a continuacion, que es lo que deja la version anterior
- *       intacta para recalcular lo que se emitio con ella.
- * </ul>
- *
- * <p>El catalogo es inmutable: {@link #con} devuelve uno nuevo. Asi el que ya se uso en una emision
- * no puede cambiar bajo los pies de nadie.
+ * <p><b>Lo que este catalogo no hace es ordenar.</b> El orden de aplicacion lo deduce el motor de
+ * las dependencias que cada regla declara, no de la posicion en una lista. Es la diferencia con la
+ * version anterior: alli el orden era el de registro, y bastaba registrar mal para calcular mal sin
+ * ningun error visible.
  */
 public final class CatalogoDeReglas {
 
-    /**
-     * En orden de registro, y en una lista y no en un mapa por identificador.
-     *
-     * <p>La primera version usaba {@code Map<IdentificadorDeRegla, List<ReglaTributaria>>} y una
-     * prueba la puso en rojo: {@code Map.copyOf} <b>no conserva el orden de insercion</b>, asi que
-     * la secuencia de reglas salia distinta entre ejecuciones. En un motor donde el orden es parte
-     * del calculo —valor unitario, mas 5 %, menos depreciacion, por area— eso es un padron
-     * calculado de dos maneras segun el dia.
-     */
-    private final List<ReglaTributaria> enOrdenDeRegistro;
+    private final List<ReglaTributaria> reglas;
+    private final List<ReglaDeAgregacion> agregaciones;
 
-    private CatalogoDeReglas(List<ReglaTributaria> enOrdenDeRegistro) {
-        this.enOrdenDeRegistro = enOrdenDeRegistro;
+    private CatalogoDeReglas(List<ReglaTributaria> reglas, List<ReglaDeAgregacion> agregaciones) {
+        this.reglas = reglas;
+        this.agregaciones = agregaciones;
     }
 
     public static CatalogoDeReglas vacio() {
-        return new CatalogoDeReglas(List.of());
+        return new CatalogoDeReglas(List.of(), List.of());
     }
 
-    public static CatalogoDeReglas de(ReglaTributaria... reglas) {
-        CatalogoDeReglas catalogo = vacio();
-        for (ReglaTributaria regla : reglas) {
-            catalogo = catalogo.con(regla);
-        }
-        return catalogo;
-    }
-
-    /**
-     * El mismo catalogo mas una implementacion.
-     *
-     * @throws VigenciasQueSeSolapan si ya hay una implementacion de esa regla cuyo rango se cruza
-     */
     public CatalogoDeReglas con(ReglaTributaria regla) {
         Objects.requireNonNull(regla, "No se registra una regla nula");
-
-        for (ReglaTributaria existente : enOrdenDeRegistro) {
+        for (ReglaTributaria existente : reglas) {
             if (existente.identificador().equals(regla.identificador())
-                    && seSolapan(existente.vigencia(), regla.vigencia())) {
+                    && existente.vigencia().seSolapaCon(regla.vigencia())) {
                 throw new VigenciasQueSeSolapan(regla.identificador());
             }
         }
-
-        List<ReglaTributaria> ampliado = new ArrayList<>(enOrdenDeRegistro);
+        List<ReglaTributaria> ampliado = new ArrayList<>(reglas);
         ampliado.add(regla);
-        return new CatalogoDeReglas(List.copyOf(ampliado));
+        return new CatalogoDeReglas(List.copyOf(ampliado), agregaciones);
     }
 
-    /**
-     * Las reglas vigentes a una fecha, en el orden en que se registraron.
-     *
-     * <p>El orden es el de registro y no el alfabetico del identificador: el orden en que se
-     * aplican las reglas es parte del calculo —la secuencia de la construccion es valor unitario,
-     * mas 5 %, menos depreciacion, por area— y ordenarlo por su nombre seria una coincidencia que
-     * se rompe el dia que se agregue una regla intermedia.
-     */
-    public List<ReglaTributaria> vigentesEn(LocalDate fecha) {
+    public CatalogoDeReglas con(ReglaDeAgregacion regla) {
+        Objects.requireNonNull(regla, "No se registra una regla nula");
+        for (ReglaDeAgregacion existente : agregaciones) {
+            if (existente.identificador().equals(regla.identificador())
+                    && existente.vigencia().seSolapaCon(regla.vigencia())) {
+                throw new VigenciasQueSeSolapan(regla.identificador());
+            }
+        }
+        List<ReglaDeAgregacion> ampliado = new ArrayList<>(agregaciones);
+        ampliado.add(regla);
+        return new CatalogoDeReglas(reglas, List.copyOf(ampliado));
+    }
+
+    /** Las reglas por partida que rigen ese ejercicio. Sin orden: lo decide el motor. */
+    public List<ReglaTributaria> vigentesEn(Ejercicio ejercicio) {
+        Objects.requireNonNull(ejercicio, "Resolver las reglas exige el ejercicio (ARQ-09 §1.3)");
         List<ReglaTributaria> vigentes = new ArrayList<>();
-        for (ReglaTributaria regla : enOrdenDeRegistro) {
-            if (regla.vigencia().vigenteEn(fecha)) {
+        for (ReglaTributaria regla : reglas) {
+            if (regla.vigencia().rigeEn(ejercicio)) {
+                vigentes.add(regla);
+            }
+        }
+        return List.copyOf(vigentes);
+    }
+
+    /** Las reglas de agregacion que rigen ese ejercicio. */
+    public List<ReglaDeAgregacion> agregacionesVigentesEn(Ejercicio ejercicio) {
+        Objects.requireNonNull(ejercicio, "Resolver las reglas exige el ejercicio (ARQ-09 §1.3)");
+        List<ReglaDeAgregacion> vigentes = new ArrayList<>();
+        for (ReglaDeAgregacion regla : agregaciones) {
+            if (regla.vigencia().rigeEn(ejercicio)) {
                 vigentes.add(regla);
             }
         }
@@ -94,31 +81,23 @@ public final class CatalogoDeReglas {
     }
 
     public boolean estaVacio() {
-        return enOrdenDeRegistro.isEmpty();
+        return reglas.isEmpty() && agregaciones.isEmpty();
     }
 
-    private static boolean seSolapan(
-            pe.gob.sgtm.dominio.Vigencia una, pe.gob.sgtm.dominio.Vigencia otra) {
-        LocalDate inicioDeUna = una.desde() == null ? LocalDate.MIN : una.desde();
-        LocalDate finDeUna = una.hasta() == null ? LocalDate.MAX : una.hasta();
-        LocalDate inicioDeOtra = otra.desde() == null ? LocalDate.MIN : otra.desde();
-        LocalDate finDeOtra = otra.hasta() == null ? LocalDate.MAX : otra.hasta();
-
-        return !finDeUna.isBefore(inicioDeOtra) && !finDeOtra.isBefore(inicioDeUna);
-    }
-
-    /** Se intento registrar una implementacion sobre el rango de otra que ya existe. */
+    /**
+     * Dos implementaciones de la misma regla vigentes a la vez. Una implementacion que ya se uso en
+     * una emision no se modifica: se crea otra con su rango, y los rangos no se pisan.
+     */
     public static final class VigenciasQueSeSolapan extends RuntimeException {
-
         @java.io.Serial private static final long serialVersionUID = 1L;
 
         VigenciasQueSeSolapan(IdentificadorDeRegla identificador) {
             super(
-                    "Ya hay una implementacion de "
+                    "Ya hay una version de "
                             + identificador
-                            + " cuya vigencia se cruza con la nueva. Una implementacion que ya se"
-                            + " uso en una emision no se modifica: se le cierra la vigencia y se"
-                            + " abre la siguiente a continuacion (ADR-0007)");
+                            + " vigente en ese rango de ejercicios. Con dos, el importe dependeria"
+                            + " de cual se elija, y recalcular el pasado dejaria de ser reproducible"
+                            + " (ARQ-09 §1.3)");
         }
     }
 }
