@@ -175,6 +175,28 @@ public final class ReglasDeArquitectura {
                     .resideInAnyPackage("..infraestructura..", "..aplicacion..")
                     .because("la dependencia apunta hacia el dominio, no desde el (ARQ-04 §1)");
 
+    /**
+     * Regla 10: toda escritura exige observacion del usuario (ADR-0008, RNF-052).
+     *
+     * <p>Se comprueba donde se puede comprobar: un caso de uso de escritura es un metodo
+     * {@code @Transactional} que no es de solo lectura, y tiene que declarar un parametro {@link
+     * pe.gob.sgtm.dominio.Observacion}.
+     *
+     * <p>La restriccion de la base es la barrera final y no se puede rodear, pero falla en
+     * ejecucion; esta falla al compilar el build, que es donde cuesta barato. Y hace algo que la
+     * base no puede: obliga a que la observacion llegue <b>desde el usuario</b>, en la firma, en
+     * lugar de rellenarse con una cadena fija en la capa de persistencia —que satisfaria a la base
+     * y vaciaria de sentido la auditoria—.
+     */
+    public static final ArchRule TODO_CASO_DE_USO_DE_ESCRITURA_EXIGE_OBSERVACION =
+            ArchRuleDefinition.classes()
+                    .that()
+                    .resideInAPackage("..aplicacion..")
+                    .should(new ConObservacionEnLasEscrituras())
+                    .because(
+                            "el que cambio lo reconstruye cualquier sistema; el por que solo lo sabe"
+                                    + " quien lo cambio, en el momento de cambiarlo (ADR-0008)");
+
     public static List<ArchRule> todas() {
         return List.of(
                 EL_DOMINIO_NO_CONOCE_FRAMEWORKS,
@@ -183,7 +205,8 @@ public final class ReglasDeArquitectura {
                 NADIE_USA_LOCALDATETIME,
                 EL_DOMINIO_NO_LEE_EL_RELOJ,
                 NADIE_RECIBE_EL_IDENTIFICADOR_DE_MUNICIPALIDAD,
-                EL_DOMINIO_NO_DEPENDE_DE_LAS_CAPAS_EXTERNAS);
+                EL_DOMINIO_NO_DEPENDE_DE_LAS_CAPAS_EXTERNAS,
+                TODO_CASO_DE_USO_DE_ESCRITURA_EXIGE_OBSERVACION);
     }
 
     /** Clases del sistema, sin las de prueba ni las de fixtures. */
@@ -271,6 +294,50 @@ public final class ReglasDeArquitectura {
                                             + " expone BigDecimal desnudo"));
                 }
             }
+        }
+    }
+
+    private static final class ConObservacionEnLasEscrituras extends ArchCondition<JavaClass> {
+
+        private static final String TRANSACTIONAL =
+                "org.springframework.transaction.annotation.Transactional";
+        private static final String OBSERVACION = PAQUETE_RAIZ + ".dominio.Observacion";
+
+        ConObservacionEnLasEscrituras() {
+            super("exigir una Observacion en todo metodo transaccional de escritura");
+        }
+
+        @Override
+        public void check(JavaClass clase, ConditionEvents eventos) {
+            for (JavaMethod metodo : clase.getMethods()) {
+                if (!esEscrituraTransaccional(metodo)) {
+                    continue;
+                }
+                boolean laRecibe =
+                        metodo.getParameters().stream()
+                                .anyMatch(p -> p.getRawType().getName().equals(OBSERVACION));
+                if (!laRecibe) {
+                    eventos.add(
+                            SimpleConditionEvent.violated(
+                                    metodo,
+                                    "el metodo "
+                                            + metodo.getFullName()
+                                            + " escribe dentro de una transaccion y no recibe una"
+                                            + " Observacion: sin ella la auditoria guarda el que y"
+                                            + " pierde el por que (regla 10, ADR-0008)"));
+                }
+            }
+        }
+
+        /**
+         * La anotacion se busca por su nombre y no por su clase para no depender de que {@code
+         * spring-tx} este en el classpath de esta prueba: lo que se revisa es el bytecode de otros
+         * modulos, no el de este.
+         */
+        private static boolean esEscrituraTransaccional(JavaMethod metodo) {
+            return metodo.getAnnotations().stream()
+                    .filter(a -> a.getRawType().getName().equals(TRANSACTIONAL))
+                    .anyMatch(a -> !Boolean.TRUE.equals(a.get("readOnly").orElse(Boolean.FALSE)));
         }
     }
 

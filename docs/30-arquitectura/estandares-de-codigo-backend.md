@@ -32,7 +32,7 @@ sgtm-<contexto>/src/main/java/pe/gob/sgtm/<contexto>/
 | 7 | Nada de Spring ni JPA en `dominio` | ArchUnit |
 | 8 | `alicuota`, nunca `tasa`, para un porcentaje | Revisión |
 | 9 | No existe «la deuda»: es `deudaActualizadaA(fecha)` | Revisión |
-| 10 | Toda modificación de datos exige observación del usuario | Restricción en la base + revisión |
+| 10 | Toda modificación de datos exige observación del usuario | ArchUnit (`@Transactional` de escritura sin `Observacion`) + restricción en la base |
 
 **Si agregas una regla, agrega la clase de muestra que la viola**, en
 `sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones/muestras/`. Una regla que no puede

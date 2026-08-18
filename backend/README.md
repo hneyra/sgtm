@@ -23,8 +23,9 @@ teclado en español, son los **identificadores con tilde**: `alicuota`, nunca `a
 
 ## Pruebas que necesitan PostgreSQL
 
-Las de `sgtm-esquema`, `sgtm-plataforma` y `sgtm-catastro` necesitan un **PostgreSQL real**: una
-base en memoria no tiene Row Level Security y daría falsos verdes (CAL-01 §2).
+Las de `sgtm-esquema`, `sgtm-plataforma`, `sgtm-catastro` y `sgtm-seguridad` necesitan un
+**PostgreSQL real**: una base en memoria no tiene Row Level Security y daría falsos verdes
+(CAL-01 §2).
 
 Por omisión levantan un contenedor con Testcontainers, así que hacen falta Docker y la imagen
 `postgres:16-alpine`.
@@ -58,8 +59,9 @@ deja el build en verde sin haber verificado nada.
 ```
 sgtm-dominio-compartido   Objetos de valor (pe.gob.sgtm.dominio) y TenantContext. Sin Spring
 sgtm-esquema              Migraciones Flyway + la prueba de aislamiento. Sin Spring
-sgtm-plataforma           Filtro del token, SET LOCAL por transaccion, guardia del pool
-                          y el patron de repositorio (pe.gob.sgtm.persistencia)
+sgtm-plataforma           Filtro del token, SET LOCAL por transaccion, guardia del pool,
+                          el patron de repositorio (pe.gob.sgtm.persistencia) y la
+                          auditoria de ADR-0008 (pe.gob.sgtm.auditoria)
 sgtm-<contexto> × 12      Los contextos acotados de ARQ-01 §3. Solo catastro tiene codigo
 sgtm-aplicacion           Ensambla, y aloja ArchUnit, el escaner y Spring Modulith
 ```
