@@ -1,35 +1,44 @@
 package pe.gob.sgtm.parametros;
 
-import java.time.LocalDate;
 import java.util.Objects;
-import pe.gob.sgtm.dominio.Dinero;
+import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
 
 /**
- * Lo que una regla tributaria recibe. <b>Todo</b> lo que recibe.
+ * Lo que entra al motor para calcular <b>una partida</b> —un predio, un vehiculo—: los datos
+ * declarados que siembran el grafo, mas el ejercicio, el conjunto sellado y la politica de
+ * redondeo.
  *
- * <p>Ahi esta la pureza de la regla 6, escrita como un tipo: la fecha entra —no se lee del reloj—,
- * los parametros entran —no se buscan en la base— y la politica de redondeo entra —no es una
- * constante—. Una regla que necesite algo mas tiene que pedirlo aqui, y ese cambio se ve en el diff
- * de todas las reglas a la vez, que es exactamente cuando conviene discutirlo.
+ * <p>El ejercicio y no una fecha: la implementacion aplicable es la del <b>ejercicio del hecho
+ * imponible</b> (ARQ-09 §1.3). Con una fecha, «hoy» es un argumento valido y calcularia 2027 con
+ * las reglas de 2037.
  *
- * @param base el importe sobre el que opera la regla
- * @param fecha la fecha a la que se calcula; nunca {@code LocalDate.now()}
- * @param parametros el conjunto sellado del ejercicio
- * @param redondeo la politica, recibida mientras D-03 siga abierta
+ * <p>Los datos declarados son un {@link EstadoDelCalculo} y no un solo importe: un predio entra con
+ * su area, su antiguedad y su porcentaje de propiedad, y de ahi salen tres ramas —terreno,
+ * edificacion y obras complementarias— que convergen despues.
  */
 public record EntradaDeCalculo(
-        Dinero base, LocalDate fecha, ParametrosSellados parametros, PoliticaDeRedondeo redondeo) {
+        Ejercicio ejercicio,
+        EstadoDelCalculo declarados,
+        ParametrosSellados parametros,
+        PoliticaDeRedondeo redondeo) {
 
     public EntradaDeCalculo {
-        Objects.requireNonNull(base, "La regla necesita su base");
-        Objects.requireNonNull(fecha, "La fecha entra como argumento (regla 6)");
-        Objects.requireNonNull(parametros, "La regla necesita el conjunto sellado del ejercicio");
+        Objects.requireNonNull(ejercicio, "El ejercicio del hecho imponible entra como argumento");
+        Objects.requireNonNull(declarados, "Los datos declarados son un estado, vacio si no hay");
+        Objects.requireNonNull(parametros, "La regla necesita el conjunto sellado");
         Objects.requireNonNull(redondeo, "La politica de redondeo se recibe, no se fija (D-03)");
+        if (!ejercicio.equals(parametros.ejercicio())) {
+            throw new IllegalArgumentException(
+                    "Se pidio calcular el ejercicio "
+                            + ejercicio
+                            + " con el conjunto sellado de "
+                            + parametros.ejercicio()
+                            + ". Cruzar los ejercicios produce una cifra plausible y equivocada");
+        }
     }
 
-    /** La misma entrada con otra base: es como el motor encadena una regla con la siguiente. */
-    public EntradaDeCalculo con(Dinero otraBase) {
-        return new EntradaDeCalculo(otraBase, fecha, parametros, redondeo);
+    public InsumosDeLaAgregacion paraAgregacion() {
+        return new InsumosDeLaAgregacion(ejercicio, parametros, redondeo);
     }
 }

@@ -2,36 +2,49 @@ package pe.gob.sgtm.parametros;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 
 /**
- * Lo que sale del motor: la cifra y <b>que reglas la produjeron</b>.
+ * El calculo de una partida: todos los conceptos que se produjeron, no solo el ultimo.
  *
- * <p>La lista de reglas no es informacion de diagnostico: va a {@code
- * determinacion.reglas_aplicadas} y es lo que hace reproducible un calculo (ADR-0007). Dos anios
- * despues, ante una impugnacion, la pregunta es «que se aplico para que saliera eso», y sin esta
- * lista la unica respuesta posible es leer el codigo de hoy —que ya no es el de entonces—.
+ * <p>Devolver un unico importe seria perder la mitad del resultado. Una determinacion muestra su
+ * desarrollo —terreno, construccion, obras, autovaluo— y una reclamacion se responde ensenando el
+ * paso donde esta la diferencia, no el total.
  *
- * @param importe la cifra
- * @param ejercicio con que ejercicio de parametros se calculo
- * @param versionDeParametros que version de ese conjunto; dos versiones dan dos cifras legitimas
- * @param reglasAplicadas en el orden en que se aplicaron
+ * <p>{@code reglasAplicadas} es lo que va a {@code determinacion.reglas_aplicadas}: con que
+ * versiones se calculo. Junto al conjunto sellado, es lo que permite reproducir el importe en 2037.
  */
 public record ResultadoDelCalculo(
-        Dinero importe,
+        EstadoDelCalculo estado,
         Ejercicio ejercicio,
         int versionDeParametros,
         List<IdentificadorDeRegla> reglasAplicadas) {
 
     public ResultadoDelCalculo {
-        Objects.requireNonNull(importe, "Todo resultado tiene su importe");
+        Objects.requireNonNull(estado, "Todo resultado tiene su estado");
         Objects.requireNonNull(ejercicio, "Todo resultado dice con que ejercicio se calculo");
         Objects.requireNonNull(reglasAplicadas, "La lista de reglas es vacia, no nula");
         reglasAplicadas = List.copyOf(reglasAplicadas);
     }
 
-    /** Las reglas aplicadas como texto, que es como viajan a la columna del esquema. */
+    public Optional<Dinero> valor(Concepto concepto) {
+        return estado.valor(concepto);
+    }
+
+    /** El concepto que se pide o un error que lo nombra: nunca un cero silencioso. */
+    public Dinero exigir(Concepto concepto) {
+        return estado.valor(concepto)
+                .orElseThrow(
+                        () ->
+                                new IllegalStateException(
+                                        "El calculo no produjo "
+                                                + concepto
+                                                + ". Los conceptos calculados fueron "
+                                                + estado.conceptos()));
+    }
+
     public List<String> reglasComoTexto() {
         return reglasAplicadas.stream().map(IdentificadorDeRegla::valor).toList();
     }
