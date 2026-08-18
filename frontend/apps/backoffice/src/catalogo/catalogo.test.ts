@@ -1,0 +1,148 @@
+import { describe, expect, it } from 'vitest';
+import {
+  MODULOS,
+  OPCIONES,
+  PANTALLAS,
+  bloquesDe,
+  buscarOpciones,
+  opcionPorRuta,
+  seccionesDe,
+} from './index';
+
+/**
+ * El catalogo portado es completo y coherente.
+ *
+ * No es una prueba ceremonial: el catalogo se **genera** desde el prototipo
+ * (`yarn portar-catalogo`), y una regeneracion que perdiera opciones por el
+ * camino no romperia ni la compilacion ni ninguna pantalla —simplemente
+ * faltarian trámites del manual, que es el defecto mas caro y mas silencioso
+ * que este proyecto puede tener—. Esto lo hace ruidoso.
+ */
+
+const BLOQUES_VALIDOS = new Set([
+  'Registro y mantenimiento',
+  'Procesos',
+  'Consultas',
+  'Documentos y reportes',
+]);
+
+describe('el catalogo trae el manual entero', () => {
+  it('son doce modulos y 134 opciones', () => {
+    expect(MODULOS).toHaveLength(12);
+    expect(OPCIONES).toHaveLength(134);
+  });
+
+  it('cada modulo declara las opciones que el manual le atribuye', () => {
+    const conteo = Object.fromEntries(MODULOS.map((m) => [m.label, m.opciones.length]));
+    expect(conteo).toEqual({
+      Inicio: 2,
+      Catastro: 12,
+      'Rentas · Registro': 15,
+      Fiscalización: 8,
+      Tránsito: 23,
+      'Infracciones administrativas': 13,
+      Tesorería: 10,
+      Consultas: 11,
+      Valores: 6,
+      Coactiva: 12,
+      'Autorizaciones y licencias': 11,
+      Seguridad: 11,
+    });
+  });
+
+  it('toda opcion tiene su pantalla, con titulo y operacion del contrato', () => {
+    for (const opcion of OPCIONES) {
+      const pantalla = PANTALLAS[opcion.id];
+      expect(pantalla, `sin pantalla: ${opcion.id}`).toBeDefined();
+      expect(pantalla?.title).toBeTruthy();
+      expect(pantalla?.endpoint).toMatch(/^(GET|POST|PUT|PATCH) \/api\/v1\//);
+    }
+  });
+
+  it('ninguna operacion del contrato esta repetida', () => {
+    const endpoints = OPCIONES.map((o) => PANTALLAS[o.id]?.endpoint);
+    expect(new Set(endpoints).size).toBe(endpoints.length);
+  });
+
+  it('ninguna ruta esta repetida', () => {
+    const rutas = OPCIONES.map((o) => o.ruta);
+    expect(new Set(rutas).size).toBe(rutas.length);
+  });
+});
+
+describe('la clasificacion en bloques viene precalculada', () => {
+  it('cada opcion cae en uno de los cuatro bloques de FRO-03 §4', () => {
+    for (const opcion of OPCIONES) {
+      expect(BLOQUES_VALIDOS.has(opcion.bloque), `${opcion.id}: ${opcion.bloque}`).toBe(true);
+    }
+  });
+
+  it('los bloques de un modulo cubren todas sus opciones, sin vacios', () => {
+    for (const modulo of MODULOS) {
+      const bloques = bloquesDe(modulo);
+      expect(bloques.every((b) => b.opciones.length > 0)).toBe(true);
+      expect(bloques.reduce((n, b) => n + b.opciones.length, 0)).toBe(modulo.opciones.length);
+    }
+  });
+
+  it('una pantalla de reporte va a «Documentos y reportes»', () => {
+    const constancia = OPCIONES.find((o) => o.id === 'constancia');
+    expect(constancia?.bloque).toBe('Documentos y reportes');
+  });
+});
+
+describe('la busqueda de la paleta', () => {
+  it('sin consulta ofrece las primeras diez opciones', () => {
+    expect(buscarOpciones('')).toHaveLength(10);
+  });
+
+  it('encuentra por etiqueta, ignorando tildes y mayusculas', () => {
+    const resultados = buscarOpciones('fiscalizacion');
+    expect(resultados.length).toBeGreaterThan(0);
+    expect(resultados.every((o) => o.modulo.label === 'Fiscalización')).toBe(true);
+  });
+
+  it('encuentra por modulo aunque la etiqueta no lo diga', () => {
+    expect(buscarOpciones('coactiva').length).toBeGreaterThan(0);
+  });
+
+  it('no devuelve mas de catorce resultados', () => {
+    expect(buscarOpciones('a').length).toBeLessThanOrEqual(14);
+  });
+});
+
+describe('las rutas resuelven a la opcion', () => {
+  it('modulo y ranura identifican una opcion', () => {
+    expect(opcionPorRuta('catastro', 'ficha-urbana')?.id).toBe('ficha_urbana');
+  });
+
+  it('una ranura que no existe no resuelve', () => {
+    expect(opcionPorRuta('catastro', 'no-existe')).toBeUndefined();
+  });
+});
+
+describe('las secciones que se muestran', () => {
+  it('con pestanas manda la pestana activa', () => {
+    const conPestanas = OPCIONES.map((o) => PANTALLAS[o.id]).find((p) => p?.tabs !== undefined);
+    expect(conPestanas?.tabs, 'el catalogo deberia tener pantallas con pestanas').toBeDefined();
+    if (!conPestanas?.tabs) return;
+    expect(seccionesDe(conPestanas, 0)).toEqual(conPestanas.tabs[0]?.secciones);
+    expect(seccionesDe(conPestanas, 1)).toEqual(conPestanas.tabs[1]?.secciones);
+  });
+
+  it('ninguna pantalla declara pestanas y secciones sueltas a la vez', () => {
+    // Cinco las declaran en el prototipo y su logica ignora las sueltas; el
+    // portador resuelve la ambiguedad en el build en lugar de dejarla viva
+    // para que cada componente decida distinto.
+    const ambiguas = OPCIONES.map((o) => PANTALLAS[o.id]).filter(
+      (p) => p?.tabs !== undefined && p.secciones !== undefined,
+    );
+    expect(ambiguas).toEqual([]);
+  });
+
+  it('una pestana fuera de rango cae en la ultima, no revienta', () => {
+    const conPestanas = OPCIONES.map((o) => PANTALLAS[o.id]).find((p) => p?.tabs !== undefined);
+    if (!conPestanas?.tabs) return;
+    expect(seccionesDe(conPestanas, 99)).toEqual(conPestanas.tabs.at(-1)?.secciones);
+  });
+});

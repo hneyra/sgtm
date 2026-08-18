@@ -1,0 +1,61 @@
+# Verificación del frontend.
+#
+# Es el mismo `yarn verificar` que hay que pasar antes de un PR (FRO-04 §10),
+# más dos comprobaciones que solo tienen sentido en CI:
+#
+#   1. Que el catálogo generado siga cuadrando con el prototipo. Se regenera y
+#      se exige que no haya diferencias: un `design/` que cambia sin regenerar
+#      deja la interfaz describiendo pantallas que ya no son las del manual, y
+#      eso no lo detecta ninguna prueba.
+#   2. Que la aplicación compile para producción.
+#
+# El backend no está aquí: sus verificaciones bloqueantes necesitan Docker y un
+# PostgreSQL de verdad (`./gradlew verificarAislamiento`), y montar eso es una
+# decisión propia que este flujo no toma por su cuenta.
+name: Frontend
+
+on:
+  pull_request:
+    paths: ['frontend/**', 'design/**', '.github/workflows/frontend.yml']
+  push:
+    branches: [main]
+    paths: ['frontend/**', 'design/**', '.github/workflows/frontend.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Instalar dependencias
+        run: yarn install --frozen-lockfile
+
+      - name: El catálogo generado cuadra con el prototipo
+        run: |
+          yarn portar-catalogo
+          git diff --exit-code -- \
+            apps/backoffice/src/catalogo \
+            packages/api-mock/src/respuestas.generado.ts \
+            || {
+              echo "::error::El catálogo generado no cuadra con design/. Corre «yarn portar-catalogo» y añade el resultado."
+              exit 1
+            }
+
+      - name: Lint, tipos y pruebas
+        run: yarn verificar
+
+      - name: Compilar
+        run: yarn build

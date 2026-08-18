@@ -95,10 +95,25 @@ export default tseslint.config(
         },
 
         // —— FRO-01 §5: el token vive en memoria ——
+        // La prohibicion es guardar credenciales en el navegador, no usar el
+        // almacenamiento: FRO-03 §3 pide persistir ahi las cinco opciones
+        // recientes, y lo dice en la misma frase en que excluye el token.
         {
           selector:
-            'MemberExpression[object.name=/^(localStorage|sessionStorage)$/][property.name=/^(setItem|getItem)$/]',
+            'CallExpression[callee.object.name=/^(localStorage|sessionStorage)$/][callee.property.name=/^(setItem|getItem|removeItem)$/][arguments.0.value=/token|jwt|bearer|credencial|contrasena|acceso|sesion/i]',
           message: 'El token vive en memoria, nunca en localStorage ni sessionStorage (FRO-01 §5).',
+        },
+
+        // —— La interfaz habla con el backend por @sgtm/api-client ——
+        // Es la regla que sostiene el proxy de datos: mientras todas las
+        // peticiones pasen por `solicitar()`, cambiar el proxy simulado por el
+        // backend real es apagar el proxy. Un `fetch` suelto en una pantalla se
+        // salta el token, la idempotencia y el formato de error, y ademas
+        // sobrevive a la integracion como un caso aparte que nadie recuerda.
+        {
+          selector: "CallExpression[callee.name='fetch']",
+          message:
+            'Las peticiones pasan por «solicitar» de @sgtm/api-client: ahi viven el token, la clave de idempotencia y el formato de error (FRO-01 §5, FRO-04 §5).',
         },
 
         // —— Regla 9 de CLAUDE.md: no existe «la deuda», existe la deuda a una fecha (RNF-075) ——
@@ -136,6 +151,28 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
+  },
+
+  {
+    // El portador del catalogo corre en Node, no en el navegador.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: { globals: { ...globals.node } },
+  },
+
+  {
+    // `@sgtm/api-client` y el proxy de datos son los dos unicos sitios donde
+    // `fetch` esta en su sitio: uno lo usa y el otro lo sustituye.
+    files: ['packages/api-client/**/*.ts', 'packages/api-mock/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "Identifier[name='municipalidadId']",
+          message:
+            'El frontend jamás envía municipalidadId: el backend lo toma del token (ARQ-03 §3.1, FRO-01 §4).',
+        },
       ],
     },
   },

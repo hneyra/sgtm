@@ -6,11 +6,12 @@
    `design/` es el prototipo de referencia, no una entrada del build. Si el
    prototipo cambia, se vuelven a copiar y se anota en el PR.
 
-   Aqui no hay componentes todavia. Los del prototipo llegan con la iteracion
-   de interfaz; sus medidas exactas estan en `design/SGTM.dc.html`.
+   `componentes.css` trae las clases de los componentes, con las medidas
+   exactas del prototipo `design/SGTM.dc.html`.
    ============================================================ */
 @import './tokens/fonts.css';
 @import './tokens/colors.css';
 @import './tokens/typography.css';
 @import './tokens/spacing.css';
 @import './base.css';
+@import './componentes.css';

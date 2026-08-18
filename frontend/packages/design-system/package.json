@@ -10,6 +10,7 @@
     "./estilos.css": "./src/estilos/estilos.css"
   },
   "dependencies": {
+    "@sgtm/api-client": "0.1.0",
     "@sgtm/dominio": "0.1.0"
   },
   "peerDependencies": {
