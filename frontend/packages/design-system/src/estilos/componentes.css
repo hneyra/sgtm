@@ -405,11 +405,28 @@ textarea.sgtm-campo__control {
 }
 
 .sgtm-aviso--error .sgtm-aviso__titulo {
-  color: var(--bad-fg);
+  color: var(--error-texto);
 }
 
+/* La traza se dicta por telefono, asi que tiene que leerse: `--ink-4` sobre la
+   tarjeta da 3,04:1 y no llega al minimo de 4,5:1 (FRO-04 §7). */
 .sgtm-aviso__traza {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--ink-3);
+}
+
+.sgtm-hoja__vacio {
+  text-align: center;
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.sgtm-aviso__acciones {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
 }

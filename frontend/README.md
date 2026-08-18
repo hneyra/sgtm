@@ -137,6 +137,31 @@ ventanilla no es un problema de rendimiento sino mostrar cifras de un año como 
 Un adaptador que pierda la `fechaCalculo` **no compila**: `DatosDePantalla` la exige, y
 `verificaciones/muestras/adaptador-sin-fecha.ts` lo demuestra compilando con `tsc`.
 
+## Los cuatro estados
+
+El prototipo no los diseña: dibuja la pantalla con datos y ya. Contra el proxy eso se nota poco;
+contra un backend real, una consulta que tarda, un filtro sin resultados o una red caída son el
+estado normal de la pantalla varias veces al día.
+
+| Estado          | Dónde       | Qué dice                                                                     |
+| --------------- | ----------- | ---------------------------------------------------------------------------- |
+| **Carga**       | Cada bloque | Esqueleto, no girador, y del tamaño de lo que sustituye                      |
+| **Vacío**       | Cada bloque | Distingue «ningún resultado para esta búsqueda» de «todavía no hay»          |
+| **Error**       | La pantalla | El mensaje del backend **sin reescribir** (RNF-080), su traza y «Reintentar» |
+| **Sin permiso** | La pantalla | Que falta permiso, **sin revelar qué hay detrás**                            |
+
+El error y el sin permiso son de la pantalla entera porque hay **una petición por pantalla**: no
+puede fallar la tabla y no el formulario si las dos salen de la misma respuesta. Y ninguno de los
+dos dibuja la estructura: entrar sin permiso no puede filtrar ni las columnas de lo que hay detrás.
+
+**Sin red la pantalla lo dice**: `fetch` rechaza con un error del navegador que no significa nada
+para quien atiende, así que `solicitar()` lo convierte en un `ProblemaDeApi` con el mismo formato
+que los del backend. La **traza se copia de un gesto**, porque se dicta por teléfono.
+
+Cinco de los diez bloques se dibujan del catálogo —descripción, portal, filtros, pestañas y barra
+de acciones— y no esperan a nadie: no tienen carga ni vacío. El formulario vacío tampoco es un
+error: es un formulario listo para llenarse.
+
 ## El proxy de datos
 
 `@sgtm/api-mock` sustituye `fetch` e intercepta lo que cuelga de `/api/v1`. Responde las 134

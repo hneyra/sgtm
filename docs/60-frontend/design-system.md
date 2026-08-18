@@ -117,7 +117,13 @@ Regla de entrada: **un componente sube aquí cuando lo usan dos módulos**, no a
 
 - [ ] Autoalojar las tres familias (`woff2`) en lugar de cargarlas de Google Fonts.
 - [ ] Confirmar el separador de millares con el área de Rentas (FRO-01 §6).
-- [ ] Verificar el contraste de la insignia de advertencia `#f6ecd9`/`#8a6420` contra 4,5:1.
+- [x] Verificar el contraste de la insignia de advertencia `#f6ecd9`/`#8a6420` contra 4,5:1.
+      **4,61:1**, calculado en `verificaciones/contraste.test.ts` y no supuesto. Al hacerlo se vio
+      que los tokens `--warn-bg`/`--warn-fg` **no estaban definidos**: el tono «atención» salía sin
+      color. Ya lo están. La misma prueba encontró dos defectos más: la traza de un error usaba
+      `--ink-4` (3,04:1 sobre la tarjeta) y el título de error usaba `--bad-fg`, que en tema oscuro
+      da 1,87:1 —la insignia lleva su fondo claro y el título de un aviso no—, así que el texto de
+      error tiene ahora token propio (`--error-texto`) con valor para cada tema.
 - [ ] Decidir si el modo oscuro del design system se ofrece; el prototipo lo trae y ninguna
       pantalla del manual lo pide.
 

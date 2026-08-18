@@ -1,8 +1,9 @@
-import { Boton, Esqueleto, Insignia, TONO_DE_INSIGNIA } from '@sgtm/design-system';
+import { Aviso, Boton, Esqueleto, Insignia, TONO_DE_INSIGNIA } from '@sgtm/design-system';
 import type { DatosDeTabla } from '@sgtm/api-client';
 import type { EstructuraDeTabla } from '../../catalogo';
 import { Paginacion } from './Paginacion';
 import type { Sentido } from '../busqueda';
+import { vacioDe } from '../estados';
 
 /**
  * Bloque de tabla (FRO-03 §5, bloque 5).
@@ -32,6 +33,8 @@ export interface TablaDePantallaProps {
   readonly sentido?: Sentido;
   readonly onOrdenar?: (clave: string) => void;
   readonly onPagina?: (pagina: number) => void;
+  /** Hay filtros aplicados: cambia lo que significa que no haya filas. */
+  readonly hayFiltros?: boolean;
 }
 
 const ARIA_SENTIDO = { ascendente: 'ascending', descendente: 'descending' } as const;
@@ -44,9 +47,11 @@ export function TablaDePantalla({
   sentido,
   onOrdenar,
   onPagina,
+  hayFiltros = false,
 }: TablaDePantallaProps) {
   const numericas = new Set(estructura.num ?? []);
   const filas = datos?.filas ?? [];
+  const vacia = !cargando && filas.length === 0;
 
   return (
     <section className="sgtm-tarjeta">
@@ -63,74 +68,90 @@ export function TablaDePantalla({
           </div>
         )}
       </div>
-      <div className="sgtm-tabla__marco">
-        <table className="sgtm-tabla">
-          <thead>
-            <tr>
-              {estructura.cols.map((columna, i) => {
-                const clave = estructura.claves[i];
-                const ordenable = onOrdenar !== undefined && clave !== undefined;
-                const activa = ordenable && clave === orden;
-                return (
-                  <th
-                    key={columna}
-                    className={numericas.has(i) ? 'sgtm-tabla--numerica' : undefined}
-                    aria-sort={activa ? ARIA_SENTIDO[sentido ?? 'ascendente'] : undefined}
-                  >
-                    {ordenable ? (
-                      <button
-                        type="button"
-                        className="sgtm-tabla__orden"
-                        data-activa={activa ? '1' : '0'}
-                        onClick={() => onOrdenar(clave)}
-                      >
-                        {columna}
-                        <span aria-hidden="true">
-                          {activa ? (sentido === 'descendente' ? ' ↓' : ' ↑') : ''}
-                        </span>
-                      </button>
-                    ) : (
-                      columna
-                    )}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {cargando
-              ? [0, 1, 2, 3, 4].map((n) => (
-                  <tr key={n}>
-                    {estructura.cols.map((columna) => (
-                      <td key={columna}>
-                        <Esqueleto alto={12} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              : filas.map((fila, f) => (
-                  // Las filas del catalogo no traen identificador propio; el
-                  // indice es estable porque la lista no se reordena en cliente.
-                  <tr key={f}>
-                    {fila.map((celda, c) => (
-                      <td
-                        key={estructura.cols[c] ?? c}
-                        className={numericas.has(c) ? 'sgtm-tabla--numerica' : undefined}
-                      >
-                        {celda.tono ? (
-                          <Insignia tono={TONO_DE_INSIGNIA[celda.tono]}>{celda.texto}</Insignia>
-                        ) : (
-                          celda.texto
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-          </tbody>
-        </table>
-      </div>
+      {vacia ? (
+        <Vacio hayFiltros={hayFiltros} que={estructura.title.toLowerCase()} />
+      ) : (
+        <div className="sgtm-tabla__marco">
+          <table className="sgtm-tabla">
+            <thead>
+              <tr>
+                {estructura.cols.map((columna, i) => {
+                  const clave = estructura.claves[i];
+                  const ordenable = onOrdenar !== undefined && clave !== undefined;
+                  const activa = ordenable && clave === orden;
+                  return (
+                    <th
+                      key={columna}
+                      className={numericas.has(i) ? 'sgtm-tabla--numerica' : undefined}
+                      aria-sort={activa ? ARIA_SENTIDO[sentido ?? 'ascendente'] : undefined}
+                    >
+                      {ordenable ? (
+                        <button
+                          type="button"
+                          className="sgtm-tabla__orden"
+                          data-activa={activa ? '1' : '0'}
+                          onClick={() => onOrdenar(clave)}
+                        >
+                          {columna}
+                          <span aria-hidden="true">
+                            {activa ? (sentido === 'descendente' ? ' ↓' : ' ↑') : ''}
+                          </span>
+                        </button>
+                      ) : (
+                        columna
+                      )}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {cargando
+                ? [0, 1, 2, 3, 4].map((n) => (
+                    <tr key={n}>
+                      {estructura.cols.map((columna) => (
+                        <td key={columna}>
+                          <Esqueleto alto={12} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                : filas.map((fila, f) => (
+                    // Las filas del catalogo no traen identificador propio; el
+                    // indice es estable porque la lista no se reordena en cliente.
+                    <tr key={f}>
+                      {fila.map((celda, c) => (
+                        <td
+                          key={estructura.cols[c] ?? c}
+                          className={numericas.has(c) ? 'sgtm-tabla--numerica' : undefined}
+                        >
+                          {celda.tono ? (
+                            <Insignia tono={TONO_DE_INSIGNIA[celda.tono]}>{celda.texto}</Insignia>
+                          ) : (
+                            celda.texto
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {datos?.paginacion && onPagina && <Paginacion datos={datos.paginacion} onPagina={onPagina} />}
       {estructura.note && <p className="sgtm-tarjeta__pie">{estructura.note}</p>}
     </section>
   );
+}
+
+/**
+ * Que decir cuando no hay filas.
+ *
+ * «Ningun resultado para este filtro» y «todavia no hay nada» no son lo mismo
+ * para quien atiende en ventanilla: en el primero hay algo que hacer —quitar un
+ * filtro—, y en el segundo no hay nada que buscar.
+ */
+function Vacio({ hayFiltros, que }: { readonly hayFiltros: boolean; readonly que: string }) {
+  const texto = vacioDe(que, hayFiltros);
+  return <Aviso titulo={texto.titulo} detalle={texto.detalle} />;
 }

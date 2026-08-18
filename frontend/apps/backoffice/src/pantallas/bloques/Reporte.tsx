@@ -65,18 +65,38 @@ export function Reporte({ estructura, datos, cargando }: ReporteProps) {
             </tr>
           </thead>
           <tbody>
-            {(datos?.filas ?? []).map((fila, f) => (
-              <tr key={f}>
-                {fila.map((celda, c) => (
-                  <td
-                    key={estructura.cols[c] ?? c}
-                    className={numericas.has(c) ? 'sgtm-hoja--numerica' : undefined}
-                  >
-                    {celda}
-                  </td>
-                ))}
+            {cargando &&
+              [0, 1, 2, 3, 4].map((n) => (
+                <tr key={n}>
+                  {estructura.cols.map((columna) => (
+                    <td key={columna}>
+                      <Esqueleto alto={12} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            {!cargando && (datos?.filas.length ?? 0) === 0 && (
+              // Un reporte sin filas se imprime igual, y quien lo firma tiene
+              // que poder ver que no es que falten: es que no hay.
+              <tr>
+                <td colSpan={estructura.cols.length} className="sgtm-hoja__vacio">
+                  Sin movimientos en el periodo del reporte.
+                </td>
               </tr>
-            ))}
+            )}
+            {!cargando &&
+              (datos?.filas ?? []).map((fila, f) => (
+                <tr key={f}>
+                  {fila.map((celda, c) => (
+                    <td
+                      key={estructura.cols[c] ?? c}
+                      className={numericas.has(c) ? 'sgtm-hoja--numerica' : undefined}
+                    >
+                      {celda}
+                    </td>
+                  ))}
+                </tr>
+              ))}
           </tbody>
         </table>
 

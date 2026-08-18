@@ -100,12 +100,30 @@ export async function solicitar<T>(ruta: string, opciones: OpcionesDeSolicitud =
   if (opciones.cuerpo !== undefined) cabeceras['content-type'] = 'application/json';
   if (opciones.claveDeIdempotencia) cabeceras['idempotency-key'] = opciones.claveDeIdempotencia;
 
-  const respuesta = await fetch(url, {
-    method: opciones.metodo ?? 'GET',
-    headers: cabeceras,
-    body: opciones.cuerpo === undefined ? undefined : JSON.stringify(opciones.cuerpo),
-    signal: opciones.senal,
-  });
+  let respuesta: Response;
+  try {
+    respuesta = await fetch(url, {
+      method: opciones.metodo ?? 'GET',
+      headers: cabeceras,
+      body: opciones.cuerpo === undefined ? undefined : JSON.stringify(opciones.cuerpo),
+      signal: opciones.senal,
+    });
+  } catch (fallo) {
+    // Cancelar no es fallar: si la pantalla se cerro, la consulta se descarta.
+    if (fallo instanceof Error && fallo.name === 'AbortError') throw fallo;
+
+    // Sin red, `fetch` rechaza con un error del navegador que no dice nada al
+    // usuario. Se convierte aqui en un problema del mismo formato que los del
+    // backend para que la pantalla lo cuente igual que los demas, en vez de
+    // quedarse cargando para siempre (FRO-01 §7).
+    throw new ProblemaDeApi({
+      type: 'https://sgtm.gob.pe/problemas/sin-conexion',
+      title: 'No se pudo contactar con el servidor',
+      status: 0,
+      detail:
+        'Revisa la conexion de la municipalidad y vuelve a intentarlo. Si la red esta bien, puede que el servicio este detenido.',
+    });
+  }
 
   if (!respuesta.ok) {
     const problema = (await respuesta.json().catch(() => null)) as ProblemDetails | null;
