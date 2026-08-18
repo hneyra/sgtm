@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: sgtm
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    # La aplicacion se conecta SIEMPRE como sgtm_app: sin DDL, sin BYPASSRLS,
+    # sin ser propietaria de las tablas y sin DELETE (ARQ-03 §4). Las
+    # credenciales de sgtm_owner solo existen en el proceso de migracion.
+    url: ${SGTM_DB_URL}
+    username: ${SGTM_DB_USUARIO:sgtm_app}
+    password: ${SGTM_DB_CLAVE}
+  flyway:
+    # La aplicacion NO migra al arrancar. Las migraciones viven en sgtm-esquema y
+    # las ejecuta el proceso de despliegue como sgtm_owner.
+    enabled: false
+
+---
+spring:
+  config:
+    activate:
+      on-profile: web
+
+---
+spring:
+  config:
+    activate:
+      on-profile: batch
+  main:
+    web-application-type: none

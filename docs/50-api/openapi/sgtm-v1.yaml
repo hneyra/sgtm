@@ -1,0 +1,2697 @@
+# ARCHIVO GENERADO — no editar a mano.
+# Origen: los `endpoint` de SGTM-design/sgtm-data-{1..5}.js.
+# Regenerar con: node docs/50-api/generar-openapi.mjs
+#
+# Es el contrato PROPUESTO: define verbo, ruta y parametros de las 134
+# operaciones que la interfaz espera. Los esquemas de cuerpo y respuesta se
+# escriben cuando se implementa cada operacion.
+openapi: 3.1.0
+info:
+  title: SGTM — Sistema de Gestion Tributaria Municipal
+  version: 1.0.0-borrador
+  description: |
+    Contrato de la API del SGTM, derivado de las pantallas del prototipo de
+    interfaz. Una operacion por opcion del menu.
+
+    El identificador de municipalidad NO viaja en ninguna ruta, parametro ni
+    cuerpo: sale del claim `municipalidad_id` del token validado (ADR-0005).
+    Una peticion que lo mande por otro camino no lo consigue.
+
+    Los importes son cadenas decimales, nunca numeros de coma flotante
+    (RNF-055), y toda cifra de deuda indica a que fecha esta actualizada
+    (RNF-075).
+servers:
+  - url: /api/v1
+    description: Camino base
+security:
+  - tokenDeAcceso: []
+tags:
+  - name: "Inicio"
+    description: "2 opciones del manual"
+  - name: "Catastro"
+    description: "12 opciones del manual"
+  - name: "Rentas · Registro"
+    description: "15 opciones del manual"
+  - name: "Fiscalización"
+    description: "8 opciones del manual"
+  - name: "Tránsito"
+    description: "23 opciones del manual"
+  - name: "Infracciones administrativas"
+    description: "13 opciones del manual"
+  - name: "Tesorería"
+    description: "10 opciones del manual"
+  - name: "Consultas"
+    description: "11 opciones del manual"
+  - name: "Valores"
+    description: "6 opciones del manual"
+  - name: "Coactiva"
+    description: "12 opciones del manual"
+  - name: "Autorizaciones y licencias"
+    description: "11 opciones del manual"
+  - name: "Seguridad"
+    description: "11 opciones del manual"
+paths:
+  "/indicadores/recaudacion":
+    get:
+      operationId: inicio
+      summary: "Panel de recaudación"
+      description: "Avance de la recaudación del ejercicio 2026 al 13 de agosto, con la cartera pendiente por tributo y las tareas abiertas de cada unidad."
+      tags: ["Inicio"]
+      parameters:
+        - name: ejercicio
+          in: query
+          required: false
+          schema: { type: string }
+          example: "2026"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/portal/deuda":
+    get:
+      operationId: portal
+      summary: "Consulta y pago en línea"
+      description: "Flujo público de autoconsulta: el contribuyente identifica su deuda, elige qué pagar y descarga su constancia sin acudir a la municipalidad."
+      tags: ["Inicio"]
+      parameters:
+        - name: doc
+          in: query
+          required: false
+          schema: { type: string }
+          example: "44218937"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/urbana/{codRefCatastral}":
+    get:
+      operationId: ficha_urbana
+      summary: "Ficha catastral urbana individual"
+      description: "Ficha del predio urbano. El código de referencia catastral se compone de sector, manzana, lote, edificación, entrada, piso y unidad; su cambio obliga a recalcular el autovalúo."
+      tags: ["Catastro"]
+      parameters:
+        - name: codRefCatastral
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/economica/{codRefCatastral}":
+    get:
+      operationId: ficha_economica
+      summary: "Ficha catastral económica"
+      description: "Actividad económica que se desarrolla en la unidad catastral, usada para verificar licencias y determinar el uso real del predio."
+      tags: ["Catastro"]
+      parameters:
+        - name: codRefCatastral
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/bienes-comunes/{codEdificacion}":
+    get:
+      operationId: ficha_bienes
+      summary: "Ficha de bienes comunes"
+      description: "Áreas comunes de una edificación en régimen de propiedad exclusiva y común, cuyo valor se distribuye entre las unidades según su porcentaje de participación."
+      tags: ["Catastro"]
+      parameters:
+        - name: codEdificacion
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/rural/{codUnidad}":
+    get:
+      operationId: ficha_rural
+      summary: "Ficha catastral rural"
+      description: "Predio rústico valorizado por hectárea según el arancel rural, el tipo de tierra y la disponibilidad de riego."
+      tags: ["Catastro"]
+      parameters:
+        - name: codUnidad
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas":
+    get:
+      operationId: consulta_fichas
+      summary: "Consulta de fichas catastrales"
+      description: "Búsqueda transversal de fichas por código, titular o ubicación, con el estado de conciliación entre catastro y el padrón de rentas."
+      tags: ["Catastro"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/{codigo}/actualizacion":
+    put:
+      operationId: actualizacion_catastro
+      summary: "Actualización del catastro"
+      description: "Actualiza construcciones y otras instalaciones de una ficha ya registrada. El sistema conserva cada versión declarada y verificada por piso, con su MEP, ECS, ECC y estado de conservación."
+      tags: ["Catastro"]
+      parameters:
+        - name: codigo
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/contribuyentes/{codigo}/ficha.pdf":
+    get:
+      operationId: ficha_contribuyente_reporte
+      summary: "Reporte de ficha del contribuyente"
+      description: "Ficha impresa del contribuyente: identificación, domicilio fiscal, documentos, contactos y unidades afectas."
+      tags: ["Catastro"]
+      parameters:
+        - name: codigo
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/vias":
+    get:
+      operationId: calles
+      summary: "Mantenimiento de vías y calles"
+      description: "Nomenclatura vial que alimenta el domicilio fiscal y la ubicación del predio. Cada vía guarda su tipo, sector y arancel unitario por tramo."
+      tags: ["Catastro"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/sectores":
+    get:
+      operationId: sectores
+      summary: "Sectores, manzanas y lotes"
+      description: "Estructura territorial sobre la que se arma el código de referencia catastral y se agrupan los padrones por zona."
+      tags: ["Catastro"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/tablas/aranceles":
+    get:
+      operationId: aranceles
+      summary: "Aranceles de terreno"
+      description: "Valor oficial del metro cuadrado de terreno por vía y tramo, publicado anualmente. Es el multiplicador del área de terreno en el autovalúo."
+      tags: ["Catastro"]
+      parameters:
+        - name: anio
+          in: query
+          required: false
+          schema: { type: string }
+          example: "2026"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/tablas/valores-unitarios":
+    get:
+      operationId: valores_unitarios
+      summary: "Valores unitarios de edificación"
+      description: "Tabla oficial por categoría constructiva. El sistema suma las siete partidas declaradas en la ficha y les aplica la depreciación correspondiente."
+      tags: ["Catastro"]
+      parameters:
+        - name: anio
+          in: query
+          required: false
+          schema: { type: string }
+          example: "2026"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/tablas/depreciacion":
+    get:
+      operationId: depreciacion
+      summary: "Tabla de depreciación"
+      description: "Porcentaje que se descuenta del valor de edificación según antigüedad, material predominante (MEP) y estado de conservación (ECS)."
+      tags: ["Catastro"]
+      parameters:
+        - name: anio
+          in: query
+          required: false
+          schema: { type: string }
+          example: "2026"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/contribuyentes":
+    get:
+      operationId: contribuyentes
+      summary: "Contribuyentes"
+      description: "Padrón único del contribuyente. Su código enlaza predios, vehículos, licencias, papeletas y la cuenta corriente."
+      tags: ["Rentas · Registro"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/predios":
+    get:
+      operationId: predios_rentas
+      summary: "Predios del contribuyente"
+      description: "Padrón predial de rentas. Cada predio guarda su autovalúo, condición de propiedad y la fecha desde la que genera obligación."
+      tags: ["Rentas · Registro"]
+      parameters:
+        - name: contribuyente
+          in: query
+          required: false
+          schema: { type: string }
+          example: "codigo"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/predial/calculo-individual":
+    post:
+      operationId: predial_individual
+      summary: "Cálculo individual del impuesto predial"
+      description: "Determina el impuesto de un contribuyente sobre el autovalúo acumulado de todos sus predios en el distrito, con la escala progresiva acumulativa y el mínimo imponible de 0.6 % de la UIT."
+      tags: ["Rentas · Registro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/predial/calculo-masivo":
+    post:
+      operationId: predial_masivo
+      summary: "Cálculo masivo del impuesto predial"
+      description: "Proceso batch de emisión anual. Recalcula todo el padrón para el ejercicio seleccionado y deja constancia de los contribuyentes observados que quedan fuera de la emisión."
+      tags: ["Rentas · Registro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/declaraciones/{djNro}":
+    get:
+      operationId: declaracion_jurada
+      summary: "Declaración jurada — HR, PU y PR"
+      description: "Formularios de la declaración: hoja resumen (HR), predio urbano (PU) y predio rústico (PR). Se imprimen para la firma del contribuyente y quedan como sustento del cálculo."
+      tags: ["Rentas · Registro"]
+      parameters:
+        - name: djNro
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/arbitrios":
+    get:
+      operationId: arbitrios
+      summary: "Arbitrios municipales"
+      description: "Limpieza pública, parques y jardines y serenazgo. La tasa depende del uso del predio, la zona, la frecuencia del servicio y los metros de frontis declarados en la ficha."
+      tags: ["Rentas · Registro"]
+      parameters:
+        - name: anio
+          in: query
+          required: false
+          schema: { type: string }
+          example: "2026"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/transferencias/predio":
+    post:
+      operationId: transferencia_predio
+      summary: "Transferencia de predio"
+      description: "Da de baja al transferente y de alta al adquirente desde la fecha del acto. La obligación del vendedor corre hasta el 31 de diciembre del año de la transferencia."
+      tags: ["Rentas · Registro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/alcabala":
+    post:
+      operationId: alcabala
+      summary: "Impuesto de alcabala"
+      description: "Grava la transferencia de propiedad con el 3 % sobre el exceso de las primeras 10 UIT, tomando como base el mayor valor entre el de transferencia y el autovalúo ajustado por el IPM."
+      tags: ["Rentas · Registro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/vehiculos/{placa}":
+    get:
+      operationId: vehiculos
+      summary: "Ficha de vehículo"
+      description: "Registro del vehículo. La afectación corre tres ejercicios desde el año siguiente a la primera inscripción registral."
+      tags: ["Rentas · Registro"]
+      parameters:
+        - name: placa
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/vehicular/calculo":
+    post:
+      operationId: vehicular_calculo
+      summary: "Cálculo del impuesto vehicular"
+      description: "Aplica el 1 % sobre la base imponible con un mínimo del 1.5 % de la UIT, por los tres ejercicios en que el vehículo permanece afecto."
+      tags: ["Rentas · Registro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/transferencias/vehiculo":
+    post:
+      operationId: transferencia_vehiculo
+      summary: "Transferencia de vehículo"
+      description: "Registra el cambio de titular. El transferente responde por el impuesto hasta el 31 de diciembre del año en que se produce la venta."
+      tags: ["Rentas · Registro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/espectaculos":
+    post:
+      operationId: espectaculos
+      summary: "Espectáculos públicos no deportivos"
+      description: "Grava el monto que se abona por presenciar el espectáculo. La tasa depende del tipo de evento y el organizador actúa como agente perceptor."
+      tags: ["Rentas · Registro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/beneficios":
+    get:
+      operationId: beneficios
+      summary: "Beneficios y exoneraciones"
+      description: "Deducciones, inafectaciones y amnistías. La deducción de 50 UIT para pensionistas y adultos mayores exige predio único destinado a vivienda."
+      tags: ["Rentas · Registro"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/deuda/altas":
+    post:
+      operationId: alta_deuda
+      summary: "Alta de deuda"
+      description: "Incorpora manualmente una obligación a la cuenta corriente cuando no proviene de la emisión masiva: determinaciones de fiscalización, multas o deuda migrada."
+      tags: ["Rentas · Registro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/deuda/bajas":
+    post:
+      operationId: baja_deuda
+      summary: "Baja de deuda"
+      description: "Extingue deuda de la cuenta corriente por prescripción, resolución que la deja sin efecto, error material o compensación. Requiere resolución y queda en la bitácora de auditoría."
+      tags: ["Rentas · Registro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/programas":
+    post:
+      operationId: fisc_programa
+      summary: "Programación de fiscalización"
+      description: "Selección de la muestra a inspeccionar por sector y criterio de riesgo, con el fiscalizador asignado y el plazo del programa."
+      tags: ["Fiscalización"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/predial/actas":
+    post:
+      operationId: fisc_predial
+      summary: "Fiscalización predial — acta de inspección"
+      description: "Formulario de campo optimizado para tablet. Contrasta lo verificado con lo declarado y determina si corresponde emitir resolución de determinación."
+      tags: ["Fiscalización"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/vehicular":
+    post:
+      operationId: fisc_vehicular
+      summary: "Fiscalización vehicular"
+      description: "Cruce del padrón vehicular con la información registral y de SUNAT para detectar vehículos afectos no declarados o con valor subvaluado."
+      tags: ["Fiscalización"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/resultados":
+    get:
+      operationId: fisc_resultados
+      summary: "Resultados y determinaciones"
+      description: "Diferencias detectadas, deuda omitida por ejercicio y estado del valor emitido a partir de cada acta."
+      tags: ["Fiscalización"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/omisos":
+    get:
+      operationId: fisc_omisos
+      summary: "Omisos y subvaluadores"
+      description: "Contribuyentes con predio en catastro pero sin declaración en rentas, y declaraciones cuyo autovalúo está por debajo del valor catastral verificado."
+      tags: ["Fiscalización"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/estado-cuenta":
+    get:
+      operationId: fisc_estado_cuenta
+      summary: "Estado de cuenta de fiscalización"
+      description: "Consulta las deudas originadas en un proceso fiscalizador: diferencias de impuesto predial, arbitrios y patrimonio vehicular con sus multas tributarias."
+      tags: ["Fiscalización"]
+      parameters:
+        - name: contribuyente
+          in: query
+          required: false
+          schema: { type: string }
+          example: "codigo"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/predial/historico":
+    get:
+      operationId: fisc_historico
+      summary: "Histórico de fiscalización predial"
+      description: "Versiones de un proceso fiscalizador: qué característica cambió, quién la modificó y en qué momento. Cada liquidación conserva su estado y su versión."
+      tags: ["Fiscalización"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/resoluciones/{numero}":
+    get:
+      operationId: resolucion_determinacion_fisc
+      summary: "Resolución de determinación de fiscalización"
+      description: "Valor emitido al cierre de un procedimiento de fiscalización: determina la diferencia de tributo por ejercicio y la multa tributaria que corresponde."
+      tags: ["Fiscalización"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/papeletas":
+    get:
+      operationId: papeletas
+      summary: "Papeletas de infracción de tránsito"
+      description: "Papeletas levantadas por el inspector municipal, con el código del Reglamento Nacional de Tránsito, la sanción en porcentaje de UIT y la medida preventiva aplicada."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/papeletas/busqueda":
+    get:
+      operationId: transito_busqueda
+      summary: "Búsqueda de infracciones"
+      description: "Búsqueda avanzada de papeletas por número, placa, infractor, propietario, rango de fechas y estado de deuda. Muestra el estado de coactiva, el último pago y el usuario que registró la papeleta."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/codigos":
+    get:
+      operationId: codigos_transito
+      summary: "Tabla de códigos de infracción de tránsito"
+      description: "Catálogo del Reglamento Nacional de Tránsito con la sanción, los puntos y la medida preventiva que el sistema aplica al registrar cada papeleta."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/descargos":
+    post:
+      operationId: transito_descargos
+      summary: "Descargos y reclamos de papeletas"
+      description: "Escrito de descargo presentado dentro del plazo, su evaluación y la resolución que declara fundada o infundada la impugnación."
+      tags: ["Tránsito"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/internamientos":
+    get:
+      operationId: internamiento
+      summary: "Internamiento vehicular"
+      description: "Control de vehículos en el depósito municipal, con el cómputo diario de la tasa de custodia y los requisitos para la liberación."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/papeletas/{numero}/actos":
+    get:
+      operationId: transito_documentos
+      summary: "Emisión de resoluciones y otros documentos"
+      description: "Registra los documentos emitidos por papeleta y conserva la secuencia del trámite, incluido el archivo digital de cada acto administrativo."
+      tags: ["Tránsito"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/valores/generacion-masiva":
+    post:
+      operationId: transito_valores
+      summary: "Generación de valores de tránsito"
+      description: "Genera masivamente los valores por papeletas de tránsito pendientes de pago. El criterio define el tipo de recaudo, la oficina y el vencimiento; las papeletas se agregan por selección o manualmente."
+      tags: ["Tránsito"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/papeletas/{numero}/codigo":
+    patch:
+      operationId: transito_cambio_numero
+      summary: "Cambio de número de papeleta de tránsito"
+      description: "Corrige el número de papeleta o el número de placa registrados, cuando hubo error del operador al momento del registro."
+      tags: ["Tránsito"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/reportes":
+    post:
+      operationId: transito_reportes
+      summary: "Reportes de infracción de tránsito"
+      description: "Emisor de los reportes del módulo de tránsito. El tipo de reporte habilita los criterios que corresponden y el destino puede ser pantalla, impresora o Excel."
+      tags: ["Tránsito"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/reportes/record-conductor":
+    get:
+      operationId: transito_record_conductor
+      summary: "Record de conductor"
+      description: "Historial de infracciones cometidas por un conductor y el estado de deuda de cada papeleta impuesta."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/reportes/record-vehicular":
+    get:
+      operationId: transito_record_vehicular
+      summary: "Record vehicular"
+      description: "Historial de papeletas de infracción de tránsito de un solo vehículo, con el estado de pago de cada una."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/constancias-libres":
+    post:
+      operationId: transito_constancia_libre
+      summary: "Constancia libre de infracciones"
+      description: "Documento con el que la municipalidad acredita que un vehículo no registra papeletas de tránsito pendientes de pago."
+      tags: ["Tránsito"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/reportes/padron":
+    get:
+      operationId: transito_padron
+      summary: "Padrón de papeletas de tránsito"
+      description: "Listado de las papeletas registradas en un intervalo de fechas, filtrable por estado de deuda, infracción y placa."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/estado-cuenta":
+    get:
+      operationId: transito_estado_cuenta
+      summary: "Estado de cuenta de infracciones"
+      description: "Papeletas pendientes de pago de un conductor o de un vehículo, con importe, beneficio aplicable y situación de coactiva."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/papeletas/{numero}/hoja-informativa":
+    get:
+      operationId: transito_papeleta_reporte
+      summary: "Reporte papeleta de infracción"
+      description: "Hoja informativa que resume la información relevante de una papeleta de infracción de tránsito."
+      tags: ["Tránsito"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/resoluciones/ordinaria":
+    post:
+      operationId: transito_rg_ordinaria
+      summary: "Resolución de gerencia ordinaria"
+      description: "Resolución que emite la municipalidad para la cobranza de la papeleta. De no cancelarse, el documento pasa al área de cobranza coactiva."
+      tags: ["Tránsito"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/resoluciones/sancionadora":
+    post:
+      operationId: transito_rg_sancionadora
+      summary: "Resolución de gerencia sancionadora"
+      description: "Segunda resolución, emitida luego de la ordinaria. Tiene carácter sancionador y se deriva a la Dirección General de Transportes."
+      tags: ["Tránsito"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/reportes/padron-coactiva":
+    get:
+      operationId: transito_padron_coactiva
+      summary: "Padrón de papeletas enviadas a coactiva"
+      description: "Control de las papeletas derivadas al área de cobranza coactiva por intervalo de fechas."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/reportes/padron-constancias":
+    get:
+      operationId: transito_padron_constancias
+      summary: "Padrón de constancias libres de infracciones"
+      description: "Padrón general de constancias libres de infracciones emitidas por la unidad competente."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/reportes/resumen-recaudacion":
+    get:
+      operationId: transito_resumen_recaudacion
+      summary: "Resumen de recaudación de tránsito"
+      description: "Recaudación por papeletas organizada por tipo de cobranza, año y mes."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/reportes/resumen-papeletas":
+    get:
+      operationId: transito_resumen_papeletas
+      summary: "Resumen de papeletas pendientes y pagadas"
+      description: "Cantidades e importes de papeletas pendientes y pagadas, diferenciando cobranza ordinaria de cobranza coactiva."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/reportes/resumen-por-codigo":
+    get:
+      operationId: transito_resumen_codigo
+      summary: "Resumen de papeletas por código de infracción"
+      description: "Cantidades e importes de papeletas pendientes y pagadas de una infracción determinada."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/reportes/resumen-por-placa":
+    get:
+      operationId: transito_resumen_placa
+      summary: "Resumen de papeletas por iniciales de placa"
+      description: "Resumen de papeletas filtrado por las dos letras iniciales del número de placa del vehículo."
+      tags: ["Tránsito"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/administrativas/notificaciones":
+    post:
+      operationId: adm_notificacion
+      summary: "Notificación administrativa"
+      description: "Registro previo de la notificación emitida en la vivienda o el negocio inspeccionado. Es el paso anterior a la generación de la multa administrativa."
+      tags: ["Infracciones administrativas"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/actas":
+    get:
+      operationId: infracciones_adm
+      summary: "Infracción administrativa"
+      description: "Procedimiento sancionador municipal: notificación preventiva, acta de constatación y resolución de infracción y sanción con multa y medida complementaria."
+      tags: ["Infracciones administrativas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/cuis":
+    get:
+      operationId: codigos_cuis
+      summary: "Cuadro único de infracciones y sanciones (CUIS)"
+      description: "Catálogo aprobado por ordenanza con el porcentaje de UIT y la medida complementaria de cada infracción administrativa."
+      tags: ["Infracciones administrativas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/administrativas/codigos/reporte":
+    get:
+      operationId: adm_codigos_reporte
+      summary: "Reporte de códigos de infracción administrativa"
+      description: "Relación impresa del cuadro único de infracciones y sanciones vigente, con la base de cálculo y la sanción no pecuniaria de cada código."
+      tags: ["Infracciones administrativas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/administrativas/valores/generacion-masiva":
+    post:
+      operationId: adm_valores
+      summary: "Generación de valores administrativa"
+      description: "Selecciona un conjunto de papeletas administrativas con deuda según un criterio y genera masivamente un valor por papeleta para su impresión y notificación posterior."
+      tags: ["Infracciones administrativas"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/administrativas/estado-cuenta":
+    get:
+      operationId: adm_estado_cuenta
+      summary: "Estado de cuenta de papeleta administrativa"
+      description: "Deuda de una papeleta administrativa con su insoluto, reajuste, interés y gastos, y el importe con beneficio vigente."
+      tags: ["Infracciones administrativas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/administrativas/resoluciones":
+    post:
+      operationId: adm_resolucion_gerencia
+      summary: "Resolución de gerencia"
+      description: "Resolución que resuelve el procedimiento sancionador y determina la multa administrativa exigible."
+      tags: ["Infracciones administrativas"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/administrativas/resoluciones/{id}/notificacion":
+    post:
+      operationId: adm_notificacion_resolucion
+      summary: "Notificación de resolución de gerencia"
+      description: "Cédula de notificación de la resolución de gerencia, con el acuse de recibo y los datos del notificador y testigos."
+      tags: ["Infracciones administrativas"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/administrativas/reportes":
+    post:
+      operationId: adm_reportes
+      summary: "Reportes de infracción administrativa"
+      description: "Emisor de los reportes del módulo de papeletas administrativas. El tipo de reporte habilita los criterios y el destino puede ser pantalla, impresora o Excel."
+      tags: ["Infracciones administrativas"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/administrativas/reportes/padron-notificaciones":
+    get:
+      operationId: adm_padron_notificaciones
+      summary: "Padrón de notificaciones"
+      description: "Relación de las notificaciones emitidas por el sistema y el estado de la deuda cuando ya existe papeleta."
+      tags: ["Infracciones administrativas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/administrativas/reportes/vencidas":
+    get:
+      operationId: adm_notificaciones_vencidas
+      summary: "Notificaciones vencidas"
+      description: "Notificaciones cuyo plazo de subsanación venció sin acreditarse el cumplimiento; habilitan la generación de la papeleta administrativa."
+      tags: ["Infracciones administrativas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/administrativas/reportes/por-contribuyente":
+    get:
+      operationId: adm_notificaciones_contribuyente
+      summary: "Notificaciones por contribuyente"
+      description: "Papeletas administrativas agrupadas por año y mes de cometida la infracción, con el estado de la multa y los datos de su pago."
+      tags: ["Infracciones administrativas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/infracciones/administrativas/reportes/resumen-recaudacion":
+    get:
+      operationId: adm_resumen_recaudacion
+      summary: "Resumen de recaudación de papeletas"
+      description: "Recaudación por multas administrativas por año y mes, diferenciando cobranza ordinaria, coactiva y por convenio."
+      tags: ["Infracciones administrativas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/tesoreria/caja/cobranza":
+    post:
+      operationId: caja_tributaria
+      summary: "Caja tributaria"
+      description: "Cobranza en ventanilla. Se elige la forma de pago, se filtra la deuda del contribuyente, se aplica el beneficio vigente y se emite el recibo."
+      tags: ["Tesorería"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/tesoreria/caja/tasas":
+    post:
+      operationId: caja_tasas
+      summary: "Caja de tasas y derechos administrativos"
+      description: "Cobro de conceptos del TUPA que no forman parte de la cuenta corriente: constancias, copias, certificados y derechos de trámite."
+      tags: ["Tesorería"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/tesoreria/fraccionamientos":
+    post:
+      operationId: fraccionamiento
+      summary: "Fraccionamiento tributario"
+      description: "Acogimiento de la deuda a pago fraccionado. El sistema simula el cronograma antes de generar el convenio; dos cuotas consecutivas impagas producen la pérdida del beneficio."
+      tags: ["Tesorería"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/tesoreria/convenios":
+    get:
+      operationId: consulta_convenios
+      summary: "Consulta de convenios"
+      description: "Seguimiento de los convenios suscritos, con las cuotas pagadas, las vencidas y los que están por quebrarse."
+      tags: ["Tesorería"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/tesoreria/recibos/{nro}/duplicado":
+    get:
+      operationId: duplicado_recibo
+      summary: "Duplicado de recibo"
+      description: "Reimpresión de un recibo ya emitido. El duplicado sale marcado como tal y queda registrado en la bitácora con el usuario que lo generó."
+      tags: ["Tesorería"]
+      parameters:
+        - name: nro
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/tesoreria/recibos/{nro}/anulacion":
+    post:
+      operationId: anulacion_recibo
+      summary: "Anulación de recibo"
+      description: "Deja sin efecto un recibo y devuelve la deuda a la cuenta corriente. Requiere autorización del responsable de tesorería y solo procede mientras la caja del turno siga abierta."
+      tags: ["Tesorería"]
+      parameters:
+        - name: nro
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/tesoreria/convenios/{numero}/anulacion":
+    post:
+      operationId: anulacion_convenio
+      summary: "Anulación de convenio"
+      description: "Anula, reforma o quiebra un convenio de fraccionamiento. La deuda acogida retorna a su estado original y el sistema conserva el motivo y el responsable de la anulación."
+      tags: ["Tesorería"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/tesoreria/caja/cierre":
+    post:
+      operationId: cierre_caja
+      summary: "Cierre y arqueo de caja"
+      description: "Arqueo del turno: recaudación por medio de pago, recibos emitidos y anulados, y diferencia entre lo declarado y lo registrado por el sistema."
+      tags: ["Tesorería"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/tesoreria/recaudacion/avance":
+    get:
+      operationId: avance_recaudacion
+      summary: "Avance de recaudación"
+      description: "Comparación de lo emitido contra lo recaudado por tributo y periodo, base del seguimiento de la meta anual."
+      tags: ["Tesorería"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/tesoreria/recaudacion/por-area":
+    get:
+      operationId: recaudacion_area
+      summary: "Recaudación por área"
+      description: "Recaudación desagregada por partida presupuestal y unidad orgánica generadora, para el reporte mensual a la gerencia de administración."
+      tags: ["Tesorería"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/consultas/cuenta-corriente/{codigo}":
+    get:
+      operationId: cuenta_corriente
+      summary: "Estado de cuenta corriente"
+      description: "Deuda y pagos del contribuyente por ejercicio y tributo, con la fase en la que se encuentra cada obligación."
+      tags: ["Consultas"]
+      parameters:
+        - name: codigo
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/consultas/deuda":
+    get:
+      operationId: consulta_deuda
+      summary: "Consulta de deuda"
+      description: "Deuda exigible a una fecha de corte, con el interés moratorio calculado al día y el desglose por fase de cobranza."
+      tags: ["Consultas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/consultas/unificada":
+    get:
+      operationId: consulta_unificada
+      summary: "Consulta unificada predial-arbitrios"
+      description: "Vista única del contribuyente: impuesto anual por ejercicio, impuesto por predio y, en pestañas, deudas, pagos, altas y bajas, movimientos del predio, fraccionamientos y valores emitidos."
+      tags: ["Consultas"]
+      parameters:
+        - name: contribuyente
+          in: query
+          required: false
+          schema: { type: string }
+          example: "codigo"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/consultas/resumen-predial":
+    get:
+      operationId: consulta_resumen_predial
+      summary: "Consulta resumen predial-arbitrios"
+      description: "Resumen por predio: impuesto predial de cada ejercicio con su valúo afecto y el saldo de deuda, más el valúo de arbitrios y los movimientos del predio."
+      tags: ["Consultas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/consultas/altas-bajas":
+    get:
+      operationId: consulta_altas_bajas
+      summary: "Consulta de altas y bajas"
+      description: "Movimientos de alta y baja de deuda de un contribuyente, automáticos o manuales, con el documento que los aprueba y el detalle de las deudas afectadas."
+      tags: ["Consultas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/consultas/deudas-con-beneficio":
+    get:
+      operationId: consulta_deudas_beneficio
+      summary: "Consulta de deudas con beneficio"
+      description: "Simula el acogimiento de la deuda a un beneficio vigente: muestra la deuda total, la deuda acogida y la deuda con beneficio, con la tasa aplicada y el ahorro resultante."
+      tags: ["Consultas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/consultas/pagos":
+    get:
+      operationId: consulta_pagos
+      summary: "Consulta de pagos"
+      description: "Historial de pagos con el recibo, la caja y el concepto imputado."
+      tags: ["Consultas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/consultas/predios":
+    get:
+      operationId: consulta_predios
+      summary: "Consulta de predios"
+      description: "Búsqueda de predios por titular, ubicación o código, con el autovalúo vigente y la deuda asociada a cada unidad."
+      tags: ["Consultas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/consultas/vehiculos":
+    get:
+      operationId: consulta_vehiculos
+      summary: "Consulta de vehículos"
+      description: "Padrón vehicular consultable por placa, motor o titular, con los ejercicios afectos y la deuda vigente."
+      tags: ["Consultas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/consultas/valores":
+    get:
+      operationId: consulta_valores
+      summary: "Consulta de valores emitidos"
+      description: "Órdenes de pago, resoluciones de determinación y de multa emitidas a un contribuyente, con su estado de notificación y firmeza."
+      tags: ["Consultas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/consultas/constancias/no-adeudo":
+    get:
+      operationId: constancia
+      summary: "Constancia de no adeudo"
+      description: "Vista previa del documento que se entrega al contribuyente. Se imprime con el mismo formato en papel membretado."
+      tags: ["Consultas"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/valores":
+    post:
+      operationId: valores_individual
+      summary: "Generación individual de valores"
+      description: "Emisión de una orden de pago, resolución de determinación o resolución de multa para un contribuyente, con la base legal que la sustenta."
+      tags: ["Valores"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+    get:
+      operationId: valores_busqueda
+      summary: "Búsqueda y mantenimiento de valores"
+      description: "Localiza un valor por número, contribuyente o periodo para consultarlo, anularlo o derivarlo a cobranza coactiva."
+      tags: ["Valores"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/valores/masivo":
+    post:
+      operationId: valores_masivo
+      summary: "Generación masiva de valores"
+      description: "Emite órdenes de pago en bloque para toda la deuda vencida que cumpla el filtro, respetando el monto mínimo de emisión fijado por ordenanza."
+      tags: ["Valores"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/valores/{nro}/notificacion":
+    post:
+      operationId: notificacion_valores
+      summary: "Notificación de valores"
+      description: "Registro del acto de notificación. La fecha de notificación determina el inicio del plazo de reclamación y, vencido este, la firmeza del valor."
+      tags: ["Valores"]
+      parameters:
+        - name: nro
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/prescripcion":
+    post:
+      operationId: prescripcion
+      summary: "Prescripción de la deuda"
+      description: "Solicitud de prescripción de la acción de cobro, con el cómputo del plazo y los actos que lo interrumpen o suspenden."
+      tags: ["Valores"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/valores/{numero}/movimientos":
+    post:
+      operationId: pase_coactiva
+      summary: "Pase de valores a coactiva"
+      description: "Registra el movimiento del valor hacia el área de cobranza coactiva: PCO — pase a coactivas, ACO — aceptado en coactivas o RCO — rechazado en coactivas."
+      tags: ["Valores"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/expedientes":
+    get:
+      operationId: coactiva_expedientes
+      summary: "Expedientes coactivos"
+      description: "Cobranza coactiva de valores firmes: resolución de ejecución, medidas cautelares, costas y gastos, y causales de suspensión."
+      tags: ["Coactiva"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/expedientes/importacion":
+    post:
+      operationId: importacion_valores
+      summary: "Importación de valores a coactiva"
+      description: "Ingresa a coactiva un valor ya generado en el módulo de valores y le asigna número de expediente coactivo, auxiliar y ejecutor para su tratamiento posterior."
+      tags: ["Coactiva"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/expedientes/{numero}/proceso":
+    get:
+      operationId: proceso_coactivo
+      summary: "Proceso coactivo"
+      description: "Seguimiento del expediente coactivo: datos generales, actuaciones del proceso y detalle de los valores que lo integran, con la deuda proyectada a la fecha."
+      tags: ["Coactiva"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/rec/impresion":
+    post:
+      operationId: rec_impresion
+      summary: "Impresión de resolución de ejecución coactiva"
+      description: "Genera e imprime la REC de los expedientes pendientes de pago, con la deuda proyectada al día elegido. Permite imprimir la carátula y la REC 2."
+      tags: ["Coactiva"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/expedientes/{numero}/estados":
+    patch:
+      operationId: expediente_historial
+      summary: "Gestionar historial del expediente"
+      description: "Cambia el estado del expediente coactivo y conserva el historial de estados con su documento de respaldo, motivo y observaciones."
+      tags: ["Coactiva"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/expedientes/{numero}/direccion-referencial":
+    patch:
+      operationId: cambiar_direccion_ref
+      summary: "Cambiar dirección referencial"
+      description: "Reemplaza la dirección referencial del expediente coactivo, que es la que se usa para notificar al obligado cuando difiere del domicilio fiscal."
+      tags: ["Coactiva"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/liquidaciones-costas":
+    post:
+      operationId: costas_procesales
+      summary: "Liquidación de costas procesales"
+      description: "Liquida las costas y gastos del procedimiento coactivo por expediente, según el arancel de costas aprobado."
+      tags: ["Coactiva"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/convenios":
+    post:
+      operationId: fraccionamiento_coactivo
+      summary: "Fraccionamiento coactivo"
+      description: "Convenio tributario coactivo. Se inicia con un pago inicial y sobre el saldo se elabora el cronograma de cuotas, con el beneficio aplicable a la deuda acogida."
+      tags: ["Coactiva"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/expedientes/{numero}/actos":
+    post:
+      operationId: actos_coactivos
+      summary: "Registro de actos coactivos"
+      description: "Registra y emite los documentos de las medidas coactivas adoptadas: embargos, retenciones y demás actos, con su archivo digital adjunto."
+      tags: ["Coactiva"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/notificaciones":
+    post:
+      operationId: notificaciones_coactivas
+      summary: "Emisión de notificaciones coactivas"
+      description: "Registra y emite las notificaciones de las resoluciones de ejecución coactiva. Admite una o varias notificaciones por expediente según el tratamiento del caso."
+      tags: ["Coactiva"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/deudas":
+    get:
+      operationId: coactiva_consulta_deudas
+      summary: "Consulta de deudas en coactiva"
+      description: "Deuda en cobranza coactiva por contribuyente y expediente, con su estado procesal y la última actuación registrada."
+      tags: ["Coactiva"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/deudas-en-beneficio":
+    get:
+      operationId: coactiva_deudas_beneficio
+      summary: "Consulta de deudas en beneficio (coactiva)"
+      description: "Deuda en cobranza coactiva acogible a un beneficio vigente, con las costas procesales incorporadas al cálculo."
+      tags: ["Coactiva"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/autorizaciones/anuncios":
+    get:
+      operationId: anuncios
+      summary: "Anuncio y propaganda"
+      description: "Autorización para instalar elementos publicitarios. La tasa resulta del área del anuncio, el número de lados y su clase."
+      tags: ["Autorizaciones y licencias"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/autorizaciones/anuncios/reportes":
+    post:
+      operationId: anuncios_reportes
+      summary: "Reportes de anuncio y propaganda"
+      description: "Emite el padrón de autorizaciones de anuncio y propaganda por contribuyente, dirección, estado o intervalo de fechas."
+      tags: ["Autorizaciones y licencias"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/funcionamiento":
+    get:
+      operationId: licencia_funcionamiento
+      summary: "Licencia de funcionamiento"
+      description: "Registro y seguimiento de licencias comerciales, con giros CIIU, zonificación, aforo, inspección técnica de seguridad y arbitrios del establecimiento."
+      tags: ["Autorizaciones y licencias"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/funcionamiento/reportes/padron":
+    post:
+      operationId: licencia_padron
+      summary: "Padrón de licencias de funcionamiento"
+      description: "Padrón de licencias municipales con agrupación por año y subagrupación por giro, dirección o contribuyente. El orden y los filtros se definen antes de emitir."
+      tags: ["Autorizaciones y licencias"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/funcionamiento/reportes/resumen-anual":
+    get:
+      operationId: licencia_resumen_anual
+      summary: "Resumen de licencias por año"
+      description: "Cantidades de licencias emitidas, canceladas y duplicadas por año, con la recaudación por derecho de trámite."
+      tags: ["Autorizaciones y licencias"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/funcionamiento/{id}/cancelacion":
+    post:
+      operationId: licencia_resolucion_cancelacion
+      summary: "Resolución de cancelación de licencia"
+      description: "Resolución que deja sin efecto la licencia de funcionamiento, por solicitud del titular o por cierre del establecimiento."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/funcionamiento/{id}/duplicado":
+    post:
+      operationId: licencia_resolucion_duplicado
+      summary: "Resolución de duplicado de licencia"
+      description: "Resolución que autoriza la emisión de un duplicado de la licencia de funcionamiento, con el número de duplicado que corresponde."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/edificacion":
+    get:
+      operationId: fue_edificacion
+      summary: "Formulario único de edificación (FUE)"
+      description: "Licencia de obra bajo la Ley 29090. La modalidad de aprobación determina si basta la verificación administrativa o se requiere comisión técnica."
+      tags: ["Autorizaciones y licencias"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/edificacion/reportes/general":
+    get:
+      operationId: edificacion_reporte
+      summary: "Reporte general de licencias de edificación"
+      description: "Relación de licencias de edificación por modalidad, con el área a construir, el valor de obra declarado y el estado del expediente."
+      tags: ["Autorizaciones y licencias"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/ciiu":
+    get:
+      operationId: ciiu
+      summary: "Catálogo CIIU de giros"
+      description: "Clasificación industrial internacional uniforme. Determina la compatibilidad del giro con la zonificación y el nivel de riesgo de la ITSE."
+      tags: ["Autorizaciones y licencias"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/certificados":
+    post:
+      operationId: certificados
+      summary: "Certificados de numeración y zonificación"
+      description: "Emisión de los certificados que acreditan el número municipal asignado y los parámetros urbanísticos del predio."
+      tags: ["Autorizaciones y licencias"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/modulos":
+    get:
+      operationId: modulos
+      summary: "Módulos del sistema"
+      description: "Sistemas controlados por el módulo de seguridad integrada. Cada módulo agrupa sus grupos, accesos y permisos."
+      tags: ["Seguridad"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/usuarios":
+    get:
+      operationId: usuarios
+      summary: "Usuarios del sistema"
+      description: "Alta de usuarios con su unidad orgánica, la caja asignada y el grupo de acceso que define qué opciones del menú puede ejecutar."
+      tags: ["Seguridad"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/grupos":
+    get:
+      operationId: grupos
+      summary: "Grupos de usuarios"
+      description: "Agrupación jerárquica de cuentas. El grupo concentra los accesos y todo usuario hereda los permisos del grupo al que pertenece."
+      tags: ["Seguridad"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/accesos":
+    get:
+      operationId: accesos
+      summary: "Accesos y políticas"
+      description: "Opciones de menú y políticas del sistema controlado. La búsqueda admite filtrar por tipo y por parte del nombre del acceso."
+      tags: ["Seguridad"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/grupos/{grupo}/miembros":
+    post:
+      operationId: miembros
+      summary: "Gestión de miembros"
+      description: "Afiliación de usuarios a uno o varios grupos, base de la posterior asignación de permisos a nivel de grupo. El árbol de la izquierda lista los grupos del módulo y sus usuarios."
+      tags: ["Seguridad"]
+      parameters:
+        - name: grupo
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/grupos/{id}/permisos":
+    put:
+      operationId: permisos
+      summary: "Permisos y niveles de accesibilidad"
+      description: "Matriz de acceso por opción del menú. Cada acceso se otorga con siete niveles: total, ejecuta, consulta, ingresa, modifica, anula e imprime."
+      tags: ["Seguridad"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/sesion/ejercicio":
+    put:
+      operationId: cambiar_anio
+      summary: "Cambiar el año de trabajo"
+      description: "Fija el ejercicio sobre el que operan todas las opciones del sistema. Los registros se graban contra el año seleccionado."
+      tags: ["Seguridad"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/usuarios/{id}/clave":
+    put:
+      operationId: cambiar_clave
+      summary: "Cambiar contraseña"
+      description: "Cambio de la clave del usuario en sesión. La contraseña caduca cada 90 días y no puede repetir las tres últimas."
+      tags: ["Seguridad"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/auditoria":
+    get:
+      operationId: auditoria
+      summary: "Auditoría del sistema"
+      description: "Bitácora de operaciones sensibles: anulaciones, extornos, bajas de deuda, cambios de valor y accesos fallidos."
+      tags: ["Seguridad"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/parametros":
+    get:
+      operationId: parametros
+      summary: "Parámetros del sistema"
+      description: "Valores que gobiernan el cálculo tributario del ejercicio. Cambiarlos afecta a todas las liquidaciones posteriores."
+      tags: ["Seguridad"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/respaldos":
+    post:
+      operationId: respaldo
+      summary: "Copias de seguridad"
+      description: "Respaldo de la base de datos. El manual exige una copia diaria al cierre de caja y una copia mensual fuera del servidor."
+      tags: ["Seguridad"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+components:
+  securitySchemes:
+    tokenDeAcceso:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token OIDC validado. Debe traer el claim `municipalidad_id`; sin el, la
+        peticion recibe 403 y no llega al controlador (ADR-0005, RNF-032).
+  schemas:
+    Importe:
+      type: string
+      pattern: "^-?[0-9]+\\.[0-9]{2}$"
+      description: |
+        Decimal exacto como cadena. Nunca numero JSON: el `number` de
+        JavaScript es binario de doble precision y pierde centimos (RNF-055).
+      example: "1234.50"
+    Error:
+      type: object
+      required: [codigo, mensaje]
+      properties:
+        codigo: { type: string, example: "DEUDA_YA_CANCELADA" }
+        mensaje: { type: string, description: "En castellano; se muestra al usuario" }
+        detalles: { type: array, items: { type: string } }
+  responses:
+    SinMunicipalidad:
+      description: |
+        El token no identifica una municipalidad. No hay valor por omision ni
+        modo sin municipalidad.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ErrorDeValidacion:
+      description: La peticion no cumple una regla de negocio
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

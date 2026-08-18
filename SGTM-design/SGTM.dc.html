@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="_ds/juris-pe-design-system-cf0a1ebf-b226-49f6-a4f0-e826eea306f3/tokens/fonts.css" />
+<link rel="stylesheet" href="_ds/juris-pe-design-system-cf0a1ebf-b226-49f6-a4f0-e826eea306f3/tokens/colors.css" />
+<link rel="stylesheet" href="_ds/juris-pe-design-system-cf0a1ebf-b226-49f6-a4f0-e826eea306f3/tokens/typography.css" />
+<link rel="stylesheet" href="_ds/juris-pe-design-system-cf0a1ebf-b226-49f6-a4f0-e826eea306f3/tokens/spacing.css" />
+<link rel="stylesheet" href="_ds/juris-pe-design-system-cf0a1ebf-b226-49f6-a4f0-e826eea306f3/tokens/base.css" />
+<link rel="stylesheet" href="_ds/juris-pe-design-system-cf0a1ebf-b226-49f6-a4f0-e826eea306f3/styles.css" />
+<script src="_ds/juris-pe-design-system-cf0a1ebf-b226-49f6-a4f0-e826eea306f3/_ds_bundle.js"></script>
+<script src="sgtm-data-1.js"></script>
+<script src="sgtm-data-2.js"></script>
+<script src="sgtm-data-3.js"></script>
+<script src="sgtm-data-4.js"></script>
+<script src="sgtm-data-5.js"></script>
+<style>
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+  html, body { background: var(--bg); color: var(--ink); margin: 0; font-family: var(--font-sans); }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent }
+  a:hover { border-bottom-color: var(--accent) }
+  input, select, textarea, button { font: inherit; color: inherit }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft) }
+  ::placeholder { color: var(--ink-4) }
+  ::-webkit-scrollbar { width: 9px; height: 9px }
+  ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 9px }
+  @media (max-width: 1080px) {
+    [data-nav] { position: fixed; z-index: 60; inset: 0 auto 0 0; transform: translateX(-101%) }
+    [data-nav][data-open="1"] { transform: none; box-shadow: var(--shadow-3) }
+    [data-navtoggle] { display: inline-flex !important }
+    [data-scrim][data-open="1"] { display: block !important }
+  }
+  @media (max-width: 760px) { [data-sm-hide] { display: none !important } }
+  @media print {
+    [data-nav], [data-appheader], [data-noprint] { display: none !important }
+    [data-sheet] { box-shadow: none !important; border: 0 !important; margin: 0 !important }
+  }
+</style>
+</helmet>
+
+<div style="display:flex; min-height:100vh; background:var(--bg)">
+  <div data-scrim="1" data-open="{{ navOpen }}" onClick="{{ closeNav }}" style="display:none; position:fixed; inset:0; z-index:55; background:rgba(26,22,18,.34)"></div>
+
+  <sc-if value="{{ pal }}">
+    <div onClick="{{ closePal }}" style="position:fixed; inset:0; z-index:80; background:rgba(26,22,18,.4); backdrop-filter:blur(2px)"></div>
+    <div style="position:fixed; z-index:81; top:11vh; left:50%; transform:translateX(-50%); width:min(620px,92vw); background:var(--bg-card); border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow-3); overflow:hidden; animation:fadeIn .18s ease">
+      <div style="display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--line)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="color:var(--ink-3)"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4.3-4.3"></path></svg>
+        <input value="{{ pq }}" onChange="{{ onPq }}" autofocus="{{ true }}" placeholder="Escribe una opción, un módulo o un trámite…" style="flex:1; border:0; background:transparent; padding:2px 0; font-size:15px; outline:none" />
+        <kbd style="font-family:var(--font-mono); font-size:10px; color:var(--ink-4); border:1px solid var(--line-2); border-radius:4px; padding:2px 5px">Esc</kbd>
+      </div>
+      <div style="max-height:52vh; overflow-y:auto; padding:6px">
+        <sc-for list="{{ palResults }}" as="r" hint-placeholder-count="8">
+          <button onClick="{{ r.go }}" style="display:flex; align-items:center; gap:12px; width:100%; padding:10px 11px; border:0; border-radius:8px; background:transparent; cursor:pointer; text-align:left" style-hover="background:var(--accent-soft)">
+            <span style="flex:1; min-width:0; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ r.label }}</span>
+            <span style="font-size:11px; color:var(--ink-3); white-space:nowrap">{{ r.mod }}</span>
+          </button>
+        </sc-for>
+      </div>
+      <div style="padding:9px 16px; border-top:1px solid var(--line); background:var(--bg-elev); font-size:11px; color:var(--ink-3); display:flex; justify-content:space-between; gap:10px">
+        <span>{{ palCount }}</span>
+        <span>Ctrl K abre y cierra este buscador</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <aside data-nav="1" data-open="{{ navOpen }}" style="width:258px; flex:0 0 258px; background:var(--bg-elev); border-right:1px solid var(--line); display:flex; flex-direction:column; overflow-y:auto">
+    <div style="padding:16px 16px 14px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg-elev); z-index:2">
+      <div style="width:34px; height:34px; border-radius:8px; background:var(--accent); color:#fff; display:grid; place-items:center; font-family:var(--font-serif); font-size:16px; font-weight:600">S</div>
+      <div style="line-height:1.2; min-width:0">
+        <div style="font-family:var(--font-serif); font-size:17px; font-weight:600; letter-spacing:-.02em">SGTM</div>
+        <div style="font-size:10px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ entidad }}</div>
+      </div>
+    </div>
+    <div style="padding:10px 10px 6px">
+      <button onClick="{{ openPal }}" style="display:flex; align-items:center; gap:8px; width:100%; box-sizing:border-box; border:1px solid var(--line-2); border-radius:7px; padding:9px 10px; background:var(--bg); cursor:pointer; text-align:left" style-hover="border-color:var(--ink-4)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="color:var(--ink-3)"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4.3-4.3"></path></svg>
+        <span style="flex:1; font-size:13px; color:var(--ink-3)">Buscar en el sistema</span>
+        <kbd style="font-family:var(--font-mono); font-size:10px; color:var(--ink-4); border:1px solid var(--line-2); border-radius:4px; padding:2px 5px">Ctrl K</kbd>
+      </button>
+    </div>
+
+    <sc-if value="{{ navRoot }}" hint-placeholder-val="{{ true }}">
+      <nav style="padding:4px 10px 28px; display:flex; flex-direction:column; gap:2px">
+        <sc-if value="{{ hasRecent }}">
+          <div style="margin:8px 0 4px; padding:0 8px; font-size:10px; text-transform:uppercase; letter-spacing:.14em; color:var(--ink-4); font-weight:500">Recientes</div>
+          <sc-for list="{{ recent }}" as="r" hint-placeholder-count="3">
+            <button onClick="{{ r.go }}" style="display:flex; flex-direction:column; align-items:flex-start; gap:1px; width:100%; padding:7px 10px; border:0; border-radius:7px; cursor:pointer; text-align:left; background:transparent" style-hover="background:var(--accent-soft)">
+              <span style="font-size:13px; color:var(--ink-2); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ r.label }}</span>
+              <span style="font-size:10.5px; color:var(--ink-4)">{{ r.mod }}</span>
+            </button>
+          </sc-for>
+          <div style="height:1px; background:var(--line); margin:10px 8px 4px"></div>
+        </sc-if>
+        <div style="margin:8px 0 4px; padding:0 8px; font-size:10px; text-transform:uppercase; letter-spacing:.14em; color:var(--ink-4); font-weight:500">Módulos</div>
+        <sc-for list="{{ modList }}" as="m" hint-placeholder-count="12">
+          <button onClick="{{ m.go }}" style="{{ m.style }}" style-hover="background:var(--accent-soft)">
+            <span style="{{ m.abbrStyle }}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <sc-for list="{{ m.icon }}" as="p" hint-placeholder-count="2"><path d="{{ p.d }}"></path></sc-for>
+              </svg>
+            </span>
+            <span style="flex:1; min-width:0; line-height:1.25">
+              <span style="display:block; font-size:13.5px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ m.label }}</span>
+              <span style="display:block; font-size:10.5px; color:var(--ink-4)">{{ m.count }}</span>
+            </span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="color:var(--ink-4)"><path d="M9 6l6 6-6 6"></path></svg>
+          </button>
+        </sc-for>
+      </nav>
+    </sc-if>
+
+    <sc-if value="{{ modName }}">
+      <nav style="padding:4px 10px 28px; display:flex; flex-direction:column; gap:1px">
+        <button onClick="{{ backMods }}" style="display:flex; align-items:center; gap:7px; padding:7px 8px; border:0; background:transparent; cursor:pointer; font-size:12px; color:var(--ink-3); text-align:left" style-hover="color:var(--accent-ink)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M15 6l-6 6 6 6"></path></svg>
+          Todos los módulos
+        </button>
+        <div style="padding:4px 8px 8px; font-family:var(--font-serif); font-size:16px; font-weight:600; letter-spacing:-.01em">{{ modName }}</div>
+        <sc-for list="{{ modGroups }}" as="gr" hint-placeholder-count="4">
+          <button onClick="{{ gr.toggle }}" style="display:flex; align-items:center; gap:7px; width:100%; margin:10px 0 2px; padding:4px 8px; border:0; background:transparent; cursor:pointer; text-align:left">
+            <span style="{{ gr.caret }}">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg>
+            </span>
+            <span style="flex:1; font-size:10px; text-transform:uppercase; letter-spacing:.14em; color:var(--ink-4); font-weight:500">{{ gr.label }}</span>
+            <span style="font-family:var(--font-mono); font-size:10px; color:var(--ink-4)">{{ gr.count }}</span>
+          </button>
+          <sc-if value="{{ gr.open }}" hint-placeholder-val="{{ true }}">
+            <sc-for list="{{ gr.items }}" as="it" hint-placeholder-count="4">
+              <button onClick="{{ it.go }}" style="{{ it.style }}" style-hover="background:var(--accent-soft)">
+                <span style="flex:1; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ it.label }}</span>
+                <span style="font-family:var(--font-mono); font-size:10px; color:var(--ink-4)">{{ it.badge }}</span>
+              </button>
+            </sc-for>
+          </sc-if>
+        </sc-for>
+      </nav>
+    </sc-if>
+  </aside>
+
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column">
+    <header data-appheader="1" style="position:sticky; top:0; z-index:40; display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--line); background:color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter:blur(10px)">
+      <button data-navtoggle="1" onClick="{{ toggleNav }}" style="display:none; width:36px; height:36px; align-items:center; justify-content:center; border:1px solid var(--line-2); border-radius:6px; background:var(--bg-card); cursor:pointer">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+      </button>
+      <div style="min-width:0; flex:1">
+        <div style="font-size:10px; text-transform:uppercase; letter-spacing:.14em; color:var(--ink-3)">{{ s.mod }}</div>
+        <h1 style="margin:2px 0 0; font-family:var(--font-serif); font-size:21px; font-weight:600; letter-spacing:-.02em; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ s.title }}</h1>
+      </div>
+      <button onClick="{{ openPal }}" style="display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border:1px solid var(--line-2); border-radius:6px; background:var(--bg-card); cursor:pointer; color:var(--ink-2)" style-hover="border-color:var(--ink-4)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4.3-4.3"></path></svg>
+      </button>
+      <div data-sm-hide="1" style="display:flex; align-items:center; gap:8px">
+        <sc-if value="{{ showEndpoint }}" hint-placeholder-val="{{ true }}">
+          <code style="font-family:var(--font-mono); font-size:11px; color:var(--ink-3); background:var(--bg-elev); border:1px solid var(--line); border-radius:999px; padding:5px 11px; white-space:nowrap">{{ s.endpoint }}</code>
+        </sc-if>
+        <div style="display:flex; align-items:center; gap:8px; padding:4px 10px 4px 4px; border:1px solid var(--line); border-radius:999px; background:var(--bg-card)">
+          <div style="width:26px; height:26px; border-radius:999px; background:var(--accent-soft); color:var(--accent-ink); display:grid; place-items:center; font-size:11px; font-weight:600">JC</div>
+          <div style="line-height:1.15">
+            <div style="font-size:12px; font-weight:500">J. Cárdenas</div>
+            <div style="font-size:10px; color:var(--ink-3)">Caja C-3</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div style="padding:22px 20px 72px; animation:fadeIn .35s ease">
+      <div style="max-width:1240px; margin:0 auto; display:flex; flex-direction:column; gap:18px">
+
+        <sc-if value="{{ isHub }}">
+          <div style="display:flex; align-items:flex-start; gap:14px; padding:20px 22px; background:var(--bg-card); border:1px solid var(--line); border-radius:12px">
+            <div style="flex:0 0 44px; width:44px; height:44px; border-radius:10px; background:var(--accent-soft); color:var(--accent-ink); display:grid; place-items:center">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <sc-for list="{{ hub.icon }}" as="p" hint-placeholder-count="2"><path d="{{ p.d }}"></path></sc-for>
+              </svg>
+            </div>
+            <div style="min-width:0">
+              <h2 style="margin:0; font-family:var(--font-serif); font-size:24px; font-weight:600; letter-spacing:-.02em">{{ hub.label }}</h2>
+              <div style="margin-top:4px; font-size:13px; color:var(--ink-3)">{{ hub.count }}</div>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px">
+            <sc-for list="{{ hub.groups }}" as="gr" hint-placeholder-count="4">
+              <section style="background:var(--bg-card); border:1px solid var(--line); border-radius:10px; overflow:hidden">
+                <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line)">
+                  <h3 style="margin:0; font-size:10px; text-transform:uppercase; letter-spacing:.14em; color:var(--ink-3); font-weight:500">{{ gr.label }}</h3>
+                  <span style="font-family:var(--font-mono); font-size:10.5px; color:var(--ink-4)">{{ gr.count }}</span>
+                </div>
+                <div style="display:flex; flex-direction:column">
+                  <sc-for list="{{ gr.items }}" as="it" hint-placeholder-count="4">
+                    <button onClick="{{ it.go }}" style="display:flex; align-items:flex-start; gap:10px; width:100%; padding:12px 16px; border:0; border-bottom:1px solid var(--line); background:transparent; cursor:pointer; text-align:left" style-hover="background:var(--accent-soft)">
+                      <span style="flex:1; min-width:0">
+                        <span style="display:block; font-size:13.5px; font-weight:500; color:var(--ink)">{{ it.label }}</span>
+                        <span style="display:block; margin-top:3px; font-size:12px; line-height:1.45; color:var(--ink-3); text-wrap:pretty">{{ it.desc }}</span>
+                      </span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="color:var(--ink-4); margin-top:3px"><path d="M9 6l6 6-6 6"></path></svg>
+                    </button>
+                  </sc-for>
+                </div>
+              </section>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ s.desc }}" hint-placeholder-val="{{ true }}">
+          <p style="margin:0; max-width:70ch; font-family:var(--font-serif); font-size:17px; line-height:1.6; color:var(--ink-2); text-wrap:pretty">{{ s.desc }}</p>
+        </sc-if>
+
+        <sc-if value="{{ s.isDash }}">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px">
+            <sc-for list="{{ s.kpis }}" as="k" hint-placeholder-count="4">
+              <div style="background:var(--bg-card); border:1px solid var(--line); border-radius:10px; padding:16px 16px 14px; box-shadow:var(--shadow-1)">
+                <x-import component-from-global-scope="JurisPEDesignSystem_cf0a1e.Stat" value="{{ k.value }}" label="{{ k.label }}" highlight="{{ true }}" hint-size="100%,72px"></x-import>
+                <div style="font-size:12px; color:var(--ink-3); margin-top:7px">{{ k.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px">
+            <sc-for list="{{ s.panels }}" as="p" hint-placeholder-count="2">
+              <div style="background:var(--bg-card); border:1px solid var(--line); border-radius:10px; overflow:hidden">
+                <div style="padding:13px 16px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; justify-content:space-between; gap:10px">
+                  <h2 style="margin:0; font-family:var(--font-serif); font-size:16px; font-weight:600">{{ p.title }}</h2>
+                  <span style="font-size:11px; color:var(--ink-3)">{{ p.note }}</span>
+                </div>
+                <div style="padding:6px 16px 14px">
+                  <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="4">
+                    <div style="display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line)">
+                      <div style="flex:1; min-width:0">
+                        <div style="font-size:13.5px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ r.label }}</div>
+                        <div style="font-size:11px; color:var(--ink-3)">{{ r.sub }}</div>
+                      </div>
+                      <div style="width:110px; height:6px; border-radius:999px; background:var(--accent-soft); overflow:hidden" data-sm-hide="1">
+                        <div style="{{ r.bar }}"></div>
+                      </div>
+                      <div style="font-family:var(--font-mono); font-size:12.5px; text-align:right; min-width:76px">{{ r.value }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ s.isPortal }}">
+          <div style="background:var(--accent); color:#fff; border-radius:12px; padding:26px 24px; display:flex; flex-wrap:wrap; gap:20px; align-items:center; justify-content:space-between">
+            <div style="min-width:260px; flex:1">
+              <div style="font-size:10px; letter-spacing:.14em; text-transform:uppercase; opacity:.72">Portal del contribuyente</div>
+              <h2 style="margin:8px 0 0; font-family:var(--font-serif); font-size:29px; font-weight:400; letter-spacing:-.025em; line-height:1.15">Consulta y paga tus tributos <em style="font-style:italic">sin ir a ventanilla</em>.</h2>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.22); border-radius:8px; padding:8px">
+              <select style="border:0; border-radius:6px; padding:11px 12px; background:#fff; color:var(--ink); min-width:96px">
+                <option>DNI</option><option>RUC</option><option>Código</option>
+              </select>
+              <input defaultValue="44218937" style="border:0; border-radius:6px; padding:11px 12px; min-width:150px; background:#fff" placeholder="Número de documento" />
+              <button style="border:0; border-radius:6px; padding:11px 20px; background:#fff; color:var(--accent); font-weight:600; cursor:pointer">Consultar</button>
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap">
+            <sc-for list="{{ s.steps }}" as="st" hint-placeholder-count="4">
+              <div style="{{ st.style }}">
+                <span style="font-family:var(--font-mono); font-size:11px; opacity:.7">{{ st.n }}</span>
+                <span style="font-size:13px; font-weight:500">{{ st.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ s.hasFilters }}">
+          <div style="background:var(--bg-card); border:1px solid var(--line); border-radius:10px; padding:14px 16px 16px">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px">
+              <div style="font-size:10px; text-transform:uppercase; letter-spacing:.13em; color:var(--ink-3)">{{ s.filterLabel }}</div>
+              <button style="border:1px solid var(--line-2); background:var(--bg-elev); border-radius:6px; padding:7px 14px; font-size:12.5px; cursor:pointer" style-hover="border-color:var(--ink-3)">Limpiar</button>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end">
+              <sc-for list="{{ s.filters }}" as="f" hint-placeholder-count="4">
+                <label style="display:flex; flex-direction:column; gap:5px; min-width:0">
+                  <span style="font-size:11.5px; color:var(--ink-3); font-weight:500">{{ f.label }}</span>
+                  <sc-if value="{{ f.isSel }}">
+                    <select defaultValue="{{ f.v }}" style="border:1px solid var(--line-2); border-radius:6px; padding:9px 10px; background:var(--bg-elev); width:100%">
+                      <sc-for list="{{ f.opts }}" as="o" hint-placeholder-count="2"><option>{{ o }}</option></sc-for>
+                    </select>
+                  </sc-if>
+                  <sc-if value="{{ f.isIn }}">
+                    <input defaultValue="{{ f.v }}" placeholder="{{ f.ph }}" style="border:1px solid var(--line-2); border-radius:6px; padding:9px 10px; background:var(--bg-elev); width:100%; box-sizing:border-box" />
+                  </sc-if>
+                </label>
+              </sc-for>
+              <button style="border:0; border-radius:6px; padding:10px 20px; background:var(--accent); color:#fff; font-weight:500; cursor:pointer; height:38px" style-hover="background:var(--accent-2)">Buscar</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ s.hasTable }}">
+          <div style="background:var(--bg-card); border:1px solid var(--line); border-radius:10px; overflow:hidden">
+            <div style="padding:13px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+              <h2 style="margin:0; font-family:var(--font-serif); font-size:16px; font-weight:600; flex:1">{{ s.tableTitle }}</h2>
+              <span style="font-family:var(--font-mono); font-size:11px; color:var(--ink-3)">{{ s.tableCount }}</span>
+              <div style="display:flex; gap:8px">
+                <sc-for list="{{ s.tableActions }}" as="a" hint-placeholder-count="2">
+                  <x-import component-from-global-scope="JurisPEDesignSystem_cf0a1e.Button" variant="ghost" size="sm" hint-size="auto,32px">{{ a.label }}</x-import>
+                </sc-for>
+              </div>
+            </div>
+            <div style="overflow-x:auto">
+              <table style="width:100%; border-collapse:collapse; min-width:640px">
+                <thead>
+                  <tr>
+                    <sc-for list="{{ s.cols }}" as="c" hint-placeholder-count="5">
+                      <th style="{{ c.style }}">{{ c.label }}</th>
+                    </sc-for>
+                  </tr>
+                </thead>
+                <tbody>
+                  <sc-for list="{{ s.rows }}" as="r" hint-placeholder-count="6">
+                    <tr style="border-top:1px solid var(--line)" style-hover="background:var(--bg-elev)">
+                      <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="5">
+                        <td style="{{ c.style }}">
+                          <sc-if value="{{ c.isTag }}"><x-import component-from-global-scope="JurisPEDesignSystem_cf0a1e.Badge" tone="{{ c.tone }}" hint-size="auto,22px">{{ c.text }}</x-import></sc-if>
+                          <sc-if value="{{ c.isText }}">{{ c.text }}</sc-if>
+                        </td>
+                      </sc-for>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+            <sc-if value="{{ s.tableNote }}">
+              <div style="padding:11px 16px; border-top:1px solid var(--line); background:var(--bg-elev); font-size:12px; color:var(--ink-3)">{{ s.tableNote }}</div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ s.hasTotals }}">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:10px; overflow:hidden">
+            <sc-for list="{{ s.totals }}" as="t" hint-placeholder-count="4">
+              <div style="{{ t.style }}">
+                <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:.11em; color:var(--ink-3)">{{ t.label }}</div>
+                <div style="font-family:var(--font-mono); font-size:19px; margin-top:6px; font-weight:500">{{ t.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ s.hasTabs }}">
+          <div style="display:flex; gap:2px; overflow-x:auto; border-bottom:1px solid var(--line); padding-bottom:0">
+            <sc-for list="{{ s.tabs }}" as="t" hint-placeholder-count="4">
+              <button onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ s.hasForm }}">
+          <div style="display:flex; flex-direction:column; gap:14px">
+            <sc-for list="{{ s.sections }}" as="sec" hint-placeholder-count="3">
+              <section style="background:var(--bg-card); border:1px solid var(--line); border-radius:10px; overflow:hidden">
+                <button onClick="{{ sec.toggle }}" style="width:100%; display:flex; align-items:center; gap:10px; padding:13px 16px; background:transparent; border:0; border-bottom:1px solid var(--line); cursor:pointer; text-align:left">
+                  <h2 style="margin:0; font-family:var(--font-serif); font-size:16px; font-weight:600; flex:1">{{ sec.label }}</h2>
+                  <span style="font-size:11px; color:var(--ink-3)">{{ sec.hint }}</span>
+                  <span style="{{ sec.caret }}">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+                  </span>
+                </button>
+                <sc-if value="{{ sec.open }}" hint-placeholder-val="{{ true }}">
+                  <div style="padding:18px 16px; display:grid; grid-template-columns:repeat(auto-fit,minmax(196px,1fr)); gap:15px 16px">
+                    <sc-for list="{{ sec.fields }}" as="f" hint-placeholder-count="6">
+                      <label style="{{ f.wrap }}">
+                        <span style="font-size:11.5px; color:var(--ink-3); font-weight:500">{{ f.label }}</span>
+                        <sc-if value="{{ f.isSel }}">
+                          <select defaultValue="{{ f.v }}" style="border:1px solid var(--line-2); border-radius:6px; padding:9px 10px; background:var(--bg-elev); width:100%">
+                            <sc-for list="{{ f.opts }}" as="o" hint-placeholder-count="2"><option>{{ o }}</option></sc-for>
+                          </select>
+                        </sc-if>
+                        <sc-if value="{{ f.isArea }}">
+                          <textarea defaultValue="{{ f.v }}" placeholder="{{ f.ph }}" rows="3" style="border:1px solid var(--line-2); border-radius:6px; padding:9px 10px; background:var(--bg-elev); width:100%; box-sizing:border-box; resize:vertical; font-family:var(--font-sans)"></textarea>
+                        </sc-if>
+                        <sc-if value="{{ f.isChk }}">
+                          <span style="display:flex; align-items:center; gap:8px; padding:9px 10px; border:1px solid var(--line-2); border-radius:6px; background:var(--bg-elev)">
+                            <input type="checkbox" defaultChecked="{{ f.on }}" style="accent-color:var(--accent); width:15px; height:15px" />
+                            <span style="font-size:13px; color:var(--ink-2)">{{ f.ph }}</span>
+                          </span>
+                        </sc-if>
+                        <sc-if value="{{ f.isRo }}">
+                          <span style="{{ f.roStyle }}">{{ f.v }}</span>
+                        </sc-if>
+                        <sc-if value="{{ f.isIn }}">
+                          <input defaultValue="{{ f.v }}" placeholder="{{ f.ph }}" style="{{ f.inStyle }}" />
+                        </sc-if>
+                      </label>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </section>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ s.isReport }}">
+          <div data-sheet="1" style="background:#fff; border:1px solid var(--line); border-radius:6px; box-shadow:var(--shadow-2); padding:40px 44px; max-width:820px; margin:0 auto; width:100%; box-sizing:border-box">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:20px; border-bottom:2px solid var(--ink); padding-bottom:14px">
+              <div>
+                <div style="font-family:var(--font-serif); font-size:15px; font-weight:600">{{ entidad }}</div>
+                <div style="font-size:11.5px; color:var(--ink-3); margin-top:2px">Gerencia de Administración Tributaria — Unidad de Rentas</div>
+              </div>
+              <div style="text-align:right; font-family:var(--font-mono); font-size:11px; color:var(--ink-3); line-height:1.7">
+                <div>{{ s.report.code }}</div>
+                <div>{{ s.report.date }}</div>
+              </div>
+            </div>
+            <h2 style="margin:22px 0 4px; font-family:var(--font-serif); font-size:24px; font-weight:600; letter-spacing:-.02em; text-align:center">{{ s.report.title }}</h2>
+            <div style="text-align:center; font-size:12px; color:var(--ink-3); margin-bottom:22px">{{ s.report.subtitle }}</div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px 22px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:14px 0; margin-bottom:18px">
+              <sc-for list="{{ s.report.meta }}" as="m" hint-placeholder-count="4">
+                <div>
+                  <div style="font-size:10px; text-transform:uppercase; letter-spacing:.11em; color:var(--ink-3)">{{ m.k }}</div>
+                  <div style="font-size:13.5px; margin-top:3px">{{ m.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <table style="width:100%; border-collapse:collapse">
+              <thead>
+                <tr>
+                  <sc-for list="{{ s.report.cols }}" as="c" hint-placeholder-count="4">
+                    <th style="{{ c.style }}">{{ c.label }}</th>
+                  </sc-for>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ s.report.rows }}" as="r" hint-placeholder-count="5">
+                  <tr style="border-bottom:1px solid var(--line)">
+                    <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="4">
+                      <td style="{{ c.style }}">{{ c.text }}</td>
+                    </sc-for>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+            <p style="font-family:var(--font-serif); font-size:14px; line-height:1.7; color:var(--ink-2); margin-top:26px; text-wrap:pretty">{{ s.report.footer }}</p>
+            <div style="display:flex; justify-content:space-between; margin-top:56px; gap:40px">
+              <div style="flex:1; border-top:1px solid var(--ink); padding-top:7px; font-size:11.5px; text-align:center; color:var(--ink-3)">Cajero / Responsable</div>
+              <div style="flex:1; border-top:1px solid var(--ink); padding-top:7px; font-size:11.5px; text-align:center; color:var(--ink-3)">Contribuyente</div>
+            </div>
+          </div>
+          <div data-noprint="1" style="display:flex; gap:10px; justify-content:center">
+            <button onClick="{{ print }}" style="border:0; border-radius:6px; padding:11px 22px; background:var(--accent); color:#fff; font-weight:500; cursor:pointer" style-hover="background:var(--accent-2)">Imprimir</button>
+            <button style="border:1px solid var(--line-2); border-radius:6px; padding:11px 22px; background:var(--bg-card); cursor:pointer" style-hover="border-color:var(--ink-3)">Descargar PDF</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ s.hasActions }}">
+          <div data-noprint="1" style="position:sticky; bottom:0; display:flex; gap:9px; flex-wrap:wrap; justify-content:flex-end; padding:12px 0 0; border-top:1px solid var(--line); background:linear-gradient(to top, var(--bg) 62%, transparent)">
+            <sc-for list="{{ s.actions }}" as="a" hint-placeholder-count="3">
+              <x-import component-from-global-scope="JurisPEDesignSystem_cf0a1e.Button" variant="{{ a.variant }}" hint-size="auto,40px">{{ a.label }}</x-import>
+            </sc-for>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;entidad&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Municipalidad Provincial de Sullana&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;showEndpoint&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Desarrollo&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Compacta&quot;,&quot;Normal&quot;,&quot;Amplia&quot;],&quot;default&quot;:&quot;Normal&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;options&quot;:[&quot;#1F3A5F&quot;,&quot;#7C2D12&quot;,&quot;#1f5f3a&quot;,&quot;#444444&quot;],&quot;default&quot;:&quot;#1F3A5F&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+const T = (label, o) => Object.assign({ label, t: 'text', v: '', ph: '', opts: null, wide: 0, on: false }, o || {});
+const S = (label, fields, o) => Object.assign({ label, fields, hint: '' }, o || {});
+const money = v => v;
+
+class Component extends DCLogic {
+  state = { view: 'inicio', tab: 0, navOpen: false, closed: {}, navMod: null, pal: false, pq: '', recent: [] };
+
+  go(id) {
+    const m = this.modOf(id);
+    this.setState(s => ({
+      view: id, tab: 0, navOpen: false, closed: {}, pal: false, pq: '',
+      navMod: m || s.navMod,
+      recent: [id].concat((s.recent || []).filter(r => r !== id)).slice(0, 5)
+    }));
+  }
+
+  modOf(id) {
+    const gs = window.SGTM_NAV || [];
+    for (var i = 0; i < gs.length; i++) {
+      for (var j = 0; j < gs[i].items.length; j++) if (gs[i].items[j][0] === id) return gs[i].label;
+    }
+    return null;
+  }
+
+  openMod(label) { this.setState({ view: '@mod:' + label, navMod: label, navOpen: false, tab: 0, pal: false }); }
+
+  componentDidMount() {
+    this._key = e => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); this.setState(s => ({ pal: !s.pal, pq: '' })); }
+      else if (e.key === 'Escape') this.setState({ pal: false, navOpen: false });
+    };
+    window.addEventListener('keydown', this._key);
+  }
+
+  componentWillUnmount() { window.removeEventListener('keydown', this._key); }
+
+  classify(id, label) {
+    const sc = this.screens()[id] || {};
+    const t = ((sc.title || label) + '').toLowerCase();
+    if (sc.kind === 'report' || /reporte|padr[oó]n|resumen|record|constancia|resoluci[oó]n|certificado/.test(t)) return 'Documentos y reportes';
+    if (/consulta|b[uú]squeda|estado de cuenta|hist[oó]rico|auditor[ií]a|panel|portal/.test(t)) return 'Consultas';
+    if (/c[aá]lculo|generaci[oó]n|proceso|transferencia|pase|importaci[oó]n|emisi[oó]n|notificaci[oó]n|anulaci[oó]n|alta de|baja de|cambio|cambiar|actualizaci[oó]n|fraccionamiento|liquidaci[oó]n|declaraci[oó]n|duplicado|prescripci[oó]n|copias de seguridad|acto/.test(t)) return 'Procesos';
+    return 'Registro y mantenimiento';
+  }
+
+  mods() {
+    if (this._mods) return this._mods;
+    const abbrs = {
+      'Inicio': 'IN', 'Catastro': 'CT', 'Rentas · Registro': 'RT', 'Fiscalización': 'FZ',
+      'Tránsito': 'TR', 'Infracciones administrativas': 'IA', 'Tesorería': 'TS',
+      'Consultas': 'CS', 'Valores': 'VL', 'Coactiva': 'CO',
+      'Autorizaciones y licencias': 'LC', 'Seguridad': 'SG'
+    };
+    const icons = {
+      'Inicio': ['M3 10.6 12 3.5l9 7.1', 'M5.6 9.6V20.5h12.8V9.6', 'M10 20.5v-5.4h4v5.4'],
+      'Catastro': ['M3.5 6.6 9 4.2l6 2.4 5.5-2.4v13.2L15 19.8l-6-2.4-5.5 2.4z', 'M9 4.2v13.2', 'M15 6.6v13.2'],
+      'Rentas · Registro': ['M6.5 3.5h7.5l4 4v13h-11.5z', 'M14 3.5v4h4', 'M9.5 12.5h5', 'M9.5 16.5h3.5'],
+      'Fiscalización': ['M9.5 4.5H8A1.5 1.5 0 0 0 6.5 6v13A1.5 1.5 0 0 0 8 20.5h8a1.5 1.5 0 0 0 1.5-1.5V6A1.5 1.5 0 0 0 16 4.5h-1.5', 'M9.5 3.2h5v2.8h-5z', 'M9.6 13.2l2 2 3.4-4'],
+      'Tránsito': ['M5 15.8v-3.2l1.9-4.4h10.2l1.9 4.4v3.2', 'M3.6 15.8h16.8', 'M8.4 18.4a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0', 'M18.8 18.4a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0'],
+      'Infracciones administrativas': ['M12 4.2 20.8 19.6H3.2z', 'M12 9.8v4.4', 'M12 17.1h.02'],
+      'Tesorería': ['M3.2 7.4h17.6v9.2H3.2z', 'M13.6 12a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0', 'M6.6 10.6v2.8', 'M17.4 10.6v2.8'],
+      'Consultas': ['M17.4 11a6.4 6.4 0 1 1-12.8 0 6.4 6.4 0 0 1 12.8 0', 'M15.8 15.8 20.6 20.6'],
+      'Valores': ['M6.5 3.5h7.5l4 4v13h-11.5z', 'M14 3.5v4h4', 'M9.5 11.5h5', 'M15.6 16.4a2.3 2.3 0 1 1-4.6 0 2.3 2.3 0 0 1 4.6 0'],
+      'Coactiva': ['M12 4.4v3.2', 'M5 8.6h14', 'M5 8.6 2.8 14.4h4.4z', 'M19 8.6 16.8 14.4h4.4z', 'M8.4 20h7.2'],
+      'Autorizaciones y licencias': ['M4.4 9.6V20h15.2V9.6', 'M3.2 9.6 5.2 4.6h13.6l2 5z', 'M9.6 20v-5.4h4.8V20'],
+      'Seguridad': ['M12 3.4 19 5.9v5.6c0 4.1-3 7.2-7 9.1-4-1.9-7-5-7-9.1V5.9z', 'M9.4 12.1l1.9 1.9 3.5-3.6']
+    };
+    const order = ['Registro y mantenimiento', 'Procesos', 'Consultas', 'Documentos y reportes'];
+    const sc = this.screens();
+    this._mods = (window.SGTM_NAV || []).map(g => {
+      const bag = {};
+      g.items.forEach(it => {
+        const k = this.classify(it[0], it[1]);
+        (bag[k] = bag[k] || []).push({ id: it[0], label: it[1], desc: (sc[it[0]] || {}).desc || '' });
+      });
+      return {
+        label: g.label, abbr: abbrs[g.label] || g.label.slice(0, 2).toUpperCase(),
+        icon: (icons[g.label] || ['M4.5 4.5h15v15h-15z']).map(d => ({ d: d })),
+        count: g.items.length, items: g.items,
+        groups: order.filter(k => bag[k]).map(k => ({ label: k, items: bag[k] }))
+      };
+    });
+    return this._mods;
+  }
+
+  allOptions() {
+    if (this._all) return this._all;
+    const sc = this.screens();
+    this._all = [];
+    (window.SGTM_NAV || []).forEach(g => g.items.forEach(it => {
+      this._all.push({ id: it[0], label: it[1], mod: g.label, title: (sc[it[0]] || {}).title || it[1] });
+    }));
+    return this._all;
+  }
+
+  screens() {
+    if (this._sc) return this._sc;
+    var sc = Object.assign({}, window.SGTM_SCREENS || {});
+    Object.keys(sc).forEach(function (k) { sc[k].id = k; });
+    this._sc = sc;
+    return sc;
+  }
+
+  field(f, i) {
+    const base = 'border:1px solid var(--line-2); border-radius:6px; padding:9px 10px; background:var(--bg-elev); width:100%; box-sizing:border-box';
+    return {
+      label: f.label, v: f.v, ph: f.ph, opts: f.opts, on: f.on,
+      isSel: f.t === 'sel', isArea: f.t === 'area', isChk: f.t === 'chk', isRo: f.t === 'ro',
+      isIn: f.t === 'text' || f.t === 'date',
+      inStyle: base + (f.t === 'date' ? '' : ''),
+      roStyle: base + '; background:transparent; border-style:dashed; color:var(--ink-2); font-family:var(--font-mono); font-size:13px; display:block; min-height:38px; line-height:19px',
+      wrap: 'display:flex; flex-direction:column; gap:5px; min-width:0' + (f.wide ? '; grid-column:1/-1' : '')
+    };
+  }
+
+  cell(c, isNum, isFirst) {
+    const tag = Array.isArray(c);
+    const tone = tag ? c[1] : null;
+    const tones = { ok: 'var(--ok-bg);color:var(--ok-fg)', warn: '#f6ecd9;color:#8a6420', bad: 'var(--bad-bg);color:var(--bad-fg)' };
+    return {
+      isTag: tag, isText: !tag, text: tag ? c[0] : c,
+      tone: tone === 'warn' ? 'accent' : (tone || 'neutral'),
+      tagStyle: 'display:inline-block; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:500; background:' + (tones[tone] || tones.ok),
+      style: 'padding:11px 14px; font-size:13px; vertical-align:middle; white-space:nowrap' +
+        (isNum ? '; text-align:right; font-family:var(--font-mono); font-size:12.5px' : '') +
+        (isFirst ? '; font-weight:500' : '; color:var(--ink-2)')
+    };
+  }
+
+  renderVals() {
+    const sc = this.screens();
+    const cur = sc[this.state.view] || sc.inicio;
+    const acc = this.props.accent || '#1F3A5F';
+    const dens = this.props.density || 'Normal';
+    const pad = dens === 'Compacta' ? 8 : dens === 'Amplia' ? 13 : 10;
+
+    const mods = this.mods();
+    const curModName = this.state.navMod;
+    const curMod = mods.filter(m => m.label === curModName)[0] || null;
+    const isHub = (this.state.view + '').indexOf('@mod:') === 0;
+
+    const modList = mods.map(m => ({
+      label: m.label, abbr: m.abbr, icon: m.icon, count: m.count + (m.count === 1 ? ' opción' : ' opciones'),
+      go: () => this.openMod(m.label),
+      style: 'display:flex; align-items:center; gap:11px; width:100%; padding:' + (pad + 2) + 'px 10px; border:0; border-radius:8px; cursor:pointer; text-align:left; background:' + (curModName === m.label ? 'var(--accent-soft)' : 'transparent'),
+      abbrStyle: 'flex:0 0 28px; width:28px; height:28px; border-radius:7px; display:grid; place-items:center; font-family:var(--font-mono); font-size:10.5px; letter-spacing:.02em; background:' + (curModName === m.label ? acc : 'var(--bg-card)') + '; color:' + (curModName === m.label ? '#fff' : 'var(--ink-3)') + '; border:1px solid ' + (curModName === m.label ? acc : 'var(--line-2)')
+    }));
+
+    const item = (it) => {
+      const on = this.state.view === it.id;
+      return {
+        label: it.label, badge: on ? '●' : '',
+        go: () => this.go(it.id),
+        style: 'display:flex; align-items:center; gap:8px; width:100%; padding:' + pad + 'px 10px; border:0; border-radius:7px; cursor:pointer; font-size:13.5px; text-align:left; background:' +
+          (on ? 'var(--accent-soft)' : 'transparent') + '; color:' + (on ? 'var(--accent-ink)' : 'var(--ink-2)') + '; font-weight:' + (on ? '600' : '400')
+      };
+    };
+
+    const modGroups = curMod ? curMod.groups.map((gr, gi) => {
+      const key = 'g|' + curMod.label + '|' + gi;
+      const shut = !!this.state.closed[key];
+      return {
+        label: gr.label, count: gr.items.length, open: !shut,
+        toggle: () => this.setState(s => ({ closed: Object.assign({}, s.closed, { [key]: !shut }) })),
+        caret: 'display:inline-flex; color:var(--ink-4); transition:transform .15s ease; transform:rotate(' + (shut ? '-90' : '0') + 'deg)',
+        items: gr.items.map(item)
+      };
+    }) : [];
+
+    const recent = (this.state.recent || []).map(id => {
+      const o = this.allOptions().filter(x => x.id === id)[0];
+      return o ? { label: o.label, mod: o.mod, go: () => this.go(id) } : null;
+    }).filter(Boolean);
+
+    const pq = (this.state.pq || '').trim().toLowerCase();
+    const palResults = (pq
+      ? this.allOptions().filter(o => (o.label + ' ' + o.title + ' ' + o.mod).toLowerCase().indexOf(pq) >= 0)
+      : this.allOptions().slice(0, 10)
+    ).slice(0, 14).map(o => ({ label: o.label, mod: o.mod, go: () => this.go(o.id) }));
+
+    const hubMod = isHub ? (mods.filter(m => m.label === (this.state.view + '').slice(5))[0] || mods[0]) : null;
+    const hub = hubMod ? {
+      label: hubMod.label, abbr: hubMod.abbr, icon: hubMod.icon,
+      count: hubMod.count + ' opciones en ' + hubMod.groups.length + ' bloques',
+      groups: hubMod.groups.map(gr => ({
+        label: gr.label, count: gr.items.length + '',
+        items: gr.items.map(it => ({
+          label: it.label,
+          desc: (it.desc || '').length > 108 ? it.desc.slice(0, 108).replace(/\s\S*$/, '') + '…' : it.desc,
+          go: () => this.go(it.id)
+        }))
+      }))
+    } : null;
+
+    const tabs = cur.tabs || null;
+    const activeTab = tabs ? tabs[Math.min(this.state.tab, tabs.length - 1)] : null;
+    const rawSections = activeTab ? activeTab.sections : (cur.sections || []);
+    const t = cur.table;
+
+    const sections = rawSections.map((sec, i) => {
+      const open = !this.state.closed[i + '|' + this.state.tab] && !(sec.hint === 'Colapsado' || sec.hint === 'Opcional' || sec.hint === 'Solo lectura');
+      return {
+        label: sec.label, hint: sec.hint, open,
+        toggle: () => this.setState(s => ({ closed: Object.assign({}, s.closed, { [i + '|' + s.tab]: open }) })),
+        caret: 'display:inline-flex; color:var(--ink-3); transition:transform .15s ease; transform:rotate(' + (open ? '0' : '-90') + 'deg)',
+        fields: sec.fields.map((f, j) => this.field(f, j))
+      };
+    });
+
+    const btn = (label, i, n) => ({
+      label,
+      variant: i === n - 1 ? 'primary' : 'secondary',
+      style: i === n - 1
+        ? 'border:0; border-radius:6px; padding:10px 22px; background:' + acc + '; color:#fff; font-weight:500; cursor:pointer; font-size:13.5px'
+        : 'border:1px solid var(--line-2); border-radius:6px; padding:10px 18px; background:var(--bg-card); cursor:pointer; font-size:13.5px'
+    });
+
+    const s = {
+      mod: cur.mod, title: cur.title, endpoint: cur.endpoint, desc: cur.desc,
+      isDash: cur.kind === 'dash', isPortal: cur.kind === 'portal', isReport: cur.kind === 'report',
+      kpis: cur.kpis || [],
+      panels: (cur.panels || []).map(p => ({
+        title: p.title, note: p.note,
+        rows: p.rows.map(r => ({ label: r.label, sub: r.sub, value: r.value, bar: 'width:' + r.pct + '%; height:100%; background:' + acc + '; border-radius:999px' }))
+      })),
+      steps: (cur.steps || []).map((l, i) => ({
+        n: '0' + (i + 1), label: l,
+        style: 'display:flex; align-items:center; gap:8px; padding:9px 15px; border-radius:999px; border:1px solid ' + (i < 3 ? 'transparent' : 'var(--line)') + '; background:' + (i < 3 ? 'var(--accent-soft)' : 'var(--bg-card)') + '; color:' + (i < 3 ? 'var(--accent-ink)' : 'var(--ink-3)')
+      })),
+      hasFilters: !!cur.filters, filterLabel: 'Búsqueda',
+      filters: (cur.filters || []).map(f => ({ label: f.label, v: f.v, ph: f.ph, opts: f.opts, isSel: f.t === 'sel', isIn: f.t !== 'sel' })),
+      hasTable: !!t, tableTitle: t ? t.title : '', tableCount: t ? t.count : '', tableNote: t ? t.note : '',
+      tableActions: (t && t.actions ? t.actions : []).map(a => ({ label: a, style: 'border:1px solid var(--line-2); border-radius:6px; padding:6px 12px; background:var(--bg-elev); font-size:12px; cursor:pointer' })),
+      cols: t ? t.cols.map((c, i) => ({ label: c, style: 'padding:10px 14px; text-align:' + ((t.num || []).indexOf(i) >= 0 ? 'right' : 'left') + '; font-size:10.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-3); font-weight:500; white-space:nowrap; background:var(--bg-elev)' })) : [],
+      rows: t ? t.rows.map(r => ({ cells: r.map((c, i) => this.cell(c, (t.num || []).indexOf(i) >= 0, i === 0)) })) : [],
+      hasTotals: !!cur.totals,
+      totals: (cur.totals || []).map(x => ({ label: x.label, value: x.value, style: 'background:' + (x.strong ? 'var(--accent-soft)' : 'var(--bg-card)') + '; padding:14px 16px' })),
+      hasTabs: !!tabs,
+      tabs: (tabs || []).map((tb, i) => ({
+        label: tb.label, go: () => this.setState({ tab: i, closed: {} }),
+        style: 'border:0; background:transparent; padding:11px 16px; cursor:pointer; font-size:13.5px; white-space:nowrap; border-bottom:2px solid ' + (i === this.state.tab ? acc : 'transparent') + '; color:' + (i === this.state.tab ? 'var(--ink)' : 'var(--ink-3)') + '; font-weight:' + (i === this.state.tab ? '600' : '400')
+      })),
+      hasForm: sections.length > 0, sections,
+      hasActions: !!cur.actions,
+      actions: (cur.actions || []).map((a, i) => btn(a, i, cur.actions.length)),
+      report: cur.report ? Object.assign({}, cur.report, {
+        cols: cur.report.cols.map((c, i) => ({ label: c, style: 'padding:9px 8px; text-align:' + ((cur.report.num || []).indexOf(i) >= 0 ? 'right' : 'left') + '; font-size:10.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-3); border-bottom:1px solid var(--ink)' })),
+        rows: cur.report.rows.map(r => ({ cells: r.map((c, i) => ({ text: c, style: 'padding:10px 8px; font-size:13px; text-align:' + ((cur.report.num || []).indexOf(i) >= 0 ? 'right' : 'left') + ((cur.report.num || []).indexOf(i) >= 0 ? '; font-family:var(--font-mono)' : '') })) }))
+      }) : null
+    };
+
+    if (isHub && hub) {
+      s.mod = 'Módulo'; s.title = hub.label; s.desc = '';
+      s.isDash = false; s.isPortal = false; s.isReport = false;
+      s.hasFilters = false; s.hasTable = false; s.hasForm = false;
+      s.hasTabs = false; s.hasActions = false; s.hasTotals = false;
+      s.steps = []; s.endpoint = '';
+    }
+
+    return {
+      s,
+      isHub, hub,
+      navRoot: !curModName, modList, recent, hasRecent: recent.length > 0,
+      modName: curModName || '', modGroups,
+      backMods: () => this.setState({ navMod: null }),
+      pal: this.state.pal, pq: this.state.pq || '', palResults,
+      palCount: palResults.length + ' de ' + this.allOptions().length + ' opciones',
+      openPal: () => this.setState({ pal: true, pq: '' }),
+      closePal: () => this.setState({ pal: false }),
+      onPq: (e) => this.setState({ pq: e.target.value }),
+      entidad: this.props.entidad || 'Municipalidad Provincial de Sullana',
+      showEndpoint: this.props.showEndpoint !== false,
+      navOpen: this.state.navOpen ? '1' : '0',
+      toggleNav: () => this.setState(x => ({ navOpen: !x.navOpen })),
+      closeNav: () => this.setState({ navOpen: false }),
+      print: () => window.print()
+    };
+  }
+}
+</script>
+</body>
+</html>

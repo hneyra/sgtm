@@ -1,0 +1,61 @@
+/* ============================================================
+   Colors — Juris PE
+   Editorial palette: warm cream paper, near-black ink, navy authority.
+   Base tokens first, then semantic aliases.
+   ============================================================ */
+:root {
+  /* —— Paper / surfaces —— */
+  --bg: #f6f4ef;          /* page — warm cream "paper" */
+  --bg-elev: #fbfaf6;     /* slightly raised fill (toolbars, inputs) */
+  --bg-card: #ffffff;     /* cards, sheets */
+
+  /* —— Ink (text) ramp —— */
+  --ink: #1a1612;         /* primary text — warm near-black */
+  --ink-2: #3d362e;       /* secondary text */
+  --ink-3: #6b6258;       /* tertiary / metadata */
+  --ink-4: #9a9085;       /* faint / disabled */
+
+  /* —— Hairlines —— */
+  --line: #e6e1d6;        /* default border / divider */
+  --line-2: #d8d2c4;      /* stronger border (inputs, controls) */
+
+  /* —— Accent — navy (institutional authority) —— */
+  --accent: #1F3A5F;      /* primary brand navy */
+  --accent-2: #2a4d7a;    /* hover / lighter navy */
+  --accent-soft: #e7ecf3; /* tint fill behind accent text */
+  --accent-ink: #0e1f33;  /* darkest navy for text on soft tint */
+
+  /* —— Accent alternates (offered as brand variants) —— */
+  --accent-tierra: #7C2D12;   /* terracotta / earth */
+  --accent-moss:   #1f5f3a;   /* moss green */
+  --accent-coral:  #c8553d;   /* coral */
+  --accent-slate:  #444444;   /* neutral slate */
+
+  /* —— Semantic accents —— */
+  --gold: #b8893d;        /* annotations, highlights */
+  --crimson: #8b2e2e;     /* dissent / votos singulares / FUNDADA-INFUNDADA */
+  --moss-green: #4a6b3a;  /* firm / vinculante / verified states */
+
+  /* —— Source badge colors (corpus origin) —— */
+  --src-tc-bg: #e8ecf3;   --src-tc-fg: #1F3A5F;   /* Tribunal Constitucional */
+  --src-cs-bg: #f0e6dc;   --src-cs-fg: #7C2D12;   /* Corte Suprema */
+  --src-ep-bg: #e8efe6;   --src-ep-fg: #2d4a26;   /* El Peruano */
+
+  /* —— Fallo / status semantics —— */
+  --ok-bg: #e8efe6;   --ok-fg: #2d4a26;    /* FUNDADA, verified, firme */
+  --bad-bg: #f3e6e1;  --bad-fg: #7C2D12;   /* INFUNDADA, rejected */
+}
+
+/* —— Dark mode (warm, low-glare reading) —— */
+[data-theme="dark"] {
+  --bg: #0f0e0c;
+  --bg-elev: #16140f;
+  --bg-card: #1c1914;
+  --ink: #f0ece2;
+  --ink-2: #d6cfbf;
+  --ink-3: #a39988;
+  --ink-4: #6b6353;
+  --line: #2a2620;
+  --line-2: #3a352c;
+  --accent-soft: #1c2a3f;
+}
