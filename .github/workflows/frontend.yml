@@ -7,7 +7,8 @@
 #      se exige que no haya diferencias: un `design/` que cambia sin regenerar
 #      deja la interfaz describiendo pantallas que ya no son las del manual, y
 #      eso no lo detecta ninguna prueba.
-#   2. Que la aplicación compile para producción.
+#   2. Que la aplicación compile para producción **y** que el juego de datos de
+#      ejemplo no llegue a ella.
 #
 # El contrato (`docs/50-api/openapi/sgtm-v1.yaml`) entra en los caminos que
 # disparan este flujo porque los tipos de la API se generan de él: un cambio de
@@ -63,5 +64,9 @@ jobs:
       - name: Lint, tipos y pruebas
         run: yarn verificar
 
-      - name: Compilar
-        run: yarn build
+      # Compila dos veces —con la bandera del proxy y sin ella— y comprueba que
+      # el juego de datos de ejemplo y el codigo del proxy **no** llegan a
+      # produccion. Se comprobo que muerde: quitando la bandera de `main.tsx`,
+      # el paso se pone rojo.
+      - name: Compilar, y que el juego de datos no llegue a produccion
+        run: yarn comprobar-compilaciones

@@ -1,5 +1,7 @@
 import type { DatosDePantalla, ProblemDetails } from '@sgtm/api-client';
 import { RESPUESTAS, RUTAS } from './respuestas.generado';
+import { YA_SERVIDAS, laSirveElBackend } from './servidas';
+import type { OperacionServida } from './servidas';
 
 /**
  * Proxy de datos: la API del SGTM, simulada en el navegador.
@@ -20,8 +22,13 @@ import { RESPUESTAS, RUTAS } from './respuestas.generado';
  *
  * **Como se apaga.** `VITE_SGTM_PROXY_DE_DATOS=false`, o simplemente no
  * llamando a `instalarProxyDeDatos()`. Entonces `fetch` va a `/api/v1`, Vite lo
- * reenvia al Spring Boot de `SGTM_API` y la interfaz no se entera. Ese es todo
- * el trabajo de integracion que este paquete deja pendiente.
+ * reenvia al Spring Boot de `SGTM_API` y la interfaz no se entera.
+ *
+ * **Y se apaga tambien operacion por operacion**, que es como se va a integrar
+ * de verdad: `servidas.ts` lista las rutas que el backend ya sirve, y esas el
+ * proxy las deja pasar. El backend llega contexto por contexto; sin este modo
+ * intermedio, la integracion seria un unico salto de 134 operaciones que nadie
+ * puede probar.
  *
  * **Lo que deliberadamente NO simula.** No filtra, no ordena, no pagina, no
  * valida y no persiste lo que se envia. Un proxy que fingiera la semantica de
@@ -76,6 +83,17 @@ function json(cuerpo: unknown, estado: number): Response {
   });
 }
 
+/** La ruta esta en la lista de servidas y el backend dice que no la conoce. */
+function noLaSirve(metodo: string, camino: string, estado: number): Response {
+  const problema: ProblemDetails = {
+    type: 'https://sgtm.gob.pe/problemas/operacion-declarada-y-no-servida',
+    title: 'La operacion esta declarada como servida y el backend no la sirve',
+    status: 502,
+    detail: `«${metodo} ${camino}» esta en la lista de operaciones que el backend ya sirve, y el backend respondio ${estado}. Quita la ruta de «packages/api-mock/src/servidas.ts» o implementa la operacion: caer al proxy en silencio esconderia el desajuste.`,
+  };
+  return json(problema, 502);
+}
+
 function noEncontrada(metodo: string, camino: string): Response {
   const problema: ProblemDetails = {
     type: 'https://sgtm.gob.pe/problemas/operacion-no-implementada',
@@ -105,6 +123,8 @@ export interface OpcionesDelProxy {
    * medio minuto de espera que no prueba nada.
    */
   readonly latencia?: boolean;
+  /** Las que ya sirve el backend. Por omision, las de `servidas.ts`. */
+  readonly yaServidas?: readonly OperacionServida[];
 }
 
 /**
@@ -113,7 +133,10 @@ export interface OpcionesDelProxy {
  * Solo intercepta lo que cuelga de `/api/v1`; cualquier otra peticion —una
  * fuente tipografica, un recurso— sigue su camino sin tocarse.
  */
-export function instalarProxyDeDatos({ latencia = true }: OpcionesDelProxy = {}): () => void {
+export function instalarProxyDeDatos({
+  latencia = true,
+  yaServidas = YA_SERVIDAS,
+}: OpcionesDelProxy = {}): () => void {
   latenciaActiva = latencia;
   if (original) return desinstalarProxyDeDatos;
   original = globalThis.fetch;
@@ -135,6 +158,16 @@ export function instalarProxyDeDatos({ latencia = true }: OpcionesDelProxy = {})
       opciones?.method ??
       (typeof entrada === 'object' && 'method' in entrada ? entrada.method : 'GET')
     ).toUpperCase();
+
+    // Lo que el backend ya sirve, sale de verdad. Si contesta que no la conoce,
+    // se dice en voz alta: caer al proxy en silencio esconderia justo lo que se
+    // quiere ver —que la ruta de la lista y la del backend no cuadran—.
+    if (laSirveElBackend(yaServidas, metodo, url.pathname)) {
+      const respuesta = await anterior(entrada, opciones);
+      return respuesta.status === 404 || respuesta.status === 501
+        ? noLaSirve(metodo, url.pathname, respuesta.status)
+        : respuesta;
+    }
 
     if (latenciaActiva) {
       await esperar(LATENCIA_MINIMA_MS + Math.random() * (LATENCIA_MAXIMA_MS - LATENCIA_MINIMA_MS));

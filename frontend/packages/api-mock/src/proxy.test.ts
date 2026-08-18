@@ -5,6 +5,7 @@ import {
   OPERACIONES_SIMULADAS,
   RESPUESTAS,
   RUTAS,
+  YA_SERVIDAS,
   desinstalarProxyDeDatos,
   instalarProxyDeDatos,
   proxyDeDatosInstalado,
@@ -110,5 +111,76 @@ describe('la aplicacion pide por HTTP y el proxy contesta', () => {
     const ruta = soloPost.ruta.replace(/^\/api\/v1/, '').replace(/\{\w+\}/g, 'ejemplo');
     await expect(solicitar(ruta)).rejects.toBeInstanceOf(ProblemaDeApi);
     await expect(solicitar(ruta, { metodo: 'POST', cuerpo: {} })).resolves.toBeDefined();
+  });
+});
+
+describe('el proxy se apaga operacion por operacion', () => {
+  // Estas pruebas sustituyen `fetch` **antes** de instalar el proxy, que es lo
+  // que convierte al doble en «el backend»: lo que el proxy deja pasar va ahi.
+  const deVerdad = globalThis.fetch;
+  afterEach(() => {
+    desinstalarProxyDeDatos();
+    globalThis.fetch = deVerdad;
+  });
+
+  /** El «backend»: lo que hay detras del proxy cuando una ruta ya esta servida. */
+  function elBackendSirve(rutas: Readonly<Record<string, number>>): string[] {
+    const pedidas: string[] = [];
+    globalThis.fetch = ((entrada: RequestInfo | URL) => {
+      const camino = new URL(
+        typeof entrada === 'string' ? entrada : String(entrada),
+        'http://localhost',
+      ).pathname;
+      pedidas.push(camino);
+      const estado = rutas[camino] ?? 404;
+      return Promise.resolve(
+        new Response(JSON.stringify({ fechaCalculo: '2026-08-13', deLaBase: true }), {
+          status: estado,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    }) as typeof fetch;
+    return pedidas;
+  }
+
+  it('con la lista a medias, una pide al backend y otra al proxy, en la misma sesion', async () => {
+    const alBackend = elBackendSirve({ '/api/v1/catastro/vias': 200 });
+    instalarProxyDeDatos({
+      latencia: false,
+      yaServidas: [{ metodo: 'GET', ruta: '/catastro/vias' }],
+    });
+
+    const servida = await solicitar<{ deLaBase?: boolean }>('/catastro/vias');
+    const simulada = await solicitar<{ deLaBase?: boolean }>('/catastro/sectores');
+
+    // La conectada sale de verdad; la otra ni se asoma.
+    expect(servida.deLaBase).toBe(true);
+    expect(simulada.deLaBase).toBeUndefined();
+    expect(alBackend).toEqual(['/api/v1/catastro/vias']);
+  });
+
+  it('una ruta declarada que el backend no sirve falla ruidosamente, no cae al proxy', async () => {
+    elBackendSirve({});
+    instalarProxyDeDatos({
+      latencia: false,
+      yaServidas: [{ metodo: 'GET', ruta: '/catastro/vias' }],
+    });
+
+    await expect(solicitar('/catastro/vias')).rejects.toThrow(/lista de operaciones/);
+  });
+
+  it('el parametro de ruta no impide reconocer la operacion servida', async () => {
+    const alBackend = elBackendSirve({ '/api/v1/rentas/vehiculos/ABC-123': 200 });
+    instalarProxyDeDatos({
+      latencia: false,
+      yaServidas: [{ metodo: 'GET', ruta: '/rentas/vehiculos/{placa}' }],
+    });
+
+    await solicitar('/rentas/vehiculos/ABC-123');
+    expect(alBackend).toEqual(['/api/v1/rentas/vehiculos/ABC-123']);
+  });
+
+  it('hoy la lista esta vacia: el backend todavia no sirve ninguna operacion', () => {
+    expect(YA_SERVIDAS).toEqual([]);
   });
 });
