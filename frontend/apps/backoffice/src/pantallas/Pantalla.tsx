@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Aviso, Esqueleto } from '@sgtm/design-system';
-import { ProblemaDeApi, descriptorDe } from '@sgtm/api-client';
+import { Aviso, Boton, Esqueleto } from '@sgtm/design-system';
+import { descriptorDe } from '@sgtm/api-client';
 import type { ValorDeCampo } from '@sgtm/api-client';
 import { opcionPorRuta, pantallaDe, seccionesDe } from '../catalogo';
 import {
@@ -12,6 +12,7 @@ import {
   registroQueFalta,
   PAGINA,
 } from './busqueda';
+import { SIN_PERMISO, estadoDePantalla, textoDeError } from './estados';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
 import { useDatosDeOperacion } from './useDatosDeOperacion';
@@ -117,7 +118,8 @@ function Bloques({
   const navegar = useNavigate();
   const { moduloId = '', ranura = '' } = useParams();
 
-  const estado = leerBusqueda(busqueda);
+  const busquedaActiva = leerBusqueda(busqueda);
+  const estado = estadoDePantalla(consulta, faltaRegistro);
   const operacion = operacionDe(estructura);
   // El registro que abre esta pantalla, si abre alguno: `codRefCatastral`, `placa`…
   const registro =
@@ -129,17 +131,24 @@ function Bloques({
   const valores: Readonly<Record<string, ValorDeCampo>> = datos?.campos ?? {};
   const secciones = seccionesDe(estructura, pestana);
 
-  if (consulta.isError) {
-    const problema = consulta.error instanceof ProblemaDeApi ? consulta.error : null;
+  // El error y el sin permiso son de la pantalla entera, no de un bloque: hay
+  // una peticion por pantalla, y no puede fallar la tabla y no el formulario.
+  // **Ninguno de los dos dibuja la estructura**: entrar sin permiso no puede
+  // filtrar ni el titulo ni los campos de lo que hay detras (REQ-03 §5).
+  if (estado === 'sin-permiso') {
+    return <Aviso tipo="sin-permiso" titulo={SIN_PERMISO.titulo} detalle={SIN_PERMISO.detalle} />;
+  }
+
+  if (estado === 'error') {
+    // El backend redacta el mensaje en castellano y en lenguaje del dominio
+    // (RNF-080); aqui no se reescribe ni se sustituye por uno generico.
+    const texto = textoDeError(consulta.error);
     return (
-      <Aviso
-        tipo="error"
-        // El backend redacta el mensaje en castellano y en lenguaje del dominio
-        // (RNF-080); aqui no se reescribe ni se sustituye por uno generico.
-        titulo={problema?.titulo ?? 'No se pudieron cargar los datos'}
-        detalle={problema?.detalle ?? 'Vuelve a intentarlo; si persiste, avisa a soporte.'}
-        traza={problema?.traza}
-      />
+      <Aviso tipo="error" titulo={texto.titulo} detalle={texto.detalle} traza={texto.traza}>
+        {/* Reintentar tiene sentido en una consulta y **nunca** en una
+            escritura: repetir un cobro es cobrar dos veces (FRO-04 §5). */}
+        <Boton onClick={() => void consulta.refetch()}>Reintentar</Boton>
+      </Aviso>
     );
   }
 
@@ -153,23 +162,23 @@ function Bloques({
 
       {estructura.kind === 'portal' && <Portal pasos={estructura.steps ?? []} />}
 
-      {faltaRegistro !== undefined && (
+      {estado === 'sin-registro' && (
         <Aviso
           titulo="Elige un registro para abrirlo"
-          detalle={`Esta pantalla abre un registro por su «${faltaRegistro}». Búscalo abajo y ábrelo desde la tabla; el enlace que quede en la barra de direcciones es el de ese registro.`}
+          detalle={`Esta pantalla abre un registro por su «${faltaRegistro}». Búscalo arriba, o pega el enlace de la ficha: el registro abierto va en la dirección, así que ese enlace se puede compartir.`}
         />
       )}
 
       {estructura.filtros && (
         <Filtros
           campos={estructura.filtros}
-          buscado={estado.filtros}
+          buscado={busquedaActiva.filtros}
           cargando={consulta.isFetching}
           // Buscar reescribe la URL: es donde vive lo buscado. Y devuelve a la
           // primera pagina, porque la pagina 7 de otra busqueda no es ninguna.
           onBuscar={(valores) => {
             const siguiente = conCambio(new URLSearchParams(busqueda), {
-              ...vaciar(estado.filtros),
+              ...vaciar(busquedaActiva.filtros),
               ...valores,
               [PAGINA]: undefined,
             });
@@ -196,8 +205,9 @@ function Bloques({
           estructura={estructura.tabla}
           datos={datos?.tabla}
           cargando={cargando}
-          {...(estado.orden === undefined ? {} : { orden: estado.orden })}
-          sentido={estado.sentido}
+          hayFiltros={Object.keys(busquedaActiva.filtros).length > 0}
+          {...(busquedaActiva.orden === undefined ? {} : { orden: busquedaActiva.orden })}
+          sentido={busquedaActiva.sentido}
           onOrdenar={(clave) => fijarBusqueda(conOrden(new URLSearchParams(busqueda), clave))}
           onPagina={(pagina) =>
             fijarBusqueda(
@@ -214,6 +224,7 @@ function Bloques({
           estructura={estructura.totales}
           datos={datos?.totales}
           fechaCalculo={datos?.fechaCalculo}
+          cargando={cargando}
         />
       )}
 

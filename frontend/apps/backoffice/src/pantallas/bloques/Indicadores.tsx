@@ -1,4 +1,4 @@
-import { Esqueleto, Indicador } from '@sgtm/design-system';
+import { Aviso, Esqueleto, Indicador } from '@sgtm/design-system';
 import type { Kpi, Panel } from '@sgtm/api-client';
 
 /**
@@ -8,6 +8,10 @@ import type { Kpi, Panel } from '@sgtm/api-client';
  * Ni el valor ni el porcentaje se calculan aqui: llegan calculados. La barra
  * pinta `pct`, no lo deduce de dividir dos importes —que ademas seria
  * aritmetica con importes, prohibida por RNF-083—.
+ *
+ * El esqueleto dibuja **cuatro** tarjetas, las mismas que trae la respuesta, y
+ * con el alto de una tarjeta con datos: si dibujara una, la pantalla saltaria
+ * al llegar la respuesta.
  */
 export interface IndicadoresProps {
   readonly kpis?: readonly Kpi[];
@@ -16,6 +20,17 @@ export interface IndicadoresProps {
 }
 
 export function Indicadores({ kpis, paneles, cargando }: IndicadoresProps) {
+  const vacio = !cargando && (kpis?.length ?? 0) === 0 && (paneles?.length ?? 0) === 0;
+
+  if (vacio) {
+    return (
+      <Aviso
+        titulo="Sin indicadores para este ejercicio"
+        detalle="El panel se llena con lo emitido y lo recaudado del ejercicio activo. Si acaba de empezar, todavía no hay nada que resumir."
+      />
+    );
+  }
+
   if (cargando) {
     return (
       <div className="sgtm-kpis">
