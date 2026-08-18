@@ -13,7 +13,7 @@ plugins {
 
 dependencies {
     implementation(platform(libs.spring.boot.bom))
-    implementation(project(":sgtm-dominio-compartido"))
+    api(project(":sgtm-dominio-compartido"))
 
     // spring-boot-starter-jdbc trae spring-jdbc y HikariCP. El pool es parte del
     // contrato aqui: la verificacion al devolver la conexion necesita poder
@@ -25,9 +25,14 @@ dependencies {
     // tipo Jwt.
     api("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
 
-    // La servlet API la aporta sgtm-aplicacion con starter-web. El perfil batch no
-    // atiende HTTP, pero es el mismo artefacto, asi que la clase esta igualmente.
-    compileOnly("jakarta.servlet:jakarta.servlet-api")
+    // La capa web comun —contrato, errores, paginacion— vive aqui, en
+    // pe.gob.sgtm.web, y la usan los controladores de los doce contextos: por eso
+    // starter-web es `api` y no `implementation`. Trae ademas la servlet API que
+    // necesita TenantContextFilter.
+    //
+    // El perfil batch no atiende HTTP, pero es el mismo artefacto (ADR-0003), asi
+    // que las clases estan igualmente y no arrancan ningun servidor por existir.
+    api("org.springframework.boot:spring-boot-starter-web")
 
     testImplementation(testFixtures(project(":sgtm-esquema")))
     testImplementation("org.springframework.boot:spring-boot-starter-web")

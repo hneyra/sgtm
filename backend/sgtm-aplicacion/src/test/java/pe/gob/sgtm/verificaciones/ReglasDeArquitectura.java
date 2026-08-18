@@ -197,6 +197,51 @@ public final class ReglasDeArquitectura {
                             "el que cambio lo reconstruye cualquier sistema; el por que solo lo sabe"
                                     + " quien lo cambio, en el momento de cambiarlo (ADR-0008)");
 
+    /**
+     * Regla 2 en el borde: ningun controlador acepta la municipalidad por HTTP.
+     *
+     * <p>{@link #NADIE_RECIBE_EL_IDENTIFICADOR_DE_MUNICIPALIDAD} ya prohibe el <b>tipo</b> {@code
+     * MunicipalidadId} en una firma. Esta regla cubre la forma en que el defecto aparece de verdad
+     * en una capa web: no como un tipo del dominio, sino como un {@code @RequestParam("
+     * municipalidadId") long} o un {@code @PathVariable} anadido «por comodidad» para probar algo y
+     * nunca retirado.
+     *
+     * <p>Si ese parametro existiera, cualquiera podria leer la deuda de otra municipalidad
+     * cambiando un numero en la barra de direcciones. El identificador sale del token y de ningun
+     * otro sitio (ADR-0005).
+     */
+    public static final ArchRule NINGUN_CONTROLADOR_RECIBE_LA_MUNICIPALIDAD =
+            ArchRuleDefinition.classes()
+                    .that(new EsControlador())
+                    .should(new SinMunicipalidadEnLaFirmaHttp())
+                    .because(
+                            "el cliente controla la ruta, los parametros y los encabezados; si"
+                                    + " alguno pudiera fijar la municipalidad, el aislamiento seria"
+                                    + " decorativo (ADR-0005, regla 2)");
+
+    /**
+     * Regla 9 y RNF-075: toda cifra que sale por HTTP dice a que fecha esta actualizada.
+     *
+     * <p>No existe «la deuda»: existe {@code deudaActualizadaA(fecha)}. El interes moratorio corre
+     * y el reajuste depende del indice del mes, asi que una cifra sin fecha es una cifra que dentro
+     * de tres dias es otra —y la diferencia acaba en una discusion en ventanilla que la
+     * municipalidad no puede ganar, porque no puede decir a que dia correspondia lo que imprimio—.
+     *
+     * <p>La regla es simple a proposito: un DTO de la capa web que declare un {@code Dinero} tiene
+     * que declarar tambien un {@code actualizadoA}. La alternativa —distinguir «importes de deuda»
+     * de los demas— exigiria un juicio que una regla automatica no puede hacer, y el proyecto ya
+     * decidio que <b>toda</b> cifra mostrada indica su fecha. Quien no quiera repetir los dos
+     * campos tiene {@code ImporteActualizado}, que los lleva juntos.
+     */
+    public static final ArchRule TODA_CIFRA_DE_LA_WEB_LLEVA_SU_FECHA =
+            ArchRuleDefinition.classes()
+                    .that()
+                    .resideInAPackage("..web..")
+                    .should(new ConFechaJuntoAlImporte())
+                    .because(
+                            "una cifra de deuda sin su fecha es una cifra que manana es otra"
+                                    + " (RNF-075, regla 9)");
+
     public static List<ArchRule> todas() {
         return List.of(
                 EL_DOMINIO_NO_CONOCE_FRAMEWORKS,
@@ -206,7 +251,9 @@ public final class ReglasDeArquitectura {
                 EL_DOMINIO_NO_LEE_EL_RELOJ,
                 NADIE_RECIBE_EL_IDENTIFICADOR_DE_MUNICIPALIDAD,
                 EL_DOMINIO_NO_DEPENDE_DE_LAS_CAPAS_EXTERNAS,
-                TODO_CASO_DE_USO_DE_ESCRITURA_EXIGE_OBSERVACION);
+                TODO_CASO_DE_USO_DE_ESCRITURA_EXIGE_OBSERVACION,
+                NINGUN_CONTROLADOR_RECIBE_LA_MUNICIPALIDAD,
+                TODA_CIFRA_DE_LA_WEB_LLEVA_SU_FECHA);
     }
 
     /** Clases del sistema, sin las de prueba ni las de fixtures. */
@@ -338,6 +385,108 @@ public final class ReglasDeArquitectura {
             return metodo.getAnnotations().stream()
                     .filter(a -> a.getRawType().getName().equals(TRANSACTIONAL))
                     .anyMatch(a -> !Boolean.TRUE.equals(a.get("readOnly").orElse(Boolean.FALSE)));
+        }
+    }
+
+    /** Un controlador es una clase anotada como tal; se busca por nombre de anotacion. */
+    private static final class EsControlador extends DescribedPredicate<JavaClass> {
+
+        private static final Set<String> ANOTACIONES =
+                Set.of(
+                        "org.springframework.web.bind.annotation.RestController",
+                        "org.springframework.stereotype.Controller");
+
+        EsControlador() {
+            super("son controladores HTTP");
+        }
+
+        @Override
+        public boolean test(JavaClass clase) {
+            return clase.getAnnotations().stream()
+                    .anyMatch(a -> ANOTACIONES.contains(a.getRawType().getName()));
+        }
+    }
+
+    private static final class SinMunicipalidadEnLaFirmaHttp extends ArchCondition<JavaClass> {
+
+        /** Las tres formas en que un valor del cliente entra en la firma de un controlador. */
+        private static final Set<String> ENTRADAS_DEL_CLIENTE =
+                Set.of(
+                        "org.springframework.web.bind.annotation.RequestParam",
+                        "org.springframework.web.bind.annotation.PathVariable",
+                        "org.springframework.web.bind.annotation.RequestHeader",
+                        "org.springframework.web.bind.annotation.CookieValue");
+
+        SinMunicipalidadEnLaFirmaHttp() {
+            super("no aceptar la municipalidad por parametro, ruta ni encabezado");
+        }
+
+        @Override
+        public void check(JavaClass clase, ConditionEvents eventos) {
+            for (JavaMethod metodo : clase.getMethods()) {
+                for (JavaParameter parametro : metodo.getParameters()) {
+                    parametro.getAnnotations().stream()
+                            .filter(a -> ENTRADAS_DEL_CLIENTE.contains(a.getRawType().getName()))
+                            .filter(SinMunicipalidadEnLaFirmaHttp::nombraLaMunicipalidad)
+                            .forEach(
+                                    a ->
+                                            eventos.add(
+                                                    SimpleConditionEvent.violated(
+                                                            metodo,
+                                                            "el metodo "
+                                                                    + metodo.getFullName()
+                                                                    + " acepta la municipalidad"
+                                                                    + " desde la peticion; sale del"
+                                                                    + " token y de ningun otro"
+                                                                    + " sitio (ADR-0005)")));
+                }
+            }
+        }
+
+        private static boolean nombraLaMunicipalidad(
+                com.tngtech.archunit.core.domain.JavaAnnotation<?> anotacion) {
+            return anotacion.getProperties().values().stream()
+                    .map(Object::toString)
+                    .anyMatch(v -> v.toLowerCase(java.util.Locale.ROOT).contains("municipalidad"));
+        }
+    }
+
+    private static final class ConFechaJuntoAlImporte extends ArchCondition<JavaClass> {
+
+        private static final String DINERO = PAQUETE_RAIZ + ".dominio.Dinero";
+        private static final String CAMPO_DE_FECHA = "actualizadoA";
+        private static final String EXCEPCION = PAQUETE_RAIZ + ".web.ImporteActualizado";
+
+        ConFechaJuntoAlImporte() {
+            super("declarar actualizadoA junto a todo importe");
+        }
+
+        @Override
+        public void check(JavaClass clase, ConditionEvents eventos) {
+            if (clase.getFullName().equals(EXCEPCION)) {
+                // Es el tipo que lleva los dos juntos: su campo se llama asi.
+                return;
+            }
+            boolean tieneImporte =
+                    clase.getFields().stream()
+                            .anyMatch(campo -> campo.getRawType().getName().equals(DINERO));
+            if (!tieneImporte) {
+                return;
+            }
+            boolean tieneFecha =
+                    clase.getFields().stream()
+                            .anyMatch(campo -> campo.getName().equals(CAMPO_DE_FECHA));
+            if (!tieneFecha) {
+                eventos.add(
+                        SimpleConditionEvent.violated(
+                                clase,
+                                "la clase "
+                                        + clase.getName()
+                                        + " expone un importe sin decir a que fecha esta"
+                                        + " actualizado: agregue un campo "
+                                        + CAMPO_DE_FECHA
+                                        + " o use ImporteActualizado (RNF-075, regla 9)"));
+            }
         }
     }
 

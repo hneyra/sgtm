@@ -111,6 +111,34 @@ class TenantContextFilterTest {
     }
 
     @Test
+    @DisplayName("el 403 sale en problem+json, con el codigo del catalogo")
+    void elRechazoSaleEnProblemJson() throws Exception {
+        // El filtro corre antes del DispatcherServlet, asi que no hay
+        // @RestControllerAdvice que traduzca nada: si respondiera con sendError, el
+        // cliente recibiria la pagina de error HTML del contenedor donde espera JSON,
+        // y la interfaz —que reacciona al campo `codigo`— no tendria a que reaccionar.
+        SecurityContextHolder.getContext()
+                .setAuthentication(
+                        new JwtAuthenticationToken(
+                                Jwt.withTokenValue("t")
+                                        .header("alg", "none")
+                                        .subject("usuario")
+                                        .issuedAt(Instant.now())
+                                        .expiresAt(Instant.now().plusSeconds(60))
+                                        .build(),
+                                List.of()));
+
+        MockHttpServletResponse respuesta = new MockHttpServletResponse();
+        filtro.doFilter(new MockHttpServletRequest(), respuesta, new MockFilterChain());
+
+        assertThat(respuesta.getStatus()).isEqualTo(403);
+        assertThat(respuesta.getContentType()).startsWith("application/problem+json");
+        assertThat(respuesta.getContentAsString())
+                .contains("\"codigo\":\"SIN_MUNICIPALIDAD\"")
+                .contains("\"status\":403");
+    }
+
+    @Test
     @DisplayName("una peticion sin token pasa sin contexto")
     void sinTokenPasaSinContexto() throws Exception {
         AtomicReference<MunicipalidadId> visto = new AtomicReference<>(new MunicipalidadId(1));

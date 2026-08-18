@@ -22,5 +22,10 @@ dependencies {
     // que lo que se verifique sea la anotacion y no un TransactionTemplate escrito
     // por la propia prueba.
     testImplementation("org.springframework:spring-aop")
+
+    // MockMvc para el endpoint: se prueba el transporte —forma del JSON, parametros,
+    // traduccion de errores— sin base de datos. Lo que la base verifica ya tiene sus
+    // pruebas aparte, y separarlas hace que cada fallo diga que se rompio.
+    testImplementation("org.springframework:spring-test")
     testRuntimeOnly(libs.postgresql)
 }

@@ -1,0 +1,184 @@
+package pe.gob.sgtm.verificaciones;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.tngtech.archunit.core.domain.JavaClass;
+import java.io.IOException;
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * Lo que el backend publica y lo que el contrato promete tienen que ser lo mismo.
+ *
+ * <p>{@code docs/50-api/openapi/sgtm-v1.yaml} no es documentacion escrita despues: esta derivado de
+ * los {@code endpoint} que declara cada una de las 134 pantallas del prototipo, y el frontend lo
+ * consume. Un endpoint que publique una ruta que el contrato no tiene es una ruta que ninguna
+ * pantalla va a llamar; una ruta del contrato con una forma distinta a la implementada es una
+ * pantalla que se rompe en integracion, semanas despues de escribir las dos mitades.
+ *
+ * <p>La prueba cubre <b>las dos direcciones</b>:
+ *
+ * <ul>
+ *   <li>Toda ruta publicada tiene que estar en el contrato. Si alguien inventa una, falla.
+ *   <li>Toda ruta de {@link #IMPLEMENTADAS} tiene que estar publicada. Esa lista es el registro
+ *       explicito de lo que ya existe: no se puede publicar un endpoint sin anotarlo ahi, ni
+ *       retirarlo sin quitarlo. Las 133 operaciones restantes del contrato estan pendientes, y no
+ *       se pueden exigir todavia sin dejar el build en rojo permanente —que es la forma segura de
+ *       que nadie vuelva a mirar esta prueba—.
+ * </ul>
+ */
+@DisplayName("ARQ-05 — Contrato de la API")
+class ContratoDeApiTest {
+
+    /** Raiz declarada en {@code servers.url} del contrato. */
+    private static final String RAIZ = "/api/v1";
+
+    /**
+     * Las operaciones del contrato que ya estan implementadas.
+     *
+     * <p>Se agrega una linea por endpoint nuevo. Es deliberado que cueste una linea: asi el diff de
+     * un endpoint nuevo dice que operacion del manual cubre.
+     */
+    private static final Set<String> IMPLEMENTADAS = Set.of("GET /catastro/vias");
+
+    /** {@code "/ruta":} seguido de {@code verbo:} en el YAML generado. */
+    private static final Pattern OPERACION_DEL_CONTRATO =
+            Pattern.compile(
+                    "\\n {2}\"(/[^\"]*)\":\\n(?: +\\w+: .*\\n)*? +(get|post|put|patch|delete):");
+
+    @Test
+    @DisplayName("el contrato se lee, y trae las 134 operaciones del manual")
+    void elContratoSeLee() throws IOException {
+        Set<String> contrato = operacionesDelContrato();
+
+        // Si el analisis del YAML devolviera vacio, las dos pruebas de abajo pasarian
+        // sin comparar nada. Ha pasado en otros proyectos con un cambio de formato.
+        assertThat(contrato)
+                .as("el contrato declara una operacion por opcion del menu")
+                .hasSizeGreaterThan(100);
+        assertThat(contrato).contains("GET /catastro/vias");
+    }
+
+    @Test
+    @DisplayName("ninguna ruta publicada falta en el contrato")
+    void ningunaRutaPublicadaFaltaEnElContrato() throws IOException {
+        Set<String> contrato = operacionesDelContrato();
+        Set<String> publicadas = operacionesPublicadas();
+
+        assertThat(publicadas).as("sin endpoints publicados no hay nada que comparar").isNotEmpty();
+
+        Set<String> fueraDelContrato = new TreeSet<>(publicadas);
+        fueraDelContrato.removeAll(contrato);
+
+        assertThat(fueraDelContrato)
+                .as(
+                        "estas rutas se publican y el contrato no las tiene: ninguna pantalla las va"
+                                + " a llamar. O se agregan al prototipo y se regenera el contrato, o"
+                                + " sobran")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("toda operacion declarada implementada esta realmente publicada")
+    void todaOperacionDeclaradaImplementadaEstaPublicada() throws IOException {
+        Set<String> publicadas = operacionesPublicadas();
+
+        assertThat(publicadas)
+                .as("lo que IMPLEMENTADAS promete tiene que existir de verdad")
+                .containsAll(IMPLEMENTADAS);
+        assertThat(operacionesDelContrato())
+                .as("y tiene que ser una operacion que el contrato declare")
+                .containsAll(IMPLEMENTADAS);
+        assertThat(publicadas)
+                .as(
+                        "hay endpoints publicados que no estan en IMPLEMENTADAS: un endpoint nuevo"
+                                + " se anota ahi, para que el diff diga que opcion del manual cubre")
+                .isSubsetOf(IMPLEMENTADAS);
+    }
+
+    // ------------------------------------------------------------------
+
+    private static Set<String> operacionesDelContrato() throws IOException {
+        String yaml =
+                Files.readString(
+                        raizDelRepositorio().resolve("docs/50-api/openapi/sgtm-v1.yaml"),
+                        StandardCharsets.UTF_8);
+
+        Set<String> operaciones = new TreeSet<>();
+        Matcher matcher = OPERACION_DEL_CONTRATO.matcher(yaml);
+        while (matcher.find()) {
+            operaciones.add(
+                    matcher.group(2).toUpperCase(java.util.Locale.ROOT) + " " + matcher.group(1));
+        }
+        return operaciones;
+    }
+
+    private static Set<String> operacionesPublicadas() {
+        Set<String> operaciones = new TreeSet<>();
+        for (JavaClass clase : ReglasDeArquitectura.clasesDeProduccion()) {
+            Class<?> tipo = clase.reflect();
+            if (!AnnotatedElementUtils.hasAnnotation(tipo, RestController.class)) {
+                continue;
+            }
+            RequestMapping deLaClase =
+                    AnnotatedElementUtils.findMergedAnnotation(tipo, RequestMapping.class);
+            String base = deLaClase == null ? "" : primero(deLaClase.path());
+
+            for (Method metodo : tipo.getDeclaredMethods()) {
+                RequestMapping mapeo =
+                        AnnotatedElementUtils.findMergedAnnotation(metodo, RequestMapping.class);
+                if (mapeo == null) {
+                    continue;
+                }
+                String ruta = base + primero(mapeo.path());
+                for (RequestMethod verbo : verbos(mapeo)) {
+                    operaciones.add(verbo.name() + " " + sinRaiz(ruta));
+                }
+            }
+        }
+        return operaciones;
+    }
+
+    private static Set<RequestMethod> verbos(RequestMapping mapeo) {
+        Set<RequestMethod> verbos = new LinkedHashSet<>(java.util.List.of(mapeo.method()));
+        if (verbos.isEmpty()) {
+            // Un mapeo sin verbo responde a todos; en el contrato eso no existe, y
+            // dejarlo pasar en silencio esconderia un endpoint mal declarado.
+            verbos.add(RequestMethod.GET);
+        }
+        return verbos;
+    }
+
+    private static String primero(String[] rutas) {
+        return rutas.length == 0 ? "" : rutas[0];
+    }
+
+    private static String sinRaiz(String ruta) {
+        return ruta.startsWith(RAIZ) ? ruta.substring(RAIZ.length()) : ruta;
+    }
+
+    /** El contrato vive en docs/, fuera del build de Gradle. */
+    private static Path raizDelRepositorio() {
+        Path actual = Path.of("").toAbsolutePath();
+        while (actual != null) {
+            if (Files.exists(actual.resolve("docs/50-api/openapi/sgtm-v1.yaml"))) {
+                return actual;
+            }
+            actual = actual.getParent();
+        }
+        throw new IllegalStateException("No se encontro el contrato de la API");
+    }
+}

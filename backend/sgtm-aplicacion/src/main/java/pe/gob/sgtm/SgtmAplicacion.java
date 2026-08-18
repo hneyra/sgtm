@@ -12,7 +12,7 @@ import pe.gob.sgtm.plataforma.ConfiguracionDeTenant;
  * Artefacto unico del SGTM, desplegado en los perfiles {@code web} y {@code batch} (ADR-0003).
  * Mismo codigo y misma imagen; lo que cambia es la configuracion.
  *
- * <p>Cuatro modulos se declaran <b>compartidos</b>: {@code dominio} (el vocabulario comun), {@code
+ * <p>Seis modulos se declaran <b>compartidos</b>: {@code dominio} (el vocabulario comun), {@code
  * compartido} (el contexto de tenant), {@code plataforma} (el camino del token al {@code SET
  * LOCAL}) y {@code persistencia} (el patron de repositorio). Ninguno es un contexto acotado, y que
  * cualquier contexto los use no es una violacion de los limites sino su proposito: sin declararlos,
@@ -21,7 +21,7 @@ import pe.gob.sgtm.plataforma.ConfiguracionDeTenant;
  */
 @Modulithic(
         systemName = "SGTM",
-        sharedModules = {"dominio", "compartido", "plataforma", "persistencia", "auditoria"})
+        sharedModules = {"dominio", "compartido", "plataforma", "persistencia", "auditoria", "web"})
 @SpringBootApplication
 @Import(ConfiguracionDeTenant.class)
 public class SgtmAplicacion {
