@@ -1,8 +1,8 @@
 /**
- * Registro del contribuyente y su codigo unico: identificacion, domicilios con vigencia,
- * documentos, contactos, gestores y observaciones (ARQ-01 §3.1).
+ * Contexto acotado `contribuyentes` (ARQ-01 §3.1).
  *
- * <p>Todos los demas contextos lo referencian; el no referencia a ninguno.
+ * <p>No referencia a ningun otro contexto y todos lo referencian a el: por eso va primero en la
+ * onda de negocio.
  */
 @org.jspecify.annotations.NullMarked
 package pe.gob.sgtm.contribuyentes;
