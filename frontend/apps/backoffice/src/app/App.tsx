@@ -4,6 +4,8 @@ import { OPCION_INICIAL } from '../catalogo';
 import { HubDeModulo } from '../pantallas/HubDeModulo';
 import { Pantalla } from '../pantallas/Pantalla';
 import { ProveedorDePreferencias } from './preferencias';
+import { ProveedorDeSesion } from './sesion/ProveedorDeSesion';
+import { PuertaDeSesion } from './sesion/PuertaDeSesion';
 import { Shell } from './Shell';
 
 /**
@@ -35,20 +37,24 @@ const cliente = crearClienteDeConsultas();
 export function App() {
   return (
     <QueryClientProvider client={cliente}>
-      <ProveedorDePreferencias>
-        <Router>
-          <Routes>
-            <Route element={<Shell />}>
-              <Route path="/" element={<Navigate to={OPCION_INICIAL.ruta} replace />} />
-              <Route path="/:moduloId" element={<HubDeModulo />} />
-              <Route path="/:moduloId/:ranura" element={<Pantalla />} />
-              {/* El registro abierto va en la ruta, no en el estado: pegar el
-                  enlace de una ficha en otra pestana abre esa misma ficha. */}
-              <Route path="/:moduloId/:ranura/:codigo" element={<Pantalla />} />
-            </Route>
-          </Routes>
-        </Router>
-      </ProveedorDePreferencias>
+      <ProveedorDeSesion>
+        <ProveedorDePreferencias>
+          <PuertaDeSesion>
+            <Router>
+              <Routes>
+                <Route element={<Shell />}>
+                  <Route path="/" element={<Navigate to={OPCION_INICIAL.ruta} replace />} />
+                  <Route path="/:moduloId" element={<HubDeModulo />} />
+                  <Route path="/:moduloId/:ranura" element={<Pantalla />} />
+                  {/* El registro abierto va en la ruta, no en el estado: pegar el
+                      enlace de una ficha en otra pestana abre esa misma ficha. */}
+                  <Route path="/:moduloId/:ranura/:codigo" element={<Pantalla />} />
+                </Route>
+              </Routes>
+            </Router>
+          </PuertaDeSesion>
+        </ProveedorDePreferencias>
+      </ProveedorDeSesion>
     </QueryClientProvider>
   );
 }

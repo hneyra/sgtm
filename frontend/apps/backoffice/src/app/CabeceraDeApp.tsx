@@ -1,5 +1,6 @@
 import { Icono } from '@sgtm/design-system';
 import { usePreferencias } from './preferencias';
+import { useSesion } from './sesion/ProveedorDeSesion';
 
 /**
  * Cabecera fija: modulo, titulo de la pantalla, buscador, operacion del
@@ -8,6 +9,11 @@ import { usePreferencias } from './preferencias';
  * El chip con el endpoint se puede apagar (`mostrarEndpoint`): en desarrollo
  * dice contra que operacion se esta trabajando, y en ventanilla no le dice nada
  * a nadie.
+ *
+ * Quien esta en la caja sale del token, y con el la municipalidad activa —que
+ * es para lo unico que el frontend lee ese claim (FRO-01 §4)—. Sin proveedor de
+ * identidad no hay usuario que mostrar, y se dice: inventarse uno seria pintar
+ * una sesion que no existe.
  */
 export interface CabeceraDeAppProps {
   readonly modulo: string;
@@ -25,6 +31,9 @@ export function CabeceraDeApp({
   onAbrirPaleta,
 }: CabeceraDeAppProps) {
   const { preferencias } = usePreferencias();
+  const sesion = useSesion();
+  const quien = sesion.datos?.usuario ?? 'Sin sesión';
+  const donde = sesion.datos?.municipalidad ?? preferencias.entidad;
 
   return (
     <header className="sgtm-cabecera" data-no-imprimible="1">
@@ -54,14 +63,23 @@ export function CabeceraDeApp({
         )}
         <div className="sgtm-cabecera__usuario">
           <span className="sgtm-cabecera__avatar" aria-hidden="true">
-            JC
+            {iniciales(quien)}
           </span>
           <span className="sgtm-cabecera__identidad">
-            <span className="sgtm-cabecera__nombre">J. Cárdenas</span>
-            <span className="sgtm-cabecera__rol">Caja C-3</span>
+            <span className="sgtm-cabecera__nombre">{quien}</span>
+            <span className="sgtm-cabecera__rol">{donde}</span>
           </span>
         </div>
       </div>
     </header>
   );
+}
+
+/** «María Quispe» → «MQ». Sin sesion, el hueco no se rellena con nada inventado. */
+function iniciales(nombre: string): string {
+  const partes = nombre.split(/\s+/).filter(Boolean);
+  return partes
+    .slice(0, 2)
+    .map((parte) => parte[0]?.toUpperCase() ?? '')
+    .join('');
 }

@@ -166,8 +166,11 @@ con el esqueleto de carga del design system y un mensaje centrado entre hairline
   código que usaba el nombre viejo. **Lo que sigue pendiente son los esquemas de cuerpo y
   respuesta**: el contrato declara verbo, ruta y parámetros, y el esquema de cada recurso se
   escribe cuando su backend existe.
-- **No hay autenticación real.** El flujo con PKCE contra el proveedor OIDC (ADR-0005) sustituirá
-  al `guardarToken` manual.
+- ~~**No hay autenticación real.**~~ **Hecho:** Authorization Code con PKCE, token en memoria,
+  renovación silenciosa que no desmonta nada, cierre de sesión que vacía la caché y cambio de
+  municipalidad que la vacía **antes** de pedir el token nuevo. Lo que sigue abierto es **D-06**:
+  el claim con las municipalidades autorizadas, que es lo que hace falta para el **selector**; el
+  flujo de una sola municipalidad no lo espera.
 - **El servidor de datos de ejemplo es un proxy en el navegador**, no un proceso aparte:
   `@sgtm/api-mock` sustituye `fetch` y responde las 134 operaciones. Se reabre si hace falta
   simular volumen o escrituras con estado (ADR-0010).

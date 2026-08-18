@@ -439,6 +439,24 @@ textarea.sgtm-campo__control {
 
 /* La caja de escritura: la observacion pegada a la accion primaria, porque sin
    ella no se guarda (regla 10, RNF-052). */
+/* La puerta de sesion: lo unico que se ve cuando no hay sesion abierta. */
+.sgtm-puerta {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+/* El aviso de expiracion es un hermano de la aplicacion, no la sustituye: si la
+   sustituyera, el formulario a medio llenar se perderia. */
+.sgtm-sesion__aviso {
+  padding: 8px 16px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 12.5px;
+  text-align: center;
+}
+
 .sgtm-escritura {
   display: flex;
   flex-direction: column;
