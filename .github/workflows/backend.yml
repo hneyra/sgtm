@@ -53,6 +53,26 @@ jobs:
       - name: Preparar Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # El wrapper descarga la distribucion de services.gradle.org, que devuelve
+      # 502 de vez en cuando. Sin este paso, ese 502 aparece como un build rojo
+      # indistinguible de un fallo real, y la reaccion natural —relanzar— acaba
+      # normalizando el relanzamiento como respuesta a cualquier rojo.
+      #
+      # Se hace aparte y con reintentos para que el fallo de red tenga su propio
+      # nombre. Una vez descargada queda en la cache, asi que los pasos de abajo
+      # ya no vuelven a pedirla.
+      - name: Descargar la distribucion de Gradle, con reintentos
+        run: |
+          for intento in 1 2 3 4; do
+            if ./gradlew --version; then
+              exit 0
+            fi
+            echo "Intento $intento fallido; se reintenta en $((intento * 10))s"
+            sleep $((intento * 10))
+          done
+          echo "No se pudo descargar la distribucion de Gradle tras cuatro intentos"
+          exit 1
+
       - name: Aislamiento multi-tenant
         run: ./gradlew verificarAislamiento --no-daemon
 
