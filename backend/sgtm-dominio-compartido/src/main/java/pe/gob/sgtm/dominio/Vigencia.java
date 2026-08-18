@@ -1,10 +1,15 @@
-package pe.gob.sgtm.seguridad.dominio;
+package pe.gob.sgtm.dominio;
 
 import java.time.LocalDate;
 import org.jspecify.annotations.Nullable;
 
 /**
  * Desde cuando y hasta cuando vale una autorizacion (RF-123).
+ *
+ * <p>Vive en el dominio compartido porque no es de la seguridad: la usan igual los permisos —el
+ * personal por contrato—, los parametros normativos —una ordenanza rige entre dos fechas— y los
+ * beneficios tributarios. Tres copias del mismo concepto acabarian con tres reglas distintas para
+ * el caso limite, que es siempre el mismo dia.
  *
  * <p>Los dos extremos admiten nulo, y significan cosas distintas: sin {@code desde}, vale desde
  * siempre; sin {@code hasta}, vale indefinidamente. Es lo que permite el caso corriente —un

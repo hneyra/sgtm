@@ -11,13 +11,13 @@ import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.dominio.Vigencia;
 import pe.gob.sgtm.seguridad.dominio.Acceso;
 import pe.gob.sgtm.seguridad.dominio.AdministracionRepository;
 import pe.gob.sgtm.seguridad.dominio.Grupo;
 import pe.gob.sgtm.seguridad.dominio.Miembro;
 import pe.gob.sgtm.seguridad.dominio.Modulo;
 import pe.gob.sgtm.seguridad.dominio.Usuario;
-import pe.gob.sgtm.seguridad.dominio.Vigencia;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 

@@ -3,6 +3,7 @@ package pe.gob.sgtm.seguridad.dominio;
 import java.time.LocalDate;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.dominio.Vigencia;
 
 /**
  * La identidad local de una persona dentro de una municipalidad.
