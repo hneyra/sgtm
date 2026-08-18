@@ -1,4 +1,4 @@
-package pe.gob.sgtm.seguridad.dominio;
+package pe.gob.sgtm.autorizacion;
 
 /**
  * Los <b>siete</b> privilegios del manual (cap. 4, RF-121).

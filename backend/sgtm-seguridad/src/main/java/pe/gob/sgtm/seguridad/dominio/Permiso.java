@@ -4,6 +4,7 @@ import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.autorizacion.Privilegio;
 
 /**
  * Que privilegios tiene un grupo o un usuario sobre un acceso.

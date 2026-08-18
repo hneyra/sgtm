@@ -24,6 +24,7 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
 import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
@@ -31,7 +32,6 @@ import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.seguridad.dominio.Permiso;
-import pe.gob.sgtm.seguridad.dominio.Privilegio;
 import pe.gob.sgtm.seguridad.infraestructura.PermisoRepositoryJdbc;
 
 /**
