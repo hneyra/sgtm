@@ -111,8 +111,9 @@ class AsientoRepositoryJdbcTest {
             assertThat(guardado.id()).isNotNull();
             assertThat(guardado.usuarioId()).isEqualTo("cajera.ventanilla");
             assertThat(guardado.motivo())
-                    .as("el repositorio guarda el motivo tal como llega; quien lo llena es"
-                            + " RegistrarAsiento, no esta capa")
+                    .as(
+                            "el repositorio guarda el motivo tal como llega; quien lo llena es"
+                                    + " RegistrarAsiento, no esta capa")
                     .isEqualTo("insoluto de la prueba");
 
             Optional<Asiento> releido =
