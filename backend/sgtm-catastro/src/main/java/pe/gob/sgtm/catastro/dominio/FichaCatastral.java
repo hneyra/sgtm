@@ -24,11 +24,21 @@ import pe.gob.sgtm.dominio.Observacion;
  * la peticion: la columna es {@code NOT NULL} y {@link Observacion} valida que diga algo (regla 10,
  * RNF-052).
  *
+ * <h2>Los cuatro tipos</h2>
+ *
+ * <p>El mismo tipo sirve para los cuatro (RF-001 a RF-004) porque el mecanismo es el mismo:
+ * version, vigencia y copia. Lo que cambia entre ellos va en {@link #detalle}, que es {@link
+ * DetalleDeLaFicha} —sellado— y cuyo {@code tipo()} tiene que coincidir con el de la ficha. Las
+ * construcciones y las obras complementarias no estan ahi: las pueden tener los cuatro.
+ *
  * <p>Aqui no se calcula nada. El area se guarda, no se valoriza; el autovaluo es de rentas y esta
  * bloqueado por D-02a.
  *
  * @param version empieza en 1 y sube de uno en uno por predio y tipo
+ * @param denominacion como se llama la unidad: la edificacion, el predio rustico
  * @param vigenciaHasta nulo mientras la version es la vigente
+ * @param detalle lo propio del tipo; nulo en la ficha {@code UNICA}, cuyo detalle son las
+ *     construcciones
  */
 public record FichaCatastral(
         @Nullable Long id,
@@ -40,17 +50,20 @@ public record FichaCatastral(
         @Nullable Medida frontis,
         @Nullable String condicionPropiedad,
         @Nullable String tipoEdificacion,
+        @Nullable String denominacion,
         LocalDate vigenciaDesde,
         @Nullable LocalDate vigenciaHasta,
         OrigenDeLaFicha origen,
         String documentoOrigen,
         Observacion observacion,
         List<Construccion> construcciones,
-        List<OtraInstalacion> instalaciones) {
+        List<OtraInstalacion> instalaciones,
+        @Nullable DetalleDeLaFicha detalle) {
 
     private static final int USO_MAXIMO = 60;
     private static final int DOCUMENTO_MAXIMO = 80;
     private static final int TEXTO_MAXIMO = 40;
+    private static final int DENOMINACION_MAXIMA = 160;
 
     public FichaCatastral {
         Objects.requireNonNull(tipo, "La ficha necesita su tipo");
@@ -88,12 +101,32 @@ public record FichaCatastral(
             throw new IllegalArgumentException(
                     "El tipo de edificacion excede " + TEXTO_MAXIMO + " caracteres");
         }
+        if (denominacion != null) {
+            denominacion = denominacion.strip();
+            if (denominacion.isEmpty()) {
+                denominacion = null;
+            } else if (denominacion.length() > DENOMINACION_MAXIMA) {
+                throw new IllegalArgumentException(
+                        "La denominacion excede " + DENOMINACION_MAXIMA + " caracteres");
+            }
+        }
         if (vigenciaHasta != null && vigenciaHasta.isBefore(vigenciaDesde)) {
             throw new IllegalArgumentException(
                     "Una ficha no puede dejar de regir antes de empezar: "
                             + vigenciaDesde
                             + ".."
                             + vigenciaHasta);
+        }
+        // El detalle es de un tipo concreto de ficha, y aqui es donde se comprueba. Sin esta
+        // linea, una ficha ECONOMICA con grupos de tierra se escribe sin ruido y se descubre al
+        // leerla, cuando ya nadie recuerda quien la escribio.
+        if (detalle != null && detalle.tipo() != tipo) {
+            throw new IllegalArgumentException(
+                    "Una ficha "
+                            + tipo
+                            + " no lleva detalle de "
+                            + detalle.tipo()
+                            + ": son dos fichas distintas del mismo predio, no una");
         }
     }
 
@@ -117,13 +150,15 @@ public record FichaCatastral(
                 null,
                 null,
                 null,
+                null,
                 desde,
                 null,
                 origen,
                 documentoOrigen,
                 observacion,
                 List.of(),
-                List.of());
+                List.of(),
+                null);
     }
 
     public boolean esNueva() {
@@ -145,11 +180,11 @@ public record FichaCatastral(
 
     /**
      * La version siguiente: misma ficha, {@code version + 1}, con la observacion que justifica el
-     * cambio y <b>una copia de lo que colgaba</b>.
+     * cambio y <b>una copia de todo lo que colgaba</b>.
      *
-     * <p>Copiar las construcciones es la parte que se olvida. Sin ella, la version anterior se
-     * quedaria con las suyas y la nueva nacería vacia, que en la practica seria borrar lo declarado
-     * sin que ningun {@code DELETE} apareciera en el diff.
+     * <p>Copiar es la parte que se olvida. Sin ella, la version anterior se quedaria con sus
+     * construcciones, sus actividades o sus grupos de tierra y la nueva naceria vacia, que en la
+     * practica seria borrar lo declarado sin que ningun {@code DELETE} apareciera en el diff.
      */
     public FichaCatastral siguienteVersion(
             LocalDate desde,
@@ -174,13 +209,15 @@ public record FichaCatastral(
                 frontis,
                 condicionPropiedad,
                 tipoEdificacion,
+                denominacion,
                 desde,
                 null,
                 origen,
                 documentoOrigen,
                 observacion,
                 construcciones,
-                instalaciones);
+                instalaciones,
+                detalle);
     }
 
     /** Cierra la version. Sus datos no se tocan: lo unico que cambia es hasta cuando rigio. */
@@ -197,86 +234,65 @@ public record FichaCatastral(
                             + " una version que empezo a regir el "
                             + vigenciaDesde);
         }
-        return conVigenciaHasta(fecha);
+        return copia(fecha, areaTerreno, construcciones, instalaciones, denominacion, detalle);
     }
 
     public FichaCatastral con(List<Construccion> otrasConstrucciones) {
-        return new FichaCatastral(
-                id,
-                predioId,
-                tipo,
-                version,
-                areaTerreno,
-                uso,
-                frontis,
-                condicionPropiedad,
-                tipoEdificacion,
-                vigenciaDesde,
+        return copia(
                 vigenciaHasta,
-                origen,
-                documentoOrigen,
-                observacion,
+                areaTerreno,
                 otrasConstrucciones,
-                instalaciones);
+                instalaciones,
+                denominacion,
+                detalle);
     }
 
     public FichaCatastral conInstalaciones(List<OtraInstalacion> otras) {
-        return new FichaCatastral(
-                id,
-                predioId,
-                tipo,
-                version,
-                areaTerreno,
-                uso,
-                frontis,
-                condicionPropiedad,
-                tipoEdificacion,
-                vigenciaDesde,
-                vigenciaHasta,
-                origen,
-                documentoOrigen,
-                observacion,
-                construcciones,
-                otras);
+        return copia(vigenciaHasta, areaTerreno, construcciones, otras, denominacion, detalle);
     }
 
     public FichaCatastral conArea(AreaM2 otraArea) {
-        return new FichaCatastral(
-                id,
-                predioId,
-                tipo,
-                version,
-                otraArea,
-                uso,
-                frontis,
-                condicionPropiedad,
-                tipoEdificacion,
-                vigenciaDesde,
-                vigenciaHasta,
-                origen,
-                documentoOrigen,
-                observacion,
-                construcciones,
-                instalaciones);
+        return copia(vigenciaHasta, otraArea, construcciones, instalaciones, denominacion, detalle);
     }
 
-    private FichaCatastral conVigenciaHasta(@Nullable LocalDate hasta) {
+    public FichaCatastral conDenominacion(@Nullable String otra) {
+        return copia(vigenciaHasta, areaTerreno, construcciones, instalaciones, otra, detalle);
+    }
+
+    /**
+     * La misma version con otro detalle. Lo rechaza si el detalle no es del tipo de la ficha: la
+     * comprobacion esta en el constructor y esta llamada pasa por el.
+     */
+    public FichaCatastral conDetalle(@Nullable DetalleDeLaFicha otro) {
+        return copia(vigenciaHasta, areaTerreno, construcciones, instalaciones, denominacion, otro);
+    }
+
+    /** Lo que no varia en ninguna copia, en un solo sitio. */
+    private FichaCatastral copia(
+            @Nullable LocalDate hasta,
+            AreaM2 area,
+            List<Construccion> conConstrucciones,
+            List<OtraInstalacion> conInstalaciones,
+            @Nullable String conDenominacion,
+            @Nullable DetalleDeLaFicha conDetalle) {
         return new FichaCatastral(
                 id,
                 predioId,
                 tipo,
                 version,
-                areaTerreno,
+                area,
                 uso,
                 frontis,
                 condicionPropiedad,
                 tipoEdificacion,
+                conDenominacion,
                 vigenciaDesde,
                 hasta,
                 origen,
                 documentoOrigen,
                 observacion,
-                construcciones,
-                instalaciones);
+                conConstrucciones,
+                conInstalaciones,
+                conDetalle);
     }
 }

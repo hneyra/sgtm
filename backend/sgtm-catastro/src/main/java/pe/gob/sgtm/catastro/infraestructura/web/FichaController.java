@@ -22,7 +22,17 @@ import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
- * Ficha catastral urbana: {@code GET /api/v1/catastro/fichas/urbana/{codRefCatastral}}.
+ * Las cuatro fichas del manual, por codigo de referencia catastral (RF-001 a RF-004).
+ *
+ * <p>Un controlador y no cuatro, porque la pregunta es la misma —«dame la ficha de este predio»— y
+ * lo unico que cambia es el tipo. Lo que si cambia por metodo es el {@code acceso}: cada una es una
+ * opcion distinta del menu, con sus propios permisos.
+ *
+ * <p><b>Las rutas nombran el parametro de tres maneras</b> —{@code codRefCatastral}, {@code
+ * codEdificacion}, {@code codUnidad}— y las tres reciben lo mismo: el codigo de referencia
+ * catastral. La edificacion en propiedad exclusiva y comun y la unidad catastral rural son predios
+ * del padron, con su propio codigo; no hacen falta dos numeraciones mas. Los nombres se respetan
+ * porque son los del contrato, y el contrato salio de las pantallas del prototipo.
  *
  * <p>Se entra por el <b>codigo de referencia catastral</b>, no por el identificador interno del
  * predio: es lo que el tecnico tiene delante y lo que el contrato declara en la ruta.
@@ -52,19 +62,58 @@ public class FichaController {
     public FichaResource urbana(
             @PathVariable String codRefCatastral,
             @RequestParam(required = false) @Nullable String fecha) {
+        return leer(codRefCatastral, TipoFicha.UNICA, fecha, "urbana");
+    }
 
-        Predio predio = predioDe(codRefCatastral);
+    @GetMapping("/economica/{codRefCatastral}")
+    @RequiereAcceso(acceso = "ficha_economica", privilegio = Privilegio.LECTURA)
+    public FichaResource economica(
+            @PathVariable String codRefCatastral,
+            @RequestParam(required = false) @Nullable String fecha) {
+        return leer(codRefCatastral, TipoFicha.ECONOMICA, fecha, "economica");
+    }
+
+    @GetMapping("/bienes-comunes/{codEdificacion}")
+    @RequiereAcceso(acceso = "ficha_bienes", privilegio = Privilegio.LECTURA)
+    public FichaResource bienesComunes(
+            @PathVariable String codEdificacion,
+            @RequestParam(required = false) @Nullable String fecha) {
+        return leer(codEdificacion, TipoFicha.BIENES_COMUNES, fecha, "de bienes comunes");
+    }
+
+    @GetMapping("/rural/{codUnidad}")
+    @RequiereAcceso(acceso = "ficha_rural", privilegio = Privilegio.LECTURA)
+    public FichaResource rural(
+            @PathVariable String codUnidad,
+            @RequestParam(required = false) @Nullable String fecha) {
+        return leer(codUnidad, TipoFicha.RURAL, fecha, "rural");
+    }
+
+    /**
+     * Un solo camino para los cuatro tipos.
+     *
+     * <p>Que la fecha se resuelva aqui y no en cada metodo es lo que impide que uno de los cuatro
+     * acabe respondiendo «la ultima» en vez de «la vigente a la fecha». Es el mismo defecto que ya
+     * aparecio en el domicilio del contribuyente, y se corrige una vez.
+     */
+    private FichaResource leer(
+            String codigo, TipoFicha tipo, @Nullable String fecha, String comoSeLlama) {
+
+        Predio predio = predioDe(codigo);
         LocalDate cuando = fecha == null || fecha.isBlank() ? LocalDate.now(reloj) : parsear(fecha);
 
         long predioId = java.util.Objects.requireNonNull(predio.id(), "El predio leido tiene id");
-        Optional<FichaCatastral> ficha = fichas.vigenteA(predioId, TipoFicha.UNICA, cuando);
+        Optional<FichaCatastral> ficha = fichas.vigenteA(predioId, tipo, cuando);
 
         return ficha.map(FichaResource::de)
                 .orElseThrow(
                         () ->
                                 new ProblemaDeNegocio(
                                         CodigoDeError.NO_ENCONTRADO,
-                                        "El predio no tiene ficha urbana vigente al " + cuando));
+                                        "El predio no tiene ficha "
+                                                + comoSeLlama
+                                                + " vigente al "
+                                                + cuando));
     }
 
     private Predio predioDe(String codigo) {
