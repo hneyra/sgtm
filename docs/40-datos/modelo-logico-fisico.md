@@ -8,9 +8,10 @@ Este documento las explica. **Si divergen, mandan las migraciones.**
 
 ## §0 — Lo primero que hay que saber
 
-Dos hallazgos sobre Row Level Security, **verificados ejecutando el DDL** contra PostgreSQL en el
-proyecto SRTM, del que se hereda la estrategia. No se volvieron a descubrir aquí: se trasladaron
-con su mitigación, y la prueba de aislamiento los vigila.
+**Tres hallazgos sobre Row Level Security**, verificados ejecutando contra PostgreSQL. Los dos
+primeros vienen del proyecto SRTM, del que se hereda la estrategia: no se volvieron a descubrir
+aquí, se trasladaron con su mitigación y la prueba de aislamiento los vigila. El tercero salió aquí,
+midiendo planes de ejecución.
 
 ### Hallazgo 1 — Un superusuario omite RLS
 
@@ -40,6 +41,38 @@ tabla padre.
    `GRANT … ON ALL TABLES IN SCHEMA`: una partición nueva no recibe privilegios salvo que alguien
    se los conceda expresamente, y eso se ve en el diff.
 
+### Hallazgo 3 — Bajo RLS, un `LIKE` no llega nunca al índice
+
+Una búsqueda por prefijo escrita como `columna LIKE 'prefijo%'` **se ejecuta como recorrido
+secuencial** para el rol de aplicación, exista o no un índice adecuado. Da igual la clase de
+operadores del índice: no se usa.
+
+El motivo es que `textlike` **no es *leakproof*** (`pg_proc.proleakproof = false`), y PostgreSQL se
+niega a evaluar una condición que no lo sea *antes* de la política de seguridad — podría revelar,
+por un mensaje de error, filas de otra municipalidad. Así que el `LIKE` se queda como `Filter`
+después del recorrido, y el índice sobra.
+
+Medido contra PostgreSQL 16 con 30 000 filas, misma tabla, mismo índice, mismos datos y el rol
+`sgtm_app` sujeto a la política:
+
+| Cómo se escribe el prefijo | Plan | Coste |
+|---|---|---|
+| `cod LIKE 'prefijo%'` | `Seq Scan` | 925 |
+| `cod ~>=~ 'prefijo' AND cod ~<~ 'prefijp'` | `Bitmap Index Scan` | 308 |
+
+**Mitigación.** Toda búsqueda por prefijo se escribe como un **rango** con los operadores de
+`text_pattern_ops` —`~>=~` y `~<~`, los dos *leakproof*—, sobre un índice declarado con esa clase
+de operadores. Expresa exactamente el mismo prefijo y sí llega al índice.
+
+No es una peculiaridad de una consulta: le pasa a **toda** búsqueda por prefijo del sistema, y
+como el plan no cambia el resultado, nada se pone rojo cuando alguien lo devuelve a `LIKE`. Por eso
+hay dos pruebas gemelas en `ConsultaDeFichasTest$Volumen`: una exige que el rango use índice, y la
+otra fija que el `LIKE` no lo usa y explica por qué.
+
+El mismo razonamiento vale para cualquier operador no *leakproof* sobre una tabla con RLS. La
+búsqueda por aproximación de nombres (`V11`) no está afectada: `similarity` va sobre un índice GIN
+que se evalúa como filtro de todos modos.
+
 ---
 
 ## 1. Las migraciones
@@ -53,6 +86,13 @@ tabla padre.
 | `V5__seguridad_y_auditoria.sql` | Módulos, accesos, grupos, usuarios, permisos, sesiones y auditoría |
 | `V6__rls.sql` | Row Level Security en todas las tablas |
 | `V7__privilegios.sql` | `GRANT` solo sobre tablas padre; sin `DELETE`; sin `UPDATE` en lo inmutable |
+| `V8__respaldo.sql` | Registro de respaldos |
+| `V9__conjuntos_sellados.sql` | Conjuntos de parámetros por ejercicio, con su sellado |
+| `V10__varias_versiones_selladas.sql` | Varias versiones selladas del mismo ejercicio (ARQ-09 §3) |
+| `V11__busqueda_por_aproximacion.sql` | `nombre_normalizado(…)` inmutable e índice GIN de trigramas |
+| `V12__responsables_solidarios.sql` | Quién responde por la deuda además del contribuyente |
+| `V13__fichas_economica_bienes_y_rural.sql` | Detalle de los otros tres tipos de ficha |
+| `V14__indices_de_la_consulta_de_fichas.sql` | Los tres índices de la consulta transversal (ver §0, hallazgo 3) |
 
 Los roles se crean **antes**, con `db/roles/crear-roles.sql`, que no es una migración: las
 políticas de `V6` los nombran, y un rol no puede crearse a sí mismo.

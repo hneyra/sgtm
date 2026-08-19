@@ -2,7 +2,6 @@ package pe.gob.sgtm.catastro.infraestructura.web;
 
 import java.time.Clock;
 import java.time.LocalDate;
-import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -12,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.catastro.aplicacion.ActualizarFichaCatastral;
+import pe.gob.sgtm.catastro.aplicacion.ConsultaDeFichas;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.FichaCatastral;
 import pe.gob.sgtm.catastro.dominio.Predio;
@@ -48,12 +48,17 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 public class FichaController {
 
     private final ActualizarFichaCatastral fichas;
+    private final ConsultaDeFichas consulta;
     private final CatastroRepository catastro;
     private final Clock reloj;
 
     public FichaController(
-            ActualizarFichaCatastral fichas, CatastroRepository catastro, Clock reloj) {
+            ActualizarFichaCatastral fichas,
+            ConsultaDeFichas consulta,
+            CatastroRepository catastro,
+            Clock reloj) {
         this.fichas = fichas;
+        this.consulta = consulta;
         this.catastro = catastro;
         this.reloj = reloj;
     }
@@ -61,32 +66,37 @@ public class FichaController {
     @GetMapping("/urbana/{codRefCatastral}")
     public FichaResource urbana(
             @PathVariable String codRefCatastral,
-            @RequestParam(required = false) @Nullable String fecha) {
-        return leer(codRefCatastral, TipoFicha.UNICA, fecha, "urbana");
+            @RequestParam(required = false) @Nullable String fecha,
+            @RequestParam(required = false, defaultValue = "false") boolean historico) {
+        return leer(codRefCatastral, TipoFicha.UNICA, fecha, "urbana", historico);
     }
 
     @GetMapping("/economica/{codRefCatastral}")
     @RequiereAcceso(acceso = "ficha_economica", privilegio = Privilegio.LECTURA)
     public FichaResource economica(
             @PathVariable String codRefCatastral,
-            @RequestParam(required = false) @Nullable String fecha) {
-        return leer(codRefCatastral, TipoFicha.ECONOMICA, fecha, "economica");
+            @RequestParam(required = false) @Nullable String fecha,
+            @RequestParam(required = false, defaultValue = "false") boolean historico) {
+        return leer(codRefCatastral, TipoFicha.ECONOMICA, fecha, "economica", historico);
     }
 
     @GetMapping("/bienes-comunes/{codEdificacion}")
     @RequiereAcceso(acceso = "ficha_bienes", privilegio = Privilegio.LECTURA)
     public FichaResource bienesComunes(
             @PathVariable String codEdificacion,
-            @RequestParam(required = false) @Nullable String fecha) {
-        return leer(codEdificacion, TipoFicha.BIENES_COMUNES, fecha, "de bienes comunes");
+            @RequestParam(required = false) @Nullable String fecha,
+            @RequestParam(required = false, defaultValue = "false") boolean historico) {
+        return leer(
+                codEdificacion, TipoFicha.BIENES_COMUNES, fecha, "de bienes comunes", historico);
     }
 
     @GetMapping("/rural/{codUnidad}")
     @RequiereAcceso(acceso = "ficha_rural", privilegio = Privilegio.LECTURA)
     public FichaResource rural(
             @PathVariable String codUnidad,
-            @RequestParam(required = false) @Nullable String fecha) {
-        return leer(codUnidad, TipoFicha.RURAL, fecha, "rural");
+            @RequestParam(required = false) @Nullable String fecha,
+            @RequestParam(required = false, defaultValue = "false") boolean historico) {
+        return leer(codUnidad, TipoFicha.RURAL, fecha, "rural", historico);
     }
 
     /**
@@ -97,23 +107,33 @@ public class FichaController {
      * aparecio en el domicilio del contribuyente, y se corrige una vez.
      */
     private FichaResource leer(
-            String codigo, TipoFicha tipo, @Nullable String fecha, String comoSeLlama) {
+            String codigo,
+            TipoFicha tipo,
+            @Nullable String fecha,
+            String comoSeLlama,
+            boolean historico) {
 
         Predio predio = predioDe(codigo);
         LocalDate cuando = fecha == null || fecha.isBlank() ? LocalDate.now(reloj) : parsear(fecha);
 
         long predioId = java.util.Objects.requireNonNull(predio.id(), "El predio leido tiene id");
-        Optional<FichaCatastral> ficha = fichas.vigenteA(predioId, tipo, cuando);
+        FichaCatastral ficha =
+                fichas.vigenteA(predioId, tipo, cuando)
+                        .orElseThrow(
+                                () ->
+                                        new ProblemaDeNegocio(
+                                                CodigoDeError.NO_ENCONTRADO,
+                                                "El predio no tiene ficha "
+                                                        + comoSeLlama
+                                                        + " vigente al "
+                                                        + cuando));
 
-        return ficha.map(FichaResource::de)
-                .orElseThrow(
-                        () ->
-                                new ProblemaDeNegocio(
-                                        CodigoDeError.NO_ENCONTRADO,
-                                        "El predio no tiene ficha "
-                                                + comoSeLlama
-                                                + " vigente al "
-                                                + cuando));
+        // El historico no viaja siempre: son todas las versiones de la ficha, y la pantalla que
+        // solo pinta la vigente no tiene por que pagarlas. Cuando no se pide, el campo sale nulo
+        // —no una lista vacia—, que es la diferencia entre «no lo pediste» y «no hay ninguna».
+        return historico
+                ? FichaResource.con(ficha, consulta.historial(predioId, tipo))
+                : FichaResource.de(ficha);
     }
 
     private Predio predioDe(String codigo) {

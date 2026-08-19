@@ -13,6 +13,7 @@ import pe.gob.sgtm.catastro.dominio.DetalleRural;
 import pe.gob.sgtm.catastro.dominio.FichaCatastral;
 import pe.gob.sgtm.catastro.dominio.ParticipacionComun;
 import pe.gob.sgtm.catastro.dominio.TierraRural;
+import pe.gob.sgtm.catastro.dominio.VersionDeLaFicha;
 
 /**
  * Una version de la ficha, tal como sale por HTTP.
@@ -24,6 +25,10 @@ import pe.gob.sgtm.catastro.dominio.TierraRural;
  * <p>Las construcciones salen con sus <b>categorias</b>, nunca con importes: cuanto vale cada
  * categoria es D-02a y vive en datos versionados (regla 5). Lo mismo con los grupos de tierra —van
  * en hectareas, sin arancel— y con los bienes comunes.
+ *
+ * <p>El {@code historico} viaja solo cuando se pide con {@code ?historico=true}: son todas las
+ * versiones de la ficha, y la pantalla que solo pinta la vigente no tiene por que pagarlas. Nulo
+ * significa «no lo pediste»; una lista vacia significaria «no hay ninguna», que no puede pasar.
  *
  * <p>Los tres bloques de detalle son <b>nulos salvo el que toca</b>. Una ficha rural no publica un
  * bloque economico vacio: quien lea el JSON tiene que poder distinguir «este predio no declara
@@ -46,9 +51,20 @@ public record FichaResource(
         List<ConstruccionResource> construcciones,
         @Nullable EconomicoResource economico,
         @Nullable BienesComunesResource bienesComunes,
-        @Nullable RuralResource rural) {
+        @Nullable RuralResource rural,
+        @Nullable List<VersionResource> historico) {
 
     public static FichaResource de(FichaCatastral ficha) {
+        return construir(ficha, null);
+    }
+
+    /** La misma ficha con su historico, cuando la peticion lo pide (RF-006). */
+    public static FichaResource con(FichaCatastral ficha, List<VersionDeLaFicha> versiones) {
+        return construir(ficha, versiones.stream().map(VersionResource::de).toList());
+    }
+
+    private static FichaResource construir(
+            FichaCatastral ficha, @Nullable List<VersionResource> historico) {
         DetalleDeLaFicha detalle = ficha.detalle();
         return new FichaResource(
                 ficha.id() == null ? 0L : ficha.id(),
@@ -71,7 +87,46 @@ public record FichaResource(
                 detalle instanceof DetalleDeBienesComunes comunes
                         ? BienesComunesResource.de(comunes)
                         : null,
-                detalle instanceof DetalleRural rural ? RuralResource.de(rural) : null);
+                detalle instanceof DetalleRural rural ? RuralResource.de(rural) : null,
+                historico);
+    }
+
+    /**
+     * Una fila del historico: <b>que rigio, cuando, quien lo escribio y por que</b>.
+     *
+     * <p>La observacion es la mitad util. Un diff dice que el area paso de 120 a 180; solo la
+     * observacion dice que fue una fiscalizacion de campo y no un error de tecleo, y es lo que se
+     * lee en voz alta cuando el contribuyente pregunta por que le subio el recibo.
+     */
+    public record VersionResource(
+            long id,
+            int version,
+            String areaTerreno,
+            String uso,
+            String vigenciaDesde,
+            @Nullable String vigenciaHasta,
+            boolean vigente,
+            String origen,
+            String documentoOrigen,
+            String observacion,
+            String usuario,
+            String registradaEn) {
+
+        public static VersionResource de(VersionDeLaFicha version) {
+            return new VersionResource(
+                    version.id(),
+                    version.version(),
+                    version.areaTerreno().toString(),
+                    version.uso(),
+                    version.vigenciaDesde().toString(),
+                    version.vigenciaHasta() == null ? null : version.vigenciaHasta().toString(),
+                    version.estaVigente(),
+                    version.origen().name(),
+                    version.documentoOrigen(),
+                    version.observacion().texto(),
+                    version.usuario(),
+                    version.registradaEn().toString());
+        }
     }
 
     /** Lo construido en un piso: medidas y categorias, cero importes. */

@@ -79,6 +79,19 @@ public class ContribuyenteRepositoryJdbc extends RepositorioJdbc
     }
 
     @Override
+    public List<Contribuyente> findAllById(java.util.Collection<Long> ids) {
+        if (ids.isEmpty()) {
+            // Un IN vacio no es SQL valido, y mandarlo al motor para que se queje seria dejar que
+            // el caso mas corriente —una pagina sin titulares— llegue como error de sintaxis.
+            return List.of();
+        }
+        return jdbc().sql("SELECT " + COLUMNAS + " FROM contribuyente WHERE id IN (:ids)")
+                .param("ids", ids)
+                .query(ContribuyenteRepositoryJdbc::mapear)
+                .list();
+    }
+
+    @Override
     public Optional<Contribuyente> findByCodigo(CodigoContribuyente codigo) {
         return jdbc().sql(
                         "SELECT "

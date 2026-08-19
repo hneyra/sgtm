@@ -47,10 +47,13 @@ Es bloqueante: `./gradlew verificarAislamiento`.
 > con el mismo contexto fijado, verifica que el superusuario ve las dos municipalidades y
 > `sgtm_app` una.
 
-Los dos hallazgos de RLS que heredamos verificados del SRTM —el superusuario omite RLS, y el
-acceso directo a una partición evade la política del padre— están en
-[`docs/40-datos/modelo-logico-fisico.md`](docs/40-datos/modelo-logico-fisico.md) §0. No se
-volvieron a descubrir: se trasladaron con su mitigación.
+Los **tres** hallazgos de RLS están en
+[`docs/40-datos/modelo-logico-fisico.md`](docs/40-datos/modelo-logico-fisico.md) §0. Dos se
+heredaron verificados del SRTM —el superusuario omite RLS, y el acceso directo a una partición
+evade la política del padre—: no se volvieron a descubrir, se trasladaron con su mitigación. El
+tercero salió aquí: **bajo RLS un `LIKE 'prefijo%'` no llega nunca al índice**, porque `textlike`
+no es *leakproof* y PostgreSQL no lo evalúa antes de la política. Toda búsqueda por prefijo se
+escribe como rango con `~>=~` / `~<~`.
 
 **Al agregar una tabla:** si lleva `municipalidad_id NOT NULL`, la prueba le exige RLS sola. Si
 no, hay que clasificarla como catálogo o como exenta en el propio código de la prueba, y eso se
@@ -285,6 +288,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Predio, catálogos y titularidad (17 pruebas) | Cambiando el disparador de la titularidad de diferido a inmediato, contra PostgreSQL | Rojo: una transferencia legítima —cerrar una titularidad y abrir otra— se vuelve imposible |
 | Ficha catastral versionada (11 pruebas) | Sobrescribiendo el `uso` de la versión anterior al cerrarla, y no copiando sus construcciones al versionar | Rojo: el historial miente; rojo: la versión nueva nace vacía |
 | Las otras tres fichas (14 pruebas) | Cinco roturas: `siguienteVersion` sin copiar el detalle; sin la comprobación de que el detalle es del tipo de la ficha; sin el disparador diferido del reparto; `vigenteA` resolviendo «la última»; y `TierraRural` admitiendo metros | Rojo las cinco. La segunda deja construir una ficha económica con grupos de tierra; la última admite 15 000 m² leídos como hectáreas |
+| Consulta de fichas e histórico (24 pruebas) | Escribiendo el prefijo con `LIKE` en vez de por rango, y devolviendo el padrón entero cuando el filtro por titular no encuentra a nadie | Rojo: el plan pasa a `Seq Scan` sobre 30 000 predios; rojo: buscar un nombre inexistente devolvía todo |
 | La fecha de auditoría sale del reloj inyectado | Devolviéndola al `DEFAULT now()` de la base | Rojo: la fila cae en un día que no es el del ejercicio con que se particionó |
 | Las guardas del generador de operaciones (6) | Un contrato de muestra que viola cada una | Las seis muerden |
 

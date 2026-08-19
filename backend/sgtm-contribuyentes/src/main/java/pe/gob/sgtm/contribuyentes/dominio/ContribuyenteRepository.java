@@ -1,5 +1,7 @@
 package pe.gob.sgtm.contribuyentes.dominio;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
@@ -17,6 +19,15 @@ import pe.gob.sgtm.dominio.DocumentoIdentidad;
 public interface ContribuyenteRepository {
 
     Optional<Contribuyente> findById(long id);
+
+    /**
+     * Varios por identificador, en una sola consulta.
+     *
+     * <p>Lo pide {@code DirectorioDeContribuyentes.porIds}: una grilla de otro contexto resuelve
+     * los titulares de una pagina entera de golpe. Con {@code findById} en un bucle no se nota en
+     * la prueba y si en el padron de una provincia.
+     */
+    List<Contribuyente> findAllById(Collection<Long> ids);
 
     Optional<Contribuyente> findByCodigo(CodigoContribuyente codigo);
 

@@ -60,6 +60,8 @@ class ContratoDeApiTest {
                     "GET /catastro/fichas/economica/{codRefCatastral}",
                     "GET /catastro/fichas/bienes-comunes/{codEdificacion}",
                     "GET /catastro/fichas/rural/{codUnidad}",
+                    "GET /catastro/fichas",
+                    "GET /catastro/contribuyentes/{codigo}/ficha.pdf",
                     "PUT /catastro/fichas/{codigo}/actualizacion",
                     "GET /rentas/contribuyentes",
                     "GET /seguridad/modulos",
