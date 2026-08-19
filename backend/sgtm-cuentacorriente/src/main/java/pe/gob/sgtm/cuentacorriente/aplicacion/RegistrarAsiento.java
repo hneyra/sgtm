@@ -8,6 +8,7 @@ import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
+import pe.gob.sgtm.cuentacorriente.dominio.SaldoRepository;
 import pe.gob.sgtm.dominio.Observacion;
 
 /**
@@ -22,15 +23,27 @@ import pe.gob.sgtm.dominio.Observacion;
  * <p>No valida que el asiento «cuadre» con nada: este contexto no conoce reglas tributarias ni sabe
  * si el cargo que le llega es correcto (ARQ-01 §4 regla 2). Quien llama —determinacion, tesoreria,
  * coactiva— es quien responde por eso.
+ *
+ * <p><b>Proyecta el saldo en la misma transaccion</b> (#23). No es una optimizacion colgada al
+ * final: si la proyeccion fuera aparte, un asiento podria confirmarse y su saldo no, y la cache
+ * quedaria corta sin que nada fallara. Esa es exactamente la divergencia que despues habria que ir
+ * a buscar con la conciliacion.
+ *
+ * <p>Llama al repositorio y no a {@code MantenerSaldoProyectado}: proyectar no es un caso de uso
+ * —nadie «proyecta un saldo» como acto administrativo— y pasarlo por uno obligaba a inventarle una
+ * observacion de usuario que el asiento ya trae. Lo detecto la regla 10, no la revision.
  */
 @Service
 public class RegistrarAsiento {
 
     private final AsientoRepository repositorio;
+    private final SaldoRepository saldos;
     private final Auditoria auditoria;
 
-    public RegistrarAsiento(AsientoRepository repositorio, Auditoria auditoria) {
+    public RegistrarAsiento(
+            AsientoRepository repositorio, SaldoRepository saldos, Auditoria auditoria) {
         this.repositorio = repositorio;
+        this.saldos = saldos;
         this.auditoria = auditoria;
     }
 
@@ -38,6 +51,7 @@ public class RegistrarAsiento {
     @Transactional
     public Asiento asentar(Asiento asiento, Observacion observacion) {
         Asiento guardado = repositorio.registrar(asiento.conMotivo(observacion.texto()));
+        saldos.aplicar(guardado);
 
         auditoria.registrar(
                 RegistroDeAuditoria.enLaFechaDe(
@@ -72,6 +86,9 @@ public class RegistrarAsiento {
         Asiento reversion =
                 Asiento.reversionDe(original, fecha, documentoOrigen, observacion.texto());
         Asiento guardado = repositorio.registrar(reversion);
+        // La reversion tambien proyecta, y con su signo opuesto: si no, el saldo se quedaria con
+        // el cargo que se acaba de deshacer y se cobraria una deuda que ya no existe.
+        saldos.aplicar(guardado);
 
         auditoria.registrar(
                 RegistroDeAuditoria.enLaFechaDe(

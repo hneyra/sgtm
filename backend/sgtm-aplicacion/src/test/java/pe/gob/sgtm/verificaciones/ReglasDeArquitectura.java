@@ -16,6 +16,7 @@ import com.tngtech.archunit.lang.syntax.ArchRuleDefinition;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Las reglas de ARQ-04 §2 que pueden expresarse como regla de ArchUnit, expresadas como regla de
@@ -265,6 +266,58 @@ public final class ReglasDeArquitectura {
                             "que la interfaz oculte una opcion es comodidad, no seguridad: la"
                                     + " peticion se puede hacer igual con curl (RF-121, ADR-0005)");
 
+    /**
+     * ADR-0006: el saldo proyectado sirve para <b>consultar</b>, nunca para <b>determinar</b>.
+     *
+     * <p>Es una cache reconstruible del insoluto, no una fuente. Determinar deuda leyendola tiene
+     * dos formas de salir mal y ninguna hace ruido: si la cache esta desajustada, el error entra en
+     * un valor tributario notificado —y a esas alturas se corrige con una resolucion, no con un
+     * {@code UPDATE}—; y si esta al dia, el resultado de la determinacion pasa a depender de cuando
+     * se proyecto por ultima vez, con lo que recalcular el mismo ejercicio dos veces puede dar dos
+     * cifras (regla 6).
+     *
+     * <p>La regla se escribe donde se puede distinguir consultar de determinar: <b>quien usa el
+     * motor de reglas no toca la cache</b>. Consultarla desde tesoreria o desde una pantalla sigue
+     * siendo legitimo, y por eso no se prohibe en general — una regla que prohibiera de mas se
+     * acabaria desactivando.
+     */
+    public static final ArchRule QUIEN_DETERMINA_NO_LEE_EL_SALDO_PROYECTADO =
+            noClasses()
+                    .that(new QueDeterminan())
+                    .should()
+                    .dependOnClassesThat()
+                    .haveNameMatching(".*(SaldoProyectado|SaldoRepository|ClaveDeSaldo)")
+                    .because(
+                            "el saldo proyectado es una cache reconstruible: si diverge del libro"
+                                    + " manda el libro, y una determinacion no puede depender de cuando"
+                                    + " se proyecto por ultima vez (ADR-0006, regla 6)");
+
+    /**
+     * Las clases que determinan: las que dependen del motor de reglas o de una regla tributaria.
+     *
+     * <p>Escrito a mano y no con {@code dependOnClassesThat}, que en esta version toma un predicado
+     * sobre {@code JavaClass} y no sobre el nombre.
+     */
+    private static final class QueDeterminan extends DescribedPredicate<JavaClass> {
+
+        private static final Pattern DETERMINAR =
+                Pattern.compile(".*(MotorDeReglas|ReglaTributaria|InsumosDeLaRegla)");
+
+        QueDeterminan() {
+            super("determinan: usan el motor de reglas o una regla tributaria");
+        }
+
+        @Override
+        public boolean test(JavaClass clase) {
+            return clase.getDirectDependenciesFromSelf().stream()
+                    .anyMatch(
+                            dependencia ->
+                                    DETERMINAR
+                                            .matcher(dependencia.getTargetClass().getSimpleName())
+                                            .matches());
+        }
+    }
+
     public static List<ArchRule> todas() {
         return List.of(
                 EL_DOMINIO_NO_CONOCE_FRAMEWORKS,
@@ -277,7 +330,8 @@ public final class ReglasDeArquitectura {
                 TODO_CASO_DE_USO_DE_ESCRITURA_EXIGE_OBSERVACION,
                 NINGUN_CONTROLADOR_RECIBE_LA_MUNICIPALIDAD,
                 TODA_CIFRA_DE_LA_WEB_LLEVA_SU_FECHA,
-                TODO_ENDPOINT_DECLARA_SU_ACCESO);
+                TODO_ENDPOINT_DECLARA_SU_ACCESO,
+                QUIEN_DETERMINA_NO_LEE_EL_SALDO_PROYECTADO);
     }
 
     /** Clases del sistema, sin las de prueba ni las de fixtures. */

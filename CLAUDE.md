@@ -262,7 +262,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Privilegios sobre particiones | `GRANT SELECT ON determinacion_2026 TO sgtm_app` | Rojo en dos pruebas |
 | Guardia del pool | Prueba gemela **sin** guardia | La fuga ocurre de verdad |
 | Patrón de repositorio (11 pruebas) | Conectando como superusuario en vez de `sgtm_app` | Rojo en 7 de las 11 |
-| Reglas de ArchUnit (11) | Clase de muestra que viola cada una | Las once muerden, ya sobre dominio real |
+| Reglas de ArchUnit (12) | Clase de muestra que viola cada una | Las doce muerden, ya sobre dominio real |
 | Observación obligatoria (regla 10) | Quitando la `Observacion` de `RegistrarVia` | Rojo en `verificarArquitectura` |
 | Auditoría contra PostgreSQL (8 pruebas) | Observación en blanco por SQL directo | La operación completa se deshace |
 | Contrato de la API vs. rutas publicadas | Publicando una ruta que el contrato no tiene | Rojo en las dos direcciones |
@@ -291,6 +291,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Consulta de fichas e histórico (24 pruebas) | Escribiendo el prefijo con `LIKE` en vez de por rango, y devolviendo el padrón entero cuando el filtro por titular no encuentra a nadie | Rojo: el plan pasa a `Seq Scan` sobre 30 000 predios; rojo: buscar un nombre inexistente devolvía todo |
 | La fecha de auditoría sale del reloj inyectado | Devolviéndola al `DEFAULT now()` de la base | Rojo: la fila cae en un día que no es el del ejercicio con que se particionó |
 | Documentos en tres formatos (26 pruebas) | Cinco roturas: el PDF con fecha de creación dentro; el RTF sin escapar lo no-ASCII; sin la comprobación de que la reimpresión sale igual; sin el disparador de inmutabilidad; y el duplicado sin marcar | Rojo las cinco. La primera es lo que haría cualquier biblioteca de PDF; la segunda escribe «PE?A GARC?A» en un documento oficial |
+| Saldo proyectado (27 pruebas) | Tres roturas: conciliar mirando solo del libro a la cache; reconstruir sin poner en cero lo que el libro ya no tiene; y la reversion sin proyectar | Rojo las tres. La segunda deja viva la deuda cuyos asientos se reversaron, con el total pareciendo razonable |
 | Las guardas del generador de operaciones (6) | Un contrato de muestra que viola cada una | Las seis muerden |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con
