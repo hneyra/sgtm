@@ -330,6 +330,18 @@ public final class DatosDePrueba {
 
         ejecutar(
                 app,
+                "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                        + " referencia, datos, formato, resumen, fecha_emision, usuario_emision,"
+                        + " observacion)"
+                        + " VALUES (?, 'FICHA_CONTRIBUYENTE', 'FICHA_CONTRIBUYENTE-2026-000001',"
+                        + "         2026, 'C-0001', CAST(? AS jsonb), 'PDF', repeat('a', 64),"
+                        + "         ?, 'siembra', 'documento de prueba')",
+                muni,
+                "{\"titulo\":\"Documento de prueba\",\"subtitulo\":null,\"aLaFecha\":\"2026-01-01\","
+                        + "\"cabecera\":[],\"tablas\":[],\"pie\":[],\"duplicado\":null}",
+                VIGENCIA);
+        ejecutar(
+                app,
                 "INSERT INTO titularidad (municipalidad_id, predio_id, contribuyente_id, condicion,"
                         + " porcentaje, vigencia_desde, documento_origen)"
                         + " VALUES (?, ?, ?, 'PROPIETARIO_UNICO', 100, ?, 'MINUTA-001')",

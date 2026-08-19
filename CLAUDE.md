@@ -290,6 +290,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Las otras tres fichas (14 pruebas) | Cinco roturas: `siguienteVersion` sin copiar el detalle; sin la comprobación de que el detalle es del tipo de la ficha; sin el disparador diferido del reparto; `vigenteA` resolviendo «la última»; y `TierraRural` admitiendo metros | Rojo las cinco. La segunda deja construir una ficha económica con grupos de tierra; la última admite 15 000 m² leídos como hectáreas |
 | Consulta de fichas e histórico (24 pruebas) | Escribiendo el prefijo con `LIKE` en vez de por rango, y devolviendo el padrón entero cuando el filtro por titular no encuentra a nadie | Rojo: el plan pasa a `Seq Scan` sobre 30 000 predios; rojo: buscar un nombre inexistente devolvía todo |
 | La fecha de auditoría sale del reloj inyectado | Devolviéndola al `DEFAULT now()` de la base | Rojo: la fila cae en un día que no es el del ejercicio con que se particionó |
+| Documentos en tres formatos (26 pruebas) | Cinco roturas: el PDF con fecha de creación dentro; el RTF sin escapar lo no-ASCII; sin la comprobación de que la reimpresión sale igual; sin el disparador de inmutabilidad; y el duplicado sin marcar | Rojo las cinco. La primera es lo que haría cualquier biblioteca de PDF; la segunda escribe «PE?A GARC?A» en un documento oficial |
 | Las guardas del generador de operaciones (6) | Un contrato de muestra que viola cada una | Las seis muerden |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con
