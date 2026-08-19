@@ -56,6 +56,8 @@ class ContratoDeApiTest {
             Set.of(
                     "GET /catastro/vias",
                     "GET /catastro/sectores",
+                    "GET /catastro/fichas/urbana/{codRefCatastral}",
+                    "PUT /catastro/fichas/{codigo}/actualizacion",
                     "GET /rentas/contribuyentes",
                     "GET /seguridad/modulos",
                     "GET /seguridad/accesos",

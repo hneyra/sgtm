@@ -70,7 +70,8 @@ class LectorDeParametrosSelladosTest {
 
         administrar =
                 envolver(
-                        new AdministrarParametros(repositorio, new AuditoriaJdbc(jdbc), RELOJ),
+                        new AdministrarParametros(
+                                repositorio, new AuditoriaJdbc(jdbc, RELOJ), RELOJ),
                         gestor);
         lector = envolver(new LectorDeParametrosSellados(repositorio), gestor);
     }

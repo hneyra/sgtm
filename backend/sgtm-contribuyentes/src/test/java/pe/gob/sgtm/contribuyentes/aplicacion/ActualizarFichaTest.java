@@ -81,7 +81,9 @@ class ActualizarFichaTest {
         transaccion = new TransactionTemplate(gestor);
         repositorio = new FichaRepositoryJdbc(jdbc);
         actualizar =
-                envolver(new ActualizarFicha(repositorio, new AuditoriaJdbc(jdbc), RELOJ), gestor);
+                envolver(
+                        new ActualizarFicha(repositorio, new AuditoriaJdbc(jdbc, RELOJ), RELOJ),
+                        gestor);
     }
 
     @SuppressWarnings("unchecked")

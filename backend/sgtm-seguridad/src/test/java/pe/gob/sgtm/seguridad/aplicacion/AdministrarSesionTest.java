@@ -84,7 +84,7 @@ class AdministrarSesionTest {
         TenantTransactionManager gestor = new TenantTransactionManager(pool);
         transaccion = new TransactionTemplate(gestor);
 
-        AuditoriaJdbc auditoria = new AuditoriaJdbc(jdbc);
+        AuditoriaJdbc auditoria = new AuditoriaJdbc(jdbc, RELOJ);
         AdministracionRepositoryJdbc administracion = new AdministracionRepositoryJdbc(jdbc);
         sesion =
                 envolver(

@@ -92,7 +92,9 @@ class RegistrarPredioTest {
         transaccion = new TransactionTemplate(gestor);
         repositorio = new CatastroRepositoryJdbc(jdbc);
         registrar =
-                envolver(new RegistrarPredio(repositorio, new AuditoriaJdbc(jdbc), RELOJ), gestor);
+                envolver(
+                        new RegistrarPredio(repositorio, new AuditoriaJdbc(jdbc, RELOJ), RELOJ),
+                        gestor);
     }
 
     @SuppressWarnings("unchecked")

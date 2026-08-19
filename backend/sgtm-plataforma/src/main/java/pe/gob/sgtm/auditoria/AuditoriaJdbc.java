@@ -1,5 +1,7 @@
 package pe.gob.sgtm.auditoria;
 
+import java.time.Clock;
+import java.time.OffsetDateTime;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
@@ -16,12 +18,21 @@ import pe.gob.sgtm.persistencia.RepositorioJdbc;
  * <p>El {@code municipalidad_id} no aparece en ninguna firma: lo pone el motor, como en todo
  * repositorio (ver {@link RepositorioJdbc#MUNICIPALIDAD_ACTUAL}). La auditoria es dato de tenant
  * como cualquier otro, con su RLS (ADR-0008).
+ *
+ * <p><b>La fecha sale del reloj inyectado, no de {@code now()} de la base.</b> Tiene que ser el
+ * mismo reloj que decidio el ejercicio de la particion: si uno dice 2026 y el otro 2027 —y en
+ * Nochevieja pasa—, la fila cae en una particion cuya fecha no coincide con la suya, y la consulta
+ * de auditoria por rango no la encuentra. Que la columna tuviera {@code DEFAULT now()} lo hacia
+ * facil de no ver.
  */
 @Component
 public class AuditoriaJdbc extends RepositorioJdbc implements Auditoria {
 
-    public AuditoriaJdbc(JdbcClient jdbc) {
+    private final Clock reloj;
+
+    public AuditoriaJdbc(JdbcClient jdbc, Clock reloj) {
         super(jdbc);
+        this.reloj = java.util.Objects.requireNonNull(reloj, "La auditoria necesita su reloj");
     }
 
     @Override
@@ -30,14 +41,15 @@ public class AuditoriaJdbc extends RepositorioJdbc implements Auditoria {
 
         jdbc().sql(
                         "INSERT INTO auditoria"
-                                + " (municipalidad_id, ejercicio, tabla, clave, operacion,"
+                                + " (municipalidad_id, ejercicio, fecha, tabla, clave, operacion,"
                                 + "  usuario_id, origen_equipo, origen_ip, observacion,"
                                 + "  datos_anteriores, datos_nuevos)"
                                 + " VALUES ("
                                 + MUNICIPALIDAD_ACTUAL
-                                + ", :ejercicio, :tabla, :clave, :operacion,"
+                                + ", :ejercicio, :fecha, :tabla, :clave, :operacion,"
                                 + " :usuario, :equipo, cast(:ip AS inet), :observacion,"
                                 + " cast(:datosAnteriores AS jsonb), cast(:datosNuevos AS jsonb))")
+                .param("fecha", OffsetDateTime.now(reloj))
                 .param("ejercicio", registro.ejercicio().valor())
                 .param("tabla", registro.tabla())
                 .param("clave", registro.clave())
