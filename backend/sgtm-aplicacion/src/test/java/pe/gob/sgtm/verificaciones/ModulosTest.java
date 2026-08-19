@@ -41,7 +41,8 @@ class ModulosTest {
                         "web",
                         "catastro",
                         "seguridad",
-                        "cuentacorriente");
+                        "cuentacorriente",
+                        "rentas");
     }
 
     @Test
