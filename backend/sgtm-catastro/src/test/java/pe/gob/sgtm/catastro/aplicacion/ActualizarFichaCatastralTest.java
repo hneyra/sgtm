@@ -138,6 +138,7 @@ class ActualizarFichaCatastralTest {
                     "Acta de fiscalizacion 045-2026",
                     null,
                     null,
+                    null,
                     Observacion.de("Se verifica en campo un area mayor a la declarada"));
 
             List<FichaCatastral> historial =
@@ -170,6 +171,7 @@ class ActualizarFichaCatastralTest {
                     LocalDate.of(2026, 9, 1),
                     OrigenDeLaFicha.DECLARACION_JURADA,
                     "Declaracion jurada 090-2026",
+                    null,
                     null,
                     null,
                     Observacion.de("El contribuyente declara la construccion terminada"));
@@ -216,6 +218,7 @@ class ActualizarFichaCatastralTest {
                             LocalDate.of(2026, 7, 1),
                             OrigenDeLaFicha.RESOLUCION,
                             "Resolucion de gerencia 010-2026",
+                            null,
                             null,
                             null,
                             Observacion.de("Cambio de uso por resolucion, sin tocar la fabrica"));
@@ -287,6 +290,7 @@ class ActualizarFichaCatastralTest {
                                             LocalDate.of(2026, 7, 1),
                                             OrigenDeLaFicha.DECLARACION_JURADA,
                                             "Documento",
+                                            null,
                                             null,
                                             null,
                                             Observacion.de("Actualizar una ficha inexistente")))

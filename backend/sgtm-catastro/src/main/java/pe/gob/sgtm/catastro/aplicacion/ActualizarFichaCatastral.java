@@ -11,6 +11,7 @@ import pe.gob.sgtm.auditoria.Auditoria;
 import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.catastro.dominio.Construccion;
+import pe.gob.sgtm.catastro.dominio.DetalleDeLaFicha;
 import pe.gob.sgtm.catastro.dominio.FichaCatastral;
 import pe.gob.sgtm.catastro.dominio.FichaCatastralRepository;
 import pe.gob.sgtm.catastro.dominio.OrigenDeLaFicha;
@@ -76,9 +77,12 @@ public class ActualizarFichaCatastral {
     /**
      * Crea la version siguiente a partir de la vigente y cierra aquella.
      *
-     * <p>{@code construcciones} e {@code instalaciones} nulos significan «lo mismo que tenia»: la
-     * copia es el comportamiento por omision, porque es lo que casi siempre se quiere y olvidarla
-     * borraria lo declarado sin que ningun {@code DELETE} apareciera en el diff.
+     * <p>{@code construcciones}, {@code instalaciones} y {@code detalle} nulos significan «lo mismo
+     * que tenia»: la copia es el comportamiento por omision, porque es lo que casi siempre se
+     * quiere y olvidarla borraria lo declarado sin que ningun {@code DELETE} apareciera en el diff.
+     *
+     * <p>Vale para los cuatro tipos. Lo unico que cambia entre ellos es {@code detalle}, y que sea
+     * del tipo que la ficha declara lo comprueba el constructor de {@link FichaCatastral}.
      */
     @Transactional
     public FichaCatastral actualizar(
@@ -89,6 +93,7 @@ public class ActualizarFichaCatastral {
             String documentoOrigen,
             @Nullable List<Construccion> construcciones,
             @Nullable List<OtraInstalacion> instalaciones,
+            @Nullable DetalleDeLaFicha detalle,
             Observacion observacion) {
 
         FichaCatastral vigente =
@@ -103,6 +108,9 @@ public class ActualizarFichaCatastral {
         }
         if (instalaciones != null) {
             siguiente = siguiente.conInstalaciones(instalaciones);
+        }
+        if (detalle != null) {
+            siguiente = siguiente.conDetalle(detalle);
         }
 
         // Cerrar antes de abrir, y no al reves: ficha_vigente_uq es un indice unico parcial,

@@ -82,6 +82,7 @@ public class ActualizacionController {
                         exigir(peticion.documentoOrigen(), "documentoOrigen"),
                         construccionesDe(peticion.construcciones()),
                         null,
+                        null,
                         observacion);
 
         return FichaResource.de(nueva);

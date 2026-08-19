@@ -35,4 +35,10 @@ public interface FichaCatastralRepository {
     List<Construccion> construccionesDe(long fichaId);
 
     List<OtraInstalacion> instalacionesDe(long fichaId);
+
+    /**
+     * Lo propio del tipo de la ficha: actividades, bienes comunes con su reparto, grupos de tierra
+     * con sus colindantes. Vacio para la ficha {@code UNICA}, cuyo detalle son las construcciones.
+     */
+    Optional<DetalleDeLaFicha> detalleDe(long fichaId, TipoFicha tipo);
 }

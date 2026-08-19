@@ -248,6 +248,86 @@ public final class DatosDePrueba {
                         + " VALUES (?, ?, 'Cerco perimetrico', 'ML', 25.00)",
                 muni,
                 fichaId);
+
+        // Los otros tres tipos de ficha (#19). Van sobre el mismo predio a proposito: el indice
+        // parcial admite una vigente de cada tipo, y sembrarlas juntas lo comprueba de paso.
+        long economica =
+                insertar(
+                        app,
+                        "INSERT INTO ficha_catastral (municipalidad_id, predio_id, tipo, version,"
+                                + " area_terreno, uso, informacion_complementaria, vigencia_desde,"
+                                + " origen, documento_origen, observacion, usuario_registro)"
+                                + " VALUES (?, ?, 'ECONOMICA', 1, 120.00, 'COMERCIO',"
+                                + "         'ficha economica de prueba', ?, 'FISCALIZACION',"
+                                + "         'ACTA-001', 'ficha economica de prueba', 'prueba')"
+                                + " RETURNING id",
+                        muni,
+                        predioId,
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO actividad_economica (municipalidad_id, ficha_id, conductor,"
+                        + " nombre_comercial, ciiu, licencia_numero, licencia_fecha)"
+                        + " VALUES (?, ?, 'Conductor de prueba', 'Bodega de prueba', '4711',"
+                        + "         'LIC-001', ?)",
+                muni,
+                economica,
+                VIGENCIA);
+
+        long comunes =
+                insertar(
+                        app,
+                        "INSERT INTO ficha_catastral (municipalidad_id, predio_id, tipo, version,"
+                                + " area_terreno, uso, denominacion, vigencia_desde, origen,"
+                                + " documento_origen, observacion, usuario_registro)"
+                                + " VALUES (?, ?, 'BIENES_COMUNES', 1, 120.00, 'MULTIFAMILIAR',"
+                                + "         'Edificio de prueba', ?, 'DECLARACION_JURADA',"
+                                + "         'DJ-002', 'ficha de bienes comunes de prueba', 'prueba')"
+                                + " RETURNING id",
+                        muni,
+                        predioId,
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO bien_comun (municipalidad_id, ficha_id, descripcion, area,"
+                        + " material_estructural, estado_conservacion)"
+                        + " VALUES (?, ?, 'Escalera comun', 30.00, 'CONCRETO', 'BUENO')",
+                muni,
+                comunes);
+        ejecutar(
+                app,
+                "INSERT INTO participacion_comun (municipalidad_id, ficha_id, predio_id,"
+                        + " porcentaje) VALUES (?, ?, ?, 100)",
+                muni,
+                comunes,
+                predioId);
+
+        long rural =
+                insertar(
+                        app,
+                        "INSERT INTO ficha_catastral (municipalidad_id, predio_id, tipo, version,"
+                                + " area_terreno, uso, denominacion, vigencia_desde, origen,"
+                                + " documento_origen, observacion, usuario_registro)"
+                                + " VALUES (?, ?, 'RURAL', 1, 120.00, 'AGRICOLA',"
+                                + "         'Fundo de prueba', ?, 'DECLARACION_JURADA', 'DJ-003',"
+                                + "         'ficha rural de prueba', 'prueba') RETURNING id",
+                        muni,
+                        predioId,
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO tierra_rural (municipalidad_id, ficha_id, clasificacion, riego,"
+                        + " cantidad_hectareas) VALUES (?, ?, 'CULTIVO_TRANSITORIO', 'SECANO',"
+                        + "         2.5000)",
+                muni,
+                rural);
+        ejecutar(
+                app,
+                "INSERT INTO colindante_rural (municipalidad_id, ficha_id, orientacion,"
+                        + " descripcion) VALUES (?, ?, 'NORTE', 'Predio de prueba colindante')",
+                muni,
+                rural);
+
         ejecutar(
                 app,
                 "INSERT INTO titularidad (municipalidad_id, predio_id, contribuyente_id, condicion,"
