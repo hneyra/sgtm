@@ -58,7 +58,10 @@ public final class ReglasDeArquitectura {
                     PAQUETE_RAIZ + ".dominio.Alicuota",
                     PAQUETE_RAIZ + ".dominio.Porcentaje",
                     PAQUETE_RAIZ + ".dominio.AreaM2",
-                    PAQUETE_RAIZ + ".dominio.ValorNormativo");
+                    PAQUETE_RAIZ + ".dominio.ValorNormativo",
+                    // Un metrado alimenta un importe (NEG-05 §RT-005); por eso es un
+                    // envoltorio y no un BigDecimal suelto.
+                    PAQUETE_RAIZ + ".dominio.Medida");
 
     private ReglasDeArquitectura() {}
 

@@ -84,7 +84,7 @@ class AdministrarParametrosTest {
         repositorio = new ParametrosRepositoryJdbc(jdbc);
 
         AdministrarParametros objetivo =
-                new AdministrarParametros(repositorio, new AuditoriaJdbc(jdbc), RELOJ);
+                new AdministrarParametros(repositorio, new AuditoriaJdbc(jdbc, RELOJ), RELOJ);
         ProxyFactory fabrica = new ProxyFactory(objetivo);
         fabrica.setProxyTargetClass(true);
         fabrica.addAdvice(

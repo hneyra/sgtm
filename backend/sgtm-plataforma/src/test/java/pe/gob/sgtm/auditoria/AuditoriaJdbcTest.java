@@ -8,6 +8,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -35,6 +38,14 @@ import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 @DisplayName("ADR-0008 — Auditoria obligatoria")
 class AuditoriaJdbcTest {
 
+    /**
+     * Fijo a proposito: la fecha de la fila de auditoria sale de este reloj, no de {@code now()} de
+     * la base. Si saliera de la base, la fila podria caer en un dia distinto del ejercicio con que
+     * se particiono.
+     */
+    private static final Clock RELOJ =
+            Clock.fixed(Instant.parse("2026-08-18T10:00:00Z"), ZoneId.of("America/Lima"));
+
     private static final Ejercicio EJERCICIO = new Ejercicio(2026);
 
     private static BaseDeDatosDePrueba base;
@@ -58,7 +69,7 @@ class AuditoriaJdbcTest {
 
         jdbc = JdbcClient.create(pool);
         transaccion = new TransactionTemplate(new TenantTransactionManager(pool));
-        auditoria = new AuditoriaJdbc(jdbc);
+        auditoria = new AuditoriaJdbc(jdbc, RELOJ);
     }
 
     @AfterAll

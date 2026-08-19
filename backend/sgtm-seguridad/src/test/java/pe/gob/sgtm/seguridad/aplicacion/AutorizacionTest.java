@@ -74,7 +74,8 @@ class AutorizacionTest {
         transaccion = new TransactionTemplate(gestor);
         comprobador = new ComprobadorDeAccesoJdbc(jdbc);
 
-        SembradorDeAccesos objetivo = new SembradorDeAccesos(jdbc, new AuditoriaJdbc(jdbc), RELOJ);
+        SembradorDeAccesos objetivo =
+                new SembradorDeAccesos(jdbc, new AuditoriaJdbc(jdbc, RELOJ), RELOJ);
         ProxyFactory fabrica = new ProxyFactory(objetivo);
         fabrica.setProxyTargetClass(true);
         fabrica.addAdvice(

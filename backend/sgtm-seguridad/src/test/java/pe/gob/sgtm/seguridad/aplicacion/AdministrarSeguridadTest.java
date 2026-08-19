@@ -85,7 +85,7 @@ class AdministrarSeguridadTest {
         transaccion = new TransactionTemplate(gestor);
         comprobador = new ComprobadorDeAccesoJdbc(jdbc);
 
-        AuditoriaJdbc auditoria = new AuditoriaJdbc(jdbc);
+        AuditoriaJdbc auditoria = new AuditoriaJdbc(jdbc, RELOJ);
         administrar =
                 envolver(
                         new AdministrarSeguridad(

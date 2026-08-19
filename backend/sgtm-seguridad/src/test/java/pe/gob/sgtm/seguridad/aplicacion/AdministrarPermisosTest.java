@@ -95,7 +95,7 @@ class AdministrarPermisosTest {
         transaccion = new TransactionTemplate(gestor);
         comprobador = new ComprobadorDeAccesoJdbc(jdbc);
 
-        AuditoriaJdbc auditoria = new AuditoriaJdbc(jdbc);
+        AuditoriaJdbc auditoria = new AuditoriaJdbc(jdbc, RELOJ);
         AdministracionRepositoryJdbc administracion = new AdministracionRepositoryJdbc(jdbc);
         permisos =
                 envolver(

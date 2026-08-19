@@ -66,7 +66,8 @@ class RegistrarViaTest {
         Clock reloj = Clock.fixed(Instant.parse("2026-08-18T10:00:00Z"), ZoneId.of("America/Lima"));
 
         RegistrarVia objetivo =
-                new RegistrarVia(new ViaRepositoryJdbc(jdbc), new AuditoriaJdbc(jdbc), reloj);
+                new RegistrarVia(
+                        new ViaRepositoryJdbc(jdbc), new AuditoriaJdbc(jdbc, reloj), reloj);
 
         ProxyFactory fabrica = new ProxyFactory(objetivo);
         fabrica.setProxyTargetClass(true);
