@@ -93,6 +93,7 @@ que se evalúa como filtro de todos modos.
 | `V12__responsables_solidarios.sql` | Quién responde por la deuda además del contribuyente |
 | `V13__fichas_economica_bienes_y_rural.sql` | Detalle de los otros tres tipos de ficha |
 | `V14__indices_de_la_consulta_de_fichas.sql` | Los tres índices de la consulta transversal (ver §0, hallazgo 3) |
+| `V15__documentos_emitidos.sql` | Documentos emitidos con los datos que los generaron, para reimprimirlos idénticos |
 
 Los roles se crean **antes**, con `db/roles/crear-roles.sql`, que no es una migración: las
 políticas de `V6` los nombran, y un rol no puede crearse a sí mismo.
