@@ -117,7 +117,8 @@ Detalle del esquema: [`sgtm-esquema/README.md`](sgtm-esquema/README.md) y
 
 ## Qué falta
 
-- Toda la funcionalidad de negocio. Bloqueada por D-01 y D-02
+- Toda regla de cálculo tributario. Bloqueada por D-02 —los valores normativos, hoy partida en
+  D-02a/b/c— y por D-03c, los puntos de redondeo
   ([GOB-02](../docs/00-gobierno/decisiones-abiertas.md)).
 - La configuración de Spring Security: el emisor OIDC y el JWKS. Hoy `TenantContextFilter` sabe
   leer el claim, pero nadie valida todavía el token.

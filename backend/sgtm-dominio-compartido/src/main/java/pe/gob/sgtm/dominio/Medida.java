@@ -15,8 +15,8 @@ import java.util.Objects;
  * existe justamente para que aparezca este tipo en vez de aquel.
  *
  * <p><b>No decide su escala ni su redondeo</b>, igual que {@code Dinero}: eso es D-03, y M02 revelo
- * que el sistema del MEF tiene un «metrado redondeado» —hay redondeo intermedio—, asi que fijarlo
- * aqui seria decidir por adelantado algo que todavia se esta midiendo.
+ * que el sistema del MEF tiene un «metrado redondeado» —hay redondeo intermedio, que es D-03c—, asi
+ * que fijarlo aqui seria decidir por adelantado algo que todavia se esta midiendo.
  *
  * <p>La unidad es texto y no una enumeracion a proposito: el manual admite las que traiga la
  * ordenanza, y una enumeracion cerrada obligaria a desplegar para admitir una unidad nueva.

@@ -41,7 +41,7 @@ class AlicuotaTest {
     }
 
     @Test
-    @DisplayName("no sabe aplicarse a una base: eso es regla de calculo (D-02)")
+    @DisplayName("no sabe aplicarse a una base: eso es regla de calculo (D-02a)")
     void noSabeAplicarseAUnaBase() {
         assertThat(Alicuota.class.getDeclaredMethods())
                 .as(

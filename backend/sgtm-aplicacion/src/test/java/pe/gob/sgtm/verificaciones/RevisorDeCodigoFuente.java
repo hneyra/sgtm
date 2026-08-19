@@ -10,7 +10,8 @@ import java.util.regex.Pattern;
 /**
  * Las reglas de ARQ-04 §2 que viven en el texto del SQL y no en la estructura de las clases: {@code
  * SET SESSION}, el {@code DELETE} sobre tablas protegidas y el {@code UPDATE} sobre las inmutables.
- * Y una que vive en el texto del Java: la politica de redondeo escrita a mano, que D-03 prohibe.
+ * Y una que vive en el texto del Java: la politica de redondeo escrita a mano, que D-03a y D-03b
+ * prohiben.
  *
  * <p>ArchUnit no las ve porque no son dependencias entre tipos, sino cadenas.
  *
@@ -74,10 +75,10 @@ public final class RevisorDeCodigoFuente {
     /**
      * Un modo de redondeo escrito en el codigo.
      *
-     * <p>D-03 no esta cerrada: no esta decidido con cuantos decimales se redondea, con que modo, ni
-     * —lo que mas pesa— en que puntos del calculo. Un {@code HALF_UP} escrito hoy es esa decision
-     * tomada por descuido, repartida por el codigo y dificil de encontrar despues. La politica se
-     * recibe como argumento: {@code PoliticaDeRedondeo}.
+     * <p>D-03 no esta cerrada: no esta decidido con cuantos decimales se redondea (D-03a), con que
+     * modo (D-03b), ni —lo que mas pesa— en que puntos del calculo (D-03c). Un {@code HALF_UP}
+     * escrito hoy es esa decision tomada por descuido, repartida por el codigo y dificil de
+     * encontrar despues. La politica se recibe como argumento: {@code PoliticaDeRedondeo}.
      *
      * <p>{@code UNNECESSARY} queda fuera a proposito: no es una politica de redondeo sino su
      * negacion, y es lo que el propio tipo usa para rechazarla.
@@ -86,7 +87,10 @@ public final class RevisorDeCodigoFuente {
             Pattern.compile(
                     "\\bRoundingMode\\s*\\.\\s*(HALF_UP|HALF_DOWN|HALF_EVEN|CEILING|FLOOR|UP|DOWN)\\b");
 
-    /** {@code setScale(2, ...)}: la escala escrita a mano. Mismo motivo, misma decision (D-03). */
+    /**
+     * {@code setScale(2, ...)}: la escala escrita a mano. Mismo motivo, misma familia de decisiones
+     * (D-03a).
+     */
     private static final Pattern ESCALA_ESCRITA =
             Pattern.compile("\\.\\s*setScale\\s*\\(\\s*[0-9]");
 
@@ -182,8 +186,9 @@ public final class RevisorDeCodigoFuente {
     }
 
     /**
-     * D-03: mientras la escala, el modo y los puntos de redondeo no esten decididos, no hay ninguna
-     * politica de redondeo escrita en el codigo. Se recibe como argumento.
+     * D-03: mientras la escala (D-03a), el modo (D-03b) y los puntos de redondeo (D-03c) no esten
+     * decididos, no hay ninguna politica de redondeo escrita en el codigo. Se recibe como
+     * argumento.
      *
      * <p>Mira el codigo y no los literales —al reves que el resto del revisor—, porque lo que se
      * busca es una llamada, no una cadena. Los comentarios se descartan: este mismo archivo explica
@@ -198,7 +203,7 @@ public final class RevisorDeCodigoFuente {
             hallazgos.add(
                     new Hallazgo(
                             archivo,
-                            "D-03 sigue abierta: el modo de redondeo se recibe en una"
+                            "D-03b sigue abierta: el modo de redondeo se recibe en una"
                                     + " PoliticaDeRedondeo, no se escribe en el codigo",
                             modo.group()));
         }
@@ -208,7 +213,7 @@ public final class RevisorDeCodigoFuente {
             hallazgos.add(
                     new Hallazgo(
                             archivo,
-                            "D-03 sigue abierta: la escala se recibe en una PoliticaDeRedondeo, no"
+                            "D-03a sigue abierta: la escala se recibe en una PoliticaDeRedondeo, no"
                                     + " se escribe en el codigo",
                             escala.group()));
         }

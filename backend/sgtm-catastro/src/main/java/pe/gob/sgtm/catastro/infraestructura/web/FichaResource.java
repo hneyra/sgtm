@@ -13,7 +13,7 @@ import pe.gob.sgtm.catastro.dominio.FichaCatastral;
  * sin decir de que version es no permite explicar por que la determinacion salio distinta.
  *
  * <p>Las construcciones salen con sus <b>categorias</b>, nunca con importes: cuanto vale cada
- * categoria es D-02 y vive en datos versionados (regla 5).
+ * categoria es D-02a y vive en datos versionados (regla 5).
  */
 public record FichaResource(
         long id,

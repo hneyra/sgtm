@@ -1,7 +1,7 @@
 package pe.gob.sgtm.catastro.dominio;
 
 /**
- * Como esta la construccion. Junto con el material y la antiguedad decide la depreciacion (D-02).
+ * Como esta la construccion. Junto con el material y la antiguedad decide la depreciacion (D-02a).
  */
 public enum EstadoDeConservacion {
     MUY_BUENO,

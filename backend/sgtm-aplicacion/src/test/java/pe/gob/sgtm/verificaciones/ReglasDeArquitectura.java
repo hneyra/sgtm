@@ -94,7 +94,7 @@ public final class ReglasDeArquitectura {
 
     /**
      * {@code BigDecimal} desnudo no aparece en una firma de dominio; se usa {@code Dinero}, que
-     * recibe la escala y el modo de redondeo (D-03).
+     * recibe la escala y el modo de redondeo (D-03a, D-03b).
      *
      * <p>Se exceptuan los propios envoltorios de decimal del dominio compartido —{@link
      * ReglasDeArquitectura#ENVOLTORIOS_DE_DECIMAL}—: son justamente los tipos que existen para que
@@ -109,7 +109,7 @@ public final class ReglasDeArquitectura {
                     .should(new SinBigDecimalEnLaFirma())
                     .because(
                             "la escala y el modo de redondeo viven dentro de Dinero, no dispersos en"
-                                    + " las reglas (D-03)");
+                                    + " las reglas (D-03a, D-03b)");
 
     /** Un instante lleva zona; una fecha tributaria es LocalDate. */
     public static final ArchRule NADIE_USA_LOCALDATETIME =

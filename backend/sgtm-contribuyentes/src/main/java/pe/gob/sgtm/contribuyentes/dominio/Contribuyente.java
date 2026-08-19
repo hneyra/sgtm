@@ -19,7 +19,7 @@ import pe.gob.sgtm.dominio.DocumentoIdentidad;
  * de la tabla es por {@code (municipalidad_id, codigo_contribuyente)}.
  *
  * <p><b>No hay ninguna regla de calculo aqui.</b> {@link CondicionEspecial} se registra, no se
- * aplica: cuanto deduce un pensionista es D-02.
+ * aplica: cuanto deduce un pensionista es D-02a.
  *
  * @param id nulo mientras no se ha guardado; lo asigna la base
  * @param conyugeId el otro miembro de la sociedad conyugal, si la hay

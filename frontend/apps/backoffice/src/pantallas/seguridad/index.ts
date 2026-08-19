@@ -161,8 +161,9 @@ const auditoria = definirConexion({
  * derecho de emision— y el backend publica **uno**: con que juego de valores se
  * emitio cada ejercicio, y si esta sellado (#10, #14). Los otros dieciseis
  * salen vacios, y tienen que salir vacios: son cifras normativas sin fuente
- * verificada todavia (D-02), y rellenarlas con lo que dibujo el prototipo seria
- * publicar como parametro del sistema un valor que nadie ha comprobado.
+ * verificada todavia (D-02a y D-02b), y rellenarlas con lo que dibujo el
+ * prototipo seria publicar como parametro del sistema un valor que nadie ha
+ * comprobado.
  */
 const parametros = definirConexion({
   // No declara ni filtros ni paginacion en el contrato: es un listado corto y

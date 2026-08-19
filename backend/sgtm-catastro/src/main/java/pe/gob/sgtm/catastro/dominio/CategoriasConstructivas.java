@@ -11,8 +11,8 @@ import org.jspecify.annotations.Nullable;
  * en datos versionados (regla 5). Copiar aqui el importe convertiria la ficha en una foto de los
  * valores del dia en que se registro, y recalcular el pasado dejaria de ser posible.
  *
- * <p>Las letras van de la A a la I. Cuales existen y que valen es D-02; que sean letras y no cifras
- * es estructura, y eso si esta decidido.
+ * <p>Las letras van de la A a la I. Cuales existen y que valen es D-02a; que sean letras y no
+ * cifras es estructura, y eso si esta decidido.
  */
 public record CategoriasConstructivas(
         @Nullable Character muros,

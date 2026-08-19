@@ -181,7 +181,7 @@ depreciación—, marcados `‹VERIFICAR›` en NEG-05 §6 y en
 [`docs/10-negocio/marco-normativo.md`](docs/10-negocio/marco-normativo.md).
 
 Un tramo equivocado produce deuda mal calculada en todo un padrón, con devoluciones masivas y
-nulidad de valores. **No implementar reglas de cálculo hasta cerrar D-02.** Tampoco los cuatro
+nulidad de valores. **No implementar reglas de cálculo hasta cerrar D-02a.** Tampoco los cuatro
 factores que NEG-05 §0.1 marca sin fuente identificada —deducción de Amazonía, `% actualización`,
 incremento del 5 %, factor de oficialización—: multiplican importes, y un valor inventado escala
 el error.
@@ -208,8 +208,9 @@ Registro completo en [`docs/00-gobierno/decisiones-abiertas.md`](docs/00-gobiern
 | # | Decisión | Bloquea |
 |---|---|---|
 | D-01 | Municipalidad piloto y validador funcional | La primera iteración de negocio |
-| D-02 | Valores normativos verificados (UIT, tramos, alícuotas, tablas) | Toda regla de cálculo |
-| D-03 | Escala, modo y **puntos** de redondeo de importes —hay redondeo intermedio, no solo al cierre de cada regla— | La primera regla de cálculo |
+| D-02a | Valores normativos **de norma nacional** (UIT, tramos, alícuotas, valores unitarios, depreciación). Se buscan y se firman; **no dependen de D-01** | El predial, el vehicular y la alcabala |
+| D-02b | Valores **de ordenanza local** con su ratificación provincial | Arbitrios y sanciones |
+| D-03c | **Los puntos donde se redondea.** No es una decisión: es ingeniería inversa contra el SRTM del MEF, que redondea en pasos intermedios | La primera regla de cálculo |
 | D-11 | Origen y valor de los cuatro factores que M02 revela sin fuente | `RT-002`, `RT-005`, `RT-011` |
 | D-04 | Migración desde la base SQL Server existente | Implantación |
 | D-05 | Régimen de firma digital de valores y resoluciones | La capa de documentos |

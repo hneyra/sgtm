@@ -7,9 +7,9 @@ import java.util.Objects;
 /**
  * Escala y modo con los que se redondea un importe.
  *
- * <p>Existe porque <b>D-03 sigue abierta</b>: no esta decidido con cuantos decimales ni con que
- * modo se redondea, ni —lo que mas pesa— en que <i>puntos</i> del calculo se redondea. Mientras no
- * lo este, el codigo no puede fingir que lo sabe.
+ * <p>Existe porque <b>D-03 sigue abierta</b> en sus tres partes: no esta decidido con cuantos
+ * decimales (D-03a) ni con que modo (D-03b) se redondea, ni —lo que mas pesa— en que <i>puntos</i>
+ * del calculo se redondea (D-03c). Mientras no lo este, el codigo no puede fingir que lo sabe.
  *
  * <p>De ahi la forma de este tipo: es un <b>argumento</b>, no una constante. No hay aqui ninguna
  * instancia por omision, ni {@code ESCALA = 2}, ni {@code HALF_UP}. Quien redondea recibe la
