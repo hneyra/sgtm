@@ -5,7 +5,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -25,6 +27,8 @@ import pe.gob.sgtm.catastro.dominio.DetalleRural;
 import pe.gob.sgtm.catastro.dominio.EstadoDeConservacion;
 import pe.gob.sgtm.catastro.dominio.FichaCatastral;
 import pe.gob.sgtm.catastro.dominio.FichaCatastralRepository;
+import pe.gob.sgtm.catastro.dominio.FichaEncontrada;
+import pe.gob.sgtm.catastro.dominio.FiltroDeFichas;
 import pe.gob.sgtm.catastro.dominio.MaterialEstructural;
 import pe.gob.sgtm.catastro.dominio.Orientacion;
 import pe.gob.sgtm.catastro.dominio.OrigenDeLaFicha;
@@ -33,11 +37,16 @@ import pe.gob.sgtm.catastro.dominio.ParticipacionComun;
 import pe.gob.sgtm.catastro.dominio.Riego;
 import pe.gob.sgtm.catastro.dominio.TierraRural;
 import pe.gob.sgtm.catastro.dominio.TipoFicha;
+import pe.gob.sgtm.catastro.dominio.VersionDeLaFicha;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.AreaM2;
+import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Medida;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.Porcentaje;
+import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 
 /**
@@ -72,6 +81,33 @@ public class FichaCatastralRepositoryJdbc extends RepositorioJdbc
                     + " cantidad_hectareas_comun";
 
     private static final String COLUMNAS_COLINDANTE = "id, ficha_id, orientacion, descripcion";
+
+    /**
+     * Lista blanca del orden de la grilla. Sin ella, {@code ordenarPor} seria una via de inyeccion
+     * y ademas dejaria ordenar por columnas sin indice, que es como se degrada un padron grande.
+     */
+    private static final OrdenSeguro ORDEN_CONSULTA =
+            OrdenSeguro.sobre("cod_ref_catastral", "direccion", "uso", "vigencia_desde", "id");
+
+    /**
+     * La grilla y el titular en una sola pasada por la base.
+     *
+     * <p>El {@code LEFT JOIN LATERAL} sobre {@code titularidad} trae <b>un</b> titular por predio
+     * —el de mayor porcentaje— sin multiplicar las filas: un predio con tres copropietarios tiene
+     * que salir una vez en la grilla, no tres. Y es {@code LEFT} a proposito: un predio sin titular
+     * vigente es exactamente el que hay que revisar, y esconderlo del listado esconde el problema.
+     */
+    private static final String DESDE_LA_GRILLA =
+            " FROM ficha_catastral f"
+                    + " JOIN predio p ON p.id = f.predio_id"
+                    + " LEFT JOIN manzana m ON m.id = p.manzana_id"
+                    + " LEFT JOIN LATERAL ("
+                    + "   SELECT t.contribuyente_id FROM titularidad t"
+                    + "    WHERE t.predio_id = p.id"
+                    + "      AND t.vigencia_desde <= :fecha"
+                    + "      AND (t.vigencia_hasta IS NULL OR t.vigencia_hasta >= :fecha)"
+                    + "    ORDER BY t.porcentaje DESC, t.id"
+                    + "    LIMIT 1) tit ON true";
 
     private static final String COLUMNAS_CONSTRUCCION =
             "id, ficha_id, piso, area_construida, anio_construccion, material_estructural,"
@@ -237,6 +273,180 @@ public class FichaCatastralRepositoryJdbc extends RepositorioJdbc
                 .param("ficha", fichaId)
                 .query(FichaCatastralRepositoryJdbc::mapearInstalacion)
                 .list();
+    }
+
+    @Override
+    public Pagina<FichaEncontrada> consultar(
+            FiltroDeFichas filtro, List<Long> titulares, LocalDate fecha, Paginacion paginacion) {
+
+        Objects.requireNonNull(fecha, "La grilla se pide a una fecha, nunca «la ultima» (regla 9)");
+
+        List<String> condiciones = new ArrayList<>();
+        Map<String, Object> parametros = new HashMap<>();
+        parametros.put("fecha", fecha);
+
+        // Solo la version vigente a la fecha: la grilla muestra un predio una vez, no una vez por
+        // version. El historico es otra consulta y otra pantalla.
+        condiciones.add("f.vigencia_desde <= :fecha");
+        condiciones.add("(f.vigencia_hasta IS NULL OR f.vigencia_hasta >= :fecha)");
+
+        if (filtro.codRefCatastral() != null) {
+            // Por prefijo y no por igualdad: el codigo se compone de sector, manzana, lote y
+            // unidad, asi que «2501010010» —todo ese sector— es una pregunta legitima.
+            //
+            // Y por RANGO, no por LIKE. Ver #prefijo: bajo RLS, un LIKE no llega nunca al indice.
+            String desde = filtro.codRefCatastral();
+            String hasta = siguienteAlPrefijo(desde);
+            if (hasta == null) {
+                condiciones.add("p.codigo_ref_catastral LIKE :codigo || '%'");
+                parametros.put("codigo", desde);
+            } else {
+                condiciones.add(
+                        "p.codigo_ref_catastral ~>=~ :codigoDesde"
+                                + " AND p.codigo_ref_catastral ~<~ :codigoHasta");
+                parametros.put("codigoDesde", desde);
+                parametros.put("codigoHasta", hasta);
+            }
+        }
+        if (filtro.manzana() != null) {
+            condiciones.add("m.codigo = :manzana");
+            parametros.put("manzana", filtro.manzana());
+        }
+        if (filtro.lote() != null) {
+            condiciones.add("p.lote = :lote");
+            parametros.put("lote", filtro.lote());
+        }
+        if (filtro.tipo() != null) {
+            condiciones.add("f.tipo = :tipo");
+            parametros.put("tipo", filtro.tipo().name());
+        }
+        if (filtro.porContribuyente().isPresent()) {
+            if (titulares.isEmpty()) {
+                // El usuario escribio un nombre y el padron no encontro a nadie. Devolver la
+                // pagina vacia es la respuesta; ignorar el filtro devolveria el padron entero, que
+                // es la respuesta que hace que alguien crea que busco mal.
+                return Pagina.vacia(paginacion);
+            }
+            condiciones.add("tit.contribuyente_id IN (:titulares)");
+            parametros.put("titulares", titulares);
+        }
+
+        String donde = " WHERE " + String.join(" AND ", condiciones);
+
+        return paginar(
+                // El alias no es cosmetico: OrdenSeguro deriva el campo que acepta el cliente del
+                // nombre de la columna, y con codigo_ref_catastral aceptaria «codigoRefCatastral»
+                // mientras el recurso publica «codRefCatastral». Dos nombres para el mismo campo
+                // es una pantalla que ordena y recibe un 422.
+                "SELECT f.id, f.predio_id, p.codigo_ref_catastral AS cod_ref_catastral,"
+                        + " p.direccion, m.codigo AS manzana,"
+                        + " p.lote, f.tipo, f.version, f.area_terreno, f.uso, f.vigencia_desde,"
+                        + " tit.contribuyente_id"
+                        + DESDE_LA_GRILLA
+                        + donde,
+                "SELECT count(*)" + DESDE_LA_GRILLA + donde,
+                parametros,
+                paginacion,
+                ORDEN_CONSULTA,
+                FichaCatastralRepositoryJdbc::mapearEncontrada);
+    }
+
+    /**
+     * El primer texto que ya <b>no</b> empieza por ese prefijo, para buscar por rango en vez de con
+     * {@code LIKE}.
+     *
+     * <h2>Por que no se usa LIKE</h2>
+     *
+     * <p>Bajo Row Level Security, <b>un {@code LIKE} no llega nunca al indice</b>. Se midio contra
+     * PostgreSQL 16, misma tabla, mismo indice, mismos datos y el mismo rol de aplicacion:
+     *
+     * <pre>
+     *   LIKE 'prefijo%'          → Seq Scan          (coste 925)
+     *   ~&gt;=~ 'prefijo' AND ~&lt;~ … → Bitmap Index Scan (coste 308)
+     * </pre>
+     *
+     * <p>El motivo es que {@code textlike} no es <i>leakproof</i> ({@code pg_proc.proleakproof =
+     * false}), y PostgreSQL no evalua una condicion que no lo sea antes de la politica de
+     * seguridad: podria filtrar por un mensaje de error filas de otra municipalidad. Asi que el
+     * {@code LIKE} se queda como {@code Filter} despues del recorrido, y el indice sobra. Los
+     * operadores de {@code text_pattern_ops} —{@code ~&gt;=~}, {@code ~&lt;~}— si son leakproof, y
+     * expresan exactamente el mismo prefijo como un rango.
+     *
+     * <p>No es una peculiaridad de esta consulta: le pasa a <b>toda</b> busqueda por prefijo del
+     * sistema, y por eso esta anotado en DAT-01 §0 junto a los otros dos hallazgos de RLS.
+     *
+     * @return el limite superior exclusivo, o {@code null} si el prefijo no es ASCII imprimible y
+     *     hay que conformarse con {@code LIKE}: incrementar el ultimo caracter en UTF-16 no
+     *     equivale a incrementarlo en bytes, y una comparacion por bytes con un limite calculado en
+     *     caracteres dejaria filas fuera
+     */
+    static @Nullable String siguienteAlPrefijo(String prefijo) {
+        if (prefijo.isEmpty()) {
+            return null;
+        }
+        for (int i = 0; i < prefijo.length(); i++) {
+            char caracter = prefijo.charAt(i);
+            if (caracter < ' ' || caracter > '~') {
+                return null;
+            }
+        }
+        char ultimo = prefijo.charAt(prefijo.length() - 1);
+        if (ultimo == '~') {
+            return null;
+        }
+        return prefijo.substring(0, prefijo.length() - 1) + (char) (ultimo + 1);
+    }
+
+    @Override
+    public List<VersionDeLaFicha> versionesDe(long predioId, TipoFicha tipo) {
+        return jdbc().sql(
+                        "SELECT id, version, area_terreno, uso, vigencia_desde, vigencia_hasta,"
+                                + " origen, documento_origen, observacion, usuario_registro,"
+                                + " fecha_registro"
+                                + " FROM ficha_catastral"
+                                + " WHERE predio_id = :predio AND tipo = :tipo"
+                                + " ORDER BY version DESC")
+                .param("predio", predioId)
+                .param("tipo", tipo.name())
+                .query(FichaCatastralRepositoryJdbc::mapearVersion)
+                .list();
+    }
+
+    private static FichaEncontrada mapearEncontrada(ResultSet fila, int numeroDeFila)
+            throws SQLException {
+        long titular = fila.getLong("contribuyente_id");
+        boolean sinTitular = fila.wasNull();
+        return new FichaEncontrada(
+                fila.getLong("id"),
+                fila.getLong("predio_id"),
+                CodigoReferenciaCatastral.de(fila.getString("cod_ref_catastral")),
+                fila.getString("direccion"),
+                fila.getString("manzana"),
+                fila.getString("lote"),
+                TipoFicha.valueOf(fila.getString("tipo")),
+                fila.getInt("version"),
+                new AreaM2(fila.getBigDecimal("area_terreno")),
+                fila.getString("uso"),
+                fila.getDate("vigencia_desde").toLocalDate(),
+                sinTitular ? null : titular,
+                null);
+    }
+
+    private static VersionDeLaFicha mapearVersion(ResultSet fila, int numeroDeFila)
+            throws SQLException {
+        java.sql.Date hasta = fila.getDate("vigencia_hasta");
+        return new VersionDeLaFicha(
+                fila.getLong("id"),
+                fila.getInt("version"),
+                new AreaM2(fila.getBigDecimal("area_terreno")),
+                fila.getString("uso"),
+                fila.getDate("vigencia_desde").toLocalDate(),
+                hasta == null ? null : hasta.toLocalDate(),
+                OrigenDeLaFicha.valueOf(fila.getString("origen")),
+                fila.getString("documento_origen"),
+                Observacion.de(fila.getString("observacion")),
+                fila.getString("usuario_registro"),
+                fila.getObject("fecha_registro", java.time.OffsetDateTime.class));
     }
 
     @Override

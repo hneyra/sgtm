@@ -12,6 +12,19 @@ plugins {
 }
 
 dependencies {
+    // La UNICA dependencia de catastro a otro contexto acotado, y esta aqui para que se vea.
+    //
+    // La titularidad guarda un contribuyente_id y nada mas: el nombre, el codigo y el domicilio
+    // viven en el padron. La consulta de fichas (RF-006) filtra por titular y el reporte de ficha
+    // (RF-010) imprime sus datos, asi que uno de los dos tiene que preguntarle al otro.
+    //
+    // Se importa solo pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes —el paquete raiz, que
+    // es la API publica (ARQ-01 §4.1)—; Spring Modulith rechaza cualquier import a .dominio o
+    // .aplicacion del vecino. La alternativa era un JOIN a la tabla contribuyente desde el SQL de
+    // catastro: mas rapido de escribir, invisible para Modulith, y roto en silencio el dia que el
+    // padron cambie una columna.
+    implementation(project(":sgtm-contribuyentes"))
+
     // La prueba del repositorio corre contra PostgreSQL de verdad: provisiona la
     // base como un ambiente real y se conecta como sgtm_app, no como el
     // superusuario que entrega Testcontainers (CAL-01 §3.2).

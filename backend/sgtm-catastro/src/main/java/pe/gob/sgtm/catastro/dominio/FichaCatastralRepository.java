@@ -3,6 +3,8 @@ package pe.gob.sgtm.catastro.dominio;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 
 /**
  * Las versiones de la ficha catastral.
@@ -41,4 +43,19 @@ public interface FichaCatastralRepository {
      * con sus colindantes. Vacio para la ficha {@code UNICA}, cuyo detalle son las construcciones.
      */
     Optional<DetalleDeLaFicha> detalleDe(long fichaId, TipoFicha tipo);
+
+    /**
+     * La consulta transversal de la grilla (RF-006), paginada.
+     *
+     * <p>{@code titulares} llega ya resuelto por el caso de uso cuando el filtro pide un
+     * contribuyente: este repositorio <b>no consulta el padron</b>. Vacio significa «no filtres por
+     * titular»; una lista con elementos, «solo estos». Que la diferencia entre «no filtres» y «el
+     * filtro no encontro a nadie» se decida aqui seria el sitio equivocado: devolveria el padron
+     * entero justo cuando el usuario escribio un nombre que no existe.
+     */
+    Pagina<FichaEncontrada> consultar(
+            FiltroDeFichas filtro, List<Long> titulares, LocalDate fecha, Paginacion paginacion);
+
+    /** El historico con autor, fecha y motivo de cada version (RF-006). */
+    List<VersionDeLaFicha> versionesDe(long predioId, TipoFicha tipo);
 }
