@@ -40,7 +40,8 @@ class ModulosTest {
                         "auditoria",
                         "web",
                         "catastro",
-                        "seguridad");
+                        "seguridad",
+                        "cuentacorriente");
     }
 
     @Test
