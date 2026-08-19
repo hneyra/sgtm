@@ -10,7 +10,7 @@ import pe.gob.sgtm.dominio.Medida;
  *
  * <p>Guarda descripcion, unidad y cantidad. <b>No guarda su valor</b>: NEG-05 §RT-005 lo calcula
  * con un valor unitario, el incremento del 5 %, la depreciacion y un «factor de oficializacion» que
- * ni siquiera tiene fuente identificada (D-11). Todos son D-02.
+ * ni siquiera tiene fuente identificada (D-11). Todos son D-02a.
  *
  * <p>La cantidad es una {@link Medida} y no un numero suelto: es un metrado, y de el sale
  * directamente un importe (regla 1, NEG-05 §RT-005). La unidad viaja con la magnitud porque «12» no

@@ -15,8 +15,8 @@ import java.util.Objects;
  * es que la restriccion dependa de cual de las dos capas se revise.
  *
  * <p><b>No sabe aplicarse a nada.</b> Multiplicar una base por una alicuota, con su redondeo y su
- * orden dentro del calculo, es una regla tributaria: vive en su contexto y esta bloqueada por D-02
- * y D-03.
+ * orden dentro del calculo, es una regla tributaria: vive en su contexto y esta bloqueada por D-02a
+ * y por D-03.
  */
 public record Alicuota(BigDecimal valor) implements Comparable<Alicuota> {
 

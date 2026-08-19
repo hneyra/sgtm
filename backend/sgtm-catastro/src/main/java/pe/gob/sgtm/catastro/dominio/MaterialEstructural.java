@@ -1,6 +1,6 @@
 package pe.gob.sgtm.catastro.dominio;
 
-/** El material predominante de la estructura. Entra en la depreciacion, que es D-02. */
+/** El material predominante de la estructura. Entra en la depreciacion, que es D-02a. */
 public enum MaterialEstructural {
     CONCRETO,
     LADRILLO,

@@ -17,7 +17,7 @@ import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
  * validacion.
  *
  * <p>Aqui no se calcula nada. El autovaluo, el arancel y los valores unitarios son del contexto de
- * rentas y estan bloqueados por D-02.
+ * rentas y estan bloqueados por D-02a.
  *
  * @param id nulo mientras no se ha guardado
  * @param viaId la via de la direccion; nulo en un rustico, que no da a ninguna calle

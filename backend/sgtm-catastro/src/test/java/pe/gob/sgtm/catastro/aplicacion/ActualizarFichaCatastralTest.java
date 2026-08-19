@@ -323,7 +323,7 @@ class ActualizarFichaCatastralTest {
             assertThat(construccion.categorias().instalaciones()).isEqualTo('G');
             assertThat(construccion.categorias().declaradas())
                     .as(
-                            "cuanto vale cada categoria es D-02 y vive en datos versionados; la"
+                            "cuanto vale cada categoria es D-02a y vive en datos versionados; la"
                                     + " ficha guarda a que fila del cuadro pertenece, no el importe")
                     .isEqualTo(7);
         }

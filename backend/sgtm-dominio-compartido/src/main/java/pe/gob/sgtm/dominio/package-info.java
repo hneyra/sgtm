@@ -15,7 +15,7 @@
  * anotacion.
  *
  * <p>Lo que <b>no</b> vive aqui: cualquier operacion que devuelva un importe determinado. Eso es
- * regla de calculo y esta bloqueado por D-02. {@link pe.gob.sgtm.dominio.Dinero} sabe sumar y
+ * regla de calculo y esta bloqueado por D-02a. {@link pe.gob.sgtm.dominio.Dinero} sabe sumar y
  * restar; no sabe cuanto se debe.
  *
  * <p>{@code @NullMarked}: todo es no nulo salvo lo marcado {@code @Nullable} (ARQ-04 §4).

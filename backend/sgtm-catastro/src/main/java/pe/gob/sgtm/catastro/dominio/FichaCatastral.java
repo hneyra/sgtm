@@ -25,7 +25,7 @@ import pe.gob.sgtm.dominio.Observacion;
  * RNF-052).
  *
  * <p>Aqui no se calcula nada. El area se guarda, no se valoriza; el autovaluo es de rentas y esta
- * bloqueado por D-02.
+ * bloqueado por D-02a.
  *
  * @param version empieza en 1 y sube de uno en uno por predio y tipo
  * @param vigenciaHasta nulo mientras la version es la vigente
