@@ -34,6 +34,13 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.modulith:spring-modulith-starter-core")
 
+    // Actuator entra por una sola razon: la sonda de vida. Sin un endpoint que
+    // diga si el proceso esta arriba Y llega a la base, `depends_on:
+    // service_healthy` del compose no puede significar nada, y el despliegue se
+    // queda esperando a un contenedor que quiza nunca sirva una peticion.
+    // Se expone `health` y nada mas (application.yaml).
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+
     // Las migraciones viven en sgtm-esquema y las ejecuta el proceso de despliegue
     // como sgtm_owner. La aplicacion NO migra al arrancar: se conecta como
     // sgtm_app, que no tiene DDL (ARQ-03 §4).
@@ -45,4 +52,12 @@ dependencies {
     // spring-tx no compilaria, y sin ella la regla no tendria como demostrarse.
     testImplementation("org.springframework:spring-tx")
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
+}
+
+// Nombre fijo del artefacto ejecutable. La imagen lo copia por nombre y no por
+// comodin: `*.jar` casaria tambien con el `-plain.jar` que produce el plugin de
+// java-library, y cual de los dos acaba en el contenedor dependeria del orden
+// alfabetico.
+tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
+    archiveFileName.set("sgtm.jar")
 }

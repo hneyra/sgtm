@@ -10,6 +10,7 @@ import java.util.EnumMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -31,6 +32,19 @@ public class GeneradorDeDocumentos {
             new EnumMap<>(FormatoDeDocumento.class);
     private final PuntoDeFirma firma;
 
+    /**
+     * El constructor que usa Spring.
+     *
+     * <p>{@code @Autowired} no es decorativo y su ausencia no fallaba al compilar: con <b>dos</b>
+     * constructores y ninguno marcado, Spring no elige —busca el constructor sin argumentos, no lo
+     * encuentra, y la aplicacion no arranca—. Lo descubrio el primer despliegue que levanto el
+     * artefacto de verdad; ninguna prueba lo veia porque ninguna instanciaba el contexto completo.
+     *
+     * <p>La firma queda en {@link PuntoDeFirma#SIN_FIRMA} mientras D-05 este abierta: el regimen de
+     * firma digital de valores y resoluciones no esta decidido, y elegir uno aqui seria decidirlo
+     * por descuido.
+     */
+    @Autowired
     public GeneradorDeDocumentos(List<Renderizador> disponibles) {
         this(disponibles, PuntoDeFirma.SIN_FIRMA);
     }

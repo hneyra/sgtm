@@ -7,6 +7,7 @@ import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaField;
 import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.domain.JavaParameter;
 import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
@@ -265,6 +266,31 @@ public final class ReglasDeArquitectura {
                             "que la interfaz oculte una opcion es comodidad, no seguridad: la"
                                     + " peticion se puede hacer igual con curl (RF-121, ADR-0005)");
 
+    /**
+     * Un componente de Spring con varios constructores dice cual se inyecta.
+     *
+     * <p>Esta regla existe por un fallo concreto, y conviene que se lea aqui porque no se parece a
+     * nada que el compilador vigile: {@code GeneradorDeDocumentos} tenia dos constructores publicos
+     * y ninguno marcado. Compilaba, sus pruebas pasaban —invocan el constructor a mano— y <b>la
+     * aplicacion no arrancaba</b>: Spring, sin un constructor declarado, busca el que no tiene
+     * argumentos, no lo encuentra y aborta el contexto entero.
+     *
+     * <p>Lo encontro el primer despliegue que levanto el artefacto de verdad. Ninguna verificacion
+     * lo veia: ArchUnit mira estructura, el escaner mira texto y Modulith mira dependencias entre
+     * modulos; instanciar el contexto no lo hacia nadie. El despliegue lo sigue comprobando, pero
+     * tarda minutos y hace falta Docker, asi que ademas se comprueba aqui, donde cuesta segundos.
+     *
+     * <p>Un constructor unico no necesita anotacion: ahi Spring no tiene nada que elegir.
+     */
+    public static final ArchRule TODO_COMPONENTE_DECLARA_QUE_CONSTRUCTOR_INYECTAR =
+            ArchRuleDefinition.classes()
+                    .that(new EsComponenteDeSpring())
+                    .should(new ConUnConstructorInyectableSinAmbiguedad())
+                    .because(
+                            "con varios constructores y ninguno marcado, Spring busca el que no"
+                                    + " tiene argumentos y la aplicacion no arranca; compila igual y"
+                                    + " las pruebas que instancian a mano no lo ven");
+
     public static List<ArchRule> todas() {
         return List.of(
                 EL_DOMINIO_NO_CONOCE_FRAMEWORKS,
@@ -277,7 +303,8 @@ public final class ReglasDeArquitectura {
                 TODO_CASO_DE_USO_DE_ESCRITURA_EXIGE_OBSERVACION,
                 NINGUN_CONTROLADOR_RECIBE_LA_MUNICIPALIDAD,
                 TODA_CIFRA_DE_LA_WEB_LLEVA_SU_FECHA,
-                TODO_ENDPOINT_DECLARA_SU_ACCESO);
+                TODO_ENDPOINT_DECLARA_SU_ACCESO,
+                TODO_COMPONENTE_DECLARA_QUE_CONSTRUCTOR_INYECTAR);
     }
 
     /** Clases del sistema, sin las de prueba ni las de fixtures. */
@@ -293,6 +320,90 @@ public final class ReglasDeArquitectura {
     // ------------------------------------------------------------------
     // Condiciones propias
     // ------------------------------------------------------------------
+
+    /** Lo que Spring instancia: los estereotipos que el escaneo de componentes descubre. */
+    private static final class EsComponenteDeSpring extends DescribedPredicate<JavaClass> {
+
+        private static final Set<String> ESTEREOTIPOS =
+                Set.of(
+                        "org.springframework.stereotype.Component",
+                        "org.springframework.stereotype.Service",
+                        "org.springframework.stereotype.Repository",
+                        "org.springframework.stereotype.Controller",
+                        "org.springframework.web.bind.annotation.RestController",
+                        "org.springframework.context.annotation.Configuration");
+
+        EsComponenteDeSpring() {
+            super("los instancia Spring");
+        }
+
+        @Override
+        public boolean test(JavaClass clase) {
+            // Basta con la anotacion directa o una meta-anotacion: @RestController lleva
+            // @Component dentro, y @Configuration tambien.
+            return clase.getAnnotations().stream()
+                    .anyMatch(
+                            a ->
+                                    ESTEREOTIPOS.contains(a.getRawType().getName())
+                                            || a.getRawType().getAnnotations().stream()
+                                                    .anyMatch(
+                                                            meta ->
+                                                                    ESTEREOTIPOS.contains(
+                                                                            meta.getRawType()
+                                                                                    .getName())));
+        }
+    }
+
+    private static final class ConUnConstructorInyectableSinAmbiguedad
+            extends ArchCondition<JavaClass> {
+
+        private static final String AUTOWIRED =
+                "org.springframework.beans.factory.annotation.Autowired";
+
+        ConUnConstructorInyectableSinAmbiguedad() {
+            super("declarar cual de sus constructores inyecta Spring");
+        }
+
+        @Override
+        public void check(JavaClass clase, ConditionEvents eventos) {
+            var constructores =
+                    clase.getConstructors().stream()
+                            .filter(c -> !c.getModifiers().contains(JavaModifier.PRIVATE))
+                            .toList();
+            if (constructores.size() <= 1) {
+                return;
+            }
+            long marcados =
+                    constructores.stream()
+                            .filter(
+                                    c ->
+                                            c.getAnnotations().stream()
+                                                    .anyMatch(
+                                                            a ->
+                                                                    AUTOWIRED.equals(
+                                                                            a.getRawType()
+                                                                                    .getName())))
+                            .count();
+            boolean haySinArgumentos =
+                    constructores.stream().anyMatch(c -> c.getRawParameterTypes().isEmpty());
+
+            if (marcados == 1 || (marcados == 0 && haySinArgumentos)) {
+                return;
+            }
+            String motivo =
+                    marcados > 1
+                            ? "tiene "
+                                    + marcados
+                                    + " constructores con @Autowired, y solo puede"
+                                    + " haber uno"
+                            : "tiene "
+                                    + constructores.size()
+                                    + " constructores, ninguno con @Autowired y ninguno sin"
+                                    + " argumentos: Spring no puede elegir y el contexto no"
+                                    + " arranca";
+            eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " " + motivo));
+        }
+    }
 
     private static final class SinTiposDeComaFlotante extends ArchCondition<JavaClass> {
 

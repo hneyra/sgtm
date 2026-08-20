@@ -13,8 +13,23 @@ spring:
     password: ${SGTM_DB_CLAVE}
   flyway:
     # La aplicacion NO migra al arrancar. Las migraciones viven en sgtm-esquema y
-    # las ejecuta el proceso de despliegue como sgtm_owner.
+    # las aplica el migrador del despliegue, como sgtm_owner, antes de que este
+    # proceso arranque (pe.gob.sgtm.esquema.Migrador).
     enabled: false
+
+# Solo la sonda de vida, y sin detalles. Es el unico endpoint que SeguridadWeb
+# deja publico: `health` responde si el proceso esta arriba y llega a la base,
+# y con `show-details: never` no dice cual es la base, ni su version, ni que
+# componentes tiene dentro. Un `include: "*"` aqui publicaria la configuracion
+# entera —con la URL de la base— delante de la cadena de seguridad.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
 
 ---
 spring:

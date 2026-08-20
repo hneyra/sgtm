@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.modulith.Modulithic;
 import pe.gob.sgtm.plataforma.ConfiguracionDeTenant;
+import pe.gob.sgtm.plataforma.SeguridadWeb;
 
 /**
  * Artefacto unico del SGTM, desplegado en los perfiles {@code web} y {@code batch} (ADR-0003).
@@ -32,7 +33,7 @@ import pe.gob.sgtm.plataforma.ConfiguracionDeTenant;
             "web"
         })
 @SpringBootApplication
-@Import(ConfiguracionDeTenant.class)
+@Import({ConfiguracionDeTenant.class, SeguridadWeb.class})
 public class SgtmAplicacion {
 
     public static void main(String[] args) {
