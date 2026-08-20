@@ -23,9 +23,11 @@ import org.junit.jupiter.api.Test;
  * prueba de aislamiento: lo que se verifica aqui son roles, privilegios y catalogo del motor, y
  * nada de eso existe fuera de PostgreSQL (CAL-01 §2).
  *
- * <p>Cada prueba levanta su propio motor porque <b>los roles son del cluster, no de la base</b>: la
- * de «faltan los roles» necesita un cluster donde no existan, y la de «no lo migra un superusuario»
- * necesita uno donde si.
+ * <p><b>Los roles son del cluster, no de la base</b>, y eso decide como esta repartida esta clase.
+ * Una prueba que exigiera un cluster sin ellos solo pasaria con Testcontainers —donde cada motor es
+ * nuevo— y fallaria contra el PostgreSQL compartido que documenta {@code backend/README.md} para
+ * cuando no hay Docker. Asi que lo que depende del cluster se comprueba con el motor delante, y el
+ * mensaje de error se comprueba sin motor ninguno.
  */
 @DisplayName("ARQ-03 §4 — El migrador del esquema")
 class MigradorTest {
