@@ -9,6 +9,11 @@
 #
 #   ./crear-usuario.sh <usuario> <clave> [municipalidad_id]
 #
+# El correo, el nombre y el apellido salen de SGTM_CORREO, SGTM_NOMBRE y
+# SGTM_APELLIDO; sin ellas se ponen marcadores. No son adorno: Keycloak exige los
+# tres para dar por completo el perfil, y sin perfil completo el usuario no puede
+# iniciar sesion aunque exista y tenga clave.
+#
 # El tercer argumento es el atributo del que sale el claim `municipalidad_id`
 # (ADR-0005). Omitirlo crea un usuario SIN municipalidad, que es util para una
 # sola cosa: comprobar que un token sin el claim recibe 403 y no llega a ningun
@@ -40,19 +45,35 @@ kc config credentials \
 
 existente=$(kc get users -r sgtm -q "username=$usuario" --fields id --format csv --noquotes | tr -d '\r' | head -1)
 
+# Keycloak valida el perfil del usuario al iniciar sesion, y por omision exige
+# correo, nombre y apellido. Un usuario sin ellos se crea sin problema y luego NO
+# PUEDE ENTRAR: el registro dice «Account is not fully set up» con un
+# `resolve_required_actions`, que no se parece a «le falta el apellido». Se
+# rellenan aqui, y una instalacion de verdad pasa los datos reales por estas tres
+# variables en vez de quedarse con los marcadores.
+correo="${SGTM_CORREO:-$usuario@sgtm.invalido}"
+nombre="${SGTM_NOMBRE:-$usuario}"
+apellido="${SGTM_APELLIDO:-(por completar)}"
+
 if [ -z "$existente" ]; then
   if [ -n "$municipalidad" ]; then
     kc create users -r sgtm \
-      -s "username=$usuario" -s enabled=true \
+      -s "username=$usuario" -s enabled=true -s emailVerified=true \
+      -s "email=$correo" -s "firstName=$nombre" -s "lastName=$apellido" \
       -s "attributes.municipalidad_id=$municipalidad" >/dev/null
   else
-    kc create users -r sgtm -s "username=$usuario" -s enabled=true >/dev/null
+    kc create users -r sgtm \
+      -s "username=$usuario" -s enabled=true -s emailVerified=true \
+      -s "email=$correo" -s "firstName=$nombre" -s "lastName=$apellido" >/dev/null
   fi
   existente=$(kc get users -r sgtm -q "username=$usuario" --fields id --format csv --noquotes | tr -d '\r' | head -1)
   echo "Usuario $usuario creado."
 else
   if [ -n "$municipalidad" ]; then
-    kc update "users/$existente" -r sgtm -s "attributes.municipalidad_id=$municipalidad" >/dev/null
+    kc update "users/$existente" -r sgtm \
+      -s "attributes.municipalidad_id=$municipalidad" \
+      -s emailVerified=true -s "email=$correo" \
+      -s "firstName=$nombre" -s "lastName=$apellido" >/dev/null
   fi
   echo "Usuario $usuario ya existia; actualizado."
 fi

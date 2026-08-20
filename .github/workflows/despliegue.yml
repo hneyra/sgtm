@@ -150,11 +150,24 @@ jobs:
           RUTA=http://localhost:8080/api/v1/catastro/vias
           KC=http://localhost:8180
 
+          # Si el token no sale, lo que interesa es POR QUE, y eso lo dice Keycloak
+          # en el cuerpo. Sin este cuidado, el fallo aparece como un rastro de
+          # Python sobre un JSON vacio y hay que ir a los registros del contenedor
+          # para enterarse de que, por ejemplo, al usuario le faltaba el apellido.
           token() {
-            curl --fail --silent --request POST \
+            local respuesta acceso
+            respuesta=$(curl --silent --request POST \
               "$KC/realms/$1/protocol/openid-connect/token" \
-              --data "grant_type=password&client_id=$2&username=$3&password=$4" \
-              | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
+              --data "grant_type=password&client_id=$2&username=$3&password=$4")
+            acceso=$(printf '%s' "$respuesta" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))' \
+              2>/dev/null || true)
+            if [ -z "$acceso" ]; then
+              echo "Keycloak no emitio token para '$3' en el realm '$1':" >&2
+              printf '%s\n' "$respuesta" >&2
+              return 1
+            fi
+            printf '%s' "$acceso"
           }
 
           # Devuelve "codigo_http CODIGO_DEL_CATALOGO", que es lo que hace precisa
