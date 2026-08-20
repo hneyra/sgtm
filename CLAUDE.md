@@ -20,8 +20,8 @@ Gradle, el esquema como migraciones Flyway, el camino del contexto de tenant (to
 → RLS) y las verificaciones bloqueantes. **Ninguna funcionalidad de negocio todavía**, y es
 deliberado: primero las barreras, después el negocio.
 
-De la **interfaz web** existen **las 134 pantallas**, con las 22 operaciones que el backend
-publica ya conectadas y las otras 112 todavía en la forma común:
+De la **interfaz web** existen **las 134 pantallas**, con las operaciones que el backend
+publica ya conectadas y el resto todavía en la forma común:
 [`frontend/`](frontend/README.md) porta el catálogo del prototipo a datos tipados y lo compone con
 **un** renderizador, sobre un shell con navegación de dos niveles y paleta de comandos. Los datos
 llegan por HTTP desde un **proxy que simula la API** ([`ADR-0010`](docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md));
@@ -282,6 +282,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | El juego de datos simulado no llega a producción | Comparando las dos compilaciones, con y sin la bandera | El chunk desaparece |
 | Un cambio del contrato rompe la compilación | Renombrando `codRefCatastral` en `sgtm-v1.yaml` y compilando con `tsc` | Rojo; al devolverlo, verde |
 | El módulo de seguridad conectado (11 pruebas) | Quitando la guarda de `leerPaginado`, el ejercicio de la bitácora, el vaciado de la caché, la lista blanca del cuerpo y el bloqueo de los campos de clave | Las cinco lo ponen rojo |
+| Ninguna cifra sin su fecha (17 pruebas) | Quitando el bloque de fecha de cálculo, restando el saldo en la interfaz y añadiendo una función de sumar a `@sgtm/dominio` | Trece, dos y una en rojo |
 | Catastro conectado (13 pruebas) | Quitando el bloque de versionado, el `historico=true`, la guarda de la ruta, poniéndole cifra al arancel rural y devolviendo el desplegable a las opciones del prototipo | Las cinco lo ponen rojo |
 | Padron de contribuyentes (15 pruebas) | Sustituyendo la aproximación por igualdad exacta, y bajando el umbral de parecido a cero | Rojo: el nombre mal escrito no encuentra a nadie; rojo: devuelve el padrón entero |
 | Ficha del contribuyente (12 pruebas) | No cerrando el domicilio anterior al mudar, y resolviendo «la última» en vez de la vigente a la fecha | Rojo: dos domicilios abiertos; rojo: una notificación de marzo usaría la dirección de setiembre |

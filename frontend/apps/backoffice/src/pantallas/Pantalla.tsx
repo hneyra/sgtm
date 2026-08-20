@@ -29,6 +29,7 @@ import { Filtros } from './bloques/Filtros';
 import { Formulario } from './bloques/Formulario';
 import { Indicadores } from './bloques/Indicadores';
 import { Portal } from './bloques/Portal';
+import { FechaDeCalculo } from './bloques/FechaDeCalculo';
 import { Reporte } from './bloques/Reporte';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
 import { Versionado } from './bloques/Versionado';
@@ -252,6 +253,11 @@ function Bloques({
     <>
       {estructura.desc && <p className="sgtm-descripcion">{estructura.desc}</p>}
 
+      {/* A que fecha estan los datos que vienen debajo. Va aqui y no dentro de
+          la banda de totales porque es de la respuesta: una pantalla que ensena
+          cifras en una tabla y no tiene banda las ensenaba sin fecha (regla 9). */}
+      <FechaDeCalculo {...(datos?.fechaCalculo ? { fecha: datos.fechaCalculo } : {})} />
+
       {/* Lo que esta pantalla **no** manda, dicho antes de que alguien lo
           teclee. Sale de la escritura declarada, no del catalogo: es una
           propiedad de la operacion, no del dibujo. */}
@@ -333,12 +339,7 @@ function Bloques({
       )}
 
       {estructura.totales && (
-        <Totales
-          estructura={estructura.totales}
-          datos={datos?.totales}
-          fechaCalculo={datos?.fechaCalculo}
-          cargando={cargando}
-        />
+        <Totales estructura={estructura.totales} datos={datos?.totales} cargando={cargando} />
       )}
 
       {estructura.tabs && estructura.tabs.length > 0 && (
