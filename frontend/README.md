@@ -160,6 +160,25 @@ con «—». Donde eso importa más es en las cifras: el arancel por m², el val
 y el autovalúo rural alimentan la valuación de un predio, y una cifra inventada ahí acaba en un
 valor mal emitido. Que falte se ve; que esté mal, no.
 
+### Lo que le cuesta al ciudadano abrir el portal
+
+El portal es el único flujo del sistema que no usa alguien de la municipalidad: se entra desde un
+teléfono, una vez al año, con la red que haya. `yarn comprobar-compilaciones` mide su ruta aparte
+del arranque y la presupuesta:
+
+```
+Portal: 123.6 KB comprimidos de 135 (arranque 122.8 + Inicio 0.9)
+```
+
+**Y ahí está el hallazgo**: el trozo de «Inicio» pesa 0.9 KB, y el arranque 122.8 — dentro del cual
+van los **11.5 KB del catálogo de navegación de los doce módulos**, con sus 134 opciones, sus iconos
+y sus resúmenes. El ciudadano se los descarga para no usarlos nunca.
+
+El presupuesto está puesto en lo que mide hoy, no en lo que debería medir: así la cifra no puede
+empeorar en silencio, y la conversación sobre bajarla queda abierta con su número delante. Bajarla
+es sacar el portal del shell del backoffice —que además no necesita: no tiene módulos que navegar—,
+y ésa es una decisión de producto, no del renderizador.
+
 ### La copia se ve como copia
 
 **Fiscalización trabaja sobre copias** y solo escribe en el padrón por transferencia (ARQ-01 §3.5).
@@ -661,6 +680,9 @@ dice en la misma frase en que excluye el token.
 | La copia se ve como copia                   | Quitando el aviso permanente                                            | Rojas, cuatro                 |
 | Y omisos no lo dice, porque no lo es        | Poniéndole el mismo aviso                                               | Roja                          |
 | Ni una cifra cambia de formato              | Recomponiendo una celda numérica                                        | Rojas, en tres módulos        |
+| El panel no calcula nada                    | Retocando un indicador o deduciendo el avance                           | Rojas, dos y dos              |
+| El panel dice su fecha de corte             | Quitando el bloque de fecha                                             | Roja                          |
+| El portal cabe en su presupuesto            | Es medido en cada compilación, con su número                            | 123.6 KB de 135               |
 
 ## Lo que todavía no está
 

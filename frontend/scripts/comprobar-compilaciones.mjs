@@ -52,6 +52,20 @@ const PRESUPUESTO = {
   arranque: 130,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
+  /**
+   * Lo que le cuesta al **ciudadano** abrir el portal (#81).
+   *
+   * Es el unico flujo del sistema que no usa alguien de la municipalidad: se
+   * entra desde un telefono, una vez al ano, con la red que haya. Su ruta es el
+   * arranque mas el trozo de «Inicio», y **hoy el arranque lleva dentro el
+   * catalogo de navegacion de los doce modulos** —134 opciones con sus iconos y
+   * resumenes— que el ciudadano no va a usar.
+   *
+   * El presupuesto esta puesto en lo que mide hoy, no en lo que deberia medir:
+   * asi la cifra no puede empeorar en silencio, y la conversacion sobre bajarla
+   * queda abierta con su numero delante.
+   */
+  portal: 135,
 };
 
 const comprimido = (contenido) => gzipSync(contenido).length / 1024;
@@ -130,6 +144,20 @@ for (const modulo of sin.modulos) {
       `«${modulo.archivo}» ocupa ${modulo.kb.toFixed(1)} KB comprimidos y el presupuesto por modulo son ${PRESUPUESTO.modulo}`,
     );
   }
+}
+
+/* ── Lo que le cuesta al ciudadano abrir el portal ───────────────────────── */
+
+const trozoDeInicio = sin.modulos.find((modulo) => modulo.archivo.includes('inicio.generado'));
+const portal = sin.arranque + (trozoDeInicio?.kb ?? 0);
+console.log(
+  `Portal: ${portal.toFixed(1)} KB comprimidos de ${PRESUPUESTO.portal} ` +
+    `(arranque ${sin.arranque.toFixed(1)} + Inicio ${(trozoDeInicio?.kb ?? 0).toFixed(1)}).`,
+);
+if (portal > PRESUPUESTO.portal) {
+  excedidos.push(
+    `abrir el portal cuesta ${portal.toFixed(1)} KB comprimidos y el presupuesto son ${PRESUPUESTO.portal}`,
+  );
 }
 
 if (sin.modulos.length !== 12) {
