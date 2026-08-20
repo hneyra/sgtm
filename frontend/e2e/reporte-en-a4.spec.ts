@@ -49,3 +49,33 @@ test('la hoja cabe en una A4, conserva las firmas y no imprime la interfaz', asy
   // documento, y sin la regla se imprimirian junto a las firmas.
   await expect(page.locator('.sgtm-hoja__botones')).toBeHidden();
 });
+
+/**
+ * La misma hoja, otra pantalla y otro modulo.
+ *
+ * Transito tiene trece reportes y la tentacion es escribir trece pantallas
+ * (#77). Que esta prueba pase sin tocar nada mas que la ruta es la evidencia de
+ * que **es el mismo bloque**: si cada reporte tuviera su copia, cada uno
+ * necesitaria su propia prueba de A4 y divergirian a la primera correccion.
+ */
+test('la hoja de tránsito cabe en la misma A4 y conserva sus firmas', async ({ page }) => {
+  await page.goto('/transito/transito-papeleta-reporte');
+
+  await page.setViewportSize({ width: A4.ancho, height: A4.alto });
+  await page.emulateMedia({ media: 'print' });
+
+  const hoja = page.locator('[data-hoja="1"]');
+  await expect(hoja).toBeVisible();
+
+  const caja = await hoja.boundingBox();
+  expect(caja).not.toBeNull();
+  if (caja === null) return;
+  expect(caja.width).toBeLessThanOrEqual(A4.ancho);
+  expect(caja.height).toBeLessThanOrEqual(A4.alto);
+
+  const firmas = page.locator('.sgtm-hoja__firmas');
+  await expect(firmas.getByText('Contribuyente', { exact: true })).toBeVisible();
+
+  // Y los botones de la hoja no se imprimen.
+  await expect(page.locator('.sgtm-hoja__botones')).toHaveAttribute('data-no-imprimible', '1');
+});
