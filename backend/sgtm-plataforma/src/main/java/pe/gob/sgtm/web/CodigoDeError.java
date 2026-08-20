@@ -15,6 +15,15 @@ import org.springframework.http.HttpStatus;
 public enum CodigoDeError {
 
     /**
+     * La peticion no trae token, o el que trae no es valido.
+     *
+     * <p>No distingue entre «no hay token», «esta vencido» y «la firma no es de nuestro emisor», y
+     * es deliberado: quien no ha podido autenticarse es justo quien no debe recibir pistas sobre
+     * cual de las tres le paso.
+     */
+    NO_AUTENTICADO(HttpStatus.UNAUTHORIZED, "La peticion no trae un token valido"),
+
+    /**
      * El token no identifica una municipalidad (ADR-0005). No hay valor por omision ni modo sin
      * municipalidad.
      */

@@ -35,10 +35,16 @@ contenedor, como `sgtm_owner`, y termina antes de que la aplicación arranque. E
 código que provisiona la base de cada prueba de persistencia: si el despliegue migrara por su
 cuenta, lo verificado en CI y lo desplegado en la municipalidad dejarían de ser lo mismo.
 
-Hoy no se puede iniciar sesión: no hay emisor de identidad, y la cadena de seguridad niega todo lo
-que no sea `/actuator/health`. Eso es deliberado y está escrito en
-[`SeguridadWeb`](sgtm-plataforma/src/main/java/pe/gob/sgtm/plataforma/SeguridadWeb.java) —antes
-ocurría por omisión, que es peor porque no se parece a un fallo—.
+La cadena de seguridad está escrita, no heredada:
+[`SeguridadWeb`](sgtm-plataforma/src/main/java/pe/gob/sgtm/plataforma/SeguridadWeb.java) deja
+público `/actuator/health`, exige token en `/api/v1/**` y **niega** todo lo demás. Del token salen
+**dos** contextos, uno por filtro y por el mismo camino: la municipalidad —`TenantContextFilter`,
+de ahí al `SET LOCAL`— y quién hace la petición —`OrigenContextFilter`, de ahí a la auditoría—.
+
+El segundo no existía, y su ausencia no se veía: nueve sitios leen `OrigenContext.actual()` y
+nadie lo fijaba, así que la primera petición autenticada del sistema devolvió 500. Es el patrón
+que conviene recordar al añadir infraestructura: no faltaba una barrera, faltaba **el camino**, y
+eso solo se ve recorriéndolo entero.
 
 **Si el build se queja del formato, no lo pelees: `spotlessApply`.** Checkstyle no revisa formato
 a propósito, para no discutir con el formateador. Lo que sí revisa, y es fácil de incumplir con el
@@ -143,9 +149,8 @@ Detalle del esquema: [`sgtm-esquema/README.md`](sgtm-esquema/README.md) y
 - Toda regla de cálculo tributario. Bloqueada por D-02 —los valores normativos, hoy partida en
   D-02a/b/c— y por D-03c, los puntos de redondeo
   ([GOB-02](../docs/00-gobierno/decisiones-abiertas.md)).
-- El emisor OIDC y el JWKS. Hoy `TenantContextFilter` sabe leer el claim y `SeguridadWeb` niega
-  todo lo que no sea la sonda de vida, pero nadie valida todavía un token: sin emisor no hay a
-  quién dejar entrar (#119).
+- La verificación de que la municipalidad activa está entre las autorizadas del usuario: falta
+  fijar el nombre de ese claim (D-06). Hasta entonces, un usuario, una municipalidad.
 - El mecanismo que escribe la auditoría (disparadores o aspecto). Se decide con el primer caso de
   uso de escritura; ver [DAT-02 §4](../docs/40-datos/auditoria-e-historico.md).
 - Las particiones de los ejercicios siguientes a 2027, y su automatización.

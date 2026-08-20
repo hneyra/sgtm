@@ -8,6 +8,7 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
+import pe.gob.sgtm.plataforma.tenant.OrigenContextFilter;
 import pe.gob.sgtm.plataforma.tenant.TenantConnectionGuard;
 import pe.gob.sgtm.plataforma.tenant.TenantContextFilter;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
@@ -75,6 +76,27 @@ public class ConfiguracionDeTenant {
         FilterRegistrationBean<TenantContextFilter> registro =
                 new FilterRegistrationBean<>(new TenantContextFilter());
         registro.setOrder(ORDEN_DESPUES_DE_SEGURIDAD);
+        return registro;
+    }
+
+    /**
+     * El gemelo del anterior para el origen de la peticion: quien la hace y desde donde.
+     *
+     * <p>Va <b>despues</b> del de tenant, y el orden no es indiferente: si el token no trae
+     * municipalidad, la peticion se corta con 403 antes de fijar ningun origen, y no queda un hilo
+     * con el usuario puesto de una peticion que nunca llego a ocurrir.
+     *
+     * <p>Son dos filtros y no uno porque son dos contextos con dos vidas: {@code TenantContext}
+     * alimenta el {@code SET LOCAL} de cada transaccion y {@code OrigenContext} alimenta la
+     * auditoria. Juntarlos ahorraria una lectura del token y haria que una regla sobre uno tuviera
+     * que razonar sobre el otro.
+     */
+    @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    FilterRegistrationBean<OrigenContextFilter> filtroDeOrigen() {
+        FilterRegistrationBean<OrigenContextFilter> registro =
+                new FilterRegistrationBean<>(new OrigenContextFilter());
+        registro.setOrder(ORDEN_DESPUES_DE_SEGURIDAD + 1);
         return registro;
     }
 }

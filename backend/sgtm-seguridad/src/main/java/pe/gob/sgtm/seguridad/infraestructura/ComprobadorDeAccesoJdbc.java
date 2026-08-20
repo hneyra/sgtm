@@ -3,6 +3,7 @@ package pe.gob.sgtm.seguridad.infraestructura;
 import java.time.LocalDate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.autorizacion.ComprobadorDeAcceso;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
@@ -50,7 +51,21 @@ public class ComprobadorDeAccesoJdbc extends RepositorioJdbc implements Comproba
         super(jdbc);
     }
 
+    /**
+     * <b>{@code @Transactional} no es decorativo aqui.</b> Esta consulta lee {@code usuario},
+     * {@code permiso}, {@code grupo} y {@code miembro}, que son tablas de tenant con RLS: sus
+     * politicas leen {@code app.municipalidad_id}, y ese parametro lo fija {@code
+     * TenantTransactionManager} con {@code SET LOCAL} <b>al abrir una transaccion</b>. Sin
+     * transaccion no hay parametro, y PostgreSQL no devuelve cero filas sino que falla con
+     * «unrecognized configuration parameter» —que es el comportamiento correcto del aislamiento
+     * (DAT-01 §0) y aqui llegaba como un 500—.
+     *
+     * <p>Se descubrio con la primera peticion autenticada del sistema: el guardia corre en un
+     * {@code preHandle}, antes de que ningun caso de uso abra su transaccion, asi que era el unico
+     * sitio que consultaba tablas de tenant sin una. Las pruebas no lo veian porque abren la suya.
+     */
     @Override
+    @Transactional(readOnly = true)
     public boolean autoriza(String usuario, String acceso, Privilegio privilegio, LocalDate fecha) {
 
         String columna = privilegio.columna();

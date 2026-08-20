@@ -42,6 +42,34 @@ services:
       timeout: 3s
       retries: 40
 
+  identidad:
+    # Keycloak emite los tokens (ADR-0005). `start-dev` es lo correcto para una
+    # marcha blanca —HTTP en claro detras del proxy, sin cluster— y lo incorrecto
+    # para produccion, donde va `start` con TLS y su propia base.
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm", "--http-port=8080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${SGTM_KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${SGTM_CLAVE_KEYCLOAK:?falta SGTM_CLAVE_KEYCLOAK en .env}
+      KC_HEALTH_ENABLED: "true"
+      # El emisor que Keycloak pone en el `iss` de cada token tiene que ser el
+      # mismo que el backend valida y el mismo al que el navegador va. Con dos
+      # nombres distintos —uno de red interna, otro del anfitrion— la firma valida
+      # y el emisor no cuadra, y el 401 no dice por que.
+      KC_HOSTNAME: ${SGTM_OIDC_EMISOR:-http://localhost:8180}
+      KC_HOSTNAME_STRICT: "false"
+    volumes:
+      - ./identidad/realm-sgtm.json:/opt/keycloak/data/import/realm-sgtm.json:ro
+    ports:
+      - "${SGTM_PUERTO_IDENTIDAD:-8180}:8080"
+    # Sin healthcheck, y no por descuido: la imagen de Keycloak no trae curl ni
+    # wget, y las recetas que circulan para sortearlo dependen de que el shell del
+    # contenedor sea bash. Aqui no hace falta ninguna, porque la aplicacion NO
+    # necesita a Keycloak para arrancar: con `jwk-set-uri` configurado, el decoder
+    # se construye sin descubrimiento y las claves se piden la primera vez que
+    # llega un token. Quien si tiene que esperarlo es quien vaya a pedir uno, y eso
+    # se espera desde fuera —ver el README y el trabajo de despliegue—.
+
   migraciones:
     build:
       context: ../backend
@@ -64,8 +92,18 @@ services:
     depends_on:
       migraciones:
         condition: service_completed_successfully
+      identidad:
+        condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: web
+      # Sin esta variable la aplicacion NO arranca, y es deliberado: un backend que
+      # atiende peticiones sin poder validar un token es la situacion que ADR-0005
+      # excluye. El valor tiene que coincidir con el `iss` que emite Keycloak.
+      SGTM_OIDC_EMISOR: ${SGTM_OIDC_EMISOR:-http://localhost:8180}/realms/sgtm
+      # De donde se traen las claves. Dentro de la red del compose, Keycloak es
+      # `identidad:8080`; `localhost:8180` es el nombre por el que llega el
+      # navegador, y dentro de este contenedor apuntaria a este mismo proceso.
+      SGTM_OIDC_JWKS: http://identidad:8080/realms/sgtm/protocol/openid-connect/certs
       SGTM_DB_URL: jdbc:postgresql://base:5432/sgtm
       # sgtm_app y solo sgtm_app. Poner aqui las credenciales de sgtm_owner
       # —«para que migre al arrancar», «para una carga rapida»— le daria DDL sobre
@@ -81,6 +119,35 @@ services:
       timeout: 3s
       retries: 40
       start_period: 30s
+
+  interfaz:
+    build:
+      context: ../frontend
+      args:
+        # Vite resuelve estas variables AL COMPILAR: no son configuracion de
+        # ejecucion y cambiarlas exige reconstruir la imagen. Es la consecuencia de
+        # servir archivos estaticos, y conviene saberla antes de buscar por que un
+        # cambio en el .env no se nota.
+        VITE_SGTM_API: /api/v1
+        VITE_SGTM_OIDC_CLIENTE: sgtm-backoffice
+        VITE_SGTM_OIDC_AUTORIZACION: ${SGTM_OIDC_EMISOR:-http://localhost:8180}/realms/sgtm/protocol/openid-connect/auth
+        VITE_SGTM_OIDC_TOKEN: ${SGTM_OIDC_EMISOR:-http://localhost:8180}/realms/sgtm/protocol/openid-connect/token
+        VITE_SGTM_OIDC_FIN_DE_SESION: ${SGTM_OIDC_EMISOR:-http://localhost:8180}/realms/sgtm/protocol/openid-connect/logout
+    depends_on:
+      aplicacion:
+        condition: service_healthy
+    ports:
+      - "${SGTM_PUERTO_INTERFAZ:-8081}:8080"
+    healthcheck:
+      # 127.0.0.1 y no `localhost`: el guion de arranque de la imagen solo anade el
+      # `listen [::]:8080` cuando la configuracion es la suya, y esta no lo es, asi
+      # que nginx escucha SOLO en IPv4. Con `localhost`, wget resuelve ::1 primero,
+      # no encuentra a nadie y el contenedor se queda «unhealthy» para siempre con
+      # nginx sirviendo perfectamente al lado.
+      test: ["CMD-SHELL", "wget --quiet --output-document=/dev/null http://127.0.0.1:8080/"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
 volumes:
   datos:
