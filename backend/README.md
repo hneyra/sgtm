@@ -83,6 +83,30 @@ salida de emergencia.
 **Sin motor, las pruebas fallan; no se saltan.** Una prueba bloqueante que se omite a sí misma
 deja el build en verde sin haber verificado nada.
 
+## Integración continua
+
+Todo pull request corre [`.github/workflows/backend.yml`](../.github/workflows/backend.yml), que
+ejecuta **los mismos tres comandos de arriba**, sin atajos y en pasos separados: cuando algo se
+rompe, el nombre del paso ya dice qué barrera cayó.
+
+Tres cosas se comprueban **antes** de las verificaciones, para que un fallo de infraestructura no
+se disfrace de fallo del código:
+
+| Comprobación | Qué evita |
+|---|---|
+| La distribución de Gradle se descarga con reintentos | Que un 502 de `services.gradle.org` salga como build rojo, y que relanzar se vuelva la respuesta a cualquier rojo |
+| `gradle.properties` declara Java 25 | Que CI verifique en silencio una versión de Java distinta de la que se despliega |
+| Hay Docker y `postgres:16-alpine` se descarga | Que un runner sin Docker se confunda con un fallo de aislamiento, que es el rojo que menos puede confundirse con otra cosa |
+
+Ninguna de las tres omite nada: sin Docker el job **falla**. La salida documentada es apuntar a un
+PostgreSQL existente, no saltarse la prueba.
+
+Cuando algo termina en rojo, los informes de pruebas y de Checkstyle quedan como artefactos de la
+corrida.
+
+El frontend tiene el suyo, [`frontend.yml`](../.github/workflows/frontend.yml), y no incluye al
+backend a propósito: estas verificaciones necesitan Docker y un PostgreSQL de verdad.
+
 ## Módulos
 
 ```

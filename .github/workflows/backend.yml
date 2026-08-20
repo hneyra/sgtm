@@ -43,7 +43,17 @@ jobs:
 
       # ADR-0001 fija Java 25. La propiedad `sgtm.java.version` existe para poder
       # construir en una maquina que todavia no lo tenga; aqui se usa el valor por
-      # omision, que es el unico admitido.
+      # omision, que es el unico admitido. Y se comprueba en vez de suponerse: si
+      # alguien cambiara la propiedad, CI verificaria en silencio una version de
+      # Java distinta de la que se despliega.
+      - name: La version de Java declarada es la que instala CI
+        run: |
+          declarada=$(sed -n 's/^sgtm\.java\.version=//p' gradle.properties)
+          if [ "$declarada" != "25" ]; then
+            echo "::error file=backend/gradle.properties::gradle.properties declara Java $declarada y este workflow instala Java 25. ADR-0001 fija 25; si de verdad cambia, cambia tambien .github/workflows/backend.yml."
+            exit 1
+          fi
+
       - name: Instalar JDK 25
         uses: actions/setup-java@v4
         with:
@@ -73,6 +83,19 @@ jobs:
           echo "No se pudo descargar la distribucion de Gradle tras cuatro intentos"
           exit 1
 
+      # Por el mismo motivo que el paso anterior: sin esto, un runner sin Docker o
+      # un registro caido salen en rojo como si fueran un fallo de aislamiento, y
+      # el rojo que mas importa del proyecto es justo el que no puede confundirse
+      # con otra cosa. Que la prueba no se salte sin Docker es lo que hace falta
+      # comprobar antes; no despues.
+      - name: Docker y la imagen de PostgreSQL
+        run: |
+          if ! docker info > /dev/null 2>&1; then
+            echo "::error::Sin Docker no hay prueba de aislamiento. La salida documentada es apuntar a un PostgreSQL existente con -Dsgtm.pruebas.postgres.url (backend/README.md); omitir la prueba no lo es."
+            exit 1
+          fi
+          docker pull postgres:16-alpine
+
       - name: Aislamiento multi-tenant
         run: ./gradlew verificarAislamiento --no-daemon
 
@@ -87,5 +110,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: informes-de-prueba
-          path: backend/**/build/reports/tests/**
+          path: |
+            backend/**/build/reports/tests/**
+            backend/**/build/reports/checkstyle/**
+          if-no-files-found: ignore
           retention-days: 7

@@ -26,6 +26,13 @@ contraparte que demuestra que muerde.**
 ./gradlew build                   # ademas: Spotless, Checkstyle y NullAway
 ```
 
+Las tres corren en cada pull request, en pasos separados, en
+[`.github/workflows/backend.yml`](../../.github/workflows/backend.yml). Antes de ellas el workflow
+comprueba lo que podría teñir de rojo el build sin que el código tenga nada que ver: que la
+distribución de Gradle se descargue, que `gradle.properties` siga declarando el Java 25 de
+ADR-0001 y que haya Docker con la imagen de PostgreSQL. Detalle en
+[`backend/README.md`](../../backend/README.md).
+
 **Una prueba bloqueante no se omite a sí misma.** Sin motor de base de datos, las pruebas de
 persistencia **fallan**; no se saltan. Una prueba que se salta sola deja el build en verde y da
 por verificado lo que nadie verificó.
