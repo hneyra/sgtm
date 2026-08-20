@@ -39,13 +39,24 @@ sistema actual que la reimplementación no puede perder.
 
 ## Operación
 
-| # | Requisito | Objetivo |
-|---|---|---|
-| RNF-070 | **(manual)** Copias de seguridad programadas, comprimidas y en dispositivo distinto del servidor | Responsabilidad de la plataforma; el sistema expone su estado |
-| RNF-071 | Recuperación ante caída sin pérdida de transacciones confirmadas | Archivado continuo de WAL |
-| RNF-072 | **(manual)** Registro de sesiones: quién está conectado y desde cuándo | Tabla de sesiones |
-| RNF-073 | Toda migración de esquema es reversible o aditiva; ninguna borra datos sin respaldo verificado | Revisión de migraciones |
-| RNF-075 | Toda cifra de deuda mostrada indica **a qué fecha** está actualizada | Revisión de la API y de la interfaz |
+Los objetivos de recuperación de esta sección salen de la topología de un solo nodo de
+[`INF-01`](../80-infraestructura/arquitectura-de-infraestructura.md) §1.1, donde la recuperación es
+una **restauración** y no una promoción. **Un objetivo que no está escrito no se puede incumplir**,
+que es la forma más cómoda de no cumplirlo nunca: por eso llevan número, y por eso el número tiene
+un sitio donde compararse.
+
+| # | Requisito | Objetivo | Cómo se verifica |
+|---|---|---|---|
+| RNF-070 | **(manual)** Copias de seguridad programadas, comprimidas y en dispositivo distinto del servidor | Respaldo base periódico y archivado continuo, **fuera del VPS** (INF-01 §1.3) | El simulacro de restauración de INF-03 §2, y una alerta cuando el destino externo deja de estar accesible |
+| RNF-071 | Recuperación ante caída sin pérdida de transacciones confirmadas | Archivado continuo de WAL | Restauración a un punto en el tiempo en `stg`, comparando las cifras con las del origen |
+| RNF-072 | **(manual)** Registro de sesiones: quién está conectado y desde cuándo | Tabla de sesiones | Las quince pruebas de sesión y auditoría contra PostgreSQL |
+| RNF-073 | Toda migración de esquema es reversible o aditiva; ninguna borra datos sin respaldo verificado | Revisión de migraciones | Revisión del PR, y el migrador que se niega a correr como superusuario o con `BYPASSRLS` |
+| RNF-074 | **Todo el tráfico entra cifrado, con certificado válido y renovación automática. Ningún otro puerto responde desde fuera** | TLS 1.2 como mínimo, 1.3 preferido. Desde internet responden **80 —que solo redirige— y 443**, y nada más | Barrido de puertos contra el VPS desde fuera, y comprobación de la cadena del certificado y de la versión de TLS negociada, tras cada despliegue de `prod` |
+| RNF-075 | Toda cifra de deuda mostrada indica **a qué fecha** está actualizada | Revisión de la API y de la interfaz | Las diecisiete pruebas de «ninguna cifra sin su fecha», y la regla de ESLint que prohíbe aritmética de importes en la interfaz |
+| RNF-076 | **Pérdida máxima de datos ante la pérdida total del VPS (RPO): 5 minutos** | `archive_timeout` de 5 minutos contra un destino que está fuera del VPS | El simulacro de INF-03 §2 mide la pérdida real de la restauración; una alerta avisa cuando el archivado se atrasa, que es cuando el RPO deja de cumplirse |
+| RNF-077 | **Tiempo máximo de recuperación ante la pérdida total del VPS (RTO): 4 horas** | VPS nuevo → k3s → `pulumi up` del stack → restauración a un punto en el tiempo → verificación → DNS | Simulacro **cronometrado** en `stg`, con el tiempo anotado. Sin ese número, el simulacro no tiene contra qué compararse y se puede declarar exitoso siempre |
+| RNF-078 | **Toda ventana de mantenimiento del VPS se anuncia antes de abrirse** | Con un solo nodo no hay a dónde mover la carga: actualizar el nodo, redimensionar el disco o reiniciar k3s **es indisponibilidad**, no una operación transparente | Registro de despliegues y ventanas. Es una regla de proceso y no tiene comprobación automática: un despliegue de `prod` fuera de ventana declarada es un hallazgo de la revisión |
+| RNF-079 | **Un respaldo que no se ha restaurado no cuenta como respaldo** | Al menos un simulacro de restauración completo por periodo, con su fecha y su tiempo anotados | El registro del simulacro (INF-03 §2). Si no hay entrada en el periodo, el requisito está incumplido — y es la única forma de detectarlo, porque un respaldo que nadie restaura siempre parece correcto |
 
 ## Interfaz y accesibilidad
 
