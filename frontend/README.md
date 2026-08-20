@@ -151,11 +151,36 @@ usuario, la caja en la que atiende, cuántos accesos tiene un grupo. Que se vea 
 La bitácora manda **siempre** el ejercicio, aunque nadie lo escriba en un filtro: es la clave de
 partición de la tabla y su controlador lo exige. No sale de la URL, sale de la sesión.
 
-De **Catastro** hay conectada **una opción de doce**: `calles`, que es el único endpoint del módulo
-publicado hoy. Sus siete columnas salen de un recurso que publica cuatro; las otras tres —sector,
-zona de arancel y arancel por m²— salen con «—». La del arancel importa más que las otras dos:
-es una **cifra** que alimenta la valuación de un predio, y una cifra inventada ahí acaba en un
+De **Catastro** hay **nueve opciones de doce**: el catálogo vial, los sectores, la consulta de
+fichas y las cuatro fichas. Las tres que faltan son las tablas de valuación, y no faltan por el
+frontend: su contenido es D-02, y en esa pantalla una cifra sin verificar **parece normativa**.
+
+Sus columnas salen de recursos que publican menos de lo que el prototipo dibuja, y el resto sale
+con «—». Donde eso importa más es en las cifras: el arancel por m², el valor de los bienes comunes
+y el autovalúo rural alimentan la valuación de un predio, y una cifra inventada ahí acaba en un
 valor mal emitido. Que falte se ve; que esté mal, no.
+
+### La ficha enseña de cuándo es lo que muestra
+
+El backend de la ficha catastral **nunca sobrescribe**: actualizar crea la versión siguiente y
+cierra la anterior. Eso no sirve de nada si la pantalla no lo cuenta, así que las cuatro fichas
+traen un bloque con la versión que rige, su vigencia, de dónde salió, y el histórico completo:
+
+```
+Versión 3  [VIGENTE]   Desde 12/03/2026   FISCALIZACION · Acta de inspección 0244-2026
+
+  v3  Desde 12/03/2026        mrios · 12/03/2026
+      Fiscalización de campo: se verificó ampliación en el segundo piso no declarada.
+  v2  01/06/2021 — 11/03/2026 jcardenas · 01/06/2021
+      Declaración jurada del contribuyente por ampliación del primer piso.
+```
+
+**La observación es la mitad útil.** El diff dice que el área pasó de 120 a 180; solo la
+observación dice que fue una fiscalización de campo y no un error de tecleo, y es lo que se lee en
+voz alta cuando el contribuyente pregunta por qué le subió el recibo. Va entera, sin recortar.
+
+Y la ficha responde **a una fecha**: `?fecha=2022-01-01` devuelve la que regía entonces, que es
+exactamente la pregunta de una reclamación.
 
 **Las conexiones no crecen por delante del backend.** Hoy son doce operaciones, las mismas que
 enumera `IMPLEMENTADAS` en el `ContratoDeApiTest`. Conectar una opción cuyo endpoint no existe
@@ -483,7 +508,12 @@ dice en la misma frase en que excluye el token.
 | La lista blanca filtra el cuerpo        | Mandando el borrador entero: viajan campos que el backend no acepta     | Rojas, dos                    |
 | La contraseña no se puede teclear       | Quitando `bloqueado` de los campos no declarados                        | Roja                          |
 | El catálogo vial no inventa columnas    | Rellenando sector, zona y arancel con lo del prototipo                  | Roja                          |
-| Las conexiones no van por delante       | Conectando `sectores`, que no tiene backend                             | Rojas, dos                    |
+| Las conexiones no van por delante       | Conectando una tabla de valuación, que no tiene contenido               | Roja                          |
+| La ficha enseña su versión              | Quitando el bloque de versionado                                        | Rojas, cinco                  |
+| El histórico se pide                    | Quitando `historico=true` de la conexión                                | Roja                          |
+| Sin código no se pide ninguna ficha     | Quitando la guarda de la ruta y el `enabled`                            | Roja                          |
+| El arancel rural no se compone          | Poniéndole una cifra                                                    | Roja                          |
+| El desplegable no esconde lo servido    | Volviendo a dibujar solo las opciones del prototipo                     | Roja                          |
 
 ## Lo que todavía no está
 
@@ -495,9 +525,12 @@ dice en la misma frase en que excluye el token.
   `permisos` no tiene `GET` con el que cargar la matriz —solo `PUT` para fijarla—, `miembros`
   necesita elegir un usuario y el prototipo no dibuja ese selector, y `respaldo` es un `POST` que
   consulta, así que abrir la pantalla no puede pedirlo (#64). Están detalladas en #70.
-- **Los diez módulos restantes esperan a su backend**, que todavía no existe: de las 134
-  operaciones del contrato el servidor publica doce. No es un pendiente del frontend y no tiene
+- **Los diez módulos restantes esperan a su backend.** De las 134 operaciones del contrato el
+  servidor publica 22, y las 22 están conectadas. No es un pendiente del frontend y no tiene
   atajo — fingirlas en el proxy sería construir la interfaz contra una invención.
+- **De Catastro quedan tres opciones sin conectar** —las tablas de valuación—, más la
+  actualización de la ficha, que escribe una tabla de pisos y el camino de escritura de hoy solo
+  lleva campos planos, y el reporte del contribuyente, que devuelve un PDF y no un recurso.
 - Las tres pantallas que [FRO-03 §6](../docs/60-frontend/mapa-de-pantallas.md) marca —caja, portal
   y reportes— **no están validadas con usuarios reales**. Es un pendiente declarado.
 

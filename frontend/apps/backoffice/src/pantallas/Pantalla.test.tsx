@@ -18,17 +18,17 @@ afterEach(() => desinstalarProxyDeDatos());
 
 describe('la estructura se ve antes que los datos', () => {
   it('las columnas llegan con el modulo; las filas, cuando responde la API', async () => {
-    // Con el registro en la ruta: esta pantalla abre una ficha, y sin codigo no
-    // pide nada —antes se pedia con un valor de relleno—.
-    montarEnRuta('/catastro/ficha-urbana/200601010150010101001');
+    // Con el registro en la ruta: esta pantalla abre un vehiculo por su placa, y
+    // sin placa no pide nada —antes se pedia con un valor de relleno—.
+    montarEnRuta('/rentas-registro/vehiculos/T2G-418');
 
     // El catalogo sigue sin preguntarle nada a la API: la estructura viaja con
     // el trozo del modulo, que el navegador cachea, y llega antes que los datos.
-    expect(await screen.findByRole('columnheader', { name: 'Nombre Calle' })).toBeInTheDocument();
-    expect(screen.queryByText('SANTA ROSA')).not.toBeInTheDocument();
+    expect(await screen.findByRole('columnheader', { name: 'Placa' })).toBeInTheDocument();
+    expect(screen.queryByText('YARIS GLI')).not.toBeInTheDocument();
 
     // Las filas son de la API, y llegan cuando llegan.
-    expect(await screen.findByText('SANTA ROSA')).toBeInTheDocument();
+    expect(await screen.findByText('YARIS GLI')).toBeInTheDocument();
   });
 });
 
@@ -56,10 +56,8 @@ describe('los bloques del descriptor', () => {
   });
 
   it('los campos de solo lectura muestran el valor que sirvio la API', async () => {
-    montarEnRuta('/catastro/ficha-urbana/200601010150010101001');
-    await waitFor(() =>
-      expect(screen.getAllByText('200601010150010101001').length).toBeGreaterThan(0),
-    );
+    montarEnRuta('/rentas-registro/vehiculos/T2G-418');
+    await waitFor(() => expect(screen.getAllByText('T2G-418').length).toBeGreaterThan(0));
   });
 
   it('la barra de acciones deja la ultima como primaria', async () => {
@@ -103,11 +101,9 @@ describe('las secciones colapsables', () => {
 
   it('se abren y se cierran al pulsarlas', async () => {
     const usuario = userEvent.setup();
-    montarEnRuta('/catastro/ficha-urbana');
+    montarEnRuta('/rentas-registro/vehiculos/T2G-418');
 
-    const cabecera = await screen.findByRole('button', {
-      name: /Ficha catastral urbana individual/,
-    });
+    const cabecera = await screen.findByRole('button', { name: /Identificación/ });
     expect(cabecera).toHaveAttribute('aria-expanded', 'true');
     await usuario.click(cabecera);
     expect(cabecera).toHaveAttribute('aria-expanded', 'false');
@@ -117,7 +113,7 @@ describe('las secciones colapsables', () => {
 describe('las pestanas', () => {
   it('cambiar de pestana cambia las secciones que se ven', async () => {
     const usuario = userEvent.setup();
-    montarEnRuta('/catastro/ficha-urbana');
+    montarEnRuta('/rentas-registro/vehiculos/T2G-418');
 
     const pestanas = await screen.findAllByRole('tab');
     expect(pestanas[0]).toHaveAttribute('aria-selected', 'true');

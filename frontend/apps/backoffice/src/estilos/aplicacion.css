@@ -423,6 +423,86 @@
   white-space: nowrap;
 }
 
+/* ── Versionado de la ficha ─────────────────────────────────────────────
+   Va arriba del formulario porque contesta la primera pregunta de quien abre
+   una ficha: cual de todas estoy viendo. Sin eso, el area de la pantalla es
+   un numero sin fecha. */
+.sgtm-versionado {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.sgtm-versionado__actual {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 16px;
+}
+
+.sgtm-versionado__titulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sgtm-versionado__numero {
+  font-weight: 600;
+  color: var(--ink-1);
+}
+
+.sgtm-versionado__vigencia {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.sgtm-versionado__origen,
+.sgtm-versionado__autor {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.sgtm-versionado__historico {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+/* La version vigente se distingue con una barra **y** con su texto «VIGENTE»
+   arriba: el estado no se comunica solo por color (FRO-02 §2.1). */
+.sgtm-versionado__historico li {
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+}
+
+.sgtm-versionado__historico li[data-vigente='1'] {
+  border-left-color: var(--accent);
+}
+
+.sgtm-versionado__fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+}
+
+.sgtm-versionado__observacion {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--ink-2);
+  /* Entera: un «…» aqui obliga a abrir otra cosa para terminar de leerla. */
+  overflow-wrap: anywhere;
+}
+
 /* El ejercicio de trabajo va en la cabecera y **no se oculta en movil**: es
    global a la sesion, y una cifra de 2025 leida como si fuera de 2026 es un
    error de atencion al contribuyente, no un detalle de pantalla estrecha. */

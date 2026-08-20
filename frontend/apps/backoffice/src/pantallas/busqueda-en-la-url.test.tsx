@@ -52,7 +52,9 @@ describe('el registro abierto vive en la ruta', () => {
   it('la URL de una ficha abierta es compartible: pegarla abre esa ficha', async () => {
     montarEnRuta('/catastro/ficha-urbana/200601010150010101001');
 
-    expect(await screen.findByText('SANTA ROSA')).toBeInTheDocument();
+    // La ficha ya viene del backend: lo que se ve es su version, no una fila
+    // del prototipo (#71).
+    expect(await screen.findByText('Versión 3')).toBeInTheDocument();
     expect(aCatastro()).toHaveLength(1);
     expect(aCatastro()[0]).toContain('/api/v1/catastro/fichas/urbana/200601010150010101001');
     expect(screen.queryByText(/Elige un registro/)).not.toBeInTheDocument();
@@ -126,12 +128,14 @@ describe('orden y pagina, contra el servidor', () => {
   it('la cache no mezcla paginas: la pagina 2 de una busqueda no es la de otra', async () => {
     const cliente = clienteDePruebas();
 
-    const primera = montarEnRuta('/catastro/sectores?sector=01&pagina=2', cliente);
-    await screen.findByText('CERCADO DE SULLANA');
+    // Sobre una opcion **sin conectar**: aqui se prueba la cache de la forma
+    // que comparten las 134, y `sectores` ya pide su recurso propio (#71).
+    const primera = montarEnRuta('/catastro/aranceles?zona=Zona+1&pagina=2', cliente);
+    await screen.findAllByText('AV. JOSÉ DE LAMA');
     primera.unmount();
 
-    const segunda = montarEnRuta('/catastro/sectores?sector=02&pagina=2', cliente);
-    await screen.findByText('CERCADO DE SULLANA');
+    const segunda = montarEnRuta('/catastro/aranceles?zona=Zona+2&pagina=2', cliente);
+    await screen.findAllByText('AV. JOSÉ DE LAMA');
     segunda.unmount();
 
     // Solo las de datos: la del catalogo del modulo es otra cosa y se comparte.
@@ -141,8 +145,8 @@ describe('orden y pagina, contra el servidor', () => {
       .map((consulta) => JSON.stringify(consulta.queryKey))
       .filter((clave) => clave.startsWith('["pantalla"'));
     expect(claves).toHaveLength(2);
-    expect(claves.some((clave) => clave.includes('"sector":"01"'))).toBe(true);
-    expect(claves.some((clave) => clave.includes('"sector":"02"'))).toBe(true);
+    expect(claves.some((clave) => clave.includes('"zona":"Zona 1"'))).toBe(true);
+    expect(claves.some((clave) => clave.includes('"zona":"Zona 2"'))).toBe(true);
     // La 2 de la URL es la 1 del backend.
     expect(claves.every((clave) => clave.includes('"pagina":"1"'))).toBe(true);
   });

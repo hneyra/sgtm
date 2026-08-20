@@ -38,8 +38,8 @@ describe('una opcion conectada y una sin conectar conviven', () => {
     expect(await screen.findByText('Recaudado 2026')).toBeInTheDocument();
     conectada.unmount();
 
-    const sinConectar = montarEnRuta('/catastro/sectores', cliente);
-    expect(await screen.findByText('CERCADO DE SULLANA')).toBeInTheDocument();
+    const sinConectar = montarEnRuta('/catastro/aranceles', cliente);
+    expect((await screen.findAllByText('AV. JOSÉ DE LAMA'))[0]).toBeInTheDocument();
     sinConectar.unmount();
 
     // Las dos piden por HTTP la ruta que declara el contrato, asi que la URL no
@@ -50,18 +50,18 @@ describe('una opcion conectada y una sin conectar conviven', () => {
       .getAll()
       .map((consulta) => consulta.queryKey);
     expect(claves).toContainEqual(['operacion', 'inicio', {}]);
-    expect(claves).toContainEqual(['pantalla', 'sectores', {}]);
+    expect(claves).toContainEqual(['pantalla', 'aranceles', {}]);
 
     expect(alaOperacion('/api/v1/indicadores/recaudacion')).toHaveLength(1);
-    expect(alaOperacion('/api/v1/catastro/sectores')).toHaveLength(1);
+    expect(alaOperacion('/api/v1/catastro/tablas/aranceles')).toHaveLength(1);
   });
 
   it('el registro dice cuales estan conectadas, y son pocas todavia', () => {
     expect(OPCIONES_CONECTADAS).toContain('inicio');
-    // De las doce de Catastro solo `calles` tiene backend hoy (#16); las once
-    // restantes esperan a #17, #18, #19 y #20.
+    // De las doce de Catastro hay nueve conectadas; las tres tablas de
+    // valuacion esperan a #17, y su contenido a D-02.
     expect(OPCIONES_CONECTADAS).toContain('calles');
-    expect(OPCIONES_CONECTADAS).not.toContain('sectores');
+    expect(OPCIONES_CONECTADAS).not.toContain('aranceles');
   });
 });
 

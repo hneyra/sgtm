@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router-dom';
 import type { DatosDePantalla } from '@sgtm/api-client';
+import { descriptorDe } from '@sgtm/api-client';
 import { useEjercicio } from '../app/ejercicio';
 import type { Conexion } from './conexiones';
 
@@ -21,15 +22,31 @@ import type { Conexion } from './conexiones';
  * operaciones que lo exigen —la bitacora esta particionada por ejercicio y su
  * controlador lo pide obligatorio (#13)—. No hace falta ponerlo aparte en la
  * clave: cambiarlo vacia la cache entera, igual que cambiar de municipalidad.
+ *
+ * **Sin el registro que abre la pantalla no hay peticion.** Una ficha catastral
+ * se pide por su codigo de referencia; sin codigo, pedirla iria a un registro
+ * que no es el que el usuario abrio —o fallaria al componer la URL—. Es la
+ * misma regla que ya cumplia el camino comun, y vive aqui para que valga para
+ * las conectadas sin que cada una la repita.
  */
 export function useDatosDeOperacion(conexion: Conexion) {
   const ruta = useParams();
   const [busqueda] = useSearchParams();
   const { ejercicio } = useEjercicio();
   const parametros = conexion.parametros({ ruta, busqueda, ejercicio });
+  // Que parametro de ruta le falta para poder pedirse, si le falta alguno.
+  const falta = descriptorDe(conexion.operacion).parametrosDeRuta.find(
+    (nombre) => (parametros[nombre] ?? '') === '',
+  );
 
-  return useQuery<DatosDePantalla>({
+  const consulta = useQuery<DatosDePantalla>({
     queryKey: ['operacion', conexion.operacion, parametros],
     queryFn: ({ signal }) => conexion.cargar(parametros, signal),
+    enabled: falta === undefined,
   });
+
+  // Se devuelve junto con la consulta y no se recalcula fuera: quien sabe con
+  // que parametros se pidio es este hook, y calcularlo dos veces es la forma de
+  // que un dia digan cosas distintas.
+  return { consulta, falta };
 }

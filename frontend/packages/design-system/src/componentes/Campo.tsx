@@ -86,6 +86,16 @@ export function Campo({
 
   function control() {
     if (tipo === 'sel') {
+      // **Lo que sirvio la API manda sobre la lista del prototipo.** Las dos
+      // vienen de sitios distintos —las opciones del catalogo portado, el valor
+      // del backend— y no tienen por que coincidir: la clasificacion de una
+      // tierra rural es `CULTIVO EN LIMPIO` en el dominio y «A1 — CULTIVO EN
+      // LIMPIO» en el desplegable. Sin esto, un `select` con un valor que no
+      // esta en su lista se dibuja mostrando la primera opcion, y entonces la
+      // pantalla ensena una eleccion que nadie hizo.
+      const declaradas = opciones ?? [];
+      const todas =
+        valor !== '' && !declaradas.includes(valor) ? [valor, ...declaradas] : declaradas;
       return (
         <select
           id={id}
@@ -96,7 +106,7 @@ export function Campo({
           aria-describedby={error === undefined ? undefined : idDelError}
           onChange={(e) => onCambio?.(e.target.value)}
         >
-          {(opciones ?? []).map((opcion) => (
+          {todas.map((opcion) => (
             <option key={opcion} value={opcion}>
               {opcion}
             </option>

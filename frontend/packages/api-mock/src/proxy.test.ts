@@ -75,7 +75,7 @@ describe('instalar y desinstalar', () => {
 describe('la aplicacion pide por HTTP y el proxy contesta', () => {
   it('sirve una pantalla con tabla por su ruta del contrato', async () => {
     instalarProxyDeDatos();
-    const datos = await solicitar<DatosDePantalla>('/catastro/sectores');
+    const datos = await solicitar<DatosDePantalla>('/catastro/tablas/aranceles');
     expect(datos.tabla?.filas.length).toBeGreaterThan(0);
     expect(datos.fechaCalculo).toBe('2026-08-13');
   });
@@ -100,8 +100,8 @@ describe('la aplicacion pide por HTTP y el proxy contesta', () => {
 
   it('los parametros de consulta no cambian la respuesta: filtrar es del backend', async () => {
     instalarProxyDeDatos();
-    const sinFiltro = await solicitar<DatosDePantalla>('/catastro/sectores');
-    const conFiltro = await solicitar<DatosDePantalla>('/catastro/sectores', {
+    const sinFiltro = await solicitar<DatosDePantalla>('/catastro/tablas/aranceles');
+    const conFiltro = await solicitar<DatosDePantalla>('/catastro/tablas/aranceles', {
       consulta: { nombre: 'SANTA ROSA' },
     });
     expect(conFiltro).toEqual(sinFiltro);
@@ -163,7 +163,7 @@ describe('el proxy se apaga operacion por operacion', () => {
     });
 
     const servida = await solicitar<{ deLaBase?: boolean }>('/catastro/vias');
-    const simulada = await solicitar<{ deLaBase?: boolean }>('/catastro/sectores');
+    const simulada = await solicitar<{ deLaBase?: boolean }>('/catastro/tablas/aranceles');
 
     // La conectada sale de verdad; la otra ni se asoma.
     expect(servida.deLaBase).toBe(true);
