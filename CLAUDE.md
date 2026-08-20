@@ -282,6 +282,8 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | El juego de datos simulado no llega a producción | Comparando las dos compilaciones, con y sin la bandera | El chunk desaparece |
 | Un cambio del contrato rompe la compilación | Renombrando `codRefCatastral` en `sgtm-v1.yaml` y compilando con `tsc` | Rojo; al devolverlo, verde |
 | El módulo de seguridad conectado (11 pruebas) | Quitando la guarda de `leerPaginado`, el ejercicio de la bitácora, el vaciado de la caché, la lista blanca del cuerpo y el bloqueo de los campos de clave | Las cinco lo ponen rojo |
+| La copia se ve como copia (7 pruebas) | Quitando el aviso permanente, poniéndoselo también a omisos, y recomponiendo una cifra de determinación | Cuatro, una y tres en rojo |
+| Licencias y el acto inalcanzable (8 pruebas) | Abriendo lo opcional, impidiendo que viaje el filtro de descripción, y cambiando el patrón de lo irreversible | Las tres lo ponen rojo |
 | Infracciones administrativas (8 pruebas) | Quitando las firmas del bloque, recomponiendo una cifra, habilitando sin observación, y mandando la página aunque sea la primera | Dos, una, tres y una en rojo |
 | Trece reportes, una hoja (14 pruebas) | Quitando las firmas del bloque, quitando la marca de no imprimible, y alterando una celda numérica al dibujarla | Seis, seis y una en rojo |
 | El expediente coactivo (26 pruebas) | Habilitando las acciones secundarias, dejando la insignia sin texto, y haciendo que `puedeVer` devuelva cierto siempre | Cuatro, una y una en rojo |

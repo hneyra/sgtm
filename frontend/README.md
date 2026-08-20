@@ -160,6 +160,30 @@ con «—». Donde eso importa más es en las cifras: el arancel por m², el val
 y el autovalúo rural alimentan la valuación de un predio, y una cifra inventada ahí acaba en un
 valor mal emitido. Que falte se ve; que esté mal, no.
 
+### La copia se ve como copia
+
+**Fiscalización trabaja sobre copias** y solo escribe en el padrón por transferencia (ARQ-01 §3.5).
+Si la pantalla no lo dice, el fiscalizador cierra el acta creyendo que ya cambió algo que no ha
+cambiado, se va, y el contribuyente sigue con su declaración antigua y su recibo antiguo hasta que
+alguien se da cuenta meses después.
+
+`pantallas/avisos.ts` declara, **por opción**, lo que una pantalla tiene que decir siempre —antes de
+que nadie teclee—. Por opción y no por módulo a propósito: la lista de omisos también es de
+fiscalización y **no** es una copia de nada —es una consulta contra el padrón de verdad—, así que
+decirle lo mismo sería mentir en la dirección contraria. Hay una prueba para cada mitad.
+
+### Quince pantallas tienen su acto detrás de una acción secundaria
+
+El renderizador habilita solo la última acción —«la última es la primaria», FRO-03 §5— y solo la
+primaria escribe. Cuando el acto de la pantalla **no es la última que dibujó el prototipo**, ese
+acto no se puede ejecutar: «Emitir · Imprimir certificado» deja el emitir apagado, y «Calcular ·
+Notificar · Resolver» deja apagados los dos que importan. Cuatro pantallas más —las hojas de
+resolución y de constancia— no declaran ninguna acción: el prototipo las modela como papel.
+
+`verificaciones/actos-inalcanzables.test.ts` no lo arregla, y es deliberado: **cuál de las acciones
+del manual es el acto de cada pantalla es una decisión de diseño**, no una que se pueda deducir del
+catálogo. Lo que hace es impedir que la lista crezca en silencio.
+
 ### Que ninguna cifra se recomponga, comprobado por el otro lado
 
 La regla de ESLint impide **escribir** aritmética con importes. No impide que una cifra llegue
@@ -634,6 +658,9 @@ dice en la misma frase en que excluye el token.
 | Lo opcional arranca cerrado                 | Haciendo que `arrancaCerrada` devuelva falso                            | Roja                          |
 | El giro se busca por nombre                 | Impidiendo que el filtro `descripcion` viaje                            | Roja                          |
 | La lista de actos inalcanzables no crece    | Cambiando el patrón de lo irreversible                                  | Roja                          |
+| La copia se ve como copia                   | Quitando el aviso permanente                                            | Rojas, cuatro                 |
+| Y omisos no lo dice, porque no lo es        | Poniéndole el mismo aviso                                               | Roja                          |
+| Ni una cifra cambia de formato              | Recomponiendo una celda numérica                                        | Rojas, en tres módulos        |
 
 ## Lo que todavía no está
 

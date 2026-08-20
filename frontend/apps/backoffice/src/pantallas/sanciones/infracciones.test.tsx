@@ -3,7 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { permisosDelClaim, puedeVer } from '../../app/sesion/permisos';
-import { cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
+import { cifrasDeLaTabla, cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
 import { montarEnRuta } from '../../pruebas/montar';
 
 /**
@@ -65,6 +65,11 @@ describe('ninguna cifra de sancion se recompone', () => {
     // infraccion. Recomponerlo al mostrar haria que la pantalla dejara de decir
     // lo que dice el documento notificado (RNF-083).
     for (const cifra of cifrasEnPantalla()) expect(servidas).toContain(cifra);
+    // Y en la otra direccion: cada cifra de la respuesta sigue estando en la
+    // pantalla. Sin esto, una transformacion que cambie el formato se escapa
+    // —deja de parecer dinero y se cae del filtro—.
+    for (const cifra of cifrasDeLaTabla('adm_estado_cuenta'))
+      expect(cifrasEnPantalla()).toContain(cifra);
   });
 });
 
