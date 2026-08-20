@@ -17,6 +17,21 @@ spring:
     # proceso arranque (pe.gob.sgtm.esquema.Migrador).
     enabled: false
 
+# La escala y el modo con que se redondea un importe, mientras D-03a y D-03b sigan
+# abiertas. Van aqui y no en el codigo a proposito: es lo que pide PoliticaDeRedondeo
+# —«el dia que D-03 se cierre habra exactamente un lugar donde escribir la respuesta,
+# y ni una constante que buscar en el codigo»— y lo que el escaner de fuentes exige
+# (regla 5). Este es ese lugar.
+#
+# Los valores de hoy son PROVISIONALES: no salen de ninguna norma verificada, y por
+# eso no hay ninguna regla de calculo que los use todavia. Lo que D-03 tiene que
+# cerrar no es solo la escala y el modo, sino los PUNTOS del calculo donde se
+# redondea (D-03c), que es ingenieria inversa contra el SRTM del MEF.
+sgtm:
+  redondeo:
+    escala: ${SGTM_REDONDEO_ESCALA:2}
+    modo: ${SGTM_REDONDEO_MODO:HALF_UP}
+
 # Solo la sonda de vida, y sin detalles. Es el unico endpoint que SeguridadWeb
 # deja publico: `health` responde si el proceso esta arriba y llega a la base,
 # y con `show-details: never` no dice cual es la base, ni su version, ni que

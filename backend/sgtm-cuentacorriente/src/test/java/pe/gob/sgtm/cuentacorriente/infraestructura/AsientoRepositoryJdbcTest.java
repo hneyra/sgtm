@@ -28,6 +28,7 @@ import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeConsulta;
+import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
 import pe.gob.sgtm.cuentacorriente.dominio.TipoAsiento;
 import pe.gob.sgtm.dominio.Dinero;
@@ -276,7 +277,152 @@ class AsientoRepositoryJdbcTest {
         }
     }
 
+    @Nested
+    @DisplayName("Asientos de una obligacion (#22, RF-041)")
+    class ParaDeuda {
+
+        @Test
+        @DisplayName("trae los asientos de la obligacion, netos de otro periodo y otro tributo")
+        void traeSoloLosDeLaObligacion() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "L-0030", "50100030");
+
+            transaccion.execute(
+                    estado ->
+                            repositorio.registrar(
+                                    asiento(
+                                            titular,
+                                            "PREDIAL",
+                                            1,
+                                            Concepto.INSOLUTO,
+                                            TipoAsiento.CARGO,
+                                            Dinero.de(100),
+                                            LocalDate.of(2026, 3, 1))));
+            // Otra cuota del mismo tributo: no es la misma obligacion.
+            transaccion.execute(
+                    estado ->
+                            repositorio.registrar(
+                                    asiento(
+                                            titular,
+                                            "PREDIAL",
+                                            2,
+                                            Concepto.INSOLUTO,
+                                            TipoAsiento.CARGO,
+                                            Dinero.de(999),
+                                            LocalDate.of(2026, 3, 1))));
+            // Otro tributo, misma cuota: tampoco.
+            transaccion.execute(
+                    estado ->
+                            repositorio.registrar(
+                                    asiento(
+                                            titular,
+                                            "ARBITRIOS",
+                                            1,
+                                            Concepto.INSOLUTO,
+                                            TipoAsiento.CARGO,
+                                            Dinero.de(999),
+                                            LocalDate.of(2026, 3, 1))));
+
+            var asientos =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.paraDeuda(
+                                            new CriterioDeDeuda(
+                                                    "L-0030",
+                                                    "PREDIAL",
+                                                    new Ejercicio(2026),
+                                                    1,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    LocalDate.of(2026, 12, 31))));
+
+            assertThat(asientos)
+                    .singleElement()
+                    .extracting(Asiento::monto)
+                    .isEqualTo(Dinero.de(100));
+        }
+
+        @Test
+        @DisplayName("no trae asientos posteriores a la fecha de corte")
+        void noTraeAsientosPosterioresAlCorte() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "L-0031", "50100031");
+
+            transaccion.execute(
+                    estado ->
+                            repositorio.registrar(
+                                    asiento(
+                                            titular,
+                                            "PREDIAL",
+                                            1,
+                                            Concepto.INSOLUTO,
+                                            TipoAsiento.CARGO,
+                                            Dinero.de(100),
+                                            LocalDate.of(2026, 3, 1))));
+            transaccion.execute(
+                    estado ->
+                            repositorio.registrar(
+                                    asiento(
+                                            titular,
+                                            "PREDIAL",
+                                            1,
+                                            Concepto.PAGO,
+                                            TipoAsiento.ABONO,
+                                            Dinero.de(100),
+                                            LocalDate.of(2026, 8, 1))));
+
+            var alCorteDeAbril =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.paraDeuda(
+                                            new CriterioDeDeuda(
+                                                    "L-0031",
+                                                    "PREDIAL",
+                                                    new Ejercicio(2026),
+                                                    1,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    LocalDate.of(2026, 4, 1))));
+
+            assertThat(alCorteDeAbril)
+                    .as("el pago de agosto es posterior al corte de abril: no cuenta todavia")
+                    .singleElement()
+                    .extracting(Asiento::concepto)
+                    .isEqualTo(Concepto.INSOLUTO);
+        }
+    }
+
     // ------------------------------------------------------------------
+
+    private static Asiento asiento(
+            long contribuyenteId,
+            String tributo,
+            int periodo,
+            Concepto concepto,
+            TipoAsiento tipo,
+            Dinero monto,
+            LocalDate fechaValor) {
+        Asiento nuevo =
+                Asiento.nuevo(
+                        new Ejercicio(2026),
+                        contribuyenteId,
+                        tributo,
+                        concepto,
+                        tipo,
+                        Fase.ORDINARIA,
+                        periodo,
+                        null,
+                        null,
+                        null,
+                        monto,
+                        fechaValor,
+                        "EM-2026-0001");
+        return concepto.exigeMotivo() ? nuevo.conMotivo("motivo de la prueba") : nuevo;
+    }
 
     private static Asiento cargoDe(long contribuyenteId, Dinero monto) {
         return cargoDe(
