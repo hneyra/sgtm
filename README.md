@@ -44,6 +44,7 @@ Requisitos: Node 22 o superior.
 
 ## Por dónde entrar
 
+- [`docs/D0-desarrollo/`](docs/D0-desarrollo/README.md) — **montar el ambiente local, arrancarlo, depurarlo y probarlo**
 - [`CLAUDE.md`](CLAUDE.md) — contexto del proyecto y reglas que no se negocian
 - [`docs/README.md`](docs/README.md) — índice documental
 - [`docs/30-arquitectura/estrategia-multitenant.md`](docs/30-arquitectura/estrategia-multitenant.md) — lo primero que hay que leer

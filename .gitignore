@@ -27,3 +27,9 @@ frontend/playwright-report/
 # Despliegue: el archivo de claves de la instalacion. El .env.ejemplo si se
 # versiona; el .env con las claves de verdad, nunca.
 despliegue/.env
+
+# La superposicion de compose que cada quien usa para desarrollar —publicar el
+# puerto de la base, montar un volumen— es de su maquina, no de la instalacion.
+# Ver docs/D0-desarrollo/entorno-local.md §2.
+despliegue/compose.override.yaml
+despliegue/compose.override.yml

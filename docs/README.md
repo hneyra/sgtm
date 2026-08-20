@@ -17,6 +17,7 @@ cosas donde espera.
 | [`50-api/`](50-api/) | Contrato OpenAPI |
 | [`60-frontend/`](60-frontend/) | Arquitectura, design system, mapa de pantallas y estándares de la interfaz |
 | [`A0-calidad/`](A0-calidad/) | Estrategia de pruebas |
+| [`D0-desarrollo/`](D0-desarrollo/) | Ambiente local, ejecución, depuración, pruebas y recetario |
 
 ## Lectura mínima antes de escribir código
 
@@ -63,3 +64,11 @@ cosas donde espera.
 
 ### A0 — Calidad
 - [Estrategia de pruebas](A0-calidad/estrategia-de-pruebas.md) — qué es bloqueante y por qué
+
+### D0 — Desarrollo
+- [Guía del desarrollador](D0-desarrollo/README.md) — índice, y qué comando para qué tarea
+- [DEV-01 — Entorno local](D0-desarrollo/entorno-local.md) — qué instalar y las tres formas de trabajar
+- [DEV-02 — Ejecutar y depurar](D0-desarrollo/ejecutar-y-depurar.md) — puntos de ruptura, la base, un token
+- [DEV-03 — Pruebas](D0-desarrollo/pruebas.md) — cómo correr una sola, y sin Docker
+- [DEV-04 — Tareas frecuentes](D0-desarrollo/tareas-frecuentes.md) — migración, contrato, catálogo, PR
+- [DEV-05 — Cuando algo no arranca](D0-desarrollo/solucion-de-problemas.md) — los rojos que ya costaron una tarde
