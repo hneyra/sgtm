@@ -1,0 +1,35 @@
+# Stack de ensayo: un segundo VPS, más pequeño, donde se ensaya la restauración
+# (INF-03 §2). No es un namespace dentro del VPS de producción: lo que se ensaya es
+# perder el nodo, y ensayarlo dentro del nodo que se pierde es no ensayarlo.
+#
+# Los secretos se ponen igual que en prod, con `--stack stg` y con credenciales
+# distintas: un secreto de stg comprometido no puede abrir prod (INF-03 §4).
+config:
+  sgtm:domain: stg.sgtm.example.pe
+  sgtm:acmeEmail: operaciones@example.pe
+
+  # Certificado del entorno de pruebas de Let's Encrypt: aquí se ajusta el ingreso sin
+  # gastar el límite de tasa. En prod está prohibido, porque ese certificado no lo
+  # acepta ningún navegador (RNF-074).
+  sgtm:acmeStaging: "true"
+
+  sgtm:postgresImage: postgres:16.4-alpine
+  sgtm:postgresStorageSize: 20Gi
+  sgtm:keycloakImage: quay.io/keycloak/keycloak:26.0
+  sgtm:keycloakRealm: sgtm
+  sgtm:keycloakSeedTestUsers: "true"
+
+  sgtm:applicationImageRepository: ghcr.io/hneyra/sgtm
+  sgtm:webReplicas: "1"
+
+  # La municipalidad de stg se da de alta MARCADA: todo documento que emita sale
+  # marcado en los tres formatos (INF-03 §3.2, issue #122). `config.ts` lo exige.
+  sgtm:esDemostracion: "true"
+
+  sgtm:backupEndpoint: https://s3.example.net
+  sgtm:backupBucket: sgtm-stg-respaldos
+  sgtm:walArchiveTimeoutSeconds: "300"
+
+  # De dónde lee stg para ensayar la restauración. Es el contenedor de prod, y la
+  # credencial con que lo lee es de SOLO LECTURA (INF-03 §4).
+  sgtm:restoreSourceBucket: sgtm-prod-respaldos

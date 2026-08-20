@@ -17,6 +17,7 @@ los estándares de código y la forma de verificar.
 | `backend/` | Esqueleto Gradle, esquema en migraciones Flyway, contexto de tenant y verificaciones bloqueantes. **Sin funcionalidad de negocio** |
 | `frontend/` | Espacio de trabajo montado: workspaces, paquetes compartidos y reglas verificadas. **Sin interfaz todavía** |
 | `design/` | Prototipo de la interfaz web (referencia de diseño; la implementación es la siguiente iteración) |
+| `infra/` | Pulumi en TypeScript con yarn: configuración validada de los dos stacks. **Sin componentes todavía** |
 
 Primero las barreras, después el negocio: el aislamiento entre municipalidades es el riesgo
 número uno del proyecto y se construye antes que cualquier caso de uso.
@@ -50,3 +51,4 @@ Requisitos: Node 22 o superior.
 - [`docs/30-arquitectura/estrategia-multitenant.md`](docs/30-arquitectura/estrategia-multitenant.md) — lo primero que hay que leer
 - [`backend/README.md`](backend/README.md) — convenciones del build y qué falta
 - [`frontend/README.md`](frontend/README.md) — espacio de trabajo de la interfaz y qué falta
+- [`infra/README.md`](infra/README.md) — la infraestructura como código, y qué falta para desplegarla

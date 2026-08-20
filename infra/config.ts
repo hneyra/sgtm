@@ -1,0 +1,544 @@
+import * as pulumi from "@pulumi/pulumi";
+
+/**
+ * Lectura y validación tipada de la configuración del stack.
+ *
+ * **Toda** la configuración se lee aquí. No hay `new pulumi.Config()` ni `process.env`
+ * en ningún otro archivo, y una regla de ESLint lo impide con su muestra que la viola
+ * (`verificaciones/`). El motivo es concreto: un valor que falta tiene que reventar al
+ * principio, con el nombre del valor y con lo que ese valor sirve, y no a mitad del
+ * despliegue con un error del proveedor de Kubernetes sobre un recurso a medias.
+ *
+ * Las invariantes de `checkInvariants` son la parte que importa. Cada una corresponde a
+ * una restricción escrita en `ADR-0011`, `INF-01`, `INF-03` o los RNF de operación que,
+ * incumplida, deja el ambiente en una configuración que **no cumple sus propios
+ * requisitos**. Son funciones puras y cada una tiene en `config.test.ts` el caso que la
+ * viola: una verificación que no puede fallar no protege nada.
+ *
+ * ## Un solo nodo, y lo que eso obliga a vigilar
+ *
+ * El SGTM corre sobre un VPS (`INF-01` §1.1). No hay quórum que sobreviva ni réplica que
+ * promover, así que las tres cosas que sostienen la recuperación —el respaldo fuera del
+ * VPS, el plazo de archivado del WAL y el ensayo de la restauración en `stg`— no son
+ * ajustes de rendimiento: son el RPO y el RTO escritos en configuración. Por eso las
+ * tres tienen invariante.
+ */
+
+/** Los dos ambientes de `INF-03` §1. El nombre del stack **es** el ambiente. */
+export const ENVIRONMENTS = ["stg", "prod"] as const;
+export type Environment = (typeof ENVIRONMENTS)[number];
+
+/**
+ * Local no está en la lista, y no es un olvido: local es
+ * `despliegue/compose.yaml`, no un stack de Pulumi (`ADR-0011` §4).
+ */
+export const LOCAL_IS_NOT_A_STACK =
+  "Local no es un stack: es `despliegue/compose.yaml` (ADR-0011 §4).";
+
+export interface IngressSettings {
+  /** Nombre público por el que llega el navegador. De él cuelga el certificado. */
+  domain: string;
+  /** Dirección de contacto de ACME. Let's Encrypt avisa ahí si el certificado no renueva. */
+  acmeEmail: string;
+  /**
+   * Emitir contra el entorno de pruebas de Let's Encrypt.
+   *
+   * Sirve para no gastar el límite de tasa mientras se ajusta el ingreso. El
+   * certificado que emite **no lo acepta ningún navegador**, así que en `prod`
+   * incumpliría RNF-074.
+   */
+  acmeStaging: boolean;
+  /**
+   * Puertos del nodo publicados a internet además de 80 y 443.
+   *
+   * Tiene que estar vacío. Es el valor que retira la última parte de la frase del
+   * README del compose —«con los puertos publicados en claro»— y el que más fácil es
+   * abrir «un momento, para depurar».
+   */
+  publishedNodePorts: number[];
+}
+
+export interface DatabaseSettings {
+  /** Imagen de PostgreSQL, con versión fijada. Nunca una etiqueta móvil. */
+  image: string;
+  /** Tamaño del volumen. Es disco local del nodo: no crece solo (`INF-01` §5). */
+  storageSize: string;
+  /**
+   * Generar aquí las claves de los roles del motor.
+   *
+   * Prohibido en los dos ambientes. `ADR-0011` §3: el estado de Pulumi guarda lo que
+   * hace falta para **crear** el mecanismo de secretos, no los secretos del sistema.
+   * De dónde salen de verdad lo decide el issue #154.
+   */
+  generateRolePasswords: boolean;
+}
+
+export interface BackupSettings {
+  /**
+   * Destino del archivado continuo y de los respaldos base.
+   *
+   * Tiene que estar **fuera del VPS** (`INF-01` §1.3): el camino de recuperación no
+   * puede depender de lo que se está recuperando. Un destino que resuelve dentro del
+   * clúster o al propio nodo no es un respaldo, es una segunda copia del mismo punto
+   * único de falla.
+   */
+  endpoint: string;
+  /** Contenedor de destino. Distinto por ambiente (`INF-03` §4). */
+  bucket: string;
+  /**
+   * Plazo máximo de archivado del WAL, en segundos.
+   *
+   * **Es el RPO escrito en configuración** (RNF-076: 5 minutos). Subirlo a una hora no
+   * rompe nada visible y degrada el RPO en silencio, que es exactamente el fallo que
+   * esta invariante existe para impedir.
+   */
+  walArchiveTimeoutSeconds: number;
+  /**
+   * Contenedor **de origen** desde el que `stg` restaura para ensayar (`INF-03` §2).
+   *
+   * Solo `stg`. La credencial con que `stg` lo lee es de solo lectura: `stg` restaura
+   * leyendo de donde `prod` escribe, y sus propios respaldos van a otro sitio.
+   */
+  restoreSourceBucket?: string;
+}
+
+export interface IdentitySettings {
+  /** Imagen de Keycloak, con versión fijada. */
+  image: string;
+  /** Realm que emite los tokens del SGTM. De él sale el claim `municipalidad_id`. */
+  realm: string;
+  /**
+   * Arrancar Keycloak en modo de desarrollo (`start-dev`).
+   *
+   * Prohibido en los dos ambientes. Es lo correcto en el compose —HTTP en claro detrás
+   * del proxy, sin agrupamiento— y lo incorrecto aquí: `start-dev` guarda su base
+   * **dentro del contenedor**, así que perder el pod es perder los usuarios.
+   */
+  developmentMode: boolean;
+  /** Usuarios de prueba con clave conocida. Prohibido en `prod` (`INF-03` §4). */
+  seedTestUsers: boolean;
+}
+
+export interface ApplicationSettings {
+  /**
+   * Repositorio de las imágenes, **sin etiqueta**.
+   *
+   * `ADR-0011` §5: la etiqueta de la imagen vive fuera del estado de Pulumi. Si entra
+   * aquí, cada liberación pasa a ser un `pulumi up` y cada reversión también, lo que
+   * acopla el ritmo de la aplicación al de la infraestructura. La etiqueta la pone el
+   * flujo de liberación (issue #148).
+   */
+  imageRepository: string;
+  /** Réplicas del perfil `web`. El perfil `batch` son Jobs, no réplicas. */
+  webReplicas: number;
+  /**
+   * La municipalidad se da de alta como instalación de demostración.
+   *
+   * Obligatorio en `stg` (`INF-03` §3.2): mientras D-02a esté abierta, toda cifra sale
+   * de parámetros que nadie firmó, y un documento de `stg` sin marca no se distingue
+   * de uno de `prod`.
+   */
+  isDemonstration: boolean;
+}
+
+/** Todo lo que no es secreto, y por tanto se puede validar sin resolver un `Output`. */
+export interface Invariants {
+  environment: Environment;
+  ingress: IngressSettings;
+  database: DatabaseSettings;
+  backup: BackupSettings;
+  identity: IdentitySettings;
+  application: ApplicationSettings;
+}
+
+export interface Settings extends Invariants {
+  /**
+   * Kubeconfig del nodo. Su `server` tiene que apuntar al bucle local: CI llega al
+   * API de k3s por un túnel SSH y el puerto 6443 no responde desde internet
+   * (`INF-01` §1.4).
+   */
+  kubeconfig: pulumi.Output<string>;
+  /** Clave del administrador de Keycloak. Secreto de arranque, no de la aplicación. */
+  keycloakAdminPassword: pulumi.Output<string>;
+  /** Credenciales del almacenamiento de objetos donde viven los respaldos. */
+  backupCredentials: {
+    accessKeyId: pulumi.Output<string>;
+    secretAccessKey: pulumi.Output<string>;
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lectura
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * De dónde salen los valores. Existe para que `config.test.ts` pueda construir un
+ * stack al que le falta un valor y comprobar que el fallo **dice cuál**, sin
+ * necesitar un stack de Pulumi de verdad.
+ */
+export interface ConfigReader {
+  text(key: string): string | undefined;
+  number(key: string): number | undefined;
+  boolean(key: string): boolean | undefined;
+  object<T>(key: string): T | undefined;
+}
+
+/** Falta un valor obligatorio del stack. El mensaje nombra el valor y para qué sirve. */
+export class MissingConfigError extends Error {
+  constructor(
+    readonly key: string,
+    readonly purpose: string,
+  ) {
+    super(
+      `Falta el valor obligatorio «sgtm:${key}» en la configuración del stack. ` +
+        `Sirve para: ${purpose}. Ponlo con \`pulumi config set ${key} <valor>\`.`,
+    );
+    this.name = "MissingConfigError";
+  }
+}
+
+function requireText(reader: ConfigReader, key: string, purpose: string): string {
+  const value = reader.text(key);
+  if (value === undefined || value.trim() === "") {
+    throw new MissingConfigError(key, purpose);
+  }
+  return value;
+}
+
+/**
+ * Arma las invariantes desde un lector cualquiera.
+ *
+ * No valida: valida `checkInvariants`. Aquí solo se decide qué es obligatorio y qué
+ * tiene valor por omisión, que es una decisión distinta y conviene poder leerla junta.
+ */
+export function readInvariants(environment: Environment, reader: ConfigReader): Invariants {
+  return {
+    environment,
+    ingress: {
+      domain: requireText(reader, "domain", "el nombre público por el que llega el navegador"),
+      acmeEmail: requireText(
+        reader,
+        "acmeEmail",
+        "la dirección a la que Let's Encrypt avisa si el certificado no renueva",
+      ),
+      acmeStaging: reader.boolean("acmeStaging") ?? false,
+      publishedNodePorts: reader.object<number[]>("publishedNodePorts") ?? [],
+    },
+    database: {
+      image: requireText(reader, "postgresImage", "la imagen de PostgreSQL, con su versión fijada"),
+      storageSize: requireText(
+        reader,
+        "postgresStorageSize",
+        "el tamaño del volumen de la base en el disco del nodo",
+      ),
+      generateRolePasswords: reader.boolean("generateRolePasswords") ?? false,
+    },
+    backup: {
+      endpoint: requireText(
+        reader,
+        "backupEndpoint",
+        "el almacenamiento de objetos, FUERA del VPS, donde viven el WAL y los respaldos",
+      ),
+      bucket: requireText(reader, "backupBucket", "el contenedor de destino de los respaldos"),
+      walArchiveTimeoutSeconds: reader.number("walArchiveTimeoutSeconds") ?? 300,
+      ...(reader.text("restoreSourceBucket") === undefined
+        ? {}
+        : { restoreSourceBucket: reader.text("restoreSourceBucket") }),
+    },
+    identity: {
+      image: requireText(reader, "keycloakImage", "la imagen de Keycloak, con su versión fijada"),
+      realm: reader.text("keycloakRealm") ?? "sgtm",
+      developmentMode: reader.boolean("keycloakDevelopmentMode") ?? false,
+      seedTestUsers: reader.boolean("keycloakSeedTestUsers") ?? false,
+    },
+    application: {
+      imageRepository: requireText(
+        reader,
+        "applicationImageRepository",
+        "el repositorio de las tres imágenes, SIN etiqueta (ADR-0011 §5)",
+      ),
+      webReplicas: reader.number("webReplicas") ?? 2,
+      isDemonstration: reader.boolean("esDemostracion") ?? false,
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Validación
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MOVING_TAGS = ["latest", "main", "stable"];
+
+function isMovingTag(image: string): boolean {
+  const tag = image.includes(":") ? image.slice(image.lastIndexOf(":") + 1) : "";
+  return tag === "" || MOVING_TAGS.includes(tag);
+}
+
+/** Destinos que están dentro del propio nodo, y por tanto no sirven de respaldo. */
+function isInsideTheNode(endpoint: string): boolean {
+  const host = endpoint.replace(/^[a-z]+:\/\//i, "").split("/")[0]?.split(":")[0] ?? "";
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host.endsWith(".svc.cluster.local") ||
+    host.endsWith(".svc") ||
+    host.endsWith(".cluster.local")
+  );
+}
+
+/**
+ * Devuelve la lista de incumplimientos. Vacía significa configuración admisible.
+ *
+ * Pura a propósito: recibe la configuración y no lee nada del entorno, de modo que
+ * `config.test.ts` puede construir el caso que viola cada regla. Cada mensaje cita el
+ * documento, porque quien lo lea estará bloqueado y necesita saber por qué.
+ */
+export function checkInvariants(s: Invariants): string[] {
+  const problems: string[] = [];
+  const isProd = s.environment === "prod";
+  const isStg = s.environment === "stg";
+
+  if (!ENVIRONMENTS.includes(s.environment)) {
+    problems.push(
+      `El stack «${s.environment}» no es uno de los dos ambientes de INF-03 §1: ` +
+        `${ENVIRONMENTS.join(", ")}. ${LOCAL_IS_NOT_A_STACK}`,
+    );
+  }
+
+  // ── RNF-074 — se entra cifrado, y no responde nada más ─────────────────────
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.ingress.acmeEmail)) {
+    problems.push(
+      `\`acmeEmail\` vale «${s.ingress.acmeEmail}» y no tiene forma de dirección de correo. ` +
+        "Es donde Let's Encrypt avisa de que el certificado no renueva, y RNF-074 exige " +
+        "certificado válido: enterarse el día del vencimiento no cuenta.",
+    );
+  }
+  if (s.ingress.acmeStaging && isProd) {
+    problems.push(
+      "`acmeStaging` es true en «prod». El certificado del entorno de pruebas de Let's " +
+        "Encrypt no lo acepta ningún navegador, así que el sistema quedaría inalcanzable " +
+        "cumpliendo la letra de RNF-074 y ninguna de sus consecuencias.",
+    );
+  }
+  if (s.ingress.publishedNodePorts.length > 0) {
+    problems.push(
+      `\`publishedNodePorts\` publica ${s.ingress.publishedNodePorts.join(", ")}. INF-01 §1.4: ` +
+        "desde internet responden 80 —que solo redirige— y 443, y nada más. Publicar el " +
+        "puerto de PostgreSQL o el de Keycloak «un momento, para depurar» es exactamente la " +
+        "frase del README del compose que esta épica existe para retirar.",
+    );
+  }
+
+  // ── INF-01 §1.3 y RNF-076 — el respaldo, fuera, y a tiempo ─────────────────
+  if (isInsideTheNode(s.backup.endpoint)) {
+    problems.push(
+      `\`backupEndpoint\` vale «${s.backup.endpoint}», que resuelve dentro del propio nodo. ` +
+        "INF-01 §1.3: el camino de recuperación no puede depender de lo que se está " +
+        "recuperando. Un respaldo en el disco que se pierde es una segunda copia del mismo " +
+        "punto único de falla, y con él se van el RPO de RNF-076 y el RTO de RNF-077.",
+    );
+  }
+  if (!s.backup.bucket.includes(s.environment)) {
+    problems.push(
+      `\`backupBucket\` vale «${s.backup.bucket}» y no nombra el ambiente «${s.environment}». ` +
+        "INF-03 §4: el almacenamiento de respaldo es distinto por ambiente, para que un " +
+        "`pulumi up` de stg mal configurado no pueda escribir sobre los respaldos de prod.",
+    );
+  }
+  if (s.backup.walArchiveTimeoutSeconds > 300) {
+    problems.push(
+      `\`walArchiveTimeoutSeconds\` vale ${s.backup.walArchiveTimeoutSeconds}. RNF-076 fija el ` +
+        "RPO en 5 minutos (300 s): este valor **es** el RPO escrito en configuración. Subirlo " +
+        "no rompe nada visible y degrada la pérdida máxima de datos en silencio.",
+    );
+  }
+  if (s.backup.walArchiveTimeoutSeconds < 1) {
+    problems.push("`walArchiveTimeoutSeconds` tiene que ser al menos 1 segundo.");
+  }
+  if (s.backup.restoreSourceBucket !== undefined && !isStg) {
+    problems.push(
+      `\`restoreSourceBucket\` está puesto en «${s.environment}». Solo stg restaura desde los ` +
+        "respaldos de otro ambiente, porque es donde se ensaya la restauración (INF-03 §2). " +
+        "En prod, restaurar desde otro contenedor es un incidente, no una configuración.",
+    );
+  }
+  if (isStg && s.backup.restoreSourceBucket === s.backup.bucket) {
+    problems.push(
+      "`restoreSourceBucket` y `backupBucket` son el mismo contenedor. Entonces stg no ensaya " +
+        "restaurar los respaldos de prod: se restaura a sí mismo, y el simulacro de INF-03 §2 " +
+        "no demuestra nada.",
+    );
+  }
+
+  // ── INF-03 §3.2 — una instalación de demostración lo dice en cada documento ─
+  if (isStg && !s.application.isDemonstration) {
+    problems.push(
+      "`esDemostracion` es false en «stg». INF-03 §3.2: la municipalidad de stg se da de alta " +
+        "marcada, y por eso todo documento que emita sale marcado en los tres formatos (#122). " +
+        "Sin la marca, una constancia de stg no se distingue de una de prod.",
+    );
+  }
+
+  // ── INF-03 §4 — nada de atajos de desarrollo en producción ─────────────────
+  if (s.identity.seedTestUsers && isProd) {
+    problems.push(
+      "`keycloakSeedTestUsers` es true en «prod». Un usuario de prueba con clave conocida en " +
+        "el realm que emite los tokens del padrón es una puerta abierta (INF-03 §4).",
+    );
+  }
+  if (s.identity.developmentMode) {
+    problems.push(
+      `\`keycloakDevelopmentMode\` es true en «${s.environment}». \`start-dev\` guarda la base ` +
+        "de Keycloak dentro del contenedor: perder el pod es perder los usuarios. Es lo " +
+        "correcto en el compose de la marcha blanca y lo incorrecto en el clúster, donde " +
+        "Keycloak va en modo `start` con su propia base (INF-01 §1).",
+    );
+  }
+
+  // ── ADR-0011 §3 — ningún secreto de la aplicación en el estado de Pulumi ───
+  if (s.database.generateRolePasswords) {
+    problems.push(
+      `\`generateRolePasswords\` es true en «${s.environment}». ADR-0011 §3: el estado de ` +
+        "Pulumi guarda lo que hace falta para crear el mecanismo de secretos, no los secretos " +
+        "del sistema. Las claves de `sgtm_owner` y `sgtm_app` abren el padrón de todas las " +
+        "municipalidades; de dónde salen lo decide el issue #154.",
+    );
+  }
+
+  // ── ADR-0011 §5 — la versión de la imagen vive fuera del estado ────────────
+  if (s.application.imageRepository.includes(":")) {
+    problems.push(
+      `\`applicationImageRepository\` vale «${s.application.imageRepository}» y lleva etiqueta. ` +
+        "ADR-0011 §5: la etiqueta de la imagen la pone el flujo de liberación, no Pulumi. Con " +
+        "la versión en el estado, cada liberación es un `pulumi up` y cada reversión también, " +
+        "y se pierde la reversión que no toca la infraestructura.",
+    );
+  }
+  if (s.application.webReplicas < 1) {
+    problems.push("`webReplicas` tiene que ser al menos 1.");
+  }
+
+  // ── Versiones fijadas, nunca móviles ───────────────────────────────────────
+  for (const [key, value] of [
+    ["postgresImage", s.database.image],
+    ["keycloakImage", s.identity.image],
+  ] as const) {
+    if (isMovingTag(value)) {
+      problems.push(
+        `\`${key}\` vale «${value}» y no fija una versión. Una etiqueta móvil convierte ` +
+          "cualquier reinicio de pod en una actualización no planificada, y en un solo nodo " +
+          "eso ocurre cada vez que se reinicia el VPS (INF-01 §5).",
+      );
+    }
+  }
+
+  return problems;
+}
+
+/**
+ * El `server` del kubeconfig tiene que ser el bucle local.
+ *
+ * Es una cicatriz de `../iaac`, y cuesta una tarde si se descubre por las malas: CI
+ * abre un túnel SSH al VPS antes de `pulumi up`, así que el proveedor de Kubernetes
+ * tiene que salir por `localhost`. Con la IP del VPS en el kubeconfig, el proveedor
+ * intenta ir por fuera del túnel contra un puerto 6443 que no responde desde internet
+ * (`INF-01` §1.4), y el error no dice nada de túneles.
+ *
+ * Pura, para que tenga prueba. `loadSettings` la aplica sobre el secreto.
+ */
+export function checkKubeconfigServer(kubeconfig: string): string[] {
+  const servers = [...kubeconfig.matchAll(/^\s*server:\s*(\S+)\s*$/gm)].map((m) => m[1] ?? "");
+  if (servers.length === 0) {
+    return ["El kubeconfig no declara ningún `server`: no hay a dónde conectarse."];
+  }
+  return servers
+    .filter((server) => {
+      const host = server.replace(/^[a-z]+:\/\//i, "").split("/")[0]?.split(":")[0] ?? "";
+      return host !== "localhost" && host !== "127.0.0.1" && host !== "[::1]";
+    })
+    .map(
+      (server) =>
+        `El kubeconfig apunta a «${server}». Tiene que apuntar a localhost: CI llega al API ` +
+        "de k3s por un túnel SSH y el 6443 no responde desde internet (INF-01 §1.4). Con la " +
+        "dirección del VPS, el proveedor sale por fuera del túnel y el error no menciona el " +
+        "túnel por ninguna parte.",
+    );
+}
+
+/** Compone el mensaje de un stack que contradice la documentación. */
+export function describeProblems(environment: string, problems: string[]): string {
+  return (
+    `La configuración del stack «${environment}» contradice la documentación:\n` +
+    problems.map((p) => `  · ${p}`).join("\n")
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Entrada real
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Lee y valida la configuración del stack. Lanza si algo contradice la documentación. */
+export function loadSettings(): Settings {
+  const config = new pulumi.Config();
+  const environment = pulumi.getStack() as Environment;
+
+  const reader: ConfigReader = {
+    text: (key) => config.get(key),
+    number: (key) => config.getNumber(key),
+    boolean: (key) => config.getBoolean(key),
+    object: <T>(key: string) => config.getObject<T>(key),
+  };
+
+  const invariants = readInvariants(environment, reader);
+
+  const problems = checkInvariants(invariants);
+  if (problems.length > 0) {
+    throw new Error(describeProblems(environment, problems));
+  }
+
+  const kubeconfig = config.requireSecret("kubeconfig").apply((raw) => {
+    const kubeProblems = checkKubeconfigServer(raw);
+    if (kubeProblems.length > 0) {
+      throw new Error(describeProblems(environment, kubeProblems));
+    }
+    return raw;
+  });
+
+  return {
+    ...invariants,
+    kubeconfig,
+    keycloakAdminPassword: config.requireSecret("keycloakAdminPassword"),
+    backupCredentials: {
+      accessKeyId: config.requireSecret("backupAccessKeyId"),
+      secretAccessKey: config.requireSecret("backupSecretAccessKey"),
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Convenciones de nombres y etiquetas
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** El namespace del SGTM en el nodo. Uno por ambiente. */
+export function namespaceName(environment: Environment): string {
+  return `sgtm-${environment}`;
+}
+
+/** Convención de nombres: `sgtm-<ambiente>-<componente>`. */
+export function resourceName(environment: Environment, component: string): string {
+  return `sgtm-${environment}-${component}`;
+}
+
+/** Etiquetas obligatorias. Van en todo objeto que se crea aquí. */
+export function commonLabels(
+  environment: Environment,
+  component: string,
+): Record<string, string> {
+  return {
+    proyecto: "sgtm",
+    ambiente: environment,
+    componente: component,
+    "gestionado-por": "pulumi",
+  };
+}

@@ -1,0 +1,120 @@
+# Verificación de la infraestructura.
+#
+# Dos trabajos, y la diferencia entre ellos es la que este flujo existe para marcar:
+#
+#   1. `verificar` — el mismo `yarn verificar` que hay que pasar antes de un PR: lint,
+#      tipos y pruebas. **No necesita nada de fuera**: ni Pulumi, ni token, ni clúster.
+#      Ahí viven las invariantes de `config.ts` y la prueba que las aplica a los propios
+#      `Pulumi.<ambiente>.yaml`, así que quitar un valor obligatorio o subir el plazo de
+#      archivado del WAL se pone rojo aquí, en un PR de cualquiera.
+#   2. `previsualizar` — `pulumi preview` de los dos stacks, publicado como comentario
+#      del PR. Necesita el token de Pulumi Cloud, así que **se omite con un aviso** en
+#      los PR que no lo tienen (los de una bifurcación) y mientras los stacks no estén
+#      creados. Omitirlo con aviso es preferible a un rojo que nadie puede arreglar y
+#      que enseña a ignorar el flujo.
+#
+# El `preview` NO lleva credenciales del clúster, y no es un descuido: mientras
+# `infra/componentes/` esté vacía no hay recurso que consultar, así que el plan se
+# calcula sin hablar con el nodo. El día que haya componentes, este trabajo necesitará
+# el túnel SSH del issue #147 — y ese es el momento de decidirlo, no antes.
+#
+# `pulumi up` no está aquí a propósito: `stg` se despliega al integrar a `main` y `prod`
+# con aprobación manual explícita (ADR-0011 §6). Los dos son el issue #147.
+name: Infraestructura
+
+on:
+  pull_request:
+    paths: ['infra/**', '.github/workflows/infra.yml']
+  push:
+    branches: [main]
+    paths: ['infra/**', '.github/workflows/infra.yml']
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verificar:
+    name: Lint, tipos y pruebas
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: infra/yarn.lock
+
+      - name: Instalar dependencias
+        run: yarn install --frozen-lockfile
+
+      - name: yarn verificar
+        run: yarn verificar
+
+  previsualizar:
+    name: pulumi preview de los dos stacks
+    runs-on: ubuntu-latest
+    needs: verificar
+    # Un PR desde una bifurcación no ve los secretos del repositorio. Sin token no hay
+    # estado que consultar, y este trabajo no tiene nada que hacer.
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: infra/yarn.lock
+
+      - name: Instalar dependencias
+        working-directory: infra
+        run: yarn install --frozen-lockfile
+
+      - name: ¿Hay token de Pulumi Cloud?
+        id: token
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          if [ -n "$PULUMI_ACCESS_TOKEN" ]; then
+            echo "hay=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=no" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Sin \`pulumi preview\`"
+              echo
+              echo "No hay \`PULUMI_ACCESS_TOKEN\` en este contexto: o el PR viene de una"
+              echo "bifurcación, o el secreto todavía no está puesto. \`yarn verificar\`"
+              echo "sí corrió, y es lo que cubre las invariantes de \`config.ts\` y de los"
+              echo "\`Pulumi.<ambiente>.yaml\`."
+              echo
+              echo "Para habilitarlo: crear los dos stacks y poner el secreto."
+              echo "Los pasos están en \`infra/README.md\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: pulumi/actions@v6
+        if: steps.token.outputs.hay == 'si'
+        with:
+          command: preview
+          stack-name: stg
+          work-dir: infra
+          comment-on-pr: true
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      - uses: pulumi/actions@v6
+        if: steps.token.outputs.hay == 'si'
+        with:
+          command: preview
+          stack-name: prod
+          work-dir: infra
+          comment-on-pr: true
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}

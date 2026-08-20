@@ -1,0 +1,29 @@
+{
+  "name": "sgtm-infra",
+  "private": true,
+  "license": "UNLICENSED",
+  "main": "index.ts",
+  "description": "SGTM — infraestructura como código (Pulumi, ADR-0011)",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verificar": "yarn lint && yarn typecheck && yarn test"
+  },
+  "dependencies": {
+    "@pulumi/pulumi": "^3.150.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^22.15.0",
+    "eslint": "^9.39.0",
+    "globals": "^16.0.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^3.2.0"
+  }
+}
