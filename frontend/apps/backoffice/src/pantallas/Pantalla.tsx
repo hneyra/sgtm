@@ -18,6 +18,7 @@ import {
 import { SIN_PERMISO, estadoDePantalla, textoDeError } from './estados';
 import { useCatalogoVisible } from '../app/sesion/useCatalogoVisible';
 import { useEscritura } from './escritura';
+import { useFocoTrasGuardar } from './foco';
 import { escrituraDe } from './escrituras';
 import { useEjercicio } from '../app/ejercicio';
 import { conexionDe } from './conexiones';
@@ -227,6 +228,9 @@ function Bloques({
   // aqui y no por el catalogo porque es una propiedad de la operacion, no del
   // dibujo —el prototipo no tiene forma de expresarla—.
   const esVersionada = VERSIONADAS.has(estructura.id);
+  // Tras cobrar, el foco vuelve al campo de identificacion: entra el siguiente
+  // contribuyente y hay que poder teclear su documento sin buscar donde.
+  const refDeBusqueda = useFocoTrasGuardar(escritura.enviada);
 
   // El error y el sin permiso son de la pantalla entera, no de un bloque: hay
   // una peticion por pantalla, y no puede fallar la tabla y no el formulario.
@@ -289,34 +293,36 @@ function Bloques({
       )}
 
       {estructura.filtros && (
-        <Filtros
-          campos={estructura.filtros}
-          buscado={busquedaActiva.filtros}
-          cargando={consulta.isFetching}
-          // Buscar reescribe la URL: es donde vive lo buscado. Y devuelve a la
-          // primera pagina, porque la pagina 7 de otra busqueda no es ninguna.
-          onBuscar={(valores) => {
-            const siguiente = conCambio(new URLSearchParams(busqueda), {
-              ...vaciar(busquedaActiva.filtros),
-              ...valores,
-              [PAGINA]: undefined,
-            });
+        <div ref={refDeBusqueda}>
+          <Filtros
+            campos={estructura.filtros}
+            buscado={busquedaActiva.filtros}
+            cargando={consulta.isFetching}
+            // Buscar reescribe la URL: es donde vive lo buscado. Y devuelve a la
+            // primera pagina, porque la pagina 7 de otra busqueda no es ninguna.
+            onBuscar={(valores) => {
+              const siguiente = conCambio(new URLSearchParams(busqueda), {
+                ...vaciar(busquedaActiva.filtros),
+                ...valores,
+                [PAGINA]: undefined,
+              });
 
-            // Buscar por el identificador del registro **abre** ese registro: se
-            // va a la ruta de la ficha, no a la lista filtrada. El resto de la
-            // busqueda se conserva, y el enlace que queda es compartible.
-            const elegido = registro === undefined ? undefined : valores[registro];
-            if (registro !== undefined && elegido !== undefined && elegido !== '') {
-              siguiente.delete(registro);
-              const consulta = siguiente.toString();
-              navegar(
-                `/${moduloId}/${ranura}/${encodeURIComponent(elegido)}${consulta === '' ? '' : `?${consulta}`}`,
-              );
-              return;
-            }
-            fijarBusqueda(siguiente);
-          }}
-        />
+              // Buscar por el identificador del registro **abre** ese registro: se
+              // va a la ruta de la ficha, no a la lista filtrada. El resto de la
+              // busqueda se conserva, y el enlace que queda es compartible.
+              const elegido = registro === undefined ? undefined : valores[registro];
+              if (registro !== undefined && elegido !== undefined && elegido !== '') {
+                siguiente.delete(registro);
+                const consulta = siguiente.toString();
+                navegar(
+                  `/${moduloId}/${ranura}/${encodeURIComponent(elegido)}${consulta === '' ? '' : `?${consulta}`}`,
+                );
+                return;
+              }
+              fijarBusqueda(siguiente);
+            }}
+          />
+        </div>
       )}
 
       {estructura.tabla && (

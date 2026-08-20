@@ -282,6 +282,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | El juego de datos simulado no llega a producción | Comparando las dos compilaciones, con y sin la bandera | El chunk desaparece |
 | Un cambio del contrato rompe la compilación | Renombrando `codRefCatastral` en `sgtm-v1.yaml` y compilando con `tsc` | Rojo; al devolverlo, verde |
 | El módulo de seguridad conectado (11 pruebas) | Quitando la guarda de `leerPaginado`, el ejercicio de la bitácora, el vaciado de la caché, la lista blanca del cuerpo y el bloqueo de los campos de clave | Las cinco lo ponen rojo |
+| La caja (6 pruebas) | Quitando el `focus()` tras guardar, enfocando en cada render en vez de en el flanco, y regenerando la clave de idempotencia en cada envío | Dos, una y una en rojo |
 | El módulo que más escribe (12 pruebas) | Habilitando la acción primaria sin observación, y rellenando la deuda del padrón con lo del prototipo | Nueve y una en rojo |
 | Ninguna cifra sin su fecha (17 pruebas) | Quitando el bloque de fecha de cálculo, restando el saldo en la interfaz y añadiendo una función de sumar a `@sgtm/dominio` | Trece, dos y una en rojo |
 | Catastro conectado (13 pruebas) | Quitando el bloque de versionado, el `historico=true`, la guarda de la ruta, poniéndole cifra al arancel rural y devolviendo el desplegable a las opciones del prototipo | Las cinco lo ponen rojo |
