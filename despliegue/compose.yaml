@@ -139,7 +139,12 @@ services:
     ports:
       - "${SGTM_PUERTO_INTERFAZ:-8081}:8080"
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --spider http://localhost:8080/ || exit 1"]
+      # 127.0.0.1 y no `localhost`: el guion de arranque de la imagen solo anade el
+      # `listen [::]:8080` cuando la configuracion es la suya, y esta no lo es, asi
+      # que nginx escucha SOLO en IPv4. Con `localhost`, wget resuelve ::1 primero,
+      # no encuentra a nadie y el contenedor se queda «unhealthy» para siempre con
+      # nginx sirviendo perfectamente al lado.
+      test: ["CMD-SHELL", "wget --quiet --output-document=/dev/null http://127.0.0.1:8080/"]
       interval: 3s
       timeout: 3s
       retries: 20
