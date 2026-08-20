@@ -35,6 +35,7 @@ import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
 import pe.gob.sgtm.cuentacorriente.dominio.TipoAsiento;
 import pe.gob.sgtm.cuentacorriente.infraestructura.AsientoRepositoryJdbc;
+import pe.gob.sgtm.cuentacorriente.infraestructura.SaldoRepositoryJdbc;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.MunicipalidadId;
@@ -75,7 +76,13 @@ class RegistrarAsientoTest {
         transaccion = new TransactionTemplate(gestor);
         repositorio = new AsientoRepositoryJdbc(jdbc);
         registrar =
-                envolver(new RegistrarAsiento(repositorio, new AuditoriaJdbc(jdbc, RELOJ)), gestor);
+                envolver(
+                        new RegistrarAsiento(
+                                repositorio,
+                                new SaldoRepositoryJdbc(jdbc),
+                                new AuditoriaJdbc(jdbc, RELOJ),
+                                RELOJ),
+                        gestor);
     }
 
     @SuppressWarnings("unchecked")

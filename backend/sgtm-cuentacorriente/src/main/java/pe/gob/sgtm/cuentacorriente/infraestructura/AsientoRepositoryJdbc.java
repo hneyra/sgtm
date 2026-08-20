@@ -14,10 +14,13 @@ import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
+import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
+import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeAltasBajas;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeConsulta;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
+import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
 import pe.gob.sgtm.cuentacorriente.dominio.TipoAsiento;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
@@ -134,6 +137,110 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
         return jdbc().sql("SELECT " + COLUMNAS + desdeConContribuyente + donde)
                 .params(parametros)
                 .query(AsientoRepositoryJdbc::mapear)
+                .list();
+    }
+
+    @Override
+    public List<Asiento> deLaObligacion(ClaveDeSaldo clave) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS
+                                + DESDE
+                                + " WHERE a.contribuyente_id = :contribuyente"
+                                + "   AND a.tributo = :tributo"
+                                + "   AND a.ejercicio = :ejercicio"
+                                + "   AND COALESCE(a.periodo, 0) = :periodo"
+                                + "   AND COALESCE(a.predio_id, 0) = :predio"
+                                + "   AND COALESCE(a.vehiculo_id, 0) = :vehiculo"
+                                + " ORDER BY a.id")
+                .param("contribuyente", clave.contribuyenteId())
+                .param("tributo", clave.tributo())
+                .param("ejercicio", clave.ejercicio().valor())
+                .param("periodo", clave.periodo())
+                .param("predio", clave.predioId() == null ? 0L : clave.predioId())
+                .param("vehiculo", clave.vehiculoId() == null ? 0L : clave.vehiculoId())
+                .query(AsientoRepositoryJdbc::mapear)
+                .list();
+    }
+
+    @Override
+    public Pagina<Asiento> altasYBajas(CriterioDeAltasBajas criterio, Paginacion paginacion) {
+        List<String> condiciones = new ArrayList<>();
+        Map<String, Object> parametros = new HashMap<>();
+
+        condiciones.add("c.codigo_contribuyente = :codigo");
+        parametros.put("codigo", criterio.codigoContribuyente());
+        // Los cuatro conceptos del desglose: es lo que un alta o una baja produce. Un
+        // PAGO es un cobro, no un movimiento de deuda, y tiene su propia consulta.
+        condiciones.add("a.concepto IN ('INSOLUTO','REAJUSTE','INTERES','GASTO')");
+
+        if (criterio.ejercicio() != null) {
+            condiciones.add("a.ejercicio = :ejercicio");
+            parametros.put("ejercicio", criterio.ejercicio().valor());
+        }
+        if (criterio.tributo() != null) {
+            condiciones.add("a.tributo = :tributo");
+            parametros.put("tributo", criterio.tributo());
+        }
+        if (criterio.sentido() != null) {
+            // Un alta incorpora deuda (CARGO) y una baja la extingue (ABONO): es la
+            // misma equivalencia que MovimientoDeDeuda#enAsientos escribe al asentar.
+            condiciones.add("a.tipo = :tipo");
+            parametros.put(
+                    "tipo",
+                    criterio.sentido() == SentidoDelMovimiento.ALTA
+                            ? TipoAsiento.CARGO.name()
+                            : TipoAsiento.ABONO.name());
+        }
+
+        String desdeConContribuyente = DESDE + " JOIN contribuyente c ON c.id = a.contribuyente_id";
+        String donde = " WHERE " + String.join(" AND ", condiciones);
+
+        return paginar(
+                "SELECT " + COLUMNAS + desdeConContribuyente + donde,
+                "SELECT count(*)" + desdeConContribuyente + donde,
+                parametros,
+                paginacion,
+                ORDEN,
+                AsientoRepositoryJdbc::mapear);
+    }
+
+    @Override
+    public Optional<Long> contribuyentePorCodigo(String codigo) {
+        return jdbc().sql(
+                        "SELECT c.id FROM contribuyente c"
+                                + " WHERE c.codigo_contribuyente = :codigo")
+                .param("codigo", codigo)
+                .query((fila, numeroDeFila) -> fila.getLong("id"))
+                .optional();
+    }
+
+    @Override
+    public List<Asiento> deContribuyente(long contribuyenteId) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS
+                                + DESDE
+                                + " WHERE a.contribuyente_id = :contribuyente"
+                                + " ORDER BY a.id")
+                .param("contribuyente", contribuyenteId)
+                .query(AsientoRepositoryJdbc::mapear)
+                .list();
+    }
+
+    @Override
+    public List<Long> contribuyentesConAsientos(long despuesDe, int cuantos) {
+        return jdbc().sql(
+                        "SELECT DISTINCT a.contribuyente_id"
+                                + DESDE
+                                + " WHERE a.contribuyente_id > :desde"
+                                + " ORDER BY a.contribuyente_id"
+                                + " LIMIT :cuantos")
+                .param("desde", despuesDe)
+                .param("cuantos", cuantos)
+                // Mapeo explicito y no query(Long.class): la columna es NOT NULL, y el
+                // atajo devuelve List<@Nullable Long>, que NullAway rechaza con razon.
+                .query((fila, numeroDeFila) -> fila.getLong("contribuyente_id"))
                 .list();
     }
 

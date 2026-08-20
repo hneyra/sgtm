@@ -1,0 +1,33 @@
+package pe.gob.sgtm.cuentacorriente.dominio;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * La proyeccion del saldo (#23). Ningun metodo recibe la municipalidad (regla 2).
+ *
+ * <p><b>Es la unica tabla de este contexto que admite {@code UPDATE}</b>, y es legitimo
+ * precisamente porque no es la verdad: el libro no se toca nunca, y esto es un cache que se
+ * recalcula. V7 le concede {@code SELECT, INSERT, UPDATE} a {@code sgtm_app} por eso, y solo por
+ * eso.
+ */
+public interface SaldoRepository {
+
+    /** El saldo proyectado de una obligacion, si ya se proyecto alguna vez. */
+    Optional<SaldoProyectado> buscar(ClaveDeSaldo clave);
+
+    /** Los saldos proyectados de un contribuyente, para conciliar o para consultar. */
+    List<SaldoProyectado> deContribuyente(long contribuyenteId);
+
+    /**
+     * Deja la fila con exactamente este contenido: la inserta si no estaba y la reemplaza si
+     * estaba.
+     *
+     * <p>Reemplazar y no acumular es deliberado. Un {@code UPDATE ... SET saldo = saldo + :monto}
+     * es correcto solo si se aplica exactamente una vez por asiento, y basta un reintento de la
+     * transaccion para que se aplique dos —y entonces la proyeccion queda mal sin que nada falle,
+     * que es el modo de fallo que este issue existe para evitar—. Escribir el total recalculado es
+     * idempotente: aplicarlo dos veces deja lo mismo.
+     */
+    void proyectar(SaldoProyectado saldo);
+}
