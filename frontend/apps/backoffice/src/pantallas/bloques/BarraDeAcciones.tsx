@@ -16,14 +16,25 @@ import { textoDeError } from '../estados';
  * Cuando la operacion de la pantalla es de lectura no hay nada que escribir
  * desde aqui, y los botones siguen deshabilitados: un boton que no sabe a que
  * endpoint llamar no se arregla habilitandolo.
+ *
+ * **Lo irreversible se confirma diciendo que va a pasar y sobre cuantos**, no
+ * preguntando si se esta seguro: quien pulsa siempre esta seguro. La diferencia
+ * importa donde mas duele —emitir una tanda de valores, pasarlos a coactiva—:
+ * «¿estas seguro?» no da ninguna informacion nueva, y «vas a emitir sobre 47
+ * valores» si (#75, FRO-04 §5).
  */
 export interface BarraDeAccionesProps {
   readonly acciones: readonly string[];
   /** La escritura de esta pantalla, si escribe alguna. */
   readonly escritura?: Escritura;
+  /**
+   * Sobre cuantos registros va a actuar, tal como lo redacta el backend:
+   * «47 valores». Es lo que convierte la confirmacion en informacion.
+   */
+  readonly alcance?: string;
 }
 
-export function BarraDeAcciones({ acciones, escritura }: BarraDeAccionesProps) {
+export function BarraDeAcciones({ acciones, escritura, alcance }: BarraDeAccionesProps) {
   const [porConfirmar, fijarPorConfirmar] = useState<string | null>(null);
   const escribe = escritura?.operacion !== undefined;
 
@@ -56,7 +67,11 @@ export function BarraDeAcciones({ acciones, escritura }: BarraDeAccionesProps) {
           {porConfirmar !== null && (
             <Aviso
               tipo="error"
-              titulo={`Vas a ${porConfirmar.toLowerCase()}, y eso no se deshace`}
+              titulo={
+                alcance === undefined
+                  ? `Vas a ${porConfirmar.toLowerCase()}, y eso no se deshace`
+                  : `Vas a ${porConfirmar.toLowerCase()} sobre ${alcance}, y eso no se deshace`
+              }
               detalle="En el SGTM no se borra: queda asentado con tu usuario y tu observación, y corregirlo exige otro acto. Confirma si es lo que quieres hacer."
             >
               <Boton onClick={() => fijarPorConfirmar(null)}>Cancelar</Boton>

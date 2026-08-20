@@ -213,8 +213,17 @@ function erroresPorCampo(error: unknown): Readonly<Record<string, string>> {
  *
  * En el SGTM no se borra: se anula, se da de baja o se reversa, y eso queda
  * asentado. Como no hay vuelta atras, la accion se confirma diciendo **que** va
- * a pasar, no preguntando si se esta seguro: quien pulsa siempre esta seguro.
+ * a pasar y **sobre cuantos**, no preguntando si se esta seguro: quien pulsa
+ * siempre esta seguro.
+ *
+ * La lista crecio con los cuatro actos que #75 nombra y que no estaban:
+ * **generar una tanda de valores**, **notificar** —el acuse sostiene el plazo, y
+ * un plazo mal notificado tumba el procedimiento— y **pasar a coactiva**. Se
+ * mira la etiqueta de la accion y no la operacion porque es lo que el usuario
+ * lee: si el boton dice «Derivar a coactiva», eso es lo que cree que va a
+ * hacer.
  */
-const IRREVERSIBLES = /anular|anulaci|dar de baja|baja de|emitir|emisi|reversar|quiebre|prescri/i;
+const IRREVERSIBLES =
+  /anular|anulaci|dar de baja|baja de|emitir|emisi|generar valor|notificar|notificaci|coactiva|reversar|quiebre|prescri|transferir|transferencia/i;
 
 export const esIrreversible = (accion: string): boolean => IRREVERSIBLES.test(accion);
