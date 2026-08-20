@@ -1,0 +1,111 @@
+# Verificación del frontend.
+#
+# Es el mismo `yarn verificar` que hay que pasar antes de un PR (FRO-04 §10),
+# más dos comprobaciones que solo tienen sentido en CI:
+#
+#   1. Que el catálogo generado siga cuadrando con el prototipo. Se regenera y
+#      se exige que no haya diferencias: un `design/` que cambia sin regenerar
+#      deja la interfaz describiendo pantallas que ya no son las del manual, y
+#      eso no lo detecta ninguna prueba.
+#   2. Que la aplicación compile para producción, que el juego de datos de
+#      ejemplo no llegue a ella y que el paquete no pase de su presupuesto.
+#
+# Y un segundo trabajo con navegador: los tres caminos completos de FRO-03 §6.
+#
+# El contrato (`docs/50-api/openapi/sgtm-v1.yaml`) entra en los caminos que
+# disparan este flujo porque los tipos de la API se generan de él: un cambio de
+# contrato que no se regenere tiene que ponerse rojo aquí, y no en el navegador.
+#
+# El backend no está aquí: sus verificaciones bloqueantes necesitan Docker y un
+# PostgreSQL de verdad (`./gradlew verificarAislamiento`), y montar eso es una
+# decisión propia que este flujo no toma por su cuenta.
+name: Frontend
+
+on:
+  pull_request:
+    paths:
+      ['frontend/**', 'design/**', 'docs/50-api/**', '.github/workflows/frontend.yml']
+  push:
+    branches: [main]
+    paths:
+      ['frontend/**', 'design/**', 'docs/50-api/**', '.github/workflows/frontend.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Instalar dependencias
+        run: yarn install --frozen-lockfile
+
+      - name: El catálogo generado cuadra con el prototipo
+        run: |
+          yarn portar-catalogo
+          git diff --exit-code -- \
+            apps/backoffice/src/catalogo \
+            packages/api-mock/src/respuestas.generado.ts \
+            || {
+              echo "::error::El catálogo generado no cuadra con design/. Corre «yarn portar-catalogo» y añade el resultado."
+              exit 1
+            }
+
+      - name: Lint, tipos y pruebas
+        run: yarn verificar
+
+      # Compila dos veces —con la bandera del proxy y sin ella— y comprueba que
+      # el juego de datos de ejemplo y el codigo del proxy **no** llegan a
+      # produccion. Se comprobo que muerde: quitando la bandera de `main.tsx`,
+      # el paso se pone rojo.
+      - name: Compilar, y que el juego de datos no llegue a produccion
+        run: yarn comprobar-compilaciones
+
+  # Los tres caminos que mas cuestan si fallan (FRO-03 §6): el cobro en caja
+  # solo con teclado, el portal en un movil y la impresion de un reporte en A4.
+  # Van en su propio trabajo porque necesitan navegador, y el resto no.
+  extremo-a-extremo:
+    name: Caminos completos
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Instalar dependencias
+        run: yarn install --frozen-lockfile
+
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Los tres caminos, en un navegador de verdad
+        run: yarn e2e
+
+      - name: Publicar la traza de lo que fallara
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trazas-de-extremo-a-extremo
+          path: frontend/test-results/
+          retention-days: 7

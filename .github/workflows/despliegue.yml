@@ -1,0 +1,365 @@
+# Verificacion del despliegue.
+#
+# No comprueba que el compose este bien escrito: lo LEVANTA, y despues le hace
+# preguntas al sistema en marcha. Un compose revisado a ojo se ve correcto hasta
+# el dia del despliegue.
+#
+# Lo que pregunta, y por que cada cosa:
+#
+#   1. ¿Se aplicaron todas las migraciones del repositorio? Un `locations` mal
+#      escrito, o un migrador que no se ejecuta, dejan la base a medias sin que
+#      nada falle.
+#   2. ¿Responde la sonda de vida, sin publicar detalles?
+#   4. LA ESCALERA DE IDENTIDAD, peldano a peldano. Cada uno responde con su
+#      codigo del catalogo, y el codigo es lo que hace la asercion precisa —dice
+#      HASTA DONDE llego la peticion, no solo que fallo—:
+#
+#        sin token ................................ 401 NO_AUTENTICADO
+#        con algo que no es un token .............. 401 NO_AUTENTICADO
+#        con un token de otro emisor .............. 401 NO_AUTENTICADO
+#        con token del realm, sin el claim ........ 403 SIN_MUNICIPALIDAD
+#        el administrador, en lo suyo ............. 200
+#        el administrador, en lo que no le toca ... 403 SIN_PRIVILEGIO
+#
+#      Los dos ultimos peldanos son los que importan, y hay que leerlos juntos: el
+#      200 cierra el camino entero —Keycloak emite, el backend valida, el claim se
+#      lee, la municipalidad esta implantada, el usuario de la base esta enlazado
+#      por su cuenta y los permisos existen—; el 403 dice que esos permisos son una
+#      barrera y no un sello.
+#   5. ¿Se atiende alguna otra ruta? La respuesta a todas es que no.
+#   6. ¿Se sirve la interfaz, y su paquete lleva el emisor? Vite lo resuelve al
+#      compilar: si no esta dentro del paquete, la pantalla de acceso no lleva a
+#      ninguna parte.
+#   7. ¿Puede la aplicacion ejecutar DDL? Esta es la que da valor al resto.
+#   8. SIN EMISOR, ¿arranca? Tiene que negarse. `application.yaml` lo dice desde
+#      #119 —«sin la variable puesta, la aplicacion no arranca»— y hasta ahora
+#      nadie lo comprobaba: un despliegue que se queda vivo sin poder validar un
+#      token responde a la sonda, se declara sano y no atiende a nadie.
+#   9. ¿Se levanta MARCADA como instalacion de demostracion? Mientras D-02a este
+#      abierta, toda cifra que el sistema calcule sale de tramos y alicuotas que
+#      nadie ha firmado, y un papel con una cifra plausible y sin marca es un papel
+#      que alguien puede intentar cobrar (#122).
+#
+# COMO SE DEMUESTRA QUE PUEDEN FALLAR:
+#
+#   - La 7: se cambia en el compose el `SGTM_DB_USUARIO: sgtm_app` de la
+#     aplicacion por `sgtm_owner`, con su clave, y este trabajo se pone rojo. Lee
+#     las credenciales del contenedor que esta corriendo, no las que el compose
+#     deberia tener.
+#   - La 9: se pone `SGTM_ES_DEMOSTRACION=false` en el .env que genera este flujo.
+#     La consulta devuelve `f` y el paso se pone rojo, diciendo lo que estaria
+#     saliendo por la impresora.
+#   - La 8: se le pone un valor por omision al marcador de `application.yaml`
+#     —`${SGTM_OIDC_EMISOR:http://…}`—. La aplicacion arranca, se queda viva, y el
+#     paso se pone rojo por tiempo agotado en vez de por un arranque fallido.
+#   - La 4: se quita el mapeador `municipalidad-id` del realm y el ultimo peldano
+#     pasa de SIN_PRIVILEGIO a SIN_MUNICIPALIDAD; se apunta `issuer-uri` al realm
+#     master y el peldano del emisor ajeno pasa a valer; se quita el
+#     `oauth2ResourceServer` de SeguridadWeb y los cinco peldanos cambian a la vez.
+
+name: Despliegue
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "backend/**"
+      - "despliegue/**"
+      - ".github/workflows/despliegue.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: despliegue-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  levantar:
+    name: La marcha blanca se levanta, se entra con token, y la aplicacion no puede hacer DDL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: despliegue
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Claves distintas en cada corrida y en cada rol. Si las tres fueran la
+      # misma, la comprobacion 4 podria pasar por el motivo equivocado.
+      - name: Generar el .env con claves efimeras
+        run: |
+          {
+            echo "SGTM_CLAVE_SUPERUSUARIO=$(openssl rand -hex 24)"
+            echo "SGTM_CLAVE_OWNER=$(openssl rand -hex 24)"
+            echo "SGTM_CLAVE_APP=$(openssl rand -hex 24)"
+            echo "SGTM_CLAVE_KEYCLOAK=$(openssl rand -hex 24)"
+            echo "SGTM_CLAVE_VERIFICACION=$(openssl rand -hex 24)"
+            # La municipalidad que se implanta, y el administrador. La cuenta es la
+            # misma que el usuario que se crea en Keycloak mas abajo: es lo unico que
+            # une la fila de la base con la identidad del token.
+            echo "SGTM_UBIGEO=200101"
+            # Entrecomillados porque llevan espacios. Sin comillas, `docker compose`
+            # los lee bien —tiene su propio analizador— pero `source .env` no: bash
+            # ve `SGTM_MUNICIPALIDAD=Municipalidad` como prefijo de asignacion e
+            # intenta ejecutar `de` como orden. Los peldanos que empiezan por
+            # `source .env` mueren con 127 antes de su primera comprobacion.
+            echo 'SGTM_MUNICIPALIDAD="Municipalidad de verificacion"'
+            echo "SGTM_TIPO_DE_MUNICIPALIDAD=PROVINCIAL"
+            echo "SGTM_ADMINISTRADOR=verificacion"
+            echo 'SGTM_NOMBRE_DEL_ADMINISTRADOR="Administrador de verificacion"'
+          } > .env
+
+          # Se lee aqui mismo, donde se escribe. Un .env que bash no puede leer se
+          # manifestaba tres pasos mas adelante, como un `127` sin contexto en el
+          # primer peldano de la escalera —y con todos los demas saltados, que es
+          # como un fallo de sintaxis se disfraza de fallo de la aplicacion—.
+          source .env
+          test -n "$SGTM_MUNICIPALIDAD"
+          test -n "$SGTM_NOMBRE_DEL_ADMINISTRADOR"
+          echo "El .env se lee: municipalidad '$SGTM_MUNICIPALIDAD'."
+
+      # Se espera a `aplicacion` y no a todo: `migraciones` corre y termina, y un
+      # contenedor que sale con exito no es un contenedor sano. Sus dependencias
+      # arrastran a los otros dos igualmente.
+      - name: Levantar la instalacion completa
+        run: docker compose up --build --detach --wait aplicacion interfaz
+
+      - name: 1 · Todas las migraciones del repositorio estan aplicadas
+        run: |
+          set -euo pipefail
+          source .env
+          enElRepositorio=$(find ../backend/sgtm-esquema/src/main/resources/db/migration \
+            -name 'V*.sql' | wc -l)
+          aplicadas=$(docker compose exec -T -e PGPASSWORD="$SGTM_CLAVE_SUPERUSUARIO" base \
+            psql --username postgres --dbname sgtm --tuples-only --no-align \
+            --command "SELECT count(*) FROM flyway_schema_history WHERE success" | tr -d '\r')
+          echo "En el repositorio: $enElRepositorio. Aplicadas: $aplicadas."
+          test "$enElRepositorio" -eq "$aplicadas"
+
+      - name: 2 · La sonda de vida responde, y no cuenta lo que no debe
+        run: |
+          set -euo pipefail
+          respuesta=$(curl --fail --silent http://localhost:8080/actuator/health)
+          echo "$respuesta"
+          echo "$respuesta" | grep -q '"status":"UP"'
+          # show-details: never. Si el cuerpo trae componentes, la sonda esta
+          # publicando la configuracion delante de la cadena de seguridad.
+          if echo "$respuesta" | grep -q '"components"'; then
+            echo "La sonda publica detalles: revisar management.endpoint.health.show-details"
+            exit 1
+          fi
+
+      - name: Esperar a que Keycloak responda
+        run: |
+          set -euo pipefail
+          # La aplicacion no espera a Keycloak —no lo necesita para arrancar— pero
+          # quien va a pedir un token si. Se espera desde el runner, que tiene curl.
+          for intento in $(seq 1 60); do
+            if curl --fail --silent http://localhost:8180/realms/sgtm/.well-known/openid-configuration >/dev/null; then
+              echo "Keycloak listo, y el realm sgtm importado."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Keycloak no respondio en cinco minutos"
+          docker compose logs --no-color --tail 100 identidad
+          exit 1
+
+      - name: 3 · Los dos usuarios de verificacion
+        run: |
+          set -euo pipefail
+          source .env
+          export SGTM_CLAVE_KEYCLOAK
+          # Uno con municipalidad y otro sin ella. El segundo existe para una sola
+          # cosa: comprobar que un token valido pero sin el claim no llega a ningun
+          # controlador. No se puede comprobar sin tenerlo.
+          ./identidad/crear-usuario.sh verificacion "$SGTM_CLAVE_VERIFICACION" 1
+          ./identidad/crear-usuario.sh sin-municipalidad "$SGTM_CLAVE_VERIFICACION"
+
+      - name: 4 · La escalera de identidad, peldano a peldano
+        run: |
+          set -euo pipefail
+          source .env
+          API=http://localhost:8080/api/v1
+          KC=http://localhost:8180
+
+          # Si el token no sale, lo que interesa es POR QUE, y eso lo dice Keycloak
+          # en el cuerpo. Sin este cuidado, el fallo aparece como un rastro de
+          # Python sobre un JSON vacio y hay que ir a los registros del contenedor
+          # para enterarse de que, por ejemplo, al usuario le faltaba el apellido.
+          token() {
+            local respuesta acceso
+            respuesta=$(curl --silent --request POST \
+              "$KC/realms/$1/protocol/openid-connect/token" \
+              --data "grant_type=password&client_id=$2&username=$3&password=$4")
+            acceso=$(printf '%s' "$respuesta" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))' \
+              2>/dev/null || true)
+            if [ -z "$acceso" ]; then
+              echo "Keycloak no emitio token para '$3' en el realm '$1':" >&2
+              printf '%s\n' "$respuesta" >&2
+              return 1
+            fi
+            printf '%s' "$acceso"
+          }
+
+          # Devuelve "codigo_http CODIGO_DEL_CATALOGO", que es lo que hace precisa
+          # cada asercion: distingue «no se autentico» de «se autentico y no tiene
+          # municipalidad» de «tiene municipalidad y le falta el privilegio». En una
+          # respuesta correcta no hay codigo del catalogo, y entonces dice «ok».
+          intento() {
+            local ruta="$1"; shift
+            local estado
+            estado=$(curl --silent --output /tmp/cuerpo --write-out '%{http_code}' "$@" "$API$ruta")
+            echo "$estado $(python3 -c 'import json;print(json.load(open("/tmp/cuerpo")).get("codigo","ok"))' 2>/dev/null || echo 'ok')"
+          }
+
+          echo "--- sin token"
+          test "$(intento /catastro/vias)" = "401 NO_AUTENTICADO"
+
+          echo "--- con un token que no es un token"
+          test "$(intento /catastro/vias --header 'Authorization: Bearer esto-no-es-un-token')" = "401 NO_AUTENTICADO"
+
+          echo "--- con un token de OTRO emisor: el realm master del mismo Keycloak"
+          ajeno=$(token master admin-cli "${SGTM_KEYCLOAK_ADMIN:-admin}" "$SGTM_CLAVE_KEYCLOAK")
+          test "$(intento /catastro/vias --header "Authorization: Bearer $ajeno")" = "401 NO_AUTENTICADO"
+
+          echo "--- con un token del realm correcto pero SIN el claim municipalidad_id"
+          sinClaim=$(token sgtm sgtm-verificacion sin-municipalidad "$SGTM_CLAVE_VERIFICACION")
+          test "$(intento /catastro/vias --header "Authorization: Bearer $sinClaim")" = "403 SIN_MUNICIPALIDAD"
+
+          conClaim=$(token sgtm sgtm-verificacion verificacion "$SGTM_CLAVE_VERIFICACION")
+
+          echo "--- el administrador implantado ENTRA en lo suyo"
+          # Aqui se cierra el camino entero: token emitido por Keycloak, validado por
+          # el backend, claim leido, municipalidad implantada, usuario de la base
+          # enlazado por su cuenta, y permisos que la implantacion otorgo.
+          test "$(intento /seguridad/usuarios --header "Authorization: Bearer $conClaim")" = "200 ok"
+
+          echo "--- y NO entra en lo que no le toca"
+          # La implantacion le da las once opciones de seguridad y ninguna mas. Si
+          # esto respondiera 200, los permisos serian un sello y no una barrera.
+          test "$(intento /catastro/vias --header "Authorization: Bearer $conClaim")" = "403 SIN_PRIVILEGIO"
+
+      - name: 5 · Ninguna otra ruta se atiende
+        run: |
+          set -euo pipefail
+          for ruta in /actuator/env /actuator/beans /; do
+            codigo=$(curl --output /dev/null --silent --write-out '%{http_code}' \
+              "http://localhost:8080$ruta")
+            echo "$ruta -> $codigo"
+            case "$codigo" in
+              401|403|404) ;;
+              *) echo "  $ruta respondio $codigo sin token"; exit 1 ;;
+            esac
+          done
+
+      - name: 6 · La interfaz se sirve, y apunta al emisor configurado
+        run: |
+          set -euo pipefail
+          curl --fail --silent http://localhost:8081/ | grep -qi "<div id=\"raiz\"\|<div id=\"root\"\|<body" \
+            || { echo "La interfaz no devolvio una pagina"; exit 1; }
+          # El emisor entra al compilar, asi que tiene que estar DENTRO del paquete.
+          # Si no esta, la imagen se construyo sin la configuracion de identidad y la
+          # pantalla de acceso no llevaria a ninguna parte.
+          if ! docker compose exec -T interfaz grep -rq "realms/sgtm/protocol/openid-connect/token" /usr/share/nginx/html/assets; then
+            echo "El paquete de la interfaz no lleva el emisor configurado"
+            exit 1
+          fi
+
+      - name: 7 · La aplicacion no puede ejecutar DDL
+        run: |
+          set -euo pipefail
+          # Las credenciales salen del contenedor en marcha, no del compose: se
+          # comprueba lo que el proceso tiene de verdad.
+          usuario=$(docker compose exec -T aplicacion printenv SGTM_DB_USUARIO | tr -d '\r')
+          clave=$(docker compose exec -T aplicacion printenv SGTM_DB_CLAVE | tr -d '\r')
+          echo "La aplicacion se conecta como: $usuario"
+
+          if docker compose exec -T -e PGPASSWORD="$clave" base \
+               psql --username "$usuario" --dbname sgtm --quiet \
+               --command 'CREATE TABLE intento_de_ddl (id int)' 2>&1
+          then
+            echo "FALLO: las credenciales de la aplicacion pueden crear tablas."
+            echo "Un proceso expuesto en HTTP con DDL sobre el padron de todas las"
+            echo "municipalidades es exactamente lo que ARQ-03 §4 excluye."
+            exit 1
+          fi
+          echo "Correcto: el DDL se rechaza con las credenciales de la aplicacion."
+
+      - name: 8 · Sin emisor configurado, la aplicacion se niega a arrancar
+        run: |
+          set -euo pipefail
+          source .env
+          # La MISMA imagen que esta sirviendo, con las mismas credenciales de
+          # base, y sin una sola variable: SGTM_OIDC_EMISOR. Se le da tiempo de
+          # sobra; si sigue viva al agotarse, es que arranco sin emisor.
+          codigo=0
+          timeout 120 docker run --rm --network sgtm_default \
+            --env SPRING_PROFILES_ACTIVE=web \
+            --env SGTM_DB_URL=jdbc:postgresql://base:5432/sgtm \
+            --env SGTM_DB_USUARIO=sgtm_app \
+            --env SGTM_DB_CLAVE="$SGTM_CLAVE_APP" \
+            sgtm-aplicacion:marcha-blanca > sin-emisor.log 2>&1 || codigo=$?
+          echo "La aplicacion sin emisor termino con $codigo"
+          tail --lines=20 sin-emisor.log
+
+          if [ "$codigo" = "124" ]; then
+            echo "FALLO: arranco y siguio viva sin emisor de identidad."
+            echo "Un backend asi responde a la sonda, se declara sano y no atiende a nadie."
+            exit 1
+          fi
+          test "$codigo" != "0"
+          echo "Correcto: sin emisor no hay proceso."
+
+      - name: 9 · La marcha blanca se levanta MARCADA
+        run: |
+          set -euo pipefail
+          source .env
+          # Mientras D-02a este abierta, toda cifra que el sistema calcule sale de
+          # parametros que nadie ha firmado. La instalacion tiene que decirlo en el
+          # papel, y el hecho vive en la fila —no en un archivo de entorno— para que
+          # quitarlo sea un UPDATE deliberado de sgtm_owner (#122, ADR-0007).
+          marcada=$(docker compose exec -T -e PGPASSWORD="$SGTM_CLAVE_SUPERUSUARIO" base \
+            psql --username postgres --dbname sgtm --tuples-only --no-align \
+            --command "SELECT es_demostracion FROM municipalidad WHERE ubigeo = '$SGTM_UBIGEO'" \
+            | tr -d '\r')
+          echo "municipalidad $SGTM_UBIGEO, es_demostracion = $marcada"
+          if [ "$marcada" != "t" ]; then
+            echo "FALLO: la instalacion NO esta marcada como de demostracion."
+            echo "Todo documento que emita saldria indistinguible de uno real, con cifras"
+            echo "calculadas a partir de tramos y alicuotas que nadie ha firmado."
+            exit 1
+          fi
+          # Y el proceso de implantacion lo dijo en su registro: si no lo dijera, esto
+          # solo comprobaria la base y no que la implantacion supiera lo que hacia.
+          docker compose logs --no-color implantacion | grep -q "DEMOSTRACION" \
+            || { echo "La implantacion no registro el regimen con que implanto"; exit 1; }
+          echo "Correcto: la instalacion se declara de demostracion, y lo dejo escrito."
+
+      # `--tail 25` y no 200: con seis servicios, doscientas lineas cada uno son mil
+      # doscientas lineas que entierran la salida del paso que fallo, que es justo
+      # lo que hay que leer. Lo aprendi buscando un error de kcadm a traves de mil
+      # lineas de arranque de PostgreSQL.
+      - name: Ultimas lineas de cada contenedor, si algo fallo
+        if: failure()
+        run: docker compose logs --no-color --tail 25
+
+      # Y los dos que corren y terminan, ENTEROS. Cuando uno de esos falla, lo que
+      # hay que leer es una traza de Java, y una traza no cabe en veinticinco
+      # lineas: las veinticinco ultimas son el `Launcher.launch` de Spring Boot, que
+      # es igual en todos los fallos posibles. El mensaje —la unica linea que
+      # distingue un fallo de otro— esta arriba del todo. Costo una vuelta entera de
+      # CI descubrirlo.
+      - name: Los procesos de un solo uso, enteros
+        if: failure()
+        run: docker compose logs --no-color migraciones implantacion
+
+      - name: Apagar
+        if: always()
+        run: docker compose down --volumes

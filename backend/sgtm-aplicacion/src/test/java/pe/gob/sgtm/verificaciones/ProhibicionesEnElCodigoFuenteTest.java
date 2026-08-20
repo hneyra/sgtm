@@ -26,7 +26,7 @@ class ProhibicionesEnElCodigoFuenteTest {
 
     @Test
     @DisplayName(
-            "ningun modulo usa SET SESSION, borra de una tabla protegida ni edita una inmutable")
+            "ningun modulo usa SET SESSION, borra de una tabla protegida, edita una inmutable ni escribe una politica de redondeo")
     void ningunModuloIncumpleLasProhibicionesDeTexto() throws IOException {
         Path raiz = raizDelBackend();
         List<Path> archivos = fuentesDeProduccion(raiz);
@@ -111,6 +111,75 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el revisor detecta un modo de redondeo escrito en el codigo (D-03)")
+    void elRevisorDetectaUnModoDeRedondeoEscrito() {
+        String fuente =
+                """
+                import java.math.RoundingMode;
+
+                class Ejemplo {
+                    // Este comentario menciona RoundingMode.HALF_UP y no debe contar.
+                    java.math.BigDecimal malo(java.math.BigDecimal base) {
+                        return base.setScale(2, RoundingMode.HALF_UP);
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarJava("Ejemplo.java", fuente))
+                .as("el modo y la escala son dos decisiones, y las dos las bloquea D-03")
+                .hasSize(2)
+                .allSatisfy(h -> assertThat(h.regla()).contains("D-03"));
+    }
+
+    @Test
+    @DisplayName("el revisor deja pasar la politica recibida como argumento")
+    void elRevisorDejaPasarLaPoliticaRecibida() {
+        String fuente =
+                """
+                class Bueno {
+                    java.math.BigDecimal redondear(java.math.BigDecimal v, int escala,
+                            java.math.RoundingMode modo) {
+                        return v.setScale(escala, modo);
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarJava("Bueno.java", fuente))
+                .as("recibir la politica es exactamente lo que D-03 obliga a hacer")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("UNNECESSARY no es una politica de redondeo y no cuenta")
+    void unnecessaryNoCuenta() {
+        String fuente =
+                """
+                class Bueno {
+                    boolean esPolitica(java.math.RoundingMode modo) {
+                        return modo != java.math.RoundingMode.UNNECESSARY;
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarJava("Bueno.java", fuente)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("un // dentro de una cadena no borra el resto de la linea")
+    void unaBarraDobleEnUnaCadenaNoBorraLaLinea() {
+        String fuente =
+                """
+                class Ejemplo {
+                    void malo(java.math.BigDecimal v) {
+                        String url = "https://ejemplo.pe"; v.setScale(4, null);
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarJava("Ejemplo.java", fuente))
+                .as(
+                        "si el revisor tratara ese // como comentario, la llamada de al lado"
+                                + " desapareceria y la regla no protegeria nada")
+                .hasSize(1);
+    }
+
+    @Test
     @DisplayName("el revisor no se queja del codigo correcto")
     void elRevisorNoSeQuejaDelCodigoCorrecto() {
         String fuente =
@@ -120,6 +189,104 @@ class ProhibicionesEnElCodigoFuenteTest {
                 }
                 """;
         assertThat(RevisorDeCodigoFuente.revisarJava("Bueno.java", fuente)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("el revisor detecta una alicuota construida desde un literal (regla 5)")
+    void elRevisorDetectaUnaAlicuotaLiteral() {
+        String fuente =
+                """
+                class Ejemplo {
+                    // Ni este comentario sobre la alicuota del 0.6 % cuenta.
+                    pe.gob.sgtm.dominio.Alicuota predial() {
+                        return pe.gob.sgtm.dominio.Alicuota.de("0.6");
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarValoresTributarios("Ejemplo.java", fuente))
+                .as(
+                        "un tramo compilado solo se cambia desplegando, con lo que se acaba sin cambiar")
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("el revisor detecta una constante con nombre de valor normativo y una cifra")
+    void elRevisorDetectaUnaConstanteNormativa() {
+        String fuente =
+                """
+                class Ejemplo {
+                    private static final java.math.BigDecimal UIT_2026 = new java.math.BigDecimal("5350");
+                    private static final int TRAMO_PRIMERO = 15;
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarValoresTributarios("Ejemplo.java", fuente))
+                .as("el nombre delata la intencion; por eso la lista es de nombres y no de tipos")
+                .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("el revisor no se queja de un valor leido de los parametros")
+    void elRevisorNoSeQuejaDeUnValorLeido() {
+        String fuente =
+                """
+                class Bueno {
+                    pe.gob.sgtm.dominio.ValorNormativo alicuota(Parametros p) {
+                        return p.exigirNumero("ALICUOTA_PREDIAL", "tramo-1");
+                    }
+                }
+                """;
+        assertThat(RevisorDeCodigoFuente.revisarValoresTributarios("Bueno.java", fuente))
+                .as("leerlo del conjunto sellado es exactamente lo que la regla 5 pide")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra de repositorio que borra de una tabla protegida")
+    void elEscanerDetectaLaMuestraDeRepositorioQueBorra() throws IOException {
+        // La muestra no vive en un literal de esta prueba sino en un archivo propio,
+        // y se lee del disco: asi se verifica el escaner sobre un archivo de verdad,
+        // con su javadoc mencionando DELETE, UPDATE y SET SESSION. Si el escaner
+        // contara los comentarios, esta prueba encontraria seis hallazgos y no tres.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/infraestructura/MuestraDeRepositorioQueBorra.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los tres literales que viola, y ninguno de los comentarios que los explican")
+                .hasSize(3);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from recibo"))
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update cuenta_corriente_asiento"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("set session"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra con valores tributarios compilados (regla 5)")
+    void elEscanerDetectaLaMuestraDeValoresCompilados() throws IOException {
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeValoresTributariosCompilados.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("la UIT, el tramo y la alicuota; y ninguno de los comentarios que los explican")
+                .hasSize(3);
     }
 
     private static List<Path> fuentesDeProduccion(Path raiz) throws IOException {

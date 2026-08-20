@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
-import pe.gob.sgtm.compartido.MunicipalidadId;
+import pe.gob.sgtm.dominio.MunicipalidadId;
 
 /**
  * Clase de muestra que viola <b>a proposito</b> todas las reglas de {@link

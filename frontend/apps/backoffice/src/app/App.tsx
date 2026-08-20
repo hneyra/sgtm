@@ -1,61 +1,65 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import { OPCION_INICIAL } from '../catalogo';
+import { HubDeModulo } from '../pantallas/HubDeModulo';
+import { Pantalla } from '../pantallas/Pantalla';
+import { ProveedorDeEjercicio } from './ejercicio';
+import { ProveedorDePreferencias } from './preferencias';
+import { ProveedorDeSesion } from './sesion/ProveedorDeSesion';
+import { PuertaDeSesion } from './sesion/PuertaDeSesion';
+import { Shell } from './Shell';
+
 /**
- * Andamio de la aplicacion.
+ * Raiz de la aplicacion: proveedores y rutas.
  *
- * **Aqui no hay interfaz todavia, y es deliberado.** Esta iteracion monta el
- * espacio de trabajo —yarn workspaces, paquetes compartidos, verificaciones—
- * para que la siguiente implemente las 134 pantallas contra un terreno ya
- * preparado, igual que el backend construyo primero las barreras de aislamiento
- * y despues el negocio.
- *
- * Lo que viene: el shell (barra lateral de dos niveles, cabecera, paleta de
- * comandos), el hub de modulo y las diez plantillas de contenido, segun
- * `design/design_handoff_sgtm_web/README.md` y FRO-03.
+ * Una ruta por opcion del menu (FRO-01 §3), derivada del catalogo: `/:modulo`
+ * abre el hub, `/:modulo/:opcion` la pantalla y `/:modulo/:opcion/:codigo` la
+ * pantalla con un registro abierto. No hay 134 declaraciones de ruta porque no
+ * hay 134 componentes: hay un renderizador y un catalogo.
  */
+export function crearClienteDeConsultas(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        // Los padrones no cambian entre dos pulsaciones de la misma pantalla.
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
+      },
+      mutations: {
+        // Un reintento automatico de un cobro es un cobro doble (FRO-04 §5).
+        retry: false,
+      },
+    },
+  });
+}
+
+const cliente = crearClienteDeConsultas();
+
 export function App() {
   return (
-    <main style={{ maxWidth: '70ch', margin: '0 auto', padding: '18vh 24px' }}>
-      <p
-        style={{
-          fontFamily: 'var(--font-sans)',
-          fontSize: 10,
-          fontWeight: 500,
-          textTransform: 'uppercase',
-          letterSpacing: '.14em',
-          color: 'var(--ink-3)',
-          margin: '0 0 10px',
-        }}
-      >
-        SGTM
-      </p>
-      <h1
-        style={{
-          fontFamily: 'var(--font-serif)',
-          fontSize: 29,
-          fontWeight: 400,
-          letterSpacing: '-.025em',
-          lineHeight: 1.15,
-          margin: '0 0 14px',
-        }}
-      >
-        El espacio de trabajo del frontend esta montado.{' '}
-        <em>La interfaz se implementa en la siguiente iteracion.</em>
-      </h1>
-      <p
-        style={{
-          fontFamily: 'var(--font-serif)',
-          fontSize: 17,
-          lineHeight: 1.6,
-          color: 'var(--ink-2)',
-          margin: 0,
-        }}
-      >
-        Doce modulos y 134 opciones, con el diseno de referencia en{' '}
-        <code style={{ fontFamily: 'var(--font-mono)', fontSize: 15 }}>design/</code> y su mapa en{' '}
-        <code style={{ fontFamily: 'var(--font-mono)', fontSize: 15 }}>
-          docs/60-frontend/mapa-de-pantallas.md
-        </code>
-        .
-      </p>
-    </main>
+    <QueryClientProvider client={cliente}>
+      <ProveedorDeSesion>
+        {/* El ejercicio de trabajo va por encima de las rutas: es de la sesion,
+            no de la pantalla, y cambiarlo vacia la cache de todas (#70). */}
+        <ProveedorDeEjercicio>
+          <ProveedorDePreferencias>
+            <PuertaDeSesion>
+              <Router>
+                <Routes>
+                  <Route element={<Shell />}>
+                    <Route path="/" element={<Navigate to={OPCION_INICIAL.ruta} replace />} />
+                    <Route path="/:moduloId" element={<HubDeModulo />} />
+                    <Route path="/:moduloId/:ranura" element={<Pantalla />} />
+                    {/* El registro abierto va en la ruta, no en el estado: pegar el
+                      enlace de una ficha en otra pestana abre esa misma ficha. */}
+                    <Route path="/:moduloId/:ranura/:codigo" element={<Pantalla />} />
+                  </Route>
+                </Routes>
+              </Router>
+            </PuertaDeSesion>
+          </ProveedorDePreferencias>
+        </ProveedorDeEjercicio>
+      </ProveedorDeSesion>
+    </QueryClientProvider>
   );
 }

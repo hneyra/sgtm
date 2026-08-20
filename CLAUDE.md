@@ -20,11 +20,13 @@ Gradle, el esquema como migraciones Flyway, el camino del contexto de tenant (to
 → RLS) y las verificaciones bloqueantes. **Ninguna funcionalidad de negocio todavía**, y es
 deliberado: primero las barreras, después el negocio.
 
-De la **interfaz web** existe el espacio de trabajo, no las pantallas:
-[`frontend/`](frontend/README.md) monta yarn workspaces, los tres paquetes compartidos
-(`dominio`, `api-client`, `design-system`) y las reglas verificadas con ESLint. **Ninguna de las
-134 pantallas está implementada**, y es el mismo orden del backend: primero las barreras. Su
-diseño de referencia —12 módulos, 134 pantallas, design system Juris PE— está en
+De la **interfaz web** existen **las 134 pantallas**, con las operaciones que el backend
+publica ya conectadas y el resto todavía en la forma común:
+[`frontend/`](frontend/README.md) porta el catálogo del prototipo a datos tipados y lo compone con
+**un** renderizador, sobre un shell con navegación de dos niveles y paleta de comandos. Los datos
+llegan por HTTP desde un **proxy que simula la API** ([`ADR-0010`](docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md));
+conectar el backend es apagarlo, no reescribir la interfaz. Su diseño de referencia —12 módulos,
+134 pantallas, design system Juris PE— está en
 [`design/`](design/design_handoff_sgtm_web/README.md). El contrato que backend y frontend comparten
 está en [`docs/50-api/openapi/sgtm-v1.yaml`](docs/50-api/openapi/sgtm-v1.yaml), derivado de los
 `endpoint` que declara cada pantalla del prototipo.
@@ -45,10 +47,15 @@ Es bloqueante: `./gradlew verificarAislamiento`.
 > con el mismo contexto fijado, verifica que el superusuario ve las dos municipalidades y
 > `sgtm_app` una.
 
-Los dos hallazgos de RLS que heredamos verificados del SRTM —el superusuario omite RLS, y el
-acceso directo a una partición evade la política del padre— están en
-[`docs/40-datos/modelo-logico-fisico.md`](docs/40-datos/modelo-logico-fisico.md) §0. No se
-volvieron a descubrir: se trasladaron con su mitigación.
+Los **cuatro** hallazgos de RLS están en
+[`docs/40-datos/modelo-logico-fisico.md`](docs/40-datos/modelo-logico-fisico.md) §0. Dos se
+heredaron verificados del SRTM —el superusuario omite RLS, y el acceso directo a una partición
+evade la política del padre—: no se volvieron a descubrir, se trasladaron con su mitigación. Los
+otros dos salieron aquí: **bajo RLS un `LIKE 'prefijo%'` no llega nunca al índice**, porque
+`textlike` no es *leakproof* y PostgreSQL no lo evalúa antes de la política —toda búsqueda por
+prefijo se escribe como rango con `~>=~` / `~<~`—; y **una clave foránea nueva sobre una tabla con
+RLS no se puede validar**, porque validar es una consulta y el migrador no tiene contexto de
+tenant: va `NOT VALID`, que sigue comprobando cada `INSERT`.
 
 **Al agregar una tabla:** si lleva `municipalidad_id NOT NULL`, la prueba le exige RLS sola. Si
 no, hay que clasificarla como catálogo o como exenta en el propio código de la prueba, y eso se
@@ -78,7 +85,9 @@ no puede fallar no protege nada.
 
 En el frontend, las que le tocan —1, 2, 8, 9 y el idioma— están como **reglas de ESLint**, con la
 misma exigencia: `frontend/verificaciones/muestras/` tiene una muestra por prohibición y
-`reglas-de-eslint.test.ts` exige que la regla la detecte.
+`reglas-de-eslint.test.ts` exige que la regla la detecte. A ellas se suma una propia de la
+interfaz: **ninguna petición sale por `fetch` suelto**, todas pasan por `solicitar()` de
+`@sgtm/api-client`. Es lo que permite cambiar el proxy de datos por el backend con una bandera.
 
 Lista completa con su justificación:
 [`docs/30-arquitectura/estandares-de-codigo-backend.md`](docs/30-arquitectura/estandares-de-codigo-backend.md)
@@ -108,13 +117,16 @@ docs/         Documentación (fuente de verdad del diseño)                     
 design/       Prototipo navegable del que derivará la interfaz                     ← referencia
 ```
 
-Módulos del backend hoy: `sgtm-dominio-compartido`, `sgtm-esquema` (migraciones y prueba de
+Módulos del backend hoy: `sgtm-dominio-compartido` (objetos de valor en `pe.gob.sgtm.dominio` y
+`TenantContext` en `pe.gob.sgtm.compartido`), `sgtm-esquema` (migraciones y prueba de
 aislamiento), `sgtm-plataforma` (filtro del token, `SET LOCAL`, guardia del pool), los **doce**
 contextos acotados vacíos y `sgtm-aplicacion` (ensambla y aloja las verificaciones).
 Límites de cada contexto: [`docs/30-arquitectura/contextos-acotados.md`](docs/30-arquitectura/contextos-acotados.md).
 
-Workspaces del frontend hoy: `apps/backoffice` (andamio, sin pantallas) y los paquetes
-`@sgtm/dominio`, `@sgtm/api-client` y `@sgtm/design-system`. Una sola aplicación: en el SGTM el
+Workspaces del frontend hoy: `apps/backoffice` (shell, catálogo y renderizador) y los paquetes
+`@sgtm/dominio`, `@sgtm/api-client`, `@sgtm/design-system` y `@sgtm/api-mock` (el proxy de datos).
+**El catálogo se regenera con `yarn portar-catalogo` y los tipos de la API con
+`yarn generar-operaciones`, desde el contrato; los archivos `.generado.ts` no se editan a mano.** Una sola aplicación: en el SGTM el
 flujo público es **una** de las 134 opciones, no un producto aparte; el criterio para separar
 `apps/portal` está en [`ADR-0009`](docs/30-arquitectura/adr/ADR-0009-plataforma-frontend.md).
 
@@ -138,6 +150,13 @@ flujo público es **una** de las 134 opciones, no un producto aparte; el criteri
 qué parámetros consume cada una, cómo se identifican (`RT-xxx`) y qué casos borde hay— está
 resuelta y verificada contra los manuales del MEF en `../srtm`. Este proyecto la **implementa**,
 no la reinventa:
+
+> **Si `../srtm` no está en el disco, se clona: `git clone https://github.com/hneyra/srtm`.**
+> No es opcional. El motor de reglas se escribió una vez sin poder leer NEG-05 ni ARQ-09, a partir
+> de lo que este archivo resume, y salieron dos defectos estructurales: una cadena lineal donde
+> NEG-05 §1 describe un grafo, y la lectura de parámetros por ejercicio que ARQ-09 §3 nombra
+> como el modelo que falla en silencio. Los dos estaban en verde y ninguno lo habría encontrado
+> una revisión. Leer el documento cuesta menos que corregir lo que se construyó sin leerlo.
 
 | Qué | Dónde vive en `../srtm` |
 |---|---|
@@ -167,14 +186,25 @@ depreciación—, marcados `‹VERIFICAR›` en NEG-05 §6 y en
 [`docs/10-negocio/marco-normativo.md`](docs/10-negocio/marco-normativo.md).
 
 Un tramo equivocado produce deuda mal calculada en todo un padrón, con devoluciones masivas y
-nulidad de valores. **No implementar reglas de cálculo hasta cerrar D-02.** Tampoco los cuatro
+nulidad de valores. **No implementar reglas de cálculo hasta cerrar D-02a.** Tampoco los cuatro
 factores que NEG-05 §0.1 marca sin fuente identificada —deducción de Amazonía, `% actualización`,
 incremento del 5 %, factor de oficialización—: multiplican importes, y un valor inventado escala
 el error.
 
-**Ningún componente del design system antes de la pantalla que lo use.** `frontend/packages/design-system`
-tiene hoy los tokens y nada más, a propósito: el prototipo ya fija las medidas exactas, y un
-componente escrito antes de su pantalla es un componente que nadie pidió.
+**Ningún componente del design system antes de la pantalla que lo use.** Los que hay salieron
+todos del renderizador; el prototipo ya fija las medidas exactas, y un componente escrito antes de
+su pantalla es un componente que nadie pidió.
+
+**Ninguna acción de pantalla que escriba sin su campo de observación.** Toda modificación de datos
+lo exige (regla 10, RNF-052). El camino de escritura vive en un solo sitio —`useEscritura`— y pide
+la observación antes de habilitar la acción; **`useMutation` fuera de ahí no pasa el lint**, con su
+muestra que lo viola. Una acción cuya operación es de lectura sigue deshabilitada: no hay a dónde
+escribir.
+
+**Ningún campo del formulario que la opción no haya declarado.** El cuerpo de una escritura lleva la
+observación y solo los campos que la opción lista en `pantallas/escrituras.ts`; mientras no esté
+ahí, su formulario no se puede escribir. Es lo que impide que una contraseña acabe en el estado de
+React —y de ahí en cualquier sitio— cuando el backend no la pide.
 
 ## Decisiones abiertas que bloquean
 
@@ -183,8 +213,9 @@ Registro completo en [`docs/00-gobierno/decisiones-abiertas.md`](docs/00-gobiern
 | # | Decisión | Bloquea |
 |---|---|---|
 | D-01 | Municipalidad piloto y validador funcional | La primera iteración de negocio |
-| D-02 | Valores normativos verificados (UIT, tramos, alícuotas, tablas) | Toda regla de cálculo |
-| D-03 | Escala, modo y **puntos** de redondeo de importes —hay redondeo intermedio, no solo al cierre de cada regla— | La primera regla de cálculo |
+| D-02a | Valores normativos **de norma nacional** (UIT, tramos, alícuotas, valores unitarios, depreciación). Se buscan y se firman; **no dependen de D-01** | El predial, el vehicular y la alcabala |
+| D-02b | Valores **de ordenanza local** con su ratificación provincial | Arbitrios y sanciones |
+| D-03c | **Los puntos donde se redondea.** No es una decisión: es ingeniería inversa contra el SRTM del MEF, que redondea en pasos intermedios | La primera regla de cálculo |
 | D-11 | Origen y valor de los cuatro factores que M02 revela sin fuente | `RT-002`, `RT-005`, `RT-011` |
 | D-04 | Migración desde la base SQL Server existente | Implantación |
 | D-05 | Régimen de firma digital de valores y resoluciones | La capa de documentos |
@@ -208,8 +239,11 @@ omiten: una prueba bloqueante que se salta a sí misma deja el build en verde.
 
 ```bash
 cd frontend
-yarn verificar                    # lint, tipos y pruebas. Lo que hay que pasar antes de un PR
+yarn verificar                    # contrato, lint, tipos y pruebas. Lo que hay que pasar antes de un PR
+yarn comprobar-compilaciones      # el juego de datos no llega a produccion, y el presupuesto de paquete
+yarn e2e                          # los tres caminos completos en un navegador (Playwright)
 yarn test                         # incluye la prueba de que cada regla de ESLint muerde
+yarn generar-operaciones          # regenera los tipos de la API desde sgtm-v1.yaml
 yarn format                       # Prettier; mismo trato que spotlessApply
 ```
 
@@ -229,9 +263,50 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Aislamiento del esquema (19 pruebas) | Quitando `WITH CHECK` de la política de tenant | Rojo en las 63 tablas |
 | Privilegios sobre particiones | `GRANT SELECT ON determinacion_2026 TO sgtm_app` | Rojo en dos pruebas |
 | Guardia del pool | Prueba gemela **sin** guardia | La fuga ocurre de verdad |
-| Reglas de ArchUnit (7) | Clase de muestra que viola cada una | Las siete muerden |
-| Escáner del código fuente | Muestras con `SET SESSION`, `DELETE` y `UPDATE` prohibidos | Las detecta |
-| Reglas de ESLint del frontend (9) | Quitando la regla de tildes: su prueba se pone roja | Las nueve muerden |
+| Patrón de repositorio (11 pruebas) | Conectando como superusuario en vez de `sgtm_app` | Rojo en 7 de las 11 |
+| Reglas de ArchUnit (11) | Clase de muestra que viola cada una | Las once muerden, ya sobre dominio real |
+| Observación obligatoria (regla 10) | Quitando la `Observacion` de `RegistrarVia` | Rojo en `verificarArquitectura` |
+| Auditoría contra PostgreSQL (8 pruebas) | Observación en blanco por SQL directo | La operación completa se deshace |
+| Contrato de la API vs. rutas publicadas | Publicando una ruta que el contrato no tiene | Rojo en las dos direcciones |
+| Los errores no filtran esquema | Mensaje real de PostgreSQL con tabla y restricción | Ni tabla, ni restricción, ni SQL en la respuesta |
+| Autorización contra PostgreSQL (7 pruebas) | Quitando `@RequiereAcceso` de `ViaController` | Rojo en `verificarArquitectura` |
+| Administración de seguridad (9 pruebas) | Sembrando dos municipalidades y consultando cruzado | Desde B, el usuario de A no existe |
+| Permisos y precedencia (9 pruebas) | Quitando la guarda del último administrador | Rojo: el sistema se queda sin quien administre |
+| Sesión y auditoría (15 pruebas) | Consultando `auditoria_2026` en vez de la tabla padre | La aplicación no tiene privilegio sobre la partición |
+| Sellado de parámetros (9 pruebas) | Quitando el disparador de inmutabilidad de `V9` | Rojo: un conjunto sellado se deja editar |
+| Lectura sellada (6 pruebas) | Quitando `AND estado = 'SELLADO'` de la consulta, y resolviendo por ejercicio en vez de por conjunto | Rojo: se deja leer un conjunto abierto; rojo: el recálculo devuelve la v2 donde la determinación usó la v1 |
+| Motor de reglas como grafo (15 pruebas, sin base ni reloj) | Volviendo a la cadena lineal: aplicar en orden de registro sin mirar las dependencias | Rojo en 8 de las 15: la convergencia de dos ramas no se puede expresar encadenando |
+| Escáner del código fuente | Muestras con `SET SESSION`, `DELETE`, `UPDATE` prohibidos, con una política de redondeo escrita a mano y con la UIT, un tramo y una alícuota compilados (regla 5) | Las detecta; neutralizando el patrón de la regla 5, rojo |
+| Reglas de ESLint del frontend (10) | Quitando la regla de tildes, y la de `fetch`: sus pruebas se ponen rojas | Las diez muerden |
+| Las 134 pantallas se dibujan | Montando cada una contra el proxy, y recorriéndolas en Chromium | 134 en verde, 0 errores |
+| Los caminos de FRO-03 §6 | Playwright: caja solo con teclado, portal en 360 px, y la misma hoja A4 en dos módulos | Pasan; el primero encontró que la paleta no se operaba con teclado |
+| El presupuesto de paquete muerde | Bajándolo por debajo de lo que mide el arranque | Rojo, con el número y qué hacer |
+| El juego de datos simulado no llega a producción | Comparando las dos compilaciones, con y sin la bandera | El chunk desaparece |
+| Un cambio del contrato rompe la compilación | Renombrando `codRefCatastral` en `sgtm-v1.yaml` y compilando con `tsc` | Rojo; al devolverlo, verde |
+| El módulo de seguridad conectado (11 pruebas) | Quitando la guarda de `leerPaginado`, el ejercicio de la bitácora, el vaciado de la caché, la lista blanca del cuerpo y el bloqueo de los campos de clave | Las cinco lo ponen rojo |
+| El panel y el portal (12 pruebas) | Retocando un indicador, deduciendo el avance, y quitando la fecha de corte | Dos, dos y una en rojo |
+| La copia se ve como copia (7 pruebas) | Quitando el aviso permanente, poniéndoselo también a omisos, y recomponiendo una cifra de determinación | Cuatro, una y tres en rojo |
+| Licencias y el acto inalcanzable (8 pruebas) | Abriendo lo opcional, impidiendo que viaje el filtro de descripción, y cambiando el patrón de lo irreversible | Las tres lo ponen rojo |
+| Infracciones administrativas (8 pruebas) | Quitando las firmas del bloque, recomponiendo una cifra, habilitando sin observación, y mandando la página aunque sea la primera | Dos, una, tres y una en rojo |
+| Trece reportes, una hoja (14 pruebas) | Quitando las firmas del bloque, quitando la marca de no imprimible, y alterando una celda numérica al dibujarla | Seis, seis y una en rojo |
+| El expediente coactivo (26 pruebas) | Habilitando las acciones secundarias, dejando la insignia sin texto, y haciendo que `puedeVer` devuelva cierto siempre | Cuatro, una y una en rojo |
+| Lo irreversible se confirma (11 pruebas) | Quitando generar, notificar y coactiva de la lista, volviendo a «¿estás seguro?», y enviando sin confirmar | Cuatro, dos y tres en rojo |
+| La caja (6 pruebas) | Quitando el `focus()` tras guardar, enfocando en cada render en vez de en el flanco, y regenerando la clave de idempotencia en cada envío | Dos, una y una en rojo |
+| El módulo que más escribe (12 pruebas) | Habilitando la acción primaria sin observación, y rellenando la deuda del padrón con lo del prototipo | Nueve y una en rojo |
+| Ninguna cifra sin su fecha (17 pruebas) | Quitando el bloque de fecha de cálculo, restando el saldo en la interfaz y añadiendo una función de sumar a `@sgtm/dominio` | Trece, dos y una en rojo |
+| Catastro conectado (13 pruebas) | Quitando el bloque de versionado, el `historico=true`, la guarda de la ruta, poniéndole cifra al arancel rural y devolviendo el desplegable a las opciones del prototipo | Las cinco lo ponen rojo |
+| Padron de contribuyentes (15 pruebas) | Sustituyendo la aproximación por igualdad exacta, y bajando el umbral de parecido a cero | Rojo: el nombre mal escrito no encuentra a nadie; rojo: devuelve el padrón entero |
+| Ficha del contribuyente (12 pruebas) | No cerrando el domicilio anterior al mudar, y resolviendo «la última» en vez de la vigente a la fecha | Rojo: dos domicilios abiertos; rojo: una notificación de marzo usaría la dirección de setiembre |
+| Predio, catálogos y titularidad (17 pruebas) | Cambiando el disparador de la titularidad de diferido a inmediato, contra PostgreSQL | Rojo: una transferencia legítima —cerrar una titularidad y abrir otra— se vuelve imposible |
+| Ficha catastral versionada (11 pruebas) | Sobrescribiendo el `uso` de la versión anterior al cerrarla, y no copiando sus construcciones al versionar | Rojo: el historial miente; rojo: la versión nueva nace vacía |
+| Las otras tres fichas (14 pruebas) | Cinco roturas: `siguienteVersion` sin copiar el detalle; sin la comprobación de que el detalle es del tipo de la ficha; sin el disparador diferido del reparto; `vigenteA` resolviendo «la última»; y `TierraRural` admitiendo metros | Rojo las cinco. La segunda deja construir una ficha económica con grupos de tierra; la última admite 15 000 m² leídos como hectáreas |
+| Consulta de fichas e histórico (24 pruebas) | Escribiendo el prefijo con `LIKE` en vez de por rango, y devolviendo el padrón entero cuando el filtro por titular no encuentra a nadie | Rojo: el plan pasa a `Seq Scan` sobre 30 000 predios; rojo: buscar un nombre inexistente devolvía todo |
+| La fecha de auditoría sale del reloj inyectado | Devolviéndola al `DEFAULT now()` de la base | Rojo: la fila cae en un día que no es el del ejercicio con que se particionó |
+| Documentos en tres formatos (26 pruebas) | Cinco roturas: el PDF con fecha de creación dentro; el RTF sin escapar lo no-ASCII; sin la comprobación de que la reimpresión sale igual; sin el disparador de inmutabilidad; y el duplicado sin marcar | Rojo las cinco. La primera es lo que haría cualquier biblioteca de PDF; la segunda escribe «PE?A GARC?A» en un documento oficial |
+| Del token firmado a las filas que RLS deja ver (11 pruebas, con un emisor OIDC propio) | Cuatro roturas: sin `oauth2ResourceServer`; con `/api/v1/**` en `permitAll()`; con solo `jwk-set-uri`, sin `issuer-uri`; y el filtro leyendo `X-Municipalidad-Id` «por comodidad» | 5, 1, 1 y 1 en rojo |
+| Padron vehicular (13 pruebas) | Cinco roturas: la unicidad de la placa sobre el texto tal cual; el cambio de placa sincronizando `papeleta.placa`; la auditoria llaveada por la placa; los valores referenciales resueltos por ejercicio; y la consulta sin `@Transactional` | 1, 1, 2, 2 y 4 en rojo |
+| Las guardas del generador de operaciones (6) | Un contrato de muestra que viola cada una | Las seis muerden |
+| La marca de la instalación de demostración (19 pruebas) | Quitando el bloque de la marca de **cada renderizador por separado**; marcando solo al dibujar en vez de al emitir; y cambiando la caché del régimen por una global de un solo valor | Cada renderizador roto pone en rojo su formato y solo el suyo; 2 en rojo; 2 en rojo —la caché global hace que la primera municipalidad que emita decida por todas, y en el orden malo la marcha blanca emite **sin** marca— |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con
 `-Dsgtm.pruebas.postgres.url` ([`backend/README.md`](backend/README.md)).

@@ -5,22 +5,21 @@
 
 ## 0. Qué existe hoy
 
-El espacio de trabajo, no la interfaz. `frontend/` monta yarn workspaces, los tres paquetes
-compartidos, el andamio de la aplicación y las verificaciones que hacen cumplir las reglas del
-proyecto. **Ninguna de las 134 pantallas está implementada, y es deliberado**: es el mismo orden
-que siguió el backend, que construyó las barreras de aislamiento antes que el primer caso de uso.
+**Las 134 pantallas, y ninguna conectada al backend real.** El catálogo del prototipo está portado
+a datos tipados y un solo renderizador las compone; los datos llegan por HTTP desde un proxy que
+simula la API ([`ADR-0010`](../30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md)).
 
 | | Estado |
 |---|---|
 | `frontend/packages/dominio` | Importe, Fecha, Estado y su formateo — **con pruebas** |
-| `frontend/packages/api-client` | Cliente HTTP: token en memoria, `Idempotency-Key` — **con pruebas** |
-| `frontend/packages/design-system` | Tokens de Juris PE y estilos base. **Sin componentes todavía** |
-| `frontend/apps/backoffice` | Arranca y monta un marcador de posición. **Sin interfaz** |
-| `frontend/verificaciones` | Nueve prohibiciones, cada una con su muestra que la viola |
+| `frontend/packages/api-client` | Cliente HTTP y el contrato `DatosDePantalla` — **con pruebas** |
+| `frontend/packages/design-system` | Tokens de Juris PE y los componentes que usan las pantallas |
+| `frontend/packages/api-mock` | **El proxy de datos**: responde las 134 operaciones del contrato |
+| `frontend/apps/backoffice` | Shell, navegación de dos niveles, paleta de comandos, hub de módulo y **el renderizador con sus diez bloques** |
+| `frontend/verificaciones` | Diez prohibiciones, cada una con su muestra que la viola |
 
-La interfaz se implementa en la siguiente iteración, a partir de
-[`design/design_handoff_sgtm_web/README.md`](../../design/design_handoff_sgtm_web/README.md) y de
-[`mapa-de-pantallas.md`](mapa-de-pantallas.md) (FRO-03).
+Lo que **no** existe: ninguna operación va contra Spring Boot, porque Spring Boot todavía no sirve
+ninguna. Es el paso 4 de [FRO-03 §7](mapa-de-pantallas.md), y se hace opción por opción.
 
 ## 1. Una aplicación, con la separación del portal aplazada
 
@@ -161,14 +160,24 @@ con el esqueleto de carga del design system y un mensaje centrado entre hairline
 
 ## 8. Lo que todavía no está
 
-- **Los tipos de la API se escriben a mano.** Falta generar el cliente desde
-  [`sgtm-v1.yaml`](../50-api/openapi/sgtm-v1.yaml) para que un cambio de contrato rompa la
-  compilación. El contrato ya existe; falta enchufar la generación al build.
-- **No hay autenticación real.** El flujo con PKCE contra el proveedor OIDC (ADR-0005) sustituirá
-  al `guardarToken` manual.
-- **No hay servidor de datos de ejemplo.** El SRTM tiene uno; aquí el catálogo del prototipo trae
-  filas de muestra en sus propios descriptores, así que la interfaz puede construirse antes de
-  decidirlo. Si la iteración de interfaz lo necesita, se añade como workspace.
+- ~~**Los tipos de la API se escriben a mano.**~~ **Hecho:** los tipos de las 134 operaciones se
+  generan desde [`sgtm-v1.yaml`](../50-api/openapi/sgtm-v1.yaml) hacia `operaciones.generado.ts`,
+  y `yarn verificar` regenera y compara. Un campo renombrado en el contrato deja de compilar el
+  código que usaba el nombre viejo. **Lo que sigue pendiente son los esquemas de cuerpo y
+  respuesta**: el contrato declara verbo, ruta y parámetros, y el esquema de cada recurso se
+  escribe cuando su backend existe.
+- ~~**No hay autenticación real.**~~ **Hecho:** Authorization Code con PKCE, token en memoria,
+  renovación silenciosa que no desmonta nada, cierre de sesión que vacía la caché y cambio de
+  municipalidad que la vacía **antes** de pedir el token nuevo. Lo que sigue abierto es **D-06**:
+  el claim con las municipalidades autorizadas, que es lo que hace falta para el **selector**; el
+  flujo de una sola municipalidad no lo espera.
+- **El servidor de datos de ejemplo es un proxy en el navegador**, no un proceso aparte:
+  `@sgtm/api-mock` sustituye `fetch` y responde las 134 operaciones. Se reabre si hace falta
+  simular volumen o escrituras con estado (ADR-0010).
+- ~~**Los parámetros de ruta no están resueltos.**~~ **Hecho:** el registro abierto va en la ruta
+  (`/rentas-registro/vehiculos/ABC-123`) y los filtros, el orden y la página en la consulta. Sin
+  registro no hay petición. Lo que queda por decidir, opción por opción, es **qué búsqueda abre qué
+  ficha** cuando el catálogo no lo dice.
 - **No hay pruebas de extremo a extremo.** Playwright, para la caja y la consulta del portal.
 - **No hay presupuesto de tamaño de paquete en CI.**
 - **Las tres familias tipográficas se cargan de Google Fonts.** Para una municipalidad con red

@@ -1,0 +1,1350 @@
+/* ============================================================
+   Shell y bloques de contenido.
+
+   Medidas tomadas de `design/SGTM.dc.html`, que el handoff declara fuente de
+   verdad: el prototipo las lleva en linea y con valores literales para que se
+   copien exactas. Lo unico que cambia es que aqui son clases.
+
+   Lo que es de un componente reutilizable esta en el design system
+   (`packages/design-system/src/estilos/componentes.css`); aqui solo vive lo que
+   compone la aplicacion: barra lateral, cabecera, paleta, hub y los diez
+   bloques del renderizador.
+   ============================================================ */
+
+/* —— Shell ——————————————————————————————————————————————————— */
+
+.sgtm-shell {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.sgtm-shell__principal {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sgtm-shell__contenido {
+  padding: 22px 20px 72px;
+  animation: fadeIn 0.35s ease;
+}
+
+.sgtm-shell__columna {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.sgtm-shell__scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(26, 22, 18, 0.34);
+}
+
+/* —— Barra lateral ————————————————————————————————————————————
+   `--nav-alto` lo fija la densidad elegida: 8 | 10 | 13 px. Un cajero trabaja
+   en compacta ocho horas al dia. */
+
+.sgtm-nav {
+  width: 258px;
+  flex: 0 0 258px;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.sgtm-nav__cabecera {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+
+.sgtm-nav__marca {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.sgtm-nav__identidad {
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.sgtm-nav__producto {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.sgtm-nav__entidad {
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sgtm-nav__buscador {
+  padding: 10px 10px 6px;
+}
+
+.sgtm-nav__buscador button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: var(--bg);
+  text-align: left;
+  color: var(--ink-3);
+}
+
+.sgtm-nav__buscador button:hover {
+  border-color: var(--ink-4);
+}
+
+.sgtm-nav__buscador span {
+  flex: 1;
+  font-size: 13px;
+}
+
+.sgtm-nav__buscador kbd,
+.sgtm-paleta kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  padding: 2px 5px;
+}
+
+.sgtm-nav__lista {
+  padding: 4px 10px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sgtm-nav__eyebrow {
+  margin: 8px 0 4px;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-4);
+}
+
+.sgtm-nav__reciente {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+}
+
+.sgtm-nav__reciente:hover,
+.sgtm-nav__modulo:hover,
+.sgtm-nav__opcion:hover {
+  background: var(--accent-soft);
+}
+
+.sgtm-nav__reciente-etiqueta {
+  font-size: 13px;
+  color: var(--ink-2);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sgtm-nav__reciente-modulo {
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+
+.sgtm-nav__divisor {
+  height: 1px;
+  border: 0;
+  background: var(--line);
+  margin: 10px 8px 4px;
+}
+
+.sgtm-nav__modulo {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: calc(var(--nav-alto, 10px) + 2px) 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  color: var(--ink-4);
+}
+
+.sgtm-nav__icono {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-card);
+  border: 1px solid var(--line-2);
+  color: var(--ink-3);
+}
+
+.sgtm-nav__modulo-texto {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.sgtm-nav__modulo-etiqueta {
+  display: block;
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sgtm-nav__modulo-conteo {
+  display: block;
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+
+.sgtm-nav__volver {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  color: var(--ink-3);
+  text-align: left;
+}
+
+.sgtm-nav__volver:hover {
+  color: var(--accent-ink);
+}
+
+.sgtm-nav__modulo-actual {
+  margin: 0;
+  padding: 4px 8px 8px;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.sgtm-nav__bloque {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  margin: 10px 0 2px;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.sgtm-nav__caret,
+.sgtm-seccion__caret {
+  display: inline-flex;
+  color: var(--ink-4);
+  transition: transform 0.15s ease;
+}
+
+.sgtm-nav__caret[data-cerrado='1'],
+.sgtm-seccion__caret[data-cerrada='1'] {
+  transform: rotate(-90deg);
+}
+
+.sgtm-nav__bloque-etiqueta {
+  flex: 1;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-4);
+}
+
+.sgtm-nav__bloque-conteo,
+.sgtm-nav__opcion-punto {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+}
+
+.sgtm-nav__opcion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: var(--nav-alto, 10px) 10px;
+  border-radius: 7px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.sgtm-nav__opcion.active {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.sgtm-nav__opcion-etiqueta {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* —— Cabecera ————————————————————————————————————————————————— */
+
+.sgtm-cabecera {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.sgtm-cabecera__hamburguesa {
+  display: none;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--bg-card);
+}
+
+.sgtm-cabecera__titulos {
+  min-width: 0;
+  flex: 1;
+}
+
+.sgtm-cabecera__eyebrow {
+  margin: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+.sgtm-cabecera__titulo {
+  margin: 2px 0 0;
+  font-family: var(--font-serif);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sgtm-cabecera__lupa {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--ink-2);
+}
+
+.sgtm-cabecera__lupa:hover,
+.sgtm-cabecera__hamburguesa:hover {
+  border-color: var(--ink-4);
+}
+
+.sgtm-cabecera__derecha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sgtm-cabecera__endpoint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 11px;
+  white-space: nowrap;
+}
+
+/* ── Versionado de la ficha ─────────────────────────────────────────────
+   Va arriba del formulario porque contesta la primera pregunta de quien abre
+   una ficha: cual de todas estoy viendo. Sin eso, el area de la pantalla es
+   un numero sin fecha. */
+.sgtm-versionado {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.sgtm-versionado__actual {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 16px;
+}
+
+.sgtm-versionado__titulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sgtm-versionado__numero {
+  font-weight: 600;
+  color: var(--ink-1);
+}
+
+.sgtm-versionado__vigencia {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.sgtm-versionado__origen,
+.sgtm-versionado__autor {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.sgtm-versionado__historico {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+/* La version vigente se distingue con una barra **y** con su texto «VIGENTE»
+   arriba: el estado no se comunica solo por color (FRO-02 §2.1). */
+.sgtm-versionado__historico li {
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+}
+
+.sgtm-versionado__historico li[data-vigente='1'] {
+  border-left-color: var(--accent);
+}
+
+.sgtm-versionado__fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+}
+
+.sgtm-versionado__observacion {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--ink-2);
+  /* Entera: un «…» aqui obliga a abrir otra cosa para terminar de leerla. */
+  overflow-wrap: anywhere;
+}
+
+/* El ejercicio de trabajo va en la cabecera y **no se oculta en movil**: es
+   global a la sesion, y una cifra de 2025 leida como si fuera de 2026 es un
+   error de atencion al contribuyente, no un detalle de pantalla estrecha. */
+.sgtm-cabecera__ejercicio {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 11px;
+  white-space: nowrap;
+}
+
+.sgtm-cabecera__ejercicio strong {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-1);
+  font-weight: 600;
+}
+
+.sgtm-cabecera__usuario {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-card);
+}
+
+.sgtm-cabecera__avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sgtm-cabecera__identidad {
+  line-height: 1.15;
+  display: flex;
+  flex-direction: column;
+}
+
+.sgtm-cabecera__nombre {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.sgtm-cabecera__rol {
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+/* —— Paleta de comandos ———————————————————————————————————————— */
+
+.sgtm-paleta__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(26, 22, 18, 0.4);
+  backdrop-filter: blur(2px);
+}
+
+.sgtm-paleta {
+  position: fixed;
+  z-index: 81;
+  top: 11vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(620px, 92vw);
+  background: var(--bg-card);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+  animation: fadeIn 0.18s ease;
+}
+
+.sgtm-paleta__campo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-3);
+}
+
+.sgtm-paleta__campo input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  font-size: 15px;
+  color: var(--ink);
+  outline: none;
+}
+
+.sgtm-paleta__resultados {
+  list-style: none;
+  margin: 0;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.sgtm-paleta__resultados button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+}
+
+.sgtm-paleta__resultados button:hover {
+  background: var(--accent-soft);
+}
+
+.sgtm-paleta__etiqueta {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sgtm-paleta__modulo {
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.sgtm-paleta__pie {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* —— Hub de modulo ———————————————————————————————————————————— */
+
+.sgtm-hub__cabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 22px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.sgtm-hub__icono {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  display: grid;
+  place-items: center;
+}
+
+.sgtm-hub__titulo {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.sgtm-hub__conteo {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.sgtm-hub__rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.sgtm-hub__bloque-cabecera {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sgtm-hub__bloque-etiqueta {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+.sgtm-hub__filas {
+  display: flex;
+  flex-direction: column;
+}
+
+.sgtm-hub__fila {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-4);
+}
+
+.sgtm-hub__fila:hover {
+  background: var(--accent-soft);
+}
+
+.sgtm-hub__fila-texto {
+  flex: 1;
+  min-width: 0;
+}
+
+.sgtm-hub__fila-etiqueta {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.sgtm-hub__fila-desc {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-3);
+  text-wrap: pretty;
+}
+
+/* —— Bloque 1: descripcion ————————————————————————————————————— */
+
+.sgtm-descripcion {
+  margin: 0;
+  max-width: 70ch;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+
+/* —— Bloque 2: panel de indicadores ————————————————————————————— */
+
+.sgtm-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.sgtm-kpis__tarjeta {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 16px 14px;
+  box-shadow: var(--shadow-1);
+}
+
+.sgtm-kpis__nota {
+  margin: 7px 0 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.sgtm-paneles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.sgtm-panel__nota {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.sgtm-panel__filas {
+  padding: 6px 16px 14px;
+}
+
+.sgtm-panel__fila {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sgtm-panel__texto {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sgtm-panel__etiqueta {
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sgtm-panel__sub {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.sgtm-panel__barra {
+  width: 110px;
+  height: 6px;
+  flex: 0 0 110px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  overflow: hidden;
+}
+
+.sgtm-panel__barra span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.sgtm-panel__valor {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  text-align: right;
+  min-width: 76px;
+}
+
+/* —— Bloque 3: portal ciudadano ———————————————————————————————— */
+
+.sgtm-portal {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 12px;
+  padding: 26px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sgtm-portal__texto {
+  min-width: 260px;
+  flex: 1;
+}
+
+.sgtm-portal__eyebrow {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.sgtm-portal__titular {
+  margin: 8px 0 0;
+  font-family: var(--font-serif);
+  font-size: 29px;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.sgtm-portal__titular em {
+  font-style: italic;
+}
+
+.sgtm-portal__consulta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.sgtm-portal__consulta select,
+.sgtm-portal__consulta input {
+  border: 0;
+  border-radius: 6px;
+  padding: 11px 12px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.sgtm-portal__consulta select {
+  min-width: 96px;
+}
+
+.sgtm-portal__consulta input {
+  min-width: 150px;
+}
+
+.sgtm-boton.sgtm-portal__boton {
+  background: #fff;
+  color: var(--accent);
+  font-weight: 600;
+  padding: 11px 20px;
+}
+
+/* Etiqueta para quien navega con lector de pantalla; el placeholder no basta. */
+.sgtm-portal__oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.sgtm-pasos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sgtm-pasos__paso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-card);
+  color: var(--ink-3);
+}
+
+.sgtm-pasos__paso[data-hecho='1'] {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.sgtm-pasos__numero {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.sgtm-pasos__etiqueta {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* —— Bloque 4: filtros ————————————————————————————————————————— */
+
+.sgtm-filtros {
+  padding: 14px 16px 16px;
+}
+
+.sgtm-filtros__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sgtm-filtros__eyebrow {
+  margin: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--ink-3);
+}
+
+.sgtm-filtros__rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.sgtm-filtros__rejilla .sgtm-boton--primario {
+  height: 38px;
+}
+
+/* —— Bloque 5: tabla ——————————————————————————————————————————— */
+
+.sgtm-tarjeta__acciones {
+  display: flex;
+  gap: 8px;
+}
+
+/* —— Bloque 6: totales ————————————————————————————————————————— */
+
+.sgtm-totales {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.sgtm-totales__celda {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  padding: 14px 16px;
+}
+
+.sgtm-totales__celda[data-fuerte='1'] {
+  background: var(--accent-soft);
+}
+
+.sgtm-totales__etiqueta {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--ink-3);
+}
+
+.sgtm-totales__valor {
+  font-family: var(--font-mono);
+  font-size: 19px;
+  font-weight: 500;
+  margin-top: 6px;
+}
+
+/* A que fecha estan los datos de la pantalla. Va arriba, bajo la descripcion, y
+   no dentro de la banda de totales: es de la respuesta, y una pantalla que
+   ensena cifras en una tabla y no tiene banda las ensenaba sin fecha. */
+.sgtm-fecha-de-calculo {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.sgtm-fecha-de-calculo strong {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* —— Bloque 7: pestanas ———————————————————————————————————————— */
+
+.sgtm-pestanas {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.sgtm-pestanas__tab {
+  border: 0;
+  background: transparent;
+  padding: 11px 16px;
+  font-size: 13.5px;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-3);
+}
+
+.sgtm-pestanas__tab[data-activa='1'] {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* —— Bloque 8: formulario —————————————————————————————————————— */
+
+.sgtm-formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sgtm-seccion__cabecera {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.sgtm-seccion__hint {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.sgtm-seccion__rejilla {
+  padding: 18px 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+  gap: 15px 16px;
+}
+
+/* —— Bloque 9: hoja de reporte ————————————————————————————————— */
+
+.sgtm-hoja {
+  display: block;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: var(--shadow-2);
+  padding: 40px 44px;
+  max-width: 820px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.sgtm-hoja__cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 14px;
+}
+
+.sgtm-hoja__entidad {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sgtm-hoja__unidad {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.sgtm-hoja__referencia {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  line-height: 1.7;
+}
+
+.sgtm-hoja__titulo {
+  margin: 22px 0 4px;
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.sgtm-hoja__subtitulo {
+  margin: 0 0 22px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.sgtm-hoja__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px 22px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 14px 0;
+  margin-bottom: 18px;
+}
+
+.sgtm-hoja__meta-clave {
+  margin: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--ink-3);
+}
+
+.sgtm-hoja__meta-valor {
+  margin: 3px 0 0;
+  font-size: 13.5px;
+}
+
+.sgtm-hoja__tabla {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sgtm-hoja__tabla th {
+  padding: 9px 8px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--ink);
+}
+
+.sgtm-hoja__tabla td {
+  padding: 10px 8px;
+  font-size: 13px;
+}
+
+.sgtm-hoja__tabla tbody tr {
+  border-bottom: 1px solid var(--line);
+}
+
+.sgtm-hoja--numerica {
+  text-align: right;
+}
+
+.sgtm-hoja__tabla td.sgtm-hoja--numerica {
+  font-family: var(--font-mono);
+}
+
+.sgtm-hoja__cierre {
+  margin-top: 26px;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+
+.sgtm-hoja__firmas {
+  display: flex;
+  justify-content: space-between;
+  gap: 40px;
+  margin-top: 56px;
+}
+
+.sgtm-hoja__firmas span {
+  flex: 1;
+  border-top: 1px solid var(--ink);
+  padding-top: 7px;
+  font-size: 11.5px;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+.sgtm-hoja__botones {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+/* —— Bloque 10: barra de acciones —————————————————————————————— */
+
+.sgtm-acciones {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--line);
+  background: linear-gradient(to top, var(--bg) 62%, transparent);
+}
+
+/* —— Responsive ———————————————————————————————————————————————
+   ≤1080px la barra lateral pasa a cajon; ≤760px desaparece lo accesorio. */
+
+@media (max-width: 1080px) {
+  .sgtm-nav {
+    position: fixed;
+    z-index: 60;
+    inset: 0 auto 0 0;
+    transform: translateX(-101%);
+    transition: transform 0.2s ease;
+  }
+
+  .sgtm-nav[data-abierta='1'] {
+    transform: none;
+    box-shadow: var(--shadow-3);
+  }
+
+  .sgtm-cabecera__hamburguesa {
+    display: inline-flex;
+  }
+
+  .sgtm-shell__scrim[data-abierta='1'] {
+    display: block;
+  }
+}
+
+@media (max-width: 760px) {
+  [data-oculto-en-movil] {
+    display: none !important;
+  }
+}
+
+/* —— Impresion: A4 vertical, una hoja por reporte (RNF-084) ————— */
+
+@media print {
+  /* Lo que sale de la municipalidad es la hoja y nada mas (RNF-084). Todo lo que
+     es interfaz lleva `data-no-imprimible` y lo esconde `base.css` del design
+     system; aqui van las dos piezas del shell que no lo llevan. */
+  .sgtm-nav,
+  .sgtm-cabecera {
+    display: none !important;
+  }
+
+  .sgtm-shell__contenido {
+    padding: 0;
+    animation: none;
+  }
+
+  .sgtm-hoja {
+    box-shadow: none;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    max-width: none;
+  }
+}

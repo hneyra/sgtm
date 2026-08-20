@@ -25,7 +25,8 @@
     "paths": {
       "@sgtm/dominio": ["packages/dominio/src/index.ts"],
       "@sgtm/design-system": ["packages/design-system/src/index.ts"],
-      "@sgtm/api-client": ["packages/api-client/src/index.ts"]
+      "@sgtm/api-client": ["packages/api-client/src/index.ts"],
+      "@sgtm/api-mock": ["packages/api-mock/src/index.ts"]
     }
   }
 }

@@ -1,160 +1,117 @@
-# Verificación del backend en cada pull request (CAL-01 §2).
+# Verificacion del backend. Lo que este workflow ejecuta es exactamente lo que
+# CLAUDE.md pide antes de un PR, sin atajos:
 #
-# Un job por barrera, y no un único `./gradlew build`, a propósito: cuando algo se
-# rompe, el nombre del check ya dice qué barrera cayó sin abrir el log. Las tres
-# son bloqueantes; ninguna se salta a sí misma.
+#   ./gradlew verificarAislamiento    aislamiento multi-tenant. Requiere Docker.
+#   ./gradlew verificarArquitectura   ArchUnit, escaner de fuentes y Spring Modulith.
+#   ./gradlew build                   compilacion, Spotless, Checkstyle y NullAway.
 #
-#   calidad      Spotless, Checkstyle y NullAway, más la compilación de todo módulo
-#   arquitectura ArchUnit, escáner del código fuente y límites de Spring Modulith
-#   aislamiento  Aislamiento multi-tenant: esquema y pool. Necesita Docker
+# Van en pasos separados a proposito, aunque `build` acabe ejecutando las mismas
+# pruebas: cuando algo se rompe, el nombre del paso ya dice que barrera cayo.
+#
+# Las pruebas de persistencia NO se omiten sin Docker: fallan. Una verificacion
+# bloqueante que se salta a si misma deja el build en verde sin haber verificado
+# nada, que es peor que no tenerla. El runner de GitHub trae Docker.
+
 name: Backend
 
 on:
-  pull_request:
-    paths:
-      - 'backend/**'
-      - '.github/workflows/backend.yml'
   push:
     branches: [main]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/backend.yml'
+  pull_request:
   workflow_dispatch:
 
-# El backend no publica nada desde CI: solo lee el repositorio.
+# Un push nuevo sobre la misma rama cancela la ejecucion anterior.
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
-# Un push nuevo a la misma rama cancela la corrida anterior; en main no se cancela
-# nada, porque ahí cada commit tiene que quedar verificado.
-concurrency:
-  group: backend-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
-env:
-  # ADR-0001 fija Java 25. El job `calidad` verifica que este número siga siendo el
-  # mismo que declara backend/gradle.properties.
-  JAVA_VERSION: '25'
-
-defaults:
-  run:
-    working-directory: backend
-
 jobs:
-  calidad:
-    name: Calidad — formato, estilo y nulidad
+  verificar:
+    name: Verificaciones bloqueantes
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v5
+    timeout-minutes: 30
 
-      # gradle.properties permite construir con otra versión de Java para el
-      # entorno que todavía no tiene el JDK 25; CI usa siempre la de ADR-0001. Si
-      # alguien cambia la propiedad, esto falla y obliga a cambiar también aquí,
-      # en vez de que CI verifique en silencio una versión distinta de la del
-      # despliegue.
-      - name: La versión de Java declarada es la que usa CI
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ADR-0001 fija Java 25. La propiedad `sgtm.java.version` existe para poder
+      # construir en una maquina que todavia no lo tenga; aqui se usa el valor por
+      # omision, que es el unico admitido. Y se comprueba en vez de suponerse: si
+      # alguien cambiara la propiedad, CI verificaria en silencio una version de
+      # Java distinta de la que se despliega.
+      - name: La version de Java declarada es la que instala CI
         run: |
           declarada=$(sed -n 's/^sgtm\.java\.version=//p' gradle.properties)
-          if [ "$declarada" != "$JAVA_VERSION" ]; then
-            echo "::error file=backend/gradle.properties::gradle.properties declara Java $declarada y este workflow instala Java $JAVA_VERSION. Actualiza JAVA_VERSION en .github/workflows/backend.yml."
+          if [ "$declarada" != "25" ]; then
+            echo "::error file=backend/gradle.properties::gradle.properties declara Java $declarada y este workflow instala Java 25. ADR-0001 fija 25; si de verdad cambia, cambia tambien .github/workflows/backend.yml."
             exit 1
           fi
 
-      - uses: actions/setup-java@v5
+      - name: Instalar JDK 25
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
+          java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          # Que el wrapper del repositorio sea el distribuido por Gradle y no un
-          # jar sustituido en un PR.
-          validate-wrappers: true
+      - name: Preparar Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      # `build -x test` deja fuera solo las pruebas: Spotless, Checkstyle y
-      # NullAway sí corren, y sobre las fuentes de prueba también. Las pruebas son
-      # de los otros dos jobs.
-      - name: ./gradlew build -x test
-        run: ./gradlew build -x test
+      # El wrapper descarga la distribucion de services.gradle.org, que devuelve
+      # 502 de vez en cuando. Sin este paso, ese 502 aparece como un build rojo
+      # indistinguible de un fallo real, y la reaccion natural —relanzar— acaba
+      # normalizando el relanzamiento como respuesta a cualquier rojo.
+      #
+      # Se hace aparte y con reintentos para que el fallo de red tenga su propio
+      # nombre. Una vez descargada queda en la cache, asi que los pasos de abajo
+      # ya no vuelven a pedirla.
+      - name: Descargar la distribucion de Gradle, con reintentos
+        run: |
+          for intento in 1 2 3 4; do
+            if ./gradlew --version; then
+              exit 0
+            fi
+            echo "Intento $intento fallido; se reintenta en $((intento * 10))s"
+            sleep $((intento * 10))
+          done
+          echo "No se pudo descargar la distribucion de Gradle tras cuatro intentos"
+          exit 1
 
-      - name: Reportes de calidad
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: reportes-calidad
-          path: backend/**/build/reports/checkstyle/
-          if-no-files-found: ignore
-          retention-days: 7
-
-  arquitectura:
-    name: Arquitectura — ArchUnit, escáner y Modulith
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          validate-wrappers: true
-
-      - name: ./gradlew verificarArquitectura
-        run: ./gradlew verificarArquitectura
-
-      - name: Reportes de prueba
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: reportes-arquitectura
-          path: |
-            backend/**/build/reports/tests/
-            backend/**/build/test-results/
-          if-no-files-found: ignore
-          retention-days: 7
-
-  aislamiento:
-    name: Aislamiento multi-tenant — esquema y pool
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          validate-wrappers: true
-
-      # Sin motor de base de datos la prueba falla, no se salta (CAL-01 §2). Se
-      # comprueba antes y se descarga la imagen aparte para que un runner sin
-      # Docker o un registro caído se distingan de un fallo de aislamiento de
-      # verdad, que es lo único que este job debería reportar en rojo.
-      - name: Docker e imagen de PostgreSQL
+      # Por el mismo motivo que el paso anterior: sin esto, un runner sin Docker o
+      # un registro caido salen en rojo como si fueran un fallo de aislamiento, y
+      # el rojo que mas importa del proyecto es justo el que no puede confundirse
+      # con otra cosa. Que la prueba no se salte sin Docker es lo que hace falta
+      # comprobar antes; no despues.
+      - name: Docker y la imagen de PostgreSQL
         run: |
           if ! docker info > /dev/null 2>&1; then
-            echo "::error::Sin Docker no hay prueba de aislamiento. La prueba no se omite: se apunta a un PostgreSQL existente con -Dsgtm.pruebas.postgres.url (backend/README.md)."
+            echo "::error::Sin Docker no hay prueba de aislamiento. La salida documentada es apuntar a un PostgreSQL existente con -Dsgtm.pruebas.postgres.url (backend/README.md); omitir la prueba no lo es."
             exit 1
           fi
           docker pull postgres:16-alpine
 
-      - name: ./gradlew verificarAislamiento
-        run: ./gradlew verificarAislamiento
+      - name: Aislamiento multi-tenant
+        run: ./gradlew verificarAislamiento --no-daemon
 
-      - name: Reportes de prueba
+      - name: Arquitectura, escaner de fuentes y limites de modulo
+        run: ./gradlew verificarArquitectura --no-daemon
+
+      - name: Build completo, con Spotless, Checkstyle y NullAway
+        run: ./gradlew build --no-daemon
+
+      - name: Publicar los informes de prueba
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: reportes-aislamiento
+          name: informes-de-prueba
           path: |
-            backend/**/build/reports/tests/
-            backend/**/build/test-results/
+            backend/**/build/reports/tests/**
+            backend/**/build/reports/checkstyle/**
           if-no-files-found: ignore
           retention-days: 7

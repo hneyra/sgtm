@@ -12,8 +12,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.filter.OncePerRequestFilter;
-import pe.gob.sgtm.compartido.MunicipalidadId;
 import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.dominio.MunicipalidadId;
+import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.RespuestaDeError;
 
 /**
  * Traduce el claim del token validado a {@link TenantContext}. Es el primer eslabon del camino de
@@ -83,8 +85,7 @@ public final class TenantContextFilter extends OncePerRequestFilter {
                             + " omision ni modo sin municipalidad (ADR-0005, RNF-032)",
                     CLAIM,
                     e.getMessage());
-            respuesta.sendError(
-                    HttpServletResponse.SC_FORBIDDEN, "El token no identifica una municipalidad");
+            responderSinMunicipalidad(respuesta);
             return;
         }
 
@@ -96,6 +97,20 @@ public final class TenantContextFilter extends OncePerRequestFilter {
             // igual que la conexion vuelve al suyo.
             TenantContext.limpiar();
         }
+    }
+
+    /**
+     * Responde 403 en {@code application/problem+json}, como cualquier otro error de la API.
+     *
+     * <p>Y no con {@code sendError}, que delega en la pagina de error del contenedor: el cliente
+     * recibiria HTML donde espera JSON, y la interfaz —que reacciona al campo {@code codigo}— no
+     * tendria a que reaccionar. Lo escribe {@link RespuestaDeError}, que es tambien lo que usa la
+     * cadena de seguridad: dos formas distintas de decir «no puedes» serian dos formas que la
+     * interfaz tendria que aprender por separado.
+     */
+    private static void responderSinMunicipalidad(HttpServletResponse respuesta)
+            throws IOException {
+        RespuestaDeError.escribir(respuesta, CodigoDeError.SIN_MUNICIPALIDAD);
     }
 
     private static @Nullable Jwt tokenDeLaAutenticacion() {

@@ -32,7 +32,17 @@ class ModulosTest {
         // contextos acotados todavia no aparecen: apareceran con su primera clase.
         assertThat(detectados)
                 .as("los modulos que ya tienen codigo")
-                .contains("compartido", "plataforma");
+                .contains(
+                        "dominio",
+                        "compartido",
+                        "plataforma",
+                        "persistencia",
+                        "auditoria",
+                        "documentos",
+                        "web",
+                        "catastro",
+                        "seguridad",
+                        "cuentacorriente");
     }
 
     @Test

@@ -17,14 +17,44 @@ contexto de tenant (token → `SET LOCAL` → RLS) y las verificaciones bloquean
 ./gradlew spotlessApply           # arregla el formato en vez de solo reprocharlo
 ```
 
+## Arrancarlo
+
+La instalación completa —motor, migración y aplicación— vive en
+[`despliegue/`](../despliegue/README.md):
+
+```bash
+cd ../despliegue
+cp .env.ejemplo .env          # y poner claves generadas, una distinta por rol
+docker compose up --build --wait aplicacion
+```
+
+Lo que hay que entender antes de tocarlo: **la aplicación no migra**. Arranca con
+`spring.flyway.enabled: false` y se conecta como `sgtm_app`, que no tiene DDL. Quien migra es
+[`Migrador`](sgtm-esquema/src/main/java/pe/gob/sgtm/esquema/Migrador.java), en su propio
+contenedor, como `sgtm_owner`, y termina antes de que la aplicación arranque. Es el **mismo**
+código que provisiona la base de cada prueba de persistencia: si el despliegue migrara por su
+cuenta, lo verificado en CI y lo desplegado en la municipalidad dejarían de ser lo mismo.
+
+La cadena de seguridad está escrita, no heredada:
+[`SeguridadWeb`](sgtm-plataforma/src/main/java/pe/gob/sgtm/plataforma/SeguridadWeb.java) deja
+público `/actuator/health`, exige token en `/api/v1/**` y **niega** todo lo demás. Del token salen
+**dos** contextos, uno por filtro y por el mismo camino: la municipalidad —`TenantContextFilter`,
+de ahí al `SET LOCAL`— y quién hace la petición —`OrigenContextFilter`, de ahí a la auditoría—.
+
+El segundo no existía, y su ausencia no se veía: nueve sitios leen `OrigenContext.actual()` y
+nadie lo fijaba, así que la primera petición autenticada del sistema devolvió 500. Es el patrón
+que conviene recordar al añadir infraestructura: no faltaba una barrera, faltaba **el camino**, y
+eso solo se ve recorriéndolo entero.
+
 **Si el build se queja del formato, no lo pelees: `spotlessApply`.** Checkstyle no revisa formato
 a propósito, para no discutir con el formateador. Lo que sí revisa, y es fácil de incumplir con el
 teclado en español, son los **identificadores con tilde**: `alicuota`, nunca `alícuota`.
 
 ## Pruebas que necesitan PostgreSQL
 
-Las de `sgtm-esquema` y `sgtm-plataforma` necesitan un **PostgreSQL real**: una base en memoria no
-tiene Row Level Security y daría falsos verdes (CAL-01 §2).
+Las de `sgtm-esquema`, `sgtm-plataforma`, `sgtm-catastro` y `sgtm-seguridad` necesitan un
+**PostgreSQL real**: una base en memoria no tiene Row Level Security y daría falsos verdes
+(CAL-01 §2).
 
 Por omisión levantan un contenedor con Testcontainers, así que hacen falta Docker y la imagen
 `postgres:16-alpine`.
@@ -33,7 +63,7 @@ Por omisión levantan un contenedor con Testcontainers, así que hacen falta Doc
 la prueba:
 
 ```bash
-./gradlew verificarAislamiento \
+./gradlew verificarAislamiento --max-workers=1 \
   -Dsgtm.pruebas.postgres.url=jdbc:postgresql://localhost:5432/postgres \
   -Dsgtm.pruebas.postgres.usuario=postgres \
   -Dsgtm.pruebas.postgres.clave=…
@@ -43,45 +73,73 @@ El usuario debe ser superusuario: la prueba crea los cuatro roles, les asigna cl
 crea una base nueva por corrida. También sirven las variables de entorno equivalentes
 (`SGTM_PRUEBAS_POSTGRES_URL`, …) y `-Dsgtm.pruebas.postgres.imagen` para cambiar la imagen.
 
+**`--max-workers=1` no es decorativo en este camino.** Cada módulo crea su propia base, pero los
+**roles de PostgreSQL son del clúster, no de la base**: dos módulos de prueba en paralelo sobre el
+mismo motor se pisan la clave efímera de `sgtm_owner`, y el fallo aparece como
+`password authentication failed`, que no se parece en nada a su causa. Con Testcontainers el
+problema no existe —cada módulo levanta su propio motor—, así que es un detalle exclusivo de esta
+salida de emergencia.
+
 **Sin motor, las pruebas fallan; no se saltan.** Una prueba bloqueante que se omite a sí misma
 deja el build en verde sin haber verificado nada.
 
 ## Integración continua
 
-Cada pull request que toca `backend/` corre
-[`.github/workflows/backend.yml`](../.github/workflows/backend.yml), con **un job por barrera**
-para que el nombre del check diga qué se rompió sin abrir el log:
+Todo pull request corre [`.github/workflows/backend.yml`](../.github/workflows/backend.yml), que
+ejecuta **los mismos tres comandos de arriba**, sin atajos y en pasos separados: cuando algo se
+rompe, el nombre del paso ya dice qué barrera cayó.
 
-| Job | Comando | Necesita Docker |
-|---|---|---|
-| `calidad` | `./gradlew build -x test` — Spotless, Checkstyle, NullAway | No |
-| `arquitectura` | `./gradlew verificarArquitectura` | No |
-| `aislamiento` | `./gradlew verificarAislamiento` | **Sí** |
+Tres cosas se comprueban **antes** de las verificaciones, para que un fallo de infraestructura no
+se disfrace de fallo del código:
 
-El runner instala el **JDK 25** de ADR-0001; el job `calidad` falla si `gradle.properties`
-declarara otra versión, porque construir en CI con una distinta de la del despliegue verifica
-otra cosa que la que se despliega.
+| Comprobación | Qué evita |
+|---|---|
+| La distribución de Gradle se descarga con reintentos | Que un 502 de `services.gradle.org` salga como build rojo, y que relanzar se vuelva la respuesta a cualquier rojo |
+| `gradle.properties` declara Java 25 | Que CI verifique en silencio una versión de Java distinta de la que se despliega |
+| Hay Docker y `postgres:16-alpine` se descarga | Que un runner sin Docker se confunda con un fallo de aislamiento, que es el rojo que menos puede confundirse con otra cosa |
 
-El job de aislamiento comprueba que hay Docker y descarga `postgres:16-alpine` **antes** de la
-prueba: así un runner sin Docker no se confunde con un fallo de aislamiento de verdad. Lo que no
-hace en ningún caso es omitir la prueba.
+Ninguna de las tres omite nada: sin Docker el job **falla**. La salida documentada es apuntar a un
+PostgreSQL existente, no saltarse la prueba.
 
-Cuando algo falla en rojo, los reportes de Checkstyle y de las pruebas quedan como artefactos de
-la corrida.
+Cuando algo termina en rojo, los informes de pruebas y de Checkstyle quedan como artefactos de la
+corrida.
+
+El frontend tiene el suyo, [`frontend.yml`](../.github/workflows/frontend.yml), y no incluye al
+backend a propósito: estas verificaciones necesitan Docker y un PostgreSQL de verdad.
 
 ## Módulos
 
 ```
-sgtm-dominio-compartido   MunicipalidadId, Ejercicio, TenantContext. Sin Spring
+sgtm-dominio-compartido   Objetos de valor (pe.gob.sgtm.dominio) y TenantContext. Sin Spring
 sgtm-esquema              Migraciones Flyway + la prueba de aislamiento. Sin Spring
-sgtm-plataforma           Filtro del token, SET LOCAL por transaccion, guardia del pool
-sgtm-<contexto> × 12      Los contextos acotados de ARQ-01 §3. Hoy vacios
+sgtm-plataforma           Filtro del token, SET LOCAL por transaccion, guardia del pool,
+                          el patron de repositorio (pe.gob.sgtm.persistencia), la
+                          auditoria de ADR-0008 (pe.gob.sgtm.auditoria), la capa web
+                          comun (pe.gob.sgtm.web) y el guardia de acceso
+                          (pe.gob.sgtm.autorizacion)
+sgtm-<contexto> × 12      Los contextos acotados de ARQ-01 §3
 sgtm-aplicacion           Ensambla, y aloja ArchUnit, el escaner y Spring Modulith
 ```
 
 Los doce contextos son `contribuyentes`, `catastro`, `rentas`, `parametros`, `fiscalizacion`,
 `sanciones`, `cuentacorriente`, `tesoreria`, `valores`, `coactiva`, `licencias` y `seguridad`.
-Están vacíos a propósito: la estructura fija los límites antes de que haya código que los cruce.
+Están vacíos a propósito —la estructura fija los límites antes de que haya código que los cruce—
+salvo `catastro`, que aloja el catálogo vial: es el repositorio de ejemplo del patrón de
+persistencia, elegido porque no arrastra ninguna regla de cálculo y sí tiene `municipalidad_id` y
+política RLS, que es lo que hay que demostrar.
+
+`sgtm-dominio-compartido` contiene **dos** paquetes, y la separación importa:
+
+| Paquete | Qué hay | Por qué separado |
+|---|---|---|
+| `pe.gob.sgtm.dominio` | `Dinero`, `Periodo`, `Alicuota`, `Porcentaje`, `AreaM2`, `Ejercicio`, `MunicipalidadId`, `CodigoContribuyente`, `CodigoReferenciaCatastral`, `Placa`, `DocumentoIdentidad`, `Observacion` | Es dominio: le aplican las siete reglas de ArchUnit sin excepción |
+| `pe.gob.sgtm.compartido` | `TenantContext` | Es una utilidad técnica con un `ThreadLocal` dentro; no es vocabulario tributario |
+
+El paquete de dominio cuelga de `pe.gob.sgtm` y **no** de `pe.gob.sgtm.compartido` por una razón
+concreta: para Spring Modulith un subpaquete es interno a su módulo, y un objeto de valor que
+ningún contexto puede importar no sirve de vocabulario común. Como módulo propio queda expuesto
+sin anotar el paquete, y así este módulo Gradle sigue sin depender de Spring —ni siquiera de una
+anotación—, que es la regla 7 en su forma más literal.
 
 ## Convenciones del build
 
@@ -112,10 +170,11 @@ Detalle del esquema: [`sgtm-esquema/README.md`](sgtm-esquema/README.md) y
 
 ## Qué falta
 
-- Toda la funcionalidad de negocio. Bloqueada por D-01 y D-02
+- Toda regla de cálculo tributario. Bloqueada por D-02 —los valores normativos, hoy partida en
+  D-02a/b/c— y por D-03c, los puntos de redondeo
   ([GOB-02](../docs/00-gobierno/decisiones-abiertas.md)).
-- La configuración de Spring Security: el emisor OIDC y el JWKS. Hoy `TenantContextFilter` sabe
-  leer el claim, pero nadie valida todavía el token.
+- La verificación de que la municipalidad activa está entre las autorizadas del usuario: falta
+  fijar el nombre de ese claim (D-06). Hasta entonces, un usuario, una municipalidad.
 - El mecanismo que escribe la auditoría (disparadores o aspecto). Se decide con el primer caso de
   uso de escritura; ver [DAT-02 §4](../docs/40-datos/auditoria-e-historico.md).
 - Las particiones de los ejercicios siguientes a 2027, y su automatización.

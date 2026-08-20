@@ -4,6 +4,7 @@ backend/build/
 backend/*/build/
 backend/buildSrc/build/
 backend/buildSrc/.gradle/
+backend/buildSrc/.kotlin/
 
 # IDE
 .idea/
@@ -14,7 +15,15 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Playwright: lo que deja una ejecucion, no lo que se versiona
+frontend/test-results/
+frontend/playwright-report/
+
 # Sistema
 .DS_Store
 
 .thumbnail
+
+# Despliegue: el archivo de claves de la instalacion. El .env.ejemplo si se
+# versiona; el .env con las claves de verdad, nunca.
+despliegue/.env

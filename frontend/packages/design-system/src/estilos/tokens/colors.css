@@ -43,7 +43,15 @@
 
   /* —— Fallo / status semantics —— */
   --ok-bg: #e8efe6;   --ok-fg: #2d4a26;    /* FUNDADA, verified, firme */
+  /* La insignia de advertencia: FRO-02 §5 la dejaba sin definir, asi que el
+     tono «atencion» salia sin color. 4,61:1, verificado en contraste.test.ts. */
+  --warn-bg: #f6ecd9; --warn-fg: #8a6420;  /* vencido, por notificar, en plazo */
   --bad-bg: #f3e6e1;  --bad-fg: #7C2D12;   /* INFUNDADA, rejected */
+
+  /* Texto de error **sobre la superficie de la pagina**, no sobre la insignia.
+     Necesita token propio porque en tema oscuro `--bad-fg` da 1,87:1 sobre la
+     tarjeta: la insignia lleva su fondo claro y el titulo de un aviso no. */
+  --error-texto: #7C2D12;
 }
 
 /* —— Dark mode (warm, low-glare reading) —— */
@@ -58,4 +66,6 @@
   --line: #2a2620;
   --line-2: #3a352c;
   --accent-soft: #1c2a3f;
+  /* Terracota aclarada: 7,2:1 sobre la tarjeta oscura. */
+  --error-texto: #d98f6b;
 }

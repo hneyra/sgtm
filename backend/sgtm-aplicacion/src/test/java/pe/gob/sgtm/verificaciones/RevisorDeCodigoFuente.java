@@ -10,6 +10,8 @@ import java.util.regex.Pattern;
 /**
  * Las reglas de ARQ-04 §2 que viven en el texto del SQL y no en la estructura de las clases: {@code
  * SET SESSION}, el {@code DELETE} sobre tablas protegidas y el {@code UPDATE} sobre las inmutables.
+ * Y una que vive en el texto del Java: la politica de redondeo escrita a mano, que D-03a y D-03b
+ * prohiben.
  *
  * <p>ArchUnit no las ve porque no son dependencias entre tipos, sino cadenas.
  *
@@ -70,6 +72,56 @@ public final class RevisorDeCodigoFuente {
     /** Literal de cadena de Java, incluidos los escapes. */
     private static final Pattern LITERAL_JAVA = Pattern.compile("\"(?:[^\"\\\\\\n]|\\\\.)*\"");
 
+    /**
+     * Un modo de redondeo escrito en el codigo.
+     *
+     * <p>D-03 no esta cerrada: no esta decidido con cuantos decimales se redondea (D-03a), con que
+     * modo (D-03b), ni —lo que mas pesa— en que puntos del calculo (D-03c). Un {@code HALF_UP}
+     * escrito hoy es esa decision tomada por descuido, repartida por el codigo y dificil de
+     * encontrar despues. La politica se recibe como argumento: {@code PoliticaDeRedondeo}.
+     *
+     * <p>{@code UNNECESSARY} queda fuera a proposito: no es una politica de redondeo sino su
+     * negacion, y es lo que el propio tipo usa para rechazarla.
+     */
+    private static final Pattern MODO_DE_REDONDEO_ESCRITO =
+            Pattern.compile(
+                    "\\bRoundingMode\\s*\\.\\s*(HALF_UP|HALF_DOWN|HALF_EVEN|CEILING|FLOOR|UP|DOWN)\\b");
+
+    /**
+     * {@code setScale(2, ...)}: la escala escrita a mano. Mismo motivo, misma familia de decisiones
+     * (D-03a).
+     */
+    private static final Pattern ESCALA_ESCRITA =
+            Pattern.compile("\\.\\s*setScale\\s*\\(\\s*[0-9]");
+
+    /**
+     * Un valor tributario construido desde un literal.
+     *
+     * <p>Regla 5: ninguna cifra normativa vive en el codigo. Una alicuota, un porcentaje o un valor
+     * normativo construidos desde una cadena literal en {@code src/main} son exactamente eso: un
+     * tramo, una tasa o una UIT compilados dentro del artefacto, que solo se pueden cambiar
+     * desplegando —con lo que se acaban sin cambiar, y calculando con los del ano pasado—.
+     *
+     * <p>{@code Dinero} no entra en la lista: un importe literal en produccion casi siempre es un
+     * cero o un tope tecnico, y prohibirlo daria mas falsos positivos que hallazgos. Lo que si es
+     * casi siempre normativo es lo otro.
+     */
+    private static final Pattern VALOR_TRIBUTARIO_LITERAL =
+            Pattern.compile(
+                    "\\b(Alicuota|Porcentaje|ValorNormativo)\\s*\\.\\s*de\\s*\\(\\s*[\"0-9]");
+
+    /**
+     * Una constante con nombre de valor normativo y una cifra dentro.
+     *
+     * <p>Es la otra forma en que aparece: no llamando a {@code Alicuota.de}, sino declarando {@code
+     * private static final BigDecimal UIT = new BigDecimal("5350")}. El nombre delata la intencion,
+     * y por eso la lista es de nombres y no de tipos.
+     */
+    private static final Pattern CONSTANTE_NORMATIVA =
+            Pattern.compile(
+                    "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
+                            + "|INTERES_MORATORIO|REAJUSTE)\\w*\\s*=\\s*[^;\\n]*[0-9]");
+
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
     private static final Pattern COMENTARIO_DE_BLOQUE = Pattern.compile("(?s)/\\*.*?\\*/");
 
@@ -89,7 +141,150 @@ public final class RevisorDeCodigoFuente {
         while (matcher.find()) {
             literales.append(matcher.group()).append('\n');
         }
-        return revisarTexto(archivo, literales.toString());
+        List<Hallazgo> hallazgos = new ArrayList<>(revisarTexto(archivo, literales.toString()));
+        hallazgos.addAll(revisarRedondeo(archivo, contenido));
+        hallazgos.addAll(revisarValoresTributarios(archivo, contenido));
+        return hallazgos;
+    }
+
+    /**
+     * Regla 5: ningun literal numerico tributario en el codigo.
+     *
+     * <p>UIT, tramos, alicuotas, valores unitarios, aranceles y tablas de depreciacion viven en
+     * datos versionados con su documento fuente y su vigencia (ADR-0007). Compilados dentro del
+     * artefacto solo se pueden cambiar desplegando, y un tramo equivocado produce deuda mal
+     * calculada en todo un padron.
+     *
+     * <p>Como el redondeo, mira el codigo y no los literales de cadena, y descarta los comentarios:
+     * este mismo archivo explica la prohibicion nombrando UIT y tramos.
+     */
+    public static List<Hallazgo> revisarValoresTributarios(String archivo, String contenido) {
+        List<Hallazgo> hallazgos = new ArrayList<>();
+
+        Matcher valor = VALOR_TRIBUTARIO_LITERAL.matcher(sinComentariosDeBloque(contenido));
+        while (valor.find()) {
+            hallazgos.add(
+                    new Hallazgo(
+                            archivo,
+                            "regla 5: una alicuota o un valor normativo construido desde un literal"
+                                    + " es una cifra de norma compilada; va en datos versionados"
+                                    + " con su documento fuente (ADR-0007)",
+                            valor.group()));
+        }
+
+        Matcher constante = CONSTANTE_NORMATIVA.matcher(sinComentariosNiMas(contenido));
+        while (constante.find()) {
+            hallazgos.add(
+                    new Hallazgo(
+                            archivo,
+                            "regla 5: esa constante lleva nombre de valor normativo y una cifra"
+                                    + " dentro; cambiarla no debe exigir un despliegue (ADR-0007)",
+                            constante.group()));
+        }
+
+        return hallazgos;
+    }
+
+    /**
+     * D-03: mientras la escala (D-03a), el modo (D-03b) y los puntos de redondeo (D-03c) no esten
+     * decididos, no hay ninguna politica de redondeo escrita en el codigo. Se recibe como
+     * argumento.
+     *
+     * <p>Mira el codigo y no los literales —al reves que el resto del revisor—, porque lo que se
+     * busca es una llamada, no una cadena. Los comentarios se descartan: este mismo archivo explica
+     * la prohibicion nombrandola, y una regla que se denuncia a si misma acaba desactivada.
+     */
+    public static List<Hallazgo> revisarRedondeo(String archivo, String contenido) {
+        String codigo = soloCodigo(contenido);
+        List<Hallazgo> hallazgos = new ArrayList<>();
+
+        Matcher modo = MODO_DE_REDONDEO_ESCRITO.matcher(codigo);
+        while (modo.find()) {
+            hallazgos.add(
+                    new Hallazgo(
+                            archivo,
+                            "D-03b sigue abierta: el modo de redondeo se recibe en una"
+                                    + " PoliticaDeRedondeo, no se escribe en el codigo",
+                            modo.group()));
+        }
+
+        Matcher escala = ESCALA_ESCRITA.matcher(codigo);
+        while (escala.find()) {
+            hallazgos.add(
+                    new Hallazgo(
+                            archivo,
+                            "D-03a sigue abierta: la escala se recibe en una PoliticaDeRedondeo, no"
+                                    + " se escribe en el codigo",
+                            escala.group()));
+        }
+
+        return hallazgos;
+    }
+
+    /**
+     * El contenido sin comentarios ni literales, para poder buscar llamadas y no texto.
+     *
+     * <p>Recorre caracter a caracter en lugar de aplicar expresiones regulares: un {@code //}
+     * dentro de una cadena no abre un comentario, y borrarlo se llevaria por delante el codigo que
+     * viene detras en la misma linea.
+     */
+    static String soloCodigo(String contenido) {
+        return sinComentarios(contenido, false);
+    }
+
+    /**
+     * El contenido sin comentarios pero <b>con</b> las cadenas.
+     *
+     * <p>Lo necesita la regla 5: {@code UIT_2026 = new BigDecimal("5350")} lleva la cifra dentro de
+     * un literal, asi que descartar las cadenas la haria invisible. Lo que sigue descartandose son
+     * los comentarios, porque este mismo archivo explica la prohibicion nombrando la UIT.
+     */
+    static String sinComentariosNiMas(String contenido) {
+        return sinComentarios(contenido, true);
+    }
+
+    private static String sinComentarios(String contenido, boolean conservarCadenas) {
+        StringBuilder codigo = new StringBuilder(contenido.length());
+        int i = 0;
+        while (i < contenido.length()) {
+            char actual = contenido.charAt(i);
+            char siguiente = i + 1 < contenido.length() ? contenido.charAt(i + 1) : '\0';
+
+            if (actual == '/' && siguiente == '/') {
+                while (i < contenido.length() && contenido.charAt(i) != '\n') {
+                    i++;
+                }
+            } else if (actual == '/' && siguiente == '*') {
+                i += 2;
+                while (i + 1 < contenido.length()
+                        && !(contenido.charAt(i) == '*' && contenido.charAt(i + 1) == '/')) {
+                    i++;
+                }
+                i = Math.min(i + 2, contenido.length());
+            } else if (actual == '"' && contenido.startsWith("\"\"\"", i)) {
+                int cierre = contenido.indexOf("\"\"\"", i + 3);
+                int fin = cierre < 0 ? contenido.length() : cierre + 3;
+                if (conservarCadenas) {
+                    codigo.append(contenido, i, fin);
+                }
+                i = fin;
+            } else if (actual == '"' || actual == '\'') {
+                char comilla = actual;
+                int inicio = i;
+                i++;
+                while (i < contenido.length() && contenido.charAt(i) != comilla) {
+                    i += contenido.charAt(i) == '\\' ? 2 : 1;
+                }
+                i++;
+                if (conservarCadenas) {
+                    codigo.append(contenido, inicio, Math.min(i, contenido.length()));
+                }
+            } else {
+                codigo.append(actual);
+                i++;
+            }
+        }
+        return codigo.toString();
     }
 
     public static List<Hallazgo> revisarSql(String archivo, String contenido) {

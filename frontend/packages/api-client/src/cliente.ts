@@ -89,7 +89,28 @@ export interface OpcionesDeSolicitud {
   senal?: AbortSignal;
 }
 
+/**
+ * Quien sabe renovar el token cuando el servidor dice que caduco.
+ *
+ * Lo registra la sesion al arrancar. Vive aqui porque el 401 llega aqui, y
+ * porque asi **ninguna pantalla tiene que acordarse** de renovar: una peticion
+ * que se topa con un token vencido se reintenta una vez, y solo una.
+ */
+let renovarElToken: (() => Promise<boolean>) | null = null;
+
+export function configurarRenovacion(renovar: (() => Promise<boolean>) | null): void {
+  renovarElToken = renovar;
+}
+
 export async function solicitar<T>(ruta: string, opciones: OpcionesDeSolicitud = {}): Promise<T> {
+  return pedir<T>(ruta, opciones, true);
+}
+
+async function pedir<T>(
+  ruta: string,
+  opciones: OpcionesDeSolicitud,
+  puedeRenovar: boolean,
+): Promise<T> {
   const url = new URL(`${BASE}${ruta}`, window.location.origin);
   for (const [clave, valor] of Object.entries(opciones.consulta ?? {})) {
     if (valor !== undefined && valor !== '') url.searchParams.set(clave, String(valor));
@@ -100,12 +121,38 @@ export async function solicitar<T>(ruta: string, opciones: OpcionesDeSolicitud =
   if (opciones.cuerpo !== undefined) cabeceras['content-type'] = 'application/json';
   if (opciones.claveDeIdempotencia) cabeceras['idempotency-key'] = opciones.claveDeIdempotencia;
 
-  const respuesta = await fetch(url, {
-    method: opciones.metodo ?? 'GET',
-    headers: cabeceras,
-    body: opciones.cuerpo === undefined ? undefined : JSON.stringify(opciones.cuerpo),
-    signal: opciones.senal,
-  });
+  let respuesta: Response;
+  try {
+    respuesta = await fetch(url, {
+      method: opciones.metodo ?? 'GET',
+      headers: cabeceras,
+      body: opciones.cuerpo === undefined ? undefined : JSON.stringify(opciones.cuerpo),
+      signal: opciones.senal,
+    });
+  } catch (fallo) {
+    // Cancelar no es fallar: si la pantalla se cerro, la consulta se descarta.
+    if (fallo instanceof Error && fallo.name === 'AbortError') throw fallo;
+
+    // Sin red, `fetch` rechaza con un error del navegador que no dice nada al
+    // usuario. Se convierte aqui en un problema del mismo formato que los del
+    // backend para que la pantalla lo cuente igual que los demas, en vez de
+    // quedarse cargando para siempre (FRO-01 §7).
+    throw new ProblemaDeApi({
+      type: 'https://sgtm.gob.pe/problemas/sin-conexion',
+      title: 'No se pudo contactar con el servidor',
+      status: 0,
+      detail:
+        'Revisa la conexion de la municipalidad y vuelve a intentarlo. Si la red esta bien, puede que el servicio este detenido.',
+    });
+  }
+
+  if (respuesta.status === 401 && puedeRenovar && renovarElToken !== null) {
+    // El token caduco mientras se trabajaba. Se renueva **una vez** y se repite
+    // la peticion; si la escritura llevaba clave de idempotencia, repetirla es
+    // seguro, que para eso esta. Si la renovacion falla, el 401 sigue su camino
+    // y la sesion lleva a autenticar conservando la ruta de vuelta.
+    if (await renovarElToken()) return pedir<T>(ruta, opciones, false);
+  }
 
   if (!respuesta.ok) {
     const problema = (await respuesta.json().catch(() => null)) as ProblemDetails | null;

@@ -10,6 +10,14 @@
    El esquema de cada recurso se escribe cuando se implemente la operacion, y
    entonces esta generacion pasa a ser el punto de partida, no el destino.
 
+   Lo que si declara, porque es lo que la interfaz manda: **los filtros de cada
+   pantalla y, en las que traen tabla, el orden y la pagina.** El prototipo
+   dibuja los filtros pero no dice como viajan; el contrato lo dice, con el
+   mismo nombre de campo que usa el catalogo portado —una prueba del frontend
+   exige que coincidan—. Filtrar, ordenar y paginar en el cliente una pagina de
+   un padron de cientos de miles de filas ordena media tabla y miente, asi que
+   los tres viajan al servidor.
+
    Uso: node docs/50-api/generar-openapi.mjs
 */
 
@@ -30,6 +38,108 @@ for (let i = 1; i <= 5; i++) {
 const NAV = ventana.SGTM_NAV;
 const PANTALLAS = ventana.SGTM_SCREENS;
 
+/* ── Nombres de parametro ─────────────────────────────────────────────────
+   Misma regla que `frontend/scripts/portar-catalogo.mjs`: `Tipo de Vía` →
+   `tipoDeVia`. Esta duplicada a proposito —los dos generadores viven en arboles
+   distintos y no comparten build— y una prueba del frontend exige que los dos
+   produzcan el mismo nombre para el mismo filtro. Si se separan, se pone roja. */
+
+const sinTildes = (texto) =>
+  texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ñ/g, 'n')
+    .replace(/Ñ/g, 'N');
+
+function aClave(etiqueta) {
+  const partes = sinTildes(etiqueta)
+    .replace(/[^A-Za-z0-9 ]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (partes.length === 0) return 'campo';
+  const [primera, ...resto] = partes;
+  const camel =
+    primera.toLowerCase() + resto.map((p) => p[0].toUpperCase() + p.slice(1).toLowerCase()).join('');
+  return /^[0-9]/.test(camel) ? `c${camel}` : camel;
+}
+
+/** Los filtros de una pantalla, con el nombre con el que viajan. */
+function filtrosDe(pantalla) {
+  const usadas = new Set();
+  return (pantalla.filters ?? []).map((filtro) => {
+    let clave = aClave(filtro.label);
+    for (let n = 2; usadas.has(clave); n++) clave = `${aClave(filtro.label)}${n}`;
+    usadas.add(clave);
+    return { nombre: clave, etiqueta: filtro.label };
+  });
+}
+
+/**
+ * Paginacion y orden, para las operaciones de lectura que traen tabla.
+ *
+ * **Los nombres son los del backend, no los que la interfaz propuso.** Cuando
+ * se escribieron aqui el backend todavia no tenia capa web; ahora la tiene
+ * (`ParametrosDePaginacion` de #6) y manda ella: `ordenarPor` y no `orden`,
+ * `direccion` y no `sentido`, y la pagina contada desde 0. Que la interfaz
+ * proponga esta bien; que siga proponiendo cuando ya hay respuesta, no.
+ */
+const PAGINACION = [
+  { nombre: 'pagina', ejemplo: '0', descripcion: 'Pagina que se pide, contada desde 0' },
+  { nombre: 'tamano', ejemplo: '20', descripcion: 'Filas por pagina' },
+  { nombre: 'ordenarPor', ejemplo: '', descripcion: 'Campo por el que se ordena, en camelCase' },
+  {
+    nombre: 'direccion',
+    ejemplo: 'ASCENDENTE',
+    descripcion: 'ASCENDENTE | DESCENDENTE',
+  },
+];
+
+/**
+ * Parametros que el backend tiene y la pantalla no dibuja.
+ *
+ * Misma regla que `PAGINACION`: cuando el backend ya existe, manda el backend.
+ * La bitacora esta particionada por ejercicio y su controlador lo pide
+ * obligatorio (`SesionController#auditoria`, #13); sin el, la consulta recorre
+ * todas las particiones, y con el volumen que alcanza esa tabla la diferencia
+ * es entre una pantalla que responde y una que hay que cancelar.
+ *
+ * Esta lista es corta a proposito. Un parametro aqui es una divergencia entre
+ * lo que la pantalla dibuja y lo que el servicio ofrece, y cada una se anota
+ * con el controlador que la impone.
+ */
+const DEL_BACKEND = {
+  auditoria: [
+    {
+      nombre: 'ejercicio',
+      ejemplo: '2026',
+      descripcion: 'Ejercicio de trabajo. Obligatorio: es la clave de particion de la bitacora',
+    },
+  ],
+  // Las cuatro fichas responden **a una fecha**: sin ella, la que rige hoy; con
+  // ella, la que regia entonces. Es lo que contesta «como estaba este predio
+  // cuando se emitio el valor de 2027», que es la pregunta de una reclamacion.
+  // Y `historico` trae todas las versiones: la pantalla que solo pinta la
+  // vigente no tiene por que pagarlas (`FichaController`, #18).
+  ...Object.fromEntries(
+    ['ficha_urbana', 'ficha_economica', 'ficha_bienes', 'ficha_rural'].map((id) => [
+      id,
+      [
+        {
+          nombre: 'fecha',
+          ejemplo: '2026-08-20',
+          descripcion: 'Ficha vigente a esta fecha. Sin ella, la que rige hoy',
+        },
+        {
+          nombre: 'historico',
+          ejemplo: 'true',
+          descripcion: 'Trae todas las versiones de la ficha, no solo la vigente',
+        },
+      ],
+    ]),
+  ),
+};
+
 /* ── Recoger las operaciones ──────────────────────────────────────────── */
 
 const operaciones = [];
@@ -41,6 +151,8 @@ for (const grupo of NAV) {
     const [metodo, rutaCompleta] = pantalla.endpoint.split(/\s+/);
     const [ruta, consulta] = rutaCompleta.split('?');
 
+    const parametrosDeRuta = [...ruta.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+
     operaciones.push({
       id,
       etiqueta,
@@ -50,16 +162,43 @@ for (const grupo of NAV) {
       titulo: pantalla.title || etiqueta,
       descripcion: pantalla.desc || '',
       // Parametros de ruta: {codigo}, {numero}, …
-      parametrosDeRuta: [...ruta.matchAll(/\{(\w+)\}/g)].map((m) => m[1]),
-      // Parametros de consulta del ejemplo del prototipo.
-      parametrosDeConsulta: consulta
-        ? consulta.split('&').map((p) => {
-            const [nombre, ejemplo] = p.split('=');
-            return { nombre, ejemplo: (ejemplo || '').replace(/[{}]/g, '') };
-          })
-        : [],
+      parametrosDeRuta,
+      // Parametros de consulta del ejemplo del prototipo, mas los filtros que
+      // dibuja la pantalla y —si trae tabla— la paginacion y el orden.
+      parametrosDeConsulta: reunir(parametrosDeRuta, [
+        ...(DEL_BACKEND[id] ?? []),
+        ...(consulta
+          ? consulta.split('&').map((p) => {
+              const [nombre, ejemplo] = p.split('=');
+              return { nombre, ejemplo: (ejemplo || '').replace(/[{}]/g, '') };
+            })
+          : []),
+        ...filtrosDe(pantalla).map((filtro) => ({
+          nombre: filtro.nombre,
+          ejemplo: '',
+          descripcion: `Filtro «${filtro.etiqueta}» de la pantalla`,
+        })),
+        ...(pantalla.table && metodo.toLowerCase() === 'get' ? PAGINACION : []),
+      ]),
     });
   }
+}
+
+/**
+ * Sin repetidos: un parametro declarado dos veces perderia uno al tiparlo.
+ *
+ * Y sin los que ya van en la ruta: cuando el filtro se llama igual que el
+ * parametro del camino —«Código de edificación» en una pantalla que abre
+ * `/bienes-comunes/{codEdificacion}`— no son dos valores, es el mismo, y el que
+ * manda es el de la ruta.
+ */
+function reunir(deLaRuta, parametros) {
+  const porNombre = new Map();
+  for (const parametro of parametros) {
+    if (deLaRuta.includes(parametro.nombre)) continue;
+    if (!porNombre.has(parametro.nombre)) porNombre.set(parametro.nombre, parametro);
+  }
+  return [...porNombre.values()];
 }
 
 /* ── Serializar a YAML, sin dependencias ──────────────────────────────── */
@@ -132,6 +271,7 @@ for (const [ruta, ops] of porRuta) {
         lineas.push(`        - name: ${p.nombre}`);
         lineas.push('          in: query');
         lineas.push('          required: false');
+        if (p.descripcion) lineas.push(`          description: ${comillas(p.descripcion)}`);
         lineas.push('          schema: { type: string }');
         if (p.ejemplo) lineas.push(`          example: ${comillas(p.ejemplo)}`);
       }

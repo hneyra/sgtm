@@ -40,3 +40,19 @@ GRANT USAGE           ON SCHEMA public TO sgtm_app, sgtm_readonly, rol_carga_par
 -- Sin GRANT de pertenencia entre roles: sgtm_owner concede privilegios sobre sus
 -- propias tablas sin necesitarla, y ser miembro de sgtm_app le permitiria un
 -- SET ROLE que borra la separacion.
+
+-- ---------- Extensiones ----------
+-- Van aqui por el mismo motivo que los roles: sgtm_owner no puede instalarlas
+-- —no tiene CREATE sobre la base y no queremos darselo—, y la migracion que las
+-- usa necesita que ya existan. Instalar una extension es provisionar el ambiente,
+-- no versionar el esquema.
+--
+--   pg_trgm   busqueda de contribuyentes por aproximacion de nombre (RF-014).
+--             Sin ella, un nombre mal escrito en ventanilla no encuentra a nadie
+--             y se da de alta al mismo contribuyente por segunda vez.
+--   unaccent  para que «PEÑA» y «PENA» sean el mismo nombre.
+--
+-- Las dos son trusted desde PostgreSQL 13, asi que en un ambiente donde
+-- sgtm_owner sea dueño de la base tampoco harian falta privilegios especiales.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS unaccent;

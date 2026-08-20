@@ -11,6 +11,7 @@ export default defineConfig({
       { find: '@sgtm/design-system', replacement: raiz('./packages/design-system/src/index.ts') },
       { find: '@sgtm/dominio', replacement: raiz('./packages/dominio/src/index.ts') },
       { find: '@sgtm/api-client', replacement: raiz('./packages/api-client/src/index.ts') },
+      { find: '@sgtm/api-mock', replacement: raiz('./packages/api-mock/src/index.ts') },
     ],
   },
   test: {

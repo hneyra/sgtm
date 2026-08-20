@@ -18,4 +18,14 @@ val libs = extensions.getByType<VersionCatalogsExtension>().named("libs")
 dependencies {
     "implementation"(platform(libs.findLibrary("spring-boot-bom").get()))
     "implementation"(project(":sgtm-dominio-compartido"))
+
+    // La capa `infraestructura` de todo contexto persiste con el mismo patron
+    // (JdbcClient, paginacion con orden validado, la transaccion que emite el
+    // SET LOCAL). Vive en sgtm-plataforma, que declara `api` sobre
+    // spring-boot-starter-jdbc: de ahi sale el JdbcClient sin declararlo aqui.
+    //
+    // Que la capa `dominio` no lo use es cosa del analisis estatico, no de la
+    // ausencia de la dependencia: Gradle no distingue paquetes dentro de un
+    // modulo, y ArchUnit si.
+    "implementation"(project(":sgtm-plataforma"))
 }

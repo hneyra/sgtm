@@ -2,7 +2,8 @@
 
 **Fuente:** el prototipo `design/SGTM.dc.html` y el catálogo `design/sgtm-data-{1..5}.js`
 **Catálogo de opciones:** [NEG-03](../10-negocio/catalogo-de-opciones.md)
-**Estado:** ninguna pantalla implementada; este documento es el plan
+**Estado:** las 134 implementadas contra el proxy de datos; falta conectarlas al backend
+([`ADR-0010`](../30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md))
 
 ## 1. Doce módulos, 134 opciones
 
@@ -124,7 +125,11 @@ Tres merecen validación con usuarios reales antes de darlas por buenas:
 | **Portal ciudadano** | Lo usa quien no conoce el sistema, una vez al año, desde un móvil con red mala |
 | **Reportes** | Se imprimen en A4 y salen de la municipalidad con firma (RNF-084) |
 
-Ninguna está validada. Es un pendiente declarado, no un olvido.
+**Ninguna está validada con usuarios reales.** Es un pendiente declarado, no un olvido, y sigue
+abierto: las tres se recorren ahora en Chromium (`yarn e2e`) —el cobro solo con teclado, el portal
+en 360 px y el reporte en una A4 con sus firmas—, pero **automatizar un camino no es validarlo**.
+La prueba dice que se puede completar; no dice que sea el camino que quien atiende en ventanilla
+usaría, ni que los nombres de los campos signifiquen para él lo que creemos.
 
 ## 7. Orden sugerido de implementación
 
@@ -138,6 +143,15 @@ Ninguna está validada. Es un pendiente declarado, no un olvido.
 
 El paso 2 es el que decide el coste de todo lo demás: hecho como catálogo, las 134 pantallas
 cuestan un renderizador; hechas a mano, cuestan 134 archivos que nadie mantiene.
+
+**Pasos 1 a 3: hechos.** El catálogo se porta con `yarn portar-catalogo`, que además **separa la
+estructura del valor**: la estructura va a la aplicación y el valor lo sirve la API. Las diez
+plantillas están implementadas y las 134 pantallas se comprueban en cada `yarn test`.
+
+**Paso 4: empezado.** El camino existe y la primera opción lo usa: junto a `useDatosDePantalla`,
+una opción puede declarar su **operación tipada** —generada del contrato— y su **adaptador**, y
+las otras 133 no se enteran. Lo que sigue pendiente es el backend: cada opción se conectará de
+verdad cuando su operación exista, apagando el proxy para esa ruta.
 
 ## 8. Documentos relacionados
 
