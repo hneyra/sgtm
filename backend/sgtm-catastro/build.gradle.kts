@@ -12,7 +12,7 @@ plugins {
 }
 
 dependencies {
-    // La UNICA dependencia de catastro a otro contexto acotado, y esta aqui para que se vea.
+    // Dos dependencias a otro contexto acotado, y las dos aqui para que se vean.
     //
     // La titularidad guarda un contribuyente_id y nada mas: el nombre, el codigo y el domicilio
     // viven en el padron. La consulta de fichas (RF-006) filtra por titular y el reporte de ficha
@@ -24,6 +24,12 @@ dependencies {
     // catastro: mas rapido de escribir, invisible para Modulith, y roto en silencio el dia que el
     // padron cambie una columna.
     implementation(project(":sgtm-contribuyentes"))
+
+    // Las tablas de valuacion (#17) cuelgan de un conjunto de parametros sellado, no de un
+    // ejercicio suelto: traducir «ejercicio» a «conjunto» es cosa de `parametros` —es quien sabe
+    // que significa sellado y cual es la version vigente—, igual que ya hizo `rentas` para el valor
+    // referencial vehicular (#141). Se importa solo su paquete raiz, la API publica.
+    implementation(project(":sgtm-parametros"))
 
     // La prueba del repositorio corre contra PostgreSQL de verdad: provisiona la
     // base como un ambiente real y se conecta como sgtm_app, no como el
