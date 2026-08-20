@@ -89,6 +89,10 @@ services:
     build:
       context: ../backend
       target: aplicacion
+    # Nombre fijo para la imagen construida. Sin el, Docker le pone uno derivado
+    # del proyecto y del servicio, y la verificacion que arranca esta misma imagen
+    # a mano —sin emisor, para comprobar que se niega— tendria que adivinarlo.
+    image: sgtm-aplicacion:marcha-blanca
     depends_on:
       migraciones:
         condition: service_completed_successfully
