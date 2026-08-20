@@ -277,11 +277,12 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Escáner del código fuente | Muestras con `SET SESSION`, `DELETE`, `UPDATE` prohibidos, con una política de redondeo escrita a mano y con la UIT, un tramo y una alícuota compilados (regla 5) | Las detecta; neutralizando el patrón de la regla 5, rojo |
 | Reglas de ESLint del frontend (10) | Quitando la regla de tildes, y la de `fetch`: sus pruebas se ponen rojas | Las diez muerden |
 | Las 134 pantallas se dibujan | Montando cada una contra el proxy, y recorriéndolas en Chromium | 134 en verde, 0 errores |
-| Los tres caminos de FRO-03 §6 | Playwright: caja solo con teclado, portal en 360 px, reporte en A4 | Los tres pasan; el primero encontró que la paleta no se operaba con teclado |
+| Los caminos de FRO-03 §6 | Playwright: caja solo con teclado, portal en 360 px, y la misma hoja A4 en dos módulos | Pasan; el primero encontró que la paleta no se operaba con teclado |
 | El presupuesto de paquete muerde | Bajándolo por debajo de lo que mide el arranque | Rojo, con el número y qué hacer |
 | El juego de datos simulado no llega a producción | Comparando las dos compilaciones, con y sin la bandera | El chunk desaparece |
 | Un cambio del contrato rompe la compilación | Renombrando `codRefCatastral` en `sgtm-v1.yaml` y compilando con `tsc` | Rojo; al devolverlo, verde |
 | El módulo de seguridad conectado (11 pruebas) | Quitando la guarda de `leerPaginado`, el ejercicio de la bitácora, el vaciado de la caché, la lista blanca del cuerpo y el bloqueo de los campos de clave | Las cinco lo ponen rojo |
+| Trece reportes, una hoja (14 pruebas) | Quitando las firmas del bloque, quitando la marca de no imprimible, y alterando una celda numérica al dibujarla | Seis, seis y una en rojo |
 | El expediente coactivo (26 pruebas) | Habilitando las acciones secundarias, dejando la insignia sin texto, y haciendo que `puedeVer` devuelva cierto siempre | Cuatro, una y una en rojo |
 | Lo irreversible se confirma (11 pruebas) | Quitando generar, notificar y coactiva de la lista, volviendo a «¿estás seguro?», y enviando sin confirmar | Cuatro, dos y tres en rojo |
 | La caja (6 pruebas) | Quitando el `focus()` tras guardar, enfocando en cada render en vez de en el flanco, y regenerando la clave de idempotencia en cada envío | Dos, una y una en rojo |

@@ -160,6 +160,22 @@ con «—». Donde eso importa más es en las cifras: el arancel por m², el val
 y el autovalúo rural alimentan la valuación de un predio, y una cifra inventada ahí acaba en un
 valor mal emitido. Que falte se ve; que esté mal, no.
 
+### Trece reportes, una hoja
+
+Tránsito tiene trece reportes y la tentación es escribir trece pantallas. Lo que hay es **un**
+bloque de hoja parametrizado al que se le conectan trece operaciones, y no es una preferencia de
+estilo: trece copias divergen a la primera corrección, y la hoja que sale de la municipalidad con
+firma no puede depender de cuál de las trece se tocó por última vez.
+
+La evidencia de que es el mismo bloque es que el `e2e` de A4 vale para las dos: la constancia de
+Consultas y la hoja informativa de Tránsito pasan la misma prueba sin tocar nada más que la ruta.
+Si cada reporte tuviera su copia, cada uno necesitaría la suya.
+
+**La papeleta muestra su desglose guardado, no uno recalculado.** El importe se determinó el día de
+la infracción con los parámetros de ese día; recalcularlo al mostrar es el error clásico de este
+módulo, y haría que la pantalla dejara de decir lo que dice el documento que se notificó. Hay una
+prueba que comprueba que cada cifra que se ve está **tal cual** en lo que sirvió la API.
+
 ### Una prueba que espera solo al título no comprueba nada
 
 El título de una pantalla lo da el catálogo de navegación y llega enseguida; **sus bloques llegan
@@ -599,6 +615,9 @@ dice en la misma frase en que excluye el token.
 | Nada asentado se edita ni se quita      | Habilitando las acciones secundarias                                    | Rojas, cuatro                 |
 | Ningún estado solo por color            | Dejando la insignia sin texto                                           | Roja                          |
 | El auxiliar no ve emitir REC            | Haciendo que `puedeVer` devuelva cierto siempre                         | Roja                          |
+| Las hojas conservan sus firmas          | Quitándolas del bloque                                                  | Rojas, seis                   |
+| La interfaz no se imprime               | Quitando la marca `data-no-imprimible`                                  | Rojas, seis                   |
+| Ninguna cifra se recompone al dibujar   | Alterando una celda numérica en la tabla                                | Roja                          |
 
 ## Lo que todavía no está
 
