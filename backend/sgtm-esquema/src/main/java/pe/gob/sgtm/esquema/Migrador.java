@@ -99,12 +99,20 @@ public final class Migrador {
     private static void comprobarElAmbiente(String url, String usuario, String clave)
             throws SQLException {
         try (Connection conexion = DriverManager.getConnection(url, usuario, clave)) {
-            exigirLosRoles(conexion);
+            exigirLosRoles(rolesFaltantes(conexion));
             exigirQueNoTengaPrivilegiosDeMas(conexion, usuario);
         }
     }
 
-    private static void exigirLosRoles(Connection conexion) throws SQLException {
+    /**
+     * Los roles de {@link #ROLES_EXIGIDOS} que no existen en el cluster.
+     *
+     * <p>Separado de {@link #exigirLosRoles} porque son dos cosas distintas de verificar y una de
+     * ellas no se puede verificar en cualquier parte: <b>los roles son del cluster, no de la
+     * base</b>, asi que una prueba que exija un cluster sin ellos solo vale cuando la prueba es
+     * dueña del motor. El mensaje, en cambio, se comprueba siempre.
+     */
+    static List<String> rolesFaltantes(Connection conexion) throws SQLException {
         List<String> faltantes = new ArrayList<>();
         try (PreparedStatement consulta =
                 conexion.prepareStatement("SELECT 1 FROM pg_roles WHERE rolname = ?")) {
@@ -117,6 +125,10 @@ public final class Migrador {
                 }
             }
         }
+        return faltantes;
+    }
+
+    static void exigirLosRoles(List<String> faltantes) {
         if (!faltantes.isEmpty()) {
             throw new IllegalStateException(
                     "Faltan roles que las politicas de V6__rls.sql nombran: "

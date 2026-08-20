@@ -11,6 +11,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -56,21 +57,29 @@ class MigradorTest {
     }
 
     @Test
-    @DisplayName("sin los cuatro roles se niega a migrar, y dice cuales faltan y como se crean")
-    void sinLosRolesSeNiega() {
-        try (MotorPostgres motor = MotorPostgres.iniciar()) {
-            // Deliberadamente NO se ejecuta crear-roles.sql. Migrar aqui fallaria a
-            // mitad de camino, en V6, con un error sobre un rol inexistente que no se
-            // parece a su causa.
-            assertThatThrownBy(
-                            () ->
-                                    Migrador.migrar(
-                                            motor.url(), motor.usuarioAdmin(), motor.claveAdmin()))
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("sgtm_owner")
-                    .hasMessageContaining("sgtm_app")
-                    .hasMessageContaining("rol_carga_parametros")
-                    .hasMessageContaining("crear-roles.sql");
+    @DisplayName("el mensaje de roles faltantes dice cuales son y como se crean")
+    void elMensajeDeRolesFaltantesEsUtil() {
+        // Sin motor: es el mensaje lo que se comprueba, y un mensaje no necesita una
+        // base de datos. Vale ademas en las dos formas de correr las pruebas —contenedor
+        // propio o PostgreSQL compartido—, porque los roles son del CLUSTER, no de la
+        // base: una prueba que exigiera un cluster sin ellos solo pasaria en la primera.
+        assertThatThrownBy(() -> Migrador.exigirLosRoles(List.of("sgtm_app", "sgtm_readonly")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("sgtm_app")
+                .hasMessageContaining("sgtm_readonly")
+                .hasMessageContaining("V6__rls.sql")
+                .hasMessageContaining("crear-roles.sql");
+    }
+
+    @Test
+    @DisplayName("con los cuatro roles creados, la consulta al catalogo no encuentra ninguno menos")
+    void conLosRolesPuestosNoFaltaNinguno() throws SQLException, IOException {
+        // Aqui si hace falta el motor: lo que se ejercita es la consulta a pg_roles.
+        try (BaseDeDatosDePrueba base = BaseDeDatosDePrueba.provisionar();
+                Connection conexion = base.conexionAdmin()) {
+            assertThat(Migrador.rolesFaltantes(conexion))
+                    .as("provisionar() ejecuta crear-roles.sql: los cuatro tienen que estar")
+                    .isEmpty();
         }
     }
 
