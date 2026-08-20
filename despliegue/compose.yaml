@@ -1,8 +1,10 @@
-# Marcha blanca del SGTM: motor, migracion y aplicacion, en ese orden.
+# Marcha blanca del SGTM: motor, migracion, identidad y aplicacion.
 #
 # El orden es la parte que importa, y no es una preferencia de arranque:
 #
-#   base ──(sana)──► migraciones ──(termina con exito)──► aplicacion
+#   base ──(sana)──► migraciones ──(termina con exito)──┐
+#                                                       ├──► aplicacion
+#   identidad ──(sana)─────────────────────────────────-┘
 #
 # El motor crea los roles al inicializarse, porque un rol no puede crearse a si
 # mismo y las politicas de V6__rls.sql los nombran. El migrador aplica el esquema
@@ -11,6 +13,14 @@
 #
 # Un esquema a medias con la aplicacion ya sirviendo peticiones es el estado que
 # este orden existe para impedir.
+#
+# La identidad se levanta en paralelo a la base: no depende de ella y nadie
+# depende de que este antes que las migraciones. Lo que si importa de `identidad`
+# es su NOMBRE. El emisor va en el claim `iss` de cada token y forma parte de lo
+# que se valida, asi que el backend y el navegador tienen que llamarlo igual:
+# `http://identidad:8081`. Dentro de la red de contenedores lo resuelve Docker;
+# fuera, hace falta una linea en /etc/hosts. Esta explicado en el README, y CI lo
+# hace en un paso.
 #
 # Las claves no estan aqui: salen de un archivo .env que no se versiona. Ver
 # .env.ejemplo y el README de esta carpeta.
@@ -57,16 +67,75 @@ services:
     # nada: el migrador es idempotente y tiene su prueba que lo demuestra.
     restart: "no"
 
+  identidad:
+    # Version fijada a proposito: un `latest` cambia el realm importado —y las
+    # claves del emisor— sin que nadie toque el repositorio.
+    image: quay.io/keycloak/keycloak:26.0.7
+    command: ["start-dev", "--import-realm", "--http-port=8081"]
+    environment:
+      # El administrador del propio Keycloak. No es un usuario del SGTM: solo
+      # sirve para administrar el emisor, y no existe en ningun realm de negocio.
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${SGTM_CLAVE_ADMIN_IDENTIDAD:?falta SGTM_CLAVE_ADMIN_IDENTIDAD en .env}
+      # El emisor, fijado. Sin esto Keycloak deduce el `iss` del encabezado Host
+      # de cada peticion: un token pedido desde el navegador saldria con
+      # `iss: http://localhost:8081/...` y el backend —que espera
+      # `http://identidad:8081/...`— lo rechazaria, correctamente y de forma
+      # desconcertante.
+      KC_HOSTNAME: http://identidad:8081
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "false"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      # `--import-realm` lee lo que haya aqui, una sola vez, al crear el realm.
+      # El realm es un archivo del repositorio: uno configurado a mano en una
+      # pantalla no es reproducible ni se ve en un diff.
+      - ./identidad/realm-sgtm.json:/opt/keycloak/data/import/realm-sgtm.json:ro
+    ports:
+      - "${SGTM_PUERTO_IDENTIDAD:-8081}:8081"
+    healthcheck:
+      # La imagen no trae curl ni wget, asi que la sonda se escribe con /dev/tcp,
+      # que es una extension del shell y si esta. Va contra el puerto de
+      # administracion —el 9000, que abre KC_HEALTH_ENABLED— y no contra el 8081,
+      # que sirve el realm: que el realm responda no significa que este listo.
+      #
+      # Se mira el codigo de estado y no el cuerpo. `ready` significa 200, en
+      # cualquier version; el JSON que devuelve ha cambiado de forma entre
+      # versiones de Keycloak, y una sonda que casa un texto se rompe en la
+      # actualizacion sin que nadie relacione una cosa con la otra.
+      #
+      # El escalar plegado `>-` es lo que hace que `\r\n` llegue a printf como dos
+      # caracteres y no como un salto de linea de verdad: en un escalar YAML entre
+      # comillas dobles, `\n` es un salto, y el comando se partiria en dos.
+      test: >-
+        exec 3<>/dev/tcp/127.0.0.1/9000 &&
+        printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+        head --lines=1 <&3 | grep --quiet ' 200 '
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 30s
+
   aplicacion:
     build:
       context: ../backend
       target: aplicacion
+    # Nombre fijo para la imagen construida. Sin el, Docker le pone uno derivado
+    # del proyecto y del servicio, y la verificacion 8 —que arranca esta misma
+    # imagen a mano, sin emisor— tendria que adivinarlo.
+    image: sgtm-aplicacion:marcha-blanca
     depends_on:
       migraciones:
         condition: service_completed_successfully
+      identidad:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: web
       SGTM_DB_URL: jdbc:postgresql://base:5432/sgtm
+      # Sin esta variable el proceso no arranca, y es deliberado: un backend sin
+      # emisor responde a la sonda de vida, se declara sano y no atiende a nadie.
+      # El texto tiene que coincidir con el `iss` que pone Keycloak, que es lo
+      # que fija KC_HOSTNAME arriba.
+      SGTM_OIDC_EMISOR: http://identidad:8081/realms/sgtm
       # sgtm_app y solo sgtm_app. Poner aqui las credenciales de sgtm_owner
       # —«para que migre al arrancar», «para una carga rapida»— le daria DDL sobre
       # el padron de todas las municipalidades a un proceso expuesto en HTTP. La

@@ -17,16 +17,20 @@ pueda entrar y que exista una municipalidad dentro.
 No es una opinión sobre el grado de avance. Son cuatro hechos comprobables en el repositorio, y
 cada uno por separado impide arrancar el sistema para que lo use una persona:
 
-| # | Hecho | Dónde se comprueba | Consecuencia |
-|---|---|---|---|
-| **M-1** | **No hay `SecurityFilterChain` ni `issuer-uri`.** `spring-boot-starter-oauth2-resource-server` está en el classpath, pero nada configura un emisor y ningún `@Bean` define la cadena de filtros | `backend/sgtm-plataforma/build.gradle.kts:26` y `application.yaml` entero; `grep -rn SecurityFilterChain backend --include=*.java` no devuelve nada en `main` | Sin `Jwt` en el `SecurityContextHolder`, `TenantContextFilter` deja pasar **siempre sin contexto**. Toda consulta falla por falta de contexto de tenant, que es el comportamiento correcto y también un sistema inservible |
-| **M-2** | **Nadie ejecuta las migraciones.** `spring.flyway.enabled: false`, a propósito y bien: la aplicación se conecta como `sgtm_app`, que no tiene DDL | `application.yaml`, `spring.flyway.enabled` | Las quince migraciones y `db/roles/crear-roles.sql` existen y **no hay proceso que las aplique**. Base vacía |
-| **M-3** | **No hay imagen ni forma de arrancar.** Ni `Dockerfile`, ni `compose`, ni manifiestos | `find . -iname '*docker*' -o -iname '*compose*'` → solo `.github` | El artefacto único de ADR-0003, en perfiles `web` y `batch`, no está empaquetado en ninguna parte |
-| **M-4** | **No hay forma de dar de alta una municipalidad.** `municipalidad` la escribe solo `sgtm_owner`, y no existe endpoint, tarea ni procedimiento que la cree, ni que siembre el primer administrador | `V1__nucleo_y_catastro.sql:35-46`; `SembradorDeAccesos` existe y **nadie lo invoca** | Sin fila en `municipalidad` no hay `municipalidad_id` que poner en ningún token. El sistema no tiene dentro |
+| # | Hecho | Dónde se comprueba | Consecuencia | Estado |
+|---|---|---|---|---|
+| **M-1** | **No hay `SecurityFilterChain` ni `issuer-uri`.** `spring-boot-starter-oauth2-resource-server` está en el classpath, pero nada configura un emisor y ningún `@Bean` define la cadena de filtros | `backend/sgtm-plataforma/build.gradle.kts:26` y `application.yaml` entero; `grep -rn SecurityFilterChain backend --include=*.java` no devuelve nada en `main` | Sin `Jwt` en el `SecurityContextHolder`, `TenantContextFilter` deja pasar **siempre sin contexto**. Toda consulta falla por falta de contexto de tenant, que es el comportamiento correcto y también un sistema inservible | **Resuelto** (PR 3, #119): cadena escrita, `issuer-uri` obligatorio y realm de Keycloak versionado |
+| **M-2** | **Nadie ejecuta las migraciones.** `spring.flyway.enabled: false`, a propósito y bien: la aplicación se conecta como `sgtm_app`, que no tiene DDL | `application.yaml`, `spring.flyway.enabled` | Las quince migraciones y `db/roles/crear-roles.sql` existen y **no hay proceso que las aplique**. Base vacía | **Resuelto** (PR 2, #118): migrador propio, como `sgtm_owner`, que corre y termina |
+| **M-3** | **No hay imagen ni forma de arrancar.** Ni `Dockerfile`, ni `compose`, ni manifiestos | `find . -iname '*docker*' -o -iname '*compose*'` → solo `.github` | El artefacto único de ADR-0003, en perfiles `web` y `batch`, no está empaquetado en ninguna parte | **Resuelto** (PR 2, #118): `backend/Dockerfile` y `despliegue/compose.yaml`, levantados en CI |
+| **M-4** | **No hay forma de dar de alta una municipalidad.** `municipalidad` la escribe solo `sgtm_owner`, y no existe endpoint, tarea ni procedimiento que la cree, ni que siembre el primer administrador | `V1__nucleo_y_catastro.sql:35-46`; `SembradorDeAccesos` existe y **nadie lo invoca** | Sin fila en `municipalidad` no hay `municipalidad_id` que poner en ningún token. El sistema no tiene dentro | Abierto (#120) |
 
 Los cuatro comparten una causa: la hoja de ruta se ordenó por dependencia **entre contextos de
 negocio**, y la implantación no es un contexto de negocio. Que aparezcan justo ahora, cuando hay
 fecha, es lo normal; que no tengan issue, no.
+
+Con M-1 cerrado, lo que detiene hoy una petición autenticada **ya no es la identidad**: es la
+autorización, porque detrás no hay municipalidad, ni permisos, ni primer administrador. Esa
+frontera exacta la verifica la comprobación 6 de `despliegue.yml`, y cerrarla es M-4.
 
 ## 2. Qué hay hecho, verificado contra el repositorio
 
@@ -63,9 +67,9 @@ Cada fila es un PR. El orden está fijado por dependencia real, no por comodidad
 
 | # | PR | Issues | Depende de |
 |---|---|---|---|
-| 1 | Este plan, y los cinco issues creados (#118…#122) | — | — |
-| 2 | Empaquetado, migración como `sgtm_owner` y compose | **#118** | — |
-| 3 | Identidad con Keycloak, de punta a punta | **#119** | 2 |
+| 1 ✔ | Este plan, y los cinco issues creados (#118…#122) | — | — |
+| 2 ✔ | Empaquetado, migración como `sgtm_owner` y compose | **#118** | — |
+| 3 ✔ | Identidad con Keycloak, de punta a punta | **#119** | 2 |
 | 4 | Implantación de una municipalidad, y la marca de demostración | **#120**, **#122** | 3 |
 | 5 | Carga inicial de catálogos territoriales | **#121** | 4 |
 | 6 | Tablas de valuación: estructura, con la dimensión que falta | **#17** | 4 |

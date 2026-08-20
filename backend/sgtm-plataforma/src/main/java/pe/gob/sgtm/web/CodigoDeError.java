@@ -15,6 +15,17 @@ import org.springframework.http.HttpStatus;
 public enum CodigoDeError {
 
     /**
+     * No hay identidad: la peticion llego sin token, o con uno que no supera la validacion del
+     * emisor —firma ajena, emisor distinto del configurado, o vencido—.
+     *
+     * <p>Es 401 y no 403 a proposito, y la diferencia importa para la interfaz: 401 significa
+     * «vuelve a autenticarte» y es lo que dispara la renovacion del token; 403 significa «ya se
+     * quien eres, y aun asi no». Devolver 403 aqui haria que una sesion vencida se viera como una
+     * falta de permisos, y el usuario llamaria a soporte en vez de volver a entrar.
+     */
+    SIN_IDENTIDAD(HttpStatus.UNAUTHORIZED, "La peticion no lleva una identidad valida"),
+
+    /**
      * El token no identifica una municipalidad (ADR-0005). No hay valor por omision ni modo sin
      * municipalidad.
      */

@@ -5,11 +5,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -17,6 +15,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ProblemaEnBruto;
 
 /**
  * Traduce el claim del token validado a {@link TenantContext}. Es el primer eslabon del camino de
@@ -86,7 +85,7 @@ public final class TenantContextFilter extends OncePerRequestFilter {
                             + " omision ni modo sin municipalidad (ADR-0005, RNF-032)",
                     CLAIM,
                     e.getMessage());
-            responderSinMunicipalidad(respuesta);
+            ProblemaEnBruto.responder(respuesta, CodigoDeError.SIN_MUNICIPALIDAD);
             return;
         }
 
@@ -98,34 +97,6 @@ public final class TenantContextFilter extends OncePerRequestFilter {
             // igual que la conexion vuelve al suyo.
             TenantContext.limpiar();
         }
-    }
-
-    /**
-     * Responde 403 en {@code application/problem+json}, como cualquier otro error de la API.
-     *
-     * <p>Y no con {@code sendError}, que delega en la pagina de error del contenedor: el cliente
-     * recibiria HTML donde espera JSON, y la interfaz —que reacciona al campo {@code codigo}— no
-     * tendria a que reaccionar. El cuerpo se escribe a mano porque este filtro corre <b>antes</b>
-     * del {@code DispatcherServlet}: aqui no hay {@code @RestControllerAdvice} que valga.
-     */
-    private static void responderSinMunicipalidad(HttpServletResponse respuesta)
-            throws IOException {
-        CodigoDeError codigo = CodigoDeError.SIN_MUNICIPALIDAD;
-        respuesta.setStatus(codigo.estado().value());
-        respuesta.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        respuesta.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        respuesta
-                .getWriter()
-                .write(
-                        "{\"status\":"
-                                + codigo.estado().value()
-                                + ",\"title\":\""
-                                + codigo.mensaje()
-                                + "\",\"codigo\":\""
-                                + codigo.name()
-                                + "\",\"mensaje\":\""
-                                + codigo.mensaje()
-                                + "\"}");
     }
 
     private static @Nullable Jwt tokenDeLaAutenticacion() {

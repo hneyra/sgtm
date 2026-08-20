@@ -35,10 +35,15 @@ contenedor, como `sgtm_owner`, y termina antes de que la aplicación arranque. E
 código que provisiona la base de cada prueba de persistencia: si el despliegue migrara por su
 cuenta, lo verificado en CI y lo desplegado en la municipalidad dejarían de ser lo mismo.
 
-Hoy no se puede iniciar sesión: no hay emisor de identidad, y la cadena de seguridad niega todo lo
-que no sea `/actuator/health`. Eso es deliberado y está escrito en
-[`SeguridadWeb`](sgtm-plataforma/src/main/java/pe/gob/sgtm/plataforma/SeguridadWeb.java) —antes
-ocurría por omisión, que es peor porque no se parece a un fallo—.
+La identidad la emite **Keycloak**, con su realm versionado en
+[`despliegue/identidad/`](../despliegue/identidad/README.md). La cadena está escrita —no heredada—
+en [`SeguridadWeb`](sgtm-plataforma/src/main/java/pe/gob/sgtm/plataforma/SeguridadWeb.java):
+`/actuator/health` es lo único público y todo lo demás exige un token que el emisor configurado
+haya firmado.
+
+**El emisor no tiene valor por omisión: sin `SGTM_OIDC_EMISOR` el proceso no arranca.** Es
+deliberado. Un backend que arranca sin emisor responde a la sonda de vida, se declara sano y no
+atiende a nadie, y eso no se parece a un fallo hasta que alguien intenta entrar.
 
 **Si el build se queja del formato, no lo pelees: `spotlessApply`.** Checkstyle no revisa formato
 a propósito, para no discutir con el formateador. Lo que sí revisa, y es fácil de incumplir con el
@@ -143,9 +148,13 @@ Detalle del esquema: [`sgtm-esquema/README.md`](sgtm-esquema/README.md) y
 - Toda regla de cálculo tributario. Bloqueada por D-02 —los valores normativos, hoy partida en
   D-02a/b/c— y por D-03c, los puntos de redondeo
   ([GOB-02](../docs/00-gobierno/decisiones-abiertas.md)).
-- El emisor OIDC y el JWKS. Hoy `TenantContextFilter` sabe leer el claim y `SeguridadWeb` niega
-  todo lo que no sea la sonda de vida, pero nadie valida todavía un token: sin emisor no hay a
-  quién dejar entrar (#119).
+- **Un usuario dentro.** El emisor ya firma tokens y el backend los acepta, pero no hay
+  municipalidad, ni permisos, ni primer administrador: una petición autenticada se detiene hoy en
+  la autorización, no en la identidad (#120).
+- **La validación de audiencia.** Un token que el realm emita a cualquier cliente lo acepta el
+  backend: la validación por omisión mira emisor y vencimiento, no `aud`. Con un solo cliente el
+  efecto es nulo; con dos deja de serlo, y hacen falta las dos mitades a la vez —un mapeador en el
+  realm y un validador en `SeguridadWeb`—, porque media audiencia rechaza todos los tokens.
 - El mecanismo que escribe la auditoría (disparadores o aspecto). Se decide con el primer caso de
   uso de escritura; ver [DAT-02 §4](../docs/40-datos/auditoria-e-historico.md).
 - Las particiones de los ejercicios siguientes a 2027, y su automatización.

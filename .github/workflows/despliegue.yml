@@ -4,22 +4,46 @@
 # preguntas al sistema en marcha. Un compose revisado a ojo se ve correcto hasta
 # el dia del despliegue.
 #
-# Las cuatro preguntas, y por que cada una:
+# Las siete preguntas, y por que cada una:
 #
 #   1. ¿Se aplicaron todas las migraciones del repositorio? Un `locations` mal
 #      escrito, o un migrador que no se ejecuta, dejan la base a medias sin que
 #      nada falle.
 #   2. ¿Responde la sonda de vida? Es lo que hace que `depends_on:
 #      service_healthy` signifique algo.
-#   3. ¿Se atiende alguna ruta de la API sin identidad? Mientras no haya emisor,
-#      la respuesta correcta a todas es que no.
+#   3. ¿Se atiende alguna ruta de la API sin identidad? La respuesta correcta a
+#      todas es 401, y con el codigo del catalogo en el cuerpo.
 #   4. ¿Puede la aplicacion ejecutar DDL? Esta es la que da valor al resto.
+#   5. ¿Deja el realm crear un usuario sin municipalidad? Tiene que negarse EL
+#      EMISOR: si la barrera fuera solo del backend, existiria un token emitido y
+#      valido que no sirve para nada, y nadie sabria por que.
+#   6. ¿Entra un token de verdad, pedido a Keycloak? Es la unica pregunta que
+#      recorre el camino entero con el emisor real.
+#   7. ¿Entra un token de OTRO realm del mismo Keycloak? Tiene que ser que no.
+#   8. Sin emisor configurado, ¿arranca la aplicacion? Tiene que negarse. Un
+#      backend que arranca sin emisor responde a la sonda de vida, se declara sano
+#      y no atiende a nadie: es peor que un fallo, porque no se parece a uno.
 #
 # COMO SE DEMUESTRA QUE LA 4 PUEDE FALLAR: se cambia en el compose el
 # `SGTM_DB_USUARIO: sgtm_app` de la aplicacion por `sgtm_owner` —con su clave— y
 # este trabajo se pone rojo. La comprobacion lee las credenciales del contenedor
 # que esta corriendo, no las que el compose deberia tener, asi que no hay forma de
 # pasarla dandole al proceso mas privilegios de los declarados.
+#
+# COMO SE DEMUESTRA QUE LA 5 PUEDE FALLAR: se quita `"required"` del atributo
+# `municipalidad_id` en `identidad/realm-sgtm.json`. Keycloak acepta el usuario y
+# el paso se pone rojo.
+#
+# COMO SE DEMUESTRA QUE LA 8 PUEDE FALLAR: se le pone un valor por omision al
+# marcador de `application.yaml` —`${SGTM_OIDC_EMISOR:http://…}`—. La aplicacion
+# arranca, se queda viva, y el paso se pone rojo por tiempo agotado.
+#
+# COMO SE DEMUESTRA QUE LA 7 PUEDE FALLAR: se cambia en `application.yaml` el
+# `issuer-uri` por `jwk-set-uri`. El token del otro realm sigue firmado por otra
+# clave, asi que este paso concreto aguanta; el que cae es
+# `CadenaDeIdentidadTest.tokenConEmisorSuplantado`, que firma con la clave buena y
+# cambia solo el emisor. Los dos hacen falta: este verifica el Keycloak de verdad,
+# aquel la propiedad exacta.
 
 name: Despliegue
 
@@ -42,7 +66,7 @@ permissions:
 
 jobs:
   levantar:
-    name: La marcha blanca se levanta, y la aplicacion no puede hacer DDL
+    name: La marcha blanca se levanta, se entra con un token y la aplicacion no puede hacer DDL
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -61,7 +85,17 @@ jobs:
             echo "SGTM_CLAVE_SUPERUSUARIO=$(openssl rand -hex 24)"
             echo "SGTM_CLAVE_OWNER=$(openssl rand -hex 24)"
             echo "SGTM_CLAVE_APP=$(openssl rand -hex 24)"
+            echo "SGTM_CLAVE_ADMIN_IDENTIDAD=$(openssl rand -hex 24)"
           } > .env
+
+      # El emisor viaja firmado dentro de cada token: el backend valida que el
+      # `iss` sea exactamente `http://identidad:8081/realms/sgtm`. Dentro de la
+      # red de contenedores ese nombre lo resuelve Docker; aqui fuera hace falta
+      # esta linea, o el runner pediria el token a un nombre y el backend
+      # esperaria otro. Es la misma linea que el README pide en la maquina de
+      # quien desarrolla.
+      - name: Que `identidad` signifique lo mismo dentro y fuera de los contenedores
+        run: echo "127.0.0.1 identidad" | sudo tee -a /etc/hosts
 
       # Se espera a `aplicacion` y no a todo: `migraciones` corre y termina, y un
       # contenedor que sale con exito no es un contenedor sano. Sus dependencias
@@ -94,17 +128,19 @@ jobs:
             exit 1
           fi
 
-      - name: 3 · Ninguna ruta de la API se atiende sin identidad
+      - name: 3 · Ninguna ruta se atiende sin identidad, y el 401 lleva su codigo
         run: |
           set -euo pipefail
           for ruta in /api/v1/catastro/vias /api/v1/seguridad/usuarios /actuator/env; do
-            codigo=$(curl --output /dev/null --silent --write-out '%{http_code}' \
+            cuerpo=$(mktemp)
+            codigo=$(curl --output "$cuerpo" --silent --write-out '%{http_code}' \
               "http://localhost:8080$ruta")
-            echo "$ruta -> $codigo"
-            case "$codigo" in
-              401|403|404) ;;
-              *) echo "  $ruta respondio $codigo sin token"; exit 1 ;;
-            esac
+            echo "$ruta -> $codigo $(cat "$cuerpo")"
+            test "$codigo" = "401"
+            # Un 401 con el cuerpo vacio deja a la interfaz sin el campo al que
+            # reacciona, y la sesion vencida —el 401 mas frecuente que va a
+            # existir— se veria como un fallo de red.
+            grep -q '"codigo":"SIN_IDENTIDAD"' "$cuerpo"
           done
 
       - name: 4 · La aplicacion no puede ejecutar DDL
@@ -127,7 +163,139 @@ jobs:
           fi
           echo "Correcto: el DDL se rechaza con las credenciales de la aplicacion."
 
-      - name: Registros de los tres contenedores, si algo fallo
+      # ── Identidad, contra el Keycloak que acaba de levantarse ──────────────
+      #
+      # A partir de aqui se habla con el emisor de verdad. `kcadm.sh` corre DENTRO
+      # del contenedor y apunta a `http://identidad:8081`, el mismo nombre que
+      # tiene fuera: cualquier otro haria que el `iss` de los tokens no coincidiera
+      # con el que el backend espera.
+      - name: Conectar kcadm al emisor
+        run: |
+          set -euo pipefail
+          source .env
+          docker compose exec -T identidad /opt/keycloak/bin/kcadm.sh config credentials \
+            --server http://identidad:8081 --realm master \
+            --user admin --password "$SGTM_CLAVE_ADMIN_IDENTIDAD"
+
+      - name: 5 · El realm se niega a crear un usuario sin municipalidad
+        run: |
+          set -euo pipefail
+          # Sin `municipalidad_id` no hay `SET LOCAL` posible, asi que un usuario
+          # sin municipalidad solo puede recibir 403 en cada peticion de su vida.
+          # Que el emisor no lo deje nacer es mejor que descubrirlo despues.
+          if docker compose exec -T identidad /opt/keycloak/bin/kcadm.sh create users -r sgtm \
+               -s username=sin-municipalidad -s enabled=true 2>&1
+          then
+            echo "FALLO: el realm dejo crear un usuario sin municipalidad."
+            echo "Revisar \"required\" del atributo municipalidad_id en realm-sgtm.json."
+            exit 1
+          fi
+          echo "Correcto: el emisor exige la municipalidad."
+
+      - name: 6 · Un token de verdad entra, y la identidad deja de ser lo que lo frena
+        run: |
+          set -euo pipefail
+          clave=$(openssl rand -hex 16)
+
+          docker compose exec -T identidad /opt/keycloak/bin/kcadm.sh create users -r sgtm \
+            -s username=verificacion -s enabled=true \
+            -s 'attributes.municipalidad_id=1'
+          docker compose exec -T identidad /opt/keycloak/bin/kcadm.sh set-password -r sgtm \
+            --username verificacion --new-password "$clave"
+
+          # El flujo de contrasena directa NO viene habilitado en el realm: es
+          # justo lo que el flujo de codigo existe para evitar. Se enciende aqui,
+          # a la vista, porque no hay navegador con el que recorrer el flujo bueno.
+          idCliente=$(docker compose exec -T identidad /opt/keycloak/bin/kcadm.sh get clients \
+            -r sgtm --query clientId=sgtm-backoffice --fields id --format csv --noquotes | tr -d '\r')
+          docker compose exec -T identidad /opt/keycloak/bin/kcadm.sh update "clients/$idCliente" \
+            -r sgtm -s directAccessGrantsEnabled=true
+
+          token=$(curl --silent --fail \
+            "http://identidad:8081/realms/sgtm/protocol/openid-connect/token" \
+            -d grant_type=password -d client_id=sgtm-backoffice \
+            -d username=verificacion -d "password=$clave" | jq -r .access_token)
+          test -n "$token" && test "$token" != "null"
+
+          # El claim tiene que estar, y tiene que ser el que ADR-0005 fija.
+          claim=$(echo "$token" | cut -d. -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | jq -r .municipalidad_id)
+          echo "El token trae municipalidad_id = $claim"
+          test "$claim" = "1"
+
+          cuerpo=$(mktemp)
+          codigo=$(curl --output "$cuerpo" --silent --write-out '%{http_code}' \
+            --header "Authorization: Bearer $token" \
+            "http://localhost:8080/api/v1/seguridad/usuarios")
+          echo "con token -> $codigo $(cat "$cuerpo")"
+
+          # No se exige 200: la municipalidad 1 todavia no existe dentro del
+          # sistema y no hay permisos sembrados —eso es #120—. Lo que se exige es
+          # que lo que detenga la peticion YA NO SEA la identidad.
+          test "$codigo" != "401"
+          if grep -q '"codigo":"SIN_IDENTIDAD"' "$cuerpo"; then
+            echo "FALLO: el backend no acepto un token que su propio emisor firmo."
+            exit 1
+          fi
+          if grep -q '"codigo":"SIN_MUNICIPALIDAD"' "$cuerpo"; then
+            echo "FALLO: el token llego sin el claim. Revisar el mapeador del realm."
+            exit 1
+          fi
+          echo "Correcto: el token entra y la cadena de identidad queda atras."
+
+      - name: 7 · Un token de otro realm del mismo Keycloak no entra
+        run: |
+          set -euo pipefail
+          clave=$(openssl rand -hex 16)
+          kcadm() { docker compose exec -T identidad /opt/keycloak/bin/kcadm.sh "$@"; }
+
+          # Un realm hermano, en el mismo emisor y con el mismo administrador. Es
+          # el escenario realista: quien puede crear un realm puede firmar tokens
+          # impecables, y lo unico que los separa del padron es el `iss`.
+          kcadm create realms -s realm=ajeno -s enabled=true -s sslRequired=none
+          kcadm create clients -r ajeno -s clientId=cliente-ajeno -s enabled=true \
+            -s publicClient=true -s directAccessGrantsEnabled=true
+          kcadm create users -r ajeno -s username=intruso -s enabled=true
+          kcadm set-password -r ajeno --username intruso --new-password "$clave"
+
+          token=$(curl --silent --fail \
+            "http://identidad:8081/realms/ajeno/protocol/openid-connect/token" \
+            -d grant_type=password -d client_id=cliente-ajeno \
+            -d username=intruso -d "password=$clave" | jq -r .access_token)
+          test -n "$token" && test "$token" != "null"
+
+          codigo=$(curl --output /dev/null --silent --write-out '%{http_code}' \
+            --header "Authorization: Bearer $token" \
+            "http://localhost:8080/api/v1/seguridad/usuarios")
+          echo "token del realm ajeno -> $codigo"
+          test "$codigo" = "401"
+          echo "Correcto: un token perfectamente firmado por otro realm no vale."
+
+      - name: 8 · Sin emisor configurado, la aplicacion se niega a arrancar
+        run: |
+          set -euo pipefail
+          source .env
+          # La MISMA imagen que esta sirviendo, con las mismas credenciales de
+          # base, y sin una sola variable: SGTM_OIDC_EMISOR. Se le da tiempo de
+          # sobra para arrancar; si sigue viva al agotarse, arranco sin emisor.
+          codigo=0
+          timeout 120 docker run --rm --network sgtm_default \
+            --env SPRING_PROFILES_ACTIVE=web \
+            --env SGTM_DB_URL=jdbc:postgresql://base:5432/sgtm \
+            --env SGTM_DB_USUARIO=sgtm_app \
+            --env SGTM_DB_CLAVE="$SGTM_CLAVE_APP" \
+            sgtm-aplicacion:marcha-blanca > sin-emisor.log 2>&1 || codigo=$?
+          echo "La aplicacion sin emisor termino con $codigo"
+          tail -20 sin-emisor.log
+
+          if [ "$codigo" = "124" ]; then
+            echo "FALLO: arranco y siguio viva sin emisor de identidad."
+            echo "Un backend asi responde a la sonda, se declara sano y no atiende a nadie."
+            exit 1
+          fi
+          test "$codigo" != "0"
+          echo "Correcto: sin emisor no hay proceso."
+
+      - name: Registros de los cuatro contenedores, si algo fallo
         if: failure()
         run: docker compose logs --no-color --tail 200
 

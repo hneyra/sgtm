@@ -371,13 +371,22 @@ caduca el token y comprueba que el texto sigue ahí.
 Del token se lee el nombre del usuario, el nombre de la municipalidad y hasta cuándo dura. **No hay
 identificador de municipalidad que mandar**, así que no se puede mandar (regla 2, FRO-01 §4).
 
+### Apuntar al emisor
+
+El emisor es **Keycloak**, y su realm está versionado en
+[`despliegue/identidad/`](../despliegue/identidad/README.md). Los valores para la instalación de
+marcha blanca están en [`apps/backoffice/.env.ejemplo`](apps/backoffice/.env.ejemplo):
+
 ```bash
-# Con proveedor de identidad:
-VITE_SGTM_OIDC_CLIENTE=sgtm-backoffice \
-VITE_SGTM_OIDC_AUTORIZACION=https://identidad.gob.pe/oauth2/authorize \
-VITE_SGTM_OIDC_TOKEN=https://identidad.gob.pe/oauth2/token \
-VITE_SGTM_OIDC_FIN_DE_SESION=https://identidad.gob.pe/oauth2/logout yarn dev
+echo "127.0.0.1 identidad" | sudo tee -a /etc/hosts   # una vez, y no es opcional
+cd apps/backoffice && cp .env.ejemplo .env
+yarn dev
 ```
+
+**La línea del `/etc/hosts` es la que más tiempo hace perder si falta.** El emisor viaja firmado
+dentro de cada token —es el claim `iss`— y el backend rechaza el que no coincida con el suyo. Si el
+navegador pidiera el token a `localhost:8081` y el backend esperara `identidad:8081`, el token
+sería impecable, todo estaría bien configurado y nada funcionaría.
 
 Sin esas variables no hay proveedor y la aplicación arranca igual, que es como se trabaja contra el
 proxy de datos. En producción, un despliegue sin ellas es un despliegue mal configurado.

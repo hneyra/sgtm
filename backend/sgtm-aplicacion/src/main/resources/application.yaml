@@ -16,6 +16,25 @@ spring:
     # las aplica el migrador del despliegue, como sgtm_owner, antes de que este
     # proceso arranque (pe.gob.sgtm.esquema.Migrador).
     enabled: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # El emisor de identidad, sin valor por omision: sin la variable el
+          # contexto no levanta. Es deliberado. Un backend que arranca sin emisor
+          # responde a la sonda de vida, se declara sano y no atiende a nadie, y
+          # eso no se parece a un fallo hasta que alguien intenta entrar.
+          #
+          # Va `issuer-uri` y no `jwk-set-uri` porque solo el primero hace que
+          # Spring valide el claim `iss`. Con el segundo, un token firmado por otro
+          # realm del mismo Keycloak —o por cualquier emisor cuyas claves se
+          # publiquen en esa URL— pasaria la validacion por omision.
+          #
+          # El valor tiene que ser el MISMO texto que el emisor pone en `iss`. Con
+          # Keycloak eso lo fija KC_HOSTNAME, y por eso la instalacion nombra al
+          # servicio igual dentro y fuera de la red de contenedores
+          # (despliegue/README.md).
+          issuer-uri: ${SGTM_OIDC_EMISOR}
 
 # Solo la sonda de vida, y sin detalles. Es el unico endpoint que SeguridadWeb
 # deja publico: `health` responde si el proceso esta arriba y llega a la base,

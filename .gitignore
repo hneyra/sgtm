@@ -27,3 +27,9 @@ frontend/playwright-report/
 # Despliegue: el archivo de claves de la instalacion. El .env.ejemplo si se
 # versiona; el .env con las claves de verdad, nunca.
 despliegue/.env
+
+# Lo mismo para el frontend: `.env.ejemplo` se versiona, `.env` no. Aqui no hay
+# secretos —un cliente publico no tiene clave— pero si direcciones de una
+# instalacion concreta, y esas no son del repositorio.
+frontend/apps/*/.env
+frontend/apps/*/.env.local
