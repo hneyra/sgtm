@@ -14,17 +14,26 @@ import pe.gob.sgtm.web.ImporteActualizado;
  *
  * <p>{@code total} lleva su fecha, como toda cifra que sale por HTTP (regla 9, RNF-075). La fecha
  * es la fecha valor del movimiento: el dia con el que entro al libro.
+ *
+ * <p>{@code numeroDeDocumento} es el de la nota de abono o de cargo que se emitio al registrar. Se
+ * devuelve el numero y no el PDF: con el se pide el documento cuando haga falta, y sale identico
+ * meses despues (#15).
  */
 public record MovimientoDeDeudaResource(
-        String sentido, ImporteActualizado total, List<AsientoResource> asientos) {
+        String sentido,
+        String numeroDeDocumento,
+        ImporteActualizado total,
+        List<AsientoResource> asientos) {
 
-    public static MovimientoDeDeudaResource de(String sentido, List<Asiento> asientos) {
+    public static MovimientoDeDeudaResource de(
+            String sentido, List<Asiento> asientos, String numeroDeDocumento) {
         Dinero total = Dinero.CERO;
         for (Asiento asiento : asientos) {
             total = total.mas(asiento.monto());
         }
         return new MovimientoDeDeudaResource(
                 sentido,
+                numeroDeDocumento,
                 new ImporteActualizado(total, asientos.get(0).fechaValor()),
                 asientos.stream().map(AsientoResource::de).toList());
     }
