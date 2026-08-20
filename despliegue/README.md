@@ -17,9 +17,9 @@ La interfaz queda en <http://localhost:8081> y Keycloak en <http://localhost:818
 ## Las piezas y su orden
 
 ```
-base ──(sana)──► migraciones ──(termina con éxito)──┐
-                                                    ├──► aplicación ──(sana)──► interfaz
-identidad ──(arrancada)─────────────────────────────┘
+base ──(sana)──► migraciones ──► implantación ──(termina con éxito)──┐
+                                                                     ├──► aplicación ──► interfaz
+identidad ──(arrancada)──────────────────────────────────────────────┘
 ```
 
 | Servicio | Rol con que se conecta | Vive |
@@ -27,6 +27,7 @@ identidad ──(arrancada)─────────────────�
 | `base` | superusuario, solo dentro del contenedor | siempre |
 | `identidad` | Keycloak, con su propio administrador | siempre |
 | `migraciones` | `sgtm_owner` — **el único con DDL** | corre y termina |
+| `implantacion` | `sgtm_owner` para **una** sentencia; el resto como `sgtm_app` | corre y termina |
 | `aplicacion` | `sgtm_app` — sin DDL, sin `BYPASSRLS`, sin `DELETE`, propietaria de nada | siempre |
 | `interfaz` | nginx: sirve la aplicación y reenvía `/api/v1` | siempre |
 
@@ -85,15 +86,37 @@ público y el backend por el interno de la red del compose. Por eso `issuer-uri`
 —lo que se compara con el `iss` del token— es el público, y `jwk-set-uri` —de dónde
 se traen las claves— es el interno.
 
-## Lo que todavía no hay
+## La implantación
 
-- **No hay ninguna municipalidad dentro.** Sin fila en `municipalidad` no hay
-  `municipalidad_id` que poner en ningún token:
-  [#120](https://github.com/hneyra/sgtm/issues/120).
-- **Un usuario recién creado no puede hacer nada todavía**, y es correcto: el token
-  vale, el claim se lee, y el guardia de acceso responde `SIN_PRIVILEGIO` porque no
-  hay municipalidad ni usuario en las tablas de la aplicación. Eso es
-  [#120](https://github.com/hneyra/sgtm/issues/120).
+`implantacion` corre una vez por despliegue, con la misma imagen que la aplicación
+en perfil `batch`, y deja el sistema **administrable**:
+
+1. da de alta la municipalidad —es la única escritura que necesita `sgtm_owner`,
+   una sentencia, en una conexión que se abre y se cierra ahí—;
+2. siembra los accesos de las 134 opciones del catálogo;
+3. crea el grupo de administración y el primer administrador;
+4. le otorga los siete privilegios sobre las once opciones de seguridad, **y
+   ninguna más**.
+
+Lo cuarto es deliberadamente poco: con eso el administrador puede repartir el
+resto del sistema según quién haga qué en la municipalidad. Darle de entrada las
+134 opciones sería más cómodo el primer día y dejaría una cuenta con todo para
+siempre, porque nadie vuelve a quitarle nada a la cuenta que funciona.
+
+**Es idempotente entera**: se ejecuta en cada despliegue, lo que ya existe se
+queda como está —con los permisos que alguien haya configurado después— y lo que
+falta se crea.
+
+Dos cosas que no hace, y conviene saberlas:
+
+- **No crea ninguna contraseña.** El sistema no guarda claves ni las transporta
+  (ADR-0005). La credencial vive en Keycloak: `SGTM_ADMINISTRADOR` tiene que ser
+  la misma cuenta que se cree con `identidad/crear-usuario.sh`, porque es lo único
+  que une la fila con la identidad del token.
+- **No fija ningún ejercicio de trabajo.** El ejercicio vive en `sesion`, es de
+  cada sesión y se elige al entrar.
+
+## Lo que todavía no hay
 - **Esto no es una instalación de producción.** Un solo nodo, sin copias de
   seguridad programadas, sin TLS y con los puertos publicados en claro. Keycloak
   corre en `start-dev`, que guarda su base en el propio contenedor. Para la marcha

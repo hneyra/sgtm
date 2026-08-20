@@ -30,6 +30,14 @@ public interface AdministracionRepository {
 
     Optional<Grupo> grupo(long id);
 
+    /**
+     * El grupo con ese nombre, si existe.
+     *
+     * <p>Existe para que la implantacion pueda ser idempotente sin recorrer paginas: el nombre ya
+     * es unico por municipalidad en el esquema, asi que buscar por el es buscar por una clave.
+     */
+    Optional<Grupo> grupoPorNombre(String nombre);
+
     Grupo guardar(Grupo grupo);
 
     // ---- Usuarios ----

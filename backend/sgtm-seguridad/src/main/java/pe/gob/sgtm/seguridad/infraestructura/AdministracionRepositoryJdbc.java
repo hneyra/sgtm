@@ -109,6 +109,16 @@ public class AdministracionRepositoryJdbc extends RepositorioJdbc
     }
 
     @Override
+    public Optional<Grupo> grupoPorNombre(String nombre) {
+        return jdbc().sql(
+                        "SELECT id, nombre, descripcion, habilitado, vigencia_desde, vigencia_hasta"
+                                + " FROM grupo WHERE nombre = :nombre")
+                .param("nombre", nombre)
+                .query(AdministracionRepositoryJdbc::mapearGrupo)
+                .optional();
+    }
+
+    @Override
     public Grupo guardar(Grupo grupo) {
         if (grupo.id() == null) {
             Long id =

@@ -18,12 +18,14 @@
 #        con algo que no es un token .............. 401 NO_AUTENTICADO
 #        con un token de otro emisor .............. 401 NO_AUTENTICADO
 #        con token del realm, sin el claim ........ 403 SIN_MUNICIPALIDAD
-#        con token del realm y con el claim ....... 403 SIN_PRIVILEGIO
+#        el administrador, en lo suyo ............. 200
+#        el administrador, en lo que no le toca ... 403 SIN_PRIVILEGIO
 #
-#      El ultimo peldano es el que importa: SIN_PRIVILEGIO significa que el token
-#      se valido, que el claim se leyo y que la peticion llego hasta el guardia de
-#      acceso. Que no tenga permisos es correcto —no hay municipalidad ni usuario
-#      en las tablas de la aplicacion todavia, y eso es #120—.
+#      Los dos ultimos peldanos son los que importan, y hay que leerlos juntos: el
+#      200 cierra el camino entero —Keycloak emite, el backend valida, el claim se
+#      lee, la municipalidad esta implantada, el usuario de la base esta enlazado
+#      por su cuenta y los permisos existen—; el 403 dice que esos permisos son una
+#      barrera y no un sello.
 #   5. ¿Se atiende alguna otra ruta? La respuesta a todas es que no.
 #   6. ¿Se sirve la interfaz, y su paquete lleva el emisor? Vite lo resuelve al
 #      compilar: si no esta dentro del paquete, la pantalla de acceso no lleva a
@@ -83,6 +85,14 @@ jobs:
             echo "SGTM_CLAVE_APP=$(openssl rand -hex 24)"
             echo "SGTM_CLAVE_KEYCLOAK=$(openssl rand -hex 24)"
             echo "SGTM_CLAVE_VERIFICACION=$(openssl rand -hex 24)"
+            # La municipalidad que se implanta, y el administrador. La cuenta es la
+            # misma que el usuario que se crea en Keycloak mas abajo: es lo unico que
+            # une la fila de la base con la identidad del token.
+            echo "SGTM_UBIGEO=200101"
+            echo "SGTM_MUNICIPALIDAD=Municipalidad de verificacion"
+            echo "SGTM_TIPO_DE_MUNICIPALIDAD=PROVINCIAL"
+            echo "SGTM_ADMINISTRADOR=verificacion"
+            echo "SGTM_NOMBRE_DEL_ADMINISTRADOR=Administrador de verificacion"
           } > .env
 
       # Se espera a `aplicacion` y no a todo: `migraciones` corre y termina, y un
@@ -147,7 +157,7 @@ jobs:
         run: |
           set -euo pipefail
           source .env
-          RUTA=http://localhost:8080/api/v1/catastro/vias
+          API=http://localhost:8080/api/v1
           KC=http://localhost:8180
 
           # Si el token no sale, lo que interesa es POR QUE, y eso lo dice Keycloak
@@ -172,37 +182,41 @@ jobs:
 
           # Devuelve "codigo_http CODIGO_DEL_CATALOGO", que es lo que hace precisa
           # cada asercion: distingue «no se autentico» de «se autentico y no tiene
-          # municipalidad» de «tiene municipalidad y le falta el privilegio».
+          # municipalidad» de «tiene municipalidad y le falta el privilegio». En una
+          # respuesta correcta no hay codigo del catalogo, y entonces dice «ok».
           intento() {
-            local cabecera=("$@")
-            local cuerpo estado
-            cuerpo=$(curl --silent --output /tmp/cuerpo --write-out '%{http_code}' \
-              "${cabecera[@]}" "$RUTA")
-            estado=$cuerpo
-            echo "$estado $(python3 -c 'import json;print(json.load(open("/tmp/cuerpo")).get("codigo","(sin codigo)"))' 2>/dev/null || echo '(sin cuerpo json)')"
+            local ruta="$1"; shift
+            local estado
+            estado=$(curl --silent --output /tmp/cuerpo --write-out '%{http_code}' "$@" "$API$ruta")
+            echo "$estado $(python3 -c 'import json;print(json.load(open("/tmp/cuerpo")).get("codigo","ok"))' 2>/dev/null || echo 'ok')"
           }
 
           echo "--- sin token"
-          test "$(intento)" = "401 NO_AUTENTICADO"
+          test "$(intento /catastro/vias)" = "401 NO_AUTENTICADO"
 
           echo "--- con un token que no es un token"
-          test "$(intento --header 'Authorization: Bearer esto-no-es-un-token')" = "401 NO_AUTENTICADO"
+          test "$(intento /catastro/vias --header 'Authorization: Bearer esto-no-es-un-token')" = "401 NO_AUTENTICADO"
 
           echo "--- con un token de OTRO emisor: el realm master del mismo Keycloak"
           ajeno=$(token master admin-cli "${SGTM_KEYCLOAK_ADMIN:-admin}" "$SGTM_CLAVE_KEYCLOAK")
-          test "$(intento --header "Authorization: Bearer $ajeno")" = "401 NO_AUTENTICADO"
+          test "$(intento /catastro/vias --header "Authorization: Bearer $ajeno")" = "401 NO_AUTENTICADO"
 
           echo "--- con un token del realm correcto pero SIN el claim municipalidad_id"
           sinClaim=$(token sgtm sgtm-verificacion sin-municipalidad "$SGTM_CLAVE_VERIFICACION")
-          test "$(intento --header "Authorization: Bearer $sinClaim")" = "403 SIN_MUNICIPALIDAD"
+          test "$(intento /catastro/vias --header "Authorization: Bearer $sinClaim")" = "403 SIN_MUNICIPALIDAD"
 
-          echo "--- con un token completo: pasa la cadena y llega al guardia de acceso"
           conClaim=$(token sgtm sgtm-verificacion verificacion "$SGTM_CLAVE_VERIFICACION")
-          # SIN_PRIVILEGIO y no SIN_MUNICIPALIDAD: el token se valido y el claim se
-          # leyo. Que no tenga permisos es correcto —todavia no hay municipalidad ni
-          # usuario en las tablas de la aplicacion, y eso es #120—; lo que se verifica
-          # aqui es hasta donde llego la peticion, no que devuelva datos.
-          test "$(intento --header "Authorization: Bearer $conClaim")" = "403 SIN_PRIVILEGIO"
+
+          echo "--- el administrador implantado ENTRA en lo suyo"
+          # Aqui se cierra el camino entero: token emitido por Keycloak, validado por
+          # el backend, claim leido, municipalidad implantada, usuario de la base
+          # enlazado por su cuenta, y permisos que la implantacion otorgo.
+          test "$(intento /seguridad/usuarios --header "Authorization: Bearer $conClaim")" = "200 ok"
+
+          echo "--- y NO entra en lo que no le toca"
+          # La implantacion le da las once opciones de seguridad y ninguna mas. Si
+          # esto respondiera 200, los permisos serian un sello y no una barrera.
+          test "$(intento /catastro/vias --header "Authorization: Bearer $conClaim")" = "403 SIN_PRIVILEGIO"
 
       - name: 5 · Ninguna otra ruta se atiende
         run: |

@@ -3,6 +3,7 @@ package pe.gob.sgtm;
 import java.time.Clock;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.modulith.Modulithic;
@@ -36,8 +37,32 @@ import pe.gob.sgtm.plataforma.SeguridadWeb;
 @Import({ConfiguracionDeTenant.class, SeguridadWeb.class})
 public class SgtmAplicacion {
 
+    /** El perfil de los procesos que corren y terminan (ADR-0003). */
+    private static final String PERFIL_BATCH = "batch";
+
+    /**
+     * En el perfil {@code web} arranca y se queda; en {@code batch} hace su trabajo y
+     * <b>termina</b>.
+     *
+     * <p>La segunda mitad no es un adorno. Spring Boot no cierra el contexto al acabar los {@code
+     * ApplicationRunner}, y basta un {@code ScheduledThreadPoolExecutor} no-demonio —los hay, sin
+     * que nadie los pida— para que la JVM siga viva sin nada que hacer. Un contenedor de un solo
+     * uso que no termina no es una molestia: el orquestador espera su {@code
+     * service_completed_successfully} para arrancar lo siguiente, y se queda esperando para
+     * siempre. El despliegue entero se cuelga en el paso mas tonto.
+     *
+     * <p>Lo descubrio la primera implantacion ejecutada de verdad: hizo su trabajo —municipalidad,
+     * 134 accesos, administrador y permisos, todo correcto en la base— y se quedo ahi.
+     *
+     * <p>{@code SpringApplication.exit} cierra el contexto y calcula el codigo de salida a partir
+     * de los {@code ExitCodeGenerator}, asi que un proceso masivo que falle seguira saliendo
+     * distinto de cero.
+     */
     public static void main(String[] args) {
-        SpringApplication.run(SgtmAplicacion.class, args);
+        ConfigurableApplicationContext contexto = SpringApplication.run(SgtmAplicacion.class, args);
+        if (contexto.getEnvironment().matchesProfiles(PERFIL_BATCH)) {
+            System.exit(SpringApplication.exit(contexto));
+        }
     }
 
     /**
