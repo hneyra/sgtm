@@ -30,6 +30,7 @@ cosas donde espera.
 - [Visión y alcance](00-gobierno/vision-y-alcance.md) — qué se reimplementa del manual y qué no
 - [Decisiones abiertas](00-gobierno/decisiones-abiertas.md) — lo que bloquea, con quién decide
 - [Glosario tributario](00-gobierno/glosario-tributario.md) — vocabulario del manual y del dominio
+- [Plan de marcha blanca](00-gobierno/plan-de-marcha-blanca.md) — el recorte del predial que se despliega, y en qué orden
 
 ### 10 — Negocio
 - [Mapa de macroprocesos](10-negocio/mapa-de-macroprocesos.md) — los siete procesos del sistema
