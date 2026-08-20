@@ -37,6 +37,17 @@ public class LectorDeParametrosSellados implements LectorDeParametros {
 
     @Override
     @Transactional(readOnly = true)
+    public IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio) {
+        ConjuntoDeParametros conjunto =
+                repositorio
+                        .selladoVigenteDe(ejercicio)
+                        .orElseThrow(() -> new EjercicioSinSellar(ejercicio));
+        return IdentificadorDeConjunto.de(
+                Objects.requireNonNull(conjunto.id(), "Un conjunto leido de la base tiene id"));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public ParametrosSellados porConjunto(IdentificadorDeConjunto identificador) {
         ConjuntoDeParametros conjunto =
                 repositorio

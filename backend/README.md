@@ -93,7 +93,7 @@ sgtm-plataforma           Filtro del token, SET LOCAL por transaccion, guardia d
                           auditoria de ADR-0008 (pe.gob.sgtm.auditoria), la capa web
                           comun (pe.gob.sgtm.web) y el guardia de acceso
                           (pe.gob.sgtm.autorizacion)
-sgtm-<contexto> × 12      Los contextos acotados de ARQ-01 §3. Solo catastro tiene codigo
+sgtm-<contexto> × 12      Los contextos acotados de ARQ-01 §3
 sgtm-aplicacion           Ensambla, y aloja ArchUnit, el escaner y Spring Modulith
 ```
 
