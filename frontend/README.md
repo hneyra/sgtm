@@ -160,6 +160,23 @@ con «—». Donde eso importa más es en las cifras: el arancel por m², el val
 y el autovalúo rural alimentan la valuación de un predio, y una cifra inventada ahí acaba en un
 valor mal emitido. Que falte se ve; que esté mal, no.
 
+### Lo irreversible se confirma diciendo qué va a pasar, y sobre cuántos
+
+«¿Estás seguro?» no da ninguna información nueva: quien pulsa siempre está seguro. Lo que hace
+falta saber es **qué va a pasar** —«vas a generar valores, y eso no se deshace»— y, cuando la
+pantalla lo sabe, **sobre cuántos**: «sobre 4,182 valores · S/ 3.84 M».
+
+La lista de lo que no se deshace cubría anular, dar de baja, emitir, reversar y prescribir. Le
+faltaban tres de los cuatro actos que [#75](https://github.com/hneyra/sgtm/issues/75) nombra:
+**generar una tanda de valores**, **notificar** —el acuse sostiene el plazo, y un plazo mal
+notificado tumba el procedimiento— y **pasar a coactiva**. Se mira la etiqueta de la acción y no la
+operación porque es lo que el usuario lee: si el botón dice «Derivar a coactiva», eso es lo que
+cree que va a hacer.
+
+El alcance está cableado y probado en el bloque, no en una pantalla, y por un motivo que conviene
+saber: **una pantalla que escribe no carga sus datos** (#64), así que hoy ninguna conoce su propio
+alcance al abrirse. Lo conocerá la emisión masiva cuando «Simular» rellene su tabla, que es #38.
+
 ### Tras cobrar, entra el siguiente contribuyente
 
 En ventanilla se cobra cientos de veces al día y siempre igual: se identifica al contribuyente, se
@@ -564,6 +581,9 @@ dice en la misma frase en que excluye el token.
 | El foco vuelve tras cobrar              | Quitando el `focus()`                                                   | Rojas, dos                    |
 | Y no se queda clavado                   | Enfocando en cada render en vez de en el flanco                         | Roja                          |
 | Un reintento no es un segundo cobro     | Regenerando la clave de idempotencia en cada envío                      | Roja                          |
+| Notificar y pasar a coactiva confirman  | Quitándolos de la lista de lo irreversible                              | Rojas, cuatro                 |
+| La confirmación dice qué va a pasar     | Volviendo a «¿estás seguro?»                                            | Rojas, dos                    |
+| Y no se envía sin confirmar             | Enviando lo irreversible directamente                                   | Rojas, tres                   |
 
 ## Lo que todavía no está
 

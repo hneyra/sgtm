@@ -396,7 +396,14 @@ function Bloques({
       )}
 
       {estructura.acciones && (
-        <BarraDeAcciones acciones={estructura.acciones} escritura={escritura} />
+        <BarraDeAcciones
+          acciones={estructura.acciones}
+          escritura={escritura}
+          // Sobre cuantos actua: lo cuenta el backend —«47 valores»— y aqui solo
+          // se traslada. Contar las filas dibujadas diria «20», que es cuantas
+          // caben en la pagina, no cuantas se van a emitir.
+          {...(datos?.tabla?.conteo === undefined ? {} : { alcance: datos.tabla.conteo })}
+        />
       )}
     </>
   );
