@@ -126,6 +126,11 @@ class ImplantarMunicipalidadTest {
     }
 
     private static ImplantarMunicipalidad implantacion(String ubigeo, String administradorCuenta) {
+        return implantacion(ubigeo, administradorCuenta, false);
+    }
+
+    private static ImplantarMunicipalidad implantacion(
+            String ubigeo, String administradorCuenta, boolean esDemostracion) {
         return new ImplantarMunicipalidad(
                 sembrador,
                 administrar,
@@ -139,6 +144,7 @@ class ImplantarMunicipalidadTest {
                         "DISTRITAL",
                         administradorCuenta,
                         "Administrador de la implantacion",
+                        esDemostracion,
                         "implantacion"));
     }
 
@@ -158,6 +164,14 @@ class ImplantarMunicipalidadTest {
     private static long accesosSembrados() {
         return transaccion.execute(
                 estado -> jdbc.sql("SELECT count(*) FROM acceso").query(Long.class).single());
+    }
+
+    private static boolean esDemostracion(String ubigeo) {
+        return Boolean.TRUE.equals(
+                jdbc.sql("SELECT es_demostracion FROM municipalidad WHERE ubigeo = :u")
+                        .param("u", ubigeo)
+                        .query(Boolean.class)
+                        .single());
     }
 
     private static long idDe(String ubigeo) {
@@ -225,6 +239,48 @@ class ImplantarMunicipalidadTest {
                     .isFalse();
 
             TenantContext.limpiar();
+        }
+    }
+
+    @Nested
+    @DisplayName("#122 — El regimen con que se implanta queda en la fila")
+    class ElRegimen {
+
+        @Test
+        @DisplayName("implantada como demostracion, la fila lo dice")
+        void implantadaComoDemostracionLaFilaLoDice() {
+            implantacion("200501", "admin.demostracion", true).run(null);
+
+            assertThat(esDemostracion("200501"))
+                    .as("de ahi lo lee la capa de documentos para marcar todo lo que emita")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("por omision NO es de demostracion")
+        void porOmisionNoEsDeDemostracion() {
+            // De los dos errores posibles, el valor por omision tiene que ser el que no se
+            // pueda cometer callando: una instalacion real que se declarara de demostracion
+            // emite papeles marcados de mas —molesto—; una de demostracion que se olvidara
+            // de declararse emite papeles sin marca, que es lo que #122 impide.
+            implantacion("200502", "admin.real").run(null);
+
+            assertThat(esDemostracion("200502")).isFalse();
+        }
+
+        @Test
+        @DisplayName("relanzar el despliegue no le quita la marca a una instalacion")
+        void relanzarNoLeQuitaLaMarca() {
+            // Quitar la marca tiene que ser deliberado y dejar rastro: un UPDATE de
+            // sgtm_owner. Si un despliegue con la variable en false la quitara, bastaria
+            // un descuido en un archivo de entorno para que la marcha blanca empezara a
+            // emitir papeles indistinguibles de los de verdad.
+            implantacion("200503", "admin.marchablanca", true).run(null);
+            implantacion("200503", "admin.marchablanca", false).run(null);
+
+            assertThat(esDemostracion("200503"))
+                    .as("la segunda implantacion pidio false, y la fila sigue marcada")
+                    .isTrue();
         }
     }
 

@@ -126,7 +126,8 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments argumentos) {
         long municipalidadId =
-                registro.darDeAltaSiFalta(datos.ubigeo(), datos.nombre(), datos.tipo());
+                registro.darDeAltaSiFalta(
+                        datos.ubigeo(), datos.nombre(), datos.tipo(), datos.esDemostracion());
 
         // El perfil batch no tiene filtros HTTP, asi que los dos contextos que en una
         // peticion salen del token se fijan aqui a mano. Origen.deProceso existe para
@@ -174,10 +175,15 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
                             true,
                             pe.gob.sgtm.dominio.Vigencia.SIEMPRE);
 
+            // El regimen se registra aqui aunque sea una sola palabra: es lo unico del
+            // resultado que no se puede comprobar mirando pantallas. Una instalacion que
+            // se creia de demostracion y salio real emite papeles sin marca, y quien lo
+            // descubre es quien recibe uno (#122).
             log.info(
-                    "Municipalidad {} lista: id {}, {} accesos nuevos, administrador '{}',"
+                    "Municipalidad {} lista ({}): id {}, {} accesos nuevos, administrador '{}',"
                             + " {} permisos otorgados al grupo '{}'",
                     datos.ubigeo(),
+                    datos.esDemostracion() ? "DEMOSTRACION" : "instalacion real",
                     municipalidadId,
                     resumen.accesosNuevos(),
                     resumen.cuenta(),

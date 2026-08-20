@@ -66,7 +66,14 @@ public class EmitirDocumento {
                         "%s-%d-%06d",
                         tipo, ejercicio.valor(), repositorio.siguienteCorrelativo(tipo, ejercicio));
 
-        byte[] documento = generador.generarFirmado(modelo, formato);
+        // Se marca ANTES de guardar, no solo al dibujar. Un documento emitido por una
+        // instalacion de demostracion nace marcado y se queda marcado: lo que se guarda
+        // es el modelo con la marca dentro, asi que reimprimirlo dentro de diez anos
+        // —y con la instalacion ya en produccion— sigue dando el mismo papel y el mismo
+        // resumen. Marcar solo al dibujar habria hecho que la marca de un papel ya
+        // emitido dependiera del regimen del dia en que alguien pide el duplicado.
+        ModeloDeDocumento marcado = generador.marcar(modelo);
+        byte[] documento = generador.generarFirmado(marcado, formato);
 
         DocumentoEmitido registrado =
                 repositorio.insertar(
@@ -76,7 +83,7 @@ public class EmitirDocumento {
                                 numero,
                                 ejercicio,
                                 referencia,
-                                modelo,
+                                marcado,
                                 formato,
                                 GeneradorDeDocumentos.resumenDe(documento),
                                 LocalDate.now(reloj),

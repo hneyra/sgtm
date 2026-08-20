@@ -31,6 +31,7 @@ public class GeneradorDeDocumentos {
     private final Map<FormatoDeDocumento, Renderizador> renderizadores =
             new EnumMap<>(FormatoDeDocumento.class);
     private final PuntoDeFirma firma;
+    private final RegimenDeLaInstalacion regimen;
 
     /**
      * El constructor que usa Spring.
@@ -45,12 +46,14 @@ public class GeneradorDeDocumentos {
      * por descuido.
      */
     @Autowired
-    public GeneradorDeDocumentos(List<Renderizador> disponibles) {
-        this(disponibles, PuntoDeFirma.SIN_FIRMA);
+    public GeneradorDeDocumentos(List<Renderizador> disponibles, RegimenDeLaInstalacion regimen) {
+        this(disponibles, PuntoDeFirma.SIN_FIRMA, regimen);
     }
 
-    public GeneradorDeDocumentos(List<Renderizador> disponibles, PuntoDeFirma firma) {
+    public GeneradorDeDocumentos(
+            List<Renderizador> disponibles, PuntoDeFirma firma, RegimenDeLaInstalacion regimen) {
         this.firma = firma;
+        this.regimen = regimen;
         for (Renderizador renderizador : disponibles) {
             Renderizador anterior = renderizadores.put(renderizador.formato(), renderizador);
             if (anterior != null) {
@@ -80,6 +83,24 @@ public class GeneradorDeDocumentos {
     }
 
     /**
+     * El modelo con la marca de demostracion si esta instalacion lo es, y el mismo modelo si no.
+     *
+     * <p><b>Este es el unico sitio del sistema que decide si un documento sale marcado.</b> Esta
+     * aqui y no en cada emisor porque un emisor que se olvide no es un olvido admisible (#122): las
+     * 134 opciones acabarian teniendo que acordarse, y bastaria una que no para que saliera una HR
+     * con cifras plausibles y sin marca.
+     *
+     * <p>Es publico para que {@link EmitirDocumento} pueda <b>guardar</b> el modelo ya marcado. Si
+     * solo se marcara al dibujar, la marca de un documento emitido dependeria del regimen del dia
+     * en que se reimprime: una instalacion que dejara de ser de demostracion reimprimiria sin marca
+     * papeles que salieron con ella —y la comprobacion de que la reimpresion da los mismos bytes
+     * saltaria, con razon—. Guardada en el modelo, el documento nace marcado y muere marcado.
+     */
+    public ModeloDeDocumento marcar(ModeloDeDocumento modelo) {
+        return regimen.esDeDemostracion() ? modelo.comoDemostracion() : modelo;
+    }
+
+    /**
      * El documento directamente sobre un flujo.
      *
      * <p>Es el camino de la emision masiva: cada documento se escribe y se olvida. Con {@link
@@ -92,7 +113,7 @@ public class GeneradorDeDocumentos {
     public void escribir(
             ModeloDeDocumento modelo, FormatoDeDocumento formato, OutputStream salida) {
         try {
-            renderizador(formato).escribir(modelo, salida);
+            renderizador(formato).escribir(marcar(modelo), salida);
         } catch (IOException fallo) {
             throw new UncheckedIOException(fallo);
         }

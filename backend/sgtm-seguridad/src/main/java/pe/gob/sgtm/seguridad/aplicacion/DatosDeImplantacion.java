@@ -30,6 +30,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param administrador cuenta del primer administrador. <b>Tiene que ser el mismo {@code
  *     preferred_username} que emite Keycloak</b>: es lo unico que une la fila con la identidad
  * @param nombreDelAdministrador su nombre, para las pantallas y la auditoria
+ * @param esDemostracion si la instalacion es de demostracion, y por tanto todo documento que emita
+ *     sale marcado (#122). <b>Por omision {@code false}</b>, y ese es el valor correcto: una
+ *     instalacion que se olvide de declararse de demostracion emite papeles sin marca, pero una que
+ *     se declarara de demostracion por descuido solo emite papeles marcados de mas. De los dos
+ *     errores posibles, el valor por omision tiene que ser el que no se pueda cometer callando
  * @param usuarioDelProceso con que nombre firma la auditoria lo que hace este proceso. No es una
  *     persona y no debe parecerlo: quien lea la auditoria tiene que distinguir lo que hizo la
  *     implantacion de lo que hizo alguien
@@ -41,6 +46,7 @@ public record DatosDeImplantacion(
         String tipo,
         String administrador,
         String nombreDelAdministrador,
+        boolean esDemostracion,
         String usuarioDelProceso) {
 
     private static final Set<String> TIPOS = Set.of("DISTRITAL", "PROVINCIAL");

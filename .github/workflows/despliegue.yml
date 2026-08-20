@@ -35,6 +35,10 @@
 #      #119 —«sin la variable puesta, la aplicacion no arranca»— y hasta ahora
 #      nadie lo comprobaba: un despliegue que se queda vivo sin poder validar un
 #      token responde a la sonda, se declara sano y no atiende a nadie.
+#   9. ¿Se levanta MARCADA como instalacion de demostracion? Mientras D-02a este
+#      abierta, toda cifra que el sistema calcule sale de tramos y alicuotas que
+#      nadie ha firmado, y un papel con una cifra plausible y sin marca es un papel
+#      que alguien puede intentar cobrar (#122).
 #
 # COMO SE DEMUESTRA QUE PUEDEN FALLAR:
 #
@@ -42,6 +46,9 @@
 #     aplicacion por `sgtm_owner`, con su clave, y este trabajo se pone rojo. Lee
 #     las credenciales del contenedor que esta corriendo, no las que el compose
 #     deberia tener.
+#   - La 9: se pone `SGTM_ES_DEMOSTRACION=false` en el .env que genera este flujo.
+#     La consulta devuelve `f` y el paso se pone rojo, diciendo lo que estaria
+#     saliendo por la impresora.
 #   - La 8: se le pone un valor por omision al marcador de `application.yaml`
 #     —`${SGTM_OIDC_EMISOR:http://…}`—. La aplicacion arranca, se queda viva, y el
 #     paso se pone rojo por tiempo agotado en vez de por un arranque fallido.
@@ -309,6 +316,31 @@ jobs:
           fi
           test "$codigo" != "0"
           echo "Correcto: sin emisor no hay proceso."
+
+      - name: 9 · La marcha blanca se levanta MARCADA
+        run: |
+          set -euo pipefail
+          source .env
+          # Mientras D-02a este abierta, toda cifra que el sistema calcule sale de
+          # parametros que nadie ha firmado. La instalacion tiene que decirlo en el
+          # papel, y el hecho vive en la fila —no en un archivo de entorno— para que
+          # quitarlo sea un UPDATE deliberado de sgtm_owner (#122, ADR-0007).
+          marcada=$(docker compose exec -T -e PGPASSWORD="$SGTM_CLAVE_SUPERUSUARIO" base \
+            psql --username postgres --dbname sgtm --tuples-only --no-align \
+            --command "SELECT es_demostracion FROM municipalidad WHERE ubigeo = '$SGTM_UBIGEO'" \
+            | tr -d '\r')
+          echo "municipalidad $SGTM_UBIGEO, es_demostracion = $marcada"
+          if [ "$marcada" != "t" ]; then
+            echo "FALLO: la instalacion NO esta marcada como de demostracion."
+            echo "Todo documento que emita saldria indistinguible de uno real, con cifras"
+            echo "calculadas a partir de tramos y alicuotas que nadie ha firmado."
+            exit 1
+          fi
+          # Y el proceso de implantacion lo dijo en su registro: si no lo dijera, esto
+          # solo comprobaria la base y no que la implantacion supiera lo que hacia.
+          docker compose logs --no-color implantacion | grep -q "DEMOSTRACION" \
+            || { echo "La implantacion no registro el regimen con que implanto"; exit 1; }
+          echo "Correcto: la instalacion se declara de demostracion, y lo dejo escrito."
 
       # `--tail 25` y no 200: con seis servicios, doscientas lineas cada uno son mil
       # doscientas lineas que entierran la salida del paso que fallo, que es justo

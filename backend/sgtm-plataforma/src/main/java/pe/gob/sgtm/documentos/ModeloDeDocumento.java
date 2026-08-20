@@ -21,6 +21,10 @@ import org.jspecify.annotations.Nullable;
  * pantalla la olvide.
  *
  * @param duplicado nulo en el original; con texto, el documento sale marcado
+ * @param demostracion nulo en una instalacion real; con texto, el documento sale marcado como
+ *     emitido por una instalacion de demostracion. <b>No lo pone el llamador</b>: lo pone {@link
+ *     GeneradorDeDocumentos} leyendo el {@link RegimenDeLaInstalacion}, porque un emisor que se
+ *     olvide de pasarlo no es un olvido admisible (#122)
  */
 public record ModeloDeDocumento(
         String titulo,
@@ -29,7 +33,8 @@ public record ModeloDeDocumento(
         List<Campo> cabecera,
         List<Tabla> tablas,
         List<String> pie,
-        @Nullable String duplicado) {
+        @Nullable String duplicado,
+        @Nullable String demostracion) {
 
     public ModeloDeDocumento {
         Objects.requireNonNull(titulo, "El documento necesita su titulo");
@@ -47,9 +52,20 @@ public record ModeloDeDocumento(
         pie = List.copyOf(pie);
     }
 
+    /**
+     * El texto de la marca de demostracion.
+     *
+     * <p>Es una constante y no un parametro configurable: si cada instalacion pudiera elegir el
+     * texto, la primera lo pondria en blanco. Dice lo que hay que saber para no intentar cobrar el
+     * papel, y lo dice sin ambiguedad.
+     */
+    public static final String MARCA_DE_DEMOSTRACION =
+            "INSTALACION DE DEMOSTRACION — DOCUMENTO SIN VALIDEZ";
+
     public static ModeloDeDocumento de(
             String titulo, LocalDate aLaFecha, List<Campo> cabecera, List<Tabla> tablas) {
-        return new ModeloDeDocumento(titulo, null, aLaFecha, cabecera, tablas, List.of(), null);
+        return new ModeloDeDocumento(
+                titulo, null, aLaFecha, cabecera, tablas, List.of(), null, null);
     }
 
     /**
@@ -63,15 +79,57 @@ public record ModeloDeDocumento(
             throw new IllegalArgumentException("El primer duplicado es el 1, no el " + numero);
         }
         return new ModeloDeDocumento(
-                titulo, subtitulo, aLaFecha, cabecera, tablas, pie, "DUPLICADO N° " + numero);
+                titulo,
+                subtitulo,
+                aLaFecha,
+                cabecera,
+                tablas,
+                pie,
+                "DUPLICADO N° " + numero,
+                demostracion);
+    }
+
+    /**
+     * El mismo documento, marcado como emitido por una instalacion de demostracion.
+     *
+     * <p><b>Idempotente</b>, y hace falta que lo sea: {@link GeneradorDeDocumentos} la aplica al
+     * dibujar y {@link EmitirDocumento} guarda el modelo ya marcado, asi que un documento emitido
+     * pasa por aqui dos veces. Si la segunda anadiera una segunda marca, la reimpresion no daria
+     * los mismos bytes que la emision y {@code LaReimpresionNoCoincide} saltaria en el primer
+     * duplicado de cada documento.
+     */
+    public ModeloDeDocumento comoDemostracion() {
+        if (demostracion != null) {
+            return this;
+        }
+        return new ModeloDeDocumento(
+                titulo,
+                subtitulo,
+                aLaFecha,
+                cabecera,
+                tablas,
+                pie,
+                duplicado,
+                MARCA_DE_DEMOSTRACION);
     }
 
     public ModeloDeDocumento con(List<String> lineasDePie) {
         return new ModeloDeDocumento(
-                titulo, subtitulo, aLaFecha, cabecera, tablas, lineasDePie, duplicado);
+                titulo,
+                subtitulo,
+                aLaFecha,
+                cabecera,
+                tablas,
+                lineasDePie,
+                duplicado,
+                demostracion);
     }
 
     public boolean esDuplicado() {
         return duplicado != null;
+    }
+
+    public boolean esDemostracion() {
+        return demostracion != null;
     }
 }

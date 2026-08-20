@@ -36,6 +36,10 @@ public class RenderizadorRtf implements Renderizador {
         texto.write("{\\rtf1\\ansi\\ansicpg1252\\deff0");
         texto.write("{\\fonttbl{\\f0\\fswiss Helvetica;}}\n");
 
+        String demostracion = modelo.demostracion();
+        if (demostracion != null) {
+            texto.write("\\qc\\b\\fs28 " + escapar(demostracion) + "\\b0\\par\n");
+        }
         String duplicado = modelo.duplicado();
         if (duplicado != null) {
             texto.write("\\qc\\b\\fs28 " + escapar(duplicado) + "\\b0\\par\n");

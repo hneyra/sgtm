@@ -45,6 +45,10 @@ public class RenderizadorXls implements Renderizador {
         xml.write("<Worksheet ss:Name=\"" + escaparAtributo(nombreDeHoja(modelo)) + "\">\n");
         xml.write("<Table>\n");
 
+        String demostracion = modelo.demostracion();
+        if (demostracion != null) {
+            fila(xml, List.of(demostracion), "h");
+        }
         String duplicado = modelo.duplicado();
         if (duplicado != null) {
             fila(xml, List.of(duplicado), "h");

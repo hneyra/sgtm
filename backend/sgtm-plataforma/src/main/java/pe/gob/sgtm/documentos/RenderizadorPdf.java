@@ -72,6 +72,12 @@ public class RenderizadorPdf implements Renderizador {
         List<String> paginas = new ArrayList<>();
         Pagina pagina = new Pagina();
 
+        // La marca de demostracion va la PRIMERA y en cuerpo de titulo: si fuera un pie
+        // de pagina, la primera fotocopia recortada la perderia (#122).
+        String demostracion = modelo.demostracion();
+        if (demostracion != null) {
+            pagina.centrado(demostracion, TITULO - 2, true);
+        }
         String duplicado = modelo.duplicado();
         if (duplicado != null) {
             pagina.centrado(duplicado, TITULO - 2, true);

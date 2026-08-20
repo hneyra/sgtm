@@ -72,6 +72,11 @@ public final class ModeloDeLaFichaDelContribuyente {
                         "Este documento no consigna importes: el autovalúo y la deuda se emiten"
                                 + " en sus propios valores.",
                         "Los datos corresponden a la fecha indicada arriba."),
+                // Duplicado y marca de demostracion, los dos nulos y los dos a proposito:
+                // ninguno lo pone quien construye el modelo. El duplicado lo pone
+                // EmitirDocumento al reimprimir, y la marca la pone GeneradorDeDocumentos
+                // leyendo el regimen de la instalacion (#122).
+                null,
                 null);
     }
 }

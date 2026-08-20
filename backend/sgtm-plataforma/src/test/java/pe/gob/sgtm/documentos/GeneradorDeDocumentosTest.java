@@ -26,7 +26,8 @@ class GeneradorDeDocumentosTest {
 
     private final GeneradorDeDocumentos generador =
             new GeneradorDeDocumentos(
-                    List.of(new RenderizadorPdf(), new RenderizadorXls(), new RenderizadorRtf()));
+                    List.of(new RenderizadorPdf(), new RenderizadorXls(), new RenderizadorRtf()),
+                    RegimenDeLaInstalacion.REAL);
 
     private static ModeloDeDocumento unaFicha() {
         return new ModeloDeDocumento(
@@ -47,6 +48,7 @@ class GeneradorDeDocumentosTest {
                                                 "JR. LIMA 250",
                                                 "100,00")))),
                 List.of("Este documento no consigna importes."),
+                null,
                 null);
     }
 
@@ -218,6 +220,7 @@ class GeneradorDeDocumentosTest {
                                             List.of("Código", "Dirección", "%"),
                                             muchas)),
                             List.of(),
+                            null,
                             null);
 
             String pdf =
@@ -258,7 +261,7 @@ class GeneradorDeDocumentosTest {
                             () ->
                                     new ModeloDeDocumento(
                                             "Ficha", null, null, List.of(), List.of(), List.of(),
-                                            null))
+                                            null, null))
                     .as("toda cifra impresa dice de cuando es (RNF-075, regla 9)")
                     .isInstanceOf(NullPointerException.class);
         }
@@ -273,7 +276,8 @@ class GeneradorDeDocumentosTest {
                                                     new RenderizadorPdf(),
                                                     new RenderizadorPdf(),
                                                     new RenderizadorXls(),
-                                                    new RenderizadorRtf())))
+                                                    new RenderizadorRtf()),
+                                            RegimenDeLaInstalacion.REAL))
                     .as("el documento saldria de uno u otro segun el orden de descubrimiento")
                     .isInstanceOf(IllegalStateException.class);
         }
@@ -284,7 +288,8 @@ class GeneradorDeDocumentosTest {
             assertThatThrownBy(
                             () ->
                                     new GeneradorDeDocumentos(
-                                            List.of(new RenderizadorPdf(), new RenderizadorXls())))
+                                            List.of(new RenderizadorPdf(), new RenderizadorXls()),
+                                            RegimenDeLaInstalacion.REAL))
                     .as(
                             "descubrir que falta el RTF cuando un usuario lo pide es descubrirlo"
                                     + " tarde")
