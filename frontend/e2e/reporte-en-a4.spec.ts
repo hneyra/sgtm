@@ -28,9 +28,13 @@ test('la hoja cabe en una A4, conserva las firmas y no imprime la interfaz', asy
   expect(caja.width).toBeLessThanOrEqual(A4.ancho);
   expect(caja.height).toBeLessThanOrEqual(A4.alto);
 
-  // Las dos lineas de firma son lo que convierte la hoja en un documento.
-  await expect(page.getByText('Cajero / Responsable')).toBeVisible();
-  await expect(page.getByText('Contribuyente', { exact: true })).toBeVisible();
+  // Las dos lineas de firma son lo que convierte la hoja en un documento. Se
+  // buscan **dentro del pie de firmas** y no en la hoja entera: «Contribuyente»
+  // es tambien una de las claves de la cabecera del reporte, y buscarlo suelto
+  // acertaba solo mientras los datos no hubieran llegado todavia.
+  const firmas = page.locator('.sgtm-hoja__firmas');
+  await expect(firmas.getByText('Cajero / Responsable')).toBeVisible();
+  await expect(firmas.getByText('Contribuyente', { exact: true })).toBeVisible();
 
   // Y la interfaz no se imprime: ni la barra lateral, ni la cabecera, ni los
   // botones de la hoja. Se comprueba que **hay** algo marcado antes de exigir

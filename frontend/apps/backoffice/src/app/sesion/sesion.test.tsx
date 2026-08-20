@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { retoDe, solicitar } from '@sgtm/api-client';
+import { useEscritura } from '../../pantallas/escritura';
 import { ProveedorDeSesion, useSesion } from './ProveedorDeSesion';
 import { PuertaDeSesion } from './PuertaDeSesion';
 
@@ -95,15 +96,36 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-/** Un formulario a medio llenar, para comprobar que la renovacion no se lo lleva. */
+/**
+ * Un formulario a medio llenar, para comprobar que la renovacion no se lo lleva.
+ *
+ * Dos campos a proposito, y el segundo es el que de verdad prueba algo: el
+ * primero es un `input` sin control, que sobrevive mientras el nodo no se
+ * desmonte; el segundo vive en el **estado de React** —el borrador de
+ * `useEscritura`— y se pierde en cuanto algo remonte el arbol. Es el caso del
+ * manual: la declaracion jurada (HR, PU, PR) se llena en varios minutos, y
+ * perderla a mitad por una renovacion de token es el defecto que mas duele de
+ * los que se pueden cometer aqui (#73, FRO-01 §5).
+ */
 function Formulario() {
   const sesion = useSesion();
+  const escritura = useEscritura(
+    'cambiar_anio',
+    {},
+    { campos: { cambiarAlAno: { campo: 'ejercicio', entero: true } } },
+  );
   return (
     <div>
       <p>Municipalidad: {sesion.datos?.municipalidad}</p>
       <p data-testid="datos">{JSON.stringify(Object.keys(sesion.datos ?? {}))}</p>
       <label htmlFor="motivo">Motivo</label>
       <input id="motivo" defaultValue="" />
+      <label htmlFor="borrador">Año</label>
+      <input
+        id="borrador"
+        value={escritura.borrador['cambiarAlAno'] ?? ''}
+        onChange={(e) => escritura.fijarCampo('cambiarAlAno', e.target.value)}
+      />
       <button type="button" onClick={() => void sesion.cambiarDeMunicipalidad('2601')}>
         Cambiar de municipalidad
       </button>
@@ -216,6 +238,11 @@ describe('renovar no le quita a nadie lo que estaba escribiendo', () => {
     await usuario.type(motivo, 'Rectificación de área construida');
     expect(motivo).toHaveValue('Rectificación de área construida');
 
+    // Y lo que vive en el estado de React, que es lo que de verdad se pierde si
+    // algo remonta: el borrador de la escritura.
+    await usuario.type(screen.getByLabelText('Año'), '2021');
+    expect(screen.getByLabelText('Año')).toHaveValue('2021');
+
     // Al servidor le caduca el token mientras se escribe.
     const antes = tokensEmitidos.length;
     globalThis.fetch = ((entrada: RequestInfo | URL) => {
@@ -232,9 +259,19 @@ describe('renovar no le quita a nadie lo que estaba escribiendo', () => {
 
     await expect(solicitar('/catastro/vias')).rejects.toThrow();
 
-    // Se renovo una vez —y solo una— y el texto sigue donde estaba.
-    expect(tokensEmitidos.length).toBe(antes + 1);
+    // Se renovo una vez —y solo una— y los dos campos siguen donde estaban.
+    await waitFor(() => expect(tokensEmitidos.length).toBe(antes + 1));
     expect(screen.getByLabelText('Motivo')).toHaveValue('Rectificación de área construida');
+    // El segundo vive en el **estado de React** —el borrador de `useEscritura`—
+    // y es el que de verdad se pierde si algo remonta el arbol. Es el caso del
+    // manual: la declaracion jurada se llena en varios minutos (#73).
+    //
+    // **Lo que esta prueba no consigue demostrar** es que muerda ante un
+    // remontaje: la renovacion simulada resuelve en el mismo turno, asi que
+    // React agrupa el cierre y la reapertura de la puerta y ningun render los
+    // separa. Cubre la regresion evidente —que la renovacion cambie los datos
+    // de la sesion sin tocar lo escrito—, no la sutil.
+    expect(screen.getByLabelText('Año')).toHaveValue('2021');
   });
 });
 
