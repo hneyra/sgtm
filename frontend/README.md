@@ -160,6 +160,17 @@ con «—». Donde eso importa más es en las cifras: el arancel por m², el val
 y el autovalúo rural alimentan la valuación de un predio, y una cifra inventada ahí acaba en un
 valor mal emitido. Que falte se ve; que esté mal, no.
 
+### Que ninguna cifra se recomponga, comprobado por el otro lado
+
+La regla de ESLint impide **escribir** aritmética con importes. No impide que una cifra llegue
+transformada por otro camino: un formateador, un redondeo «de presentación», una suma metida en un
+adaptador.
+
+`pruebas/cifras.ts` lo mira por el otro lado: lo que se ve en la pantalla tiene que estar **tal
+cual** en lo que sirvió la API. Lo usan Tránsito —el desglose de la papeleta se determinó el día de
+la infracción— e Infracciones administrativas, que es lo que su issue pide: reusar el de #77, no
+duplicarlo.
+
 ### Trece reportes, una hoja
 
 Tránsito tiene trece reportes y la tentación es escribir trece pantallas. Lo que hay es **un**
@@ -581,43 +592,45 @@ dice en la misma frase en que excluye el token.
 
 ## Qué se verificó, y cómo
 
-| Verificación                            | Cómo                                                                    | Resultado                     |
-| --------------------------------------- | ----------------------------------------------------------------------- | ----------------------------- |
-| Las 134 pantallas se dibujan            | `todas-las-pantallas.test.tsx` monta cada una y comprueba su título     | 134 en verde                  |
-| Las 134 en un navegador de verdad       | Chromium recorriendo las 134 rutas                                      | 0 errores de página, 0 de API |
-| El proxy responde el contrato           | 10 pruebas: rutas, verbos, parámetros, 404, instalación                 | En verde                      |
-| El catálogo está completo               | 17 pruebas: 12 módulos, 134 opciones, bloques, rutas y endpoints únicos | En verde                      |
-| El juego de datos no llega a producción | Dos compilaciones, con y sin la bandera                                 | 145 KB menos, chunk ausente   |
-| Las reglas de ESLint muerden            | Quitando la de `fetch`: su prueba se pone roja                          | Muerde                        |
-| Los seis listados leen el recurso real  | Quitando la guarda de `leerPaginado`: pinta media pantalla en silencio  | Roja                          |
-| La bitácora manda el ejercicio          | Quitándolo de la conexión                                               | Roja                          |
-| Cambiar de ejercicio vacía la caché     | Quitando `clear()`: la petición nueva encuentra lo viejo                | Rojas, dos                    |
-| La lista blanca filtra el cuerpo        | Mandando el borrador entero: viajan campos que el backend no acepta     | Rojas, dos                    |
-| La contraseña no se puede teclear       | Quitando `bloqueado` de los campos no declarados                        | Roja                          |
-| El catálogo vial no inventa columnas    | Rellenando sector, zona y arancel con lo del prototipo                  | Roja                          |
-| Las conexiones no van por delante       | Conectando una tabla de valuación, que no tiene contenido               | Roja                          |
-| La ficha enseña su versión              | Quitando el bloque de versionado                                        | Rojas, cinco                  |
-| El histórico se pide                    | Quitando `historico=true` de la conexión                                | Roja                          |
-| Sin código no se pide ninguna ficha     | Quitando la guarda de la ruta y el `enabled`                            | Roja                          |
-| El arancel rural no se compone          | Poniéndole una cifra                                                    | Roja                          |
-| El desplegable no esconde lo servido    | Volviendo a dibujar solo las opciones del prototipo                     | Roja                          |
-| Ninguna cifra sin su fecha (las once)   | Quitando el bloque de fecha de cálculo                                  | Rojas, trece                  |
-| El saldo no se compone                  | Restando en la interfaz en vez de dejarlo vacío                         | Rojas, dos                    |
-| `@sgtm/dominio` no suma                 | Añadiéndole una función de sumar importes                               | Roja                          |
-| Nueve escrituras sin observación        | Habilitando la acción primaria sin ella                                 | Rojas, nueve                  |
-| La deuda del padrón no se inventa       | Rellenando predios y deuda con lo del prototipo                         | Roja                          |
-| El foco vuelve tras cobrar              | Quitando el `focus()`                                                   | Rojas, dos                    |
-| Y no se queda clavado                   | Enfocando en cada render en vez de en el flanco                         | Roja                          |
-| Un reintento no es un segundo cobro     | Regenerando la clave de idempotencia en cada envío                      | Roja                          |
-| Notificar y pasar a coactiva confirman  | Quitándolos de la lista de lo irreversible                              | Rojas, cuatro                 |
-| La confirmación dice qué va a pasar     | Volviendo a «¿estás seguro?»                                            | Rojas, dos                    |
-| Y no se envía sin confirmar             | Enviando lo irreversible directamente                                   | Rojas, tres                   |
-| Nada asentado se edita ni se quita      | Habilitando las acciones secundarias                                    | Rojas, cuatro                 |
-| Ningún estado solo por color            | Dejando la insignia sin texto                                           | Roja                          |
-| El auxiliar no ve emitir REC            | Haciendo que `puedeVer` devuelva cierto siempre                         | Roja                          |
-| Las hojas conservan sus firmas          | Quitándolas del bloque                                                  | Rojas, seis                   |
-| La interfaz no se imprime               | Quitando la marca `data-no-imprimible`                                  | Rojas, seis                   |
-| Ninguna cifra se recompone al dibujar   | Alterando una celda numérica en la tabla                                | Roja                          |
+| Verificación                                | Cómo                                                                    | Resultado                     |
+| ------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------- |
+| Las 134 pantallas se dibujan                | `todas-las-pantallas.test.tsx` monta cada una y comprueba su título     | 134 en verde                  |
+| Las 134 en un navegador de verdad           | Chromium recorriendo las 134 rutas                                      | 0 errores de página, 0 de API |
+| El proxy responde el contrato               | 10 pruebas: rutas, verbos, parámetros, 404, instalación                 | En verde                      |
+| El catálogo está completo                   | 17 pruebas: 12 módulos, 134 opciones, bloques, rutas y endpoints únicos | En verde                      |
+| El juego de datos no llega a producción     | Dos compilaciones, con y sin la bandera                                 | 145 KB menos, chunk ausente   |
+| Las reglas de ESLint muerden                | Quitando la de `fetch`: su prueba se pone roja                          | Muerde                        |
+| Los seis listados leen el recurso real      | Quitando la guarda de `leerPaginado`: pinta media pantalla en silencio  | Roja                          |
+| La bitácora manda el ejercicio              | Quitándolo de la conexión                                               | Roja                          |
+| Cambiar de ejercicio vacía la caché         | Quitando `clear()`: la petición nueva encuentra lo viejo                | Rojas, dos                    |
+| La lista blanca filtra el cuerpo            | Mandando el borrador entero: viajan campos que el backend no acepta     | Rojas, dos                    |
+| La contraseña no se puede teclear           | Quitando `bloqueado` de los campos no declarados                        | Roja                          |
+| El catálogo vial no inventa columnas        | Rellenando sector, zona y arancel con lo del prototipo                  | Roja                          |
+| Las conexiones no van por delante           | Conectando una tabla de valuación, que no tiene contenido               | Roja                          |
+| La ficha enseña su versión                  | Quitando el bloque de versionado                                        | Rojas, cinco                  |
+| El histórico se pide                        | Quitando `historico=true` de la conexión                                | Roja                          |
+| Sin código no se pide ninguna ficha         | Quitando la guarda de la ruta y el `enabled`                            | Roja                          |
+| El arancel rural no se compone              | Poniéndole una cifra                                                    | Roja                          |
+| El desplegable no esconde lo servido        | Volviendo a dibujar solo las opciones del prototipo                     | Roja                          |
+| Ninguna cifra sin su fecha (las once)       | Quitando el bloque de fecha de cálculo                                  | Rojas, trece                  |
+| El saldo no se compone                      | Restando en la interfaz en vez de dejarlo vacío                         | Rojas, dos                    |
+| `@sgtm/dominio` no suma                     | Añadiéndole una función de sumar importes                               | Roja                          |
+| Nueve escrituras sin observación            | Habilitando la acción primaria sin ella                                 | Rojas, nueve                  |
+| La deuda del padrón no se inventa           | Rellenando predios y deuda con lo del prototipo                         | Roja                          |
+| El foco vuelve tras cobrar                  | Quitando el `focus()`                                                   | Rojas, dos                    |
+| Y no se queda clavado                       | Enfocando en cada render en vez de en el flanco                         | Roja                          |
+| Un reintento no es un segundo cobro         | Regenerando la clave de idempotencia en cada envío                      | Roja                          |
+| Notificar y pasar a coactiva confirman      | Quitándolos de la lista de lo irreversible                              | Rojas, cuatro                 |
+| La confirmación dice qué va a pasar         | Volviendo a «¿estás seguro?»                                            | Rojas, dos                    |
+| Y no se envía sin confirmar                 | Enviando lo irreversible directamente                                   | Rojas, tres                   |
+| Nada asentado se edita ni se quita          | Habilitando las acciones secundarias                                    | Rojas, cuatro                 |
+| Ningún estado solo por color                | Dejando la insignia sin texto                                           | Roja                          |
+| El auxiliar no ve emitir REC                | Haciendo que `puedeVer` devuelva cierto siempre                         | Roja                          |
+| Las hojas conservan sus firmas              | Quitándolas del bloque                                                  | Rojas, seis                   |
+| La interfaz no se imprime                   | Quitando la marca `data-no-imprimible`                                  | Rojas, seis                   |
+| Ninguna cifra se recompone al dibujar       | Alterando una celda numérica en la tabla                                | Roja                          |
+| Los reportes de otro módulo reusan la hoja  | Quitando las firmas del bloque                                          | Rojas, dos                    |
+| Una pantalla de trabajo se abre sin filtrar | Mandando la página aunque sea la primera                                | Roja                          |
 
 ## Lo que todavía no está
 

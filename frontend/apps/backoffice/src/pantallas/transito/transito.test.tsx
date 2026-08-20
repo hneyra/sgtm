@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { datosDe, desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
+import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
+import { cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
 import { montarEnRuta } from '../../pruebas/montar';
 
 /**
@@ -77,25 +78,14 @@ describe('la papeleta muestra su desglose guardado, no uno recalculado', () => {
     // comprobacion mirando celdas vacias (#76).
     await screen.findAllByText('MPS-2026-041182');
 
-    const servidos = new Set<string>();
-    const datos = datosDe('papeletas');
-    for (const fila of datos?.tabla?.filas ?? [])
-      for (const celda of fila) servidos.add(celda.texto);
-    for (const total of datos?.totales ?? []) servidos.add(total.value);
-    for (const valor of Object.values(datos?.campos ?? {})) {
-      if (typeof valor === 'string') servidos.add(valor);
-    }
-
-    const DINERO = /^-?\d{1,3}(,\d{3})*\.\d{2}$/;
-    const enPantalla = [...document.querySelectorAll('td, .sgtm-totales__valor')]
-      .map((nodo) => (nodo.textContent ?? '').trim())
-      .filter((texto) => DINERO.test(texto));
+    const servidas = cifrasServidas('papeletas');
+    const enPantalla = cifrasEnPantalla();
 
     expect(enPantalla.length).toBeGreaterThan(0);
     // El importe se determino el dia de la infraccion con los parametros de ese
     // dia. Recalcularlo al mostrar es el error clasico de este modulo: la
     // papeleta dejaria de decir lo que dice el documento que se notifico.
-    for (const cifra of enPantalla) expect(servidos).toContain(cifra);
+    for (const cifra of enPantalla) expect(servidas).toContain(cifra);
   });
 });
 
