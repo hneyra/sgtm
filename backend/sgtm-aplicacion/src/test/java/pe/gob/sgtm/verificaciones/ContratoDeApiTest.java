@@ -65,6 +65,7 @@ class ContratoDeApiTest {
                     "GET /catastro/contribuyentes/{codigo}/ficha.pdf",
                     "PUT /catastro/fichas/{codigo}/actualizacion",
                     "GET /rentas/contribuyentes",
+                    "GET /rentas/beneficios",
                     "GET /consultas/cuenta-corriente/{codigo}",
                     "GET /seguridad/modulos",
                     "GET /seguridad/accesos",
