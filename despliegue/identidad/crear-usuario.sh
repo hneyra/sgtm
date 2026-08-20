@@ -60,9 +60,13 @@ existente=$(buscarId "$usuario")
 # `resolve_required_actions`, que no se parece a «le falta el apellido». Se
 # rellenan aqui, y una instalacion de verdad pasa los datos reales por estas tres
 # variables en vez de quedarse con los marcadores.
+#
+# El marcador del apellido va SIN parentesis, y no es capricho: Keycloak valida
+# nombre y apellido contra una lista de caracteres prohibidos —parentesis entre
+# ellos— y responde `error-person-name-invalid-character`. Letras y espacios.
 correo="${SGTM_CORREO:-$usuario@sgtm.invalido}"
 nombre="${SGTM_NOMBRE:-$usuario}"
-apellido="${SGTM_APELLIDO:-(por completar)}"
+apellido="${SGTM_APELLIDO:-Por completar}"
 
 if [ -z "$existente" ]; then
   if [ -n "$municipalidad" ]; then
