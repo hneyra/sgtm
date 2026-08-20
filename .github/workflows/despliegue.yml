@@ -96,11 +96,25 @@ jobs:
             # misma que el usuario que se crea en Keycloak mas abajo: es lo unico que
             # une la fila de la base con la identidad del token.
             echo "SGTM_UBIGEO=200101"
-            echo "SGTM_MUNICIPALIDAD=Municipalidad de verificacion"
+            # Entrecomillados porque llevan espacios. Sin comillas, `docker compose`
+            # los lee bien —tiene su propio analizador— pero `source .env` no: bash
+            # ve `SGTM_MUNICIPALIDAD=Municipalidad` como prefijo de asignacion e
+            # intenta ejecutar `de` como orden. Los peldanos que empiezan por
+            # `source .env` mueren con 127 antes de su primera comprobacion.
+            echo 'SGTM_MUNICIPALIDAD="Municipalidad de verificacion"'
             echo "SGTM_TIPO_DE_MUNICIPALIDAD=PROVINCIAL"
             echo "SGTM_ADMINISTRADOR=verificacion"
-            echo "SGTM_NOMBRE_DEL_ADMINISTRADOR=Administrador de verificacion"
+            echo 'SGTM_NOMBRE_DEL_ADMINISTRADOR="Administrador de verificacion"'
           } > .env
+
+          # Se lee aqui mismo, donde se escribe. Un .env que bash no puede leer se
+          # manifestaba tres pasos mas adelante, como un `127` sin contexto en el
+          # primer peldano de la escalera —y con todos los demas saltados, que es
+          # como un fallo de sintaxis se disfraza de fallo de la aplicacion—.
+          source .env
+          test -n "$SGTM_MUNICIPALIDAD"
+          test -n "$SGTM_NOMBRE_DEL_ADMINISTRADOR"
+          echo "El .env se lee: municipalidad '$SGTM_MUNICIPALIDAD'."
 
       # Se espera a `aplicacion` y no a todo: `migraciones` corre y termina, y un
       # contenedor que sale con exito no es un contenedor sano. Sus dependencias
