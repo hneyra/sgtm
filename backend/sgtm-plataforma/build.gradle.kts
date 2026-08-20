@@ -35,6 +35,11 @@ dependencies {
     api("org.springframework.boot:spring-boot-starter-web")
 
     testImplementation(testFixtures(project(":sgtm-esquema")))
+
+    // Solo para la prueba de la cadena de identidad: verifica que /actuator/health
+    // sigue siendo lo unico publico. El actuator de produccion lo trae
+    // sgtm-aplicacion, que es quien lo despliega.
+    testImplementation("org.springframework.boot:spring-boot-starter-actuator")
     testImplementation("org.springframework.boot:spring-boot-starter-web")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")

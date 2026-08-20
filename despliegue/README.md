@@ -140,6 +140,21 @@ aserción precisa, porque dice *hasta dónde* llegó la petición:
 El último peldaño es el que importa: `SIN_PRIVILEGIO` significa que el token se
 validó, que el claim se leyó y que la petición llegó hasta el guardia de acceso.
 
+**Y ahí se detiene, a propósito.** La escalera verifica hasta dónde llega la
+petición, no qué ve al llegar: todavía no hay municipalidad ni permisos sembrados
+(#120). Lo que sí llega hasta el final es
+[`CadenaDeIdentidadTest`](../backend/sgtm-plataforma/src/test/java/pe/gob/sgtm/plataforma/identidad/CadenaDeIdentidadTest.java),
+en `./gradlew build`: token firmado → cadena → claim → `SET LOCAL` → **las filas
+que RLS deja ver**, contra PostgreSQL y como `sgtm_app`. Las dos hacen falta —una
+habla con el Keycloak de verdad, la otra llega a las filas— y ninguna sustituye a
+la otra.
+
+Otra pregunta que la escalera no puede hacer: **sin `SGTM_OIDC_EMISOR`, la
+aplicación tiene que negarse a arrancar.** Se arranca la misma imagen a mano, sin
+esa variable y con todo lo demás puesto; si sigue viva a los dos minutos, el paso
+se pone rojo. Un backend que arranca sin emisor responde a la sonda, se declara
+sano y no atiende a nadie.
+
 Y la que da valor al resto: **las credenciales que el contenedor de la aplicación
 tiene de verdad no pueden crear una tabla**. Se demuestra que puede fallar
 cambiando en `compose.yaml` el `SGTM_DB_USUARIO` por `sgtm_owner`: el trabajo se

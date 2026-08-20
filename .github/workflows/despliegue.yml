@@ -31,6 +31,10 @@
 #      compilar: si no esta dentro del paquete, la pantalla de acceso no lleva a
 #      ninguna parte.
 #   7. ¿Puede la aplicacion ejecutar DDL? Esta es la que da valor al resto.
+#   8. SIN EMISOR, ¿arranca? Tiene que negarse. `application.yaml` lo dice desde
+#      #119 —«sin la variable puesta, la aplicacion no arranca»— y hasta ahora
+#      nadie lo comprobaba: un despliegue que se queda vivo sin poder validar un
+#      token responde a la sonda, se declara sano y no atiende a nadie.
 #
 # COMO SE DEMUESTRA QUE PUEDEN FALLAR:
 #
@@ -38,6 +42,9 @@
 #     aplicacion por `sgtm_owner`, con su clave, y este trabajo se pone rojo. Lee
 #     las credenciales del contenedor que esta corriendo, no las que el compose
 #     deberia tener.
+#   - La 8: se le pone un valor por omision al marcador de `application.yaml`
+#     —`${SGTM_OIDC_EMISOR:http://…}`—. La aplicacion arranca, se queda viva, y el
+#     paso se pone rojo por tiempo agotado en vez de por un arranque fallido.
 #   - La 4: se quita el mapeador `municipalidad-id` del realm y el ultimo peldano
 #     pasa de SIN_PRIVILEGIO a SIN_MUNICIPALIDAD; se apunta `issuer-uri` al realm
 #     master y el peldano del emisor ajeno pasa a valer; se quita el
@@ -263,6 +270,31 @@ jobs:
             exit 1
           fi
           echo "Correcto: el DDL se rechaza con las credenciales de la aplicacion."
+
+      - name: 8 · Sin emisor configurado, la aplicacion se niega a arrancar
+        run: |
+          set -euo pipefail
+          source .env
+          # La MISMA imagen que esta sirviendo, con las mismas credenciales de
+          # base, y sin una sola variable: SGTM_OIDC_EMISOR. Se le da tiempo de
+          # sobra; si sigue viva al agotarse, es que arranco sin emisor.
+          codigo=0
+          timeout 120 docker run --rm --network sgtm_default \
+            --env SPRING_PROFILES_ACTIVE=web \
+            --env SGTM_DB_URL=jdbc:postgresql://base:5432/sgtm \
+            --env SGTM_DB_USUARIO=sgtm_app \
+            --env SGTM_DB_CLAVE="$SGTM_CLAVE_APP" \
+            sgtm-aplicacion:marcha-blanca > sin-emisor.log 2>&1 || codigo=$?
+          echo "La aplicacion sin emisor termino con $codigo"
+          tail --lines=20 sin-emisor.log
+
+          if [ "$codigo" = "124" ]; then
+            echo "FALLO: arranco y siguio viva sin emisor de identidad."
+            echo "Un backend asi responde a la sonda, se declara sano y no atiende a nadie."
+            exit 1
+          fi
+          test "$codigo" != "0"
+          echo "Correcto: sin emisor no hay proceso."
 
       # `--tail 25` y no 200: con seis servicios, doscientas lineas cada uno son mil
       # doscientas lineas que entierran la salida del paso que fallo, que es justo

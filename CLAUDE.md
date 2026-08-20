@@ -301,6 +301,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Consulta de fichas e histórico (24 pruebas) | Escribiendo el prefijo con `LIKE` en vez de por rango, y devolviendo el padrón entero cuando el filtro por titular no encuentra a nadie | Rojo: el plan pasa a `Seq Scan` sobre 30 000 predios; rojo: buscar un nombre inexistente devolvía todo |
 | La fecha de auditoría sale del reloj inyectado | Devolviéndola al `DEFAULT now()` de la base | Rojo: la fila cae en un día que no es el del ejercicio con que se particionó |
 | Documentos en tres formatos (26 pruebas) | Cinco roturas: el PDF con fecha de creación dentro; el RTF sin escapar lo no-ASCII; sin la comprobación de que la reimpresión sale igual; sin el disparador de inmutabilidad; y el duplicado sin marcar | Rojo las cinco. La primera es lo que haría cualquier biblioteca de PDF; la segunda escribe «PE?A GARC?A» en un documento oficial |
+| Del token firmado a las filas que RLS deja ver (11 pruebas, con un emisor OIDC propio) | Cuatro roturas: sin `oauth2ResourceServer`; con `/api/v1/**` en `permitAll()`; con solo `jwk-set-uri`, sin `issuer-uri`; y el filtro leyendo `X-Municipalidad-Id` «por comodidad» | 5, 1, 1 y 1 en rojo |
 | Las guardas del generador de operaciones (6) | Un contrato de muestra que viola cada una | Las seis muerden |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con
