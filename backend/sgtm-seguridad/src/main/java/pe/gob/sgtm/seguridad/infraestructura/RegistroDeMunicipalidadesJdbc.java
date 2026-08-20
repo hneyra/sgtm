@@ -54,9 +54,10 @@ public class RegistroDeMunicipalidadesJdbc implements RegistroDeMunicipalidades 
     }
 
     @Override
-    public long darDeAltaSiFalta(String ubigeo, String nombre, String tipo) {
+    public long darDeAltaSiFalta(
+            String ubigeo, String nombre, String tipo, boolean esDemostracion) {
         try (Connection conexion = DriverManager.getConnection(url, usuario, clave)) {
-            insertarSiFalta(conexion, ubigeo, nombre, tipo);
+            insertarSiFalta(conexion, ubigeo, nombre, tipo, esDemostracion);
             return identificador(conexion, ubigeo);
         } catch (SQLException e) {
             // Sin el ubigeo, el mensaje de PostgreSQL no dice de que municipalidad habla.
@@ -72,14 +73,17 @@ public class RegistroDeMunicipalidadesJdbc implements RegistroDeMunicipalidades 
      * de clave duplicada. Asi los dos acaban con la misma fila.
      */
     private static void insertarSiFalta(
-            Connection conexion, String ubigeo, String nombre, String tipo) throws SQLException {
+            Connection conexion, String ubigeo, String nombre, String tipo, boolean esDemostracion)
+            throws SQLException {
         try (PreparedStatement alta =
                 conexion.prepareStatement(
-                        "INSERT INTO municipalidad (ubigeo, nombre, tipo) VALUES (?, ?, ?)"
+                        "INSERT INTO municipalidad (ubigeo, nombre, tipo, es_demostracion)"
+                                + " VALUES (?, ?, ?, ?)"
                                 + " ON CONFLICT (ubigeo) DO NOTHING")) {
             alta.setString(1, ubigeo);
             alta.setString(2, nombre);
             alta.setString(3, tipo);
+            alta.setBoolean(4, esDemostracion);
             alta.executeUpdate();
         }
     }

@@ -55,6 +55,10 @@ class EmitirDocumentoTest {
     private static final Ejercicio EJERCICIO = new Ejercicio(2026);
     private static final String TIPO = "ORDEN_PAGO";
 
+    /** El PDF se escribe en WinAnsiEncoding, que es CP-1252 (ver RenderizadorPdf). */
+    private static final java.nio.charset.Charset WIN_ANSI =
+            java.nio.charset.Charset.forName("windows-1252");
+
     private static BaseDeDatosDePrueba base;
     private static long municipalidad;
     private static long otraMunicipalidad;
@@ -70,6 +74,9 @@ class EmitirDocumentoTest {
      * distintas del original con el mismo numero.
      */
     private static EmitirDocumento emitirConOtroRenderizador;
+
+    /** El mismo caso de uso, pero con la instalacion declarada de demostracion (#122). */
+    private static EmitirDocumento emitirEnDemostracion;
 
     @BeforeAll
     static void provisionar() throws SQLException, IOException {
@@ -94,13 +101,28 @@ class EmitirDocumentoTest {
                         List.of(
                                 new RenderizadorPdf(),
                                 new RenderizadorXls(),
-                                new RenderizadorRtf()));
+                                new RenderizadorRtf()),
+                        RegimenDeLaInstalacion.REAL);
 
         emitir =
                 envolver(
                         new EmitirDocumento(
                                 new DocumentoRepositoryJdbc(jdbc, json),
                                 generador,
+                                new AuditoriaJdbc(jdbc, RELOJ),
+                                RELOJ),
+                        gestor);
+
+        emitirEnDemostracion =
+                envolver(
+                        new EmitirDocumento(
+                                new DocumentoRepositoryJdbc(jdbc, json),
+                                new GeneradorDeDocumentos(
+                                        List.of(
+                                                new RenderizadorPdf(),
+                                                new RenderizadorXls(),
+                                                new RenderizadorRtf()),
+                                        RegimenDeLaInstalacion.DEMOSTRACION),
                                 new AuditoriaJdbc(jdbc, RELOJ),
                                 RELOJ),
                         gestor);
@@ -113,7 +135,8 @@ class EmitirDocumentoTest {
                                         List.of(
                                                 new PdfConOtroMargen(),
                                                 new RenderizadorXls(),
-                                                new RenderizadorRtf())),
+                                                new RenderizadorRtf()),
+                                        RegimenDeLaInstalacion.REAL),
                                 new AuditoriaJdbc(jdbc, RELOJ),
                                 RELOJ),
                         gestor);
@@ -340,6 +363,68 @@ class EmitirDocumentoTest {
     }
 
     @Nested
+    @DisplayName("#122 — Bajo demostracion, el papel nace marcado y muere marcado")
+    class BajoDemostracion {
+
+        @Test
+        @DisplayName("el documento emitido sale marcado")
+        void elDocumentoEmitidoSaleMarcado() {
+            EmitirDocumento.Emision emision = enDemostracion("C-000501");
+
+            assertThat(new String(emision.contenido(), WIN_ANSI))
+                    .as("mientras D-02a este abierta, ninguna cifra que salga de aqui esta firmada")
+                    .contains(ModeloDeDocumento.MARCA_DE_DEMOSTRACION);
+        }
+
+        @Test
+        @DisplayName("la marca queda GUARDADA con los datos, no solo dibujada")
+        void laMarcaQuedaGuardada() {
+            // Es la diferencia entre marcar al dibujar y marcar al emitir. Si solo se
+            // dibujara, el modelo guardado saldria limpio y la marca del papel dependeria
+            // del regimen del dia en que alguien pide el duplicado.
+            EmitirDocumento.Emision emision = enDemostracion("C-000502");
+
+            assertThat(emision.registro().datos().esDemostracion())
+                    .as("lo que se guarda es el modelo ya marcado")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("la reimpresion sigue saliendo marcada, y con los mismos bytes")
+        void laReimpresionSigueSaliendoMarcada() {
+            // Este es el escenario que importa: la municipalidad sale de la marcha blanca,
+            // el regimen de la instalacion pasa a real, y alguien pide el duplicado de un
+            // papel de entonces. Tiene que salir marcado —lo era— y tiene que salir
+            // identico, o la comprobacion del resumen lo rechaza con razon.
+            String numero = enDemostracion("C-000503").registro().numero();
+
+            EmitirDocumento.Emision duplicado =
+                    emitir.reimprimir(
+                            TIPO,
+                            EJERCICIO,
+                            numero,
+                            FormatoDeDocumento.PDF,
+                            Observacion.de("El contribuyente pidio copia del documento"));
+
+            String papel = new String(duplicado.contenido(), WIN_ANSI);
+            assertThat(papel)
+                    .as("reimpreso por una instalacion que YA NO es de demostracion")
+                    .contains(ModeloDeDocumento.MARCA_DE_DEMOSTRACION);
+            assertThat(papel).contains("DUPLICADO");
+        }
+
+        private EmitirDocumento.Emision enDemostracion(String referencia) {
+            return emitirEnDemostracion.emitir(
+                    TIPO,
+                    EJERCICIO,
+                    referencia,
+                    modelo(referencia),
+                    FormatoDeDocumento.PDF,
+                    Observacion.de("Emision de la orden de pago del ejercicio"));
+        }
+    }
+
+    @Nested
     @DisplayName("Emision masiva")
     class Masiva {
 
@@ -410,6 +495,7 @@ class EmitirDocumentoTest {
                                 List.of("Concepto", "Importe"),
                                 List.of(List.of("Cifra ficticia de prueba", "0,00")))),
                 List.of(),
+                null,
                 null);
     }
 

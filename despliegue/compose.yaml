@@ -152,6 +152,18 @@ services:
       SGTM_IMPLANTACION_TIPO: ${SGTM_TIPO_DE_MUNICIPALIDAD:-DISTRITAL}
       SGTM_IMPLANTACION_ADMINISTRADOR: ${SGTM_ADMINISTRADOR:?falta SGTM_ADMINISTRADOR en .env}
       SGTM_IMPLANTACION_NOMBREDELADMINISTRADOR: ${SGTM_NOMBRE_DEL_ADMINISTRADOR:-Administrador del sistema}
+      # Mientras D-02a este abierta, toda cifra que el sistema calcule sale de
+      # parametros que nadie ha firmado. Una instalacion declarada de demostracion
+      # marca TODO documento que emita, en los tres formatos (#122).
+      #
+      # El valor por omision es `true`, al reves que en el codigo, y a proposito: aqui
+      # se levanta una marcha blanca. Una instalacion de verdad tiene que decir que lo
+      # es, y decirlo es un cambio que se ve en su .env.
+      #
+      # Solo se aplica al ALTA: relanzar el despliegue con `false` no le quita la marca
+      # a una municipalidad ya implantada. Quitarla es un UPDATE deliberado de
+      # sgtm_owner, que deja rastro de quien lo hizo.
+      SGTM_IMPLANTACION_ESDEMOSTRACION: ${SGTM_ES_DEMOSTRACION:-true}
       SGTM_IMPLANTACION_URL: jdbc:postgresql://base:5432/sgtm
       # OWNERCLAVE sin guion bajo: en una variable de entorno el `_` se traduce a
       # punto, asi que SGTM_IMPLANTACION_OWNER_CLAVE seria la propiedad

@@ -18,8 +18,14 @@ public interface RegistroDeMunicipalidades {
      * Da de alta la municipalidad si no existe, y devuelve su identificador.
      *
      * <p>Idempotente por {@code ubigeo}: repetirlo no crea una segunda fila ni falla. Si ya existe,
-     * <b>no</b> actualiza el nombre ni el tipo — un despliegue no es el sitio donde se corrige el
-     * nombre de una municipalidad, y hacerlo en silencio seria peor que no hacerlo.
+     * <b>no</b> actualiza nada — ni el nombre, ni el tipo, ni la marca de demostracion—. Un
+     * despliegue no es el sitio donde se corrige el nombre de una municipalidad, y hacerlo en
+     * silencio seria peor que no hacerlo.
+     *
+     * <p>Que tampoco toque {@code esDemostracion} es lo que hace que la marca sea dificil de
+     * quitar, que es su proposito (#122): una instalacion no deja de ser de demostracion porque
+     * alguien relance el despliegue con una variable distinta. Se quita con un {@code UPDATE}
+     * deliberado de {@code sgtm_owner}, y eso deja rastro de quien lo hizo.
      */
-    long darDeAltaSiFalta(String ubigeo, String nombre, String tipo);
+    long darDeAltaSiFalta(String ubigeo, String nombre, String tipo, boolean esDemostracion);
 }
