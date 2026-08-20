@@ -24,8 +24,10 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * aqui porque el contrato no declara ningun {@code POST} en esta ruta y ninguno de esos contextos
  * existe todavia.
  *
- * <p>{@code situacion} es un filtro que el contrato declara y esta pantalla no resuelve: depende
- * del saldo proyectado (issue #23), que sigue bloqueado. Se ignora en vez de fallar la peticion.
+ * <p>{@code situacion} es un filtro que el contrato declara y esta pantalla no resuelve. El saldo
+ * proyectado del que depende ya existe (#23), pero decidir que cuenta como «pendiente» a que fecha
+ * es la consulta de deuda por contribuyente —#25, mas adelante en la secuencia—, no este listado
+ * cronologico. Se ignora en vez de fallar la peticion.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/consultas/cuenta-corriente")

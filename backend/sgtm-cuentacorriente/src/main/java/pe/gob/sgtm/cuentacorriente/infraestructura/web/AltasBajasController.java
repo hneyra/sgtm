@@ -1,0 +1,89 @@
+package pe.gob.sgtm.cuentacorriente.infraestructura.web;
+
+import java.util.Locale;
+import org.jspecify.annotations.Nullable;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
+import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeAltasBajas;
+import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
+import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.web.Api;
+import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ParametrosDePaginacion;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
+import pe.gob.sgtm.web.RespuestaPaginada;
+
+/**
+ * Consulta de altas y bajas: {@code GET /api/v1/consultas/altas-bajas} (RF-045).
+ *
+ * <p>Devuelve los asientos que son movimientos de deuda, con el documento que los sustenta y el
+ * motivo con que se registraron. Es lo que responde «por que debe esto» sobre una deuda restante:
+ * la lista de lo que entro y lo que salio, cada linea con su resolucion.
+ *
+ * <p><b>{@code autoManual} es un filtro que el contrato declara y esta pantalla no resuelve</b>, y
+ * conviene decir por que en vez de fingirlo: hoy nada distingue en el libro un movimiento
+ * registrado a mano de uno que produjo una emision, porque no hay ninguna columna que lo marque y
+ * la emision masiva todavia no existe —es #30, mas adelante en la secuencia—. Cuando exista habra
+ * que decidir como se marca; mientras tanto el filtro se ignora en vez de fallar la peticion, igual
+ * que {@code situacion} en {@code CuentaCorrienteController}.
+ */
+@RestController
+@RequestMapping(Api.RAIZ + "/consultas/altas-bajas")
+@RequiereAcceso(acceso = "consulta_altas_bajas", privilegio = Privilegio.LECTURA)
+public class AltasBajasController {
+
+    /** Cronologico, como se lee cualquier movimiento de cuenta corriente. */
+    private static final String ORDEN_POR_OMISION = "fecha_valor";
+
+    private final AsientoRepository repositorio;
+
+    public AltasBajasController(AsientoRepository repositorio) {
+        this.repositorio = repositorio;
+    }
+
+    @GetMapping
+    public RespuestaPaginada<AsientoResource> altasYBajas(
+            @RequestParam String codigoCont,
+            @RequestParam(required = false) @Nullable String ano,
+            @RequestParam(required = false) @Nullable String tributo,
+            @RequestParam(required = false) @Nullable String altaBaja,
+            ParametrosDePaginacion paginacion) {
+
+        CriterioDeAltasBajas criterio =
+                new CriterioDeAltasBajas(
+                        codigoCont, ejercicioDe(ano), tributo, sentidoDe(altaBaja));
+
+        return RespuestaPaginada.de(
+                repositorio.altasYBajas(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                AsientoResource::de);
+    }
+
+    private static @Nullable Ejercicio ejercicioDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            return null;
+        }
+        try {
+            return new Ejercicio(Integer.parseInt(texto.strip()));
+        } catch (NumberFormatException noEsNumero) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, "El año no es un numero");
+        }
+    }
+
+    private static @Nullable SentidoDelMovimiento sentidoDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            return null;
+        }
+        try {
+            return SentidoDelMovimiento.valueOf(texto.strip().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException desconocido) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "El filtro «Alta / Baja» admite ALTA o BAJA: '" + texto + "'");
+        }
+    }
+}

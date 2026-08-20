@@ -192,6 +192,10 @@ public final class ReglasDeArquitectura {
      * base no puede: obliga a que la observacion llegue <b>desde el usuario</b>, en la firma, en
      * lugar de rellenarse con una cadena fija en la capa de persistencia —que satisfaria a la base
      * y vaciaria de sentido la auditoria—.
+     *
+     * <p>Las excepciones estan en {@link ConObservacionEnLasEscrituras#SIN_USUARIO_QUE_OBSERVE} y
+     * se nombran una a una, con su motivo. Que cueste una linea es deliberado: exime a un metodo
+     * concreto, no a una clase ni a un paquete, y el diff dice cual y por que.
      */
     public static final ArchRule TODO_CASO_DE_USO_DE_ESCRITURA_EXIGE_OBSERVACION =
             ArchRuleDefinition.classes()
@@ -485,6 +489,26 @@ public final class ReglasDeArquitectura {
                 "org.springframework.transaction.annotation.Transactional";
         private static final String OBSERVACION = PAQUETE_RAIZ + ".dominio.Observacion";
 
+        /**
+         * Los metodos que escriben sin observacion porque <b>no hay usuario que la de</b>.
+         *
+         * <p>La regla 10 gobierna las <b>modificaciones de datos</b>: el que las hace sabe por que,
+         * y se le exige decirlo. Un proceso que recalcula un cache derivado a las tres de la
+         * madrugada no modifica ningun dato —la fuente, el libro de asientos, queda intacta— y no
+         * tiene ninguna observacion que dar. Exigirsela produciria exactamente lo que el javadoc de
+         * la regla advierte: una cadena fija que satisface la comprobacion y vacia de sentido la
+         * auditoria.
+         *
+         * <p>Se nombra el metodo entero, no la clase: cualquier otra escritura que se agregue a la
+         * misma clase vuelve a estar sujeta a la regla.
+         */
+        private static final Set<String> SIN_USUARIO_QUE_OBSERVE =
+                Set.of(
+                        // Reconstruye saldo_proyectado desde el libro (#23). Es un cache
+                        // derivado: no modifica ningun dato, lo recalcula. El libro no se toca.
+                        PAQUETE_RAIZ
+                                + ".cuentacorriente.aplicacion.ReconstruirSaldo.deContribuyente(long)");
+
         ConObservacionEnLasEscrituras() {
             super("exigir una Observacion en todo metodo transaccional de escritura");
         }
@@ -492,7 +516,8 @@ public final class ReglasDeArquitectura {
         @Override
         public void check(JavaClass clase, ConditionEvents eventos) {
             for (JavaMethod metodo : clase.getMethods()) {
-                if (!esEscrituraTransaccional(metodo)) {
+                if (!esEscrituraTransaccional(metodo)
+                        || SIN_USUARIO_QUE_OBSERVE.contains(metodo.getFullName())) {
                     continue;
                 }
                 boolean laRecibe =

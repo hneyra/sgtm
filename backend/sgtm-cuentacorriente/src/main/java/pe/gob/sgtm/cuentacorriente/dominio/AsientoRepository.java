@@ -34,6 +34,45 @@ public interface AsientoRepository {
      */
     List<Asiento> paraDeuda(CriterioDeDeuda criterio);
 
+    /**
+     * Los movimientos de alta y baja de deuda que pide el criterio, paginados (RF-045).
+     *
+     * <p>Ver {@link CriterioDeAltasBajas} para que cuenta como movimiento de deuda y que no.
+     */
+    Pagina<Asiento> altasYBajas(CriterioDeAltasBajas criterio, Paginacion paginacion);
+
+    /**
+     * <b>Todos</b> los asientos de una obligacion, sin filtro de fecha (#23).
+     *
+     * <p>Es lo que la reconstruccion del saldo proyectado recorre: reconstruir a una fecha de corte
+     * daria un saldo que no es el del libro, y la conciliacion lo leeria como divergencia.
+     */
+    List<Asiento> deLaObligacion(ClaveDeSaldo clave);
+
+    /**
+     * El identificador del contribuyente con ese codigo, si existe en esta municipalidad.
+     *
+     * <p>Vive aqui y no en un repositorio del contexto {@code contribuyentes} por lo mismo que el
+     * cruce de {@link #buscar}: se resuelve en SQL contra una tabla con la que ya hay clave
+     * foranea, sin conocer ningun tipo de ese contexto (ARQ-01 §4 regla 2). Las dos tablas
+     * comparten politica RLS, asi que la busqueda no se sale del tenant.
+     */
+    Optional<Long> contribuyentePorCodigo(String codigo);
+
+    /** Todos los asientos de un contribuyente, para reconstruir sus saldos de una vez (#23). */
+    List<Asiento> deContribuyente(long contribuyenteId);
+
+    /**
+     * Los contribuyentes con al menos un asiento, en orden de identificador, desde {@code
+     * despuesDe} y como mucho {@code cuantos}.
+     *
+     * <p>La forma —cursor por identificador, no {@code OFFSET}— es lo que hace <b>reanudable</b> la
+     * reconstruccion masiva (#23): el proceso guarda el ultimo identificador que termino y sigue
+     * desde ahi, sin recorrer otra vez lo hecho y sin saltarse a nadie si entretanto entra un
+     * contribuyente nuevo.
+     */
+    List<Long> contribuyentesConAsientos(long despuesDe, int cuantos);
+
     /** Inserta el asiento y devuelve la fila guardada, con su {@code id} y su {@code usuarioId}. */
     Asiento registrar(Asiento asiento);
 }
