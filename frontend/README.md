@@ -631,6 +631,9 @@ dice en la misma frase en que excluye el token.
 | Ninguna cifra se recompone al dibujar       | Alterando una celda numérica en la tabla                                | Roja                          |
 | Los reportes de otro módulo reusan la hoja  | Quitando las firmas del bloque                                          | Rojas, dos                    |
 | Una pantalla de trabajo se abre sin filtrar | Mandando la página aunque sea la primera                                | Roja                          |
+| Lo opcional arranca cerrado                 | Haciendo que `arrancaCerrada` devuelva falso                            | Roja                          |
+| El giro se busca por nombre                 | Impidiendo que el filtro `descripcion` viaje                            | Roja                          |
+| La lista de actos inalcanzables no crece    | Cambiando el patrón de lo irreversible                                  | Roja                          |
 
 ## Lo que todavía no está
 
