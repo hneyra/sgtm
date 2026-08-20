@@ -74,6 +74,22 @@ function origen(texto = ''): { equipo: string | null; ip: string | null } {
   return { equipo: equipo === '' ? null : equipo, ip: ip === '' ? null : ip };
 }
 
+/* ── Rentas: el padron de contribuyentes ───────────────────────────────── */
+
+const contribuyentes = (): Paginado =>
+  unaPagina(
+    filasDe('contribuyentes').map(([est, codigo, nombre, dni, ruc], i) => ({
+      id: i + 1,
+      codigo,
+      tipoDocumento: ruc && ruc !== '—' ? 'RUC' : 'DNI',
+      numeroDocumento: ruc && ruc !== '—' ? ruc : dni,
+      tipoPersona: ruc && ruc !== '—' ? 'JURIDICA' : 'NATURAL',
+      nombreRazonSocial: nombre,
+      condicionEspecial: null,
+      activo: (est ?? '').toUpperCase() === 'A',
+    })),
+  );
+
 /* ── Cuenta corriente: el libro de asientos ────────────────────────────── */
 
 /**
@@ -445,6 +461,7 @@ const parametros = (): Paginado => {
 /** Por camino del contrato, relativo a `/api/v1`. Solo `GET`: ninguna escribe. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/catastro/vias': vias,
+  '/rentas/contribuyentes': contribuyentes,
   '/consultas/cuenta-corriente/{codigo}': cuentaCorriente,
   '/catastro/sectores': sectores,
   '/catastro/fichas': fichas,

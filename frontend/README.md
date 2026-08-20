@@ -160,6 +160,17 @@ con «—». Donde eso importa más es en las cifras: el arancel por m², el val
 y el autovalúo rural alimentan la valuación de un predio, y una cifra inventada ahí acaba en un
 valor mal emitido. Que falte se ve; que esté mal, no.
 
+### Ocho formularios que no guardan sin observación
+
+Rentas · Registro es el módulo que más escribe: de sus quince opciones, **nueve tienen verbo de
+escritura**. Ahí la regla 10 deja de ser una regla escrita, así que hay una prueba que las recorre
+todas y exige que su acción primaria siga deshabilitada mientras no haya observación. Habilitándola
+sin ella, se ponen rojas nueve.
+
+Y **SoD-2** (REQ-03 §4): quien cobra no puede dar de baja lo que cobra. Un perfil de cajero no ve
+`alta_deuda` ni `baja_deuda`, y sí ve el padrón sin poder tocarlo. La interfaz lo esconde; el
+servidor lo impide — las dos cosas hacen falta, y esta solo es la comodidad.
+
 ### Ninguna cifra sin su fecha, y no solo en la banda de totales
 
 No existe «la deuda»: existe `deudaActualizadaA(fecha)` (regla 9, RNF-075). Eso ya lo hacía cumplir
@@ -536,6 +547,8 @@ dice en la misma frase en que excluye el token.
 | Ninguna cifra sin su fecha (las once)   | Quitando el bloque de fecha de cálculo                                  | Rojas, trece                  |
 | El saldo no se compone                  | Restando en la interfaz en vez de dejarlo vacío                         | Rojas, dos                    |
 | `@sgtm/dominio` no suma                 | Añadiéndole una función de sumar importes                               | Roja                          |
+| Nueve escrituras sin observación        | Habilitando la acción primaria sin ella                                 | Rojas, nueve                  |
+| La deuda del padrón no se inventa       | Rellenando predios y deuda con lo del prototipo                         | Roja                          |
 
 ## Lo que todavía no está
 
