@@ -1,5 +1,6 @@
 package pe.gob.sgtm.cuentacorriente.dominio;
 
+import java.util.List;
 import java.util.Optional;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
@@ -23,6 +24,15 @@ public interface AsientoRepository {
      * igualdad. La aproximacion es cosa del padron de {@code contribuyentes}.
      */
     Pagina<Asiento> buscar(CriterioDeConsulta criterio, Paginacion paginacion);
+
+    /**
+     * Los asientos de <b>una</b> obligacion, hasta la fecha de corte del criterio (RF-041, RF-042).
+     *
+     * <p>Sin paginar: una obligacion tiene pocos asientos —no el libro completo de un
+     * contribuyente—, y {@link CalculoDeDeuda#deudaActualizadaA} necesita verlos todos para netear
+     * cargos contra abonos, no una pagina de ellos.
+     */
+    List<Asiento> paraDeuda(CriterioDeDeuda criterio);
 
     /** Inserta el asiento y devuelve la fila guardada, con su {@code id} y su {@code usuarioId}. */
     Asiento registrar(Asiento asiento);

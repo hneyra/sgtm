@@ -16,6 +16,7 @@ import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeConsulta;
+import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
 import pe.gob.sgtm.cuentacorriente.dominio.TipoAsiento;
 import pe.gob.sgtm.dominio.Dinero;
@@ -90,6 +91,50 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 paginacion,
                 ORDEN,
                 AsientoRepositoryJdbc::mapear);
+    }
+
+    @Override
+    public List<Asiento> paraDeuda(CriterioDeDeuda criterio) {
+        List<String> condiciones = new ArrayList<>();
+        Map<String, Object> parametros = new HashMap<>();
+
+        condiciones.add("c.codigo_contribuyente = :codigo");
+        parametros.put("codigo", criterio.codigoContribuyente());
+        condiciones.add("a.tributo = :tributo");
+        parametros.put("tributo", criterio.tributo());
+        condiciones.add("a.ejercicio = :ejercicio");
+        parametros.put("ejercicio", criterio.ejercicio().valor());
+        condiciones.add("a.fecha_valor <= :fecha");
+        parametros.put("fecha", criterio.fecha());
+
+        if (criterio.periodo() != null) {
+            condiciones.add("a.periodo = :periodo");
+            parametros.put("periodo", criterio.periodo());
+        }
+        if (criterio.predioId() != null) {
+            condiciones.add("a.predio_id = :predioId");
+            parametros.put("predioId", criterio.predioId());
+        }
+        if (criterio.vehiculoId() != null) {
+            condiciones.add("a.vehiculo_id = :vehiculoId");
+            parametros.put("vehiculoId", criterio.vehiculoId());
+        }
+        if (criterio.fase() != null) {
+            condiciones.add("a.fase = :fase");
+            parametros.put("fase", criterio.fase().name());
+        }
+        if (criterio.concepto() != null) {
+            condiciones.add("a.concepto = :concepto");
+            parametros.put("concepto", criterio.concepto().name());
+        }
+
+        String desdeConContribuyente = DESDE + " JOIN contribuyente c ON c.id = a.contribuyente_id";
+        String donde = " WHERE " + String.join(" AND ", condiciones);
+
+        return jdbc().sql("SELECT " + COLUMNAS + desdeConContribuyente + donde)
+                .params(parametros)
+                .query(AsientoRepositoryJdbc::mapear)
+                .list();
     }
 
     @Override
