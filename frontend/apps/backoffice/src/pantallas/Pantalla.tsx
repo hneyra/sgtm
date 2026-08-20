@@ -19,6 +19,7 @@ import { SIN_PERMISO, estadoDePantalla, textoDeError } from './estados';
 import { useCatalogoVisible } from '../app/sesion/useCatalogoVisible';
 import { useEscritura } from './escritura';
 import { useFocoTrasGuardar } from './foco';
+import { avisoDe } from './avisos';
 import { escrituraDe } from './escrituras';
 import { useEjercicio } from '../app/ejercicio';
 import { conexionDe } from './conexiones';
@@ -203,6 +204,7 @@ function Bloques({
   // sesion. Sin declaracion, el formulario no se escribe y solo viaja la
   // observacion: negacion por omision, como la autorizacion del manual.
   const declarada = escrituraDe(estructura.id);
+  const aviso = avisoDe(estructura.id);
   const trabajo = useEjercicio();
   const escritura = useEscritura(
     operacion !== undefined && escribe(operacion) && puedeEscribirAqui ? operacion : undefined,
@@ -268,6 +270,10 @@ function Bloques({
       {declarada?.nota !== undefined && (
         <Aviso titulo="Cómo funciona esta pantalla" detalle={declarada.nota} />
       )}
+
+      {/* Y lo que hay que saber **de lo que se esta mirando**: que es una copia
+          de trabajo y el padron todavia no la recoge (#80). */}
+      {aviso !== undefined && <Aviso titulo={aviso.titulo} detalle={aviso.detalle} />}
 
       {estructura.kind === 'dash' && (
         <Indicadores kpis={datos?.kpis} paneles={datos?.paneles} cargando={cargando} />

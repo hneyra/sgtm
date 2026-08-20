@@ -12,6 +12,13 @@ import { datosDe } from '@sgtm/api-mock';
  * Vive aqui y no en el archivo de un modulo porque #78 lo pide explicitamente
  * para los suyos —«se reusa el de #77, no se duplica»— y porque el defecto que
  * busca no es de un modulo: es de cualquier pantalla con importes.
+ *
+ * **Se mira en las dos direcciones, y la segunda es la que costo.** Comprobar
+ * solo que lo que se ve esta en la respuesta deja pasar una transformacion que
+ * cambie el formato: `1,842.60` convertido en `2026.86` deja de parecer dinero,
+ * se cae del filtro y la comprobacion no lo ve. Por eso tambien se exige lo
+ * contrario: que **cada cifra que la respuesta trae en su tabla siga estando en
+ * la pantalla**. Lo descubrio intentar demostrar que la primera mordia (#80).
  */
 
 /** Una cifra de dinero, como se ve en pantalla: `1,842.60`, `-26.40`. */
@@ -22,6 +29,12 @@ export function cifrasEnPantalla(): string[] {
   return [...document.querySelectorAll('td, .sgtm-totales__valor, .sgtm-campo__control')]
     .map((nodo) => (nodo.textContent ?? '').trim())
     .filter((texto) => DINERO.test(texto));
+}
+
+/** Las cifras de dinero que la respuesta trae **en su tabla**: tienen que verse. */
+export function cifrasDeLaTabla(pantalla: string): string[] {
+  const filas = datosDe(pantalla)?.tabla?.filas ?? [];
+  return filas.flatMap((fila) => fila.map((celda) => celda.texto)).filter((t) => DINERO.test(t));
 }
 
 /** Todas las cifras que la API sirvio para esa pantalla, vengan de donde vengan. */

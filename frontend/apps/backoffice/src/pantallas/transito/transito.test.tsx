@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
-import { cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
+import { cifrasDeLaTabla, cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
 import { montarEnRuta } from '../../pruebas/montar';
 
 /**
@@ -86,6 +86,10 @@ describe('la papeleta muestra su desglose guardado, no uno recalculado', () => {
     // dia. Recalcularlo al mostrar es el error clasico de este modulo: la
     // papeleta dejaria de decir lo que dice el documento que se notifico.
     for (const cifra of enPantalla) expect(servidas).toContain(cifra);
+    // Y en la otra direccion: cada cifra de la respuesta sigue estando en la
+    // pantalla. Sin esto, una transformacion que cambie el formato se escapa
+    // —deja de parecer dinero y se cae del filtro—.
+    for (const cifra of cifrasDeLaTabla('papeletas')) expect(cifrasEnPantalla()).toContain(cifra);
   });
 });
 
