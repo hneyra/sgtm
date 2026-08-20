@@ -23,3 +23,7 @@ frontend/playwright-report/
 .DS_Store
 
 .thumbnail
+
+# Despliegue: el archivo de claves de la instalacion. El .env.ejemplo si se
+# versiona; el .env con las claves de verdad, nunca.
+despliegue/.env

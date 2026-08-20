@@ -1,0 +1,86 @@
+# Marcha blanca del SGTM: motor, migracion y aplicacion, en ese orden.
+#
+# El orden es la parte que importa, y no es una preferencia de arranque:
+#
+#   base ──(sana)──► migraciones ──(termina con exito)──► aplicacion
+#
+# El motor crea los roles al inicializarse, porque un rol no puede crearse a si
+# mismo y las politicas de V6__rls.sql los nombran. El migrador aplica el esquema
+# como sgtm_owner y TERMINA. Solo entonces arranca la aplicacion, que se conecta
+# como sgtm_app y no tiene DDL (ARQ-03 §4).
+#
+# Un esquema a medias con la aplicacion ya sirviendo peticiones es el estado que
+# este orden existe para impedir.
+#
+# Las claves no estan aqui: salen de un archivo .env que no se versiona. Ver
+# .env.ejemplo y el README de esta carpeta.
+
+name: sgtm
+
+services:
+  base:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sgtm
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${SGTM_CLAVE_SUPERUSUARIO:?falta SGTM_CLAVE_SUPERUSUARIO en .env}
+      # Las lee el guion de asignacion de claves. El superusuario es el unico que
+      # puede asignarlas, y solo existe en este contenedor.
+      SGTM_CLAVE_OWNER: ${SGTM_CLAVE_OWNER:?falta SGTM_CLAVE_OWNER en .env}
+      SGTM_CLAVE_APP: ${SGTM_CLAVE_APP:?falta SGTM_CLAVE_APP en .env}
+    volumes:
+      # Los dos guiones de inicializacion corren en orden alfabetico, una sola vez,
+      # cuando el volumen esta vacio. `crear-roles.sql` se monta desde el modulo del
+      # esquema en lugar de copiarse aqui: una copia seria un segundo sitio donde
+      # olvidar que el rol no puede ser superusuario.
+      - ../backend/sgtm-esquema/src/main/resources/db/roles/crear-roles.sql:/docker-entrypoint-initdb.d/10-crear-roles.sql:ro
+      - ./inicializacion-del-motor/20-asignar-claves.sh:/docker-entrypoint-initdb.d/20-asignar-claves.sh:ro
+      - datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=postgres --dbname=sgtm"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+
+  migraciones:
+    build:
+      context: ../backend
+      target: migrador
+    depends_on:
+      base:
+        condition: service_healthy
+    environment:
+      SGTM_DB_URL: jdbc:postgresql://base:5432/sgtm
+      SGTM_DB_OWNER_USUARIO: sgtm_owner
+      SGTM_DB_OWNER_CLAVE: ${SGTM_CLAVE_OWNER:?falta SGTM_CLAVE_OWNER en .env}
+    # Corre y termina. Si se reinicia, vuelve a comprobar el ambiente y no aplica
+    # nada: el migrador es idempotente y tiene su prueba que lo demuestra.
+    restart: "no"
+
+  aplicacion:
+    build:
+      context: ../backend
+      target: aplicacion
+    depends_on:
+      migraciones:
+        condition: service_completed_successfully
+    environment:
+      SPRING_PROFILES_ACTIVE: web
+      SGTM_DB_URL: jdbc:postgresql://base:5432/sgtm
+      # sgtm_app y solo sgtm_app. Poner aqui las credenciales de sgtm_owner
+      # —«para que migre al arrancar», «para una carga rapida»— le daria DDL sobre
+      # el padron de todas las municipalidades a un proceso expuesto en HTTP. La
+      # verificacion de despliegue comprueba exactamente esto y se pone roja.
+      SGTM_DB_USUARIO: sgtm_app
+      SGTM_DB_CLAVE: ${SGTM_CLAVE_APP:?falta SGTM_CLAVE_APP en .env}
+    ports:
+      - "${SGTM_PUERTO:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:8080/actuator/health || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 30s
+
+volumes:
+  datos:

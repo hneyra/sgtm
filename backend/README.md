@@ -17,6 +17,29 @@ contexto de tenant (token → `SET LOCAL` → RLS) y las verificaciones bloquean
 ./gradlew spotlessApply           # arregla el formato en vez de solo reprocharlo
 ```
 
+## Arrancarlo
+
+La instalación completa —motor, migración y aplicación— vive en
+[`despliegue/`](../despliegue/README.md):
+
+```bash
+cd ../despliegue
+cp .env.ejemplo .env          # y poner claves generadas, una distinta por rol
+docker compose up --build --wait aplicacion
+```
+
+Lo que hay que entender antes de tocarlo: **la aplicación no migra**. Arranca con
+`spring.flyway.enabled: false` y se conecta como `sgtm_app`, que no tiene DDL. Quien migra es
+[`Migrador`](sgtm-esquema/src/main/java/pe/gob/sgtm/esquema/Migrador.java), en su propio
+contenedor, como `sgtm_owner`, y termina antes de que la aplicación arranque. Es el **mismo**
+código que provisiona la base de cada prueba de persistencia: si el despliegue migrara por su
+cuenta, lo verificado en CI y lo desplegado en la municipalidad dejarían de ser lo mismo.
+
+Hoy no se puede iniciar sesión: no hay emisor de identidad, y la cadena de seguridad niega todo lo
+que no sea `/actuator/health`. Eso es deliberado y está escrito en
+[`SeguridadWeb`](sgtm-plataforma/src/main/java/pe/gob/sgtm/plataforma/SeguridadWeb.java) —antes
+ocurría por omisión, que es peor porque no se parece a un fallo—.
+
 **Si el build se queja del formato, no lo pelees: `spotlessApply`.** Checkstyle no revisa formato
 a propósito, para no discutir con el formateador. Lo que sí revisa, y es fácil de incumplir con el
 teclado en español, son los **identificadores con tilde**: `alicuota`, nunca `alícuota`.
@@ -120,8 +143,9 @@ Detalle del esquema: [`sgtm-esquema/README.md`](sgtm-esquema/README.md) y
 - Toda regla de cálculo tributario. Bloqueada por D-02 —los valores normativos, hoy partida en
   D-02a/b/c— y por D-03c, los puntos de redondeo
   ([GOB-02](../docs/00-gobierno/decisiones-abiertas.md)).
-- La configuración de Spring Security: el emisor OIDC y el JWKS. Hoy `TenantContextFilter` sabe
-  leer el claim, pero nadie valida todavía el token.
+- El emisor OIDC y el JWKS. Hoy `TenantContextFilter` sabe leer el claim y `SeguridadWeb` niega
+  todo lo que no sea la sonda de vida, pero nadie valida todavía un token: sin emisor no hay a
+  quién dejar entrar (#119).
 - El mecanismo que escribe la auditoría (disparadores o aspecto). Se decide con el primer caso de
   uso de escritura; ver [DAT-02 §4](../docs/40-datos/auditoria-e-historico.md).
 - Las particiones de los ejercicios siguientes a 2027, y su automatización.

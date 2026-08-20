@@ -10,7 +10,6 @@ import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import org.flywaydb.core.Flyway;
 
 /**
  * Provisiona la base de la prueba tal como se provisiona un ambiente real:
@@ -96,12 +95,16 @@ public final class BaseDeDatosDePrueba implements AutoCloseable {
         }
     }
 
-    private void migrar() {
-        Flyway.configure()
-                .dataSource(motor.url(), OWNER, claves.get(OWNER))
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+    /**
+     * Migra con el <b>mismo</b> {@link Migrador} que aplica el despliegue.
+     *
+     * <p>No es reutilizacion por ahorro: es lo que hace que la prueba de aislamiento hable del
+     * esquema que se despliega de verdad. Una copia de esta llamada aqui —con otras {@code
+     * locations} u otra version de Flyway— dejaria a CI verificando un esquema y a la municipalidad
+     * corriendo otro.
+     */
+    private void migrar() throws SQLException {
+        Migrador.migrar(motor.url(), OWNER, claves.get(OWNER));
     }
 
     private static String leerRecurso(String ruta) throws IOException {
