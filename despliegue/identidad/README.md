@@ -7,10 +7,22 @@ haya que levantar la instalación otra vez, nadie recordará qué casillas estab
 marcadas. [`realm-sgtm.json`](realm-sgtm.json) se importa al arrancar Keycloak y
 fija tres cosas:
 
-- **El mapeador que pone `municipalidad_id` en el token.** Es el claim de
-  ADR-0005, del que sale el `SET LOCAL` y con él la separación entre
-  municipalidades. Sale de un atributo del usuario, así que asignar a alguien a
-  otra municipalidad es cambiar ese atributo, no tocar código.
+- **El atributo `municipalidad_id` del perfil de usuario, y el mapeador que lo
+  pone en el token.** Es el claim de ADR-0005, del que sale el `SET LOCAL` y con
+  él la separación entre municipalidades. Asignar a alguien a otra municipalidad
+  es cambiar ese atributo, no tocar código.
+
+  Declararlo en el perfil no es trámite. Dos motivos, y el segundo importa más:
+
+  1. **Keycloak descarta en silencio los atributos que el perfil no declara.** El
+     usuario se crea sin protestar, `kcadm` no dice nada, y el token sale sin el
+     claim. Lo diagnosticó la escalera del despliegue: el último peldaño devolvió
+     `SIN_MUNICIPALIDAD` donde esperaba `SIN_PRIVILEGIO`, que es exactamente para
+     lo que sirve comparar códigos del catálogo en vez de solo códigos HTTP.
+  2. **`edit: [admin]`** impide que un usuario se cambie a sí mismo de
+     municipalidad desde la pantalla de su cuenta. Con ese atributo se decide qué
+     padrón ve: si fuera editable por su dueño, el aislamiento entre
+     municipalidades se configuraría desde el navegador del contribuyente.
 - **`sgtm-backoffice`**, el cliente público de la interfaz, con PKCE `S256`
   obligatorio y sin secreto: una aplicación de navegador no tiene dónde guardar
   uno.
