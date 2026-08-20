@@ -160,6 +160,18 @@ con «—». Donde eso importa más es en las cifras: el arancel por m², el val
 y el autovalúo rural alimentan la valuación de un predio, y una cifra inventada ahí acaba en un
 valor mal emitido. Que falte se ve; que esté mal, no.
 
+### Una prueba que espera solo al título no comprueba nada
+
+El título de una pantalla lo da el catálogo de navegación y llega enseguida; **sus bloques llegan
+con el trozo del módulo**, que se carga aparte. Una prueba que espera solo al título mira una
+página a medio dibujar, y ahí cualquier comprobación pasa sola: no encuentra lo que busca porque
+todavía no está.
+
+Le pasó a un `e2e` de este repositorio —lo destapó un cambio de tiempos— y le pasó después a las
+propias pruebas de Coactiva, que daban verde sobre doce pantallas vacías. Por eso esas esperan a
+que exista la barra de acciones antes de mirar nada. **Al escribir una prueba sobre una pantalla,
+esperar a algo que solo aparece con los datos.**
+
 ### Lo irreversible se confirma diciendo qué va a pasar, y sobre cuántos
 
 «¿Estás seguro?» no da ninguna información nueva: quien pulsa siempre está seguro. Lo que hace
@@ -584,6 +596,9 @@ dice en la misma frase en que excluye el token.
 | Notificar y pasar a coactiva confirman  | Quitándolos de la lista de lo irreversible                              | Rojas, cuatro                 |
 | La confirmación dice qué va a pasar     | Volviendo a «¿estás seguro?»                                            | Rojas, dos                    |
 | Y no se envía sin confirmar             | Enviando lo irreversible directamente                                   | Rojas, tres                   |
+| Nada asentado se edita ni se quita      | Habilitando las acciones secundarias                                    | Rojas, cuatro                 |
+| Ningún estado solo por color            | Dejando la insignia sin texto                                           | Roja                          |
+| El auxiliar no ve emitir REC            | Haciendo que `puedeVer` devuelva cierto siempre                         | Roja                          |
 
 ## Lo que todavía no está
 

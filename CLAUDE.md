@@ -282,6 +282,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | El juego de datos simulado no llega a producción | Comparando las dos compilaciones, con y sin la bandera | El chunk desaparece |
 | Un cambio del contrato rompe la compilación | Renombrando `codRefCatastral` en `sgtm-v1.yaml` y compilando con `tsc` | Rojo; al devolverlo, verde |
 | El módulo de seguridad conectado (11 pruebas) | Quitando la guarda de `leerPaginado`, el ejercicio de la bitácora, el vaciado de la caché, la lista blanca del cuerpo y el bloqueo de los campos de clave | Las cinco lo ponen rojo |
+| El expediente coactivo (26 pruebas) | Habilitando las acciones secundarias, dejando la insignia sin texto, y haciendo que `puedeVer` devuelva cierto siempre | Cuatro, una y una en rojo |
 | Lo irreversible se confirma (11 pruebas) | Quitando generar, notificar y coactiva de la lista, volviendo a «¿estás seguro?», y enviando sin confirmar | Cuatro, dos y tres en rojo |
 | La caja (6 pruebas) | Quitando el `focus()` tras guardar, enfocando en cada render en vez de en el flanco, y regenerando la clave de idempotencia en cada envío | Dos, una y una en rojo |
 | El módulo que más escribe (12 pruebas) | Habilitando la acción primaria sin observación, y rellenando la deuda del padrón con lo del prototipo | Nueve y una en rojo |
