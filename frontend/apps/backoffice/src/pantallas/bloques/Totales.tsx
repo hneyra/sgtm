@@ -1,15 +1,17 @@
 import { Esqueleto } from '@sgtm/design-system';
-import { formatearFecha } from '@sgtm/dominio';
-import type { Fecha } from '@sgtm/dominio';
 import type { Total } from '@sgtm/api-client';
 
 /**
  * Banda de totales (FRO-03 §5, bloque 6).
  *
- * Los importes llegan **ya sumados por el backend** y la banda dice a que fecha
- * estan calculados: no existe «la deuda», existe la deuda a una fecha (regla 9,
- * RNF-075). Sumar aqui produciria una cifra que el backend no puede sustentar
- * (RNF-083).
+ * Los importes llegan **ya sumados por el backend**: sumar aqui produciria una
+ * cifra que el backend no puede sustentar (RNF-083).
+ *
+ * La fecha a la que estan actualizados **ya no vive aqui**, y ese cambio corrige
+ * un defecto: era de la banda, asi que una pantalla que ensena cifras en una
+ * tabla y no tiene banda —siete de las once de Consultas— mostraba importes sin
+ * decir de cuando eran. Es de la respuesta, y se dibuja una vez por pantalla
+ * (`FechaDeCalculo`).
  *
  * Mientras carga, cada celda guarda su sitio con un esqueleto del alto de la
  * cifra: la banda no cambia de altura al llegar la respuesta. Y **no muestra un
@@ -18,11 +20,10 @@ import type { Total } from '@sgtm/api-client';
 export interface TotalesProps {
   readonly estructura: readonly { readonly label: string; readonly fuerte: boolean }[];
   readonly datos?: readonly Total[];
-  readonly fechaCalculo?: Fecha;
   readonly cargando?: boolean;
 }
 
-export function Totales({ estructura, datos, fechaCalculo, cargando = false }: TotalesProps) {
+export function Totales({ estructura, datos, cargando = false }: TotalesProps) {
   const porEtiqueta = new Map((datos ?? []).map((t) => [t.label, t.value]));
 
   return (
@@ -45,9 +46,6 @@ export function Totales({ estructura, datos, fechaCalculo, cargando = false }: T
           </div>
         ))}
       </div>
-      {fechaCalculo && (
-        <p className="sgtm-totales__fecha">Cifras actualizadas al {formatearFecha(fechaCalculo)}</p>
-      )}
     </section>
   );
 }

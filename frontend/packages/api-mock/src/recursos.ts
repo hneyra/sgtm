@@ -74,6 +74,55 @@ function origen(texto = ''): { equipo: string | null; ip: string | null } {
   return { equipo: equipo === '' ? null : equipo, ip: ip === '' ? null : ip };
 }
 
+/* ── Cuenta corriente: el libro de asientos ────────────────────────────── */
+
+/**
+ * Un asiento por cada cifra emitida y otro por cada cifra pagada.
+ *
+ * El prototipo dibuja una fila por cuota con «emitido», «pagado» y «saldo» en la
+ * misma linea; el libro no funciona asi —cada movimiento es su propio asiento— y
+ * lo que publica `AsientoResource` es uno. Aqui se desdobla, que es la forma que
+ * tiene el backend, y el monto viaja con su fecha (`ImporteActualizado`).
+ */
+const cuentaCorriente = (): Paginado => {
+  const asientos: Readonly<Record<string, unknown>>[] = [];
+  filasDe('cuenta_corriente').forEach(
+    ([ejercicio, tributo, unidad, cuota, emitido, pagado, , fase], i) => {
+      const comun = {
+        ejercicio: Number(ejercicio),
+        tributo,
+        concepto: 'INSOLUTO',
+        fase: (fase ?? '').toUpperCase(),
+        periodo: Number((cuota ?? '').split(' ')[0]) || null,
+        predioId: unidad,
+        vehiculoId: null,
+        referenciaExterna: null,
+        documentoOrigen: `Emisión ${ejercicio}`,
+        asientoReversadoId: null,
+        usuarioId: null,
+        motivo: null,
+      };
+      if (emitido && emitido !== '0.00') {
+        asientos.push({
+          ...comun,
+          id: asientos.length + 1,
+          tipo: 'CARGO',
+          monto: { importe: emitido, actualizadoA: `${ejercicio}-02-28` },
+        });
+      }
+      if (pagado && pagado !== '0.00') {
+        asientos.push({
+          ...comun,
+          id: asientos.length + 1,
+          tipo: 'ABONO',
+          monto: { importe: pagado, actualizadoA: `${ejercicio}-03-1${i % 9}` },
+        });
+      }
+    },
+  );
+  return unaPagina(asientos);
+};
+
 /* ── Catastro: sectores, fichas y su consulta ──────────────────────────── */
 
 const sectores = (): Paginado =>
@@ -396,6 +445,7 @@ const parametros = (): Paginado => {
 /** Por camino del contrato, relativo a `/api/v1`. Solo `GET`: ninguna escribe. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/catastro/vias': vias,
+  '/consultas/cuenta-corriente/{codigo}': cuentaCorriente,
   '/catastro/sectores': sectores,
   '/catastro/fichas': fichas,
   '/seguridad/modulos': modulos,
@@ -481,8 +531,15 @@ function patron(ruta: string): RegExp {
 /** El recurso paginado de un camino, si el proxy lo publica con la forma del backend. */
 export function paginadoDe(metodo: string, camino: string): Paginado | null {
   if (metodo.toUpperCase() !== 'GET') return null;
-  const construir = PAGINADOS[camino.replace(/^\/api\/v1/, '')];
-  return construir === undefined ? null : construir();
+  const relativo = camino.replace(/^\/api\/v1/, '');
+  const directo = PAGINADOS[relativo];
+  if (directo !== undefined) return directo();
+  // Hay listados cuya ruta lleva el registro que acotan —el estado de cuenta de
+  // un contribuyente—: se comparan por patron.
+  for (const [ruta, construir] of Object.entries(PAGINADOS)) {
+    if (ruta.includes('{') && patron(ruta).test(relativo)) return construir();
+  }
+  return null;
 }
 
 /**

@@ -160,6 +160,25 @@ con «—». Donde eso importa más es en las cifras: el arancel por m², el val
 y el autovalúo rural alimentan la valuación de un predio, y una cifra inventada ahí acaba en un
 valor mal emitido. Que falte se ve; que esté mal, no.
 
+### Ninguna cifra sin su fecha, y no solo en la banda de totales
+
+No existe «la deuda»: existe `deudaActualizadaA(fecha)` (regla 9, RNF-075). Eso ya lo hacía cumplir
+`Importe`, que no compila sin `fechaCalculo`, y una regla de ESLint con su muestra.
+
+Faltaba lo obvio: **que el usuario la vea**. La fecha vivía dentro de la banda de totales, así que
+las pantallas que enseñan cifras en una tabla y no tienen banda —**siete de las once de
+Consultas**— mostraban importes sin decir de cuándo eran. En ventanilla eso es responder «debe
+1,842.60» sin decir que esa cifra era la de anteayer.
+
+Ahora es un bloque propio, debajo de la descripción, en las 134: la fecha es de la **respuesta**,
+no de un bloque. Hay una prueba que recorre las once de Consultas y exige que cualquier pantalla
+con cifras la enseñe; sin el bloque, se ponen rojas trece.
+
+**Y la interfaz no suma.** El saldo del estado de cuenta sale vacío en vez de restado —el saldo
+proyectado es del backend—, los cuatro totales también, y `@sgtm/dominio` **no exporta ninguna
+función de sumar**. Esa ausencia es la medida, y hay una prueba que la fija: mientras no exista, no
+hay forma cómoda de componer una cifra que el backend no pueda sustentar.
+
 ### La ficha enseña de cuándo es lo que muestra
 
 El backend de la ficha catastral **nunca sobrescribe**: actualizar crea la versión siguiente y
@@ -514,6 +533,9 @@ dice en la misma frase en que excluye el token.
 | Sin código no se pide ninguna ficha     | Quitando la guarda de la ruta y el `enabled`                            | Roja                          |
 | El arancel rural no se compone          | Poniéndole una cifra                                                    | Roja                          |
 | El desplegable no esconde lo servido    | Volviendo a dibujar solo las opciones del prototipo                     | Roja                          |
+| Ninguna cifra sin su fecha (las once)   | Quitando el bloque de fecha de cálculo                                  | Rojas, trece                  |
+| El saldo no se compone                  | Restando en la interfaz en vez de dejarlo vacío                         | Rojas, dos                    |
+| `@sgtm/dominio` no suma                 | Añadiéndole una función de sumar importes                               | Roja                          |
 
 ## Lo que todavía no está
 
