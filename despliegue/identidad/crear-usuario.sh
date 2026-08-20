@@ -43,7 +43,16 @@ kc config credentials \
   --user "$SGTM_KEYCLOAK_ADMIN" \
   --password "$SGTM_CLAVE_KEYCLOAK" >/dev/null
 
-existente=$(kc get users -r sgtm -q "username=$usuario" --fields id --format csv --noquotes | tr -d '\r' | head -1)
+# `| head -1` cerraria la tuberia antes de que kcadm termine de escribir, y con
+# `pipefail` ese SIGPIPE mata el guion entero por un motivo que no tiene nada que
+# ver con Keycloak. Se lee todo y se recorta despues.
+buscarId() {
+  local salida
+  salida=$(kc get users -r sgtm -q "username=$1" --fields id --format csv --noquotes || true)
+  printf '%s' "$salida" | tr -d '\r' | sed -n '1p'
+}
+
+existente=$(buscarId "$usuario")
 
 # Keycloak valida el perfil del usuario al iniciar sesion, y por omision exige
 # correo, nombre y apellido. Un usuario sin ellos se crea sin problema y luego NO
@@ -60,20 +69,20 @@ if [ -z "$existente" ]; then
     kc create users -r sgtm \
       -s "username=$usuario" -s enabled=true -s emailVerified=true \
       -s "email=$correo" -s "firstName=$nombre" -s "lastName=$apellido" \
-      -s "attributes.municipalidad_id=$municipalidad" >/dev/null
+      -s "attributes.municipalidad_id=$municipalidad"
   else
     kc create users -r sgtm \
       -s "username=$usuario" -s enabled=true -s emailVerified=true \
-      -s "email=$correo" -s "firstName=$nombre" -s "lastName=$apellido" >/dev/null
+      -s "email=$correo" -s "firstName=$nombre" -s "lastName=$apellido"
   fi
-  existente=$(kc get users -r sgtm -q "username=$usuario" --fields id --format csv --noquotes | tr -d '\r' | head -1)
+  existente=$(buscarId "$usuario")
   echo "Usuario $usuario creado."
 else
   if [ -n "$municipalidad" ]; then
     kc update "users/$existente" -r sgtm \
       -s "attributes.municipalidad_id=$municipalidad" \
       -s emailVerified=true -s "email=$correo" \
-      -s "firstName=$nombre" -s "lastName=$apellido" >/dev/null
+      -s "firstName=$nombre" -s "lastName=$apellido"
   fi
   echo "Usuario $usuario ya existia; actualizado."
 fi
