@@ -415,12 +415,17 @@ public final class DatosDePrueba {
                         muni,
                         "ABC-" + numeroDePlaca(sufijo),
                         titular);
+        // El valor referencial cuelga del conjunto y no del ejercicio (V16): un
+        // ejercicio puede tener varias versiones selladas, y resolver por
+        // ejercicio devolveria la vigente hoy en vez de la que se uso al
+        // determinar.
         ejecutar(
                 app,
-                "INSERT INTO valor_referencial_vehiculo (municipalidad_id, ejercicio, marca, modelo,"
-                        + " anio_fabricacion, valor, documento_fuente)"
-                        + " VALUES (?, ?, 'MARCA', 'MODELO', 2020, ?, 'fixture de la prueba')",
+                "INSERT INTO valor_referencial_vehiculo (municipalidad_id, conjunto_id, ejercicio,"
+                        + " marca, modelo, anio_fabricacion, valor, documento_fuente)"
+                        + " VALUES (?, ?, ?, 'MARCA', 'MODELO', 2020, ?, 'fixture de la prueba')",
                 muni,
+                conjuntoId,
                 EJERCICIO,
                 MIL);
         ejecutar(

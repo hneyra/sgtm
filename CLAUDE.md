@@ -47,13 +47,15 @@ Es bloqueante: `./gradlew verificarAislamiento`.
 > con el mismo contexto fijado, verifica que el superusuario ve las dos municipalidades y
 > `sgtm_app` una.
 
-Los **tres** hallazgos de RLS están en
+Los **cuatro** hallazgos de RLS están en
 [`docs/40-datos/modelo-logico-fisico.md`](docs/40-datos/modelo-logico-fisico.md) §0. Dos se
 heredaron verificados del SRTM —el superusuario omite RLS, y el acceso directo a una partición
-evade la política del padre—: no se volvieron a descubrir, se trasladaron con su mitigación. El
-tercero salió aquí: **bajo RLS un `LIKE 'prefijo%'` no llega nunca al índice**, porque `textlike`
-no es *leakproof* y PostgreSQL no lo evalúa antes de la política. Toda búsqueda por prefijo se
-escribe como rango con `~>=~` / `~<~`.
+evade la política del padre—: no se volvieron a descubrir, se trasladaron con su mitigación. Los
+otros dos salieron aquí: **bajo RLS un `LIKE 'prefijo%'` no llega nunca al índice**, porque
+`textlike` no es *leakproof* y PostgreSQL no lo evalúa antes de la política —toda búsqueda por
+prefijo se escribe como rango con `~>=~` / `~<~`—; y **una clave foránea nueva sobre una tabla con
+RLS no se puede validar**, porque validar es una consulta y el migrador no tiene contexto de
+tenant: va `NOT VALID`, que sigue comprobando cada `INSERT`.
 
 **Al agregar una tabla:** si lleva `municipalidad_id NOT NULL`, la prueba le exige RLS sola. Si
 no, hay que clasificarla como catálogo o como exenta en el propio código de la prueba, y eso se
@@ -302,6 +304,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | La fecha de auditoría sale del reloj inyectado | Devolviéndola al `DEFAULT now()` de la base | Rojo: la fila cae en un día que no es el del ejercicio con que se particionó |
 | Documentos en tres formatos (26 pruebas) | Cinco roturas: el PDF con fecha de creación dentro; el RTF sin escapar lo no-ASCII; sin la comprobación de que la reimpresión sale igual; sin el disparador de inmutabilidad; y el duplicado sin marcar | Rojo las cinco. La primera es lo que haría cualquier biblioteca de PDF; la segunda escribe «PE?A GARC?A» en un documento oficial |
 | Del token firmado a las filas que RLS deja ver (11 pruebas, con un emisor OIDC propio) | Cuatro roturas: sin `oauth2ResourceServer`; con `/api/v1/**` en `permitAll()`; con solo `jwk-set-uri`, sin `issuer-uri`; y el filtro leyendo `X-Municipalidad-Id` «por comodidad» | 5, 1, 1 y 1 en rojo |
+| Padron vehicular (13 pruebas) | Cinco roturas: la unicidad de la placa sobre el texto tal cual; el cambio de placa sincronizando `papeleta.placa`; la auditoria llaveada por la placa; los valores referenciales resueltos por ejercicio; y la consulta sin `@Transactional` | 1, 1, 2, 2 y 4 en rojo |
 | Las guardas del generador de operaciones (6) | Un contrato de muestra que viola cada una | Las seis muerden |
 | La marca de la instalación de demostración (19 pruebas) | Quitando el bloque de la marca de **cada renderizador por separado**; marcando solo al dibujar en vez de al emitir; y cambiando la caché del régimen por una global de un solo valor | Cada renderizador roto pone en rojo su formato y solo el suyo; 2 en rojo; 2 en rojo —la caché global hace que la primera municipalidad que emita decida por todas, y en el orden malo la marcha blanca emite **sin** marca— |
 

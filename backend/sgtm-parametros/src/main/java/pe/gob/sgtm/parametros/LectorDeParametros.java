@@ -37,6 +37,21 @@ public interface LectorDeParametros {
      */
     ParametrosSellados porConjunto(IdentificadorDeConjunto identificador);
 
+    /**
+     * Que conjunto sellado rige hoy el ejercicio, por su identificador.
+     *
+     * <p>Existe porque hay datos normativos que <b>no</b> caben en {@link ParametrosSellados} —una
+     * tabla entera de valores referenciales de vehiculos, un arancel por manzana— y viven en su
+     * propia tabla. Esa tabla cuelga del conjunto, no del ejercicio, exactamente por el motivo de
+     * arriba; y para leerla hace falta saber de que conjunto se trata.
+     *
+     * <p>Se publica aqui y no se resuelve en cada contexto: repetir el «sellado de mayor version de
+     * este ejercicio» en el SQL de rentas, de catastro y de sanciones es tener tres sitios donde
+     * olvidarse del {@code AND estado = 'SELLADO'}, y el que se olvide leera un conjunto abierto
+     * sin que nada falle.
+     */
+    IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio);
+
     /** Ningun conjunto sellado rige el ejercicio. No hay valor por omision (ARQ-09 §2.5). */
     final class EjercicioSinSellar extends RuntimeException {
         @java.io.Serial private static final long serialVersionUID = 1L;

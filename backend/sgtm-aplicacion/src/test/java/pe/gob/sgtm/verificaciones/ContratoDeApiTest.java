@@ -55,6 +55,7 @@ class ContratoDeApiTest {
     private static final Set<String> IMPLEMENTADAS =
             Set.of(
                     "GET /catastro/vias",
+                    "GET /rentas/vehiculos/{placa}",
                     "GET /catastro/sectores",
                     "GET /catastro/fichas/urbana/{codRefCatastral}",
                     "GET /catastro/fichas/economica/{codRefCatastral}",

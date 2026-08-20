@@ -75,6 +75,30 @@ que se evalúa como filtro de todos modos.
 
 ---
 
+
+### Hallazgo 4 — Una clave foránea nueva sobre una tabla con RLS no se puede validar
+
+`ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY` lanza, para validar, **una consulta** sobre la tabla.
+Esa consulta queda sujeta a la política, la política lee `app.municipalidad_id`, y el migrador corre
+como `sgtm_owner` **sin contexto de tenant** —correctamente: migrar no es atender la petición de
+ninguna municipalidad—. El resultado es que la migración entera se cae con
+
+```
+ERROR: unrecognized configuration parameter "app.municipalidad_id"
+```
+
+No sale en la revisión: el `ALTER TABLE` se lee impecable. Sale al ejecutarlo, y apareció al añadir
+`valor_referencial_vehiculo.conjunto_id` en `V17`.
+
+Las tablas de `V1` a `V5` no lo sufren porque sus claves foráneas nacieron **antes** que las
+políticas de `V6`. Le pasa a toda clave foránea que se agregue de aquí en adelante sobre una tabla
+de tenant.
+
+**Mitigación.** `NOT VALID`, y no es un atajo: es la única forma. Salta el escaneo de las filas
+existentes y **no debilita nada hacia adelante** — la restricción se comprueba en cada `INSERT` y
+en cada `UPDATE` desde ese momento. Lo único que queda sin verificar son las filas anteriores, y en
+una tabla vacía no hay ninguna. `VALIDATE CONSTRAINT` después chocaría con lo mismo.
+
 ## 1. Las migraciones
 
 | Migración | Contenido |
@@ -95,6 +119,7 @@ que se evalúa como filtro de todos modos.
 | `V14__indices_de_la_consulta_de_fichas.sql` | Los tres índices de la consulta transversal (ver §0, hallazgo 3) |
 | `V15__documentos_emitidos.sql` | Documentos emitidos con los datos que los generaron, para reimprimirlos idénticos |
 | `V16__instalacion_de_demostracion.sql` | `municipalidad.es_demostracion`: todo documento que emita el tenant sale marcado |
+| `V17__placa_normalizada_y_valores_por_conjunto.sql` | La placa es única sin su guion, y el valor referencial cuelga del conjunto sellado (ver §0, hallazgo 4) |
 
 Los roles se crean **antes**, con `db/roles/crear-roles.sql`, que no es una migración: las
 políticas de `V6` los nombran, y un rol no puede crearse a sí mismo.
