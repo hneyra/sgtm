@@ -72,7 +72,8 @@ services:
 
   migraciones:
     build:
-      context: ../backend
+      context: ..
+      dockerfile: backend/Dockerfile
       target: migrador
     depends_on:
       base:
@@ -87,14 +88,15 @@ services:
 
   aplicacion:
     build:
-      context: ../backend
+      context: ..
+      dockerfile: backend/Dockerfile
       target: aplicacion
     # Nombre fijo para la imagen construida. Sin el, Docker le pone uno derivado
     # del proyecto y del servicio, y la verificacion que arranca esta misma imagen
     # a mano —sin emisor, para comprobar que se niega— tendria que adivinarlo.
     image: sgtm-aplicacion:marcha-blanca
     depends_on:
-      migraciones:
+      implantacion:
         condition: service_completed_successfully
       identidad:
         condition: service_started
@@ -123,6 +125,40 @@ services:
       timeout: 3s
       retries: 40
       start_period: 30s
+
+  # Corre y termina, como el migrador, y por el mismo motivo: es implantacion, no
+  # servicio. Usa la MISMA imagen que la aplicacion —un solo artefacto, ADR-0003—
+  # con el perfil batch, asi que no abre puerto ninguno.
+  #
+  # Es el unico sitio, ademas del migrador, donde entran las credenciales de
+  # sgtm_owner: las necesita para UNA sentencia sobre `municipalidad`, que es la
+  # unica tabla que sgtm_app no puede escribir. Todo lo demas lo hace como
+  # sgtm_app y con su auditoria.
+  implantacion:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      target: aplicacion
+    depends_on:
+      migraciones:
+        condition: service_completed_successfully
+    environment:
+      SPRING_PROFILES_ACTIVE: batch
+      SGTM_DB_URL: jdbc:postgresql://base:5432/sgtm
+      SGTM_DB_USUARIO: sgtm_app
+      SGTM_DB_CLAVE: ${SGTM_CLAVE_APP:?falta SGTM_CLAVE_APP en .env}
+      SGTM_IMPLANTACION_UBIGEO: ${SGTM_UBIGEO:?falta SGTM_UBIGEO en .env}
+      SGTM_IMPLANTACION_NOMBRE: ${SGTM_MUNICIPALIDAD:?falta SGTM_MUNICIPALIDAD en .env}
+      SGTM_IMPLANTACION_TIPO: ${SGTM_TIPO_DE_MUNICIPALIDAD:-DISTRITAL}
+      SGTM_IMPLANTACION_ADMINISTRADOR: ${SGTM_ADMINISTRADOR:?falta SGTM_ADMINISTRADOR en .env}
+      SGTM_IMPLANTACION_NOMBREDELADMINISTRADOR: ${SGTM_NOMBRE_DEL_ADMINISTRADOR:-Administrador del sistema}
+      SGTM_IMPLANTACION_URL: jdbc:postgresql://base:5432/sgtm
+      # OWNERCLAVE sin guion bajo: en una variable de entorno el `_` se traduce a
+      # punto, asi que SGTM_IMPLANTACION_OWNER_CLAVE seria la propiedad
+      # `sgtm.implantacion.owner.clave` y no `owner-clave`. Los guiones del nombre
+      # de la propiedad, en cambio, simplemente se quitan.
+      SGTM_IMPLANTACION_OWNERCLAVE: ${SGTM_CLAVE_OWNER:?falta SGTM_CLAVE_OWNER en .env}
+    restart: "no"
 
   interfaz:
     build:
