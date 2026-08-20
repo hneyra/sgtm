@@ -72,7 +72,8 @@ services:
 
   migraciones:
     build:
-      context: ../backend
+      context: ..
+      dockerfile: backend/Dockerfile
       target: migrador
     depends_on:
       base:
@@ -87,7 +88,8 @@ services:
 
   aplicacion:
     build:
-      context: ../backend
+      context: ..
+      dockerfile: backend/Dockerfile
       target: aplicacion
     depends_on:
       implantacion:
@@ -130,7 +132,8 @@ services:
   # sgtm_app y con su auditoria.
   implantacion:
     build:
-      context: ../backend
+      context: ..
+      dockerfile: backend/Dockerfile
       target: aplicacion
     depends_on:
       migraciones:

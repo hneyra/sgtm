@@ -264,13 +264,23 @@ jobs:
           fi
           echo "Correcto: el DDL se rechaza con las credenciales de la aplicacion."
 
-      # `--tail 25` y no 200: con cinco servicios, doscientas lineas cada uno son mil
-      # lineas que entierran la salida del paso que fallo, que es justo lo que hay
-      # que leer. Lo aprendi buscando un error de kcadm a traves de mil lineas de
-      # arranque de PostgreSQL.
+      # `--tail 25` y no 200: con seis servicios, doscientas lineas cada uno son mil
+      # doscientas lineas que entierran la salida del paso que fallo, que es justo
+      # lo que hay que leer. Lo aprendi buscando un error de kcadm a traves de mil
+      # lineas de arranque de PostgreSQL.
       - name: Ultimas lineas de cada contenedor, si algo fallo
         if: failure()
         run: docker compose logs --no-color --tail 25
+
+      # Y los dos que corren y terminan, ENTEROS. Cuando uno de esos falla, lo que
+      # hay que leer es una traza de Java, y una traza no cabe en veinticinco
+      # lineas: las veinticinco ultimas son el `Launcher.launch` de Spring Boot, que
+      # es igual en todos los fallos posibles. El mensaje —la unica linea que
+      # distingue un fallo de otro— esta arriba del todo. Costo una vuelta entera de
+      # CI descubrirlo.
+      - name: Los procesos de un solo uso, enteros
+        if: failure()
+        run: docker compose logs --no-color migraciones implantacion
 
       - name: Apagar
         if: always()

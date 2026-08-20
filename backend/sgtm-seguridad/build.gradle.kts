@@ -26,9 +26,41 @@ dependencies {
 // Copiarla en lugar de mantener una segunda lista es lo que hace cierta la promesa
 // del manual: una opcion nueva en el catalogo aparece como acceso configurable en
 // el siguiente arranque, sin que nadie tenga que acordarse de nada.
+//
+// La comprobacion de que el archivo existe NO es defensiva: un `Copy` cuya fuente
+// no esta se salta con NO-SOURCE y el build sigue en verde, dejando un jar sin
+// catalogo. Eso paso de verdad —la imagen de Docker se construia con el contexto
+// en `backend/`, y el catalogo vive fuera— y el sintoma aparecio dos versiones
+// despues: la aplicacion arrancaba, servia peticiones, y la implantacion no
+// encontraba ninguna opcion que sembrar. Aqui falla el build, que es donde se ve.
+//
+// Va en una tarea aparte y no en un `doFirst` del `Copy` porque un `Copy` sin
+// fuente se salta ENTERO —NO-SOURCE— y sus acciones no llegan a ejecutarse: el
+// guardia se saltaria junto con lo que guarda.
+val catalogo = "../docs/10-negocio/catalogo-de-opciones.md"
+val archivoDelCatalogo = rootProject.layout.projectDirectory.file(catalogo).asFile
+
+val exigirCatalogo = tasks.register("exigirCatalogoDeOpciones") {
+    description = "Falla si el catalogo de opciones (NEG-03) no esta donde el build lo busca."
+    val ruta = archivoDelCatalogo
+    val donde = catalogo
+    outputs.upToDateWhen { false }
+    doLast {
+        if (!ruta.exists()) {
+            throw GradleException(
+                "No esta $donde, y sin el el jar sale sin las 134 opciones: nadie" +
+                    " puede dar permiso a ninguna pantalla, y la implantacion de una" +
+                    " municipalidad no tiene accesos que sembrar. Si esto ocurre dentro" +
+                    " de una imagen de Docker, el contexto de compilacion no incluye docs/.",
+            )
+        }
+    }
+}
+
 val catalogoDeOpciones = tasks.register<Copy>("copiarCatalogoDeOpciones") {
     description = "Copia el catalogo de opciones (NEG-03) a los recursos de seguridad."
-    from(rootProject.layout.projectDirectory.file("../docs/10-negocio/catalogo-de-opciones.md"))
+    dependsOn(exigirCatalogo)
+    from(archivoDelCatalogo)
     into(layout.buildDirectory.dir("generated/recursos/seguridad"))
 }
 

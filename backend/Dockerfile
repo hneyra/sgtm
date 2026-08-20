@@ -17,20 +17,34 @@
 # La compilacion, en cambio, es una sola: las dos salen del mismo `construccion`,
 # asi que el codigo que migra en produccion es exactamente el que CI verifico.
 
+# El contexto de compilacion es la RAIZ del repositorio, no `backend/`, y no es un
+# detalle: el catalogo de las 134 opciones (NEG-03) vive en `docs/` y el build lo
+# copia a los recursos de sgtm-seguridad. Con el contexto en `backend/` ese archivo
+# sencillamente no existia dentro de la imagen, la tarea que lo copia se saltaba
+# con NO-SOURCE, y el jar salia sin catalogo —compilando en verde—. El sintoma
+# aparecio mucho despues: la aplicacion arrancaba y servia peticiones, pero la
+# implantacion de una municipalidad no encontraba ninguna opcion que sembrar, asi
+# que nadie podia entrar a ninguna pantalla.
+#
 # ---------------------------------------------------------------------------
 FROM eclipse-temurin:25-jdk AS construccion
 
-WORKDIR /origen
+WORKDIR /origen/backend
 
 # Primero lo que casi nunca cambia, para que la capa de dependencias se reutilice
 # entre compilaciones. `--version` descarga la distribucion de Gradle y nada mas.
-COPY gradlew gradle.properties settings.gradle.kts build.gradle.kts ./
-COPY gradle/ gradle/
+COPY backend/gradlew backend/gradle.properties backend/settings.gradle.kts backend/build.gradle.kts ./
+COPY backend/gradle/ gradle/
 RUN ./gradlew --version --no-daemon
 
-COPY buildSrc/ buildSrc/
-COPY config/ config/
-COPY . .
+COPY backend/buildSrc/ buildSrc/
+COPY backend/config/ config/
+
+# Lo unico que se trae de fuera de backend/, y con nombre propio para que se vea
+# en el diff si alguien anade una segunda dependencia externa por descuido.
+COPY docs/10-negocio/catalogo-de-opciones.md /origen/docs/10-negocio/
+
+COPY backend/ ./
 
 # Sin pruebas: las bloqueantes necesitan Docker y ya corrieron en CI. Una imagen
 # que las repitiera dentro del build las volveria a ejecutar en cada despliegue,
@@ -53,7 +67,7 @@ RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=construccion /origen/sgtm-aplicacion/build/libs/sgtm.jar /opt/sgtm/sgtm.jar
+COPY --from=construccion /origen/backend/sgtm-aplicacion/build/libs/sgtm.jar /opt/sgtm/sgtm.jar
 USER 10001
 EXPOSE 8080
 
@@ -66,7 +80,7 @@ ENTRYPOINT ["java", "-jar", "/opt/sgtm/sgtm.jar"]
 FROM eclipse-temurin:25-jre AS migrador
 
 RUN useradd --system --uid 10002 --shell /usr/sbin/nologin migrador
-COPY --from=construccion /origen/sgtm-esquema/build/install/migrar /opt/migrador
+COPY --from=construccion /origen/backend/sgtm-esquema/build/install/migrar /opt/migrador
 USER 10002
 
 # Corre y termina. El orquestador espera a que salga con exito antes de arrancar
