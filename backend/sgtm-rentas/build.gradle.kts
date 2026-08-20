@@ -1,8 +1,8 @@
 // Contexto acotado `rentas` (ARQ-01 §3.3).
 //
-// Hoy solo el padron vehicular (#26): registro puro, sin una sola cifra. La
-// determinacion —predial, arbitrios, vehicular, alcabala— sigue bloqueada por
-// D-02, y lo que falta no es la estructura sino los valores normativos.
+// El padron vehicular (#26) y beneficios y exoneraciones (#27): registro puro, sin una
+// sola cifra. La determinacion —predial, arbitrios, vehicular, alcabala— sigue bloqueada
+// por D-02, y lo que falta no es la estructura sino los valores normativos.
 
 plugins {
     id("sgtm.modulo")
@@ -22,6 +22,9 @@ dependencies {
     // sin que nada falle.
     implementation(project(":sgtm-parametros"))
 
+    // La prueba del repositorio corre contra PostgreSQL de verdad: provisiona la
+    // base como un ambiente real y se conecta como sgtm_app, no como el
+    // superusuario que entrega Testcontainers (CAL-01 §3.2).
     testImplementation(testFixtures(project(":sgtm-esquema")))
     testImplementation("org.springframework.boot:spring-boot-starter-jdbc")
 
