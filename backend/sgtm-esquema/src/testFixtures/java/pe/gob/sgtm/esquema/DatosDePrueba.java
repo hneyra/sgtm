@@ -435,7 +435,7 @@ public final class DatosDePrueba {
                 "INSERT INTO declaracion_jurada (municipalidad_id, numero, ejercicio,"
                         + " contribuyente_id, tipo, predio_id, fecha_presentacion, fecha_limite,"
                         + " usuario_registro, observacion)"
-                        + " VALUES (?, ?, ?, ?, 'HR', ?, ?, ?, ?, 'prueba', 'declaracion de prueba')",
+                        + " VALUES (?, ?, ?, ?, 'HR', ?, ?, ?, 'prueba', 'declaracion de prueba')",
                 muni,
                 "DJ-" + sufijo,
                 EJERCICIO,
