@@ -160,6 +160,18 @@ con «—». Donde eso importa más es en las cifras: el arancel por m², el val
 y el autovalúo rural alimentan la valuación de un predio, y una cifra inventada ahí acaba en un
 valor mal emitido. Que falte se ve; que esté mal, no.
 
+### Tras cobrar, entra el siguiente contribuyente
+
+En ventanilla se cobra cientos de veces al día y siempre igual: se identifica al contribuyente, se
+elige qué paga, se cobra, y **entra el siguiente**. Si tras cobrar hay que ir a buscar el campo de
+identificación —con el ratón, o tabulando desde donde quedara el foco—, ese gesto se paga en cada
+cobro (RNF-082, FRO-03 §6).
+
+`useFocoTrasGuardar` devuelve el foco al primer campo escribible de la búsqueda cuando una escritura
+termina bien, y **solo en el flanco**: recolocarlo en cada dibujo dejaría al cajero sin poder mover
+el foco a ningún otro sitio. Las dos mitades tienen su prueba, y la segunda necesita provocar un
+render de más para poder distinguirse — sin eso, «una vez» y «en cada render» se ven igual.
+
 ### Ocho formularios que no guardan sin observación
 
 Rentas · Registro es el módulo que más escribe: de sus quince opciones, **nueve tienen verbo de
@@ -549,6 +561,9 @@ dice en la misma frase en que excluye el token.
 | `@sgtm/dominio` no suma                 | Añadiéndole una función de sumar importes                               | Roja                          |
 | Nueve escrituras sin observación        | Habilitando la acción primaria sin ella                                 | Rojas, nueve                  |
 | La deuda del padrón no se inventa       | Rellenando predios y deuda con lo del prototipo                         | Roja                          |
+| El foco vuelve tras cobrar              | Quitando el `focus()`                                                   | Rojas, dos                    |
+| Y no se queda clavado                   | Enfocando en cada render en vez de en el flanco                         | Roja                          |
+| Un reintento no es un segundo cobro     | Regenerando la clave de idempotencia en cada envío                      | Roja                          |
 
 ## Lo que todavía no está
 
