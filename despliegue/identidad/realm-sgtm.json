@@ -1,0 +1,93 @@
+{
+  "_comentario": [
+    "Realm de la marcha blanca del SGTM. Se importa al arrancar Keycloak y se versiona aqui:",
+    "un realm configurado a mano en una pantalla no es reproducible, y el dia que haya que",
+    "levantar la instalacion otra vez nadie recordara que casillas estaban marcadas.",
+    "",
+    "Lo que este archivo fija, y por que:",
+    "",
+    "  - El mapeador que pone `municipalidad_id` en el token. Es el claim de ADR-0005, del que",
+    "    sale el SET LOCAL y con el la separacion entre municipalidades. Sale de un atributo del",
+    "    usuario, asi que asignar a alguien a otra municipalidad es cambiar ese atributo y no",
+    "    tocar codigo.",
+    "  - El cliente publico del backoffice, con PKCE S256 obligatorio y sin secreto: una",
+    "    aplicacion de navegador no tiene donde guardar uno.",
+    "  - Un cliente de verificacion con `direct access grants`, que es como CI consigue un token",
+    "    sin abrir un navegador. No sirve para personas: no tiene redireccion.",
+    "",
+    "LO QUE NO ESTA AQUI: ni un solo usuario, ni una sola clave. Un realm versionado que trae",
+    "un usuario con contrasena es la forma mas comoda de que esa contrasena acabe en produccion;",
+    "los usuarios los crea quien provisiona, con crear-usuario.sh, y sus claves salen del .env."
+  ],
+  "realm": "sgtm",
+  "enabled": true,
+  "displayName": "SGTM — marcha blanca",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "attributes": {
+    "frontendUrl": ""
+  },
+  "clients": [
+    {
+      "clientId": "sgtm-backoffice",
+      "name": "Backoffice del SGTM",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:5173/*", "http://localhost:8081/*"],
+      "webOrigins": ["http://localhost:5173", "http://localhost:8081"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "municipalidad-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "municipalidad_id",
+            "claim.name": "municipalidad_id",
+            "jsonType.label": "long",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "sgtm-verificacion",
+      "name": "Cliente de verificacion del despliegue",
+      "description": "Solo para que CI consiga un token sin navegador. Sin redireccion: no sirve para personas.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "protocolMappers": [
+        {
+          "name": "municipalidad-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "municipalidad_id",
+            "claim.name": "municipalidad_id",
+            "jsonType.label": "long",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ]
+}

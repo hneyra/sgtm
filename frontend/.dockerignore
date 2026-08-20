@@ -1,0 +1,13 @@
+# Lo que no entra en el contexto de compilacion.
+#
+# node_modules es el motivo principal: son cientos de megabytes, y ademas los de
+# la maquina de quien construye pueden ser de otra plataforma. La imagen los
+# instala dentro, desde el yarn.lock que si se versiona.
+node_modules/
+*/node_modules/
+*/*/node_modules/
+dist/
+*/*/dist/
+test-results/
+playwright-report/
+.git/

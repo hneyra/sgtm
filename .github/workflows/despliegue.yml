@@ -4,22 +4,42 @@
 # preguntas al sistema en marcha. Un compose revisado a ojo se ve correcto hasta
 # el dia del despliegue.
 #
-# Las cuatro preguntas, y por que cada una:
+# Lo que pregunta, y por que cada cosa:
 #
 #   1. ¿Se aplicaron todas las migraciones del repositorio? Un `locations` mal
 #      escrito, o un migrador que no se ejecuta, dejan la base a medias sin que
 #      nada falle.
-#   2. ¿Responde la sonda de vida? Es lo que hace que `depends_on:
-#      service_healthy` signifique algo.
-#   3. ¿Se atiende alguna ruta de la API sin identidad? Mientras no haya emisor,
-#      la respuesta correcta a todas es que no.
-#   4. ¿Puede la aplicacion ejecutar DDL? Esta es la que da valor al resto.
+#   2. ¿Responde la sonda de vida, sin publicar detalles?
+#   4. LA ESCALERA DE IDENTIDAD, peldano a peldano. Cada uno responde con su
+#      codigo del catalogo, y el codigo es lo que hace la asercion precisa —dice
+#      HASTA DONDE llego la peticion, no solo que fallo—:
 #
-# COMO SE DEMUESTRA QUE LA 4 PUEDE FALLAR: se cambia en el compose el
-# `SGTM_DB_USUARIO: sgtm_app` de la aplicacion por `sgtm_owner` —con su clave— y
-# este trabajo se pone rojo. La comprobacion lee las credenciales del contenedor
-# que esta corriendo, no las que el compose deberia tener, asi que no hay forma de
-# pasarla dandole al proceso mas privilegios de los declarados.
+#        sin token ................................ 401 NO_AUTENTICADO
+#        con algo que no es un token .............. 401 NO_AUTENTICADO
+#        con un token de otro emisor .............. 401 NO_AUTENTICADO
+#        con token del realm, sin el claim ........ 403 SIN_MUNICIPALIDAD
+#        con token del realm y con el claim ....... 403 SIN_PRIVILEGIO
+#
+#      El ultimo peldano es el que importa: SIN_PRIVILEGIO significa que el token
+#      se valido, que el claim se leyo y que la peticion llego hasta el guardia de
+#      acceso. Que no tenga permisos es correcto —no hay municipalidad ni usuario
+#      en las tablas de la aplicacion todavia, y eso es #120—.
+#   5. ¿Se atiende alguna otra ruta? La respuesta a todas es que no.
+#   6. ¿Se sirve la interfaz, y su paquete lleva el emisor? Vite lo resuelve al
+#      compilar: si no esta dentro del paquete, la pantalla de acceso no lleva a
+#      ninguna parte.
+#   7. ¿Puede la aplicacion ejecutar DDL? Esta es la que da valor al resto.
+#
+# COMO SE DEMUESTRA QUE PUEDEN FALLAR:
+#
+#   - La 7: se cambia en el compose el `SGTM_DB_USUARIO: sgtm_app` de la
+#     aplicacion por `sgtm_owner`, con su clave, y este trabajo se pone rojo. Lee
+#     las credenciales del contenedor que esta corriendo, no las que el compose
+#     deberia tener.
+#   - La 4: se quita el mapeador `municipalidad-id` del realm y el ultimo peldano
+#     pasa de SIN_PRIVILEGIO a SIN_MUNICIPALIDAD; se apunta `issuer-uri` al realm
+#     master y el peldano del emisor ajeno pasa a valer; se quita el
+#     `oauth2ResourceServer` de SeguridadWeb y los cinco peldanos cambian a la vez.
 
 name: Despliegue
 
@@ -42,7 +62,7 @@ permissions:
 
 jobs:
   levantar:
-    name: La marcha blanca se levanta, y la aplicacion no puede hacer DDL
+    name: La marcha blanca se levanta, se entra con token, y la aplicacion no puede hacer DDL
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -61,13 +81,15 @@ jobs:
             echo "SGTM_CLAVE_SUPERUSUARIO=$(openssl rand -hex 24)"
             echo "SGTM_CLAVE_OWNER=$(openssl rand -hex 24)"
             echo "SGTM_CLAVE_APP=$(openssl rand -hex 24)"
+            echo "SGTM_CLAVE_KEYCLOAK=$(openssl rand -hex 24)"
+            echo "SGTM_CLAVE_VERIFICACION=$(openssl rand -hex 24)"
           } > .env
 
       # Se espera a `aplicacion` y no a todo: `migraciones` corre y termina, y un
       # contenedor que sale con exito no es un contenedor sano. Sus dependencias
       # arrastran a los otros dos igualmente.
       - name: Levantar la instalacion completa
-        run: docker compose up --build --detach --wait aplicacion
+        run: docker compose up --build --detach --wait aplicacion interfaz
 
       - name: 1 · Todas las migraciones del repositorio estan aplicadas
         run: |
@@ -94,10 +116,85 @@ jobs:
             exit 1
           fi
 
-      - name: 3 · Ninguna ruta de la API se atiende sin identidad
+      - name: Esperar a que Keycloak responda
         run: |
           set -euo pipefail
-          for ruta in /api/v1/catastro/vias /api/v1/seguridad/usuarios /actuator/env; do
+          # La aplicacion no espera a Keycloak —no lo necesita para arrancar— pero
+          # quien va a pedir un token si. Se espera desde el runner, que tiene curl.
+          for intento in $(seq 1 60); do
+            if curl --fail --silent http://localhost:8180/realms/sgtm/.well-known/openid-configuration >/dev/null; then
+              echo "Keycloak listo, y el realm sgtm importado."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Keycloak no respondio en cinco minutos"
+          docker compose logs --no-color --tail 100 identidad
+          exit 1
+
+      - name: 3 · Los dos usuarios de verificacion
+        run: |
+          set -euo pipefail
+          source .env
+          export SGTM_CLAVE_KEYCLOAK
+          # Uno con municipalidad y otro sin ella. El segundo existe para una sola
+          # cosa: comprobar que un token valido pero sin el claim no llega a ningun
+          # controlador. No se puede comprobar sin tenerlo.
+          ./identidad/crear-usuario.sh verificacion "$SGTM_CLAVE_VERIFICACION" 1
+          ./identidad/crear-usuario.sh sin-municipalidad "$SGTM_CLAVE_VERIFICACION"
+
+      - name: 4 · La escalera de identidad, peldano a peldano
+        run: |
+          set -euo pipefail
+          source .env
+          RUTA=http://localhost:8080/api/v1/catastro/vias
+          KC=http://localhost:8180
+
+          token() {
+            curl --fail --silent --request POST \
+              "$KC/realms/$1/protocol/openid-connect/token" \
+              --data "grant_type=password&client_id=$2&username=$3&password=$4" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
+          }
+
+          # Devuelve "codigo_http CODIGO_DEL_CATALOGO", que es lo que hace precisa
+          # cada asercion: distingue «no se autentico» de «se autentico y no tiene
+          # municipalidad» de «tiene municipalidad y le falta el privilegio».
+          intento() {
+            local cabecera=("$@")
+            local cuerpo estado
+            cuerpo=$(curl --silent --output /tmp/cuerpo --write-out '%{http_code}' \
+              "${cabecera[@]}" "$RUTA")
+            estado=$cuerpo
+            echo "$estado $(python3 -c 'import json;print(json.load(open("/tmp/cuerpo")).get("codigo","(sin codigo)"))' 2>/dev/null || echo '(sin cuerpo json)')"
+          }
+
+          echo "--- sin token"
+          test "$(intento)" = "401 NO_AUTENTICADO"
+
+          echo "--- con un token que no es un token"
+          test "$(intento --header 'Authorization: Bearer esto-no-es-un-token')" = "401 NO_AUTENTICADO"
+
+          echo "--- con un token de OTRO emisor: el realm master del mismo Keycloak"
+          ajeno=$(token master admin-cli "${SGTM_KEYCLOAK_ADMIN:-admin}" "$SGTM_CLAVE_KEYCLOAK")
+          test "$(intento --header "Authorization: Bearer $ajeno")" = "401 NO_AUTENTICADO"
+
+          echo "--- con un token del realm correcto pero SIN el claim municipalidad_id"
+          sinClaim=$(token sgtm sgtm-verificacion sin-municipalidad "$SGTM_CLAVE_VERIFICACION")
+          test "$(intento --header "Authorization: Bearer $sinClaim")" = "403 SIN_MUNICIPALIDAD"
+
+          echo "--- con un token completo: pasa la cadena y llega al guardia de acceso"
+          conClaim=$(token sgtm sgtm-verificacion verificacion "$SGTM_CLAVE_VERIFICACION")
+          # SIN_PRIVILEGIO y no SIN_MUNICIPALIDAD: el token se valido y el claim se
+          # leyo. Que no tenga permisos es correcto —todavia no hay municipalidad ni
+          # usuario en las tablas de la aplicacion, y eso es #120—; lo que se verifica
+          # aqui es hasta donde llego la peticion, no que devuelva datos.
+          test "$(intento --header "Authorization: Bearer $conClaim")" = "403 SIN_PRIVILEGIO"
+
+      - name: 5 · Ninguna otra ruta se atiende
+        run: |
+          set -euo pipefail
+          for ruta in /actuator/env /actuator/beans /; do
             codigo=$(curl --output /dev/null --silent --write-out '%{http_code}' \
               "http://localhost:8080$ruta")
             echo "$ruta -> $codigo"
@@ -107,7 +204,20 @@ jobs:
             esac
           done
 
-      - name: 4 · La aplicacion no puede ejecutar DDL
+      - name: 6 · La interfaz se sirve, y apunta al emisor configurado
+        run: |
+          set -euo pipefail
+          curl --fail --silent http://localhost:8081/ | grep -qi "<div id=\"raiz\"\|<div id=\"root\"\|<body" \
+            || { echo "La interfaz no devolvio una pagina"; exit 1; }
+          # El emisor entra al compilar, asi que tiene que estar DENTRO del paquete.
+          # Si no esta, la imagen se construyo sin la configuracion de identidad y la
+          # pantalla de acceso no llevaria a ninguna parte.
+          if ! docker compose exec -T interfaz grep -rq "realms/sgtm/protocol/openid-connect/token" /usr/share/nginx/html/assets; then
+            echo "El paquete de la interfaz no lleva el emisor configurado"
+            exit 1
+          fi
+
+      - name: 7 · La aplicacion no puede ejecutar DDL
         run: |
           set -euo pipefail
           # Las credenciales salen del contenedor en marcha, no del compose: se
@@ -127,7 +237,7 @@ jobs:
           fi
           echo "Correcto: el DDL se rechaza con las credenciales de la aplicacion."
 
-      - name: Registros de los tres contenedores, si algo fallo
+      - name: Registros de los contenedores, si algo fallo
         if: failure()
         run: docker compose logs --no-color --tail 200
 

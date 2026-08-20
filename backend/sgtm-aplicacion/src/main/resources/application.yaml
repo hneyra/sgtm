@@ -36,6 +36,30 @@ spring:
   config:
     activate:
       on-profile: web
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # El emisor no tiene valor por omision, y eso ES la decision: sin la variable
+          # puesta, la aplicacion no arranca. Un emisor por omision dejaria un despliegue
+          # que atiende peticiones sin poder validar un token de verdad, que es la
+          # situacion que ADR-0005 excluye y que nadie ve hasta que la mira.
+          #
+          # Va en el perfil web y no arriba porque el perfil batch no atiende HTTP: no
+          # hay peticion que autenticar, y exigirle el emisor obligaria a que la maquina
+          # que corre una determinacion masiva de madrugada pudiera ver Keycloak.
+          issuer-uri: ${SGTM_OIDC_EMISOR}
+          # El emisor es una identidad, no una direccion de red, y en un despliegue
+          # con contenedores las dos no coinciden: el navegador va a Keycloak por el
+          # nombre publico y el backend lo alcanza por el nombre interno. Si se usara
+          # el publico para las dos cosas, el backend intentaria descargar el JWKS de
+          # una direccion que dentro de su contenedor es el mismo, y todo token seria
+          # invalido por un motivo que no se parece en nada a su causa.
+          #
+          # `issuer-uri` sigue siendo el publico —es lo que se compara con el `iss`
+          # del token, y es lo que hace que un token de otro realm no valga—; lo que
+          # cambia es de donde se traen las claves.
+          jwk-set-uri: ${SGTM_OIDC_JWKS:${SGTM_OIDC_EMISOR}/protocol/openid-connect/certs}
 
 ---
 spring:
