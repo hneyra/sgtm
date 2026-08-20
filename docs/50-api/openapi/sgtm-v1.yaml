@@ -129,6 +129,18 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: fecha
+          in: query
+          required: false
+          description: "Ficha vigente a esta fecha. Sin ella, la que rige hoy"
+          schema: { type: string }
+          example: "2026-08-20"
+        - name: historico
+          in: query
+          required: false
+          description: "Trae todas las versiones de la ficha, no solo la vigente"
+          schema: { type: string }
+          example: "true"
         - name: codigoDeRefCatastral
           in: query
           required: false
@@ -193,6 +205,18 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: fecha
+          in: query
+          required: false
+          description: "Ficha vigente a esta fecha. Sin ella, la que rige hoy"
+          schema: { type: string }
+          example: "2026-08-20"
+        - name: historico
+          in: query
+          required: false
+          description: "Trae todas las versiones de la ficha, no solo la vigente"
+          schema: { type: string }
+          example: "true"
         - name: codigoDeRefCatastral
           in: query
           required: false
@@ -229,6 +253,18 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: fecha
+          in: query
+          required: false
+          description: "Ficha vigente a esta fecha. Sin ella, la que rige hoy"
+          schema: { type: string }
+          example: "2026-08-20"
+        - name: historico
+          in: query
+          required: false
+          description: "Trae todas las versiones de la ficha, no solo la vigente"
+          schema: { type: string }
+          example: "true"
         - name: denominacion
           in: query
           required: false
@@ -278,6 +314,18 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: fecha
+          in: query
+          required: false
+          description: "Ficha vigente a esta fecha. Sin ella, la que rige hoy"
+          schema: { type: string }
+          example: "2026-08-20"
+        - name: historico
+          in: query
+          required: false
+          description: "Trae todas las versiones de la ficha, no solo la vigente"
+          schema: { type: string }
+          example: "true"
         - name: codUnidadCatastralUc
           in: query
           required: false

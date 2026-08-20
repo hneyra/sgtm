@@ -1,6 +1,6 @@
 import type { DatosDePantalla, ProblemDetails } from '@sgtm/api-client';
 import { RESPUESTAS, RUTAS } from './respuestas.generado';
-import { escrituraDe, paginadoDe } from './recursos';
+import { escrituraDe, paginadoDe, recursoDe } from './recursos';
 import { YA_SERVIDAS, laSirveElBackend } from './servidas';
 import type { OperacionServida } from './servidas';
 
@@ -189,6 +189,11 @@ export function instalarProxyDeDatos({
     // (ver `recursos.ts`).
     const paginado = paginadoDe(metodo, url.pathname);
     if (paginado) return json(paginado, 200);
+
+    // Y las que no son listados —una ficha catastral es un recurso, no una
+    // pagina— salen sueltas, con su version y su historico.
+    const recurso = recursoDe(metodo, url.pathname);
+    if (recurso) return json(recurso, 200);
 
     // Y las dos escrituras de sesion devuelven el recurso que devuelve el
     // backend, no los datos de la pantalla: la cabecera adopta el ejercicio que

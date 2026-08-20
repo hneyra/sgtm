@@ -12,8 +12,9 @@ import { RESPUESTAS } from './respuestas.generado';
  * construyendo la pantalla contra una forma que el servidor no usa, que es justo
  * lo que este modo intermedio existe para evitar.
  *
- * Son doce, las mismas que enumera `IMPLEMENTADAS` en el `ContratoDeApiTest` del
- * backend: las once de seguridad (#9, #12, #13) y el catalogo vial (#16). **Esta
+ * Son las mismas que enumera `IMPLEMENTADAS` en el `ContratoDeApiTest` del
+ * backend: las once de seguridad (#9, #12, #13), el catalogo vial y los
+ * sectores (#16), las cuatro fichas (#18, #19) y su consulta (#20). **Esta
  * lista crece cuando crece aquella**, no antes: publicar aqui una forma que el
  * backend todavia no sirve seria inventarsela.
  *
@@ -72,6 +73,212 @@ function origen(texto = ''): { equipo: string | null; ip: string | null } {
   const [equipo = '', ip = ''] = texto.split('·').map((parte) => parte.trim());
   return { equipo: equipo === '' ? null : equipo, ip: ip === '' ? null : ip };
 }
+
+/* ── Catastro: sectores, fichas y su consulta ──────────────────────────── */
+
+const sectores = (): Paginado =>
+  unaPagina(
+    filasDe('sectores').map(([codigo, nombre, , , , zona, estado], i) => ({
+      id: i + 1,
+      codigo,
+      nombre,
+      zona,
+      activo: activo(estado),
+    })),
+  );
+
+const fichas = (): Paginado =>
+  unaPagina(
+    filasDe('consulta_fichas').map(([codigo, , titular, uso, areaTerreno], i) => ({
+      id: i + 1,
+      predioId: i + 1,
+      codRefCatastral: codigo,
+      direccion: '',
+      manzana: null,
+      lote: null,
+      tipo: 'UNICA',
+      version: 1,
+      areaTerreno,
+      uso,
+      vigenciaDesde: '2026-01-01',
+      titular,
+    })),
+  );
+
+/**
+ * Una ficha con su historico.
+ *
+ * **Tres versiones y no una**, porque una sola no ejercita nada: el bloque de
+ * versionado existe para ensenar que el area de hoy no es la de siempre, y con
+ * una version la pantalla se ve igual con el bloque y sin el. Las fechas y las
+ * observaciones salen del prototipo; la forma, de `FichaResource`.
+ */
+function ficha(
+  pantalla: string,
+  tipo: string,
+  detalle: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  const campos = RESPUESTAS[pantalla]?.campos ?? {};
+  const valor = (clave: string): string =>
+    typeof campos[clave] === 'string' ? (campos[clave] as string) : '';
+
+  const actual = {
+    version: 3,
+    vigenciaDesde: '2026-03-12',
+    vigenciaHasta: null,
+    vigente: true,
+    origen: 'FISCALIZACION',
+    documentoOrigen: 'Acta de inspección 0244-2026',
+    observacion: 'Fiscalización de campo: se verificó ampliación en el segundo piso no declarada.',
+  };
+
+  return {
+    id: 1,
+    predioId: 1,
+    tipo,
+    areaTerreno: valor('areaTotalHa') || '210.00',
+    uso: valor('uso2') || 'Casa habitación',
+    denominacion: valor('denominacion2') || null,
+    ...actual,
+    construcciones: [
+      {
+        id: 1,
+        piso: '01',
+        areaConstruida: '118.50',
+        anioConstruccion: 1998,
+        material: 'NOBLE',
+        estadoConservacion: 'BUENO',
+        categorias: 'C B C C B C B',
+      },
+      {
+        id: 2,
+        piso: '02',
+        areaConstruida: '46.00',
+        anioConstruccion: 2024,
+        material: 'NOBLE',
+        estadoConservacion: 'MUY_BUENO',
+        categorias: 'B B B C B C B',
+      },
+    ],
+    economico: null,
+    bienesComunes: null,
+    rural: null,
+    ...detalle,
+    historico: [
+      {
+        id: 3,
+        ...actual,
+        areaTerreno: '210.00',
+        uso: 'Casa habitación',
+        usuario: 'mrios',
+        registradaEn: '2026-03-12T10:22:00Z',
+      },
+      {
+        id: 2,
+        version: 2,
+        areaTerreno: '210.00',
+        uso: 'Casa habitación',
+        vigenciaDesde: '2021-06-01',
+        vigenciaHasta: '2026-03-11',
+        vigente: false,
+        origen: 'DECLARACION',
+        documentoOrigen: 'DJ 2021-004182',
+        observacion: 'Declaración jurada del contribuyente por ampliación del primer piso.',
+        usuario: 'jcardenas',
+        registradaEn: '2021-06-01T09:05:00Z',
+      },
+      {
+        id: 1,
+        version: 1,
+        areaTerreno: '210.00',
+        uso: 'Casa habitación',
+        vigenciaDesde: '2006-01-01',
+        vigenciaHasta: '2021-05-31',
+        vigente: false,
+        origen: 'CATASTRO',
+        documentoOrigen: 'Levantamiento catastral 2006',
+        observacion: 'Ficha inicial del levantamiento catastral.',
+        usuario: 'catastro',
+        registradaEn: '2006-01-01T00:00:00Z',
+      },
+    ],
+  };
+}
+
+const urbana = (): Readonly<Record<string, unknown>> => ficha('ficha_urbana', 'UNICA', {});
+
+const economica = (): Readonly<Record<string, unknown>> =>
+  ficha('ficha_economica', 'ECONOMICA', {
+    economico: {
+      actividades: [
+        {
+          id: 1,
+          conductor: 'MEDINA MEDINA, RUFINA (SUC.)',
+          nombreComercial: 'BODEGA EL SOL',
+          ciiu: 'G-5211-01 — VENTA AL POR MENOR EN ALMACENES',
+          areaOcupada: '48.00',
+          licenciaNumero: '2010-006549',
+          licenciaFecha: '2010-04-18',
+          anuncioNumero: null,
+        },
+      ],
+      informacionComplementaria: null,
+      sinLicencia: 0,
+    },
+  });
+
+const bienesComunes = (): Readonly<Record<string, unknown>> =>
+  ficha('ficha_bienes', 'BIENES_COMUNES', {
+    bienesComunes: {
+      bienes: [
+        {
+          id: 1,
+          descripcion: 'Escalera común',
+          area: '24.00',
+          material: 'NOBLE',
+          estadoConservacion: 'BUENO',
+        },
+      ],
+      participaciones: filasDe('ficha_bienes').map(([unidad, , , porcentaje], i) => ({
+        predioId: i + 1,
+        porcentaje,
+        unidad,
+      })),
+      areaComunTotal: '124.00',
+    },
+  });
+
+const rural = (): Readonly<Record<string, unknown>> =>
+  ficha('ficha_rural', 'RURAL', {
+    rural: {
+      tierras: [
+        {
+          id: 1,
+          clasificacion: 'CULTIVO EN LIMPIO',
+          calidadAgrologica: 'MEDIA',
+          riego: 'BAJO_RIEGO',
+          hectareas: '8.2000 HA',
+        },
+        {
+          id: 2,
+          clasificacion: 'PASTOS',
+          calidadAgrologica: null,
+          riego: 'SECANO',
+          hectareas: '4.3000 HA',
+        },
+      ],
+      colindantes: [{ orientacion: 'NORTE', descripcion: 'Fundo San Miguel' }],
+      hectareasTotales: '12.5000 HA',
+    },
+  });
+
+/** Recursos que no son listados: se sirven tal cual, sin sobre paginado. */
+const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>> = {
+  '/catastro/fichas/urbana/{codRefCatastral}': urbana,
+  '/catastro/fichas/economica/{codRefCatastral}': economica,
+  '/catastro/fichas/bienes-comunes/{codEdificacion}': bienesComunes,
+  '/catastro/fichas/rural/{codUnidad}': rural,
+};
 
 /* ── Una funcion por recurso, con los campos que declara su `Resource` ──── */
 
@@ -189,6 +396,8 @@ const parametros = (): Paginado => {
 /** Por camino del contrato, relativo a `/api/v1`. Solo `GET`: ninguna escribe. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/catastro/vias': vias,
+  '/catastro/sectores': sectores,
+  '/catastro/fichas': fichas,
   '/seguridad/modulos': modulos,
   '/seguridad/accesos': accesos,
   '/seguridad/grupos': grupos,
@@ -274,4 +483,23 @@ export function paginadoDe(metodo: string, camino: string): Paginado | null {
   if (metodo.toUpperCase() !== 'GET') return null;
   const construir = PAGINADOS[camino.replace(/^\/api\/v1/, '')];
   return construir === undefined ? null : construir();
+}
+
+/**
+ * El recurso suelto de un camino: una ficha, no un listado.
+ *
+ * Va por patron porque su ruta lleva el codigo del predio, y el proxy no filtra
+ * —devuelve la misma ficha venga el codigo que venga—. Fingir que busca seria
+ * simular una semantica que el backend ya tiene y este archivo no.
+ */
+export function recursoDe(
+  metodo: string,
+  camino: string,
+): Readonly<Record<string, unknown>> | null {
+  if (metodo.toUpperCase() !== 'GET') return null;
+  const relativo = camino.replace(/^\/api\/v1/, '');
+  for (const [ruta, construir] of Object.entries(SUELTOS)) {
+    if (patron(ruta).test(relativo)) return construir();
+  }
+  return null;
 }

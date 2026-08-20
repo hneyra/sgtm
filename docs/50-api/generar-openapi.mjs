@@ -96,7 +96,7 @@ const PAGINACION = [
 ];
 
 /**
- * Parametros que el backend **exige** y la pantalla no dibuja.
+ * Parametros que el backend tiene y la pantalla no dibuja.
  *
  * Misma regla que `PAGINACION`: cuando el backend ya existe, manda el backend.
  * La bitacora esta particionada por ejercicio y su controlador lo pide
@@ -105,10 +105,10 @@ const PAGINACION = [
  * es entre una pantalla que responde y una que hay que cancelar.
  *
  * Esta lista es corta a proposito. Un parametro aqui es una divergencia entre
- * lo que la pantalla dibuja y lo que el servicio necesita, y cada una se anota
+ * lo que la pantalla dibuja y lo que el servicio ofrece, y cada una se anota
  * con el controlador que la impone.
  */
-const EXIGE_EL_BACKEND = {
+const DEL_BACKEND = {
   auditoria: [
     {
       nombre: 'ejercicio',
@@ -116,6 +116,28 @@ const EXIGE_EL_BACKEND = {
       descripcion: 'Ejercicio de trabajo. Obligatorio: es la clave de particion de la bitacora',
     },
   ],
+  // Las cuatro fichas responden **a una fecha**: sin ella, la que rige hoy; con
+  // ella, la que regia entonces. Es lo que contesta «como estaba este predio
+  // cuando se emitio el valor de 2027», que es la pregunta de una reclamacion.
+  // Y `historico` trae todas las versiones: la pantalla que solo pinta la
+  // vigente no tiene por que pagarlas (`FichaController`, #18).
+  ...Object.fromEntries(
+    ['ficha_urbana', 'ficha_economica', 'ficha_bienes', 'ficha_rural'].map((id) => [
+      id,
+      [
+        {
+          nombre: 'fecha',
+          ejemplo: '2026-08-20',
+          descripcion: 'Ficha vigente a esta fecha. Sin ella, la que rige hoy',
+        },
+        {
+          nombre: 'historico',
+          ejemplo: 'true',
+          descripcion: 'Trae todas las versiones de la ficha, no solo la vigente',
+        },
+      ],
+    ]),
+  ),
 };
 
 /* ── Recoger las operaciones ──────────────────────────────────────────── */
@@ -144,7 +166,7 @@ for (const grupo of NAV) {
       // Parametros de consulta del ejemplo del prototipo, mas los filtros que
       // dibuja la pantalla y —si trae tabla— la paginacion y el orden.
       parametrosDeConsulta: reunir(parametrosDeRuta, [
-        ...(EXIGE_EL_BACKEND[id] ?? []),
+        ...(DEL_BACKEND[id] ?? []),
         ...(consulta
           ? consulta.split('&').map((p) => {
               const [nombre, ejemplo] = p.split('=');

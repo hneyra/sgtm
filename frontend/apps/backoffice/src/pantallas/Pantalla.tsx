@@ -31,6 +31,7 @@ import { Indicadores } from './bloques/Indicadores';
 import { Portal } from './bloques/Portal';
 import { Reporte } from './bloques/Reporte';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
+import { Versionado } from './bloques/Versionado';
 import { Totales } from './bloques/Totales';
 
 /**
@@ -112,6 +113,14 @@ function PantallaDelModulo({
 
 type Estructura = EstructuraDePantalla;
 
+/** Las pantallas cuyo recurso trae version y vigencia. Hoy, las cuatro fichas. */
+const VERSIONADAS: ReadonlySet<string> = new Set([
+  'ficha_urbana',
+  'ficha_economica',
+  'ficha_bienes',
+  'ficha_rural',
+]);
+
 /**
  * Los dos caminos, y por que hay dos.
  *
@@ -148,8 +157,17 @@ function ContenidoConectado({
   readonly estructura: Estructura;
   readonly conexion: Conexion;
 }) {
-  const consulta = useDatosDeOperacion(conexion);
-  return <Bloques estructura={estructura} consulta={consulta} />;
+  // La ficha de un predio se abre por su codigo. Sin codigo no hay peticion, y
+  // lo que toca decir es que falta elegir uno —no dibujar un esqueleto para
+  // siempre—.
+  const { consulta, falta } = useDatosDeOperacion(conexion);
+  return (
+    <Bloques
+      estructura={estructura}
+      consulta={consulta}
+      {...(falta === undefined ? {} : { faltaRegistro: falta })}
+    />
+  );
 }
 
 function Bloques({
@@ -204,6 +222,10 @@ function Bloques({
   const datos = consulta.data;
   const valores: Readonly<Record<string, ValorDeCampo>> = datos?.campos ?? {};
   const secciones = seccionesDe(estructura, pestana);
+  // Las cuatro fichas: su backend versiona y nunca sobrescribe (#18). Se sabe
+  // aqui y no por el catalogo porque es una propiedad de la operacion, no del
+  // dibujo —el prototipo no tiene forma de expresarla—.
+  const esVersionada = VERSIONADAS.has(estructura.id);
 
   // El error y el sin permiso son de la pantalla entera, no de un bloque: hay
   // una peticion por pantalla, y no puede fallar la tabla y no el formulario.
@@ -242,6 +264,16 @@ function Bloques({
       )}
 
       {estructura.kind === 'portal' && <Portal pasos={estructura.steps ?? []} />}
+
+      {/* Que version se esta viendo va **antes** que sus datos: es lo que dice
+          de cuando son los numeros que vienen debajo. Solo lo traen las
+          pantallas cuyo backend no sobrescribe. */}
+      {(datos?.versionado !== undefined || (cargando && esVersionada)) && (
+        <Versionado
+          {...(datos?.versionado ? { datos: datos.versionado } : {})}
+          cargando={cargando}
+        />
+      )}
 
       {estado === 'sin-registro' && (
         <Aviso

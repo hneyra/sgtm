@@ -65,28 +65,28 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/catastro/fichas/urbana/{codRefCatastral}',
     parametrosDeRuta: ['codRefCatastral'],
-    parametrosDeConsulta: ['codigoDeRefCatastral', 'codContribuyenteRentas', 'nroFicha', 'uso', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['fecha', 'historico', 'codigoDeRefCatastral', 'codContribuyenteRentas', 'nroFicha', 'uso', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Ficha catastral económica — `GET /catastro/fichas/economica/{codRefCatastral}` */
   ficha_economica: {
     metodo: 'GET',
     ruta: '/catastro/fichas/economica/{codRefCatastral}',
     parametrosDeRuta: ['codRefCatastral'],
-    parametrosDeConsulta: ['codigoDeRefCatastral', 'contribuyente', 'ciiu'],
+    parametrosDeConsulta: ['fecha', 'historico', 'codigoDeRefCatastral', 'contribuyente', 'ciiu'],
   },
   /** Ficha de bienes comunes — `GET /catastro/fichas/bienes-comunes/{codEdificacion}` */
   ficha_bienes: {
     metodo: 'GET',
     ruta: '/catastro/fichas/bienes-comunes/{codEdificacion}',
     parametrosDeRuta: ['codEdificacion'],
-    parametrosDeConsulta: ['denominacion', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['fecha', 'historico', 'denominacion', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Ficha catastral rural — `GET /catastro/fichas/rural/{codUnidad}` */
   ficha_rural: {
     metodo: 'GET',
     ruta: '/catastro/fichas/rural/{codUnidad}',
     parametrosDeRuta: ['codUnidad'],
-    parametrosDeConsulta: ['codUnidadCatastralUc', 'contribuyente', 'valleSector'],
+    parametrosDeConsulta: ['fecha', 'historico', 'codUnidadCatastralUc', 'contribuyente', 'valleSector'],
   },
   /** Consulta de fichas catastrales — `GET /catastro/fichas` */
   consulta_fichas: {
@@ -1012,6 +1012,8 @@ export interface ParametrosPorOperacion {
   /** `GET /catastro/fichas/urbana/{codRefCatastral}` */
   readonly ficha_urbana: {
     readonly codRefCatastral: string;
+    readonly fecha?: string;
+    readonly historico?: string;
     readonly codigoDeRefCatastral?: string;
     readonly codContribuyenteRentas?: string;
     readonly nroFicha?: string;
@@ -1024,6 +1026,8 @@ export interface ParametrosPorOperacion {
   /** `GET /catastro/fichas/economica/{codRefCatastral}` */
   readonly ficha_economica: {
     readonly codRefCatastral: string;
+    readonly fecha?: string;
+    readonly historico?: string;
     readonly codigoDeRefCatastral?: string;
     readonly contribuyente?: string;
     readonly ciiu?: string;
@@ -1031,6 +1035,8 @@ export interface ParametrosPorOperacion {
   /** `GET /catastro/fichas/bienes-comunes/{codEdificacion}` */
   readonly ficha_bienes: {
     readonly codEdificacion: string;
+    readonly fecha?: string;
+    readonly historico?: string;
     readonly denominacion?: string;
     readonly pagina?: string;
     readonly tamano?: string;
@@ -1040,6 +1046,8 @@ export interface ParametrosPorOperacion {
   /** `GET /catastro/fichas/rural/{codUnidad}` */
   readonly ficha_rural: {
     readonly codUnidad: string;
+    readonly fecha?: string;
+    readonly historico?: string;
     readonly codUnidadCatastralUc?: string;
     readonly contribuyente?: string;
     readonly valleSector?: string;

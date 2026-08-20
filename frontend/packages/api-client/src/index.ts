@@ -32,6 +32,8 @@ export type {
   Panel,
   FilaDePanel,
   Total,
+  Version,
+  DatosDeVersionado,
 } from './pantallas';
 export {
   descriptorDe,

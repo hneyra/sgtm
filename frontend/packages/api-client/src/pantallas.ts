@@ -34,6 +34,15 @@ export interface DatosDePantalla {
   readonly tabla?: DatosDeTabla;
   readonly totales?: readonly Total[];
   readonly reporte?: DatosDeReporte;
+  /**
+   * Que version del registro se esta viendo, y las que hubo antes.
+   *
+   * Lo trae una pantalla cuyo backend **no sobrescribe**: la ficha catastral
+   * (#18). Sin esto, la pantalla ensena un area de 180 m² sin decir que rige
+   * desde marzo y que hasta entonces eran 120, y entonces no hay forma de
+   * explicar por que la determinacion del ejercicio anterior salio distinta.
+   */
+  readonly versionado?: DatosDeVersionado;
 }
 
 /** Texto en casi todo; booleano en las casillas. */
@@ -112,6 +121,41 @@ export type TonoDeCelda = 'ok' | 'warn' | 'bad';
 export interface Total {
   readonly label: string;
   readonly value: string;
+}
+
+/**
+ * Una version de un registro versionado, con **por que** se escribio.
+ *
+ * La observacion es la mitad util. Un diff dice que el area paso de 120 a 180;
+ * solo la observacion dice que fue una fiscalizacion de campo y no un error de
+ * tecleo, y es lo que se lee en voz alta cuando el contribuyente pregunta por
+ * que le subio el recibo (regla 10, RNF-052).
+ */
+export interface Version {
+  readonly version: number;
+  readonly vigenciaDesde: Fecha;
+  /** Nulo mientras rija: una version vigente no tiene fin. */
+  readonly vigenciaHasta?: Fecha;
+  readonly vigente: boolean;
+  readonly origen: string;
+  readonly documentoOrigen: string;
+  readonly observacion: string;
+  /** Quien la registro y cuando. Solo lo trae el historico. */
+  readonly usuario?: string;
+  readonly registradaEn?: string;
+}
+
+export interface DatosDeVersionado {
+  /** La que se esta viendo. Siempre. */
+  readonly actual: Version;
+  /**
+   * Las demas, cuando se piden.
+   *
+   * Ausente no es lo mismo que vacia: ausente significa «no se pidio», y vacia
+   * significaria «no hay ninguna», que no puede pasar —toda ficha tiene al menos
+   * la suya—.
+   */
+  readonly historico?: readonly Version[];
 }
 
 export interface DatosDeReporte {
