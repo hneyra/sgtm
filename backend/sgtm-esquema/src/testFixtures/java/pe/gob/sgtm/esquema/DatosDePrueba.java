@@ -82,7 +82,7 @@ public final class DatosDePrueba {
             long[] contribuyentes = sembrarContribuyentes(app, muni, sufijo);
             long titular = contribuyentes[0];
             long segundo = contribuyentes[1];
-            long predioId = sembrarCatastro(app, muni, sufijo, titular);
+            long predioId = sembrarCatastro(app, muni, sufijo, titular, conjuntoId);
             long vehiculoId =
                     sembrarRentas(app, muni, sufijo, titular, segundo, predioId, conjuntoId);
             long reciboId = sembrarTesoreria(app, muni, sufijo, titular);
@@ -182,7 +182,8 @@ public final class DatosDePrueba {
     // Catastro
     // ------------------------------------------------------------------
 
-    private static long sembrarCatastro(Connection app, long muni, String sufijo, long titular)
+    private static long sembrarCatastro(
+            Connection app, long muni, String sufijo, long titular, long conjuntoId)
             throws SQLException {
         long viaId =
                 insertar(
@@ -359,30 +360,31 @@ public final class DatosDePrueba {
                 titular,
                 VIGENCIA);
 
-        // Tablas de valuacion. Valores de relleno: los normativos siguen en D-02.
+        // Tablas de valuacion. Valores de relleno: los normativos siguen en D-02. Cuelgan del
+        // conjunto de parametros sembrado por sembrarParametros, no de un ejercicio suelto (#17).
         ejecutar(
                 app,
-                "INSERT INTO arancel (municipalidad_id, ejercicio, via_id, valor_m2,"
+                "INSERT INTO arancel (municipalidad_id, conjunto_id, via_id, valor_m2,"
                         + " documento_fuente)"
                         + " VALUES (?, ?, ?, 1.000000, 'fixture de la prueba')",
                 muni,
-                EJERCICIO,
+                conjuntoId,
                 viaId);
         ejecutar(
                 app,
-                "INSERT INTO valor_unitario_edificacion (municipalidad_id, ejercicio, partida,"
-                        + " categoria, valor_m2, documento_fuente)"
-                        + " VALUES (?, ?, 'MUROS', 'C', 1.000000, 'fixture de la prueba')",
+                "INSERT INTO valor_unitario_edificacion (municipalidad_id, conjunto_id, partida,"
+                        + " categoria, anio_construccion_desde, valor_m2, documento_fuente)"
+                        + " VALUES (?, ?, 'MUROS', 'C', 2000, 1.000000, 'fixture de la prueba')",
                 muni,
-                EJERCICIO);
+                conjuntoId);
         ejecutar(
                 app,
-                "INSERT INTO depreciacion (municipalidad_id, ejercicio, material,"
+                "INSERT INTO depreciacion (municipalidad_id, conjunto_id, material,"
                         + " estado_conservacion, antiguedad_hasta, porcentaje, documento_fuente)"
                         + " VALUES (?, ?, 'CONCRETO', 'BUENO', 10, 1.0000,"
                         + "         'fixture de la prueba')",
                 muni,
-                EJERCICIO);
+                conjuntoId);
         return predioId;
     }
 
