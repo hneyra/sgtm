@@ -173,6 +173,24 @@ jobs:
     needs: aplicacion-y-migrador
 
     steps:
+      # `command -v pulumi` NO sirve aquí: los runners `ubuntu-latest` traen el CLI
+      # de Pulumi preinstalado de fábrica, así que esa comprobación siempre habría
+      # dicho «está disponible» sin decir nada sobre si algún paso lo usó. Lo que de
+      # verdad hace falta demostrar es que NINGÚN paso lo invoca, y eso se demuestra
+      # interceptando la llamada, no mirando si el binario existe: un `pulumi` falso
+      # se antepone en el PATH, y si algún paso de más abajo lo ejecuta, deja un
+      # rastro que la última comprobación revisa.
+      - name: Vigilar que nada de este job invoque pulumi
+        run: |
+          mkdir -p "$RUNNER_TEMP/vigilancia-pulumi"
+          cat > "$RUNNER_TEMP/vigilancia-pulumi/pulumi" <<'CENTINELA'
+          #!/bin/sh
+          echo "invocado con: $*" > "$RUNNER_TEMP/vigilancia-pulumi/.invocado"
+          exit 1
+          CENTINELA
+          chmod +x "$RUNNER_TEMP/vigilancia-pulumi/pulumi"
+          echo "$RUNNER_TEMP/vigilancia-pulumi" >> "$GITHUB_PATH"
+
       - name: El nombre del repositorio, en minúsculas
         id: repositorio
         run: |
@@ -303,17 +321,18 @@ jobs:
           echo "Revertido: el clúster vuelve a reportar $revertido"
 
       # No es una relectura del propio YAML —eso solo demuestra que nadie lo escribió,
-      # no que nadie pueda hacerlo—: es una comprobación de tiempo de ejecución. Si
-      # `pulumi` ni siquiera está instalado en este job, ningún paso de arriba pudo
-      # haber ejecutado `pulumi up`, sin importar lo que dijera el código. La
-      # demostración de que la regla puede fallar es la contraparte, ya escrita:
-      # `infra/config.ts` pone rojo `applicationImageRepository` en cuanto lleva una
-      # etiqueta (issue #146) — es la que impediría que la versión volviera a colarse
-      # en el estado de Pulumi.
-      - name: "Criterio 4 — nada en este job pudo haber ejecutado pulumi up"
+      # no que nadie pueda hacerlo—: es una comprobación de tiempo de ejecución, contra
+      # el centinela del primer paso. `command -v pulumi` no basta: los runners
+      # `ubuntu-latest` traen el CLI preinstalado, así que esa comprobación sería
+      # siempre verdadera y no demostraría nada — lo que hace falta es que ningún paso
+      # lo haya LLAMADO, y eso es lo que el centinela detecta. La demostración de que
+      # la regla puede fallar es la contraparte, ya escrita: `infra/config.ts` pone
+      # rojo `applicationImageRepository` en cuanto lleva una etiqueta (issue #146) —
+      # es la que impediría que la versión volviera a colarse en el estado de Pulumi.
+      - name: "Criterio 4 — nada en este job invocó pulumi"
         run: |
-          if command -v pulumi > /dev/null 2>&1; then
-            echo "::error::pulumi esta instalado en este job; deja de ser una demostracion de que la reversion no lo necesita" >&2
+          if [ -f "$RUNNER_TEMP/vigilancia-pulumi/.invocado" ]; then
+            echo "::error::Un paso de este job invocó pulumi: $(cat "$RUNNER_TEMP/vigilancia-pulumi/.invocado")" >&2
             exit 1
           fi
-          echo "Confirmado en tiempo de ejecución: pulumi no está disponible en este job"
+          echo "Confirmado en tiempo de ejecución: ningún paso invocó pulumi, aunque el runner lo trae preinstalado"
