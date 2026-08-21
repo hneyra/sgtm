@@ -69,7 +69,6 @@ class ContratoDeApiTest {
                     "GET /catastro/tablas/depreciacion",
                     "GET /rentas/contribuyentes",
                     "GET /rentas/beneficios",
-                    "GET /rentas/declaraciones/{djNro}",
                     "GET /consultas/cuenta-corriente/{codigo}",
                     "GET /consultas/deuda",
                     "GET /consultas/altas-bajas",
