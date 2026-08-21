@@ -66,6 +66,7 @@ cosas donde espera.
 ### 80 — Infraestructura
 - [INF-01 — Arquitectura de infraestructura](80-infraestructura/arquitectura-de-infraestructura.md) — un VPS, qué cuesta y qué pasa cuando se cae
 - [INF-03 — Ambientes](80-infraestructura/ambientes.md) — local, `stg` y `prod`, y dónde se ensaya la restauración
+- [`infra/README.md`](../infra/README.md) — el árbol de Pulumi, sus invariantes y cómo se demuestra que muerden
 
 ### A0 — Calidad
 - [Estrategia de pruebas](A0-calidad/estrategia-de-pruebas.md) — qué es bloqueante y por qué

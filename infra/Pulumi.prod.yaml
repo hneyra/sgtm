@@ -1,0 +1,33 @@
+# Stack de producción: el VPS que atiende a la municipalidad (INF-01 §1).
+#
+# Aquí solo hay valores en claro. Los secretos —kubeconfig, clave del administrador de
+# Keycloak y credenciales del almacenamiento de respaldo— NO se versionan en texto: se
+# ponen una vez con `pulumi config set --secret` y quedan cifrados con la clave del
+# stack. Los de la aplicación no están en Pulumi en absoluto (ADR-0011 §3, issue #154).
+#
+#   pulumi config set --secret kubeconfig "$(cat k3s.yaml)" --stack prod
+#   pulumi config set --secret keycloakAdminPassword <valor> --stack prod
+#   pulumi config set --secret backupAccessKeyId <valor> --stack prod
+#   pulumi config set --secret backupSecretAccessKey <valor> --stack prod
+#
+# El `server` del kubeconfig tiene que ser `https://localhost:6443`: CI llega por un
+# túnel SSH y `config.ts` se pone rojo si apunta al VPS (INF-01 §1.4).
+config:
+  sgtm:domain: sgtm.example.pe
+  sgtm:acmeEmail: operaciones@example.pe
+
+  # Versiones fijadas. Una etiqueta móvil convierte cualquier reinicio del VPS en una
+  # actualización no planificada, y en un solo nodo eso pasa en cada mantenimiento.
+  sgtm:postgresImage: postgres:16.4-alpine
+  sgtm:postgresStorageSize: 100Gi
+  sgtm:keycloakImage: quay.io/keycloak/keycloak:26.0
+  sgtm:keycloakRealm: sgtm
+
+  # Sin etiqueta, a propósito: la pone el flujo de liberación (ADR-0011 §5, issue #148).
+  sgtm:applicationImageRepository: ghcr.io/hneyra/sgtm
+  sgtm:webReplicas: "2"
+
+  # El RPO de RNF-076, escrito. El destino está FUERA del VPS (INF-01 §1.3).
+  sgtm:backupEndpoint: https://s3.example.net
+  sgtm:backupBucket: sgtm-prod-respaldos
+  sgtm:walArchiveTimeoutSeconds: "300"

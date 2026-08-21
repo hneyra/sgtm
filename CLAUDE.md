@@ -115,6 +115,7 @@ backend/      Spring Boot 4, multi-módulo. Monolito modular con Spring Modulith
 frontend/     React sobre Vite, yarn workspaces. Espacio de trabajo sin pantallas  ← existe
 docs/         Documentación (fuente de verdad del diseño)                          ← existe
 design/       Prototipo navegable del que derivará la interfaz                     ← referencia
+infra/        Pulumi en TypeScript con yarn. Dos stacks, sin componentes todavia   ← existe
 ```
 
 Módulos del backend hoy: `sgtm-dominio-compartido` (objetos de valor en `pe.gob.sgtm.dominio` y
@@ -236,6 +237,11 @@ el teclado en español, son los **identificadores con tilde**: `alicuota`, nunca
 
 Las pruebas de persistencia requieren Docker. Sin motor de base de datos **fallan**, no se
 omiten: una prueba bloqueante que se salta a sí misma deja el build en verde.
+
+```bash
+cd infra
+yarn verificar                    # lint, tipos y pruebas. Sin Pulumi, sin token y sin cluster
+```
 
 ```bash
 cd frontend
