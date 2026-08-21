@@ -18,7 +18,8 @@ import { RESPUESTAS } from './respuestas.generado';
  * aranceles (#17), el padron de contribuyentes (#11), la ficha de vehiculo
  * (#26), la declaracion jurada (#28) y los beneficios (#27) desde #73, y desde
  * #72 la consulta de deuda (#22, #175), la constancia de no adeudo (#25,
- * #179) y el padron vehicular consultable (#25, #184). **Esta lista crece cuando crece aquella**, no antes: publicar aqui
+ * #179), el padron vehicular consultable (#25, #184) y las altas y bajas de deuda (#24, #72).
+ * **Esta lista crece cuando crece aquella**, no antes: publicar aqui
  * una forma que el backend todavia no sirve seria inventarsela.
  *
  * **Los valores siguen siendo los del prototipo.** Aqui no se inventa ni un
@@ -328,6 +329,36 @@ function consultaVehiculos(): Paginado {
         };
       },
     ),
+  );
+}
+
+/**
+ * Altas y bajas de deuda (`AsientoResource`, RF-045, #24, #72): la misma forma que publica
+ * `cuenta_corriente`, no las columnas de expediente que dibuja el prototipo.
+ *
+ * «A/B» del prototipo («A» ok, «B» bad) se traduce al `tipo` del asiento: `CARGO` es alta,
+ * `ABONO` es baja (`MovimientoDeDeuda#enAsientos`). «Doc. Aprob.» va a `documentoOrigen` — es el
+ * unico campo de documento que trae el recurso real — y «Fecha Reg.» a `fechaValor`.
+ */
+function altasBajas(): Paginado {
+  return unaPagina(
+    filasDe('consulta_altas_bajas').map(([, aB, , , docAprob, , fechaReg], i) => ({
+      id: i + 1,
+      ejercicio: new Date().getFullYear(),
+      tributo: 'PREDIAL',
+      concepto: 'INSOLUTO',
+      tipo: aB === 'A' ? 'CARGO' : 'ABONO',
+      fase: 'ORDINARIA',
+      periodo: null,
+      predioId: null,
+      vehiculoId: null,
+      referenciaExterna: null,
+      monto: { importe: '100.00', actualizadoA: fechaDe(fechaReg ?? '') ?? '2026-08-13' },
+      documentoOrigen: docAprob || 'S/D',
+      asientoReversadoId: null,
+      usuarioId: null,
+      motivo: null,
+    })),
   );
 }
 
@@ -729,6 +760,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/consultas/cuenta-corriente/{codigo}': cuentaCorriente,
   '/consultas/deuda': consultaDeuda,
   '/consultas/vehiculos': consultaVehiculos,
+  '/consultas/altas-bajas': altasBajas,
   '/catastro/sectores': sectores,
   '/catastro/fichas': fichas,
   '/seguridad/modulos': modulos,

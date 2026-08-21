@@ -327,10 +327,85 @@ function fechaDeVehiculosDe(vehiculos: readonly unknown[]): Fecha {
   return hoy();
 }
 
+/**
+ * Movimientos de alta y baja de deuda (RF-045, #24, #72): la lista de por que se debe lo que se
+ * debe, cada linea con el asiento que la sustenta.
+ *
+ * El endpoint publica `AsientoResource` —la misma forma que `cuenta_corriente`—, no las columnas
+ * de documento que dibuja el prototipo (Num. Docum., Cod. Municipal, Fec. Doc. Aprob....): un alta
+ * o baja es, en este backend, un asiento mas del libro (ADR-0006), sin una tabla de expedientes
+ * aparte. Cuatro columnas quedan vacias porque esa informacion no existe todavia en el asiento:
+ *
+ * - «Num. Docum.»: el asiento trae un solo campo de documento —`documentoOrigen`—, que va a «Doc.
+ *   Aprob.»; no hay un correlativo interno distinto del documento que lo sustenta.
+ * - «A/M» (automatica/manual): el propio `AltasBajasController` dice que nada distingue hoy un
+ *   movimiento a mano de uno que produjo una emision masiva (#30, mas adelante).
+ * - «Cod. Municipal»: el asiento guarda el identificador interno de la unidad (`predioId` /
+ *   `vehiculoId`), no un codigo externo — mostrarlo aqui seria un dato que no es el que pide la
+ *   columna.
+ * - «Fec. Doc. Aprob.»: el asiento trae una sola fecha, `fechaValor`, que va a «Fecha Reg.»; no
+ *   hay una segunda fecha de aprobacion por separado.
+ *
+ * «A/B» sale de `tipo`: un alta es `CARGO` y una baja `ABONO` (`MovimientoDeDeuda#enAsientos`).
+ * «Est.» distingue si el asiento es el mismo el que reversa a otro (`asientoReversadoId`) — no si
+ * a el lo reversaron despues, que esta fila sola no lo puede saber.
+ */
+const consulta_altas_bajas = definirConexion({
+  operacion: 'consulta_altas_bajas',
+  parametros: ({ busqueda }) => parametrosDeBusqueda('consulta_altas_bajas', undefined, busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'las altas y bajas'),
+  adaptar: (paginado): DatosDePantalla => {
+    const tabla = tablaDe(
+      paginado,
+      (asiento): readonly Celda[] => {
+        const monto = importeDe(asiento['monto']);
+        const documento = texto(asiento['documentoOrigen']);
+        return [
+          { texto: SIN_DATO },
+          { texto: aBDe(asiento['tipo']) },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: documento },
+          { texto: SIN_DATO },
+          { texto: monto?.actualizadoA ?? SIN_DATO },
+          { texto: asiento['asientoReversadoId'] != null ? 'REVERSIÓN' : 'VIGENTE' },
+        ];
+      },
+      'movimientos',
+    );
+
+    return {
+      fechaCalculo: fechaDeAltasBajasDe(paginado.contenido),
+      tabla,
+    };
+  },
+});
+
+/** `CARGO` incorpora deuda (alta); `ABONO` la extingue (baja) — `MovimientoDeDeuda#enAsientos`. */
+function aBDe(tipo: unknown): string {
+  if (tipo === 'CARGO') return 'ALTA';
+  if (tipo === 'ABONO') return 'BAJA';
+  return SIN_DATO;
+}
+
+/** La fecha valor del asiento mas reciente: todas las filas comparten como se calcularon. */
+function fechaDeAltasBajasDe(asientos: readonly unknown[]): Fecha {
+  let mayor: string | undefined;
+  for (const asiento of asientos) {
+    if (!esObjeto(asiento)) continue;
+    const monto = importeDe(asiento['monto']);
+    if (monto !== undefined && (mayor === undefined || monto.actualizadoA > mayor)) {
+      mayor = monto.actualizadoA;
+    }
+  }
+  return (mayor ?? hoy()) as Fecha;
+}
+
 /** Las opciones de Consultas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_CONSULTAS: Readonly<Record<string, Conexion>> = {
   cuenta_corriente,
   consulta_deuda,
   constancia,
   consulta_vehiculos,
+  consulta_altas_bajas,
 };
