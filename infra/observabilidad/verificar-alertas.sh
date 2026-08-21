@@ -167,8 +167,27 @@ for _ in $(seq 1 30); do
     fi
     sleep 10
 done
-[ "$LOGRADO" = "si" ] \
-    || { echo "FALLO: PostgreSQLCaido no llego a firing en 5 minutos." >&2; exit 1; }
+if [ "$LOGRADO" != "si" ]; then
+    echo "FALLO: PostgreSQLCaido no llego a firing en 5 minutos." >&2
+    echo "::group::Diagnostico: que ve Prometheus de verdad"
+    echo "-- up{job=\"postgres\"} --"
+    consultar_prometheus 'up%7Bjob%3D%22postgres%22%7D' || true
+    echo "-- pg_up --"
+    consultar_prometheus 'pg_up' || true
+    echo "-- ALERTS (cualquier estado) --"
+    consultar_prometheus 'ALERTS' || true
+    echo "-- El objetivo «postgres», segun /api/v1/targets --"
+    kubectl -n "$NS" exec verificador-de-alertas -- python3 -c "
+import json, urllib.request
+r = urllib.request.urlopen('http://sgtm-stg-observabilidad-prometheus:9090/api/v1/targets')
+d = json.load(r)
+for t in d['data']['activeTargets']:
+    if t['labels'].get('job') == 'postgres':
+        print(json.dumps(t, indent=2))
+" || true
+    echo "::endgroup::"
+    exit 1
+fi
 echo "  PostgreSQLCaido: firing"
 
 echo
