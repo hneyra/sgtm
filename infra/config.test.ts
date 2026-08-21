@@ -66,6 +66,10 @@ function baseline(environment: Environment = "prod"): Invariants {
       administrador: "administrador",
       nombreDelAdministrador: "Administrador del sistema",
     },
+    observability: {
+      // Declarado en los dos: en prod es obligatorio (issue #156).
+      alertWebhookUrl: "http://observabilidad-alertmanager-receptor.example.svc:9094/hooks/sgtm",
+    },
   };
 }
 
@@ -309,7 +313,13 @@ const VALORES_MINIMOS = {
  * revienta la lectura, incumple una invariante—, y la prueba de abajo recorre
  * `VALORES_MINIMOS` esperando exactamente lo primero.
  */
-const MINIMOS_ADMISIBLES = { ...VALORES_MINIMOS, esDemostracion: true };
+const MINIMOS_ADMISIBLES = {
+  ...VALORES_MINIMOS,
+  esDemostracion: true,
+  // Obligatorio en prod (issue #156): sin el, `checkInvariants` revienta con la
+  // misma frase que el propio fallo — "una regla que no notifica a nadie...".
+  alertWebhookUrl: "https://hooks.example.pe/sgtm-alertas",
+};
 
 describe("un valor obligatorio que falta revienta al principio, y dice cuál", () => {
   it("con todos los valores mínimos, la lectura pasa y no incumple nada", () => {

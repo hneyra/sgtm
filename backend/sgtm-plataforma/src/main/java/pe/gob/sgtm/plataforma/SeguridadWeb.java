@@ -26,20 +26,30 @@ import pe.gob.sgtm.web.RespuestaDeError;
  * tenant —que es el comportamiento correcto del aislamiento— y el sistema queda mudo sin que nada
  * se vea roto.
  *
- * <h2>Las tres reglas</h2>
+ * <h2>Las cuatro reglas</h2>
  *
  * <ul>
  *   <li>{@code /actuator/health} es publico. Es lo que permite que el orquestador sepa si el
  *       proceso esta vivo y con base de datos; sin un endpoint publico, {@code depends_on:
  *       service_healthy} no puede significar nada. No expone detalles: {@code show-details} va en
  *       {@code never}, asi que dice si y no que.
+ *   <li>{@code /actuator/prometheus} tambien es publico —sin token—, y es una decision distinta a
+ *       la de {@code health}: no protege datos de negocio, protege una superficie de ataque. Lo que
+ *       lo mantiene fuera de alcance NO es esta cadena: es que ninguna {@code IngressRoute} enruta
+ *       ahi. {@code Ingreso.ts} reenvia {@code /api/v1} a este servicio y todo lo demas del dominio
+ *       publico va a la interfaz, que no conoce {@code /actuator/*}; Prometheus llega por la red
+ *       interna del cluster, sin pasar por Traefik (issue #156). Es el mismo modelo que protege el
+ *       puerto de PostgreSQL: de red, no de aplicacion. Si algun dia una {@code IngressRoute}
+ *       reenvia aqui, este endpoint queda expuesto sin que nada en este archivo lo evite —por eso
+ *       {@code componentes.test.ts} fija esa ruta como invariante del lado de infraestructura.
  *   <li>{@code /api/v1/**} exige un token que valide contra el emisor configurado. Validar es
  *       comprobar la firma contra su JWKS, el vencimiento y el emisor; el <b>claim</b> {@code
  *       municipalidad_id} lo exige despues {@code TenantContextFilter}, que corre por dentro de
  *       esta cadena y por eso ve la autenticacion ya puesta.
  *   <li>Todo lo demas se <b>niega</b>. Una ruta que nadie declaro no es una ruta que convenga
- *       servir, y {@code /actuator/**} entero cae aqui: {@code health} esta nombrado uno por uno,
- *       de modo que exponer un endpoint nuevo del actuator exige tambien abrirlo aqui.
+ *       servir, y {@code /actuator/**} entero cae aqui: {@code health} y {@code prometheus} estan
+ *       nombrados uno por uno, de modo que exponer un endpoint nuevo del actuator exige tambien
+ *       abrirlo aqui.
  * </ul>
  *
  * <h2>Sin sesion y sin CSRF, y por que eso no es un descuido</h2>
@@ -63,8 +73,14 @@ import pe.gob.sgtm.web.RespuestaDeError;
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class SeguridadWeb {
 
-    /** Lo unico que se atiende sin identidad: la sonda de vida del orquestador. */
+    /** La sonda de vida del orquestador. Se atiende sin identidad. */
     public static final String SONDA_DE_SALUD = "/actuator/health";
+
+    /**
+     * Las metricas de Prometheus (issue #156). Se atienden sin identidad porque quien las protege
+     * es la red, no esta cadena: ver el docstring de la clase.
+     */
+    public static final String METRICAS = "/actuator/prometheus";
 
     /** Todo lo que publica la API, bajo la raiz que declara el contrato. */
     public static final String RAIZ_DE_LA_API = "/api/v1/**";
@@ -73,7 +89,7 @@ public class SeguridadWeb {
     SecurityFilterChain cadenaDeSeguridad(HttpSecurity http) throws Exception {
         return http.authorizeHttpRequests(
                         rutas ->
-                                rutas.requestMatchers(SONDA_DE_SALUD)
+                                rutas.requestMatchers(SONDA_DE_SALUD, METRICAS)
                                         .permitAll()
                                         .requestMatchers(RAIZ_DE_LA_API)
                                         .authenticated()

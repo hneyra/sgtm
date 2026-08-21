@@ -4,6 +4,7 @@ import {
   ROL_DE_IDENTIDAD,
   servicioDeAplicacion,
   servicioDeBaseDeDatos,
+  servicioDeGrafana,
   servicioDeIdentidad,
 } from "./convenciones";
 import type { Environment } from "../config";
@@ -58,8 +59,8 @@ export interface EntradaDeSecreto {
 /**
  * El inventario completo de un ambiente.
  *
- * Siete entradas, cinco `Secret` distintos —`sgtm-<amb>-keycloak` y
- * `sgtm-<amb>-postgres-respaldo` guardan dos claves cada uno— con siete valores,
+ * Nueve entradas, siete `Secret` distintos —`sgtm-<amb>-keycloak` y
+ * `sgtm-<amb>-postgres-respaldo` guardan dos claves cada uno— con nueve valores,
  * **ninguno repetido**: es la comprobacion que pide el issue, no solo «roles
  * distintos» sino «claves distintas». La prueba en `verificaciones/secretos.
  * test.ts` lo exige contando entradas unicas por `secreto`+`clave`, y
@@ -149,6 +150,26 @@ export function inventarioDeSecretos(environment: Environment): EntradaDeSecreto
       // El CronJob no aparece aqui porque no hace falta decirlo dos veces: crea un
       // pod nuevo en cada corrida.
       requiereReinicioDe: servicioDeBaseDeDatos(environment),
+    },
+    {
+      rol: "sgtm-monitor",
+      secreto: nombres.monitoreo,
+      clave: CLAVES.monitoreo,
+      consumidor: "postgres-exporter, el sidecar del motor (issue #156): solo pg_monitor",
+      periodicidad: "semestral",
+      rolDePostgres: "sgtm_monitor",
+      // El sidecar vive en el MISMO pod que postgres: reiniciar el motor lo
+      // reinicia a el tambien, asi que no hace falta nombrarlo aparte.
+      requiereReinicioDe: servicioDeBaseDeDatos(environment),
+    },
+    {
+      rol: "grafana-admin",
+      secreto: nombres.grafana,
+      clave: CLAVES.grafana,
+      consumidor: "Grafana (issue #156). Nunca esta en una IngressRoute: se administra por el tunel SSH",
+      periodicidad: "anual",
+      // No es un rol de PostgreSQL: es la cuenta de administrador de Grafana.
+      requiereReinicioDe: servicioDeGrafana(environment),
     },
   ];
 }

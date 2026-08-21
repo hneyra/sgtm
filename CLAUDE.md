@@ -247,6 +247,8 @@ verificaciones/motor/verificar-el-motor.sh --con-aislamiento   # el motor, levan
 secretos/bootstrap-secretos.sh --ambiente stg      # genera lo que falte, nunca via Pulumi
 secretos/rotar-clave.sh --ambiente stg --rol sgtm-app   # rota contra la base en marcha
 respaldo/simulacro-de-restauracion.sh --ambiente stg   # el respaldo, restaurado de verdad
+observabilidad/verificar-alertas.sh                    # apaga la base, comprueba que la alerta llega
+observabilidad/verificar-tableros.sh                   # cada panel del tablero, contra Prometheus
 ```
 
 **El aislamiento se verifica contra el motor que levanta ese guion, nunca contra uno en
@@ -349,6 +351,9 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | El respaldo, restaurado de verdad (RNF-079) | Cinco roturas del simulacro: sin `recovery_target_time`; con `archive_mode=off`; con `sgtm_respaldo` como `SUPERUSER`; con el sha256 de wal-g corrompido; y sin el `GRANT pg_read_all_settings` | Las cinco lo ponen rojo. La primera restaura **4 filas donde había 3** —la escritura posterior al instante marcado sobrevive—, que es exactamente el defecto que un PITR mal apuntado produce en silencio |
 | El rol del respaldo no puede más de lo que necesita | Dándole `CONNECT` sobre la base del padrón, contra un motor real | Rojo: `pg_backup_start`/`stop` son operaciones del clúster, no de una base, y una credencial de más apuntando al padrón es una credencial de más |
 | El escaneo de secretos del repositorio entero | Apuntando gitleaks a la muestra de clave de mentira sin la exclusión del repositorio | La encuentra; sin la muestra, el escaneo del repositorio no demostraría nada |
+| Una alerta que le llegue a alguien, contra un clúster real | Apagando PostgreSQL sin receptor configurado, y con receptor configurado | Sin receptor: la regla llega a `firing` y el receptor de prueba recibe 0 peticiones; con receptor: la misma alerta activa se entrega |
+| Los tableros muestran datos de verdad | Consultando cada panel de `resumen-operativo.json` contra un Prometheus real, con exportadores reales y uno sintético para la JVM | Ninguno vuelve «No data»; quitar un objetivo del scrape lo pone rojo, nombrando el panel |
+| kube-state-metrics no tiene privilegio de más | Pidiendo `secrets`/`configmaps` o un verbo de escritura en su `ClusterRole` | `yarn test` lo rechaza: solo `list`/`watch` sobre lo que las reglas y el tablero usan |
 | Carga inicial de vías, sectores y manzanas (20 pruebas) | Anotando `@Transactional` sobre el método que orquesta el archivo entero —o, equivalente, envolviendo el bucle en un solo `TransactionTemplate`— en vez de dejar que cada fila abra la suya al llamar a un caso de uso `@Service` distinto | Rojo: la fila que revienta la unicidad se lleva consigo a la fila válida que la seguía, igual que ya demostraba `ViaRepositoryJdbcTest` para dos escrituras en una transacción |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con

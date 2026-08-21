@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+# «Los tableros muestran datos de verdad, no "No data"» (issue #156), comprobado
+# consultando Prometheus con la MISMA expresion que cada panel del tablero — no
+# abriendo Grafana y mirando, que no se automatiza.
+#
+# Extrae `targets[].expr` de `observabilidad/dashboards/resumen-operativo.json` y
+# ejecuta cada una contra un Prometheus real. Si alguna devuelve una lista vacia,
+# falla nombrando el panel: es la regresion de "No data" que este guion existe para
+# atrapar antes que un funcionario mirando el tablero.
+#
+# Postgres, el nodo y los pods los sirven exportadores reales, desplegados de
+# verdad. La aplicacion no —no hay imagen publicable desde aqui—, asi que sus dos
+# paneles (JVM, peticiones HTTP) se comprueban contra un exportador SINTETICO que
+# sirve exactamente los mismos nombres de metrica que Micrometer publicaria en
+# `/actuator/prometheus`. Se dice aqui para que nadie lo lea como "la aplicacion
+# real ya se probo".
+#
+#   uso: observabilidad/verificar-tableros.sh
+set -euo pipefail
+
+AQUI=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+INFRA=$(cd "$AQUI/.." && pwd)
+NS=sgtm-stg
+cd "$INFRA"
+
+command -v kubectl >/dev/null 2>&1 || { echo "FALLO: falta kubectl." >&2; exit 1; }
+
+echo "· Aplicando el manifiesto de stg contra el clúster"
+yarn --silent manifiestos --ambiente stg \
+    | node -e '
+        const entrada = JSON.parse(require("fs").readFileSync(0, "utf8"));
+        const deTraefik = ["IngressRoute", "Middleware", "TLSOption", "HelmChartConfig"];
+        entrada.items = entrada.items.filter((i) => !deTraefik.includes(i.kind));
+        process.stdout.write(JSON.stringify(entrada));
+      ' \
+    | kubectl apply -f - >/dev/null
+
+echo "· Generando los secretos que faltan"
+./secretos/bootstrap-secretos.sh --ambiente stg >/dev/null
+
+echo "· Esperando a que el motor, node-exporter, kube-state-metrics y Prometheus esten listos"
+for despliegue in postgres observabilidad-node-exporter observabilidad-kube-state-metrics observabilidad-prometheus; do
+    kubectl -n "$NS" rollout status "deployment/sgtm-stg-$despliegue" --timeout=180s
+done
+
+echo "· Desplegando el exportador sintetico de la aplicacion (ver el docstring de este guion)"
+cat <<'YAML' | kubectl apply -n "$NS" -f - >/dev/null
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aplicacion-sintetica
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: aplicacion-sintetica } }
+  template:
+    metadata: { labels: { app: aplicacion-sintetica } }
+    spec:
+      containers:
+        - name: exportador
+          image: python:3.12-alpine
+          command:
+            - python3
+            - -c
+            - |
+              import http.server
+              CUERPO = (
+                  '# TYPE jvm_memory_used_bytes gauge\n'
+                  'jvm_memory_used_bytes{application="sgtm",area="heap"} 123456789\n'
+                  '# TYPE http_server_requests_seconds_count counter\n'
+                  'http_server_requests_seconds_count{application="sgtm",uri="/api/v1/predios"} 42\n'
+              )
+              class H(http.server.BaseHTTPRequestHandler):
+                  def do_GET(self):
+                      self.send_response(200)
+                      self.send_header('Content-Type', 'text/plain')
+                      self.end_headers()
+                      self.wfile.write(CUERPO.encode())
+                  def log_message(self, *a): pass
+              http.server.HTTPServer(('0.0.0.0', 8080), H).serve_forever()
+          ports: [{ containerPort: 8080 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aplicacion-sintetica
+spec:
+  selector: { app: aplicacion-sintetica }
+  ports: [{ port: 8080, targetPort: 8080 }]
+YAML
+kubectl -n "$NS" rollout status deployment/aplicacion-sintetica --timeout=60s
+
+# Prometheus escuchaba a `sgtm-stg-aplicacion` -que no existe en este clúster de
+# prueba, nunca contesta y su ausencia no se puede distinguir de un fallo real-. Se
+# repunta el job `aplicacion` al exportador sintetico, solo para esta comprobacion.
+echo "· Repuntando el scrape de «aplicacion» al exportador sintetico"
+kubectl -n "$NS" get configmap sgtm-stg-observabilidad-prometheus -o json \
+    | node -e '
+        const cm = JSON.parse(require("fs").readFileSync(0, "utf8"));
+        cm.data["prometheus.yml"] = cm.data["prometheus.yml"].replace(
+          /targets: \["sgtm-stg-aplicacion:8080"\]/,
+          "targets: [\"aplicacion-sintetica:8080\"]",
+        );
+        process.stdout.write(JSON.stringify(cm));
+      ' \
+    | kubectl apply -f - >/dev/null
+kubectl -n "$NS" rollout restart deployment/sgtm-stg-observabilidad-prometheus >/dev/null
+kubectl -n "$NS" rollout status deployment/sgtm-stg-observabilidad-prometheus --timeout=90s
+
+echo "· Desplegando el cliente de comprobacion"
+cat <<'YAML' | kubectl apply -n "$NS" -f - >/dev/null
+apiVersion: v1
+kind: Pod
+metadata:
+  name: verificador-de-tableros
+spec:
+  restartPolicy: Never
+  containers:
+    - name: verificador
+      image: python:3.12-alpine
+      command: ["sleep", "600"]
+YAML
+kubectl -n "$NS" wait --for=condition=Ready pod/verificador-de-tableros --timeout=60s
+
+echo "· Esperando el primer scrape de todos los objetivos (dos ciclos de 30s)"
+sleep 65
+
+echo
+echo "· Cada panel del tablero, consultado contra Prometheus"
+
+# `targets[].expr` de cada panel que no es una fila (`type: row`).
+consultas=$(node -e '
+  const t = JSON.parse(require("fs").readFileSync("observabilidad/dashboards/resumen-operativo.json", "utf8"));
+  for (const p of t.panels) {
+    if (p.type === "row") continue;
+    for (const objetivo of p.targets ?? []) {
+      process.stdout.write(JSON.stringify({ panel: p.title, expr: objetivo.expr }) + "\n");
+    }
+  }
+')
+
+FALLARON=0
+while IFS= read -r linea; do
+    [ -n "$linea" ] || continue
+    panel=$(echo "$linea" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).panel)')
+    expr=$(echo "$linea" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).expr)')
+
+    resultado=$(kubectl -n "$NS" exec verificador-de-tableros -- python3 -c "
+import json, urllib.parse, urllib.request
+q = urllib.parse.quote('''$expr''')
+r = urllib.request.urlopen(f'http://sgtm-stg-observabilidad-prometheus:9090/api/v1/query?query={q}')
+d = json.load(r)
+print(len(d['data']['result']))
+")
+
+    if [ "$resultado" = "0" ]; then
+        echo "  ✗ «$panel»: SIN DATOS — $expr"
+        FALLARON=$((FALLARON + 1))
+    else
+        echo "  ✓ «$panel»: $resultado serie(s)"
+    fi
+done <<< "$consultas"
+
+if [ "$FALLARON" -gt 0 ]; then
+    echo
+    echo "FALLO: $FALLARON panel(es) sin datos. Es la regresion de \"No data\" que esta" >&2
+    echo "comprobacion existe para atrapar." >&2
+    exit 1
+fi
+
+echo
+echo "Los paneles del tablero muestran datos de verdad."

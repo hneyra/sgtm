@@ -8,7 +8,7 @@
 #
 # Requiere, ya fijadas por quien la usa: AMBIENTE, PUERTO, TRABAJO (un directorio de
 # `mktemp -d`). Deja fijadas: PGHOST, PGPORT, MODO, CLAVE_SUPER, CLAVE_OWNER, CLAVE_APP,
-# CLAVE_IDENTIDAD, CLAVE_RESPALDO, BINARIOS. No tiene `set -euo pipefail` propio: hereda el de quien la
+# CLAVE_IDENTIDAD, CLAVE_RESPALDO, CLAVE_MONITOREO, BINARIOS. No tiene `set -euo pipefail` propio: hereda el de quien la
 # usa.
 
 : "${AMBIENTE:?lib-motor-local.sh necesita AMBIENTE}"
@@ -33,6 +33,7 @@ CLAVE_OWNER="o'wner-Cl4ve"
 CLAVE_APP="a'pp-Cl4ve"
 CLAVE_IDENTIDAD="k'eycloak-Cl4ve"
 CLAVE_RESPALDO="r'espaldo-Cl4ve"
+CLAVE_MONITOREO="m'onitoreo-Cl4ve"
 
 for herramienta in psql pg_isready node yarn; do
     command -v "$herramienta" >/dev/null 2>&1 \
@@ -68,6 +69,7 @@ motor_arrancar_con_docker() {
         --env SGTM_CLAVE_APP="$CLAVE_APP" \
         --env SGTM_CLAVE_IDENTIDAD="$CLAVE_IDENTIDAD" \
         --env SGTM_CLAVE_RESPALDO="$CLAVE_RESPALDO" \
+        --env SGTM_CLAVE_MONITOREO="$CLAVE_MONITOREO" \
         --env PGDATA=/var/lib/postgresql/data/pgdata \
         --volume "$TRABAJO/inicializacion:/docker-entrypoint-initdb.d:ro" \
         --publish "127.0.0.1:$PUERTO:5432" \
@@ -115,7 +117,8 @@ motor_arrancar_localmente() {
             *.sh) POSTGRES_USER=postgres POSTGRES_DB=sgtm \
                   SGTM_CLAVE_OWNER="$CLAVE_OWNER" SGTM_CLAVE_APP="$CLAVE_APP" \
                   SGTM_CLAVE_IDENTIDAD="$CLAVE_IDENTIDAD" \
-                  SGTM_CLAVE_RESPALDO="$CLAVE_RESPALDO" bash "$guion" >/dev/null ;;
+                  SGTM_CLAVE_RESPALDO="$CLAVE_RESPALDO" \
+                  SGTM_CLAVE_MONITOREO="$CLAVE_MONITOREO" bash "$guion" >/dev/null ;;
         esac
     done
     unset PGPASSWORD

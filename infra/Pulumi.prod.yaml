@@ -1,12 +1,13 @@
 # Stack de producción: el VPS que atiende a la municipalidad (INF-01 §1).
 #
-# Aquí solo hay valores en claro. Los secretos —kubeconfig, clave del administrador de
-# Keycloak y credenciales del almacenamiento de respaldo— NO se versionan en texto: se
-# ponen una vez con `pulumi config set --secret` y quedan cifrados con la clave del
-# stack. Los de la aplicación no están en Pulumi en absoluto (ADR-0011 §3, issue #154).
+# Aquí solo hay valores en claro. Los secretos de arranque de la infraestructura
+# —kubeconfig y credenciales del almacenamiento de respaldo— NO se versionan en texto:
+# se ponen una vez con `pulumi config set --secret` y quedan cifrados con la clave del
+# stack. Los de la aplicación —incluida la clave del administrador de Keycloak— no
+# están en Pulumi en absoluto (ADR-0011 §3, issue #154): los genera
+# `secretos/bootstrap-secretos.sh`.
 #
 #   pulumi config set --secret kubeconfig "$(cat k3s.yaml)" --stack prod
-#   pulumi config set --secret keycloakAdminPassword <valor> --stack prod
 #   pulumi config set --secret backupAccessKeyId <valor> --stack prod
 #   pulumi config set --secret backupSecretAccessKey <valor> --stack prod
 #
@@ -54,3 +55,9 @@ config:
   sgtm:backupEndpoint: https://s3.example.net
   sgtm:backupBucket: sgtm-prod-respaldos
   sgtm:walArchiveTimeoutSeconds: "300"
+
+  # A donde Alertmanager avisa (issue #156). Obligatorio en prod: `config.ts` se pone
+  # rojo sin él —«una regla que no notifica a nadie no es una alerta»—. ⚠ PROVISIONAL:
+  # el receptor real —Slack, correo, PagerDuty— se decide con el patrocinador; este
+  # valor solo fija que la variable exista.
+  sgtm:alertWebhookUrl: https://hooks.example.pe/sgtm-alertas

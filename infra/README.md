@@ -17,6 +17,8 @@ yarn verificar        # lint, tipos y pruebas. Lo que hay que pasar antes de un 
 yarn manifiestos --ambiente stg          # los manifiestos de un ambiente, en JSON
 verificaciones/motor/verificar-el-motor.sh --ambiente stg --con-aislamiento
 respaldo/simulacro-de-restauracion.sh --ambiente stg   # el respaldo, restaurado de verdad
+observabilidad/verificar-alertas.sh                    # apaga la base, comprueba que la alerta llega
+observabilidad/verificar-tableros.sh                   # cada panel del tablero, contra Prometheus
 ```
 
 `yarn verificar` **no necesita Pulumi, ni token, ni clúster.** Es deliberado: la parte
@@ -32,11 +34,12 @@ etiqueta que se cuela en el estado— se detecta en la máquina de quien lo escr
 | `config.ts` | **Toda** la configuración: se lee, se le ponen valores por omisión y se valida |
 | `config.test.ts` | Un caso que viola cada invariante |
 | `index.ts` | La composición. Una sola, para los dos ambientes |
-| `componentes/` | Los cinco componentes de la fase B más el respaldo de la fase C, como **funciones puras** que devuelven manifiestos |
+| `componentes/` | Los cinco componentes de la fase B más el respaldo y la observabilidad de la fase C, como **funciones puras** que devuelven manifiestos |
 | `auditoria.ts` | Las convenciones de `INF-01` §4 sobre esos manifiestos. Corre en `yarn verificar` **y** en `pulumi up` |
 | `herramientas/` | `yarn manifiestos` y `yarn secretos`: lo que se desplegaría y el inventario de claves, en JSON, sin Pulumi |
 | `secretos/` | Generar lo que falte y rotar lo que ya existe (`INF-06`, issue #154) — nunca `pulumi up` |
 | `respaldo/` | El simulacro de restauración: archivado, PITR y verificación contra un motor real (`INF-08`, issue #155) |
+| `observabilidad/` | Las reglas de alerta, el tablero, y las dos comprobaciones que corren contra un clúster real (`INF-09`, issue #156) |
 | `verificaciones/` | Las reglas de ESLint, los stacks versionados, los criterios de aceptación de la fase B y el motor levantado de verdad |
 
 ### Por qué los componentes devuelven datos en vez de crear recursos
@@ -110,6 +113,8 @@ Y sobre los manifiestos, en `auditoria.ts`:
 | Keycloak no arranca en `start-dev` | #151 |
 | Toda ruta va por `websecure` con TLS, y `/keycloak/admin` no se publica | #153 |
 | El motor declara `archive_mode=on`; ninguna clave de wal-g va como `value` | RNF-076, #155 |
+| El `Secret` de `sgtm_owner` entra en el CronJob de respaldo (excepción nombrada), y en ningún otro CronJob | RF-126, #155 |
+| El `ClusterRole` de kube-state-metrics no toca `secrets` ni `configmaps`, y solo `list`/`watch` | #156 |
 
 > **Una nota sobre la última fila de `ADR-0011` §5.** El ADR anotaba como costo aceptado
 > que la frontera de la versión de la imagen «no tiene verificación automática todavía;
@@ -132,6 +137,8 @@ Todas se ejercen editando archivos reales y viendo el rojo:
 | Quitar `!PathPrefix(/keycloak/admin)` de la ruta de identidad | `yarn test` |
 | Quitar el `GRANT CONNECT` de `30-base-de-keycloak.sh` | `verificar-el-motor.sh`: `sgtm_owner` deja de poder conectarse |
 | Quitar `archive_mode=on`, o poner la clave de cifrado de wal-g como `value` | `yarn test`, citando RNF-076 |
+| Apagar PostgreSQL sin cablear el receptor de alertas | `verificar-alertas.sh`: la regla se evalúa y el receptor de prueba recibe 0 peticiones |
+| Quitar un panel del tablero de su fuente de datos real | `verificar-tableros.sh`: «No data», nombrando el panel |
 | Quitar `recovery_target_time` del simulacro | `simulacro-de-restauracion.sh`: se restauran 4 filas donde había 3 |
 | Hacer `SUPERUSER` a `sgtm_respaldo`, o darle `CONNECT` al padrón | `verificar-el-motor.sh` y el simulacro |
 

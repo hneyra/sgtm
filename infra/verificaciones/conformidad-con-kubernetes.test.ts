@@ -47,7 +47,8 @@ describe("cada manifiesto es asignable a su tipo de @pulumi/kubernetes", () => {
     );
     const servicios: k8s.types.input.core.v1.Service[] = de("Service");
 
-    expect(volumenes).toHaveLength(1);
+    // Tres: los datos del motor, los de Prometheus y los de Grafana (#155, #156).
+    expect(volumenes).toHaveLength(3);
     expect(servicios.length).toBeGreaterThan(0);
   });
 
@@ -56,12 +57,26 @@ describe("cada manifiesto es asignable a su tipo de @pulumi/kubernetes", () => {
     const trabajos: k8s.types.input.batch.v1.Job[] = de("Job");
     const programados: k8s.types.input.batch.v1.CronJob[] = de("CronJob");
 
-    // Cuatro despliegues: motor, identidad, aplicacion e interfaz.
-    expect(despliegues).toHaveLength(4);
+    // Nueve despliegues: motor, identidad, aplicacion, interfaz, y los cinco de
+    // observabilidad —Prometheus, Alertmanager, node-exporter, kube-state-metrics,
+    // Grafana— (#156).
+    expect(despliegues).toHaveLength(9);
     // Tres Jobs: migracion, implantacion y reconciliacion del realm.
     expect(trabajos).toHaveLength(3);
     // Dos CronJob: el lote de la aplicacion (suspendido) y el respaldo base (#155).
     expect(programados).toHaveLength(2);
+  });
+
+  it("ServiceAccount, ClusterRole y ClusterRoleBinding: solo kube-state-metrics", () => {
+    const cuentas: k8s.types.input.core.v1.ServiceAccount[] = de("ServiceAccount");
+    const roles: k8s.types.input.rbac.v1.ClusterRole[] = de("ClusterRole");
+    const enlaces: k8s.types.input.rbac.v1.ClusterRoleBinding[] = de("ClusterRoleBinding");
+
+    // El unico componente de infra/ con RBAC propio (issue #156): ver el docstring
+    // de Observabilidad.ts. Uno de cada, nunca mas sin que alguien lo decida aqui.
+    expect(cuentas).toHaveLength(1);
+    expect(roles).toHaveLength(1);
+    expect(enlaces).toHaveLength(1);
   });
 
   it("los recursos de Traefik llevan el grupo de la v3", () => {

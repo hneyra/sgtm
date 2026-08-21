@@ -55,6 +55,15 @@ export interface Secretos {
    * contenedor de PostgreSQL.
    */
   respaldo: string;
+  /**
+   * `sgtm_monitor` (issue #156): `pg_monitor`, el rol predefinido de PostgreSQL, y
+   * nada de DDL. Lo usa el sidecar `postgres-exporter`, en el MISMO pod que el
+   * motor —nunca un componente aparte—, asi que no necesita excepcion en
+   * `auditoria.ts`.
+   */
+  monitoreo: string;
+  /** Clave del administrador de Grafana (issue #156). Grafana nunca esta en una `IngressRoute`. */
+  grafana: string;
 }
 
 export function secretos(environment: Environment): Secretos {
@@ -64,6 +73,8 @@ export function secretos(environment: Environment): Secretos {
     aplicacion: resourceName(environment, "postgres-app"),
     identidad: resourceName(environment, "keycloak"),
     respaldo: resourceName(environment, "postgres-respaldo"),
+    monitoreo: resourceName(environment, "postgres-monitoreo"),
+    grafana: resourceName(environment, "grafana"),
   };
 }
 
@@ -83,6 +94,10 @@ export const CLAVES = {
   respaldo: "clave-respaldo",
   /** Clave simetrica (libsodium, 32 bytes en base64) con que wal-g cifra el respaldo. */
   cifradoDeRespaldo: "clave-cifrado",
+  /** Clave de `sgtm_monitor`. */
+  monitoreo: "clave-monitoreo",
+  /** Clave del administrador de Grafana. */
+  grafana: "clave-admin",
 } as const;
 
 /**
@@ -190,6 +205,28 @@ export const RECURSOS = {
     requests: { cpu: "10m", memory: "32Mi" },
     limits: { cpu: "200m", memory: "128Mi" },
   },
+  /** `postgres-exporter`, `node-exporter`: solo leen y traducen, casi no piden nada. */
+  exportador: {
+    requests: { cpu: "10m", memory: "32Mi" },
+    limits: { cpu: "100m", memory: "64Mi" },
+  },
+  /** Prometheus: guarda series en memoria antes de volcarlas a disco (issue #156). */
+  prometheus: {
+    requests: { cpu: "100m", memory: "256Mi" },
+    limits: { cpu: "500m", memory: "1Gi" },
+  },
+  alertmanager: {
+    requests: { cpu: "10m", memory: "32Mi" },
+    limits: { cpu: "200m", memory: "128Mi" },
+  },
+  kubeStateMetrics: {
+    requests: { cpu: "10m", memory: "64Mi" },
+    limits: { cpu: "200m", memory: "256Mi" },
+  },
+  grafana: {
+    requests: { cpu: "50m", memory: "128Mi" },
+    limits: { cpu: "500m", memory: "512Mi" },
+  },
   // `satisfies` y no una anotacion de tipo: asi `RECURSOS.motor` es un `Recursos` y no
   // un `Recursos | undefined`, y a la vez cada entrada se comprueba contra el tipo.
 } satisfies Record<string, Recursos>;
@@ -275,6 +312,30 @@ export function servicioDeInterfaz(environment: Environment): string {
 /** URL JDBC de la base del padron, dentro del clúster. */
 export function urlDelPadron(environment: Environment): string {
   return `jdbc:postgresql://${servicioDeBaseDeDatos(environment)}:5432/${BASE_DEL_PADRON}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Observabilidad: nombres de servicio (issue #156)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function servicioDePrometheus(environment: Environment): string {
+  return resourceName(environment, "observabilidad-prometheus");
+}
+
+export function servicioDeAlertmanager(environment: Environment): string {
+  return resourceName(environment, "observabilidad-alertmanager");
+}
+
+export function servicioDeNodeExporter(environment: Environment): string {
+  return resourceName(environment, "observabilidad-node-exporter");
+}
+
+export function servicioDeKubeStateMetrics(environment: Environment): string {
+  return resourceName(environment, "observabilidad-kube-state-metrics");
+}
+
+export function servicioDeGrafana(environment: Environment): string {
+  return resourceName(environment, "observabilidad-grafana");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
