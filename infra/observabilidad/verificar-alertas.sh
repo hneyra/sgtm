@@ -51,8 +51,24 @@ echo "· Esperando a que el motor y la observabilidad esten listos"
 # Solo lo que esta prueba necesita. La aplicacion, la interfaz y la identidad no
 # tienen imagen publicable desde aqui y se quedarian en ImagePullBackOff para
 # siempre: no se esperan, y no hace falta que lo esten.
+#
+# 300s, no 180s: un clúster `kind` recien creado no trae ninguna de estas imagenes
+# —ni la de postgres, ni la del sidecar de metricas, ni la de wal-g—, y las trae
+# TODAS de red al mismo tiempo que las de Prometheus/Alertmanager. El propio
+# `startupProbe` del motor (`BaseDeDatos.ts`) ya da hasta cinco minutos antes de
+# considerar el arranque fallido; el tiempo de espera de aqui no puede ser menor
+# sin quedarse corto por una razon que no es la que se quiere comprobar.
 for despliegue in postgres observabilidad-prometheus observabilidad-alertmanager; do
-    kubectl -n "$NS" rollout status "deployment/sgtm-stg-$despliegue" --timeout=180s
+    if ! kubectl -n "$NS" rollout status "deployment/sgtm-stg-$despliegue" --timeout=300s; then
+        echo "::group::Diagnostico de sgtm-stg-$despliegue"
+        kubectl -n "$NS" get pods -o wide
+        kubectl -n "$NS" describe "deployment/sgtm-stg-$despliegue"
+        kubectl -n "$NS" describe pods -l "app=sgtm-stg-$despliegue"
+        kubectl -n "$NS" logs "deployment/sgtm-stg-$despliegue" --all-containers --prefix --tail=200 || true
+        kubectl -n "$NS" get events --sort-by=.lastTimestamp
+        echo "::endgroup::"
+        exit 1
+    fi
 done
 
 echo "· Desplegando el receptor de prueba"

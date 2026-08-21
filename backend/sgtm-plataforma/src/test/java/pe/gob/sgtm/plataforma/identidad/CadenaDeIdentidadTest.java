@@ -79,8 +79,8 @@ import pe.gob.sgtm.plataforma.SeguridadWeb;
 // "health" lo es—, y aqui se fija explicita para probar lo mismo que despliega
 // sgtm-aplicacion (application.yaml), no el comportamiento por omision del starter.
 @SpringBootTest(
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = "management.endpoints.web.exposure.include=health,prometheus")
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "management.endpoints.web.exposure.include=health,prometheus")
 @DisplayName("ADR-0005 — Del token firmado a las filas que RLS deja ver")
 class CadenaDeIdentidadTest {
 
@@ -258,10 +258,12 @@ class CadenaDeIdentidadTest {
             HttpResponse<String> respuesta = pedirSinToken(SeguridadWeb.METRICAS);
 
             assertThat(respuesta.statusCode())
-                    .as("issue #156: quien las protege es la red —ninguna IngressRoute llega aqui—, no esta cadena")
+                    .as(
+                            "issue #156: quien las protege es la red —ninguna IngressRoute llega aqui—, no esta cadena")
                     .isEqualTo(200);
             assertThat(respuesta.body())
-                    .as("tiene que ser el formato de Prometheus, no un 200 vacio que nadie pueda scrapear")
+                    .as(
+                            "tiene que ser el formato de Prometheus, no un 200 vacio que nadie pueda scrapear")
                     .contains("jvm_memory_used_bytes");
         }
 

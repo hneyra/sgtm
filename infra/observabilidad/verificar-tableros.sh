@@ -39,8 +39,20 @@ echo "· Generando los secretos que faltan"
 ./secretos/bootstrap-secretos.sh --ambiente stg >/dev/null
 
 echo "· Esperando a que el motor, node-exporter, kube-state-metrics y Prometheus esten listos"
+# 300s, no 180s: ver el comentario equivalente en verificar-alertas.sh — un
+# clúster `kind` recien creado descarga TODAS estas imagenes de red a la vez, y
+# el propio `startupProbe` del motor ya da hasta cinco minutos.
 for despliegue in postgres observabilidad-node-exporter observabilidad-kube-state-metrics observabilidad-prometheus; do
-    kubectl -n "$NS" rollout status "deployment/sgtm-stg-$despliegue" --timeout=180s
+    if ! kubectl -n "$NS" rollout status "deployment/sgtm-stg-$despliegue" --timeout=300s; then
+        echo "::group::Diagnostico de sgtm-stg-$despliegue"
+        kubectl -n "$NS" get pods -o wide
+        kubectl -n "$NS" describe "deployment/sgtm-stg-$despliegue"
+        kubectl -n "$NS" describe pods -l "app=sgtm-stg-$despliegue"
+        kubectl -n "$NS" logs "deployment/sgtm-stg-$despliegue" --all-containers --prefix --tail=200 || true
+        kubectl -n "$NS" get events --sort-by=.lastTimestamp
+        echo "::endgroup::"
+        exit 1
+    fi
 done
 
 echo "· Desplegando el exportador sintetico de la aplicacion (ver el docstring de este guion)"
