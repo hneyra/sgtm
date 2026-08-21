@@ -82,6 +82,14 @@ fallo() {
     exit 1
 }
 
+# Las comprobaciones se hacen con el cliente de PostgreSQL desde fuera del motor, asi
+# que el camino de Docker tambien lo necesita. Se dice aqui y no en la primera consulta,
+# que fallaria con un «command not found» a mitad.
+for herramienta in psql pg_isready node yarn; do
+    command -v "$herramienta" >/dev/null 2>&1 \
+        || { echo "FALLO: falta «$herramienta», que este guion necesita." >&2; exit 1; }
+done
+
 # ── 1. Los guiones, sacados del manifiesto ───────────────────────────────────
 echo "· Extrayendo la inicializacion del manifiesto de «$AMBIENTE»"
 cd "$INFRA"

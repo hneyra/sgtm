@@ -115,7 +115,7 @@ backend/      Spring Boot 4, multi-módulo. Monolito modular con Spring Modulith
 frontend/     React sobre Vite, yarn workspaces. Espacio de trabajo sin pantallas  ← existe
 docs/         Documentación (fuente de verdad del diseño)                          ← existe
 design/       Prototipo navegable del que derivará la interfaz                     ← referencia
-infra/        Pulumi en TypeScript con yarn. Dos stacks, sin componentes todavia   ← existe
+infra/        Pulumi en TypeScript con yarn. Dos stacks, y el sistema de la fase B  ← existe
 ```
 
 Módulos del backend hoy: `sgtm-dominio-compartido` (objetos de valor en `pe.gob.sgtm.dominio` y
@@ -241,7 +241,14 @@ omiten: una prueba bloqueante que se salta a sí misma deja el build en verde.
 ```bash
 cd infra
 yarn verificar                    # lint, tipos y pruebas. Sin Pulumi, sin token y sin cluster
+yarn manifiestos --ambiente stg   # lo que se desplegaria, en JSON. Tampoco necesita Pulumi
+verificaciones/motor/verificar-el-motor.sh --con-aislamiento   # el motor, levantado de verdad
 ```
+
+**El aislamiento se verifica contra el motor que levanta ese guion, nunca contra uno en
+servicio:** la prueba provisiona, y `ALTER ROLE` sobre `sgtm_owner` y `sgtm_app` vale para
+todas las bases del clúster de PostgreSQL, no solo para la suya. Apuntarla a `prod` deja fuera
+a la aplicación (INF-01 §4.1).
 
 ```bash
 cd frontend
@@ -313,6 +320,8 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Padron vehicular (13 pruebas) | Cinco roturas: la unicidad de la placa sobre el texto tal cual; el cambio de placa sincronizando `papeleta.placa`; la auditoria llaveada por la placa; los valores referenciales resueltos por ejercicio; y la consulta sin `@Transactional` | 1, 1, 2, 2 y 4 en rojo |
 | Las guardas del generador de operaciones (6) | Un contrato de muestra que viola cada una | Las seis muerden |
 | La marca de la instalación de demostración (19 pruebas) | Quitando el bloque de la marca de **cada renderizador por separado**; marcando solo al dibujar en vez de al emitir; y cambiando la caché del régimen por una global de un solo valor | Cada renderizador roto pone en rojo su formato y solo el suyo; 2 en rojo; 2 en rojo —la caché global hace que la primera municipalidad que emita decida por todas, y en el orden malo la marcha blanca emite **sin** marca— |
+| Los manifiestos del clúster (49 pruebas, sin Pulumi ni nodo) | Poniendo `RollingUpdate` sobre el volumen de la base, `timeoutSeconds: 1` en una sonda, `sgtm_owner` como usuario del Deployment, un puerto en el perfil `batch`, `start-dev` en Keycloak y `/keycloak/admin` publicado | Las seis lo ponen rojo |
+| El motor del manifiesto, levantado de verdad | Quitando el `GRANT CONNECT` que devuelve a los cuatro roles lo que el guion de Keycloak revoca de PUBLIC | Rojo: `sgtm_owner` deja de poder conectarse, y con él la aplicación entera |
 | Carga inicial de vías, sectores y manzanas (20 pruebas) | Anotando `@Transactional` sobre el método que orquesta el archivo entero —o, equivalente, envolviendo el bucle en un solo `TransactionTemplate`— en vez de dejar que cada fila abra la suya al llamar a un caso de uso `@Service` distinto | Rojo: la fila que revienta la unicidad se lleva consigo a la fila válida que la seguía, igual que ya demostraba `ViaRepositoryJdbcTest` para dos escrituras en una transacción |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con
