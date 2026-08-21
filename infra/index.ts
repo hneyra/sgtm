@@ -1,3 +1,7 @@
+import * as k8s from "@pulumi/kubernetes";
+import { auditarManifiestos, describirAuditoria } from "./auditoria";
+import { construirManifiestos } from "./componentes";
+import { secretos } from "./componentes/convenciones";
 import { loadSettings, namespaceName, resourceName } from "./config";
 
 /**
@@ -9,45 +13,116 @@ import { loadSettings, namespaceName, resourceName } from "./config";
  * igual en `prod`. Los únicos condicionales admisibles son los que responden a una
  * **capacidad** declarada en configuración, no al nombre del ambiente.
  *
- * ## Este archivo todavía no crea ni un recurso, y es deliberado
+ * ## Cómo está montado
  *
- * Es el andamio (issue #146): el árbol de Pulumi, la configuración leída y validada en
- * un solo sitio, y el `pulumi preview` que comenta en cada PR qué cambiaría. Mientras
- * `componentes/` esté vacía, `preview` **no necesita alcanzar el clúster**, que es lo
- * que permite correrlo en CI sin credenciales de escritura sobre el nodo.
+ * Tres pasos, y el orden importa:
  *
- * Lo que entra después, cada uno en su issue:
+ * 1. `loadSettings()` lee y valida la configuración. Un valor que falta revienta aquí,
+ *    con su nombre y con para qué sirve.
+ * 2. `construirManifiestos()` arma los objetos de Kubernetes de los cinco componentes
+ *    de la fase B. Es una función pura: no crea recursos, no habla con el clúster.
+ * 3. `auditarManifiestos()` los revisa contra las convenciones de `INF-01` §4 —sondas
+ *    con `timeoutSeconds`, límites de recursos, `Recreate` sobre volumen, el `Secret`
+ *    de `sgtm_owner` fuera del Deployment— y **lanza antes de crear nada**. Un `up` que
+ *    falla al principio es mejor que uno que deja el ingreso a medias.
  *
- * | Componente | Issue |
- * |---|---|
- * | `BaseDeDatos.ts` — PostgreSQL con los cuatro roles, y `verificarAislamiento` contra esa instancia | #149 |
- * | `Migracion.ts` — migración e implantación como Jobs; `sgtm_owner` no entra en el Deployment | #150 |
- * | `Identidad.ts` — Keycloak en modo producción, con su base y su realm como código | #151 |
- * | `Aplicacion.ts` — perfiles `web` y `batch`, sondas y límites | #152 |
- * | `Ingreso.ts` — Traefik, TLS y el fin de los puertos publicados en claro | #153 |
+ * Las mismas dos funciones las llaman las pruebas de `verificaciones/`, sin Pulumi y sin
+ * clúster. Es lo que permite que un PR de cualquiera ponga rojo un despliegue mal
+ * formado.
  *
- * ## La frontera que hay que respetar cuando `Aplicacion.ts` exista
+ * ## La frontera con el flujo de liberación
  *
- * **Pulumi define el despliegue; no la versión de la imagen** (`ADR-0011` §5). La
- * configuración declara `applicationImageRepository` **sin etiqueta**, y `config.ts`
- * se pone rojo si alguien le pone una. La etiqueta la pone el flujo de liberación
- * (issue #148), porque con la versión dentro del estado cada liberación es un
- * `pulumi up` y cada reversión también.
+ * **Pulumi define el despliegue; no la versión que corre** (`ADR-0011` §5). El campo
+ * `image` de los contenedores lleva `ignoreChanges`: Pulumi lo escribe al crear el
+ * recurso y no vuelve a mirarlo. El flujo de liberación mueve la etiqueta con
+ * `kubectl set image` —el mecanismo que #148 dejó demostrado—, y ni la liberación ni la
+ * reversión ejecutan `pulumi up`. Sin `ignoreChanges`, el `preview` diario vería la
+ * versión liberada como deriva y el siguiente `up` la desharía en silencio.
+ *
+ * ## Lo que este archivo NO crea: los `Secret`
+ *
+ * Ninguno. Las claves de `sgtm_owner`, de `sgtm_app`, del superusuario del motor y del
+ * administrador de Keycloak **no están en el estado de Pulumi** (`ADR-0011` §3): los
+ * manifiestos los referencian por nombre y quien provisiona el ambiente los pone. Los
+ * pasos exactos están en `README.md`; de dónde salen de verdad lo decide el issue #154.
  */
 
 const settings = loadSettings();
 const env = settings.environment;
+const namespace = namespaceName(env);
 
-// Salidas del stack. Son lo único que `pulumi preview` tiene para enseñar mientras no
-// haya componentes, y sirven de comprobante de que la configuración se leyó y se validó:
-// si algo contradice la documentación, `loadSettings` ya lanzó y no se llega aquí.
+const manifiestos = construirManifiestos(settings);
+
+const problemas = auditarManifiestos(manifiestos, {
+  secretoDeOwner: secretos(env).owner,
+  namespace,
+});
+if (problemas.length > 0) {
+  throw new Error(describirAuditoria(env, problemas));
+}
+
+/**
+ * El proveedor de Kubernetes, contra el kubeconfig del stack.
+ *
+ * `enableServerSideApply` deja que el API server resuelva las fusiones de campos, que es
+ * lo que permite que el flujo de liberación cambie `image` sin que Pulumi lo reclame
+ * como suyo en el siguiente `up`.
+ */
+const proveedor = new k8s.Provider(resourceName(env, "kubernetes"), {
+  kubeconfig: settings.kubeconfig,
+  enableServerSideApply: true,
+});
+
+/**
+ * El campo que el flujo de liberación mueve, y que Pulumi no vuelve a mirar.
+ *
+ * Se aplica a todo recurso con plantilla de pod. Un `Job` no lo necesita —su nombre
+ * lleva la versión y uno nuevo se crea entero—, pero incluirlo no hace daño y evita
+ * tener que acordarse de la excepción.
+ */
+const IGNORAR_LA_VERSION = ["spec.template.spec.containers[*].image"];
+
+const recursos = new k8s.yaml.v2.ConfigGroup(
+  resourceName(env, "sistema"),
+  { objs: manifiestos },
+  {
+    provider: proveedor,
+    transformations: [
+      (args) => {
+        if (args.type.startsWith("kubernetes:apps/v1:Deployment")) {
+          return { props: args.props, opts: { ...args.opts, ignoreChanges: IGNORAR_LA_VERSION } };
+        }
+        return undefined;
+      },
+    ],
+  },
+);
+
+// Salidas del stack. Sirven de comprobante de que la configuración se leyó, se validó y
+// los manifiestos pasaron la auditoría: si algo contradijera la documentación,
+// `loadSettings` o `auditarManifiestos` ya habrían lanzado y no se llegaría aquí.
 export const environment = env;
-export const namespace = namespaceName(env);
+export const namespaceDelSistema = namespace;
 export const domain = settings.ingress.domain;
 export const databaseResource = resourceName(env, "postgres");
+
+/** Cuántos objetos describe el stack. Cambia cuando cambia la forma del despliegue. */
+export const objetosDelSistema = manifiestos.length;
 
 /** El RPO, tal como quedó configurado. Se publica para poder comprobarlo desde fuera. */
 export const walArchiveTimeoutSeconds = settings.backup.walArchiveTimeoutSeconds;
 
 /** Si esta instalación marca todo documento que emite (`INF-03` §3.2). */
 export const isDemonstration = settings.application.isDemonstration;
+
+/**
+ * La versión con la que se crearon los despliegues.
+ *
+ * **No es la que corre**: la que corre la pone el flujo de liberación y se lee del
+ * clúster con `kubectl get deployment -o jsonpath='{...image}'`, que es lo que demuestra
+ * el criterio 1 de #148. Se publica para poder comparar las dos.
+ */
+export const bootstrapVersion = settings.application.bootstrapVersion;
+
+/** Los recursos aplicados, para que `pulumi stack` los enseñe agrupados. */
+export const recursosDelSistema = recursos.urn;

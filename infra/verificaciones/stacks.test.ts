@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   checkInvariants,
@@ -9,6 +6,7 @@ import {
   readInvariants,
   type ConfigReader,
 } from "../config";
+import { leerStack, textoDelStack } from "./stacks";
 
 /**
  * Los `Pulumi.<ambiente>.yaml` versionados en este repositorio cumplen sus propias
@@ -26,48 +24,6 @@ import {
  * obligatorio de `Pulumi.prod.yaml` y ver que se pone rojo diciendo cual falta— se
  * puede correr en cualquier maquina, tambien en un PR de alguien de fuera.
  */
-
-const AQUI = dirname(fileURLToPath(import.meta.url));
-const RAIZ = join(AQUI, "..");
-
-/**
- * Lector minimo de un `Pulumi.<ambiente>.yaml`.
- *
- * Solo entiende la forma que estos archivos tienen —`config:` y debajo una linea
- * `sgtm:clave: valor` por valor—, y es a proposito: reconoce exactamente lo que Pulumi
- * lee de ellos, sin traer un analizador de YAML entero para ocho lineas. Si algun dia
- * un stack necesita estructuras anidadas, aqui es donde se nota.
- */
-function leerStack(ambiente: string): ConfigReader {
-  const texto = readFileSync(join(RAIZ, `Pulumi.${ambiente}.yaml`), "utf8");
-  const valores = new Map<string, string>();
-
-  for (const linea of texto.split("\n")) {
-    const limpia = linea.split("#")[0] ?? "";
-    const casa = /^\s+sgtm:([A-Za-z0-9_]+):\s*(.+?)\s*$/.exec(limpia);
-    if (casa && casa[1] !== undefined && casa[2] !== undefined) {
-      valores.set(casa[1], casa[2].replace(/^["']|["']$/g, ""));
-    }
-  }
-
-  // Las conversiones son las de Pulumi: en el archivo todo es texto, y `getNumber`,
-  // `getBoolean` y `getObject` lo interpretan al leerlo.
-  return {
-    text: (clave) => valores.get(clave),
-    number: (clave) => {
-      const bruto = valores.get(clave);
-      return bruto === undefined ? undefined : Number(bruto);
-    },
-    boolean: (clave) => {
-      const bruto = valores.get(clave);
-      return bruto === undefined ? undefined : bruto === "true";
-    },
-    object: <T>(clave: string) => {
-      const bruto = valores.get(clave);
-      return bruto === undefined ? undefined : (JSON.parse(bruto) as T);
-    },
-  };
-}
 
 describe("los stacks versionados cumplen sus invariantes", () => {
   it.each(ENVIRONMENTS)("Pulumi.%s.yaml", (ambiente) => {
@@ -95,7 +51,7 @@ describe("los stacks versionados cumplen sus invariantes", () => {
 
   it("ningun stack versiona un secreto en claro", () => {
     for (const ambiente of ENVIRONMENTS) {
-      const texto = readFileSync(join(RAIZ, `Pulumi.${ambiente}.yaml`), "utf8");
+      const texto = textoDelStack(ambiente);
       const lineas = texto.split("\n").filter((l) => !l.trimStart().startsWith("#"));
       for (const clave of [
         "kubeconfig",
