@@ -59,6 +59,21 @@ export function leerPaginado(cuerpo: unknown, que: string): Paginado<unknown> {
 }
 
 /**
+ * Abre un objeto suelto: un recurso de un solo registro, sin sobre de ningun tipo.
+ *
+ * `VehiculoResource`, `DeclaracionJuradaResource` y sus gemelos son un objeto JSON tal cual —ni
+ * paginados (no son un listado) ni envueltos en un sobre de ficha versionada (eso es de
+ * catastro, y tiene su propio `leerFicha`)—. Falla ruidosamente si no lo es, por la misma razon
+ * que {@link leerPaginado}.
+ */
+export function leerObjeto(cuerpo: unknown, que: string): Readonly<Record<string, unknown>> {
+  if (!esObjeto(cuerpo)) {
+    throw new Error(`La respuesta de ${que} no trae un objeto.`);
+  }
+  return cuerpo;
+}
+
+/**
  * Abre un arreglo suelto: sin sobre de paginacion.
  *
  * Las tablas de valuacion (#17) no lo tienen: `ArancelController` y sus

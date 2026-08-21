@@ -96,8 +96,14 @@ describe('la aplicacion pide por HTTP y el proxy contesta', () => {
 
   it('resuelve rutas con parametro, venga el valor que venga', async () => {
     instalarProxyDeDatos();
-    const datos = await solicitar<DatosDePantalla>('/rentas/vehiculos/X1A-742');
-    expect(datos.campos).toBeDefined();
+    // Una ruta con parametro que **todavia no conecta** (#73 conecto
+    // `/rentas/vehiculos/{placa}`, que ya sale con la forma de
+    // `VehiculoResource` y no con esta): esta prueba es sobre el camino
+    // comun de las opciones sin backend, no sobre una en particular.
+    // `fechaCalculo` y no `campos`: lo primero lo lleva toda `DatosDePantalla`
+    // (regla 9); lo segundo no lo tienen las pantallas de tipo «reporte».
+    const datos = await solicitar<DatosDePantalla>('/fiscalizacion/resoluciones/RES-2026-0001');
+    expect(datos.fechaCalculo).toBeDefined();
   });
 
   it('los parametros de consulta no cambian la respuesta: filtrar es del backend', async () => {
