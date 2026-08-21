@@ -158,9 +158,16 @@ echo "· Apagando la base de datos"
 kubectl -n "$NS" scale deployment/sgtm-stg-postgres --replicas=0
 kubectl -n "$NS" wait --for=delete pod -l app=sgtm-stg-postgres --timeout=60s 2>/dev/null || true
 
+# 8 minutos, no 5: el diagnostico de mas abajo demostro que la regla SI llega a
+# firing -up{job="postgres"} en 0, "connection refused" en /api/v1/targets, la
+# propia ALERTS con alertstate=firing-, pero justo despues de que el sondeo de 5
+# minutos se rindiera. En un runner compartido, con seis pods compitiendo por CPU
+# a la vez que Prometheus evalua reglas cada 30s, la evaluacion real se atrasa lo
+# suficiente para que el `for: 2m` tarde mas de cinco minutos en cumplirse; no es
+# la regla la que esta mal, es el margen del sondeo el que estaba corto.
 echo "· Esperando a que la regla PostgreSQLCaido pase de pending a firing (for: 2m)"
 LOGRADO=no
-for _ in $(seq 1 30); do
+for _ in $(seq 1 48); do
     if alerta_esta firing; then
         LOGRADO=si
         break
@@ -168,7 +175,7 @@ for _ in $(seq 1 30); do
     sleep 10
 done
 if [ "$LOGRADO" != "si" ]; then
-    echo "FALLO: PostgreSQLCaido no llego a firing en 5 minutos." >&2
+    echo "FALLO: PostgreSQLCaido no llego a firing en 8 minutos." >&2
     echo "::group::Diagnostico: que ve Prometheus de verdad"
     echo "-- up{job=\"postgres\"} --"
     consultar_prometheus 'up%7Bjob%3D%22postgres%22%7D' || true
