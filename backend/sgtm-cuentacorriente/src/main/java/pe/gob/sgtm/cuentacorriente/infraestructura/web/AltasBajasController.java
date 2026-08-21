@@ -49,9 +49,9 @@ public class AltasBajasController {
 
     /**
      * {@code @Transactional(readOnly = true)} directo en el controlador: es un passthrough de
-     * lectura, sin caso de uso intermedio que lo justifique. Sin la anotacion, la consulta falla
-     * en la base por falta de contexto —{@code RepositorioJdbc} no abre transaccion propia—, igual
-     * que le pasaba a {@code CuentaCorrienteController} antes de este mismo arreglo.
+     * lectura, sin caso de uso intermedio que lo justifique. Sin la anotacion, la consulta falla en
+     * la base por falta de contexto —{@code RepositorioJdbc} no abre transaccion propia—, igual que
+     * le pasaba a {@code CuentaCorrienteController} antes de este mismo arreglo.
      */
     @GetMapping
     @Transactional(readOnly = true)

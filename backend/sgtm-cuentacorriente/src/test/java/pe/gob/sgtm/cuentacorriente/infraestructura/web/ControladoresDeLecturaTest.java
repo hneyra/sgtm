@@ -27,8 +27,8 @@ import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
 
 /**
- * Los dos GET de solo lectura de este contexto exigen {@code @Transactional(readOnly = true)} en
- * el propio controlador.
+ * Los dos GET de solo lectura de este contexto exigen {@code @Transactional(readOnly = true)} en el
+ * propio controlador.
  *
  * <p>Es una regresion real, no hipotetica: {@code RepositorioJdbc} no abre transaccion propia (es
  * su diseño deliberado), asi que una consulta sin una transaccion activa <b>falla</b> en la base
@@ -93,7 +93,8 @@ class ControladoresDeLecturaTest {
     }
 
     @Test
-    @DisplayName("sin el proxy transaccional, el GET de cuenta corriente falla por falta de contexto")
+    @DisplayName(
+            "sin el proxy transaccional, el GET de cuenta corriente falla por falta de contexto")
     void sinProxyCuentaCorrienteFalla() {
         assertThatThrownBy(
                         () ->
