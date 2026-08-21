@@ -2,6 +2,7 @@ package pe.gob.sgtm.cuentacorriente.infraestructura.web;
 
 import java.util.Locale;
 import org.jspecify.annotations.Nullable;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -46,7 +47,14 @@ public class AltasBajasController {
         this.repositorio = repositorio;
     }
 
+    /**
+     * {@code @Transactional(readOnly = true)} directo en el controlador: es un passthrough de
+     * lectura, sin caso de uso intermedio que lo justifique. Sin la anotacion, la consulta falla
+     * en la base por falta de contexto —{@code RepositorioJdbc} no abre transaccion propia—, igual
+     * que le pasaba a {@code CuentaCorrienteController} antes de este mismo arreglo.
+     */
     @GetMapping
+    @Transactional(readOnly = true)
     public RespuestaPaginada<AsientoResource> altasYBajas(
             @RequestParam String codigoCont,
             @RequestParam(required = false) @Nullable String ano,

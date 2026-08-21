@@ -1,6 +1,7 @@
 package pe.gob.sgtm.cuentacorriente.infraestructura.web;
 
 import org.jspecify.annotations.Nullable;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -43,7 +44,15 @@ public class CuentaCorrienteController {
         this.repositorio = repositorio;
     }
 
+    /**
+     * {@code @Transactional(readOnly = true)} directo en el controlador, y no un caso de uso
+     * intermedio: es un passthrough de lectura sin ninguna regla que aplicar. Sin esta anotacion
+     * la consulta {@code falla} en la base por falta de contexto —{@code
+     * RepositorioJdbc} no abre transaccion propia, y sin una activa no hay {@code SET LOCAL}—, que
+     * es el sintoma exacto que encontro la prueba de regresion de este mismo archivo.
+     */
     @GetMapping("/{codigo}")
+    @Transactional(readOnly = true)
     public RespuestaPaginada<AsientoResource> estadoDeCuenta(
             @PathVariable String codigo,
             @RequestParam(required = false) @Nullable String ejercicio,
