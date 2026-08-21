@@ -18,17 +18,20 @@ afterEach(() => desinstalarProxyDeDatos());
 
 describe('la estructura se ve antes que los datos', () => {
   it('las columnas llegan con el modulo; las filas, cuando responde la API', async () => {
-    // Con el registro en la ruta: esta pantalla abre un vehiculo por su placa, y
-    // sin placa no pide nada —antes se pedia con un valor de relleno—.
-    montarEnRuta('/rentas-registro/vehiculos/T2G-418');
+    // Sin conectar (#73 conecto `vehiculos`, que ya no pasa por el proxy
+    // generico y no sirve como ejemplo de este camino): un listado cualquiera
+    // de los que siguen pidiendo la forma comun basta para el punto de la
+    // prueba.
+    montarEnRuta('/transito/papeletas');
 
     // El catalogo sigue sin preguntarle nada a la API: la estructura viaja con
     // el trozo del modulo, que el navegador cachea, y llega antes que los datos.
-    expect(await screen.findByRole('columnheader', { name: 'Placa' })).toBeInTheDocument();
-    expect(screen.queryByText('YARIS GLI')).not.toBeInTheDocument();
+    expect(await screen.findByRole('columnheader', { name: 'Nro. Papeleta' })).toBeInTheDocument();
+    expect(screen.queryAllByText('MPS-2026-041182')).toHaveLength(0);
 
-    // Las filas son de la API, y llegan cuando llegan.
-    expect(await screen.findByText('YARIS GLI')).toBeInTheDocument();
+    // Las filas son de la API, y llegan cuando llegan. Con `findAllBy` y no
+    // `findBy`: el numero de papeleta se repite en mas de una fila del mock.
+    expect(await screen.findAllByText('MPS-2026-041182')).not.toHaveLength(0);
   });
 });
 
@@ -56,8 +59,11 @@ describe('los bloques del descriptor', () => {
   });
 
   it('los campos de solo lectura muestran el valor que sirvio la API', async () => {
-    montarEnRuta('/rentas-registro/vehiculos/T2G-418');
-    await waitFor(() => expect(screen.getAllByText('T2G-418').length).toBeGreaterThan(0));
+    // `t: 'ro'` se dibuja como `<output>`, que si es texto real —a diferencia
+    // de un `<input>`, cuyo valor no encuentra `getByText`—. Con registro en
+    // la ruta: sin el, la operacion no se pide (`useDatosDePantalla`).
+    montarEnRuta('/coactiva/proceso-coactivo/0000001201');
+    await waitFor(() => expect(screen.getAllByText('701.08T1').length).toBeGreaterThan(0));
   });
 
   it('la barra de acciones deja la ultima como primaria', async () => {

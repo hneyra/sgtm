@@ -14,9 +14,11 @@ import { RESPUESTAS } from './respuestas.generado';
  *
  * Son las mismas que enumera `IMPLEMENTADAS` en el `ContratoDeApiTest` del
  * backend: las once de seguridad (#9, #12, #13), el catalogo vial y los
- * sectores (#16), las cuatro fichas (#18, #19), su consulta (#20) y los
- * aranceles (#17). **Esta lista crece cuando crece aquella**, no antes:
- * publicar aqui una forma que el backend todavia no sirve seria inventarsela.
+ * sectores (#16), las cuatro fichas (#18, #19), su consulta (#20), los
+ * aranceles (#17), el padron de contribuyentes (#11) y, desde #73, la ficha de
+ * vehiculo (#26), la declaracion jurada (#28) y los beneficios (#27). **Esta
+ * lista crece cuando crece aquella**, no antes: publicar aqui una forma que el
+ * backend todavia no sirve seria inventarsela.
  *
  * **Los valores siguen siendo los del prototipo.** Aqui no se inventa ni un
  * dato: se leen las mismas filas que dibuja el catalogo portado y se les pone
@@ -92,6 +94,103 @@ const contribuyentes = (): Paginado =>
       condicionEspecial: null,
       activo: (est ?? '').toUpperCase() === 'A',
     })),
+  );
+
+/**
+ * Ficha de vehiculo (`VehiculoResource`, #26): registro puro, ni cifra ni
+ * titular con nombre. Se lee de los `campos` del prototipo —no de su `tabla`,
+ * que es la busqueda por criterios que este endpoint (por placa unica) no
+ * hace— y solo lo que `VehiculoResource` publica de verdad.
+ */
+function vehiculo(): Readonly<Record<string, unknown>> {
+  const campos = RESPUESTAS['vehiculos']?.campos ?? {};
+  const valor = (clave: string): string =>
+    typeof campos[clave] === 'string' ? (campos[clave] as string) : '';
+  const anioDe = (fecha: string): number | null => {
+    const anio = Number(fecha.slice(0, 4));
+    return Number.isNaN(anio) ? null : anio;
+  };
+  return {
+    id: 1,
+    placa: valor('placa2') || valor('placa') || 'ABC-123',
+    contribuyenteId: 1,
+    marca: valor('marca'),
+    modelo: valor('modelo'),
+    categoria: valor('categoria') || null,
+    anioFabricacion: Number(valor('anoDeFabricacion')) || new Date().getFullYear(),
+    anioInscripcion: anioDe(valor('fechaDeInscripcion')) ?? new Date().getFullYear(),
+    numeroMotor: valor('nroDeMotor') || null,
+    numeroSerie: valor('nroDeSerie') || null,
+    estado: 'ACTIVO',
+    historialDePlacas: [],
+  };
+}
+
+/** `27/02/2026` → `2026-02-27`. `DeclaracionJuradaResource` publica una fecha, no un instante. */
+function fechaDe(texto: string): string | null {
+  const partes = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!partes) return null;
+  const [, dia, mes, anio] = partes;
+  return `${anio}-${mes}-${dia}`;
+}
+
+/**
+ * Declaracion jurada (`DeclaracionJuradaResource`, #28): `GET .../{djNro}` trae
+ * **una**, y aqui se sirve la primera fila de «Declaraciones presentadas» del
+ * prototipo con esa forma —contribuyente y predios no estan en el recurso
+ * real, y aqui tampoco se inventan—.
+ */
+function declaracionJurada(): Readonly<Record<string, unknown>> {
+  const [fila] = RESPUESTAS['declaracion_jurada']?.tabla?.filas ?? [];
+  const [numero, ejercicio, , tipo, fecha, , , estado] = (fila ?? []).map((c) => c.texto);
+  const fechaIso = fechaDe(fecha ?? '') ?? '2026-01-01';
+  return {
+    id: 1,
+    numero: numero || '000000',
+    ejercicio: Number(ejercicio) || new Date().getFullYear(),
+    tipo: (tipo ?? 'INSCRIPCION').toUpperCase().replace(/\s+/g, '_'),
+    predioId: 1,
+    vehiculoId: null,
+    fichaCatastralId: 1,
+    fechaPresentacion: fechaIso,
+    fechaLimite: fechaIso,
+    fueraDePlazo: false,
+    estado: estado === 'Procesada' ? 'CONFORME' : 'PENDIENTE',
+    djRectificaId: null,
+  };
+}
+
+/**
+ * Beneficios y exoneraciones (`BeneficioResource`, #27): solo las filas del
+ * prototipo que ya tienen resolucion y vigencia — «En trámite» es un estado de
+ * un flujo de aprobacion que `Beneficio` no modela (es registro puro, no
+ * calcula ni tramita), asi que esa fila del prototipo no tiene con que
+ * llenarse sin inventar una resolucion que no existe.
+ */
+const beneficios = (): Paginado =>
+  unaPagina(
+    filasDe('beneficios')
+      .filter(([, , , resolucion]) => resolucion !== undefined && resolucion !== '—')
+      .map(([expediente, , tipo, resolucion, vigencia, deduccion], i) => {
+        const [desde] = (vigencia ?? '').split(' — ');
+        const indefinida = (vigencia ?? '').includes('indefinida');
+        const numero = Number.parseFloat(deduccion ?? '');
+        return {
+          id: i + 1,
+          contribuyenteId: i + 1,
+          predioId: null,
+          vehiculoId: null,
+          tipo,
+          tributo: 'PREDIAL',
+          clase: 'DEDUCCION',
+          porcentaje: Number.isNaN(numero) ? null : numero.toFixed(2),
+          monto: null,
+          vigenciaDesde: `${desde}-01-01`,
+          vigenciaHasta: indefinida ? null : `${desde}-12-31`,
+          baseLegal: resolucion,
+          documentoOrigen: expediente,
+        };
+      }),
   );
 
 /* ── Cuenta corriente: el libro de asientos ────────────────────────────── */
@@ -366,6 +465,8 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/catastro/fichas/economica/{codRefCatastral}': economica,
   '/catastro/fichas/bienes-comunes/{codEdificacion}': bienesComunes,
   '/catastro/fichas/rural/{codUnidad}': rural,
+  '/rentas/vehiculos/{placa}': vehiculo,
+  '/rentas/declaraciones/{djNro}': declaracionJurada,
 };
 
 /* ── Una funcion por recurso, con los campos que declara su `Resource` ──── */
@@ -485,6 +586,7 @@ const parametros = (): Paginado => {
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/catastro/vias': vias,
   '/rentas/contribuyentes': contribuyentes,
+  '/rentas/beneficios': beneficios,
   '/consultas/cuenta-corriente/{codigo}': cuentaCorriente,
   '/catastro/sectores': sectores,
   '/catastro/fichas': fichas,
