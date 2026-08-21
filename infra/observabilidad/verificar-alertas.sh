@@ -135,7 +135,14 @@ spec:
   containers:
     - name: verificador
       image: python:3.12-alpine
-      command: ["sleep", "600"]
+      # `infinity`, no un numero: este pod tiene que sobrevivir a TODA la
+      # espera de PostgreSQLCaido (issue #156), y un `sleep 600` fijo es
+      # exactamente lo que rompio esta comprobacion -el pod pasaba a
+      # `Succeeded` a los 10 minutos, y desde ahi CADA `kubectl exec`
+      # fallaba con "cannot exec into a container in a completed pod" sin
+      # que la alerta tuviera nada que ver-. El clúster entero se destruye
+      # al final del trabajo, asi que no hay nada que limpiar aqui.
+      command: ["sleep", "infinity"]
 YAML
 kubectl -n "$NS" wait --for=condition=Ready pod/verificador-de-alertas --timeout=60s
 
