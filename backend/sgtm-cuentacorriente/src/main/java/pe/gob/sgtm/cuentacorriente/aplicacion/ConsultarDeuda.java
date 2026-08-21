@@ -19,6 +19,7 @@ import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.CalculoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
+import pe.gob.sgtm.cuentacorriente.dominio.ConstanciaDeNoAdeudo;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeudaPorContribuyente;
 import pe.gob.sgtm.cuentacorriente.dominio.DeudaActualizada;
@@ -28,6 +29,8 @@ import pe.gob.sgtm.cuentacorriente.dominio.SaldoProyectado;
 import pe.gob.sgtm.cuentacorriente.dominio.SaldoRepository;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
+import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
  * {@code consulta_deuda}: trae los asientos de una obligacion —o de todas las de un contribuyente—
@@ -100,12 +103,7 @@ public class ConsultarDeuda {
             return Pagina.vacia(paginacion);
         }
 
-        Map<ClaveDeObligacion, List<SaldoProyectado>> agrupados = new LinkedHashMap<>();
-        for (SaldoProyectado saldo : saldos.deContribuyente(contribuyenteId.get())) {
-            agrupados
-                    .computeIfAbsent(ClaveDeObligacion.de(saldo.clave()), k -> new ArrayList<>())
-                    .add(saldo);
-        }
+        Map<ClaveDeObligacion, List<SaldoProyectado>> agrupados = agrupar(contribuyenteId.get());
 
         List<ClaveDeObligacion> seleccionadas = new ArrayList<>();
         for (Map.Entry<ClaveDeObligacion, List<SaldoProyectado>> grupo : agrupados.entrySet()) {
@@ -134,6 +132,61 @@ public class ConsultarDeuda {
     /** La fecha de hoy, del reloj inyectado y no de {@code LocalDate.now()} (regla 6). */
     public LocalDate hoy() {
         return LocalDate.now(reloj);
+    }
+
+    /**
+     * Si se puede emitir la constancia de no adeudo del contribuyente a la fecha de corte (RF-049,
+     * RNF-084, #25): se niega si <b>alguna</b> obligacion tiene saldo pendiente a esa fecha, en
+     * cualquier fase.
+     *
+     * <p>«Incluida la que esta en coactiva o en convenio vigente» (criterio de aceptacion de #25)
+     * no exige consultar a {@code coactiva} ni a un contexto de convenios: {@link Fase#COACTIVA} y
+     * {@link Fase#CONVENIO} ya son un valor mas de la fase de la propia obligacion, y este metodo
+     * agrupa <b>todas</b> las obligaciones sin filtrar por fase —a diferencia de {@link
+     * #porContribuyente}, que la deja elegir—. Es exactamente la regla 2 (ARQ-01 §4):
+     * cuentacorriente no necesita conocer a nadie para responder esto.
+     *
+     * <p>A diferencia de {@link #porContribuyente}, un codigo que no existe <b>no</b> da un
+     * resultado vacio silencioso: la constancia es un documento sobre una persona concreta, y «no
+     * debe nada» seria una afirmacion falsa sobre alguien que no esta en el padron de esta
+     * municipalidad.
+     *
+     * @throws ProblemaDeNegocio {@code NO_ENCONTRADO} si el codigo no identifica a ningun
+     *     contribuyente de la municipalidad activa
+     */
+    @Transactional(readOnly = true)
+    public ConstanciaDeNoAdeudo constanciaDeNoAdeudo(String codigoContribuyente, LocalDate fecha) {
+        CriterioDeDeudaPorContribuyente criterio =
+                new CriterioDeDeudaPorContribuyente(codigoContribuyente, fecha, null);
+        Optional<Long> contribuyenteId =
+                repositorio.contribuyentePorCodigo(criterio.codigoContribuyente());
+        if (contribuyenteId.isEmpty()) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.NO_ENCONTRADO,
+                    "No hay ningun contribuyente con el codigo " + criterio.codigoContribuyente());
+        }
+
+        List<ObligacionConDeuda> obligaciones = new ArrayList<>();
+        for (Map.Entry<ClaveDeObligacion, List<SaldoProyectado>> grupo :
+                agrupar(contribuyenteId.get()).entrySet()) {
+            obligaciones.add(filaDe(criterio, grupo.getKey(), grupo.getValue()));
+        }
+        obligaciones.sort(
+                Comparator.comparing((ObligacionConDeuda o) -> o.ejercicio().valor())
+                        .thenComparing(ObligacionConDeuda::tributo));
+
+        return ConstanciaDeNoAdeudo.de(criterio.codigoContribuyente(), fecha, obligaciones);
+    }
+
+    /** Los saldos del contribuyente, agrupados por obligacion (tributo/ejercicio/unidad). */
+    private Map<ClaveDeObligacion, List<SaldoProyectado>> agrupar(long contribuyenteId) {
+        Map<ClaveDeObligacion, List<SaldoProyectado>> agrupados = new LinkedHashMap<>();
+        for (SaldoProyectado saldo : saldos.deContribuyente(contribuyenteId)) {
+            agrupados
+                    .computeIfAbsent(ClaveDeObligacion.de(saldo.clave()), k -> new ArrayList<>())
+                    .add(saldo);
+        }
+        return agrupados;
     }
 
     private ObligacionConDeuda filaDe(
