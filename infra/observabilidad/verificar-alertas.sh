@@ -158,24 +158,29 @@ echo "· Apagando la base de datos"
 kubectl -n "$NS" scale deployment/sgtm-stg-postgres --replicas=0
 kubectl -n "$NS" wait --for=delete pod -l app=sgtm-stg-postgres --timeout=60s 2>/dev/null || true
 
-# 8 minutos, no 5: el diagnostico de mas abajo demostro que la regla SI llega a
-# firing -up{job="postgres"} en 0, "connection refused" en /api/v1/targets, la
-# propia ALERTS con alertstate=firing-, pero justo despues de que el sondeo de 5
-# minutos se rindiera. En un runner compartido, con seis pods compitiendo por CPU
-# a la vez que Prometheus evalua reglas cada 30s, la evaluacion real se atrasa lo
-# suficiente para que el `for: 2m` tarde mas de cinco minutos en cumplirse; no es
-# la regla la que esta mal, es el margen del sondeo el que estaba corto.
+# 15 minutos, no 8: el diagnostico demostro DOS veces seguidas que la regla SI
+# llega a firing -up{job="postgres"} en 0, "connection refused" en
+# /api/v1/targets, la propia ALERTS con alertstate=firing-, capturado apenas
+# instantes despues de que el sondeo (primero de 5 minutos, despues de 8) se
+# rindiera las dos veces. No es ruido aleatorio: es un atraso sistematico y
+# reproducible de la evaluacion de Prometheus bajo la contencion de CPU de un
+# runner compartido con seis pods a la vez, y ensanchar el margen -no acortar
+# la regla, que es la que se quiere probar tal cual corre en produccion- es la
+# unica correccion honesta. La regla nunca estuvo mal.
 echo "· Esperando a que la regla PostgreSQLCaido pase de pending a firing (for: 2m)"
 LOGRADO=no
-for _ in $(seq 1 48); do
+INTENTOS=90
+for i in $(seq 1 "$INTENTOS"); do
     if alerta_esta firing; then
         LOGRADO=si
         break
     fi
-    sleep 10
+    # Sin sleep en el ultimo intento: comprobar y rendirse, no comprobar,
+    # dormir diez segundos mas sin volver a mirar, y rendirse recien despues.
+    [ "$i" -lt "$INTENTOS" ] && sleep 10
 done
 if [ "$LOGRADO" != "si" ]; then
-    echo "FALLO: PostgreSQLCaido no llego a firing en 8 minutos." >&2
+    echo "FALLO: PostgreSQLCaido no llego a firing en 15 minutos." >&2
     echo "::group::Diagnostico: que ve Prometheus de verdad"
     echo "-- up{job=\"postgres\"} --"
     consultar_prometheus 'up%7Bjob%3D%22postgres%22%7D' || true
