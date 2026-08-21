@@ -15,14 +15,24 @@
 groups:
   - name: sgtm
     rules:
+      # `pg_up`, no solo: ese metrico lo emite el propio sidecar de `postgres-exporter`
+      # (issue #156), que vive en el MISMO pod que el motor. Si el pod entero cae
+      # -crash, desalojo, o esta prueba escalando el Deployment a cero-, el sidecar
+      # cae con el y deja de reportar NADA: la serie `pg_up` no pasa a 0,
+      # sencillamente deja de existir, y una regla que solo mirara `pg_up == 0` nunca
+      # llegaria a "pending". `up{job="postgres"}` es la metrica que el propio
+      # Prometheus genera para CADA intento de scrape, exista o no el objetivo al
+      # otro lado, y por eso es la que de verdad cubre "el pod entero desaparecio"
+      # -descubierto ejecutando el simulacro de esta alerta contra un clúster real
+      # (verificar-alertas.sh): con solo `pg_up`, la alerta nunca llegaba a firing.
       - alert: PostgreSQLCaido
-        expr: pg_up == 0
+        expr: pg_up == 0 or up{job="postgres"} == 0
         for: 2m
         labels:
           severidad: critica
         annotations:
           resumen: "PostgreSQL no responde"
-          descripcion: "pg_up == 0 desde hace 2 minutos. El padron entero deja de servirse."
+          descripcion: "El motor o su sidecar de metricas llevan 2 minutos sin responder. El padron entero deja de servirse."
 
       - alert: JobDeMigracionFallido
         expr: kube_job_status_failed{job_name=~".*migracion.*"} == 1
