@@ -660,7 +660,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/consultas/altas-bajas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['tipoDeConsulta', 'codigoCont', 'altaBaja', 'autoManual', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['tipoDeConsulta', 'codigoCont', 'ano', 'tributo', 'altaBaja', 'autoManual', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Consulta de deudas con beneficio — `GET /consultas/deudas-con-beneficio` */
   consulta_deudas_beneficio: {
@@ -1692,6 +1692,8 @@ export interface ParametrosPorOperacion {
   readonly consulta_altas_bajas: {
     readonly tipoDeConsulta?: string;
     readonly codigoCont?: string;
+    readonly ano?: string;
+    readonly tributo?: string;
     readonly altaBaja?: string;
     readonly autoManual?: string;
     readonly pagina?: string;

@@ -4055,6 +4055,16 @@ paths:
           required: false
           description: "Filtro «Código Cont.» de la pantalla"
           schema: { type: string }
+        - name: ano
+          in: query
+          required: false
+          description: "Filtro «Año» de la pantalla, dentro de «Filtros del detalle»"
+          schema: { type: string }
+        - name: tributo
+          in: query
+          required: false
+          description: "Filtro «Tributo» de la pantalla, dentro de «Filtros del detalle»"
+          schema: { type: string }
         - name: altaBaja
           in: query
           required: false
@@ -4063,7 +4073,7 @@ paths:
         - name: autoManual
           in: query
           required: false
-          description: "Filtro «Auto / Manual» de la pantalla"
+          description: "Filtro «Auto / Manual» de la pantalla. El backend todavia no distingue un movimiento automatico de uno manual y lo ignora"
           schema: { type: string }
         - name: pagina
           in: query
