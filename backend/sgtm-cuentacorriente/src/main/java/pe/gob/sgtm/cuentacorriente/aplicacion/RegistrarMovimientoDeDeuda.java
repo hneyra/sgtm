@@ -11,6 +11,8 @@ import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.DeudaActualizada;
 import pe.gob.sgtm.cuentacorriente.dominio.MovimientoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
+import pe.gob.sgtm.documentos.EmitirDocumento;
+import pe.gob.sgtm.documentos.FormatoDeDocumento;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
@@ -32,6 +34,15 @@ import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
  * existe: el total cuadraria y el desglose quedaria mal.
  *
  * <p>Un alta no tiene ese limite: incorporar deuda que no estaba es exactamente para lo que existe.
+ *
+ * <h2>El formato impreso se emite al registrar, no al pedirlo</h2>
+ *
+ * <p>La nota de abono o de cargo se emite en la misma transaccion, con {@code EmitirDocumento}
+ * (#15). Emitirla despues, cuando alguien la pidiera, significaria dibujarla con los datos de
+ * <b>ese</b> dia: la deuda ya seria otra y el papel no coincidiria con el movimiento que dice
+ * sustentar. Emitiendola aqui queda guardada con los datos con que se dibujo y con su resumen
+ * SHA-256, que es lo que permite reimprimirla identica meses despues —y lo que hace que la
+ * reimpresion <b>falle</b> en vez de entregar un papel distinto si alguien cambia el renderizador—.
  */
 @Service
 public class RegistrarMovimientoDeDeuda {
@@ -40,16 +51,19 @@ public class RegistrarMovimientoDeDeuda {
     private final RegistrarAsiento registrarAsiento;
     private final CalculoDeDeuda calculo;
     private final PoliticaDeRedondeo redondeo;
+    private final EmitirDocumento documentos;
 
     public RegistrarMovimientoDeDeuda(
             AsientoRepository asientos,
             RegistrarAsiento registrarAsiento,
             CalculoDeDeuda calculo,
-            PoliticaDeRedondeo redondeo) {
+            PoliticaDeRedondeo redondeo,
+            EmitirDocumento documentos) {
         this.asientos = asientos;
         this.registrarAsiento = registrarAsiento;
         this.calculo = calculo;
         this.redondeo = redondeo;
+        this.documentos = documentos;
     }
 
     /**
@@ -60,10 +74,13 @@ public class RegistrarMovimientoDeDeuda {
      * —el insoluto si, el interes no— dejaria una deuda que no corresponde ni a antes ni a despues,
      * y sin nada que dijera que falto la otra mitad.
      *
+     * @param codigoContribuyente el codigo que se imprime en el formato; el identificador ya viaja
+     *     dentro del movimiento, y el codigo es lo que el papel tiene que mostrar
      * @param observacion por que se registra; sin ella no se guarda (regla 10, RNF-052)
      */
     @Transactional
-    public List<Asiento> registrar(MovimientoDeDeuda movimiento, Observacion observacion) {
+    public Registro registrar(
+            MovimientoDeDeuda movimiento, String codigoContribuyente, Observacion observacion) {
         if (movimiento.sentido() == SentidoDelMovimiento.BAJA) {
             verificarQueNoExcedeLaDeuda(movimiento);
         }
@@ -72,8 +89,28 @@ public class RegistrarMovimientoDeDeuda {
         for (Asiento asiento : movimiento.enAsientos()) {
             guardados.add(registrarAsiento.asentar(asiento, observacion));
         }
-        return List.copyOf(guardados);
+        List<Asiento> asentados = List.copyOf(guardados);
+
+        EmitirDocumento.Emision emision =
+                documentos.emitir(
+                        FormatoDelMovimiento.tipoDe(movimiento.sentido()),
+                        movimiento.clave().ejercicio(),
+                        movimiento.documentoOrigen(),
+                        FormatoDelMovimiento.de(movimiento, asentados, codigoContribuyente),
+                        FormatoDeDocumento.PDF,
+                        observacion);
+
+        return new Registro(asentados, emision.registro().numero());
     }
+
+    /**
+     * Lo que produjo el movimiento: sus asientos y el numero del documento con que se formalizo.
+     *
+     * <p>Se devuelve el <b>numero</b> y no los bytes: quien registra un alta desde una pantalla no
+     * necesita el PDF en la respuesta, y devolverlo obligaria a acarrearlo por toda la capa web
+     * para que casi siempre se descarte. Con el numero se pide cuando haga falta, y sale identico.
+     */
+    public record Registro(List<Asiento> asientos, String numeroDeDocumento) {}
 
     private void verificarQueNoExcedeLaDeuda(MovimientoDeDeuda movimiento) {
         ClaveDeSaldo clave = movimiento.clave();

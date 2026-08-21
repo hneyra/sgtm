@@ -40,6 +40,14 @@ import pe.gob.sgtm.cuentacorriente.dominio.SaldoProyectado;
 import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
 import pe.gob.sgtm.cuentacorriente.infraestructura.AsientoRepositoryJdbc;
 import pe.gob.sgtm.cuentacorriente.infraestructura.SaldoRepositoryJdbc;
+import pe.gob.sgtm.documentos.DocumentoRepositoryJdbc;
+import pe.gob.sgtm.documentos.EmitirDocumento;
+import pe.gob.sgtm.documentos.FormatoDeDocumento;
+import pe.gob.sgtm.documentos.GeneradorDeDocumentos;
+import pe.gob.sgtm.documentos.RegimenDeLaInstalacion;
+import pe.gob.sgtm.documentos.RenderizadorPdf;
+import pe.gob.sgtm.documentos.RenderizadorRtf;
+import pe.gob.sgtm.documentos.RenderizadorXls;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.MunicipalidadId;
@@ -48,6 +56,8 @@ import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
+import pe.gob.sgtm.web.ConfiguracionDeJson;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * El saldo proyectado y los movimientos de deuda, contra PostgreSQL de verdad (#23, #24).
@@ -78,6 +88,11 @@ class SaldoYMovimientosTest {
     private static ReconstruirSaldo reconstruir;
     private static ReconstruirPadron padron;
     private static org.springframework.transaction.support.TransactionTemplate transaccion;
+    private static EmitirDocumento documentos;
+    private static JdbcClient jdbc;
+
+    /** El codigo con que se creo cada contribuyente: es lo que se imprime en el formato. */
+    private static final java.util.Map<Long, String> CODIGOS = new java.util.HashMap<>();
 
     @BeforeAll
     static void provisionar() throws SQLException, IOException {
@@ -91,6 +106,7 @@ class SaldoYMovimientosTest {
 
         JdbcClient jdbc = JdbcClient.create(pool);
         TenantTransactionManager gestor = new TenantTransactionManager(pool);
+        SaldoYMovimientosTest.jdbc = jdbc;
 
         asientos = new AsientoRepositoryJdbc(jdbc);
         saldos = new SaldoRepositoryJdbc(jdbc);
@@ -99,13 +115,32 @@ class SaldoYMovimientosTest {
                         new RegistrarAsiento(
                                 asientos, saldos, new AuditoriaJdbc(jdbc, RELOJ), RELOJ),
                         gestor);
+        tools.jackson.databind.json.JsonMapper json =
+                JsonMapper.builder()
+                        .addModule(new ConfiguracionDeJson().moduloDeObjetosDeValor())
+                        .build();
+        EmitirDocumento emitir =
+                envolver(
+                        new EmitirDocumento(
+                                new DocumentoRepositoryJdbc(jdbc, json),
+                                new GeneradorDeDocumentos(
+                                        List.of(
+                                                new RenderizadorPdf(),
+                                                new RenderizadorXls(),
+                                                new RenderizadorRtf()),
+                                        RegimenDeLaInstalacion.REAL),
+                                new AuditoriaJdbc(jdbc, RELOJ),
+                                RELOJ),
+                        gestor);
+        documentos = emitir;
         movimientos =
                 envolver(
                         new RegistrarMovimientoDeDeuda(
                                 asientos,
                                 registrarAsiento,
                                 new CalculoDeDeuda(new SinAcumulacionDePrueba()),
-                                new PoliticaDeRedondeo(2, RoundingMode.HALF_UP)),
+                                new PoliticaDeRedondeo(2, RoundingMode.HALF_UP),
+                                emitir),
                         gestor);
         reconstruir = envolver(new ReconstruirSaldo(asientos, saldos, RELOJ), gestor);
         padron = new ReconstruirPadron(asientos, reconstruir, gestor);
@@ -147,7 +182,7 @@ class SaldoYMovimientosTest {
     void asentarDejaElSaldoAlDia() {
         long titular = crearContribuyente("S-0001", "60100001");
 
-        movimientos.registrar(alta(titular, Dinero.de(1000)), OBSERVACION);
+        movimientos.registrar(alta(titular, Dinero.de(1000)), codigoDe(titular), OBSERVACION);
 
         assertThat(saldoDe(titular))
                 .as("el mantenimiento va en la misma transaccion que el asiento (ADR-0006)")
@@ -161,8 +196,8 @@ class SaldoYMovimientosTest {
     void reconstruirDaLoMismoQueElLibro() {
         long titular = crearContribuyente("S-0002", "60100002");
 
-        movimientos.registrar(alta(titular, Dinero.de(1000)), OBSERVACION);
-        movimientos.registrar(baja(titular, Dinero.de(250)), OBSERVACION);
+        movimientos.registrar(alta(titular, Dinero.de(1000)), codigoDe(titular), OBSERVACION);
+        movimientos.registrar(baja(titular, Dinero.de(250)), codigoDe(titular), OBSERVACION);
 
         List<SaldoProyectado> reconstruidos = reconstruir.deContribuyente(titular);
 
@@ -180,7 +215,7 @@ class SaldoYMovimientosTest {
             "una fila corrompida a proposito: la conciliacion la detecta y la reparacion la repara")
     void laConciliacionDetectaLaCorrupcionYLaReconstruccionLaRepara() throws SQLException {
         long titular = crearContribuyente("S-0003", "60100003");
-        movimientos.registrar(alta(titular, Dinero.de(1000)), OBSERVACION);
+        movimientos.registrar(alta(titular, Dinero.de(1000)), codigoDe(titular), OBSERVACION);
 
         corromperElSaldo(titular);
 
@@ -205,7 +240,7 @@ class SaldoYMovimientosTest {
     @DisplayName("la conciliacion no repara: reportar y arreglar son dos actos distintos")
     void laConciliacionNoRepara() throws SQLException {
         long titular = crearContribuyente("S-0004", "60100004");
-        movimientos.registrar(alta(titular, Dinero.de(500)), OBSERVACION);
+        movimientos.registrar(alta(titular, Dinero.de(500)), codigoDe(titular), OBSERVACION);
         corromperElSaldo(titular);
 
         reconstruir.conciliar(titular);
@@ -223,8 +258,8 @@ class SaldoYMovimientosTest {
     void laReconstruccionMasivaEsReanudable() throws SQLException {
         long primero = crearContribuyente("S-0010", "60100010");
         long segundo = crearContribuyente("S-0011", "60100011");
-        movimientos.registrar(alta(primero, Dinero.de(100)), OBSERVACION);
-        movimientos.registrar(alta(segundo, Dinero.de(200)), OBSERVACION);
+        movimientos.registrar(alta(primero, Dinero.de(100)), codigoDe(primero), OBSERVACION);
+        movimientos.registrar(alta(segundo, Dinero.de(200)), codigoDe(segundo), OBSERVACION);
         corromperElSaldo(primero);
         corromperElSaldo(segundo);
 
@@ -242,8 +277,8 @@ class SaldoYMovimientosTest {
     void reanudarNoVuelveATocarLoAnterior() throws SQLException {
         long anterior = crearContribuyente("S-0020", "60100020");
         long posterior = crearContribuyente("S-0021", "60100021");
-        movimientos.registrar(alta(anterior, Dinero.de(100)), OBSERVACION);
-        movimientos.registrar(alta(posterior, Dinero.de(200)), OBSERVACION);
+        movimientos.registrar(alta(anterior, Dinero.de(100)), codigoDe(anterior), OBSERVACION);
+        movimientos.registrar(alta(posterior, Dinero.de(200)), codigoDe(posterior), OBSERVACION);
         corromperElSaldo(anterior);
         corromperElSaldo(posterior);
 
@@ -262,8 +297,14 @@ class SaldoYMovimientosTest {
     void unAltaYUnaBajaProducenAsientos() {
         long titular = crearContribuyente("M-0001", "70100001");
 
-        List<Asiento> deAlta = movimientos.registrar(alta(titular, Dinero.de(1000)), OBSERVACION);
-        List<Asiento> deBaja = movimientos.registrar(baja(titular, Dinero.de(300)), OBSERVACION);
+        List<Asiento> deAlta =
+                movimientos
+                        .registrar(alta(titular, Dinero.de(1000)), codigoDe(titular), OBSERVACION)
+                        .asientos();
+        List<Asiento> deBaja =
+                movimientos
+                        .registrar(baja(titular, Dinero.de(300)), codigoDe(titular), OBSERVACION)
+                        .asientos();
 
         assertThat(deAlta).singleElement().extracting(Asiento::id).isNotNull();
         assertThat(deBaja).singleElement().extracting(Asiento::id).isNotNull();
@@ -276,7 +317,7 @@ class SaldoYMovimientosTest {
         long titular = crearContribuyente("M-0002", "70100002");
 
         List<Asiento> guardados =
-                movimientos.registrar(
+                registrarYObtenerAsientos(
                         new MovimientoDeDeuda(
                                 SentidoDelMovimiento.ALTA,
                                 clave(titular),
@@ -288,6 +329,7 @@ class SaldoYMovimientosTest {
                                 FECHA,
                                 "RES-2026-0001",
                                 null),
+                        codigoDe(titular),
                         OBSERVACION);
 
         assertThat(guardados)
@@ -301,9 +343,14 @@ class SaldoYMovimientosTest {
     @DisplayName("una baja mayor que la deuda vigente a su fecha se rechaza")
     void unaBajaMayorQueLaDeudaSeRechaza() {
         long titular = crearContribuyente("M-0003", "70100003");
-        movimientos.registrar(alta(titular, Dinero.de(500)), OBSERVACION);
+        movimientos.registrar(alta(titular, Dinero.de(500)), codigoDe(titular), OBSERVACION);
 
-        assertThatThrownBy(() -> movimientos.registrar(baja(titular, Dinero.de(501)), OBSERVACION))
+        assertThatThrownBy(
+                        () ->
+                                movimientos.registrar(
+                                        baja(titular, Dinero.de(501)),
+                                        codigoDe(titular),
+                                        OBSERVACION))
                 .isInstanceOf(RegistrarMovimientoDeDeuda.BajaMayorQueLaDeuda.class)
                 .hasMessageContaining("no puede extinguir mas de lo que hay");
     }
@@ -312,7 +359,7 @@ class SaldoYMovimientosTest {
     @DisplayName("la baja se compara parte por parte, no solo contra el total")
     void laBajaSeComparaParteAParte() {
         long titular = crearContribuyente("M-0004", "70100004");
-        movimientos.registrar(alta(titular, Dinero.de(500)), OBSERVACION);
+        movimientos.registrar(alta(titular, Dinero.de(500)), codigoDe(titular), OBSERVACION);
 
         // El total de la baja (500) no excede el insoluto vigente (500), pero la parte de
         // interes si: se estaria extinguiendo interes que nunca se asento.
@@ -330,6 +377,7 @@ class SaldoYMovimientosTest {
                                                 FECHA,
                                                 "RES-2026-0002",
                                                 null),
+                                        codigoDe(titular),
                                         OBSERVACION))
                 .isInstanceOf(RegistrarMovimientoDeDeuda.BajaMayorQueLaDeuda.class)
                 .hasMessageContaining("interes");
@@ -339,7 +387,7 @@ class SaldoYMovimientosTest {
     @DisplayName("una baja rechazada no deja ningun asiento a medias")
     void unaBajaRechazadaNoDejaAsientosAMedias() {
         long titular = crearContribuyente("M-0005", "70100005");
-        movimientos.registrar(alta(titular, Dinero.de(500)), OBSERVACION);
+        movimientos.registrar(alta(titular, Dinero.de(500)), codigoDe(titular), OBSERVACION);
 
         assertThatThrownBy(
                         () ->
@@ -355,6 +403,7 @@ class SaldoYMovimientosTest {
                                                 FECHA,
                                                 "RES-2026-0003",
                                                 null),
+                                        codigoDe(titular),
                                         OBSERVACION))
                 .isInstanceOf(RegistrarMovimientoDeDeuda.BajaMayorQueLaDeuda.class);
 
@@ -367,8 +416,8 @@ class SaldoYMovimientosTest {
     @DisplayName("una baja parcial deja la deuda restante consultable y explicable")
     void unaBajaParcialDejaLaDeudaExplicable() {
         long titular = crearContribuyente("M-0006", "70100006");
-        movimientos.registrar(alta(titular, Dinero.de(1000)), OBSERVACION);
-        movimientos.registrar(baja(titular, Dinero.de(400)), OBSERVACION);
+        movimientos.registrar(alta(titular, Dinero.de(1000)), codigoDe(titular), OBSERVACION);
+        movimientos.registrar(baja(titular, Dinero.de(400)), codigoDe(titular), OBSERVACION);
 
         assertThat(saldoDe(titular))
                 .get()
@@ -384,13 +433,58 @@ class SaldoYMovimientosTest {
     @DisplayName("una baja hasta el total deja el saldo en cero, y se admite")
     void unaBajaHastaElTotalSeAdmite() {
         long titular = crearContribuyente("M-0007", "70100007");
-        movimientos.registrar(alta(titular, Dinero.de(700)), OBSERVACION);
-        movimientos.registrar(baja(titular, Dinero.de(700)), OBSERVACION);
+        movimientos.registrar(alta(titular, Dinero.de(700)), codigoDe(titular), OBSERVACION);
+        movimientos.registrar(baja(titular, Dinero.de(700)), codigoDe(titular), OBSERVACION);
 
         assertThat(saldoDe(titular))
                 .get()
                 .extracting(SaldoProyectado::insolutoSaldo)
                 .isEqualTo(Dinero.CERO);
+    }
+
+    @Test
+    @DisplayName("el formato impreso se emite al registrar y se reimprime identico meses despues")
+    void elFormatoImpresoSeReimprimeIdentico() {
+        long titular = crearContribuyente("M-0008", "70100008");
+
+        RegistrarMovimientoDeDeuda.Registro registro =
+                movimientos.registrar(
+                        alta(titular, Dinero.de(900)), codigoDe(titular), OBSERVACION);
+
+        assertThat(registro.numeroDeDocumento())
+                .as("un alta es una nota de abono, y se numera como tal")
+                .startsWith("NA-2026-");
+
+        // Reimprimir vuelve a dibujar los datos guardados y comprueba el resumen
+        // SHA-256 contra el de la emision: si no coincidieran, falla en vez de
+        // entregar un papel distinto con el mismo numero (#15).
+        EmitirDocumento.Emision duplicado =
+                documentos.reimprimir(
+                        "NA",
+                        EJERCICIO,
+                        registro.numeroDeDocumento(),
+                        FormatoDeDocumento.PDF,
+                        OBSERVACION);
+
+        assertThat(duplicado.contenido()).isNotEmpty();
+        assertThat(duplicado.registro().reimpresiones())
+                .as("y el duplicado sale marcado como tal")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("una baja se numera como nota de cargo, no como nota de abono")
+    void unaBajaSeNumeraComoNotaDeCargo() {
+        long titular = crearContribuyente("M-0009", "70100009");
+        movimientos.registrar(alta(titular, Dinero.de(500)), codigoDe(titular), OBSERVACION);
+
+        RegistrarMovimientoDeDeuda.Registro registro =
+                movimientos.registrar(
+                        baja(titular, Dinero.de(200)), codigoDe(titular), OBSERVACION);
+
+        assertThat(registro.numeroDeDocumento())
+                .as("son dos series distintas: mezclarlas rompe el correlativo de cada una")
+                .startsWith("NC-2026-");
     }
 
     // ------------------------------------------------------------------
@@ -494,12 +588,24 @@ class SaldoYMovimientosTest {
                     resultado.next();
                     long id = resultado.getLong(1);
                     app.commit();
+                    CODIGOS.put(id, codigo);
                     return id;
                 }
             }
         } catch (SQLException excepcion) {
             throw new IllegalStateException(excepcion);
         }
+    }
+
+    /** Solo para no repetir {@code .asientos()} en las llamadas con movimiento en linea. */
+    private static List<Asiento> registrarYObtenerAsientos(
+            MovimientoDeDeuda movimiento, String codigo, Observacion observacion) {
+        return movimientos.registrar(movimiento, codigo, observacion).asientos();
+    }
+
+    private static String codigoDe(long titular) {
+        return java.util.Objects.requireNonNull(
+                CODIGOS.get(titular), "El contribuyente lo creo esta misma prueba");
     }
 
     /** No acumula nada: estas pruebas miran el libro y el saldo, no la mora (D-02). */

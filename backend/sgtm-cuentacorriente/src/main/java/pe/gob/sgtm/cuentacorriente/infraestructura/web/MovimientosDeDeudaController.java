@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
-import java.util.List;
 import java.util.Locale;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
@@ -16,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarMovimientoDeDeuda;
-import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
@@ -79,8 +77,8 @@ public class MovimientosDeDeudaController {
             SentidoDelMovimiento sentido, PeticionDeMovimiento peticion) {
 
         Observacion observacion = observacionDe(peticion.observacion());
-        long contribuyenteId =
-                contribuyenteDe(exigir(peticion.codContribuyente(), "codContribuyente"));
+        String codigoContribuyente = exigir(peticion.codContribuyente(), "codContribuyente");
+        long contribuyenteId = contribuyenteDe(codigoContribuyente);
 
         MovimientoDeDeuda movimiento;
         try {
@@ -106,13 +104,14 @@ public class MovimientosDeDeudaController {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
 
-        List<Asiento> guardados;
+        RegistrarMovimientoDeDeuda.Registro registro;
         try {
-            guardados = movimientos.registrar(movimiento, observacion);
+            registro = movimientos.registrar(movimiento, codigoContribuyente, observacion);
         } catch (RegistrarMovimientoDeDeuda.BajaMayorQueLaDeuda excede) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(excede));
         }
-        return MovimientoDeDeudaResource.de(sentido.name(), guardados);
+        return MovimientoDeDeudaResource.de(
+                sentido.name(), registro.asientos(), registro.numeroDeDocumento());
     }
 
     private long contribuyenteDe(String codigo) {

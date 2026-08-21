@@ -21,5 +21,10 @@ dependencies {
     // por la propia prueba.
     testImplementation("org.springframework:spring-aop")
     testImplementation("org.springframework:spring-test")
+
+    // El formato impreso de un alta o una baja (#24) se emite con EmitirDocumento, y
+    // su repositorio guarda el modelo como JSON: la prueba necesita el mapeador para
+    // construirlo igual que lo construye la aplicacion.
+    testImplementation("org.springframework.boot:spring-boot-starter-web")
     testRuntimeOnly(libs.postgresql)
 }
