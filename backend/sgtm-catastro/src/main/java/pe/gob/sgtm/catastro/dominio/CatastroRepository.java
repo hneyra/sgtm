@@ -45,5 +45,8 @@ public interface CatastroRepository {
     /** Los predios de los que alguien es titular en esa fecha. */
     List<Titularidad> prediosDe(long contribuyenteId, LocalDate fecha);
 
+    /** Una titularidad por su identificador, vigente o ya cerrada. */
+    Optional<Titularidad> titularidad(long id);
+
     Titularidad guardar(Titularidad titularidad);
 }

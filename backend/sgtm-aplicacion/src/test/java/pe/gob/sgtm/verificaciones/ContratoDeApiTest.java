@@ -70,6 +70,8 @@ class ContratoDeApiTest {
                     "GET /rentas/contribuyentes",
                     "GET /rentas/beneficios",
                     "GET /rentas/declaraciones/{djNro}",
+                    "POST /rentas/transferencias/predio",
+                    "POST /rentas/transferencias/vehiculo",
                     "GET /consultas/cuenta-corriente/{codigo}",
                     "GET /consultas/deuda",
                     "GET /consultas/altas-bajas",

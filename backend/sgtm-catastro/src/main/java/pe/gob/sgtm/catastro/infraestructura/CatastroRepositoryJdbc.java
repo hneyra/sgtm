@@ -262,6 +262,14 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
     }
 
     @Override
+    public Optional<Titularidad> titularidad(long id) {
+        return jdbc().sql("SELECT " + COLUMNAS_TITULARIDAD + " FROM titularidad WHERE id = :id")
+                .param("id", id)
+                .query(CatastroRepositoryJdbc::mapearTitularidad)
+                .optional();
+    }
+
+    @Override
     public Titularidad guardar(Titularidad titularidad) {
         if (titularidad.esNueva()) {
             Long id =

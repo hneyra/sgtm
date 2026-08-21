@@ -97,6 +97,34 @@ public record Vehiculo(
     }
 
     /**
+     * El mismo vehiculo bajo otro contribuyente: el efecto de una transferencia (#29).
+     *
+     * <p>Como {@link #conPlaca}, es <b>el mismo vehiculo</b> —conserva su identificador—. A
+     * diferencia de la titularidad de un predio, aqui no hay una tabla de historial propia: el
+     * cambio de propietario, como el de placa, queda en la auditoria (regla 10), no en una fila
+     * nueva.
+     */
+    public Vehiculo conTitular(long nuevoContribuyenteId) {
+        if (nuevoContribuyenteId < 1) {
+            throw new IllegalArgumentException(
+                    "El nuevo titular necesita un identificador de contribuyente valido: "
+                            + nuevoContribuyenteId);
+        }
+        return new Vehiculo(
+                id,
+                placa,
+                nuevoContribuyenteId,
+                marca,
+                modelo,
+                categoria,
+                anioFabricacion,
+                anioInscripcion,
+                numeroMotor,
+                numeroSerie,
+                estado);
+    }
+
+    /**
      * El mismo vehiculo con otra placa.
      *
      * <p>Es <b>el mismo vehiculo</b>: conserva el identificador, y con el todo lo que cuelga de el.
