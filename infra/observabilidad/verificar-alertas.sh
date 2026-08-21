@@ -47,6 +47,17 @@ yarn --silent manifiestos --ambiente stg \
 echo "· Generando los secretos que faltan (issue #154)"
 ./secretos/bootstrap-secretos.sh --ambiente stg >/dev/null
 
+# El UNICO Secret que `bootstrap-secretos.sh` no toca (ADR-0011 §3): las credenciales
+# de almacenamiento de objetos del respaldo las materializa `index.ts` en el propio
+# `pulumi up`, no el guion de arranque. Este guion no llama a Pulumi, asi que sin este
+# paso el motor se queda en `CreateContainerConfigError` -el Secret que su
+# `archive_command` referencia no existe- y nunca llega a listo. Los valores son de
+# mentira: nada de esto habla con un S3 real.
+kubectl -n "$NS" create secret generic sgtm-stg-postgres-respaldo-credenciales \
+    --from-literal=access-key-id=verificacion \
+    --from-literal=secret-access-key=verificacion \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
 echo "· Esperando a que el motor y la observabilidad esten listos"
 # Solo lo que esta prueba necesita. La aplicacion, la interfaz y la identidad no
 # tienen imagen publicable desde aqui y se quedarian en ImagePullBackOff para

@@ -38,6 +38,15 @@ yarn --silent manifiestos --ambiente stg \
 echo "· Generando los secretos que faltan"
 ./secretos/bootstrap-secretos.sh --ambiente stg >/dev/null
 
+# Ver el comentario equivalente en verificar-alertas.sh: el UNICO Secret que
+# `bootstrap-secretos.sh` no genera (ADR-0011 §3) es el de las credenciales de
+# almacenamiento de objetos, que normalmente materializa `pulumi up`. Sin el, el
+# motor se queda en `CreateContainerConfigError` y esta espera nunca termina.
+kubectl -n "$NS" create secret generic sgtm-stg-postgres-respaldo-credenciales \
+    --from-literal=access-key-id=verificacion \
+    --from-literal=secret-access-key=verificacion \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
 echo "· Esperando a que el motor, node-exporter, kube-state-metrics y Prometheus esten listos"
 # 300s, no 180s: ver el comentario equivalente en verificar-alertas.sh — un
 # clúster `kind` recien creado descarga TODAS estas imagenes de red a la vez, y

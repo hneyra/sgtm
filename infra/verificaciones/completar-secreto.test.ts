@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { completarSecreto, huella, manifiestoDeSecreto } from "../herramientas/completar-secreto";
+import {
+  completarSecreto,
+  generadorPorOmision,
+  huella,
+  manifiestoDeSecreto,
+} from "../herramientas/completar-secreto";
 
 /**
  * La logica de `bootstrap-secretos.sh`, sin tocar ningun cluster.
@@ -67,6 +72,28 @@ describe("completarSecreto", () => {
     const resultado = completarSecreto(undefined, Array.from({ length: 1000 }, (_, i) => `k${i}`));
     const valores = new Set(Object.values(resultado.data));
     expect(valores.size).toBe(1000);
+  });
+});
+
+describe("generadorPorOmision", () => {
+  /**
+   * Lo que un clúster real puso en rojo (issue #157): `Secret.data` se decodifica en
+   * base64 UNA vez al inyectarse como variable de entorno, y kubelet le pasa ese
+   * valor al runtime de contenedores por gRPC —cuyos campos `string` exigen UTF-8
+   * valido—. Un generador que guardara los bytes crudos de `crypto.randomBytes`
+   * directamente falla esta prueba casi siempre —en un muestreo de 20, las 20
+   * fallaban— y el sintoma en el clúster era
+   * `grpc: error while marshaling: string field contains invalid UTF-8`, con el
+   * contenedor sin llegar a crearse.
+   */
+  it("decodificada en base64 -como hace Kubernetes al inyectarla-, da texto UTF-8 valido", () => {
+    for (let i = 0; i < 50; i++) {
+      const decodificada = Buffer.from(generadorPorOmision(), "base64");
+      // Un `Buffer` con bytes que no forman UTF-8 valido se reconstruye distinto al
+      // volver a codificarlo: es la comprobacion de ida y vuelta, no una expresion
+      // regular que podria dejar pasar una secuencia parcialmente valida.
+      expect(Buffer.from(decodificada.toString("utf8"), "utf8").equals(decodificada)).toBe(true);
+    }
   });
 });
 

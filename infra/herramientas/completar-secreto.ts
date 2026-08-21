@@ -27,9 +27,30 @@ export interface ResultadoDeCompletar {
   generadas: string[];
 }
 
-/** Genera un valor aleatorio, ya en base64: 32 bytes de `crypto.randomBytes`. */
+/**
+ * Genera una clave, ya codificada para `Secret.data`.
+ *
+ * **No** son los 32 bytes de `crypto.randomBytes` codificados una vez: eso es lo que
+ * este archivo hacia hasta que un clúster real —no un `SGTM_MOTOR_MODO=local`, que
+ * nunca pasa por el API de Kubernetes— lo puso en rojo (issue #157, descubierto
+ * verificando `verificar-alertas.sh`/`verificar-tableros.sh` contra un `kind` real).
+ * `Secret.data` documenta sus valores como base64 y Kubernetes los DECODIFICA una vez
+ * al inyectarlos como variable de entorno; el kubelet le pasa ese valor al runtime de
+ * contenedores por gRPC, cuyos campos `string` exigen UTF-8 valido. 32 bytes crudos de
+ * `crypto.randomBytes` casi nunca lo son —comprobado: en un muestreo de 20, las 20
+ * fallan—, asi que la creacion del contenedor fallaba con
+ * `grpc: error while marshaling: string field contains invalid UTF-8` en cuanto un
+ * pod de verdad intentaba montar esa clave, y eso no lo veia ninguna prueba que solo
+ * comprobara que el `Secret` existe o que su huella no cambia.
+ *
+ * La clave de verdad —lo que `20-asignar-claves.sh` y compania terminan usando— es la
+ * CADENA en base64 de esos 32 bytes: texto ASCII, siempre UTF-8 valido, con la misma
+ * entropia. Lo que va en `Secret.data` es esa cadena codificada una vez mas, que es
+ * exactamente lo que Kubernetes decodifica de vuelta.
+ */
 export function generadorPorOmision(): string {
-  return randomBytes(32).toString("base64");
+  const clave = randomBytes(32).toString("base64");
+  return Buffer.from(clave, "utf8").toString("base64");
 }
 
 /**
