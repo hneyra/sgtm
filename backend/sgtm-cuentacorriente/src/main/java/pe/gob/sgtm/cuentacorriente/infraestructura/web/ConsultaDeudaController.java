@@ -10,25 +10,32 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultarDeuda;
-import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
-import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeudaPorContribuyente;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
-import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.web.Api;
+import pe.gob.sgtm.web.ParametrosDePaginacion;
+import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
- * {@code consulta_deuda}: {@code GET /api/v1/consultas/deuda} (RF-041, RF-042).
+ * {@code consulta_deuda}: {@code GET /api/v1/consultas/deuda} (RF-041, RF-042, #25).
  *
- * <p>Insoluto, reajuste, interes y gasto de <b>una</b> obligacion —contribuyente, tributo, año y,
- * si el tributo se divide, la cuota y la unidad que la distinguen—, a una fecha de corte. Sin
- * {@code fecha}, se calcula a hoy, con el reloj inyectado de {@link ConsultarDeuda#hoy()} y no con
- * {@code LocalDate.now()} (regla 6).
+ * <p>Todas las obligaciones del contribuyente —tributo, ejercicio, unidad— con su deuda actualizada
+ * a una fecha de corte, en una fila por obligacion. Sin {@code fechaDeCorte}, se calcula a hoy, con
+ * el reloj inyectado de {@link ConsultarDeuda#hoy()} y no con {@code LocalDate.now()} (regla 6).
+ *
+ * <p>{@code incluyeConvenios} esta en el contrato de la pantalla pero se ignora: el contexto de
+ * convenios de fraccionamiento todavia no existe (#25 depende de el solo para esa parte). Se acepta
+ * el parametro para no romper la pantalla, no se aplica —el mismo patron que {@code situacion} en
+ * {@code CuentaCorrienteController}—.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/consultas/deuda")
 @RequiereAcceso(acceso = "consulta_deuda", privilegio = Privilegio.LECTURA)
 public class ConsultaDeudaController {
+
+    private static final String ORDEN_POR_OMISION = "ejercicio";
 
     private final ConsultarDeuda consulta;
 
@@ -37,30 +44,25 @@ public class ConsultaDeudaController {
     }
 
     @GetMapping
-    public DeudaResource deuda(
+    public RespuestaPaginada<ObligacionConDeudaResource> deuda(
             @RequestParam String codContribuyente,
-            @RequestParam String tributo,
-            @RequestParam int anio,
-            @RequestParam(required = false) @Nullable Integer cuota,
-            @RequestParam(required = false) @Nullable Long predioId,
-            @RequestParam(required = false) @Nullable Long vehiculoId,
+            @RequestParam(required = false) @Nullable String fechaDeCorte,
             @RequestParam(required = false) @Nullable String fase,
-            @RequestParam(required = false) @Nullable String concepto,
-            @RequestParam(required = false) @Nullable String fecha) {
+            @RequestParam(required = false) @Nullable String incluyeConvenios,
+            ParametrosDePaginacion parametros) {
 
-        CriterioDeDeuda criterio =
-                new CriterioDeDeuda(
-                        codContribuyente,
-                        tributo,
-                        new Ejercicio(anio),
-                        cuota,
-                        predioId,
-                        vehiculoId,
-                        faseDe(fase),
-                        conceptoDe(concepto),
-                        fechaDe(fecha));
+        if (codContribuyente.isBlank()) {
+            throw new IllegalArgumentException(
+                    "codContribuyente es obligatorio para consultar la deuda");
+        }
 
-        return DeudaResource.de(consulta.deudaActualizadaA(criterio));
+        CriterioDeDeudaPorContribuyente criterio =
+                new CriterioDeDeudaPorContribuyente(
+                        codContribuyente, fechaDe(fechaDeCorte), faseDe(fase));
+
+        return RespuestaPaginada.de(
+                consulta.porContribuyente(criterio, paginacionDe(parametros)),
+                ObligacionConDeudaResource::de);
     }
 
     private static @Nullable Fase faseDe(@Nullable String texto) {
@@ -68,13 +70,6 @@ public class ConsultaDeudaController {
             return null;
         }
         return Fase.valueOf(texto.strip().toUpperCase(Locale.ROOT));
-    }
-
-    private static @Nullable Concepto conceptoDe(@Nullable String texto) {
-        if (texto == null || texto.isBlank()) {
-            return null;
-        }
-        return Concepto.valueOf(texto.strip().toUpperCase(Locale.ROOT));
     }
 
     /**
@@ -94,5 +89,22 @@ public class ConsultaDeudaController {
             throw new IllegalArgumentException(
                     "La fecha de corte debe tener formato AAAA-MM-DD: '" + texto + "'", excepcion);
         }
+    }
+
+    /**
+     * Igual que {@link ParametrosDePaginacion#aPaginacion}, salvo la direccion por omision: aqui es
+     * {@code DESCENDENTE} —el ejercicio mas reciente primero, como se lee un listado de deuda en
+     * ventanilla—, en vez de la {@code ASCENDENTE} que asume {@code aPaginacion}.
+     */
+    private static Paginacion paginacionDe(ParametrosDePaginacion parametros) {
+        return new Paginacion(
+                parametros.pagina() == null ? 0 : parametros.pagina(),
+                parametros.tamano() == null ? 20 : parametros.tamano(),
+                parametros.ordenarPor() == null || parametros.ordenarPor().isBlank()
+                        ? ORDEN_POR_OMISION
+                        : parametros.ordenarPor(),
+                parametros.direccion() == null
+                        ? Paginacion.Direccion.DESCENDENTE
+                        : parametros.direccion());
     }
 }
