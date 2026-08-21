@@ -10,7 +10,7 @@ plugins {
 }
 
 dependencies {
-    // La UNICA dependencia a otro contexto acotado, y esta aqui para que se vea.
+    // Dos dependencias a otro contexto acotado, y estan aqui para que se vean.
     //
     // Los valores referenciales de vehiculos son datos normativos: cuelgan de un conjunto sellado,
     // no de un ejercicio. Traducir «ejercicio» a «conjunto» es cosa de `parametros` —es quien sabe
@@ -21,6 +21,12 @@ dependencies {
     // Modulith, y el dia que alguien olvide el `AND estado = 'SELLADO'` se lee un conjunto abierto
     // sin que nada falle.
     implementation(project(":sgtm-parametros"))
+
+    // La declaracion jurada (#28) referencia la version de ficha catastral vigente a su
+    // fecha, para poder reconstruir el pasado (RNF-075). El mapa de contextos (ARQ-01 §2)
+    // declara justo esta arista —catastro ──► rentas—, y solo se importa el paquete raiz
+    // de catastro, que es su API publica: LectorDeFichas.
+    implementation(project(":sgtm-catastro"))
 
     // La prueba del repositorio corre contra PostgreSQL de verdad: provisiona la
     // base como un ambiente real y se conecta como sgtm_app, no como el
