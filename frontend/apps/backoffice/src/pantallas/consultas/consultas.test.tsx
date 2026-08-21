@@ -10,11 +10,11 @@ import { SIN_DATO } from '../seguridad/listado';
  * Consultas (#72): **ninguna cifra sin su fecha**.
  *
  * Es el modulo que mas usa quien atiende en ventanilla, y donde la regla 9 de
- * CLAUDE.md se ve o no se ve. Tres de las once ya tienen backend y estan
- * conectadas —`cuenta_corriente` (#21), `consulta_deuda` (#22, #175) y
- * `constancia` (#25, #179)—; las otras ocho esperan a #24 y al resto de #25.
- * Lo que **no** espera a nadie es la propiedad que da sentido al modulo, y es
- * lo que se verifica aqui sobre las once a la vez.
+ * CLAUDE.md se ve o no se ve. Cuatro de las once ya tienen backend y estan
+ * conectadas —`cuenta_corriente` (#21), `consulta_deuda` (#22, #175),
+ * `constancia` (#25, #179) y `consulta_vehiculos` (#25, #184)—; las otras siete
+ * esperan a #24 y al resto de #25. Lo que **no** espera a nadie es la propiedad
+ * que da sentido al modulo, y es lo que se verifica aqui sobre las once a la vez.
  */
 
 /** Las once opciones del modulo, por su ranura. Si el catalogo cambia, cambia esto. */
@@ -123,7 +123,7 @@ describe('el estado de cuenta es el libro, y se ve como tal', () => {
     expect(acciones.some((texto) => /modificar|editar|anular|corregir/i.test(texto))).toBe(false);
   });
 
-  it('las ocho restantes siguen sin conectar: su backend es #24 y el resto de #25', () => {
+  it('las siete restantes siguen sin conectar: su backend es #24 y el resto de #25', () => {
     for (const opcion of [
       'consulta_unificada',
       'consulta_resumen_predial',
@@ -131,12 +131,16 @@ describe('el estado de cuenta es el libro, y se ve como tal', () => {
       'consulta_deudas_beneficio',
       'consulta_pagos',
       'consulta_predios',
-      'consulta_vehiculos',
       'consulta_valores',
     ]) {
       expect(OPCIONES_CONECTADAS).not.toContain(opcion);
     }
-    for (const opcion of ['cuenta_corriente', 'consulta_deuda', 'constancia']) {
+    for (const opcion of [
+      'cuenta_corriente',
+      'consulta_deuda',
+      'constancia',
+      'consulta_vehiculos',
+    ]) {
       expect(OPCIONES_CONECTADAS).toContain(opcion);
     }
   });
@@ -168,5 +172,33 @@ describe('constancia se niega o se emite, y lo dice antes que la tabla', () => {
 
     expect(await screen.findByText('Impuesto predial')).toBeInTheDocument();
     expect(screen.getByText(/SE EMITE|SE NIEGA/)).toBeInTheDocument();
+  });
+});
+
+describe('consulta_vehiculos lee VehiculoEncontradoResource', () => {
+  it('la deuda de la fila viene del recurso, no de sumar nada en la interfaz', async () => {
+    montarEnRuta('/consultas/consulta-vehiculos');
+
+    expect(await screen.findByText('T2G-418')).toBeInTheDocument();
+    await screen.findByText(/Cifras actualizadas al/);
+  });
+
+  it('«Base imponible» sale vacia: el recurso no manda ese campo (D-02)', async () => {
+    montarEnRuta('/consultas/consulta-vehiculos');
+
+    const tabla = await screen.findByRole('table');
+    const fila = (await within(tabla).findByText('T2G-418')).closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+    // Placa, Clase, Marca y modelo, Año fab., Titular, Afectación, Base imponible, Deuda.
+    expect(celdas[6]?.textContent).toBe(SIN_DATO);
+  });
+
+  it('«Afectación» es el rango que manda el recurso, no una palabra inventada', async () => {
+    montarEnRuta('/consultas/consulta-vehiculos');
+
+    // El mock lee «2019 — 2021» del prototipo y lo parte en afectoDesde/afectoHasta:
+    // si la pantalla lo vuelve a juntar igual, el recurso real —dos enteros— tambien se lee bien.
+    expect(await screen.findByText('2019 — 2021')).toBeInTheDocument();
   });
 });

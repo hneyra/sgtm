@@ -11,15 +11,26 @@ import pe.gob.sgtm.dominio.Placa;
 /**
  * {@code Vehiculo}, funcion pura sin base ni reloj (#25, #26).
  *
- * <p>Lo unico que este dominio calcula sin depender de D-02 es {@link Vehiculo#afectoEn}: tres
- * ejercicios desde el siguiente al de la inscripcion. {@code consulta_vehiculos} (#25) se apoya en
- * el para su columna «Afectacion», y por eso vale la pena fijar aqui los tres bordes del intervalo,
- * no solo el caso feliz.
+ * <p>Lo unico que este dominio calcula sin depender de D-02 es {@link Vehiculo#rangoDeAfectacion}
+ * —tres ejercicios desde el siguiente al de la inscripcion— y {@link Vehiculo#afectoEn}, que
+ * consulta ese mismo rango. {@code consulta_vehiculos} (#25) se apoya en los dos para su columna
+ * «Afectación», y por eso vale la pena fijar aqui los tres bordes del intervalo, no solo el caso
+ * feliz.
  */
-@DisplayName("Vehiculo#afectoEn — tres ejercicios desde el siguiente a la inscripcion")
+@DisplayName("Vehiculo#rangoDeAfectacion — tres ejercicios desde el siguiente a la inscripcion")
 class VehiculoTest {
 
     private static final Ejercicio INSCRIPCION_2024 = new Ejercicio(2024);
+
+    @Test
+    @DisplayName("el rango va del ejercicio siguiente a la inscripcion, tres ejercicios enteros")
+    void elRangoVaDelSiguienteALaInscripcionTresEjercicios() {
+        Vehiculo vehiculo = nuevo(INSCRIPCION_2024);
+        Vehiculo.RangoDeAfectacion rango = vehiculo.rangoDeAfectacion();
+
+        assertThat(rango.desde()).isEqualTo(new Ejercicio(2025));
+        assertThat(rango.hasta()).isEqualTo(new Ejercicio(2027));
+    }
 
     @Test
     @DisplayName("el ejercicio de la inscripcion todavia no esta afecto")

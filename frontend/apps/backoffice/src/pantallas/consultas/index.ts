@@ -6,13 +6,13 @@ import { parametrosDeBusqueda } from '../busqueda';
 import { SIN_DATO, hoy, leerObjeto, leerPaginado, tablaDe, texto } from '../seguridad/listado';
 
 /**
- * Consultas, conectado hasta donde llega el backend: **tres opciones de once**.
+ * Consultas, conectado hasta donde llega el backend: **cuatro opciones de once**.
  *
- * `cuenta_corriente` (#21) ya estaba. Se suman `consulta_deuda` (#22, #175) y
- * `constancia` (#25, #179). Las otras ocho —`consulta_unificada`,
- * `consulta_resumen_predial`, `consulta_altas_bajas`, `consulta_pagos`,
- * `consulta_predios`, `consulta_vehiculos`, `consulta_valores`,
- * `consulta_deudas_beneficio`— siguen esperando su backend.
+ * `cuenta_corriente` (#21) ya estaba. Se suman `consulta_deuda` (#22, #175),
+ * `constancia` (#25, #179) y `consulta_vehiculos` (#25, #184). Las otras siete
+ * —`consulta_unificada`, `consulta_resumen_predial`, `consulta_altas_bajas`,
+ * `consulta_pagos`, `consulta_predios`, `consulta_valores`,
+ * `consulta_deudas_beneficio`— siguen esperando su backend (#25 sigue abierto).
  */
 
 /**
@@ -266,9 +266,71 @@ const constancia = definirConexion({
   },
 });
 
+/**
+ * Padron vehicular consultable, con la deuda vigente de cada unidad (RF-024, #25, #184).
+ *
+ * «Base imponible S/» sale vacia a proposito: el recurso no manda ese campo —el impuesto al
+ * patrimonio vehicular necesita valores referenciales bloqueados por D-02—, y un cero inventado
+ * aqui seria una cifra que el backend no puede sustentar (RNF-083).
+ *
+ * «Afectación» es el rango `afectoDesde — afectoHasta` que ya manda el recurso —estructural,
+ * `Vehiculo#rangoDeAfectacion`, ninguna cifra calculada aqui—, salvo que el vehiculo este de
+ * baja: el prototipo dibuja «2019 — 2021», no una palabra («AFECTO»/«INAFECTO»), y eso es lo
+ * que hay que mostrar.
+ */
+const consulta_vehiculos = definirConexion({
+  operacion: 'consulta_vehiculos',
+  parametros: ({ busqueda }) => parametrosDeBusqueda('consulta_vehiculos', undefined, busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'el padron vehicular'),
+  adaptar: (paginado): DatosDePantalla => {
+    const tabla = tablaDe(
+      paginado,
+      (vehiculo): readonly Celda[] => {
+        const deuda = importeDe(vehiculo['deuda']);
+        return [
+          { texto: texto(vehiculo['placa']) },
+          { texto: texto(vehiculo['clase']) },
+          { texto: `${texto(vehiculo['marca'])} ${texto(vehiculo['modelo'])}`.trim() },
+          { texto: texto(vehiculo['anioFabricacion']) },
+          { texto: texto(vehiculo['titular']) },
+          { texto: afectacionDe(vehiculo) },
+          { texto: SIN_DATO },
+          { texto: deuda?.importe ?? SIN_DATO },
+        ];
+      },
+      'vehículos',
+    );
+
+    return {
+      fechaCalculo: fechaDeVehiculosDe(paginado.contenido),
+      tabla,
+    };
+  },
+});
+
+/** `estado === 'BAJA'` gana; si no, el rango que ya manda el recurso. */
+function afectacionDe(vehiculo: Readonly<Record<string, unknown>>): string {
+  if (vehiculo['estado'] === 'BAJA') return 'BAJA';
+  const desde = vehiculo['afectoDesde'];
+  const hasta = vehiculo['afectoHasta'];
+  if (typeof desde !== 'number' || typeof hasta !== 'number') return SIN_DATO;
+  return `${desde} — ${hasta}`;
+}
+
+/** La fecha de corte con que se calculo la deuda de cualquier fila: todas comparten la misma. */
+function fechaDeVehiculosDe(vehiculos: readonly unknown[]): Fecha {
+  for (const vehiculo of vehiculos) {
+    if (!esObjeto(vehiculo)) continue;
+    const deuda = importeDe(vehiculo['deuda']);
+    if (deuda !== undefined) return deuda.actualizadoA;
+  }
+  return hoy();
+}
+
 /** Las opciones de Consultas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_CONSULTAS: Readonly<Record<string, Conexion>> = {
   cuenta_corriente,
   consulta_deuda,
   constancia,
+  consulta_vehiculos,
 };
