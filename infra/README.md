@@ -85,11 +85,28 @@ Las cuatro se ejercen editando archivos reales y viendo el rojo:
 | Ponerle etiqueta a `applicationImageRepository` | `yarn test`, citando `ADR-0011` §5 |
 | Copiar la lectura de configuración a un componente | `yarn lint` |
 
-## Los stacks todavía no existen
+## Cómo llegar a un VPS real
 
-Este repositorio versiona los **valores en claro** de cada ambiente. Lo que falta para
-que `pulumi preview` corra de verdad —y hasta entonces el trabajo de CI se omite con un
-aviso, no con un rojo que nadie puede arreglar— es crear los stacks una vez:
+`.github/workflows/infra.yml` ya tiene los cinco trabajos de `ADR-0011` §6 —`verificar`,
+`previsualizar`, `aplicar-stg`, `aplicar-prod` y la detección de deriva diaria—, con el
+túnel SSH de `INF-01` §1.4 en los tres que hablan con el clúster. **Ninguno puede correr
+de verdad todavía**, porque el VPS no existe: los cuatro trabajos que lo necesitan se
+**omiten con un aviso** en el resumen, no con un rojo, mientras falte cualquiera de sus
+credenciales. Esto es lo que falta, en orden:
+
+### 1. El VPS y k3s
+
+Aprovisionar el VPS y correr el instalador de k3s en él es trabajo fuera de este
+repositorio —no hay nada que un PR pueda automatizar sin la cuenta del proveedor—. El
+resultado que este flujo necesita es **el kubeconfig del nodo**, con el `server` cambiado
+a `https://localhost:6443` (`INF-01` §1.4):
+
+```bash
+# En el VPS, una vez que k3s está instalado:
+sudo cat /etc/rancher/k3s/k3s.yaml | sed 's#server: https://127.0.0.1:6443#server: https://localhost:6443#'
+```
+
+### 2. Los dos stacks de Pulumi
 
 ```bash
 cd infra
@@ -97,28 +114,65 @@ pulumi stack init sgtm/stg
 pulumi stack init sgtm/prod
 
 # Los secretos, uno por ambiente y sin reutilizar ninguno entre ambientes (INF-03 §4).
-# El `server` del kubeconfig tiene que ser https://localhost:6443 (INF-01 §1.4).
 pulumi config set --secret kubeconfig "$(cat k3s.yaml)"      --stack prod
 pulumi config set --secret keycloakAdminPassword <valor>     --stack prod
 pulumi config set --secret backupAccessKeyId <valor>         --stack prod
 pulumi config set --secret backupSecretAccessKey <valor>     --stack prod
+# Y lo mismo con --stack stg, con sus propios valores.
 ```
-
-Y en el repositorio, el secreto `PULUMI_ACCESS_TOKEN` de Actions. Es una credencial
-sobre el **estado**, no sobre el clúster: `preview` no habla con el nodo mientras
-`componentes/` esté vacía.
 
 **Los dominios y los destinos de los stacks versionados son de ejemplo** —`example.pe`,
 `s3.example.net`— porque el proveedor del VPS y el del almacenamiento de objetos siguen
 sin decidirse ([`INF-01` §7](../docs/80-infraestructura/arquitectura-de-infraestructura.md)).
 Se reemplazan cuando se decidan; las invariantes ya valen igual.
 
+### 3. La clave SSH de despliegue, y solo de despliegue
+
+**No la de una persona.** Un par de claves nuevo, cuya única función es abrir el túnel
+que este flujo necesita:
+
+```bash
+ssh-keygen -t ed25519 -f despliegue-sgtm -C "github-actions@sgtm" -N ""
+# La pública, en su propia línea de authorized_keys del VPS —para poder revocarla sola,
+# sin tocar la de nadie más—. Si el VPS lo permite, restringida a NO abrir una shell:
+#   command="echo 'solo tunel'",no-pty,no-X11-forwarding,no-agent-forwarding <clave-publica>
+```
+
+### 4. Los cuatro secretos de GitHub Actions
+
+`Settings → Secrets and variables → Actions`, en este repositorio:
+
+| Secreto | Valor |
+|---|---|
+| `PULUMI_ACCESS_TOKEN` | Token de Pulumi Cloud |
+| `SSH_PRIVATE_KEY` | La **privada** de `despliegue-sgtm`, completa |
+| `VPS_USER` | El usuario con el que se conecta esa clave |
+| `VPS_HOST` | La IP o el nombre del VPS |
+
+Con los cuatro puestos, `previsualizar` y `aplicar-stg` corren solos. `aplicar-prod`
+necesita además el paso 5.
+
+### 5. El *environment* `prod`, con aprobación requerida
+
+**Este es el paso que ningún YAML de este repositorio puede hacer por sí mismo.** El
+criterio de este issue —«`prod` no se aplica hasta que alguien aprueba, y queda
+registrado quién»— no lo cumple el archivo del flujo: lo cumple GitHub, y solo si el
+*environment* existe con esa regla puesta.
+
+`Settings → Environments → New environment` → nombre **`prod`** (tiene que ser exacto:
+es el nombre que `environment: prod` del job `aplicar-prod` referencia) → **Required
+reviewers** → añadir a quien tenga que aprobar. Sin este paso, GitHub trata `prod` como
+un nombre libre sin protección y el trabajo corre sin que nadie lo mire — que es
+exactamente el estado que esta separación existe para impedir. Quién aprueba es una
+decisión de las personas del proyecto, no una que este repositorio pueda tomar.
+
 ## Lo que no está aquí, y dónde está
 
 | Cosa | Dónde |
 |---|---|
 | El entorno local | [`despliegue/compose.yaml`](../despliegue/README.md). **No se retira** |
-| Llegar al clúster desde CI: kubeconfig, túnel SSH, `up` de `stg` y de `prod` | #147 |
+| El destino real de las alertas de deriva (hoy: el trabajo se pone rojo, y nada más) | #156 |
+| La huella SSH del VPS fijada de antemano, en vez de confiada la primera vez | #157 |
 | La etiqueta de las tres imágenes | El flujo de liberación, #148 |
 | De dónde salen los secretos de la aplicación | #154 |
 | Los runbooks de restauración | #158 |

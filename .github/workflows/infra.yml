@@ -1,25 +1,37 @@
-# Verificación de la infraestructura.
+# Verificación y despliegue de la infraestructura.
 #
-# Dos trabajos, y la diferencia entre ellos es la que este flujo existe para marcar:
+# Cinco trabajos, en el orden de ADR-0011 §6:
 #
 #   1. `verificar` — el mismo `yarn verificar` que hay que pasar antes de un PR: lint,
 #      tipos y pruebas. **No necesita nada de fuera**: ni Pulumi, ni token, ni clúster.
 #      Ahí viven las invariantes de `config.ts` y la prueba que las aplica a los propios
 #      `Pulumi.<ambiente>.yaml`, así que quitar un valor obligatorio o subir el plazo de
 #      archivado del WAL se pone rojo aquí, en un PR de cualquiera.
-#   2. `previsualizar` — `pulumi preview` de los dos stacks, publicado como comentario
-#      del PR. Necesita el token de Pulumi Cloud, así que **se omite con un aviso** en
-#      los PR que no lo tienen (los de una bifurcación) y mientras los stacks no estén
-#      creados. Omitirlo con aviso es preferible a un rojo que nadie puede arreglar y
-#      que enseña a ignorar el flujo.
+#   2. `previsualizar` — `pulumi preview` de los dos stacks en cada PR, publicado como
+#      comentario. No lleva el túnel: mientras `infra/componentes/` esté vacía no hay
+#      recurso que consultar, así que el plan se calcula sin hablar con el nodo.
+#   3. `aplicar-stg` — `pulumi up` de `stg`, automático al integrar a `main`.
+#   4. `aplicar-prod` — `pulumi up` de `prod`, **detrás del *environment* protegido
+#      `prod`**. GitHub no deja avanzar el trabajo sin que alguien con acceso a ese
+#      *environment* lo apruebe, y registra quién — es lo que hace cierta la letra de
+#      ADR-0011 §6: «prod, con aprobación manual explícita; nunca automático».
+#   5. `deteccion-de-deriva` — a diario, `pulumi preview --expect-no-changes` contra
+#      `prod`. Si el clúster se apartó del estado declarado —alguien corrió un
+#      `kubectl apply` a mano, la lección de `../iaac`—, el trabajo se pone rojo.
 #
-# El `preview` NO lleva credenciales del clúster, y no es un descuido: mientras
-# `infra/componentes/` esté vacía no hay recurso que consultar, así que el plan se
-# calcula sin hablar con el nodo. El día que haya componentes, este trabajo necesitará
-# el túnel SSH del issue #147 — y ese es el momento de decidirlo, no antes.
+# Los tres últimos necesitan **el túnel SSH al API de k3s** (INF-01 §1.4): el servidor
+# no se publica a internet, así que el proveedor de Kubernetes solo lo alcanza a través
+# de un `ssh -L 6443:localhost:6443` abierto antes de cada `preview` o `up`. Es la misma
+# cicatriz de `../iaac`: con la IP del VPS en el kubeconfig en vez de `localhost`, el
+# proveedor sale por fuera del túnel — y `config.ts`, ya en `main`, se pone rojo antes de
+# que ese kubeconfig llegue a usarse.
 #
-# `pulumi up` no está aquí a propósito: `stg` se despliega al integrar a `main` y `prod`
-# con aprobación manual explícita (ADR-0011 §6). Los dos son el issue #147.
+# **Todos se omiten con un aviso, no con un rojo, mientras el VPS y sus secretos no
+# existan.** Ninguno de los cuatro secretos —`PULUMI_ACCESS_TOKEN`, `SSH_PRIVATE_KEY`,
+# `VPS_USER`, `VPS_HOST`— se puede fabricar desde este repositorio: salen de un VPS real,
+# que es aprovisionamiento fuera del alcance de un PR. Un rojo permanente por algo que
+# nadie en el PR puede arreglar enseña a ignorar el flujo; el resumen del trabajo dice
+# qué falta y `infra/README.md` trae los pasos exactos.
 name: Infraestructura
 
 on:
@@ -28,6 +40,10 @@ on:
   push:
     branches: [main]
     paths: ['infra/**', '.github/workflows/infra.yml']
+  schedule:
+    # 07:00 UTC — madrugada en Perú (UTC-5). El horario exacto no importa mientras sea
+    # fuera de la ventana de atención; lo que importa es que corra todos los días.
+    - cron: '0 7 * * *'
 
 permissions:
   contents: read
@@ -37,6 +53,7 @@ jobs:
   verificar:
     name: Lint, tipos y pruebas
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     defaults:
       run:
         working-directory: infra
@@ -116,5 +133,208 @@ jobs:
           stack-name: prod
           work-dir: infra
           comment-on-pr: true
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+  aplicar-stg:
+    name: pulumi up en stg
+    runs-on: ubuntu-latest
+    needs: verificar
+    if: github.event_name == 'push'
+    # `pulumi up` tiene su propio bloqueo de concurrencia en Pulumi Cloud (ADR-0011 §3);
+    # esto evita además que dos integraciones seguidas abran dos túneles a la vez sobre
+    # el mismo nodo.
+    concurrency:
+      group: infra-aplicar-stg
+      cancel-in-progress: false
+    outputs:
+      hay-credenciales: ${{ steps.credenciales.outputs.hay }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: infra/yarn.lock
+
+      - name: Instalar dependencias
+        working-directory: infra
+        run: yarn install --frozen-lockfile
+
+      - name: ¿Hay credenciales del clúster?
+        id: credenciales
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          if [ -n "$PULUMI_ACCESS_TOKEN" ] && [ -n "$SSH_PRIVATE_KEY" ] \
+             && [ -n "$VPS_USER" ] && [ -n "$VPS_HOST" ]; then
+            echo "hay=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=no" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Sin \`pulumi up\` en stg"
+              echo
+              echo "Falta uno o más de \`PULUMI_ACCESS_TOKEN\`, \`SSH_PRIVATE_KEY\`,"
+              echo "\`VPS_USER\` o \`VPS_HOST\`. Sin ellos no hay VPS al que llegar:"
+              echo "esto corre en cuanto exista y sus secretos estén puestos."
+              echo "Los pasos están en \`infra/README.md\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Abrir el túnel SSH al API de k3s
+        if: steps.credenciales.outputs.hay == 'si'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/despliegue
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/despliegue
+          # TOFU (confiar la primera vez): no hay huella fijada de antemano, así que se
+          # acepta la que presente el host en esta conexión y se recuerda para el resto
+          # del trabajo. Fijar la huella real del VPS es trabajo de endurecimiento
+          # (issue #157), no de este issue.
+          ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
+              -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
+
+      - uses: pulumi/actions@v6
+        if: steps.credenciales.outputs.hay == 'si'
+        with:
+          command: up
+          stack-name: stg
+          work-dir: infra
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+  aplicar-prod:
+    name: pulumi up en prod (con aprobación)
+    runs-on: ubuntu-latest
+    needs: aplicar-stg
+    # Sin las cuatro credenciales no hay nada que este trabajo pueda hacer, y no tiene
+    # sentido pedirle a un revisor que apruebe una espera que termina en un paso omitido.
+    # El *environment* protegido —y con él la aprobación— solo entra en juego cuando de
+    # verdad hay algo que aplicar.
+    if: github.event_name == 'push' && needs.aplicar-stg.outputs.hay-credenciales == 'si'
+    # GitHub bloquea este trabajo hasta que alguien con acceso al *environment* `prod`
+    # lo aprueba, y registra quién. **El *environment* se crea a mano, una vez, en
+    # Settings → Environments → New environment → «prod» → Required reviewers**: no hay
+    # API para eso en este flujo, y quién aprueba es una decisión de las personas del
+    # proyecto, no de este archivo. Sin ese *environment* configurado, GitHub trata la
+    # palabra clave como un nombre libre y el trabajo corre sin aprobación — por eso el
+    # criterio de aceptación de este issue no está satisfecho solo con este YAML.
+    environment: prod
+    concurrency:
+      group: infra-aplicar-prod
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: infra/yarn.lock
+
+      - name: Instalar dependencias
+        working-directory: infra
+        run: yarn install --frozen-lockfile
+
+      # Sin la comprobación de "¿hay credenciales?": el `if` del trabajo ya exige que
+      # `aplicar-stg` haya visto las cuatro (mismos secretos del repositorio, mismo
+      # resultado), así que repetirla aquí solo repetiría código sin cambiar nada.
+      - name: Abrir el túnel SSH al API de k3s
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/despliegue
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/despliegue
+          ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
+              -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
+
+      - uses: pulumi/actions@v6
+        with:
+          command: up
+          stack-name: prod
+          work-dir: infra
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+  deteccion-de-deriva:
+    name: Detección de deriva en prod
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: infra/yarn.lock
+
+      - name: Instalar dependencias
+        working-directory: infra
+        run: yarn install --frozen-lockfile
+
+      - name: ¿Hay credenciales del clúster?
+        id: credenciales
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          if [ -n "$PULUMI_ACCESS_TOKEN" ] && [ -n "$SSH_PRIVATE_KEY" ] \
+             && [ -n "$VPS_USER" ] && [ -n "$VPS_HOST" ]; then
+            echo "hay=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=no" >> "$GITHUB_OUTPUT"
+            echo "### Sin detección de deriva: no hay credenciales del clúster todavía" \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Abrir el túnel SSH al API de k3s
+        if: steps.credenciales.outputs.hay == 'si'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/despliegue
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/despliegue
+          ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
+              -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
+
+      - name: Instalar el CLI de Pulumi
+        if: steps.credenciales.outputs.hay == 'si'
+        run: |
+          curl -fsSL https://get.pulumi.com | sh
+          echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
+
+      # `--expect-no-changes` es la comprobación: sale en rojo si el plan no está vacío,
+      # que es exactamente lo que pasa cuando alguien corrió un `kubectl apply` a mano
+      # sobre lo que Pulumi cree que gestiona en solitario.
+      #
+      # ⚠ El aviso hoy es «el trabajo programado se puso rojo», no una notificación a una
+      # persona: no hay todavía un destino de alertas (issue #156). Es el mismo aviso que
+      # ya recibe cualquiera que mire Actions o que GitHub notifica por omisión a quien
+      # tiene las notificaciones de ejecuciones fallidas activadas; conectarlo a un canal
+      # de verdad es ese issue, no este.
+      - name: pulumi preview --expect-no-changes contra prod
+        if: steps.credenciales.outputs.hay == 'si'
+        working-directory: infra
+        run: pulumi preview --stack prod --expect-no-changes --diff --non-interactive
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
