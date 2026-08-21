@@ -31,6 +31,24 @@ yarn --silent manifiestos --ambiente stg \
         const entrada = JSON.parse(require("fs").readFileSync(0, "utf8"));
         const deTraefik = ["IngressRoute", "Middleware", "TLSOption", "HelmChartConfig"];
         entrada.items = entrada.items.filter((i) => !deTraefik.includes(i.kind));
+
+        // Solo aqui, nunca en Observabilidad.ts: `node_exporter` excluye "overlay" de
+        // sus metricas de filesystem por omision, y con motivo -en un VPS real la raiz
+        // es ext4/xfs, y lo que aparece como "overlay" ahi es la capa escribible de
+        // CADA contenedor, que no es "el disco del nodo"-. Un nodo de `kind` es EL AL
+        // REVES: su propia raiz esta montada como overlay -es un contenedor de Docker
+        // haciendo de nodo-, asi que con la exclusion de fabrica el panel de disco
+        // nunca ve una sola serie aqui. Se desactiva la exclusion SOLO para esta
+        // comprobacion.
+        const nodeExporter = entrada.items.find(
+          (i) => i.kind === "Deployment" && i.metadata.name.includes("node-exporter"),
+        );
+        const contenedor = nodeExporter?.spec.template.spec.containers.find(
+          (c) => c.name === "node-exporter",
+        );
+        if (!contenedor) throw new Error("No hay Deployment de node-exporter en el manifiesto");
+        contenedor.args.push("--collector.filesystem.fs-types-exclude=^$");
+
         process.stdout.write(JSON.stringify(entrada));
       ' \
     | kubectl apply -f - >/dev/null
