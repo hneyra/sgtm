@@ -173,6 +173,7 @@ decisión de las personas del proyecto, no una que este repositorio pueda tomar.
 | El entorno local | [`despliegue/compose.yaml`](../despliegue/README.md). **No se retira** |
 | El destino real de las alertas de deriva (hoy: el trabajo se pone rojo, y nada más) | #156 |
 | La huella SSH del VPS fijada de antemano, en vez de confiada la primera vez | #157 |
-| La etiqueta de las tres imágenes | El flujo de liberación, #148 |
+| Las tres imágenes, publicadas y etiquetadas por commit | [`.github/workflows/publicar-imagenes.yml`](../.github/workflows/publicar-imagenes.yml) |
+| Aplicar esa etiqueta a un `Deployment` real, sin `pulumi up` | Depende de que exista el `Deployment` — `Aplicacion.ts`, #152 |
 | De dónde salen los secretos de la aplicación | #154 |
 | Los runbooks de restauración | #158 |

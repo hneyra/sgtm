@@ -1,0 +1,161 @@
+# Publicación de las tres imágenes del sistema (issue #148).
+#
+# **Un commit en `main` publica las tres, etiquetadas con su sha — nunca con
+# `latest`.** `latest` no identifica nada cuando hay que decir qué está corriendo en
+# la municipalidad; el sha sí, y es lo único que el flujo de liberación necesita para
+# fijar una versión sin tocar el estado de Pulumi (`ADR-0011` §5).
+#
+#   | Imagen             | Sale de                              | Cuántas |
+#   |---------------------|---------------------------------------|---------|
+#   | `sgtm-aplicacion`   | `backend/Dockerfile`, destino `aplicacion` | 1 |
+#   | `sgtm-migrador`     | el mismo Dockerfile, destino `migrador`    | 1 |
+#   | `sgtm-interfaz`     | `frontend/Dockerfile`, destino `interfaz`  | **2, una por ambiente** |
+#
+# Las dos primeras no dependen del ambiente: la configuración de la aplicación entra
+# por variables de entorno en tiempo de ejecución, así que el mismo artefacto sirve
+# para `stg` y para `prod` — es lo que ADR-0011 §5 llama «promover el mismo
+# artefacto».
+#
+# **La interfaz es la excepción, y a propósito.** Vite resuelve `VITE_SGTM_OIDC_*` AL
+# COMPILAR (`frontend/Dockerfile`): el emisor de identidad queda incrustado en el
+# paquete estático. Con un emisor por ambiente, hacen falta dos imágenes —no una
+# reconfigurable—, y las dos build args que cambian entre ellas son exactamente las
+# que dependen del emisor. La fuente de esos valores es a propósito la más aburrida
+# posible: el `sgtm:domain` que cada `Pulumi.<ambiente>.yaml` YA fija, con la misma
+# forma de URL que `despliegue/compose.yaml` y `../iaac` ya usan para Keycloak
+# (`https://<dominio>/keycloak`). No es una decisión nueva de este flujo: es aplicar
+# una convención que ya existe a los dos dominios que `infra/` ya declara. Cuando el
+# emisor cambie —dominio nuevo, otro realm—, cambia en `Pulumi.<ambiente>.yaml` y este
+# flujo reconstruye la imagen de esa municipalidad sola, sin tocar la otra.
+#
+# **Lo que este flujo NO hace, y por qué se queda corto a propósito:**
+#
+# Publica las imágenes. No las despliega. «El clúster corre una versión
+# identificable, sin abrir el estado de Pulumi» y «revertir no ejecuta `pulumi up` y
+# tarda menos de 15 minutos» son los otros dos criterios de #148, y los dos dependen
+# de que exista un `Deployment` al que aplicarle la imagen — que es #152
+# (`Aplicacion.ts`), todavía sin escribir. Inventar aquí un `kubectl set image` contra
+# un recurso que no existe sería simular un mecanismo que #152 podría diseñar de otra
+# forma. Lo que sí queda listo: la etiqueta que ese mecanismo va a consumir, publicada
+# y estable, esperando.
+name: Publicar imágenes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'infra/Pulumi.stg.yaml'
+      - 'infra/Pulumi.prod.yaml'
+      - '.github/workflows/publicar-imagenes.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: publicar-imagenes-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  aplicacion-y-migrador:
+    name: ${{ matrix.imagen }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # `destino` es el nombre de la etapa en backend/Dockerfile; `imagen`, el
+        # nombre publicado. Los dos difieren porque el Dockerfile los llamó como se
+        # leen en ARQ-03 §4 (aplicacion, migrador) y el registro los necesita con el
+        # prefijo del proyecto, para no colisionar con ninguna otra imagen de
+        # `ghcr.io/<owner>/`.
+        include:
+          - destino: aplicacion
+            imagen: sgtm-aplicacion
+          - destino: migrador
+            imagen: sgtm-migrador
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: El nombre del repositorio, en minúsculas
+        id: repositorio
+        run: |
+          # GHCR exige minúsculas. github.repository_owner ya lo está para este
+          # repositorio, pero un propietario con mayúsculas rompería el push en
+          # silencio si no se normaliza aquí.
+          echo "propietario=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" \
+            >> "$GITHUB_OUTPUT"
+
+      # El contexto es la RAIZ del repositorio, no backend/: el Dockerfile ya lo
+      # explica — el catálogo de NEG-03 vive en docs/ y el build lo copia de ahí.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          target: ${{ matrix.destino }}
+          push: true
+          tags: ghcr.io/${{ steps.repositorio.outputs.propietario }}/${{ matrix.imagen }}:${{ github.sha }}
+
+  interfaz:
+    name: sgtm-interfaz (${{ matrix.ambiente }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ambiente: [stg, prod]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: El nombre del repositorio, en minúsculas
+        id: repositorio
+        run: |
+          echo "propietario=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" \
+            >> "$GITHUB_OUTPUT"
+
+      # El dominio sale de infra/Pulumi.<ambiente>.yaml, la misma fuente que usa
+      # `infra/verificaciones/stacks.test.ts` — sin instalar Pulumi ni pedir su
+      # token, porque `domain` no es un secreto.
+      - name: Leer el dominio del ambiente
+        id: dominio
+        run: |
+          dominio=$(sed -n 's/^[[:space:]]*sgtm:domain:[[:space:]]*//p' \
+            "infra/Pulumi.${{ matrix.ambiente }}.yaml" | head -n1 | tr -d '"' | tr -d "'")
+          if [ -z "$dominio" ]; then
+            echo "::error file=infra/Pulumi.${{ matrix.ambiente }}.yaml::No se encontro sgtm:domain" \
+              >&2
+            exit 1
+          fi
+          echo "dominio=$dominio" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile
+          target: interfaz
+          push: true
+          tags: >-
+            ghcr.io/${{ steps.repositorio.outputs.propietario }}/sgtm-interfaz:${{ matrix.ambiente }}-${{ github.sha }}
+          build-args: |
+            VITE_SGTM_API=/api/v1
+            VITE_SGTM_OIDC_CLIENTE=sgtm-backoffice
+            VITE_SGTM_OIDC_AUTORIZACION=https://${{ steps.dominio.outputs.dominio }}/keycloak/realms/sgtm/protocol/openid-connect/auth
+            VITE_SGTM_OIDC_TOKEN=https://${{ steps.dominio.outputs.dominio }}/keycloak/realms/sgtm/protocol/openid-connect/token
+            VITE_SGTM_OIDC_FIN_DE_SESION=https://${{ steps.dominio.outputs.dominio }}/keycloak/realms/sgtm/protocol/openid-connect/logout
