@@ -67,6 +67,12 @@ limpiar() {
 }
 trap limpiar EXIT
 
+# El PITR exige apagar el motor, destruir su directorio de datos y arrancar OTRO
+# proceso sobre lo restaurado. Eso es manipular el volumen desde fuera, y contra un
+# contenedor de la imagen oficial no se puede sin reimplementar medio entrypoint — por
+# eso este simulacro pide la instancia local aunque haya Docker.
+export SGTM_MOTOR_MODO=local
+
 # shellcheck source=../verificaciones/motor/lib-motor-local.sh
 source "$INFRA/verificaciones/motor/lib-motor-local.sh"
 
@@ -115,15 +121,8 @@ walg() {
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. El motor, con archivado continuo
 # ─────────────────────────────────────────────────────────────────────────────
-if [ "$MODO" != "local" ]; then
-    echo
-    echo "FALLO: este simulacro necesita el modo local, no Docker." >&2
-    echo "El PITR exige apagar el motor, destruir su directorio de datos y arrancar" >&2
-    echo "OTRO proceso sobre lo restaurado. Eso es manipular el volumen desde fuera," >&2
-    echo "y contra un contenedor de la imagen oficial no se puede sin reimplementar" >&2
-    echo "medio entrypoint. Con SGTM_PUERTO_SIMULACRO y un PostgreSQL local, si." >&2
-    exit 1
-fi
+[ "$MODO" = "local" ] \
+    || { echo "FALLO: la biblioteca no arranco en modo local pese a SGTM_MOTOR_MODO=local." >&2; exit 1; }
 
 echo
 echo "· Encendiendo el archivado continuo de WAL"

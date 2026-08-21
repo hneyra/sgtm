@@ -152,7 +152,10 @@ sola forma honesta de responderse que no sea «sí», y está en el recuadro de 
 
 - [ ] Escribir y automatizar el proceso de anonimización, con su comprobación (§3.1, punto 3).
 - [ ] Fijar la periodicidad del refresco de `stg` desde `prod`.
-- [ ] Fijar la periodicidad del simulacro de restauración y dónde se anota el tiempo (§2).
+- [ ] Fijar la periodicidad del simulacro de restauración **contra `stg`** y dónde se anota el
+      tiempo (§2). El simulacro del **procedimiento** ya corre en cada PR
+      ([`INF-08`](respaldo-y-recuperacion.md) §5); lo que falta es el que mide el RTO con
+      volumetría real, y ese necesita el segundo VPS.
 - [ ] Confirmar el segundo VPS con el patrocinador (§6).
 - [ ] Definir las ventanas de congelamiento del calendario tributario (§5).
 - [ ] Decidir de dónde salen las semillas sintéticas de local ahora que el proxy de datos del
@@ -161,6 +164,7 @@ sola forma honesta de responderse que no sea «sí», y está en el recuadro de 
 ## 8. Documentos relacionados
 
 [`arquitectura-de-infraestructura.md`](arquitectura-de-infraestructura.md) (INF-01) ·
+[`respaldo-y-recuperacion.md`](respaldo-y-recuperacion.md) (INF-08) ·
 [`ADR-0011`](../30-arquitectura/adr/ADR-0011-infraestructura-como-codigo.md) ·
 [`REQ-02 §Operación`](../20-requisitos/requisitos-no-funcionales.md) ·
 [`GOB-04 — Plan de marcha blanca`](../00-gobierno/plan-de-marcha-blanca.md) ·

@@ -16,6 +16,7 @@ yarn install
 yarn verificar        # lint, tipos y pruebas. Lo que hay que pasar antes de un PR
 yarn manifiestos --ambiente stg          # los manifiestos de un ambiente, en JSON
 verificaciones/motor/verificar-el-motor.sh --ambiente stg --con-aislamiento
+respaldo/simulacro-de-restauracion.sh --ambiente stg   # el respaldo, restaurado de verdad
 ```
 
 `yarn verificar` **no necesita Pulumi, ni token, ni clúster.** Es deliberado: la parte
@@ -31,10 +32,11 @@ etiqueta que se cuela en el estado— se detecta en la máquina de quien lo escr
 | `config.ts` | **Toda** la configuración: se lee, se le ponen valores por omisión y se valida |
 | `config.test.ts` | Un caso que viola cada invariante |
 | `index.ts` | La composición. Una sola, para los dos ambientes |
-| `componentes/` | Los cinco componentes de la fase B, como **funciones puras** que devuelven manifiestos |
+| `componentes/` | Los cinco componentes de la fase B más el respaldo de la fase C, como **funciones puras** que devuelven manifiestos |
 | `auditoria.ts` | Las convenciones de `INF-01` §4 sobre esos manifiestos. Corre en `yarn verificar` **y** en `pulumi up` |
 | `herramientas/` | `yarn manifiestos` y `yarn secretos`: lo que se desplegaría y el inventario de claves, en JSON, sin Pulumi |
 | `secretos/` | Generar lo que falte y rotar lo que ya existe (`INF-06`, issue #154) — nunca `pulumi up` |
+| `respaldo/` | El simulacro de restauración: archivado, PITR y verificación contra un motor real (`INF-08`, issue #155) |
 | `verificaciones/` | Las reglas de ESLint, los stacks versionados, los criterios de aceptación de la fase B y el motor levantado de verdad |
 
 ### Por qué los componentes devuelven datos en vez de crear recursos
@@ -107,6 +109,7 @@ Y sobre los manifiestos, en `auditoria.ts`:
 | El perfil `web` declara `SGTM_OIDC_EMISOR`; el `batch` no abre puertos | ADR-0005, #152 |
 | Keycloak no arranca en `start-dev` | #151 |
 | Toda ruta va por `websecure` con TLS, y `/keycloak/admin` no se publica | #153 |
+| El motor declara `archive_mode=on`; ninguna clave de wal-g va como `value` | RNF-076, #155 |
 
 > **Una nota sobre la última fila de `ADR-0011` §5.** El ADR anotaba como costo aceptado
 > que la frontera de la versión de la imagen «no tiene verificación automática todavía;
@@ -116,7 +119,7 @@ Y sobre los manifiestos, en `auditoria.ts`:
 
 ## Cómo se demuestra que las verificaciones pueden fallar
 
-Las cuatro se ejercen editando archivos reales y viendo el rojo:
+Todas se ejercen editando archivos reales y viendo el rojo:
 
 | Rotura | Qué se pone rojo |
 |---|---|
@@ -128,11 +131,17 @@ Las cuatro se ejercen editando archivos reales y viendo el rojo:
 | Darle al `Deployment` de la aplicación el `Secret` de `sgtm_owner`, o cambiarle el usuario de base | `yarn test` |
 | Quitar `!PathPrefix(/keycloak/admin)` de la ruta de identidad | `yarn test` |
 | Quitar el `GRANT CONNECT` de `30-base-de-keycloak.sh` | `verificar-el-motor.sh`: `sgtm_owner` deja de poder conectarse |
+| Quitar `archive_mode=on`, o poner la clave de cifrado de wal-g como `value` | `yarn test`, citando RNF-076 |
+| Quitar `recovery_target_time` del simulacro | `simulacro-de-restauracion.sh`: se restauran 4 filas donde había 3 |
+| Hacer `SUPERUSER` a `sgtm_respaldo`, o darle `CONNECT` al padrón | `verificar-el-motor.sh` y el simulacro |
 
-La última fila es la que más vale, porque **no se puede comprobar leyendo el
-manifiesto**: ese guion revoca el `CONNECT` que `PUBLIC` tiene por omisión sobre la base
-del padrón, y si no vuelve a concedérselo a los cuatro roles, el sistema entero se queda
-fuera. Se descubrió ejecutándolo.
+Las últimas cuatro son las que más valen, porque **no se pueden comprobar leyendo el
+manifiesto**. `30-base-de-keycloak.sh` revoca el `CONNECT` que `PUBLIC` tiene por omisión
+sobre la base del padrón, y si no vuelve a concedérselo a los cuatro roles, el sistema
+entero se queda fuera. Y un respaldo solo se sabe que sirve restaurándolo: el simulacro
+destruye el directorio de datos y comprueba que lo que vuelve cuadra al céntimo
+([`INF-08`](../docs/80-infraestructura/respaldo-y-recuperacion.md)). Las dos se
+descubrieron ejecutándolas.
 
 ## Los secretos que estos manifiestos leen y no crean
 
