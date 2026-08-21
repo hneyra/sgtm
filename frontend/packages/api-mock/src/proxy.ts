@@ -1,6 +1,6 @@
 import type { DatosDePantalla, ProblemDetails } from '@sgtm/api-client';
 import { RESPUESTAS, RUTAS } from './respuestas.generado';
-import { escrituraDe, paginadoDe, recursoDe } from './recursos';
+import { escrituraDe, listaDe, paginadoDe, recursoDe } from './recursos';
 import { YA_SERVIDAS, laSirveElBackend } from './servidas';
 import type { OperacionServida } from './servidas';
 
@@ -184,9 +184,10 @@ export function instalarProxyDeDatos({
       await esperar(LATENCIA_MINIMA_MS + Math.random() * (LATENCIA_MAXIMA_MS - LATENCIA_MINIMA_MS));
     }
 
-    // Las doce operaciones que el backend ya sirve salen con **su** forma, no
-    // con la que comparten las 134: para esas la pantalla ya habla su idioma
-    // (ver `recursos.ts`).
+    // Las operaciones que el backend ya sirve salen con **su** forma, no con
+    // la que comparten las 134: para esas la pantalla ya habla su idioma (ver
+    // `recursos.ts`) — sobre paginado, recurso suelto o arreglo, segun lo que
+    // publique cada una.
     const paginado = paginadoDe(metodo, url.pathname);
     if (paginado) return json(paginado, 200);
 
@@ -194,6 +195,11 @@ export function instalarProxyDeDatos({
     // pagina— salen sueltas, con su version y su historico.
     const recurso = recursoDe(metodo, url.pathname);
     if (recurso) return json(recurso, 200);
+
+    // Ni sobre paginado ni recurso suelto: un arreglo tal cual, como lo
+    // publican las tablas de valuacion (#17).
+    const lista = listaDe(metodo, url.pathname);
+    if (lista) return json(lista, 200);
 
     // Y las dos escrituras de sesion devuelven el recurso que devuelve el
     // backend, no los datos de la pantalla: la cabecera adopta el ejercicio que

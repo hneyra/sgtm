@@ -75,7 +75,9 @@ describe('instalar y desinstalar', () => {
 describe('la aplicacion pide por HTTP y el proxy contesta', () => {
   it('sirve una pantalla con tabla por su ruta del contrato', async () => {
     instalarProxyDeDatos();
-    const datos = await solicitar<DatosDePantalla>('/catastro/tablas/aranceles');
+    // Sin conectar: los aranceles ya piden su recurso propio (#71) y salen por
+    // el camino que se prueba mas abajo, no por este.
+    const datos = await solicitar<DatosDePantalla>('/catastro/tablas/depreciacion');
     expect(datos.tabla?.filas.length).toBeGreaterThan(0);
     expect(datos.fechaCalculo).toBe('2026-08-13');
   });
