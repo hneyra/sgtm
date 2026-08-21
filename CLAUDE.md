@@ -242,13 +242,20 @@ omiten: una prueba bloqueante que se salta a sí misma deja el build en verde.
 cd infra
 yarn verificar                    # lint, tipos y pruebas. Sin Pulumi, sin token y sin cluster
 yarn manifiestos --ambiente stg   # lo que se desplegaria, en JSON. Tampoco necesita Pulumi
+yarn secretos --ambiente stg      # el inventario de INF-06: nombre, clave, rotacion. Nunca un valor
 verificaciones/motor/verificar-el-motor.sh --con-aislamiento   # el motor, levantado de verdad
+secretos/bootstrap-secretos.sh --ambiente stg      # genera lo que falte, nunca via Pulumi
+secretos/rotar-clave.sh --ambiente stg --rol sgtm-app   # rota contra la base en marcha
 ```
 
 **El aislamiento se verifica contra el motor que levanta ese guion, nunca contra uno en
 servicio:** la prueba provisiona, y `ALTER ROLE` sobre `sgtm_owner` y `sgtm_app` vale para
 todas las bases del clúster de PostgreSQL, no solo para la suya. Apuntarla a `prod` deja fuera
 a la aplicación (INF-01 §4.1).
+
+**Ningún secreto de la aplicación vive en el estado de Pulumi** (`ADR-0011` §3,
+[`INF-06`](docs/80-infraestructura/gestion-de-secretos.md)): `bootstrap-secretos.sh` los
+genera hablando con el API de Kubernetes por `kubectl`, nunca con `pulumi up`.
 
 ```bash
 cd frontend
@@ -322,6 +329,10 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | La marca de la instalación de demostración (19 pruebas) | Quitando el bloque de la marca de **cada renderizador por separado**; marcando solo al dibujar en vez de al emitir; y cambiando la caché del régimen por una global de un solo valor | Cada renderizador roto pone en rojo su formato y solo el suyo; 2 en rojo; 2 en rojo —la caché global hace que la primera municipalidad que emita decida por todas, y en el orden malo la marcha blanca emite **sin** marca— |
 | Los manifiestos del clúster (49 pruebas, sin Pulumi ni nodo) | Poniendo `RollingUpdate` sobre el volumen de la base, `timeoutSeconds: 1` en una sonda, `sgtm_owner` como usuario del Deployment, un puerto en el perfil `batch`, `start-dev` en Keycloak y `/keycloak/admin` publicado | Las seis lo ponen rojo |
 | El motor del manifiesto, levantado de verdad | Quitando el `GRANT CONNECT` que devuelve a los cuatro roles lo que el guion de Keycloak revoca de PUBLIC | Rojo: `sgtm_owner` deja de poder conectarse, y con él la aplicación entera |
+| El inventario de secretos y su generación (14 pruebas, sin cluster) | Un generador que repite un valor; `keycloakAdminPassword` reintroducida en la lista de arranque de Pulumi | Rojo: `completarSecreto` lanza en vez de crear dos claves iguales; `verificaciones/secretos.test.ts` detecta la clave compartida entre las dos listas |
+| La rotación de `sgtm_app`, contra un motor real | Quitando el `ALTER ROLE` de `verificar-rotacion.sh` | Rojo: una conexión nueva con la clave vieja sigue funcionando después de "rotar" |
+| Los secretos, generados y comprobados contra un cluster real (CI) | Corriendo `bootstrap-secretos.sh` dos veces y comparando huellas; y forzando la misma clave para `sgtm_owner` y `sgtm_app` con `kubectl patch` | La huella no cambia en la segunda corrida; `verificar-claves-distintas.sh` detecta las dos claves iguales |
+| El escaneo de secretos del repositorio entero | Apuntando gitleaks a la muestra de clave de mentira sin la exclusión del repositorio | La encuentra; sin la muestra, el escaneo del repositorio no demostraría nada |
 | Carga inicial de vías, sectores y manzanas (20 pruebas) | Anotando `@Transactional` sobre el método que orquesta el archivo entero —o, equivalente, envolviendo el bucle en un solo `TransactionTemplate`— en vez de dejar que cada fila abra la suya al llamar a un caso de uso `@Service` distinto | Rojo: la fila que revienta la unicidad se lleva consigo a la fila válida que la seguía, igual que ya demostraba `ViaRepositoryJdbcTest` para dos escrituras en una transacción |
 
 **Sin Docker en la máquina, la prueba no se salta**: se apunta a un PostgreSQL existente con

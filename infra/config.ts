@@ -195,6 +195,18 @@ export interface Invariants {
   implantacion: ImplantacionSettings;
 }
 
+/**
+ * Los dos secretos de arranque que SÍ viven aquí, cifrados en la configuración del
+ * stack (`ADR-0011` §3): lo que Pulumi necesita para *crear* el mecanismo. Ninguno de
+ * los dos abre el padrón de una municipalidad por sí solo.
+ *
+ * **La clave del administrador de Keycloak no está aquí, y antes lo estuvo.** `INF-06`
+ * (issue #154) la clasifica como secreto de la *aplicación* —la misma familia que
+ * `sgtm_owner` y `sgtm_app`—, así que sale de Pulumi igual que ellos: la genera
+ * `infra/secretos/bootstrap-secretos.sh` y vive solo en el `Secret` de Kubernetes que
+ * `Identidad.ts` ya referencia. El campo se retiró de esta interfaz junto con esa
+ * decisión; queda la nota para que nadie lo reintroduzca "por comodidad".
+ */
 export interface Settings extends Invariants {
   /**
    * Kubeconfig del nodo. Su `server` tiene que apuntar al bucle local: CI llega al
@@ -202,8 +214,6 @@ export interface Settings extends Invariants {
    * (`INF-01` §1.4).
    */
   kubeconfig: pulumi.Output<string>;
-  /** Clave del administrador de Keycloak. Secreto de arranque, no de la aplicación. */
-  keycloakAdminPassword: pulumi.Output<string>;
   /** Credenciales del almacenamiento de objetos donde viven los respaldos. */
   backupCredentials: {
     accessKeyId: pulumi.Output<string>;
@@ -608,7 +618,6 @@ export function loadSettings(): Settings {
   return {
     ...invariants,
     kubeconfig,
-    keycloakAdminPassword: config.requireSecret("keycloakAdminPassword"),
     backupCredentials: {
       accessKeyId: config.requireSecret("backupAccessKeyId"),
       secretAccessKey: config.requireSecret("backupSecretAccessKey"),

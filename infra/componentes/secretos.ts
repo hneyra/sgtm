@@ -1,0 +1,138 @@
+import {
+  secretos as nombresDeSecretos,
+  CLAVES,
+  ROL_DE_IDENTIDAD,
+  servicioDeAplicacion,
+  servicioDeIdentidad,
+} from "./convenciones";
+import type { Environment } from "../config";
+
+/**
+ * El inventario de secretos de la aplicacion, en un solo sitio (issue #154).
+ *
+ * `convenciones.ts` ya nombra los `Secret` y sus claves — es lo que los manifiestos
+ * referencian. Este archivo agrega **de donde sale cada valor** y **cada cuanto se
+ * rota**, y es la fuente unica que leen tres cosas distintas: `docs/80-infraestructura/
+ * gestion-de-secretos.md` (a mano, porque un documento no ejecuta TypeScript),
+ * `herramientas/emitir-secretos.ts` (que lo vuelca a JSON para los guiones de bash) y
+ * `verificaciones/secretos.test.ts` (que exige que ninguna clave se repita entre roles).
+ *
+ * **Ninguno de estos valores vive aqui.** Esto es metadatos —nombre, clave, rol de
+ * PostgreSQL si lo tiene, periodicidad—, nunca el secreto mismo. `ADR-0011` §3 sigue
+ * intacto: Pulumi crea el `Namespace` y referencia estos `Secret` por nombre; no los crea
+ * con un valor. Quien genera el valor es `secretos/bootstrap-secretos.sh`, y quien lo
+ * escribe en el clúster es `kubectl`, nunca `pulumi up`.
+ */
+
+/** Cada cuanto se rota un secreto, y por que. */
+export type Periodicidad = "semestral" | "trimestral" | "anual" | "nunca-desde-el-nodo" | "tras-incidente";
+
+export interface EntradaDeSecreto {
+  /** Identificador corto, el que usan los guiones de bash (`--rol sgtm-app`). */
+  rol: string;
+  /** El `Secret` de Kubernetes que lo guarda. */
+  secreto: string;
+  /** La clave dentro de ese `Secret`. */
+  clave: string;
+  /** Quien lo consume. */
+  consumidor: string;
+  periodicidad: Periodicidad;
+  /**
+   * El rol de PostgreSQL cuya clave es esta, si lo es. `undefined` para lo que no es una
+   * clave de un rol del motor (el administrador de Keycloak, por ejemplo).
+   *
+   * Es lo que `rotar-clave.sh` necesita para saber si tiene que hacer `ALTER ROLE` o
+   * solo reemplazar el `Secret`.
+   */
+  rolDePostgres?: string;
+  /**
+   * El `Deployment` que hay que reprogramar despues de rotar, si alguno lo consume
+   * como pod en marcha. `undefined` cuando nadie lo necesita asi: `sgtm-owner` solo lo
+   * leen los dos Jobs, y un Job nuevo ya lee el `Secret` actualizado al crearse — no
+   * hay pod en marcha que reprogramar.
+   */
+  requiereReinicioDe?: string;
+}
+
+/**
+ * El inventario completo de un ambiente.
+ *
+ * Cinco entradas, cuatro `Secret` distintos —`sgtm-<amb>-keycloak` guarda dos claves—
+ * con cinco valores, **ninguno repetido**: es la comprobacion que pide el issue, no solo
+ * «roles distintos» sino «claves distintas». La prueba en `verificaciones/secretos.
+ * test.ts` lo exige contando entradas unicas por `secreto`+`clave`, y
+ * `completar-secreto.ts` lo hace estructuralmente imposible de incumplir al generar.
+ */
+export function inventarioDeSecretos(environment: Environment): EntradaDeSecreto[] {
+  const nombres = nombresDeSecretos(environment);
+
+  return [
+    {
+      rol: "postgres-superusuario",
+      secreto: nombres.motor,
+      clave: CLAVES.superusuario,
+      consumidor: "Inicializacion del motor (el propio contenedor de PostgreSQL)",
+      // No sale del nodo: solo lo usa el punto de entrada de la imagen al arrancar, y
+      // el guion `bootstrap-secretos.sh` cuando genera lo que falta. Rotar exigiria
+      // volver a autenticar contra un motor cuyo superusuario es este mismo — se anota
+      // como excepcion en el documento, no en el tipo.
+      periodicidad: "nunca-desde-el-nodo",
+      rolDePostgres: "postgres",
+    },
+    {
+      rol: "sgtm-owner",
+      secreto: nombres.owner,
+      clave: CLAVES.owner,
+      consumidor: "Los dos Jobs: migracion e implantacion. Nunca el Deployment de la aplicacion",
+      periodicidad: "trimestral",
+      rolDePostgres: "sgtm_owner",
+    },
+    {
+      rol: "sgtm-app",
+      secreto: nombres.aplicacion,
+      clave: CLAVES.aplicacion,
+      consumidor: "El Deployment de la aplicacion, perfil web y perfil batch",
+      periodicidad: "semestral",
+      rolDePostgres: "sgtm_app",
+      requiereReinicioDe: servicioDeAplicacion(environment),
+    },
+    {
+      rol: "keycloak-admin",
+      secreto: nombres.identidad,
+      clave: CLAVES.administradorDeIdentidad,
+      consumidor: "El propio Keycloak (bootstrap admin), y el Job que reconcilia el realm",
+      // No es una clave de PostgreSQL: rotarla es un ALTER USER de Keycloak (kcadm.sh),
+      // no un ALTER ROLE. Queda fuera de rotar-clave.sh a proposito; el procedimiento
+      // manual esta en INF-06.
+      periodicidad: "anual",
+    },
+    {
+      rol: "keycloak-base",
+      secreto: nombres.identidad,
+      clave: CLAVES.baseDeIdentidad,
+      consumidor: "Keycloak, para conectarse a su propia base",
+      periodicidad: "semestral",
+      rolDePostgres: ROL_DE_IDENTIDAD,
+      requiereReinicioDe: servicioDeIdentidad(environment),
+    },
+  ];
+}
+
+/**
+ * Los secretos de arranque de la infraestructura: SI viven en Pulumi, cifrados en la
+ * configuracion del stack (`ADR-0011` §3). No son secretos de la aplicacion — son lo que
+ * hace falta para que Pulumi **cree** el mecanismo, y por eso la excepcion no contradice
+ * la regla: kubeconfig, clave SSH y token no abren el padron de ninguna municipalidad
+ * por si solos.
+ */
+export const SECRETOS_DE_ARRANQUE = [
+  { clave: "kubeconfig", donde: "pulumi config (cifrado)", periodicidad: "semestral" as Periodicidad },
+  { clave: "backupAccessKeyId", donde: "pulumi config (cifrado)", periodicidad: "semestral" as Periodicidad },
+  {
+    clave: "backupSecretAccessKey",
+    donde: "pulumi config (cifrado)",
+    periodicidad: "semestral" as Periodicidad,
+  },
+  { clave: "PULUMI_ACCESS_TOKEN", donde: "GitHub Actions secret", periodicidad: "semestral" as Periodicidad },
+  { clave: "SSH_PRIVATE_KEY", donde: "GitHub Actions secret", periodicidad: "semestral" as Periodicidad },
+] as const;

@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verificar": "yarn lint && yarn typecheck && yarn test",
-    "manifiestos": "vite-node herramientas/emitir.ts --"
+    "manifiestos": "vite-node herramientas/emitir.ts --",
+    "secretos": "vite-node herramientas/secretos.ts --"
   },
   "dependencies": {
     "@pulumi/kubernetes": "^4.18.0",

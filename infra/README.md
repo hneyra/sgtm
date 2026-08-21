@@ -33,7 +33,8 @@ etiqueta que se cuela en el estado— se detecta en la máquina de quien lo escr
 | `index.ts` | La composición. Una sola, para los dos ambientes |
 | `componentes/` | Los cinco componentes de la fase B, como **funciones puras** que devuelven manifiestos |
 | `auditoria.ts` | Las convenciones de `INF-01` §4 sobre esos manifiestos. Corre en `yarn verificar` **y** en `pulumi up` |
-| `herramientas/` | `yarn manifiestos`: los manifiestos de un ambiente, en JSON, sin Pulumi |
+| `herramientas/` | `yarn manifiestos` y `yarn secretos`: lo que se desplegaría y el inventario de claves, en JSON, sin Pulumi |
+| `secretos/` | Generar lo que falte y rotar lo que ya existe (`INF-06`, issue #154) — nunca `pulumi up` |
 | `verificaciones/` | Las reglas de ESLint, los stacks versionados, los criterios de aceptación de la fase B y el motor levantado de verdad |
 
 ### Por qué los componentes devuelven datos en vez de crear recursos
@@ -136,28 +137,26 @@ fuera. Se descubrió ejecutándolo.
 ## Los secretos que estos manifiestos leen y no crean
 
 `ADR-0011` §3: las claves de la aplicación **no están en el estado de Pulumi**. Los
-manifiestos las nombran; quien provisiona el ambiente las pone. De dónde salen de verdad
-—un gestor, sobres sellados, un operador— lo decide el issue #154; hasta entonces, se
-crean a mano una vez:
+manifiestos las nombran; quien las genera es `secretos/bootstrap-secretos.sh`, **no**
+`pulumi up`. El inventario completo, la rotación de cada uno y por qué está resuelto así
+—no un gestor externo, no un operador— está en
+[`INF-06`](../docs/80-infraestructura/gestion-de-secretos.md) (issue #154); aquí solo el
+comando:
 
 ```bash
-NS=sgtm-prod       # o sgtm-stg
-kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl -n "$NS" create secret generic sgtm-prod-postgres-superusuario \
-    --from-literal=clave-superusuario="$(openssl rand -base64 32)"
-kubectl -n "$NS" create secret generic sgtm-prod-postgres-owner \
-    --from-literal=clave-owner="$(openssl rand -base64 32)"
-kubectl -n "$NS" create secret generic sgtm-prod-postgres-app \
-    --from-literal=clave-app="$(openssl rand -base64 32)"
-kubectl -n "$NS" create secret generic sgtm-prod-keycloak \
-    --from-literal=clave-administrador="$(openssl rand -base64 32)" \
-    --from-literal=clave-base="$(openssl rand -base64 32)"
+infra/secretos/bootstrap-secretos.sh --ambiente prod   # o stg
 ```
+
+Idempotente: genera **solo** lo que falta —32 bytes al azar por clave, nunca dos claves
+con el mismo valor— y no toca lo que ya existía. Corre **antes** de `pulumi up`, con el
+mismo kubeconfig del túnel SSH; CI lo hace así en `aplicar-stg` y `aplicar-prod`. No
+imprime ningún valor, solo huellas.
 
 **Las claves de los roles del motor se asignan una sola vez**, cuando el volumen está
 vacío: el guion de inicialización las lee del `Secret` y hace el `ALTER ROLE`. Cambiar el
-`Secret` después **no cambia la clave del rol** —eso es rotación, y es el issue #154—.
+`Secret` después **no cambia la clave del rol** — eso es rotación:
+`infra/secretos/rotar-clave.sh --ambiente prod --rol sgtm-app`, contra la base en
+marcha, sin reiniciar nada (`INF-06` §3).
 
 Sin estos `Secret`, `pulumi up` crea los objetos y los pods se quedan esperando, con el
 `Secret` ausente en sus eventos. Es preferible a la alternativa: una clave generada por
@@ -190,11 +189,12 @@ volver a aplicar la misma no hace nada: el migrador es idempotente.
 ## Cómo llegar a un VPS real
 
 `.github/workflows/infra.yml` tiene los trabajos de `ADR-0011` §6 —`verificar`, `motor`,
-`manifiestos`, `previsualizar`, `aplicar-stg`, `aplicar-prod` y la detección de deriva
-diaria—, con el túnel SSH de `INF-01` §1.4 en los cuatro que hablan con el clúster. Los
-tres primeros corren siempre y no necesitan VPS. **Los que hablan con el clúster no
-pueden correr todavía**, porque el VPS no existe: los cuatro trabajos que lo necesitan se
-**omiten con un aviso** en el resumen, no con un rojo, mientras falte cualquiera de sus
+`manifiestos`, `secretos`, `previsualizar`, `aplicar-stg`, `aplicar-prod` y la detección
+de deriva diaria—, con el túnel SSH de `INF-01` §1.4 en los cuatro que hablan con el
+clúster. Los cuatro primeros corren siempre y no necesitan VPS. **Los que hablan con el
+clúster no pueden correr todavía**, porque el VPS no existe: los cuatro trabajos que lo
+necesitan se **omiten con un aviso** en el resumen, no con un rojo, mientras falte
+cualquiera de sus
 credenciales. Esto es lo que falta, en orden:
 
 ### 1. El VPS y k3s
@@ -216,9 +216,10 @@ cd infra
 pulumi stack init sgtm/stg
 pulumi stack init sgtm/prod
 
-# Los secretos, uno por ambiente y sin reutilizar ninguno entre ambientes (INF-03 §4).
+# Los secretos DE ARRANQUE, uno por ambiente y sin reutilizar ninguno entre ambientes
+# (INF-03 §4). No hay ninguno de la aplicación aquí: esos los genera
+# secretos/bootstrap-secretos.sh, no pulumi config (INF-06, issue #154).
 pulumi config set --secret kubeconfig "$(cat k3s.yaml)"      --stack prod
-pulumi config set --secret keycloakAdminPassword <valor>     --stack prod
 pulumi config set --secret backupAccessKeyId <valor>         --stack prod
 pulumi config set --secret backupSecretAccessKey <valor>     --stack prod
 # Y lo mismo con --stack stg, con sus propios valores.
