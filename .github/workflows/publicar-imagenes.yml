@@ -148,9 +148,13 @@ jobs:
           fi
           echo "dominio=$dominio" >> "$GITHUB_OUTPUT"
 
+      # `frontend`, no la raíz: `nginx.conf` vive junto al Dockerfile, y `despliegue/
+      # compose.yaml` ya fija `context: ../frontend` para este mismo destino. La
+      # aplicación y el migrador sí necesitan la raíz —el catálogo de NEG-03 vive en
+      # docs/—, pero la interfaz no toca nada fuera de `frontend/`.
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: frontend
           file: frontend/Dockerfile
           target: interfaz
           push: true
@@ -179,10 +183,16 @@ jobs:
       # bloqueado por #147/#152—, y no hace falta que lo sea: lo único que este job
       # necesita de un clúster es un API de Kubernetes de verdad al que hablarle con
       # kubectl, y kind da uno en segundos.
+      #
+      # `install_only` NO va aquí, aunque el nombre invite a ponerlo: esa bandera le
+      # dice a la acción que instale kind y kubectl y SE DETENGA ahí, sin crear ningún
+      # clúster — la acción queda pensada para cuando otro paso crea el clúster con
+      # otro método. Con ella puesta, este job instalaba las herramientas y el primer
+      # `kubectl apply` fallaba contra `localhost:8080`, sin nada escuchando ahí.
       - name: Crear un cluster de Kubernetes desechable
         uses: helm/kind-action@v1
         with:
-          install_only: true
+          cluster_name: demostracion-liberacion
 
       # Revisión "anterior": un placeholder deliberadamente ajeno a sgtm-aplicacion.
       # El nombre del recurso (demostracion-liberacion) y el namespace (default) son
