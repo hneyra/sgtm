@@ -1,6 +1,6 @@
 # Verificación y despliegue de la infraestructura.
 #
-# Siete trabajos, en el orden de ADR-0011 §6:
+# Ocho trabajos, en el orden de ADR-0011 §6:
 #
 #   1. `verificar` — el mismo `yarn verificar` que hay que pasar antes de un PR: lint,
 #      tipos y pruebas. **No necesita nada de fuera**: ni Pulumi, ni token, ni clúster.
@@ -15,11 +15,18 @@
 #   1c. `manifiestos` — `kubectl apply --dry-run=server` de los manifiestos contra un
 #      clúster desechable (`kind`). Valida el esquema de Kubernetes de verdad: un campo
 #      mal escrito que los tipos no atrapen, lo atrapa el API server.
+#   1d. `secretos` — `secretos/bootstrap-secretos.sh` contra otro clúster desechable
+#      (issue #154, INF-06): que un despliegue desde cero genere lo que falta sin que
+#      nadie teclee una clave, que volver a correrlo no cambie nada, y que ninguna clave
+#      del inventario comparta valor con otra — comprobado contra el cluster, no leído
+#      del código que las genera.
 #   2. `previsualizar` — `pulumi preview` de los dos stacks en cada PR, publicado como
 #      comentario. **Ahora lleva el túnel**: desde que `infra/componentes/` tiene
 #      recursos, el plan se calcula comparando con lo que hay en el nodo, y para eso hay
 #      que poder llegar a él.
-#   3. `aplicar-stg` — `pulumi up` de `stg`, automático al integrar a `main`.
+#   3. `aplicar-stg` — genera los secretos que falten contra el clúster real
+#      (`bootstrap-secretos.sh`, INF-06) y solo entonces `pulumi up` de `stg`,
+#      automático al integrar a `main`.
 #   4. `aplicar-prod` — `pulumi up` de `prod`, **detrás del *environment* protegido
 #      `prod`**. GitHub no deja avanzar el trabajo sin que alguien con acceso a ese
 #      *environment* lo apruebe, y registra quién — es lo que hace cierta la letra de
@@ -187,6 +194,90 @@ jobs:
             echo "::endgroup::"
           done
 
+  secretos:
+    name: Los secretos se generan solos, y ninguno se repite
+    runs-on: ubuntu-latest
+    needs: verificar
+    if: github.event_name != 'schedule'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: infra/yarn.lock
+
+      - name: Instalar dependencias
+        working-directory: infra
+        run: yarn install --frozen-lockfile
+
+      # El mismo truco que `manifiestos`: un clúster desechable solo para tener un API
+      # de Kubernetes de verdad al que hablarle. `bootstrap-secretos.sh` no necesita
+      # PostgreSQL corriendo — solo crea y lee objetos `Secret`.
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: secretos
+
+      - name: Un despliegue desde cero genera lo que falta, sin que nadie teclee una clave
+        working-directory: infra
+        run: |
+          set -euo pipefail
+          ./secretos/bootstrap-secretos.sh --ambiente stg
+          ./secretos/bootstrap-secretos.sh --ambiente prod
+
+      - name: Ninguna clave se repite, ni dentro de un ambiente ni entre los dos
+        working-directory: infra
+        run: |
+          ./secretos/verificar-claves-distintas.sh \
+              --ambiente stg  --namespace sgtm-stg \
+              --ambiente prod --namespace sgtm-prod
+
+      # Correrlo otra vez tiene que ser un no-op: nada nuevo, y los valores que ya
+      # existian se quedan exactamente iguales. Se compara por huella (sha256 corto),
+      # nunca por el valor.
+      - name: Volver a correrlo no cambia nada
+        working-directory: infra
+        run: |
+          set -euo pipefail
+          huella_de() {
+            kubectl -n "$1" get secret "$2" -o jsonpath="{.data.$3}" \
+              | base64 --decode | sha256sum | cut -c1-12
+          }
+          antes=$(huella_de sgtm-stg sgtm-stg-postgres-app clave-app)
+
+          ./secretos/bootstrap-secretos.sh --ambiente stg
+
+          despues=$(huella_de sgtm-stg sgtm-stg-postgres-app clave-app)
+          if [ "$antes" != "$despues" ]; then
+            echo "::error::bootstrap-secretos.sh cambio una clave que ya existia. Eso" \
+                 "rotaria credenciales de la aplicacion en cada pulumi up, sin que" \
+                 "nadie lo pidiera."
+            exit 1
+          fi
+          echo "La huella no cambio: $antes"
+
+      # La demostracion del issue: "volviendo a poner la misma clave para sgtm_owner y
+      # sgtm_app... esa es la que hay que escribir: claves distintas, comprobado". Se
+      # fuerza aqui, contra el cluster real, y se exige que la comprobacion de arriba
+      # lo detecte.
+      - name: 'Demostracion: dos claves iguales se detectan'
+        working-directory: infra
+        run: |
+          set -euo pipefail
+          valor_de_owner=$(kubectl -n sgtm-stg get secret sgtm-stg-postgres-owner \
+              -o jsonpath='{.data.clave-owner}')
+          kubectl -n sgtm-stg patch secret sgtm-stg-postgres-app --type=merge \
+              -p "{\"data\":{\"clave-app\":\"$valor_de_owner\"}}"
+
+          if ./secretos/verificar-claves-distintas.sh --ambiente stg --namespace sgtm-stg; then
+            echo "::error::verificar-claves-distintas.sh NO detecto que sgtm_owner y" \
+                 "sgtm_app comparten clave. La comprobacion no protege nada."
+            exit 1
+          fi
+          echo "Correcto: la comprobacion detecto las dos claves iguales."
+
   previsualizar:
     name: pulumi preview de los dos stacks
     runs-on: ubuntu-latest
@@ -346,6 +437,15 @@ jobs:
           ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
               -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
 
+      # ANTES de `pulumi up`: los Deployment y Job que va a crear referencian estos
+      # Secret por nombre, y sin ellos los pods se quedan en Pending. Idempotente —
+      # correrlo en cada integración no cambia nada una vez que existen— y nunca pasa
+      # por Pulumi (INF-06, issue #154): las claves no entran a su estado.
+      - name: Generar los secretos que falten (INF-06)
+        if: steps.credenciales.outputs.hay == 'si'
+        working-directory: infra
+        run: ./secretos/bootstrap-secretos.sh --ambiente stg
+
       - uses: pulumi/actions@v6
         if: steps.credenciales.outputs.hay == 'si'
         with:
@@ -403,6 +503,10 @@ jobs:
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/despliegue
           ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
               -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
+
+      - name: Generar los secretos que falten (INF-06)
+        working-directory: infra
+        run: ./secretos/bootstrap-secretos.sh --ambiente prod
 
       - uses: pulumi/actions@v6
         with:

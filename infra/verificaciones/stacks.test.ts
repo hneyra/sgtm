@@ -55,7 +55,6 @@ describe("los stacks versionados cumplen sus invariantes", () => {
       const lineas = texto.split("\n").filter((l) => !l.trimStart().startsWith("#"));
       for (const clave of [
         "kubeconfig",
-        "keycloakAdminPassword",
         "backupAccessKeyId",
         "backupSecretAccessKey",
       ]) {
