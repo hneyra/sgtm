@@ -20,7 +20,17 @@ config:
   sgtm:keycloakSeedTestUsers: "true"
 
   sgtm:applicationImageRepository: ghcr.io/hneyra/sgtm
+  sgtm:applicationBootstrapVersion: 64de42b4c56eb2491e2a61287bceb4b66b6e53d1
   sgtm:webReplicas: "1"
+
+  # La municipalidad de ensayo. El ubigeo es el de Sullana porque stg restaura los
+  # respaldos de prod anonimizados (INF-03 §2 y §3): con otro ubigeo, lo restaurado no
+  # cuadraría con lo implantado.
+  sgtm:ubigeo: "200101"
+  sgtm:municipalidad: Municipalidad Provincial de Sullana (ensayo)
+  sgtm:tipoDeMunicipalidad: PROVINCIAL
+  sgtm:administrador: administrador
+  sgtm:nombreDelAdministrador: Administrador del sistema
 
   # La municipalidad de stg se da de alta MARCADA: todo documento que emita sale
   # marcado en los tres formatos (INF-03 §3.2, issue #122). `config.ts` lo exige.

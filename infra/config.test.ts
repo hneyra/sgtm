@@ -53,8 +53,18 @@ function baseline(environment: Environment = "prod"): Invariants {
     },
     application: {
       imageRepository: "ghcr.io/hneyra/sgtm",
+      bootstrapVersion: "64de42b4c56eb2491e2a61287bceb4b66b6e53d1",
       webReplicas: 2,
       isDemonstration: isStg,
+      // Declarado en los dos: en prod es obligatorio decidirlo a mano (issue #150).
+      isDemonstrationDeclared: true,
+    },
+    implantacion: {
+      ubigeo: "200101",
+      nombre: "Municipalidad Provincial de Sullana",
+      tipo: "PROVINCIAL",
+      administrador: "administrador",
+      nombreDelAdministrador: "Administrador del sistema",
     },
   };
 }
@@ -215,6 +225,46 @@ describe("ADR-0011 — el estado de Pulumi no guarda ni versiones ni secretos", 
   });
 });
 
+describe("ADR-0011 §5 — la version de arranque fija una version", () => {
+  it("una etiqueta movil como version de arranque", () => {
+    const c = baseline();
+    c.application.bootstrapVersion = "latest";
+    expectViolation(c, "no fija una");
+  });
+
+  it("la version de arranque es una etiqueta, no una imagen", () => {
+    const c = baseline();
+    c.application.bootstrapVersion = "ghcr.io/hneyra/sgtm:abc123";
+    expectViolation(c, "es una etiqueta, no una imagen");
+  });
+});
+
+describe("issue #150 — la implantacion, decidida antes de tocar el cluster", () => {
+  it("en prod, `esDemostracion` heredado del valor por omision no cuenta como decision", () => {
+    const c = baseline("prod");
+    c.application.isDemonstrationDeclared = false;
+    expectViolation(c, "no está declarado en «prod»");
+  });
+
+  it("en stg no hace falta declararlo: la invariante de INF-03 §3.2 ya lo exige true", () => {
+    const c = baseline("stg");
+    c.application.isDemonstrationDeclared = false;
+    expect(checkInvariants(c)).toEqual([]);
+  });
+
+  it("un ubigeo que no son seis digitos", () => {
+    const c = baseline();
+    c.implantacion.ubigeo = "2001";
+    expectViolation(c, "el ubigeo son seis dígitos");
+  });
+
+  it("un tipo de municipalidad que no existe", () => {
+    const c = baseline();
+    (c.implantacion as { tipo: string }).tipo = "REGIONAL";
+    expectViolation(c, "es DISTRITAL o PROVINCIAL");
+  });
+});
+
 describe("el stack tiene que ser uno de los dos ambientes", () => {
   it("«local» no es un stack", () => {
     const c = baseline();
@@ -245,11 +295,25 @@ const VALORES_MINIMOS = {
   backupBucket: "sgtm-prod-respaldos",
   keycloakImage: "quay.io/keycloak/keycloak:26.0",
   applicationImageRepository: "ghcr.io/hneyra/sgtm",
+  applicationBootstrapVersion: "64de42b4c56eb2491e2a61287bceb4b66b6e53d1",
+  ubigeo: "200101",
+  municipalidad: "Municipalidad Provincial de Sullana",
+  administrador: "administrador",
 };
+
+/**
+ * Los mínimos, más lo único que prod tiene que **decidir** y no puede heredar de un
+ * valor por omisión: si la instalación se declara de demostración (issue #150).
+ *
+ * Va aparte de `VALORES_MINIMOS` porque no es un valor que falte —su ausencia no
+ * revienta la lectura, incumple una invariante—, y la prueba de abajo recorre
+ * `VALORES_MINIMOS` esperando exactamente lo primero.
+ */
+const MINIMOS_ADMISIBLES = { ...VALORES_MINIMOS, esDemostracion: true };
 
 describe("un valor obligatorio que falta revienta al principio, y dice cuál", () => {
   it("con todos los valores mínimos, la lectura pasa y no incumple nada", () => {
-    const leidas = readInvariants("prod", reader(VALORES_MINIMOS));
+    const leidas = readInvariants("prod", reader(MINIMOS_ADMISIBLES));
     expect(checkInvariants(leidas)).toEqual([]);
   });
 
@@ -286,6 +350,8 @@ describe("un valor obligatorio que falta revienta al principio, y dice cuál", (
     expect(leidas.backup.walArchiveTimeoutSeconds).toBe(300);
     expect(leidas.application.webReplicas).toBe(2);
     expect(leidas.identity.realm).toBe("sgtm");
+    expect(leidas.implantacion.tipo).toBe("DISTRITAL");
+    expect(leidas.implantacion.nombreDelAdministrador).toBe("Administrador del sistema");
     expect(leidas.ingress.publishedNodePorts).toEqual([]);
     expect(leidas.backup.restoreSourceBucket).toBeUndefined();
   });

@@ -129,6 +129,24 @@ export interface ApplicationSettings {
    * flujo de liberación (issue #148).
    */
   imageRepository: string;
+  /**
+   * La versión con la que Pulumi **crea** los despliegues y los Jobs.
+   *
+   * `ADR-0011` §5 saca la etiqueta de la imagen del estado de Pulumi, y aquí hay que
+   * decir con precisión qué significa eso, porque «la versión no está en el estado» a
+   * secas es falso: un `Deployment` tiene que nacer con **alguna** imagen.
+   *
+   * Lo que se garantiza es la consecuencia que ADR-0011 §5 buscaba: **liberar y
+   * revertir no ejecutan `pulumi up`**. Este valor se usa al crear el recurso, y de ahí
+   * en adelante el campo `image` queda ignorado por Pulumi (`ignoreChanges`, ver
+   * `index.ts`): el flujo de liberación mueve la etiqueta con `kubectl set image` y el
+   * `preview` diario no lo ve como deriva ni intenta deshacerlo.
+   *
+   * Cambiar este valor, por tanto, **no despliega nada** sobre un clúster que ya corre.
+   * Es la versión con la que un VPS reconstruido desde cero arranca antes de que el
+   * flujo de liberación lo ponga al día, y por eso conviene que no envejezca demasiado.
+   */
+  bootstrapVersion: string;
   /** Réplicas del perfil `web`. El perfil `batch` son Jobs, no réplicas. */
   webReplicas: number;
   /**
@@ -139,6 +157,31 @@ export interface ApplicationSettings {
    * de uno de `prod`.
    */
   isDemonstration: boolean;
+  /**
+   * Si `esDemostracion` se declaró en el stack, en vez de caer en el valor por omisión.
+   *
+   * `prod` tiene que **decidirlo a mano** (issue #150): mientras D-02a esté abierta,
+   * toda cifra sale de parámetros que nadie firmó, y una instalación así tiene que
+   * decir que es de demostración. Caer en el valor por omisión no es decidir.
+   */
+  isDemonstrationDeclared: boolean;
+}
+
+/**
+ * El alta de la municipalidad, que ejecuta el Job de implantación (issue #150).
+ *
+ * No lleva ninguna contraseña, y es deliberado: la credencial del administrador vive en
+ * Keycloak. `administrador` tiene que ser **la misma cuenta que exista allí**; si no
+ * coincide, el sistema queda con un administrador que no puede entrar.
+ */
+export interface ImplantacionSettings {
+  /** Ubigeo de la municipalidad: seis dígitos. */
+  ubigeo: string;
+  nombre: string;
+  tipo: "DISTRITAL" | "PROVINCIAL";
+  /** Cuenta del primer administrador. La misma que existe en Keycloak. */
+  administrador: string;
+  nombreDelAdministrador: string;
 }
 
 /** Todo lo que no es secreto, y por tanto se puede validar sin resolver un `Output`. */
@@ -149,6 +192,7 @@ export interface Invariants {
   backup: BackupSettings;
   identity: IdentitySettings;
   application: ApplicationSettings;
+  implantacion: ImplantacionSettings;
 }
 
 export interface Settings extends Invariants {
@@ -257,8 +301,26 @@ export function readInvariants(environment: Environment, reader: ConfigReader): 
         "applicationImageRepository",
         "el repositorio de las tres imágenes, SIN etiqueta (ADR-0011 §5)",
       ),
+      bootstrapVersion: requireText(
+        reader,
+        "applicationBootstrapVersion",
+        "la versión con que se CREAN los despliegues; liberar y revertir no la usan (ADR-0011 §5)",
+      ),
       webReplicas: reader.number("webReplicas") ?? 2,
       isDemonstration: reader.boolean("esDemostracion") ?? false,
+      isDemonstrationDeclared: reader.boolean("esDemostracion") !== undefined,
+    },
+    implantacion: {
+      ubigeo: requireText(reader, "ubigeo", "el ubigeo de la municipalidad que se implanta"),
+      nombre: requireText(reader, "municipalidad", "el nombre de la municipalidad que se implanta"),
+      tipo: (reader.text("tipoDeMunicipalidad") ?? "DISTRITAL") as ImplantacionSettings["tipo"],
+      administrador: requireText(
+        reader,
+        "administrador",
+        "la cuenta del primer administrador, que tiene que existir ya en Keycloak",
+      ),
+      nombreDelAdministrador:
+        reader.text("nombreDelAdministrador") ?? "Administrador del sistema",
     },
   };
 }
@@ -417,6 +479,44 @@ export function checkInvariants(s: Invariants): string[] {
   }
   if (s.application.webReplicas < 1) {
     problems.push("`webReplicas` tiene que ser al menos 1.");
+  }
+  if (isMovingTag(`imagen:${s.application.bootstrapVersion}`)) {
+    problems.push(
+      `\`applicationBootstrapVersion\` vale «${s.application.bootstrapVersion}» y no fija una ` +
+        "versión. Es la etiqueta con la que un VPS reconstruido desde cero arranca: con una " +
+        "etiqueta móvil, dos reconstrucciones del mismo stack darían dos sistemas distintos y " +
+        "ninguna de las dos se podría nombrar.",
+    );
+  }
+  if (s.application.bootstrapVersion.includes(":")) {
+    problems.push(
+      "`applicationBootstrapVersion` es una etiqueta, no una imagen: no lleva `:`. El " +
+        "repositorio va en `applicationImageRepository`.",
+    );
+  }
+
+  // ── issue #150 — la marca de demostración en prod se decide a mano ─────────
+  if (isProd && !s.application.isDemonstrationDeclared) {
+    problems.push(
+      "`esDemostracion` no está declarado en «prod». Hay que decidirlo a mano (issue #150): " +
+        "mientras D-02a esté abierta, toda cifra que el sistema calcule sale de tramos y " +
+        "alícuotas que nadie ha firmado, y una instalación que emite documentos con esas " +
+        "cifras tiene que decir lo que es. Caer en el valor por omisión no es decidir.",
+    );
+  }
+
+  // ── issue #150 — la implantación, que corre una sola vez y deja huella ─────
+  if (!/^\d{6}$/.test(s.implantacion.ubigeo)) {
+    problems.push(
+      `\`ubigeo\` vale «${s.implantacion.ubigeo}» y el ubigeo son seis dígitos. Lo mismo exige ` +
+        "`DatosDeImplantacion` al arrancar el Job, pero allí el fallo llega con el despliegue " +
+        "a medias y aquí llega antes de tocar el clúster.",
+    );
+  }
+  if (s.implantacion.tipo !== "DISTRITAL" && s.implantacion.tipo !== "PROVINCIAL") {
+    problems.push(
+      `\`tipoDeMunicipalidad\` vale «${s.implantacion.tipo}»: es DISTRITAL o PROVINCIAL.`,
+    );
   }
 
   // ── Versiones fijadas, nunca móviles ───────────────────────────────────────

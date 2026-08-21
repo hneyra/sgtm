@@ -6,13 +6,16 @@ está en [`ADR-0011`](../docs/30-arquitectura/adr/ADR-0011-infraestructura-como-
 la topología, en [`INF-01`](../docs/80-infraestructura/arquitectura-de-infraestructura.md);
 los ambientes, en [`INF-03`](../docs/80-infraestructura/ambientes.md).
 
-**Hoy esto es el andamio.** Compila, se valida y se puede previsualizar, y **no crea ni
-un recurso**: `componentes/` está vacía a propósito ([por qué, y qué entra ahí](componentes/README.md)).
+**Hoy describe el sistema entero de la fase B**: PostgreSQL con sus cuatro roles, los
+Jobs de migración e implantación, Keycloak con su base y su realm, la aplicación y la
+interfaz, y Traefik con TLS ([qué hace cada componente](componentes/README.md)).
 
 ```bash
 cd infra
 yarn install
 yarn verificar        # lint, tipos y pruebas. Lo que hay que pasar antes de un PR
+yarn manifiestos --ambiente stg          # los manifiestos de un ambiente, en JSON
+verificaciones/motor/verificar-el-motor.sh --ambiente stg --con-aislamiento
 ```
 
 `yarn verificar` **no necesita Pulumi, ni token, ni clúster.** Es deliberado: la parte
@@ -28,8 +31,28 @@ etiqueta que se cuela en el estado— se detecta en la máquina de quien lo escr
 | `config.ts` | **Toda** la configuración: se lee, se le ponen valores por omisión y se valida |
 | `config.test.ts` | Un caso que viola cada invariante |
 | `index.ts` | La composición. Una sola, para los dos ambientes |
-| `componentes/` | Vacía. Entra con #149 a #153 |
-| `verificaciones/` | Que las reglas de ESLint muerden, y que los stacks versionados cumplen |
+| `componentes/` | Los cinco componentes de la fase B, como **funciones puras** que devuelven manifiestos |
+| `auditoria.ts` | Las convenciones de `INF-01` §4 sobre esos manifiestos. Corre en `yarn verificar` **y** en `pulumi up` |
+| `herramientas/` | `yarn manifiestos`: los manifiestos de un ambiente, en JSON, sin Pulumi |
+| `verificaciones/` | Las reglas de ESLint, los stacks versionados, los criterios de aceptación de la fase B y el motor levantado de verdad |
+
+### Por qué los componentes devuelven datos en vez de crear recursos
+
+Cada componente es una función que devuelve objetos planos de Kubernetes, y `index.ts`
+los audita y los aplica. De ahí salen tres cosas que no se consiguen creando recursos
+dentro del componente:
+
+1. **La auditoría puede leerlos.** Un `pulumi.Input<number>` no se compara con 3; un
+   `number` sí. Las convenciones de `INF-01` §4 dejan de ser un documento.
+2. **Las pruebas corren sin Pulumi y sin clúster**, que es lo que permite que un PR de
+   cualquiera ponga rojo un despliegue mal formado.
+3. **El diff de un cambio de infraestructura es legible**: cambia un objeto, no una
+   llamada con quince opciones.
+
+El costo —perder el tipado del esquema de Kubernetes— se recupera en
+`verificaciones/conformidad-con-kubernetes.test.ts`: cada manifiesto se asigna al tipo
+de `@pulumi/kubernetes` que le corresponde, y un nombre de propiedad mal escrito **no
+compila**.
 
 ## La regla que sostiene todo lo demás
 
@@ -67,6 +90,22 @@ configuración **no contradiga lo que el proyecto ya decidió por escrito**.
 | `applicationImageRepository` **sin etiqueta** | `ADR-0011` §5 |
 | Las imágenes fijan versión; nada de `latest` | `INF-01` §5 |
 | El `server` del kubeconfig apunta al bucle local | `INF-01` §1.4 — la cicatriz de `../iaac` |
+| `applicationBootstrapVersion` fija una versión, y es una etiqueta, no una imagen | `ADR-0011` §5 |
+| En `prod`, `esDemostracion` **se declara**; heredarlo del valor por omisión no cuenta | #150, D-02a |
+| El ubigeo son seis dígitos y el tipo de municipalidad es DISTRITAL o PROVINCIAL | #150 |
+
+Y sobre los manifiestos, en `auditoria.ts`:
+
+| Convención | De dónde sale |
+|---|---|
+| Toda sonda declara `timeoutSeconds`, entre 3 y 5 s | `INF-01` §4 — el 1 s del kubelet mata pods sanos |
+| Todo contenedor declara `requests` y `limits`; todo pod, su `priorityClassName` | `INF-01` §4 |
+| Un `Deployment` con volumen persistente usa `Recreate` | `INF-01` §4 |
+| Ningún `Service` fuera de `ClusterIP` | `INF-01` §1.4 |
+| El `Secret` de `sgtm_owner` no entra en ningún proceso expuesto en HTTP | ARQ-03 §4, #150 |
+| El perfil `web` declara `SGTM_OIDC_EMISOR`; el `batch` no abre puertos | ADR-0005, #152 |
+| Keycloak no arranca en `start-dev` | #151 |
+| Toda ruta va por `websecure` con TLS, y `/keycloak/admin` no se publica | #153 |
 
 > **Una nota sobre la última fila de `ADR-0011` §5.** El ADR anotaba como costo aceptado
 > que la frontera de la versión de la imagen «no tiene verificación automática todavía;
@@ -84,13 +123,77 @@ Las cuatro se ejercen editando archivos reales y viendo el rojo:
 | Subir `walArchiveTimeoutSeconds` a 3600 | `yarn test`, citando RNF-076 |
 | Ponerle etiqueta a `applicationImageRepository` | `yarn test`, citando `ADR-0011` §5 |
 | Copiar la lectura de configuración a un componente | `yarn lint` |
+| Poner `RollingUpdate` en el `Deployment` de la base, o `timeoutSeconds: 1` en una sonda | `yarn test`, con el motivo entero |
+| Darle al `Deployment` de la aplicación el `Secret` de `sgtm_owner`, o cambiarle el usuario de base | `yarn test` |
+| Quitar `!PathPrefix(/keycloak/admin)` de la ruta de identidad | `yarn test` |
+| Quitar el `GRANT CONNECT` de `30-base-de-keycloak.sh` | `verificar-el-motor.sh`: `sgtm_owner` deja de poder conectarse |
+
+La última fila es la que más vale, porque **no se puede comprobar leyendo el
+manifiesto**: ese guion revoca el `CONNECT` que `PUBLIC` tiene por omisión sobre la base
+del padrón, y si no vuelve a concedérselo a los cuatro roles, el sistema entero se queda
+fuera. Se descubrió ejecutándolo.
+
+## Los secretos que estos manifiestos leen y no crean
+
+`ADR-0011` §3: las claves de la aplicación **no están en el estado de Pulumi**. Los
+manifiestos las nombran; quien provisiona el ambiente las pone. De dónde salen de verdad
+—un gestor, sobres sellados, un operador— lo decide el issue #154; hasta entonces, se
+crean a mano una vez:
+
+```bash
+NS=sgtm-prod       # o sgtm-stg
+kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl -n "$NS" create secret generic sgtm-prod-postgres-superusuario \
+    --from-literal=clave-superusuario="$(openssl rand -base64 32)"
+kubectl -n "$NS" create secret generic sgtm-prod-postgres-owner \
+    --from-literal=clave-owner="$(openssl rand -base64 32)"
+kubectl -n "$NS" create secret generic sgtm-prod-postgres-app \
+    --from-literal=clave-app="$(openssl rand -base64 32)"
+kubectl -n "$NS" create secret generic sgtm-prod-keycloak \
+    --from-literal=clave-administrador="$(openssl rand -base64 32)" \
+    --from-literal=clave-base="$(openssl rand -base64 32)"
+```
+
+**Las claves de los roles del motor se asignan una sola vez**, cuando el volumen está
+vacío: el guion de inicialización las lee del `Secret` y hace el `ALTER ROLE`. Cambiar el
+`Secret` después **no cambia la clave del rol** —eso es rotación, y es el issue #154—.
+
+Sin estos `Secret`, `pulumi up` crea los objetos y los pods se quedan esperando, con el
+`Secret` ausente en sus eventos. Es preferible a la alternativa: una clave generada por
+Pulumi vive en el estado de Pulumi, y esa clave abre el padrón de todas las
+municipalidades.
+
+## Liberar una versión nueva
+
+La etiqueta de la imagen **no la mueve Pulumi** (`ADR-0011` §5): el campo `image` lleva
+`ignoreChanges`, así que el flujo de liberación lo cambia con `kubectl` y el `preview`
+diario no lo ve como deriva.
+
+```bash
+kubectl -n sgtm-prod set image deployment/sgtm-prod-aplicacion aplicacion=ghcr.io/hneyra/sgtm-aplicacion:<sha>
+kubectl -n sgtm-prod rollout status deployment/sgtm-prod-aplicacion
+# Y revertir, sin pulumi up y en segundos:
+kubectl -n sgtm-prod rollout undo deployment/sgtm-prod-aplicacion
+```
+
+**Si la versión nueva trae migraciones**, antes hay que correr el Job de migración con
+esa versión. `yarn manifiestos` lo emite ya listo:
+
+```bash
+yarn manifiestos --ambiente prod --componente migracion | kubectl apply -f -
+```
+
+El nombre del Job lleva la versión, así que una versión nueva crea un Job nuevo y
+volver a aplicar la misma no hace nada: el migrador es idempotente.
 
 ## Cómo llegar a un VPS real
 
-`.github/workflows/infra.yml` ya tiene los cinco trabajos de `ADR-0011` §6 —`verificar`,
-`previsualizar`, `aplicar-stg`, `aplicar-prod` y la detección de deriva diaria—, con el
-túnel SSH de `INF-01` §1.4 en los tres que hablan con el clúster. **Ninguno puede correr
-de verdad todavía**, porque el VPS no existe: los cuatro trabajos que lo necesitan se
+`.github/workflows/infra.yml` tiene los trabajos de `ADR-0011` §6 —`verificar`, `motor`,
+`manifiestos`, `previsualizar`, `aplicar-stg`, `aplicar-prod` y la detección de deriva
+diaria—, con el túnel SSH de `INF-01` §1.4 en los cuatro que hablan con el clúster. Los
+tres primeros corren siempre y no necesitan VPS. **Los que hablan con el clúster no
+pueden correr todavía**, porque el VPS no existe: los cuatro trabajos que lo necesitan se
 **omiten con un aviso** en el resumen, no con un rojo, mientras falte cualquiera de sus
 credenciales. Esto es lo que falta, en orden:
 
@@ -175,6 +278,7 @@ decisión de las personas del proyecto, no una que este repositorio pueda tomar.
 | La huella SSH del VPS fijada de antemano, en vez de confiada la primera vez | #157 |
 | Las tres imágenes, publicadas y etiquetadas por commit | [`.github/workflows/publicar-imagenes.yml`](../.github/workflows/publicar-imagenes.yml) |
 | El mecanismo de liberación y reversión —probado contra un clúster efímero de CI, sin `pulumi up`— | El mismo flujo, job `demostrar-liberacion-y-reversion` |
-| Apuntar ese mecanismo al `Deployment` real | `Aplicacion.ts`, #152 |
+| El archivado continuo de WAL y el PITR: el `Deployment` de PostgreSQL **no los trae** | #155 |
+| El cortafuegos del VPS, que no es un objeto de Kubernetes | #157, y `vps/cortafuegos.sh` |
 | De dónde salen los secretos de la aplicación | #154 |
 | Los runbooks de restauración | #158 |
