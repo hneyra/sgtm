@@ -1,7 +1,6 @@
 package pe.gob.sgtm.rentas.infraestructura.web;
 
 import org.jspecify.annotations.Nullable;
-import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeVehiculos.VehiculoConDeuda;
 import pe.gob.sgtm.web.ImporteActualizado;
 
@@ -13,10 +12,10 @@ import pe.gob.sgtm.web.ImporteActualizado;
  * referenciales, y eso sigue bloqueado por D-02 (ver el javadoc de {@code Vehiculo}). Un campo
  * ausente es lo honesto; inventar un cero no lo seria.
  *
- * <p>{@code afecto} es estructural —{@code Vehiculo#afectoEn}, los tres ejercicios desde la
- * inscripcion—, no el resultado de cruzar con un beneficio: una exoneracion registrada no cambia
- * este campo. Traducir los dos en una sola palabra —«AFECTO», «EXONERADO»— es cosa de quien consuma
- * el contrato, igual que {@code consulta_deuda} traduce su «Fase» en el frontend.
+ * <p>{@code afectoDesde}/{@code afectoHasta} son {@code Vehiculo#rangoDeAfectacion}: estructural,
+ * los tres ejercicios desde la inscripcion, no el resultado de cruzar con un beneficio —una
+ * exoneracion registrada no cambia estos campos—. Es el mismo par que el prototipo dibuja en la
+ * columna «Afectación» como «2019 — 2021».
  */
 public record VehiculoEncontradoResource(
         String placa,
@@ -25,7 +24,8 @@ public record VehiculoEncontradoResource(
         String modelo,
         int anioFabricacion,
         String estado,
-        boolean afecto,
+        int afectoDesde,
+        int afectoHasta,
         long contribuyenteId,
         String codigoContribuyente,
         String titular,
@@ -33,6 +33,7 @@ public record VehiculoEncontradoResource(
 
     public static VehiculoEncontradoResource de(VehiculoConDeuda fila) {
         var vehiculo = fila.fila().vehiculo();
+        var rango = vehiculo.rangoDeAfectacion();
         return new VehiculoEncontradoResource(
                 vehiculo.placa().valor(),
                 vehiculo.categoria(),
@@ -40,7 +41,8 @@ public record VehiculoEncontradoResource(
                 vehiculo.modelo(),
                 vehiculo.anioFabricacion().valor(),
                 vehiculo.estado().name(),
-                vehiculo.afectoEn(Ejercicio.de(fila.deuda().actualizadoA())),
+                rango.desde().valor(),
+                rango.hasta().valor(),
                 vehiculo.contribuyenteId(),
                 fila.fila().codigoContribuyente(),
                 fila.fila().titular(),

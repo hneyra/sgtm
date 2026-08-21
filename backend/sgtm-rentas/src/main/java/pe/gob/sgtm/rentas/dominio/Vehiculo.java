@@ -148,17 +148,33 @@ public record Vehiculo(
     }
 
     /**
-     * Si el vehiculo esta afecto en ese ejercicio: tres ejercicios desde el siguiente al de la
-     * primera inscripcion registral.
+     * Los tres ejercicios en que el vehiculo esta afecto, ambos extremos incluidos: desde el
+     * siguiente al de la primera inscripcion registral.
      *
-     * <p>Inscrito en 2024 → afecto en 2025, 2026 y 2027. No lleva ninguna cifra, asi que no depende
-     * de D-02; lo que si depende es cuanto se paga.
+     * <p>Inscrito en 2024 → afecto de 2025 a 2027. No lleva ninguna cifra, asi que no depende de
+     * D-02; lo que si depende es cuanto se paga. Es la unica formula que sabe cuantos ejercicios
+     * dura la afectacion —{@link #afectoEn} la consulta en vez de repetirla—, para que «tres» no
+     * quede escrito dos veces.
      */
+    public RangoDeAfectacion rangoDeAfectacion() {
+        int desde = anioInscripcion.valor() + 1;
+        return new RangoDeAfectacion(
+                new Ejercicio(desde), new Ejercicio(desde + EJERCICIOS_AFECTOS - 1));
+    }
+
+    /** Si el vehiculo esta afecto en ese ejercicio: dentro de {@link #rangoDeAfectacion}. */
     public boolean afectoEn(Ejercicio ejercicio) {
         Objects.requireNonNull(ejercicio, "Hay que decir de que ejercicio se habla");
-        int primero = anioInscripcion.valor() + 1;
-        return ejercicio.valor() >= primero && ejercicio.valor() < primero + EJERCICIOS_AFECTOS;
+        RangoDeAfectacion rango = rangoDeAfectacion();
+        return ejercicio.valor() >= rango.desde().valor()
+                && ejercicio.valor() <= rango.hasta().valor();
     }
+
+    /**
+     * El primer y el ultimo ejercicio de la afectacion, ambos incluidos —lo que {@code
+     * consulta_vehiculos} (#25) muestra en su columna «Afectación»—.
+     */
+    public record RangoDeAfectacion(Ejercicio desde, Ejercicio hasta) {}
 
     private static String exigirTexto(String valor, String campo, int maximo) {
         String limpio = valor.strip();

@@ -17,8 +17,8 @@ import { RESPUESTAS } from './respuestas.generado';
  * sectores (#16), las cuatro fichas (#18, #19), su consulta (#20), los
  * aranceles (#17), el padron de contribuyentes (#11), la ficha de vehiculo
  * (#26), la declaracion jurada (#28) y los beneficios (#27) desde #73, y desde
- * #72 la consulta de deuda (#22, #175) y la constancia de no adeudo (#25,
- * #179). **Esta lista crece cuando crece aquella**, no antes: publicar aqui
+ * #72 la consulta de deuda (#22, #175), la constancia de no adeudo (#25,
+ * #179) y el padron vehicular consultable (#25, #184). **Esta lista crece cuando crece aquella**, no antes: publicar aqui
  * una forma que el backend todavia no sirve seria inventarsela.
  *
  * **Los valores siguen siendo los del prototipo.** Aqui no se inventa ni un
@@ -292,6 +292,43 @@ function constanciaDeNoAdeudo(): Readonly<Record<string, unknown>> {
     seNiega: obligaciones.some((o) => Number(o.deuda.total.importe) > 0),
     obligaciones,
   };
+}
+
+/**
+ * Padron vehicular (`VehiculoEncontradoResource`, RF-024, #25, #184).
+ *
+ * «Marca y modelo» es una sola celda en el prototipo; el recurso real trae `marca` y `modelo`
+ * separados, y aqui no hay como partirlos sin adivinar — se guarda todo en `marca` y `modelo`
+ * queda vacio. El adaptador de la pantalla los junta con un espacio, que es lo mismo que hace
+ * con el dato real.
+ *
+ * «Afectación» trae un rango («2019 — 2021», con raya, no guion): se parte por el separador y
+ * se guarda como los dos enteros que publica el recurso real.
+ */
+function consultaVehiculos(): Paginado {
+  const fecha = '2026-08-13';
+  return unaPagina(
+    filasDe('consulta_vehiculos').map(
+      ([placa, clase, marcaYModelo, anioFab, titular, afectacion, , deudaS], i) => {
+        const [desde, hasta] = (afectacion ?? '').split('—').map((parte) => Number(parte.trim()));
+        const anioPorOmision = new Date().getFullYear();
+        return {
+          placa,
+          clase: clase || null,
+          marca: marcaYModelo ?? '',
+          modelo: '',
+          anioFabricacion: Number(anioFab) || anioPorOmision,
+          estado: 'ACTIVO',
+          afectoDesde: Number.isNaN(desde) ? anioPorOmision : desde,
+          afectoHasta: Number.isNaN(hasta) ? anioPorOmision : hasta,
+          contribuyenteId: i + 1,
+          codigoContribuyente: `C-VEH-${String(i + 1).padStart(4, '0')}`,
+          titular,
+          deuda: { importe: deudaS ?? '0.00', actualizadoA: fecha },
+        };
+      },
+    ),
+  );
 }
 
 /* ── Cuenta corriente: el libro de asientos ────────────────────────────── */
@@ -691,6 +728,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/rentas/beneficios': beneficios,
   '/consultas/cuenta-corriente/{codigo}': cuentaCorriente,
   '/consultas/deuda': consultaDeuda,
+  '/consultas/vehiculos': consultaVehiculos,
   '/catastro/sectores': sectores,
   '/catastro/fichas': fichas,
   '/seguridad/modulos': modulos,
