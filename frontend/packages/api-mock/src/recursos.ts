@@ -15,10 +15,11 @@ import { RESPUESTAS } from './respuestas.generado';
  * Son las mismas que enumera `IMPLEMENTADAS` en el `ContratoDeApiTest` del
  * backend: las once de seguridad (#9, #12, #13), el catalogo vial y los
  * sectores (#16), las cuatro fichas (#18, #19), su consulta (#20), los
- * aranceles (#17), el padron de contribuyentes (#11) y, desde #73, la ficha de
- * vehiculo (#26), la declaracion jurada (#28) y los beneficios (#27). **Esta
- * lista crece cuando crece aquella**, no antes: publicar aqui una forma que el
- * backend todavia no sirve seria inventarsela.
+ * aranceles (#17), el padron de contribuyentes (#11), la ficha de vehiculo
+ * (#26), la declaracion jurada (#28) y los beneficios (#27) desde #73, y desde
+ * #72 la consulta de deuda (#22, #175) y la constancia de no adeudo (#25,
+ * #179). **Esta lista crece cuando crece aquella**, no antes: publicar aqui
+ * una forma que el backend todavia no sirve seria inventarsela.
  *
  * **Los valores siguen siendo los del prototipo.** Aqui no se inventa ni un
  * dato: se leen las mismas filas que dibuja el catalogo portado y se les pone
@@ -192,6 +193,106 @@ const beneficios = (): Paginado =>
         };
       }),
   );
+
+/* ── Consultas: deuda y constancia ──────────────────────────────────────── */
+
+/** «Ordinaria», «Valor emitido», «Coactiva» del prototipo → el `enum Fase` (V2). */
+const FASE_DEL_MOCK: Readonly<Record<string, string>> = {
+  Ordinaria: 'ORDINARIA',
+  'Valor emitido': 'VALOR',
+  Coactiva: 'COACTIVA',
+};
+
+/** `1-4` → periodo 1 a 4; `1` → 1 a 1; vacio o `Anual` → 0 y 0 (anual, V2). */
+function periodoDe(cuota: string): { desde: number; hasta: number } {
+  const partes = cuota
+    .split('-')
+    .map((p) => Number(p.trim()))
+    .filter((n) => !Number.isNaN(n));
+  const [desde = 0, hasta = desde] = partes;
+  return { desde, hasta };
+}
+
+/**
+ * Deuda de todas las obligaciones de un contribuyente (`ObligacionConDeudaResource`, #22, #175).
+ *
+ * Las cinco cifras de cada obligacion comparten la fecha de corte del `campos`
+ * del prototipo: es lo que `DeudaResource` exige (regla 9), y el proxy no
+ * inventa una fecha por cifra.
+ */
+const consultaDeuda = (): Paginado => {
+  const fecha =
+    typeof RESPUESTAS['consulta_deuda']?.campos?.['fechaDeCorte'] === 'string'
+      ? (RESPUESTAS['consulta_deuda'].campos['fechaDeCorte'] as string)
+      : '2026-08-13';
+  const importe = (valor: string) => ({ importe: valor, actualizadoA: fecha });
+
+  return unaPagina(
+    filasDe('consulta_deuda').map(
+      ([ano, tributo, cuota, insoluto, reajuste, interes, gasto, total, fase], i) => {
+        const { desde, hasta } = periodoDe(cuota ?? '');
+        return {
+          tributo,
+          ejercicio: Number(ano) || new Date().getFullYear(),
+          predioId: i + 1,
+          vehiculoId: null,
+          periodoDesde: desde,
+          periodoHasta: hasta,
+          fase: FASE_DEL_MOCK[fase ?? ''] ?? 'ORDINARIA',
+          deuda: {
+            insoluto: importe(insoluto ?? '0.00'),
+            reajuste: importe(reajuste ?? '0.00'),
+            interes: importe(interes ?? '0.00'),
+            gasto: importe(gasto ?? '0.00'),
+            total: importe(total ?? '0.00'),
+          },
+        };
+      },
+    ),
+  );
+};
+
+/**
+ * Constancia de no adeudo (`ConstanciaResource`, RF-049, #25, #179).
+ *
+ * El prototipo dibuja «Tributo | Ejercicios | Situación | Saldo S/» con un
+ * rango de ejercicios por fila; `ObligacionConDeudaResource` es por ejercicio
+ * suelto, asi que se toma el primero del rango — es una simplificacion del
+ * proxy, no del backend real, que sí publica una fila por ejercicio.
+ */
+function constanciaDeNoAdeudo(): Readonly<Record<string, unknown>> {
+  const reporte = RESPUESTAS['constancia']?.reporte;
+  const fecha = '2026-08-13';
+  const codigo = reporte?.meta.find((dato) => dato.k === 'Código')?.v ?? '00000000000';
+  const importe = (valor: string) => ({ importe: valor, actualizadoA: fecha });
+
+  const obligaciones = (reporte?.filas ?? []).map(([tributo, rango, , saldo], i) => {
+    const primerAnio = Number((rango ?? '').split('—')[0]?.trim());
+    return {
+      tributo,
+      ejercicio: Number.isNaN(primerAnio) ? new Date().getFullYear() : primerAnio,
+      predioId: i + 1,
+      vehiculoId: null,
+      periodoDesde: 0,
+      periodoHasta: 0,
+      fase: 'ORDINARIA',
+      deuda: {
+        insoluto: importe(saldo ?? '0.00'),
+        reajuste: importe('0.00'),
+        interes: importe('0.00'),
+        gasto: importe('0.00'),
+        total: importe(saldo ?? '0.00'),
+      },
+    };
+  });
+
+  return {
+    codigoContribuyente: codigo,
+    fechaDeCorte: fecha,
+    seNiega: obligaciones.some((o) => Number(o.deuda.total.importe) > 0),
+    obligaciones,
+  };
+}
 
 /* ── Cuenta corriente: el libro de asientos ────────────────────────────── */
 
@@ -467,6 +568,7 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/catastro/fichas/rural/{codUnidad}': rural,
   '/rentas/vehiculos/{placa}': vehiculo,
   '/rentas/declaraciones/{djNro}': declaracionJurada,
+  '/consultas/constancias/no-adeudo': constanciaDeNoAdeudo,
 };
 
 /* ── Una funcion por recurso, con los campos que declara su `Resource` ──── */
@@ -588,6 +690,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/rentas/contribuyentes': contribuyentes,
   '/rentas/beneficios': beneficios,
   '/consultas/cuenta-corriente/{codigo}': cuentaCorriente,
+  '/consultas/deuda': consultaDeuda,
   '/catastro/sectores': sectores,
   '/catastro/fichas': fichas,
   '/seguridad/modulos': modulos,

@@ -83,8 +83,10 @@ describe('los bloques del descriptor', () => {
     expect(hoja).toBeInTheDocument();
     expect(screen.getByText('Contribuyente')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Imprimir' }).length).toBeGreaterThan(0);
-    // Los datos del documento —codigo y fecha— vienen de la API, no del catalogo.
-    expect(await screen.findByText('CNA-2026-01184')).toBeInTheDocument();
+    // El resultado —se emite o se niega— viene de la API, no del catalogo.
+    // El codigo del documento (#72) sale vacio a proposito: la numeracion es
+    // D-09, todavia abierta, y un folio inventado aqui no lo emitiria nadie.
+    expect(await screen.findByText(/SE EMITE|SE NIEGA/)).toBeInTheDocument();
   });
 });
 
