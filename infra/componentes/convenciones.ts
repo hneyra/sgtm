@@ -1,5 +1,13 @@
 import { commonLabels, resourceName, type Environment } from "../config";
-import type { PriorityClass, Recursos, Sonda } from "./tipos";
+import type {
+  Contenedor,
+  MontajeDeVolumen,
+  PriorityClass,
+  Recursos,
+  Sonda,
+  VariableDeEntorno,
+  Volumen,
+} from "./tipos";
 
 /**
  * Lo que comparten los cinco componentes: nombres, prioridades, tamanos y sondas.
@@ -31,12 +39,22 @@ import type { PriorityClass, Recursos, Sonda } from "./tipos";
 export interface Secretos {
   /** Superusuario del motor. Solo lo usa el propio contenedor de PostgreSQL. */
   motor: string;
-  /** `sgtm_owner`: DDL. Solo los dos Jobs. Jamas el Deployment de la aplicacion. */
+  /** `sgtm_owner`: DDL. Solo los dos Jobs y el CronJob de respaldo. Jamas el Deployment de la aplicacion. */
   owner: string;
   /** `sgtm_app`: la aplicacion. Sin DDL, sin `BYPASSRLS`, propietaria de nada. */
   aplicacion: string;
   /** Administrador de arranque de Keycloak, y la clave de su rol en el motor. */
   identidad: string;
+  /**
+   * `sgtm_respaldo` (issue #155) y la clave de cifrado de wal-g.
+   *
+   * Dos valores en el mismo `Secret`, igual que `identidad`. Ninguno de los dos es
+   * DDL: `sgtm_respaldo` solo puede ejecutar `pg_backup_start`/`pg_backup_stop` —lo
+   * minimo que wal-g necesita, comprobado contra un motor real, no `sgtm_owner` ni
+   * el superusuario—, y la clave de cifrado nunca sale de este `Secret` y del propio
+   * contenedor de PostgreSQL.
+   */
+  respaldo: string;
 }
 
 export function secretos(environment: Environment): Secretos {
@@ -45,6 +63,7 @@ export function secretos(environment: Environment): Secretos {
     owner: resourceName(environment, "postgres-owner"),
     aplicacion: resourceName(environment, "postgres-app"),
     identidad: resourceName(environment, "keycloak"),
+    respaldo: resourceName(environment, "postgres-respaldo"),
   };
 }
 
@@ -60,6 +79,31 @@ export const CLAVES = {
   administradorDeIdentidad: "clave-administrador",
   /** Clave del rol de Keycloak en PostgreSQL. */
   baseDeIdentidad: "clave-base",
+  /** Clave de `sgtm_respaldo`. */
+  respaldo: "clave-respaldo",
+  /** Clave simetrica (libsodium, 32 bytes en base64) con que wal-g cifra el respaldo. */
+  cifradoDeRespaldo: "clave-cifrado",
+} as const;
+
+/**
+ * El `Secret` con las credenciales del almacenamiento de objetos (issue #155).
+ *
+ * **La unica excepcion real a «Pulumi no crea secretos».** `backupAccessKeyId` y
+ * `backupSecretAccessKey` SI viven cifrados en la configuracion del stack —
+ * `ADR-0011` §3 los clasifica como secretos de *arranque de la infraestructura*, no
+ * de la aplicacion: no abren el padron de ninguna municipalidad, solo dejan escribir
+ * en el contenedor de respaldo—. Por eso, y solo para este `Secret`, es `index.ts`
+ * quien lo crea con `k8s.core.v1.Secret`, en vez de `bootstrap-secretos.sh`. Los
+ * componentes de aqui solo necesitan el nombre.
+ */
+export function secretoDeCredencialesDeRespaldo(environment: Environment): string {
+  return resourceName(environment, "postgres-respaldo-credenciales");
+}
+
+/** Las claves del `Secret` de `secretoDeCredencialesDeRespaldo`. */
+export const CLAVES_DE_CREDENCIALES_DE_RESPALDO = {
+  accessKeyId: "access-key-id",
+  secretAccessKey: "secret-access-key",
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -205,6 +249,17 @@ export function servicioDeBaseDeDatos(environment: Environment): string {
   return resourceName(environment, "postgres");
 }
 
+/**
+ * El volumen de datos del motor. Un solo sitio: lo monta `BaseDeDatos.ts` en
+ * lectura-escritura y `Respaldo.ts` en **solo lectura** (issue #155) — wal-g lee
+ * `PGDATA` directamente, y montarlo dos veces con el mismo nombre calculado por
+ * separado es la clase de duplicacion que se desincroniza la primera vez que
+ * alguien cambia uno de los dos sitios.
+ */
+export function volumenDeDatos(environment: Environment): string {
+  return resourceName(environment, "postgres-datos");
+}
+
 export function servicioDeIdentidad(environment: Environment): string {
   return resourceName(environment, "identidad");
 }
@@ -248,4 +303,126 @@ export function emisorPublico(domain: string, realm: string): string {
 export function jwksInterno(environment: Environment, realm: string): string {
   const servicio = servicioDeIdentidad(environment);
   return `http://${servicio}:8080/keycloak/realms/${realm}/protocol/openid-connect/certs`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// wal-g: version fijada, y el binario que la descarga (issue #155)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** La version de wal-g. Subirla es un cambio deliberado, nunca una etiqueta movil. */
+export const WALG_VERSION = "3.0.5";
+
+/**
+ * El sha256 del binario de esa version, verificado a mano al fijarla —descargado y
+ * comprobado contra el `.sha256` que publica el propio proyecto en el mismo release,
+ * la misma vez que se elige `WALG_VERSION`—. Se compara contra este valor y no solo
+ * contra el `.sha256` publicado: es la misma precaucion que
+ * `.github/actions/instalar-gitleaks/action.yml`, porque un release comprometido
+ * traeria los dos archivos comprometidos a la vez.
+ */
+export const WALG_SHA256 = "b412489168a4ab74aaeb91c06e297573e3950599e839116177f196005e915d0f";
+
+/** Imagen minima con `curl`, `tar` y `sha256sum` para el contenedor que lo descarga. */
+export const IMAGEN_DE_DESCARGA = "curlimages/curl:8.11.0";
+
+/** Donde queda el binario dentro del pod, en el volumen compartido `wal-g-bin`. */
+export const WALG_DIRECTORIO = "/opt/wal-g";
+export const WALG_BINARIO = `${WALG_DIRECTORIO}/wal-g`;
+
+/**
+ * El contenedor de inicializacion que descarga wal-g y verifica su checksum, antes de
+ * que el contenedor principal —el motor, o el CronJob de respaldo— pueda usarlo.
+ *
+ * Un binario de unos 64 MB no cabe en un `ConfigMap` —el limite practico de `etcd`
+ * son unos 1,5 MB por objeto—, asi que no se puede montar como los guiones de
+ * `fuentes.ts`: hay que descargarlo al arrancar el pod, verificarlo, y dejarlo listo
+ * en un volumen `emptyDir` que el contenedor principal monta de solo lectura.
+ *
+ * Comparten esto `BaseDeDatos.ts` y `Respaldo.ts`: el motor lo necesita para
+ * `archive_command`/`restore_command`, y el CronJob de respaldo para `backup-push`.
+ * Definirlo una vez es lo que evita que las dos copias de la logica de descarga se
+ * separen la primera vez que alguien actualice `WALG_VERSION` en un solo sitio.
+ */
+export function contenedorDeDescargaDeWalg(): Contenedor {
+  const url =
+    `https://github.com/wal-g/wal-g/releases/download/v${WALG_VERSION}/` +
+    "wal-g-pg-ubuntu-20.04-amd64.tar.gz";
+  return {
+    name: "wal-g-instalar",
+    image: IMAGEN_DE_DESCARGA,
+    command: ["/bin/sh", "-c"],
+    args: [
+      [
+        "set -eu",
+        `curl -fsSL -o /tmp/wal-g.tar.gz "${url}"`,
+        // Verifica contra el sha256 fijado arriba, no contra un archivo descargado
+        // en el mismo momento: eso solo comprobaria que la descarga no se corrompio
+        // en transito, no que el release sea el que se audito al fijar la version.
+        `echo "${WALG_SHA256}  /tmp/wal-g.tar.gz" | sha256sum -c -`,
+        "tar -xzf /tmp/wal-g.tar.gz -C /tmp",
+        `mv /tmp/wal-g-pg-ubuntu-20.04-amd64 ${WALG_BINARIO}`,
+        `chmod +x ${WALG_BINARIO}`,
+        "rm -f /tmp/wal-g.tar.gz",
+      ].join(" && "),
+    ],
+    resources: RECURSOS.auxiliar,
+    volumeMounts: [{ name: "wal-g-bin", mountPath: WALG_DIRECTORIO }],
+  };
+}
+
+/** El volumen `emptyDir` que comparte el binario entre el contenedor de descarga y el que lo usa. */
+export function volumenDeWalg(): Volumen {
+  return { name: "wal-g-bin", emptyDir: {} };
+}
+
+/** Donde monta el binario el contenedor que YA no lo descarga: siempre de solo lectura. */
+export function montajeDeWalg(): MontajeDeVolumen {
+  return { name: "wal-g-bin", mountPath: WALG_DIRECTORIO, readOnly: true };
+}
+
+/**
+ * Las variables de entorno de wal-g, en un solo sitio.
+ *
+ * Las usan tres procesos distintos: `archive_command`/`restore_command` del motor
+ * (`BaseDeDatos.ts`) y `backup-push`/`delete` del CronJob de respaldo
+ * (`Respaldo.ts`). Definirlas una vez es lo que impide que un cambio de proveedor de
+ * almacenamiento se aplique en un sitio y se olvide en el otro.
+ *
+ * `WALG_S3_FORCE_PATH_STYLE=true` porque el proveedor del almacenamiento de objetos
+ * todavia no esta decidido (`INF-01` §7): el estilo de ruta funciona contra
+ * practicamente cualquier S3 compatible, y el virtual-hosted-style que asume AWS por
+ * omision no funciona contra la mayoria de los que no son AWS.
+ */
+export function variablesWalg(args: {
+  backup: { endpoint: string; bucket: string };
+  credenciales: string;
+  secretoDeRespaldo: string;
+}): VariableDeEntorno[] {
+  return [
+    { name: "WALG_S3_PREFIX", value: `s3://${args.backup.bucket}` },
+    { name: "AWS_ENDPOINT", value: args.backup.endpoint },
+    { name: "WALG_S3_FORCE_PATH_STYLE", value: "true" },
+    { name: "WALG_COMPRESSION_METHOD", value: "lz4" },
+    {
+      name: "AWS_ACCESS_KEY_ID",
+      valueFrom: {
+        secretKeyRef: { name: args.credenciales, key: CLAVES_DE_CREDENCIALES_DE_RESPALDO.accessKeyId },
+      },
+    },
+    {
+      name: "AWS_SECRET_ACCESS_KEY",
+      valueFrom: {
+        secretKeyRef: {
+          name: args.credenciales,
+          key: CLAVES_DE_CREDENCIALES_DE_RESPALDO.secretAccessKey,
+        },
+      },
+    },
+    // Cifra cada backup base y cada segmento de WAL. Nunca un valor literal: sale
+    // del mismo `Secret` que genera `bootstrap-secretos.sh`, jamas de Pulumi.
+    {
+      name: "WALG_LIBSODIUM_KEY",
+      valueFrom: { secretKeyRef: { name: args.secretoDeRespaldo, key: CLAVES.cifradoDeRespaldo } },
+    },
+  ];
 }

@@ -3,6 +3,7 @@ import {
   CLAVES,
   ROL_DE_IDENTIDAD,
   servicioDeAplicacion,
+  servicioDeBaseDeDatos,
   servicioDeIdentidad,
 } from "./convenciones";
 import type { Environment } from "../config";
@@ -57,9 +58,10 @@ export interface EntradaDeSecreto {
 /**
  * El inventario completo de un ambiente.
  *
- * Cinco entradas, cuatro `Secret` distintos —`sgtm-<amb>-keycloak` guarda dos claves—
- * con cinco valores, **ninguno repetido**: es la comprobacion que pide el issue, no solo
- * «roles distintos» sino «claves distintas». La prueba en `verificaciones/secretos.
+ * Siete entradas, cinco `Secret` distintos —`sgtm-<amb>-keycloak` y
+ * `sgtm-<amb>-postgres-respaldo` guardan dos claves cada uno— con siete valores,
+ * **ninguno repetido**: es la comprobacion que pide el issue, no solo «roles
+ * distintos» sino «claves distintas». La prueba en `verificaciones/secretos.
  * test.ts` lo exige contando entradas unicas por `secreto`+`clave`, y
  * `completar-secreto.ts` lo hace estructuralmente imposible de incumplir al generar.
  */
@@ -114,6 +116,39 @@ export function inventarioDeSecretos(environment: Environment): EntradaDeSecreto
       periodicidad: "semestral",
       rolDePostgres: ROL_DE_IDENTIDAD,
       requiereReinicioDe: servicioDeIdentidad(environment),
+    },
+    {
+      rol: "sgtm-respaldo",
+      secreto: nombres.respaldo,
+      clave: CLAVES.respaldo,
+      consumidor: "El CronJob de respaldo base (issue #155): solo pg_backup_start/stop",
+      periodicidad: "semestral",
+      rolDePostgres: "sgtm_respaldo",
+      // Sin Deployment que reiniciar: el CronJob crea un pod nuevo en cada corrida, y
+      // ese pod lee el Secret que este en ese momento — igual que sgtm-owner con sus
+      // dos Jobs.
+    },
+    {
+      rol: "respaldo-cifrado",
+      secreto: nombres.respaldo,
+      clave: CLAVES.cifradoDeRespaldo,
+      consumidor: "El contenedor de PostgreSQL (archive_command/restore_command) y el CronJob de respaldo",
+      // No es una clave de un rol de PostgreSQL: es la clave simetrica con que wal-g
+      // cifra cada backup y cada segmento de WAL. Rotarla de rutina inutilizaria los
+      // respaldos ya escritos con la clave vieja -no hay `ALTER ROLE` que los
+      // vuelva a cifrar-, asi que no tiene periodicidad fija: se rota solo si se
+      // sospecha que se filtro, y el procedimiento (documentado en INF-06/INF-08)
+      // exige conservar la clave vieja hasta que caduque el ultimo respaldo cifrado
+      // con ella.
+      periodicidad: "tras-incidente",
+      // Sin rolDePostgres: rotar-clave.sh la rechaza a proposito, igual que hace con
+      // keycloak-admin. No es un ALTER ROLE.
+      //
+      // El motor SI necesita reiniciarse para leer un valor nuevo -es una variable
+      // de entorno del Deployment, y las lee al arrancar el proceso, no en caliente-.
+      // El CronJob no aparece aqui porque no hace falta decirlo dos veces: crea un
+      // pod nuevo en cada corrida.
+      requiereReinicioDe: servicioDeBaseDeDatos(environment),
     },
   ];
 }

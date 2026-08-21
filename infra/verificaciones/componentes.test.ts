@@ -190,7 +190,7 @@ describe("#150 · sgtm_owner no entra en el Deployment", () => {
   const ms = manifiestosDe(AMBIENTE);
   const secretoDeOwner = secretos(AMBIENTE).owner;
 
-  it("el Secret de owner se monta en los dos Jobs y en el motor, y en nada mas", () => {
+  it("el Secret de owner se monta en los dos Jobs, en el motor y en el CronJob de respaldo, y en nada mas", () => {
     const donde = new Set(
       contenedoresDeTodo(ms)
         .filter(({ c }) => secretosDe(c).includes(secretoDeOwner))
@@ -199,9 +199,13 @@ describe("#150 · sgtm_owner no entra en el Deployment", () => {
 
     // El motor es la excepcion, y es donde `sgtm_owner` se crea: el guion de
     // inicializacion le asigna la clave, y para asignarla tiene que conocerla. Ese
-    // contenedor ya guarda ademas la del superusuario. Lo que la regla persigue es que
-    // no acabe en un proceso expuesto en HTTP.
+    // contenedor ya guarda ademas la del superusuario. El CronJob de respaldo (#155)
+    // es la segunda excepcion: escribe el estado en la tabla `respaldo` (RF-126), tal
+    // como `V8__respaldo.sql` declara que lo hace «el proceso de despliegue». Lo que
+    // la regla persigue es que no acabe en un proceso expuesto en HTTP, y ninguno de
+    // los dos abre un puerto.
     expect([...donde].sort()).toEqual([
+      "CronJob/sgtm-prod-respaldo",
       "Deployment/sgtm-prod-postgres",
       `Job/sgtm-prod-implantacion-${invariantesDe(AMBIENTE).application.bootstrapVersion.slice(0, 12)}`,
       `Job/sgtm-prod-migracion-${invariantesDe(AMBIENTE).application.bootstrapVersion.slice(0, 12)}`,
@@ -673,6 +677,127 @@ describe("#153 · la demostracion", () => {
 
     const roto = sinRedireccion.replace("    redirectTo:", "    # redirectTo:");
     expect(roto.includes("    redirectTo:")).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #155 — Respaldos, PITR y el CronJob de respaldo base
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface CronJobLeido {
+  spec: {
+    concurrencyPolicy: string;
+    jobTemplate: { spec: { template: { spec: { containers: Contenedor[] } } } };
+  };
+}
+
+function contenedorDelCronJob(ms: Manifiesto[], contiene: string): Contenedor {
+  const cronjob = buscar(ms, "CronJob", contiene) as unknown as CronJobLeido;
+  const contenedor = cronjob.spec.jobTemplate.spec.template.spec.containers[0];
+  if (!contenedor) throw new Error(`El CronJob «${contiene}» no tiene contenedores`);
+  return contenedor;
+}
+
+function contenedorDelMotor(ms: Manifiesto[]): Contenedor {
+  const motor = buscar(ms, "Deployment", "postgres") as {
+    spec: { template: { spec: { containers: Contenedor[] } } };
+  };
+  const contenedor = motor.spec.template.spec.containers[0];
+  if (!contenedor) throw new Error("El Deployment del motor no tiene contenedores");
+  return contenedor;
+}
+
+describe("#155 · el respaldo", () => {
+  const ms = manifiestosDe(AMBIENTE);
+
+  it("el motor archiva WAL de forma continua, con wal-g", () => {
+    const postgres = contenedorDelMotor(ms);
+    expect(postgres.args).toContain("archive_mode=on");
+    expect((postgres.args ?? []).join(" ")).toContain("wal-g wal-push %p");
+    expect((postgres.args ?? []).join(" ")).toContain("archive_timeout=");
+  });
+
+  it("wal-g se descarga y se verifica antes de que el motor arranque", () => {
+    const motor = buscar(ms, "Deployment", "postgres") as {
+      spec: { template: { spec: { initContainers?: Contenedor[] } } };
+    };
+    const descarga = (motor.spec.template.spec.initContainers ?? [])[0];
+    expect(descarga?.name).toBe("wal-g-instalar");
+    expect((descarga?.args ?? []).join(" ")).toContain("sha256sum -c");
+  });
+
+  it("el respaldo base corre en un CronJob propio, nunca dos a la vez", () => {
+    const respaldo = buscar(ms, "CronJob", "respaldo") as unknown as CronJobLeido;
+    expect(respaldo.spec.concurrencyPolicy).toBe("Forbid");
+  });
+
+  it("el respaldo lo hace sgtm_respaldo, no sgtm_owner ni el superusuario", () => {
+    const contenedor = contenedorDelCronJob(ms, "respaldo");
+    const guion = (contenedor.args ?? []).join(" ");
+    expect(guion).toContain("PGUSER=sgtm_respaldo");
+    expect(secretosDe(contenedor)).toContain(secretos(AMBIENTE).respaldo);
+  });
+
+  it("el CronJob escribe el estado en la tabla respaldo, como sgtm_owner (RF-126)", () => {
+    const contenedor = contenedorDelCronJob(ms, "respaldo");
+    const guion = (contenedor.args ?? []).join(" ");
+    expect(guion).toContain("PGUSER=sgtm_owner");
+    expect(guion).toContain("INSERT INTO respaldo");
+    expect(guion).toContain("UPDATE respaldo");
+  });
+
+  it("el volumen de datos se monta de solo lectura en el CronJob", () => {
+    const contenedor = contenedorDelCronJob(ms, "respaldo");
+    const montaje = (contenedor.volumeMounts ?? []).find((v) => v.name === "datos");
+    expect(montaje?.readOnly).toBe(true);
+  });
+
+  it("la clave de cifrado nunca es un valor literal", () => {
+    for (const { c } of contenedoresDeTodo(ms)) {
+      const clave = (c.env ?? []).find((e) => e.name === "WALG_LIBSODIUM_KEY");
+      if (clave) expect(clave.value).toBeUndefined();
+    }
+  });
+
+  it("las tres claves nuevas —sgtm_respaldo, cifrado y credenciales— no se repiten entre si", () => {
+    const contenedor = contenedorDelCronJob(ms, "respaldo");
+    const nombres = secretosDe(contenedor);
+    expect(new Set(nombres).size).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("#155 · la demostracion: la auditoria se pone roja", () => {
+  it("quitando archive_mode=on, la auditoria lo detecta", () => {
+    const ms = manifiestosDe(AMBIENTE);
+    const postgres = contenedorDelMotor(ms);
+    postgres.args = (postgres.args ?? []).filter((a) => a !== "archive_mode=on");
+
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("archive_mode=on"));
+  });
+
+  it("poniendo la clave de cifrado como `value` en vez de `valueFrom`, la auditoria lo detecta", () => {
+    const ms = manifiestosDe(AMBIENTE);
+    const postgres = contenedorDelMotor(ms);
+    const clave = postgres.env?.find((e) => e.name === "WALG_LIBSODIUM_KEY");
+    if (clave) {
+      clave.value = "una-clave-de-mentira-en-texto-plano";
+      clave.valueFrom = undefined;
+    }
+
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("texto plano"));
+  });
+
+  it("dandole al CronJob de lote el Secret de sgtm_owner, la auditoria lo sigue rechazando", () => {
+    const ms = manifiestosDe(AMBIENTE);
+    const contenedor = contenedorDelCronJob(ms, "lote");
+    (contenedor.env ??= []).push({
+      name: "SGTM_DB_OWNER_CLAVE",
+      valueFrom: { secretKeyRef: { name: secretos(AMBIENTE).owner, key: "clave-owner" } },
+    });
+
+    // La excepcion de #155 es del CronJob de respaldo, no de «cualquier CronJob»: el
+    // de lote —la MISMA imagen que la aplicacion— sigue sin poder llevar esta clave.
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("el Secret de sgtm_owner"));
   });
 });
 

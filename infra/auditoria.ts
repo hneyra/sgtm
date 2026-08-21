@@ -36,19 +36,27 @@ const ESPERA_MINIMA = 3;
 const ESPERA_MAXIMA = 5;
 
 /**
- * El unico pod que puede leer la clave de `sgtm_owner` sin ser un Job.
+ * Los pods que pueden leer la clave de `sgtm_owner` sin ser un Job.
  *
- * Es el motor de datos, y la excepcion es estrecha a proposito: `sgtm_owner` **se crea
- * ahi**. El guion de inicializacion —el mismo que usa el compose— es quien le asigna la
- * clave, y para asignarla tiene que conocerla. Ese contenedor ya guarda ademas la del
- * superusuario, que puede mas que todas las demas juntas: darle tambien esta no amplia
- * nada.
+ * `postgres` es el motor de datos, y la excepcion es estrecha a proposito:
+ * `sgtm_owner` **se crea ahi**. El guion de inicializacion —el mismo que usa el
+ * compose— es quien le asigna la clave, y para asignarla tiene que conocerla. Ese
+ * contenedor ya guarda ademas la del superusuario, que puede mas que todas las demas
+ * juntas: darle tambien esta no amplia nada.
+ *
+ * `respaldo` es el `CronJob` de `Respaldo.ts` (issue #155): `V8__respaldo.sql`
+ * declara que quien escribe el estado del respaldo en la tabla `respaldo` (RF-126) es
+ * `sgtm_owner`, «como el proceso de despliegue» — y este `CronJob` es ese proceso. La
+ * excepcion sigue siendo nombrada y estrecha: el `CronJob` de `lote` en
+ * `Aplicacion.ts`, que corre la MISMA imagen de la aplicacion, sigue prohibido.
  *
  * Lo que la regla persigue es otra cosa: que la clave de `sgtm_owner` no acabe en un
  * proceso **expuesto en HTTP**. La aplicacion, la interfaz y las tareas de lote no la
- * tienen ni con excusa (ARQ-03 §4, issue #150).
+ * tienen ni con excusa (ARQ-03 §4, issue #150). Ninguno de los dos de aqui abre un
+ * puerto.
  */
 const MOTOR = "postgres";
+const COMPONENTES_CON_ACCESO_A_OWNER = [MOTOR, "respaldo"];
 
 /** Objetos que no viven en un namespace. */
 const SIN_NAMESPACE = ["Namespace", "PriorityClass"];
@@ -87,7 +95,11 @@ export function auditarManifiestos(
         problemas.push(...auditarSondas(donde, c.name, c));
         problemas.push(...auditarKeycloak(donde, c.name, c.args ?? []));
         problemas.push(...auditarLaAplicacion(donde, c));
-        if ((clase === "Deployment" || clase === "CronJob") && etiquetas["componente"] !== MOTOR) {
+        problemas.push(...auditarRespaldo(donde, c));
+        if (
+          (clase === "Deployment" || clase === "CronJob") &&
+          !COMPONENTES_CON_ACCESO_A_OWNER.includes(etiquetas["componente"] ?? "")
+        ) {
           problemas.push(...auditarSecretoDeOwner(donde, c, contexto));
         }
       }
@@ -226,6 +238,44 @@ function auditarLaAplicacion(donde: string, c: Contenedor): string[] {
         "no atiende HTTP —`web-application-type: none`—: un puerto ahi es una superficie que " +
         "nadie pidio.",
     );
+  }
+
+  return problemas;
+}
+
+/**
+ * El respaldo, leido del manifiesto (issue #155).
+ *
+ * Dos cosas, y las dos con consecuencia si fallan en silencio: un motor que arranca
+ * sin `archive_mode=on` no archiva WAL —el RPO de RNF-076 deja de existir y nadie lo
+ * nota hasta que hace falta restaurar—, y una clave de wal-g puesta como `value` en
+ * vez de `valueFrom.secretKeyRef` queda en el manifiesto en texto plano, visible con
+ * `kubectl get -o yaml` por cualquiera con acceso de lectura al namespace.
+ */
+const CLAVES_DE_RESPALDO_QUE_NUNCA_VAN_EN_TEXTO_PLANO = ["WALG_LIBSODIUM_KEY", "AWS_SECRET_ACCESS_KEY"];
+
+function auditarRespaldo(donde: string, c: Contenedor): string[] {
+  const problemas: string[] = [];
+
+  if (c.name === "postgres" && !(c.args ?? []).some((a) => a === "archive_mode=on")) {
+    problemas.push(
+      `${donde}, contenedor «${c.name}»: no declara \`archive_mode=on\`. Sin el, el motor no ` +
+        "archiva WAL —el RPO de RNF-076 deja de existir— y nada en el arranque lo dice: el " +
+        "sintoma aparece el dia que hace falta restaurar y no hay a donde ir mas alla del " +
+        "ultimo respaldo base.",
+    );
+  }
+
+  for (const clave of CLAVES_DE_RESPALDO_QUE_NUNCA_VAN_EN_TEXTO_PLANO) {
+    const variable = (c.env ?? []).find((e) => e.name === clave);
+    if (variable && variable.value !== undefined) {
+      problemas.push(
+        `${donde}, contenedor «${c.name}»: \`${clave}\` va como \`value\` en vez de ` +
+          "`valueFrom.secretKeyRef`. Un manifiesto no es un lugar para un secreto en texto " +
+          "plano: `kubectl get -o yaml` lo enseñaria a cualquiera con acceso de lectura al " +
+          "namespace, y esta clave cifra —o descifra— el padron entero respaldado.",
+      );
+    }
   }
 
   return problemas;

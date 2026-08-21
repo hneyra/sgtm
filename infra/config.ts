@@ -100,6 +100,14 @@ export interface BackupSettings {
    * leyendo de donde `prod` escribe, y sus propios respaldos van a otro sitio.
    */
   restoreSourceBucket?: string;
+  /**
+   * Punto HTTP al que el CronJob de respaldo avisa si `wal-g backup-push` falla
+   * (issue #155). Opcional: sin el, el fallo sigue quedando en la tabla `respaldo`
+   * (RF-126) y en el estado del propio `CronJob`, pero nadie recibe un empujon
+   * activo. Cablear esto a un canal de verdad —Alertmanager, un webhook de chat— es
+   * issue #156; aqui solo se declara el punto de entrada.
+   */
+  alertWebhookUrl?: string;
 }
 
 export interface IdentitySettings {
@@ -298,6 +306,9 @@ export function readInvariants(environment: Environment, reader: ConfigReader): 
       ...(reader.text("restoreSourceBucket") === undefined
         ? {}
         : { restoreSourceBucket: reader.text("restoreSourceBucket") }),
+      ...(reader.text("backupAlertWebhookUrl") === undefined
+        ? {}
+        : { alertWebhookUrl: reader.text("backupAlertWebhookUrl") }),
     },
     identity: {
       image: requireText(reader, "keycloakImage", "la imagen de Keycloak, con su versión fijada"),
