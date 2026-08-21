@@ -28,6 +28,13 @@ dependencies {
     // de catastro, que es su API publica: LectorDeFichas.
     implementation(project(":sgtm-catastro"))
 
+    // consulta_vehiculos (#25) necesita la deuda vigente de cada vehiculo. El mapa de contextos
+    // (ARQ-01 §2) declara la arista cuentacorriente ──► rentas al reves de las otras dos: es
+    // justo la excepcion que preve la regla 2 («cuentacorriente no conoce a nadie», ARQ-01 §4).
+    // Solo se importa el paquete raiz de cuentacorriente, que es su API publica:
+    // ConsultaDeDeudaPublica.
+    implementation(project(":sgtm-cuentacorriente"))
+
     // La prueba del repositorio corre contra PostgreSQL de verdad: provisiona la
     // base como un ambiente real y se conecta como sgtm_app, no como el
     // superusuario que entrega Testcontainers (CAL-01 §3.2).

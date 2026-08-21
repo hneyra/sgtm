@@ -2,17 +2,25 @@ package pe.gob.sgtm.rentas.infraestructura;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Placa;
+import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 import pe.gob.sgtm.rentas.dominio.CambioDePlaca;
+import pe.gob.sgtm.rentas.dominio.CriterioDeVehiculo;
 import pe.gob.sgtm.rentas.dominio.EstadoVehiculo;
 import pe.gob.sgtm.rentas.dominio.Vehiculo;
+import pe.gob.sgtm.rentas.dominio.VehiculoEncontrado;
 import pe.gob.sgtm.rentas.dominio.VehiculoRepository;
 
 /** Padron vehicular sobre PostgreSQL. */
@@ -25,6 +33,16 @@ public class VehiculoRepositoryJdbc extends RepositorioJdbc implements VehiculoR
 
     /** El nombre con el que la auditoria llavea al vehiculo. */
     static final String TABLA = "vehiculo";
+
+    private static final OrdenSeguro ORDEN = OrdenSeguro.sobre("placa", "marca", "modelo", "id");
+
+    /**
+     * Como {@link #COLUMNAS}, calificadas para el {@code JOIN} de {@link #buscar}, con el titular.
+     */
+    private static final String COLUMNAS_CON_TITULAR =
+            "v.id, v.placa, v.contribuyente_id, v.marca, v.modelo, v.categoria,"
+                    + " v.anio_fabricacion, v.anio_inscripcion, v.numero_motor, v.numero_serie,"
+                    + " v.estado, c.nombre_razon_social, c.codigo_contribuyente";
 
     public VehiculoRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
@@ -56,6 +74,47 @@ public class VehiculoRepositoryJdbc extends RepositorioJdbc implements VehiculoR
                 .param("id", id)
                 .query(VehiculoRepositoryJdbc::mapear)
                 .optional();
+    }
+
+    /**
+     * El padron con el titular resuelto en el mismo {@code JOIN} (#25).
+     *
+     * <p>{@code placa} es por igualdad —sin el guion, como {@link #findByPlaca}— y no por prefijo:
+     * un {@code LIKE} bajo RLS no llega nunca al indice (ver {@code FichaCatastralRepositoryJdbc}),
+     * y la placa completa es lo que trae ventanilla cuando busca un vehiculo concreto.
+     */
+    @Override
+    public Pagina<VehiculoEncontrado> buscar(CriterioDeVehiculo criterio, Paginacion paginacion) {
+        List<String> condiciones = new ArrayList<>();
+        Map<String, Object> parametros = new HashMap<>();
+
+        if (criterio.placa() != null) {
+            condiciones.add("replace(v.placa, '-', '') = :placa");
+            parametros.put("placa", criterio.placa().replace("-", ""));
+        }
+        if (criterio.nroMotor() != null) {
+            condiciones.add("v.numero_motor = :nroMotor");
+            parametros.put("nroMotor", criterio.nroMotor());
+        }
+        if (criterio.contribuyente() != null) {
+            condiciones.add("c.codigo_contribuyente = :contribuyente");
+            parametros.put("contribuyente", criterio.contribuyente());
+        }
+        if (criterio.estado() != null) {
+            condiciones.add("v.estado = :estado");
+            parametros.put("estado", criterio.estado().name());
+        }
+
+        String desde = " FROM vehiculo v JOIN contribuyente c ON c.id = v.contribuyente_id";
+        String donde = condiciones.isEmpty() ? "" : " WHERE " + String.join(" AND ", condiciones);
+
+        return paginar(
+                "SELECT " + COLUMNAS_CON_TITULAR + desde + donde,
+                "SELECT count(*)" + desde + donde,
+                parametros,
+                paginacion,
+                ORDEN,
+                VehiculoRepositoryJdbc::mapearEncontrado);
     }
 
     @Override
@@ -172,6 +231,14 @@ public class VehiculoRepositoryJdbc extends RepositorioJdbc implements VehiculoR
         valores.put("serie", vehiculo.numeroSerie());
         valores.put("estado", vehiculo.estado().name());
         return valores;
+    }
+
+    private static VehiculoEncontrado mapearEncontrado(ResultSet fila, int numero)
+            throws SQLException {
+        return new VehiculoEncontrado(
+                mapear(fila, numero),
+                fila.getString("nombre_razon_social"),
+                fila.getString("codigo_contribuyente"));
     }
 
     private static Vehiculo mapear(ResultSet fila, int numero) throws SQLException {

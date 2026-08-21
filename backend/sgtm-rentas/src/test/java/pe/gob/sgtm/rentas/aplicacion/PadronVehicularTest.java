@@ -10,8 +10,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -27,14 +30,22 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
 import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
+import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
+import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.Placa;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
+import pe.gob.sgtm.rentas.aplicacion.ConsultaDeVehiculos.VehiculoConDeuda;
 import pe.gob.sgtm.rentas.dominio.CambioDePlaca;
+import pe.gob.sgtm.rentas.dominio.CriterioDeVehiculo;
+import pe.gob.sgtm.rentas.dominio.EstadoVehiculo;
 import pe.gob.sgtm.rentas.dominio.Vehiculo;
 import pe.gob.sgtm.rentas.dominio.VehiculoRepository;
 import pe.gob.sgtm.rentas.infraestructura.VehiculoRepositoryJdbc;
@@ -62,6 +73,8 @@ class PadronVehicularTest {
 
     private static final Ejercicio FABRICACION = new Ejercicio(2020);
     private static final Ejercicio INSCRIPCION = new Ejercicio(2021);
+    private static final Clock RELOJ =
+            Clock.fixed(Instant.parse("2026-08-20T10:00:00Z"), ZoneId.of("America/Lima"));
 
     private static BaseDeDatosDePrueba base;
     private static long municipalidad;
@@ -70,6 +83,7 @@ class PadronVehicularTest {
     private static RegistrarVehiculo registrar;
     private static CambiarPlaca cambiarPlaca;
     private static ConsultaDeVehiculos consulta;
+    private static DeudaDeMentira deuda;
 
     @BeforeAll
     static void provisionar() throws SQLException, IOException {
@@ -83,16 +97,16 @@ class PadronVehicularTest {
         pool.setPassword(base.clave(BaseDeDatosDePrueba.APP));
 
         JdbcClient jdbc = JdbcClient.create(pool);
-        Clock reloj = Clock.fixed(Instant.parse("2026-08-20T10:00:00Z"), ZoneId.of("America/Lima"));
         repositorio = new VehiculoRepositoryJdbc(jdbc);
-        AuditoriaJdbc auditoria = new AuditoriaJdbc(jdbc, reloj);
+        AuditoriaJdbc auditoria = new AuditoriaJdbc(jdbc, RELOJ);
 
-        registrar = envolver(new RegistrarVehiculo(repositorio, auditoria, reloj), pool);
-        cambiarPlaca = envolver(new CambiarPlaca(repositorio, auditoria, reloj), pool);
+        registrar = envolver(new RegistrarVehiculo(repositorio, auditoria, RELOJ), pool);
+        cambiarPlaca = envolver(new CambiarPlaca(repositorio, auditoria, RELOJ), pool);
         // La consulta se envuelve igual que las escrituras, y por el mismo motivo:
         // sin transaccion no hay SET LOCAL y la politica RLS no puede evaluarse.
         // Leer «simple» desde el controlador no funcionaria nunca.
-        consulta = envolver(new ConsultaDeVehiculos(repositorio), pool);
+        deuda = new DeudaDeMentira();
+        consulta = envolver(new ConsultaDeVehiculos(repositorio, deuda), pool);
     }
 
     @SuppressWarnings("unchecked")
@@ -275,6 +289,193 @@ class PadronVehicularTest {
         }
     }
 
+    @Nested
+    @DisplayName("consulta_vehiculos (#25)")
+    class LaConsultaDelPadron {
+
+        @Test
+        @DisplayName("filtra por placa, por motor y por el codigo del titular")
+        void filtraPorPlacaMotorYTitular() {
+            registrar.registrar(
+                    conMotor(nuevo("Y1A-111"), "MOT-Y1A"), Observacion.de("Alta del vehiculo"));
+            registrar.registrar(
+                    conMotor(nuevo("Y2B-222"), "MOT-Y2B"),
+                    Observacion.de("Otro vehiculo, mismo" + " titular"));
+
+            assertThat(buscar(new CriterioDeVehiculo("Y1A111", null, null, null)).contenido())
+                    .as("sin guion, igual que findByPlaca")
+                    .extracting(fila -> fila.fila().vehiculo().placa())
+                    .containsExactly(Placa.de("Y1A-111"));
+
+            assertThat(buscar(new CriterioDeVehiculo(null, "MOT-Y2B", null, null)).contenido())
+                    .extracting(fila -> fila.fila().vehiculo().placa())
+                    .containsExactly(Placa.de("Y2B-222"));
+
+            assertThat(buscar(new CriterioDeVehiculo(null, null, "C-VEH-1", null)).contenido())
+                    .as(
+                            "las dos son del mismo titular; puede haber mas de otros metodos de"
+                                    + " esta misma clase, que comparten la base sembrada")
+                    .extracting(fila -> fila.fila().vehiculo().placa())
+                    .contains(Placa.de("Y1A-111"), Placa.de("Y2B-222"));
+        }
+
+        @Test
+        @DisplayName("el titular de otro contribuyente no aparece al filtrar por el primero")
+        void elFiltroPorContribuyenteNoTraeAOtroTitular() throws SQLException {
+            long otro = crearContribuyente("C-VEH-9", "40404099", "OTRO PROPIETARIO");
+            registrar.registrar(nuevo("Y3C-333"), Observacion.de("Del titular de siempre"));
+            sembrarVehiculo(otro, "Y4D-444", EstadoVehiculo.ACTIVO);
+
+            List<VehiculoConDeuda> encontrados =
+                    buscar(new CriterioDeVehiculo(null, null, "C-VEH-1", null)).contenido();
+
+            assertThat(encontrados)
+                    .extracting(fila -> fila.fila().vehiculo().placa())
+                    .doesNotContain(Placa.de("Y4D-444"));
+        }
+
+        @Test
+        @DisplayName("trae el nombre del titular resuelto, sin que quien llama pida otra cosa")
+        void traeElTitularResuelto() {
+            registrar.registrar(nuevo("Y5E-555"), Observacion.de("Alta del vehiculo"));
+
+            VehiculoConDeuda fila =
+                    buscar(new CriterioDeVehiculo("Y5E555", null, null, null)).contenido().get(0);
+
+            assertThat(fila.fila().titular()).isEqualTo("PROPIETARIO DE PRUEBA");
+            assertThat(fila.fila().codigoContribuyente()).isEqualTo("C-VEH-1");
+        }
+
+        @Test
+        @DisplayName("solo 'BAJA' filtra contra el padron; el resto de la afectacion no")
+        void soloBajaFiltraContraElPadron() throws SQLException {
+            sembrarVehiculo(contribuyente, "Y6F-666", EstadoVehiculo.BAJA);
+
+            assertThat(
+                            buscar(new CriterioDeVehiculo(null, null, null, EstadoVehiculo.BAJA))
+                                    .contenido())
+                    .extracting(fila -> fila.fila().vehiculo().placa())
+                    .containsExactly(Placa.de("Y6F-666"));
+        }
+
+        @Test
+        @DisplayName(
+                "la deuda de la fila es solo la de ese vehiculo, no la de otro del mismo titular")
+        void laDeudaEsSoloDeEseVehiculo() {
+            Vehiculo primero =
+                    registrar.registrar(nuevo("Y7G-777"), Observacion.de("Alta del vehiculo"));
+            Vehiculo segundo =
+                    registrar.registrar(
+                            nuevo("Y8H-888"), Observacion.de("Otro vehiculo, mismo" + " titular"));
+
+            deuda.para(
+                    contribuyente,
+                    List.of(
+                            obligacion("VEHICULAR", 2026, requireId(primero), Dinero.de("150.00")),
+                            obligacion(
+                                    "VEHICULAR", 2026, requireId(segundo), Dinero.de("999.00"))));
+
+            VehiculoConDeuda fila =
+                    buscar(new CriterioDeVehiculo("Y7G777", null, null, null)).contenido().get(0);
+
+            assertThat(fila.deuda().importe())
+                    .as("la deuda del segundo vehiculo (999.00) no puede colarse en la del primero")
+                    .isEqualTo(Dinero.de("150.00"));
+            assertThat(fila.deuda().actualizadoA()).isEqualTo(LocalDate.of(2026, 8, 20));
+        }
+
+        @Test
+        @DisplayName("sin ninguna obligacion asentada, la deuda es cero, no una fila sin cifra")
+        void sinObligacionesLaDeudaEsCero() {
+            registrar.registrar(nuevo("Y9J-999"), Observacion.de("Alta del vehiculo"));
+
+            VehiculoConDeuda fila =
+                    buscar(new CriterioDeVehiculo("Y9J999", null, null, null)).contenido().get(0);
+
+            assertThat(fila.deuda().importe()).isEqualTo(Dinero.CERO);
+        }
+
+        private Pagina<VehiculoConDeuda> buscar(CriterioDeVehiculo criterio) {
+            return consulta.buscar(
+                    criterio,
+                    LocalDate.now(RELOJ),
+                    new Paginacion(0, 20, "placa", Paginacion.Direccion.ASCENDENTE));
+        }
+
+        /**
+         * Siembra un vehiculo por SQL directo, no por {@link VehiculoRepository#save}: ese metodo
+         * no esta envuelto en transaccion (a diferencia de {@code registrar} y {@code
+         * cambiarPlaca}), y sin {@code SET LOCAL} la politica RLS no puede evaluarse. Es el mismo
+         * patron que {@link #crearContribuyente}.
+         */
+        private void sembrarVehiculo(long contribuyenteId, String placa, EstadoVehiculo estado)
+                throws SQLException {
+            try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+                pe.gob.sgtm.esquema.ContextoDeTenant.fijar(app, municipalidad);
+                try (PreparedStatement sentencia =
+                        app.prepareStatement(
+                                "INSERT INTO vehiculo (municipalidad_id, placa, contribuyente_id,"
+                                        + " marca, modelo, categoria, anio_fabricacion,"
+                                        + " anio_inscripcion, estado)"
+                                        + " VALUES (?, ?, ?, 'TOYOTA', 'HILUX', 'CAMIONETA', 2020,"
+                                        + " 2021, ?)")) {
+                    sentencia.setLong(1, municipalidad);
+                    sentencia.setString(2, placa);
+                    sentencia.setLong(3, contribuyenteId);
+                    sentencia.setString(4, estado.name());
+                    sentencia.executeUpdate();
+                    app.commit();
+                }
+            }
+        }
+
+        private Vehiculo conMotor(Vehiculo vehiculo, String motor) {
+            return new Vehiculo(
+                    vehiculo.id(),
+                    vehiculo.placa(),
+                    vehiculo.contribuyenteId(),
+                    vehiculo.marca(),
+                    vehiculo.modelo(),
+                    vehiculo.categoria(),
+                    vehiculo.anioFabricacion(),
+                    vehiculo.anioInscripcion(),
+                    motor,
+                    vehiculo.numeroSerie(),
+                    vehiculo.estado());
+        }
+
+        private ObligacionPublica obligacion(
+                String tributo, int ejercicio, long vehiculoId, Dinero total) {
+            return new ObligacionPublica(
+                    tributo,
+                    new Ejercicio(ejercicio),
+                    null,
+                    vehiculoId,
+                    LocalDate.of(2026, 8, 20),
+                    total);
+        }
+    }
+
+    /**
+     * Doble de {@link ConsultaDeDeudaPublica}: aqui no hay libro de asientos, asi que la deuda de
+     * cada contribuyente la fija el propio caso a mano. Es lo que permite demostrar que {@link
+     * ConsultaDeVehiculos#buscar} suma solo las obligaciones del vehiculo de la fila —no las de
+     * otro predio o vehiculo del mismo titular— sin levantar {@code cuentacorriente}.
+     */
+    private static final class DeudaDeMentira implements ConsultaDeDeudaPublica {
+        private final Map<Long, List<ObligacionPublica>> porContribuyente = new HashMap<>();
+
+        void para(long contribuyenteId, List<ObligacionPublica> obligaciones) {
+            porContribuyente.put(contribuyenteId, obligaciones);
+        }
+
+        @Override
+        public List<ObligacionPublica> deTodoElContribuyente(
+                long contribuyenteId, LocalDate fecha) {
+            return porContribuyente.getOrDefault(contribuyenteId, List.of());
+        }
+    }
+
     /* ── Utilidades ────────────────────────────────────────────────────── */
 
     private static Vehiculo nuevo(String placa) {
@@ -307,6 +508,11 @@ class PadronVehicularTest {
     }
 
     private static long crearContribuyente() throws SQLException {
+        return crearContribuyente("C-VEH-1", "40404040", "PROPIETARIO DE PRUEBA");
+    }
+
+    private static long crearContribuyente(String codigo, String dni, String nombre)
+            throws SQLException {
         try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
             pe.gob.sgtm.esquema.ContextoDeTenant.fijar(app, municipalidad);
             try (PreparedStatement sentencia =
@@ -314,9 +520,12 @@ class PadronVehicularTest {
                             "INSERT INTO contribuyente (municipalidad_id, codigo_contribuyente,"
                                     + " tipo_documento, numero_documento, tipo_persona,"
                                     + " nombre_razon_social, usuario_registro)"
-                                    + " VALUES (?, 'C-VEH-1', 'DNI', '40404040', 'NATURAL',"
-                                    + "         'PROPIETARIO DE PRUEBA', 'prueba') RETURNING id")) {
+                                    + " VALUES (?, ?, 'DNI', ?, 'NATURAL', ?, 'prueba')"
+                                    + " RETURNING id")) {
                 sentencia.setLong(1, municipalidad);
+                sentencia.setString(2, codigo);
+                sentencia.setString(3, dni);
+                sentencia.setString(4, nombre);
                 try (ResultSet fila = sentencia.executeQuery()) {
                     fila.next();
                     long id = fila.getLong(1);

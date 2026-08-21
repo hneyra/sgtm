@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -220,6 +221,53 @@ class ConsultarDeudaTest {
 
         assertThat(pagina.estaVacia()).isTrue();
         assertThat(pagina.totalElementos()).isZero();
+    }
+
+    @Test
+    @DisplayName(
+            "todasLasObligacionesDe agrega igual que porContribuyente, sin pagina ni filtro de"
+                    + " fase")
+    void todasLasObligacionesDeAgregaIgualQuePorContribuyente() {
+        String codigo = crearContribuyenteConCodigo("D-0006", "80400006");
+        long titular = idDe(codigo);
+
+        // Dos periodos de la misma obligacion (se agregan en una fila) y una obligacion
+        // distinta en otra fase, para probar las dos cosas que porContribuyente ya prueba
+        // por separado: el neteo por obligacion, y que no filtra fase.
+        cargar(titular, "ARBITRIOS", 2026, 3, null, Dinero.de(100), Fase.ORDINARIA);
+        cargar(titular, "ARBITRIOS", 2026, 7, null, Dinero.de(150), Fase.ORDINARIA);
+        cargar(titular, "PREDIAL", 2027, 0, null, Dinero.de(300), Fase.COACTIVA);
+
+        List<ObligacionConDeuda> todas =
+                consulta.todasLasObligacionesDe(titular, LocalDate.of(2026, 6, 1));
+
+        assertThat(todas)
+                .as("las dos obligaciones, en cualquier fase: este metodo no filtra fase")
+                .hasSize(2);
+        ObligacionConDeuda arbitrios =
+                todas.stream()
+                        .filter(o -> "ARBITRIOS".equals(o.tributo()))
+                        .findFirst()
+                        .orElseThrow();
+        assertThat(arbitrios.periodoDesde()).isEqualTo(3);
+        assertThat(arbitrios.periodoHasta()).isEqualTo(7);
+        assertThat(arbitrios.deuda().insoluto())
+                .as("las dos cuotas se netean juntas, igual que en porContribuyente")
+                .isEqualTo(Dinero.de(250));
+        ObligacionConDeuda predial =
+                todas.stream().filter(o -> "PREDIAL".equals(o.tributo())).findFirst().orElseThrow();
+        assertThat(predial.fase())
+                .as("distinta obligacion, con su propia fase, aunque el corte sea el mismo")
+                .isEqualTo(Fase.COACTIVA);
+    }
+
+    @Test
+    @DisplayName("un contribuyente sin ningun asiento da una lista vacia, no un error")
+    void unContribuyenteSinAsientosDaListaVacia() {
+        String codigo = crearContribuyenteConCodigo("D-0007", "80400007");
+        long titular = idDe(codigo);
+
+        assertThat(consulta.todasLasObligacionesDe(titular, LocalDate.of(2026, 6, 1))).isEmpty();
     }
 
     @Test

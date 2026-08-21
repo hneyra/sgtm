@@ -166,16 +166,67 @@ public class ConsultarDeuda {
                     "No hay ningun contribuyente con el codigo " + criterio.codigoContribuyente());
         }
 
-        List<ObligacionConDeuda> obligaciones = new ArrayList<>();
-        for (Map.Entry<ClaveDeObligacion, List<SaldoProyectado>> grupo :
-                agrupar(contribuyenteId.get()).entrySet()) {
-            obligaciones.add(filaDe(criterio, grupo.getKey(), grupo.getValue()));
-        }
+        List<ObligacionConDeuda> obligaciones =
+                new ArrayList<>(todasLasObligacionesDe(contribuyenteId.get(), fecha));
         obligaciones.sort(
                 Comparator.comparing((ObligacionConDeuda o) -> o.ejercicio().valor())
                         .thenComparing(ObligacionConDeuda::tributo));
 
         return ConstanciaDeNoAdeudo.de(criterio.codigoContribuyente(), fecha, obligaciones);
+    }
+
+    /**
+     * Todas las obligaciones con deuda del contribuyente, sin paginar y sin filtrar por fase —a
+     * diferencia de {@link #porContribuyente}, que pagina y deja elegir la fase—: la lista
+     * completa, en cualquier orden.
+     *
+     * <p>Es lo que necesitan tanto {@link #constanciaDeNoAdeudo} como el puerto publico de este
+     * contexto ({@code pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica}, ARQ-01 §4): «cuanto
+     * debe en total» no tiene pagina, la tiene una grilla.
+     *
+     * <p>A diferencia de {@link #filaDe} —que resuelve cada obligacion con su propia consulta a
+     * {@link AsientoRepository#paraDeuda}—, agrupa <b>en memoria</b> los asientos de una sola
+     * llamada a {@link AsientoRepository#deContribuyente}: no hay pagina que acote cuantos grupos
+     * se resuelven, asi que una consulta por obligacion aqui podria ser cualquier numero de ellas.
+     * {@link CalculoDeDeuda#deudaActualizadaA} filtra el corte por su cuenta (ve {@code
+     * fechaValor}), asi que agrupar sin filtrar por fecha primero es seguro.
+     */
+    @Transactional(readOnly = true)
+    public List<ObligacionConDeuda> todasLasObligacionesDe(long contribuyenteId, LocalDate fecha) {
+        Map<ClaveDeObligacion, List<Asiento>> agrupados = new LinkedHashMap<>();
+        for (Asiento asiento : repositorio.deContribuyente(contribuyenteId)) {
+            agrupados
+                    .computeIfAbsent(ClaveDeObligacion.deAsiento(asiento), k -> new ArrayList<>())
+                    .add(asiento);
+        }
+
+        List<ObligacionConDeuda> obligaciones = new ArrayList<>();
+        for (Map.Entry<ClaveDeObligacion, List<Asiento>> grupo : agrupados.entrySet()) {
+            List<Asiento> delGrupo = grupo.getValue();
+            ClaveDeObligacion clave = grupo.getKey();
+            int periodoDesde =
+                    delGrupo.stream().mapToInt(ConsultarDeuda::periodoDe).min().orElseThrow();
+            int periodoHasta =
+                    delGrupo.stream().mapToInt(ConsultarDeuda::periodoDe).max().orElseThrow();
+            Fase fase = delGrupo.stream().map(Asiento::fase).max(FASE_MAS_AVANZADA).orElseThrow();
+            DeudaActualizada deuda = calculo.deudaActualizadaA(delGrupo, fecha, redondeo);
+            obligaciones.add(
+                    new ObligacionConDeuda(
+                            clave.tributo(),
+                            clave.ejercicio(),
+                            clave.predioId(),
+                            clave.vehiculoId(),
+                            periodoDesde,
+                            periodoHasta,
+                            fase,
+                            deuda));
+        }
+        return obligaciones;
+    }
+
+    /** {@code periodo} nulo es anual, igual que en {@link ClaveDeSaldo#de(Asiento)}. */
+    private static int periodoDe(Asiento asiento) {
+        return asiento.periodo() == null ? 0 : asiento.periodo();
     }
 
     /** Los saldos del contribuyente, agrupados por obligacion (tributo/ejercicio/unidad). */
@@ -265,6 +316,14 @@ public class ConsultarDeuda {
         static ClaveDeObligacion de(ClaveDeSaldo clave) {
             return new ClaveDeObligacion(
                     clave.tributo(), clave.ejercicio(), clave.predioId(), clave.vehiculoId());
+        }
+
+        static ClaveDeObligacion deAsiento(Asiento asiento) {
+            return new ClaveDeObligacion(
+                    asiento.tributo(),
+                    asiento.ejercicio(),
+                    asiento.predioId(),
+                    asiento.vehiculoId());
         }
     }
 }

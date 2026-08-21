@@ -1,14 +1,23 @@
 package pe.gob.sgtm.rentas.aplicacion;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
+import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
+import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Placa;
 import pe.gob.sgtm.rentas.dominio.CambioDePlaca;
+import pe.gob.sgtm.rentas.dominio.CriterioDeVehiculo;
 import pe.gob.sgtm.rentas.dominio.Vehiculo;
+import pe.gob.sgtm.rentas.dominio.VehiculoEncontrado;
 import pe.gob.sgtm.rentas.dominio.VehiculoRepository;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ImporteActualizado;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
@@ -32,9 +41,11 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 public class ConsultaDeVehiculos {
 
     private final VehiculoRepository repositorio;
+    private final ConsultaDeDeudaPublica deuda;
 
-    public ConsultaDeVehiculos(VehiculoRepository repositorio) {
+    public ConsultaDeVehiculos(VehiculoRepository repositorio, ConsultaDeDeudaPublica deuda) {
         this.repositorio = repositorio;
+        this.deuda = deuda;
     }
 
     /** La ficha con su historial, o {@code NO_ENCONTRADO} si esa placa no esta en el padron. */
@@ -52,6 +63,46 @@ public class ConsultaDeVehiculos {
         return new FichaDeVehiculo(vehiculo, repositorio.historialDePlacas(id));
     }
 
+    /**
+     * El padron vehicular que pide el criterio, con la deuda vigente de cada vehiculo (RF-024,
+     * #25).
+     *
+     * <p>«Base imponible» no sale en esta fila: el impuesto al patrimonio vehicular necesita la
+     * tabla de valores referenciales, y eso sigue bloqueado por D-02 (ver el javadoc de {@link
+     * Vehiculo}). La deuda si: es dinero ya asentado en el libro, no una cifra que este metodo
+     * determine.
+     */
+    @Transactional(readOnly = true)
+    public Pagina<VehiculoConDeuda> buscar(
+            CriterioDeVehiculo criterio, LocalDate fecha, Paginacion paginacion) {
+        Pagina<VehiculoEncontrado> pagina = repositorio.buscar(criterio, paginacion);
+        return pagina.mapear(fila -> new VehiculoConDeuda(fila, deudaDe(fila.vehiculo(), fecha)));
+    }
+
+    /**
+     * La deuda de <b>este</b> vehiculo, sumando las obligaciones de su contribuyente que le
+     * pertenecen a el —no las de otros predios o vehiculos que tambien tenga—.
+     *
+     * <p>Sumar varias {@link ObligacionPublica} ya calculadas es una agregacion legitima del
+     * backend, no la composicion que RNF-083 prohibe en la interfaz: aqui hay contexto completo —el
+     * mismo contribuyente, la misma fecha de corte— en una sola transaccion, y el resultado sigue
+     * llevando su fecha.
+     */
+    private ImporteActualizado deudaDe(Vehiculo vehiculo, LocalDate fecha) {
+        long id = Objects.requireNonNull(vehiculo.id(), "Un vehiculo leido de la base tiene id");
+        Dinero total = Dinero.CERO;
+        for (ObligacionPublica obligacion :
+                deuda.deTodoElContribuyente(vehiculo.contribuyenteId(), fecha)) {
+            if (Objects.equals(obligacion.vehiculoId(), id)) {
+                total = total.mas(obligacion.total());
+            }
+        }
+        return new ImporteActualizado(total, fecha);
+    }
+
     /** Lo que la pantalla de la ficha necesita, leido de una vez. */
     public record FichaDeVehiculo(Vehiculo vehiculo, List<CambioDePlaca> historial) {}
+
+    /** Una fila de la consulta: el vehiculo, su titular y cuanto debe a la fecha de corte. */
+    public record VehiculoConDeuda(VehiculoEncontrado fila, ImporteActualizado deuda) {}
 }
