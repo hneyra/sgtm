@@ -202,6 +202,14 @@ Apuntarla al motor de una municipalidad en marcha, por tanto, **deja fuera a la 
 que alguien vuelva a aplicar el `Secret` — y el síntoma es un `28P01` en cada petición, que no se
 parece en nada a «alguien corrió una prueba».
 
+Y hay una segunda consecuencia de la misma frase —los roles son del clúster, no de la base—:
+**contra un motor externo, las dos tareas de `verificarAislamiento` no se pueden ejecutar en
+paralelo.** `org.gradle.parallel=true` las lanza a la vez, las dos hacen `ALTER ROLE` sobre los
+mismos cuatro roles, y salen un `tuple concurrently updated` y un `password authentication failed`
+que no se parecen en nada a su causa. Con Testcontainers no ocurre, porque cada tarea levanta su
+propio contenedor. Por eso la invocación lleva `--no-parallel --max-workers=1`, y se descubrió
+ejecutándola.
+
 Dónde se ejecuta entonces, que es donde el criterio de #149 se cumple igual:
 
 | Sitio | Cómo |

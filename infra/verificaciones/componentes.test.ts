@@ -361,6 +361,12 @@ describe("#151 · identidad", () => {
     expect(documentos.perfilDeUsuario).toContain("municipalidad_id");
   });
 
+  it("la pantalla de acceso no dice «marcha blanca»", () => {
+    const configuracion = buscar(ms, "ConfigMap", "realm") as { data: Record<string, string> };
+    expect(configuracion.data["realm.json"]).not.toContain("marcha blanca");
+    expect(JSON.parse(configuracion.data["realm.json"] ?? "{}").displayName).toBe("SGTM");
+  });
+
   it("el realm no trae ni un usuario ni una clave", () => {
     const configuracion = buscar(ms, "ConfigMap", "realm") as { data: Record<string, string> };
     for (const [nombre, contenido] of Object.entries(configuracion.data)) {

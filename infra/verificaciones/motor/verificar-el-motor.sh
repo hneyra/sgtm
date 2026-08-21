@@ -302,9 +302,22 @@ esperarAlMotor || fallo "el motor no volvio tras el reinicio"
 if [ "$CON_AISLAMIENTO" = "si" ]; then
     echo
     echo "· verificarAislamiento contra esta instancia"
+    # `--no-parallel --max-workers=1`, y esto se descubrio por las malas en la primera
+    # corrida de este trabajo: `verificarAislamiento` son DOS tareas —el esquema y la
+    # plataforma— y `org.gradle.parallel=true` las lanza a la vez.
+    #
+    # Con Testcontainers eso da igual: cada una levanta su contenedor. Contra un motor
+    # externo comparten instancia, y **los roles son objetos del clúster de PostgreSQL,
+    # no de una base**: las dos ejecutan `ALTER ROLE sgtm_owner ... PASSWORD` sobre los
+    # mismos roles. El resultado fue un `tuple concurrently updated` en una y un
+    # `password authentication failed for user "sgtm_owner"` en la otra —la clave que
+    # acababa de poner se la habia cambiado la vecina—.
+    #
+    # En serie no hay carrera: cada clase provisiona, usa lo suyo y termina. Cuesta unos
+    # segundos mas y es lo que hace que este camino signifique algo.
     (
         cd "$INFRA/../backend"
-        ./gradlew verificarAislamiento --no-daemon \
+        ./gradlew verificarAislamiento --no-daemon --no-parallel --max-workers=1 \
             -Dsgtm.pruebas.postgres.url="jdbc:postgresql://127.0.0.1:$PUERTO/postgres" \
             -Dsgtm.pruebas.postgres.usuario=postgres \
             -Dsgtm.pruebas.postgres.clave="$CLAVE_SUPER"

@@ -163,7 +163,16 @@ export function documentosDelRealm(args: {
   }
 
   return {
-    realm: JSON.stringify({ ...ajustes, realm: args.realm }, null, 2),
+    // `displayName` se reescribe: el del archivo versionado dice «marcha blanca», que es
+    // lo que el compose levanta. Es lo primero que se lee en la pantalla de acceso, y en
+    // la instalacion de una municipalidad seria mentira —o peor, una explicacion que
+    // nadie pidio—. La marca de instalacion de demostracion es otra cosa, y va en los
+    // documentos que el sistema emite (INF-03 §3.2), no en el formulario de entrada.
+    realm: JSON.stringify(
+      { ...ajustes, realm: args.realm, displayName: "SGTM" },
+      null,
+      2,
+    ),
     perfilDeUsuario: perfil,
     // `OVERWRITE` reemplaza el cliente, no el realm: los usuarios no se tocan.
     clientes: JSON.stringify({ ifResourceExists: "OVERWRITE", clients: clientes }, null, 2),
