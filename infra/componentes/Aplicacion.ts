@@ -26,9 +26,10 @@ import type { ConfigMap, CronJob, Deployment, Manifiesto, Service } from "./tipo
  *
  * La variable no lleva valor por omision ni aqui ni en `application.yaml`, y eso **es**
  * la decision: un backend que atiende peticiones sin poder validar un token responde a
- * la sonda, se declara sano y no atiende a nadie. La comprobacion 8 del despliegue
- * actual lo verifica arrancando la imagen sin la variable; su traslado al clúster esta
- * en `verificaciones/cluster/`.
+ * la sonda, se declara sano y no atiende a nadie. La comprobacion 8 de `despliegue.yml`
+ * lo verifica arrancando la imagen sin la variable; aqui, lo que se puede comprobar sin
+ * clúster es que el manifiesto la declara —lo hace `auditoria.ts`—, y contra el proceso
+ * en marcha vuelve a comprobarse en el VPS.
  *
  * ## El navegador no habla con el backend
  *
@@ -191,11 +192,11 @@ export function manifiestosDeAplicacion(args: AplicacionArgs): Manifiesto[] {
                   readOnly: true,
                 },
               ],
-              // 127.0.0.1 y no `localhost`: el guion de arranque de la imagen solo
-              // anade el `listen [::]:8080` cuando la configuracion es la suya, y esta
-              // no lo es. Con `localhost` la sonda resolveria ::1 y no encontraria a
-              // nadie, con nginx sirviendo perfectamente al lado. La nota esta en el
-              // compose y cuesta lo mismo aqui.
+              // La sonda va por HTTP contra la IP del pod, que es lo que hace el
+              // kubelet, y no contra un nombre: la configuracion que se monta declara
+              // `listen 8080` a secas —solo IPv4—, y en el compose eso ya costo un
+              // contenedor «unhealthy» para siempre con nginx sirviendo al lado,
+              // porque `localhost` resolvia ::1 primero.
               readinessProbe: sondaHttp("/", 8080, { failureThreshold: 3 }),
               livenessProbe: sondaHttp("/", 8080, { periodSeconds: 20, failureThreshold: 5 }),
             },

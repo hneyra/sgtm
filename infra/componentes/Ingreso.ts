@@ -29,8 +29,9 @@ import type { HelmChartConfig, IngressRoute, Manifiesto, Middleware, TLSOption }
  * 22, 80 y 443 es configuracion del anfitrion, y Pulumi aqui habla con el API de k3s, no
  * con el sistema operativo. Va en `vps/cortafuegos.sh`, que se ejecuta al aprovisionar el
  * nodo, y la comprobacion de que ningun otro puerto responde desde fuera se hace desde
- * fuera —`verificaciones/cluster/puertos-desde-fuera.sh`—, que es el unico sitio desde
- * donde esa afirmacion significa algo.
+ * fuera —el `nmap` que el propio guion deja escrito—, que es el unico sitio desde donde
+ * esa afirmacion significa algo. **Mientras no haya VPS, ese criterio de #153 queda sin
+ * verificar**, y decirlo es preferible a darlo por bueno.
  */
 
 export interface IngresoArgs {

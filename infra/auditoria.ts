@@ -193,7 +193,7 @@ function auditarSecretoDeOwner(
  *
  * Son las comprobaciones 7 y 8 de `despliegue.yml` dichas antes de desplegar. Contra el
  * clúster se comprueban de nuevo, y contra el proceso en marcha —que es donde valen de
- * verdad—, en `verificaciones/cluster/`.
+ * verdad—, en `verificaciones/motor/` y, lo que exige un clúster, en el VPS.
  */
 function auditarLaAplicacion(donde: string, c: Contenedor): string[] {
   const problemas: string[] = [];

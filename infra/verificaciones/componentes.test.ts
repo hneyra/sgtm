@@ -21,8 +21,9 @@ import { invariantesDe } from "./stacks";
  * correcto no es un sistema que funciona, y las cuatro afirmaciones que solo valen
  * contra lo que corre —el aislamiento verificado contra la instancia, la aplicacion que
  * no puede hacer DDL con las credenciales de su proceso, la escalera de identidad y el
- * escaneo de puertos desde fuera— viven en `verificaciones/cluster/`, que se ejecuta
- * contra un clúster desechable o contra el VPS.
+ * escaneo de puertos desde fuera— no se comprueban aqui: la primera y la segunda, en
+ * `verificaciones/motor/verificar-el-motor.sh`, que levanta el motor de estos mismos
+ * manifiestos; las otras dos exigen un VPS y **quedan sin verificar hasta que exista**.
  *
  * Lo que si demuestra: que lo que se va a aplicar dice lo que los issues exigen que
  * diga. Es la mitad barata de la verificacion, y es la que evita el viaje.

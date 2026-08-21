@@ -41,9 +41,10 @@ import type { Contenedor, Job, Manifiesto, VariableDeEntorno } from "./tipos";
  *
  * El `Secret` con la clave de `sgtm_owner` se monta **solo** en estos dos Jobs. La
  * auditoria de `auditoria.ts` lo exige leyendo los manifiestos, y la comprobacion 7 del
- * despliegue —trasladada al clúster en `verificaciones/cluster/`— lo comprueba contra el
- * proceso en marcha: con las credenciales que el contenedor de la aplicacion tiene de
- * verdad, `CREATE TABLE` tiene que fallar.
+ * despliegue lo comprueba contra el proceso en marcha: con las credenciales que el
+ * contenedor tiene de verdad, `CREATE TABLE` tiene que fallar. Su traslado esta en
+ * `verificaciones/motor/verificar-el-motor.sh`, que lo ejecuta contra el motor que
+ * levantan estos mismos manifiestos.
  *
  * ## Idempotencia, y por que el nombre lleva la version
  *
