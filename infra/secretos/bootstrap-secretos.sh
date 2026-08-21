@@ -69,7 +69,7 @@ while IFS= read -r nombre; do
     salida=$(mktemp)
     # shellcheck disable=SC2086
     printf '%s' "$existente" \
-        | yarn --silent vite-node herramientas/completar-secreto.ts "$nombre" "$NAMESPACE" $claves \
+        | yarn --silent vite-node herramientas/completar-secreto-cli.ts "$nombre" "$NAMESPACE" $claves \
         > "$salida"
 
     kubectl apply -f "$salida" >/dev/null

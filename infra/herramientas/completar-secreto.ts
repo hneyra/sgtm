@@ -7,8 +7,11 @@ import { createHash, randomBytes } from "node:crypto";
  * esta, y nunca junta dos claves con el mismo valor. Vive aparte del guion de bash a
  * proposito: es la parte que puede tener un defecto sutil —una condicion de carrera al
  * decidir "esto ya existe", una clave que se sobreescribe por error— y en TypeScript
- * tiene prueba unitaria sin tocar un cluster. El CLI de mas abajo es el unico que habla
- * con `kubectl`.
+ * tiene prueba unitaria sin tocar un cluster. El CLI vive aparte, en
+ * `completar-secreto-cli.ts` — el mismo motivo que separa `emitir-manifiestos.ts` de
+ * `emitir.ts`: un guardia del tipo `require.main === module` no distingue ts-node de
+ * vite-node, y un archivo de entrada sin guardia no tiene ese problema. Es el unico que
+ * habla con `kubectl`.
  */
 
 /** Un `Secret` de Kubernetes, en la forma minima que este modulo necesita. */
@@ -91,45 +94,4 @@ export function manifiestoDeSecreto(args: {
  */
 export function huella(valorBase64: string): string {
   return createHash("sha256").update(valorBase64, "base64").digest("hex").slice(0, 12);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CLI: `secreto.json existente | vite-node completar-secreto.ts <nombre> <namespace> <clave...>`
-// ─────────────────────────────────────────────────────────────────────────────
-
-function leerEntradaEstandar(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let datos = "";
-    process.stdin.on("data", (trozo) => (datos += trozo));
-    process.stdin.on("end", () => resolve(datos));
-    process.stdin.on("error", reject);
-  });
-}
-
-async function principal(): Promise<void> {
-  const [nombre, namespace, ...requeridas] = process.argv.slice(2);
-  if (!nombre || !namespace || requeridas.length === 0) {
-    throw new Error(
-      "uso: completar-secreto.ts <nombre> <namespace> <clave...>, con el Secret " +
-        "existente (o vacio) en la entrada estandar",
-    );
-  }
-
-  const entrada = (await leerEntradaEstandar()).trim();
-  const existente: SecretoExistente | undefined = entrada ? JSON.parse(entrada) : undefined;
-
-  const resultado = completarSecreto(existente, requeridas);
-  const manifiesto = manifiestoDeSecreto({ nombre, namespace, data: resultado.data });
-
-  process.stdout.write(JSON.stringify(manifiesto) + "\n");
-  for (const clave of resultado.generadas) {
-    process.stderr.write(`  · ${nombre}/${clave}: generada (huella ${huella(resultado.data[clave]!)})\n`);
-  }
-}
-
-if ((process.argv[1] ?? "").includes("completar-secreto")) {
-  principal().catch((error: unknown) => {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exit(1);
-  });
 }
