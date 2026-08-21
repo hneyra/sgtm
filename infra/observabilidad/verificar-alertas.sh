@@ -157,7 +157,21 @@ print(json.dumps(d['data']['result']))
 
 alerta_esta() {
     # $1: estado esperado dentro de ALERTS{alertname="PostgreSQLCaido"} -> alertstate
-    consultar_prometheus 'ALERTS%7Balertname%3D%22PostgreSQLCaido%22%7D' | grep -q "\"alertstate\":\"$1\""
+    #
+    # Parseado, no grep -q contra el JSON en crudo: `json.dumps` de Python
+    # pone un espacio despues de cada `:` -"alertstate": "firing"-, y un
+    # patron `"alertstate":"$1"` sin ese espacio NUNCA hace match. Este era
+    # el fallo real detras de CADA "PostgreSQLCaido no llego a firing" de
+    # este guion, ensanchando el sondeo de 5 a 8 a 15 minutos sin que
+    # ninguno lo arreglara -el bloqueo no era el tiempo, era que esta
+    # comprobacion jamas podia dar "si"-.
+    local resultado
+    resultado=$(consultar_prometheus 'ALERTS%7Balertname%3D%22PostgreSQLCaido%22%7D')
+    python3 -c "
+import json, sys
+series = json.loads(sys.argv[1])
+sys.exit(0 if any(s['metric'].get('alertstate') == sys.argv[2] for s in series) else 1)
+" "$resultado" "$1"
 }
 
 echo
@@ -165,18 +179,17 @@ echo "· Apagando la base de datos"
 kubectl -n "$NS" scale deployment/sgtm-stg-postgres --replicas=0
 kubectl -n "$NS" wait --for=delete pod -l app=sgtm-stg-postgres --timeout=60s 2>/dev/null || true
 
-# 15 minutos, no 8: el diagnostico demostro DOS veces seguidas que la regla SI
-# llega a firing -up{job="postgres"} en 0, "connection refused" en
-# /api/v1/targets, la propia ALERTS con alertstate=firing-, capturado apenas
-# instantes despues de que el sondeo (primero de 5 minutos, despues de 8) se
-# rindiera las dos veces. No es ruido aleatorio: es un atraso sistematico y
-# reproducible de la evaluacion de Prometheus bajo la contencion de CPU de un
-# runner compartido con seis pods a la vez, y ensanchar el margen -no acortar
-# la regla, que es la que se quiere probar tal cual corre en produccion- es la
-# unica correccion honesta. La regla nunca estuvo mal.
+# 6 minutos, no los 15 a los que se llego ensanchando a ciegas: el `alerta_esta`
+# de mas arriba tenia el bug real -el `grep -q` contra el JSON de Python nunca
+# podia hacer match, por el espacio que `json.dumps` pone despues de cada `:`-,
+# y NINGUN ensanchamiento del sondeo iba a arreglar una comprobacion que jamas
+# podia dar "si". Con la comprobacion parseando el JSON de verdad, el margen
+# que hace falta es el de la regla misma: hasta 30s para el primer scrape
+# fallido, dos minutos de `for:`, y margen para la latencia de evaluacion —
+# nunca los quince minutos que enmascaraban el bug de arriba.
 echo "· Esperando a que la regla PostgreSQLCaido pase de pending a firing (for: 2m)"
 LOGRADO=no
-INTENTOS=90
+INTENTOS=36
 for i in $(seq 1 "$INTENTOS"); do
     if alerta_esta firing; then
         LOGRADO=si
@@ -187,7 +200,7 @@ for i in $(seq 1 "$INTENTOS"); do
     [ "$i" -lt "$INTENTOS" ] && sleep 10
 done
 if [ "$LOGRADO" != "si" ]; then
-    echo "FALLO: PostgreSQLCaido no llego a firing en 15 minutos." >&2
+    echo "FALLO: PostgreSQLCaido no llego a firing en 6 minutos." >&2
     echo "::group::Diagnostico: que ve Prometheus de verdad"
     echo "-- up{job=\"postgres\"} --"
     consultar_prometheus 'up%7Bjob%3D%22postgres%22%7D' || true

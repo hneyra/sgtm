@@ -364,11 +364,8 @@ jobs:
       # «Una regla que no notifica a nadie no es una alerta, es un grafico» (issue
       # #156): apaga la base, comprueba que la regla se evalua SIN que nadie se
       # entere, cablea un receptor, y comprueba que la MISMA alerta activa se
-      # entrega. Hasta ~17 minutos: el `for: 2m` de la regla es real, no acortado
-      # para CI, y en un runner compartido la evaluacion de Prometheus se atraso
-      # de forma reproducible -no una vez, dos- bajo la carga de seis pods a la
-      # vez, lo bastante para que cinco y despues ocho minutos de margen no
-      # alcanzaran.
+      # entrega. Hasta ~8 minutos: el `for: 2m` de la regla es real, no acortado
+      # para CI.
       - name: verificar-alertas.sh
         run: infra/observabilidad/verificar-alertas.sh
 
