@@ -1,0 +1,309 @@
+# Publicación de las tres imágenes del sistema (issue #148).
+#
+# **Un commit en `main` publica las tres, etiquetadas con su sha — nunca con
+# `latest`.** `latest` no identifica nada cuando hay que decir qué está corriendo en
+# la municipalidad; el sha sí, y es lo único que el flujo de liberación necesita para
+# fijar una versión sin tocar el estado de Pulumi (`ADR-0011` §5).
+#
+#   | Imagen             | Sale de                              | Cuántas |
+#   |---------------------|---------------------------------------|---------|
+#   | `sgtm-aplicacion`   | `backend/Dockerfile`, destino `aplicacion` | 1 |
+#   | `sgtm-migrador`     | el mismo Dockerfile, destino `migrador`    | 1 |
+#   | `sgtm-interfaz`     | `frontend/Dockerfile`, destino `interfaz`  | **2, una por ambiente** |
+#
+# Las dos primeras no dependen del ambiente: la configuración de la aplicación entra
+# por variables de entorno en tiempo de ejecución, así que el mismo artefacto sirve
+# para `stg` y para `prod` — es lo que ADR-0011 §5 llama «promover el mismo
+# artefacto».
+#
+# **La interfaz es la excepción, y a propósito.** Vite resuelve `VITE_SGTM_OIDC_*` AL
+# COMPILAR (`frontend/Dockerfile`): el emisor de identidad queda incrustado en el
+# paquete estático. Con un emisor por ambiente, hacen falta dos imágenes —no una
+# reconfigurable—, y las dos build args que cambian entre ellas son exactamente las
+# que dependen del emisor. La fuente de esos valores es a propósito la más aburrida
+# posible: el `sgtm:domain` que cada `Pulumi.<ambiente>.yaml` YA fija, con la misma
+# forma de URL que `despliegue/compose.yaml` y `../iaac` ya usan para Keycloak
+# (`https://<dominio>/keycloak`). No es una decisión nueva de este flujo: es aplicar
+# una convención que ya existe a los dos dominios que `infra/` ya declara. Cuando el
+# emisor cambie —dominio nuevo, otro realm—, cambia en `Pulumi.<ambiente>.yaml` y este
+# flujo reconstruye la imagen de esa municipalidad sola, sin tocar la otra.
+#
+# **El tercer job demuestra los otros dos criterios de #148** —«el clúster corre una
+# versión identificable, sin abrir el estado de Pulumi» y «revertir no ejecuta
+# `pulumi up` y tarda menos de 15 minutos»— sin esperar a que exista el `Deployment`
+# real de producción, que es #152 (`Aplicacion.ts`) y todavía no está escrito.
+#
+# Lo hace contra un clúster **efímero y descartable** (`kind`, dentro del mismo
+# runner), con un `Deployment` que existe solo para este trabajo y desaparece con él.
+# **No es una preview de lo que #152 va a crear** —el nombre, el namespace y la forma
+# del manifiesto son deliberadamente genéricos, para que nadie los confunda con el
+# recurso real—; es la prueba de que el MECANISMO que #152 va a usar —versionar por
+# etiqueta de imagen, mover esa etiqueta con `kubectl`, nunca con `pulumi up`— funciona
+# de verdad y tarda segundos, no minutos. Cuando #152 exista, apunta el mismo
+# `kubectl set image` a su `Deployment` real y el mecanismo ya está probado.
+name: Publicar imágenes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'infra/Pulumi.stg.yaml'
+      - 'infra/Pulumi.prod.yaml'
+      - '.github/workflows/publicar-imagenes.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: publicar-imagenes-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  aplicacion-y-migrador:
+    name: ${{ matrix.imagen }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # `destino` es el nombre de la etapa en backend/Dockerfile; `imagen`, el
+        # nombre publicado. Los dos difieren porque el Dockerfile los llamó como se
+        # leen en ARQ-03 §4 (aplicacion, migrador) y el registro los necesita con el
+        # prefijo del proyecto, para no colisionar con ninguna otra imagen de
+        # `ghcr.io/<owner>/`.
+        include:
+          - destino: aplicacion
+            imagen: sgtm-aplicacion
+          - destino: migrador
+            imagen: sgtm-migrador
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: El nombre del repositorio, en minúsculas
+        id: repositorio
+        run: |
+          # GHCR exige minúsculas. github.repository_owner ya lo está para este
+          # repositorio, pero un propietario con mayúsculas rompería el push en
+          # silencio si no se normaliza aquí.
+          echo "propietario=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" \
+            >> "$GITHUB_OUTPUT"
+
+      # El contexto es la RAIZ del repositorio, no backend/: el Dockerfile ya lo
+      # explica — el catálogo de NEG-03 vive en docs/ y el build lo copia de ahí.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          target: ${{ matrix.destino }}
+          push: true
+          tags: ghcr.io/${{ steps.repositorio.outputs.propietario }}/${{ matrix.imagen }}:${{ github.sha }}
+
+  interfaz:
+    name: sgtm-interfaz (${{ matrix.ambiente }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ambiente: [stg, prod]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: El nombre del repositorio, en minúsculas
+        id: repositorio
+        run: |
+          echo "propietario=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" \
+            >> "$GITHUB_OUTPUT"
+
+      # El dominio sale de infra/Pulumi.<ambiente>.yaml, la misma fuente que usa
+      # `infra/verificaciones/stacks.test.ts` — sin instalar Pulumi ni pedir su
+      # token, porque `domain` no es un secreto.
+      - name: Leer el dominio del ambiente
+        id: dominio
+        run: |
+          dominio=$(sed -n 's/^[[:space:]]*sgtm:domain:[[:space:]]*//p' \
+            "infra/Pulumi.${{ matrix.ambiente }}.yaml" | head -n1 | tr -d '"' | tr -d "'")
+          if [ -z "$dominio" ]; then
+            echo "::error file=infra/Pulumi.${{ matrix.ambiente }}.yaml::No se encontro sgtm:domain" \
+              >&2
+            exit 1
+          fi
+          echo "dominio=$dominio" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile
+          target: interfaz
+          push: true
+          tags: >-
+            ghcr.io/${{ steps.repositorio.outputs.propietario }}/sgtm-interfaz:${{ matrix.ambiente }}-${{ github.sha }}
+          build-args: |
+            VITE_SGTM_API=/api/v1
+            VITE_SGTM_OIDC_CLIENTE=sgtm-backoffice
+            VITE_SGTM_OIDC_AUTORIZACION=https://${{ steps.dominio.outputs.dominio }}/keycloak/realms/sgtm/protocol/openid-connect/auth
+            VITE_SGTM_OIDC_TOKEN=https://${{ steps.dominio.outputs.dominio }}/keycloak/realms/sgtm/protocol/openid-connect/token
+            VITE_SGTM_OIDC_FIN_DE_SESION=https://${{ steps.dominio.outputs.dominio }}/keycloak/realms/sgtm/protocol/openid-connect/logout
+
+  demostrar-liberacion-y-reversion:
+    name: El mecanismo de liberación funciona, sin pulumi up
+    runs-on: ubuntu-latest
+    needs: aplicacion-y-migrador
+
+    steps:
+      - name: El nombre del repositorio, en minúsculas
+        id: repositorio
+        run: |
+          echo "propietario=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" \
+            >> "$GITHUB_OUTPUT"
+
+      # Un clúster desechable, dentro del propio runner. No es el VPS —eso sigue
+      # bloqueado por #147/#152—, y no hace falta que lo sea: lo único que este job
+      # necesita de un clúster es un API de Kubernetes de verdad al que hablarle con
+      # kubectl, y kind da uno en segundos.
+      - name: Crear un cluster de Kubernetes desechable
+        uses: helm/kind-action@v1
+        with:
+          install_only: true
+
+      # Revisión "anterior": un placeholder deliberadamente ajeno a sgtm-aplicacion.
+      # El nombre del recurso (demostracion-liberacion) y el namespace (default) son
+      # genericos a proposito: este Deployment no es el que #152 va a crear, es un
+      # doble que existe solo para que el mecanismo tenga algo que versionar.
+      # Manifiesto explícito, no `kubectl create deployment --image=…`: ese atajo
+      # nombra el contenedor como la IMAGEN (`alpine`, no `demostracion-liberacion`),
+      # y el `kubectl set image` de más abajo fallaría contra un nombre que nadie
+      # escribió a propósito. Fijar el nombre aquí es lo que evita ese error.
+      - name: Desplegar una "version anterior" de mentira
+        run: |
+          cat <<'MANIFIESTO' | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: demostracion-liberacion
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: demostracion-liberacion
+            template:
+              metadata:
+                labels:
+                  app: demostracion-liberacion
+              spec:
+                containers:
+                  - name: demostracion-liberacion
+                    image: alpine:3.20
+                    command: ["sleep", "infinity"]
+          MANIFIESTO
+          kubectl rollout status deployment/demostracion-liberacion --timeout=60s
+
+      - name: "Criterio 1 — el clúster corre una versión identificable, sin abrir Pulumi"
+        id: version_anterior
+        run: |
+          # Ni un `pulumi` en este job, de arriba a abajo: nada que instalar, ningun
+          # `pulumi stack output` que consultar. La version desplegada se lee con
+          # kubectl, punto.
+          imagen=$(kubectl get deployment demostracion-liberacion \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')
+          echo "Version anterior desplegada: $imagen"
+          if [ "$imagen" != "alpine:3.20" ]; then
+            echo "::error::Se esperaba alpine:3.20 y el cluster reporta $imagen" >&2
+            exit 1
+          fi
+
+      # La imagen real, recien publicada por el job anterior. Es la prueba de que el
+      # mecanismo mueve el artefacto de verdad que este flujo acaba de construir, no
+      # un sustituto inventado para la ocasion.
+      #
+      # `kubectl set image` cambia SOLO el campo `image` del contenedor: el pod nuevo
+      # sigue arrancando con `sleep infinity`, heredado del manifiesto anterior, y NO
+      # con el `ENTRYPOINT` real de sgtm-aplicacion. Es deliberado y no un descuido: a
+      # este job no le hace falta que la aplicacion llegue a arrancar —eso exigiria
+      # Postgres y Keycloak reales, que son #149 y #151— para probar el mecanismo que
+      # #148 pide. Lo unico que se afirma es lo que la referencia de imagen del
+      # `Deployment` dice, que es exactamente lo que "el cluster corre una version
+      # identificable" significa.
+      - name: "Criterio 2 — liberar la imagen real, sin pulumi up, y cronometrarlo"
+        id: liberacion
+        run: |
+          imagen_nueva="ghcr.io/${{ steps.repositorio.outputs.propietario }}/sgtm-aplicacion:${{ github.sha }}"
+          inicio=$(date +%s)
+          kubectl set image deployment/demostracion-liberacion \
+            demostracion-liberacion="$imagen_nueva"
+          fin=$(date +%s)
+          duracion=$((fin - inicio))
+          echo "duracion=$duracion" >> "$GITHUB_OUTPUT"
+          echo "Liberar la version nueva tardo ${duracion}s (limite: 900s = 15 min)"
+          if [ "$duracion" -ge 900 ]; then
+            echo "::error::La liberación tardó ${duracion}s, el límite de RNF-082 y de este issue es 900s (15 min)" >&2
+            exit 1
+          fi
+
+          desplegado=$(kubectl get deployment demostracion-liberacion \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')
+          if [ "$desplegado" != "$imagen_nueva" ]; then
+            echo "::error::El clúster reporta «$desplegado», se esperaba «$imagen_nueva»" >&2
+            exit 1
+          fi
+          echo "El clúster ya reporta la versión identificable: $desplegado"
+
+      # `kubectl rollout undo` es la reversión nativa de Kubernetes: vuelve al
+      # ReplicaSet anterior con su plantilla de pod completa, sin que este flujo tenga
+      # que recordar cuál era la imagen vieja. Es exactamente lo que ADR-0011 §5 pide:
+      # una reversión que no ejecuta `pulumi up` y que no depende de la infraestructura,
+      # solo del historial de revisiones que Kubernetes ya lleva.
+      - name: "Criterio 3 — revertir a la versión anterior, sin pulumi up, en menos de 15 minutos"
+        run: |
+          inicio=$(date +%s)
+          kubectl rollout undo deployment/demostracion-liberacion
+          kubectl rollout status deployment/demostracion-liberacion --timeout=60s
+          fin=$(date +%s)
+          duracion=$((fin - inicio))
+          echo "La reversión tardó ${duracion}s (límite: 900s = 15 min)"
+          if [ "$duracion" -ge 900 ]; then
+            echo "::error::La reversión tardó ${duracion}s, por encima del límite de 900s" >&2
+            exit 1
+          fi
+
+          revertido=$(kubectl get deployment demostracion-liberacion \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')
+          if [ "$revertido" != "alpine:3.20" ]; then
+            echo "::error::Tras revertir, el clúster reporta «$revertido» y se esperaba «alpine:3.20»" >&2
+            exit 1
+          fi
+          echo "Revertido: el clúster vuelve a reportar $revertido"
+
+      # No es una relectura del propio YAML —eso solo demuestra que nadie lo escribió,
+      # no que nadie pueda hacerlo—: es una comprobación de tiempo de ejecución. Si
+      # `pulumi` ni siquiera está instalado en este job, ningún paso de arriba pudo
+      # haber ejecutado `pulumi up`, sin importar lo que dijera el código. La
+      # demostración de que la regla puede fallar es la contraparte, ya escrita:
+      # `infra/config.ts` pone rojo `applicationImageRepository` en cuanto lleva una
+      # etiqueta (issue #146) — es la que impediría que la versión volviera a colarse
+      # en el estado de Pulumi.
+      - name: "Criterio 4 — nada en este job pudo haber ejecutado pulumi up"
+        run: |
+          if command -v pulumi > /dev/null 2>&1; then
+            echo "::error::pulumi esta instalado en este job; deja de ser una demostracion de que la reversion no lo necesita" >&2
+            exit 1
+          fi
+          echo "Confirmado en tiempo de ejecución: pulumi no está disponible en este job"
