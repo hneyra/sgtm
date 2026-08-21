@@ -478,20 +478,35 @@ public final class DatosDePrueba {
                 titular,
                 VIGENCIA);
 
+        // Sin predio_id: el predial se determina por contribuyente, nunca por un solo
+        // predio (NEG-05 §1); determinacion_predial_sin_predio_ck (V20) lo exige. El
+        // aporte del predio va en determinacion_predio_detalle (V20).
+        long determinacionId =
+                insertar(
+                        app,
+                        "INSERT INTO determinacion (municipalidad_id, ejercicio, tributo, periodo,"
+                                + " contribuyente_id, conjunto_id, base_imponible,"
+                                + " monto_determinado, reglas_aplicadas, usuario_calculo)"
+                                + " VALUES (?, ?, 'PREDIAL', 1, ?, ?, ?, ?,"
+                                + "         ARRAY['RT-000']::varchar(200)[], 'prueba') RETURNING id",
+                        muni,
+                        EJERCICIO,
+                        titular,
+                        conjuntoId,
+                        MIL,
+                        CIEN);
         ejecutar(
                 app,
-                "INSERT INTO determinacion (municipalidad_id, ejercicio, tributo, periodo,"
-                        + " contribuyente_id, predio_id, conjunto_id, base_imponible,"
-                        + " monto_determinado, reglas_aplicadas, usuario_calculo)"
-                        + " VALUES (?, ?, 'PREDIAL', 1, ?, ?, ?, ?, ?,"
-                        + "         ARRAY['RT-000']::varchar(200)[], 'prueba')",
+                "INSERT INTO determinacion_predio_detalle (municipalidad_id, ejercicio,"
+                        + " determinacion_id, predio_id, autovaluo, porcentaje_propiedad,"
+                        + " base_imponible_predio)"
+                        + " VALUES (?, ?, ?, ?, ?, 100, ?)",
                 muni,
                 EJERCICIO,
-                titular,
+                determinacionId,
                 predioId,
-                conjuntoId,
                 MIL,
-                CIEN);
+                MIL);
         ejecutar(
                 app,
                 "INSERT INTO cuenta_corriente_asiento (municipalidad_id, ejercicio,"
