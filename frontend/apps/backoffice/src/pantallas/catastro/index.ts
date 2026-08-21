@@ -2,18 +2,40 @@ import type { Celda, DatosDePantalla, ValorDeCampo } from '@sgtm/api-client';
 import { definirConexion } from '../conexiones';
 import type { Conexion, ContextoDePantalla } from '../conexiones';
 import { parametrosDeBusqueda } from '../busqueda';
-import { SIN_DATO, datosDe, estado, leerPaginado, tablaDe, texto } from '../seguridad/listado';
+import {
+  SIN_DATO,
+  datosDe,
+  estado,
+  leerLista,
+  leerPaginado,
+  tablaDe,
+  tablaDeLista,
+  texto,
+} from '../seguridad/listado';
 import { campo, leerFicha } from './fichas';
 import type { Ficha } from './fichas';
 
 /**
- * Catastro, conectado hasta donde llega el backend: **nueve opciones de doce**.
+ * Catastro, conectado hasta donde llega el backend: **diez opciones de doce**.
  *
- * Las tres que faltan son las tablas de valuacion —aranceles, valores unitarios
- * y depreciacion—, y no faltan por el frontend: su endpoint es #17 y su
- * **contenido** es D-02. Conectarlas hoy con lo que dibuja el prototipo seria
- * publicar como parametro del sistema una cifra que nadie ha verificado, y en
- * esta pantalla eso parece normativo.
+ * Las dos que faltan son valores unitarios y depreciacion, y ya no es
+ * (solo) porque su contenido sea D-02: `ValorUnitarioController` y
+ * `DepreciacionController` publican **una fila por partida** (o por estado de
+ * conservacion) y el prototipo dibuja una **matriz** —categoria × siete
+ * partidas; antiguedad × cuatro estados—. Volcar filas sueltas bajo columnas
+ * fijas las mostraria bajo la cabecera de otra partida, que es peor que un
+ * hueco. Y para valores unitarios hay una segunda dimension que NEG-05 exige
+ * —el ano de construccion— que el prototipo ni siquiera dibuja como filtro:
+ * conectarla tal cual eligiria en silencio que rango de anos mostrar. Las dos
+ * necesitan una decision de diseno —una tabla nueva, o filtros que el
+ * prototipo no declara— antes de que esto sea "conectar", no un adaptador.
+ *
+ * Aranceles si es la fila suelta que el resto de este modulo ya usa: un
+ * `Arancel` por fila, sin pivote. Su endpoint tampoco pagina ni filtra de
+ * verdad —`ArancelController` solo lee `anio`—, y aqui se acepta el mismo
+ * corte que ya acepto #70 para `accesos` o `usuarios`: el contrato declara mas
+ * filtros de los que el controlador recibe, y fingir que la interfaz los
+ * aplica seria peor que dejarlos sin efecto.
  *
  * **Lo que se ve es lo que el backend manda.** El prototipo dibuja para la
  * ficha urbana once pestanas con noventa campos —suministro de luz, merced
@@ -288,6 +310,54 @@ const sectores = definirConexion({
     ),
 });
 
+/* ── Aranceles: la unica tabla de valuacion sin pivote ──────────────────── */
+
+/**
+ * Aranceles de terreno (RF-009, #17).
+ *
+ * `ArancelController` no pagina —devuelve `List<ArancelResource>` tal cual— ni
+ * filtra: solo lee `anio`, que es lo unico que se manda. El «Via», «Zona» y
+ * «Ejercicio» que dibuja el prototipo siguen en el contrato porque #63 los
+ * anadio automaticamente a toda pantalla con tabla; que el controlador no los
+ * reciba es una brecha del backend, no algo que el frontend deba disimular
+ * (mismo corte que ya acepto #70 para `accesos`).
+ *
+ * `ArancelResource` publica el id de la via, no su nombre: cruzarlo con el
+ * catalogo vial (#16) para mostrarlo traeria las vias completas a una tabla
+ * que solo necesita el arancel. Y `tramo` es una subdivision libre —«un tramo
+ * con mayor valor que el resto de la cuadra»—, no un rango numerico: no hay
+ * «cuadra hasta» que separarle.
+ */
+const aranceles = definirConexion({
+  operacion: 'aranceles',
+  // `via` y `zona` viajan si se escriben, igual que en `accesos` (#70): el
+  // contrato los declara y el controlador los ignora, y eso no lo decide esta
+  // pantalla. `anio` es aparte porque no es un filtro de la URL: es el
+  // ejercicio de la sesion, y sin el la peticion ni siquiera es valida.
+  parametros: (contexto) => ({
+    ...deLaBusqueda('aranceles')(contexto),
+    anio: String(contexto.ejercicio),
+  }),
+  leer: (cuerpo) => leerLista(cuerpo, 'los aranceles'),
+  adaptar: (lista) =>
+    datosDe(
+      tablaDeLista(
+        lista,
+        (arancel): readonly Celda[] => [
+          { texto: texto(arancel['viaId']) },
+          { texto: texto(arancel['tramo']) },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: texto(arancel['valorM2']) },
+          // La variacion contra el ano anterior no la publica el recurso, y
+          // calcularla aqui seria componer una cifra de valuacion (D-02).
+          { texto: SIN_DATO },
+        ],
+        'aranceles',
+      ),
+    ),
+});
+
 const listaDe = (valor: unknown): readonly Readonly<Record<string, unknown>>[] =>
   Array.isArray(valor)
     ? valor.filter(
@@ -308,4 +378,5 @@ export const CONEXIONES_DE_CATASTRO: Readonly<Record<string, Conexion>> = {
   ficha_economica,
   ficha_bienes,
   ficha_rural,
+  aranceles,
 };

@@ -59,6 +59,25 @@ export function leerPaginado(cuerpo: unknown, que: string): Paginado<unknown> {
 }
 
 /**
+ * Abre un arreglo suelto: sin sobre de paginacion.
+ *
+ * Las tablas de valuacion (#17) no lo tienen: `ArancelController` y sus
+ * gemelos devuelven `List<...Resource>` tal cual, porque son catalogos de
+ * referencia —una docena de filas, no un padron— y no un listado que haya que
+ * paginar. Forzar esta respuesta por `leerPaginado` fallaria pensando que la
+ * forma esta mal, cuando la forma real es esta.
+ */
+export function leerLista(
+  cuerpo: unknown,
+  que: string,
+): readonly Readonly<Record<string, unknown>>[] {
+  if (!Array.isArray(cuerpo)) {
+    throw new Error(`La respuesta de ${que} no trae un arreglo.`);
+  }
+  return cuerpo.filter(esObjeto);
+}
+
+/**
  * El listado, ya como tabla: sus filas, su conteo y su paginacion.
  *
  * El conteo lo redacta la interfaz —«47 registros»— y no el backend, que aqui
@@ -79,6 +98,23 @@ export function tablaDe(
       totalPaginas: paginado.totalPaginas,
       hayMas: paginado.hayMas,
     },
+  };
+}
+
+/**
+ * Un arreglo suelto, ya como tabla: sus filas y su conteo, **sin paginacion**.
+ *
+ * El paginador se dibuja solo cuando la respuesta lo trae (#63); esta no lo
+ * trae, asi que aqui no se inventa uno.
+ */
+export function tablaDeLista(
+  lista: readonly Readonly<Record<string, unknown>>[],
+  fila: (registro: Readonly<Record<string, unknown>>) => readonly Celda[],
+  que: string,
+): DatosDeTabla {
+  return {
+    filas: lista.map(fila),
+    conteo: `${lista.length} ${que}`,
   };
 }
 

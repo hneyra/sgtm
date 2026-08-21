@@ -14,9 +14,9 @@ import { RESPUESTAS } from './respuestas.generado';
  *
  * Son las mismas que enumera `IMPLEMENTADAS` en el `ContratoDeApiTest` del
  * backend: las once de seguridad (#9, #12, #13), el catalogo vial y los
- * sectores (#16), las cuatro fichas (#18, #19) y su consulta (#20). **Esta
- * lista crece cuando crece aquella**, no antes: publicar aqui una forma que el
- * backend todavia no sirve seria inventarsela.
+ * sectores (#16), las cuatro fichas (#18, #19), su consulta (#20) y los
+ * aranceles (#17). **Esta lista crece cuando crece aquella**, no antes:
+ * publicar aqui una forma que el backend todavia no sirve seria inventarsela.
  *
  * **Los valores siguen siendo los del prototipo.** Aqui no se inventa ni un
  * dato: se leen las mismas filas que dibuja el catalogo portado y se les pone
@@ -26,6 +26,10 @@ import { RESPUESTAS } from './respuestas.generado';
  * Lo que sigue sin simular es la semantica: no filtra, no ordena y no pagina de
  * verdad —siempre devuelve la pagina 0 con todo lo que hay—. Fingir que pagina
  * seria inventar un comportamiento del servidor, que es lo que el proxy no hace.
+ *
+ * Los aranceles tampoco vienen en el sobre paginado: `ArancelController`
+ * publica un arreglo suelto, y el proxy lo respeta en vez de forzarlo a
+ * `Paginado` (`LISTAS`, mas abajo).
  */
 
 /** El sobre de un listado, tal como lo publica `RespuestaPaginada` (#6). */
@@ -151,6 +155,25 @@ const sectores = (): Paginado =>
       activo: activo(estado),
     })),
   );
+
+/**
+ * Aranceles de terreno (`ArancelResource`, #17).
+ *
+ * No es `Paginado`: el controlador real devuelve `List<ArancelResource>` tal
+ * cual, sin sobre. `viaId` no esta en el prototipo —su columna es el nombre de
+ * la via, no un identificador—, asi que aqui se numera por posicion, igual que
+ * las demas conexiones que necesitan un identificador que el prototipo no
+ * dibuja (`fichas`, `sectores`). `tramo` reutiliza «Cuadra desde» del
+ * prototipo: es lo mas cercano que hay a esa subdivision libre.
+ */
+const aranceles = (): readonly Readonly<Record<string, unknown>>[] =>
+  filasDe('aranceles').map(([, cuadraDesde, , , arancelSM], i) => ({
+    id: i + 1,
+    viaId: i + 1,
+    tramo: cuadraDesde === '' ? null : cuadraDesde,
+    valorM2: arancelSM,
+    documentoFuente: 'Resolución de Alcaldía 0142-2026-MPS',
+  }));
 
 const fichas = (): Paginado =>
   unaPagina(
@@ -472,6 +495,25 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/seguridad/auditoria': auditoria,
   '/seguridad/parametros': parametros,
 };
+
+/**
+ * Por camino del contrato, para los listados que el backend publica **sin**
+ * sobre de paginacion: un arreglo suelto, tal como lo devuelve el controlador.
+ */
+export const LISTAS: Readonly<Record<string, () => readonly Readonly<Record<string, unknown>>[]>> =
+  {
+    '/catastro/tablas/aranceles': aranceles,
+  };
+
+/** El arreglo suelto de un camino, si el proxy lo publica sin sobre. */
+export function listaDe(
+  metodo: string,
+  camino: string,
+): readonly Readonly<Record<string, unknown>>[] | null {
+  if (metodo.toUpperCase() !== 'GET') return null;
+  const relativo = camino.replace(/^\/api\/v1/, '');
+  return LISTAS[relativo]?.() ?? null;
+}
 
 /* ── Lo que devuelven las dos escrituras que la interfaz ya usa ─────────── */
 

@@ -8,7 +8,7 @@ import { SIN_DATO as SIN_CIFRA } from '../seguridad/listado';
 /**
  * Catastro, conectado **hasta donde llega el backend** (#71).
  *
- * Nueve opciones de doce. Lo que se comprueba aqui es lo que distingue este
+ * Diez opciones de doce. Lo que se comprueba aqui es lo que distingue este
  * modulo de los demas:
  *
  * - que las fichas **ensenan su version y su historico**, que es la
@@ -16,7 +16,9 @@ import { SIN_DATO as SIN_CIFRA } from '../seguridad/listado';
  *   pantalla no lo cuenta—;
  * - que lo que el recurso no publica sale vacio, y en particular **ninguna
  *   cifra de valuacion se compone aqui** (D-02);
- * - que las tres tablas de valuacion siguen sin conectar, y por que.
+ * - que los aranceles leen un arreglo suelto, sin sobre de paginacion;
+ * - que valores unitarios y depreciacion siguen sin conectar, y por que ya no
+ *   es solo D-02.
  */
 
 let peticiones: string[] = [];
@@ -65,23 +67,60 @@ describe('el catalogo vial lee ViaResource', () => {
   });
 });
 
-describe('las tres tablas de valuacion siguen sin conectar', () => {
-  it('y es lo correcto: su endpoint es #17 y su contenido es D-02', () => {
-    // No es que falte trabajo de interfaz: es que **su contenido no existe**.
-    // Una tabla de aranceles con las cifras del prototipo parece normativa, y
-    // una cifra normativa inventada produce deuda mal determinada en todo el
-    // padron.
-    for (const opcion of ['aranceles', 'valores_unitarios', 'depreciacion']) {
+describe('los aranceles leen ArancelResource, sin sobre de paginacion', () => {
+  it('vía sale como el id que publica el recurso; zona y variación quedan vacías', async () => {
+    montarEnRuta('/catastro/aranceles');
+
+    // Segunda fila del prototipo: via "AV. JOSÉ DE LAMA" cuadra 7-14, zona 1,
+    // arancel 386.40. El recurso no publica el nombre de la via ni la zona.
+    const fila = (await screen.findByText('386.40')).closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+    expect(celdas.map((celda) => celda.textContent)).toEqual([
+      '2', // el id de la via, no su nombre: ArancelResource no publica cual es
+      '7', // el tramo: una subdivision libre, no un rango numerico
+      SIN_CIFRA, // «cuadra hasta»: no hay donde separarla del tramo
+      SIN_CIFRA, // zona: ArancelResource no la publica
+      '386.40',
+      SIN_CIFRA, // variación vs. el ano anterior: componerla seria D-02
+    ]);
+
+    expect(peticiones.filter((u) => u.includes('/api/v1/catastro/tablas/aranceles'))).toHaveLength(
+      1,
+    );
+    // `anio` es el unico parametro que el controlador real recibe.
+    const [peticion] = peticiones.filter((u) => u.includes('/api/v1/catastro/tablas/aranceles'));
+    expect(peticion).toContain(`anio=${new Date().getFullYear()}`);
+  });
+
+  it('el conteo sale del arreglo, y el paginador no se dibuja: el controlador no pagina', async () => {
+    montarEnRuta('/catastro/aranceles');
+    expect(await screen.findByText(/aranceles$/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('navigation', { name: 'Paginación de la tabla' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('valores unitarios y depreciacion siguen sin conectar', () => {
+  it('y ya no es solo D-02: el recurso es una fila por partida, y el prototipo una matriz', () => {
+    // `ValorUnitarioController` y `DepreciacionController` existen (#17) y
+    // publican una fila por partida —o por estado de conservacion—, nunca la
+    // matriz categoria×partida o antiguedad×estado que dibuja el prototipo.
+    // Volcar esas filas bajo columnas fijas las pondria bajo la cabecera de
+    // otra partida, y valores unitarios tiene ademas una dimension —el ano de
+    // construccion, NEG-05— que el prototipo ni declara como filtro.
+    for (const opcion of ['valores_unitarios', 'depreciacion']) {
       expect(OPCIONES_CONECTADAS).not.toContain(opcion);
     }
   });
 
   it('y se siguen dibujando por la forma que comparten las 134', async () => {
-    montarEnRuta('/catastro/aranceles');
-    expect((await screen.findAllByText('AV. JOSÉ DE LAMA'))[0]).toBeInTheDocument();
+    montarEnRuta('/catastro/depreciacion');
+    expect(await screen.findByText('Hasta 5 años')).toBeInTheDocument();
   });
 
-  it('las nueve que si tienen backend estan conectadas', () => {
+  it('las diez que si conectan estan en el registro', () => {
     for (const opcion of [
       'calles',
       'sectores',
@@ -90,11 +129,13 @@ describe('las tres tablas de valuacion siguen sin conectar', () => {
       'ficha_economica',
       'ficha_bienes',
       'ficha_rural',
+      'aranceles',
     ]) {
       expect(OPCIONES_CONECTADAS).toContain(opcion);
     }
     // La actualizacion y el reporte tienen endpoint y no se conectan por aqui:
-    // la primera escribe (#64) y el segundo devuelve un PDF, no un recurso.
+    // la primera escribe una tabla (#64 solo lleva campos planos) y el
+    // segundo devuelve un PDF, no un recurso.
     expect(OPCIONES_CONECTADAS).not.toContain('actualizacion_catastro');
     expect(OPCIONES_CONECTADAS).not.toContain('ficha_contribuyente_reporte');
   });
