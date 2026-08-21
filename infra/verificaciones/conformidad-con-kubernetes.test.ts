@@ -60,7 +60,8 @@ describe("cada manifiesto es asignable a su tipo de @pulumi/kubernetes", () => {
     expect(despliegues).toHaveLength(4);
     // Tres Jobs: migracion, implantacion y reconciliacion del realm.
     expect(trabajos).toHaveLength(3);
-    expect(programados).toHaveLength(1);
+    // Dos CronJob: el lote de la aplicacion (suspendido) y el respaldo base (#155).
+    expect(programados).toHaveLength(2);
   });
 
   it("los recursos de Traefik llevan el grupo de la v3", () => {

@@ -108,6 +108,14 @@ export function reconciliarRealmSh(): string {
 }
 
 /**
+ * `40-rol-de-respaldo.sh` (issue #155). Este tambien es de `infra/`: el compose no
+ * archiva WAL ni respalda fuera del contenedor, asi que no necesita el rol.
+ */
+export function rolDeRespaldoSh(): string {
+  return leer(join(raizDeInfra(), "componentes/inicializacion/40-rol-de-respaldo.sh"));
+}
+
+/**
  * `nginx.conf` de la interfaz, **el del repositorio**.
  *
  * La imagen ya lo trae dentro, pero apunta al `aplicacion:8080` de la red del compose y

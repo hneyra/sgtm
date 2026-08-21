@@ -4,11 +4,13 @@ import { manifiestosDeBaseDeDatos } from "./BaseDeDatos";
 import { manifiestosDeIdentidad } from "./Identidad";
 import { manifiestosDeIngreso } from "./Ingreso";
 import { manifiestosDeMigracion } from "./Migracion";
+import { manifiestosDeRespaldo } from "./Respaldo";
 import { clasesDePrioridad } from "./convenciones";
 import type { Manifiesto, Namespace } from "./tipos";
 
 /**
- * Los cinco componentes de la fase B, compuestos en el orden en que arrancan.
+ * Los cinco componentes de la fase B, mas el respaldo de la fase C (issue #155),
+ * compuestos en el orden en que arrancan.
  *
  * Una funcion, sin Pulumi dentro. `index.ts` la llama, audita lo que devuelve y lo
  * aplica; las pruebas la llaman y leen el resultado. Es lo que permite que `yarn
@@ -33,6 +35,21 @@ export function construirManifiestos(s: Invariants): Manifiesto[] {
       namespace,
       image: s.database.image,
       storageSize: s.database.storageSize,
+      backup: {
+        endpoint: s.backup.endpoint,
+        bucket: s.backup.bucket,
+        walArchiveTimeoutSeconds: s.backup.walArchiveTimeoutSeconds,
+      },
+    }),
+    ...manifiestosDeRespaldo({
+      environment,
+      namespace,
+      postgresImage: s.database.image,
+      backup: {
+        endpoint: s.backup.endpoint,
+        bucket: s.backup.bucket,
+      },
+      alertWebhookUrl: s.backup.alertWebhookUrl,
     }),
     ...manifiestosDeMigracion({
       environment,

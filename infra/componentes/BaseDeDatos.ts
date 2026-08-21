@@ -3,12 +3,19 @@ import {
   BASE_DEL_PADRON,
   CLAVES,
   RECURSOS,
+  contenedorDeDescargaDeWalg,
+  montajeDeWalg,
   nombreDePrioridad,
+  secretoDeCredencialesDeRespaldo,
   secretos,
   servicioDeBaseDeDatos,
   sondaExec,
+  variablesWalg,
+  volumenDeDatos,
+  volumenDeWalg,
+  WALG_BINARIO,
 } from "./convenciones";
-import { asignarClavesSh, baseDeKeycloakSh, crearRolesSql } from "./fuentes";
+import { asignarClavesSh, baseDeKeycloakSh, crearRolesSql, rolDeRespaldoSh } from "./fuentes";
 import type { ConfigMap, Deployment, Manifiesto, PersistentVolumeClaim, Service } from "./tipos";
 
 /**
@@ -39,17 +46,29 @@ import type { ConfigMap, Deployment, Manifiesto, PersistentVolumeClaim, Service 
  * operador no da lo unico que justificaria su costo —conmutacion a una replica—, porque
  * no hay segundo nodo al que conmutar (`INF-01` §1.1).
  *
- * **La consecuencia, dicha antes de que duela:** el archivado de WAL y el PITR de #155
- * son trabajo de este repositorio. Si nadie los escribe, no existen, y el RPO de
- * RNF-076 es una aspiracion.
+ * **La consecuencia, pagada aqui.** El archivado de WAL y el PITR de #155 son trabajo
+ * de este repositorio: `archive_mode`, `archive_command` y `archive_timeout` van como
+ * argumentos del propio proceso `postgres` —no hay `postgresql.conf` propio, y estos
+ * tres no se pueden pasar por variable de entorno—, y `archive_command` invoca el
+ * binario de wal-g que un contenedor de inicializacion descarga y verifica antes de
+ * que el motor arranque (`convenciones.contenedorDeDescargaDeWalg`, compartido con el
+ * CronJob de respaldo base en `Respaldo.ts`).
+ *
+ * El rol que hace el respaldo **no es el superusuario ni `sgtm_owner`**: es
+ * `sgtm_respaldo`, con exactamente los dos privilegios que wal-g necesita
+ * —`pg_backup_start`/`pg_backup_stop`— y nada de DDL. Ese conjunto se determino
+ * ejecutando `wal-g backup-push` contra un PostgreSQL real hasta encontrar el minimo
+ * que no falla, no leyendo la documentacion: con solo `REPLICATION` falla el permiso
+ * sobre `pg_backup_start`; sin `pg_read_all_settings` falla leyendo `data_directory`.
+ * El guion que lo crea es `inicializacion/40-rol-de-respaldo.sh`.
  *
  * ## Lo que no se reinventa
  *
- * Los dos guiones de inicializacion son **los archivos del repositorio**, no copias:
- * `crear-roles.sql` del modulo del esquema y `20-asignar-claves.sh` del compose. Corren
- * en orden alfabetico, una sola vez, cuando el volumen esta vacio — igual que en el
- * compose, porque una politica de `V6__rls.sql` los nombra y **un rol no puede crearse
- * a si mismo**.
+ * Los guiones de inicializacion son **los archivos del repositorio**, no copias:
+ * `crear-roles.sql` del modulo del esquema, `20-asignar-claves.sh` del compose, y
+ * `40-rol-de-respaldo.sh` de aqui mismo. Corren en orden alfabetico, una sola vez,
+ * cuando el volumen esta vacio — igual que en el compose, porque una politica de
+ * `V6__rls.sql` los nombra y **un rol no puede crearse a si mismo**.
  */
 
 export interface BaseDeDatosArgs {
@@ -59,16 +78,33 @@ export interface BaseDeDatosArgs {
   image: string;
   /** Tamano del volumen. Es disco local del nodo: no crece solo (`INF-01` §5). */
   storageSize: string;
+  /** El respaldo continuo (issue #155): destino, y el RPO escrito en configuracion. */
+  backup: {
+    /** El `AWS_ENDPOINT` de wal-g: el almacenamiento de objetos, FUERA del VPS. */
+    endpoint: string;
+    /** El contenedor. `WALG_S3_PREFIX` sale de aqui: `s3://<bucket>`. */
+    bucket: string;
+    /** `archive_timeout`, en segundos. Es RNF-076 escrito en el proceso del motor. */
+    walArchiveTimeoutSeconds: number;
+  };
 }
 
-/** Dentro del volumen, y no en su raiz: `lost+found` de un ext4 impide el `initdb`. */
-const DIRECTORIO_DE_DATOS = "/var/lib/postgresql/data/pgdata";
+/**
+ * Dentro del volumen, y no en su raiz: `lost+found` de un ext4 impide el `initdb`.
+ *
+ * Exportado: `Respaldo.ts` monta el MISMO volumen —de solo lectura— en la MISMA
+ * ruta, y wal-g exige que el `PGDATA` que se le pasa coincida textualmente con el
+ * `data_directory` que reporta el motor en marcha (comprobado contra un PostgreSQL
+ * real: con una ruta distinta, `backup-push` falla antes de tocar un archivo).
+ */
+export const DIRECTORIO_DE_DATOS = "/var/lib/postgresql/data/pgdata";
 
 export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
-  const { environment, namespace, image, storageSize } = args;
+  const { environment, namespace, image, storageSize, backup } = args;
   const nombre = servicioDeBaseDeDatos(environment);
   const etiquetas = commonLabels(environment, "postgres");
   const secreto = secretos(environment);
+  const credenciales = secretoDeCredencialesDeRespaldo(environment);
 
   const inicializacion: ConfigMap = {
     apiVersion: "v1",
@@ -83,13 +119,14 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
       "10-crear-roles.sql": crearRolesSql(),
       "20-asignar-claves.sh": asignarClavesSh(),
       "30-base-de-keycloak.sh": baseDeKeycloakSh(),
+      "40-rol-de-respaldo.sh": rolDeRespaldoSh(),
     },
   };
 
   const volumen: PersistentVolumeClaim = {
     apiVersion: "v1",
     kind: "PersistentVolumeClaim",
-    metadata: { name: resourceName(environment, "postgres-datos"), namespace, labels: etiquetas },
+    metadata: { name: volumenDeDatos(environment), namespace, labels: etiquetas },
     spec: {
       // `ReadWriteOnce`, que es lo unico que da el almacenamiento local de un nodo, y
       // lo que obliga a `Recreate` mas abajo.
@@ -97,6 +134,11 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
       resources: { requests: { storage: storageSize } },
     },
   };
+
+  // Las usan `archive_command` y `restore_command` —procesos hijos del propio
+  // `postgres`, que las heredan—. `40-rol-de-respaldo.sh` no las necesita: crea el
+  // rol, no invoca wal-g.
+  const variablesDeWalg = variablesWalg({ backup, credenciales, secretoDeRespaldo: secreto.respaldo });
 
   const motor: Deployment = {
     apiVersion: "apps/v1",
@@ -114,10 +156,31 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
         metadata: { labels: { ...etiquetas, app: nombre } },
         spec: {
           priorityClassName: nombreDePrioridad(environment, "datos"),
+          // Descarga y verifica wal-g ANTES de que el motor arranque: `archive_mode`
+          // esta encendido desde el primer segundo, asi que el binario tiene que
+          // existir antes del primer `archive_command`.
+          initContainers: [contenedorDeDescargaDeWalg()],
           containers: [
             {
               name: "postgres",
               image,
+              // La imagen oficial resuelve `ENTRYPOINT docker-entrypoint.sh` y
+              // `CMD postgres`; sustituir solo `args` mantiene el entrypoint intacto
+              // y cambia el CMD por `postgres` con las banderas de abajo — el patron
+              // documentado por la propia imagen para pasarle parametros al servidor.
+              //
+              // Van como argumentos y no en `postgresql.conf` porque aqui no hay
+              // `postgresql.conf` propio que montar, y porque `archive_command` no se
+              // puede pasar por variable de entorno.
+              args: [
+                "postgres",
+                "-c",
+                "archive_mode=on",
+                "-c",
+                `archive_command=${WALG_BINARIO} wal-push %p`,
+                "-c",
+                `archive_timeout=${backup.walArchiveTimeoutSeconds}`,
+              ],
               ports: [{ name: "postgres", containerPort: 5432 }],
               env: [
                 { name: "POSTGRES_DB", value: BASE_DEL_PADRON },
@@ -141,12 +204,19 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
                     secretKeyRef: { name: secreto.identidad, key: CLAVES.baseDeIdentidad },
                   },
                 },
+                // La lee `40-rol-de-respaldo.sh`.
+                {
+                  name: "SGTM_CLAVE_RESPALDO",
+                  valueFrom: { secretKeyRef: { name: secreto.respaldo, key: CLAVES.respaldo } },
+                },
                 { name: "PGDATA", value: DIRECTORIO_DE_DATOS },
+                ...variablesDeWalg,
               ],
               resources: RECURSOS.motor,
               volumeMounts: [
                 { name: "datos", mountPath: "/var/lib/postgresql/data" },
                 { name: "inicializacion", mountPath: "/docker-entrypoint-initdb.d", readOnly: true },
+                montajeDeWalg(),
               ],
               // El arranque de un motor con un padron grande no es instantaneo, y
               // recuperarse de un corte lo es menos. `startupProbe` con 60 intentos da
@@ -172,6 +242,7 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
             // ejecucion: el motor los ignoraria en silencio y la base arrancaria sin
             // claves asignadas.
             { name: "inicializacion", configMap: { name: inicializacion.metadata.name, defaultMode: 493 } },
+            volumenDeWalg(),
           ],
         },
       },

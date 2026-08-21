@@ -115,7 +115,7 @@ backend/      Spring Boot 4, multi-módulo. Monolito modular con Spring Modulith
 frontend/     React sobre Vite, yarn workspaces. Espacio de trabajo sin pantallas  ← existe
 docs/         Documentación (fuente de verdad del diseño)                          ← existe
 design/       Prototipo navegable del que derivará la interfaz                     ← referencia
-infra/        Pulumi en TypeScript con yarn. Dos stacks, y el sistema de la fase B  ← existe
+infra/        Pulumi en TypeScript con yarn. Dos stacks, el sistema y su respaldo  ← existe
 ```
 
 Módulos del backend hoy: `sgtm-dominio-compartido` (objetos de valor en `pe.gob.sgtm.dominio` y
@@ -246,6 +246,7 @@ yarn secretos --ambiente stg      # el inventario de INF-06: nombre, clave, rota
 verificaciones/motor/verificar-el-motor.sh --con-aislamiento   # el motor, levantado de verdad
 secretos/bootstrap-secretos.sh --ambiente stg      # genera lo que falte, nunca via Pulumi
 secretos/rotar-clave.sh --ambiente stg --rol sgtm-app   # rota contra la base en marcha
+respaldo/simulacro-de-restauracion.sh --ambiente stg   # el respaldo, restaurado de verdad
 ```
 
 **El aislamiento se verifica contra el motor que levanta ese guion, nunca contra uno en
@@ -256,6 +257,19 @@ a la aplicación (INF-01 §4.1).
 **Ningún secreto de la aplicación vive en el estado de Pulumi** (`ADR-0011` §3,
 [`INF-06`](docs/80-infraestructura/gestion-de-secretos.md)): `bootstrap-secretos.sh` los
 genera hablando con el API de Kubernetes por `kubectl`, nunca con `pulumi up`.
+
+**El respaldo lo toma `sgtm_respaldo`, no el superusuario ni `sgtm_owner`**
+([`INF-08`](docs/80-infraestructura/respaldo-y-recuperacion.md), issue #155). Sus
+privilegios son los tres que wal-g necesita —`pg_read_all_settings` y `EXECUTE` sobre
+`pg_backup_start`/`pg_backup_stop`—, y ese conjunto se determinó **ejecutando** hasta dar
+con el mínimo que no falla: `REPLICATION` resultó no hacer falta, y `pg_read_all_settings`
+sí, aunque no aparezca en ninguna guía. Si un respaldo falla, la salida cómoda es darle
+superusuario al rol; entonces el respaldo deja de ser un lector y pasa a ser una credencial
+con poder total sobre el padrón, sin que ningún síntoma lo delate.
+
+**La clave de cifrado del respaldo no se rota de rutina.** Cambiarla deja ilegibles todos
+los respaldos escritos con la anterior; no hay `ALTER ROLE` que los vuelva a cifrar
+(`INF-08` §4).
 
 ```bash
 cd frontend
@@ -332,6 +346,8 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | El inventario de secretos y su generación (14 pruebas, sin cluster) | Un generador que repite un valor; `keycloakAdminPassword` reintroducida en la lista de arranque de Pulumi | Rojo: `completarSecreto` lanza en vez de crear dos claves iguales; `verificaciones/secretos.test.ts` detecta la clave compartida entre las dos listas |
 | La rotación de `sgtm_app`, contra un motor real | Quitando el `ALTER ROLE` de `verificar-rotacion.sh` | Rojo: una conexión nueva con la clave vieja sigue funcionando después de "rotar" |
 | Los secretos, generados y comprobados contra un cluster real (CI) | Corriendo `bootstrap-secretos.sh` dos veces y comparando huellas; y forzando la misma clave para `sgtm_owner` y `sgtm_app` con `kubectl patch` | La huella no cambia en la segunda corrida; `verificar-claves-distintas.sh` detecta las dos claves iguales |
+| El respaldo, restaurado de verdad (RNF-079) | Cinco roturas del simulacro: sin `recovery_target_time`; con `archive_mode=off`; con `sgtm_respaldo` como `SUPERUSER`; con el sha256 de wal-g corrompido; y sin el `GRANT pg_read_all_settings` | Las cinco lo ponen rojo. La primera restaura **4 filas donde había 3** —la escritura posterior al instante marcado sobrevive—, que es exactamente el defecto que un PITR mal apuntado produce en silencio |
+| El rol del respaldo no puede más de lo que necesita | Dándole `CONNECT` sobre la base del padrón, contra un motor real | Rojo: `pg_backup_start`/`stop` son operaciones del clúster, no de una base, y una credencial de más apuntando al padrón es una credencial de más |
 | El escaneo de secretos del repositorio entero | Apuntando gitleaks a la muestra de clave de mentira sin la exclusión del repositorio | La encuentra; sin la muestra, el escaneo del repositorio no demostraría nada |
 | Carga inicial de vías, sectores y manzanas (20 pruebas) | Anotando `@Transactional` sobre el método que orquesta el archivo entero —o, equivalente, envolviendo el bucle en un solo `TransactionTemplate`— en vez de dejar que cada fila abra la suya al llamar a un caso de uso `@Service` distinto | Rojo: la fila que revienta la unicidad se lleva consigo a la fila válida que la seguía, igual que ya demostraba `ViaRepositoryJdbcTest` para dos escrituras en una transacción |
 

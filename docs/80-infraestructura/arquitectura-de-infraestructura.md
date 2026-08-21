@@ -93,6 +93,10 @@ motivos, escritos en [`ADR-0011`](../30-arquitectura/adr/ADR-0011-infraestructur
 **La contrapartida está anotada:** con la base dentro del nodo, el respaldo y su ensayo son
 responsabilidad de este repositorio, no del proveedor. Si nadie los escribe, no existen.
 
+**Ya están escritos** (issue #155): archivado continuo de WAL, respaldo base diario cifrado y un
+simulacro de restauración que corre en cada PR. El cómo, y lo que de eso sigue sin verificarse
+hasta que exista el VPS, está en [`INF-08`](respaldo-y-recuperacion.md).
+
 ### 1.3 Por qué los respaldos están fuera del VPS
 
 **El camino de recuperación no puede depender de lo que se está recuperando.** Si el VPS se pierde

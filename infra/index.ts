@@ -1,8 +1,12 @@
 import * as k8s from "@pulumi/kubernetes";
 import { auditarManifiestos, describirAuditoria } from "./auditoria";
 import { construirManifiestos } from "./componentes";
-import { secretos } from "./componentes/convenciones";
-import { loadSettings, namespaceName, resourceName } from "./config";
+import {
+  CLAVES_DE_CREDENCIALES_DE_RESPALDO,
+  secretoDeCredencialesDeRespaldo,
+  secretos,
+} from "./componentes/convenciones";
+import { commonLabels, loadSettings, namespaceName, resourceName } from "./config";
 
 /**
  * Composición única para los dos ambientes (`ADR-0011` §4).
@@ -39,12 +43,19 @@ import { loadSettings, namespaceName, resourceName } from "./config";
  * reversión ejecutan `pulumi up`. Sin `ignoreChanges`, el `preview` diario vería la
  * versión liberada como deriva y el siguiente `up` la desharía en silencio.
  *
- * ## Lo que este archivo NO crea: los `Secret`
+ * ## Lo que este archivo NO crea: los `Secret` de la aplicación
  *
- * Ninguno. Las claves de `sgtm_owner`, de `sgtm_app`, del superusuario del motor y del
- * administrador de Keycloak **no están en el estado de Pulumi** (`ADR-0011` §3): los
- * manifiestos los referencian por nombre y quien provisiona el ambiente los pone. Los
- * pasos exactos están en `README.md`; de dónde salen de verdad lo decide el issue #154.
+ * Ninguno. Las claves de `sgtm_owner`, de `sgtm_app`, del superusuario del motor, del
+ * administrador de Keycloak y las de `sgtm_respaldo`/cifrado de wal-g **no están en el
+ * estado de Pulumi** (`ADR-0011` §3): los manifiestos los referencian por nombre y
+ * `secretos/bootstrap-secretos.sh` los pone (issue #154).
+ *
+ * **La única excepción, y deliberada:** las credenciales del almacenamiento de
+ * objetos (`backupAccessKeyId`/`backupSecretAccessKey`). `ADR-0011` §3 las clasifica
+ * como secretos de *arranque de la infraestructura* —lo que Pulumi necesita para
+ * *crear* el mecanismo—, no de la aplicación: no abren el padrón de ninguna
+ * municipalidad, solo dejan escribir en el contenedor de respaldo. Por eso, y solo
+ * para este `Secret`, SÍ lo crea Pulumi con un valor real (issue #155).
  */
 
 const settings = loadSettings();
@@ -74,6 +85,30 @@ const proveedor = new k8s.Provider(resourceName(env, "kubernetes"), {
 });
 
 /**
+ * La única excepción de «Lo que este archivo NO crea» de arriba (issue #155).
+ *
+ * `stringData` en vez de `data`: Pulumi cifra el valor en su estado de todos modos —es
+ * un `pulumi.Output` secreto—, y `stringData` evita tener que codificarlo a base64 a
+ * mano. Kubernetes lo hace por su cuenta al aplicar el objeto.
+ */
+const credencialesDeRespaldo = new k8s.core.v1.Secret(
+  resourceName(env, "postgres-respaldo-credenciales"),
+  {
+    metadata: {
+      name: secretoDeCredencialesDeRespaldo(env),
+      namespace,
+      labels: commonLabels(env, "respaldo"),
+    },
+    type: "Opaque",
+    stringData: {
+      [CLAVES_DE_CREDENCIALES_DE_RESPALDO.accessKeyId]: settings.backupCredentials.accessKeyId,
+      [CLAVES_DE_CREDENCIALES_DE_RESPALDO.secretAccessKey]: settings.backupCredentials.secretAccessKey,
+    },
+  },
+  { provider: proveedor },
+);
+
+/**
  * El campo que el flujo de liberación mueve, y que Pulumi no vuelve a mirar.
  *
  * Se aplica a todo recurso con plantilla de pod. Un `Job` no lo necesita —su nombre
@@ -87,6 +122,7 @@ const recursos = new k8s.yaml.v2.ConfigGroup(
   { objs: manifiestos },
   {
     provider: proveedor,
+    dependsOn: [credencialesDeRespaldo],
     transformations: [
       (args) => {
         if (args.type.startsWith("kubernetes:apps/v1:Deployment")) {

@@ -1,6 +1,6 @@
 # Verificación y despliegue de la infraestructura.
 #
-# Ocho trabajos, en el orden de ADR-0011 §6:
+# Nueve trabajos, en el orden de ADR-0011 §6:
 #
 #   1. `verificar` — el mismo `yarn verificar` que hay que pasar antes de un PR: lint,
 #      tipos y pruebas. **No necesita nada de fuera**: ni Pulumi, ni token, ni clúster.
@@ -15,6 +15,11 @@
 #   1c. `manifiestos` — `kubectl apply --dry-run=server` de los manifiestos contra un
 #      clúster desechable (`kind`). Valida el esquema de Kubernetes de verdad: un campo
 #      mal escrito que los tipos no atrapen, lo atrapa el API server.
+#   1b-bis. `simulacro` — restaura un respaldo **de verdad** (issue #155, RNF-079):
+#      archivado continuo de WAL, respaldo base cifrado, pérdida total del directorio de
+#      datos, PITR a un instante marcado, y comprobación de que las cifras cuadran y de
+#      que lo restaurado admite escrituras. Y comprueba que el propio simulacro puede
+#      fallar: sin `recovery_target_time` tiene que ponerse rojo.
 #   1d. `secretos` — `secretos/bootstrap-secretos.sh` contra otro clúster desechable
 #      (issue #154, INF-06): que un despliegue desde cero genere lo que falta sin que
 #      nadie teclee una clave, que volver a correrlo no cambie nada, y que ninguna clave
@@ -134,6 +139,52 @@ jobs:
       # filas de la otra municipalidad.
       - name: verificar-el-motor.sh --con-aislamiento
         run: infra/verificaciones/motor/verificar-el-motor.sh --ambiente stg --con-aislamiento
+
+  simulacro:
+    name: El respaldo, restaurado de verdad
+    runs-on: ubuntu-latest
+    needs: verificar
+    if: github.event_name != 'schedule'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: infra/yarn.lock
+
+      - name: Instalar dependencias
+        working-directory: infra
+        run: yarn install --frozen-lockfile
+
+      # RNF-079: un respaldo que no se ha restaurado no cuenta como respaldo. Este
+      # trabajo recorre el ciclo entero contra un PostgreSQL real —archivado continuo,
+      # respaldo base cifrado con el rol que NO puede hacer DDL, pérdida total del
+      # directorio de datos, PITR a un instante marcado, y comprobación de que las
+      # cifras cuadran y lo restaurado admite escrituras—.
+      #
+      # No usa Docker a propósito: el PITR exige destruir el directorio de datos y
+      # arrancar otro proceso sobre lo restaurado, y contra un contenedor de la imagen
+      # oficial eso no se puede sin reimplementar medio entrypoint. El runner trae
+      # PostgreSQL instalado, y `SGTM_MOTOR_MODO=local` es lo que el guion pide.
+      - name: simulacro-de-restauracion.sh
+        run: infra/respaldo/simulacro-de-restauracion.sh --ambiente stg
+
+      # Y que el simulacro puede fallar, que es lo que lo hace valer algo: sin
+      # `recovery_target_time` el WAL se reproduce entero, la escritura posterior al
+      # instante marcado sobrevive, y la comprobación tiene que ponerse roja. Si esto
+      # pasara en verde, el simulacro no estaría verificando el PITR.
+      - name: Y se demuestra que puede fallar (sin recovery_target_time)
+        run: |
+          sed -i "s|^recovery_target_time = .*|# quitado a proposito|" \
+              infra/respaldo/simulacro-de-restauracion.sh
+          if infra/respaldo/simulacro-de-restauracion.sh --ambiente stg; then
+              echo "::error::El simulacro paso SIN recovery_target_time. No esta verificando el PITR."
+              exit 1
+          fi
+          echo "Correcto: sin el objetivo de recuperacion, el simulacro se pone rojo."
 
   manifiestos:
     name: Los manifiestos, validados por un API server de verdad

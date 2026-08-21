@@ -8,7 +8,7 @@
 #
 # Requiere, ya fijadas por quien la usa: AMBIENTE, PUERTO, TRABAJO (un directorio de
 # `mktemp -d`). Deja fijadas: PGHOST, PGPORT, MODO, CLAVE_SUPER, CLAVE_OWNER, CLAVE_APP,
-# CLAVE_IDENTIDAD, BINARIOS. No tiene `set -euo pipefail` propio: hereda el de quien la
+# CLAVE_IDENTIDAD, CLAVE_RESPALDO, BINARIOS. No tiene `set -euo pipefail` propio: hereda el de quien la
 # usa.
 
 : "${AMBIENTE:?lib-motor-local.sh necesita AMBIENTE}"
@@ -32,6 +32,7 @@ CLAVE_SUPER="sup3r'usuario"
 CLAVE_OWNER="o'wner-Cl4ve"
 CLAVE_APP="a'pp-Cl4ve"
 CLAVE_IDENTIDAD="k'eycloak-Cl4ve"
+CLAVE_RESPALDO="r'espaldo-Cl4ve"
 
 for herramienta in psql pg_isready node yarn; do
     command -v "$herramienta" >/dev/null 2>&1 \
@@ -66,6 +67,7 @@ motor_arrancar_con_docker() {
         --env SGTM_CLAVE_OWNER="$CLAVE_OWNER" \
         --env SGTM_CLAVE_APP="$CLAVE_APP" \
         --env SGTM_CLAVE_IDENTIDAD="$CLAVE_IDENTIDAD" \
+        --env SGTM_CLAVE_RESPALDO="$CLAVE_RESPALDO" \
         --env PGDATA=/var/lib/postgresql/data/pgdata \
         --volume "$TRABAJO/inicializacion:/docker-entrypoint-initdb.d:ro" \
         --publish "127.0.0.1:$PUERTO:5432" \
@@ -112,7 +114,8 @@ motor_arrancar_localmente() {
                        >/dev/null ;;
             *.sh) POSTGRES_USER=postgres POSTGRES_DB=sgtm \
                   SGTM_CLAVE_OWNER="$CLAVE_OWNER" SGTM_CLAVE_APP="$CLAVE_APP" \
-                  SGTM_CLAVE_IDENTIDAD="$CLAVE_IDENTIDAD" bash "$guion" >/dev/null ;;
+                  SGTM_CLAVE_IDENTIDAD="$CLAVE_IDENTIDAD" \
+                  SGTM_CLAVE_RESPALDO="$CLAVE_RESPALDO" bash "$guion" >/dev/null ;;
         esac
     done
     unset PGPASSWORD
@@ -155,7 +158,19 @@ motor_como_superusuario() {
 
 BINARIOS=$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | tail -1 || true)
 
-if docker pull --quiet "$MOTOR_IMAGEN" >/dev/null 2>&1; then
+# `SGTM_MOTOR_MODO=local` fuerza la instancia local aunque haya Docker. Lo usa
+# `respaldo/simulacro-de-restauracion.sh` (issue #155): el PITR exige apagar el motor,
+# destruir su directorio de datos y arrancar OTRO proceso sobre lo restaurado, y eso
+# contra un contenedor de la imagen oficial no se puede sin reimplementar medio
+# entrypoint. Nadie mas deberia usarlo: el camino fiel es el de Docker.
+if [ "${SGTM_MOTOR_MODO:-}" = "local" ]; then
+    [ -n "$BINARIOS" ] && [ -x "$BINARIOS/initdb" ] \
+        || { echo "FALLO: SGTM_MOTOR_MODO=local pero no hay un PostgreSQL local instalado." >&2; exit 1; }
+    MODO=local
+    echo "· Motor: instancia local temporal, pedida con SGTM_MOTOR_MODO=local"
+    echo "  ($("$BINARIOS/postgres" --version))"
+    motor_arrancar_localmente
+elif docker pull --quiet "$MOTOR_IMAGEN" >/dev/null 2>&1; then
     MODO=docker
     echo "· Motor: contenedor con $MOTOR_IMAGEN"
     motor_arrancar_con_docker

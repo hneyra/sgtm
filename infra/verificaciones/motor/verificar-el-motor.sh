@@ -10,7 +10,8 @@
 #   3. Con las credenciales de la aplicacion, `CREATE TABLE` **falla**.
 #   4. Los cuatro roles del SGTM conservan el CONNECT sobre la base del padron.
 #   5. Keycloak tiene base propia, y NO puede conectarse a la del padron.
-#   6. Reiniciar el motor deja los datos donde estaban.
+#   6. El rol del respaldo puede pg_backup_start/stop y NADA mas (issue #155).
+#   7. Reiniciar el motor deja los datos donde estaban.
 #
 # Lo que esto verifica es el CONTENIDO de la inicializacion —los roles, sus atributos,
 # quien puede conectarse a que—, que es donde esta el riesgo y no cambia porque el
@@ -113,7 +114,53 @@ PGPASSWORD="$CLAVE_IDENTIDAD" psql --username=keycloak --dbname=keycloak --quiet
     --command 'SELECT 1' >/dev/null 2>&1 \
     || { echo "FALLO: Keycloak no puede conectarse a su propia base" >&2; exit 1; }
 
-# ── 7. Reiniciar deja los datos donde estaban ────────────────────────────────
+# ── 7. El rol del respaldo: lo minimo que wal-g necesita, y nada mas ─────────
+#
+# `40-rol-de-respaldo.sh` le da exactamente tres cosas: `pg_read_all_settings` —wal-g
+# pregunta `data_directory`— y EXECUTE sobre `pg_backup_start`/`pg_backup_stop`. Ese
+# conjunto se determino EJECUTANDO `wal-g backup-push` contra un motor real hasta dar
+# con el minimo que no falla, no leyendo documentacion (issue #155).
+#
+# Lo que esta prueba impide es lo contrario: que alguien "arregle" un respaldo que
+# falla dandole superusuario al rol. Entonces el respaldo dejaria de ser un lector y
+# pasaria a ser una credencial con poder total sobre el padron de todas las
+# municipalidades, y el sintoma no aparece por ninguna parte — el respaldo funciona.
+echo "· El rol del respaldo no puede mas de lo que necesita"
+atributos=$(comoSuperusuario \
+    "SELECT rolsuper, rolbypassrls, rolcanlogin FROM pg_roles WHERE rolname = 'sgtm_respaldo'" postgres)
+[ -n "$atributos" ] \
+    || { echo "FALLO: el rol sgtm_respaldo no existe; 40-rol-de-respaldo.sh no corrio" >&2; exit 1; }
+case "$atributos" in
+    f\|f\|t) ;;
+    *) echo "FALLO: sgtm_respaldo es superusuario, omite RLS o no puede conectarse: $atributos" >&2; exit 1 ;;
+esac
+echo "  sgtm_respaldo → rolsuper|rolbypassrls|rolcanlogin = $atributos"
+
+if PGPASSWORD="$CLAVE_RESPALDO" psql --username=sgtm_respaldo --dbname=postgres --quiet \
+        --command 'CREATE TABLE intento_de_ddl_respaldo (id int)' >/dev/null 2>&1; then
+    echo "FALLO: el rol del respaldo puede crear tablas. Respalda leyendo; no escribe" >&2
+    exit 1
+fi
+
+# Las dos funciones que SI necesita. Sin ellas `backup-push` falla con «permission
+# denied for function pg_backup_start», y el respaldo no llega ni a empezar.
+for funcion in "pg_backup_start(text, boolean)" "pg_backup_stop(boolean)"; do
+    [ "$(comoSuperusuario \
+            "SELECT has_function_privilege('sgtm_respaldo', '$funcion', 'EXECUTE')" postgres)" = "t" ] \
+        || { echo "FALLO: sgtm_respaldo no puede ejecutar $funcion; wal-g no podria respaldar" >&2; exit 1; }
+done
+[ "$(comoSuperusuario \
+        "SELECT pg_has_role('sgtm_respaldo', 'pg_read_all_settings', 'MEMBER')" postgres)" = "t" ] \
+    || { echo "FALLO: sgtm_respaldo no puede leer data_directory; wal-g no encontraria PGDATA" >&2; exit 1; }
+echo "  puede pg_backup_start/stop y leer la configuracion: lo justo"
+
+# El rol del respaldo NO necesita entrar a la base del padron: pg_backup_start y
+# pg_backup_stop son operaciones del cluster, no de una base.
+[ "$(comoSuperusuario "SELECT has_database_privilege('sgtm_respaldo','sgtm','CONNECT')" postgres)" = "f" ] \
+    || { echo "FALLO: sgtm_respaldo puede conectarse a la base del padron, y no la necesita" >&2; exit 1; }
+echo "  y no alcanza la base del padron"
+
+# ── 8. Reiniciar deja los datos donde estaban ────────────────────────────────
 echo "· Reiniciar el motor no pierde datos"
 PGPASSWORD="$CLAVE_OWNER" psql --username=sgtm_owner --dbname=sgtm --quiet \
     --command 'CREATE TABLE si_sobrevive (dato text)' \
@@ -124,7 +171,7 @@ motor_reiniciar || { echo "FALLO: el motor no volvio tras el reinicio" >&2; exit
 [ "$(comoSuperusuario "SELECT dato FROM si_sobrevive")" = "sobrevivio" ] \
     || { echo "FALLO: el dato no sobrevivio al reinicio" >&2; exit 1; }
 
-# ── 8. El aislamiento, contra ESTA instancia ─────────────────────────────────
+# ── 9. El aislamiento, contra ESTA instancia ─────────────────────────────────
 #
 # Es el primer criterio de aceptacion del issue #149, y lo unico que demuestra que el
 # aislamiento sigue en pie es ejecutarlo aqui.
