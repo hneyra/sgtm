@@ -4308,7 +4308,12 @@ paths:
         - name: estado
           in: query
           required: false
-          description: "Filtro «Estado» de la pantalla"
+          description: "Filtro «Estado» de la pantalla. Solo «BAJA» filtra contra el padron; el resto —AFECTO, INAFECTO, EXONERADO— es afectacion calculada y no se traduce todavia"
+          schema: { type: string }
+        - name: fecha
+          in: query
+          required: false
+          description: "Fecha de corte de la deuda de cada fila. Sin ella, hoy"
           schema: { type: string }
         - name: pagina
           in: query

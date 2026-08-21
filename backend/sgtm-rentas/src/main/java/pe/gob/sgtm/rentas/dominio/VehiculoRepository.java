@@ -2,6 +2,8 @@ package pe.gob.sgtm.rentas.dominio;
 
 import java.util.List;
 import java.util.Optional;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Placa;
 
 /**
@@ -22,6 +24,9 @@ public interface VehiculoRepository {
     Optional<Vehiculo> findByPlaca(Placa placa);
 
     Optional<Vehiculo> findById(long id);
+
+    /** El padron vehicular que pide el criterio, paginado, con el titular ya resuelto (#25). */
+    Pagina<VehiculoEncontrado> buscar(CriterioDeVehiculo criterio, Paginacion paginacion);
 
     Vehiculo save(Vehiculo vehiculo);
 
