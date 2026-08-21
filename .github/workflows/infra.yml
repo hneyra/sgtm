@@ -1,15 +1,24 @@
 # Verificación y despliegue de la infraestructura.
 #
-# Cinco trabajos, en el orden de ADR-0011 §6:
+# Siete trabajos, en el orden de ADR-0011 §6:
 #
 #   1. `verificar` — el mismo `yarn verificar` que hay que pasar antes de un PR: lint,
 #      tipos y pruebas. **No necesita nada de fuera**: ni Pulumi, ni token, ni clúster.
-#      Ahí viven las invariantes de `config.ts` y la prueba que las aplica a los propios
-#      `Pulumi.<ambiente>.yaml`, así que quitar un valor obligatorio o subir el plazo de
-#      archivado del WAL se pone rojo aquí, en un PR de cualquiera.
+#      Ahí viven las invariantes de `config.ts`, la auditoría de los manifiestos y los
+#      criterios de aceptación de la fase B, así que quitar un valor obligatorio, subir
+#      el plazo de archivado del WAL o dejar una sonda con el `timeoutSeconds` por
+#      omisión se pone rojo aquí, en un PR de cualquiera.
+#   1b. `motor` — levanta un PostgreSQL con **los guiones de inicialización que el
+#      manifiesto monta** y ejecuta contra él `verificarAislamiento` (issue #149). Es la
+#      única forma de afirmar que el aislamiento sigue en pie: leerlo del manifiesto no
+#      lo demuestra. Necesita Docker; no necesita clúster.
+#   1c. `manifiestos` — `kubectl apply --dry-run=server` de los manifiestos contra un
+#      clúster desechable (`kind`). Valida el esquema de Kubernetes de verdad: un campo
+#      mal escrito que los tipos no atrapen, lo atrapa el API server.
 #   2. `previsualizar` — `pulumi preview` de los dos stacks en cada PR, publicado como
-#      comentario. No lleva el túnel: mientras `infra/componentes/` esté vacía no hay
-#      recurso que consultar, así que el plan se calcula sin hablar con el nodo.
+#      comentario. **Ahora lleva el túnel**: desde que `infra/componentes/` tiene
+#      recursos, el plan se calcula comparando con lo que hay en el nodo, y para eso hay
+#      que poder llegar a él.
 #   3. `aplicar-stg` — `pulumi up` de `stg`, automático al integrar a `main`.
 #   4. `aplicar-prod` — `pulumi up` de `prod`, **detrás del *environment* protegido
 #      `prod`**. GitHub no deja avanzar el trabajo sin que alguien con acceso a ese
@@ -36,10 +45,18 @@ name: Infraestructura
 
 on:
   pull_request:
-    paths: ['infra/**', '.github/workflows/infra.yml']
+    paths: &rutas
+      - 'infra/**'
+      - '.github/workflows/infra.yml'
+      # Los manifiestos MONTAN estos dos archivos en vez de copiarlos (issue #149), así
+      # que un cambio ahí cambia lo que se despliega aunque `infra/` no se toque.
+      - 'backend/sgtm-esquema/src/main/resources/db/roles/**'
+      - 'despliegue/inicializacion-del-motor/**'
+      - 'despliegue/identidad/realm-sgtm.json'
+      - 'frontend/nginx.conf'
   push:
     branches: [main]
-    paths: ['infra/**', '.github/workflows/infra.yml']
+    paths: *rutas
   schedule:
     # 07:00 UTC — madrugada en Perú (UTC-5). El horario exacto no importa mientras sea
     # fuera de la ventana de atención; lo que importa es que corra todos los días.
@@ -73,6 +90,103 @@ jobs:
       - name: yarn verificar
         run: yarn verificar
 
+  motor:
+    name: El motor, levantado y con el aislamiento verificado
+    runs-on: ubuntu-latest
+    needs: verificar
+    if: github.event_name != 'schedule'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: infra/yarn.lock
+
+      - name: Instalar dependencias
+        working-directory: infra
+        run: yarn install --frozen-lockfile
+
+      # La misma versión que declara `backend/gradle.properties` y que instala
+      # `backend.yml`: la prueba de aislamiento es del backend, y aquí solo cambia
+      # contra qué motor corre.
+      - name: Instalar JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Levanta el motor con los guiones que el manifiesto monta, comprueba los cuatro
+      # roles contra el proceso en marcha y ejecuta `verificarAislamiento` contra esa
+      # instancia. **Es el criterio de aceptación de #149**, y no se puede sustituir por
+      # leer el manifiesto: un manifiesto correcto no demuestra que sgtm_app no vea las
+      # filas de la otra municipalidad.
+      - name: verificar-el-motor.sh --con-aislamiento
+        run: infra/verificaciones/motor/verificar-el-motor.sh --ambiente stg --con-aislamiento
+
+  manifiestos:
+    name: Los manifiestos, validados por un API server de verdad
+    runs-on: ubuntu-latest
+    needs: verificar
+    if: github.event_name != 'schedule'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: infra/yarn.lock
+
+      - name: Instalar dependencias
+        working-directory: infra
+        run: yarn install --frozen-lockfile
+
+      # `kind` sin desplegar nada: el clúster existe solo para que su API server valide
+      # el esquema. Es el mismo truco que usa `publicar-imagenes.yml` para demostrar el
+      # mecanismo de liberación, y por el mismo motivo — un clúster desechable dentro
+      # del propio runner cuesta segundos.
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: validacion-de-manifiestos
+
+      # Se aplican **de verdad** contra el clúster desechable, no con
+      # `--dry-run=server`, y la diferencia importa: en dry-run el `Namespace` del
+      # ambiente no llega a existir y todo lo que va dentro fallaría por eso; y la
+      # `PriorityClass` que cada pod nombra tampoco, con lo que el API server rechazaría
+      # los pods por una causa que no es la que se quiere comprobar. Aplicando de
+      # verdad, cada objeto se valida contra el esquema real y contra lo que ya existe.
+      #
+      # Los pods no llegan a arrancar —no hay Secrets, ni imágenes que descargar, ni
+      # volumen— y da igual: lo que se comprueba aquí es que el API server acepta cada
+      # objeto. Que el sistema funcione es otra cosa, y está en `motor` y en el VPS.
+      #
+      # Los recursos de Traefik quedan fuera porque sus CRD no están en kind, y con
+      # ellos el ingreso entero: `traefik.io/v1alpha1` lo cubren los tipos de
+      # `tipos.ts`, la auditoría y `conformidad-con-kubernetes.test.ts`. Se dice aquí
+      # para que nadie lo lea como «esto valida todo».
+      - name: Los dos ambientes, aplicados contra el clúster desechable
+        working-directory: infra
+        run: |
+          set -euo pipefail
+          for ambiente in stg prod; do
+            echo "::group::$ambiente"
+            yarn --silent manifiestos --ambiente "$ambiente" \
+              | node -e '
+                  const entrada = JSON.parse(require("fs").readFileSync(0, "utf8"));
+                  const deTraefik = ["IngressRoute", "Middleware", "TLSOption", "HelmChartConfig"];
+                  entrada.items = entrada.items.filter((i) => !deTraefik.includes(i.kind));
+                  process.stdout.write(JSON.stringify(entrada));
+                ' \
+              | kubectl apply --filename -
+            echo "::endgroup::"
+          done
+
   previsualizar:
     name: pulumi preview de los dos stacks
     runs-on: ubuntu-latest
@@ -94,27 +208,56 @@ jobs:
         working-directory: infra
         run: yarn install --frozen-lockfile
 
-      - name: ¿Hay token de Pulumi Cloud?
+      # Desde que `componentes/` tiene recursos, el plan se calcula contra lo que hay
+      # en el nodo: `preview` necesita las cuatro credenciales, no solo el token. Las
+      # tres primeras versiones de este archivo decían lo contrario, y era cierto
+      # entonces —con la carpeta vacía no había nada que consultar—.
+      - name: ¿Hay credenciales del clúster?
         id: token
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
         run: |
-          if [ -n "$PULUMI_ACCESS_TOKEN" ]; then
+          if [ -n "$PULUMI_ACCESS_TOKEN" ] && [ -n "$SSH_PRIVATE_KEY" ] \
+             && [ -n "$VPS_USER" ] && [ -n "$VPS_HOST" ]; then
             echo "hay=si" >> "$GITHUB_OUTPUT"
           else
             echo "hay=no" >> "$GITHUB_OUTPUT"
             {
               echo "### Sin \`pulumi preview\`"
               echo
-              echo "No hay \`PULUMI_ACCESS_TOKEN\` en este contexto: o el PR viene de una"
-              echo "bifurcación, o el secreto todavía no está puesto. \`yarn verificar\`"
-              echo "sí corrió, y es lo que cubre las invariantes de \`config.ts\` y de los"
-              echo "\`Pulumi.<ambiente>.yaml\`."
+              echo "Falta alguna de las cuatro credenciales, o el PR viene de una"
+              echo "bifurcación y no ve los secretos del repositorio."
               echo
-              echo "Para habilitarlo: crear los dos stacks y poner el secreto."
-              echo "Los pasos están en \`infra/README.md\`."
+              echo "Lo que sí corrió, y es lo que cubre este cambio mientras no haya VPS:"
+              echo
+              echo "- \`yarn verificar\` — invariantes de \`config.ts\`, auditoría de los"
+              echo "  manifiestos y los criterios de aceptación de la fase B."
+              echo "- \`motor\` — el PostgreSQL del manifiesto, levantado, con"
+              echo "  \`verificarAislamiento\` contra esa instancia."
+              echo "- \`manifiestos\` — los dos ambientes aceptados por un API server."
+              echo
+              echo "Para habilitar el preview: crear los dos stacks y poner los cuatro"
+              echo "secretos. Los pasos están en \`infra/README.md\`."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # El túnel, por la misma razón que en `aplicar-*`: el API de k3s no responde desde
+      # internet (INF-01 §1.4), y ahora `preview` sí necesita llegar a él.
+      - name: Abrir el túnel SSH al API de k3s
+        if: steps.token.outputs.hay == 'si'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/despliegue
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/despliegue
+          ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
+              -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
 
       - uses: pulumi/actions@v6
         if: steps.token.outputs.hay == 'si'

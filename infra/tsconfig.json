@@ -19,5 +19,12 @@
     "noUnusedLocals": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["index.ts", "config.ts", "componentes/**/*.ts"]
+  "include": [
+    "index.ts",
+    "config.ts",
+    "auditoria.ts",
+    "componentes/**/*.ts",
+    "herramientas/**/*.ts",
+    "verificaciones/stacks.ts"
+  ]
 }

@@ -135,6 +135,14 @@ empezaron a agotar su tiempo y varios contenedores sanos murieron por fallo de s
 solo nodo no tiene a dónde mover la carga: lo único que impide que una carga se lleve por delante
 al plano de control es reservarle su parte.
 
+**La ventana del perfil `batch` es 02:00, hora de Perú.** Con un solo nodo, la emisión masiva y la
+ventanilla comparten CPU: no hay nodo dedicado como en el SRTM, y lo que hay son límites de
+recursos, una clase de prioridad por debajo de todo lo demás y esa ventana. La consecuencia —una
+emisión grande degrada la atención— queda escrita aquí, y no se descubre el día de la emisión. El
+`CronJob` existe ya, **suspendido**: mientras D-02a siga abierta no hay regla de cálculo, y por
+tanto no hay emisión masiva que correr; lo que declara hoy es la ventana y los límites con que
+correrá cuando la haya.
+
 **El dato que orienta el dimensionamiento de la base:** el particionado por ejercicio
 ([`ADR-0004`](../30-arquitectura/adr/ADR-0004-almacenamiento-de-datos.md)) mantiene acotado lo que
 se consulta en caliente, pero el volumen total crece sin límite superior. La memoria de PostgreSQL
@@ -145,7 +153,7 @@ es el recurso crítico, no la CPU.
 | Elemento | Decisión |
 |---|---|
 | Ingreso | Traefik, el que k3s trae de fábrica |
-| TLS | Certificado de Let's Encrypt por desafío HTTP-01, renovación automática. TLS 1.2 como mínimo, 1.3 preferido (RNF-074) |
+| TLS | Certificado de Let's Encrypt por desafío HTTP-01, renovación automática. **TLS 1.3 como mínimo** — ver la nota de abajo |
 | Puertos publicados | **80 y 443, y nada más.** 80 solo redirige a 443 |
 | API de k3s | 6443 cerrado desde internet; se llega por túnel SSH (§1.4) |
 | Políticas de red | Denegación por omisión entre namespaces; se abre solo lo necesario (issue #157) |
@@ -154,6 +162,18 @@ es el recurso crítico, no la CPU.
 **La salida restringida importa antes de que haya integraciones:** un compromiso de la aplicación
 con salida libre permite exfiltrar el padrón completo de todas las municipalidades. Con lista de
 destinos permitidos, no.
+
+> **La versión mínima de TLS quedó en 1.3, y no en el «1.2 como mínimo» que decía esta tabla.**
+> Lo fija el `TLSOption` de `infra/componentes/Ingreso.ts`, y viene de lo que el issue #153 no
+> negocia. La consecuencia hay que saberla: **un navegador anterior a 2018 no entra**, y en una
+> ventanilla municipal eso puede ser una máquina real. Si aparece, la decisión se revisa por
+> escrito —aquí— y no aflojando esa línea en un despliegue de urgencia.
+
+> **El cortafuegos del nodo no es un objeto de Kubernetes.** Pulumi habla con el API de k3s, no
+> con el sistema operativo: que desde internet solo respondan 80 y 443 lo decide
+> [`infra/vps/cortafuegos.sh`](../../infra/vps/cortafuegos.sh), que se ejecuta al aprovisionar el
+> nodo. Y comprobarlo es una afirmación sobre lo que ve internet, así que **se comprueba desde
+> fuera**, nunca desde el propio VPS.
 
 ## 4. Convenciones que ya costaron un incidente
 
@@ -170,6 +190,25 @@ primer manifiesto en vez de después del primer susto.
 
 ⚠ Aplicar la reserva del nodo **reinicia k3s**, es decir, corta el API server unos segundos. Va en su
 propia ventana de mantenimiento, no en un `pulumi up` que además cambia otras cosas.
+
+### 4.1 `verificarAislamiento` no se ejecuta contra un motor en servicio
+
+Se descubrió leyendo lo que la prueba hace antes de verificar nada: **provisiona**. Crea una base
+para la corrida y les asigna a los cuatro roles claves efímeras con `ALTER ROLE`
+(`BaseDeDatosDePrueba.crearRoles`). Los roles son objetos **del clúster de PostgreSQL**, no de una
+base: esas claves nuevas valen para todas sus bases a la vez.
+
+Apuntarla al motor de una municipalidad en marcha, por tanto, **deja fuera a la aplicación** hasta
+que alguien vuelva a aplicar el `Secret` — y el síntoma es un `28P01` en cada petición, que no se
+parece en nada a «alguien corrió una prueba».
+
+Dónde se ejecuta entonces, que es donde el criterio de #149 se cumple igual:
+
+| Sitio | Cómo |
+|---|---|
+| CI, en cada PR que toca la infraestructura | `infra/verificaciones/motor/verificar-el-motor.sh --con-aislamiento` levanta un motor **con los guiones del manifiesto** y la ejecuta contra él |
+| `stg`, en una ventana anunciada | Contra su motor, sabiendo que hay que reponer las claves después |
+| `prod` | **Nunca** |
 
 ## 5. Escenarios de falla
 
