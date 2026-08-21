@@ -210,6 +210,32 @@ TOTAL_SULLANA=$(motor_como_superusuario \
     "SELECT sum(monto) FROM simulacro_deuda WHERE municipalidad = 'sullana'")
 echo "  total del padron en el origen: $TOTAL_ORIGEN (sullana: $TOTAL_SULLANA)"
 
+# El archivador es asincrono: se espera a que el segmento CON esta escritura este
+# arriba antes de seguir — no solo la del `archive_timeout=5s`, que en un runner
+# compartido puede atrasarse mas de lo que el resto del guion tarda en llegar a la
+# restauracion. Sin este `pg_switch_wal()` explicito, la escritura buena
+# dependia del mismo reloj pasivo que la mala, y la diferencia entre las dos es
+# justo lo que este simulacro existe para comprobar.
+esperar_archivado() {
+    local desde="$1" archivados=0 fallidos
+    for _ in $(seq 1 30); do
+        archivados=$(motor_como_superusuario "SELECT archived_count FROM pg_stat_archiver" postgres)
+        fallidos=$(motor_como_superusuario "SELECT failed_count FROM pg_stat_archiver" postgres)
+        [ "${fallidos:-0}" = "0" ] \
+            || { echo "FALLO: el archivado de WAL fallo $fallidos veces. Sin archivado no hay RPO." >&2; exit 1; }
+        [ "${archivados:-0}" -gt "$desde" ] && { echo "$archivados"; return 0; }
+        motor_como_superusuario "SELECT pg_switch_wal()" postgres >/dev/null
+        sleep 1
+    done
+    echo "FALLO: no se archivo un segmento nuevo en 30 s (iba por $desde)." >&2
+    exit 1
+}
+
+ARCHIVADOS_ANTES=$(motor_como_superusuario "SELECT archived_count FROM pg_stat_archiver" postgres)
+motor_como_superusuario "SELECT pg_switch_wal()" postgres >/dev/null
+ARCHIVADOS_TRAS_LO_BUENO=$(esperar_archivado "$ARCHIVADOS_ANTES")
+echo "  la escritura buena ya esta archivada ($ARCHIVADOS_TRAS_LO_BUENO segmentos)"
+
 T_BUENO=$(motor_como_superusuario "SELECT clock_timestamp()")
 echo "  T_BUENO = $T_BUENO"
 sleep 2
@@ -225,19 +251,7 @@ INSERT INTO simulacro_deuda VALUES ('sullana', 'ESCRITURA-QUE-SE-PIERDE', 999999
 SELECT pg_switch_wal();
 SQL
 
-# El archivador es asincrono: se espera a que el ultimo segmento este arriba, y si no
-# llega, se dice — porque un WAL sin archivar es exactamente el hueco del RPO.
-for _ in $(seq 1 30); do
-    archivados=$(motor_como_superusuario "SELECT archived_count FROM pg_stat_archiver" postgres)
-    fallidos=$(motor_como_superusuario "SELECT failed_count FROM pg_stat_archiver" postgres)
-    [ "${fallidos:-0}" = "0" ] \
-        || { echo "FALLO: el archivado de WAL fallo $fallidos veces. Sin archivado no hay RPO." >&2; exit 1; }
-    [ "${archivados:-0}" -gt 0 ] && break
-    motor_como_superusuario "SELECT pg_switch_wal()" postgres >/dev/null
-    sleep 1
-done
-[ "${archivados:-0}" -gt 0 ] \
-    || { echo "FALLO: no se archivo ni un segmento de WAL en 30 s." >&2; exit 1; }
+archivados=$(esperar_archivado "$ARCHIVADOS_TRAS_LO_BUENO")
 echo "  $archivados segmentos archivados, 0 fallidos"
 
 # ─────────────────────────────────────────────────────────────────────────────
