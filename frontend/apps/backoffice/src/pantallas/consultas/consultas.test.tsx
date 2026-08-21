@@ -10,9 +10,11 @@ import { SIN_DATO } from '../seguridad/listado';
  * Consultas (#72): **ninguna cifra sin su fecha**.
  *
  * Es el modulo que mas usa quien atiende en ventanilla, y donde la regla 9 de
- * CLAUDE.md se ve o no se ve. Las otras diez opciones esperan a #22, #24 y #25;
- * lo que **no** espera a nadie es la propiedad que da sentido al modulo, y es lo
- * que se verifica aqui sobre las once a la vez.
+ * CLAUDE.md se ve o no se ve. Tres de las once ya tienen backend y estan
+ * conectadas —`cuenta_corriente` (#21), `consulta_deuda` (#22, #175) y
+ * `constancia` (#25, #179)—; las otras ocho esperan a #24 y al resto de #25.
+ * Lo que **no** espera a nadie es la propiedad que da sentido al modulo, y es
+ * lo que se verifica aqui sobre las once a la vez.
  */
 
 /** Las once opciones del modulo, por su ranura. Si el catalogo cambia, cambia esto. */
@@ -121,9 +123,8 @@ describe('el estado de cuenta es el libro, y se ve como tal', () => {
     expect(acciones.some((texto) => /modificar|editar|anular|corregir/i.test(texto))).toBe(false);
   });
 
-  it('las diez restantes siguen sin conectar: su backend es #22, #24 y #25', () => {
+  it('las ocho restantes siguen sin conectar: su backend es #24 y el resto de #25', () => {
     for (const opcion of [
-      'consulta_deuda',
       'consulta_unificada',
       'consulta_resumen_predial',
       'consulta_altas_bajas',
@@ -132,10 +133,40 @@ describe('el estado de cuenta es el libro, y se ve como tal', () => {
       'consulta_predios',
       'consulta_vehiculos',
       'consulta_valores',
-      'constancia',
     ]) {
       expect(OPCIONES_CONECTADAS).not.toContain(opcion);
     }
-    expect(OPCIONES_CONECTADAS).toContain('cuenta_corriente');
+    for (const opcion of ['cuenta_corriente', 'consulta_deuda', 'constancia']) {
+      expect(OPCIONES_CONECTADAS).toContain(opcion);
+    }
+  });
+});
+
+describe('consulta_deuda lee ObligacionConDeudaResource', () => {
+  it('la fase del prototipo se traduce al enum del backend, y «Todas» no filtra', async () => {
+    montarEnRuta('/consultas/consulta-deuda?fase=Valor%20emitido');
+
+    // El mock no filtra de verdad (ADR-0010): lo que importa aqui es que la
+    // peticion no truena por mandar «VALOR EMITIDO» donde el enum espera
+    // «VALOR» (Fase.valueOf lanzaria). Si la pantalla se dibuja, no trono.
+    // Con `findAllBy`: el tributo se repite en mas de una fila del mock.
+    expect(await screen.findAllByText('IMPUESTO PREDIAL')).not.toHaveLength(0);
+  });
+
+  it('los cuatro totales no se componen: RNF-083', async () => {
+    montarEnRuta('/consultas/consulta-deuda');
+
+    await screen.findByText(/Cifras actualizadas al/);
+    const total = screen.getByText('Deuda total');
+    expect(total.closest('.sgtm-totales__celda')?.textContent).toContain(SIN_DATO);
+  });
+});
+
+describe('constancia se niega o se emite, y lo dice antes que la tabla', () => {
+  it('la hoja trae el resultado en su meta y las filas con su tributo', async () => {
+    montarEnRuta('/consultas/constancia/00000025673');
+
+    expect(await screen.findByText('Impuesto predial')).toBeInTheDocument();
+    expect(screen.getByText(/SE EMITE|SE NIEGA/)).toBeInTheDocument();
   });
 });

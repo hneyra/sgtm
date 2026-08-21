@@ -4409,6 +4409,17 @@ paths:
       summary: "Constancia de no adeudo"
       description: "Vista previa del documento que se entrega al contribuyente. Se imprime con el mismo formato en papel membretado."
       tags: ["Consultas"]
+      parameters:
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: fecha
+          in: query
+          required: false
+          description: "Fecha de corte; sin ella, la de hoy"
+          schema: { type: string }
       responses:
         200:
           description: Operacion realizada
