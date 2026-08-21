@@ -688,7 +688,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/consultas/vehiculos',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['placa', 'nroMotor', 'contribuyente', 'estado', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['placa', 'nroMotor', 'contribuyente', 'estado', 'fecha', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Consulta de valores emitidos — `GET /consultas/valores` */
   consulta_valores: {
@@ -1739,6 +1739,7 @@ export interface ParametrosPorOperacion {
     readonly nroMotor?: string;
     readonly contribuyente?: string;
     readonly estado?: string;
+    readonly fecha?: string;
     readonly pagina?: string;
     readonly tamano?: string;
     readonly ordenarPor?: string;
