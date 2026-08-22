@@ -34,12 +34,17 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.modulith:spring-modulith-starter-core")
 
-    // Actuator entra por una sola razon: la sonda de vida. Sin un endpoint que
-    // diga si el proceso esta arriba Y llega a la base, `depends_on:
-    // service_healthy` del compose no puede significar nada, y el despliegue se
-    // queda esperando a un contenedor que quiza nunca sirva una peticion.
-    // Se expone `health` y nada mas (application.yaml).
+    // Actuator entra por dos razones: la sonda de vida y las metricas (issue #156).
+    // Sin un endpoint que diga si el proceso esta arriba Y llega a la base,
+    // `depends_on: service_healthy` del compose no puede significar nada, y el
+    // despliegue se queda esperando a un contenedor que quiza nunca sirva una
+    // peticion. Se exponen `health` y `prometheus`, y nada mas (application.yaml,
+    // SeguridadWeb).
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    // El registro de Prometheus. Sin el, `/actuator/prometheus` no existe aunque
+    // este en la lista de exposicion: Micrometer necesita SABER en que formato
+    // escribir, y este es el que Prometheus sabe leer.
+    implementation("io.micrometer:micrometer-registry-prometheus")
 
     // Las migraciones viven en sgtm-esquema y las ejecuta el proceso de despliegue
     // como sgtm_owner. La aplicacion NO migra al arrancar: se conecta como

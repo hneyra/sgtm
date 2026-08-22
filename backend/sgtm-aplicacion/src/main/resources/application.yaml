@@ -32,19 +32,24 @@ sgtm:
     escala: ${SGTM_REDONDEO_ESCALA:2}
     modo: ${SGTM_REDONDEO_MODO:HALF_UP}
 
-# Solo la sonda de vida, y sin detalles. Es el unico endpoint que SeguridadWeb
-# deja publico: `health` responde si el proceso esta arriba y llega a la base,
-# y con `show-details: never` no dice cual es la base, ni su version, ni que
-# componentes tiene dentro. Un `include: "*"` aqui publicaria la configuracion
-# entera —con la URL de la base— delante de la cadena de seguridad.
+# La sonda de vida y las metricas, y sin detalles en la primera. `health` responde
+# si el proceso esta arriba y llega a la base, y con `show-details: never` no dice
+# cual es la base, ni su version, ni que componentes tiene dentro. `prometheus`
+# expone contadores y medidores —peticiones, JVM, conexiones a la base—, nunca
+# datos de negocio: no hay un padron ahi dentro (issue #156). Un `include: "*"`
+# aqui publicaria la configuracion entera —con la URL de la base— delante de la
+# cadena de seguridad, y SeguridadWeb exige nombrar cada endpoint uno por uno.
 management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health, prometheus
   endpoint:
     health:
       show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 ---
 spring:

@@ -11,7 +11,8 @@
 #   4. Los cuatro roles del SGTM conservan el CONNECT sobre la base del padron.
 #   5. Keycloak tiene base propia, y NO puede conectarse a la del padron.
 #   6. El rol del respaldo puede pg_backup_start/stop y NADA mas (issue #155).
-#   7. Reiniciar el motor deja los datos donde estaban.
+#   7. El rol de monitoreo tiene pg_monitor y NADA mas (issue #156).
+#   8. Reiniciar el motor deja los datos donde estaban.
 #
 # Lo que esto verifica es el CONTENIDO de la inicializacion —los roles, sus atributos,
 # quien puede conectarse a que—, que es donde esta el riesgo y no cambia porque el
@@ -160,7 +161,38 @@ echo "  puede pg_backup_start/stop y leer la configuracion: lo justo"
     || { echo "FALLO: sgtm_respaldo puede conectarse a la base del padron, y no la necesita" >&2; exit 1; }
 echo "  y no alcanza la base del padron"
 
-# ── 8. Reiniciar deja los datos donde estaban ────────────────────────────────
+# ── 8. El rol de monitoreo: pg_monitor, y nada mas (issue #156) ──────────────
+#
+# `postgres-exporter` vive en el MISMO pod que el motor, con `sgtm_monitor`. El
+# privilegio predefinido de PostgreSQL da lectura sobre las vistas de estadisticas,
+# nunca sobre una tabla del padron: es lo que separa "medir cuantas conexiones hay"
+# de "leer la deuda de un contribuyente".
+echo "· El rol de monitoreo solo tiene pg_monitor"
+atributosDeMonitoreo=$(comoSuperusuario \
+    "SELECT rolsuper, rolbypassrls, rolcanlogin FROM pg_roles WHERE rolname = 'sgtm_monitor'" postgres)
+[ -n "$atributosDeMonitoreo" ] \
+    || { echo "FALLO: el rol sgtm_monitor no existe; 50-rol-de-monitoreo.sh no corrio" >&2; exit 1; }
+case "$atributosDeMonitoreo" in
+    f\|f\|t) ;;
+    *) echo "FALLO: sgtm_monitor es superusuario, omite RLS o no puede conectarse: $atributosDeMonitoreo" >&2; exit 1 ;;
+esac
+echo "  sgtm_monitor → rolsuper|rolbypassrls|rolcanlogin = $atributosDeMonitoreo"
+
+if PGPASSWORD="$CLAVE_MONITOREO" psql --username=sgtm_monitor --dbname=postgres --quiet \
+        --command 'CREATE TABLE intento_de_ddl_monitoreo (id int)' >/dev/null 2>&1; then
+    echo "FALLO: el rol de monitoreo puede crear tablas. Solo mide; no escribe" >&2
+    exit 1
+fi
+
+[ "$(comoSuperusuario "SELECT pg_has_role('sgtm_monitor', 'pg_monitor', 'MEMBER')" postgres)" = "t" ] \
+    || { echo "FALLO: sgtm_monitor no tiene pg_monitor; postgres-exporter no podria leer nada" >&2; exit 1; }
+echo "  tiene pg_monitor: lo justo"
+
+[ "$(comoSuperusuario "SELECT has_database_privilege('sgtm_monitor','sgtm','CONNECT')" postgres)" = "f" ] \
+    || { echo "FALLO: sgtm_monitor puede conectarse a la base del padron, y no la necesita" >&2; exit 1; }
+echo "  y no alcanza la base del padron"
+
+# ── 9. Reiniciar deja los datos donde estaban ────────────────────────────────
 echo "· Reiniciar el motor no pierde datos"
 PGPASSWORD="$CLAVE_OWNER" psql --username=sgtm_owner --dbname=sgtm --quiet \
     --command 'CREATE TABLE si_sobrevive (dato text)' \
@@ -171,7 +203,7 @@ motor_reiniciar || { echo "FALLO: el motor no volvio tras el reinicio" >&2; exit
 [ "$(comoSuperusuario "SELECT dato FROM si_sobrevive")" = "sobrevivio" ] \
     || { echo "FALLO: el dato no sobrevivio al reinicio" >&2; exit 1; }
 
-# ── 9. El aislamiento, contra ESTA instancia ─────────────────────────────────
+# ── 10. El aislamiento, contra ESTA instancia ────────────────────────────────
 #
 # Es el primer criterio de aceptacion del issue #149, y lo unico que demuestra que el
 # aislamiento sigue en pie es ejecutarlo aqui.

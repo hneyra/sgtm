@@ -10,13 +10,23 @@ import {
   secretos,
   servicioDeBaseDeDatos,
   sondaExec,
+  sondaHttp,
   variablesWalg,
   volumenDeDatos,
   volumenDeWalg,
   WALG_BINARIO,
 } from "./convenciones";
-import { asignarClavesSh, baseDeKeycloakSh, crearRolesSql, rolDeRespaldoSh } from "./fuentes";
+import {
+  asignarClavesSh,
+  baseDeKeycloakSh,
+  crearRolesSql,
+  rolDeMonitoreoSh,
+  rolDeRespaldoSh,
+} from "./fuentes";
 import type { ConfigMap, Deployment, Manifiesto, PersistentVolumeClaim, Service } from "./tipos";
+
+/** `postgres-exporter`, con version fijada (issue #156). */
+const IMAGEN_DE_POSTGRES_EXPORTER = "prometheuscommunity/postgres-exporter:v0.15.0";
 
 /**
  * PostgreSQL en el clúster, con los cuatro roles y el aislamiento intactos (issue #149).
@@ -120,6 +130,7 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
       "20-asignar-claves.sh": asignarClavesSh(),
       "30-base-de-keycloak.sh": baseDeKeycloakSh(),
       "40-rol-de-respaldo.sh": rolDeRespaldoSh(),
+      "50-rol-de-monitoreo.sh": rolDeMonitoreoSh(),
     },
   };
 
@@ -209,6 +220,11 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
                   name: "SGTM_CLAVE_RESPALDO",
                   valueFrom: { secretKeyRef: { name: secreto.respaldo, key: CLAVES.respaldo } },
                 },
+                // La lee `50-rol-de-monitoreo.sh`.
+                {
+                  name: "SGTM_CLAVE_MONITOREO",
+                  valueFrom: { secretKeyRef: { name: secreto.monitoreo, key: CLAVES.monitoreo } },
+                },
                 { name: "PGDATA", value: DIRECTORIO_DE_DATOS },
                 ...variablesDeWalg,
               ],
@@ -233,6 +249,33 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
                 ["pg_isready", "--username=postgres", `--dbname=${BASE_DEL_PADRON}`],
                 { periodSeconds: 20, failureThreshold: 5 },
               ),
+            },
+            // El sidecar de metricas (issue #156): en el MISMO pod, nunca un
+            // Deployment aparte. Comparte la red del pod —se conecta por
+            // `localhost`—, y usa `sgtm_monitor`, no el superusuario: solo
+            // `pg_monitor`, sin DDL. Ver `convenciones.secretos().monitoreo`.
+            {
+              name: "postgres-exporter",
+              image: IMAGEN_DE_POSTGRES_EXPORTER,
+              env: [
+                {
+                  name: "DATA_SOURCE_URI",
+                  value: "localhost:5432/postgres?sslmode=disable",
+                },
+                { name: "DATA_SOURCE_USER", value: "sgtm_monitor" },
+                {
+                  name: "DATA_SOURCE_PASS",
+                  valueFrom: { secretKeyRef: { name: secreto.monitoreo, key: CLAVES.monitoreo } },
+                },
+              ],
+              ports: [{ name: "metrics", containerPort: 9187 }],
+              resources: RECURSOS.exportador,
+              // `httpGet`, no `exec`: la sonda la hace el kubelet desde fuera del
+              // contenedor, asi que no depende de que la imagen traiga `wget` —la
+              // de `postgres_exporter` no trae shell ni utilidades, es un solo
+              // binario Go—.
+              readinessProbe: sondaHttp("/metrics", 9187, { periodSeconds: 10, failureThreshold: 3 }),
+              livenessProbe: sondaHttp("/metrics", 9187, { periodSeconds: 20, failureThreshold: 5 }),
             },
           ],
           volumes: [
@@ -259,7 +302,12 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
       // un `NodePort` «un momento, para depurar» es la frase que esta epica retira.
       type: "ClusterIP",
       selector: { app: nombre },
-      ports: [{ name: "postgres", port: 5432, targetPort: 5432 }],
+      ports: [
+        { name: "postgres", port: 5432, targetPort: 5432 },
+        // Solo lo scrapea Prometheus, desde dentro del cluster (issue #156). No
+        // hay `IngressRoute` que lo alcance, igual que el puerto de PostgreSQL.
+        { name: "metrics", port: 9187, targetPort: 9187 },
+      ],
     },
   };
 

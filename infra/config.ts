@@ -192,6 +192,23 @@ export interface ImplantacionSettings {
   nombreDelAdministrador: string;
 }
 
+/**
+ * Observabilidad y alertas (issue #156).
+ *
+ * `../iaac`, §Alerts, tiene el incidente anotado: reglas evaluándose durante meses sin
+ * destino, y una caída que nadie vio. «Una regla que no notifica a nadie no es una
+ * alerta, es un gráfico» es la frase que esta interfaz existe para que no se repita.
+ */
+export interface ObservabilitySettings {
+  /**
+   * El `webhook_configs` de Alertmanager. Sin él, las reglas se evalúan igual —se ven
+   * en la API de Alertmanager— pero nadie recibe nada: es el estado que `checkInvariants`
+   * prohíbe en `prod` y permite en `stg`, porque es exactamente el que hace falta para
+   * poder demostrar la diferencia entre «la regla está roja» y «alguien se enteró».
+   */
+  alertWebhookUrl?: string;
+}
+
 /** Todo lo que no es secreto, y por tanto se puede validar sin resolver un `Output`. */
 export interface Invariants {
   environment: Environment;
@@ -201,6 +218,7 @@ export interface Invariants {
   identity: IdentitySettings;
   application: ApplicationSettings;
   implantacion: ImplantacionSettings;
+  observability: ObservabilitySettings;
 }
 
 /**
@@ -342,6 +360,11 @@ export function readInvariants(environment: Environment, reader: ConfigReader): 
       ),
       nombreDelAdministrador:
         reader.text("nombreDelAdministrador") ?? "Administrador del sistema",
+    },
+    observability: {
+      ...(reader.text("alertWebhookUrl") === undefined
+        ? {}
+        : { alertWebhookUrl: reader.text("alertWebhookUrl") }),
     },
   };
 }
@@ -537,6 +560,17 @@ export function checkInvariants(s: Invariants): string[] {
   if (s.implantacion.tipo !== "DISTRITAL" && s.implantacion.tipo !== "PROVINCIAL") {
     problems.push(
       `\`tipoDeMunicipalidad\` vale «${s.implantacion.tipo}»: es DISTRITAL o PROVINCIAL.`,
+    );
+  }
+
+  // ── issue #156 — una regla que no notifica a nadie no es una alerta ────────
+  if (isProd && s.observability.alertWebhookUrl === undefined) {
+    problems.push(
+      "`alertWebhookUrl` no está declarado en «prod». `../iaac` tiene el incidente anotado: " +
+        "reglas evaluándose durante meses sin destino, y una caída que nadie vio. Sin un " +
+        "receptor, Alertmanager enruta a `null-receiver` — las alertas se ven en su API y no " +
+        "le llegan a nadie, que es exactamente el estado que este mensaje existe para impedir " +
+        "en producción.",
     );
   }
 

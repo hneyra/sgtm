@@ -3,6 +3,7 @@ import { manifiestosDeAplicacion } from "./Aplicacion";
 import { manifiestosDeBaseDeDatos } from "./BaseDeDatos";
 import { manifiestosDeIdentidad } from "./Identidad";
 import { manifiestosDeIngreso } from "./Ingreso";
+import { manifiestosDeObservabilidad } from "./Observabilidad";
 import { manifiestosDeMigracion } from "./Migracion";
 import { manifiestosDeRespaldo } from "./Respaldo";
 import { clasesDePrioridad } from "./convenciones";
@@ -92,6 +93,11 @@ export function construirManifiestos(s: Invariants): Manifiesto[] {
       domain: s.ingress.domain,
       acmeEmail: s.ingress.acmeEmail,
       acmeStaging: s.ingress.acmeStaging,
+    }),
+    ...manifiestosDeObservabilidad({
+      environment,
+      namespace,
+      alertWebhookUrl: s.observability.alertWebhookUrl,
     }),
   ];
 }

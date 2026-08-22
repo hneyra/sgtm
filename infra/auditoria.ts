@@ -58,8 +58,16 @@ const ESPERA_MAXIMA = 5;
 const MOTOR = "postgres";
 const COMPONENTES_CON_ACCESO_A_OWNER = [MOTOR, "respaldo"];
 
-/** Objetos que no viven en un namespace. */
-const SIN_NAMESPACE = ["Namespace", "PriorityClass"];
+/**
+ * Objetos que no viven en un namespace.
+ *
+ * `ClusterRole`/`ClusterRoleBinding` son de alcance de clúster por definicion de
+ * Kubernetes —no es una excepcion de este repositorio, es el tipo del objeto—: los
+ * usa `kube-state-metrics` (issue #156), el unico componente de `infra/` con RBAC
+ * propio, y su nombre lleva el ambiente (`resourceName`) para no chocar con el del
+ * otro stack en el mismo clúster.
+ */
+const SIN_NAMESPACE = ["Namespace", "PriorityClass", "ClusterRole", "ClusterRoleBinding"];
 
 export interface ContextoDeAuditoria {
   /** El `Secret` con la clave de `sgtm_owner`. No puede aparecer fuera de los Jobs. */

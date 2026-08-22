@@ -37,9 +37,12 @@ dependencies {
     testImplementation(testFixtures(project(":sgtm-esquema")))
 
     // Solo para la prueba de la cadena de identidad: verifica que /actuator/health
-    // sigue siendo lo unico publico. El actuator de produccion lo trae
-    // sgtm-aplicacion, que es quien lo despliega.
+    // y /actuator/prometheus siguen siendo lo unico publico (issue #156). El
+    // actuator de produccion lo trae sgtm-aplicacion, que es quien lo despliega.
     testImplementation("org.springframework.boot:spring-boot-starter-actuator")
+    // Sin el registro, el endpoint "prometheus" no se activa —404, no 200 vacio—
+    // y la prueba de arriba estaria comprobando el camino equivocado.
+    testImplementation("io.micrometer:micrometer-registry-prometheus")
     testImplementation("org.springframework.boot:spring-boot-starter-web")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")

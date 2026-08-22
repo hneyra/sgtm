@@ -96,11 +96,18 @@ export interface Volumen {
   secret?: { secretName: string; defaultMode?: number };
   persistentVolumeClaim?: { claimName: string };
   emptyDir?: Record<string, never>;
+  /** Solo `node-exporter` (issue #156): lee `/proc` y `/sys` del nodo, de solo lectura. */
+  hostPath?: { path: string; type?: string };
 }
 
 export interface EspecificacionDePod {
   restartPolicy?: string;
   priorityClassName: string;
+  /** Solo lo declara `kube-state-metrics` (issue #156): es el unico pod con RBAC propio. */
+  serviceAccountName?: string;
+  /** Solo `node-exporter`: sin el, ve la red y el PID 1 del contenedor, no los del nodo. */
+  hostNetwork?: boolean;
+  hostPID?: boolean;
   initContainers?: Contenedor[];
   containers: Contenedor[];
   volumes?: Volumen[];
@@ -248,6 +255,36 @@ export interface HelmChartConfig {
   spec: { valuesContent: string };
 }
 
+/**
+ * Los tres objetos de RBAC, y solo para `kube-state-metrics` (issue #156).
+ *
+ * Es el UNICO componente de todo `infra/` que habla con el API de Kubernetes —lee
+ * pods, nodos y `CronJob` para convertirlos en metricas—, y por eso es el unico que
+ * necesita una cuenta de servicio con permisos. Todo lo demas de este repositorio
+ * corre sin RBAC propio a proposito: menos superficie que auditar.
+ */
+export interface ServiceAccount {
+  apiVersion: "v1";
+  kind: "ServiceAccount";
+  metadata: Metadatos;
+}
+
+/** De alcance de clúster: `kube-state-metrics` lee objetos de todos los namespaces. */
+export interface ClusterRole {
+  apiVersion: "rbac.authorization.k8s.io/v1";
+  kind: "ClusterRole";
+  metadata: Metadatos;
+  rules: { apiGroups: string[]; resources: string[]; verbs: string[] }[];
+}
+
+export interface ClusterRoleBinding {
+  apiVersion: "rbac.authorization.k8s.io/v1";
+  kind: "ClusterRoleBinding";
+  metadata: Metadatos;
+  roleRef: { apiGroup: "rbac.authorization.k8s.io"; kind: "ClusterRole"; name: string };
+  subjects: { kind: "ServiceAccount"; name: string; namespace: string }[];
+}
+
 export type Manifiesto =
   | Namespace
   | PriorityClass
@@ -260,7 +297,10 @@ export type Manifiesto =
   | IngressRoute
   | Middleware
   | TLSOption
-  | HelmChartConfig;
+  | HelmChartConfig
+  | ServiceAccount
+  | ClusterRole
+  | ClusterRoleBinding;
 
 /** Los manifiestos que llevan pods dentro. La auditoria los recorre todos. */
 export interface PodAuditable {

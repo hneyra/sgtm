@@ -116,6 +116,27 @@ export function rolDeRespaldoSh(): string {
 }
 
 /**
+ * `50-rol-de-monitoreo.sh` (issue #156). Tambien de `infra/`: en el compose nadie
+ * recolecta metricas, asi que no hace falta el rol.
+ */
+export function rolDeMonitoreoSh(): string {
+  return leer(join(raizDeInfra(), "componentes/inicializacion/50-rol-de-monitoreo.sh"));
+}
+
+/**
+ * Las reglas de alerta (issue #156). Estatico y compartido entre `stg` y `prod`: ver
+ * el comentario del propio archivo.
+ */
+export function alertasYml(): string {
+  return leer(join(raizDeInfra(), "observabilidad/alertas.yml"));
+}
+
+/** El tablero de Grafana. Un solo archivo, con una fila por area (JVM, PostgreSQL, nodo, pods). */
+export function tableroResumenOperativoJson(): string {
+  return leer(join(raizDeInfra(), "observabilidad/dashboards/resumen-operativo.json"));
+}
+
+/**
  * `nginx.conf` de la interfaz, **el del repositorio**.
  *
  * La imagen ya lo trae dentro, pero apunta al `aplicacion:8080` de la red del compose y

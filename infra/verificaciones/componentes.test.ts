@@ -6,6 +6,7 @@ import { construirManifiestos } from "../componentes";
 import { manifiestosDeIdentidad, documentosDelRealm, RUTA_DE_IDENTIDAD } from "../componentes/Identidad";
 import { nginxDelCluster } from "../componentes/Aplicacion";
 import { valoresDeTraefik } from "../componentes/Ingreso";
+import { manifiestosDeObservabilidad } from "../componentes/Observabilidad";
 import { secretos } from "../componentes/convenciones";
 import { raizDelRepositorio } from "../componentes/fuentes";
 import { contenedoresDe, podsDe, type Contenedor, type Manifiesto } from "../componentes/tipos";
@@ -85,8 +86,9 @@ describe("los manifiestos de los dos ambientes pasan su propia auditoria", () =>
     const ms = manifiestosDe(AMBIENTE);
     const fuera = ms.filter(
       (m) =>
-        !["Namespace", "PriorityClass", "HelmChartConfig"].includes(m.kind) &&
-        m.metadata.namespace !== namespaceName(AMBIENTE),
+        !["Namespace", "PriorityClass", "HelmChartConfig", "ClusterRole", "ClusterRoleBinding"].includes(
+          m.kind,
+        ) && m.metadata.namespace !== namespaceName(AMBIENTE),
     );
     expect(fuera.map((m) => `${m.kind}/${m.metadata.name}`)).toEqual([]);
   });
@@ -798,6 +800,167 @@ describe("#155 · la demostracion: la auditoria se pone roja", () => {
     // La excepcion de #155 es del CronJob de respaldo, no de «cualquier CronJob»: el
     // de lote —la MISMA imagen que la aplicacion— sigue sin poder llevar esta clave.
     expect(auditar(ms)).toContainEqual(expect.stringContaining("el Secret de sgtm_owner"));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #156 — Observabilidad: metricas, tableros y una alerta que le llegue a alguien
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Solo el componente de observabilidad, con el `alertWebhookUrl` que la prueba necesita. */
+function manifiestosDeObservabilidadDePrueba(alertWebhookUrl: string | undefined): Manifiesto[] {
+  return manifiestosDeObservabilidad({
+    environment: AMBIENTE,
+    namespace: namespaceName(AMBIENTE),
+    alertWebhookUrl,
+  });
+}
+
+function contenedorDe(ms: Manifiesto[], kindDeployment: string, contiene: string, nombre: string): Contenedor {
+  const despliegue = buscar(ms, kindDeployment, contiene) as {
+    spec: { template: { spec: { containers: Contenedor[] } } };
+  };
+  const contenedor = despliegue.spec.template.spec.containers.find((c) => c.name === nombre);
+  if (!contenedor) {
+    throw new Error(`No hay contenedor «${nombre}» en el Deployment que contiene «${contiene}»`);
+  }
+  return contenedor;
+}
+
+describe("#156 · observabilidad", () => {
+  const ms = manifiestosDe(AMBIENTE);
+
+  it("el motor lleva su sidecar de metricas, con sgtm_monitor y nunca el superusuario", () => {
+    const exportador = contenedorDe(ms, "Deployment", "postgres", "postgres-exporter");
+    const variables = variablesDe(exportador);
+    expect(variables.get("DATA_SOURCE_USER")).toBe("sgtm_monitor");
+    expect(secretosDe(exportador)).toContain(secretos(AMBIENTE).monitoreo);
+    expect(secretosDe(exportador)).not.toContain(secretos(AMBIENTE).motor);
+  });
+
+  it("Prometheus scrapea la aplicacion, el motor, el nodo, kube-state-metrics y Traefik", () => {
+    const configuracion = buscar(ms, "ConfigMap", "observabilidad-prometheus") as {
+      data: Record<string, string>;
+    };
+    const prometheusYml = configuracion.data["prometheus.yml"] ?? "";
+    for (const objetivo of [
+      "/actuator/prometheus",
+      "sgtm-prod-postgres:9187",
+      "sgtm-prod-observabilidad-node-exporter:9100",
+      "sgtm-prod-observabilidad-kube-state-metrics:8080",
+      "traefik.kube-system.svc.cluster.local:9100",
+    ]) {
+      expect(prometheusYml).toContain(objetivo);
+    }
+  });
+
+  it("las diez reglas de alerta estan cargadas, con las que el issue exige", () => {
+    const configuracion = buscar(ms, "ConfigMap", "observabilidad-prometheus") as {
+      data: Record<string, string>;
+    };
+    const alertasYmlCargado = configuracion.data["alertas.yml"] ?? "";
+    for (const regla of [
+      "PostgreSQLCaido",
+      "PodEnCrashLoopBackOff",
+      "PodNoListo",
+      "CPUDelNodoAlta",
+      "MemoriaDelNodoAlta",
+      "DiscoDelNodoAlto",
+      "CertificadoPorExpirar",
+      "RespaldoQueNoCorrio",
+      "JobDeMigracionFallido",
+    ]) {
+      expect(alertasYmlCargado).toContain(`alert: ${regla}`);
+    }
+  });
+
+  it("sin destino configurado, Alertmanager enruta a null-receiver; con destino, al webhook", () => {
+    // AMBIENTE es "prod" en este archivo, y prod SIEMPRE trae alertWebhookUrl —lo
+    // exige config.ts—; para probar el estado sin destino hay que construir el
+    // argumento a mano, sin pasar por invariantesDe().
+    const sinWebhook = manifiestosDeObservabilidadDePrueba(undefined);
+    const alertmanagerYmlSinWebhook =
+      (buscar(sinWebhook, "ConfigMap", "observabilidad-alertmanager") as { data: Record<string, string> })
+        .data["alertmanager.yml"] ?? "";
+    expect(alertmanagerYmlSinWebhook).toContain("receiver: null-receiver");
+
+    const conWebhook = manifiestosDeObservabilidadDePrueba("https://hooks.example.pe/x");
+    const alertmanagerYmlConWebhook =
+      (buscar(conWebhook, "ConfigMap", "observabilidad-alertmanager") as { data: Record<string, string> })
+        .data["alertmanager.yml"] ?? "";
+    expect(alertmanagerYmlConWebhook).toContain("receiver: webhook");
+    expect(alertmanagerYmlConWebhook).toContain("https://hooks.example.pe/x");
+  });
+
+  it("kube-state-metrics no tiene privilegio de mas: nada de Secret ni ConfigMap", () => {
+    const rol = buscar(ms, "ClusterRole", "kube-state-metrics") as {
+      rules: { apiGroups: string[]; resources: string[]; verbs: string[] }[];
+    };
+    const recursos = rol.rules.flatMap((r) => r.resources);
+    expect(recursos).not.toContain("secrets");
+    expect(recursos).not.toContain("configmaps");
+    for (const regla of rol.rules) {
+      expect(regla.verbs).not.toContain("create");
+      expect(regla.verbs).not.toContain("delete");
+      expect(regla.verbs).not.toContain("update");
+    }
+  });
+
+  it("node-exporter ve el nodo, no el contenedor", () => {
+    const despliegue = buscar(ms, "Deployment", "observabilidad-node-exporter") as {
+      spec: { template: { spec: { hostNetwork?: boolean; hostPID?: boolean } } };
+    };
+    expect(despliegue.spec.template.spec.hostNetwork).toBe(true);
+    expect(despliegue.spec.template.spec.hostPID).toBe(true);
+  });
+
+  it("Grafana no esta en ninguna IngressRoute: se administra por el tunel SSH", () => {
+    const rutas = ms.filter((m): m is Manifiesto & { spec: { routes: { match: string }[] } } =>
+      m.kind === "IngressRoute",
+    );
+    const nombreDeGrafana = buscar(ms, "Service", "observabilidad-grafana").metadata.name;
+    for (const ruta of rutas) {
+      for (const r of ruta.spec.routes) {
+        expect(r.match).not.toContain("grafana");
+      }
+    }
+    // Y el Service en si no aparece como backend de ninguna ruta.
+    const backends = rutas.flatMap((r) =>
+      (r as unknown as { spec: { routes: { services: { name: string }[] }[] } }).spec.routes.flatMap(
+        (ru) => ru.services.map((s) => s.name),
+      ),
+    );
+    expect(backends).not.toContain(nombreDeGrafana);
+  });
+
+  it("responde que version corre y desde cuando, desde el tablero", () => {
+    const tablero = buscar(ms, "ConfigMap", "observabilidad-grafana") as { data: Record<string, string> };
+    const json = JSON.parse(tablero.data["resumen-operativo.json"] ?? "{}") as {
+      panels: { title: string }[];
+    };
+    expect(tablero.data["resumen-operativo.json"]).toBeDefined();
+    expect(json.panels.some((p) => p.title.includes("Version desplegada"))).toBe(true);
+  });
+});
+
+describe("#156 · la demostracion: la auditoria se pone roja", () => {
+  it("quitando resources del sidecar de metricas, la auditoria lo detecta", () => {
+    const ms = manifiestosDe(AMBIENTE);
+    const exportador = contenedorDe(ms, "Deployment", "postgres", "postgres-exporter");
+    // @ts-expect-error -- se rompe a proposito: `resources` es obligatorio en el tipo.
+    delete exportador.resources;
+
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("sin requests ni limits"));
+  });
+
+  it("quitando priorityClassName de Prometheus, la auditoria lo detecta", () => {
+    const ms = manifiestosDe(AMBIENTE);
+    const prometheus = buscar(ms, "Deployment", "observabilidad-prometheus") as {
+      spec: { template: { spec: { priorityClassName?: string } } };
+    };
+    delete prometheus.spec.template.spec.priorityClassName;
+
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("priorityClassName"));
   });
 });
 
