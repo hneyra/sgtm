@@ -27,6 +27,7 @@ public final class InsumosDeLaRegla {
     private final Set<Concepto> declarados;
     private final EstadoDelCalculo estado;
     private final Ejercicio ejercicio;
+    private final CaracteristicasDeLaPartida caracteristicas;
     private final ParametrosSellados parametros;
     private final PoliticasDeRedondeo redondeo;
 
@@ -35,12 +36,14 @@ public final class InsumosDeLaRegla {
             Set<Concepto> declarados,
             EstadoDelCalculo estado,
             Ejercicio ejercicio,
+            CaracteristicasDeLaPartida caracteristicas,
             ParametrosSellados parametros,
             PoliticasDeRedondeo redondeo) {
         this.regla = regla;
         this.declarados = declarados;
         this.estado = estado;
         this.ejercicio = ejercicio;
+        this.caracteristicas = caracteristicas;
         this.parametros = parametros;
         this.redondeo = redondeo;
     }
@@ -65,6 +68,15 @@ public final class InsumosDeLaRegla {
     /** El ejercicio del hecho imponible, no el ano en curso (ARQ-09 §1.3). */
     public Ejercicio ejercicio() {
         return ejercicio;
+    }
+
+    /**
+     * La llave con que esta partida busca un parametro: la via del terreno, la categoria de la
+     * construccion, el material. Si la partida no la trae es {@code CaracteristicaAusente}, no un
+     * valor por omision.
+     */
+    public String caracteristica(String nombre) {
+        return caracteristicas.exigir(nombre);
     }
 
     /** El conjunto sellado. Los parametros entran como argumento, nunca se leen dentro. */

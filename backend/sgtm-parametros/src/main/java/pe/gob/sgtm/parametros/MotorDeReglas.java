@@ -64,6 +64,7 @@ public final class MotorDeReglas {
                                         regla.requiere(),
                                         estado,
                                         entrada.ejercicio(),
+                                        entrada.caracteristicas(),
                                         entrada.parametros(),
                                         entrada.redondeo()));
                 Objects.requireNonNull(
