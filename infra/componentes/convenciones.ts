@@ -269,18 +269,24 @@ export function sondaExec(command: string[], extra: Partial<Sonda> = {}): Sonda 
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Lo que va en TODO contenedor, sin excepcion: nada de escalada de privilegios y
- * ninguna capacidad Linux de mas. A diferencia de `runAsNonRoot` —que algunas
- * imagenes no soportan sin ayuda, ver `seguridadSinRoot`—, estas dos no tienen
- * ningun motivo legitimo para faltar: ni siquiera el `entrypoint` de PostgreSQL,
- * que arranca como root, necesita escalar privilegios o una capacidad con nombre
- * para hacer su `chown` inicial.
+ * Lo que va en TODO contenedor, sin excepcion: nada de escalada de privilegios, y
+ * ninguna capacidad Linux de mas alla de las que el propio contenedor nombra por
+ * `extra.capabilities.add` -casi nunca ninguna: la mayoria no necesita ni una-.
+ *
+ * `allowPrivilegeEscalation: false` si es universal sin excepcion. `capabilities.drop:
+ * ["ALL"]` tambien lo es, pero dropear TODO vuelve a "root" literalmente incapaz de sus
+ * propias operaciones -en Linux el privilegio de root viene de las capacidades, no del
+ * UID-: el `entrypoint` de PostgreSQL, que arranca como root a proposito para tomar
+ * posesion de `PGDATA` con `chown`, se rompio exactamente asi -"Operation not
+ * permitted", encontrado en CI-. La correccion no es dejar de dropear TODO: es que ESE
+ * contenedor re-conceda por nombre lo que su `entrypoint` necesita (ver
+ * `BaseDeDatos.ts`), y ningun otro.
  */
 export function seguridadBase(extra: Partial<SecurityContext> = {}): SecurityContext {
   return {
     allowPrivilegeEscalation: false,
-    capabilities: { drop: ["ALL"] },
     ...extra,
+    capabilities: { drop: ["ALL"], ...extra.capabilities },
   };
 }
 

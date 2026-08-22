@@ -1081,6 +1081,21 @@ describe("#157 · endurecimiento", () => {
     expect(sinRunAsUser.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
   });
 
+  it("el motor re-concede las capacidades que su entrypoint necesita para tomar posesion de PGDATA", () => {
+    // Encontrado en CI (issue #157): `capabilities: { drop: ["ALL"] }` deja a "root"
+    // -el entrypoint de PostgreSQL arranca como root a proposito, ver el comentario en
+    // BaseDeDatos.ts- sin las capacidades que hacen a root privilegiado en Linux. El
+    // contenedor entraba en CrashLoopBackOff con "chown: ... Operation not permitted"
+    // contra un clúster real; ni la auditoria ni `yarn manifiestos` lo detectan, porque
+    // las dos comprueban que `drop` incluya "ALL", nunca que el entrypoint pueda
+    // arrancar de verdad.
+    const motor = contenedorDe(ms, "Deployment", "postgres", "postgres");
+    const concedidas = motor.securityContext?.capabilities?.add ?? [];
+    for (const necesaria of ["CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID"]) {
+      expect(concedidas).toContain(necesaria);
+    }
+  });
+
   it("todo contenedor tiene sin escalada de privilegios y sin capacidades", () => {
     const sinEndurecer = contenedoresDeTodo(ms).filter(
       ({ c }) =>

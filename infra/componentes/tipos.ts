@@ -77,13 +77,22 @@ export interface Recursos {
  * su propio comentario, con el motivo. `allowPrivilegeEscalation` y `capabilities.drop`
  * no tienen esa excusa: van en **todo** contenedor, y por eso `convenciones.seguridadBase`
  * los fija sin que nadie tenga que acordarse.
+ *
+ * `capabilities.add` existe por el mismo motivo que la ausencia de `runAsNonRoot`
+ * arriba: dejar caer TODAS las capacidades vuelve a "root" incapaz incluso de sus
+ * propias operaciones -un contenedor con `capabilities: { drop: ["ALL"] }` no puede
+ * `chown` un archivo aunque corra como UID 0, porque en Linux el privilegio de root
+ * viene de las capacidades, no del UID- (encontrado en CI: el `entrypoint` de
+ * PostgreSQL fallaba con "Operation not permitted" al tomar posesion de `PGDATA`).
+ * La respuesta correcta no es dejar de dropear TODO, es re-conceder por nombre
+ * exactamente lo que ese `entrypoint` necesita y nada mas.
  */
 export interface SecurityContext {
   runAsNonRoot?: boolean;
   /** Solo cuando el `USER` de la imagen no basta y hace falta nombrarlo (ej. `999`). */
   runAsUser?: number;
   allowPrivilegeEscalation: false;
-  capabilities: { drop: ["ALL"] };
+  capabilities: { drop: ["ALL"]; add?: string[] };
   /** Solo donde un contenedor no escribe nada fuera de sus volumenes montados. */
   readOnlyRootFilesystem?: boolean;
 }

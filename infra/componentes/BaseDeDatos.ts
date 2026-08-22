@@ -200,7 +200,22 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
               // proceso que de verdad atiende conexiones ya corre sin root -lo hace la
               // propia imagen, no este manifiesto-; forzar `runAsNonRoot` aqui no lo
               // asegura mas, rompe el `chown` inicial contra un volumen nuevo.
-              securityContext: seguridadBase(),
+              //
+              // `capabilities.add` (issue #157): dropear TODAS las capacidades vuelve a
+              // ese root sin ninguna de las que sus propias operaciones necesitan -en
+              // Linux el privilegio de root viene de las capacidades, no del UID-.
+              // Encontrado en CI: "chown: /var/lib/postgresql/data/pgdata: Operation not
+              // permitted" y "chmod: /var/run/postgresql: Operation not permitted", el
+              // contenedor en CrashLoopBackOff. Las cinco que re-concede son exactamente
+              // las que el `entrypoint` ejercita, no una lista generica: CHOWN y FOWNER
+              // para tomar posesion del volumen y del directorio del socket, DAC_OVERRIDE
+              // porque una comprobacion de permiso de por medio tambien depende de ella
+              // -no solo del dueño del archivo-, y SETUID/SETGID para el `gosu postgres`
+              // final, que sin ellas fallaria un paso mas adelante aunque el chown de
+              // arriba se corrigiera solo.
+              securityContext: seguridadBase({
+                capabilities: { drop: ["ALL"], add: ["CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID"] },
+              }),
               ports: [{ name: "postgres", containerPort: 5432 }],
               env: [
                 { name: "POSTGRES_DB", value: BASE_DEL_PADRON },
