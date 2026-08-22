@@ -479,6 +479,23 @@ export function contenedorDeDescargaDeWalg(): Contenedor {
     // Ninguno de los dos es el sistema de archivos raiz una vez que `/tmp` tambien
     // viene montado (`volumenDeTmpDeWalg`), asi que sellarlo no le quita nada y le
     // cierra al binario descargado la posibilidad de dejar algo fuera de su volumen.
+    //
+    // **Ejecutado, no razonado**, contra la imagen real -`curlimages/curl:8.11.0`, los
+    // `args` exactos de abajo, `--read-only`, UID 65534, todas las capacidades caidas y
+    // `no-new-privileges`, con los dos `emptyDir` emulados como directorios 1777-:
+    //
+    //   A) con `/tmp` montado, como lo declara este manifiesto -> exit 0. Deja
+    //      `/opt/wal-g/wal-g` de 64 402 920 bytes en modo 0755, `/tmp` vacio tras el
+    //      `rm` final, y el binario arranca: «wal-g version v3.0.5 94bf839». De paso
+    //      confirma que `WALG_SHA256` es el del release de verdad.
+    //   B) sellando la raiz SIN montar `/tmp` -> exit 23, «curl: (23) client returned
+    //      ERROR on write of 16384 bytes». En Kubernetes eso es un init container que
+    //      no termina, y detras un motor que nunca llega a Ready.
+    //   C) sin sellar la raiz y sin `/tmp` -haciendo memoria: el estado anterior a este
+    //      cambio- -> exit 0. Por eso el par no se notaba: solo importa una vez sellada.
+    //
+    // De ahi que el montaje de `/tmp` y este `readOnlyRootFilesystem` sean una sola
+    // decision y no dos, y que `componentes.test.ts` los exija juntos.
     securityContext: seguridadSinRoot({ runAsUser: 65534, readOnlyRootFilesystem: true }),
     resources: RECURSOS.auxiliar,
     volumeMounts: [

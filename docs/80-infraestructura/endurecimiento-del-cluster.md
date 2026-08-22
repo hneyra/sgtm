@@ -74,6 +74,20 @@ quitársela a cualquiera de ellos no ponía nada rojo, y la única constancia de
 es exacta en las dos direcciones: se pone roja si uno de los cuatro la pierde, y también si un
 quinto la gana sin pasar por aquí.
 
+**`wal-g-instalar` se ejecutó, no se razonó.** Contra la imagen real
+(`curlimages/curl:8.11.0`), con los `args` exactos del manifiesto, `--read-only`, UID 65534, todas
+las capacidades caídas y `no-new-privileges`, y los dos `emptyDir` emulados como directorios
+`1777`:
+
+| Caso | Resultado |
+|---|---|
+| Con `/tmp` montado —lo que el manifiesto declara— | **exit 0.** Deja `/opt/wal-g/wal-g` de 64 402 920 bytes en modo 0755, `/tmp` vacío tras el `rm` final, y el binario arranca: «wal-g version v3.0.5 94bf839». De paso confirma que `WALG_SHA256` es el del release de verdad |
+| Sellando la raíz **sin** montar `/tmp` | **exit 23**, «curl: (23) client returned ERROR on write of 16384 bytes». En Kubernetes: un init container que no termina, y detrás un motor que nunca llega a `Ready` |
+| Sin sellar la raíz y sin `/tmp` —el estado anterior a este cambio— | exit 0. Por eso el par no se notaba: solo importa una vez sellada la raíz |
+
+El montaje de `/tmp` y el `readOnlyRootFilesystem` son por eso **una sola decisión y no dos**, y
+`componentes.test.ts` los exige juntos.
+
 Los que **no** la llevan no es por olvido: Prometheus, Alertmanager, Grafana, Keycloak y los
 cuatro contenedores de la JVM escriben fuera de sus volúmenes —o no está comprobado que no lo
 hagan—, y sellarlos sin ejecutarlos contra un clúster sería cambiar un manifiesto que funciona
@@ -154,6 +168,25 @@ se puso rojo, y la corrección fue la que el issue pide: subir la etiqueta a `ng
 |---|---|
 | La reserva del nodo, contra un `k3s` real | El VPS piloto (`D-04`) |
 | `readOnlyRootFilesystem` en Prometheus, Alertmanager, Grafana, Keycloak y los cuatro contenedores de la JVM | Ejecutar cada imagen con la raíz sellada y ver qué ruta reclama. Los cuatro que sí la llevan están en §2; sellar el resto a ciegas es la clase de cambio que este PR ya vio fallar dos veces contra un clúster real y ninguna en `yarn verificar` |
+
+## 6-bis. Lo que este PR no pudo verificar en CI
+
+Los flujos de GitHub Actions de la cuenta se quedaron **sin cuota** mientras se cerraba este
+issue, así que las comprobaciones que necesitan un clúster no llegaron a correr sobre el último
+commit. Lo que sí se ejecutó, y dónde:
+
+| Comprobación | Cómo se ejecutó sin CI |
+|---|---|
+| `yarn verificar` (lint, tipos, 177 pruebas) | En local, en verde, con cada comprobación nueva demostrada que muerde |
+| El init container de wal-g con la raíz sellada | Contra la imagen real, con Docker. Los tres casos de §2 |
+| El esquema de los 60 objetos de cada ambiente | `kubeconform -strict` contra los esquemas JSON de Kubernetes 1.31, en `stg` y en `prod`: 60/60 válidos. Demostrado que puede fallar escribiendo `readOnlyRootFileSystem` con la `S` de más — el esquema estricto lo rechaza por `additionalProperties` |
+
+**Sigue sin correr, y hace falta cuota para ello:** `kind` no arranca en el entorno de desarrollo
+—`/sys/fs/cgroup` es `tmpfs`, así que el kubelet no puede gestionar cgroups y el plano de control
+nunca sube—, y `registry.k8s.io` y `quay.io` están bloqueados por la política de egreso. Eso deja
+fuera los trabajos que aplican los manifiestos contra un API server de verdad, `verificar-red.sh`
+contra Calico, el simulacro de restauración y las dos comprobaciones de observabilidad. `kubeconform`
+valida el esquema, no la admisión ni los valores por omisión del API server: **no lo sustituye.**
 
 ## 7. Documentos relacionados
 
