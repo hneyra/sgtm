@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Origen | [#116](https://github.com/hneyra/sgtm/issues/116) — refinamiento técnico y funcional |
-| Estado | **En ejecución.** E-1 y E-2 hechos; E-3, E-5, E-6 y E-7 abiertos como issues; E-4 **aplazado**. Ver §0 |
+| Estado | **En ejecución.** E-1, E-2 y E-5 hechos; E-7 con sus dos entregables de código hechos; E-3 **con su barrera puesta y la transcripción pendiente**; E-6 esperando la ordenanza; E-4 **aplazado**, ya reevaluado. Ver §0 |
 | Decide | Dirección del proyecto (E-4 y E-6); el resto no requiere autorización |
 | No hace | No cierra D-02, no carga ninguna cifra y no sustituye a [GOB-02](decisiones-abiertas.md) |
 
@@ -83,17 +83,17 @@ ahora explica por qué nunca debió llevarla.
 
 | Paquete | Issue | Estado |
 |---|---|---|
-| **E-3** transcribir y firmar D-02a | #200 | Abierto. **Es el de mayor rendimiento y no espera a nadie** |
+| **E-3** transcribir y firmar D-02a | #200 | Abierto, **con la barrera ya puesta**. `docs/10-negocio/valores-normativos/` existe con su plantilla y su comprobación: cabecera de ocho campos, **dos firmas distintas**, filas del mapa que cierra —en las dos direcciones— y ningún `INSERT` de valores en una migración. Hoy imprime **17 filas de `D-02a` sin archivo**; bajarlo es el paquete. Lo que falta no es código: es leer las normas y firmarlas, y eso lo hacen dos personas |
 | **E-5** el corpus de casos | #201 | **Hecho.** 32 casos en `sgtm-rentas/src/test/resources/casos/`, uno por regla de NEG-05, con los 17 casos borde de §2 enumerados. Dos ejecutables, y los otros treinta con **quien los impide** en su fila. Al hacerlo salieron tres hallazgos: H-10, H-11 y H-12 (§0.6) |
 | **E-6** la municipalidad de demostración | #202 | Abierto. Tres de sus cuatro entregables **ya existen**; falta elegir la ordenanza |
 | **E-7** puntos de redondeo y campaña de D-03c | #203 | **Entregables 1 y 2 hechos**: `PuntoDeRedondeo` con sus catorce puntos, `PoliticasDeRedondeo` que falla cuando falta uno, y el formulario de la campaña en `docs/10-negocio/observaciones-srtm-mef/`. Queda la campaña, que necesita acceso al SRTM del MEF |
-| **E-4** el estado `PROVISIONAL` | — | **Aplazado**, con el motivo de §E-4. Se reevalúa al cerrar #201, con el caso concreto delante. No se abre issue para no fingir que hay trabajo aprobado |
+| **E-4** el estado `PROVISIONAL` | — | **Reevaluado al cerrar #201, y sigue aplazado** —ahora con evidencia, ver §0.7—. No se abre issue para no fingir que hay trabajo aprobado |
 
 ### 0.5 Las cinco decisiones de §4
 
 | # | Decisión | Estado |
 |---|---|---|
-| 1 | E-4 sí o no | **Resuelta: no todavía.** Es la recomendación del plan, y sigue en pie tras ejecutar E-1 y E-2 |
+| 1 | E-4 sí o no | **Resuelta: no todavía.** Reevaluada al cerrar #201 con el caso concreto delante, que es lo que el plan pedía. Ver §0.7 |
 | 2 | E-6: qué ordenanza | **Abierta.** Decide Rentas; es lo único que le falta a #202 |
 | 3 | D-13: ámbito de las tablas de valuación | **Registrada en [GOB-02](decisiones-abiertas.md) como D-13.** Decide Arquitectura. Bloquea la carga de E-3, no su transcripción |
 | 4 | H-4: la dimensión que falta en `valor_unitario_edificacion` | **Abierta.** #17 está cerrado, así que ya no puede entrar «en su hijo estructura»: entra donde se cargue el cuadro, junto con D-13 |
@@ -116,6 +116,26 @@ D-11**: no es que falte el valor del factor, es que no se sabe si el factor exis
 corpus no es solo un juego de casos: es un **libro mayor** donde cada caso dice quién lo impide, y
 la prueba comprueba que eso sea verdad en las dos direcciones —un caso declarado «sin regla» cuya
 regla sí está registrada la pone en rojo—.
+
+### 0.7 E-4, reevaluado con el caso delante
+
+El plan aplazaba el tercer estado `PROVISIONAL` y se comprometía a **reevaluarlo al cerrar #201**,
+con un caso concreto en vez de una hipótesis. Ya lo hay, y la recomendación **se mantiene**. Lo que
+cambia es que ahora se puede argumentar en vez de recomendar:
+
+| Lo que E-4 prometía | Dónde está hoy |
+|---|---|
+| Ejercitar el grafo entero con cifras que no son normativas | `CorpusDeCasosTest` y `MotorDeReglasTest`, **en memoria**, sin una sola fila en la base |
+| Que una cifra sin valor normativo no produzca un importe que alguien tome por bueno | La comprobación *no se admite un `esperado` si los parámetros son ficticios*, del propio corpus |
+| Cuatro piezas: migración con `CHECK` y dos disparadores, `ParametrosDeSimulacion` como tipo, regla de arquitectura con su muestra, y prueba gemela sin el disparador | Sigue sin escribirse, y su coste no ha bajado |
+
+La barrera que justificaba el estado —lo segundo— **existe al coste de una comprobación**, no de
+una migración irreversible. Y H-7 sigue en pie: un `parametro_tributario` no sabe si es provisional,
+así que el estado por sí solo no impediría que una fila provisional acabara en un conjunto sellado.
+
+**Se reevaluará otra vez si aparece un caso que exija el camino persistido** —una emisión de punta a
+punta que no se pueda montar en memoria—. Hoy no aparece, y meter cifras inventadas en la base para
+cubrir un camino que ya está cubierto es la antiestrategia de §5.
 
 ## 1. Lo que se verificó antes de planificar
 
