@@ -61,7 +61,7 @@ jobs:
           tags: local/${{ matrix.imagen }}:pr-${{ github.event.pull_request.number }}
 
       - name: Trivy — resumen (CRITICAL y HIGH, no bloqueante)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: local/${{ matrix.imagen }}:pr-${{ github.event.pull_request.number }}
           format: table
@@ -80,7 +80,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Trivy — bloqueante (solo CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: local/${{ matrix.imagen }}:pr-${{ github.event.pull_request.number }}
           format: table
@@ -116,7 +116,7 @@ jobs:
             VITE_SGTM_OIDC_FIN_DE_SESION=https://escaneo.invalido/keycloak/realms/sgtm/protocol/openid-connect/logout
 
       - name: Trivy — resumen (CRITICAL y HIGH, no bloqueante)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: local/sgtm-interfaz:pr-${{ github.event.pull_request.number }}
           format: table
@@ -135,7 +135,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Trivy — bloqueante (solo CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: local/sgtm-interfaz:pr-${{ github.event.pull_request.number }}
           format: table
