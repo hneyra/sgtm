@@ -1,0 +1,42 @@
+# Verificación de la documentación que se comprueba sola.
+#
+# Hoy es una: el **mapa normativo** de NEG-02 §2. Dice, para cada dato normativo
+# que falta, qué norma lo fija, qué parte de D-02 lo bloquea y qué issues lo
+# esperan; de ahí sale el etiquetado del tablero. Las dos cosas tienen que decir
+# lo mismo, y el guion lo comprueba en las dos direcciones.
+#
+# Va en su propio flujo y no dentro del de frontend porque no necesita `yarn`
+# ni el espacio de trabajo: es Node pelado sobre dos archivos de `docs/`.
+#
+# Si mañana se automatiza la cabecera de los archivos de valores normativos
+# (E-3, #200), su guion entra aquí al lado.
+name: Documentación
+
+on:
+  pull_request:
+    paths:
+      ['docs/10-negocio/**', '.github/workflows/documentacion.yml']
+  push:
+    branches: [main]
+    paths:
+      ['docs/10-negocio/**', '.github/workflows/documentacion.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: Mapa normativo
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: El mapa normativo y el tablero dicen lo mismo
+        run: node docs/10-negocio/verificar-mapa-normativo.mjs
