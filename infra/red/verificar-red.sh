@@ -12,10 +12,13 @@
 #      PostgreSQL.
 #   2. Desde un pod con las etiquetas de la aplicacion, no se puede alcanzar un
 #      destino de internet que no este en la lista blanca.
-#   3. Quitando la politica de PostgreSQL, la MISMA conexion del punto 1 pasa a
-#      CONECTAR -la prueba de que la politica hacia algo, no que estaba mal
-#      etiquetada y sencillamente no seleccionaba ningun pod (issue #157, "como se
-#      demuestra que puede fallar").
+#   3. Quitando la denegacion por omision, la MISMA conexion del punto 1 pasa a
+#      CONECTAR -la prueba de que las politicas de arriba hacian algo, no que
+#      estaban mal etiquetadas y sencillamente no seleccionaban ningun pod (issue
+#      #157, "como se demuestra que puede fallar"). Quita `denegar-todo` entera y
+#      no solo la politica de ingreso de postgres: la interfaz tiene su PROPIA
+#      salida restringida (`permitir-salida-interfaz`), y quitar solo un lado
+#      dejaria la conexion bloqueada igual por el otro.
 #
 # La interfaz y la aplicacion no tienen imagen publicable desde este repositorio
 # (issue #156 ya documento el mismo limite para sus tableros): las pruebas 1 y 2 no
@@ -173,15 +176,22 @@ echo "  Bloqueado: correcto -la aplicacion no tiene ninguna dependencia externa 
 
 echo
 echo "· La demostracion que el issue pide: sin la politica, la MISMA conexion CONECTA"
-kubectl -n "$NS" delete networkpolicy permitir-ingreso-postgres >/dev/null
+# `denegar-todo`, no solo `permitir-ingreso-postgres`: la interfaz TAMBIEN tiene su
+# propia salida restringida a aplicacion (`permitir-salida-interfaz`), asi que
+# quitar solo la politica de ingreso de postgres no bastaria -la conexion seguiria
+# bloqueada por el lado de la interfaz, y esta demostracion daria un falso FALLO
+# aunque las dos politicas esten haciendo su trabajo-. Quitando la denegacion por
+# omision entera se comprueba lo que el issue pide de verdad: que hay AL MENOS una
+# politica real detras del bloqueo, no una decorativa.
+kubectl -n "$NS" delete networkpolicy denegar-todo >/dev/null
 if ! puede_conectar "$NS" sintetico-interfaz "sgtm-stg-postgres" 5432; then
-    echo "FALLO: quitando permitir-ingreso-postgres, la interfaz SIGUE sin poder conectar." >&2
-    echo "Eso significa que la politica de arriba no estaba haciendo nada -probablemente" >&2
-    echo "denegar-todo bloqueando por otra via, o un podSelector que nunca selecciono a" >&2
-    echo "postgres- y la comprobacion de 1/2 pasaba en verde por la razon equivocada." >&2
+    echo "FALLO: quitando denegar-todo, la interfaz SIGUE sin poder conectar. Eso" >&2
+    echo "significa que ninguna politica de las de arriba estaba haciendo nada -un" >&2
+    echo "podSelector que nunca selecciono a los pods correctos- y las comprobaciones" >&2
+    echo "1/2 y 2/2 pasaban en verde por la razon equivocada." >&2
     exit 1
 fi
-echo "  Conecta: permitir-ingreso-postgres SI estaba haciendo algo, no era decorativa."
+echo "  Conecta: denegar-todo SI estaba haciendo algo, no era decorativa."
 
 echo
 echo "Denegacion por omision, verificada contra Calico: lo que Red.ts declara es lo que"
