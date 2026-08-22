@@ -12,13 +12,17 @@
 #      PostgreSQL.
 #   2. Desde un pod con las etiquetas de la aplicacion, no se puede alcanzar un
 #      destino de internet que no este en la lista blanca.
-#   3. Quitando la denegacion por omision, la MISMA conexion del punto 1 pasa a
-#      CONECTAR -la prueba de que las politicas de arriba hacian algo, no que
-#      estaban mal etiquetadas y sencillamente no seleccionaban ningun pod (issue
-#      #157, "como se demuestra que puede fallar"). Quita `denegar-todo` entera y
-#      no solo la politica de ingreso de postgres: la interfaz tiene su PROPIA
-#      salida restringida (`permitir-salida-interfaz`), y quitar solo un lado
-#      dejaria la conexion bloqueada igual por el otro.
+#   3. Quitando las dos politicas que gobiernan el flujo del punto 1, la MISMA
+#      conexion pasa a CONECTAR -la prueba de que hacian algo, no que estaban mal
+#      etiquetadas y sencillamente no seleccionaban ningun pod (issue #157, "como
+#      se demuestra que puede fallar"). NO basta con quitar `denegar-todo`: en
+#      Kubernetes, un pod seleccionado por CUALQUIER `NetworkPolicy` de un tipo
+#      -Ingress o Egress- queda restringido a lo que esa politica permite, con
+#      `denegar-todo` presente o no. La interfaz tiene su propia salida restringida
+#      (`permitir-salida-interfaz`) y postgres su propio ingreso restringido
+#      (`permitir-ingreso-postgres`): las DOS gobiernan este flujo de forma
+#      independiente, y hay que quitar las dos -confirmado en CI: quitar solo
+#      `denegar-todo` no desbloqueaba nada, la conexion seguia fallando-.
 #
 # La interfaz y la aplicacion no tienen imagen publicable desde este repositorio
 # (issue #156 ya documento el mismo limite para sus tableros): las pruebas 1 y 2 no
@@ -175,23 +179,25 @@ fi
 echo "  Bloqueado: correcto -la aplicacion no tiene ninguna dependencia externa hoy-."
 
 echo
-echo "· La demostracion que el issue pide: sin la politica, la MISMA conexion CONECTA"
-# `denegar-todo`, no solo `permitir-ingreso-postgres`: la interfaz TAMBIEN tiene su
-# propia salida restringida a aplicacion (`permitir-salida-interfaz`), asi que
-# quitar solo la politica de ingreso de postgres no bastaria -la conexion seguiria
-# bloqueada por el lado de la interfaz, y esta demostracion daria un falso FALLO
-# aunque las dos politicas esten haciendo su trabajo-. Quitando la denegacion por
-# omision entera se comprueba lo que el issue pide de verdad: que hay AL MENOS una
-# politica real detras del bloqueo, no una decorativa.
-kubectl -n "$NS" delete networkpolicy denegar-todo >/dev/null
+echo "· La demostracion que el issue pide: sin las politicas, la MISMA conexion CONECTA"
+# Las DOS que gobiernan este flujo, no `denegar-todo`: en Kubernetes, un pod
+# seleccionado por CUALQUIER NetworkPolicy de un tipo -Ingress o Egress- queda
+# restringido a lo que esa politica permite, con `denegar-todo` presente o no.
+# La interfaz tiene su propia salida restringida (`permitir-salida-interfaz`) y
+# postgres su propio ingreso restringido (`permitir-ingreso-postgres`): las dos
+# bloquean esta conexion de forma INDEPENDIENTE, y confirmado en CI: quitar solo
+# `denegar-todo` no desbloqueaba nada -la conexion seguia fallando, un falso
+# FALLO en una demostracion que en realidad probaba que las politicas SI
+# trabajan-.
+kubectl -n "$NS" delete networkpolicy permitir-salida-interfaz permitir-ingreso-postgres >/dev/null
 if ! puede_conectar "$NS" sintetico-interfaz "sgtm-stg-postgres" 5432; then
-    echo "FALLO: quitando denegar-todo, la interfaz SIGUE sin poder conectar. Eso" >&2
-    echo "significa que ninguna politica de las de arriba estaba haciendo nada -un" >&2
-    echo "podSelector que nunca selecciono a los pods correctos- y las comprobaciones" >&2
-    echo "1/2 y 2/2 pasaban en verde por la razon equivocada." >&2
+    echo "FALLO: quitando las dos politicas, la interfaz SIGUE sin poder conectar." >&2
+    echo "Eso significa que ninguna de las dos estaba haciendo nada -un podSelector" >&2
+    echo "que nunca selecciono a los pods correctos- y las comprobaciones 1/2 y 2/2" >&2
+    echo "pasaban en verde por la razon equivocada." >&2
     exit 1
 fi
-echo "  Conecta: denegar-todo SI estaba haciendo algo, no era decorativa."
+echo "  Conecta: las dos politicas SI estaban haciendo algo, no eran decorativas."
 
 echo
 echo "Denegacion por omision, verificada contra Calico: lo que Red.ts declara es lo que"

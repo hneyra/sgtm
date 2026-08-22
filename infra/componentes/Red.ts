@@ -162,9 +162,13 @@ function permitirIngresoPublico(environment: Environment, namespace: string): Ne
 }
 
 /**
- * Lo que llega a PostgreSQL, y de nadie mas — esta es la politica que el propio
- * issue pide poder apagar para demostrar que protege algo: sin ella, el pod de la
- * interfaz alcanza el motor.
+ * Lo que llega a PostgreSQL, y de nadie mas — esta es una de las dos politicas
+ * que el propio issue pide poder apagar para demostrar que protegen algo (la
+ * otra es `permitir-salida-interfaz`, mas abajo: en Kubernetes un pod
+ * seleccionado por CUALQUIER `NetworkPolicy` de un tipo queda restringido a esa
+ * politica, asi que el ingreso de postgres y la salida de la interfaz bloquean
+ * este flujo de forma independiente, y `verificar-red.sh` quita las dos a la
+ * vez para demostrarlo).
  */
 function permitirIngresoPostgres(environment: Environment, namespace: string): NetworkPolicy {
   return politica(namespace, "permitir-ingreso-postgres", {
