@@ -472,15 +472,38 @@ export function contenedorDeDescargaDeWalg(): Contenedor {
     // que lo sea: el volumen que monta es un `emptyDir` -escribible por cualquier
     // UID por convencion del kubelet- y el resto de la tarea (`curl`, `sha256sum`,
     // `tar`, `chmod`, `mv`) no depende de poseer ningun archivo de la imagen.
-    securityContext: seguridadSinRoot({ runAsUser: 65534 }),
+    // `readOnlyRootFilesystem` es lo que el issue #157 pide «donde se pueda», y aqui
+    // se puede sin adivinar: la tarea entera escribe en exactamente dos sitios, los
+    // dos leibles de sus propios `args` de arriba -`/tmp`, para el `.tar.gz` que
+    // descarga y desempaqueta, y `WALG_DIRECTORIO`, que es el `emptyDir` compartido-.
+    // Ninguno de los dos es el sistema de archivos raiz una vez que `/tmp` tambien
+    // viene montado (`volumenDeTmpDeWalg`), asi que sellarlo no le quita nada y le
+    // cierra al binario descargado la posibilidad de dejar algo fuera de su volumen.
+    securityContext: seguridadSinRoot({ runAsUser: 65534, readOnlyRootFilesystem: true }),
     resources: RECURSOS.auxiliar,
-    volumeMounts: [{ name: "wal-g-bin", mountPath: WALG_DIRECTORIO }],
+    volumeMounts: [
+      { name: "wal-g-bin", mountPath: WALG_DIRECTORIO },
+      { name: "wal-g-tmp", mountPath: "/tmp" },
+    ],
   };
 }
 
 /** El volumen `emptyDir` que comparte el binario entre el contenedor de descarga y el que lo usa. */
 export function volumenDeWalg(): Volumen {
   return { name: "wal-g-bin", emptyDir: {} };
+}
+
+/**
+ * El `/tmp` del contenedor de descarga, para que su raiz pueda ir de solo lectura.
+ *
+ * Va aparte de `wal-g-bin` a proposito: ese lo monta tambien el contenedor principal
+ * —de solo lectura, con `montajeDeWalg()`—, y el `.tar.gz` intermedio no tiene por que
+ * asomar ahi. Un `emptyDir` es escribible por cualquier UID por convencion del
+ * kubelet, que es lo que deja que el `runAsUser: 65534` de arriba escriba en el sin
+ * tener que coincidir con el usuario de la imagen.
+ */
+export function volumenDeTmpDeWalg(): Volumen {
+  return { name: "wal-g-tmp", emptyDir: {} };
 }
 
 /** Donde monta el binario el contenedor que YA no lo descarga: siempre de solo lectura. */

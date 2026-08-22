@@ -14,6 +14,7 @@ import {
   variablesWalg,
   volumenDeDatos,
   volumenDeWalg,
+  volumenDeTmpDeWalg,
   WALG_BINARIO,
 } from "./convenciones";
 import type { CronJob, Manifiesto } from "./tipos";
@@ -232,6 +233,7 @@ export function manifiestosDeRespaldo(args: RespaldoArgs): Manifiesto[] {
                   persistentVolumeClaim: { claimName: volumenDeDatos(environment) },
                 },
                 volumenDeWalg(),
+                volumenDeTmpDeWalg(),
               ],
             },
           },

@@ -1118,6 +1118,52 @@ describe("#157 · endurecimiento", () => {
     expect(sinLimites.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
   });
 
+  it("los contenedores que no escriben fuera de sus volumenes llevan la raiz sellada", () => {
+    // `readOnlyRootFilesystem` es el «donde se pueda» del alcance del issue #157, y
+    // «donde se pueda» es una lista, no una regla universal: sellarlo en un
+    // contenedor que si escribe en su raiz no lo endurece, lo rompe -y lo rompe
+    // contra un clúster real, no aqui, que es como este mismo PR descubrio lo de
+    // `capabilities.drop` y lo de `runAsNonRoot`-.
+    //
+    // Esta prueba fija la lista de los que SI la llevan. Tres de ellos ya la
+    // llevaban desde el issue #156 sin que ninguna prueba lo dijera: sin fijarla,
+    // quitarla de cualquiera de los tres no habria puesto nada rojo, y la unica
+    // constancia de que era una decision -y no un descuido de copiar y pegar- era
+    // que estaba escrita.
+    const CON_RAIZ_SELLADA = new Set([
+      // Exportadores: leen una fuente y sirven /metrics. Ninguno escribe.
+      "postgres-exporter",
+      "node-exporter",
+      "kube-state-metrics",
+      // Descarga, verifica y mueve; escribe en `/tmp` y en el `emptyDir` compartido,
+      // los dos montados (ver `contenedorDeDescargaDeWalg`).
+      "wal-g-instalar",
+    ]);
+    const sellados = contenedoresDeTodo(ms)
+      .filter(({ c }) => c.securityContext?.readOnlyRootFilesystem === true)
+      .map(({ c }) => c.name);
+    expect(new Set(sellados)).toEqual(CON_RAIZ_SELLADA);
+  });
+
+  it("el que descarga wal-g tiene `/tmp` montado: sin eso, sellar la raiz lo rompe", () => {
+    // El orden importa y por eso son dos comprobaciones y no una: la raiz sellada
+    // sin un `/tmp` escribible convierte el `curl -o /tmp/wal-g.tar.gz` en un fallo
+    // de arranque del pod entero -el init container no termina, y el motor detras
+    // nunca llega a Ready-.
+    for (const donde of ["Deployment", "CronJob"] as const) {
+      const pods = podsDeTodo(ms).filter(({ donde: d }) => d.startsWith(donde));
+      const conDescarga = pods.filter(({ pod }) =>
+        contenedoresDe(pod).some((c) => c.name === "wal-g-instalar"),
+      );
+      expect(conDescarga.length).toBeGreaterThan(0);
+      for (const { pod } of conDescarga) {
+        const descarga = contenedoresDe(pod).find((c) => c.name === "wal-g-instalar")!;
+        expect(descarga.volumeMounts?.map((v) => v.mountPath)).toContain("/tmp");
+        expect((pod.volumes ?? []).map((v) => v.name)).toContain("wal-g-tmp");
+      }
+    }
+  });
+
   // Las tres de abajo son el «falta auditar y completar» de las clases de prioridad.
   // Lo que ya habia comprobaba que ningun pod se OLVIDA de declarar su clase; lo que
   // faltaba es que las clases esten en el orden correcto, que es de donde sale el

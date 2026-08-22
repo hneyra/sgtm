@@ -53,15 +53,57 @@ puñado de contenedores, auditada por separado en `verificaciones/componentes.te
 movido a `/tmp` y permisos de grupo —no un `runAsUser` fijo— sobre `/var/cache/nginx` y
 `/etc/nginx`, para seguir funcionando bajo cualquier UID que Kubernetes le asigne.
 
+### La raíz de solo lectura, y por qué es una lista y no una regla
+
+El alcance del issue pide sistema de archivos raíz de solo lectura **«donde se pueda»**, y ese
+«donde se pueda» es literal: `readOnlyRootFilesystem: true` sobre un contenedor que sí escribe en
+su raíz no lo endurece, lo rompe —y lo rompe contra un clúster real, no en `yarn verificar`, que
+es exactamente cómo este PR descubrió lo de `capabilities.drop` sobre el `entrypoint` de
+PostgreSQL y lo de `runAsNonRoot` sobre seis imágenes con `USER` no numérico—.
+
+Cuatro contenedores la llevan hoy, y la lista está fijada en `componentes.test.ts`:
+
+| Contenedor | Por qué se puede |
+|---|---|
+| `postgres-exporter`, `node-exporter`, `kube-state-metrics` | Leen una fuente y sirven `/metrics`. No escriben nada |
+| `wal-g-instalar` | Escribe en exactamente dos sitios, los dos leíbles de sus propios `args`: `/tmp` —el `.tar.gz` que descarga y desempaqueta— y el `emptyDir` compartido con el motor. Con `/tmp` también montado como `emptyDir`, ninguno de los dos es la raíz |
+
+Los tres primeros ya la llevaban desde el issue #156 **sin que ninguna prueba lo dijera**:
+quitársela a cualquiera de ellos no ponía nada rojo, y la única constancia de que era una decisión
+—y no un descuido al copiar y pegar un `securityContext`— era que estaba escrita. Ahora la lista
+es exacta en las dos direcciones: se pone roja si uno de los cuatro la pierde, y también si un
+quinto la gana sin pasar por aquí.
+
+Los que **no** la llevan no es por olvido: Prometheus, Alertmanager, Grafana, Keycloak y los
+cuatro contenedores de la JVM escriben fuera de sus volúmenes —o no está comprobado que no lo
+hagan—, y sellarlos sin ejecutarlos contra un clúster sería cambiar un manifiesto que funciona
+por uno que no. Queda en §6.
+
 ## 3. Límites, prioridades y sondas
 
-Esto no lo introdujo el issue #157: `convenciones.RECURSOS` y `clasesDePrioridad` existen desde
-que se desplegó el primer componente (#150–#153), y `auditoria.auditarRecursos` ya hacía
-bloqueante que todo contenedor declare `requests` y `limits`. Lo que el issue confirma es que
-sigue siendo así — `EspecificacionDePod.priorityClassName` es un campo **obligatorio** del tipo,
-no opcional, así que un pod sin clase de prioridad no compila. `convenciones.ESPERA_DE_SONDA = 3`
-fija el `timeoutSeconds` de toda sonda por encima del valor por omisión del kubelet (1 s, la causa
-del incidente de `../iaac` documentado en `INF-01` §4).
+`convenciones.RECURSOS` y `clasesDePrioridad` existen desde que se desplegó el primer componente
+(#150–#153), y `auditoria.auditarRecursos` ya hacía bloqueante que todo contenedor declare
+`requests` y `limits`. `EspecificacionDePod.priorityClassName` es además un campo **obligatorio**
+del tipo, no opcional, así que un pod sin clase de prioridad no compila.
+`convenciones.ESPERA_DE_SONDA = 3` fija el `timeoutSeconds` de toda sonda por encima del valor por
+omisión del kubelet (1 s, la causa del incidente de `../iaac` documentado en `INF-01` §4).
+
+**Lo que faltaba era el orden, que es de donde sale el sentido entero de tener clases.** Todo lo
+anterior responde a «¿se acordó alguien de declararlo?». No responde a lo que el issue pone como
+no-negociable: *«la base de datos se desaloja la última»*. Comprobado ejecutándolo —no razonándolo—:
+intercambiando `PRIORIDADES.datos` y `PRIORIDADES.lote` en `convenciones.ts`, con PostgreSQL en la
+prioridad **más baja** del clúster y las emisiones masivas en la más alta, las 170 pruebas de
+`yarn verificar` seguían en verde. Cada pod seguía declarando su clase; solo que bajo presión de
+memoria el kubelet desalojaba la base **primero**, sin ningún síntoma hasta el día que el nodo se
+quede sin memoria —el peor día para descubrirlo, porque con un solo nodo no hay a dónde mover lo
+desalojado—.
+
+`auditoria.auditarPrioridades` cierra eso con dos reglas leídas del manifiesto: toda clase que un
+pod nombre tiene que estar **definida en el mismo manifiesto** —Kubernetes rechaza un pod cuya
+`PriorityClass` no existe: no es un despliegue con menos garantías, es un pod que no arranca—, y
+ningún pod puede valer tanto o más que el del motor salvo que use su misma clase, lo que deja
+sitio a una futura réplica del tramo de datos sin abrir la puerta a que la interfaz empate con la
+base.
 
 ## 4. La reserva del nodo, y su ventana de mantenimiento
 
@@ -111,7 +153,7 @@ se puso rojo, y la corrección fue la que el issue pide: subir la etiqueta a `ng
 | Sin verificar | Qué haría falta |
 |---|---|
 | La reserva del nodo, contra un `k3s` real | El VPS piloto (`D-04`) |
-| `readOnlyRootFilesystem` | El tipo lo admite (`SecurityContext.readOnlyRootFilesystem`); ningún componente lo usa todavía — auditar cuáles pueden y aplicarlo es trabajo aparte |
+| `readOnlyRootFilesystem` en Prometheus, Alertmanager, Grafana, Keycloak y los cuatro contenedores de la JVM | Ejecutar cada imagen con la raíz sellada y ver qué ruta reclama. Los cuatro que sí la llevan están en §2; sellar el resto a ciegas es la clase de cambio que este PR ya vio fallar dos veces contra un clúster real y ninguna en `yarn verificar` |
 
 ## 7. Documentos relacionados
 

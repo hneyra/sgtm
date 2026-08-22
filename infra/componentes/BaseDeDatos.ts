@@ -16,6 +16,7 @@ import {
   variablesWalg,
   volumenDeDatos,
   volumenDeWalg,
+  volumenDeTmpDeWalg,
   WALG_BINARIO,
 } from "./convenciones";
 import {
@@ -318,6 +319,7 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
             // claves asignadas.
             { name: "inicializacion", configMap: { name: inicializacion.metadata.name, defaultMode: 493 } },
             volumenDeWalg(),
+            volumenDeTmpDeWalg(),
           ],
         },
       },
