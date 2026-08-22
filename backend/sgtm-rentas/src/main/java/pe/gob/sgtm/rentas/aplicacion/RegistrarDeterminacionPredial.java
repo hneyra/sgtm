@@ -14,7 +14,7 @@ import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
-import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
+import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
 import pe.gob.sgtm.parametros.InsumosDeLaAgregacion;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
@@ -84,7 +84,7 @@ public class RegistrarDeterminacionPredial {
      *     propiedad y base ya ponderada); nunca vacio (NEG-05 §1: sin predios no hay base)
      * @param tramos el cuadro progresivo vigente, resuelto por quien conoce la ordenanza (D-02b)
      * @param minimoImponible el minimo del ejercicio (D-02b)
-     * @param redondeo la politica con que se redondea el impuesto (D-03)
+     * @param redondeo las politicas con que se redondea, una por punto (D-03c)
      * @param observacion por que se registra (regla 10)
      */
     @Transactional
@@ -94,7 +94,7 @@ public class RegistrarDeterminacionPredial {
             List<DetalleDeterminacionPredio> predios,
             List<Tramo> tramos,
             Dinero minimoImponible,
-            PoliticaDeRedondeo redondeo,
+            PoliticasDeRedondeo redondeo,
             Observacion observacion) {
         Objects.requireNonNull(ejercicio, "La determinacion necesita su ejercicio");
         Objects.requireNonNull(predios, "La lista de predios es vacia, no nula");
