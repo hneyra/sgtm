@@ -16,16 +16,24 @@ import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
  * <p>Los datos declarados son un {@link EstadoDelCalculo} y no un solo importe: un predio entra con
  * su area, su antiguedad y su porcentaje de propiedad, y de ahi salen tres ramas —terreno,
  * edificacion y obras complementarias— que convergen despues.
+ *
+ * <p>Las {@link CaracteristicasDeLaPartida} son lo que el predio <b>es</b> y no cuanto vale: la
+ * via, la categoria, el material. Son las llaves con que las reglas de valuacion buscan su
+ * parametro.
  */
 public record EntradaDeCalculo(
         Ejercicio ejercicio,
         EstadoDelCalculo declarados,
+        CaracteristicasDeLaPartida caracteristicas,
         ParametrosSellados parametros,
         PoliticasDeRedondeo redondeo) {
 
     public EntradaDeCalculo {
         Objects.requireNonNull(ejercicio, "El ejercicio del hecho imponible entra como argumento");
         Objects.requireNonNull(declarados, "Los datos declarados son un estado, vacio si no hay");
+        Objects.requireNonNull(
+                caracteristicas,
+                "Las caracteristicas de la partida son un objeto, vacio si no hay");
         Objects.requireNonNull(parametros, "La regla necesita el conjunto sellado");
         Objects.requireNonNull(
                 redondeo, "Las politicas de redondeo se reciben, no se fijan (D-03)");

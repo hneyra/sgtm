@@ -84,7 +84,7 @@ ahora explica por qué nunca debió llevarla.
 | Paquete | Issue | Estado |
 |---|---|---|
 | **E-3** transcribir y firmar D-02a | #200 | Abierto. **Es el de mayor rendimiento y no espera a nadie** |
-| **E-5** el corpus de casos | #201 | Abierto |
+| **E-5** el corpus de casos | #201 | **Hecho.** 32 casos en `sgtm-rentas/src/test/resources/casos/`, uno por regla de NEG-05, con los 17 casos borde de §2 enumerados. Dos ejecutables, y los otros treinta con **quien los impide** en su fila. Al hacerlo salieron tres hallazgos: H-10, H-11 y H-12 (§0.6) |
 | **E-6** la municipalidad de demostración | #202 | Abierto. Tres de sus cuatro entregables **ya existen**; falta elegir la ordenanza |
 | **E-7** puntos de redondeo y campaña de D-03c | #203 | **Entregables 1 y 2 hechos**: `PuntoDeRedondeo` con sus catorce puntos, `PoliticasDeRedondeo` que falla cuando falta uno, y el formulario de la campaña en `docs/10-negocio/observaciones-srtm-mef/`. Queda la campaña, que necesita acceso al SRTM del MEF |
 | **E-4** el estado `PROVISIONAL` | — | **Aplazado**, con el motivo de §E-4. Se reevalúa al cerrar #201, con el caso concreto delante. No se abre issue para no fingir que hay trabajo aprobado |
@@ -98,6 +98,24 @@ ahora explica por qué nunca debió llevarla.
 | 3 | D-13: ámbito de las tablas de valuación | **Registrada en [GOB-02](decisiones-abiertas.md) como D-13.** Decide Arquitectura. Bloquea la carga de E-3, no su transcripción |
 | 4 | H-4: la dimensión que falta en `valor_unitario_edificacion` | **Abierta.** #17 está cerrado, así que ya no puede entrar «en su hijo estructura»: entra donde se cargue el cuadro, junto con D-13 |
 | 5 | H-3: anuncios y costas coactivas | **Anuncios, resuelto**: pasa a `D-02b` (fila 18). **Costas, abierto**: la fila 23 queda `D-02c ‹confirmar›` hasta saber quién aprueba el arancel |
+
+### 0.6 Tres hallazgos más, del día de construir el corpus
+
+E-5 se escribió el 22 de agosto y encontró tres cosas que ningún documento decía. Las tres cambian
+lo que se puede prometer del predial.
+
+| # | Hallazgo | Cómo se comprobó |
+|---|---|---|
+| **H-10** | **El motor solo sabía expresar reglas cuyo parámetro tiene clave constante.** Una regla lee `numero(tipo, clave)` con la clave escrita en el código, y eso vale para la UIT o una alícuota —una por ejercicio—, pero el **arancel es por vía**, el **valor unitario por categoría y año** y la **depreciación por material, antigüedad y estado**: la clave sale del predio. Sin un sitio de donde sacarla, `RT-001`, `RT-003` y `RT-004` **no tenían forma** | Intentar escribir `RT-001` contra `InsumosDeLaRegla` |
+| **H-11** | **Los números de NEG-05 no cuadran con NEG-05.** §6 pide «resolución de los **14** casos borde de §2» y en §2 hay **diecisiete**. Y «`RT-001`…`RT-016`» son **doce** reglas: §2 no define `RT-006` a `RT-009`, y esos identificadores no existen | Enumeración una por una al construir el corpus |
+| **H-12** | **De las doce reglas, hoy se puede escribir una.** `RT-001` es la única rama del grafo sin ninguno de los cuatro factores de D-11. `RT-002`, `RT-005`, `RT-010` y `RT-012` los llevan —y CLAUDE.md prohíbe implementarlos «ni estructuralmente»—; `RT-003` espera a H-4; `RT-004` a D-02a; `RT-015` y `RT-016` no caben en el motor, porque producen un **conjunto de cuotas** y una regla devuelve un importe; `RT-013` y `RT-014` existen como funciones puras fuera del motor | Clasificación de las doce, fila por fila, en el corpus |
+
+**H-12 corrige la premisa de E-5.** El plan decía «se deja en blanco la cifra, no las aristas del
+grafo», y da por hecho que las aristas se conocen. **Cuatro de ellas no las bloquea D-02 sino
+D-11**: no es que falte el valor del factor, es que no se sabe si el factor existe. Por eso el
+corpus no es solo un juego de casos: es un **libro mayor** donde cada caso dice quién lo impide, y
+la prueba comprueba que eso sea verdad en las dos direcciones —un caso declarado «sin regla» cuya
+regla sí está registrada la pone en rojo—.
 
 ## 1. Lo que se verificó antes de planificar
 

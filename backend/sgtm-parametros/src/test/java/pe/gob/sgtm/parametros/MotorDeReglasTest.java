@@ -67,6 +67,7 @@ class MotorDeReglasTest {
         return new EntradaDeCalculo(
                 EJERCICIO,
                 EstadoDelCalculo.con(AREA, Dinero.de(area)),
+                CaracteristicasDeLaPartida.ninguna(),
                 parametrosFicticios(),
                 REDONDEO_DE_PRUEBA);
     }
@@ -245,6 +246,7 @@ class MotorDeReglasTest {
                     new EntradaDeCalculo(
                             EJERCICIO,
                             EstadoDelCalculo.vacio(),
+                            CaracteristicasDeLaPartida.ninguna(),
                             parametrosFicticios(),
                             REDONDEO_DE_PRUEBA);
 
@@ -464,6 +466,7 @@ class MotorDeReglasTest {
                     new EntradaDeCalculo(
                             EJERCICIO,
                             EstadoDelCalculo.con(AREA, Dinero.de("100.00")),
+                            CaracteristicasDeLaPartida.ninguna(),
                             ParametrosSellados.de(EJERCICIO, 1).construir(),
                             REDONDEO_DE_PRUEBA);
 
@@ -480,6 +483,7 @@ class MotorDeReglasTest {
                                     new EntradaDeCalculo(
                                             new Ejercicio(2027),
                                             EstadoDelCalculo.con(AREA, Dinero.de("100.00")),
+                                            CaracteristicasDeLaPartida.ninguna(),
                                             parametrosFicticios(),
                                             REDONDEO_DE_PRUEBA))
                     .as("cruzarlos produce una cifra plausible y equivocada")
