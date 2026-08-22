@@ -8,7 +8,7 @@
 #
 # Bloqueante solo en CRITICAL. HIGH se reporta -aparece en el resumen del trabajo,
 # visible desde el PR sin abrir un log- pero no rompe el flujo: las imagenes base
-# (`postgres:16-alpine`, `nginx:1.27-alpine`, `eclipse-temurin`) acumulan hallazgos
+# (`postgres:16-alpine`, `nginx:1.31-alpine`, `eclipse-temurin`) acumulan hallazgos
 # HIGH que nadie de este repositorio puede corregir sin esperar a la propia base, y
 # un flujo bloqueante en algo que no se puede arreglar hoy es un flujo que termina
 # ignorado. CRITICAL si bloquea: ahi la respuesta correcta es casi siempre

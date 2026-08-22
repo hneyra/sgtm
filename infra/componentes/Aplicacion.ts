@@ -197,7 +197,7 @@ export function manifiestosDeAplicacion(args: AplicacionArgs): Manifiesto[] {
               // fallo que ya se encontro en CI para Prometheus/Alertmanager/
               // node-exporter/kube-state-metrics (todas imagenes de terceros con
               // `USER nobody`), aqui contra la imagen propia-. 101 es el UID/GID con
-              // que la imagen base `nginx:1.27-alpine` crea a "nginx".
+              // que la imagen base `nginx:1.31-alpine` crea a "nginx".
               securityContext: seguridadSinRoot({ runAsUser: 101 }),
               resources: RECURSOS.interfaz,
               volumeMounts: [

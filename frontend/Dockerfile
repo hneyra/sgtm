@@ -42,7 +42,12 @@ ENV VITE_SGTM_PROXY_DE_DATOS=$VITE_SGTM_PROXY_DE_DATOS \
 RUN yarn build
 
 # ---------------------------------------------------------------------------
-FROM nginx:1.27-alpine AS interfaz
+# 1.31.4, no 1.27 (issue #157): `escaneo-de-imagenes.yml` encontro CVE-2026-31789
+# -CRITICAL, un desbordamiento de buffer en OpenSSL- en `libssl3`/`libcrypto3`
+# 3.3.3-r0, la version de Alpine que trae la imagen `1.27-alpine` congelada en el
+# momento en que este Dockerfile la fijo. La correccion real es la que el propio
+# issue pide: actualizar la etiqueta de la imagen base, no ignorar el hallazgo.
+FROM nginx:1.31.4-alpine AS interfaz
 
 COPY --from=construccion /origen/apps/backoffice/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf

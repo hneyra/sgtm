@@ -99,17 +99,18 @@ sin publicarlas a ningún registro, y las escanea con Trivy. El resultado —CRI
 publica en el resumen del trabajo, visible desde el PR sin abrir un log.
 
 Bloqueante solo en CRITICAL. HIGH se reporta pero no rompe el flujo: las imágenes base
-(`postgres:16-alpine`, `nginx:1.27-alpine`, la base de `eclipse-temurin`) acumulan hallazgos HIGH
+(`postgres:16-alpine`, `nginx:1.31-alpine`, la base de `eclipse-temurin`) acumulan hallazgos HIGH
 que este repositorio no puede corregir sin esperar a la propia base — un flujo bloqueante ahí es
-un flujo que termina ignorado. CRITICAL sí bloquea: la respuesta casi siempre es actualizar la
-etiqueta de la imagen base, la otra mitad del alcance del issue.
+un flujo que termina ignorado. CRITICAL sí bloquea, y no es hipotético: la primera corrida real
+encontró `CVE-2026-31789` (desbordamiento de buffer en OpenSSL, CRITICAL) en `libssl3`/`libcrypto3`
+dentro de `nginx:1.27-alpine`, la etiqueta que este Dockerfile fijaba hasta ese momento. El flujo
+se puso rojo, y la corrección fue la que el issue pide: subir la etiqueta a `nginx:1.31.4-alpine`.
 
 ## 6. Lo que sigue sin verificarse, y por qué
 
 | Sin verificar | Qué haría falta |
 |---|---|
 | La reserva del nodo, contra un `k3s` real | El VPS piloto (`D-04`) |
-| Que Trivy encuentre algo real y el flujo lo bloquee de verdad | Una imagen base con un CVE `CRITICAL` conocido — hoy se confía en que Trivy funciona, no se ha demostrado que el bloqueo muerde |
 | `readOnlyRootFilesystem` | El tipo lo admite (`SecurityContext.readOnlyRootFilesystem`); ningún componente lo usa todavía — auditar cuáles pueden y aplicarlo es trabajo aparte |
 
 ## 7. Documentos relacionados
