@@ -118,6 +118,17 @@ function permitirIngresoPublico(environment: Environment, namespace: string): Ne
       policyTypes: ["Ingress"],
       ingress: [{ from: desdeTraefik, ports: [puerto(8080)] }],
     }),
+    // La contraparte de "Traefik llega directo... y la interfaz por su proxy_pass
+    // interno" de mas abajo: esa frase describe una conexion que la interfaz
+    // INICIA, y sin esta politica de salida `denegar-todo` la bloquea aunque el
+    // ingreso de la aplicacion la admita -las dos puntas de un flujo se declaran
+    // por separado, y esta faltaba (encontrado verificando `Red.ts` contra un CNI
+    // que de verdad aplica NetworkPolicy, issue #157).
+    politica(namespace, "permitir-salida-interfaz", {
+      podSelector: { matchLabels: { app: servicioDeInterfaz(environment) } },
+      policyTypes: ["Egress"],
+      egress: [{ to: [deApp(servicioDeAplicacion(environment))], ports: [puerto(8080)] }],
+    }),
     politica(namespace, "permitir-ingreso-aplicacion", {
       podSelector: { matchLabels: { app: servicioDeAplicacion(environment) } },
       policyTypes: ["Ingress"],

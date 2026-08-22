@@ -88,9 +88,13 @@ if ! kubectl -n "$NS" rollout status deployment/sgtm-stg-postgres --timeout=300s
 fi
 
 # Pods sinteticos con la MISMA etiqueta `app` que `Red.ts` selecciona -ver el
-# docstring de arriba-. `netcat-openbsd` trae `nc`, con el que basta para
-# "se conecto" / "no se conecto": no hace falta hablar el protocolo real de
-# ninguno de los dos lados para probar una politica de red.
+# docstring de arriba-. `nc`, el de BusyBox que la imagen `alpine` ya trae -sin
+# instalar nada-: instalar un paquete exigiria salida a internet, y es
+# exactamente lo que `permitir-salida-aplicacion`/la ausencia de una politica de
+# salida para la interfaz NO conceden -confirmado por error: la primera version
+# de este guion intentaba `apk add netcat-openbsd` y se quedaba colgada contra
+# el repositorio de Alpine, bloqueada por la misma politica que este guion
+# existe para probar-.
 echo "· Desplegando los pods sinteticos -interfaz, aplicacion, y un testigo sin politica-"
 cat <<YAML | kubectl apply -n "$NS" -f - >/dev/null
 apiVersion: v1
@@ -132,11 +136,6 @@ for pod in sintetico-interfaz sintetico-aplicacion; do
     kubectl -n "$NS" wait --for=condition=Ready "pod/$pod" --timeout=60s
 done
 kubectl -n default wait --for=condition=Ready pod/testigo-sin-politica --timeout=60s
-
-for pod in sintetico-interfaz sintetico-aplicacion; do
-    kubectl -n "$NS" exec "$pod" -- apk add --no-cache --quiet netcat-openbsd >/dev/null
-done
-kubectl -n default exec testigo-sin-politica -- apk add --no-cache --quiet netcat-openbsd >/dev/null
 
 # $1: namespace  $2: pod  $3: host  $4: puerto
 puede_conectar() {
