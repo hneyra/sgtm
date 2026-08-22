@@ -207,8 +207,19 @@ print(len(d['data']['result']))
     done
     if [ "$LOGRADO" != "si" ]; then
         echo "  ✗ «$panel»: la consulta a Prometheus no respondio en 3 intentos — $expr" >&2
-        FALLARON=$((FALLARON + 1))
-        continue
+        echo >&2
+        echo "Esto no es un panel sin datos: es que Prometheus mismo dejo de contestar." >&2
+        echo "Diagnostico ahora, en vez de gastar minutos repitiendo el mismo fallo en cada" >&2
+        echo "panel que queda -encontrado en CI: los doce fallaban identicos, uno por uno-." >&2
+        echo "::group::Diagnostico: sgtm-stg-observabilidad-prometheus" >&2
+        kubectl -n "$NS" get pods -o wide >&2
+        kubectl -n "$NS" describe deployment/sgtm-stg-observabilidad-prometheus >&2
+        kubectl -n "$NS" describe pods -l app=sgtm-stg-observabilidad-prometheus >&2
+        kubectl -n "$NS" logs deployment/sgtm-stg-observabilidad-prometheus --all-containers --prefix --tail=200 >&2 || true
+        kubectl -n "$NS" logs deployment/sgtm-stg-observabilidad-prometheus --all-containers --prefix --tail=200 --previous >&2 || true
+        kubectl -n "$NS" get events --sort-by=.lastTimestamp >&2
+        echo "::endgroup::" >&2
+        exit 1
     fi
 
     if [ "$resultado" = "0" ]; then
