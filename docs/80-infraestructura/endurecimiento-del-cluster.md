@@ -169,24 +169,29 @@ se puso rojo, y la corrección fue la que el issue pide: subir la etiqueta a `ng
 | La reserva del nodo, contra un `k3s` real | El VPS piloto (`D-04`) |
 | `readOnlyRootFilesystem` en Prometheus, Alertmanager, Grafana, Keycloak y los cuatro contenedores de la JVM | Ejecutar cada imagen con la raíz sellada y ver qué ruta reclama. Los cuatro que sí la llevan están en §2; sellar el resto a ciegas es la clase de cambio que este PR ya vio fallar dos veces contra un clúster real y ninguna en `yarn verificar` |
 
-## 6-bis. Lo que este PR no pudo verificar en CI
+## 6-bis. La raíz sellada, comprobada en cada PR
 
-Los flujos de GitHub Actions de la cuenta se quedaron **sin cuota** mientras se cerraba este
-issue, así que las comprobaciones que necesitan un clúster no llegaron a correr sobre el último
-commit. Lo que sí se ejecutó, y dónde:
+Que el manifiesto **diga** `readOnlyRootFilesystem: true` y que el contenedor **arranque** con eso
+puesto son dos afirmaciones distintas, y la segunda es la que este PR vio fallar dos veces —
+`capabilities.drop: ["ALL"]` dejando al `entrypoint` de PostgreSQL sin `CAP_CHOWN`, y `runAsNonRoot`
+rompiendo seis imágenes con `USER` no numérico—. Las dos aparecieron contra un clúster real y
+ninguna en `yarn verificar`.
 
-| Comprobación | Cómo se ejecutó sin CI |
-|---|---|
-| `yarn verificar` (lint, tipos, 177 pruebas) | En local, en verde, con cada comprobación nueva demostrada que muerde |
-| El init container de wal-g con la raíz sellada | Contra la imagen real, con Docker. Los tres casos de §2 |
-| El esquema de los 60 objetos de cada ambiente | `kubeconform -strict` contra los esquemas JSON de Kubernetes 1.31, en `stg` y en `prod`: 60/60 válidos. Demostrado que puede fallar escribiendo `readOnlyRootFileSystem` con la `S` de más — el esquema estricto lo rechaza por `additionalProperties` |
+Por eso la comprobación es un guion y no una prueba más:
+[`infra/verificaciones/raiz-sellada/verificar-raiz-sellada.sh`](../../infra/verificaciones/raiz-sellada/verificar-raiz-sellada.sh),
+con su trabajo propio en `infra.yml` (`raiz-sellada`). **Lee la imagen, los `args` y el
+`securityContext` del manifiesto emitido**, nunca de una copia: un guion con la orden duplicada
+comprueba lo que decía el manifiesto el día que se escribió, no lo que dice hoy. Solo necesita
+Docker, así que es el más barato de los trabajos que ejercitan algo de verdad.
 
-**Sigue sin correr, y hace falta cuota para ello:** `kind` no arranca en el entorno de desarrollo
-—`/sys/fs/cgroup` es `tmpfs`, así que el kubelet no puede gestionar cgroups y el plano de control
-nunca sube—, y `registry.k8s.io` y `quay.io` están bloqueados por la política de egreso. Eso deja
-fuera los trabajos que aplican los manifiestos contra un API server de verdad, `verificar-red.sh`
-contra Calico, el simulacro de restauración y las dos comprobaciones de observabilidad. `kubeconform`
-valida el esquema, no la admisión ni los valores por omisión del API server: **no lo sustituye.**
+Los dos `emptyDir` se emulan con directorios `1777`, que es como el kubelet los crea —de ahí que un
+`runAsUser: 65534` pueda escribir en ellos sin coincidir con el usuario de la imagen—. Un volumen
+nombrado de Docker **no** sirve: nace `root:root 0755` y el `mv` falla por una razón que no tiene
+nada que ver con lo que se quiere comprobar.
+
+Y lleva dentro su propia demostración de que puede fallar: el guion también comprueba que el guion
+mismo sigue teniendo sentido —si el manifiesto deja de declarar `readOnlyRootFilesystem` o deja de
+montar `/tmp`, se pone rojo diciendo eso en vez de comprobar en silencio otra cosa—.
 
 ## 7. Documentos relacionados
 
