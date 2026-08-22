@@ -10,6 +10,8 @@ import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
+import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
+import pe.gob.sgtm.dominio.PuntoDeRedondeo;
 import pe.gob.sgtm.parametros.InsumosDeLaAgregacion;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 
@@ -22,8 +24,12 @@ import pe.gob.sgtm.parametros.ParametrosSellados;
 class RT011BaseImponibleDelContribuyenteTest {
 
     private static final Ejercicio EJERCICIO = new Ejercicio(2026);
-    private static final PoliticaDeRedondeo REDONDEO =
-            new PoliticaDeRedondeo(2, RoundingMode.HALF_UP);
+    private static final PoliticasDeRedondeo REDONDEO =
+            PoliticasDeRedondeo.construir()
+                    .en(
+                            PuntoDeRedondeo.IMPUESTO_POR_TRAMO,
+                            new PoliticaDeRedondeo(2, RoundingMode.HALF_UP))
+                    .construir();
 
     /** Cuadro ficticio: 0.2 % hasta 1000, 0.6 % hasta 3000, 1.0 % en adelante. */
     private static final List<Tramo> CUADRO_FICTICIO =

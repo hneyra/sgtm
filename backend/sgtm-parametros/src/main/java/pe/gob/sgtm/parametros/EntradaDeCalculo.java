@@ -2,12 +2,12 @@ package pe.gob.sgtm.parametros;
 
 import java.util.Objects;
 import pe.gob.sgtm.dominio.Ejercicio;
-import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
+import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
 
 /**
  * Lo que entra al motor para calcular <b>una partida</b> —un predio, un vehiculo—: los datos
- * declarados que siembran el grafo, mas el ejercicio, el conjunto sellado y la politica de
- * redondeo.
+ * declarados que siembran el grafo, mas el ejercicio, el conjunto sellado y las politicas de
+ * redondeo, una por punto.
  *
  * <p>El ejercicio y no una fecha: la implementacion aplicable es la del <b>ejercicio del hecho
  * imponible</b> (ARQ-09 §1.3). Con una fecha, «hoy» es un argumento valido y calcularia 2027 con
@@ -21,13 +21,14 @@ public record EntradaDeCalculo(
         Ejercicio ejercicio,
         EstadoDelCalculo declarados,
         ParametrosSellados parametros,
-        PoliticaDeRedondeo redondeo) {
+        PoliticasDeRedondeo redondeo) {
 
     public EntradaDeCalculo {
         Objects.requireNonNull(ejercicio, "El ejercicio del hecho imponible entra como argumento");
         Objects.requireNonNull(declarados, "Los datos declarados son un estado, vacio si no hay");
         Objects.requireNonNull(parametros, "La regla necesita el conjunto sellado");
-        Objects.requireNonNull(redondeo, "La politica de redondeo se recibe, no se fija (D-03)");
+        Objects.requireNonNull(
+                redondeo, "Las politicas de redondeo se reciben, no se fijan (D-03)");
         if (!ejercicio.equals(parametros.ejercicio())) {
             throw new IllegalArgumentException(
                     "Se pidio calcular el ejercicio "

@@ -312,6 +312,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Sellado de parámetros (9 pruebas) | Quitando el disparador de inmutabilidad de `V9` | Rojo: un conjunto sellado se deja editar |
 | Lectura sellada (6 pruebas) | Quitando `AND estado = 'SELLADO'` de la consulta, y resolviendo por ejercicio en vez de por conjunto | Rojo: se deja leer un conjunto abierto; rojo: el recálculo devuelve la v2 donde la determinación usó la v1 |
 | Motor de reglas como grafo (15 pruebas, sin base ni reloj) | Volviendo a la cadena lineal: aplicar en orden de registro sin mirar las dependencias | Rojo en 8 de las 15: la convergencia de dos ramas no se puede expresar encadenando |
+| Los puntos de redondeo (7 pruebas, D-03c) | Devolviendo la politica unica: que un punto sin parametrizar resuelva a la primera que haya, en vez de fallar | Rojo en 3: sin la guarda, el importe sale **sin redondear** y nadie lo distingue del correcto |
 | Escáner del código fuente | Muestras con `SET SESSION`, `DELETE`, `UPDATE` prohibidos, con una política de redondeo escrita a mano y con la UIT, un tramo y una alícuota compilados (regla 5) | Las detecta; neutralizando el patrón de la regla 5, rojo |
 | Reglas de ESLint del frontend (10) | Quitando la regla de tildes, y la de `fetch`: sus pruebas se ponen rojas | Las diez muerden |
 | Las 134 pantallas se dibujan | Montando cada una contra el proxy, y recorriéndolas en Chromium | 134 en verde, 0 errores |

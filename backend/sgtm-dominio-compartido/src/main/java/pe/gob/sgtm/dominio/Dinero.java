@@ -93,6 +93,18 @@ public record Dinero(BigDecimal valor) implements Comparable<Dinero> {
         return new Dinero(politica.aplicarA(valor));
     }
 
+    /**
+     * El mismo importe, redondeado con la politica que corresponde a <b>ese punto</b> del calculo.
+     *
+     * <p>Es la forma que pide D-03c: no «redondea», sino «redondea aqui, porque aqui el SRTM del
+     * MEF redondea». Si el punto no tiene politica no se devuelve el importe sin tocar —eso seria
+     * una cifra plausible y equivocada—: falla con {@code PuntoSinPolitica}.
+     */
+    public Dinero redondeadoEn(PuntoDeRedondeo punto, PoliticasDeRedondeo politicas) {
+        Objects.requireNonNull(politicas, "El redondeo por punto necesita su parametrizacion");
+        return redondeadoCon(politicas.en(punto));
+    }
+
     public boolean esCero() {
         return valor.signum() == 0;
     }

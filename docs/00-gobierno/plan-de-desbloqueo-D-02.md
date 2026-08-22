@@ -86,7 +86,7 @@ ahora explica por qué nunca debió llevarla.
 | **E-3** transcribir y firmar D-02a | #200 | Abierto. **Es el de mayor rendimiento y no espera a nadie** |
 | **E-5** el corpus de casos | #201 | Abierto |
 | **E-6** la municipalidad de demostración | #202 | Abierto. Tres de sus cuatro entregables **ya existen**; falta elegir la ordenanza |
-| **E-7** puntos de redondeo y campaña de D-03c | #203 | Abierto |
+| **E-7** puntos de redondeo y campaña de D-03c | #203 | **Entregables 1 y 2 hechos**: `PuntoDeRedondeo` con sus catorce puntos, `PoliticasDeRedondeo` que falla cuando falta uno, y el formulario de la campaña en `docs/10-negocio/observaciones-srtm-mef/`. Queda la campaña, que necesita acceso al SRTM del MEF |
 | **E-4** el estado `PROVISIONAL` | — | **Aplazado**, con el motivo de §E-4. Se reevalúa al cerrar #201, con el caso concreto delante. No se abre issue para no fingir que hay trabajo aprobado |
 
 ### 0.5 Las cinco decisiones de §4
