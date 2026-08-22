@@ -35,11 +35,35 @@ command -v kubectl >/dev/null 2>&1 || { echo "FALLO: falta kubectl." >&2; exit 1
 echo "· Aplicando el manifiesto de stg contra el clúster"
 # El mismo filtro que el trabajo `manifiestos` de infra.yml: los recursos de Traefik
 # no tienen CRD en un `kind` limpio.
+#
+# Interfaz, aplicacion, Keycloak (identidad + el Job de realm) y los Job de
+# migracion/implantacion tambien se excluyen aqui, aunque el bucle de mas abajo
+# nunca los espera: aplicados igual compiten por la CPU del nodo UNICO de `kind`
+# con postgres y Prometheus/Alertmanager, que SI hacen falta. Encontrado en
+# `verificar-tableros.sh` (issue #156/#157, misma causa): con el manifiesto
+# completo el scheduler reportaba "Insufficient cpu", y bajo esa saturacion hasta
+# Prometheus -ya listo, sirviendo peticiones- dejaba de contestar a tiempo.
 yarn --silent manifiestos --ambiente stg \
     | node -e '
         const entrada = JSON.parse(require("fs").readFileSync(0, "utf8"));
         const deTraefik = ["IngressRoute", "Middleware", "TLSOption", "HelmChartConfig"];
         entrada.items = entrada.items.filter((i) => !deTraefik.includes(i.kind));
+
+        const pesados = [
+          { kind: "Deployment", prefijo: "sgtm-stg-interfaz" },
+          { kind: "Service", prefijo: "sgtm-stg-interfaz" },
+          { kind: "Deployment", prefijo: "sgtm-stg-identidad" },
+          { kind: "Job", prefijo: "sgtm-stg-realm-" },
+          { kind: "Job", prefijo: "sgtm-stg-migracion-" },
+          { kind: "Job", prefijo: "sgtm-stg-implantacion-" },
+          { kind: "Deployment", prefijo: "sgtm-stg-aplicacion" },
+          { kind: "CronJob", prefijo: "sgtm-stg-lote" },
+        ];
+        entrada.items = entrada.items.filter((i) => {
+          const nombre = i.metadata?.name ?? "";
+          return !pesados.some((p) => i.kind === p.kind && nombre.startsWith(p.prefijo));
+        });
+
         process.stdout.write(JSON.stringify(entrada));
       ' \
     | kubectl apply -f - >/dev/null
