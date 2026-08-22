@@ -183,13 +183,33 @@ while IFS= read -r linea; do
     panel=$(echo "$linea" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).panel)')
     expr=$(echo "$linea" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).expr)')
 
-    resultado=$(kubectl -n "$NS" exec verificador-de-tableros -- python3 -c "
+    # Reintenta la CONSULTA, no el resultado: un "0 series" es un dato real -el
+    # panel esta de verdad sin datos-, y no hay que reintentar eso. Lo que si se
+    # reintenta es la conexion en si -sin `timeout=`, `urlopen` puede colgarse
+    # hasta el reintento de SYN del kernel (~127s) antes de fallar, encontrado en
+    # CI dos veces seguidas: un runner con el manifiesto entero desplegado (motor,
+    # observabilidad, los pods sinteticos de este guion) tiene mas contienda de CPU
+    # y red de la que este guion tenia cuando se escribio, y una sola consulta entre
+    # catorce colgandose 2 minutos es mas plausible que nunca antes de #157.
+    LOGRADO=no
+    for intento in 1 2 3; do
+        if resultado=$(kubectl -n "$NS" exec verificador-de-tableros -- python3 -c "
 import json, urllib.parse, urllib.request
 q = urllib.parse.quote('''$expr''')
-r = urllib.request.urlopen(f'http://sgtm-stg-observabilidad-prometheus:9090/api/v1/query?query={q}')
+r = urllib.request.urlopen(f'http://sgtm-stg-observabilidad-prometheus:9090/api/v1/query?query={q}', timeout=10)
 d = json.load(r)
 print(len(d['data']['result']))
-")
+" 2>/dev/null); then
+            LOGRADO=si
+            break
+        fi
+        [ "$intento" -lt 3 ] && sleep 3
+    done
+    if [ "$LOGRADO" != "si" ]; then
+        echo "  ✗ «$panel»: la consulta a Prometheus no respondio en 3 intentos — $expr" >&2
+        FALLARON=$((FALLARON + 1))
+        continue
+    fi
 
     if [ "$resultado" = "0" ]; then
         echo "  ✗ «$panel»: SIN DATOS — $expr"
