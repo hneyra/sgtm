@@ -33,10 +33,11 @@ cosas donde espera.
 - [Decisiones abiertas](00-gobierno/decisiones-abiertas.md) — lo que bloquea, con quién decide
 - [Glosario tributario](00-gobierno/glosario-tributario.md) — vocabulario del manual y del dominio
 - [Plan de marcha blanca](00-gobierno/plan-de-marcha-blanca.md) — el recorte del predial que se despliega, y en qué orden
+- [Plan de desbloqueo de D-02](00-gobierno/plan-de-desbloqueo-D-02.md) — los siete paquetes, y qué se hizo de ellos
 
 ### 10 — Negocio
 - [Mapa de macroprocesos](10-negocio/mapa-de-macroprocesos.md) — los siete procesos del sistema
-- [Marco normativo](10-negocio/marco-normativo.md) — normas citadas y datos por verificar
+- [Marco normativo](10-negocio/marco-normativo.md) — normas citadas, y el mapa de qué dato falta, qué norma lo fija y quién lo espera
 - [Catálogo de opciones](10-negocio/catalogo-de-opciones.md) — las 134 opciones ↔ figuras del manual
 
 ### 20 — Requisitos

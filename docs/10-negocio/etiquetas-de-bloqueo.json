@@ -1,0 +1,27 @@
+{
+  "comentario": [
+    "Instantanea de las etiquetas `bloqueado:D-02x` del tablero de GitHub.",
+    "Es la mitad del tablero de la comprobacion cruzada de NEG-02 §4: el mapa dice que",
+    "issues espera cada dato, y este archivo dice que etiquetas llevan de verdad.",
+    "Se regenera con:",
+    "  gh issue list --repo hneyra/sgtm --state all --json number,labels \\",
+    "    --label bloqueado:D-02a --label bloqueado:D-02b --label bloqueado:D-02c",
+    "y se actualiza en el mismo PR que cambia una etiqueta. Si se desincroniza,",
+    "`verificar-mapa-normativo.mjs` se pone en rojo, que es exactamente lo que tiene que pasar."
+  ],
+  "generado": "2026-08-22",
+  "etiquetas": {
+    "188": ["D-02a"],
+    "189": ["D-02b"],
+    "190": ["D-02a"],
+    "191": ["D-02b"],
+    "192": ["D-02a"],
+    "193": ["D-02c"],
+    "194": ["D-02a"],
+    "195": ["D-02a", "D-02c"],
+    "196": ["D-02a", "D-02b", "D-02c"],
+    "197": ["D-02a", "D-02b"],
+    "198": ["D-02a"],
+    "199": ["D-02b"]
+  }
+}
