@@ -65,5 +65,25 @@ redondear también produce un importe, y ese importe es plausible y equivocado.
 
 Esta tabla es el progreso de D-03c. Bajar el número de «sin observar» es lo único que la cierra.
 
+## Dónde acaba una ficha cerrada
+
+**En una fila, no en el código.** Cada punto observado entra en `parametro_tributario` con
+`tipo = 'REDONDEO'` y `clave` igual al nombre del punto, y lleva las dos mitades a la vez:
+
+| Columna | Qué lleva |
+|---|---|
+| `valor_numerico` | La escala: número de decimales |
+| `valor_texto` | El modo: un `RoundingMode` (`HALF_UP`, `DOWN`, `HALF_EVEN`…) |
+| `documento_fuente` | La ficha de observación que lo revela |
+
+Las dos en la misma fila **a propósito**: con una fila por mitad, un conjunto sellado podría tener
+la escala de un punto sin su modo —cada fila válida por separado— y ese punto quedaría *medio
+configurado*, que es peor que ausente porque aparenta estar resuelto.
+`PoliticasDeRedondeoSelladas` lo rechaza nombrando la mitad que falta.
+
+Quien calcula **lee**: `RegistrarDeterminacionPredial` ya no recibe las políticas, las resuelve del
+conjunto sellado del ejercicio. Escribir una a mano no compila el build: el escáner de fuentes la
+detecta (regla 5, D-03).
+
 Issue: [#203](https://github.com/hneyra/sgtm/issues/203). Depende de **acceso al SRTM del MEF**, no
 de D-01 ni de D-02.

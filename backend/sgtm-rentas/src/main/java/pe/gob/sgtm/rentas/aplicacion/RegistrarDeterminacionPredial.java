@@ -18,6 +18,7 @@ import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
 import pe.gob.sgtm.parametros.InsumosDeLaAgregacion;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
+import pe.gob.sgtm.parametros.PoliticasDeRedondeoSelladas;
 import pe.gob.sgtm.rentas.dominio.predial.DetalleDeterminacionPredio;
 import pe.gob.sgtm.rentas.dominio.predial.Determinacion;
 import pe.gob.sgtm.rentas.dominio.predial.DeterminacionRepository;
@@ -43,11 +44,16 @@ import pe.gob.sgtm.rentas.dominio.predial.TramosProgresivosAcumulativos;
  *   <li>{@code MinimoImponible.aplicar} (RT-014) sustituye el resultado si no llega al minimo.
  * </ol>
  *
- * <p>{@code tramos}, {@code minimoImponible} y {@code redondeo} llegan como argumento, nunca de un
- * literal (regla 5, D-03): el cuadro del articulo 13 y el minimo son {@code ‹VERIFICAR›} en NEG-05
- * y siguen bloqueados por D-02b hasta que una ordenanza los fije. No se lee ninguno de {@link
- * ParametrosSellados} todavia porque el formato de esa lectura —una clave por tramo, cuantos
- * tramos— tampoco esta decidido: inventarlo aqui congelaria una forma que D-02b podria contradecir.
+ * <p><b>El redondeo se lee del conjunto sellado</b>, con {@link PoliticasDeRedondeoSelladas}: es el
+ * tercer entregable de E-7 (#203). La respuesta de D-03c —en que puntos se redondea, con que escala
+ * y que modo— entra como dato con su documento fuente, no como codigo, y este servicio no la
+ * construye ni la recibe.
+ *
+ * <p>{@code tramos} y {@code minimoImponible}, en cambio, siguen llegando como argumento, y la
+ * diferencia no es un descuido: de D-03c ya esta decidido el <b>formato</b> —una fila {@code
+ * REDONDEO:‹punto›} por punto— y lo que falta son los valores; del cuadro del articulo 13 no esta
+ * decidido ni el formato —una clave por tramo, cuantos tramos—, y fijarlo aqui congelaria una forma
+ * que D-02b podria contradecir. Ninguno de los dos sale de un literal (regla 5).
  *
  * <p>No usa {@code MotorDeReglas.aplicarAlContribuyente}: el motor exige al menos una {@code
  * ReglaTributaria} vigente por partida (fase 1, terreno/edificacion/obras) para no fallar con
@@ -84,7 +90,6 @@ public class RegistrarDeterminacionPredial {
      *     propiedad y base ya ponderada); nunca vacio (NEG-05 §1: sin predios no hay base)
      * @param tramos el cuadro progresivo vigente, resuelto por quien conoce la ordenanza (D-02b)
      * @param minimoImponible el minimo del ejercicio (D-02b)
-     * @param redondeo las politicas con que se redondea, una por punto (D-03c)
      * @param observacion por que se registra (regla 10)
      */
     @Transactional
@@ -94,7 +99,6 @@ public class RegistrarDeterminacionPredial {
             List<DetalleDeterminacionPredio> predios,
             List<Tramo> tramos,
             Dinero minimoImponible,
-            PoliticasDeRedondeo redondeo,
             Observacion observacion) {
         Objects.requireNonNull(ejercicio, "La determinacion necesita su ejercicio");
         Objects.requireNonNull(predios, "La lista de predios es vacia, no nula");
@@ -104,6 +108,7 @@ public class RegistrarDeterminacionPredial {
 
         ParametrosSellados sellados = parametros.vigenteEn(ejercicio);
         long conjuntoId = parametros.conjuntoVigenteEn(ejercicio).valor();
+        PoliticasDeRedondeo redondeo = PoliticasDeRedondeoSelladas.de(sellados);
         InsumosDeLaAgregacion insumos = new InsumosDeLaAgregacion(ejercicio, sellados, redondeo);
 
         List<Dinero> aportes = new ArrayList<>();
