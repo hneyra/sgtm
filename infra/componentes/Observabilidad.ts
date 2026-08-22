@@ -208,6 +208,15 @@ function manifiestosDePrometheus(args: ArgsComunes): Manifiesto[] {
                 "--config.file=/etc/prometheus/prometheus.yml",
                 "--storage.tsdb.path=/prometheus",
                 "--storage.tsdb.retention.time=15d",
+                // Habilita `POST /-/reload`: releer la configuracion sin recrear el
+                // Pod. `verificar-tableros.sh` (issue #157) lo necesita para repuntar
+                // el scrape de la aplicacion sin pasar por `kubectl rollout restart`
+                // -encontrado en CI, en CUATRO corridas seguidas: justo despues de
+                // esa recreacion la primera consulta fallaba conectando, con
+                // Prometheus ya sirviendo peticiones segun su propio log y el Pod en
+                // Ready segun el API server. No habia nada mal en Prometheus: era la
+                // recreacion misma, que cambia la direccion que el Service enruta.
+                "--web.enable-lifecycle",
               ],
               ports: [{ name: "http", containerPort: 9090 }],
               // Sin `readOnlyRootFilesystem`: no esta comprobado contra un Prometheus

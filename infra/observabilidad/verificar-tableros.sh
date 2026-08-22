@@ -170,8 +170,22 @@ kubectl -n "$NS" get configmap sgtm-stg-observabilidad-prometheus -o json \
         process.stdout.write(JSON.stringify(cm));
       ' \
     | kubectl apply -f - >/dev/null
-kubectl -n "$NS" rollout restart deployment/sgtm-stg-observabilidad-prometheus >/dev/null
-kubectl -n "$NS" rollout status deployment/sgtm-stg-observabilidad-prometheus --timeout=90s
+
+# `POST /-/reload`, no `kubectl rollout restart`: releer la configuracion sin
+# recrear el Pod. Encontrado en CI, en CUATRO corridas seguidas: justo despues
+# de un `rollout restart`, la primera consulta a Prometheus fallaba conectando
+# -con Prometheus ya sirviendo peticiones segun su propio log, y el Pod en
+# Ready segun el API server-. No era Prometheus: era la recreacion misma, que
+# cambia la direccion que el Service enruta. `/-/reload` es el MISMO proceso,
+# el MISMO Pod, la MISMA entrada del Service -solo relee su archivo-.
+echo "· Recargando la configuracion de Prometheus (POST /-/reload, sin recrear el Pod)"
+kubectl -n "$NS" exec deployment/aplicacion-sintetica -- python3 -c "
+import urllib.request
+urllib.request.urlopen(
+    urllib.request.Request('http://sgtm-stg-observabilidad-prometheus:9090/-/reload', method='POST'),
+    timeout=10,
+)
+"
 
 echo "· Desplegando el cliente de comprobacion"
 cat <<'YAML' | kubectl apply -n "$NS" -f - >/dev/null
