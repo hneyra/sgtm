@@ -1057,6 +1057,30 @@ describe("#157 · endurecimiento", () => {
     expect(sinNonRoot.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
   });
 
+  it("los contenedores cuya imagen fija un USER por nombre, no por numero, declaran runAsUser", () => {
+    // Encontrado en CI (issue #157): con `runAsNonRoot: true` y sin `runAsUser`
+    // explicito, el kubelet rechaza el contenedor si la imagen fija su usuario por
+    // NOMBRE -"nobody", "nginx", "curl_user"- en vez de por numero, porque no puede
+    // verificar sin ejecutar dentro de la imagen que ese nombre no es root. Esta
+    // lista es la contraparte de `SIN_RUNASNONROOT` de arriba: no contenedores que
+    // se salten el endurecimiento, sino contenedores que lo llevan Y ademas nombran
+    // su UID -sin este `runAsUser`, `yarn manifiestos` compila y pasa la auditoria
+    // igual, y el fallo solo aparece contra un API server de verdad, como paso aqui.
+    const CON_USER_NO_NUMERICO = new Set([
+      "prometheus",
+      "alertmanager",
+      "node-exporter",
+      "kube-state-metrics",
+      "postgres-exporter",
+      "wal-g-instalar",
+      "interfaz",
+    ]);
+    const sinRunAsUser = contenedoresDeTodo(ms).filter(
+      ({ c }) => CON_USER_NO_NUMERICO.has(c.name) && c.securityContext?.runAsUser === undefined,
+    );
+    expect(sinRunAsUser.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
+  });
+
   it("todo contenedor tiene sin escalada de privilegios y sin capacidades", () => {
     const sinEndurecer = contenedoresDeTodo(ms).filter(
       ({ c }) =>

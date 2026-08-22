@@ -457,10 +457,16 @@ export function contenedorDeDescargaDeWalg(): Contenedor {
         "rm -f /tmp/wal-g.tar.gz",
       ].join(" && "),
     ],
-    // `curlimages/curl` ya trae su propio usuario sin privilegios (issue #157): no
-    // hace falta nombrar un `runAsUser`, y descargar-verificar-mover no necesita
-    // ninguna capacidad Linux con nombre.
-    securityContext: seguridadSinRoot(),
+    // `curlimages/curl` ya trae su propio usuario sin privilegios -`curl_user`-,
+    // pero `runAsUser` SI hace falta nombrarlo (issue #157): la imagen fija ese
+    // usuario por NOMBRE, no por numero, y el kubelet rechaza el contenedor sin
+    // poder verificar que es no-root -"container has runAsNonRoot and image has
+    // non-numeric user (curl_user), cannot verify user is non-root", encontrado en
+    // CI-. 65534 no es necesariamente el UID real de `curl_user`, y no hace falta
+    // que lo sea: el volumen que monta es un `emptyDir` -escribible por cualquier
+    // UID por convencion del kubelet- y el resto de la tarea (`curl`, `sha256sum`,
+    // `tar`, `chmod`, `mv`) no depende de poseer ningun archivo de la imagen.
+    securityContext: seguridadSinRoot({ runAsUser: 65534 }),
     resources: RECURSOS.auxiliar,
     volumeMounts: [{ name: "wal-g-bin", mountPath: WALG_DIRECTORIO }],
   };

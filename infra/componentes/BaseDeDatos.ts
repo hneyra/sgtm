@@ -280,7 +280,12 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
               ports: [{ name: "metrics", containerPort: 9187 }],
               // No escribe nada fuera de lo que responde por HTTP (issue #157): todo
               // lo que hace es leer `pg_stat_*` por la red y traducirlo.
-              securityContext: seguridadSinRoot({ readOnlyRootFilesystem: true }),
+              //
+              // `runAsUser: 65534`: la misma convencion `USER nobody` (sin numero)
+              // que el resto de las imagenes del ecosistema Prometheus en este
+              // repositorio -Prometheus, Alertmanager, node-exporter,
+              // kube-state-metrics-, y el mismo fallo que esas cuatro dieron en CI.
+              securityContext: seguridadSinRoot({ runAsUser: 65534, readOnlyRootFilesystem: true }),
               resources: RECURSOS.exportador,
               // `httpGet`, no `exec`: la sonda la hace el kubelet desde fuera del
               // contenedor, asi que no depende de que la imagen traiga `wget` —la

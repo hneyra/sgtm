@@ -191,7 +191,14 @@ export function manifiestosDeAplicacion(args: AplicacionArgs): Manifiesto[] {
               // arranca como root por omision -el pid y la cache de nginx los
               // necesita root para escribir-, y `frontend/Dockerfile` se lo cede al
               // usuario "nginx" que la propia imagen ya trae sin usar.
-              securityContext: seguridadSinRoot(),
+              //
+              // `runAsUser: 101`: `nginx` es un NOMBRE, no un numero, y el kubelet
+              // rechaza el contenedor sin poder verificar que es no-root -el mismo
+              // fallo que ya se encontro en CI para Prometheus/Alertmanager/
+              // node-exporter/kube-state-metrics (todas imagenes de terceros con
+              // `USER nobody`), aqui contra la imagen propia-. 101 es el UID/GID con
+              // que la imagen base `nginx:1.27-alpine` crea a "nginx".
+              securityContext: seguridadSinRoot({ runAsUser: 101 }),
               resources: RECURSOS.interfaz,
               volumeMounts: [
                 {

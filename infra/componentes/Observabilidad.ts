@@ -214,7 +214,14 @@ function manifiestosDePrometheus(args: ArgsComunes): Manifiesto[] {
               // real que su unica escritura sea `/prometheus` -sin Docker local para
               // probarlo, ver CLAUDE.md-, y equivocarse aqui cambia una base de series
               // que arranca por una que no.
-              securityContext: seguridadSinRoot(),
+              //
+              // `runAsUser: 65534` (issue #157): la imagen fija `USER nobody`, un
+              // nombre, no un numero, y el kubelet rechaza el contenedor sin poder
+              // VERIFICAR que ese usuario es no-root -"container has runAsNonRoot and
+              // image has non-numeric user (nobody), cannot verify user is non-root",
+              // encontrado en CI-. 65534 es el UID real de `nobody` en la imagen; el
+              // `fsGroup` de mas abajo ya usaba el mismo numero, por la misma razon.
+              securityContext: seguridadSinRoot({ runAsUser: 65534 }),
               resources: RECURSOS.prometheus,
               volumeMounts: [
                 { name: "configuracion", mountPath: "/etc/prometheus" },
@@ -324,7 +331,9 @@ function manifiestosDeAlertmanager(
               image: IMAGEN_DE_ALERTMANAGER,
               args: ["--config.file=/etc/alertmanager/alertmanager.yml"],
               ports: [{ name: "http", containerPort: 9093 }],
-              securityContext: seguridadSinRoot(),
+              // `runAsUser: 65534` (issue #157): ver el comentario identico junto a
+              // Prometheus -misma imagen base, mismo `USER nobody` sin numero-.
+              securityContext: seguridadSinRoot({ runAsUser: 65534 }),
               resources: RECURSOS.alertmanager,
               volumeMounts: [
                 { name: "configuracion", mountPath: "/etc/alertmanager" },
@@ -409,7 +418,10 @@ function manifiestosDeNodeExporter(args: ArgsComunes): Manifiesto[] {
               // que usa este componente leen archivos del sistema completo
               // (`/proc/stat`, `/proc/meminfo`), no datos por proceso ajeno que
               // exigirian coincidir con su UID.
-              securityContext: seguridadSinRoot({ readOnlyRootFilesystem: true }),
+              //
+              // `runAsUser: 65534`: la misma imagen base que Prometheus y
+              // Alertmanager, con el mismo `USER nobody` sin numero.
+              securityContext: seguridadSinRoot({ runAsUser: 65534, readOnlyRootFilesystem: true }),
               resources: RECURSOS.exportador,
               volumeMounts: [
                 { name: "proc", mountPath: "/host/proc", readOnly: true },
@@ -508,7 +520,10 @@ function manifiestosDeKubeStateMetrics(args: ArgsComunes): Manifiesto[] {
               ports: [{ name: "metrics", containerPort: 8080 }],
               // Sin volumen ninguno: solo lee el API de Kubernetes por la red y
               // traduce a metricas (issue #157).
-              securityContext: seguridadSinRoot({ readOnlyRootFilesystem: true }),
+              //
+              // `runAsUser: 65534`: la imagen fija `USER nobody`, un nombre, no un
+              // numero -el mismo motivo que Prometheus, Alertmanager y node-exporter-.
+              securityContext: seguridadSinRoot({ runAsUser: 65534, readOnlyRootFilesystem: true }),
               resources: RECURSOS.kubeStateMetrics,
               readinessProbe: sondaHttp("/healthz", 8080, { periodSeconds: 10, failureThreshold: 3 }),
               livenessProbe: sondaHttp("/healthz", 8080, { periodSeconds: 20, failureThreshold: 5 }),
