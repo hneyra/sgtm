@@ -32,6 +32,34 @@ yarn --silent manifiestos --ambiente stg \
         const deTraefik = ["IngressRoute", "Middleware", "TLSOption", "HelmChartConfig"];
         entrada.items = entrada.items.filter((i) => !deTraefik.includes(i.kind));
 
+        // Interfaz, aplicacion, Keycloak (identidad + el Job de realm) y los Job de
+        // migracion/implantacion no le hacen falta a esta comprobacion -los dos
+        // paneles de la aplicacion los sirve el exportador sintetico de mas abajo, y
+        // ningun panel del tablero lee nada de Keycloak-, y el nodo UNICO de `kind`
+        // no tiene CPU para desplegarlos a la vez que postgres y los cinco
+        // componentes de observabilidad. Encontrado en CI dos veces seguidas: con el
+        // manifiesto completo, el scheduler reportaba "Insufficient cpu" para varios
+        // Pods, y bajo esa saturacion hasta Prometheus -que SI llegaba a Ready- dejaba
+        // de contestar peticiones HTTP durante minutos. No es que Prometheus se haya
+        // roto: es que compartir un runner de 2 vCPU con dos Keycloak reintentando su
+        // arranque, dos replicas de interfaz reintentando una imagen que este
+        // repositorio no publica, y el resto del padron completo no deja margen para
+        // que nada responda a tiempo.
+        const pesados = [
+          { kind: "Deployment", prefijo: "sgtm-stg-interfaz" },
+          { kind: "Service", prefijo: "sgtm-stg-interfaz" },
+          { kind: "Deployment", prefijo: "sgtm-stg-identidad" },
+          { kind: "Job", prefijo: "sgtm-stg-realm-" },
+          { kind: "Job", prefijo: "sgtm-stg-migracion-" },
+          { kind: "Job", prefijo: "sgtm-stg-implantacion-" },
+          { kind: "Deployment", prefijo: "sgtm-stg-aplicacion" },
+          { kind: "CronJob", prefijo: "sgtm-stg-lote" },
+        ];
+        entrada.items = entrada.items.filter((i) => {
+          const nombre = i.metadata?.name ?? "";
+          return !pesados.some((p) => i.kind === p.kind && nombre.startsWith(p.prefijo));
+        });
+
         // Solo aqui, nunca en Observabilidad.ts: `node_exporter` excluye "overlay" de
         // sus metricas de filesystem por omision, y con motivo -en un VPS real la raiz
         // es ext4/xfs, y lo que aparece como "overlay" ahi es la capa escribible de
