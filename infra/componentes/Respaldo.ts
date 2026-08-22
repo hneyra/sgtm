@@ -9,6 +9,7 @@ import {
   nombreDePrioridad,
   secretoDeCredencialesDeRespaldo,
   secretos,
+  seguridadBase,
   servicioDeBaseDeDatos,
   variablesWalg,
   volumenDeDatos,
@@ -191,6 +192,13 @@ export function manifiestosDeRespaldo(args: RespaldoArgs): Manifiesto[] {
                   image: postgresImage,
                   command: ["/bin/bash", "-c"],
                   args: [guion],
+                  // Sin `runAsNonRoot` (issue #157), y no por el mismo motivo que el
+                  // motor: PGDATA lo monta de solo lectura con el permiso `0700` que la
+                  // propia imagen le da al iniciar (dueno `postgres`, UID que este
+                  // manifiesto no fija en ningun otro sitio), y forzar aqui un UID
+                  // distinto -sin verificarlo contra un clúster real- cambia un guion de
+                  // respaldo que funciona por uno que falla leyendo su propio origen.
+                  securityContext: seguridadBase(),
                   env: [
                     { name: "PGHOST", value: servicioDeBaseDeDatos(environment) },
                     { name: "AMBIENTE", value: environment },

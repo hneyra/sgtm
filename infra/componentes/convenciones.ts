@@ -4,6 +4,7 @@ import type {
   MontajeDeVolumen,
   PriorityClass,
   Recursos,
+  SecurityContext,
   Sonda,
   VariableDeEntorno,
   Volumen,
@@ -264,6 +265,36 @@ export function sondaExec(command: string[], extra: Partial<Sonda> = {}): Sonda 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Endurecimiento de contenedores (issue #157)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Lo que va en TODO contenedor, sin excepcion: nada de escalada de privilegios y
+ * ninguna capacidad Linux de mas. A diferencia de `runAsNonRoot` —que algunas
+ * imagenes no soportan sin ayuda, ver `seguridadSinRoot`—, estas dos no tienen
+ * ningun motivo legitimo para faltar: ni siquiera el `entrypoint` de PostgreSQL,
+ * que arranca como root, necesita escalar privilegios o una capacidad con nombre
+ * para hacer su `chown` inicial.
+ */
+export function seguridadBase(extra: Partial<SecurityContext> = {}): SecurityContext {
+  return {
+    allowPrivilegeEscalation: false,
+    capabilities: { drop: ["ALL"] },
+    ...extra,
+  };
+}
+
+/**
+ * La misma base, mas `runAsNonRoot: true`: lo que usa casi todo contenedor de este
+ * repositorio. Los que NO la usan lo dicen en su propio sitio, con el motivo —hoy,
+ * solo el `entrypoint` del motor de PostgreSQL (`BaseDeDatos.ts`), que necesita
+ * arrancar como root para tomar posesion del volumen antes de bajar privilegios.
+ */
+export function seguridadSinRoot(extra: Partial<SecurityContext> = {}): SecurityContext {
+  return seguridadBase({ runAsNonRoot: true, ...extra });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Nombres de servicio y de base
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -426,6 +457,10 @@ export function contenedorDeDescargaDeWalg(): Contenedor {
         "rm -f /tmp/wal-g.tar.gz",
       ].join(" && "),
     ],
+    // `curlimages/curl` ya trae su propio usuario sin privilegios (issue #157): no
+    // hace falta nombrar un `runAsUser`, y descargar-verificar-mover no necesita
+    // ninguna capacidad Linux con nombre.
+    securityContext: seguridadSinRoot(),
     resources: RECURSOS.auxiliar,
     volumeMounts: [{ name: "wal-g-bin", mountPath: WALG_DIRECTORIO }],
   };

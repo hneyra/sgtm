@@ -8,6 +8,8 @@ import {
   nombreDePrioridad,
   secretoDeCredencialesDeRespaldo,
   secretos,
+  seguridadBase,
+  seguridadSinRoot,
   servicioDeBaseDeDatos,
   sondaExec,
   sondaHttp,
@@ -192,6 +194,13 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
                 "-c",
                 `archive_timeout=${backup.walArchiveTimeoutSeconds}`,
               ],
+              // Sin `runAsNonRoot` (issue #157): el `entrypoint` de la imagen oficial
+              // arranca como root A PROPOSITO, para tomar posesion de PGDATA con
+              // `chown` antes de bajar privilegios el mismo con `gosu postgres`. El
+              // proceso que de verdad atiende conexiones ya corre sin root -lo hace la
+              // propia imagen, no este manifiesto-; forzar `runAsNonRoot` aqui no lo
+              // asegura mas, rompe el `chown` inicial contra un volumen nuevo.
+              securityContext: seguridadBase(),
               ports: [{ name: "postgres", containerPort: 5432 }],
               env: [
                 { name: "POSTGRES_DB", value: BASE_DEL_PADRON },
@@ -269,6 +278,9 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
                 },
               ],
               ports: [{ name: "metrics", containerPort: 9187 }],
+              // No escribe nada fuera de lo que responde por HTTP (issue #157): todo
+              // lo que hace es leer `pg_stat_*` por la red y traducirlo.
+              securityContext: seguridadSinRoot({ readOnlyRootFilesystem: true }),
               resources: RECURSOS.exportador,
               // `httpGet`, no `exec`: la sonda la hace el kubelet desde fuera del
               // contenedor, asi que no depende de que la imagen traiga `wget` —la

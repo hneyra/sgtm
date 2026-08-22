@@ -67,6 +67,27 @@ export interface Recursos {
   limits: { cpu: string; memory: string };
 }
 
+/**
+ * El endurecimiento de un contenedor (issue #157).
+ *
+ * `runAsNonRoot` es opcional en el TIPO porque no todas las imagenes lo soportan sin
+ * ayuda: el motor de PostgreSQL arranca su `entrypoint` como root a proposito —para
+ * poder tomar posesion del volumen antes de bajar privilegios con `gosu`— y forzarlo
+ * aqui rompe el arranque en vez de asegurarlo. Cada componente que lo omite lo dice en
+ * su propio comentario, con el motivo. `allowPrivilegeEscalation` y `capabilities.drop`
+ * no tienen esa excusa: van en **todo** contenedor, y por eso `convenciones.seguridadBase`
+ * los fija sin que nadie tenga que acordarse.
+ */
+export interface SecurityContext {
+  runAsNonRoot?: boolean;
+  /** Solo cuando el `USER` de la imagen no basta y hace falta nombrarlo (ej. `999`). */
+  runAsUser?: number;
+  allowPrivilegeEscalation: false;
+  capabilities: { drop: ["ALL"] };
+  /** Solo donde un contenedor no escribe nada fuera de sus volumenes montados. */
+  readOnlyRootFilesystem?: boolean;
+}
+
 export interface MontajeDeVolumen {
   name: string;
   mountPath: string;
@@ -88,6 +109,11 @@ export interface Contenedor {
   startupProbe?: Sonda;
   readinessProbe?: Sonda;
   livenessProbe?: Sonda;
+  /** Opcional en el tipo, como `priorityClassName` en `EspecificacionDePod`: la
+   *  auditoria (`auditarSeguridad`, issue #157) es quien lo exige en la practica, y
+   *  hacerlo obligatorio en el tipo esconderia el mensaje de esa auditoria detras de
+   *  un error de TypeScript menos preciso. */
+  securityContext?: SecurityContext;
 }
 
 export interface Volumen {
@@ -108,6 +134,13 @@ export interface EspecificacionDePod {
   /** Solo `node-exporter`: sin el, ve la red y el PID 1 del contenedor, no los del nodo. */
   hostNetwork?: boolean;
   hostPID?: boolean;
+  /**
+   * `fsGroup` (issue #157): quien monta un volumen persistente o `emptyDir` y corre
+   * como no-root necesita que el volumen sea escribible por su grupo, y ni el
+   * aprovisionador local de `kind` ni el disco local del VPS le dan esa propiedad
+   * solos. El kubelet aplica el `chown` recursivo al montar, una sola vez.
+   */
+  securityContext?: { fsGroup?: number };
   initContainers?: Contenedor[];
   containers: Contenedor[];
   volumes?: Volumen[];
@@ -285,6 +318,45 @@ export interface ClusterRoleBinding {
   subjects: { kind: "ServiceAccount"; name: string; namespace: string }[];
 }
 
+/**
+ * Denegacion por omision, y se abre lo necesario (issue #157).
+ *
+ * Un `podSelector` vacio (`{}`) selecciona TODOS los pods del namespace: es la forma
+ * de escribir «nada entra, nada sale» antes de las excepciones. Cada regla de mas
+ * abajo es una excepcion nombrada, nunca «todo menos la lista negra» — la diferencia
+ * que separa una politica que protege de una que documenta buenas intenciones.
+ *
+ * `podSelector: { matchLabels: { app: ... } }` en vez de `componente`, a proposito:
+ * los cinco sub-componentes de `Observabilidad.ts` comparten la etiqueta
+ * `componente: observabilidad` (issue #156), y una politica que seleccionara por esa
+ * etiqueta le daria a Grafana el trafico que solo Prometheus deberia recibir.
+ */
+export interface NetworkPolicy {
+  apiVersion: "networking.k8s.io/v1";
+  kind: "NetworkPolicy";
+  metadata: Metadatos;
+  spec: {
+    podSelector: { matchLabels: Record<string, string> } | Record<string, never>;
+    policyTypes: ("Ingress" | "Egress")[];
+    ingress?: ReglaDeRed[];
+    egress?: ReglaDeRed[];
+  };
+}
+
+interface SelectorDeRed {
+  podSelector?: { matchLabels: Record<string, string> };
+  namespaceSelector?: { matchLabels: Record<string, string> };
+  /** Solo para salida a internet: un bloque CIDR, con `except` para lo que no cubre. */
+  ipBlock?: { cidr: string; except?: string[] };
+}
+
+interface ReglaDeRed {
+  /** Ausente: el `NetworkPolicy` de Kubernetes lo entiende como «cualquier origen o destino». */
+  from?: SelectorDeRed[];
+  to?: SelectorDeRed[];
+  ports?: { protocol: "TCP" | "UDP"; port: number }[];
+}
+
 export type Manifiesto =
   | Namespace
   | PriorityClass
@@ -300,7 +372,8 @@ export type Manifiesto =
   | HelmChartConfig
   | ServiceAccount
   | ClusterRole
-  | ClusterRoleBinding;
+  | ClusterRoleBinding
+  | NetworkPolicy;
 
 /** Los manifiestos que llevan pods dentro. La auditoria los recorre todos. */
 export interface PodAuditable {

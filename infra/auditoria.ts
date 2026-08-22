@@ -104,6 +104,7 @@ export function auditarManifiestos(
         problemas.push(...auditarKeycloak(donde, c.name, c.args ?? []));
         problemas.push(...auditarLaAplicacion(donde, c));
         problemas.push(...auditarRespaldo(donde, c));
+        problemas.push(...auditarSeguridad(donde, c));
         if (
           (clase === "Deployment" || clase === "CronJob") &&
           !COMPONENTES_CON_ACCESO_A_OWNER.includes(etiquetas["componente"] ?? "")
@@ -168,6 +169,26 @@ function auditarRecursos(
       "toda carga los declara. Sin ellos el planificador no puede reservar nada y el kubelet " +
       "desaloja a ciegas, que en un nodo unico es la diferencia entre perder un Job y perder " +
       "la base de datos.",
+  ];
+}
+
+/**
+ * El endurecimiento de `INF-01` §4 que no admite excepcion (issue #157): sin
+ * escalada de privilegios, y sin ninguna capacidad Linux de mas. `runAsNonRoot`
+ * queda fuera a proposito —lo audita `verificaciones/componentes.test.ts`, no
+ * aqui, porque su ausencia es una decision nombrada de un puñado de contenedores
+ * (el motor de PostgreSQL, `respaldo-base`) y no un olvido: convertirla en un
+ * incumplimiento bloqueante rompe exactamente los dos casos donde faltar es
+ * correcto.
+ */
+function auditarSeguridad(donde: string, c: Contenedor): string[] {
+  const sc = c.securityContext;
+  if (sc?.allowPrivilegeEscalation === false && sc.capabilities?.drop?.includes("ALL")) return [];
+  return [
+    `${donde}, contenedor «${c.name}»: sin \`securityContext\` endurecido —` +
+      '`allowPrivilegeEscalation: false` y `capabilities: { drop: ["ALL"] }`. ' +
+      "INF-01 §4 (issue #157): ninguna de las dos tiene un motivo legitimo para faltar, ni " +
+      "siquiera en el contenedor que arranca como root a proposito.",
   ];
 }
 

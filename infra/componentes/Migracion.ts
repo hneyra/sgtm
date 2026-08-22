@@ -5,6 +5,7 @@ import {
   RECURSOS,
   nombreDePrioridad,
   secretos,
+  seguridadSinRoot,
   servicioDeBaseDeDatos,
   urlDelPadron,
 } from "./convenciones";
@@ -161,6 +162,9 @@ function contenedorDeEspera(args: {
         valueFrom: { secretKeyRef: { name: secreto.aplicacion, key: CLAVES.aplicacion } },
       },
     ],
+    // Solo habla `psql` por la red -no lee PGDATA, ni nada que necesite coincidir
+    // con un UID del volumen-: el caso simple de `seguridadSinRoot` (issue #157).
+    securityContext: seguridadSinRoot(),
     resources: RECURSOS.auxiliar,
   };
 }
@@ -201,6 +205,9 @@ export function manifiestosDeMigracion(args: MigracionArgs): Manifiesto[] {
                   valueFrom: { secretKeyRef: { name: secreto.owner, key: CLAVES.owner } },
                 },
               ],
+              // `USER 10002` en el propio Dockerfile del migrador (issue #157): la
+              // imagen ya no corre como root, esto solo lo declara.
+              securityContext: seguridadSinRoot(),
               resources: RECURSOS.aplicacionLote,
             },
           ],
@@ -261,6 +268,8 @@ export function manifiestosDeMigracion(args: MigracionArgs): Manifiesto[] {
               // un artefacto, dos perfiles). No abre puerto ninguno.
               image: `${imageRepository}/sgtm-aplicacion:${version}`,
               env: variablesDeImplantacion,
+              // `USER 10001` en el Dockerfile, la misma imagen que `aplicacion` (issue #157).
+              securityContext: seguridadSinRoot(),
               resources: RECURSOS.aplicacionLote,
             },
           ],

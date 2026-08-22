@@ -9,7 +9,13 @@ import { valoresDeTraefik } from "../componentes/Ingreso";
 import { manifiestosDeObservabilidad } from "../componentes/Observabilidad";
 import { secretos } from "../componentes/convenciones";
 import { raizDelRepositorio } from "../componentes/fuentes";
-import { contenedoresDe, podsDe, type Contenedor, type Manifiesto } from "../componentes/tipos";
+import {
+  contenedoresDe,
+  podsDe,
+  type Contenedor,
+  type Manifiesto,
+  type NetworkPolicy,
+} from "../componentes/tipos";
 import { ENVIRONMENTS, namespaceName, type Environment } from "../config";
 import { invariantesDe } from "./stacks";
 
@@ -940,6 +946,151 @@ describe("#156 · observabilidad", () => {
     };
     expect(tablero.data["resumen-operativo.json"]).toBeDefined();
     expect(json.panels.some((p) => p.title.includes("Version desplegada"))).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #157 — Endurecimiento: red, sin root, limites y sondas
+// ─────────────────────────────────────────────────────────────────────────────
+
+function politicasDeRed(ms: Manifiesto[]): NetworkPolicy[] {
+  return ms.filter((m): m is NetworkPolicy => m.kind === "NetworkPolicy");
+}
+
+function politicaDe(ms: Manifiesto[], nombre: string): NetworkPolicy {
+  const encontrada = politicasDeRed(ms).find((p) => p.metadata.name === nombre);
+  if (!encontrada) {
+    throw new Error(
+      `No hay ningun NetworkPolicy «${nombre}». Hay: ` +
+        politicasDeRed(ms).map((p) => p.metadata.name).join(", "),
+    );
+  }
+  return encontrada;
+}
+
+/** Todo `podSelector`/`namespaceSelector` que aparece en cualquier regla de una politica. */
+function origenesDe(p: NetworkPolicy): { pods: string[]; namespaces: string[] } {
+  const reglas = [...(p.spec.ingress ?? []), ...(p.spec.egress ?? [])];
+  const selectores = reglas.flatMap((r) => [...(r.from ?? []), ...(r.to ?? [])]);
+  return {
+    pods: selectores
+      .map((s) => s.podSelector?.matchLabels.app)
+      .filter((app): app is string => app !== undefined),
+    namespaces: selectores
+      .map((s) => s.namespaceSelector?.matchLabels["kubernetes.io/metadata.name"])
+      .filter((n): n is string => n !== undefined),
+  };
+}
+
+describe("#157 · endurecimiento", () => {
+  const ms = manifiestosDe(AMBIENTE);
+
+  it("denegar-todo selecciona TODOS los pods, en las dos direcciones, sin ninguna excepcion propia", () => {
+    const base = politicaDe(ms, "denegar-todo");
+    expect(base.spec.podSelector).toEqual({});
+    expect(base.spec.policyTypes.sort()).toEqual(["Egress", "Ingress"]);
+    expect(base.spec.ingress ?? []).toEqual([]);
+    expect(base.spec.egress ?? []).toEqual([]);
+  });
+
+  it("la interfaz no esta entre quienes pueden alcanzar PostgreSQL", () => {
+    // La prueba estructural: quien figura en la politica que ADMITE trafico hacia
+    // el motor. La prueba de verdad —que conectar falla— exige un clúster con el
+    // `NetworkPolicy` aplicado y es responsabilidad de
+    // `red/verificar-politicas.sh`, no de esta suite sin clúster.
+    const postgres = politicaDe(ms, "permitir-ingreso-postgres");
+    const nombreDeInterfaz = buscar(ms, "Service", "sgtm-prod-interfaz").metadata.name;
+    expect(origenesDe(postgres).pods).not.toContain(nombreDeInterfaz);
+  });
+
+  it("la aplicacion no tiene ningun bloque de internet en su lista de salida", () => {
+    const salida = politicaDe(ms, "permitir-salida-aplicacion");
+    const destinos = salida.spec.egress?.flatMap((r) => r.to ?? []) ?? [];
+    expect(destinos.some((d) => d.ipBlock !== undefined)).toBe(false);
+  });
+
+  it("las dos excepciones de salida a internet son del mismo puerto, y de nadie mas", () => {
+    // El motor y el respaldo, hacia el almacenamiento de objetos (issue #155): la
+    // unica salida amplia que este archivo declara, y acotada a :443.
+    const conInternet = politicasDeRed(ms).filter((p) =>
+      (p.spec.egress ?? []).some((r) => (r.to ?? []).some((d) => d.ipBlock !== undefined)),
+    );
+    const nombres = conInternet.map((p) => p.metadata.name).sort();
+    expect(nombres).toEqual(
+      [
+        "permitir-salida-sgtm-prod-observabilidad-alertmanager-a-internet",
+        "permitir-salida-sgtm-prod-postgres-a-internet",
+        "permitir-salida-sgtm-prod-respaldo-a-internet",
+      ].sort(),
+    );
+    for (const p of conInternet) {
+      const puertos = (p.spec.egress ?? []).flatMap((r) => r.ports ?? []).map((pt) => pt.port);
+      expect(puertos).toEqual([443]);
+    }
+  });
+
+  it("kube-state-metrics no tiene politica de salida: el API de Kubernetes no es un pod", () => {
+    const p = politicaDe(ms, "permitir-ingreso-kube-state-metrics");
+    expect(p.spec.policyTypes).toEqual(["Ingress"]);
+    expect(p.spec.egress).toBeUndefined();
+  });
+
+  it("toda politica vive en el namespace del ambiente", () => {
+    for (const p of politicasDeRed(ms)) {
+      expect(p.metadata.namespace).toBe(namespaceName(AMBIENTE));
+    }
+  });
+
+  it("ningun contenedor corre como root, salvo los dos nombrados por su motivo", () => {
+    const SIN_RUNASNONROOT = new Set([
+      // El entrypoint de la imagen oficial de PostgreSQL arranca como root a
+      // proposito (ver `BaseDeDatos.ts`).
+      "postgres",
+      // Lee PGDATA de solo lectura con el permiso que la propia imagen le dio al
+      // motor; forzar un UID sin verificarlo contra un clúster real cambia un
+      // guion que funciona por uno que no (ver `Respaldo.ts`).
+      "respaldo-base",
+    ]);
+    const sinNonRoot = contenedoresDeTodo(ms).filter(
+      ({ c }) => !SIN_RUNASNONROOT.has(c.name) && c.securityContext?.runAsNonRoot !== true,
+    );
+    expect(sinNonRoot.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
+  });
+
+  it("todo contenedor tiene sin escalada de privilegios y sin capacidades", () => {
+    const sinEndurecer = contenedoresDeTodo(ms).filter(
+      ({ c }) =>
+        c.securityContext?.allowPrivilegeEscalation !== false ||
+        !c.securityContext.capabilities?.drop?.includes("ALL"),
+    );
+    expect(sinEndurecer.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
+  });
+
+  it("kubectl get pods no mostraria ninguno sin limites: todo contenedor los declara", () => {
+    const sinLimites = contenedoresDeTodo(ms).filter(
+      ({ c }) => !c.resources?.limits?.cpu || !c.resources.limits.memory,
+    );
+    expect(sinLimites.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
+  });
+});
+
+describe("#157 · la demostracion: la auditoria se pone roja", () => {
+  it("quitando allowPrivilegeEscalation del motor, la auditoria lo detecta", () => {
+    const ms = manifiestosDe(AMBIENTE);
+    const motor = contenedorDe(ms, "Deployment", "postgres", "postgres");
+    // @ts-expect-error -- se rompe a proposito: `allowPrivilegeEscalation` es obligatorio en el tipo.
+    delete motor.securityContext.allowPrivilegeEscalation;
+
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("securityContext"));
+  });
+
+  it("quitando el drop de capacidades de la interfaz, la auditoria lo detecta", () => {
+    const ms = manifiestosDe(AMBIENTE);
+    const interfaz = contenedorDe(ms, "Deployment", "interfaz", "interfaz");
+    // @ts-expect-error -- se rompe a proposito: `capabilities` es obligatorio en el tipo.
+    delete interfaz.securityContext.capabilities;
+
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("securityContext"));
   });
 });
 

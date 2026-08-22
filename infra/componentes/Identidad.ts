@@ -7,6 +7,7 @@ import {
   ROL_DE_IDENTIDAD,
   nombreDePrioridad,
   secretos,
+  seguridadSinRoot,
   servicioDeBaseDeDatos,
   servicioDeIdentidad,
   sondaHttp,
@@ -280,6 +281,8 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
                   },
                 },
               ],
+              // La imagen de quay.io ya corre como no-root de fabrica (issue #157).
+              securityContext: seguridadSinRoot(),
               resources: RECURSOS.identidad,
               // Keycloak migra su propia base al arrancar tras una actualizacion
               // menor, y eso tarda. `startupProbe` con 60 intentos da hasta cinco
@@ -362,6 +365,7 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
                 },
                 { name: "KC_CLIENTES", value: documentos.clientesComprobados.join(" ") },
               ],
+              securityContext: seguridadSinRoot(),
               resources: RECURSOS.auxiliar,
               volumeMounts: [{ name: "realm", mountPath: "/realm", readOnly: true }],
             },
