@@ -190,4 +190,6 @@ día del incidente.
 fuera) · [`INF-03`](ambientes.md) §2 (dónde se ensaya la restauración) ·
 [`INF-06`](gestion-de-secretos.md) (de dónde sale la clave de cifrado) ·
 [`ADR-0011`](../30-arquitectura/adr/ADR-0011-infraestructura-como-codigo.md) ·
+[Restaurar a un punto en el tiempo](../B0-operacion/runbooks/restaurar-a-un-punto-en-el-tiempo.md)
+— el runbook que ejecuta este procedimiento contra el clúster ·
 [`infra/README.md`](../../infra/README.md)
