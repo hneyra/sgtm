@@ -12,17 +12,17 @@
 #      PostgreSQL.
 #   2. Desde un pod con las etiquetas de la aplicacion, no se puede alcanzar un
 #      destino de internet que no este en la lista blanca.
-#   3. Quitando las dos politicas que gobiernan el flujo del punto 1, la MISMA
-#      conexion pasa a CONECTAR -la prueba de que hacian algo, no que estaban mal
-#      etiquetadas y sencillamente no seleccionaban ningun pod (issue #157, "como
-#      se demuestra que puede fallar"). NO basta con quitar `denegar-todo`: en
-#      Kubernetes, un pod seleccionado por CUALQUIER `NetworkPolicy` de un tipo
-#      -Ingress o Egress- queda restringido a lo que esa politica permite, con
-#      `denegar-todo` presente o no. La interfaz tiene su propia salida restringida
-#      (`permitir-salida-interfaz`) y postgres su propio ingreso restringido
-#      (`permitir-ingreso-postgres`): las DOS gobiernan este flujo de forma
-#      independiente, y hay que quitar las dos -confirmado en CI: quitar solo
-#      `denegar-todo` no desbloqueaba nada, la conexion seguia fallando-.
+#   3. Quitando TODAS las politicas de red del namespace, la MISMA conexion pasa a
+#      CONECTAR -la prueba de que hacian algo, no que estaban mal etiquetadas y
+#      sencillamente no seleccionaban ningun pod (issue #157, "como se demuestra
+#      que puede fallar"). Ninguna combinacion parcial basta: `denegar-todo` y
+#      `permitir-dns` usan `podSelector: {}` -seleccionan CADA pod del namespace,
+#      para Ingress y Egress-, asi que la interfaz y postgres SIEMPRE quedan
+#      seleccionados por al menos una politica, sin importar cuales otras se
+#      quiten -confirmado en CI dos veces: ni quitar solo `denegar-todo`, ni
+#      quitar solo las dos politicas especificas de este flujo, desbloqueaba
+#      nada-. Quitar el namespace ENTERO de politicas es la unica demostracion
+#      sin ambiguedad.
 #
 # La interfaz y la aplicacion no tienen imagen publicable desde este repositorio
 # (issue #156 ya documento el mismo limite para sus tableros): las pruebas 1 y 2 no
@@ -180,24 +180,23 @@ echo "  Bloqueado: correcto -la aplicacion no tiene ninguna dependencia externa 
 
 echo
 echo "· La demostracion que el issue pide: sin las politicas, la MISMA conexion CONECTA"
-# Las DOS que gobiernan este flujo, no `denegar-todo`: en Kubernetes, un pod
-# seleccionado por CUALQUIER NetworkPolicy de un tipo -Ingress o Egress- queda
-# restringido a lo que esa politica permite, con `denegar-todo` presente o no.
-# La interfaz tiene su propia salida restringida (`permitir-salida-interfaz`) y
-# postgres su propio ingreso restringido (`permitir-ingreso-postgres`): las dos
-# bloquean esta conexion de forma INDEPENDIENTE, y confirmado en CI: quitar solo
-# `denegar-todo` no desbloqueaba nada -la conexion seguia fallando, un falso
-# FALLO en una demostracion que en realidad probaba que las politicas SI
-# trabajan-.
-kubectl -n "$NS" delete networkpolicy permitir-salida-interfaz permitir-ingreso-postgres >/dev/null
+# TODAS, no una ni dos: `denegar-todo` y `permitir-dns` tienen `podSelector: {}`
+# -seleccionan CADA pod del namespace, para Ingress y Egress- asi que quitar
+# cualquier subconjunto de politicas deja SIEMPRE a la interfaz y a postgres
+# seleccionados por al menos una de esas dos, y por tanto restringidos igual.
+# Confirmado en CI dos veces: quitar `denegar-todo` sola no bastaba -las politicas
+# especificas de interfaz/postgres seguian restringiendolos-, y quitar esas dos
+# tampoco -`denegar-todo` y `permitir-dns` seguian restringiendolos-. La unica
+# demostracion sin ambiguedad es la que el propio issue describe: sin NINGUNA
+# politica de red en el namespace, la conexion conecta.
+kubectl -n "$NS" delete networkpolicy --all >/dev/null
 if ! puede_conectar "$NS" sintetico-interfaz "sgtm-stg-postgres" 5432; then
-    echo "FALLO: quitando las dos politicas, la interfaz SIGUE sin poder conectar." >&2
-    echo "Eso significa que ninguna de las dos estaba haciendo nada -un podSelector" >&2
-    echo "que nunca selecciono a los pods correctos- y las comprobaciones 1/2 y 2/2" >&2
-    echo "pasaban en verde por la razon equivocada." >&2
+    echo "FALLO: sin NINGUNA NetworkPolicy en el namespace, la interfaz SIGUE sin" >&2
+    echo "poder conectar. Eso ya no es una politica mal etiquetada: es Calico, kind, o" >&2
+    echo "el propio guion de comprobacion los que estan fallando, no Red.ts." >&2
     exit 1
 fi
-echo "  Conecta: las dos politicas SI estaban haciendo algo, no eran decorativas."
+echo "  Conecta: las politicas de arriba SI estaban haciendo algo, no eran decorativas."
 
 echo
 echo "Denegacion por omision, verificada contra Calico: lo que Red.ts declara es lo que"
