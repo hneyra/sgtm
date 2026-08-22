@@ -7,16 +7,17 @@ import { manifiestosDeIdentidad, documentosDelRealm, RUTA_DE_IDENTIDAD } from ".
 import { nginxDelCluster } from "../componentes/Aplicacion";
 import { valoresDeTraefik } from "../componentes/Ingreso";
 import { manifiestosDeObservabilidad } from "../componentes/Observabilidad";
-import { secretos } from "../componentes/convenciones";
+import { PRIORIDADES, nombreDePrioridad, secretos } from "../componentes/convenciones";
 import { raizDelRepositorio } from "../componentes/fuentes";
 import {
   contenedoresDe,
   podsDe,
   type Contenedor,
+  type EspecificacionDePod,
   type Manifiesto,
   type NetworkPolicy,
 } from "../componentes/tipos";
-import { ENVIRONMENTS, namespaceName, type Environment } from "../config";
+import { ENVIRONMENTS, namespaceName, resourceName, type Environment } from "../config";
 import { invariantesDe } from "./stacks";
 
 /**
@@ -59,6 +60,11 @@ function contenedoresDeTodo(ms: Manifiesto[]): { donde: string; c: Contenedor }[
       contenedoresDe(pod).map((c) => ({ donde: contexto, c })),
     ),
   );
+}
+
+/** Todo pod del manifiesto, para las comprobaciones que miran el pod y no el contenedor. */
+function podsDeTodo(ms: Manifiesto[]): { donde: string; pod: EspecificacionDePod }[] {
+  return ms.flatMap((m) => podsDe(m).map(({ contexto, pod }) => ({ donde: contexto, pod })));
 }
 
 function variablesDe(c: Contenedor): Map<string, string | undefined> {
@@ -1111,6 +1117,41 @@ describe("#157 · endurecimiento", () => {
     );
     expect(sinLimites.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
   });
+
+  // Las tres de abajo son el «falta auditar y completar» de las clases de prioridad.
+  // Lo que ya habia comprobaba que ningun pod se OLVIDA de declarar su clase; lo que
+  // faltaba es que las clases esten en el orden correcto, que es de donde sale el
+  // sentido entero de tenerlas. Sin esto, intercambiar `datos` y `lote` en
+  // `convenciones.ts` deja las 170 pruebas en verde con PostgreSQL como lo PRIMERO
+  // que el kubelet desaloja.
+
+  it("las tres clases estan estrictamente ordenadas: datos por encima de servicio, y servicio de lote", () => {
+    expect(PRIORIDADES.datos).toBeGreaterThan(PRIORIDADES.servicio);
+    expect(PRIORIDADES.servicio).toBeGreaterThan(PRIORIDADES.lote);
+  });
+
+  it("el motor de datos usa la clase `datos`, y es el unico que la usa", () => {
+    const conClaseDeDatos = podsDeTodo(ms).filter(
+      ({ pod }) => pod.priorityClassName === nombreDePrioridad(AMBIENTE, "datos"),
+    );
+    expect(conClaseDeDatos.map(({ donde }) => donde)).toEqual([
+      `Deployment/${resourceName(AMBIENTE, "postgres")}`,
+    ]);
+  });
+
+  it("ningun pod del manifiesto vale tanto como el motor: la base se desaloja la ultima", () => {
+    const valorDe = new Map(
+      ms.filter((m) => m.kind === "PriorityClass").map((m) => [m.metadata.name, m.value]),
+    );
+    const delMotor = valorDe.get(nombreDePrioridad(AMBIENTE, "datos"));
+
+    const porEncima = podsDeTodo(ms).filter(
+      ({ pod }) =>
+        pod.priorityClassName !== nombreDePrioridad(AMBIENTE, "datos") &&
+        (valorDe.get(pod.priorityClassName) ?? 0) >= (delMotor ?? 0),
+    );
+    expect(porEncima.map(({ donde }) => donde)).toEqual([]);
+  });
 });
 
 describe("#157 · la demostracion: la auditoria se pone roja", () => {
@@ -1130,6 +1171,35 @@ describe("#157 · la demostracion: la auditoria se pone roja", () => {
     delete interfaz.securityContext.capabilities;
 
     expect(auditar(ms)).toContainEqual(expect.stringContaining("securityContext"));
+  });
+
+  it("intercambiando `datos` y `lote`, la auditoria detecta que la base se desaloja primero", () => {
+    // Exactamente lo que un `PRIORIDADES.datos = 100 / lote = 1000` produciria en el
+    // manifiesto. Antes de esta comprobacion, esa inversion pasaba las 170 pruebas en
+    // verde: cada pod seguia declarando su clase, y nadie miraba el numero.
+    const ms = manifiestosDe(AMBIENTE);
+    const clase = (prioridad: Parameters<typeof nombreDePrioridad>[1]) =>
+      ms.find(
+        (m): m is Extract<Manifiesto, { kind: "PriorityClass" }> =>
+          m.kind === "PriorityClass" && m.metadata.name === nombreDePrioridad(AMBIENTE, prioridad),
+      );
+    const datos = clase("datos");
+    const lote = clase("lote");
+    [datos!.value, lote!.value] = [lote!.value, datos!.value];
+
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("es lo ULTIMO que se desaloja"));
+  });
+
+  it("apuntando un pod a una clase que nadie define, la auditoria lo detecta", () => {
+    // Kubernetes rechaza el pod entero, no lo despliega con menos garantias: una
+    // `PriorityClass` mal escrita es un pod que no arranca.
+    const ms = manifiestosDe(AMBIENTE);
+    const prometheus = buscar(ms, "Deployment", "observabilidad-prometheus") as {
+      spec: { template: { spec: { priorityClassName: string } } };
+    };
+    prometheus.spec.template.spec.priorityClassName = "prioridad-que-no-existe";
+
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("ningun PriorityClass"));
   });
 });
 
