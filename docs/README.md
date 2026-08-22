@@ -69,6 +69,7 @@ cosas donde espera.
 - [INF-06 — Gestión de secretos](80-infraestructura/gestion-de-secretos.md) — de dónde sale cada clave, dónde no está y cómo se rota
 - [INF-08 — Respaldo y recuperación](80-infraestructura/respaldo-y-recuperacion.md) — archivado de WAL, PITR y el simulacro que lo demuestra
 - [INF-09 — Observabilidad y alertas](80-infraestructura/observabilidad-y-alertas.md) — métricas, tableros y una alerta que le llegue a alguien
+- [INF-10 — Endurecimiento del clúster](80-infraestructura/endurecimiento-del-cluster.md) — denegación por omisión en la red, sin root, y la reserva del nodo
 - [`infra/README.md`](../infra/README.md) — el árbol de Pulumi, sus invariantes y cómo se demuestra que muerden
 
 ### A0 — Calidad

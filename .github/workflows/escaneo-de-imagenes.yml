@@ -1,0 +1,143 @@
+# Escaneo de vulnerabilidades de las tres imagenes del sistema, en el PR (issue #157).
+#
+# `publicar-imagenes.yml` (issue #148) construye estas mismas imagenes, pero solo al
+# fusionar en `main` -y para entonces ya es tarde para que alguien revise el
+# resultado antes de aceptar el cambio-. Este flujo construye las mismas imagenes
+# EN el PR, sin publicarlas a ningun registro (`push: false`, `load: true`: la imagen
+# queda en el runner, nunca sale de el), y las escanea con Trivy.
+#
+# Bloqueante solo en CRITICAL. HIGH se reporta -aparece en el resumen del trabajo,
+# visible desde el PR sin abrir un log- pero no rompe el flujo: las imagenes base
+# (`postgres:16-alpine`, `nginx:1.27-alpine`, `eclipse-temurin`) acumulan hallazgos
+# HIGH que nadie de este repositorio puede corregir sin esperar a la propia base, y
+# un flujo bloqueante en algo que no se puede arreglar hoy es un flujo que termina
+# ignorado. CRITICAL si bloquea: ahi la respuesta correcta es casi siempre
+# actualizar la etiqueta de la imagen base, que es la otra mitad del alcance del
+# issue.
+name: Escaneo de vulnerabilidades
+
+on:
+  pull_request:
+    paths:
+      - 'backend/Dockerfile'
+      - 'backend/**/build.gradle.kts'
+      - 'frontend/Dockerfile'
+      - 'frontend/package.json'
+      - 'frontend/yarn.lock'
+      - '.github/workflows/escaneo-de-imagenes.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  aplicacion-y-migrador:
+    name: ${{ matrix.imagen }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - destino: aplicacion
+            imagen: sgtm-aplicacion
+          - destino: migrador
+            imagen: sgtm-migrador
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Contexto: la raiz del repositorio, igual que `publicar-imagenes.yml` -el
+      # catalogo de NEG-03 vive en docs/ y el build lo copia de ahi-. `push: false`,
+      # `load: true`: la imagen se queda en el daemon local de este runner, para que
+      # Trivy la escanee, y nunca toca un registro.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          target: ${{ matrix.destino }}
+          push: false
+          load: true
+          tags: local/${{ matrix.imagen }}:pr-${{ github.event.pull_request.number }}
+
+      - name: Trivy — resumen (CRITICAL y HIGH, no bloqueante)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: local/${{ matrix.imagen }}:pr-${{ github.event.pull_request.number }}
+          format: table
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+          output: resumen.txt
+
+      - name: Publicar el resumen en el PR
+        if: always()
+        run: |
+          {
+            echo "### ${{ matrix.imagen }}"
+            echo '```'
+            cat resumen.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Trivy — bloqueante (solo CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: local/${{ matrix.imagen }}:pr-${{ github.event.pull_request.number }}
+          format: table
+          severity: CRITICAL
+          exit-code: '1'
+
+  interfaz:
+    name: sgtm-interfaz
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Sin dominio real -este escaneo no publica nada ni lo despliega en ningun
+      # ambiente-: los `VITE_SGTM_OIDC_*` solo cambian el paquete de JavaScript
+      # compilado, nunca los paquetes del sistema operativo que Trivy audita. Un
+      # valor fijo de relleno basta.
+      - uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          target: interfaz
+          push: false
+          load: true
+          tags: local/sgtm-interfaz:pr-${{ github.event.pull_request.number }}
+          build-args: |
+            VITE_SGTM_API=/api/v1
+            VITE_SGTM_OIDC_CLIENTE=sgtm-backoffice
+            VITE_SGTM_OIDC_AUTORIZACION=https://escaneo.invalido/keycloak/realms/sgtm/protocol/openid-connect/auth
+            VITE_SGTM_OIDC_TOKEN=https://escaneo.invalido/keycloak/realms/sgtm/protocol/openid-connect/token
+            VITE_SGTM_OIDC_FIN_DE_SESION=https://escaneo.invalido/keycloak/realms/sgtm/protocol/openid-connect/logout
+
+      - name: Trivy — resumen (CRITICAL y HIGH, no bloqueante)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: local/sgtm-interfaz:pr-${{ github.event.pull_request.number }}
+          format: table
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+          output: resumen.txt
+
+      - name: Publicar el resumen en el PR
+        if: always()
+        run: |
+          {
+            echo "### sgtm-interfaz"
+            echo '```'
+            cat resumen.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Trivy — bloqueante (solo CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: local/sgtm-interfaz:pr-${{ github.event.pull_request.number }}
+          format: table
+          severity: CRITICAL
+          exit-code: '1'
