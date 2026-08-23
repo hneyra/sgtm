@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -13,6 +14,7 @@ import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.seguridad.aplicacion.AdministrarPermisos;
+import pe.gob.sgtm.seguridad.aplicacion.AdministrarPermisos.PermisoDeAcceso;
 import pe.gob.sgtm.seguridad.dominio.Permiso;
 import pe.gob.sgtm.web.Api;
 
@@ -36,6 +38,24 @@ public class PermisosController {
 
     public PermisosController(AdministrarPermisos administrar) {
         this.administrar = administrar;
+    }
+
+    /**
+     * Los permisos ya configurados del grupo, para cargar la matriz antes de guardarla.
+     *
+     * <p>No trae las 134 opciones del catalogo: trae las que este grupo tiene configuradas. La
+     * pantalla combina esta respuesta —tipicamente unas pocas filas— con la pagina de {@code GET
+     * /seguridad/accesos}, que ya pagina el catalogo entero. Ninguna de las dos necesita traer las
+     * 134 opciones a la vez.
+     */
+    @GetMapping
+    @RequiereAcceso(acceso = "permisos", privilegio = Privilegio.LECTURA)
+    public List<PermisoResource> deGrupo(@PathVariable("id") long grupo) {
+        List<PermisoResource> resultado = new ArrayList<>();
+        for (PermisoDeAcceso permiso : administrar.deGrupo(grupo)) {
+            resultado.add(PermisoResource.de(permiso));
+        }
+        return resultado;
     }
 
     @PutMapping
@@ -91,6 +111,19 @@ public class PermisosController {
             return new PermisoResource(
                     permiso.id() == null ? 0L : permiso.id(),
                     acceso,
+                    permiso.grupoId() == null ? 0L : permiso.grupoId(),
+                    nombres);
+        }
+
+        static PermisoResource de(PermisoDeAcceso permiso) {
+            List<String> nombres =
+                    java.util.Arrays.stream(Privilegio.values())
+                            .filter(permiso.privilegios()::contains)
+                            .map(Enum::name)
+                            .toList();
+            return new PermisoResource(
+                    permiso.id(),
+                    permiso.codigoDeAcceso(),
                     permiso.grupoId() == null ? 0L : permiso.grupoId(),
                     nombres);
         }

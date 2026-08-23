@@ -752,7 +752,34 @@ const parametros = (): Paginado => {
   ]);
 };
 
-/** Por camino del contrato, relativo a `/api/v1`. Solo `GET`: ninguna escribe. */
+/**
+ * El historico de respaldos (RF-126, #70). Su verbo es `POST` —lo fija el
+ * contrato del prototipo— pero solo consulta: `respaldo()` la publica junto
+ * a las demas lecturas por la misma razon que `paginadoDe` la deja pasar.
+ */
+const respaldo = (): Paginado =>
+  unaPagina([
+    {
+      id: 1,
+      inicio: '2026-08-23T02:00:00Z',
+      fin: '2026-08-23T02:04:12Z',
+      resultado: 'EXITOSO',
+      destino: 's3://sgtm-respaldos/2026-08-23.tar.gz.age',
+      tamanoBytes: 187_342_211,
+      detalle: null,
+    },
+    {
+      id: 2,
+      inicio: '2026-08-10T02:00:00Z',
+      fin: '2026-08-10T02:01:03Z',
+      resultado: 'FALLIDO',
+      destino: 's3://sgtm-respaldos/2026-08-10.tar.gz.age',
+      tamanoBytes: null,
+      detalle: 'Sin espacio en el servidor de destino.',
+    },
+  ]);
+
+/** Por camino del contrato, relativo a `/api/v1`. Casi todas son `GET`: ver `respaldo`. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/catastro/vias': vias,
   '/rentas/contribuyentes': contribuyentes,
@@ -769,7 +796,20 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/seguridad/usuarios': usuarios,
   '/seguridad/auditoria': auditoria,
   '/seguridad/parametros': parametros,
+  '/seguridad/respaldos': respaldo,
 };
+
+/**
+ * Los permisos ya otorgados de un grupo (`GET .../grupos/{id}/permisos`, #70).
+ *
+ * El proxy no filtra ni persiste (arriba, en `proxy.ts`): la misma fila sale
+ * sin importar que grupo se pida, igual que ya hace `cuentaCorriente` con su
+ * `{codigo}`. Sirve para probar que la matriz carga lo que haya **sin** traer
+ * las 134 opciones del catalogo — aqui hay una, a proposito.
+ */
+const permisosDeGrupo = (): readonly Readonly<Record<string, unknown>>[] => [
+  { id: 1, acceso: 'calles', grupoId: 1, usuarioId: null, privilegios: ['LECTURA'] },
+];
 
 /**
  * Por camino del contrato, para los listados que el backend publica **sin**
@@ -778,6 +818,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
 export const LISTAS: Readonly<Record<string, () => readonly Readonly<Record<string, unknown>>[]>> =
   {
     '/catastro/tablas/aranceles': aranceles,
+    '/seguridad/grupos/{id}/permisos': permisosDeGrupo,
   };
 
 /** El arreglo suelto de un camino, si el proxy lo publica sin sobre. */
@@ -787,7 +828,14 @@ export function listaDe(
 ): readonly Readonly<Record<string, unknown>>[] | null {
   if (metodo.toUpperCase() !== 'GET') return null;
   const relativo = camino.replace(/^\/api\/v1/, '');
-  return LISTAS[relativo]?.() ?? null;
+  const directa = LISTAS[relativo];
+  if (directa !== undefined) return directa();
+  // Hay listados cuya ruta lleva el registro que acotan —el grupo, aqui—: se
+  // comparan por patron, igual que `paginadoDe`.
+  for (const [ruta, construir] of Object.entries(LISTAS)) {
+    if (ruta.includes('{') && patron(ruta).test(relativo)) return construir();
+  }
+  return null;
 }
 
 /* ── Lo que devuelven las dos escrituras que la interfaz ya usa ─────────── */
@@ -862,9 +910,21 @@ function patron(ruta: string): RegExp {
   return new RegExp(`^${escapado}$`);
 }
 
-/** El recurso paginado de un camino, si el proxy lo publica con la forma del backend. */
+/**
+ * El recurso paginado de un camino, si el proxy lo publica con la forma del backend.
+ *
+ * Casi siempre es un `GET`. La excepcion es `/seguridad/respaldos`: su verbo
+ * es `POST` porque asi lo fijo el contrato del prototipo, pero el controlador
+ * solo consulta —la aplicacion no puede ejecutar copias de seguridad (ARQ-03
+ * §4)— y su respuesta es el mismo sobre paginado que las demas lecturas. Por
+ * eso este comparador mira el metodo real de cada entrada y no descarta el
+ * `POST` de entrada.
+ */
 export function paginadoDe(metodo: string, camino: string): Paginado | null {
-  if (metodo.toUpperCase() !== 'GET') return null;
+  const verbo = metodo.toUpperCase();
+  if (verbo !== 'GET' && !(verbo === 'POST' && camino.endsWith('/seguridad/respaldos'))) {
+    return null;
+  }
   const relativo = camino.replace(/^\/api\/v1/, '');
   const directo = PAGINADOS[relativo];
   if (directo !== undefined) return directo();
