@@ -84,6 +84,16 @@ public class AdministracionRepositoryJdbc extends RepositorioJdbc
                 .optional();
     }
 
+    @Override
+    public Optional<Acceso> accesoPorId(long id) {
+        return jdbc().sql(
+                        "SELECT id, modulo_id, tipo, codigo, nombre, activo FROM acceso"
+                                + " WHERE id = :id")
+                .param("id", id)
+                .query(AdministracionRepositoryJdbc::mapearAcceso)
+                .optional();
+    }
+
     // ------------------------------------------------------------------ grupos
 
     @Override

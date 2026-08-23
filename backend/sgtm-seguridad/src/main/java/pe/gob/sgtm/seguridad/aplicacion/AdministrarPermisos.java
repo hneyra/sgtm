@@ -2,9 +2,11 @@ package pe.gob.sgtm.seguridad.aplicacion;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.auditoria.Auditoria;
@@ -62,10 +64,51 @@ public class AdministrarPermisos {
         this.reloj = reloj;
     }
 
+    /**
+     * Los permisos ya configurados de un grupo, con el codigo de cada acceso resuelto.
+     *
+     * <p><b>No trae las 134 opciones del catalogo</b>: trae las que este grupo tiene configuradas,
+     * que para la mayoria son unas pocas. La pantalla de la matriz combina esta lista —sparse— con
+     * la pagina de {@code GET /seguridad/accesos} que ya esta conectada, y así nunca carga el
+     * catalogo entero en memoria solo para dibujar una matriz.
+     */
     @Transactional(readOnly = true)
-    public List<Permiso> deGrupo(long grupoId) {
-        return permisos.todosLosDeGrupo(grupoId);
+    public List<PermisoDeAcceso> deGrupo(long grupoId) {
+        exigirQueElGrupoExista(grupoId);
+        List<PermisoDeAcceso> resultado = new ArrayList<>();
+        for (Permiso permiso : permisos.todosLosDeGrupo(grupoId)) {
+            resultado.add(resuelto(permiso));
+        }
+        return resultado;
     }
+
+    private PermisoDeAcceso resuelto(Permiso permiso) {
+        Acceso acceso =
+                administracion
+                        .accesoPorId(permiso.accesoId())
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "El permiso "
+                                                        + permiso.id()
+                                                        + " apunta al acceso "
+                                                        + permiso.accesoId()
+                                                        + ", que ya no existe"));
+        return new PermisoDeAcceso(
+                permiso.id() == null ? 0L : permiso.id(),
+                acceso.codigo(),
+                permiso.grupoId(),
+                permiso.usuarioId(),
+                permiso.privilegios());
+    }
+
+    /** Un permiso ya resuelto: el codigo de su acceso en vez del id interno. */
+    public record PermisoDeAcceso(
+            long id,
+            String codigoDeAcceso,
+            @Nullable Long grupoId,
+            @Nullable Long usuarioId,
+            Set<Privilegio> privilegios) {}
 
     /** Fija los privilegios de un <b>grupo</b> sobre un acceso. Lo no incluido se retira. */
     @Transactional

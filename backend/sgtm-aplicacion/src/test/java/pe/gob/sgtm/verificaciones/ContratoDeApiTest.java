@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -85,16 +86,25 @@ class ContratoDeApiTest {
                     "GET /seguridad/usuarios",
                     "POST /seguridad/grupos/{grupo}/miembros",
                     "PUT /seguridad/grupos/{id}/permisos",
+                    "GET /seguridad/grupos/{id}/permisos",
                     "PUT /seguridad/sesion/ejercicio",
                     "PUT /seguridad/usuarios/{id}/clave",
                     "GET /seguridad/auditoria",
                     "POST /seguridad/respaldos",
                     "GET /seguridad/parametros");
 
-    /** {@code "/ruta":} seguido de {@code verbo:} en el YAML generado. */
-    private static final Pattern OPERACION_DEL_CONTRATO =
-            Pattern.compile(
-                    "\\n {2}\"(/[^\"]*)\":\\n(?: +\\w+: .*\\n)*? +(get|post|put|patch|delete):");
+    /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
+    private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");
+
+    /**
+     * Un verbo dentro de la ruta actual: {@code verbo:} con cuatro espacios de sangria.
+     *
+     * <p>Una ruta puede declarar mas de un verbo —{@code permisos} lee y guarda en la misma ruta,
+     * {@code GET} para cargar la matriz y {@code PUT} para guardarla—, asi que esto no puede ser
+     * parte de un solo regex por ruta: hay que seguir mirando lineas hasta la siguiente ruta.
+     */
+    private static final Pattern VERBO_DEL_CONTRATO =
+            Pattern.compile("    (get|post|put|patch|delete):");
 
     @Test
     @DisplayName("el contrato se lee, y trae las 134 operaciones del manual")
@@ -149,16 +159,24 @@ class ContratoDeApiTest {
     // ------------------------------------------------------------------
 
     private static Set<String> operacionesDelContrato() throws IOException {
-        String yaml =
-                Files.readString(
+        List<String> lineas =
+                Files.readAllLines(
                         raizDelRepositorio().resolve("docs/50-api/openapi/sgtm-v1.yaml"),
                         StandardCharsets.UTF_8);
 
         Set<String> operaciones = new TreeSet<>();
-        Matcher matcher = OPERACION_DEL_CONTRATO.matcher(yaml);
-        while (matcher.find()) {
-            operaciones.add(
-                    matcher.group(2).toUpperCase(java.util.Locale.ROOT) + " " + matcher.group(1));
+        String rutaActual = null;
+        for (String linea : lineas) {
+            Matcher ruta = RUTA_DEL_CONTRATO.matcher(linea);
+            if (ruta.matches()) {
+                rutaActual = ruta.group(1);
+                continue;
+            }
+            Matcher verbo = VERBO_DEL_CONTRATO.matcher(linea);
+            if (verbo.matches() && rutaActual != null) {
+                operaciones.add(
+                        verbo.group(1).toUpperCase(java.util.Locale.ROOT) + " " + rutaActual);
+            }
         }
         return operaciones;
     }

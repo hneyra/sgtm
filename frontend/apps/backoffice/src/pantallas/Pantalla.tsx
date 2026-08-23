@@ -36,6 +36,9 @@ import { Reporte } from './bloques/Reporte';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
 import { Versionado } from './bloques/Versionado';
 import { Totales } from './bloques/Totales';
+import { PermisosMatrix } from './seguridad/PermisosMatrix';
+import { MiembrosDeGrupo } from './seguridad/MiembrosDeGrupo';
+import { Respaldos } from './seguridad/Respaldos';
 
 /**
  * **El renderizador.** Una sola pantalla para las 134 del manual.
@@ -135,7 +138,36 @@ const VERSIONADAS: ReadonlySet<string> = new Set([
  * La eleccion se hace aqui, en dos componentes hermanos, y no dentro de uno con
  * un `if`: un hook no se llama a veces.
  */
+/**
+ * Tres opciones de seguridad que no caben en ninguno de los dos caminos
+ * comunes, cada una por su propio motivo (#70):
+ *
+ *   permisos   su cuerpo es una lista de niveles, no campos planos ni una
+ *              tabla de solo lectura, y necesita los dos verbos de su ruta a
+ *              la vez —leer para cargar la matriz, escribir para guardarla—.
+ *   miembros   escribe un booleano (`activo`), y `CampoDelCuerpo` solo sabe
+ *              de texto y enteros.
+ *   respaldo   su verbo es `POST` pero el controlador solo consulta: la
+ *              aplicacion no puede ejecutar copias de seguridad (ARQ-03 §4),
+ *              asi que sus botones se quedan deshabilitados en vez de
+ *              conectarse a una escritura que no hace lo que dice.
+ *
+ * Viven en su propio componente en vez de forzar al renderizador comun a
+ * saber de listas, de booleanos o de un verbo que miente.
+ */
+const COMPONENTES_PROPIOS: Readonly<
+  Record<string, (props: { readonly estructura: Estructura }) => React.JSX.Element>
+> = {
+  permisos: PermisosMatrix,
+  miembros: MiembrosDeGrupo,
+  respaldo: Respaldos,
+};
+
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
+  const Propio = COMPONENTES_PROPIOS[estructura.id];
+  if (Propio !== undefined) {
+    return <Propio estructura={estructura} />;
+  }
   const conexion = conexionDe(estructura.id);
   return conexion === undefined ? (
     <ContenidoDelCatalogo estructura={estructura} />

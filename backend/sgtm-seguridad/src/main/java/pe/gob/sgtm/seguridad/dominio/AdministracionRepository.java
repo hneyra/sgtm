@@ -24,6 +24,9 @@ public interface AdministracionRepository {
 
     Optional<Acceso> accesoPorCodigo(String codigo);
 
+    /** Para resolver el codigo de un acceso a partir del id que guarda un {@code Permiso}. */
+    Optional<Acceso> accesoPorId(long id);
+
     // ---- Grupos ----
 
     Pagina<Grupo> grupos(Paginacion paginacion);

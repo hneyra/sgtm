@@ -6012,6 +6012,26 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+    get:
+      operationId: permisos_de_grupo
+      summary: "Permisos ya otorgados de un grupo"
+      description: "Los permisos que el grupo ya tiene configurados, para cargar la matriz antes de guardarla (PUT de la misma ruta). No trae las 134 opciones del catalogo: solo las que el grupo ya tiene."
+      tags: ["Seguridad"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/seguridad/sesion/ejercicio":
     put:
       operationId: cambiar_anio
@@ -6163,6 +6183,29 @@ paths:
           required: false
           description: "Filtro «Tipo» de la pantalla"
           schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
       requestBody:
         required: true
         content:

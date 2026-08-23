@@ -374,6 +374,65 @@ class AdministrarPermisosTest {
     }
 
     @Nested
+    @DisplayName("Leer los permisos de un grupo, para cargar la matriz antes de guardarla")
+    class LecturaDeLaMatriz {
+
+        @Test
+        @DisplayName("trae solo lo configurado, con el codigo del acceso ya resuelto")
+        void traeSoloLoConfigurado() {
+            Grupo grupo = grupo("Lectura de matriz");
+            permisos.fijarParaGrupo(
+                    grupo.id(),
+                    "calles",
+                    EnumSet.of(Privilegio.LECTURA, Privilegio.IMPRESION),
+                    observacion("Se otorga el catalogo vial para la prueba de lectura"));
+            permisos.fijarParaGrupo(
+                    grupo.id(),
+                    "sectores",
+                    EnumSet.of(Privilegio.REGISTRO),
+                    observacion("Se otorga sectores para la prueba de lectura"));
+
+            List<AdministrarPermisos.PermisoDeAcceso> leidos = permisos.deGrupo(grupo.id());
+
+            assertThat(leidos)
+                    .as("no trae las 134 opciones del catalogo, solo las dos configuradas")
+                    .hasSize(2);
+            assertThat(leidos)
+                    .filteredOn(p -> p.codigoDeAcceso().equals("calles"))
+                    .singleElement()
+                    .satisfies(
+                            p -> {
+                                assertThat(p.privilegios())
+                                        .containsExactlyInAnyOrder(
+                                                Privilegio.LECTURA, Privilegio.IMPRESION);
+                                assertThat(p.grupoId()).isEqualTo(grupo.id());
+                                assertThat(p.usuarioId()).isNull();
+                            });
+            assertThat(leidos)
+                    .filteredOn(p -> p.codigoDeAcceso().equals("sectores"))
+                    .singleElement()
+                    .satisfies(
+                            p -> assertThat(p.privilegios()).containsExactly(Privilegio.REGISTRO));
+        }
+
+        @Test
+        @DisplayName("un grupo sin ningun permiso configurado devuelve la lista vacia")
+        void unGrupoSinPermisosDevuelveVacio() {
+            Grupo grupo = grupo("Sin permisos todavia");
+
+            assertThat(permisos.deGrupo(grupo.id())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("un grupo que no existe se rechaza, igual que al guardar")
+        void unGrupoInexistenteSeRechaza() {
+            assertThatThrownBy(() -> permisos.deGrupo(999_999L))
+                    .isInstanceOf(ProblemaDeNegocio.class)
+                    .hasMessageContaining("999999");
+        }
+    }
+
+    @Nested
     @DisplayName("Auditoria de la configuracion (ADR-0008 §5)")
     class AuditoriaDeLaConfiguracion {
 
