@@ -479,8 +479,12 @@ jobs:
           install -m 700 -d ~/.ssh
           install -m 600 /dev/null ~/.ssh/despliegue
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/despliegue
+          # stg corre en k3d (Kubernetes en un contenedor) en vez de k3s directo sobre el
+          # host: la API queda publicada en el puerto 6445 del VPS, no en el 6443 de un
+          # k3s nativo (que es lo que usa prod). El lado local del túnel sigue siendo
+          # 6443, que es lo que el kubeconfig de stg declara.
           ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
-              -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
+              -i ~/.ssh/despliegue -f -N -L 6443:localhost:6445 "$VPS_USER@$VPS_HOST"
 
       # Los tres bootstrap secrets de infraestructura (ADR-0011 §3) se inyectan aquí,
       # frescos en cada corrida, y nunca tocan el checkout: `stacks.test.ts` exige que
@@ -670,7 +674,7 @@ jobs:
           # del trabajo. Fijar la huella real del VPS es trabajo de endurecimiento
           # (issue #157), no de este issue.
           ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
-              -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
+              -i ~/.ssh/despliegue -f -N -L 6443:localhost:6445 "$VPS_USER@$VPS_HOST"
 
       # ANTES de `pulumi up`: los Deployment y Job que va a crear referencian estos
       # Secret por nombre, y sin ellos los pods se quedan en Pending. Idempotente —
