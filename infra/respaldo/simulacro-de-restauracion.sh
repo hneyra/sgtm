@@ -319,6 +319,31 @@ motor_como_su_usuario env \
 PID_RESTAURADO=si
 motor_esperar || { tail -40 "$TRABAJO/restaurado.log"; echo "FALLO: el motor restaurado no acepto conexiones." >&2; exit 1; }
 
+# `motor_esperar` solo confirma que el socket acepta conexiones, y eso pasa en cuanto
+# se alcanza el "consistent recovery state" -MUCHO antes de que termine de reproducir
+# el WAL hasta T_BUENO, que sigue corriendo en segundo plano-. Preguntar por los datos
+# justo despues de `motor_esperar` es una carrera contra esa reproduccion: a veces gana
+# la consulta y la tabla todavia no existe -encontrado en CI y reproducido en local,
+# con el log del motor mostrando "database system is ready to accept read-only
+# connections" varios milisegundos ANTES de restaurar los segmentos que contienen la
+# escritura buena-. `pg_get_wal_replay_pause_state()` (PG 15+) es la señal real: pasa a
+# "paused" solo cuando la reproduccion llega de verdad al objetivo -no cuando el socket
+# empieza a responder-.
+echo "· Esperando a que la reproduccion llegue de verdad al objetivo -no solo a que el socket responda-"
+PAUSADO=no
+for _ in $(seq 1 30); do
+    if [ "$(motor_como_superusuario "SELECT pg_get_wal_replay_pause_state()" postgres)" = "paused" ]; then
+        PAUSADO=si
+        break
+    fi
+    sleep 1
+done
+if [ "$PAUSADO" != "si" ]; then
+    echo "FALLO: la reproduccion del WAL no llego a 'paused' en 30s." >&2
+    tail -40 "$TRABAJO/restaurado.log" >&2
+    exit 1
+fi
+
 FIN_DEL_RELOJ=$(date +%s)
 SEGUNDOS=$(( FIN_DEL_RELOJ - INICIO_DEL_RELOJ ))
 
@@ -332,6 +357,16 @@ consultar() {
     motor_como_su_usuario env PGPASSWORD="$CLAVE_SUPER" psql --username=postgres \
         --dbname=sgtm --tuples-only --no-align --command "$1"
 }
+
+if ! consultar "SELECT 1 FROM pg_tables WHERE tablename = 'simulacro_deuda'" | grep -q 1; then
+    echo "FALLO: la tabla simulacro_deuda no existe en lo restaurado -la reproduccion del WAL" >&2
+    echo "se detuvo ANTES de llegar a T_BUENO, no despues. Diagnostico:" >&2
+    echo "-- pg_is_in_recovery / ultimo LSN aplicado --" >&2
+    consultar "SELECT pg_is_in_recovery(), pg_last_wal_replay_lsn()" >&2 || true
+    echo "-- Ultimas 40 lineas del log del motor restaurado --" >&2
+    tail -40 "$TRABAJO/restaurado.log" >&2
+    exit 1
+fi
 
 filas=$(consultar "SELECT count(*) FROM simulacro_deuda")
 [ "$filas" = "3" ] \

@@ -5,6 +5,7 @@ import { manifiestosDeIdentidad } from "./Identidad";
 import { manifiestosDeIngreso } from "./Ingreso";
 import { manifiestosDeObservabilidad } from "./Observabilidad";
 import { manifiestosDeMigracion } from "./Migracion";
+import { manifiestosDeRed } from "./Red";
 import { manifiestosDeRespaldo } from "./Respaldo";
 import { clasesDePrioridad } from "./convenciones";
 import type { Manifiesto, Namespace } from "./tipos";
@@ -99,6 +100,12 @@ export function construirManifiestos(s: Invariants): Manifiesto[] {
       namespace,
       alertWebhookUrl: s.observability.alertWebhookUrl,
     }),
+    // Al final, a proposito (issue #157): `denegar-todo` selecciona TODOS los
+    // pods de arriba por igual, y aplicarla despues no cambia nada —Kubernetes
+    // no tiene «orden de aplicacion», las politicas se unen— pero deja el
+    // manifiesto en el orden en que se razona: primero lo que corre, despues lo
+    // que decide con quien puede hablar.
+    ...manifiestosDeRed({ environment, namespace }),
   ];
 }
 
