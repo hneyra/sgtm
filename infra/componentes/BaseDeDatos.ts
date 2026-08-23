@@ -8,12 +8,15 @@ import {
   nombreDePrioridad,
   secretoDeCredencialesDeRespaldo,
   secretos,
+  seguridadBase,
+  seguridadSinRoot,
   servicioDeBaseDeDatos,
   sondaExec,
   sondaHttp,
   variablesWalg,
   volumenDeDatos,
   volumenDeWalg,
+  volumenDeTmpDeWalg,
   WALG_BINARIO,
 } from "./convenciones";
 import {
@@ -192,6 +195,28 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
                 "-c",
                 `archive_timeout=${backup.walArchiveTimeoutSeconds}`,
               ],
+              // Sin `runAsNonRoot` (issue #157): el `entrypoint` de la imagen oficial
+              // arranca como root A PROPOSITO, para tomar posesion de PGDATA con
+              // `chown` antes de bajar privilegios el mismo con `gosu postgres`. El
+              // proceso que de verdad atiende conexiones ya corre sin root -lo hace la
+              // propia imagen, no este manifiesto-; forzar `runAsNonRoot` aqui no lo
+              // asegura mas, rompe el `chown` inicial contra un volumen nuevo.
+              //
+              // `capabilities.add` (issue #157): dropear TODAS las capacidades vuelve a
+              // ese root sin ninguna de las que sus propias operaciones necesitan -en
+              // Linux el privilegio de root viene de las capacidades, no del UID-.
+              // Encontrado en CI: "chown: /var/lib/postgresql/data/pgdata: Operation not
+              // permitted" y "chmod: /var/run/postgresql: Operation not permitted", el
+              // contenedor en CrashLoopBackOff. Las cinco que re-concede son exactamente
+              // las que el `entrypoint` ejercita, no una lista generica: CHOWN y FOWNER
+              // para tomar posesion del volumen y del directorio del socket, DAC_OVERRIDE
+              // porque una comprobacion de permiso de por medio tambien depende de ella
+              // -no solo del dueño del archivo-, y SETUID/SETGID para el `gosu postgres`
+              // final, que sin ellas fallaria un paso mas adelante aunque el chown de
+              // arriba se corrigiera solo.
+              securityContext: seguridadBase({
+                capabilities: { drop: ["ALL"], add: ["CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID"] },
+              }),
               ports: [{ name: "postgres", containerPort: 5432 }],
               env: [
                 { name: "POSTGRES_DB", value: BASE_DEL_PADRON },
@@ -269,6 +294,14 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
                 },
               ],
               ports: [{ name: "metrics", containerPort: 9187 }],
+              // No escribe nada fuera de lo que responde por HTTP (issue #157): todo
+              // lo que hace es leer `pg_stat_*` por la red y traducirlo.
+              //
+              // `runAsUser: 65534`: la misma convencion `USER nobody` (sin numero)
+              // que el resto de las imagenes del ecosistema Prometheus en este
+              // repositorio -Prometheus, Alertmanager, node-exporter,
+              // kube-state-metrics-, y el mismo fallo que esas cuatro dieron en CI.
+              securityContext: seguridadSinRoot({ runAsUser: 65534, readOnlyRootFilesystem: true }),
               resources: RECURSOS.exportador,
               // `httpGet`, no `exec`: la sonda la hace el kubelet desde fuera del
               // contenedor, asi que no depende de que la imagen traiga `wget` —la
@@ -286,6 +319,7 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
             // claves asignadas.
             { name: "inicializacion", configMap: { name: inicializacion.metadata.name, defaultMode: 493 } },
             volumenDeWalg(),
+            volumenDeTmpDeWalg(),
           ],
         },
       },

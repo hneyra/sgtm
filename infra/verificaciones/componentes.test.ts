@@ -7,10 +7,17 @@ import { manifiestosDeIdentidad, documentosDelRealm, RUTA_DE_IDENTIDAD } from ".
 import { nginxDelCluster } from "../componentes/Aplicacion";
 import { valoresDeTraefik } from "../componentes/Ingreso";
 import { manifiestosDeObservabilidad } from "../componentes/Observabilidad";
-import { secretos } from "../componentes/convenciones";
+import { PRIORIDADES, nombreDePrioridad, secretos } from "../componentes/convenciones";
 import { raizDelRepositorio } from "../componentes/fuentes";
-import { contenedoresDe, podsDe, type Contenedor, type Manifiesto } from "../componentes/tipos";
-import { ENVIRONMENTS, namespaceName, type Environment } from "../config";
+import {
+  contenedoresDe,
+  podsDe,
+  type Contenedor,
+  type EspecificacionDePod,
+  type Manifiesto,
+  type NetworkPolicy,
+} from "../componentes/tipos";
+import { ENVIRONMENTS, namespaceName, resourceName, type Environment } from "../config";
 import { invariantesDe } from "./stacks";
 
 /**
@@ -53,6 +60,11 @@ function contenedoresDeTodo(ms: Manifiesto[]): { donde: string; c: Contenedor }[
       contenedoresDe(pod).map((c) => ({ donde: contexto, c })),
     ),
   );
+}
+
+/** Todo pod del manifiesto, para las comprobaciones que miran el pod y no el contenedor. */
+function podsDeTodo(ms: Manifiesto[]): { donde: string; pod: EspecificacionDePod }[] {
+  return ms.flatMap((m) => podsDe(m).map(({ contexto, pod }) => ({ donde: contexto, pod })));
 }
 
 function variablesDe(c: Contenedor): Map<string, string | undefined> {
@@ -940,6 +952,323 @@ describe("#156 · observabilidad", () => {
     };
     expect(tablero.data["resumen-operativo.json"]).toBeDefined();
     expect(json.panels.some((p) => p.title.includes("Version desplegada"))).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #157 — Endurecimiento: red, sin root, limites y sondas
+// ─────────────────────────────────────────────────────────────────────────────
+
+function politicasDeRed(ms: Manifiesto[]): NetworkPolicy[] {
+  return ms.filter((m): m is NetworkPolicy => m.kind === "NetworkPolicy");
+}
+
+function politicaDe(ms: Manifiesto[], nombre: string): NetworkPolicy {
+  const encontrada = politicasDeRed(ms).find((p) => p.metadata.name === nombre);
+  if (!encontrada) {
+    throw new Error(
+      `No hay ningun NetworkPolicy «${nombre}». Hay: ` +
+        politicasDeRed(ms).map((p) => p.metadata.name).join(", "),
+    );
+  }
+  return encontrada;
+}
+
+/** Todo `podSelector`/`namespaceSelector` que aparece en cualquier regla de una politica. */
+function origenesDe(p: NetworkPolicy): { pods: string[]; namespaces: string[] } {
+  const reglas = [...(p.spec.ingress ?? []), ...(p.spec.egress ?? [])];
+  const selectores = reglas.flatMap((r) => [...(r.from ?? []), ...(r.to ?? [])]);
+  return {
+    pods: selectores
+      .map((s) => s.podSelector?.matchLabels.app)
+      .filter((app): app is string => app !== undefined),
+    namespaces: selectores
+      .map((s) => s.namespaceSelector?.matchLabels["kubernetes.io/metadata.name"])
+      .filter((n): n is string => n !== undefined),
+  };
+}
+
+describe("#157 · endurecimiento", () => {
+  const ms = manifiestosDe(AMBIENTE);
+
+  it("denegar-todo selecciona TODOS los pods, en las dos direcciones, sin ninguna excepcion propia", () => {
+    const base = politicaDe(ms, "denegar-todo");
+    expect(base.spec.podSelector).toEqual({});
+    expect(base.spec.policyTypes.sort()).toEqual(["Egress", "Ingress"]);
+    expect(base.spec.ingress ?? []).toEqual([]);
+    expect(base.spec.egress ?? []).toEqual([]);
+  });
+
+  it("la interfaz no esta entre quienes pueden alcanzar PostgreSQL", () => {
+    // La prueba estructural: quien figura en la politica que ADMITE trafico hacia
+    // el motor. La prueba de verdad —que conectar falla— exige un clúster con el
+    // `NetworkPolicy` aplicado y es responsabilidad de
+    // `red/verificar-politicas.sh`, no de esta suite sin clúster.
+    const postgres = politicaDe(ms, "permitir-ingreso-postgres");
+    const nombreDeInterfaz = buscar(ms, "Service", "sgtm-prod-interfaz").metadata.name;
+    expect(origenesDe(postgres).pods).not.toContain(nombreDeInterfaz);
+  });
+
+  it("Prometheus tiene entrada, y es solo de Grafana", () => {
+    // Con salida pero sin entrada, Prometheus queda inalcanzable para cualquiera
+    // -Grafana incluido- bajo un CNI que aplique NetworkPolicy de verdad: las dos
+    // puntas del flujo se declaran cada una en su propio pod.
+    const prometheus = politicaDe(ms, "permitir-ingreso-prometheus");
+    const nombreDeGrafana = buscar(ms, "Service", "sgtm-prod-observabilidad-grafana").metadata.name;
+    expect(origenesDe(prometheus).pods).toEqual([nombreDeGrafana]);
+    const puertos = (prometheus.spec.ingress ?? []).flatMap((r) => r.ports ?? []).map((p) => p.port);
+    expect(puertos).toEqual([9090]);
+  });
+
+  it("Prometheus puede empujar hacia Alertmanager: permitir-ingreso-alertmanager no basta sola", () => {
+    // Sin esta, la regla evalua a FIRING de verdad y nadie se entera: la conexion
+    // misma con la que Prometheus la empuja se cae antes de llegar.
+    const salida = politicaDe(ms, "permitir-salida-prometheus");
+    const nombreDeAlertmanager = buscar(ms, "Service", "sgtm-prod-observabilidad-alertmanager").metadata.name;
+    const reglaConAlertmanager = (salida.spec.egress ?? []).find((r) =>
+      (r.to ?? []).some((d) => d.podSelector?.matchLabels.app === nombreDeAlertmanager),
+    );
+    expect(reglaConAlertmanager).toBeDefined();
+    expect((reglaConAlertmanager?.ports ?? []).map((p) => p.port)).toEqual([9093]);
+  });
+
+  it("la aplicacion no tiene ningun bloque de internet en su lista de salida", () => {
+    const salida = politicaDe(ms, "permitir-salida-aplicacion");
+    const destinos = salida.spec.egress?.flatMap((r) => r.to ?? []) ?? [];
+    expect(destinos.some((d) => d.ipBlock !== undefined)).toBe(false);
+  });
+
+  it("las dos excepciones de salida a internet son del mismo puerto, y de nadie mas", () => {
+    // El motor y el respaldo, hacia el almacenamiento de objetos (issue #155): la
+    // unica salida amplia que este archivo declara, y acotada a :443.
+    const conInternet = politicasDeRed(ms).filter((p) =>
+      (p.spec.egress ?? []).some((r) => (r.to ?? []).some((d) => d.ipBlock !== undefined)),
+    );
+    const nombres = conInternet.map((p) => p.metadata.name).sort();
+    expect(nombres).toEqual(
+      [
+        "permitir-salida-sgtm-prod-observabilidad-alertmanager-a-internet",
+        "permitir-salida-sgtm-prod-postgres-a-internet",
+        "permitir-salida-sgtm-prod-respaldo-a-internet",
+      ].sort(),
+    );
+    for (const p of conInternet) {
+      const puertos = (p.spec.egress ?? []).flatMap((r) => r.ports ?? []).map((pt) => pt.port);
+      expect(puertos).toEqual([443]);
+    }
+  });
+
+  it("kube-state-metrics no tiene politica de salida: el API de Kubernetes no es un pod", () => {
+    const p = politicaDe(ms, "permitir-ingreso-kube-state-metrics");
+    expect(p.spec.policyTypes).toEqual(["Ingress"]);
+    expect(p.spec.egress).toBeUndefined();
+  });
+
+  it("toda politica vive en el namespace del ambiente", () => {
+    for (const p of politicasDeRed(ms)) {
+      expect(p.metadata.namespace).toBe(namespaceName(AMBIENTE));
+    }
+  });
+
+  it("ningun contenedor corre como root, salvo los dos nombrados por su motivo", () => {
+    const SIN_RUNASNONROOT = new Set([
+      // El entrypoint de la imagen oficial de PostgreSQL arranca como root a
+      // proposito (ver `BaseDeDatos.ts`).
+      "postgres",
+      // Lee PGDATA de solo lectura con el permiso que la propia imagen le dio al
+      // motor; forzar un UID sin verificarlo contra un clúster real cambia un
+      // guion que funciona por uno que no (ver `Respaldo.ts`).
+      "respaldo-base",
+    ]);
+    const sinNonRoot = contenedoresDeTodo(ms).filter(
+      ({ c }) => !SIN_RUNASNONROOT.has(c.name) && c.securityContext?.runAsNonRoot !== true,
+    );
+    expect(sinNonRoot.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
+  });
+
+  it("los contenedores cuya imagen fija un USER por nombre, no por numero, declaran runAsUser", () => {
+    // Encontrado en CI (issue #157): con `runAsNonRoot: true` y sin `runAsUser`
+    // explicito, el kubelet rechaza el contenedor si la imagen fija su usuario por
+    // NOMBRE -"nobody", "nginx", "curl_user"- en vez de por numero, porque no puede
+    // verificar sin ejecutar dentro de la imagen que ese nombre no es root. Esta
+    // lista es la contraparte de `SIN_RUNASNONROOT` de arriba: no contenedores que
+    // se salten el endurecimiento, sino contenedores que lo llevan Y ademas nombran
+    // su UID -sin este `runAsUser`, `yarn manifiestos` compila y pasa la auditoria
+    // igual, y el fallo solo aparece contra un API server de verdad, como paso aqui.
+    const CON_USER_NO_NUMERICO = new Set([
+      "prometheus",
+      "alertmanager",
+      "node-exporter",
+      "kube-state-metrics",
+      "postgres-exporter",
+      "wal-g-instalar",
+      "interfaz",
+    ]);
+    const sinRunAsUser = contenedoresDeTodo(ms).filter(
+      ({ c }) => CON_USER_NO_NUMERICO.has(c.name) && c.securityContext?.runAsUser === undefined,
+    );
+    expect(sinRunAsUser.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
+  });
+
+  it("el motor re-concede las capacidades que su entrypoint necesita para tomar posesion de PGDATA", () => {
+    // Encontrado en CI (issue #157): `capabilities: { drop: ["ALL"] }` deja a "root"
+    // -el entrypoint de PostgreSQL arranca como root a proposito, ver el comentario en
+    // BaseDeDatos.ts- sin las capacidades que hacen a root privilegiado en Linux. El
+    // contenedor entraba en CrashLoopBackOff con "chown: ... Operation not permitted"
+    // contra un clúster real; ni la auditoria ni `yarn manifiestos` lo detectan, porque
+    // las dos comprueban que `drop` incluya "ALL", nunca que el entrypoint pueda
+    // arrancar de verdad.
+    const motor = contenedorDe(ms, "Deployment", "postgres", "postgres");
+    const concedidas = motor.securityContext?.capabilities?.add ?? [];
+    for (const necesaria of ["CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID"]) {
+      expect(concedidas).toContain(necesaria);
+    }
+  });
+
+  it("todo contenedor tiene sin escalada de privilegios y sin capacidades", () => {
+    const sinEndurecer = contenedoresDeTodo(ms).filter(
+      ({ c }) =>
+        c.securityContext?.allowPrivilegeEscalation !== false ||
+        !c.securityContext.capabilities?.drop?.includes("ALL"),
+    );
+    expect(sinEndurecer.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
+  });
+
+  it("kubectl get pods no mostraria ninguno sin limites: todo contenedor los declara", () => {
+    const sinLimites = contenedoresDeTodo(ms).filter(
+      ({ c }) => !c.resources?.limits?.cpu || !c.resources.limits.memory,
+    );
+    expect(sinLimites.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
+  });
+
+  it("los contenedores que no escriben fuera de sus volumenes llevan la raiz sellada", () => {
+    // `readOnlyRootFilesystem` es el «donde se pueda» del alcance del issue #157, y
+    // «donde se pueda» es una lista, no una regla universal: sellarlo en un
+    // contenedor que si escribe en su raiz no lo endurece, lo rompe -y lo rompe
+    // contra un clúster real, no aqui, que es como este mismo PR descubrio lo de
+    // `capabilities.drop` y lo de `runAsNonRoot`-.
+    //
+    // Esta prueba fija la lista de los que SI la llevan. Tres de ellos ya la
+    // llevaban desde el issue #156 sin que ninguna prueba lo dijera: sin fijarla,
+    // quitarla de cualquiera de los tres no habria puesto nada rojo, y la unica
+    // constancia de que era una decision -y no un descuido de copiar y pegar- era
+    // que estaba escrita.
+    const CON_RAIZ_SELLADA = new Set([
+      // Exportadores: leen una fuente y sirven /metrics. Ninguno escribe.
+      "postgres-exporter",
+      "node-exporter",
+      "kube-state-metrics",
+      // Descarga, verifica y mueve; escribe en `/tmp` y en el `emptyDir` compartido,
+      // los dos montados (ver `contenedorDeDescargaDeWalg`).
+      "wal-g-instalar",
+    ]);
+    const sellados = contenedoresDeTodo(ms)
+      .filter(({ c }) => c.securityContext?.readOnlyRootFilesystem === true)
+      .map(({ c }) => c.name);
+    expect(new Set(sellados)).toEqual(CON_RAIZ_SELLADA);
+  });
+
+  it("el que descarga wal-g tiene `/tmp` montado: sin eso, sellar la raiz lo rompe", () => {
+    // El orden importa y por eso son dos comprobaciones y no una: la raiz sellada
+    // sin un `/tmp` escribible convierte el `curl -o /tmp/wal-g.tar.gz` en un fallo
+    // de arranque del pod entero -el init container no termina, y el motor detras
+    // nunca llega a Ready-.
+    for (const donde of ["Deployment", "CronJob"] as const) {
+      const pods = podsDeTodo(ms).filter(({ donde: d }) => d.startsWith(donde));
+      const conDescarga = pods.filter(({ pod }) =>
+        contenedoresDe(pod).some((c) => c.name === "wal-g-instalar"),
+      );
+      expect(conDescarga.length).toBeGreaterThan(0);
+      for (const { pod } of conDescarga) {
+        const descarga = contenedoresDe(pod).find((c) => c.name === "wal-g-instalar")!;
+        expect(descarga.volumeMounts?.map((v) => v.mountPath)).toContain("/tmp");
+        expect((pod.volumes ?? []).map((v) => v.name)).toContain("wal-g-tmp");
+      }
+    }
+  });
+
+  // Las tres de abajo son el «falta auditar y completar» de las clases de prioridad.
+  // Lo que ya habia comprobaba que ningun pod se OLVIDA de declarar su clase; lo que
+  // faltaba es que las clases esten en el orden correcto, que es de donde sale el
+  // sentido entero de tenerlas. Sin esto, intercambiar `datos` y `lote` en
+  // `convenciones.ts` deja las 170 pruebas en verde con PostgreSQL como lo PRIMERO
+  // que el kubelet desaloja.
+
+  it("las tres clases estan estrictamente ordenadas: datos por encima de servicio, y servicio de lote", () => {
+    expect(PRIORIDADES.datos).toBeGreaterThan(PRIORIDADES.servicio);
+    expect(PRIORIDADES.servicio).toBeGreaterThan(PRIORIDADES.lote);
+  });
+
+  it("el motor de datos usa la clase `datos`, y es el unico que la usa", () => {
+    const conClaseDeDatos = podsDeTodo(ms).filter(
+      ({ pod }) => pod.priorityClassName === nombreDePrioridad(AMBIENTE, "datos"),
+    );
+    expect(conClaseDeDatos.map(({ donde }) => donde)).toEqual([
+      `Deployment/${resourceName(AMBIENTE, "postgres")}`,
+    ]);
+  });
+
+  it("ningun pod del manifiesto vale tanto como el motor: la base se desaloja la ultima", () => {
+    const valorDe = new Map(
+      ms.filter((m) => m.kind === "PriorityClass").map((m) => [m.metadata.name, m.value]),
+    );
+    const delMotor = valorDe.get(nombreDePrioridad(AMBIENTE, "datos"));
+
+    const porEncima = podsDeTodo(ms).filter(
+      ({ pod }) =>
+        pod.priorityClassName !== nombreDePrioridad(AMBIENTE, "datos") &&
+        (valorDe.get(pod.priorityClassName) ?? 0) >= (delMotor ?? 0),
+    );
+    expect(porEncima.map(({ donde }) => donde)).toEqual([]);
+  });
+});
+
+describe("#157 · la demostracion: la auditoria se pone roja", () => {
+  it("quitando allowPrivilegeEscalation del motor, la auditoria lo detecta", () => {
+    const ms = manifiestosDe(AMBIENTE);
+    const motor = contenedorDe(ms, "Deployment", "postgres", "postgres");
+    // @ts-expect-error -- se rompe a proposito: `allowPrivilegeEscalation` es obligatorio en el tipo.
+    delete motor.securityContext.allowPrivilegeEscalation;
+
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("securityContext"));
+  });
+
+  it("quitando el drop de capacidades de la interfaz, la auditoria lo detecta", () => {
+    const ms = manifiestosDe(AMBIENTE);
+    const interfaz = contenedorDe(ms, "Deployment", "interfaz", "interfaz");
+    // @ts-expect-error -- se rompe a proposito: `capabilities` es obligatorio en el tipo.
+    delete interfaz.securityContext.capabilities;
+
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("securityContext"));
+  });
+
+  it("intercambiando `datos` y `lote`, la auditoria detecta que la base se desaloja primero", () => {
+    // Exactamente lo que un `PRIORIDADES.datos = 100 / lote = 1000` produciria en el
+    // manifiesto. Antes de esta comprobacion, esa inversion pasaba las 170 pruebas en
+    // verde: cada pod seguia declarando su clase, y nadie miraba el numero.
+    const ms = manifiestosDe(AMBIENTE);
+    const clase = (prioridad: Parameters<typeof nombreDePrioridad>[1]) =>
+      ms.find(
+        (m): m is Extract<Manifiesto, { kind: "PriorityClass" }> =>
+          m.kind === "PriorityClass" && m.metadata.name === nombreDePrioridad(AMBIENTE, prioridad),
+      );
+    const datos = clase("datos");
+    const lote = clase("lote");
+    [datos!.value, lote!.value] = [lote!.value, datos!.value];
+
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("es lo ULTIMO que se desaloja"));
+  });
+
+  it("apuntando un pod a una clase que nadie define, la auditoria lo detecta", () => {
+    // Kubernetes rechaza el pod entero, no lo despliega con menos garantias: una
+    // `PriorityClass` mal escrita es un pod que no arranca.
+    const ms = manifiestosDe(AMBIENTE);
+    const prometheus = buscar(ms, "Deployment", "observabilidad-prometheus") as {
+      spec: { template: { spec: { priorityClassName: string } } };
+    };
+    prometheus.spec.template.spec.priorityClassName = "prioridad-que-no-existe";
+
+    expect(auditar(ms)).toContainEqual(expect.stringContaining("ningun PriorityClass"));
   });
 });
 

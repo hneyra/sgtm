@@ -35,11 +35,35 @@ command -v kubectl >/dev/null 2>&1 || { echo "FALLO: falta kubectl." >&2; exit 1
 echo "· Aplicando el manifiesto de stg contra el clúster"
 # El mismo filtro que el trabajo `manifiestos` de infra.yml: los recursos de Traefik
 # no tienen CRD en un `kind` limpio.
+#
+# Interfaz, aplicacion, Keycloak (identidad + el Job de realm) y los Job de
+# migracion/implantacion tambien se excluyen aqui, aunque el bucle de mas abajo
+# nunca los espera: aplicados igual compiten por la CPU del nodo UNICO de `kind`
+# con postgres y Prometheus/Alertmanager, que SI hacen falta. Encontrado en
+# `verificar-tableros.sh` (issue #156/#157, misma causa): con el manifiesto
+# completo el scheduler reportaba "Insufficient cpu", y bajo esa saturacion hasta
+# Prometheus -ya listo, sirviendo peticiones- dejaba de contestar a tiempo.
 yarn --silent manifiestos --ambiente stg \
     | node -e '
         const entrada = JSON.parse(require("fs").readFileSync(0, "utf8"));
         const deTraefik = ["IngressRoute", "Middleware", "TLSOption", "HelmChartConfig"];
         entrada.items = entrada.items.filter((i) => !deTraefik.includes(i.kind));
+
+        const pesados = [
+          { kind: "Deployment", prefijo: "sgtm-stg-interfaz" },
+          { kind: "Service", prefijo: "sgtm-stg-interfaz" },
+          { kind: "Deployment", prefijo: "sgtm-stg-identidad" },
+          { kind: "Job", prefijo: "sgtm-stg-realm-" },
+          { kind: "Job", prefijo: "sgtm-stg-migracion-" },
+          { kind: "Job", prefijo: "sgtm-stg-implantacion-" },
+          { kind: "Deployment", prefijo: "sgtm-stg-aplicacion" },
+          { kind: "CronJob", prefijo: "sgtm-stg-lote" },
+        ];
+        entrada.items = entrada.items.filter((i) => {
+          const nombre = i.metadata?.name ?? "";
+          return !pesados.some((p) => i.kind === p.kind && nombre.startsWith(p.prefijo));
+        });
+
         process.stdout.write(JSON.stringify(entrada));
       ' \
     | kubectl apply -f - >/dev/null
@@ -122,14 +146,59 @@ spec:
 YAML
 kubectl -n "$NS" rollout status deployment/receptor-de-prueba --timeout=60s
 
-# Un pod aparte para hablar HTTP con Prometheus y Alertmanager desde DENTRO del
-# clúster: sus Service son ClusterIP, igual que el resto de lo interno.
+# `denegar-todo` (Red.ts, issue #157) cubre TODO pod del namespace, ad-hoc incluido:
+# sin esto Alertmanager no puede entregar el webhook a `receptor-de-prueba`, ni
+# `verificador-de-alertas` puede consultar a Prometheus mas abajo. Ninguna va en
+# `Red.ts`: son pods que solo existen en esta comprobacion, y esa politica documenta
+# en su propio docstring que no abre nada «por si acaso».
+echo "· Abriendo, solo para esta comprobacion, lo que denegar-todo le cierra a los pods ad-hoc"
+cat <<'YAML' | kubectl apply -n "$NS" -f - >/dev/null
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: permitir-verificacion-alertas-receptor
+spec:
+  podSelector: { matchLabels: { app: receptor-de-prueba } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app: sgtm-stg-observabilidad-alertmanager } } }]
+      ports: [{ port: 8000, protocol: TCP }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: permitir-verificacion-alertas-egreso-alertmanager
+spec:
+  podSelector: { matchLabels: { app: sgtm-stg-observabilidad-alertmanager } }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app: receptor-de-prueba } } }]
+      ports: [{ port: 8000, protocol: TCP }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: permitir-verificacion-alertas-ingreso-prometheus
+spec:
+  podSelector: { matchLabels: { app: sgtm-stg-observabilidad-prometheus } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app: verificador-de-alertas } } }]
+      ports: [{ port: 9090, protocol: TCP }]
+YAML
+
+# Un pod aparte para hablar HTTP con Prometheus desde DENTRO del clúster: su
+# Service es ClusterIP, igual que el resto de lo interno.
 echo "· Desplegando el cliente de comprobacion"
 cat <<'YAML' | kubectl apply -n "$NS" -f - >/dev/null
 apiVersion: v1
 kind: Pod
 metadata:
   name: verificador-de-alertas
+  # La etiqueta, no solo el nombre: `NetworkPolicy` selecciona por `podSelector`,
+  # y sin ella las dos excepciones de arriba y de mas abajo no tienen a quien
+  # apuntar.
+  labels: { app: verificador-de-alertas }
 spec:
   restartPolicy: Never
   containers:
@@ -143,6 +212,17 @@ spec:
       # que la alerta tuviera nada que ver-. El clúster entero se destruye
       # al final del trabajo, asi que no hay nada que limpiar aqui.
       command: ["sleep", "infinity"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: permitir-verificacion-alertas-verificador
+spec:
+  podSelector: { matchLabels: { app: verificador-de-alertas } }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app: sgtm-stg-observabilidad-prometheus } } }]
+      ports: [{ port: 9090, protocol: TCP }]
 YAML
 kubectl -n "$NS" wait --for=condition=Ready pod/verificador-de-alertas --timeout=60s
 
@@ -275,8 +355,18 @@ for _ in $(seq 1 12); do
     fi
     sleep 10
 done
-[ "$ENTREGADO" = "si" ] \
-    || { echo "FALLO: con el receptor configurado, la notificacion nunca llego." >&2; exit 1; }
+if [ "$ENTREGADO" != "si" ]; then
+    echo "FALLO: con el receptor configurado, la notificacion nunca llego." >&2
+    echo "::group::Diagnostico: entrega del webhook" >&2
+    echo "--- linea 'url' del ConfigMap de alertmanager ---" >&2
+    kubectl -n "$NS" get configmap sgtm-stg-observabilidad-alertmanager -o jsonpath='{.data.alertmanager\.yml}' | grep -A1 webhook_configs >&2 || true
+    kubectl -n "$NS" describe pods -l app=sgtm-stg-observabilidad-alertmanager >&2
+    kubectl -n "$NS" logs deployment/sgtm-stg-observabilidad-alertmanager --all-containers --prefix --tail=200 >&2 || true
+    kubectl -n "$NS" logs deployment/receptor-de-prueba --all-containers --prefix --tail=50 >&2 || true
+    kubectl -n "$NS" get events --sort-by=.lastTimestamp >&2
+    echo "::endgroup::" >&2
+    exit 1
+fi
 echo "  El receptor de prueba recibio la alerta: correcto."
 
 echo

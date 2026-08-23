@@ -67,6 +67,11 @@ on:
       - "backend/**"
       - "despliegue/**"
       - ".github/workflows/despliegue.yml"
+      # No todo `frontend/**`: el resto ya lo cubre `frontend`'s propio `yarn
+      # verificar`/`e2e`. Solo lo que este flujo REALMENTE construye y arranca
+      # (issue #157: el Dockerfile paso a correr nginx sin root).
+      - "frontend/Dockerfile"
+      - "frontend/nginx.conf"
   workflow_dispatch:
 
 concurrency:

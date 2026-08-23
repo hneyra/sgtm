@@ -4,6 +4,7 @@ import {
   RECURSOS,
   nombreDePrioridad,
   secretos,
+  seguridadSinRoot,
   servicioDeAlertmanager,
   servicioDeAplicacion,
   servicioDeBaseDeDatos,
@@ -195,6 +196,10 @@ function manifiestosDePrometheus(args: ArgsComunes): Manifiesto[] {
         metadata: { labels: { ...etiquetas, app: nombre } },
         spec: {
           priorityClassName: prioridad,
+          // La imagen ya corre como `nobody` (issue #157), pero el PVC que monta lo
+          // crea el aprovisionador de disco -root, sin saber de ese usuario-: sin
+          // `fsGroup` el proceso no root no podria escribir su propia base de series.
+          securityContext: { fsGroup: 65534 },
           containers: [
             {
               name: "prometheus",
@@ -203,8 +208,29 @@ function manifiestosDePrometheus(args: ArgsComunes): Manifiesto[] {
                 "--config.file=/etc/prometheus/prometheus.yml",
                 "--storage.tsdb.path=/prometheus",
                 "--storage.tsdb.retention.time=15d",
+                // Habilita `POST /-/reload`: releer la configuracion sin recrear el
+                // Pod. `verificar-tableros.sh` (issue #157) lo necesita para repuntar
+                // el scrape de la aplicacion sin pasar por `kubectl rollout restart`
+                // -encontrado en CI, en CUATRO corridas seguidas: justo despues de
+                // esa recreacion la primera consulta fallaba conectando, con
+                // Prometheus ya sirviendo peticiones segun su propio log y el Pod en
+                // Ready segun el API server. No habia nada mal en Prometheus: era la
+                // recreacion misma, que cambia la direccion que el Service enruta.
+                "--web.enable-lifecycle",
               ],
               ports: [{ name: "http", containerPort: 9090 }],
+              // Sin `readOnlyRootFilesystem`: no esta comprobado contra un Prometheus
+              // real que su unica escritura sea `/prometheus` -sin Docker local para
+              // probarlo, ver CLAUDE.md-, y equivocarse aqui cambia una base de series
+              // que arranca por una que no.
+              //
+              // `runAsUser: 65534` (issue #157): la imagen fija `USER nobody`, un
+              // nombre, no un numero, y el kubelet rechaza el contenedor sin poder
+              // VERIFICAR que ese usuario es no-root -"container has runAsNonRoot and
+              // image has non-numeric user (nobody), cannot verify user is non-root",
+              // encontrado en CI-. 65534 es el UID real de `nobody` en la imagen; el
+              // `fsGroup` de mas abajo ya usaba el mismo numero, por la misma razon.
+              securityContext: seguridadSinRoot({ runAsUser: 65534 }),
               resources: RECURSOS.prometheus,
               volumeMounts: [
                 { name: "configuracion", mountPath: "/etc/prometheus" },
@@ -304,12 +330,19 @@ function manifiestosDeAlertmanager(
         metadata: { labels: { ...etiquetas, app: nombre } },
         spec: {
           priorityClassName: prioridad,
+          // Mismo motivo que en Prometheus: el `emptyDir` de deduplicacion lo crea
+          // el kubelet, no la imagen, y sin `fsGroup` un proceso no-root podria
+          // encontrarselo sin permiso de escritura.
+          securityContext: { fsGroup: 65534 },
           containers: [
             {
               name: "alertmanager",
               image: IMAGEN_DE_ALERTMANAGER,
               args: ["--config.file=/etc/alertmanager/alertmanager.yml"],
               ports: [{ name: "http", containerPort: 9093 }],
+              // `runAsUser: 65534` (issue #157): ver el comentario identico junto a
+              // Prometheus -misma imagen base, mismo `USER nobody` sin numero-.
+              securityContext: seguridadSinRoot({ runAsUser: 65534 }),
               resources: RECURSOS.alertmanager,
               volumeMounts: [
                 { name: "configuracion", mountPath: "/etc/alertmanager" },
@@ -388,6 +421,16 @@ function manifiestosDeNodeExporter(args: ArgsComunes): Manifiesto[] {
                 "--collector.filesystem.mount-points-exclude=^/(host/proc|host/sys)($|/)",
               ],
               ports: [{ name: "metrics", containerPort: 9100 }],
+              // Lee `/proc` y `/sys` de solo lectura y no escribe nada propio: el
+              // candidato mas simple para sistema de archivos raiz de solo lectura
+              // (issue #157). `runAsNonRoot` no choca con `hostPID`: los colectores
+              // que usa este componente leen archivos del sistema completo
+              // (`/proc/stat`, `/proc/meminfo`), no datos por proceso ajeno que
+              // exigirian coincidir con su UID.
+              //
+              // `runAsUser: 65534`: la misma imagen base que Prometheus y
+              // Alertmanager, con el mismo `USER nobody` sin numero.
+              securityContext: seguridadSinRoot({ runAsUser: 65534, readOnlyRootFilesystem: true }),
               resources: RECURSOS.exportador,
               volumeMounts: [
                 { name: "proc", mountPath: "/host/proc", readOnly: true },
@@ -484,6 +527,12 @@ function manifiestosDeKubeStateMetrics(args: ArgsComunes): Manifiesto[] {
               // de una superficie de mas.
               args: ["--resources=pods,nodes,persistentvolumeclaims,deployments,jobs,cronjobs"],
               ports: [{ name: "metrics", containerPort: 8080 }],
+              // Sin volumen ninguno: solo lee el API de Kubernetes por la red y
+              // traduce a metricas (issue #157).
+              //
+              // `runAsUser: 65534`: la imagen fija `USER nobody`, un nombre, no un
+              // numero -el mismo motivo que Prometheus, Alertmanager y node-exporter-.
+              securityContext: seguridadSinRoot({ runAsUser: 65534, readOnlyRootFilesystem: true }),
               resources: RECURSOS.kubeStateMetrics,
               readinessProbe: sondaHttp("/healthz", 8080, { periodSeconds: 10, failureThreshold: 3 }),
               livenessProbe: sondaHttp("/healthz", 8080, { periodSeconds: 20, failureThreshold: 5 }),
@@ -573,6 +622,9 @@ function manifiestosDeGrafana(
         metadata: { labels: { ...etiquetas, app: nombre } },
         spec: {
           priorityClassName: prioridad,
+          // Mismo motivo que Prometheus: el PVC de `/var/lib/grafana` lo crea el
+          // aprovisionador de disco, no la imagen.
+          securityContext: { fsGroup: 472 },
           containers: [
             {
               name: "grafana",
@@ -590,6 +642,8 @@ function manifiestosDeGrafana(
                 { name: "GF_AUTH_ANONYMOUS_ENABLED", value: "false" },
               ],
               ports: [{ name: "http", containerPort: 3000 }],
+              // La imagen ya corre como `grafana` de fabrica (issue #157).
+              securityContext: seguridadSinRoot(),
               resources: RECURSOS.grafana,
               volumeMounts: [
                 {

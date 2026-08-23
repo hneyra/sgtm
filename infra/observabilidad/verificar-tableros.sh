@@ -32,6 +32,34 @@ yarn --silent manifiestos --ambiente stg \
         const deTraefik = ["IngressRoute", "Middleware", "TLSOption", "HelmChartConfig"];
         entrada.items = entrada.items.filter((i) => !deTraefik.includes(i.kind));
 
+        // Interfaz, aplicacion, Keycloak (identidad + el Job de realm) y los Job de
+        // migracion/implantacion no le hacen falta a esta comprobacion -los dos
+        // paneles de la aplicacion los sirve el exportador sintetico de mas abajo, y
+        // ningun panel del tablero lee nada de Keycloak-, y el nodo UNICO de `kind`
+        // no tiene CPU para desplegarlos a la vez que postgres y los cinco
+        // componentes de observabilidad. Encontrado en CI dos veces seguidas: con el
+        // manifiesto completo, el scheduler reportaba "Insufficient cpu" para varios
+        // Pods, y bajo esa saturacion hasta Prometheus -que SI llegaba a Ready- dejaba
+        // de contestar peticiones HTTP durante minutos. No es que Prometheus se haya
+        // roto: es que compartir un runner de 2 vCPU con dos Keycloak reintentando su
+        // arranque, dos replicas de interfaz reintentando una imagen que este
+        // repositorio no publica, y el resto del padron completo no deja margen para
+        // que nada responda a tiempo.
+        const pesados = [
+          { kind: "Deployment", prefijo: "sgtm-stg-interfaz" },
+          { kind: "Service", prefijo: "sgtm-stg-interfaz" },
+          { kind: "Deployment", prefijo: "sgtm-stg-identidad" },
+          { kind: "Job", prefijo: "sgtm-stg-realm-" },
+          { kind: "Job", prefijo: "sgtm-stg-migracion-" },
+          { kind: "Job", prefijo: "sgtm-stg-implantacion-" },
+          { kind: "Deployment", prefijo: "sgtm-stg-aplicacion" },
+          { kind: "CronJob", prefijo: "sgtm-stg-lote" },
+        ];
+        entrada.items = entrada.items.filter((i) => {
+          const nombre = i.metadata?.name ?? "";
+          return !pesados.some((p) => i.kind === p.kind && nombre.startsWith(p.prefijo));
+        });
+
         // Solo aqui, nunca en Observabilidad.ts: `node_exporter` excluye "overlay" de
         // sus metricas de filesystem por omision, y con motivo -en un VPS real la raiz
         // es ext4/xfs, y lo que aparece como "overlay" ahi es la capa escribible de
@@ -128,6 +156,48 @@ spec:
 YAML
 kubectl -n "$NS" rollout status deployment/aplicacion-sintetica --timeout=60s
 
+# `denegar-todo` (Red.ts, issue #157) cubre TODO pod del namespace, ad-hoc incluido:
+# sin esto Prometheus no puede alcanzar a `aplicacion-sintetica` para scrapearla, ni
+# `aplicacion-sintetica`/`verificador-de-tableros` pueden alcanzar a Prometheus para
+# el `/-/reload` y las consultas de panel de mas abajo. Ninguna de las dos va en
+# `Red.ts`: son pods que solo existen en esta comprobacion, y esa politica documenta
+# en su propio docstring que no abre nada «por si acaso».
+echo "· Abriendo, solo para esta comprobacion, lo que denegar-todo le cierra a los pods ad-hoc"
+cat <<'YAML' | kubectl apply -n "$NS" -f - >/dev/null
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: permitir-verificacion-tableros-aplicacion-sintetica
+spec:
+  podSelector: { matchLabels: { app: aplicacion-sintetica } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app: sgtm-stg-observabilidad-prometheus } } }]
+      ports: [{ port: 8080, protocol: TCP }]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app: sgtm-stg-observabilidad-prometheus } } }]
+      ports: [{ port: 9090, protocol: TCP }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: permitir-verificacion-tableros-prometheus
+spec:
+  podSelector: { matchLabels: { app: sgtm-stg-observabilidad-prometheus } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: aplicacion-sintetica } }
+        - podSelector: { matchLabels: { app: verificador-de-tableros } }
+      ports: [{ port: 9090, protocol: TCP }]
+  # `permitir-salida-prometheus` (Red.ts) solo abre salida hacia la aplicacion
+  # REAL: el repunte de mas abajo cambia el objetivo del scrape al exportador
+  # sintetico, y esa politica de produccion no sabe nada de el.
+  egress:
+    - to: [{ podSelector: { matchLabels: { app: aplicacion-sintetica } } }]
+      ports: [{ port: 8080, protocol: TCP }]
+YAML
+
 # Prometheus escuchaba a `sgtm-stg-aplicacion` -que no existe en este clúster de
 # prueba, nunca contesta y su ausencia no se puede distinguir de un fallo real-. Se
 # repunta el job `aplicacion` al exportador sintetico, solo para esta comprobacion.
@@ -142,8 +212,91 @@ kubectl -n "$NS" get configmap sgtm-stg-observabilidad-prometheus -o json \
         process.stdout.write(JSON.stringify(cm));
       ' \
     | kubectl apply -f - >/dev/null
-kubectl -n "$NS" rollout restart deployment/sgtm-stg-observabilidad-prometheus >/dev/null
-kubectl -n "$NS" rollout status deployment/sgtm-stg-observabilidad-prometheus --timeout=90s
+
+# El objeto ConfigMap en el API cambia al instante; el archivo que kubelet monta
+# DENTRO del Pod no -kubelet lo sincroniza en su propio ciclo periodico, hasta
+# ~60-90s despues, independiente de cuando se aplico el cambio-. Pedir `/-/reload`
+# antes de que eso pase relee un archivo que TODAVIA dice `sgtm-stg-aplicacion`:
+# Prometheus contesta 200 igual -recargo algo, solo que lo viejo-, y el resultado
+# es identico a que el repunte nunca hubiera pasado. Encontrado en CI: `/api/v1/targets`
+# mostraba `scrapeUrl: http://sgtm-stg-aplicacion:8080/...` pese a que el ConfigMap
+# ya tenia `aplicacion-sintetica:8080` -connection refused, no un problema de red-.
+echo "· Esperando a que el volumen del ConfigMap se sincronice dentro del Pod"
+SINCRONIZADO=no
+for intento in $(seq 1 45); do
+    if kubectl -n "$NS" exec deployment/sgtm-stg-observabilidad-prometheus -- \
+        grep -q 'aplicacion-sintetica:8080' /etc/prometheus/prometheus.yml 2>/dev/null; then
+        SINCRONIZADO=si
+        break
+    fi
+    sleep 2
+done
+if [ "$SINCRONIZADO" != "si" ]; then
+    echo "FALLO: el archivo montado en el Pod nunca reflejo el ConfigMap actualizado" >&2
+    echo "en 90s. Sin esto, /-/reload releeria el objetivo de scrape viejo." >&2
+    exit 1
+fi
+
+# `POST /-/reload`, no `kubectl rollout restart`: releer la configuracion sin
+# recrear el Pod. Encontrado en CI, en CUATRO corridas seguidas: justo despues
+# de un `rollout restart`, la primera consulta a Prometheus fallaba conectando
+# -con Prometheus ya sirviendo peticiones segun su propio log, y el Pod en
+# Ready segun el API server-. No era Prometheus: era la recreacion misma, que
+# cambia la direccion que el Service enruta. `/-/reload` es el MISMO proceso,
+# el MISMO Pod, la MISMA entrada del Service -solo relee su archivo-.
+echo "· Recargando la configuracion de Prometheus (POST /-/reload, sin recrear el Pod)"
+# Reintenta la CONEXION, no el resultado -el mismo patron que las consultas de panel de
+# mas abajo-. Dos ajustes de esta ventana ya se probaron en CI y ninguno basto: 3
+# intentos (~36s) y luego 8 (~101s), y en LOS DOS casos cada intento agoto el
+# `timeout=10` completo -nunca fallo rapido-, lo que descarta una ventana de
+# sincronizacion puntual (la hipotesis de `kube-proxy` que motivo el segundo ajuste):
+# una condicion que sigue fallando igual de 36s a 101s no es una carrera que una
+# ventana mas ancha vaya a ganar. La correccion ahora no es un tercer numero a
+# ciegas: es dejar de silenciar CON `2>/dev/null` el error real de cada intento -asi
+# no se sabia si era DNS, TCP o la aplicacion-, y volcar el mismo diagnostico rico que
+# ya usa el bucle de paneles mas abajo si los 5 intentos (~32s, generoso si la causa
+# resulta ser mas simple que las dos anteriores) siguen sin lograrlo.
+LOGRADO=no
+for intento in 1 2 3 4 5; do
+    if SALIDA=$(kubectl -n "$NS" exec deployment/aplicacion-sintetica -- python3 -c "
+import urllib.request
+urllib.request.urlopen(
+    urllib.request.Request('http://sgtm-stg-observabilidad-prometheus:9090/-/reload', method='POST'),
+    timeout=10,
+)
+" 2>&1); then
+        LOGRADO=si
+        break
+    fi
+    [ "$intento" -lt 5 ] && sleep 3
+done
+if [ "$LOGRADO" != "si" ]; then
+    echo "FALLO: /-/reload no respondio en 5 intentos. Ultimo error:" >&2
+    echo "$SALIDA" >&2
+    echo >&2
+    echo "::group::Diagnostico: aplicacion-sintetica -> sgtm-stg-observabilidad-prometheus" >&2
+    kubectl -n "$NS" get pods -o wide >&2
+    kubectl -n "$NS" get endpoints sgtm-stg-observabilidad-prometheus -o wide >&2
+    echo "--- resolucion DNS y conexion TCP desde dentro de aplicacion-sintetica ---" >&2
+    kubectl -n "$NS" exec deployment/aplicacion-sintetica -- python3 -c "
+import socket
+try:
+    print('DNS:', socket.gethostbyname('sgtm-stg-observabilidad-prometheus'))
+except Exception as e:
+    print('DNS FALLO:', repr(e))
+try:
+    s = socket.create_connection(('sgtm-stg-observabilidad-prometheus', 9090), timeout=5)
+    print('TCP: conecta')
+    s.close()
+except Exception as e:
+    print('TCP FALLO:', repr(e))
+" >&2 || true
+    kubectl -n "$NS" describe pods -l app=sgtm-stg-observabilidad-prometheus >&2
+    kubectl -n "$NS" logs deployment/sgtm-stg-observabilidad-prometheus --all-containers --prefix --tail=200 >&2 || true
+    kubectl -n "$NS" get events --sort-by=.lastTimestamp >&2
+    echo "::endgroup::" >&2
+    exit 1
+fi
 
 echo "· Desplegando el cliente de comprobacion"
 cat <<'YAML' | kubectl apply -n "$NS" -f - >/dev/null
@@ -151,12 +304,27 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: verificador-de-tableros
+  # La etiqueta, no solo el nombre: `NetworkPolicy` selecciona por `podSelector`,
+  # y sin ella las dos excepciones de mas arriba y de mas abajo no tienen a quien
+  # apuntar.
+  labels: { app: verificador-de-tableros }
 spec:
   restartPolicy: Never
   containers:
     - name: verificador
       image: python:3.12-alpine
       command: ["sleep", "600"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: permitir-verificacion-tableros-verificador
+spec:
+  podSelector: { matchLabels: { app: verificador-de-tableros } }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app: sgtm-stg-observabilidad-prometheus } } }]
+      ports: [{ port: 9090, protocol: TCP }]
 YAML
 kubectl -n "$NS" wait --for=condition=Ready pod/verificador-de-tableros --timeout=60s
 
