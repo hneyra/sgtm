@@ -355,8 +355,34 @@ for _ in $(seq 1 12); do
     fi
     sleep 10
 done
-[ "$ENTREGADO" = "si" ] \
-    || { echo "FALLO: con el receptor configurado, la notificacion nunca llego." >&2; exit 1; }
+if [ "$ENTREGADO" != "si" ]; then
+    echo "FALLO: con el receptor configurado, la notificacion nunca llego." >&2
+    # DIAGNOSTICO TEMPORAL: por que el webhook no llega pese a que las politicas
+    # de red ya se ven correctas.
+    echo "::group::Diagnostico temporal: entrega del webhook" >&2
+    echo "--- linea 'url' del ConfigMap de alertmanager ---" >&2
+    kubectl -n "$NS" get configmap sgtm-stg-observabilidad-alertmanager -o jsonpath='{.data.alertmanager\.yml}' | grep -A1 webhook_configs >&2 || true
+    echo "--- config vigente segun el propio Alertmanager (/api/v2/status) ---" >&2
+    kubectl -n "$NS" exec verificador-de-alertas -- python3 -c "
+import urllib.request
+r = urllib.request.urlopen('http://sgtm-stg-observabilidad-alertmanager:9093/api/v2/status', timeout=10)
+print(r.read().decode())
+" >&2 || true
+    echo "--- logs de Alertmanager ---" >&2
+    kubectl -n "$NS" logs deployment/sgtm-stg-observabilidad-alertmanager --all-containers --prefix --tail=100 >&2 || true
+    echo "--- conexion TCP directa desde verificador-de-alertas a receptor-de-prueba:8000 ---" >&2
+    kubectl -n "$NS" exec verificador-de-alertas -- python3 -c "
+import socket
+try:
+    s = socket.create_connection(('receptor-de-prueba', 8000), timeout=5)
+    print('TCP: conecta')
+    s.close()
+except Exception as e:
+    print('TCP FALLO:', repr(e))
+" >&2 || true
+    echo "::endgroup::" >&2
+    exit 1
+fi
 echo "  El receptor de prueba recibio la alerta: correcto."
 
 echo

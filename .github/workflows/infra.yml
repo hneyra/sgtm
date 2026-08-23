@@ -377,7 +377,7 @@ jobs:
     name: Una alerta que le llegue a alguien
     runs-on: ubuntu-latest
     needs: verificar
-    if: false # DEBUG temporal: acotando diagnostico del scrape de aplicacion-sintetica
+    if: github.event_name != 'schedule'
     # Sin esto, el limite por omision de GitHub es 360 minutos: un colgado real -no una
     # corrida lenta, una que nunca termina- se queda consumiendo cuota hasta que alguien
     # lo nota y cancela a mano, como paso el 2026-08-23 (mas de 40 minutos, muy por

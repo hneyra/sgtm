@@ -213,6 +213,30 @@ kubectl -n "$NS" get configmap sgtm-stg-observabilidad-prometheus -o json \
       ' \
     | kubectl apply -f - >/dev/null
 
+# El objeto ConfigMap en el API cambia al instante; el archivo que kubelet monta
+# DENTRO del Pod no -kubelet lo sincroniza en su propio ciclo periodico, hasta
+# ~60-90s despues, independiente de cuando se aplico el cambio-. Pedir `/-/reload`
+# antes de que eso pase relee un archivo que TODAVIA dice `sgtm-stg-aplicacion`:
+# Prometheus contesta 200 igual -recargo algo, solo que lo viejo-, y el resultado
+# es identico a que el repunte nunca hubiera pasado. Encontrado en CI: `/api/v1/targets`
+# mostraba `scrapeUrl: http://sgtm-stg-aplicacion:8080/...` pese a que el ConfigMap
+# ya tenia `aplicacion-sintetica:8080` -connection refused, no un problema de red-.
+echo "· Esperando a que el volumen del ConfigMap se sincronice dentro del Pod"
+SINCRONIZADO=no
+for intento in $(seq 1 45); do
+    if kubectl -n "$NS" exec deployment/sgtm-stg-observabilidad-prometheus -- \
+        grep -q 'aplicacion-sintetica:8080' /etc/prometheus/prometheus.yml 2>/dev/null; then
+        SINCRONIZADO=si
+        break
+    fi
+    sleep 2
+done
+if [ "$SINCRONIZADO" != "si" ]; then
+    echo "FALLO: el archivo montado en el Pod nunca reflejo el ConfigMap actualizado" >&2
+    echo "en 90s. Sin esto, /-/reload releeria el objetivo de scrape viejo." >&2
+    exit 1
+fi
+
 # `POST /-/reload`, no `kubectl rollout restart`: releer la configuracion sin
 # recrear el Pod. Encontrado en CI, en CUATRO corridas seguidas: justo despues
 # de un `rollout restart`, la primera consulta a Prometheus fallaba conectando
