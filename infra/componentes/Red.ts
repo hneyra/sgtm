@@ -293,6 +293,11 @@ function politicasDeObservabilidad(environment: Environment, namespace: string):
         // `kube-system` (issue #156, `Ingreso.ts`): es la unica metrica de fuera
         // del namespace que este componente scrapea.
         { to: [{ namespaceSelector: KUBE_SYSTEM }], ports: [puerto(9100)] },
+        // Sin esta, Prometheus nunca puede EMPUJAR una alerta activa hacia
+        // Alertmanager -`permitir-ingreso-alertmanager` ya esperaba este lado,
+        // pero las dos puntas hacen falta-. La regla no notifica a nadie aunque
+        // este en FIRING: la conexion misma se cae antes de llegar.
+        { to: [deApp(alertmanager)], ports: [puerto(9093)] },
       ],
     }),
     // Sin esta, Prometheus tiene salida (arriba) pero CERO entrada: `denegar-todo`

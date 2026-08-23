@@ -1020,6 +1020,18 @@ describe("#157 · endurecimiento", () => {
     expect(puertos).toEqual([9090]);
   });
 
+  it("Prometheus puede empujar hacia Alertmanager: permitir-ingreso-alertmanager no basta sola", () => {
+    // Sin esta, la regla evalua a FIRING de verdad y nadie se entera: la conexion
+    // misma con la que Prometheus la empuja se cae antes de llegar.
+    const salida = politicaDe(ms, "permitir-salida-prometheus");
+    const nombreDeAlertmanager = buscar(ms, "Service", "sgtm-prod-observabilidad-alertmanager").metadata.name;
+    const reglaConAlertmanager = (salida.spec.egress ?? []).find((r) =>
+      (r.to ?? []).some((d) => d.podSelector?.matchLabels.app === nombreDeAlertmanager),
+    );
+    expect(reglaConAlertmanager).toBeDefined();
+    expect((reglaConAlertmanager?.ports ?? []).map((p) => p.port)).toEqual([9093]);
+  });
+
   it("la aplicacion no tiene ningun bloque de internet en su lista de salida", () => {
     const salida = politicaDe(ms, "permitir-salida-aplicacion");
     const destinos = salida.spec.egress?.flatMap((r) => r.to ?? []) ?? [];
