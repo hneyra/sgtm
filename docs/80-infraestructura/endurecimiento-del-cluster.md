@@ -138,15 +138,30 @@ aceptación es literal: el guion lo comprueba, no lo fuerza.
 
 **Los dos VPS —`stg` y `prod`— ya existen** (INF-03 §4, commit `1e564e8`): tienen IP y credenciales
 propias en los *environments* de GitHub. La clave de despliegue de CI (`stg`/`SSH_PRIVATE_KEY`) está
-restringida a solo abrir el túnel al API de k3s (`infra/README.md` §3) — no sirve para correr este
-guion, que necesita una sesión de shell como root. Correrlo es trabajo manual de operación, en su
-propia ventana de mantenimiento, con una clave que sí tenga esa capacidad.
+restringida a **solo abrir el túnel** al API de k3s (`infra/README.md` §3): una sesión con ella
+responde `solo tunel` y termina. No sirve para correr este guion, que necesita shell como root —y
+está bien que no sirva: una clave de despliegue que además pudiera reiniciar k3s sería una clave de
+despliegue con poder de operación—. Correrlo es trabajo manual, en su propia ventana de
+mantenimiento, con una credencial que sí tenga esa capacidad.
+
+**Ejecutado contra un nodo real.** Ya no es una descripción de lo que el guion haría:
+
+| Lo que el guion afirmó | Lo que devolvió el nodo `vmd120205` |
+|---|---|
+| El API server vuelve | «El API server responde» |
+| El nodo vuelve a `Ready` | `node/vmd120205 condition met` |
+| **kubelet aplicó la reserva** —lo asignable baja, la capacidad no— | CPU 4 → asignable **2**; memoria 8 126 500 Ki → asignable **6 029 348 Ki**. La diferencia es **2 097 152 Ki = 2 Gi exactos**, y 2 CPU: justo `system-reserved` + `kube-reserved` (1 CPU y 1 Gi cada uno). La capacidad no se movió |
+| «El clúster vuelve solo» | Ningún pod fuera de `Running`/`Succeeded` tras el reinicio |
+
+La reserva se lee en lo **asignable**, no en la capacidad, y esa es la comprobación que distingue
+«k3s reinició» de «kubelet tomó los argumentos»: un `kubelet-arg` mal escrito reinicia el servicio
+igual de bien y deja lo asignable intacto.
 
 ### Registro de ejecuciones
 
-| Fecha | Quién | ¿Volvió solo? | Notas |
-|---|---|---|---|
-| — | — | — | Pendiente de la primera ejecución contra el VPS de `stg` |
+| Fecha | Quién | Nodo | ¿Volvió solo? | Notas |
+|---|---|---|---|---|
+| 2026-08-23 | hneyra | `vmd120205` (`prod`) | **Sí** | Primera ejecución. Reserva aplicada y confirmada en lo asignable (2 CPU y 2 Gi menos, capacidad intacta). Sin intervención manual: el API server volvió, el nodo pasó a `Ready` y ningún pod quedó fuera de `Running`/`Succeeded`. Lo que la corrida comprueba es que el nodo se recupera del reinicio; que la aplicación entera sobreviva a él se verá cuando `aplicar-prod` haya desplegado el sistema completo |
 
 ## 5. Escaneo de vulnerabilidades de imágenes
 
@@ -167,7 +182,7 @@ se puso rojo, y la corrección fue la que el issue pide: subir la etiqueta a `ng
 
 | Sin verificar | Qué haría falta |
 |---|---|
-| La reserva del nodo, contra un `k3s` real | Una sesión de shell como root en el VPS de `stg` — la clave de despliegue de CI no alcanza, está restringida a solo túnel |
+| El reinicio del nodo **con el sistema desplegado encima** | §4 ya comprueba que el nodo se recupera solo; lo que falta es repetirlo con la aplicación, el motor y Keycloak corriendo, y es trabajo del día en que `aplicar-prod` los haya desplegado |
 | `readOnlyRootFilesystem` en Prometheus, Alertmanager, Grafana, Keycloak y los cuatro contenedores de la JVM | Ejecutar cada imagen con la raíz sellada y ver qué ruta reclama. Los cuatro que sí la llevan están en §2; sellar el resto a ciegas es la clase de cambio que este PR ya vio fallar dos veces contra un clúster real y ninguna en `yarn verificar` |
 
 ## 6-bis. La raíz sellada, comprobada en cada PR
