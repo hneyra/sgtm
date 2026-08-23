@@ -6,12 +6,12 @@ sale de esta tabla y entra como ADR o como cambio en el documento que correspond
 | # | Decisión | Decide | Bloquea | Estado |
 |---|---|---|---|---|
 | **D-01** | Municipalidad piloto y validador funcional de reglas tributarias | Dirección del proyecto | La primera iteración de negocio completa | Abierta |
-| **D-02a** | **Valores normativos de norma nacional**: UIT, tramos y alícuotas del predial (TUO LTM art. 13), mínimo imponible, deducción del pensionista (art. 19), adulto mayor no pensionista (Ley 30490), inafectaciones (art. 17), deducciones por uso (art. 18), plazos de pago (art. 15), cuadro de valores unitarios, tabla de depreciación, valores referenciales vehiculares. **No se decide: se busca, se transcribe y se firma** | Asesoría legal | El predial, el vehicular y la alcabala | Abierta — **no depende de D-01** |
-| **D-02b** | **Valores de ordenanza local**: tasas de arbitrios por sector y uso, criterios de distribución del costo, calendario de vencimientos, derecho de emisión, descuento por pago adelantado, CUIS, inafectaciones de arbitrios. Cada uno **con su acuerdo de ratificación provincial**: sin ratificación no habilita emisión (ARQ-09 §2.4, riesgo R-04) | Rentas del piloto | Arbitrios y sanciones administrativas | Abierta — **bloqueada por D-01** |
-| **D-02c** | **Valores del resto de tributos y del procedimiento**: espectáculos, anuncios, interés moratorio, reajuste, prescripción, costas y gastos coactivos, tabla de infracciones de tránsito, multa tributaria | Rentas + asesoría legal | Espectáculos, anuncios, cobranza y coactiva | Abierta — parcialmente bloqueada por D-01 |
+| **D-02a** | **Lo que fija una norma nacional publicada.** Enumeración exacta: las filas 1-9, 15, 16, 17, 20, 21, 22, 24 y 27 del [mapa normativo](../10-negocio/marco-normativo.md) —UIT, tramos y alícuotas, mínimo, deducciones, plazos y reajuste del predial, valores unitarios, aranceles, depreciación, alcabala, vehicular, espectáculos, prescripción, plazos de notificación, tabla de infracciones de tránsito y multa tributaria—. **No se decide: se busca, se transcribe y se firma** (E-3, #200) | Asesoría legal | #188, #190, #192, #194, #195, #196, #197, #198 | Abierta — **no depende de D-01** |
+| **D-02b** | **Lo que fija una ordenanza de la municipalidad en materia tributaria**, con su **acuerdo de ratificación provincial** cuando la emite una distrital: filas 11-14, 18, 19, 25, 28 y 29 del mapa —arbitrios y sus criterios de distribución, descuento por pago adelantado, inafectaciones, anuncios, TIM, CUIS, interés y máximo de cuotas del fraccionamiento, y derecho de trámite del TUPA—. Sin ratificación no habilita emisión (ARQ-09 §2.4, riesgo R-04) | Rentas del piloto | #189, #191, #196, #197, #199 | Abierta — **bloqueada por D-01**, o por elegir la municipalidad de demostración (E-6, #202) |
+| **D-02c** | **Lo que fija un acto propio de la municipalidad que no es ordenanza tributaria ratificada**: filas 23 y 26 del mapa —arancel de costas coactivas ‹confirmar quién lo aprueba› y descuentos por pronto pago de papeletas—. Ni se busca en El Peruano ni se ratifica: hay que producirlo | Rentas + asesoría legal | #193, #195, #196 | Abierta — parcialmente bloqueada por D-01 |
 | **D-03a** | **Escala de cálculo intermedio.** Casi decidida de hecho: `../srtm/docs/40-datos/ddl/esquema-verificado.sql` ya define `monto_calc numeric(18,6)` frente a `dinero numeric(15,2)`. Falta **ratificarlo**, no inventarlo | Arquitectura + contabilidad | La primera regla de cálculo | Abierta — trámite |
 | **D-03b** | **Modo de redondeo**: `HALF_UP` frente a `HALF_EVEN` | Rentas + contabilidad | La primera regla de cálculo | Abierta — decisión limpia |
-| **D-03c** | **Los puntos donde se redondea.** <b>No es una decisión: es ingeniería inversa.</b> M02 reveló el «metrado redondeado» de obras complementarias, es decir que el SRTM del MEF **redondea en pasos intermedios**, no solo al cierre de cada regla como asumía ARQ-09 §1.4. Nadie puede decidir en qué puntos redondea un sistema ajeno: hay que inventariarlo observándolo. Ver §Cómo se cierra D-03c | Rentas, con acceso al SRTM del MEF | `CAL-02` y la primera regla de cálculo | Abierta — **es la que bloquea** |
+| **D-03c** | **Los puntos donde se redondea.** <b>No es una decisión: es ingeniería inversa.</b> M02 reveló el «metrado redondeado» de obras complementarias, es decir que el SRTM del MEF **redondea en pasos intermedios**, no solo al cierre de cada regla como asumía ARQ-09 §1.4. Nadie puede decidir en qué puntos redondea un sistema ajeno: hay que inventariarlo observándolo. Ver §Cómo se cierra D-03c | Rentas, con acceso al SRTM del MEF | `CAL-02` y la primera regla de cálculo | Abierta — **es la que bloquea**. El tipo que puede expresar la respuesta ya existe (`PuntoDeRedondeo`, `PoliticasDeRedondeo`): catorce puntos candidatos, ninguno con política, y el cálculo que pida uno sin parametrizar **falla** en vez de no redondear |
 | **D-03d** | **Redondeo del importe a pagar en el cierre de caja**, que puede no ser el del cálculo | Tesorería + contabilidad | El cierre de caja | Abierta |
 | **D-04** | Estrategia de migración desde la base SQL Server del sistema actual: alcance, corte, conciliación de saldos | Dirección + TI municipal | Implantación | Abierta |
 | **D-05** | Régimen de firma digital de valores, resoluciones y constancias | Asesoría legal | La capa de generación de documentos | Abierta |
@@ -22,6 +22,7 @@ sale de esta tabla y entra como ADR o como cambio en el documento que correspond
 | **D-10** | **Longitud exacta del código de referencia catastral.** La plantilla del manual (`DDPPddSSMMMLLLEEeeppUUU`) da 23 posiciones; los ejemplos del prototipo de interfaz traen 21 | Catastro del piloto | La validación del código y la carga de fichas | Abierta |
 | **D-11** | **Origen y valor de los cuatro factores sin fuente** que reveló el manual M02 del MEF (`../srtm` NEG-05 §0.1): deducción de Amazonía, `% actualización`, incremento del 5 % sobre el valor unitario **antes** de depreciar, y factor de oficialización de obras complementarias. Los cuatro multiplican o restan sobre importes | Rentas del piloto + asesoría legal | `RT-002`, `RT-005` y `RT-011`; se suma a D-02a | Abierta |
 | **D-12** | **Qué pasa con el autovalúo cuya titularidad no llega a 100 %.** El esquema ya admite titularidad parcial —valida «no excede 100», como el SRTM del MEF—; falta decidir si la porción sin titular identificado se determina a alguien o simplemente no se cobra | Rentas + asesoría legal | La base imponible del predial (`RT-011`) | Abierta |
+| **D-13** | **Ámbito de las tres tablas de dato nacional.** `valor_unitario_edificacion`, `depreciacion` y `valor_referencial_vehiculo` llevan hoy `municipalidad_id NOT NULL`, mientras ARQ-09 §2.1 dice que el parámetro nacional va con `municipalidad_id` nulo —como sí hace `parametro_tributario`—. Cargar el cuadro del MEF una vez por municipalidad admite que dos tenants tengan **copias distintas del mismo cuadro nacional**. Hallazgo H-5 de [GOB-03](plan-de-desbloqueo-D-02.md) | Arquitectura | La **carga** de lo que E-3 (#200) transcriba, no su transcripción | Abierta — no bloquea empezar E-3 |
 
 ## Por qué D-02 bloquea de verdad
 
@@ -48,6 +49,16 @@ tres grupos tienen responsables y bloqueos distintos:
 
 Mientras fueran la misma decisión, lo que se podía hacer esperaba por lo que no. La partición no
 cierra nada: hace visible qué está esperando a qué.
+
+**La partición ya es una función**, y no lo era: el criterio no es el tributo sino **quién produce
+el valor**, y está escrito en [NEG-02 §2.1](../10-negocio/marco-normativo.md) con las 29 filas
+asignadas una por una. Al construir el mapa, cuatro datos cambiaron de parte —espectáculos,
+prescripción y plazos, y la tabla de infracciones de tránsito pasaron de `D-02c` a `D-02a`; los
+anuncios y la TIM, a `D-02b`— y dos que no tenían fila la ganaron. El saldo práctico: **cuatro
+datos más se pueden buscar hoy, sin piloto**, y `#192` deja de esperar a D-01.
+
+Las etiquetas del tablero salen de ahí, y `docs/10-negocio/verificar-mapa-normativo.mjs` comprueba
+en las dos direcciones que sigan diciendo lo mismo.
 
 **Lo único de D-02 que no se resuelve buscando es D-11**, los cuatro factores sin fuente. Ahí sí
 hay una decisión: si la fuente no aparece, ¿se implementan igual, se omiten, o se bloquea la

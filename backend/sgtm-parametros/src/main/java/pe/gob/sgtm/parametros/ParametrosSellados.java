@@ -71,6 +71,7 @@ public final class ParametrosSellados {
                 .orElseThrow(
                         () ->
                                 new ParametroAusente(
+                                        llave(tipo, clave),
                                         "El conjunto sellado del ejercicio "
                                                 + ejercicio
                                                 + " (version "
@@ -89,8 +90,23 @@ public final class ParametrosSellados {
 
         @java.io.Serial private static final long serialVersionUID = 1L;
 
-        ParametroAusente(String mensaje) {
+        private final String llave;
+
+        ParametroAusente(String llave, String mensaje) {
             super(mensaje);
+            this.llave = llave;
+        }
+
+        /**
+         * La llave que falta, {@code tipo:clave}, legible por programa y no solo por quien lee el
+         * mensaje.
+         *
+         * <p>Es lo que permite que el corpus de casos <b>recoja</b> los parametros que una regla
+         * pide de verdad, corriendola con un conjunto vacio, en vez de que alguien los escriba a
+         * mano en una lista que se desincroniza.
+         */
+        public String llave() {
+            return llave;
         }
     }
 

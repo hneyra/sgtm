@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
+import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
+import pe.gob.sgtm.dominio.PuntoDeRedondeo;
 import pe.gob.sgtm.dominio.ValorNormativo;
 
 /**
@@ -35,9 +37,16 @@ class MotorDeReglasTest {
 
     private static final Ejercicio EJERCICIO = new Ejercicio(2026);
 
-    /** Ficticia. No representa ninguna decision sobre D-03; la prueba necesita una cualquiera. */
-    private static final PoliticaDeRedondeo REDONDEO_DE_PRUEBA =
-            new PoliticaDeRedondeo(2, RoundingMode.HALF_UP);
+    /**
+     * Ficticia. Ni la escala, ni el modo, ni el punto elegido representan una decision sobre D-03:
+     * ninguna regla de esta prueba redondea, el motor solo transporta la parametrizacion.
+     */
+    private static final PoliticasDeRedondeo REDONDEO_DE_PRUEBA =
+            PoliticasDeRedondeo.construir()
+                    .en(
+                            PuntoDeRedondeo.AUTOVALUO_DEL_PREDIO,
+                            new PoliticaDeRedondeo(2, RoundingMode.HALF_UP))
+                    .construir();
 
     // Los conceptos de la muestra imitan la forma del grafo real —dos ramas que convergen—
     // sin usar sus nombres, para que nadie los confunda con el calculo del predial.
@@ -58,6 +67,7 @@ class MotorDeReglasTest {
         return new EntradaDeCalculo(
                 EJERCICIO,
                 EstadoDelCalculo.con(AREA, Dinero.de(area)),
+                CaracteristicasDeLaPartida.ninguna(),
                 parametrosFicticios(),
                 REDONDEO_DE_PRUEBA);
     }
@@ -236,6 +246,7 @@ class MotorDeReglasTest {
                     new EntradaDeCalculo(
                             EJERCICIO,
                             EstadoDelCalculo.vacio(),
+                            CaracteristicasDeLaPartida.ninguna(),
                             parametrosFicticios(),
                             REDONDEO_DE_PRUEBA);
 
@@ -455,6 +466,7 @@ class MotorDeReglasTest {
                     new EntradaDeCalculo(
                             EJERCICIO,
                             EstadoDelCalculo.con(AREA, Dinero.de("100.00")),
+                            CaracteristicasDeLaPartida.ninguna(),
                             ParametrosSellados.de(EJERCICIO, 1).construir(),
                             REDONDEO_DE_PRUEBA);
 
@@ -471,6 +483,7 @@ class MotorDeReglasTest {
                                     new EntradaDeCalculo(
                                             new Ejercicio(2027),
                                             EstadoDelCalculo.con(AREA, Dinero.de("100.00")),
+                                            CaracteristicasDeLaPartida.ninguna(),
                                             parametrosFicticios(),
                                             REDONDEO_DE_PRUEBA))
                     .as("cruzarlos produce una cifra plausible y equivocada")

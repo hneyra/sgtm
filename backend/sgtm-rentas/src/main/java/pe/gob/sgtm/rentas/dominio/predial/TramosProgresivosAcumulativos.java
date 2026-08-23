@@ -4,7 +4,8 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
 import pe.gob.sgtm.dominio.Dinero;
-import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
+import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
+import pe.gob.sgtm.dominio.PuntoDeRedondeo;
 
 /**
  * RT-013 — Tramos y alicuotas progresivas acumulativas (TUO Ley de Tributacion Municipal, D.S.
@@ -35,14 +36,20 @@ public final class TramosProgresivosAcumulativos {
     /**
      * El impuesto resultante de aplicar los tramos, en orden, a {@code baseAfecta}.
      *
+     * <p>Redondea en {@link PuntoDeRedondeo#IMPUESTO_POR_TRAMO}, y falla si ese punto no esta
+     * parametrizado: mientras D-03c no diga si el SRTM redondea tramo a tramo o solo al cerrar el
+     * impuesto, no redondear es una respuesta tan inventada como cualquier otra, con el agravante
+     * de que no se nota.
+     *
      * @param tramos en orden ascendente de limite; el ultimo, sin tope, cierra la lista
      * @throws IllegalArgumentException si la base es negativa o la lista de tramos esta vacia
      */
     public static Dinero calcular(
-            Dinero baseAfecta, List<Tramo> tramos, PoliticaDeRedondeo redondeo) {
+            Dinero baseAfecta, List<Tramo> tramos, PoliticasDeRedondeo redondeo) {
         Objects.requireNonNull(baseAfecta, "El calculo necesita la base afecta");
         Objects.requireNonNull(tramos, "El calculo necesita el cuadro de tramos");
-        Objects.requireNonNull(redondeo, "La politica de redondeo se recibe, no se fija (D-03)");
+        Objects.requireNonNull(
+                redondeo, "Las politicas de redondeo se reciben, no se fijan (D-03)");
         if (baseAfecta.esNegativo()) {
             throw new IllegalArgumentException(
                     "La base afecta no puede ser negativa: " + baseAfecta);
@@ -75,6 +82,6 @@ public final class TramosProgresivosAcumulativos {
             }
         }
 
-        return impuesto.redondeadoCon(redondeo);
+        return impuesto.redondeadoEn(PuntoDeRedondeo.IMPUESTO_POR_TRAMO, redondeo);
     }
 }

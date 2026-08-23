@@ -5,11 +5,13 @@ import java.util.Set;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
+import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
+import pe.gob.sgtm.dominio.PuntoDeRedondeo;
 import pe.gob.sgtm.dominio.ValorNormativo;
 
 /**
  * Lo unico que una regla puede ver mientras calcula: los conceptos que <b>declaro</b> necesitar,
- * los parametros sellados, el ejercicio y la politica de redondeo.
+ * los parametros sellados, el ejercicio y las politicas de redondeo.
  *
  * <p>La restriccion es el punto. Si la regla recibiera el estado completo podria leer un concepto
  * que no declaro en {@link ReglaTributaria#requiere()}, y entonces el grafo declarado seria
@@ -25,20 +27,23 @@ public final class InsumosDeLaRegla {
     private final Set<Concepto> declarados;
     private final EstadoDelCalculo estado;
     private final Ejercicio ejercicio;
+    private final CaracteristicasDeLaPartida caracteristicas;
     private final ParametrosSellados parametros;
-    private final PoliticaDeRedondeo redondeo;
+    private final PoliticasDeRedondeo redondeo;
 
     InsumosDeLaRegla(
             IdentificadorDeRegla regla,
             Set<Concepto> declarados,
             EstadoDelCalculo estado,
             Ejercicio ejercicio,
+            CaracteristicasDeLaPartida caracteristicas,
             ParametrosSellados parametros,
-            PoliticaDeRedondeo redondeo) {
+            PoliticasDeRedondeo redondeo) {
         this.regla = regla;
         this.declarados = declarados;
         this.estado = estado;
         this.ejercicio = ejercicio;
+        this.caracteristicas = caracteristicas;
         this.parametros = parametros;
         this.redondeo = redondeo;
     }
@@ -65,14 +70,31 @@ public final class InsumosDeLaRegla {
         return ejercicio;
     }
 
+    /**
+     * La llave con que esta partida busca un parametro: la via del terreno, la categoria de la
+     * construccion, el material. Si la partida no la trae es {@code CaracteristicaAusente}, no un
+     * valor por omision.
+     */
+    public String caracteristica(String nombre) {
+        return caracteristicas.exigir(nombre);
+    }
+
     /** El conjunto sellado. Los parametros entran como argumento, nunca se leen dentro. */
     public ParametrosSellados parametros() {
         return parametros;
     }
 
-    /** Se recibe, no se elige: D-03 sigue abierta (ARQ-09 §1.4). */
-    public PoliticaDeRedondeo redondeo() {
-        return redondeo;
+    /**
+     * La politica del punto que la regla redondea. Se recibe, no se elige: D-03 sigue abierta
+     * (ARQ-09 §1.4).
+     *
+     * <p><b>La regla nombra su punto</b>, y por eso no hay un {@code redondeo()} sin argumento: con
+     * una politica unica para todo el calculo, el punto que nadie observo no falla —no redondea— y
+     * el importe sale plausible. Que el punto no este parametrizado es {@code PuntoSinPolitica},
+     * como que falte un parametro es {@code ParametroAusente}.
+     */
+    public PoliticaDeRedondeo redondeoEn(PuntoDeRedondeo punto) {
+        return redondeo.en(punto);
     }
 
     /**

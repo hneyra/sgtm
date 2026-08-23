@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
+import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
+import pe.gob.sgtm.dominio.PuntoDeRedondeo;
 
 /**
  * RT-013, con un cuadro de tramos <b>ficticio</b> —no el del articulo 13, que sigue bloqueado por
@@ -18,8 +20,13 @@ import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
 @DisplayName("TramosProgresivosAcumulativos (RT-013)")
 class TramosProgresivosAcumulativosTest {
 
-    private static final PoliticaDeRedondeo REDONDEO =
-            new PoliticaDeRedondeo(2, RoundingMode.HALF_UP);
+    /** Ficticia en su escala y su modo; el punto si es el que la regla nombra. */
+    private static final PoliticasDeRedondeo REDONDEO =
+            PoliticasDeRedondeo.construir()
+                    .en(
+                            PuntoDeRedondeo.IMPUESTO_POR_TRAMO,
+                            new PoliticaDeRedondeo(2, RoundingMode.HALF_UP))
+                    .construir();
 
     /** Cuadro ficticio de tres tramos: 0.2 % hasta 1000, 0.6 % hasta 3000, 1.0 % en adelante. */
     private static final List<Tramo> CUADRO_FICTICIO =
@@ -104,5 +111,26 @@ class TramosProgresivosAcumulativosTest {
                                 TramosProgresivosAcumulativos.calcular(
                                         Dinero.de(500), List.of(), REDONDEO))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("sin politica para su punto, el calculo falla en vez de no redondear")
+    void sinPoliticaParaSuPuntoElCalculoFalla() {
+        // Una parametrizacion que cubre otros puntos, pero no el que RT-013 redondea. Antes de
+        // PuntoDeRedondeo este caso no existia: habia una politica para todo el calculo y el punto
+        // que nadie habia observado simplemente no se redondeaba, produciendo un importe plausible.
+        PoliticasDeRedondeo otroPunto =
+                PoliticasDeRedondeo.construir()
+                        .en(
+                                PuntoDeRedondeo.AUTOVALUO_DEL_PREDIO,
+                                new PoliticaDeRedondeo(2, RoundingMode.HALF_UP))
+                        .construir();
+
+        assertThatThrownBy(
+                        () ->
+                                TramosProgresivosAcumulativos.calcular(
+                                        Dinero.de(500), CUADRO_FICTICIO, otroPunto))
+                .isInstanceOf(PoliticasDeRedondeo.PuntoSinPolitica.class)
+                .hasMessageContaining("IMPUESTO_POR_TRAMO");
     }
 }

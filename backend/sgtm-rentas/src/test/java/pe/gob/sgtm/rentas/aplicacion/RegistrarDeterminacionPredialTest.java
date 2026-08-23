@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
-import java.math.RoundingMode;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -38,11 +37,12 @@ import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
-import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
 import pe.gob.sgtm.dominio.Porcentaje;
+import pe.gob.sgtm.dominio.PuntoDeRedondeo;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.parametros.PoliticasDeRedondeoSelladas;
 import pe.gob.sgtm.parametros.aplicacion.AdministrarParametros;
 import pe.gob.sgtm.parametros.aplicacion.LectorDeParametrosSellados;
 import pe.gob.sgtm.parametros.dominio.ConjuntoDeParametros;
@@ -80,8 +80,6 @@ class RegistrarDeterminacionPredialTest {
             Clock.fixed(Instant.parse("2026-08-18T10:00:00Z"), ZoneId.of("America/Lima"));
 
     private static final Ejercicio EJERCICIO = new Ejercicio(2026);
-    private static final PoliticaDeRedondeo REDONDEO =
-            new PoliticaDeRedondeo(2, RoundingMode.HALF_UP);
 
     /** Cuadro ficticio: 0.2 % hasta 1000, 0.6 % hasta 3000, 1.0 % en adelante. */
     private static final List<Tramo> CUADRO_FICTICIO =
@@ -179,7 +177,6 @@ class RegistrarDeterminacionPredialTest {
                             prediosDeclarados(predioA, predioB),
                             CUADRO_FICTICIO,
                             MINIMO_FICTICIO,
-                            REDONDEO,
                             Observacion.de("Primera determinacion del ejercicio 2026"));
 
             assertThat(primera.id()).isNotNull();
@@ -199,7 +196,6 @@ class RegistrarDeterminacionPredialTest {
                             prediosDeclarados(predioA, predioB),
                             CUADRO_FICTICIO,
                             MINIMO_FICTICIO,
-                            REDONDEO,
                             Observacion.de("Recalculo con el conjunto sellado corregido"));
 
             assertThat(segunda.id())
@@ -258,9 +254,72 @@ class RegistrarDeterminacionPredialTest {
                                             List.of(),
                                             CUADRO_FICTICIO,
                                             MINIMO_FICTICIO,
-                                            REDONDEO,
                                             Observacion.de("No deberia llegar a calcular nada")))
                     .isInstanceOf(RegistrarDeterminacionPredial.SinPrediosDeclarados.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("E-7 §3 — el redondeo sale del conjunto sellado, no del codigo (D-03c)")
+    class ElRedondeoSaleDelConjunto {
+
+        @Test
+        @DisplayName("cambiar la escala de la fila cambia el importe determinado")
+        void cambiarLaFilaCambiaElImporte() throws SQLException {
+            long titular = crearContribuyente("DET-0003", "80300003");
+            long predio = crearPredio("000000000000000104");
+            // 2026 y no un ejercicio cualquiera: `determinacion` esta particionada por ejercicio
+            // y solo existen las particiones de 2026 y 2027 (V2).
+            Ejercicio ejercicio = EJERCICIO;
+
+            sellarConRedondeo(ejercicio, 4, "HALF_UP", "Redondeo ficticio a cuatro decimales");
+            Determinacion conCuatro =
+                    registrar.registrar(
+                            ejercicio,
+                            titular,
+                            List.of(aporte(predio, "1234.5678")),
+                            List.of(Tramo.sinTope(Alicuota.de("1.0"))),
+                            MINIMO_FICTICIO,
+                            Observacion.de("Determinacion con redondeo a cuatro decimales"));
+
+            sellarConRedondeo(ejercicio, 0, "DOWN", "Redondeo ficticio a cero decimales");
+            Determinacion conCero =
+                    registrar.registrar(
+                            ejercicio,
+                            titular,
+                            List.of(aporte(predio, "1234.5678")),
+                            List.of(Tramo.sinTope(Alicuota.de("1.0"))),
+                            MINIMO_FICTICIO,
+                            Observacion.de("Determinacion con redondeo a cero decimales"));
+
+            assertThat(conCuatro.montoDeterminado())
+                    .as("ninguna escala vive en el servicio: la de la fila es la que se aplica")
+                    .isNotEqualTo(conCero.montoDeterminado());
+            assertThat(conCero.montoDeterminado()).isEqualTo(Dinero.de("12.00"));
+        }
+
+        @Test
+        @DisplayName("un conjunto sellado sin ninguna fila REDONDEO no determina: falla")
+        void sinFilaDeRedondeoNoDetermina() throws SQLException {
+            long titular = crearContribuyente("DET-0004", "80300004");
+            long predio = crearPredio("000000000000000105");
+            Ejercicio ejercicio = new Ejercicio(2027);
+            sellarConjuntoSinRedondeo(ejercicio, "Conjunto sin ningun punto observado");
+
+            assertThatThrownBy(
+                            () ->
+                                    registrar.registrar(
+                                            ejercicio,
+                                            titular,
+                                            List.of(aporte(predio, "1000.00")),
+                                            CUADRO_FICTICIO,
+                                            MINIMO_FICTICIO,
+                                            Observacion.de("Determinacion sin redondeo observado")))
+                    .as(
+                            "sin puntos observados el importe saldria sin redondear y nadie lo"
+                                    + " distinguiria del correcto")
+                    .isInstanceOf(PoliticasDeRedondeoSelladas.SinPuntosObservados.class)
+                    .hasMessageContaining("D-03c");
         }
     }
 
@@ -317,24 +376,74 @@ class RegistrarDeterminacionPredialTest {
                         predioB, Dinero.de(1000), Porcentaje.total(), Dinero.de(1000)));
     }
 
-    private static long sellarConjunto(Ejercicio ejercicio, String motivo) throws SQLException {
-        long parametroCualquiera = parametroDeRelleno(ejercicio, motivo);
+    private static DetalleDeterminacionPredio aporte(long predio, String base) {
+        return DetalleDeterminacionPredio.nuevo(
+                predio, Dinero.de(base), Porcentaje.total(), Dinero.de(base));
+    }
 
+    private static long sellarConjunto(Ejercicio ejercicio, String motivo) throws SQLException {
+        return sellarConRedondeo(ejercicio, 2, "HALF_UP", motivo);
+    }
+
+    /** Sella un conjunto cuyo unico parametro es el punto de redondeo, con la escala y el modo. */
+    private static long sellarConRedondeo(
+            Ejercicio ejercicio, int escala, String modo, String motivo) throws SQLException {
+        return sellarCon(ejercicio, motivo, parametroDeRedondeo(escala, modo, motivo));
+    }
+
+    /** Sella un conjunto valido —no se puede sellar uno vacio— y sin ningun punto de redondeo. */
+    private static long sellarConjuntoSinRedondeo(Ejercicio ejercicio, String motivo)
+            throws SQLException {
+        return sellarCon(ejercicio, motivo, parametroAjenoAlRedondeo(motivo));
+    }
+
+    private static long sellarCon(Ejercicio ejercicio, String motivo, long parametro)
+            throws SQLException {
         ConjuntoDeParametros conjunto =
                 administrarParametros.abrirVersion(ejercicio, Observacion.de(motivo));
-        administrarParametros.agregarParametro(
-                conjunto.id(), parametroCualquiera, Observacion.de(motivo));
+        administrarParametros.agregarParametro(conjunto.id(), parametro, Observacion.de(motivo));
         ConjuntoDeParametros sellado =
                 administrarParametros.sellar(conjunto.id(), Observacion.de(motivo));
         return sellado.id();
     }
 
     /**
-     * {@code RegistrarDeterminacionPredial} no lee ningun parametro del conjunto sellado —tramos y
-     * minimo llegan como argumento (D-02b)—: alcanza con que exista al menos uno para poder sellar
-     * (un conjunto vacio no se sella).
+     * La fila {@code REDONDEO:IMPUESTO_POR_TRAMO} que el servicio <b>lee</b> del conjunto sellado
+     * (E-7 §Entregable 3, #203): escala en {@code valor_numerico}, modo en {@code valor_texto}, las
+     * dos mitades en la misma fila.
+     *
+     * <p>La escala y el modo de aqui son <b>ficticios</b>: la campana de observacion del SRTM del
+     * MEF no ha empezado, y su documento fuente lo dice. Lo que esta prueba verifica no es que sean
+     * los correctos sino que <b>salgan de la base</b>: cambiarlos cambia el importe, y ninguno vive
+     * en el codigo del servicio.
      */
-    private static long parametroDeRelleno(Ejercicio ejercicio, String motivo) throws SQLException {
+    private static long parametroDeRedondeo(int escala, String modo, String motivo)
+            throws SQLException {
+        try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS);
+                PreparedStatement sentencia =
+                        carga.prepareStatement(
+                                "INSERT INTO parametro_tributario (municipalidad_id, tipo, clave,"
+                                        + " valor_numerico, valor_texto, vigencia_desde,"
+                                        + " documento_fuente, usuario_carga, usuario_aprueba)"
+                                        + " VALUES (NULL, ?, ?, ?, ?, DATE '2026-01-01', ?,"
+                                        + " 'carga', 'aprueba') RETURNING id")) {
+            sentencia.setString(1, PoliticasDeRedondeoSelladas.TIPO);
+            sentencia.setString(2, PuntoDeRedondeo.IMPUESTO_POR_TRAMO.name());
+            sentencia.setBigDecimal(3, java.math.BigDecimal.valueOf(escala));
+            sentencia.setString(4, modo);
+            sentencia.setString(
+                    5,
+                    motivo
+                            + "; escala y modo ficticios, no observados del SRTM del MEF (D-03c"
+                            + " sigue abierta)");
+            return devolverId(carga, sentencia);
+        }
+    }
+
+    /**
+     * Un parametro que no es de redondeo: el conjunto es valido y aun asi no tiene ningun punto.
+     */
+    private static long parametroAjenoAlRedondeo(String motivo) throws SQLException {
         try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS);
                 PreparedStatement sentencia =
                         carga.prepareStatement(
@@ -343,15 +452,20 @@ class RegistrarDeterminacionPredialTest {
                                         + " usuario_carga, usuario_aprueba) VALUES (NULL,"
                                         + " 'FICTICIO', ?, 1.000000, DATE '2026-01-01', ?,"
                                         + " 'carga', 'aprueba') RETURNING id")) {
-            sentencia.setString(1, "RELLENO_" + System.nanoTime());
+            sentencia.setString(1, "SIN_REDONDEO_" + System.nanoTime());
             sentencia.setString(
                     2, motivo + "; valor ficticio de prueba, no representa ninguna norma");
-            try (ResultSet resultado = sentencia.executeQuery()) {
-                resultado.next();
-                long id = resultado.getLong(1);
-                carga.commit();
-                return id;
-            }
+            return devolverId(carga, sentencia);
+        }
+    }
+
+    private static long devolverId(Connection carga, PreparedStatement sentencia)
+            throws SQLException {
+        try (ResultSet resultado = sentencia.executeQuery()) {
+            resultado.next();
+            long id = resultado.getLong(1);
+            carga.commit();
+            return id;
         }
     }
 
