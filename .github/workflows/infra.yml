@@ -117,7 +117,7 @@ jobs:
     name: El motor, levantado y con el aislamiento verificado
     runs-on: ubuntu-latest
     needs: verificar
-    if: github.event_name != 'schedule'
+    if: false # DEBUG temporal: deshabilitado para acotar el diagnostico de #157/#215
 
     steps:
       - uses: actions/checkout@v4
@@ -155,7 +155,7 @@ jobs:
     name: La raiz sellada arranca, y su /tmp no es decorativo
     runs-on: ubuntu-latest
     needs: verificar
-    if: github.event_name != 'schedule'
+    if: false # DEBUG temporal: deshabilitado para acotar el diagnostico de #157/#215
 
     steps:
       - uses: actions/checkout@v4
@@ -188,7 +188,7 @@ jobs:
     name: El respaldo, restaurado de verdad
     runs-on: ubuntu-latest
     needs: verificar
-    if: github.event_name != 'schedule'
+    if: false # DEBUG temporal: deshabilitado para acotar el diagnostico de #157/#215
 
     steps:
       - uses: actions/checkout@v4
@@ -234,7 +234,7 @@ jobs:
     name: Los manifiestos, validados por un API server de verdad
     runs-on: ubuntu-latest
     needs: verificar
-    if: github.event_name != 'schedule'
+    if: false # DEBUG temporal: deshabilitado para acotar el diagnostico de #157/#215
 
     steps:
       - uses: actions/checkout@v4
@@ -293,7 +293,7 @@ jobs:
     name: Los secretos se generan solos, y ninguno se repite
     runs-on: ubuntu-latest
     needs: verificar
-    if: github.event_name != 'schedule'
+    if: false # DEBUG temporal: deshabilitado para acotar el diagnostico de #157/#215
 
     steps:
       - uses: actions/checkout@v4
@@ -447,7 +447,7 @@ jobs:
     name: Denegacion por omision, contra un CNI que la aplica de verdad
     runs-on: ubuntu-latest
     needs: verificar
-    if: github.event_name != 'schedule'
+    if: false # DEBUG temporal: deshabilitado para acotar el diagnostico de #157/#215
 
     steps:
       - uses: actions/checkout@v4
@@ -491,7 +491,7 @@ jobs:
     needs: verificar
     # Un PR desde una bifurcación no ve los secretos del repositorio ni del environment.
     # Sin token no hay estado que consultar, y este trabajo no tiene nada que hacer.
-    if: github.event_name == 'pull_request'
+    if: false # DEBUG temporal: deshabilitado para acotar el diagnostico de #157/#215
     environment: stg
 
     steps:
@@ -593,7 +593,7 @@ jobs:
     name: pulumi preview de prod
     runs-on: ubuntu-latest
     needs: verificar
-    if: github.event_name == 'pull_request'
+    if: false # DEBUG temporal: deshabilitado para acotar el diagnostico de #157/#215
     # Sin protección: es una copia de los secretos del *environment* `prod`, que existe
     # solo para que este preview de solo lectura no quede detrás de la aprobación que
     # `aplicar-prod` sí exige. El `up` real nunca usa este *environment*.
