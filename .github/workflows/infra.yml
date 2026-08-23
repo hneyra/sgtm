@@ -32,14 +32,10 @@
 #   1f. `observabilidad-tableros` — cada panel de `resumen-operativo.json`, consultado
 #      contra un Prometheus real con exportadores reales. Falla nombrando el panel si
 #      alguno vuelve «No data» — la regresión que el issue #156 pide poder atrapar.
-#   2. `previsualizar-stg` / `previsualizar-prod` — `pulumi preview` de cada stack en
-#      cada PR, publicado como comentario. **Dos jobs, no uno**: stg y prod son dos VPS
-#      con IP distinta, así que cada uno abre su propio túnel con el *environment* que le
-#      corresponde (`stg` y `prod-preview`, una copia sin protección de los secretos de
-#      `prod` para que este preview de solo lectura no quede detrás de la aprobación que
-#      sí exige `aplicar-prod`). Desde que `infra/componentes/` tiene recursos, el plan
-#      se calcula comparando con lo que hay en el nodo, y para eso hay que poder llegar
-#      a él.
+#   2. `previsualizar` — `pulumi preview` de los dos stacks en cada PR, publicado como
+#      comentario. **Ahora lleva el túnel**: desde que `infra/componentes/` tiene
+#      recursos, el plan se calcula comparando con lo que hay en el nodo, y para eso hay
+#      que poder llegar a él.
 #   3. `aplicar-stg` — genera los secretos que falten contra el clúster real
 #      (`bootstrap-secretos.sh`, INF-06) y solo entonces `pulumi up` de `stg`,
 #      automático al integrar a `main`.
@@ -470,21 +466,13 @@ jobs:
       - name: verificar-red.sh
         run: infra/red/verificar-red.sh
 
-  # stg y prod son dos VPS con IP distinta, así que un solo túnel no puede llegar a los
-  # dos. Antes esto era un solo job reutilizando un túnel para ambos `preview` — bastaba
-  # mientras los dos ambientes vivían en el mismo nodo. Ahora son dos jobs, cada uno con
-  # su propio `environment` para que `secrets.VPS_HOST` (y compañía) resuelva al VPS que
-  # le corresponde: `stg` para el nodo de stg, y `prod-preview` —una copia sin protección
-  # de los mismos valores del `environment` `prod`— para que el preview de prod siga
-  # corriendo solo en cada PR, sin pedir la aprobación que sí exige `aplicar-prod`.
-  previsualizar-stg:
-    name: pulumi preview de stg
+  previsualizar:
+    name: pulumi preview de los dos stacks
     runs-on: ubuntu-latest
     needs: verificar
-    # Un PR desde una bifurcación no ve los secretos del repositorio ni del environment.
-    # Sin token no hay estado que consultar, y este trabajo no tiene nada que hacer.
+    # Un PR desde una bifurcación no ve los secretos del repositorio. Sin token no hay
+    # estado que consultar, y este trabajo no tiene nada que hacer.
     if: github.event_name == 'pull_request'
-    environment: stg
 
     steps:
       - uses: actions/checkout@v4
@@ -517,10 +505,10 @@ jobs:
           else
             echo "hay=no" >> "$GITHUB_OUTPUT"
             {
-              echo "### Sin \`pulumi preview\` de stg"
+              echo "### Sin \`pulumi preview\`"
               echo
-              echo "Falta alguna de las cuatro credenciales del *environment* \`stg\`, o"
-              echo "el PR viene de una bifurcación y no las ve."
+              echo "Falta alguna de las cuatro credenciales, o el PR viene de una"
+              echo "bifurcación y no ve los secretos del repositorio."
               echo
               echo "Lo que sí corrió, y es lo que cubre este cambio mientras no haya VPS:"
               echo
@@ -550,23 +538,6 @@ jobs:
           ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
               -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
 
-      # Los tres bootstrap secrets de infraestructura (ADR-0011 §3) se inyectan aquí,
-      # frescos en cada corrida, y nunca tocan el checkout: `stacks.test.ts` exige que
-      # `Pulumi.<ambiente>.yaml` nunca los versione, ni siquiera cifrados. `pulumi config
-      # set` los escribe en la copia efímera de este runner, que muere con el job.
-      - name: Configurar los secretos de infraestructura del stack (ADR-0011 §3)
-        if: steps.token.outputs.hay == 'si'
-        working-directory: infra
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
-          BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
-          BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
-        run: |
-          pulumi config set --secret --stack stg kubeconfig -- "$KUBECONFIG_VALUE"
-          pulumi config set --secret --stack stg backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
-          pulumi config set --secret --stack stg backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
-
       - uses: pulumi/actions@v6
         if: steps.token.outputs.hay == 'si'
         with:
@@ -576,87 +547,6 @@ jobs:
           comment-on-pr: true
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-
-  previsualizar-prod:
-    name: pulumi preview de prod
-    runs-on: ubuntu-latest
-    needs: verificar
-    if: github.event_name == 'pull_request'
-    # Sin protección: es una copia de los secretos del *environment* `prod`, que existe
-    # solo para que este preview de solo lectura no quede detrás de la aprobación que
-    # `aplicar-prod` sí exige. El `up` real nunca usa este *environment*.
-    environment: prod-preview
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: yarn
-          cache-dependency-path: infra/yarn.lock
-
-      - name: Instalar dependencias
-        working-directory: infra
-        run: yarn install --frozen-lockfile
-
-      - name: ¿Hay credenciales del clúster?
-        id: token
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-        run: |
-          if [ -n "$PULUMI_ACCESS_TOKEN" ] && [ -n "$SSH_PRIVATE_KEY" ] \
-             && [ -n "$VPS_USER" ] && [ -n "$VPS_HOST" ]; then
-            echo "hay=si" >> "$GITHUB_OUTPUT"
-          else
-            echo "hay=no" >> "$GITHUB_OUTPUT"
-            {
-              echo "### Sin \`pulumi preview\` de prod"
-              echo
-              echo "Falta alguna de las cuatro credenciales del *environment*"
-              echo "\`prod-preview\`, o el PR viene de una bifurcación y no las ve."
-              echo
-              echo "Lo que sí corrió, y es lo que cubre este cambio mientras no haya VPS:"
-              echo
-              echo "- \`yarn verificar\` — invariantes de \`config.ts\`, auditoría de los"
-              echo "  manifiestos y los criterios de aceptación de la fase B."
-              echo "- \`motor\` — el PostgreSQL del manifiesto, levantado, con"
-              echo "  \`verificarAislamiento\` contra esa instancia."
-              echo "- \`manifiestos\` — los dos ambientes aceptados por un API server."
-              echo
-              echo "Para habilitar el preview: crear los dos stacks y poner los cuatro"
-              echo "secretos. Los pasos están en \`infra/README.md\`."
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Abrir el túnel SSH al API de k3s
-        if: steps.token.outputs.hay == 'si'
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-        run: |
-          install -m 700 -d ~/.ssh
-          install -m 600 /dev/null ~/.ssh/despliegue
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/despliegue
-          ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
-              -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
-
-      - name: Configurar los secretos de infraestructura del stack (ADR-0011 §3)
-        if: steps.token.outputs.hay == 'si'
-        working-directory: infra
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
-          BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
-          BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
-        run: |
-          pulumi config set --secret --stack prod kubeconfig -- "$KUBECONFIG_VALUE"
-          pulumi config set --secret --stack prod backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
-          pulumi config set --secret --stack prod backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
 
       - uses: pulumi/actions@v6
         if: steps.token.outputs.hay == 'si'
@@ -673,11 +563,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: verificar
     if: github.event_name == 'push'
-    # stg y prod son DOS VPS con IP distinta. Sin este `environment`, `secrets.VPS_HOST`
-    # y compañía resolverían a los secretos de nivel-repositorio —que son los de prod—
-    # y este trabajo abriría el túnel al nodo equivocado: `pulumi up --stack stg`
-    # escribiendo los recursos de stg contra el clúster de producción.
-    environment: stg
     # `pulumi up` tiene su propio bloqueo de concurrencia en Pulumi Cloud (ADR-0011 §3);
     # esto evita además que dos integraciones seguidas abran dos túneles a la vez sobre
     # el mismo nodo.
@@ -749,19 +634,6 @@ jobs:
         working-directory: infra
         run: ./secretos/bootstrap-secretos.sh --ambiente stg
 
-      - name: Configurar los secretos de infraestructura del stack (ADR-0011 §3)
-        if: steps.credenciales.outputs.hay == 'si'
-        working-directory: infra
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
-          BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
-          BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
-        run: |
-          pulumi config set --secret --stack stg kubeconfig -- "$KUBECONFIG_VALUE"
-          pulumi config set --secret --stack stg backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
-          pulumi config set --secret --stack stg backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
-
       - uses: pulumi/actions@v6
         if: steps.credenciales.outputs.hay == 'si'
         with:
@@ -806,10 +678,8 @@ jobs:
         run: yarn install --frozen-lockfile
 
       # Sin la comprobación de "¿hay credenciales?": el `if` del trabajo ya exige que
-      # `aplicar-stg` haya visto las cuatro de PULUMI_ACCESS_TOKEN/SSH_PRIVATE_KEY/
-      # VPS_USER/VPS_HOST (el token es de repositorio; los otros tres, del *environment*
-      # `stg` en ese job). Repetirla aquí no verificaría las de `prod` —viven en un
-      # *environment* distinto—, así que solo repetiría código sin cambiar nada.
+      # `aplicar-stg` haya visto las cuatro (mismos secretos del repositorio, mismo
+      # resultado), así que repetirla aquí solo repetiría código sin cambiar nada.
       - name: Abrir el túnel SSH al API de k3s
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -825,18 +695,6 @@ jobs:
       - name: Generar los secretos que falten (INF-06)
         working-directory: infra
         run: ./secretos/bootstrap-secretos.sh --ambiente prod
-
-      - name: Configurar los secretos de infraestructura del stack (ADR-0011 §3)
-        working-directory: infra
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
-          BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
-          BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
-        run: |
-          pulumi config set --secret --stack prod kubeconfig -- "$KUBECONFIG_VALUE"
-          pulumi config set --secret --stack prod backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
-          pulumi config set --secret --stack prod backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
 
       - uses: pulumi/actions@v6
         with:
