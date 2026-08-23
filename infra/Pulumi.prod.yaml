@@ -1,39 +1,43 @@
 # Stack de producción: el VPS que atiende a la municipalidad (INF-01 §1).
 #
 # Aquí solo hay valores en claro. Los secretos de arranque de la infraestructura
-# —kubeconfig y credenciales del almacenamiento de respaldo— NO se versionan en texto:
-# se ponen una vez con `pulumi config set --secret` y quedan cifrados con la clave del
-# stack. Los de la aplicación —incluida la clave del administrador de Keycloak— no
+# —kubeconfig y credenciales del almacenamiento de respaldo— NO se versionan en este
+# archivo, ni siquiera cifrados (`stacks.test.ts`: "ningun stack versiona un secreto en
+# claro"): `pulumi config set --secret` escribe en la copia efímera del checkout, nunca
+# en git. Los de la aplicación —incluida la clave del administrador de Keycloak— no
 # están en Pulumi en absoluto (ADR-0011 §3, issue #154): los genera
 # `secretos/bootstrap-secretos.sh`.
+#
+# CI los inyecta frescos en cada corrida desde los secretos `KUBECONFIG`/
+# `BACKUP_ACCESS_KEY_ID`/`BACKUP_SECRET_ACCESS_KEY` del *environment* `prod` de GitHub
+# (`.github/workflows/infra.yml`, paso "Configurar los secretos de infraestructura del
+# stack"). Localmente, antes de `preview`/`up`, hay que correr:
 #
 #   pulumi config set --secret kubeconfig "$(cat k3s.yaml)" --stack prod
 #   pulumi config set --secret backupAccessKeyId <valor> --stack prod
 #   pulumi config set --secret backupSecretAccessKey <valor> --stack prod
 #
+# y NUNCA `git add` el resultado — es exactamente lo que la prueba detecta si se cuela.
+#
 # El `server` del kubeconfig tiene que ser `https://localhost:6443`: CI llega por un
 # túnel SSH y `config.ts` se pone rojo si apunta al VPS (INF-01 §1.4).
 config:
-  sgtm:domain: sgtm.example.pe
+  sgtm:domain: vmd120205.contabo.net
   sgtm:acmeEmail: operaciones@example.pe
-
   # Versiones fijadas. Una etiqueta móvil convierte cualquier reinicio del VPS en una
   # actualización no planificada, y en un solo nodo eso pasa en cada mantenimiento.
   sgtm:postgresImage: postgres:16.4-alpine
   sgtm:postgresStorageSize: 100Gi
   sgtm:keycloakImage: quay.io/keycloak/keycloak:26.0
   sgtm:keycloakRealm: sgtm
-
   # Sin etiqueta, a propósito: la pone el flujo de liberación (ADR-0011 §5, issue #148).
   sgtm:applicationImageRepository: ghcr.io/hneyra/sgtm
   sgtm:webReplicas: "2"
-
   # La versión con la que Pulumi CREA los despliegues, y nada más: el campo `image`
   # queda ignorado después (ADR-0011 §5), así que cambiar esta línea no despliega nada
   # sobre un clúster que ya corre. Es con lo que arranca un VPS reconstruido desde
   # cero, antes de que el flujo de liberación lo ponga al día.
   sgtm:applicationBootstrapVersion: 64de42b4c56eb2491e2a61287bceb4b66b6e53d1
-
   # La municipalidad que se implanta. ⚠ PROVISIONAL: D-01 —municipalidad piloto— sigue
   # abierta, y estos valores son los del manual del que sale el sistema, no un
   # compromiso. El administrador NO lleva contraseña: la credencial vive en Keycloak y
@@ -43,19 +47,16 @@ config:
   sgtm:tipoDeMunicipalidad: PROVINCIAL
   sgtm:administrador: administrador
   sgtm:nombreDelAdministrador: Administrador del sistema
-
   # Decidido a mano, que es lo que exige el issue #150. Vale `true` mientras D-02a esté
   # abierta: toda cifra que el sistema calcule hoy sale de tramos y alícuotas que nadie
   # ha firmado, y una instalación que emite documentos con esas cifras tiene que decir
   # lo que es. Ponerlo en `false` es el acto deliberado que cierra la marcha blanca, y
   # solo corresponde cuando D-02a esté cerrada.
   sgtm:esDemostracion: "true"
-
   # El RPO de RNF-076, escrito. El destino está FUERA del VPS (INF-01 §1.3).
   sgtm:backupEndpoint: https://s3.example.net
   sgtm:backupBucket: sgtm-prod-respaldos
   sgtm:walArchiveTimeoutSeconds: "300"
-
   # A donde Alertmanager avisa (issue #156). Obligatorio en prod: `config.ts` se pone
   # rojo sin él —«una regla que no notifica a nadie no es una alerta»—. ⚠ PROVISIONAL:
   # el receptor real —Slack, correo, PagerDuty— se decide con el patrocinador; este

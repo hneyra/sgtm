@@ -295,6 +295,35 @@ public final class ReglasDeArquitectura {
                                     + " tiene argumentos y la aplicacion no arranca; compila igual y"
                                     + " las pruebas que instancian a mano no lo ven");
 
+    /**
+     * Nada que siembre datos corre en el perfil por omision: solo en {@code batch} (E-6, #202).
+     *
+     * <p>La siembra de un tenant de demostracion —y la implantacion de cualquier municipalidad—
+     * escribe en {@code municipalidad}, que solo {@code sgtm_owner} puede escribir. {@link
+     * org.springframework.boot.ApplicationRunner} es el mecanismo por el que algo corre <b>al
+     * arrancar</b>: uno sin perfil corre tambien en el proceso web, y entonces el contenedor que
+     * atiende peticiones necesita las credenciales de {@code sgtm_owner} para arrancar. Eso no es
+     * una siembra de mas: es el camino mas corto entre una peticion HTTP y el alta de una
+     * municipalidad.
+     *
+     * <p>Es el tercer criterio de aceptacion de #202 —«poner la siembra en el perfil por omision
+     * pone en rojo la comprobacion»— y hasta esta regla nadie lo comprobaba: quitarle el
+     * {@code @Profile("batch")} a {@code ImplantarMunicipalidad} compilaba, sus pruebas seguian en
+     * verde —la instancian a mano— y el unico sintoma habria sido que el proceso web pide una clave
+     * que no deberia conocer.
+     *
+     * <p>Se exige el perfil <b>y</b> que sea {@code batch}: {@code @Profile("web")} o
+     * {@code @Profile("!test")} tambien lo pondrian en el proceso equivocado.
+     */
+    public static final ArchRule TODA_SIEMBRA_CORRE_SOLO_EN_EL_PERFIL_BATCH =
+            ArchRuleDefinition.classes()
+                    .that(new EsUnProcesoDeArranque())
+                    .should(new ConPerfilBatch())
+                    .because(
+                            "sembrar escribe en municipalidad, y esa tabla solo la escribe"
+                                    + " sgtm_owner: un proceso de arranque sin perfil le exige esa"
+                                    + " credencial al contenedor que atiende peticiones (#202)");
+
     public static List<ArchRule> todas() {
         return List.of(
                 EL_DOMINIO_NO_CONOCE_FRAMEWORKS,
@@ -308,7 +337,8 @@ public final class ReglasDeArquitectura {
                 NINGUN_CONTROLADOR_RECIBE_LA_MUNICIPALIDAD,
                 TODA_CIFRA_DE_LA_WEB_LLEVA_SU_FECHA,
                 TODO_ENDPOINT_DECLARA_SU_ACCESO,
-                TODO_COMPONENTE_DECLARA_QUE_CONSTRUCTOR_INYECTAR);
+                TODO_COMPONENTE_DECLARA_QUE_CONSTRUCTOR_INYECTAR,
+                TODA_SIEMBRA_CORRE_SOLO_EN_EL_PERFIL_BATCH);
     }
 
     /** Clases del sistema, sin las de prueba ni las de fixtures. */
@@ -324,6 +354,66 @@ public final class ReglasDeArquitectura {
     // ------------------------------------------------------------------
     // Condiciones propias
     // ------------------------------------------------------------------
+
+    /** Lo que Spring corre al arrancar el proceso, antes de atender nada. */
+    private static final class EsUnProcesoDeArranque extends DescribedPredicate<JavaClass> {
+
+        private static final Set<String> ARRANQUE =
+                Set.of(
+                        "org.springframework.boot.ApplicationRunner",
+                        "org.springframework.boot.CommandLineRunner");
+
+        EsUnProcesoDeArranque() {
+            super("Spring los corre al arrancar el proceso");
+        }
+
+        @Override
+        public boolean test(JavaClass clase) {
+            return clase.getAllRawInterfaces().stream()
+                    .anyMatch(interfaz -> ARRANQUE.contains(interfaz.getName()));
+        }
+    }
+
+    private static final class ConPerfilBatch extends ArchCondition<JavaClass> {
+
+        private static final String PROFILE = "org.springframework.context.annotation.Profile";
+        private static final String BATCH = "batch";
+
+        ConPerfilBatch() {
+            super("declarar @Profile(\"batch\")");
+        }
+
+        @Override
+        public void check(JavaClass clase, ConditionEvents eventos) {
+            var perfil =
+                    clase.getAnnotations().stream()
+                            .filter(a -> PROFILE.equals(a.getRawType().getName()))
+                            .findFirst();
+            if (perfil.isEmpty()) {
+                eventos.add(
+                        SimpleConditionEvent.violated(
+                                clase,
+                                clase.getName()
+                                        + " corre al arrancar y no declara @Profile: correria"
+                                        + " tambien en el proceso web"));
+                return;
+            }
+            Object valor = perfil.get().getProperties().get("value");
+            List<String> perfiles =
+                    valor instanceof Object[] varios
+                            ? java.util.Arrays.stream(varios).map(String::valueOf).toList()
+                            : List.of(String.valueOf(valor));
+            if (!perfiles.contains(BATCH)) {
+                eventos.add(
+                        SimpleConditionEvent.violated(
+                                clase,
+                                clase.getName()
+                                        + " corre al arrancar con @Profile"
+                                        + perfiles
+                                        + ", y sembrar solo se hace en 'batch'"));
+            }
+        }
+    }
 
     /** Lo que Spring instancia: los estereotipos que el escaneo de componentes descubre. */
     private static final class EsComponenteDeSpring extends DescribedPredicate<JavaClass> {

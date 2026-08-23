@@ -1,0 +1,57 @@
+# Verificación de la documentación que se comprueba sola.
+#
+# Son dos, y las dos comprueban en las dos direcciones:
+#
+#   1. el **mapa normativo** de NEG-02 §2 — qué norma fija cada dato que falta,
+#      qué parte de D-02 lo bloquea y qué issues lo esperan— contra el etiquetado
+#      real del tablero;
+#   2. los **valores normativos transcritos** (E-3, #200) — que cada archivo lleve
+#      norma, artículo, fecha de publicación y **dos firmas distintas**, que cierre
+#      filas del mapa que existen y que nadie más cierra, y que ninguna cifra haya
+#      acabado cargada en una migración: cargar depende de D-13, no de E-3.
+#
+# La segunda pasa en verde con el directorio vacío, y debe hacerlo: la barrera
+# llega antes que la transcripción. Por eso corre además contra sus muestras, que
+# es lo que distingue «no hay nada que rechazar» de «no rechaza nada».
+#
+# Va en su propio flujo y no dentro del de frontend porque no necesita `yarn`
+# ni el espacio de trabajo: es Node pelado sobre archivos de `docs/`.
+name: Documentación
+
+on:
+  pull_request:
+    paths: &rutas
+      - 'docs/10-negocio/**'
+      - '.github/workflows/documentacion.yml'
+      # La comprobación de valores normativos LEE las migraciones, para que una
+      # cifra cargada por SQL no se escape del filtro de rutas.
+      - 'backend/sgtm-esquema/src/main/resources/db/migration/**'
+  push:
+    branches: [main]
+    paths: *rutas
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: Documentación que se comprueba sola
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: El mapa normativo y el tablero dicen lo mismo
+        run: node docs/10-negocio/verificar-mapa-normativo.mjs
+
+      - name: Las prohibiciones de los valores normativos muerden
+        run: node docs/10-negocio/verificar-las-muestras-de-valores.mjs
+
+      - name: Los valores normativos transcritos están en regla
+        run: node docs/10-negocio/verificar-valores-normativos.mjs

@@ -136,16 +136,17 @@ El guion espera a que el API server vuelva a responder, a que el nodo pase a `Re
 que ningún pod quedó fuera de `Running`/`Succeeded` — «el clúster vuelve solo» del criterio de
 aceptación es literal: el guion lo comprueba, no lo fuerza.
 
-⚠ **Sin verificar contra un nodo real.** No existe un VPS todavía (`D-04` sigue abierta), así que
-este guion no se ha ejecutado contra un `k3s` en marcha — solo contra la lógica que describe.
-Cuando exista el nodo piloto, la primera ejecución real de este guion es también la primera fila
-de la tabla de abajo.
+**Los dos VPS —`stg` y `prod`— ya existen** (INF-03 §4, commit `1e564e8`): tienen IP y credenciales
+propias en los *environments* de GitHub. La clave de despliegue de CI (`stg`/`SSH_PRIVATE_KEY`) está
+restringida a solo abrir el túnel al API de k3s (`infra/README.md` §3) — no sirve para correr este
+guion, que necesita una sesión de shell como root. Correrlo es trabajo manual de operación, en su
+propia ventana de mantenimiento, con una clave que sí tenga esa capacidad.
 
 ### Registro de ejecuciones
 
 | Fecha | Quién | ¿Volvió solo? | Notas |
 |---|---|---|---|
-| — | — | — | Sin ejecutar todavía: no existe VPS (`D-04`) |
+| — | — | — | Pendiente de la primera ejecución contra el VPS de `stg` |
 
 ## 5. Escaneo de vulnerabilidades de imágenes
 
@@ -166,7 +167,7 @@ se puso rojo, y la corrección fue la que el issue pide: subir la etiqueta a `ng
 
 | Sin verificar | Qué haría falta |
 |---|---|
-| La reserva del nodo, contra un `k3s` real | El VPS piloto (`D-04`) |
+| La reserva del nodo, contra un `k3s` real | Una sesión de shell como root en el VPS de `stg` — la clave de despliegue de CI no alcanza, está restringida a solo túnel |
 | `readOnlyRootFilesystem` en Prometheus, Alertmanager, Grafana, Keycloak y los cuatro contenedores de la JVM | Ejecutar cada imagen con la raíz sellada y ver qué ruta reclama. Los cuatro que sí la llevan están en §2; sellar el resto a ciegas es la clase de cambio que este PR ya vio fallar dos veces contra un clúster real y ninguna en `yarn verificar` |
 
 ## 6-bis. La raíz sellada, comprobada en cada PR
