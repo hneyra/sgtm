@@ -156,6 +156,48 @@ spec:
 YAML
 kubectl -n "$NS" rollout status deployment/aplicacion-sintetica --timeout=60s
 
+# `denegar-todo` (Red.ts, issue #157) cubre TODO pod del namespace, ad-hoc incluido:
+# sin esto Prometheus no puede alcanzar a `aplicacion-sintetica` para scrapearla, ni
+# `aplicacion-sintetica`/`verificador-de-tableros` pueden alcanzar a Prometheus para
+# el `/-/reload` y las consultas de panel de mas abajo. Ninguna de las dos va en
+# `Red.ts`: son pods que solo existen en esta comprobacion, y esa politica documenta
+# en su propio docstring que no abre nada «por si acaso».
+echo "· Abriendo, solo para esta comprobacion, lo que denegar-todo le cierra a los pods ad-hoc"
+cat <<'YAML' | kubectl apply -n "$NS" -f - >/dev/null
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: permitir-verificacion-tableros-aplicacion-sintetica
+spec:
+  podSelector: { matchLabels: { app: aplicacion-sintetica } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app: sgtm-stg-observabilidad-prometheus } } }]
+      ports: [{ port: 8080, protocol: TCP }]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app: sgtm-stg-observabilidad-prometheus } } }]
+      ports: [{ port: 9090, protocol: TCP }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: permitir-verificacion-tableros-prometheus
+spec:
+  podSelector: { matchLabels: { app: sgtm-stg-observabilidad-prometheus } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: aplicacion-sintetica } }
+        - podSelector: { matchLabels: { app: verificador-de-tableros } }
+      ports: [{ port: 9090, protocol: TCP }]
+  # `permitir-salida-prometheus` (Red.ts) solo abre salida hacia la aplicacion
+  # REAL: el repunte de mas abajo cambia el objetivo del scrape al exportador
+  # sintetico, y esa politica de produccion no sabe nada de el.
+  egress:
+    - to: [{ podSelector: { matchLabels: { app: aplicacion-sintetica } } }]
+      ports: [{ port: 8080, protocol: TCP }]
+YAML
+
 # Prometheus escuchaba a `sgtm-stg-aplicacion` -que no existe en este clúster de
 # prueba, nunca contesta y su ausencia no se puede distinguir de un fallo real-. Se
 # repunta el job `aplicacion` al exportador sintetico, solo para esta comprobacion.
@@ -238,12 +280,27 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: verificador-de-tableros
+  # La etiqueta, no solo el nombre: `NetworkPolicy` selecciona por `podSelector`,
+  # y sin ella las dos excepciones de mas arriba y de mas abajo no tienen a quien
+  # apuntar.
+  labels: { app: verificador-de-tableros }
 spec:
   restartPolicy: Never
   containers:
     - name: verificador
       image: python:3.12-alpine
       command: ["sleep", "600"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: permitir-verificacion-tableros-verificador
+spec:
+  podSelector: { matchLabels: { app: verificador-de-tableros } }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app: sgtm-stg-observabilidad-prometheus } } }]
+      ports: [{ port: 9090, protocol: TCP }]
 YAML
 kubectl -n "$NS" wait --for=condition=Ready pod/verificador-de-tableros --timeout=60s
 

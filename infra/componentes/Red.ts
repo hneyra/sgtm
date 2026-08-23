@@ -295,6 +295,16 @@ function politicasDeObservabilidad(environment: Environment, namespace: string):
         { to: [{ namespaceSelector: KUBE_SYSTEM }], ports: [puerto(9100)] },
       ],
     }),
+    // Sin esta, Prometheus tiene salida (arriba) pero CERO entrada: `denegar-todo`
+    // cubre tambien su propio pod, y `permitir-salida-grafana` solo abre el lado
+    // de Grafana -las dos puntas del flujo tienen que declararse, cada una en su
+    // propio pod-. Sin esto, Grafana no puede consultarlo: cada panel del tablero
+    // se queda en blanco contra un CNI que aplique NetworkPolicy de verdad.
+    politica(namespace, "permitir-ingreso-prometheus", {
+      podSelector: { matchLabels: { app: prometheus } },
+      policyTypes: ["Ingress"],
+      ingress: [{ from: [deApp(servicioDeGrafana(environment))], ports: [puerto(9090)] }],
+    }),
     politica(namespace, "permitir-ingreso-alertmanager", {
       podSelector: { matchLabels: { app: alertmanager } },
       policyTypes: ["Ingress"],

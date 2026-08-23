@@ -1009,6 +1009,17 @@ describe("#157 · endurecimiento", () => {
     expect(origenesDe(postgres).pods).not.toContain(nombreDeInterfaz);
   });
 
+  it("Prometheus tiene entrada, y es solo de Grafana", () => {
+    // Con salida pero sin entrada, Prometheus queda inalcanzable para cualquiera
+    // -Grafana incluido- bajo un CNI que aplique NetworkPolicy de verdad: las dos
+    // puntas del flujo se declaran cada una en su propio pod.
+    const prometheus = politicaDe(ms, "permitir-ingreso-prometheus");
+    const nombreDeGrafana = buscar(ms, "Service", "sgtm-prod-observabilidad-grafana").metadata.name;
+    expect(origenesDe(prometheus).pods).toEqual([nombreDeGrafana]);
+    const puertos = (prometheus.spec.ingress ?? []).flatMap((r) => r.ports ?? []).map((p) => p.port);
+    expect(puertos).toEqual([9090]);
+  });
+
   it("la aplicacion no tiene ningun bloque de internet en su lista de salida", () => {
     const salida = politicaDe(ms, "permitir-salida-aplicacion");
     const destinos = salida.spec.egress?.flatMap((r) => r.to ?? []) ?? [];
