@@ -138,6 +138,21 @@ const DEL_BACKEND = {
       ],
     ]),
   ),
+  // El reporte responde a una fecha, igual que las cuatro fichas, y ademas
+  // a un formato: sin el, JSON —lo que la pantalla dibuja—; con
+  // `PDF`/`XLS`/`RTF`, el documento (`ReporteController`, #71).
+  ficha_contribuyente_reporte: [
+    {
+      nombre: 'fecha',
+      ejemplo: '2026-08-20',
+      descripcion: 'Ficha vigente a esta fecha. Sin ella, la que rige hoy',
+    },
+    {
+      nombre: 'formato',
+      ejemplo: 'PDF',
+      descripcion: 'PDF | XLS | RTF. Sin el, responde JSON: lo que la pantalla dibuja',
+    },
+  ],
 };
 
 /* ── Recoger las operaciones ──────────────────────────────────────────── */

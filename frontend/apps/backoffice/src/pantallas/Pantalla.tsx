@@ -33,6 +33,10 @@ import { Indicadores } from './bloques/Indicadores';
 import { Portal } from './bloques/Portal';
 import { FechaDeCalculo } from './bloques/FechaDeCalculo';
 import { Reporte } from './bloques/Reporte';
+import { useDescargaDeArchivo } from './useDescargaDeArchivo';
+import { ActualizacionDeCatastro } from './catastro/ActualizacionDeCatastro';
+import { ValoresUnitarios } from './catastro/ValoresUnitarios';
+import { Depreciacion } from './catastro/Depreciacion';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
 import { Versionado } from './bloques/Versionado';
 import { Totales } from './bloques/Totales';
@@ -135,7 +139,32 @@ const VERSIONADAS: ReadonlySet<string> = new Set([
  * La eleccion se hace aqui, en dos componentes hermanos, y no dentro de uno con
  * un `if`: un hook no se llama a veces.
  */
+/**
+ * Opciones cuyo cuerpo no cabe en ninguno de los dos caminos comunes —campos
+ * planos o tabla de solo lectura— y viven en su propio componente (#71):
+ *
+ *   actualizacion_catastro   guarda una lista de construcciones, no campos
+ *                            planos, y necesita el `GET` de `ficha_urbana`
+ *                            para no borrar pisos que no se estan tocando.
+ *   valores_unitarios,       el backend publica una fila por partida/estado y
+ *   depreciacion             tramo; el prototipo dibuja una matriz. Agrupar y
+ *                            cruzar eso no es un adaptador de los que ya
+ *                            existen, y las dos siguen bloqueadas por D-02a
+ *                            en su contenido, no en su forma.
+ */
+const COMPONENTES_PROPIOS: Readonly<
+  Record<string, (props: { readonly estructura: Estructura }) => React.JSX.Element>
+> = {
+  actualizacion_catastro: ActualizacionDeCatastro,
+  valores_unitarios: ValoresUnitarios,
+  depreciacion: Depreciacion,
+};
+
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
+  const Propio = COMPONENTES_PROPIOS[estructura.id];
+  if (Propio !== undefined) {
+    return <Propio estructura={estructura} />;
+  }
   const conexion = conexionDe(estructura.id);
   return conexion === undefined ? (
     <ContenidoDelCatalogo estructura={estructura} />
@@ -206,6 +235,11 @@ function Bloques({
   const declarada = escrituraDe(estructura.id);
   const aviso = avisoDe(estructura.id);
   const trabajo = useEjercicio();
+  // La unica pantalla que descarga un archivo en vez de dibujar JSON (#71). El
+  // hook se llama siempre —no se puede llamar a un hook a veces— y se pasa al
+  // bloque de reporte solo cuando esta es la pantalla, para que las otras doce
+  // sigan con su boton deshabilitado de siempre.
+  const descargaDeFicha = useDescargaDeArchivo('ficha_contribuyente_reporte', { codigo: codigo ?? '' });
   const escritura = useEscritura(
     operacion !== undefined && escribe(operacion) && puedeEscribirAqui ? operacion : undefined,
     operacion === undefined ? {} : parametrosDeBusqueda(operacion, codigo, busqueda),
@@ -394,7 +428,14 @@ function Bloques({
       )}
 
       {estructura.kind === 'report' && estructura.reporte && (
-        <Reporte estructura={estructura.reporte} datos={datos?.reporte} cargando={cargando} />
+        <Reporte
+          estructura={estructura.reporte}
+          datos={datos?.reporte}
+          cargando={cargando}
+          {...(estructura.id === 'ficha_contribuyente_reporte'
+            ? { descargas: descargaDeFicha }
+            : {})}
+        />
       )}
 
       {cargando && !estructura.kind && !estructura.tabla && secciones.length === 0 && (

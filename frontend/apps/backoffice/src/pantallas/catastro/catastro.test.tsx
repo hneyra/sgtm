@@ -8,8 +8,8 @@ import { SIN_DATO as SIN_CIFRA } from '../seguridad/listado';
 /**
  * Catastro, conectado **hasta donde llega el backend** (#71).
  *
- * Diez opciones de doce. Lo que se comprueba aqui es lo que distingue este
- * modulo de los demas:
+ * Las doce opciones tienen ya alguna conexion real. Lo que se comprueba aqui
+ * es lo que distingue este modulo de los demas:
  *
  * - que las fichas **ensenan su version y su historico**, que es la
  *   funcionalidad de #18 —un backend que no sobrescribe no sirve de nada si la
@@ -17,8 +17,9 @@ import { SIN_DATO as SIN_CIFRA } from '../seguridad/listado';
  * - que lo que el recurso no publica sale vacio, y en particular **ninguna
  *   cifra de valuacion se compone aqui** (D-02);
  * - que los aranceles leen un arreglo suelto, sin sobre de paginacion;
- * - que valores unitarios y depreciacion siguen sin conectar, y por que ya no
- *   es solo D-02.
+ * - que valores unitarios y depreciacion tienen su propio componente, porque
+ *   el recurso es una fila por partida y el prototipo dibuja una matriz
+ *   (`ValoresUnitarios.test.tsx`, `Depreciacion.test.tsx`).
  */
 
 let peticiones: string[] = [];
@@ -102,25 +103,8 @@ describe('los aranceles leen ArancelResource, sin sobre de paginacion', () => {
   });
 });
 
-describe('valores unitarios y depreciacion siguen sin conectar', () => {
-  it('y ya no es solo D-02: el recurso es una fila por partida, y el prototipo una matriz', () => {
-    // `ValorUnitarioController` y `DepreciacionController` existen (#17) y
-    // publican una fila por partida —o por estado de conservacion—, nunca la
-    // matriz categoria×partida o antiguedad×estado que dibuja el prototipo.
-    // Volcar esas filas bajo columnas fijas las pondria bajo la cabecera de
-    // otra partida, y valores unitarios tiene ademas una dimension —el ano de
-    // construccion, NEG-05— que el prototipo ni declara como filtro.
-    for (const opcion of ['valores_unitarios', 'depreciacion']) {
-      expect(OPCIONES_CONECTADAS).not.toContain(opcion);
-    }
-  });
-
-  it('y se siguen dibujando por la forma que comparten las 134', async () => {
-    montarEnRuta('/catastro/depreciacion');
-    expect(await screen.findByText('Hasta 5 años')).toBeInTheDocument();
-  });
-
-  it('las diez que si conectan estan en el registro', () => {
+describe('las conexiones de catastro, por su mecanismo', () => {
+  it('las ocho de forma comun (lectura simple) estan en el registro de conexiones', () => {
     for (const opcion of [
       'calles',
       'sectores',
@@ -133,11 +117,20 @@ describe('valores unitarios y depreciacion siguen sin conectar', () => {
     ]) {
       expect(OPCIONES_CONECTADAS).toContain(opcion);
     }
-    // La actualizacion y el reporte tienen endpoint y no se conectan por aqui:
-    // la primera escribe una tabla (#64 solo lleva campos planos) y el
-    // segundo devuelve un PDF, no un recurso.
-    expect(OPCIONES_CONECTADAS).not.toContain('actualizacion_catastro');
-    expect(OPCIONES_CONECTADAS).not.toContain('ficha_contribuyente_reporte');
+    // Las otras cuatro tienen endpoint y no se conectan por `definirConexion`:
+    // cada una tiene un componente propio, en `Pantalla.tsx` (#71).
+    //   actualizacion_catastro   escribe una lista de construcciones
+    //   valores_unitarios,       el recurso es una fila por partida/estado y
+    //   depreciacion             el prototipo dibuja una matriz
+    //   ficha_contribuyente_reporte   devuelve un archivo, no un recurso
+    for (const opcion of [
+      'actualizacion_catastro',
+      'valores_unitarios',
+      'depreciacion',
+      'ficha_contribuyente_reporte',
+    ]) {
+      expect(OPCIONES_CONECTADAS).not.toContain(opcion);
+    }
   });
 });
 

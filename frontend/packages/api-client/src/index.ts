@@ -17,7 +17,7 @@ export {
 } from './sesion';
 export type { ConfiguracionDeIdentidad, Sesion, DatosDelToken } from './sesion';
 export { ProblemaDeApi } from './cliente';
-export type { ProblemDetails, OpcionesDeSolicitud } from './cliente';
+export type { ProblemDetails, OpcionesDeSolicitud, Archivo } from './cliente';
 export { pedirDatosDePantalla } from './pantallas';
 export type {
   DatosDePantalla,
@@ -40,6 +40,7 @@ export {
   rutaDeOperacion,
   consultaDeOperacion,
   pedirOperacion,
+  descargarOperacion,
   enviarOperacion,
   escribe,
 } from './operaciones';

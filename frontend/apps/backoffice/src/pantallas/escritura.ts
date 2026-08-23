@@ -95,12 +95,23 @@ export interface OpcionesDeEscritura {
    * pedir.
    */
   readonly alGuardar?: (respuesta: unknown) => 'cache-vaciada' | void;
+  /**
+   * Sustituye el cuerpo entero (salvo la observacion) por lo que devuelva esta
+   * funcion, en vez de `soloDeclarados(borrador, campos)`.
+   *
+   * Existe para las pantallas cuyo cuerpo no es un formulario de campos
+   * planos: `permisos` manda una lista de niveles, `actualizacion_catastro`
+   * una lista de construcciones, y `CampoDelCuerpo` no tiene forma de
+   * expresar un arreglo. Se lee en cada envio —es un cierre sobre el estado
+   * de quien la declara—, igual que `borrador` se lee en cada envio hoy.
+   */
+  readonly cuerpo?: () => Readonly<Record<string, unknown>>;
 }
 
 export function useEscritura(
   operacion: IdDeOperacion | undefined,
   parametros: Readonly<Record<string, string>>,
-  { campos = SIN_CAMPOS, alGuardar }: OpcionesDeEscritura = {},
+  { campos = SIN_CAMPOS, alGuardar, cuerpo }: OpcionesDeEscritura = {},
 ): Escritura {
   const [observacion, fijarTexto] = useState('');
   const [borrador, fijarBorrador] = useState<Readonly<Record<string, string>>>({});
@@ -119,9 +130,11 @@ export function useEscritura(
       return enviarOperacion(
         operacion,
         parametros as ParametrosDe<IdDeOperacion>,
-        // La observacion va siempre; lo demas, solo lo declarado. Un campo que
-        // el formulario dibuja y la opcion no declaro no llega hasta aqui.
-        { ...soloDeclarados(borrador, campos), observacion } as CuerpoDe<IdDeOperacion>,
+        // La observacion va siempre; lo demas, solo lo declarado —o lo que
+        // `cuerpo` construya, para la pantalla que no cabe en campos planos—.
+        { ...(cuerpo ? cuerpo() : soloDeclarados(borrador, campos)), observacion } as CuerpoDe<
+          IdDeOperacion
+        >,
         clave.current,
       );
     },

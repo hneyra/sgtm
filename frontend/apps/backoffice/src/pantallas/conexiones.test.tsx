@@ -38,8 +38,8 @@ describe('una opcion conectada y una sin conectar conviven', () => {
     expect(await screen.findByText('Recaudado 2026')).toBeInTheDocument();
     conectada.unmount();
 
-    const sinConectar = montarEnRuta('/catastro/depreciacion', cliente);
-    expect(await screen.findByText('Hasta 5 años')).toBeInTheDocument();
+    const sinConectar = montarEnRuta('/transito/papeletas', cliente);
+    expect(await screen.findAllByText('MPS-2026-041182')).not.toHaveLength(0);
     sinConectar.unmount();
 
     // Las dos piden por HTTP la ruta que declara el contrato, asi que la URL no
@@ -50,19 +50,18 @@ describe('una opcion conectada y una sin conectar conviven', () => {
       .getAll()
       .map((consulta) => consulta.queryKey);
     expect(claves).toContainEqual(['operacion', 'inicio', {}]);
-    expect(claves).toContainEqual(['pantalla', 'depreciacion', {}]);
+    expect(claves).toContainEqual(['pantalla', 'papeletas', {}]);
 
     expect(alaOperacion('/api/v1/indicadores/recaudacion')).toHaveLength(1);
-    expect(alaOperacion('/api/v1/catastro/tablas/depreciacion')).toHaveLength(1);
+    expect(alaOperacion('/api/v1/transito/papeletas')).toHaveLength(1);
   });
 
   it('el registro dice cuales estan conectadas, y son pocas todavia', () => {
     expect(OPCIONES_CONECTADAS).toContain('inicio');
-    // De las doce de Catastro hay diez conectadas; valores unitarios y
-    // depreciacion esperan una decision de diseno, no solo D-02 (#71).
     expect(OPCIONES_CONECTADAS).toContain('calles');
     expect(OPCIONES_CONECTADAS).toContain('aranceles');
-    expect(OPCIONES_CONECTADAS).not.toContain('depreciacion');
+    // Transito no tiene ninguna opcion conectada todavia.
+    expect(OPCIONES_CONECTADAS).not.toContain('papeletas');
   });
 });
 

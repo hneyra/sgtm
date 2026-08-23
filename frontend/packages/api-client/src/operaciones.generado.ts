@@ -107,7 +107,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/catastro/contribuyentes/{codigo}/ficha.pdf',
     parametrosDeRuta: ['codigo'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['fecha', 'formato'],
   },
   /** Mantenimiento de vías y calles — `GET /catastro/vias` */
   calles: {
@@ -1075,6 +1075,8 @@ export interface ParametrosPorOperacion {
   /** `GET /catastro/contribuyentes/{codigo}/ficha.pdf` */
   readonly ficha_contribuyente_reporte: {
     readonly codigo: string;
+    readonly fecha?: string;
+    readonly formato?: string;
   };
   /** `GET /catastro/vias` */
   readonly calles: {

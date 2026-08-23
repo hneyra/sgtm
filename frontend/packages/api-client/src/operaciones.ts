@@ -1,4 +1,5 @@
-import { solicitar } from './cliente';
+import { descargar, solicitar } from './cliente';
+import type { Archivo } from './cliente';
 import { OPERACIONES } from './operaciones.generado';
 import type {
   CuerpoDe,
@@ -98,6 +99,32 @@ export function pedirOperacion<O extends IdDeOperacion>(
   }
 
   return solicitar<RespuestaDe<O>>(rutaDeOperacion(id, parametros), {
+    metodo: descriptor.metodo,
+    consulta: consultaDeOperacion(id, parametros),
+    senal,
+  });
+}
+
+/**
+ * Descarga una operacion de lectura como archivo, no como JSON.
+ *
+ * Existe para el unico caso de hoy: el reporte de la ficha del contribuyente
+ * (#71), que el backend sirve en PDF, XLS y RTF segun el parametro `formato`
+ * que el contrato ya declara. El resto de operaciones de lectura sigue por
+ * `pedirOperacion`; esta es la puerta lateral para cuando la respuesta no es
+ * JSON.
+ */
+export function descargarOperacion<O extends IdDeOperacion>(
+  id: O,
+  parametros: ParametrosDe<O>,
+  senal?: AbortSignal,
+): Promise<Archivo> {
+  const descriptor = OPERACIONES[id] as DescriptorDeOperacion;
+  if (descriptor.metodo !== 'GET') {
+    throw new Error(`La operacion «${id}» no es de lectura: no se descarga con ella.`);
+  }
+
+  return descargar(rutaDeOperacion(id, parametros), {
     metodo: descriptor.metodo,
     consulta: consultaDeOperacion(id, parametros),
     senal,
