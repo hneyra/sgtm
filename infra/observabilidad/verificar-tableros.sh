@@ -225,40 +225,6 @@ try:
 except Exception as e:
     print('TCP FALLO:', repr(e))
 " >&2 || true
-
-    # DIAGNOSTICO TEMPORAL (issue #157/#215, investigacion en curso): aislar si el
-    # bloqueo es especifico del Service (kube-proxy/DNAT) o del path pod-a-pod
-    # entero, y si hay algo de verdad aplicando NetworkPolicy pese a que kindnet
-    # documentalmente no deberia.
-    echo "--- conexion TCP DIRECTA a la IP del pod, sin pasar por el Service ---" >&2
-    IP_PROM=$(kubectl -n "$NS" get pods -l app=sgtm-stg-observabilidad-prometheus -o jsonpath='{.items[0].status.podIP}')
-    echo "IP del pod de Prometheus: $IP_PROM" >&2
-    kubectl -n "$NS" exec deployment/aplicacion-sintetica -- python3 -c "
-import socket
-try:
-    s = socket.create_connection(('$IP_PROM', 9090), timeout=5)
-    print('TCP DIRECTO A POD: conecta')
-    s.close()
-except Exception as e:
-    print('TCP DIRECTO A POD FALLO:', repr(e))
-" >&2 || true
-
-    echo "--- NetworkPolicy presentes en el manifiesto ---" >&2
-    kubectl -n "$NS" get networkpolicy -o wide >&2 || true
-
-    echo "--- logs de kindnet (¿procesa NetworkPolicy pese a no deberia?) ---" >&2
-    kubectl -n kube-system logs -l app=kindnet --all-containers --prefix --tail=100 >&2 || true
-
-    echo "--- iptables del nodo, visto desde el contenedor de Docker que hace de nodo ---" >&2
-    NODO=$(docker ps --filter "name=observabilidad-tableros-control-plane" --format '{{.Names}}' | head -1)
-    echo "Contenedor del nodo: $NODO" >&2
-    docker exec "$NODO" sh -c 'command -v iptables-save >/dev/null 2>&1 && iptables-save || echo "iptables-save no disponible"' >&2 || true
-    docker exec "$NODO" sh -c 'command -v nft >/dev/null 2>&1 && nft list ruleset || echo "nft no disponible"' >&2 || true
-    docker exec "$NODO" sh -c 'command -v conntrack >/dev/null 2>&1 && conntrack -L 2>&1 | grep -i "9090\|dpt=9090" || echo "conntrack no disponible o sin entradas"' >&2 || true
-
-    echo "--- uso de CPU en el contenedor del nodo (¿estarvacion?) ---" >&2
-    docker stats "$NODO" --no-stream >&2 || true
-
     kubectl -n "$NS" describe pods -l app=sgtm-stg-observabilidad-prometheus >&2
     kubectl -n "$NS" logs deployment/sgtm-stg-observabilidad-prometheus --all-containers --prefix --tail=200 >&2 || true
     kubectl -n "$NS" get events --sort-by=.lastTimestamp >&2
