@@ -179,15 +179,17 @@ kubectl -n "$NS" get configmap sgtm-stg-observabilidad-prometheus -o json \
 # cambia la direccion que el Service enruta. `/-/reload` es el MISMO proceso,
 # el MISMO Pod, la MISMA entrada del Service -solo relee su archivo-.
 echo "· Recargando la configuracion de Prometheus (POST /-/reload, sin recrear el Pod)"
-# El mismo reintento de la CONEXION que las consultas de panel de mas abajo, y por el
-# mismo motivo -encontrado en CI: el reload es la primera peticion de red del guion
-# tras aplicar el manifiesto completo, justo cuando la contienda de CPU/red del nodo
-# unico de `kind` es mayor, y sin reintento un `urlopen` sin suerte puede colgarse
-# hasta el reintento de SYN del kernel (~127s) antes de fallar-. Reintentar la
-# CONEXION tiene sentido aqui igual que alli: un `POST /-/reload` que si llega
-# siempre devuelve 200, asi que no hay "resultado real" que perder reintentando.
+# Reintenta la CONEXION, no el resultado -el mismo patron que las consultas de panel de
+# mas abajo-, pero con una ventana bastante mas ancha: 3 intentos (~36s) NO bastaban,
+# encontrado en CI -cada uno de los tres agotaba el `timeout=10` completo, nunca fallaba
+# rapido-, y el sospechoso concreto es `kube-proxy` en modo iptables, cuyo periodo de
+# sincronizacion por omision es ~30s: el Service de Prometheus se acaba de crear en este
+# mismo guion, y hasta el proximo ciclo de sync las reglas DNAT para alcanzarlo desde
+# OTRO pod -aplicacion-sintetica, el que hace el exec, tambien recien desplegado- pueden
+# no estar programadas todavia. 8 intentos (~101s) le da margen a un ciclo de 30s con
+# holgura de sobra, en vez de quedarse justo al borde como el intento anterior.
 LOGRADO=no
-for intento in 1 2 3; do
+for intento in $(seq 1 8); do
     if kubectl -n "$NS" exec deployment/aplicacion-sintetica -- python3 -c "
 import urllib.request
 urllib.request.urlopen(
@@ -198,10 +200,10 @@ urllib.request.urlopen(
         LOGRADO=si
         break
     fi
-    [ "$intento" -lt 3 ] && sleep 3
+    [ "$intento" -lt 8 ] && sleep 3
 done
 if [ "$LOGRADO" != "si" ]; then
-    echo "FALLO: /-/reload no respondio en 3 intentos." >&2
+    echo "FALLO: /-/reload no respondio en 8 intentos (~101s)." >&2
     exit 1
 fi
 
