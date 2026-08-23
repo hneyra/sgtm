@@ -360,6 +360,39 @@ while IFS= read -r linea; do
     if [ "$resultado" = "0" ]; then
         echo "  ✗ «$panel»: SIN DATOS — $expr"
         FALLARON=$((FALLARON + 1))
+        # DIAGNOSTICO TEMPORAL: por que el scrape de aplicacion-sintetica no
+        # produce datos pese a que las politicas de red ya se ven correctas.
+        if echo "$expr" | grep -q 'application'; then
+            echo "::group::Diagnostico temporal: scrape de aplicacion" >&2
+            echo "--- up{job=\"aplicacion\"} ---" >&2
+            kubectl -n "$NS" exec verificador-de-tableros -- python3 -c "
+import json, urllib.request
+r = urllib.request.urlopen('http://sgtm-stg-observabilidad-prometheus:9090/api/v1/query?query=up%7Bjob%3D%22aplicacion%22%7D', timeout=10)
+print(json.dumps(json.load(r)['data']['result'], indent=2))
+" >&2 || true
+            echo "--- /api/v1/targets, job=aplicacion ---" >&2
+            kubectl -n "$NS" exec verificador-de-tableros -- python3 -c "
+import json, urllib.request
+r = urllib.request.urlopen('http://sgtm-stg-observabilidad-prometheus:9090/api/v1/targets', timeout=10)
+d = json.load(r)
+for t in d['data']['activeTargets']:
+    if t['labels'].get('job') == 'aplicacion':
+        print(json.dumps(t, indent=2))
+" >&2 || true
+            echo "--- linea 'aplicacion' del ConfigMap de Prometheus ---" >&2
+            kubectl -n "$NS" get configmap sgtm-stg-observabilidad-prometheus -o jsonpath='{.data.prometheus\.yml}' | grep -A3 'job_name: aplicacion' >&2 || true
+            echo "--- conexion TCP directa desde verificador-de-tableros a aplicacion-sintetica:8080 ---" >&2
+            kubectl -n "$NS" exec verificador-de-tableros -- python3 -c "
+import socket
+try:
+    s = socket.create_connection(('aplicacion-sintetica', 8080), timeout=5)
+    print('TCP: conecta')
+    s.close()
+except Exception as e:
+    print('TCP FALLO:', repr(e))
+" >&2 || true
+            echo "::endgroup::" >&2
+        fi
     else
         echo "  ✓ «$panel»: $resultado serie(s)"
     fi
