@@ -146,10 +146,18 @@ spec:
 YAML
 kubectl -n "$NS" wait --for=condition=Ready pod/verificador-de-alertas --timeout=60s
 
+# timeout=10, no el por omision de urllib -que en Python bloquea sin limite en el
+# socket subyacente (issue #215): contra un nodo de `kind` recien creado, bajo
+# presion de arranque en frio, una conexion colgada puede tardar mucho mas de los
+# 10s entre reintentos de `alerta_esta` en fallar de verdad. El sondeo de mas abajo
+# esta disenado para 36 intentos en 6 minutos; con una sola llamada colgandose
+# minutos enteros, se agotan 5 intentos en ~12 minutos sin llegar nunca al 36 -que
+# es exactamente el patron de fallo documentado en el issue-. Con timeout corto,
+# cada intento falla rapido y el sondeo llega a los 36 de verdad.
 consultar_prometheus() {
     kubectl -n "$NS" exec verificador-de-alertas -- python3 -c "
 import json, urllib.request
-r = urllib.request.urlopen('http://sgtm-stg-observabilidad-prometheus:9090/api/v1/query?query=$1')
+r = urllib.request.urlopen('http://sgtm-stg-observabilidad-prometheus:9090/api/v1/query?query=$1', timeout=10)
 d = json.load(r)
 print(json.dumps(d['data']['result']))
 "
@@ -211,7 +219,7 @@ if [ "$LOGRADO" != "si" ]; then
     echo "-- El objetivo «postgres», segun /api/v1/targets --"
     kubectl -n "$NS" exec verificador-de-alertas -- python3 -c "
 import json, urllib.request
-r = urllib.request.urlopen('http://sgtm-stg-observabilidad-prometheus:9090/api/v1/targets')
+r = urllib.request.urlopen('http://sgtm-stg-observabilidad-prometheus:9090/api/v1/targets', timeout=10)
 d = json.load(r)
 for t in d['data']['activeTargets']:
     if t['labels'].get('job') == 'postgres':

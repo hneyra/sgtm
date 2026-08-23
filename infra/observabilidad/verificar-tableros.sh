@@ -177,19 +177,41 @@ consultas=$(node -e '
   }
 ')
 
+# timeout=10 y hasta 3 intentos, no una sola llamada sin limite (issue #215): a
+# diferencia de verificar-alertas.sh -donde cada consulta ya vive dentro del
+# sondeo de 36 intentos de `alerta_esta`-, esta consulta no tenia NINGUN
+# reintento propio, y sin `timeout=` en urlopen podia colgarse minutos contra un
+# nodo de `kind` recien creado. Un solo bache de red transitorio en UN panel
+# tumbaba el guion entero -con `set -euo pipefail`- aunque los demas ya
+# estuvieran en verde. Es el "urlopen error timed out" documentado en el issue.
+consultar_panel() {
+    local expr="$1" intento
+    for intento in 1 2 3; do
+        if kubectl -n "$NS" exec verificador-de-tableros -- python3 -c "
+import json, urllib.parse, urllib.request
+q = urllib.parse.quote('''$expr''')
+r = urllib.request.urlopen(f'http://sgtm-stg-observabilidad-prometheus:9090/api/v1/query?query={q}', timeout=10)
+d = json.load(r)
+print(len(d['data']['result']))
+"; then
+            return 0
+        fi
+        [ "$intento" -lt 3 ] && sleep 5
+    done
+    return 1
+}
+
 FALLARON=0
 while IFS= read -r linea; do
     [ -n "$linea" ] || continue
     panel=$(echo "$linea" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).panel)')
     expr=$(echo "$linea" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).expr)')
 
-    resultado=$(kubectl -n "$NS" exec verificador-de-tableros -- python3 -c "
-import json, urllib.parse, urllib.request
-q = urllib.parse.quote('''$expr''')
-r = urllib.request.urlopen(f'http://sgtm-stg-observabilidad-prometheus:9090/api/v1/query?query={q}')
-d = json.load(r)
-print(len(d['data']['result']))
-")
+    if ! resultado=$(consultar_panel "$expr"); then
+        echo "  ✗ «$panel»: la consulta a Prometheus fallo tras 3 intentos — $expr"
+        FALLARON=$((FALLARON + 1))
+        continue
+    fi
 
     if [ "$resultado" = "0" ]; then
         echo "  ✗ «$panel»: SIN DATOS — $expr"
