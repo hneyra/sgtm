@@ -264,49 +264,40 @@ consultas=$(node -e '
   }
 ')
 
+# timeout=10 y hasta 3 intentos, no una sola llamada sin limite (issue #215): a
+# diferencia de verificar-alertas.sh -donde cada consulta ya vive dentro del
+# sondeo de 36 intentos de `alerta_esta`-, esta consulta no tenia NINGUN
+# reintento propio, y sin `timeout=` en urlopen podia colgarse minutos contra un
+# nodo de `kind` recien creado. Un solo bache de red transitorio en UN panel
+# tumbaba el guion entero -con `set -euo pipefail`- aunque los demas ya
+# estuvieran en verde. Es el "urlopen error timed out" documentado en el issue.
+consultar_panel() {
+    local expr="$1" intento
+    for intento in 1 2 3; do
+        if kubectl -n "$NS" exec verificador-de-tableros -- python3 -c "
+import json, urllib.parse, urllib.request
+q = urllib.parse.quote('''$expr''')
+r = urllib.request.urlopen(f'http://sgtm-stg-observabilidad-prometheus:9090/api/v1/query?query={q}', timeout=10)
+d = json.load(r)
+print(len(d['data']['result']))
+"; then
+            return 0
+        fi
+        [ "$intento" -lt 3 ] && sleep 5
+    done
+    return 1
+}
+
 FALLARON=0
 while IFS= read -r linea; do
     [ -n "$linea" ] || continue
     panel=$(echo "$linea" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).panel)')
     expr=$(echo "$linea" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).expr)')
 
-    # Reintenta la CONSULTA, no el resultado: un "0 series" es un dato real -el
-    # panel esta de verdad sin datos-, y no hay que reintentar eso. Lo que si se
-    # reintenta es la conexion en si -sin `timeout=`, `urlopen` puede colgarse
-    # hasta el reintento de SYN del kernel (~127s) antes de fallar, encontrado en
-    # CI dos veces seguidas: un runner con el manifiesto entero desplegado (motor,
-    # observabilidad, los pods sinteticos de este guion) tiene mas contienda de CPU
-    # y red de la que este guion tenia cuando se escribio, y una sola consulta entre
-    # catorce colgandose 2 minutos es mas plausible que nunca antes de #157.
-    LOGRADO=no
-    for intento in 1 2 3; do
-        if resultado=$(kubectl -n "$NS" exec verificador-de-tableros -- python3 -c "
-import json, urllib.parse, urllib.request
-q = urllib.parse.quote('''$expr''')
-r = urllib.request.urlopen(f'http://sgtm-stg-observabilidad-prometheus:9090/api/v1/query?query={q}', timeout=10)
-d = json.load(r)
-print(len(d['data']['result']))
-" 2>/dev/null); then
-            LOGRADO=si
-            break
-        fi
-        [ "$intento" -lt 3 ] && sleep 3
-    done
-    if [ "$LOGRADO" != "si" ]; then
-        echo "  ✗ «$panel»: la consulta a Prometheus no respondio en 3 intentos — $expr" >&2
-        echo >&2
-        echo "Esto no es un panel sin datos: es que Prometheus mismo dejo de contestar." >&2
-        echo "Diagnostico ahora, en vez de gastar minutos repitiendo el mismo fallo en cada" >&2
-        echo "panel que queda -encontrado en CI: los doce fallaban identicos, uno por uno-." >&2
-        echo "::group::Diagnostico: sgtm-stg-observabilidad-prometheus" >&2
-        kubectl -n "$NS" get pods -o wide >&2
-        kubectl -n "$NS" describe deployment/sgtm-stg-observabilidad-prometheus >&2
-        kubectl -n "$NS" describe pods -l app=sgtm-stg-observabilidad-prometheus >&2
-        kubectl -n "$NS" logs deployment/sgtm-stg-observabilidad-prometheus --all-containers --prefix --tail=200 >&2 || true
-        kubectl -n "$NS" logs deployment/sgtm-stg-observabilidad-prometheus --all-containers --prefix --tail=200 --previous >&2 || true
-        kubectl -n "$NS" get events --sort-by=.lastTimestamp >&2
-        echo "::endgroup::" >&2
-        exit 1
+    if ! resultado=$(consultar_panel "$expr"); then
+        echo "  ✗ «$panel»: la consulta a Prometheus fallo tras 3 intentos — $expr"
+        FALLARON=$((FALLARON + 1))
+        continue
     fi
 
     if [ "$resultado" = "0" ]; then
