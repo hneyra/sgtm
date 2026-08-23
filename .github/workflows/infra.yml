@@ -484,7 +484,6 @@ jobs:
     # Un PR desde una bifurcación no ve los secretos del repositorio ni del environment.
     # Sin token no hay estado que consultar, y este trabajo no tiene nada que hacer.
     if: github.event_name == 'pull_request'
-    environment: stg
 
     steps:
       - uses: actions/checkout@v4
@@ -585,7 +584,6 @@ jobs:
     # Sin protección: es una copia de los secretos del *environment* `prod`, que existe
     # solo para que este preview de solo lectura no quede detrás de la aprobación que
     # `aplicar-prod` sí exige. El `up` real nunca usa este *environment*.
-    environment: prod-preview
 
     steps:
       - uses: actions/checkout@v4
@@ -677,7 +675,6 @@ jobs:
     # y compañía resolverían a los secretos de nivel-repositorio —que son los de prod—
     # y este trabajo abriría el túnel al nodo equivocado: `pulumi up --stack stg`
     # escribiendo los recursos de stg contra el clúster de producción.
-    environment: stg
     # `pulumi up` tiene su propio bloqueo de concurrencia en Pulumi Cloud (ADR-0011 §3);
     # esto evita además que dos integraciones seguidas abran dos túneles a la vez sobre
     # el mismo nodo.
