@@ -180,30 +180,55 @@ kubectl -n "$NS" get configmap sgtm-stg-observabilidad-prometheus -o json \
 # el MISMO Pod, la MISMA entrada del Service -solo relee su archivo-.
 echo "· Recargando la configuracion de Prometheus (POST /-/reload, sin recrear el Pod)"
 # Reintenta la CONEXION, no el resultado -el mismo patron que las consultas de panel de
-# mas abajo-, pero con una ventana bastante mas ancha: 3 intentos (~36s) NO bastaban,
-# encontrado en CI -cada uno de los tres agotaba el `timeout=10` completo, nunca fallaba
-# rapido-, y el sospechoso concreto es `kube-proxy` en modo iptables, cuyo periodo de
-# sincronizacion por omision es ~30s: el Service de Prometheus se acaba de crear en este
-# mismo guion, y hasta el proximo ciclo de sync las reglas DNAT para alcanzarlo desde
-# OTRO pod -aplicacion-sintetica, el que hace el exec, tambien recien desplegado- pueden
-# no estar programadas todavia. 8 intentos (~101s) le da margen a un ciclo de 30s con
-# holgura de sobra, en vez de quedarse justo al borde como el intento anterior.
+# mas abajo-. Dos ajustes de esta ventana ya se probaron en CI y ninguno basto: 3
+# intentos (~36s) y luego 8 (~101s), y en LOS DOS casos cada intento agoto el
+# `timeout=10` completo -nunca fallo rapido-, lo que descarta una ventana de
+# sincronizacion puntual (la hipotesis de `kube-proxy` que motivo el segundo ajuste):
+# una condicion que sigue fallando igual de 36s a 101s no es una carrera que una
+# ventana mas ancha vaya a ganar. La correccion ahora no es un tercer numero a
+# ciegas: es dejar de silenciar CON `2>/dev/null` el error real de cada intento -asi
+# no se sabia si era DNS, TCP o la aplicacion-, y volcar el mismo diagnostico rico que
+# ya usa el bucle de paneles mas abajo si los 5 intentos (~32s, generoso si la causa
+# resulta ser mas simple que las dos anteriores) siguen sin lograrlo.
 LOGRADO=no
-for intento in $(seq 1 8); do
-    if kubectl -n "$NS" exec deployment/aplicacion-sintetica -- python3 -c "
+for intento in 1 2 3 4 5; do
+    if SALIDA=$(kubectl -n "$NS" exec deployment/aplicacion-sintetica -- python3 -c "
 import urllib.request
 urllib.request.urlopen(
     urllib.request.Request('http://sgtm-stg-observabilidad-prometheus:9090/-/reload', method='POST'),
     timeout=10,
 )
-" 2>/dev/null; then
+" 2>&1); then
         LOGRADO=si
         break
     fi
-    [ "$intento" -lt 8 ] && sleep 3
+    [ "$intento" -lt 5 ] && sleep 3
 done
 if [ "$LOGRADO" != "si" ]; then
-    echo "FALLO: /-/reload no respondio en 8 intentos (~101s)." >&2
+    echo "FALLO: /-/reload no respondio en 5 intentos. Ultimo error:" >&2
+    echo "$SALIDA" >&2
+    echo >&2
+    echo "::group::Diagnostico: aplicacion-sintetica -> sgtm-stg-observabilidad-prometheus" >&2
+    kubectl -n "$NS" get pods -o wide >&2
+    kubectl -n "$NS" get endpoints sgtm-stg-observabilidad-prometheus -o wide >&2
+    echo "--- resolucion DNS y conexion TCP desde dentro de aplicacion-sintetica ---" >&2
+    kubectl -n "$NS" exec deployment/aplicacion-sintetica -- python3 -c "
+import socket
+try:
+    print('DNS:', socket.gethostbyname('sgtm-stg-observabilidad-prometheus'))
+except Exception as e:
+    print('DNS FALLO:', repr(e))
+try:
+    s = socket.create_connection(('sgtm-stg-observabilidad-prometheus', 9090), timeout=5)
+    print('TCP: conecta')
+    s.close()
+except Exception as e:
+    print('TCP FALLO:', repr(e))
+" >&2 || true
+    kubectl -n "$NS" describe pods -l app=sgtm-stg-observabilidad-prometheus >&2
+    kubectl -n "$NS" logs deployment/sgtm-stg-observabilidad-prometheus --all-containers --prefix --tail=200 >&2 || true
+    kubectl -n "$NS" get events --sort-by=.lastTimestamp >&2
+    echo "::endgroup::" >&2
     exit 1
 fi
 
