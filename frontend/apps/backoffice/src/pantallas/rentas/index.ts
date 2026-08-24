@@ -14,22 +14,26 @@ import {
 } from '../seguridad/listado';
 
 /**
- * Rentas · Registro, conectado hasta donde llega el backend: **siete opciones de quince**.
+ * Rentas · Registro, conectado hasta donde llega el backend: **cinco opciones de quince**.
  *
  * `contribuyentes` (#11) ya estaba. Se suman `vehiculos` (#26), `declaracion_jurada` (#28) y
  * `beneficios` (#27): las tres son lectura, y las tres tenian su endpoint publicado desde hace
- * dias sin que nadie las conectara. Quedan fuera de este PR, deliberadamente:
+ * dias sin que nadie las conectara. `alta_deuda` (#24, #73) se suma como escritura, en
+ * `escrituras.ts` — es la primera opcion de este modulo con formulario conectado de verdad.
+ * Quedan fuera de este PR, deliberadamente:
  *
  * - `predios_rentas`, `predial_individual`, `predial_masivo`: el backend no publica todavia
  *   ningun `Controller` para `Determinacion` — #30 dejo la regla de negocio y su prueba, pero
  *   "los dos endpoints... siguen sin capa web" es literal, no una figura retorica.
  * - `arbitrios`, `alcabala`, `vehicular_calculo`, `espectaculos`: bloqueados por D-02 (#31, #32).
- * - `transferencia_predio`, `transferencia_vehiculo`, `alta_deuda`, `baja_deuda`: **tienen**
- *   backend (#29, #24) pero son las primeras escrituras que se conectarian en toda la interfaz —
- *   `escrituras.ts` hoy solo declara `cambiar_anio` y `cambiar_clave`, dos formularios triviales.
- *   Merecen su propio PR: cada campo que se declare ahi es el unico que su formulario podra
- *   mandar (la lista blanca de #64), y apurarlo junto con tres lecturas mas es la forma de
- *   equivocarse en un campo que nadie revisa con cuidado.
+ * - `transferencia_predio`, `transferencia_vehiculo`: el backend pide un identificador interno
+ *   (`predioId`) y el codigo exacto de contribuyente, y el prototipo solo pide un codigo
+ *   catastral y un numero de documento — hace falta una busqueda que resuelva uno contra el
+ *   otro antes de poder enviar, y `escrituras.ts` no tiene forma de expresar eso (ver #73).
+ * - `baja_deuda`: a diferencia de `alta_deuda`, su pantalla es buscar-y-seleccionar-varias-filas
+ *   sobre una tabla de deuda existente, no un formulario plano — cada fila seleccionada es su
+ *   propio `POST` a `/rentas/deuda/bajas`, y eso es una pieza de interfaz que no existe todavia,
+ *   no una entrada mas en la lista blanca.
  */
 
 /** El registro que abre la ficha o la declaracion. Sin el no hay peticion. */

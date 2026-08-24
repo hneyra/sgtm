@@ -22,6 +22,28 @@ export interface EscrituraDeclarada {
   readonly nota?: string;
 }
 
+/**
+ * «Concepto/tributo» del prototipo → el codigo corto que ya usa `determinacion`
+ * (`CHECK` de `V2__rentas_y_cuenta_corriente.sql`): `PREDIAL`, `ARBITRIO`,
+ * `VEHICULAR`, `ALCABALA`, `ESPECTACULOS`, `ANUNCIOS`, `JUEGOS`.
+ *
+ * Solo cuatro de las siete opciones del catalogo tienen ese codigo. Las otras
+ * tres —«MULTA TRIBUTARIA», «MULTA ADMINISTRATIVA», «DERECHOS
+ * ADMINISTRATIVOS»— no son parte del vocabulario de `tributo` en ningun sitio
+ * del sistema todavia, y una de ellas ni siquiera entra en las 20 posiciones
+ * de la columna (`DERECHOS_ADMINISTRATIVOS` son 24). Inventar un codigo aqui
+ * seria una decision de negocio que no le toca a esta pantalla: se devuelve
+ * `undefined` y el campo no viaja, igual que si no se hubiera llenado.
+ */
+const TRIBUTO_DEL_BACKEND: Readonly<Record<string, string>> = {
+  'IMPUESTO PREDIAL': 'PREDIAL',
+  'ARBITRIOS MUNICIPALES': 'ARBITRIO',
+  'PATRIMONIO VEHICULAR': 'VEHICULAR',
+  ALCABALA: 'ALCABALA',
+};
+
+const tributoDe = (texto: string): string | undefined => TRIBUTO_DEL_BACKEND[texto];
+
 const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   /**
    * Cambiar el año de trabajo.
@@ -49,6 +71,38 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   cambiar_clave: {
     campos: {},
     nota: 'La contraseña no se escribe aquí y el sistema no la recibe: el cambio lo hace el proveedor de identidad. Al aceptar, queda registrado quién lo pidió y por qué, y se continúa allí.',
+  },
+
+  /**
+   * Alta de deuda (RF-043, #24, #73): incorpora manualmente una obligacion a la cuenta corriente.
+   *
+   * `unidadPredioPlaca` no viaja: el backend pide `predioId`/`vehiculoId` como identificador
+   * interno, y esta pantalla no resuelve todavia un codigo o una placa contra ese identificador
+   * (esa resolucion es la misma que le falta a `transferencia_predio`/`transferencia_vehiculo`).
+   * El alta queda a nivel de contribuyente, sin atar la obligacion a una unidad concreta.
+   *
+   * `cuotaHasta` tampoco viaja: `PeticionDeMovimiento` solo admite una `cuota` entera, no un
+   * rango — se toma `cuotaDesde` como la cuota unica de esta alta.
+   *
+   * `documentoQueSustenta` (el tipo de documento) no tiene campo propio en el backend: el unico
+   * campo de documento es `documentoOrigen`, que se llena con `nDelDocumento`. `motivoDelAlta`
+   * tampoco viaja: es la misma observacion obligatoria que ya pide `useEscritura`, no un campo
+   * aparte.
+   */
+  alta_deuda: {
+    campos: {
+      codContribuyente: { campo: 'codContribuyente' },
+      conceptoTributo: { campo: 'tributo', valor: tributoDe },
+      ano: { campo: 'ano' },
+      cuotaDesde: { campo: 'cuota', entero: true },
+      insolutoS: { campo: 'insoluto' },
+      reajusteS: { campo: 'reajuste' },
+      interesS: { campo: 'interes' },
+      gastosS: { campo: 'gasto' },
+      fechaDeVencimiento: { campo: 'fechaValor' },
+      nDelDocumento: { campo: 'documentoOrigen' },
+    },
+    nota: 'Solo se admiten los tributos con código establecido: predial, arbitrios, vehicular y alcabala. La unidad (predio o placa) y el rango de cuotas todavía no se resuelven aquí: el alta queda a nivel de contribuyente y con una sola cuota.',
   },
 };
 
