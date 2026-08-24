@@ -42,6 +42,13 @@ public interface AsientoRepository {
     Pagina<Asiento> altasYBajas(CriterioDeAltasBajas criterio, Paginacion paginacion);
 
     /**
+     * El historial de pagos que pide el criterio, paginado (RF-048, #25).
+     *
+     * <p>Ver {@link CriterioDePagos} para que cuenta como pago y que no.
+     */
+    Pagina<Asiento> pagos(CriterioDePagos criterio, Paginacion paginacion);
+
+    /**
      * <b>Todos</b> los asientos de una obligacion, sin filtro de fecha (#23).
      *
      * <p>Es lo que la reconstruccion del saldo proyectado recorre: reconstruir a una fecha de corte
