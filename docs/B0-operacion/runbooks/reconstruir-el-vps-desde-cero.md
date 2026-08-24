@@ -4,7 +4,7 @@
 |---|---|
 | Cuándo | Pérdida total del nodo: el proveedor lo destruye, el disco no arranca, el VPS se cancela por error |
 | RTO objetivo | 4 horas (RNF-077) |
-| Estado del ensayo | **Parcialmente ejecutado, 2026-08-24.** Pasos 3–4 (secreto de arranque, `pulumi up` del stack completo) corridos contra el VPS real de `stg`, con once defectos reales encontrados y corregidos. Pasos 1–2 (VPS nuevo, cortafuegos) y el resto de «Cómo se comprueba que terminó bien» siguen sin ensayar. Ver «Estado del ensayo» |
+| Estado del ensayo | **Parcialmente ejecutado, 2026-08-24.** Pasos 3–4 (secreto de arranque, `pulumi up` del stack completo) y la escalera de identidad de «Cómo se comprueba que terminó bien» corridos contra el VPS real de `stg`, con once defectos reales encontrados y corregidos. Pasos 1–2 (VPS nuevo, cortafuegos), la restauración PITR y las dos comprobaciones que esta exige siguen sin ensayar. Ver «Estado del ensayo» |
 
 ## Síntoma
 
@@ -185,10 +185,28 @@ conexión que no va a ningún lado: no se pudo verificar que un respaldo *llegue
 destino, solo que el proceso ya no muere al arrancar. Esa decisión no está en
 [Decisiones abiertas](../../00-gobierno/decisiones-abiertas.md) todavía.
 
+**La escalera de identidad, contra el sistema real, con los cuatro peldaños en el
+código que le corresponden:**
+
+| Petición | Esperado | Obtenido |
+|---|---|---|
+| Sin token | `401` | `401` |
+| Token de otro emisor (realm `master`, no `sgtm`) | `401` | `401` |
+| Token del realm, sin el claim `municipalidad_id` | `403 SIN_MUNICIPALIDAD` | `403`, `"codigo":"SIN_MUNICIPALIDAD"` |
+| El administrador, en lo suyo (`GET /api/v1/seguridad/auditoria`) | `200` | `200`, 26 filas reales de la propia implantación |
+
+Los cuatro contra `GET /api/v1/seguridad/auditoria?ejercicio=2026`, por
+`kubectl port-forward` directo al Service (sin tocar DNS ni ingreso, siguiendo el paso 6
+del procedimiento). Los dos usuarios de Keycloak que hicieron falta —`administrador` con
+`municipalidad_id=1`, y `sin-municipalidad` sin el atributo, solo para este peldaño— no
+los siembra ningún manifiesto: se crean con
+[`despliegue/identidad/crear-usuario.sh`](../../../despliegue/identidad/crear-usuario.sh),
+adaptado de `docker compose exec` a `kcadm` contra el clúster. Quedan en el realm de
+`stg` para el próximo ensayo.
+
 Lo que queda pendiente de este mismo ensayo, sin necesidad de reconstruir el clúster de
 nuevo:
 
-- La escalera de identidad completa (401/401/403/200) contra el sistema real.
 - El aislamiento sostenido y la deuda con fecha (las dos comprobaciones que
   [Restaurar a un punto en el tiempo](restaurar-a-un-punto-en-el-tiempo.md) exige).
 - Restaurar a un punto en el tiempo de verdad — bloqueado en la decisión de arriba, no
