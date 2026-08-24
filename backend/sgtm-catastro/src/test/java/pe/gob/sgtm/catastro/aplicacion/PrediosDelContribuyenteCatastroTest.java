@@ -73,7 +73,9 @@ class PrediosDelContribuyenteCatastroTest {
         registrar =
                 envolver(
                         new RegistrarPredio(
-                                repositorio, new AuditoriaJdbc(jdbc, Clock.systemUTC()), Clock.systemUTC()),
+                                repositorio,
+                                new AuditoriaJdbc(jdbc, Clock.systemUTC()),
+                                Clock.systemUTC()),
                         gestor);
         consulta = new PrediosDelContribuyenteCatastro(repositorio);
     }
@@ -116,8 +118,7 @@ class PrediosDelContribuyenteCatastroTest {
                 Observacion.de("Alta de titularidad para la prueba"));
 
         List<PredioDelContribuyente> predios =
-                transaccion.execute(
-                        estado -> consulta.de(titular, LocalDate.of(2026, 1, 1)));
+                transaccion.execute(estado -> consulta.de(titular, LocalDate.of(2026, 1, 1)));
 
         assertThat(predios).hasSize(1);
         PredioDelContribuyente predio = predios.get(0);
@@ -155,20 +156,17 @@ class PrediosDelContribuyenteCatastroTest {
 
         registrar.transferir(
                 original,
-                Titularidad.unico(
-                        predioId, adquiriente, LocalDate.of(2025, 6, 1), "EP-2025-0001"),
+                Titularidad.unico(predioId, adquiriente, LocalDate.of(2025, 6, 1), "EP-2025-0001"),
                 Observacion.de("Transferencia para la prueba"));
 
         List<PredioDelContribuyente> deHoy =
-                transaccion.execute(
-                        estado -> consulta.de(transferente, LocalDate.of(2026, 1, 1)));
+                transaccion.execute(estado -> consulta.de(transferente, LocalDate.of(2026, 1, 1)));
         assertThat(deHoy)
                 .as("el titular original ya no lo es a esta fecha: la transferencia lo cerro")
                 .isEmpty();
 
         List<PredioDelContribuyente> antesDeLaTransferencia =
-                transaccion.execute(
-                        estado -> consulta.de(transferente, LocalDate.of(2024, 1, 1)));
+                transaccion.execute(estado -> consulta.de(transferente, LocalDate.of(2024, 1, 1)));
         assertThat(antesDeLaTransferencia)
                 .as("antes de la transferencia, el titular original si lo era")
                 .singleElement()
