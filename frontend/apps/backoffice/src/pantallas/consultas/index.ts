@@ -6,13 +6,14 @@ import { parametrosDeBusqueda } from '../busqueda';
 import { SIN_DATO, hoy, leerObjeto, leerPaginado, tablaDe, texto } from '../seguridad/listado';
 
 /**
- * Consultas, conectado hasta donde llega el backend: **cuatro opciones de once**.
+ * Consultas, conectado hasta donde llega el backend: **seis opciones de once**.
  *
  * `cuenta_corriente` (#21) ya estaba. Se suman `consulta_deuda` (#22, #175),
- * `constancia` (#25, #179) y `consulta_vehiculos` (#25, #184). Las otras siete
- * —`consulta_unificada`, `consulta_resumen_predial`, `consulta_altas_bajas`,
- * `consulta_pagos`, `consulta_predios`, `consulta_valores`,
- * `consulta_deudas_beneficio`— siguen esperando su backend (#25 sigue abierto).
+ * `constancia` (#25, #179), `consulta_vehiculos` (#25, #184),
+ * `consulta_altas_bajas` (#24, #186) y `consulta_pagos` (#25, #219). Las otras
+ * cinco —`consulta_unificada`, `consulta_resumen_predial`, `consulta_predios`,
+ * `consulta_valores`, `consulta_deudas_beneficio`— siguen esperando su backend
+ * (#25 sigue abierto).
  */
 
 /**
@@ -401,6 +402,61 @@ function fechaDeAltasBajasDe(asientos: readonly unknown[]): Fecha {
   return (mayor ?? hoy()) as Fecha;
 }
 
+/**
+ * Historial de pagos de un contribuyente (RF-048, #25, #219): cada fila es el asiento `ABONO`
+ * de concepto `PAGO` con que se registro el cobro — la misma forma que `consulta_altas_bajas`,
+ * filtrada distinto.
+ *
+ * «Concepto» se lee del `tributo` del asiento y no de `concepto`: el backend ya filtro por
+ * `concepto = PAGO`, asi que ese campo diria siempre lo mismo en las once filas; lo que
+ * distingue un pago de otro es a que tributo se imputo.
+ *
+ * «Medio» y «Caja» salen vacias a proposito: ningun campo del asiento distingue el medio de
+ * cobro ni la caja que lo atendio —esa distincion es de `tesoreria`, que todavia no existe—,
+ * igual que documenta `ConsultaPagosController` en el backend.
+ */
+const consulta_pagos = definirConexion({
+  operacion: 'consulta_pagos',
+  parametros: ({ busqueda }) => parametrosDeBusqueda('consulta_pagos', undefined, busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'los pagos'),
+  adaptar: (paginado): DatosDePantalla => {
+    const tabla = tablaDe(
+      paginado,
+      (asiento): readonly Celda[] => {
+        const monto = importeDe(asiento['monto']);
+        return [
+          { texto: monto?.actualizadoA ?? SIN_DATO },
+          { texto: texto(asiento['documentoOrigen']) },
+          { texto: texto(asiento['tributo']) },
+          { texto: texto(asiento['ejercicio']) },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: monto?.importe ?? SIN_DATO },
+        ];
+      },
+      'pagos',
+    );
+
+    return {
+      fechaCalculo: fechaDePagosDe(paginado.contenido),
+      tabla,
+    };
+  },
+});
+
+/** La fecha valor del pago mas reciente: todas las filas comparten como se calcularon. */
+function fechaDePagosDe(asientos: readonly unknown[]): Fecha {
+  let mayor: string | undefined;
+  for (const asiento of asientos) {
+    if (!esObjeto(asiento)) continue;
+    const monto = importeDe(asiento['monto']);
+    if (monto !== undefined && (mayor === undefined || monto.actualizadoA > mayor)) {
+      mayor = monto.actualizadoA;
+    }
+  }
+  return (mayor ?? hoy()) as Fecha;
+}
+
 /** Las opciones de Consultas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_CONSULTAS: Readonly<Record<string, Conexion>> = {
   cuenta_corriente,
@@ -408,4 +464,5 @@ export const CONEXIONES_DE_CONSULTAS: Readonly<Record<string, Conexion>> = {
   constancia,
   consulta_vehiculos,
   consulta_altas_bajas,
+  consulta_pagos,
 };

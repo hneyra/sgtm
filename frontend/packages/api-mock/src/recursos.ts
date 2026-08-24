@@ -18,7 +18,8 @@ import { RESPUESTAS } from './respuestas.generado';
  * aranceles (#17), el padron de contribuyentes (#11), la ficha de vehiculo
  * (#26), la declaracion jurada (#28) y los beneficios (#27) desde #73, y desde
  * #72 la consulta de deuda (#22, #175), la constancia de no adeudo (#25,
- * #179), el padron vehicular consultable (#25, #184) y las altas y bajas de deuda (#24, #72).
+ * #179), el padron vehicular consultable (#25, #184), las altas y bajas de
+ * deuda (#24, #72) y el historial de pagos (#25, #219).
  * **Esta lista crece cuando crece aquella**, no antes: publicar aqui
  * una forma que el backend todavia no sirve seria inventarsela.
  *
@@ -355,6 +356,38 @@ function altasBajas(): Paginado {
       referenciaExterna: null,
       monto: { importe: '100.00', actualizadoA: fechaDe(fechaReg ?? '') ?? '2026-08-13' },
       documentoOrigen: docAprob || 'S/D',
+      asientoReversadoId: null,
+      usuarioId: null,
+      motivo: null,
+    })),
+  );
+}
+
+/**
+ * Historial de pagos (`AsientoResource`, RF-048, #25, #219): la misma forma que publica
+ * `cuenta_corriente` y `consulta_altas_bajas`, filtrada a los abonos de concepto `PAGO`.
+ *
+ * «Concepto» del prototipo es un texto libre («Impuesto predial cuotas 1 y 2»), no un tributo del
+ * enum: se guarda tal cual en `tributo` porque es lo mas cercano que hay, y la pantalla solo lo
+ * muestra como texto — no lo compara contra ningun valor. «Recibo» va a `documentoOrigen`, que es
+ * el unico campo de documento que trae el recurso real. «Medio» y «Caja» no viajan: el recurso no
+ * los publica todavia (ver `ConsultaPagosController` en el backend).
+ */
+function pagos(): Paginado {
+  return unaPagina(
+    filasDe('consulta_pagos').map(([fecha, recibo, concepto, ano, , , importeS], i) => ({
+      id: i + 1,
+      ejercicio: Number(ano) || new Date().getFullYear(),
+      tributo: concepto || 'PAGO',
+      concepto: 'PAGO',
+      tipo: 'ABONO',
+      fase: 'ORDINARIA',
+      periodo: null,
+      predioId: null,
+      vehiculoId: null,
+      referenciaExterna: null,
+      monto: { importe: importeS ?? '0.00', actualizadoA: fechaDe(fecha ?? '') ?? '2026-08-13' },
+      documentoOrigen: recibo || 'S/D',
       asientoReversadoId: null,
       usuarioId: null,
       motivo: null,
@@ -788,6 +821,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/consultas/deuda': consultaDeuda,
   '/consultas/vehiculos': consultaVehiculos,
   '/consultas/altas-bajas': altasBajas,
+  '/consultas/pagos': pagos,
   '/catastro/sectores': sectores,
   '/catastro/fichas': fichas,
   '/seguridad/modulos': modulos,
