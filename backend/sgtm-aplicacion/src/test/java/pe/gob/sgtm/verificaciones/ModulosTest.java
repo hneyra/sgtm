@@ -43,7 +43,8 @@ class ModulosTest {
                         "catastro",
                         "seguridad",
                         "cuentacorriente",
-                        "rentas");
+                        "rentas",
+                        "sanciones");
     }
 
     @Test

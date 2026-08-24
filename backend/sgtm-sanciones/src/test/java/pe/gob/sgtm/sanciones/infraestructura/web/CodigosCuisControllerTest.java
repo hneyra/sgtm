@@ -1,0 +1,99 @@
+package pe.gob.sgtm.sanciones.infraestructura.web;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.dominio.Alicuota;
+import pe.gob.sgtm.sanciones.dominio.CodigoInfraccion;
+import pe.gob.sgtm.sanciones.dominio.CodigoInfraccionRepository;
+import pe.gob.sgtm.sanciones.dominio.CriterioDeCodigoInfraccion;
+import pe.gob.sgtm.sanciones.dominio.Familia;
+import pe.gob.sgtm.web.ConfiguracionDeJson;
+import pe.gob.sgtm.web.ManejadorDeErrores;
+import tools.jackson.databind.json.JsonMapper;
+
+/** #43 — capa web del cuadro único de infracciones y sanciones (CUIS). */
+@DisplayName("Capa web — GET /api/v1/infracciones/cuis")
+class CodigosCuisControllerTest {
+
+    private static final Clock RELOJ =
+            Clock.fixed(Instant.parse("2026-06-15T00:00:00Z"), ZoneOffset.UTC);
+
+    private CriterioDeCodigoInfraccion ultimoCriterio;
+
+    private final MockMvc mvc =
+            MockMvcBuilders.standaloneSetup(
+                            new CodigosCuisController(repositorioDeMentira(), RELOJ))
+                    .setControllerAdvice(new ManejadorDeErrores())
+                    .setMessageConverters(
+                            new JacksonJsonHttpMessageConverter(
+                                    JsonMapper.builder()
+                                            .addModule(
+                                                    new ConfiguracionDeJson()
+                                                            .moduloDeObjetosDeValor())
+                                            .build()))
+                    .build();
+
+    @Test
+    @DisplayName("filtra siempre por la familia ADMINISTRATIVA, nunca TRANSITO")
+    void filtraSiempreLaFamiliaAdministrativa() throws Exception {
+        mvc.perform(get("/api/v1/infracciones/cuis")).andReturn();
+
+        assertThat(ultimoCriterio.familia()).isEqualTo(Familia.ADMINISTRATIVA);
+    }
+
+    private CodigoInfraccionRepository repositorioDeMentira() {
+        return new CodigoInfraccionRepository() {
+            @Override
+            public Optional<CodigoInfraccion> findById(long id) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<CodigoInfraccion> vigenteA(
+                    Familia familia, String codigo, LocalDate fecha) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Pagina<CodigoInfraccion> buscar(
+                    CriterioDeCodigoInfraccion criterio, Paginacion paginacion) {
+                ultimoCriterio = criterio;
+                CodigoInfraccion codigo =
+                        CodigoInfraccion.nuevo(
+                                criterio.familia(),
+                                "CUIS-01",
+                                "Comercio sin licencia",
+                                Alicuota.de("15"),
+                                null,
+                                null,
+                                "Ordenanza 001-2026",
+                                LocalDate.of(2026, 1, 1));
+                return Pagina.de(List.of(codigo), paginacion, 1);
+            }
+
+            @Override
+            public CodigoInfraccion insertar(CodigoInfraccion codigoInfraccion) {
+                throw new UnsupportedOperationException("esta prueba no escribe");
+            }
+
+            @Override
+            public CodigoInfraccion actualizar(CodigoInfraccion codigoInfraccion) {
+                throw new UnsupportedOperationException("esta prueba no escribe");
+            }
+        };
+    }
+}
