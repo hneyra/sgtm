@@ -40,7 +40,8 @@ function baseline(environment: Environment = "prod"): Invariants {
       generateRolePasswords: false,
     },
     backup: {
-      endpoint: "https://s3.example.net",
+      endpoint: "https://s3.us-east-1.amazonaws.com",
+      region: "us-east-1",
       bucket: `sgtm-${environment}-respaldos`,
       walArchiveTimeoutSeconds: 300,
       ...(isStg ? { restoreSourceBucket: "sgtm-prod-respaldos" } : {}),
