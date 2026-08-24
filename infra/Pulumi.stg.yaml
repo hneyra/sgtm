@@ -26,12 +26,12 @@ config:
   sgtm:applicationImageRepository: ghcr.io/hneyra
   sgtm:applicationBootstrapVersion: b974d5db73cfaa91ffa891dd3dc4f15a409a1a36
   sgtm:webReplicas: "1"
-  # La municipalidad de ensayo. El ubigeo es el de Sullana porque stg restaura los
-  # respaldos de prod anonimizados (INF-03 §2 y §3): con otro ubigeo, lo restaurado no
-  # cuadraría con lo implantado.
-  sgtm:ubigeo: "200101"
-  sgtm:municipalidad: Municipalidad Provincial de Sullana (ensayo)
-  sgtm:tipoDeMunicipalidad: PROVINCIAL
+  # La municipalidad de ensayo. El ubigeo es el de Catacaos, igual que en prod (D-01,
+  # 2026-08-24), porque stg restaura los respaldos de prod anonimizados (INF-03 §2 y
+  # §3): con otro ubigeo, lo restaurado no cuadraría con lo implantado.
+  sgtm:ubigeo: "200105"
+  sgtm:municipalidad: Municipalidad Distrital de Catacaos (ensayo)
+  sgtm:tipoDeMunicipalidad: DISTRITAL
   sgtm:administrador: administrador
   sgtm:nombreDelAdministrador: Administrador del sistema
   # La municipalidad de stg se da de alta MARCADA: todo documento que emita sale
