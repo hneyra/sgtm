@@ -199,6 +199,20 @@ function permitirIngresoPostgres(environment: Environment, namespace: string): N
   });
 }
 
+/**
+ * Keycloak: solo a su propia base (issue #158, encontrado reconstruyendo un cluster
+ * real desde cero — nunca se probo un arranque de Keycloak sin el namespace ya con
+ * trafico existente, y sin esta politica queda en CrashLoopBackOff indefinido:
+ * `permitir-ingreso-postgres` deja entrar, pero nada dejaba salir).
+ */
+function permitirSalidaIdentidad(environment: Environment, namespace: string): NetworkPolicy {
+  return politica(namespace, "permitir-salida-identidad", {
+    podSelector: { matchLabels: { app: servicioDeIdentidad(environment) } },
+    policyTypes: ["Egress"],
+    egress: [{ to: [deApp(servicioDeBaseDeDatos(environment))], ports: [puerto(5432)] }],
+  });
+}
+
 /** La aplicacion: sale a lo que necesita, y no hay ningun destino de internet en la lista. */
 function permitirSalidaAplicacion(environment: Environment, namespace: string): NetworkPolicy {
   return politica(namespace, "permitir-salida-aplicacion", {
@@ -357,6 +371,7 @@ export function manifiestosDeRed(args: ArgsDeRed): Manifiesto[] {
     permitirDns(namespace),
     ...permitirIngresoPublico(environment, namespace),
     permitirIngresoPostgres(environment, namespace),
+    permitirSalidaIdentidad(environment, namespace),
     permitirSalidaAplicacion(environment, namespace),
     ...permitirSalidaDeLote(environment, namespace),
     permitirSalidaPostgres(environment, namespace),

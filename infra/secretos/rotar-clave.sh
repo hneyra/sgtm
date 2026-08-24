@@ -58,7 +58,7 @@ entrada=$(yarn --silent secretos --ambiente "$AMBIENTE" | ROL="$ROL" node -e '
   if (!e) { process.stderr.write(""); process.exit(1); }
   process.stdout.write(JSON.stringify(e));
 ') || {
-    echo "«$ROL» no esta en el inventario, o no admite rotacion por este guion." >&2
+    echo "«${ROL}» no esta en el inventario, o no admite rotacion por este guion." >&2
     echo "Los roles del inventario que SI tienen rolDePostgres (y por tanto se rotan asi):" >&2
     yarn --silent secretos --ambiente "$AMBIENTE" \
         | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8")).filter((e)=>e.rolDePostgres).forEach((e)=>process.stderr.write("  - "+e.rol+"\n"))'
@@ -76,19 +76,19 @@ ROL_DE_POSTGRES=$(leer_campo rolDePostgres)
 REINICIAR=$(leer_campo requiereReinicioDe)
 
 [ -n "$ROL_DE_POSTGRES" ] || {
-    echo "«$ROL» no es una clave de PostgreSQL — no hay ALTER ROLE que ejecutar." >&2
+    echo "«${ROL}» no es una clave de PostgreSQL — no hay ALTER ROLE que ejecutar." >&2
     echo "Si es «keycloak-admin»: el procedimiento manual esta en INF-06 (kcadm.sh set-password)." >&2
     exit 2
 }
 
-echo "· Rotando «$ROL_DE_POSTGRES» ($ROL) en «$NAMESPACE»"
+echo "· Rotando «${ROL_DE_POSTGRES}» ($ROL) en «${NAMESPACE}»"
 
 MOTOR="deployment/$(printf 'sgtm-%s-postgres' "$AMBIENTE")"
 SECRETO_SUPER=$(printf 'sgtm-%s-postgres-superusuario' "$AMBIENTE")
 
 CLAVE_SUPER=$(kubectl -n "$NAMESPACE" get secret "$SECRETO_SUPER" \
     -o jsonpath='{.data.clave-superusuario}' | base64 --decode)
-[ -n "$CLAVE_SUPER" ] || { echo "No se pudo leer la clave del superusuario desde «$SECRETO_SUPER»." >&2; exit 1; }
+[ -n "$CLAVE_SUPER" ] || { echo "No se pudo leer la clave del superusuario desde «${SECRETO_SUPER}»." >&2; exit 1; }
 
 VALOR_NUEVO=$(openssl rand -base64 32)
 
@@ -109,7 +109,7 @@ echo "  ALTER ROLE ejecutado contra el motor en marcha"
 # ── El Secret: solo esta clave, sin tocar las demas que viva ahi junto ───────
 kubectl -n "$NAMESPACE" patch secret "$SECRETO" --type=merge \
     -p "{\"data\":{\"$CLAVE\":\"$(printf '%s' "$VALOR_NUEVO" | base64 --wrap=0)\"}}" >/dev/null
-echo "  Secret «$SECRETO/$CLAVE» actualizado"
+echo "  Secret «${SECRETO}/${CLAVE}» actualizado"
 
 # ── Quien tenga un pod en marcha leyendo esto, se reprograma ─────────────────
 if [ -n "$REINICIAR" ]; then
@@ -122,4 +122,4 @@ else
 fi
 
 echo
-echo "Rotacion de «$ROL» completa. Ningun valor se imprimio en esta salida."
+echo "Rotacion de «${ROL}» completa. Ningun valor se imprimio en esta salida."

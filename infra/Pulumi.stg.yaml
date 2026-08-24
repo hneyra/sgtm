@@ -23,8 +23,8 @@ config:
   sgtm:keycloakImage: quay.io/keycloak/keycloak:26.0
   sgtm:keycloakRealm: sgtm
   sgtm:keycloakSeedTestUsers: "true"
-  sgtm:applicationImageRepository: ghcr.io/hneyra/sgtm
-  sgtm:applicationBootstrapVersion: 64de42b4c56eb2491e2a61287bceb4b66b6e53d1
+  sgtm:applicationImageRepository: ghcr.io/hneyra
+  sgtm:applicationBootstrapVersion: b974d5db73cfaa91ffa891dd3dc4f15a409a1a36
   sgtm:webReplicas: "1"
   # La municipalidad de ensayo. El ubigeo es el de Sullana porque stg restaura los
   # respaldos de prod anonimizados (INF-03 §2 y §3): con otro ubigeo, lo restaurado no

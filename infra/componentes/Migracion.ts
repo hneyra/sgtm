@@ -164,7 +164,14 @@ function contenedorDeEspera(args: {
     ],
     // Solo habla `psql` por la red -no lee PGDATA, ni nada que necesite coincidir
     // con un UID del volumen-: el caso simple de `seguridadSinRoot` (issue #157).
-    securityContext: seguridadSinRoot(),
+    //
+    // `runAsUser: 70`: a diferencia del contenedor de postgres de verdad (que arranca
+    // como root para el `chown`/`gosu` del volumen, ver BaseDeDatos.ts), este solo
+    // ejecuta `psql` como cliente y no necesita nada de eso — pero `postgres:16-alpine`
+    // arranca como root por omision, y `runAsNonRoot` sin UID explicito lo rechaza
+    // (issue #158: encontrado reconstruyendo un cluster real desde cero. `70` es el UID
+    // de `postgres` en esta imagen, confirmado corriendola: `id postgres`).
+    securityContext: seguridadSinRoot({ runAsUser: 70 }),
     resources: RECURSOS.auxiliar,
   };
 }

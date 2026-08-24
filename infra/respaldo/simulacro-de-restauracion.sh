@@ -409,7 +409,7 @@ echo "  promovido, y admite escrituras: es un sistema, no una copia"
 
 echo
 echo "─────────────────────────────────────────────────────────────────────"
-echo "  El simulacro de restauracion paso (ambiente «$AMBIENTE», modo $MODO)."
+echo "  El simulacro de restauracion paso (ambiente «${AMBIENTE}», modo $MODO)."
 echo
 echo "  Tiempo de recuperacion medido: ${SEGUNDOS}s"
 echo "    Desde la perdida del directorio de datos hasta un motor que acepta"

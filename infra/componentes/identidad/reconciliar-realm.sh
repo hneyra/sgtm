@@ -35,7 +35,7 @@ set -euo pipefail
 KCADM=/opt/keycloak/bin/kcadm.sh
 DIRECTORIO=${KC_DIRECTORIO:-/realm}
 
-echo "Reconciliando el realm «$KC_REALM» contra $KC_SERVIDOR"
+echo "Reconciliando el realm «${KC_REALM}» contra $KC_SERVIDOR"
 
 # El Job puede arrancar antes que Keycloak termine de migrar su propia base. No es
 # un fallo: es el orden normal de un despliegue. Se reintenta durante cinco
@@ -76,14 +76,14 @@ for cliente in $KC_CLIENTES; do
     case "$mapeadores" in
         *municipalidad_id*) ;;
         *)
-            echo "FALLO: el cliente «$cliente» quedo SIN el mapeador de municipalidad_id." >&2
+            echo "FALLO: el cliente «${cliente}» quedo SIN el mapeador de municipalidad_id." >&2
             echo "Es el claim del que sale el SET LOCAL, y con el la separacion entre" >&2
             echo "municipalidades (ADR-0005). Un realm sin ese mapeador emite tokens que el" >&2
             echo "backend rechaza con SIN_MUNICIPALIDAD, y el 403 no dice por que." >&2
             exit 1
             ;;
     esac
-    echo "Cliente «$cliente»: mapeador de municipalidad_id presente."
+    echo "Cliente «${cliente}»: mapeador de municipalidad_id presente."
 done
 
-echo "Realm «$KC_REALM» reconciliado."
+echo "Realm «${KC_REALM}» reconciliado."
