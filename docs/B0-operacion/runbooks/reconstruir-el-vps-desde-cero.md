@@ -4,7 +4,7 @@
 |---|---|
 | Cuándo | Pérdida total del nodo: el proveedor lo destruye, el disco no arranca, el VPS se cancela por error |
 | RTO objetivo | 4 horas (RNF-077) |
-| Estado del ensayo | **Parcialmente ejecutado, 2026-08-24.** Pasos 3–5 completos contra el VPS real de `stg`: secreto de arranque, `pulumi up` del stack completo, y el PITR en sí (paso 5) —359s, medidos, con `--contra-cluster`—. Las cuatro comprobaciones de «Cómo se comprueba que terminó bien» —salvo el cortafuegos— también corridas. Catorce defectos de infraestructura y dos de documentación encontrados y corregidos en el camino. Solo faltan los pasos 1–2 (VPS nuevo desde el proveedor, cortafuegos): necesitan destruir el VPS mismo, no su clúster. Ver «Estado del ensayo» |
+| Estado del ensayo | **Ejecutado en su totalidad, 2026-08-24 —en dos VPS distintos.** Pasos 3–5 contra el VPS real de `stg` (Contabo): secreto de arranque, `pulumi up` del stack completo, y el PITR en sí —359s, medidos, con `--contra-cluster`—. Pasos 1–2 contra una VPS nueva de un proveedor distinto (AWS EC2), levantada solo para esto y ya destruida: aprovisionamiento, `k3s` nativo, `cortafuegos.sh` en un sistema operativo recién instalado, y el stack completo desplegado y sano encima. Catorce defectos de infraestructura, dos de documentación y un piso de memoria confirmado, en el camino. Ver «Estado del ensayo» |
 
 ## Síntoma
 
@@ -240,12 +240,58 @@ propósito— vive en el «Estado del ensayo» de
 [Restaurar a un punto en el tiempo](restaurar-a-un-punto-en-el-tiempo.md#estado-del-ensayo),
 no repetido aquí.
 
-Lo que queda pendiente de este mismo ensayo, sin necesidad de reconstruir el clúster de
-nuevo:
+**2026-08-24, más tarde el mismo día: los pasos 1–2, contra una VPS nueva de verdad.**
+El VPS de `stg` (Contabo) es infraestructura en uso: destruirlo para ensayar «el
+proveedor lo destruye» habría sido destruir lo que ya sostiene el resto de este
+ensayo. En su lugar, una VPS aparte —AWS EC2, otro proveedor, levantada solo para
+esto y destruida al terminar— para probar exactamente lo que el clúster k3d de los
+pasos 3–5 no podía: el sistema operativo y el proveedor, no lo que corre encima.
 
-- El cortafuegos con `nmap` y los pasos 1–2 — necesitan un VPS que se reconstruya desde
-  el proveedor, no uno cuyo clúster se vacía y se vuelve a llenar. Es lo único que queda
-  de todo el runbook.
+1. **Un VPS nuevo, con k3s.** Ubuntu 24.04 LTS recién instalada; `curl -sfL
+   https://get.k3s.io | sudo sh -` instaló k3s **nativo** —no k3d— sin nada que
+   ajustar. El kubeconfig, con el `server` reescrito, funcionó igual que documenta
+   `infra/README.md`.
+
+2. **El cortafuegos, antes que nada más.** `cortafuegos.sh` corrió por primera vez
+   contra un sistema operativo que nunca había tenido `ufw` — «Rules updated» de
+   principio a fin, sin un solo ajuste. Confirmado **desde fuera**, como exige el
+   propio guion: `22` abierto, `80`/`443` abiertos a nivel de cortafuegos —rechazados
+   solo porque nada escuchaba ahí todavía, no bloqueados: la diferencia entre
+   `Connection refused` y un `timeout` es exactamente esa—, y `5432`/`6443`/`10250`
+   genuinamente cerrados (`timeout`, sin respuesta).
+
+   **El piso de memoria, confirmado aparte:** el primer intento, en una instancia de
+   4 GB, se quedó con la mitad del stack en `Pending` por `Insufficient memory` antes
+   de programar `interfaz` — 4 GB no alcanza. Con 16 GB, el mismo despliegue entró
+   con margen. El detalle vive en
+   [`arquitectura-de-infraestructura.md`](../../80-infraestructura/arquitectura-de-infraestructura.md#2-dimensionamiento-inicial)
+   §2, no repetido aquí.
+
+3. **El stack completo, desplegado y sano.** No con `pulumi up`: Pulumi exige que el
+   nombre del stack sea literalmente `stg` o `prod` (`config.ts` lo valida), y los
+   dos ya apuntan a sus VPS reales — commandeer esa identidad, aunque fuera
+   temporalmente, se descartó por el riesgo frente al beneficio, dado que `pulumi up`
+   reconstruyendo desde cero ya se había demostrado extensamente en los pasos 3–5.
+   En su lugar, los mismos 69 objetos que emite `yarn manifiestos --ambiente stg`,
+   aplicados con `kubectl apply` directo, más `bootstrap-secretos.sh` y las dos
+   piezas que en un `pulumi up` real pone `index.ts` —el `Secret` de credenciales de
+   S3, y el de `ghcr-pull` que en este ensayo no salía de ningún manifiesto—. Resultó
+   en los 9 `Deployment` sanos, los 3 `Job` completados, y `GET /actuator/health`
+   respondiendo `200`. Reprodujo, de paso, el mismo hallazgo ya conocido de la imagen
+   del migrador pineada sin la migración `V21` (issue #158, ya documentado arriba):
+   el mismo `GRANT` de emergencia lo resolvió aquí también.
+
+**Lo que esto no reemplaza:** el VPS de `stg` real (Contabo) nunca se destruyó ni se
+reconstruyó — sigue siendo el mismo desde que existe. Lo que se demostró es que el
+*procedimiento* —aprovisionar, cerrar el cortafuegos, desplegar el stack— funciona
+contra un proveedor y un sistema operativo genuinamente nuevos, no que se ejecutó
+sobre la VPS que de verdad sostiene `stg`. Es la misma distinción que ya hacía este
+runbook sobre el clúster k3d: ensayar perder el nodo dentro del nodo que se pierde no
+es ensayarlo.
+
+Con esto, los ocho runbooks están escritos y **el de reconstrucción, ejecutado en su
+totalidad** — el único criterio de aceptación de #158 que queda abierto es el que
+depende de D-02a (una cifra de deuda real), que no es trabajo de este runbook.
 
 Lo que ya estaba verificado antes de este ensayo, en piezas, sin VPS real:
 
