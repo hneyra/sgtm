@@ -4,10 +4,10 @@
 |---|---|
 | Norma | TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF) |
 | Artículo | 13 |
-| Publicada | ‹AAAA-MM-DD›, El Peruano |
-| Ejercicios que rige | ‹por confirmar› |
+| Publicada | 2004-11-15, El Peruano |
+| Ejercicios que rige | 2004– |
 | Filas de NEG-02 §2 | 2 |
-| Transcribió | ‹Nombre›, ‹AAAA-MM-DD› |
+| Transcribió | JNA, 2026-08-24 |
 | Verificó | — |
 | Estado | TRANSCRITO |
 
@@ -15,11 +15,11 @@
 
 **Sin reordenar, sin convertir unidades, sin corregir un encabezado.**
 
-| Tramo (hasta, en UIT) | Alícuota |
+| Tramo de autoavalúo | Alícuota |
 |---|---|
-| ‹15› | ‹0.2%› |
-| ‹15 a 60› | ‹0.6%› |
-| ‹más de 60› | ‹1.0%› |
+| Hasta 15 UIT | 0.2% |
+| Más de 15 UIT y hasta 60 UIT | 0.6% |
+| Más de 60 UIT | 1.0% |
 
 > RNF-05 / NEG-05 exigen que la base sea **por contribuyente**, no por predio: los tramos se
 > aplican al valor acumulado de todos sus predios. Ese comportamiento ya está resuelto en NEG-05
@@ -30,9 +30,9 @@
 | Qué | Dónde |
 |---|---|
 | Tipo | `parametro_tributario` (tipo `TRAMO_PREDIAL`, una fila por tramo) |
-| Clave | ‹cómo se forma la clave› |
+| Clave | El número de orden del tramo (1.ª, 2.ª, 3.ª escala) — el límite superior del tramo en UIT, `TRAMO_PREDIAL-1`, `TRAMO_PREDIAL-2`, `TRAMO_PREDIAL-3` |
 | Ámbito | nacional |
-| Vigencia | ‹desde qué ejercicio, y hasta cuál› |
+| Vigencia | 2004–, sin modificación conocida a la fecha de esta transcripción |
 
 **No se carga con este archivo.** La carga depende de D-13.
 

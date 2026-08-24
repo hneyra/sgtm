@@ -2,12 +2,12 @@
 
 | Campo | Valor |
 |---|---|
-| Norma | TUO LTM |
-| Artículo | 15 (vencimientos); 15, inciso b (reajuste) |
-| Publicada | ‹AAAA-MM-DD›, El Peruano |
-| Ejercicios que rige | ‹por confirmar› |
+| Norma | TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF) |
+| Artículo | 15, incisos a) y b) (vencimientos); 15, inciso b) (reajuste) |
+| Publicada | 2004-11-15, El Peruano |
+| Ejercicios que rige | 2004– |
 | Filas de NEG-02 §2 | 6, 20 |
-| Transcribió | ‹Nombre›, ‹AAAA-MM-DD› |
+| Transcribió | JNA, 2026-08-24 |
 | Verificó | — |
 | Estado | TRANSCRITO |
 
@@ -15,17 +15,28 @@
 
 **Sin reordenar, sin convertir unidades, sin corregir un encabezado.**
 
-| Cuota | Vencimiento |
+| Alternativa de pago | Vencimiento |
 |---|---|
-| Al contado | ‹último día hábil de febrero› |
-| Primera trimestral | ‹por confirmar› |
-| Segunda trimestral | ‹por confirmar› |
-| Tercera trimestral | ‹por confirmar› |
-| Cuarta trimestral | ‹por confirmar› |
+| a) Al contado | Hasta el último día hábil del mes de febrero de cada año |
+| b) Fraccionado, primera cuota (de cuatro trimestrales, un cuarto del impuesto total cada una) | Hasta el último día hábil del mes de febrero |
+| b) Segunda cuota | Hasta el último día hábil del mes de mayo |
+| b) Tercera cuota | Hasta el último día hábil del mes de agosto |
+| b) Cuarta cuota | Hasta el último día hábil del mes de noviembre |
 
-> Reajuste: la deuda de las cuotas posteriores a la primera se reajusta según la variación
-> acumulada del Índice de Precios al Por Mayor (IPM) que publica el INEI, entre el mes de
-> vencimiento de la primera cuota y el mes precedente al pago (TUO LTM art. 15, inc. b).
+> Texto literal del artículo 15: «El impuesto podrá cancelarse de acuerdo a las siguientes
+> alternativas: a) Al contado, hasta el último día hábil del mes de febrero de cada año. b) En
+> forma fraccionada, hasta en cuatro cuotas trimestrales. En este caso, la primera cuota será
+> equivalente a un cuarto del impuesto total resultante y deberá pagarse hasta el último día hábil
+> del mes de febrero. Las cuotas restantes serán pagadas hasta el último día hábil de los meses de
+> mayo, agosto y noviembre, debiendo ser reajustadas de acuerdo a la variación acumulada del Índice
+> de Precios al Por Mayor (IPM) que publica el Instituto Nacional de Estadística e Informática
+> (INEI), por el período comprendido desde el mes de vencimiento de pago de la primera cuota y el
+> mes precedente al pago.»
+>
+> Reajuste (inciso b, segundo párrafo): la segunda, tercera y cuarta cuota trimestral se reajustan
+> según la variación acumulada del IPM que publica el INEI, por el período comprendido entre el mes
+> de vencimiento de la primera cuota y el mes precedente al pago. La primera cuota, y el pago al
+> contado, no llevan reajuste.
 >
 > La **prórroga** que una ordenanza local pueda dar sobre estos vencimientos es otro dato, y es
 > D-02c — no se transcribe en este archivo.
@@ -34,13 +45,18 @@
 
 | Qué | Dónde |
 |---|---|
-| Tipo | `parametro_tributario` (tipo `PREDIAL_VENCIMIENTO`, `PREDIAL_REAJUSTE`) |
-| Clave | ‹cómo se forma la clave› |
+| Tipo | `parametro_tributario` (tipo `PREDIAL_VENCIMIENTO`, una fila por cuota; `PREDIAL_REAJUSTE_IPM` para el índice) |
+| Clave | `PREDIAL_VENCIMIENTO-CONTADO`, `PREDIAL_VENCIMIENTO-1`..`PREDIAL_VENCIMIENTO-4`, con el ejercicio como parte de la clave compuesta (el día exacto —"último día hábil"— depende del calendario de cada año) |
 | Ámbito | nacional |
-| Vigencia | ‹desde qué ejercicio, y hasta cuál› |
+| Vigencia | 2004–, sin modificación conocida a la fecha de esta transcripción |
 
 **No se carga con este archivo.** La carga depende de D-13.
 
 ## 3. Qué no cabe hoy
 
-Nada.
+La norma no da una fecha fija: da una **regla** ("último día hábil de febrero/mayo/agosto/
+noviembre"). Ese "último día hábil" depende del calendario de feriados de cada año y no está
+transcrito aquí —transcribir la regla es lo que corresponde a este archivo, no resolverla en una
+fecha AAAA-MM-DD por ejercicio—. Si `parametro_tributario` solo puede guardar una fecha resuelta y
+no una regla, hace falta decidir dónde vive el cálculo del "último día hábil" de cada mes; eso
+queda fuera de esta transcripción.
