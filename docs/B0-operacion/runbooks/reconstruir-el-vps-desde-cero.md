@@ -4,7 +4,7 @@
 |---|---|
 | Cuándo | Pérdida total del nodo: el proveedor lo destruye, el disco no arranca, el VPS se cancela por error |
 | RTO objetivo | 4 horas (RNF-077) |
-| Estado del ensayo | **Parcialmente ejecutado, 2026-08-24.** Pasos 3–4 (secreto de arranque, `pulumi up` del stack completo) y las cuatro comprobaciones de «Cómo se comprueba que terminó bien» —salvo el cortafuegos— corridas contra el VPS real de `stg`, con catorce defectos de infraestructura y dos de documentación encontrados y corregidos. El proveedor de almacenamiento de objetos ya se decidió (AWS S3) y el respaldo —continuo y base— llega de verdad. Pasos 1–2 (VPS nuevo, cortafuegos) y la restauración PITR en sí siguen sin ensayar: falta la bandera `--contra-cluster`, no una decisión. Ver «Estado del ensayo» |
+| Estado del ensayo | **Parcialmente ejecutado, 2026-08-24.** Pasos 3–5 completos contra el VPS real de `stg`: secreto de arranque, `pulumi up` del stack completo, y el PITR en sí (paso 5) —359s, medidos, con `--contra-cluster`—. Las cuatro comprobaciones de «Cómo se comprueba que terminó bien» —salvo el cortafuegos— también corridas. Catorce defectos de infraestructura y dos de documentación encontrados y corregidos en el camino. Solo faltan los pasos 1–2 (VPS nuevo desde el proveedor, cortafuegos): necesitan destruir el VPS mismo, no su clúster. Ver «Estado del ensayo» |
 
 ## Síntoma
 
@@ -226,18 +226,26 @@ municipalidad de un solo uso (`999999`) y una cadena sintética de deuda, marcad
 como ensayo en cada campo de trazabilidad: no son datos reales, y `es_demostracion=true`
 en `stg` lo confirma en cualquier documento que las toque.
 
+**2026-08-24, más tarde el mismo día: el paso 5, restaurar a un punto en el tiempo, de
+verdad.** `simulacro-de-restauracion.sh --contra-cluster` ahora existe
+([`infra/respaldo/contra-cluster.sh`](../../../infra/respaldo/contra-cluster.sh)) y se
+ejecutó contra `stg` real: apagó el `Deployment` en marcha, preservó `PGDATA` sin
+borrarla, restauró el último respaldo base desde AWS S3 en un pod temporal, y dejó que
+el motor —con el mismo `command`/`args` que ya tenía— entrara en recuperación solo hasta
+un instante objetivo real. **359 segundos**, desde apagar el `Deployment` hasta que la
+reproducción del WAL llegó de verdad al objetivo (`pg_get_wal_replay_pause_state() =
+'paused'`, no solo el socket respondiendo). Promovido, con una escritura real después.
+El detalle completo —qué se escribió, qué se comprobó, qué queda sin limpiar a
+propósito— vive en el «Estado del ensayo» de
+[Restaurar a un punto en el tiempo](restaurar-a-un-punto-en-el-tiempo.md#estado-del-ensayo),
+no repetido aquí.
+
 Lo que queda pendiente de este mismo ensayo, sin necesidad de reconstruir el clúster de
 nuevo:
 
-- **Restaurar a un punto en el tiempo de verdad.** Ya no está bloqueado en la decisión
-  del almacenamiento de objetos —eso se cerró arriba—: está bloqueado en que
-  [`simulacro-de-restauracion.sh`](../../../infra/respaldo/simulacro-de-restauracion.sh)
-  no tiene la bandera `--contra-cluster` (paso 4 de
-  [Restaurar a un punto en el tiempo](restaurar-a-un-punto-en-el-tiempo.md)) y en que
-  hace falta más de un respaldo base real —hoy hay uno— para elegir un instante objetivo
-  con sentido.
 - El cortafuegos con `nmap` y los pasos 1–2 — necesitan un VPS que se reconstruya desde
-  el proveedor, no uno cuyo clúster se vacía y se vuelve a llenar.
+  el proveedor, no uno cuyo clúster se vacía y se vuelve a llenar. Es lo único que queda
+  de todo el runbook.
 
 Lo que ya estaba verificado antes de este ensayo, en piezas, sin VPS real:
 

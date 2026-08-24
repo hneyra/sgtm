@@ -5,7 +5,7 @@
 | Cuándo | Borrado accidental, corrupción de datos, o el primer paso de una reconstrucción completa |
 | RTO objetivo | Parte del RTO de 4 horas de RNF-077 ([`INF-01`](../../80-infraestructura/arquitectura-de-infraestructura.md) §5) |
 | RPO objetivo | 5 minutos (RNF-076) |
-| Estado del ensayo | **El procedimiento se ensaya en cada PR** que toca `infra/`, contra un PostgreSQL real ([`INF-08`](../../80-infraestructura/respaldo-y-recuperacion.md) §5). Las dos comprobaciones de «Cómo se comprueba que terminó bien» ya se corrieron contra `stg` real, 2026-08-24 — con datos sintéticos, sin una restauración real de por medio. El proveedor de almacenamiento de objetos ya se decidió (AWS S3) y el respaldo llega de verdad. **No** se ha ensayado el PITR en sí contra `stg`: falta la bandera `--contra-cluster`, no una decisión (ver «Estado del ensayo» abajo) |
+| Estado del ensayo | **Ejecutado contra `stg` real, 2026-08-24.** `simulacro-de-restauracion.sh --contra-cluster` apagó el `Deployment` en marcha, restauró el respaldo base desde AWS S3, reprodujo el WAL hasta un instante objetivo real y verificó la cifra exacta — **359 segundos**, de punta a punta. Ver «Estado del ensayo» abajo |
 
 ## Síntoma
 
@@ -200,15 +200,40 @@ El detalle de los tres queda en el «Estado del ensayo» de
 [Reconstruir el VPS desde cero](reconstruir-el-vps-desde-cero.md#estado-del-ensayo), no
 repetido aquí.
 
+**2026-08-24, más tarde el mismo día: el PITR en sí, contra `stg` real.**
+`simulacro-de-restauracion.sh --contra-cluster` existe ahora
+([`infra/respaldo/contra-cluster.sh`](../../../infra/respaldo/contra-cluster.sh)) y se
+ejecutó, no se revisó:
+
+1. Escribió una fila «buena» en `contribuyente` (municipalidad 1) y anotó T_BUENO entre
+   esa escritura y la siguiente.
+2. Escribió una fila «mala» y forzó su archivado — la misma separación por
+   `pg_switch_wal()` que usa el modo local, pero contra el archivado continuo real.
+3. Apagó el `Deployment` (`--replicas=0`), preservó `PGDATA` como
+   `pgdata.antes-de-restaurar` **sin borrarlo**, y en un pod temporal con el mismo
+   volumen en lectura-escritura restauró el respaldo base real con `wal-g backup-fetch`.
+4. Escribió `recovery.signal` y hasta ahí llegó el pod temporal — el `Deployment`
+   volvió a `--replicas=1` con el mismo `command`/`args` que ya tenía, sin tocarlos, y
+   el propio motor entró en recuperación solo.
+5. Esperó `pg_get_wal_replay_pause_state() = 'paused'` — no solo a que el socket
+   respondiera, la misma carrera que ya documentaba el modo local.
+
+**Tiempo de recuperación medido: 359 segundos**, desde apagar el `Deployment` hasta que
+la reproducción del WAL llegó, de verdad, a T_BUENO. La fila buena estaba; la mala no.
+Promovido (`pg_wal_replay_resume()`, `pg_is_in_recovery() = f`), aceptó una escritura
+real — es un sistema, no una copia. Nada de esto se limpió a propósito: la fila buena, la
+de después de restaurar, y `pgdata.antes-de-restaurar` siguen en `stg`, la misma decisión
+de «no en el mismo paso» que toma este runbook.
+
+**No** es el RTO de RNF-077: son unas pocas filas de ensayo, no el padrón con volumetría
+real. El número que sale de aquí mide el procedimiento —volumen real, `Deployment` real,
+S3 real—, no el tamaño.
+
 **Lo que este runbook todavía no tiene:**
 
-- La bandera `--contra-cluster` del paso 4, que hoy no existe: el guion solo restaura
-  sobre un motor que él mismo levanta, no sobre el volumen de un `Deployment` en marcha.
-  Ya no es solo una bandera que falta: ahora hay un respaldo real esperando del otro
-  lado para poder ensayarla contra él.
-- Ejecución completa contra `stg`, con datos anonimizados de volumetría real
-  ([`INF-03`](../../80-infraestructura/ambientes.md) §2) — es donde saldría el RTO real,
-  no el de 2 segundos con 4 filas que mide el simulacro de hoy.
+- Ejecución con datos anonimizados de volumetría real
+  ([`INF-03`](../../80-infraestructura/ambientes.md) §2) — es donde saldría el RTO real
+  de RNF-077, no el de 359s con unas pocas filas que mide el ensayo de hoy.
 - Una comprobación 2 con una cifra real, calculada por el sistema: depende de D-02a,
   no de este runbook ni del VPS.
 

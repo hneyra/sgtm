@@ -260,11 +260,12 @@ Detalle en [`ambientes.md`](ambientes.md) (INF-03). Resumen de topología:
 
 - [ ] Confirmar el proveedor del VPS y el dimensionamiento de §2 con volumetría real (bloqueado por D-01).
 - [x] Definir el proveedor del almacenamiento de objetos externo, que es donde vive el RPO (§1.3). AWS S3, 2026-08-24 — buckets `sgtm-stg-respaldos`/`sgtm-prod-respaldos`, `us-east-1`, confirmado contra un respaldo real (issue #158).
-- [ ] Ensayar [reconstruir el VPS desde cero](../B0-operacion/runbooks/reconstruir-el-vps-desde-cero.md) contra un VPS real y anotar el tiempo (issue #158; los ocho runbooks ya están escritos, y su clúster —no el VPS mismo— ya se reconstruyó una vez).
+- [ ] Ensayar [reconstruir el VPS desde cero](../B0-operacion/runbooks/reconstruir-el-vps-desde-cero.md) contra un VPS real y anotar el tiempo (issue #158; los ocho runbooks ya están escritos, y su clúster **y su restauración PITR** —no el VPS mismo— ya se reconstruyeron una vez, 2026-08-24, 359s medidos).
 - [ ] Definir la ventana de mantenimiento y cómo se anuncia (RNF-078).
 - [ ] Definir la lista de destinos de salida permitidos cuando aparezca la primera integración (§3).
 - [ ] Medir cuánto tarda de verdad la restauración con el padrón del piloto, y corregir RNF-077 si
-      el número no se sostiene.
+      el número no se sostiene. El procedimiento ya se cronometró (359s, issue #158) pero con unas
+      pocas filas de ensayo, no con volumetría real — ese número sigue pendiente.
 
 ## 8. Documentos relacionados
 
