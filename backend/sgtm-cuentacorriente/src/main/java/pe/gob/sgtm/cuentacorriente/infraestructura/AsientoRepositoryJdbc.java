@@ -19,6 +19,7 @@ import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeAltasBajas;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeConsulta;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.CriterioDePagos;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
 import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
 import pe.gob.sgtm.cuentacorriente.dominio.TipoAsiento;
@@ -191,6 +192,39 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                     criterio.sentido() == SentidoDelMovimiento.ALTA
                             ? TipoAsiento.CARGO.name()
                             : TipoAsiento.ABONO.name());
+        }
+
+        String desdeConContribuyente = DESDE + " JOIN contribuyente c ON c.id = a.contribuyente_id";
+        String donde = " WHERE " + String.join(" AND ", condiciones);
+
+        return paginar(
+                "SELECT " + COLUMNAS + desdeConContribuyente + donde,
+                "SELECT count(*)" + desdeConContribuyente + donde,
+                parametros,
+                paginacion,
+                ORDEN,
+                AsientoRepositoryJdbc::mapear);
+    }
+
+    @Override
+    public Pagina<Asiento> pagos(CriterioDePagos criterio, Paginacion paginacion) {
+        List<String> condiciones = new ArrayList<>();
+        Map<String, Object> parametros = new HashMap<>();
+
+        condiciones.add("c.codigo_contribuyente = :codigo");
+        parametros.put("codigo", criterio.codigoContribuyente());
+        // Un pago es un ABONO de concepto PAGO: los demas abonos son movimientos de
+        // deuda y los cubre altasYBajas (ver CriterioDePagos).
+        condiciones.add("a.tipo = 'ABONO'");
+        condiciones.add("a.concepto = 'PAGO'");
+
+        if (criterio.desde() != null) {
+            condiciones.add("a.fecha_valor >= :desde");
+            parametros.put("desde", criterio.desde());
+        }
+        if (criterio.hasta() != null) {
+            condiciones.add("a.fecha_valor <= :hasta");
+            parametros.put("hasta", criterio.hasta());
         }
 
         String desdeConContribuyente = DESDE + " JOIN contribuyente c ON c.id = a.contribuyente_id";

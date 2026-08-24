@@ -29,6 +29,7 @@ import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeConsulta;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.CriterioDePagos;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
 import pe.gob.sgtm.cuentacorriente.dominio.TipoAsiento;
 import pe.gob.sgtm.dominio.Dinero;
@@ -393,6 +394,125 @@ class AsientoRepositoryJdbcTest {
                     .singleElement()
                     .extracting(Asiento::concepto)
                     .isEqualTo(Concepto.INSOLUTO);
+        }
+    }
+
+    @Nested
+    @DisplayName("Pagos (#25, RF-048)")
+    class Pagos {
+
+        @Test
+        @DisplayName("solo trae abonos de concepto PAGO, no otros movimientos de deuda")
+        void soloTraeAbonosDePago() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "L-0040", "50100040");
+
+            transaccion.execute(
+                    estado ->
+                            repositorio.registrar(
+                                    asiento(
+                                            titular,
+                                            "PREDIAL",
+                                            1,
+                                            Concepto.INSOLUTO,
+                                            TipoAsiento.CARGO,
+                                            Dinero.de(100),
+                                            LocalDate.of(2026, 3, 1))));
+            transaccion.execute(
+                    estado ->
+                            repositorio.registrar(
+                                    asiento(
+                                            titular,
+                                            "PREDIAL",
+                                            1,
+                                            Concepto.PAGO,
+                                            TipoAsiento.ABONO,
+                                            Dinero.de(100),
+                                            LocalDate.of(2026, 3, 15))));
+            transaccion.execute(
+                    estado ->
+                            repositorio.registrar(
+                                    asiento(
+                                            titular,
+                                            "PREDIAL",
+                                            1,
+                                            Concepto.COMPENSACION,
+                                            TipoAsiento.ABONO,
+                                            Dinero.de(100),
+                                            LocalDate.of(2026, 4, 1))));
+
+            Pagina<Asiento> pagos =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.pagos(
+                                            new CriterioDePagos("L-0040", null, null),
+                                            Paginacion.de(0, 20, "fecha_valor")));
+
+            assertThat(pagos.contenido())
+                    .as("ni el cargo insoluto ni la compensacion son un pago")
+                    .singleElement()
+                    .extracting(Asiento::concepto)
+                    .isEqualTo(Concepto.PAGO);
+        }
+
+        @Test
+        @DisplayName("filtra por rango de fechas")
+        void filtraPorRangoDeFechas() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "L-0041", "50100041");
+
+            transaccion.execute(
+                    estado ->
+                            repositorio.registrar(
+                                    asiento(
+                                            titular,
+                                            "PREDIAL",
+                                            1,
+                                            Concepto.PAGO,
+                                            TipoAsiento.ABONO,
+                                            Dinero.de(100),
+                                            LocalDate.of(2026, 1, 10))));
+            transaccion.execute(
+                    estado ->
+                            repositorio.registrar(
+                                    asiento(
+                                            titular,
+                                            "PREDIAL",
+                                            2,
+                                            Concepto.PAGO,
+                                            TipoAsiento.ABONO,
+                                            Dinero.de(100),
+                                            LocalDate.of(2026, 6, 10))));
+
+            Pagina<Asiento> deJunio =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.pagos(
+                                            new CriterioDePagos(
+                                                    "L-0041",
+                                                    LocalDate.of(2026, 6, 1),
+                                                    LocalDate.of(2026, 6, 30)),
+                                            Paginacion.de(0, 20, "fecha_valor")));
+
+            assertThat(deJunio.contenido())
+                    .singleElement()
+                    .extracting(Asiento::fechaValor)
+                    .isEqualTo(LocalDate.of(2026, 6, 10));
+        }
+
+        @Test
+        @DisplayName("un codigo que no existe devuelve vacio, no un error")
+        void unCodigoQueNoExisteDevuelveVacio() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+
+            Pagina<Asiento> pagina =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.pagos(
+                                            new CriterioDePagos("NO-EXISTE", null, null),
+                                            Paginacion.de(0, 20, "fecha_valor")));
+
+            assertThat(pagina.totalElementos()).isZero();
         }
     }
 
