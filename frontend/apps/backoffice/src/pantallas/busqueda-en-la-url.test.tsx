@@ -129,13 +129,15 @@ describe('orden y pagina, contra el servidor', () => {
     const cliente = clienteDePruebas();
 
     // Sobre una opcion **sin conectar**: aqui se prueba la cache de la forma
-    // que comparten las 134, y `aranceles` ya pide su recurso propio (#71).
-    const primera = montarEnRuta('/catastro/depreciacion?materialMep=LADRILLO&pagina=2', cliente);
-    await screen.findByText('Hasta 5 años');
+    // que comparten las 134 (`depreciacion` ya pide su recurso propio, #71).
+    // El numero de papeleta se repite en mas de un sitio de la pantalla
+    // (la tabla y la ficha), asi que se busca con `findAllBy`.
+    const primera = montarEnRuta('/transito/papeletas?placa=AAA-111&pagina=2', cliente);
+    await screen.findAllByText('MPS-2026-041182');
     primera.unmount();
 
-    const segunda = montarEnRuta('/catastro/depreciacion?materialMep=ADOBE&pagina=2', cliente);
-    await screen.findByText('Hasta 5 años');
+    const segunda = montarEnRuta('/transito/papeletas?placa=BBB-222&pagina=2', cliente);
+    await screen.findAllByText('MPS-2026-041182');
     segunda.unmount();
 
     // Solo las de datos: la del catalogo del modulo es otra cosa y se comparte.
@@ -145,8 +147,8 @@ describe('orden y pagina, contra el servidor', () => {
       .map((consulta) => JSON.stringify(consulta.queryKey))
       .filter((clave) => clave.startsWith('["pantalla"'));
     expect(claves).toHaveLength(2);
-    expect(claves.some((clave) => clave.includes('"materialMep":"LADRILLO"'))).toBe(true);
-    expect(claves.some((clave) => clave.includes('"materialMep":"ADOBE"'))).toBe(true);
+    expect(claves.some((clave) => clave.includes('"placa":"AAA-111"'))).toBe(true);
+    expect(claves.some((clave) => clave.includes('"placa":"BBB-222"'))).toBe(true);
     // La 2 de la URL es la 1 del backend.
     expect(claves.every((clave) => clave.includes('"pagina":"1"'))).toBe(true);
   });

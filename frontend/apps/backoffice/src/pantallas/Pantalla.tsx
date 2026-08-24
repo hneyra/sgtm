@@ -33,6 +33,10 @@ import { Indicadores } from './bloques/Indicadores';
 import { Portal } from './bloques/Portal';
 import { FechaDeCalculo } from './bloques/FechaDeCalculo';
 import { Reporte } from './bloques/Reporte';
+import { useDescargaDeArchivo } from './useDescargaDeArchivo';
+import { ActualizacionDeCatastro } from './catastro/ActualizacionDeCatastro';
+import { ValoresUnitarios } from './catastro/ValoresUnitarios';
+import { Depreciacion } from './catastro/Depreciacion';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
 import { Versionado } from './bloques/Versionado';
 import { Totales } from './bloques/Totales';
@@ -139,18 +143,32 @@ const VERSIONADAS: ReadonlySet<string> = new Set([
  * un `if`: un hook no se llama a veces.
  */
 /**
- * Tres opciones de seguridad que no caben en ninguno de los dos caminos
- * comunes, cada una por su propio motivo (#70):
+ * Opciones cuyo cuerpo no cabe en ninguno de los dos caminos comunes —campos
+ * planos o tabla de solo lectura— y viven en su propio componente.
  *
- *   permisos   su cuerpo es una lista de niveles, no campos planos ni una
- *              tabla de solo lectura, y necesita los dos verbos de su ruta a
- *              la vez —leer para cargar la matriz, escribir para guardarla—.
- *   miembros   escribe un booleano (`activo`), y `CampoDelCuerpo` solo sabe
- *              de texto y enteros.
- *   respaldo   su verbo es `POST` pero el controlador solo consulta: la
- *              aplicacion no puede ejecutar copias de seguridad (ARQ-03 §4),
- *              asi que sus botones se quedan deshabilitados en vez de
- *              conectarse a una escritura que no hace lo que dice.
+ *   permisos                 (#70) su cuerpo es una lista de niveles, no
+ *                            campos planos ni una tabla de solo lectura, y
+ *                            necesita los dos verbos de su ruta a la vez
+ *                            —leer para cargar la matriz, escribir para
+ *                            guardarla—.
+ *   miembros                 (#70) escribe un booleano (`activo`), y
+ *                            `CampoDelCuerpo` solo sabe de texto y enteros.
+ *   respaldo                 (#70) su verbo es `POST` pero el controlador
+ *                            solo consulta: la aplicacion no puede ejecutar
+ *                            copias de seguridad (ARQ-03 §4), asi que sus
+ *                            botones se quedan deshabilitados en vez de
+ *                            conectarse a una escritura que no hace lo que
+ *                            dice.
+ *   actualizacion_catastro   (#71) guarda una lista de construcciones, no
+ *                            campos planos, y necesita el `GET` de
+ *                            `ficha_urbana` para no borrar pisos que no se
+ *                            estan tocando.
+ *   valores_unitarios,       (#71) el backend publica una fila por
+ *   depreciacion             partida/estado y tramo; el prototipo dibuja
+ *                            una matriz. Agrupar y cruzar eso no es un
+ *                            adaptador de los que ya existen, y las dos
+ *                            siguen bloqueadas por D-02a en su contenido,
+ *                            no en su forma.
  *
  * Viven en su propio componente en vez de forzar al renderizador comun a
  * saber de listas, de booleanos o de un verbo que miente.
@@ -161,6 +179,9 @@ const COMPONENTES_PROPIOS: Readonly<
   permisos: PermisosMatrix,
   miembros: MiembrosDeGrupo,
   respaldo: Respaldos,
+  actualizacion_catastro: ActualizacionDeCatastro,
+  valores_unitarios: ValoresUnitarios,
+  depreciacion: Depreciacion,
 };
 
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
@@ -238,6 +259,11 @@ function Bloques({
   const declarada = escrituraDe(estructura.id);
   const aviso = avisoDe(estructura.id);
   const trabajo = useEjercicio();
+  // La unica pantalla que descarga un archivo en vez de dibujar JSON (#71). El
+  // hook se llama siempre —no se puede llamar a un hook a veces— y se pasa al
+  // bloque de reporte solo cuando esta es la pantalla, para que las otras doce
+  // sigan con su boton deshabilitado de siempre.
+  const descargaDeFicha = useDescargaDeArchivo('ficha_contribuyente_reporte', { codigo: codigo ?? '' });
   const escritura = useEscritura(
     operacion !== undefined && escribe(operacion) && puedeEscribirAqui ? operacion : undefined,
     operacion === undefined ? {} : parametrosDeBusqueda(operacion, codigo, busqueda),
@@ -426,7 +452,14 @@ function Bloques({
       )}
 
       {estructura.kind === 'report' && estructura.reporte && (
-        <Reporte estructura={estructura.reporte} datos={datos?.reporte} cargando={cargando} />
+        <Reporte
+          estructura={estructura.reporte}
+          datos={datos?.reporte}
+          cargando={cargando}
+          {...(estructura.id === 'ficha_contribuyente_reporte'
+            ? { descargas: descargaDeFicha }
+            : {})}
+        />
       )}
 
       {cargando && !estructura.kind && !estructura.tabla && secciones.length === 0 && (

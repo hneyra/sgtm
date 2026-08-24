@@ -815,9 +815,22 @@ const permisosDeGrupo = (): readonly Readonly<Record<string, unknown>>[] => [
  * Por camino del contrato, para los listados que el backend publica **sin**
  * sobre de paginacion: un arreglo suelto, tal como lo devuelve el controlador.
  */
+/**
+ * Valores unitarios y depreciacion (#71): un arreglo vacio, siempre.
+ *
+ * No es una simplificacion del proxy: es lo que hay. Las dos estan bloqueadas
+ * por D-02a —ningun valor unitario ni porcentaje de depreciacion tiene fuente
+ * verificada todavia—, y poner aqui una fila de ejemplo las haria parecer
+ * normativas. La pantalla tiene que poder mostrar el vacio explicito, y esta
+ * es la unica respuesta que no se lo impide.
+ */
+const sinSellarTodavia = (): readonly Readonly<Record<string, unknown>>[] => [];
+
 export const LISTAS: Readonly<Record<string, () => readonly Readonly<Record<string, unknown>>[]>> =
   {
     '/catastro/tablas/aranceles': aranceles,
+    '/catastro/tablas/valores-unitarios': sinSellarTodavia,
+    '/catastro/tablas/depreciacion': sinSellarTodavia,
     '/seguridad/grupos/{id}/permisos': permisosDeGrupo,
   };
 
@@ -953,4 +966,47 @@ export function recursoDe(
     if (patron(ruta).test(relativo)) return construir();
   }
   return null;
+}
+
+/** El tipo de medio de cada formato que `ReporteController` sirve (#71). */
+const TIPOS_DE_MEDIO: Readonly<Record<string, string>> = {
+  PDF: 'application/pdf',
+  XLS: 'application/vnd.ms-excel',
+  RTF: 'application/rtf',
+};
+
+/** Un archivo descargable, tal como lo sirve el proxy: cuerpo, tipo y nombre. */
+export interface ArchivoSimulado {
+  readonly cuerpo: string;
+  readonly tipoDeMedio: string;
+  readonly nombreDeArchivo: string;
+}
+
+/**
+ * El reporte de la ficha del contribuyente, cuando pide un archivo (`?formato=`).
+ *
+ * A diferencia del resto de este archivo, aqui **si se inventa el contenido**:
+ * no hay un `Resource` del prototipo del que copiarlo, porque un archivo
+ * binario no es un dato de pantalla. Lo que se prueba con esto es el
+ * mecanismo de descarga —la cabecera, el nombre, el tipo de medio—, no la
+ * fidelidad del documento. Sin `formato`, la ruta sigue su camino de siempre
+ * y responde JSON, como cualquier otra pantalla sin conectar.
+ */
+export function archivoDe(
+  metodo: string,
+  camino: string,
+  formato: string | null,
+): ArchivoSimulado | null {
+  if (metodo.toUpperCase() !== 'GET' || formato === null || formato === '') return null;
+  const relativo = camino.replace(/^\/api\/v1/, '');
+  if (!/^\/catastro\/contribuyentes\/[^/]+\/ficha\.pdf$/.test(relativo)) return null;
+
+  const tipoDeMedio = TIPOS_DE_MEDIO[formato.toUpperCase()];
+  if (tipoDeMedio === undefined) return null;
+
+  return {
+    cuerpo: `Ficha del contribuyente — documento simulado por el proxy de datos (formato ${formato.toUpperCase()})`,
+    tipoDeMedio,
+    nombreDeArchivo: `ficha-simulada.${formato.toLowerCase()}`,
+  };
 }

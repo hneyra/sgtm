@@ -473,6 +473,18 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: fecha
+          in: query
+          required: false
+          description: "Ficha vigente a esta fecha. Sin ella, la que rige hoy"
+          schema: { type: string }
+          example: "2026-08-20"
+        - name: formato
+          in: query
+          required: false
+          description: "PDF | XLS | RTF. Sin el, responde JSON: lo que la pantalla dibuja"
+          schema: { type: string }
+          example: "PDF"
       responses:
         200:
           description: Operacion realizada

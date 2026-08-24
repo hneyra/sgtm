@@ -99,11 +99,11 @@ export interface OpcionesDeEscritura {
    * Sustituye el cuerpo entero (salvo la observacion) por lo que devuelva esta
    * funcion, en vez de `soloDeclarados(borrador, campos)`.
    *
-   * Existe para la unica pantalla cuyo cuerpo no es un formulario de campos
-   * planos: `permisos` manda una lista de niveles, no pares clave-valor de
-   * texto, y `CampoDelCuerpo` no tiene forma de expresar un arreglo. Se lee en
-   * cada envio —es un cierre sobre el estado de quien la declara—, igual que
-   * `borrador` se lee en cada envio hoy.
+   * Existe para las pantallas cuyo cuerpo no es un formulario de campos
+   * planos: `permisos` manda una lista de niveles, `actualizacion_catastro`
+   * una lista de construcciones, y `CampoDelCuerpo` no tiene forma de
+   * expresar un arreglo. Se lee en cada envio —es un cierre sobre el estado
+   * de quien la declara—, igual que `borrador` se lee en cada envio hoy.
    */
   readonly cuerpo?: () => Readonly<Record<string, unknown>>;
 }
