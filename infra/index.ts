@@ -85,13 +85,51 @@ const proveedor = new k8s.Provider(resourceName(env, "kubernetes"), {
 });
 
 /**
+ * El campo que el flujo de liberación mueve, y que Pulumi no vuelve a mirar.
+ *
+ * Se aplica a todo recurso con plantilla de pod. Un `Job` no lo necesita —su nombre
+ * lleva la versión y uno nuevo se crea entero—, pero incluirlo no hace daño y evita
+ * tener que acordarse de la excepción.
+ */
+const IGNORAR_LA_VERSION = ["spec.template.spec.containers[*].image"];
+
+/**
+ * Trae el `Namespace` entre sus 68 objetos (issue #158: encontrado reconstruyendo un
+ * clúster de verdad desde cero, no en revisión).
+ */
+const recursos = new k8s.yaml.v2.ConfigGroup(
+  resourceName(env, "sistema"),
+  { objs: manifiestos },
+  {
+    provider: proveedor,
+    transformations: [
+      (args) => {
+        if (args.type.startsWith("kubernetes:apps/v1:Deployment")) {
+          return { props: args.props, opts: { ...args.opts, ignoreChanges: IGNORAR_LA_VERSION } };
+        }
+        return undefined;
+      },
+    ],
+  },
+);
+
+/**
  * La única excepción de «Lo que este archivo NO crea» de arriba (issue #155).
  *
  * `stringData` en vez de `data`: Pulumi cifra el valor en su estado de todos modos —es
  * un `pulumi.Output` secreto—, y `stringData` evita tener que codificarlo a base64 a
  * mano. Kubernetes lo hace por su cuenta al aplicar el objeto.
+ *
+ * Sin `dependsOn` hacia `recursos` a propósito (issue #158): el `ConfigGroup` no se da
+ * por creado hasta que **todos** sus Deployment quedan `Ready`, y `postgres` necesita
+ * este mismo `Secret` para arrancar — depender de `recursos` es un círculo que nunca
+ * se resuelve. Sin dependencia declarada, este `Secret` corre en paralelo al
+ * `ConfigGroup`; si su primer intento llega antes que el `Namespace` (que el propio
+ * `ConfigGroup` crea en sus primeros segundos), el proveedor reintenta la creación con
+ * backoff — se observó tolerando bien más de un minuto — tiempo de sobra para que el
+ * `Namespace` ya exista.
  */
-const credencialesDeRespaldo = new k8s.core.v1.Secret(
+new k8s.core.v1.Secret(
   resourceName(env, "postgres-respaldo-credenciales"),
   {
     metadata: {
@@ -106,32 +144,6 @@ const credencialesDeRespaldo = new k8s.core.v1.Secret(
     },
   },
   { provider: proveedor },
-);
-
-/**
- * El campo que el flujo de liberación mueve, y que Pulumi no vuelve a mirar.
- *
- * Se aplica a todo recurso con plantilla de pod. Un `Job` no lo necesita —su nombre
- * lleva la versión y uno nuevo se crea entero—, pero incluirlo no hace daño y evita
- * tener que acordarse de la excepción.
- */
-const IGNORAR_LA_VERSION = ["spec.template.spec.containers[*].image"];
-
-const recursos = new k8s.yaml.v2.ConfigGroup(
-  resourceName(env, "sistema"),
-  { objs: manifiestos },
-  {
-    provider: proveedor,
-    dependsOn: [credencialesDeRespaldo],
-    transformations: [
-      (args) => {
-        if (args.type.startsWith("kubernetes:apps/v1:Deployment")) {
-          return { props: args.props, opts: { ...args.opts, ignoreChanges: IGNORAR_LA_VERSION } };
-        }
-        return undefined;
-      },
-    ],
-  },
 );
 
 // Salidas del stack. Sirven de comprobante de que la configuración se leyó, se validó y

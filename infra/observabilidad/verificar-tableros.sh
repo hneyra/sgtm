@@ -376,16 +376,16 @@ while IFS= read -r linea; do
     expr=$(echo "$linea" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).expr)')
 
     if ! resultado=$(consultar_panel "$expr"); then
-        echo "  ✗ «$panel»: la consulta a Prometheus fallo tras 3 intentos — $expr"
+        echo "  ✗ «${panel}»: la consulta a Prometheus fallo tras 3 intentos — $expr"
         FALLARON=$((FALLARON + 1))
         continue
     fi
 
     if [ "$resultado" = "0" ]; then
-        echo "  ✗ «$panel»: SIN DATOS — $expr"
+        echo "  ✗ «${panel}»: SIN DATOS — $expr"
         FALLARON=$((FALLARON + 1))
     else
-        echo "  ✓ «$panel»: $resultado serie(s)"
+        echo "  ✓ «${panel}»: $resultado serie(s)"
     fi
 done <<< "$consultas"
 

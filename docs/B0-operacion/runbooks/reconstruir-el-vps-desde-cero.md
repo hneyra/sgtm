@@ -4,7 +4,7 @@
 |---|---|
 | Cuándo | Pérdida total del nodo: el proveedor lo destruye, el disco no arranca, el VPS se cancela por error |
 | RTO objetivo | 4 horas (RNF-077) |
-| Estado del ensayo | **No ejecutado.** Este runbook describe el procedimiento; no está cronometrado contra un VPS real. Ver «Estado del ensayo» |
+| Estado del ensayo | **Parcialmente ejecutado, 2026-08-24.** Pasos 3–4 (secreto de arranque, `pulumi up` del stack completo) y la escalera de identidad de «Cómo se comprueba que terminó bien» corridos contra el VPS real de `stg`, con once defectos reales encontrados y corregidos. Pasos 1–2 (VPS nuevo, cortafuegos), la restauración PITR y las dos comprobaciones que esta exige siguen sin ensayar. Ver «Estado del ensayo» |
 
 ## Síntoma
 
@@ -148,32 +148,81 @@ tiempo](restaurar-a-un-punto-en-el-tiempo.md#cómo-se-comprueba-que-terminó-bie
 
 ## Estado del ensayo
 
-**Este es el runbook que el issue #158 exige ensayar, y no está ensayado.** La razón es
-concreta, no una omisión: los cinco pasos de
-[`infra/README.md` §«Cómo llegar a un VPS real»](../../../infra/README.md#cómo-llegar-a-un-vps-real)
-siguen sin darse — no hay VPS, no hay stacks de Pulumi inicializados contra un proveedor
-real, no hay clave SSH de despliegue, no hay secretos de GitHub Actions, no hay
-*environment* `prod` con aprobación. Los cuatro trabajos de `infra.yml` que hablan con un
-clúster real se omiten con un aviso en cada corrida, no en rojo, mientras falte
-cualquiera de esas credenciales — es una decisión ya tomada (`ADR-0011` §6), no un
-defecto de este runbook.
+**2026-08-24. Primer ensayo real, contra el VPS de `stg` (`vmd194233`, k3d).** El VPS ya
+existía; lo que se reconstruyó desde cero fue su clúster —el propio operador lo destruyó
+y lo volvió a crear— y sobre eso corrieron los pasos 3 y 4: actualizar el secreto de
+arranque en Pulumi y `pulumi up` del stack completo, contra el clúster real, sin
+Docker local para las pruebas de aislamiento (`-Dsgtm.pruebas.postgres.url` no aplicó
+aquí porque el motor de la prueba fue el propio clúster). Los pasos 1 y 2 —VPS nuevo
+desde el proveedor, cortafuegos de un sistema operativo recién instalado— **no se
+ensayaron**: el sistema operativo del VPS no se tocó, solo su carga de Kubernetes. Ese
+sigue siendo el hueco más grande del ensayo.
 
-Lo que **sí** está verificado hoy, en piezas, contra sistemas reales:
+Lo que sí se ensayó, de punta a punta, fue reconstruir el stack entero sobre un clúster
+vacío. Y ejecutarlo — no revisarlo — encontró **once defectos reales** que ninguna
+revisión de código había visto, seis documentados aparte
+(`infra: seis defectos reales...`, commit `803359e`) y cinco más en esta misma sesión:
 
-| Pieza del procedimiento | Cómo se verifica hoy |
+| # | Defecto | Cómo se encontró | Commit |
+|---|---|---|---|
+| 7 | El Job de migración se conecta a postgres apenas arranca la JVM, sin reintento: pierde la carrera contra la propagación de la `NetworkPolicy` de un pod recién creado y agota su `backoffLimit` sin correr una sola migración | Reproducido a mano: la misma conexión sin espera falla, con `sleep 3` antes funciona siempre | `c3ddcbf` |
+| 8 | La comprobación del mapeador `municipalidad_id` del realm usaba `kcadm --fields 'protocolMappers(name,config)'`, que nunca proyecta el `config` anidado: el Job fallaba siempre, con el mapeador correctamente puesto | `get clients/<id>` sin filtrar sí trae el `config`; con `--fields`, siempre vacío | `c3ddcbf` |
+| 9 | `sgtm_app` no tenía `SELECT` sobre `flyway_schema_history` (V7 la dejó fuera a propósito, por no ser tabla de negocio); el contenedor de espera de `implantacion` la consulta con esas credenciales y esperaba en bucle algo que nunca iba a poder ver | `implantacion` llevaba 4 h en `Init:0/1` con la migración ya terminada hacía 3 h | `c3ddcbf` + migración `V21` |
+| 10 | `psql --command`/`-c` no interpola `:'var'` en este cliente: las tres consultas del `CronJob` de respaldo (abrir la fila `EN_CURSO`, cerrarla `EXITOSO`/`FALLIDO`) llegaban a Postgres con el token literal — `syntax error at or near ":"`, siempre, en cualquier corrida | Reproducido a mano: `--command` no interpola, el mismo `-v` por `stdin` (heredoc) sí | `998fc78` |
+| 11 | El binario oficial de wal-g está enlazado contra glibc; `postgres:16.4-alpine` es musl. El motor llevaba desde su primer WAL sin poder archivar ninguno (`sh: /opt/wal-g/wal-g: not found`, exit 127, cada `archive_timeout`), y el `CronJob` de respaldo fallaba en `backup-push` por lo mismo. **Afecta igual a `prod`**: usa la misma imagen | Logs del motor real, siete intentos idénticos del Job de migración con el mismo síntoma de fondo | `e83f1e4` |
+
+Los cinco se corrigieron, se aplicaron contra el clúster real con `pulumi up`, y se
+confirmaron ahí mismo — no solo en las pruebas. El estado al cerrar la sesión: los 9
+`Deployment` sanos, los 3 `Job` (`migracion`, `implantacion`, `realm`) en `Complete`, el
+`CronJob` de respaldo escribiendo bien sus filas de auditoría, y wal-g ejecutando de
+verdad (se ve corriendo bajo el cargador de `gcompat`, en vez de morir al instante).
+
+**Lo que el defecto 11 dejó a la vista, y no es un defecto:** `sgtm:backupEndpoint`
+sigue siendo el marcador de posición `s3.example.net` — no hay proveedor de
+almacenamiento de objetos decidido (`Red.ts` ya lo documentaba: «sin proveedor decidido
+no hay `ipBlock` que fijar»). Sin un extremo real, `wal-push` se queda esperando una
+conexión que no va a ningún lado: no se pudo verificar que un respaldo *llegue* a
+destino, solo que el proceso ya no muere al arrancar. Esa decisión no está en
+[Decisiones abiertas](../../00-gobierno/decisiones-abiertas.md) todavía.
+
+**La escalera de identidad, contra el sistema real, con los cuatro peldaños en el
+código que le corresponden:**
+
+| Petición | Esperado | Obtenido |
+|---|---|---|
+| Sin token | `401` | `401` |
+| Token de otro emisor (realm `master`, no `sgtm`) | `401` | `401` |
+| Token del realm, sin el claim `municipalidad_id` | `403 SIN_MUNICIPALIDAD` | `403`, `"codigo":"SIN_MUNICIPALIDAD"` |
+| El administrador, en lo suyo (`GET /api/v1/seguridad/auditoria`) | `200` | `200`, 26 filas reales de la propia implantación |
+
+Los cuatro contra `GET /api/v1/seguridad/auditoria?ejercicio=2026`, por
+`kubectl port-forward` directo al Service (sin tocar DNS ni ingreso, siguiendo el paso 6
+del procedimiento). Los dos usuarios de Keycloak que hicieron falta —`administrador` con
+`municipalidad_id=1`, y `sin-municipalidad` sin el atributo, solo para este peldaño— no
+los siembra ningún manifiesto: se crean con
+[`despliegue/identidad/crear-usuario.sh`](../../../despliegue/identidad/crear-usuario.sh),
+adaptado de `docker compose exec` a `kcadm` contra el clúster. Quedan en el realm de
+`stg` para el próximo ensayo.
+
+Lo que queda pendiente de este mismo ensayo, sin necesidad de reconstruir el clúster de
+nuevo:
+
+- El aislamiento sostenido y la deuda con fecha (las dos comprobaciones que
+  [Restaurar a un punto en el tiempo](restaurar-a-un-punto-en-el-tiempo.md) exige).
+- Restaurar a un punto en el tiempo de verdad — bloqueado en la decisión de arriba, no
+  en código.
+- El cortafuegos con `nmap` y los pasos 1–2 — necesitan un VPS que se reconstruya desde
+  el proveedor, no uno cuyo clúster se vacía y se vuelve a llenar.
+
+Lo que ya estaba verificado antes de este ensayo, en piezas, sin VPS real:
+
+| Pieza del procedimiento | Cómo se verifica |
 |---|---|
-| El cortafuegos deja exactamente 22/80/443 | El propio guion documenta la comprobación con `nmap`, pero no hay VPS contra el que correrla en CI |
 | `bootstrap-secretos.sh` genera las cinco claves sin repetir ninguna | 14 pruebas, sin clúster (`INF-06` §1) |
 | El ciclo de respaldo y restauración (paso 5) | En cada PR, contra un motor real (`INF-08` §5) |
 | El manifiesto completo del clúster | 49 pruebas, sin Pulumi ni nodo (`infra/verificaciones/`) |
 | El motor arranca con los roles y privilegios correctos | `verificar-el-motor.sh`, contra un motor real |
 | Que ningún paso de la liberación invoque Pulumi | Job `demostrar-liberacion-y-reversion`, contra un clúster `kind` efímero |
-
-Lo que falta, y solo un VPS real lo da: **el procedimiento entero, de punta a punta,
-cronometrado.** El día que exista `stg`, correr este runbook contra él, con el tiempo
-real anotado aquí mismo — con fecha, duración y lo que salió mal la primera vez, que es
-el criterio de aceptación del issue #158 y el que distingue un runbook ensayado de uno
-que solo se escribió.
 
 ## Documentos relacionados
 

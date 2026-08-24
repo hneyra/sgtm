@@ -31,7 +31,7 @@ config:
   sgtm:keycloakImage: quay.io/keycloak/keycloak:26.0
   sgtm:keycloakRealm: sgtm
   # Sin etiqueta, a propósito: la pone el flujo de liberación (ADR-0011 §5, issue #148).
-  sgtm:applicationImageRepository: ghcr.io/hneyra/sgtm
+  sgtm:applicationImageRepository: ghcr.io/hneyra
   sgtm:webReplicas: "2"
   # La versión con la que Pulumi CREA los despliegues, y nada más: el campo `image`
   # queda ignorado después (ADR-0011 §5), así que cambiar esta línea no despliega nada

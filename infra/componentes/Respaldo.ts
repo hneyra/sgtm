@@ -101,12 +101,26 @@ export function manifiestosDeRespaldo(args: RespaldoArgs): Manifiesto[] {
   const guion = [
     "set -uo pipefail",
     "",
+    "# 0. El binario oficial de wal-g esta enlazado contra glibc; esta imagen es musl",
+    "#    (Alpine). Sin gcompat, wal-push/backup-push mueren con «not found» (exit",
+    "#    127) -confirmado contra un cluster real, issue #158: el motor llevaba desde",
+    "#    su primer WAL sin poder archivar ni uno solo-. Requiere la salida a :443 que",
+    "#    permitirSalidaAlAlmacenamiento ya abre para este pod.",
+    "apk add --no-cache gcompat >/tmp/apk.log 2>&1 || { cat /tmp/apk.log >&2; " +
+      'echo "FALLO: no se pudo instalar gcompat (glibc para wal-g)." >&2; exit 1; }',
+    "",
     "# 1. Se registra ANTES de intentar nada: si el pod muere a mitad, la fila que",
     "#    se queda en EN_CURSO es la pista de que algo no termino, no un silencio.",
+    // `--command`/`-c` NO interpola `:'var'` en este cliente -confirmado contra un
+    // Postgres real (issue #158)-: la consulta llegaba con el token `:'destino'`
+    // sin sustituir y `syntax error at or near ":"`. Por `stdin` (heredoc) si
+    // interpola; las tres consultas de este guion pasan por ahi en vez de
+    // `--command`.
     'respaldoId=$(PGUSER=sgtm_owner PGPASSWORD="$CLAVE_OWNER" psql --host="$PGHOST" ' +
-      `--dbname=${BASE_DEL_PADRON} --quiet --tuples-only --no-align \\`,
-    '    -v destino="$DESTINO" ' +
-      '--command "INSERT INTO respaldo (inicio, resultado, destino) VALUES (now(), \'EN_CURSO\', :\'destino\') RETURNING id")',
+      `--dbname=${BASE_DEL_PADRON} --quiet --tuples-only --no-align -v destino="$DESTINO" <<'SQL'`,
+    "INSERT INTO respaldo (inicio, resultado, destino) VALUES (now(), 'EN_CURSO', :'destino') RETURNING id;",
+    "SQL",
+    ")",
     'if [ -z "$respaldoId" ]; then',
     '    echo "FALLO: no se pudo registrar el inicio en la tabla respaldo (RF-126)." >&2',
     "    exit 1",
@@ -119,14 +133,16 @@ export function manifiestosDeRespaldo(args: RespaldoArgs): Manifiesto[] {
     `    PGUSER=sgtm_respaldo PGPASSWORD="$CLAVE_RESPALDO" "${WALG_BINARIO}" delete retain "$RETENCION" ` +
       "--confirm >> /tmp/walg.log 2>&1 || true",
     '    PGUSER=sgtm_owner PGPASSWORD="$CLAVE_OWNER" psql --host="$PGHOST" ' +
-      `--dbname=${BASE_DEL_PADRON} --quiet -v id="$respaldoId" \\`,
-    "        --command \"UPDATE respaldo SET fin = now(), resultado = 'EXITOSO' WHERE id = :id\"",
+      `--dbname=${BASE_DEL_PADRON} --quiet -v id="$respaldoId" <<'SQL'`,
+    "UPDATE respaldo SET fin = now(), resultado = 'EXITOSO' WHERE id = :id;",
+    "SQL",
     '    echo "Respaldo #$respaldoId EXITOSO."',
     "else",
     "    detalle=$(tail -c 480 /tmp/walg.log | tr '\\n' ' ' | tr -d \"'\")",
     '    PGUSER=sgtm_owner PGPASSWORD="$CLAVE_OWNER" psql --host="$PGHOST" ' +
-      `--dbname=${BASE_DEL_PADRON} --quiet -v id="$respaldoId" -v detalle="$detalle" \\`,
-    "        --command \"UPDATE respaldo SET fin = now(), resultado = 'FALLIDO', detalle = :'detalle' WHERE id = :id\"",
+      `--dbname=${BASE_DEL_PADRON} --quiet -v id="$respaldoId" -v detalle="$detalle" <<'SQL'`,
+    "UPDATE respaldo SET fin = now(), resultado = 'FALLIDO', detalle = :'detalle' WHERE id = :id;",
+    "SQL",
     '    echo "FALLO: el respaldo #$respaldoId no se completo. Detalle: $detalle" >&2',
     "",
     "    # Aviso por /dev/tcp: ver la nota de por que, en el docstring de Respaldo.ts.",

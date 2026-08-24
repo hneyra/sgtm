@@ -35,7 +35,7 @@ set -euo pipefail
 KCADM=/opt/keycloak/bin/kcadm.sh
 DIRECTORIO=${KC_DIRECTORIO:-/realm}
 
-echo "Reconciliando el realm «$KC_REALM» contra $KC_SERVIDOR"
+echo "Reconciliando el realm «${KC_REALM}» contra $KC_SERVIDOR"
 
 # El Job puede arrancar antes que Keycloak termine de migrar su propia base. No es
 # un fallo: es el orden normal de un despliegue. Se reintenta durante cinco
@@ -70,20 +70,27 @@ fi
 # La comprobacion. Es lo que hace que este Job valga como verificacion.
 # ---------------------------------------------------------------------------
 for cliente in $KC_CLIENTES; do
-    mapeadores=$("$KCADM" get clients -r "$KC_REALM" -q "clientId=$cliente" \
-        --fields 'protocolMappers(name,config)' 2>/dev/null || true)
+    # Sin `--fields`: se probo `--fields 'protocolMappers(name,config)'` y kcadm
+    # devuelve el `config` de cada mapeador siempre vacio (`{}`) para un campo
+    # anidado dentro de un arreglo -confirmado contra un Keycloak real (issue
+    # #158): `get clients/<id> --fields 'protocolMappers(name,config)'` y la misma
+    # consulta por `clientId` sin filtrar dan resultados distintos, y solo la
+    # segunda trae el `claim.name` que esta comprobacion necesita ver. Con el
+    # filtro, esta comprobacion fallaba SIEMPRE, con el mapeador correctamente
+    # puesto: un falso rojo permanente, no una carrera.
+    mapeadores=$("$KCADM" get clients -r "$KC_REALM" -q "clientId=$cliente" 2>/dev/null || true)
 
     case "$mapeadores" in
         *municipalidad_id*) ;;
         *)
-            echo "FALLO: el cliente «$cliente» quedo SIN el mapeador de municipalidad_id." >&2
+            echo "FALLO: el cliente «${cliente}» quedo SIN el mapeador de municipalidad_id." >&2
             echo "Es el claim del que sale el SET LOCAL, y con el la separacion entre" >&2
             echo "municipalidades (ADR-0005). Un realm sin ese mapeador emite tokens que el" >&2
             echo "backend rechaza con SIN_MUNICIPALIDAD, y el 403 no dice por que." >&2
             exit 1
             ;;
     esac
-    echo "Cliente «$cliente»: mapeador de municipalidad_id presente."
+    echo "Cliente «${cliente}»: mapeador de municipalidad_id presente."
 done
 
-echo "Realm «$KC_REALM» reconciliado."
+echo "Realm «${KC_REALM}» reconciliado."
