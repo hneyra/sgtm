@@ -126,6 +126,41 @@ export function esperaDeImplantacion(args: {
   });
 }
 
+/**
+ * El contenedor que espera a que postgres acepte conexiones, sin credenciales.
+ *
+ * `pg_isready` no autentica: solo abre el socket. Existe porque el migrador se conecta
+ * apenas arranca la JVM, sin reintento propio, y eso le hace perder la carrera contra la
+ * propagacion de la NetworkPolicy de un pod recien creado -confirmado contra el clúster
+ * real de stg (issue #158): la primera conexion de un pod nuevo con `app: migracion`
+ * fallaba con "Connection refused" en los siete primeros intentos del Job, y la misma
+ * conexion con tres segundos de espera funcionaba siempre. Como cada reintento del Job
+ * crea un pod nuevo -IP nueva, politica que reprogramar de cero-, el migrador perdia la
+ * carrera casi siempre y el Job agotaba su `backoffLimit` sin correr una sola migracion.
+ */
+function esperaDePostgres(args: {
+  environment: Environment;
+  postgresImage: string;
+}): Contenedor {
+  const servicio = servicioDeBaseDeDatos(args.environment);
+  return {
+    name: "espera-postgres",
+    image: args.postgresImage,
+    command: ["/bin/sh", "-c"],
+    args: [
+      [
+        "set -eu",
+        `echo "Esperando que ${servicio} acepte conexiones..."`,
+        `until pg_isready --host=${servicio} --quiet; do`,
+        "  sleep 3",
+        "done",
+      ].join("\n"),
+    ],
+    securityContext: seguridadSinRoot({ runAsUser: 70 }),
+    resources: RECURSOS.auxiliar,
+  };
+}
+
 function contenedorDeEspera(args: {
   nombre: string;
   environment: Environment;
@@ -199,6 +234,7 @@ export function manifiestosDeMigracion(args: MigracionArgs): Manifiesto[] {
         spec: {
           restartPolicy: "Never",
           priorityClassName: nombreDePrioridad(environment, "lote"),
+          initContainers: [esperaDePostgres({ environment, postgresImage })],
           containers: [
             {
               name: "migrador",

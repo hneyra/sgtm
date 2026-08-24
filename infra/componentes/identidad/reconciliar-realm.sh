@@ -70,8 +70,15 @@ fi
 # La comprobacion. Es lo que hace que este Job valga como verificacion.
 # ---------------------------------------------------------------------------
 for cliente in $KC_CLIENTES; do
-    mapeadores=$("$KCADM" get clients -r "$KC_REALM" -q "clientId=$cliente" \
-        --fields 'protocolMappers(name,config)' 2>/dev/null || true)
+    # Sin `--fields`: se probo `--fields 'protocolMappers(name,config)'` y kcadm
+    # devuelve el `config` de cada mapeador siempre vacio (`{}`) para un campo
+    # anidado dentro de un arreglo -confirmado contra un Keycloak real (issue
+    # #158): `get clients/<id> --fields 'protocolMappers(name,config)'` y la misma
+    # consulta por `clientId` sin filtrar dan resultados distintos, y solo la
+    # segunda trae el `claim.name` que esta comprobacion necesita ver. Con el
+    # filtro, esta comprobacion fallaba SIEMPRE, con el mapeador correctamente
+    # puesto: un falso rojo permanente, no una carrera.
+    mapeadores=$("$KCADM" get clients -r "$KC_REALM" -q "clientId=$cliente" 2>/dev/null || true)
 
     case "$mapeadores" in
         *municipalidad_id*) ;;
