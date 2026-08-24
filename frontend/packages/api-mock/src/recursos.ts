@@ -19,7 +19,8 @@ import { RESPUESTAS } from './respuestas.generado';
  * (#26), la declaracion jurada (#28) y los beneficios (#27) desde #73, y desde
  * #72 la consulta de deuda (#22, #175), la constancia de no adeudo (#25,
  * #179), el padron vehicular consultable (#25, #184), las altas y bajas de
- * deuda (#24, #72) y el historial de pagos (#25, #219).
+ * deuda (#24, #72), el historial de pagos (#25, #219) y los predios de un
+ * contribuyente (#25, #222).
  * **Esta lista crece cuando crece aquella**, no antes: publicar aqui
  * una forma que el backend todavia no sirve seria inventarsela.
  *
@@ -391,6 +392,26 @@ function pagos(): Paginado {
       asientoReversadoId: null,
       usuarioId: null,
       motivo: null,
+    })),
+  );
+}
+
+/**
+ * Predios de un contribuyente (`PredioEncontradoResource`, #25, #222): solo los campos que el
+ * recurso real publica — código, tipo, dirección, porcentaje de titularidad y deuda. «Titular»,
+ * «Uso», «Terreno m²», «Const. m²» y «Autovalúo S/» del prototipo no tienen con que llenarse
+ * todavia (ver el adaptador de la pantalla).
+ */
+function predios(): Paginado {
+  const fecha = '2026-08-13';
+  return unaPagina(
+    filasDe('consulta_predios').map(([codigoPredial, , direccion, , , , , deudaS], i) => ({
+      predioId: i + 1,
+      codigoReferenciaCatastral: codigoPredial,
+      tipo: 'URBANO',
+      direccion,
+      porcentajeTitularidad: '100.0000',
+      deuda: { importe: deudaS ?? '0.00', actualizadoA: fecha },
     })),
   );
 }
@@ -822,6 +843,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/consultas/vehiculos': consultaVehiculos,
   '/consultas/altas-bajas': altasBajas,
   '/consultas/pagos': pagos,
+  '/consultas/predios': predios,
   '/catastro/sectores': sectores,
   '/catastro/fichas': fichas,
   '/seguridad/modulos': modulos,

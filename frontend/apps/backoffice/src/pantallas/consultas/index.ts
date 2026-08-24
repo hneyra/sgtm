@@ -6,14 +6,14 @@ import { parametrosDeBusqueda } from '../busqueda';
 import { SIN_DATO, hoy, leerObjeto, leerPaginado, tablaDe, texto } from '../seguridad/listado';
 
 /**
- * Consultas, conectado hasta donde llega el backend: **seis opciones de once**.
+ * Consultas, conectado hasta donde llega el backend: **siete opciones de once**.
  *
  * `cuenta_corriente` (#21) ya estaba. Se suman `consulta_deuda` (#22, #175),
  * `constancia` (#25, #179), `consulta_vehiculos` (#25, #184),
- * `consulta_altas_bajas` (#24, #186) y `consulta_pagos` (#25, #219). Las otras
- * cinco —`consulta_unificada`, `consulta_resumen_predial`, `consulta_predios`,
- * `consulta_valores`, `consulta_deudas_beneficio`— siguen esperando su backend
- * (#25 sigue abierto).
+ * `consulta_altas_bajas` (#24, #186), `consulta_pagos` (#25, #219) y
+ * `consulta_predios` (#25, #222). Las otras cuatro —`consulta_unificada`,
+ * `consulta_resumen_predial`, `consulta_valores`, `consulta_deudas_beneficio`—
+ * siguen esperando su backend (#25 sigue abierto).
  */
 
 /**
@@ -457,6 +457,56 @@ function fechaDePagosDe(asientos: readonly unknown[]): Fecha {
   return (mayor ?? hoy()) as Fecha;
 }
 
+/**
+ * Predios de un contribuyente, con la deuda de cada uno (#25, #72, #222).
+ *
+ * «Titular», «Uso», «Terreno m²» y «Const. m²» salen vacias a proposito: `PredioEncontradoResource`
+ * no las publica todavia —el nombre necesita cruzar con el contribuyente, y uso/area son de la
+ * ficha catastral, que esta pantalla no consulta—. «Autovalúo S/» tambien: depende de la
+ * determinacion predial (#30, #188), bloqueada por D-02a. Solo el filtro «Contribuyente» resuelve
+ * de verdad; «Código predial», «Calle», «Manzana» y «Lote» los ignora el backend (ver
+ * `ConsultaPrediosController`), y por eso tampoco filtran aqui.
+ */
+const consulta_predios = definirConexion({
+  operacion: 'consulta_predios',
+  parametros: ({ busqueda }) => parametrosDeBusqueda('consulta_predios', undefined, busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'los predios'),
+  adaptar: (paginado): DatosDePantalla => {
+    const tabla = tablaDe(
+      paginado,
+      (predio): readonly Celda[] => {
+        const deuda = importeDe(predio['deuda']);
+        return [
+          { texto: texto(predio['codigoReferenciaCatastral']) },
+          { texto: SIN_DATO },
+          { texto: texto(predio['direccion']) },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: deuda?.importe ?? SIN_DATO },
+        ];
+      },
+      'predios',
+    );
+
+    return {
+      fechaCalculo: fechaDePrediosDe(paginado.contenido),
+      tabla,
+    };
+  },
+});
+
+/** La fecha de corte con que se calculo la deuda de cualquier fila: todas comparten la misma. */
+function fechaDePrediosDe(predios: readonly unknown[]): Fecha {
+  for (const predio of predios) {
+    if (!esObjeto(predio)) continue;
+    const deuda = importeDe(predio['deuda']);
+    if (deuda !== undefined) return deuda.actualizadoA;
+  }
+  return hoy();
+}
+
 /** Las opciones de Consultas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_CONSULTAS: Readonly<Record<string, Conexion>> = {
   cuenta_corriente,
@@ -465,4 +515,5 @@ export const CONEXIONES_DE_CONSULTAS: Readonly<Record<string, Conexion>> = {
   consulta_vehiculos,
   consulta_altas_bajas,
   consulta_pagos,
+  consulta_predios,
 };
