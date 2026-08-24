@@ -21,6 +21,8 @@ public interface CatastroRepository {
 
     Optional<Sector> sectorPorCodigo(String codigo);
 
+    Optional<Sector> sectorPorId(long id);
+
     Sector guardar(Sector sector);
 
     List<Manzana> manzanasDe(long sectorId);

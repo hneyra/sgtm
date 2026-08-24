@@ -84,6 +84,14 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
     }
 
     @Override
+    public Optional<Sector> sectorPorId(long id) {
+        return jdbc().sql("SELECT " + COLUMNAS_SECTOR + " FROM sector WHERE id = :id")
+                .param("id", id)
+                .query(CatastroRepositoryJdbc::mapearSector)
+                .optional();
+    }
+
+    @Override
     public Sector guardar(Sector sector) {
         if (sector.esNuevo()) {
             Long id =
