@@ -119,8 +119,9 @@ no se publican: es lo que retira la última parte de la frase del README del com
 
 ## 2. Dimensionamiento inicial
 
-⚠ **Estimaciones, no mediciones.** Se recalibran con la volumetría real de la municipalidad piloto,
-que hoy no existe porque D-01 está abierta.
+⚠ **Estimaciones de CPU y de la base, todavía sin volumetría real** —eso sigue esperando a la
+municipalidad piloto—, pero el piso de memoria del nodo **ya se confirmó desplegando el stack
+entero de verdad** (issue #158, ver la nota más abajo): 4 GB no alcanza, 16 GB sí.
 
 | Componente | Réplicas | CPU | Memoria | Almacenamiento |
 |---|---|---|---|---|
@@ -151,6 +152,18 @@ correrá cuando la haya.
 ([`ADR-0004`](../30-arquitectura/adr/ADR-0004-almacenamiento-de-datos.md)) mantiene acotado lo que
 se consulta en caliente, pero el volumen total crece sin límite superior. La memoria de PostgreSQL
 es el recurso crítico, no la CPU.
+
+**Un piso confirmado, no solo estimado (2026-08-24, issue #158):** desplegando el stack entero
+—los 69 objetos, sin recortar ninguno— contra un nodo real de 2 vCPU/4 GB (`t3.medium`), las
+peticiones (`requests`) de los pods por sí solas ya ocupaban el 99 % de la memoria **antes** de que
+Kubernetes lograra ubicar `interfaz` ni ningún componente de observabilidad — se quedaban en
+`Pending` por «`Insufficient memory`», no por un límite artificial. **4 GB de RAM no alcanza.**
+Redimensionando a 4 vCPU/16 GB (`t3.xlarge`), el mismo despliegue completo entró con margen: 43 %
+de CPU y 27 % de memoria en `requests`, los 9 `Deployment` sanos y los 3 `Job` completados. Esto
+confirma como piso realista los 16 GB que esta tabla ya estimaba — no fue necesario revisarlos a
+más—, y dice explícitamente lo que la estimación por sí sola no podía: por debajo de eso, el
+clúster ni siquiera termina de programar sus propios pods, mucho antes de que nadie note falta de
+rendimiento.
 
 ## 3. Red
 
