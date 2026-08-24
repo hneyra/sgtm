@@ -93,7 +93,10 @@ class ContratoDeApiTest {
                     "PUT /seguridad/usuarios/{id}/clave",
                     "GET /seguridad/auditoria",
                     "POST /seguridad/respaldos",
-                    "GET /seguridad/parametros");
+                    "GET /seguridad/parametros",
+                    "GET /transito/codigos",
+                    "GET /infracciones/cuis",
+                    "GET /infracciones/administrativas/codigos/reporte");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");
