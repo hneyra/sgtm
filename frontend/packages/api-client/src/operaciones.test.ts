@@ -31,8 +31,12 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual', () => {
-    expect(Object.keys(OPERACIONES)).toHaveLength(134);
+  it('son las 134 del manual, mas la companera de lectura de permisos (#70)', () => {
+    // `permisos_de_grupo` no es una opcion del catalogo: es el GET que hacia
+    // falta para poder cargar la matriz que guarda `permisos` antes de
+    // guardarla, y no tiene pantalla propia de la que salir (generar-openapi.mjs,
+    // OPERACIONES_ADICIONALES). Las 134 opciones del manual siguen siendo 134.
+    expect(Object.keys(OPERACIONES)).toHaveLength(135);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

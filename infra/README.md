@@ -205,23 +205,26 @@ volver a aplicar la misma no hace nada: el migrador es idempotente.
 ## Cómo llegar a un VPS real
 
 `.github/workflows/infra.yml` tiene los trabajos de `ADR-0011` §6 —`verificar`, `motor`,
-`manifiestos`, `secretos`, `previsualizar`, `aplicar-stg`, `aplicar-prod` y la detección
-de deriva diaria—, con el túnel SSH de `INF-01` §1.4 en los cuatro que hablan con el
-clúster. Los cuatro primeros corren siempre y no necesitan VPS. **Los que hablan con el
-clúster no pueden correr todavía**, porque el VPS no existe: los cuatro trabajos que lo
-necesitan se **omiten con un aviso** en el resumen, no con un rojo, mientras falte
-cualquiera de sus
-credenciales. Esto es lo que falta, en orden:
+`manifiestos`, `secretos`, `previsualizar-stg`, `previsualizar-prod`, `aplicar-stg`,
+`aplicar-prod` y la detección de deriva diaria—, con el túnel SSH de `INF-01` §1.4 en los
+que hablan con un clúster. Los primeros corren siempre y no necesitan VPS. **Los que
+hablan con un clúster no pueden correr todavía**, porque los VPS no existen: esos
+trabajos se **omiten con un aviso** en el resumen, no con un rojo, mientras falte
+cualquiera de sus credenciales. Esto es lo que falta, en orden:
 
-### 1. El VPS y k3s
+**stg y prod son DOS VPS distintos**, con IP y credenciales propias (`INF-03` §4: un
+secreto de stg comprometido no puede abrir prod) — no una simplificación de "por ahora
+comparten nodo". Cada paso de abajo se hace **una vez por VPS**.
 
-Aprovisionar el VPS y correr el instalador de k3s en él es trabajo fuera de este
+### 1. Los dos VPS y su k3s
+
+Aprovisionar cada VPS y correr el instalador de k3s en él es trabajo fuera de este
 repositorio —no hay nada que un PR pueda automatizar sin la cuenta del proveedor—. El
-resultado que este flujo necesita es **el kubeconfig del nodo**, con el `server` cambiado
-a `https://localhost:6443` (`INF-01` §1.4):
+resultado que este flujo necesita de cada uno es **el kubeconfig del nodo**, con el
+`server` cambiado a `https://localhost:6443` (`INF-01` §1.4):
 
 ```bash
-# En el VPS, una vez que k3s está instalado:
+# En cada VPS, una vez que k3s está instalado:
 sudo cat /etc/rancher/k3s/k3s.yaml | sed 's#server: https://127.0.0.1:6443#server: https://localhost:6443#'
 ```
 
@@ -231,46 +234,59 @@ sudo cat /etc/rancher/k3s/k3s.yaml | sed 's#server: https://127.0.0.1:6443#serve
 cd infra
 pulumi stack init sgtm/stg
 pulumi stack init sgtm/prod
-
-# Los secretos DE ARRANQUE, uno por ambiente y sin reutilizar ninguno entre ambientes
-# (INF-03 §4). No hay ninguno de la aplicación aquí: esos los genera
-# secretos/bootstrap-secretos.sh, no pulumi config (INF-06, issue #154).
-pulumi config set --secret kubeconfig "$(cat k3s.yaml)"      --stack prod
-pulumi config set --secret backupAccessKeyId <valor>         --stack prod
-pulumi config set --secret backupSecretAccessKey <valor>     --stack prod
-# Y lo mismo con --stack stg, con sus propios valores.
 ```
+
+Nada más por ahora: `kubeconfig`, `backupAccessKeyId` y `backupSecretAccessKey` **no se
+fijan aquí**. `stacks.test.ts` ("ningun stack versiona un secreto en claro") exige que
+`Pulumi.<ambiente>.yaml` nunca los tenga, ni siquiera cifrados — van en el paso 4, como
+secretos de GitHub, e inyectados en caliente por CI (y a mano, localmente, antes de cada
+`preview`/`up` propio; ver el comentario de cabecera de `Pulumi.stg.yaml`/
+`Pulumi.prod.yaml`).
 
 **Los dominios y los destinos de los stacks versionados son de ejemplo** —`example.pe`,
 `s3.example.net`— porque el proveedor del VPS y el del almacenamiento de objetos siguen
 sin decidirse ([`INF-01` §7](../docs/80-infraestructura/arquitectura-de-infraestructura.md)).
 Se reemplazan cuando se decidan; las invariantes ya valen igual.
 
-### 3. La clave SSH de despliegue, y solo de despliegue
+### 3. Una clave SSH de despliegue POR VPS, y solo de despliegue
 
-**No la de una persona.** Un par de claves nuevo, cuya única función es abrir el túnel
-que este flujo necesita:
+**No la de una persona, y no la misma para los dos VPS.** Un par de claves nuevo por
+VPS, cuya única función es abrir el túnel que este flujo necesita:
 
 ```bash
-ssh-keygen -t ed25519 -f despliegue-sgtm -C "github-actions@sgtm" -N ""
-# La pública, en su propia línea de authorized_keys del VPS —para poder revocarla sola,
-# sin tocar la de nadie más—. Si el VPS lo permite, restringida a NO abrir una shell:
+ssh-keygen -t ed25519 -f despliegue-sgtm-stg -C "github-actions@sgtm-stg" -N ""
+ssh-keygen -t ed25519 -f despliegue-sgtm-prod -C "github-actions@sgtm-prod" -N ""
+# Cada pública, en su propia línea de authorized_keys del VPS que le corresponde —para
+# poder revocarla sola, sin tocar la del otro VPS ni la de nadie más—. Restringida a NO
+# abrir una shell (verificar que la entrada final NO tenga `no-port-forwarding`, es la
+# única capacidad que hace falta):
 #   command="echo 'solo tunel'",no-pty,no-X11-forwarding,no-agent-forwarding <clave-publica>
 ```
 
-### 4. Los cuatro secretos de GitHub Actions
+### 4. Los secretos de GitHub Actions: uno de repositorio, tres por *environment*
 
-`Settings → Secrets and variables → Actions`, en este repositorio:
+`Settings → Secrets and variables → Actions`, en este repositorio. Solo el token es de
+repositorio —es el mismo para los dos ambientes—; todo lo demás va en un *environment*
+por VPS, para que `secrets.VPS_HOST` (y compañía) resuelva al nodo correcto en cada job:
 
-| Secreto | Valor |
-|---|---|
-| `PULUMI_ACCESS_TOKEN` | Token de Pulumi Cloud |
-| `SSH_PRIVATE_KEY` | La **privada** de `despliegue-sgtm`, completa |
-| `VPS_USER` | El usuario con el que se conecta esa clave |
-| `VPS_HOST` | La IP o el nombre del VPS |
+| Secreto | Alcance | Valor |
+|---|---|---|
+| `PULUMI_ACCESS_TOKEN` | Repositorio | Token de Pulumi Cloud |
+| `SSH_PRIVATE_KEY` | *Environment* `stg` / `prod` | La **privada** de despliegue de ESE VPS, completa |
+| `VPS_USER` | *Environment* `stg` / `prod` | El usuario con el que se conecta esa clave |
+| `VPS_HOST` | *Environment* `stg` / `prod` | La IP o el nombre de ESE VPS |
+| `KUBECONFIG` | *Environment* `stg` / `prod` | El kubeconfig del paso 1, completo |
+| `BACKUP_ACCESS_KEY_ID` | *Environment* `stg` / `prod` | Credencial de escritura del contenedor de respaldo de ESE ambiente |
+| `BACKUP_SECRET_ACCESS_KEY` | *Environment* `stg` / `prod` | Su secreto |
 
-Con los cuatro puestos, `previsualizar` y `aplicar-stg` corren solos. `aplicar-prod`
-necesita además el paso 5.
+Además, un tercer *environment* **`prod-preview`**, sin protección, con una **copia** de
+los siete valores de `prod` (menos el token, que ya es de repositorio): existe solo para
+que `previsualizar-prod` pueda correr en cada PR sin quedar detrás de la aprobación que
+sí exige `aplicar-prod` — el `up` real nunca lee de `prod-preview`.
+
+Con `stg` y `prod-preview` puestos (más el token), `previsualizar-stg`,
+`previsualizar-prod` y `aplicar-stg` corren solos. `aplicar-prod` necesita además que el
+*environment* `prod` tenga sus siete valores y el paso 5.
 
 ### 5. El *environment* `prod`, con aprobación requerida
 
@@ -298,4 +314,4 @@ decisión de las personas del proyecto, no una que este repositorio pueda tomar.
 | El archivado continuo de WAL y el PITR: el `Deployment` de PostgreSQL **no los trae** | #155 |
 | El cortafuegos del VPS, que no es un objeto de Kubernetes | #157, y `vps/cortafuegos.sh` |
 | De dónde salen los secretos de la aplicación | #154 |
-| Los runbooks de restauración | #158 |
+| Los runbooks de operación — escritos; el de reconstrucción, sin ensayar contra un VPS real | [`docs/B0-operacion/runbooks/`](../docs/B0-operacion/runbooks/), issue #158 |

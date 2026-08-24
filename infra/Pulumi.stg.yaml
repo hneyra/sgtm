@@ -2,44 +2,46 @@
 # (INF-03 §2). No es un namespace dentro del VPS de producción: lo que se ensaya es
 # perder el nodo, y ensayarlo dentro del nodo que se pierde es no ensayarlo.
 #
-# Los secretos se ponen igual que en prod, con `--stack stg` y con credenciales
-# distintas: un secreto de stg comprometido no puede abrir prod (INF-03 §4).
+# El kubeconfig y las credenciales de respaldo NO viven en este archivo, ni siquiera
+# cifrados (`stacks.test.ts`: "ningun stack versiona un secreto en claro"). CI los
+# inyecta frescos en cada corrida desde los secretos `KUBECONFIG`/`BACKUP_ACCESS_KEY_ID`/
+# `BACKUP_SECRET_ACCESS_KEY` del *environment* `stg` de GitHub, con
+# `pulumi config set --secret ... --stack stg` como paso previo a `preview`/`up`
+# (`.github/workflows/infra.yml`). Localmente hay que correr esos mismos tres comandos
+# antes de poder previsualizar o aplicar — y nunca `git add` el resultado: son
+# credenciales distintas a las de prod (INF-03 §4), un secreto de stg comprometido no
+# puede abrir prod.
 config:
-  sgtm:domain: stg.sgtm.example.pe
+  sgtm:domain: sv-RFoVCw2ifaqy3G9NZ1eT.cloud.elastika.pe
   sgtm:acmeEmail: operaciones@example.pe
-
   # Certificado del entorno de pruebas de Let's Encrypt: aquí se ajusta el ingreso sin
   # gastar el límite de tasa. En prod está prohibido, porque ese certificado no lo
   # acepta ningún navegador (RNF-074).
   sgtm:acmeStaging: "true"
-
   sgtm:postgresImage: postgres:16.4-alpine
   sgtm:postgresStorageSize: 20Gi
   sgtm:keycloakImage: quay.io/keycloak/keycloak:26.0
   sgtm:keycloakRealm: sgtm
   sgtm:keycloakSeedTestUsers: "true"
-
-  sgtm:applicationImageRepository: ghcr.io/hneyra/sgtm
-  sgtm:applicationBootstrapVersion: 64de42b4c56eb2491e2a61287bceb4b66b6e53d1
+  sgtm:applicationImageRepository: ghcr.io/hneyra
+  sgtm:applicationBootstrapVersion: b974d5db73cfaa91ffa891dd3dc4f15a409a1a36
   sgtm:webReplicas: "1"
-
-  # La municipalidad de ensayo. El ubigeo es el de Sullana porque stg restaura los
-  # respaldos de prod anonimizados (INF-03 §2 y §3): con otro ubigeo, lo restaurado no
-  # cuadraría con lo implantado.
-  sgtm:ubigeo: "200101"
-  sgtm:municipalidad: Municipalidad Provincial de Sullana (ensayo)
-  sgtm:tipoDeMunicipalidad: PROVINCIAL
+  # La municipalidad de ensayo. El ubigeo es el de Catacaos, igual que en prod (D-01,
+  # 2026-08-24), porque stg restaura los respaldos de prod anonimizados (INF-03 §2 y
+  # §3): con otro ubigeo, lo restaurado no cuadraría con lo implantado.
+  sgtm:ubigeo: "200105"
+  sgtm:municipalidad: Municipalidad Distrital de Catacaos (ensayo)
+  sgtm:tipoDeMunicipalidad: DISTRITAL
   sgtm:administrador: administrador
   sgtm:nombreDelAdministrador: Administrador del sistema
-
   # La municipalidad de stg se da de alta MARCADA: todo documento que emita sale
   # marcado en los tres formatos (INF-03 §3.2, issue #122). `config.ts` lo exige.
   sgtm:esDemostracion: "true"
-
-  sgtm:backupEndpoint: https://s3.example.net
+  # AWS S3 (issue #158, decision de 2026-08-24). us-east-1: es donde vive el bucket.
+  sgtm:backupEndpoint: https://s3.us-east-1.amazonaws.com
+  sgtm:backupRegion: us-east-1
   sgtm:backupBucket: sgtm-stg-respaldos
   sgtm:walArchiveTimeoutSeconds: "300"
-
   # De dónde lee stg para ensayar la restauración. Es el contenedor de prod, y la
   # credencial con que lo lee es de SOLO LECTURA (INF-03 §4).
   sgtm:restoreSourceBucket: sgtm-prod-respaldos

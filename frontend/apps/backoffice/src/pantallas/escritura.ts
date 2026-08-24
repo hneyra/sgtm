@@ -61,12 +61,22 @@ export interface Escritura {
  * esos son cadenas decimales de punta a punta (regla 1, RNF-055), y convertir
  * uno a `number` perderia centimos. Aqui solo pasan enteros de dominio: anos,
  * codigos, contadores.
+ *
+ * `valor` existe para el mismo problema que ya resuelve la lectura con `Fase`
+ * (`FASES_DEL_BACKEND` en `pantallas/consultas`): el prototipo dibuja un
+ * vocabulario («IMPUESTO PREDIAL») y el backend espera otro («PREDIAL»). Es
+ * una traduccion, no una validacion: un valor que la funcion no reconoce
+ * devuelve `undefined`, y ese campo simplemente no viaja —lo mismo que pasa
+ * hoy si el usuario no lo llena—, en vez de mandar el texto del prototipo tal
+ * cual y dejar que el backend lo rechace con un mensaje que no explica nada.
  */
 export interface CampoDelCuerpo {
   /** Como se llama en el cuerpo que espera el backend. */
   readonly campo: string;
   /** El backend lo declara entero, no cadena. Nunca para importes. */
   readonly entero?: boolean;
+  /** Traduce el texto del formulario al que espera el backend. Ver el javadoc de arriba. */
+  readonly valor?: (texto: string) => string | undefined;
 }
 
 /** Sin campos declarados. Constante para que la lista blanca no cambie cada render. */
@@ -95,12 +105,23 @@ export interface OpcionesDeEscritura {
    * pedir.
    */
   readonly alGuardar?: (respuesta: unknown) => 'cache-vaciada' | void;
+  /**
+   * Sustituye el cuerpo entero (salvo la observacion) por lo que devuelva esta
+   * funcion, en vez de `soloDeclarados(borrador, campos)`.
+   *
+   * Existe para las pantallas cuyo cuerpo no es un formulario de campos
+   * planos: `permisos` manda una lista de niveles, `actualizacion_catastro`
+   * una lista de construcciones, y `CampoDelCuerpo` no tiene forma de
+   * expresar un arreglo. Se lee en cada envio —es un cierre sobre el estado
+   * de quien la declara—, igual que `borrador` se lee en cada envio hoy.
+   */
+  readonly cuerpo?: () => Readonly<Record<string, unknown>>;
 }
 
 export function useEscritura(
   operacion: IdDeOperacion | undefined,
   parametros: Readonly<Record<string, string>>,
-  { campos = SIN_CAMPOS, alGuardar }: OpcionesDeEscritura = {},
+  { campos = SIN_CAMPOS, alGuardar, cuerpo }: OpcionesDeEscritura = {},
 ): Escritura {
   const [observacion, fijarTexto] = useState('');
   const [borrador, fijarBorrador] = useState<Readonly<Record<string, string>>>({});
@@ -119,9 +140,12 @@ export function useEscritura(
       return enviarOperacion(
         operacion,
         parametros as ParametrosDe<IdDeOperacion>,
-        // La observacion va siempre; lo demas, solo lo declarado. Un campo que
-        // el formulario dibuja y la opcion no declaro no llega hasta aqui.
-        { ...soloDeclarados(borrador, campos), observacion } as CuerpoDe<IdDeOperacion>,
+        // La observacion va siempre; lo demas, solo lo declarado —o lo que
+        // `cuerpo` construya, para la pantalla que no cabe en campos planos—.
+        {
+          ...(cuerpo ? cuerpo() : soloDeclarados(borrador, campos)),
+          observacion,
+        } as CuerpoDe<IdDeOperacion>,
         clave.current,
       );
     },
@@ -189,7 +213,11 @@ function soloDeclarados(
   for (const [campo, valor] of Object.entries(borrador)) {
     const declarado = campos[campo];
     if (declarado === undefined || valor === '') continue;
-    if (declarado.entero === true) {
+    if (declarado.valor !== undefined) {
+      // Un valor que la traduccion no reconoce no viaja: ver el javadoc de `CampoDelCuerpo`.
+      const traducido = declarado.valor(valor);
+      if (traducido !== undefined) cuerpo[declarado.campo] = traducido;
+    } else if (declarado.entero === true) {
       const entero = Number.parseInt(valor, 10);
       // Un entero que no lo es no viaja: mandar `NaN` produciria un 400 con un
       // mensaje del deserializador en vez de un error del dominio.

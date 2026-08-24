@@ -27,8 +27,8 @@ import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
 
 /**
- * Los dos GET de solo lectura de este contexto exigen {@code @Transactional(readOnly = true)} en el
- * propio controlador.
+ * Los GET de solo lectura de este contexto que no pasan por un caso de uso propio exigen
+ * {@code @Transactional(readOnly = true)} en el propio controlador.
  *
  * <p>Es una regresion real, no hipotetica: {@code RepositorioJdbc} no abre transaccion propia (es
  * su diseño deliberado), asi que una consulta sin una transaccion activa <b>falla</b> en la base
@@ -43,8 +43,10 @@ class ControladoresDeLecturaTest {
     private static long municipalidad;
     private static CuentaCorrienteController cuentaCorrienteSinProxy;
     private static AltasBajasController altasBajasSinProxy;
+    private static ConsultaPagosController pagosSinProxy;
     private static CuentaCorrienteController cuentaCorrienteConProxy;
     private static AltasBajasController altasBajasConProxy;
+    private static ConsultaPagosController pagosConProxy;
 
     @BeforeAll
     static void provisionar() throws SQLException, IOException {
@@ -60,10 +62,12 @@ class ControladoresDeLecturaTest {
 
         cuentaCorrienteSinProxy = new CuentaCorrienteController(repositorio);
         altasBajasSinProxy = new AltasBajasController(repositorio);
+        pagosSinProxy = new ConsultaPagosController(repositorio);
 
         TenantTransactionManager gestor = new TenantTransactionManager(pool);
         cuentaCorrienteConProxy = envolver(cuentaCorrienteSinProxy, gestor);
         altasBajasConProxy = envolver(altasBajasSinProxy, gestor);
+        pagosConProxy = envolver(pagosSinProxy, gestor);
     }
 
     @SuppressWarnings("unchecked")
@@ -125,6 +129,21 @@ class ControladoresDeLecturaTest {
     @DisplayName("con @Transactional, el GET de altas y bajas funciona")
     void conProxyAltasBajasFunciona() {
         var pagina = altasBajasConProxy.altasYBajas("NO-EXISTE", null, null, null, paginacion());
+
+        assertThat(pagina.totalElementos()).isZero();
+    }
+
+    @Test
+    @DisplayName("sin el proxy transaccional, el GET de pagos falla por falta de contexto")
+    void sinProxyPagosFalla() {
+        assertThatThrownBy(() -> pagosSinProxy.pagos("NO-EXISTE", null, null, paginacion()))
+                .isInstanceOf(RuntimeException.class);
+    }
+
+    @Test
+    @DisplayName("con @Transactional, el GET de pagos funciona")
+    void conProxyPagosFunciona() {
+        var pagina = pagosConProxy.pagos("NO-EXISTE", null, null, paginacion());
 
         assertThat(pagina.totalElementos()).isZero();
     }

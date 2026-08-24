@@ -83,6 +83,14 @@ export interface BackupSettings {
    * único de falla.
    */
   endpoint: string;
+  /**
+   * La región AWS del almacenamiento de objetos (issue #158). El SDK de AWS firma
+   * cada petición con la región incluida; sin ella, `wal-g` falla al primer intento
+   * contra un S3 real —a diferencia de un S3-compatible generico, donde a veces no
+   * importa—. `us-east-1` no es un valor por omisión razonable para otra región: se
+   * declara siempre, aunque el bucket viva ahí.
+   */
+  region: string;
   /** Contenedor de destino. Distinto por ambiente (`INF-03` §4). */
   bucket: string;
   /**
@@ -319,6 +327,7 @@ export function readInvariants(environment: Environment, reader: ConfigReader): 
         "backupEndpoint",
         "el almacenamiento de objetos, FUERA del VPS, donde viven el WAL y los respaldos",
       ),
+      region: requireText(reader, "backupRegion", "la región AWS del almacenamiento de objetos"),
       bucket: requireText(reader, "backupBucket", "el contenedor de destino de los respaldos"),
       walArchiveTimeoutSeconds: reader.number("walArchiveTimeoutSeconds") ?? 300,
       ...(reader.text("restoreSourceBucket") === undefined

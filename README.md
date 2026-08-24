@@ -1,11 +1,9 @@
 # SGTM — Sistema de Gestión Tributaria Municipal
 
-Reimplementación del sistema tributario municipal documentado en el manual de usuario del SGTM
-de la Municipalidad Provincial de Sullana (231 figuras, 12 módulos, 134 opciones), como producto
+Implementación del Sistema Tributario Municipal, como producto
 **multi-municipal**: una instalación atiende a muchas municipalidades.
 
-El original es una aplicación de escritorio —Visual Basic .NET, SQL Server 2008, cliente
-Windows— descrita en el manual. Aquí el manual es la **especificación funcional**; la
+Implementación Cloud-native e IA-native. Aquí el manual es la **especificación funcional**; la
 arquitectura se toma de [`../srtm`](../srtm), del que se heredan la estrategia multi-tenant,
 los estándares de código y la forma de verificar.
 

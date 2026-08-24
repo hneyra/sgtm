@@ -1,7 +1,9 @@
-import { Boton, Esqueleto } from '@sgtm/design-system';
+import { Aviso, Boton, Esqueleto } from '@sgtm/design-system';
 import type { DatosDeReporte } from '@sgtm/api-client';
 import type { EstructuraDeReporte } from '../../catalogo';
 import { usePreferencias } from '../../app/preferencias';
+import type { DescargaDeArchivo } from '../useDescargaDeArchivo';
+import { textoDeError } from '../estados';
 
 /**
  * Hoja de reporte (FRO-03 §5, bloque 9).
@@ -10,17 +12,22 @@ import { usePreferencias } from '../../app/preferencias';
  * que la hoja pierde sombra, borde y margenes al imprimir, y todo lo que no es
  * la hoja —barra lateral, cabecera, botones— desaparece.
  *
- * «Descargar PDF» todavia no hace nada: el PDF lo emite el backend con su
+ * **«Descargar PDF» no hace nada, salvo que la pantalla traiga `descargas`.**
+ * Para los otros doce reportes el PDF lo emitiria el backend con su
  * numeracion y su firma, y el regimen de firma digital es la decision abierta
- * D-05. Un PDF generado en el navegador no seria el documento oficial.
+ * D-05: un PDF generado en el navegador no seria el documento oficial. El
+ * reporte de la ficha del contribuyente es la excepcion (#71): no se registra
+ * como documento emitido —es una consulta, no una emision—, y su backend ya
+ * sirve los tres formatos que RNF-081 exige.
  */
 export interface ReporteProps {
   readonly estructura: EstructuraDeReporte;
   readonly datos?: DatosDeReporte;
   readonly cargando: boolean;
+  readonly descargas?: DescargaDeArchivo;
 }
 
-export function Reporte({ estructura, datos, cargando }: ReporteProps) {
+export function Reporte({ estructura, datos, cargando, descargas }: ReporteProps) {
   const { preferencias } = usePreferencias();
   const numericas = new Set(estructura.num ?? []);
 
@@ -112,10 +119,34 @@ export function Reporte({ estructura, datos, cargando }: ReporteProps) {
         <Boton variante="primario" onClick={() => window.print()}>
           Imprimir
         </Boton>
-        <Boton disabled title="El PDF lo emite el backend con su numeración y su firma (D-05)">
-          Descargar PDF
-        </Boton>
+        {descargas ? (
+          FORMATOS.map((formato) => (
+            <Boton
+              key={formato}
+              disabled={descargas.enCurso !== null}
+              onClick={() => descargas.descargar(formato)}
+            >
+              {descargas.enCurso === formato ? 'Descargando…' : `Descargar ${formato}`}
+            </Boton>
+          ))
+        ) : (
+          <Boton disabled title="El PDF lo emite el backend con su numeración y su firma (D-05)">
+            Descargar PDF
+          </Boton>
+        )}
       </div>
+      {descargas?.error !== undefined && descargas.error !== null && (
+        <div data-no-imprimible="1">
+          <ErrorDeDescarga error={descargas.error} />
+        </div>
+      )}
     </>
   );
+}
+
+const FORMATOS = ['PDF', 'XLS', 'RTF'] as const;
+
+function ErrorDeDescarga({ error }: { readonly error: unknown }) {
+  const texto = textoDeError(error);
+  return <Aviso tipo="error" titulo={texto.titulo} detalle={texto.detalle} traza={texto.traza} />;
 }

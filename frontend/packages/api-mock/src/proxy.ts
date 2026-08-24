@@ -1,6 +1,6 @@
 import type { DatosDePantalla, ProblemDetails } from '@sgtm/api-client';
 import { RESPUESTAS, RUTAS } from './respuestas.generado';
-import { escrituraDe, listaDe, paginadoDe, recursoDe } from './recursos';
+import { archivoDe, escrituraDe, listaDe, paginadoDe, recursoDe } from './recursos';
 import { YA_SERVIDAS, laSirveElBackend } from './servidas';
 import type { OperacionServida } from './servidas';
 
@@ -182,6 +182,20 @@ export function instalarProxyDeDatos({
 
     if (latenciaActiva) {
       await esperar(LATENCIA_MINIMA_MS + Math.random() * (LATENCIA_MAXIMA_MS - LATENCIA_MINIMA_MS));
+    }
+
+    // El reporte de la ficha del contribuyente, cuando pide un archivo: no es
+    // JSON, y sin esto un `?formato=PDF` recibiria la misma respuesta que sin
+    // el (#71).
+    const archivo = archivoDe(metodo, url.pathname, url.searchParams.get('formato'));
+    if (archivo) {
+      return new Response(archivo.cuerpo, {
+        status: 200,
+        headers: {
+          'content-type': archivo.tipoDeMedio,
+          'content-disposition': `attachment; filename="${archivo.nombreDeArchivo}"`,
+        },
+      });
     }
 
     // Las operaciones que el backend ya sirve salen con **su** forma, no con

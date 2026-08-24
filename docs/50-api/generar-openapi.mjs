@@ -116,6 +116,12 @@ const DEL_BACKEND = {
       descripcion: 'Ejercicio de trabajo. Obligatorio: es la clave de particion de la bitacora',
     },
   ],
+  // `respaldo` trae tabla pero su verbo es POST —lo fija el contrato del
+  // prototipo, no la pantalla—, y la paginacion solo se anade mas abajo
+  // cuando el metodo es GET. `SesionController#respaldos` sigue paginando
+  // igual que las lecturas: sin esto, la pantalla no podria pedir la pagina
+  // siguiente de un historico que solo crece.
+  respaldo: PAGINACION,
   // Las cuatro fichas responden **a una fecha**: sin ella, la que rige hoy; con
   // ella, la que regia entonces. Es lo que contesta «como estaba este predio
   // cuando se emitio el valor de 2027», que es la pregunta de una reclamacion.
@@ -138,6 +144,49 @@ const DEL_BACKEND = {
       ],
     ]),
   ),
+  // El reporte responde a una fecha, igual que las cuatro fichas, y ademas
+  // a un formato: sin el, JSON —lo que la pantalla dibuja—; con
+  // `PDF`/`XLS`/`RTF`, el documento (`ReporteController`, #71).
+  ficha_contribuyente_reporte: [
+    {
+      nombre: 'fecha',
+      ejemplo: '2026-08-20',
+      descripcion: 'Ficha vigente a esta fecha. Sin ella, la que rige hoy',
+    },
+    {
+      nombre: 'formato',
+      ejemplo: 'PDF',
+      descripcion: 'PDF | XLS | RTF. Sin el, responde JSON: lo que la pantalla dibuja',
+    },
+  ],
+};
+
+/**
+ * Operaciones que el backend publica ademas de la que declara la pantalla.
+ *
+ * Misma razon que `DEL_BACKEND`: cuando el backend ya existe, manda el
+ * backend. Una pantalla del prototipo declara **un** `endpoint`, pero
+ * `permisos` guarda una matriz que antes hay que poder cargar, y ese `GET` no
+ * tiene pantalla propia de la que salir —no puede leerse de
+ * `PANTALLAS[id].endpoint`, que ya esta ocupado por el `PUT` que guarda—.
+ *
+ * Corta a proposito: cada entrada es una pantalla que escribe y no puede leer
+ * su propio estado sin esto. El `operationId` es distinto del `id` de la
+ * pantalla porque los dos verbos comparten ruta y opcion de menu, y el
+ * generador de tipos del frontend exige que cada operationId sea unico.
+ */
+const OPERACIONES_ADICIONALES = {
+  permisos: [
+    {
+      operationId: 'permisos_de_grupo',
+      metodo: 'get',
+      titulo: 'Permisos ya otorgados de un grupo',
+      descripcion:
+        'Los permisos que el grupo ya tiene configurados, para cargar la matriz antes' +
+        ' de guardarla (PUT de la misma ruta). No trae las 134 opciones del catalogo:' +
+        ' solo las que el grupo ya tiene.',
+    },
+  ],
 };
 
 /* ── Recoger las operaciones ──────────────────────────────────────────── */
@@ -155,6 +204,7 @@ for (const grupo of NAV) {
 
     operaciones.push({
       id,
+      operationId: id,
       etiqueta,
       modulo: grupo.label,
       metodo: metodo.toLowerCase(),
@@ -181,6 +231,21 @@ for (const grupo of NAV) {
         ...(pantalla.table && metodo.toLowerCase() === 'get' ? PAGINACION : []),
       ]),
     });
+
+    for (const extra of OPERACIONES_ADICIONALES[id] ?? []) {
+      operaciones.push({
+        id,
+        operationId: extra.operationId,
+        etiqueta,
+        modulo: grupo.label,
+        metodo: extra.metodo,
+        ruta,
+        titulo: extra.titulo,
+        descripcion: extra.descripcion,
+        parametrosDeRuta,
+        parametrosDeConsulta: reunir(parametrosDeRuta, []),
+      });
+    }
   }
 }
 
@@ -253,7 +318,7 @@ for (const [ruta, ops] of porRuta) {
   lineas.push(`  ${comillas(rutaRelativa)}:`);
   for (const op of ops) {
     lineas.push(`    ${op.metodo}:`);
-    lineas.push(`      operationId: ${op.id}`);
+    lineas.push(`      operationId: ${op.operationId}`);
     lineas.push(`      summary: ${comillas(op.titulo)}`);
     if (op.descripcion) {
       lineas.push(`      description: ${comillas(unaLinea(op.descripcion))}`);

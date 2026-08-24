@@ -103,20 +103,55 @@ export function configurarRenovacion(renovar: (() => Promise<boolean>) | null): 
 }
 
 export async function solicitar<T>(ruta: string, opciones: OpcionesDeSolicitud = {}): Promise<T> {
-  return pedir<T>(ruta, opciones, true);
+  const respuesta = await pedir(ruta, opciones, 'application/json', true);
+  if (respuesta.status === 204) return undefined as T;
+  return (await respuesta.json()) as T;
 }
 
-async function pedir<T>(
+/** Un archivo descargado: sus bytes y el nombre que propuso el backend. */
+export interface Archivo {
+  readonly blob: Blob;
+  readonly nombreDeArchivo: string;
+}
+
+/**
+ * Pide un archivo en vez de JSON: el reporte de una ficha en PDF, XLS o RTF.
+ *
+ * Comparte con {@link solicitar} todo lo que no es la forma de la respuesta
+ * —el token, la renovacion, los errores del backend—, porque las dos
+ * atraviesan la misma frontera y solo una deberia saber renovar un token
+ * vencido. Lo unico que cambia es que aqui no hay JSON que abrir: el cuerpo
+ * es el archivo, y el nombre sale de `Content-Disposition`, que es lo que el
+ * backend ya declara (`ReporteController`).
+ */
+export async function descargar(
+  ruta: string,
+  opciones: OpcionesDeSolicitud = {},
+): Promise<Archivo> {
+  const respuesta = await pedir(ruta, opciones, '*/*', true);
+  const blob = await respuesta.blob();
+  return { blob, nombreDeArchivo: nombreDeArchivoDe(respuesta) };
+}
+
+/** `attachment; filename="ficha-200601.pdf"` → `ficha-200601.pdf`. */
+function nombreDeArchivoDe(respuesta: Response): string {
+  const cabecera = respuesta.headers.get('content-disposition') ?? '';
+  const coincide = /filename="?([^";]+)"?/i.exec(cabecera);
+  return coincide?.[1] ?? 'documento';
+}
+
+async function pedir(
   ruta: string,
   opciones: OpcionesDeSolicitud,
+  aceptar: string,
   puedeRenovar: boolean,
-): Promise<T> {
+): Promise<Response> {
   const url = new URL(`${BASE}${ruta}`, window.location.origin);
   for (const [clave, valor] of Object.entries(opciones.consulta ?? {})) {
     if (valor !== undefined && valor !== '') url.searchParams.set(clave, String(valor));
   }
 
-  const cabeceras: Record<string, string> = { accept: 'application/json' };
+  const cabeceras: Record<string, string> = { accept: aceptar };
   if (tokenEnMemoria) cabeceras['authorization'] = `Bearer ${tokenEnMemoria}`;
   if (opciones.cuerpo !== undefined) cabeceras['content-type'] = 'application/json';
   if (opciones.claveDeIdempotencia) cabeceras['idempotency-key'] = opciones.claveDeIdempotencia;
@@ -151,7 +186,7 @@ async function pedir<T>(
     // la peticion; si la escritura llevaba clave de idempotencia, repetirla es
     // seguro, que para eso esta. Si la renovacion falla, el 401 sigue su camino
     // y la sesion lleva a autenticar conservando la ruta de vuelta.
-    if (await renovarElToken()) return pedir<T>(ruta, opciones, false);
+    if (await renovarElToken()) return pedir(ruta, opciones, aceptar, false);
   }
 
   if (!respuesta.ok) {
@@ -167,8 +202,7 @@ async function pedir<T>(
     );
   }
 
-  if (respuesta.status === 204) return undefined as T;
-  return (await respuesta.json()) as T;
+  return respuesta;
 }
 
 /** Clave nueva por intento del usuario, estable mientras dure ese intento. */

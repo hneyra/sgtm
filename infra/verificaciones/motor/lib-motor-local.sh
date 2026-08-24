@@ -37,10 +37,10 @@ CLAVE_MONITOREO="m'onitoreo-Cl4ve"
 
 for herramienta in psql pg_isready node yarn; do
     command -v "$herramienta" >/dev/null 2>&1 \
-        || { echo "FALLO: falta «$herramienta», que lib-motor-local.sh necesita." >&2; exit 1; }
+        || { echo "FALLO: falta «${herramienta}», que lib-motor-local.sh necesita." >&2; exit 1; }
 done
 
-echo "· Extrayendo la inicializacion del manifiesto de «$AMBIENTE»"
+echo "· Extrayendo la inicializacion del manifiesto de «${AMBIENTE}»"
 (cd "$LIB_MOTOR_INFRA" && yarn --silent manifiestos --ambiente "$AMBIENTE" --componente postgres) \
     > "$TRABAJO/postgres.json"
 

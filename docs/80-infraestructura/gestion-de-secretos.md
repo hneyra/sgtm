@@ -225,4 +225,6 @@ probado.
 [`ADR-0011`](../30-arquitectura/adr/ADR-0011-infraestructura-como-codigo.md) §3 ·
 [`INF-01`](arquitectura-de-infraestructura.md) · [`infra/README.md`](../../infra/README.md)
 §«Los secretos que estos manifiestos leen y no crean» ·
+[Rotar la clave de un rol](../B0-operacion/runbooks/rotar-la-clave-de-un-rol.md) — el
+runbook de §3.1 ·
 [`despliegue/README.md`](../../despliegue/README.md) — la misma regla en el entorno local

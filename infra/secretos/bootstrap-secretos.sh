@@ -45,7 +45,7 @@ command -v kubectl >/dev/null 2>&1 || { echo "Falta kubectl." >&2; exit 1; }
 # conflicto, porque los campos que declara ya coinciden.
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
-echo "Completando los secretos de «$NAMESPACE»..."
+echo "Completando los secretos de «${NAMESPACE}»..."
 cd "$INFRA"
 
 inventario=$(yarn --silent secretos --ambiente "$AMBIENTE")

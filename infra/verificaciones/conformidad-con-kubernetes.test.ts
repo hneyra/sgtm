@@ -79,6 +79,12 @@ describe("cada manifiesto es asignable a su tipo de @pulumi/kubernetes", () => {
     expect(enlaces).toHaveLength(1);
   });
 
+  it("NetworkPolicy: denegar-todo mas las excepciones nombradas (issue #157)", () => {
+    const politicas: k8s.types.input.networking.v1.NetworkPolicy[] = de("NetworkPolicy");
+
+    expect(politicas).toHaveLength(23);
+  });
+
   it("los recursos de Traefik llevan el grupo de la v3", () => {
     // Estos no tienen tipo en `@pulumi/kubernetes` —son CRD—, asi que aqui se comprueba
     // lo unico que se puede comprobar sin el esquema: el grupo. Con el grupo viejo el

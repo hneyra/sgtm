@@ -6,6 +6,7 @@ import {
   jwksInterno,
   nombreDePrioridad,
   secretos,
+  seguridadSinRoot,
   servicioDeAplicacion,
   servicioDeInterfaz,
   sondaHttp,
@@ -121,6 +122,9 @@ export function manifiestosDeAplicacion(args: AplicacionArgs): Manifiesto[] {
                 { name: "SGTM_OIDC_JWKS", value: jwksInterno(environment, realm) },
                 ...credencialesDeLaBase,
               ],
+              // `USER 10001` en el Dockerfile (issue #157): sin root desde antes de
+              // este manifiesto, esto solo lo declara.
+              securityContext: seguridadSinRoot(),
               resources: RECURSOS.aplicacionWeb,
               // La JVM tarda en arrancar —el compose le da `start_period: 30s`—, y el
               // `startupProbe` es la forma de decirlo sin aflojar la sonda de vida:
@@ -183,6 +187,18 @@ export function manifiestosDeAplicacion(args: AplicacionArgs): Manifiesto[] {
               // el paquete estatico. La etiqueta la pone `publicar-imagenes.yml`.
               image: `${imageRepository}/sgtm-interfaz:${environment}-${version}`,
               ports: [{ name: "http", containerPort: 8080 }],
+              // `USER nginx` en el Dockerfile (issue #157): la imagen base de nginx
+              // arranca como root por omision -el pid y la cache de nginx los
+              // necesita root para escribir-, y `frontend/Dockerfile` se lo cede al
+              // usuario "nginx" que la propia imagen ya trae sin usar.
+              //
+              // `runAsUser: 101`: `nginx` es un NOMBRE, no un numero, y el kubelet
+              // rechaza el contenedor sin poder verificar que es no-root -el mismo
+              // fallo que ya se encontro en CI para Prometheus/Alertmanager/
+              // node-exporter/kube-state-metrics (todas imagenes de terceros con
+              // `USER nobody`), aqui contra la imagen propia-. 101 es el UID/GID con
+              // que la imagen base `nginx:1.31-alpine` crea a "nginx".
+              securityContext: seguridadSinRoot({ runAsUser: 101 }),
               resources: RECURSOS.interfaz,
               volumeMounts: [
                 {
@@ -259,6 +275,7 @@ export function manifiestosDeAplicacion(args: AplicacionArgs): Manifiesto[] {
                     { name: "SPRING_PROFILES_ACTIVE", value: "batch" },
                     ...credencialesDeLaBase,
                   ],
+                  securityContext: seguridadSinRoot(),
                   resources: RECURSOS.aplicacionLote,
                 },
               ],

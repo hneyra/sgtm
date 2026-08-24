@@ -18,6 +18,7 @@ cosas donde espera.
 | [`60-frontend/`](60-frontend/) | Arquitectura, design system, mapa de pantallas y estándares de la interfaz |
 | [`80-infraestructura/`](80-infraestructura/) | Topología del despliegue, ambientes y objetivos de recuperación |
 | [`A0-calidad/`](A0-calidad/) | Estrategia de pruebas |
+| [`B0-operacion/`](B0-operacion/) | Runbooks: qué hacer cuando algo del VPS falla |
 | [`D0-desarrollo/`](D0-desarrollo/) | Ambiente local, ejecución, depuración, pruebas y recetario |
 
 ## Lectura mínima antes de escribir código
@@ -33,11 +34,14 @@ cosas donde espera.
 - [Decisiones abiertas](00-gobierno/decisiones-abiertas.md) — lo que bloquea, con quién decide
 - [Glosario tributario](00-gobierno/glosario-tributario.md) — vocabulario del manual y del dominio
 - [Plan de marcha blanca](00-gobierno/plan-de-marcha-blanca.md) — el recorte del predial que se despliega, y en qué orden
+- [Plan de desbloqueo de D-02](00-gobierno/plan-de-desbloqueo-D-02.md) — los siete paquetes, y qué se hizo de ellos
 
 ### 10 — Negocio
 - [Mapa de macroprocesos](10-negocio/mapa-de-macroprocesos.md) — los siete procesos del sistema
-- [Marco normativo](10-negocio/marco-normativo.md) — normas citadas y datos por verificar
+- [Marco normativo](10-negocio/marco-normativo.md) — normas citadas, y el mapa de qué dato falta, qué norma lo fija y quién lo espera
 - [Catálogo de opciones](10-negocio/catalogo-de-opciones.md) — las 134 opciones ↔ figuras del manual
+- [Observaciones del SRTM del MEF](10-negocio/observaciones-srtm-mef/README.md) — la campaña que cierra D-03c: dónde redondea el sistema del MEF
+- [Valores normativos transcritos](10-negocio/valores-normativos/README.md) — lo que cierra D-02a, norma a norma, con dos firmas y sin cargar nada
 
 ### 20 — Requisitos
 - [Requisitos funcionales](20-requisitos/requisitos-funcionales.md) — RF por módulo
@@ -69,10 +73,15 @@ cosas donde espera.
 - [INF-06 — Gestión de secretos](80-infraestructura/gestion-de-secretos.md) — de dónde sale cada clave, dónde no está y cómo se rota
 - [INF-08 — Respaldo y recuperación](80-infraestructura/respaldo-y-recuperacion.md) — archivado de WAL, PITR y el simulacro que lo demuestra
 - [INF-09 — Observabilidad y alertas](80-infraestructura/observabilidad-y-alertas.md) — métricas, tableros y una alerta que le llegue a alguien
+- [INF-10 — Endurecimiento del clúster](80-infraestructura/endurecimiento-del-cluster.md) — denegación por omisión en la red, sin root, y la reserva del nodo
+- [INF-11 — Entorno local de desarrollo](80-infraestructura/entorno-local-de-desarrollo.md) — por qué local sigue siendo el compose y no Pulumi
 - [`infra/README.md`](../infra/README.md) — el árbol de Pulumi, sus invariantes y cómo se demuestra que muerden
 
 ### A0 — Calidad
 - [Estrategia de pruebas](A0-calidad/estrategia-de-pruebas.md) — qué es bloqueante y por qué
+
+### B0 — Operación
+- [Runbooks](B0-operacion/runbooks/) — los ocho procedimientos de INF-01 §5, con la misma estructura
 
 ### D0 — Desarrollo
 - [Guía del desarrollador](D0-desarrollo/README.md) — índice, y qué comando para qué tarea

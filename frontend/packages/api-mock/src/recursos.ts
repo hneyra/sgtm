@@ -18,7 +18,9 @@ import { RESPUESTAS } from './respuestas.generado';
  * aranceles (#17), el padron de contribuyentes (#11), la ficha de vehiculo
  * (#26), la declaracion jurada (#28) y los beneficios (#27) desde #73, y desde
  * #72 la consulta de deuda (#22, #175), la constancia de no adeudo (#25,
- * #179), el padron vehicular consultable (#25, #184) y las altas y bajas de deuda (#24, #72).
+ * #179), el padron vehicular consultable (#25, #184), las altas y bajas de
+ * deuda (#24, #72), el historial de pagos (#25, #219) y los predios de un
+ * contribuyente (#25, #222).
  * **Esta lista crece cuando crece aquella**, no antes: publicar aqui
  * una forma que el backend todavia no sirve seria inventarsela.
  *
@@ -358,6 +360,58 @@ function altasBajas(): Paginado {
       asientoReversadoId: null,
       usuarioId: null,
       motivo: null,
+    })),
+  );
+}
+
+/**
+ * Historial de pagos (`AsientoResource`, RF-048, #25, #219): la misma forma que publica
+ * `cuenta_corriente` y `consulta_altas_bajas`, filtrada a los abonos de concepto `PAGO`.
+ *
+ * «Concepto» del prototipo es un texto libre («Impuesto predial cuotas 1 y 2»), no un tributo del
+ * enum: se guarda tal cual en `tributo` porque es lo mas cercano que hay, y la pantalla solo lo
+ * muestra como texto — no lo compara contra ningun valor. «Recibo» va a `documentoOrigen`, que es
+ * el unico campo de documento que trae el recurso real. «Medio» y «Caja» no viajan: el recurso no
+ * los publica todavia (ver `ConsultaPagosController` en el backend).
+ */
+function pagos(): Paginado {
+  return unaPagina(
+    filasDe('consulta_pagos').map(([fecha, recibo, concepto, ano, , , importeS], i) => ({
+      id: i + 1,
+      ejercicio: Number(ano) || new Date().getFullYear(),
+      tributo: concepto || 'PAGO',
+      concepto: 'PAGO',
+      tipo: 'ABONO',
+      fase: 'ORDINARIA',
+      periodo: null,
+      predioId: null,
+      vehiculoId: null,
+      referenciaExterna: null,
+      monto: { importe: importeS ?? '0.00', actualizadoA: fechaDe(fecha ?? '') ?? '2026-08-13' },
+      documentoOrigen: recibo || 'S/D',
+      asientoReversadoId: null,
+      usuarioId: null,
+      motivo: null,
+    })),
+  );
+}
+
+/**
+ * Predios de un contribuyente (`PredioEncontradoResource`, #25, #222): solo los campos que el
+ * recurso real publica — código, tipo, dirección, porcentaje de titularidad y deuda. «Titular»,
+ * «Uso», «Terreno m²», «Const. m²» y «Autovalúo S/» del prototipo no tienen con que llenarse
+ * todavia (ver el adaptador de la pantalla).
+ */
+function predios(): Paginado {
+  const fecha = '2026-08-13';
+  return unaPagina(
+    filasDe('consulta_predios').map(([codigoPredial, , direccion, , , , , deudaS], i) => ({
+      predioId: i + 1,
+      codigoReferenciaCatastral: codigoPredial,
+      tipo: 'URBANO',
+      direccion,
+      porcentajeTitularidad: '100.0000',
+      deuda: { importe: deudaS ?? '0.00', actualizadoA: fecha },
     })),
   );
 }
@@ -752,7 +806,34 @@ const parametros = (): Paginado => {
   ]);
 };
 
-/** Por camino del contrato, relativo a `/api/v1`. Solo `GET`: ninguna escribe. */
+/**
+ * El historico de respaldos (RF-126, #70). Su verbo es `POST` —lo fija el
+ * contrato del prototipo— pero solo consulta: `respaldo()` la publica junto
+ * a las demas lecturas por la misma razon que `paginadoDe` la deja pasar.
+ */
+const respaldo = (): Paginado =>
+  unaPagina([
+    {
+      id: 1,
+      inicio: '2026-08-23T02:00:00Z',
+      fin: '2026-08-23T02:04:12Z',
+      resultado: 'EXITOSO',
+      destino: 's3://sgtm-respaldos/2026-08-23.tar.gz.age',
+      tamanoBytes: 187_342_211,
+      detalle: null,
+    },
+    {
+      id: 2,
+      inicio: '2026-08-10T02:00:00Z',
+      fin: '2026-08-10T02:01:03Z',
+      resultado: 'FALLIDO',
+      destino: 's3://sgtm-respaldos/2026-08-10.tar.gz.age',
+      tamanoBytes: null,
+      detalle: 'Sin espacio en el servidor de destino.',
+    },
+  ]);
+
+/** Por camino del contrato, relativo a `/api/v1`. Casi todas son `GET`: ver `respaldo`. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/catastro/vias': vias,
   '/rentas/contribuyentes': contribuyentes,
@@ -761,6 +842,8 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/consultas/deuda': consultaDeuda,
   '/consultas/vehiculos': consultaVehiculos,
   '/consultas/altas-bajas': altasBajas,
+  '/consultas/pagos': pagos,
+  '/consultas/predios': predios,
   '/catastro/sectores': sectores,
   '/catastro/fichas': fichas,
   '/seguridad/modulos': modulos,
@@ -769,15 +852,42 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/seguridad/usuarios': usuarios,
   '/seguridad/auditoria': auditoria,
   '/seguridad/parametros': parametros,
+  '/seguridad/respaldos': respaldo,
 };
+
+/**
+ * Los permisos ya otorgados de un grupo (`GET .../grupos/{id}/permisos`, #70).
+ *
+ * El proxy no filtra ni persiste (arriba, en `proxy.ts`): la misma fila sale
+ * sin importar que grupo se pida, igual que ya hace `cuentaCorriente` con su
+ * `{codigo}`. Sirve para probar que la matriz carga lo que haya **sin** traer
+ * las 134 opciones del catalogo — aqui hay una, a proposito.
+ */
+const permisosDeGrupo = (): readonly Readonly<Record<string, unknown>>[] => [
+  { id: 1, acceso: 'calles', grupoId: 1, usuarioId: null, privilegios: ['LECTURA'] },
+];
 
 /**
  * Por camino del contrato, para los listados que el backend publica **sin**
  * sobre de paginacion: un arreglo suelto, tal como lo devuelve el controlador.
  */
+/**
+ * Valores unitarios y depreciacion (#71): un arreglo vacio, siempre.
+ *
+ * No es una simplificacion del proxy: es lo que hay. Las dos estan bloqueadas
+ * por D-02a —ningun valor unitario ni porcentaje de depreciacion tiene fuente
+ * verificada todavia—, y poner aqui una fila de ejemplo las haria parecer
+ * normativas. La pantalla tiene que poder mostrar el vacio explicito, y esta
+ * es la unica respuesta que no se lo impide.
+ */
+const sinSellarTodavia = (): readonly Readonly<Record<string, unknown>>[] => [];
+
 export const LISTAS: Readonly<Record<string, () => readonly Readonly<Record<string, unknown>>[]>> =
   {
     '/catastro/tablas/aranceles': aranceles,
+    '/catastro/tablas/valores-unitarios': sinSellarTodavia,
+    '/catastro/tablas/depreciacion': sinSellarTodavia,
+    '/seguridad/grupos/{id}/permisos': permisosDeGrupo,
   };
 
 /** El arreglo suelto de un camino, si el proxy lo publica sin sobre. */
@@ -787,7 +897,14 @@ export function listaDe(
 ): readonly Readonly<Record<string, unknown>>[] | null {
   if (metodo.toUpperCase() !== 'GET') return null;
   const relativo = camino.replace(/^\/api\/v1/, '');
-  return LISTAS[relativo]?.() ?? null;
+  const directa = LISTAS[relativo];
+  if (directa !== undefined) return directa();
+  // Hay listados cuya ruta lleva el registro que acotan —el grupo, aqui—: se
+  // comparan por patron, igual que `paginadoDe`.
+  for (const [ruta, construir] of Object.entries(LISTAS)) {
+    if (ruta.includes('{') && patron(ruta).test(relativo)) return construir();
+  }
+  return null;
 }
 
 /* ── Lo que devuelven las dos escrituras que la interfaz ya usa ─────────── */
@@ -862,9 +979,21 @@ function patron(ruta: string): RegExp {
   return new RegExp(`^${escapado}$`);
 }
 
-/** El recurso paginado de un camino, si el proxy lo publica con la forma del backend. */
+/**
+ * El recurso paginado de un camino, si el proxy lo publica con la forma del backend.
+ *
+ * Casi siempre es un `GET`. La excepcion es `/seguridad/respaldos`: su verbo
+ * es `POST` porque asi lo fijo el contrato del prototipo, pero el controlador
+ * solo consulta —la aplicacion no puede ejecutar copias de seguridad (ARQ-03
+ * §4)— y su respuesta es el mismo sobre paginado que las demas lecturas. Por
+ * eso este comparador mira el metodo real de cada entrada y no descarta el
+ * `POST` de entrada.
+ */
 export function paginadoDe(metodo: string, camino: string): Paginado | null {
-  if (metodo.toUpperCase() !== 'GET') return null;
+  const verbo = metodo.toUpperCase();
+  if (verbo !== 'GET' && !(verbo === 'POST' && camino.endsWith('/seguridad/respaldos'))) {
+    return null;
+  }
   const relativo = camino.replace(/^\/api\/v1/, '');
   const directo = PAGINADOS[relativo];
   if (directo !== undefined) return directo();
@@ -893,4 +1022,47 @@ export function recursoDe(
     if (patron(ruta).test(relativo)) return construir();
   }
   return null;
+}
+
+/** El tipo de medio de cada formato que `ReporteController` sirve (#71). */
+const TIPOS_DE_MEDIO: Readonly<Record<string, string>> = {
+  PDF: 'application/pdf',
+  XLS: 'application/vnd.ms-excel',
+  RTF: 'application/rtf',
+};
+
+/** Un archivo descargable, tal como lo sirve el proxy: cuerpo, tipo y nombre. */
+export interface ArchivoSimulado {
+  readonly cuerpo: string;
+  readonly tipoDeMedio: string;
+  readonly nombreDeArchivo: string;
+}
+
+/**
+ * El reporte de la ficha del contribuyente, cuando pide un archivo (`?formato=`).
+ *
+ * A diferencia del resto de este archivo, aqui **si se inventa el contenido**:
+ * no hay un `Resource` del prototipo del que copiarlo, porque un archivo
+ * binario no es un dato de pantalla. Lo que se prueba con esto es el
+ * mecanismo de descarga —la cabecera, el nombre, el tipo de medio—, no la
+ * fidelidad del documento. Sin `formato`, la ruta sigue su camino de siempre
+ * y responde JSON, como cualquier otra pantalla sin conectar.
+ */
+export function archivoDe(
+  metodo: string,
+  camino: string,
+  formato: string | null,
+): ArchivoSimulado | null {
+  if (metodo.toUpperCase() !== 'GET' || formato === null || formato === '') return null;
+  const relativo = camino.replace(/^\/api\/v1/, '');
+  if (!/^\/catastro\/contribuyentes\/[^/]+\/ficha\.pdf$/.test(relativo)) return null;
+
+  const tipoDeMedio = TIPOS_DE_MEDIO[formato.toUpperCase()];
+  if (tipoDeMedio === undefined) return null;
+
+  return {
+    cuerpo: `Ficha del contribuyente — documento simulado por el proxy de datos (formato ${formato.toUpperCase()})`,
+    tipoDeMedio,
+    nombreDeArchivo: `ficha-simulada.${formato.toLowerCase()}`,
+  };
 }

@@ -5,6 +5,7 @@ import {
   RECURSOS,
   nombreDePrioridad,
   secretos,
+  seguridadSinRoot,
   servicioDeBaseDeDatos,
   urlDelPadron,
 } from "./convenciones";
@@ -125,6 +126,41 @@ export function esperaDeImplantacion(args: {
   });
 }
 
+/**
+ * El contenedor que espera a que postgres acepte conexiones, sin credenciales.
+ *
+ * `pg_isready` no autentica: solo abre el socket. Existe porque el migrador se conecta
+ * apenas arranca la JVM, sin reintento propio, y eso le hace perder la carrera contra la
+ * propagacion de la NetworkPolicy de un pod recien creado -confirmado contra el clúster
+ * real de stg (issue #158): la primera conexion de un pod nuevo con `app: migracion`
+ * fallaba con "Connection refused" en los siete primeros intentos del Job, y la misma
+ * conexion con tres segundos de espera funcionaba siempre. Como cada reintento del Job
+ * crea un pod nuevo -IP nueva, politica que reprogramar de cero-, el migrador perdia la
+ * carrera casi siempre y el Job agotaba su `backoffLimit` sin correr una sola migracion.
+ */
+function esperaDePostgres(args: {
+  environment: Environment;
+  postgresImage: string;
+}): Contenedor {
+  const servicio = servicioDeBaseDeDatos(args.environment);
+  return {
+    name: "espera-postgres",
+    image: args.postgresImage,
+    command: ["/bin/sh", "-c"],
+    args: [
+      [
+        "set -eu",
+        `echo "Esperando que ${servicio} acepte conexiones..."`,
+        `until pg_isready --host=${servicio} --quiet; do`,
+        "  sleep 3",
+        "done",
+      ].join("\n"),
+    ],
+    securityContext: seguridadSinRoot({ runAsUser: 70 }),
+    resources: RECURSOS.auxiliar,
+  };
+}
+
 function contenedorDeEspera(args: {
   nombre: string;
   environment: Environment;
@@ -161,6 +197,16 @@ function contenedorDeEspera(args: {
         valueFrom: { secretKeyRef: { name: secreto.aplicacion, key: CLAVES.aplicacion } },
       },
     ],
+    // Solo habla `psql` por la red -no lee PGDATA, ni nada que necesite coincidir
+    // con un UID del volumen-: el caso simple de `seguridadSinRoot` (issue #157).
+    //
+    // `runAsUser: 70`: a diferencia del contenedor de postgres de verdad (que arranca
+    // como root para el `chown`/`gosu` del volumen, ver BaseDeDatos.ts), este solo
+    // ejecuta `psql` como cliente y no necesita nada de eso — pero `postgres:16-alpine`
+    // arranca como root por omision, y `runAsNonRoot` sin UID explicito lo rechaza
+    // (issue #158: encontrado reconstruyendo un cluster real desde cero. `70` es el UID
+    // de `postgres` en esta imagen, confirmado corriendola: `id postgres`).
+    securityContext: seguridadSinRoot({ runAsUser: 70 }),
     resources: RECURSOS.auxiliar,
   };
 }
@@ -188,6 +234,7 @@ export function manifiestosDeMigracion(args: MigracionArgs): Manifiesto[] {
         spec: {
           restartPolicy: "Never",
           priorityClassName: nombreDePrioridad(environment, "lote"),
+          initContainers: [esperaDePostgres({ environment, postgresImage })],
           containers: [
             {
               name: "migrador",
@@ -201,6 +248,9 @@ export function manifiestosDeMigracion(args: MigracionArgs): Manifiesto[] {
                   valueFrom: { secretKeyRef: { name: secreto.owner, key: CLAVES.owner } },
                 },
               ],
+              // `USER 10002` en el propio Dockerfile del migrador (issue #157): la
+              // imagen ya no corre como root, esto solo lo declara.
+              securityContext: seguridadSinRoot(),
               resources: RECURSOS.aplicacionLote,
             },
           ],
@@ -261,6 +311,8 @@ export function manifiestosDeMigracion(args: MigracionArgs): Manifiesto[] {
               // un artefacto, dos perfiles). No abre puerto ninguno.
               image: `${imageRepository}/sgtm-aplicacion:${version}`,
               env: variablesDeImplantacion,
+              // `USER 10001` en el Dockerfile, la misma imagen que `aplicacion` (issue #157).
+              securityContext: seguridadSinRoot(),
               resources: RECURSOS.aplicacionLote,
             },
           ],

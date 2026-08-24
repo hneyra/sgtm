@@ -38,16 +38,70 @@
 # salga de ahi es el que manda. Este guion es el que impide llegar a ese dia sin saber
 # si el procedimiento funciona.
 #
-#   uso: respaldo/simulacro-de-restauracion.sh [--ambiente stg|prod]
+# ## `--contra-cluster` (issue #158)
+#
+# Repite el mismo ciclo -8 pasos, mismo cronometraje- pero contra el `Deployment` de
+# `stg` en marcha y el almacenamiento de objetos real, en vez de un motor y un
+# `WALG_FILE_PREFIX` locales. Ejecutado por primera vez el 2026-08-24: **359s** desde
+# apagar el motor hasta que la reproduccion del WAL llega, de verdad, a T_BUENO.
+#
+# Exige `--ambiente stg` -se niega contra `prod` sin excepcion, es destructivo sobre
+# el volumen en marcha- y un `KUBECONFIG` que ya apunte al cluster (el mismo tunel SSH
+# que usa el resto de `infra/`, no lo abre este guion). Los ocho pasos:
+#
+#   1-2. Igual que el modo local, pero se saltan: el motor de `stg` YA esta con
+#        archivado continuo, y el respaldo base YA lo toma el `CronJob` -este guion no
+#        repite lo que otro proceso ya hace y ya se verifico (#228)-.
+#   3-4. Escribe dos filas de ensayo en `contribuyente` de la municipalidad `1`,
+#        marcadas «ensayo-158-pitr» en cada campo de trazabilidad, con un
+#        `pg_switch_wal()` entre una y otra para separarlas en el archivado: T_BUENO
+#        es el instante entre las dos.
+#   5.   Se omite: ya lo comprueba el modo local, y repetirlo contra `stg` significaria
+#        cifrar con una clave equivocada un respaldo real, sin necesidad.
+#   6.   Apaga el `Deployment` (`--replicas=0`), preserva `PGDATA` -se renombra a
+#        `pgdata.antes-de-restaurar`, nunca se borra- y arranca un pod temporal, con el
+#        MISMO volumen montado en lectura-escritura, que instala wal-g y hace
+#        `backup-fetch` del ultimo respaldo real.
+#   7.   El pod temporal escribe `recovery.signal` y `postgresql.auto.conf`
+#        (`recovery_target_time = T_BUENO`, `recovery_target_action = 'pause'`) y se
+#        borra; el `Deployment` vuelve a `--replicas=1` y el propio motor -con el
+#        mismo `command`/`args` que ya tiene, sin tocarlos- entra en recuperacion solo.
+#        Se espera `pg_get_wal_replay_pause_state() = 'paused'`, no solo a que el
+#        socket responda (la misma carrera que documenta el modo local).
+#   8.   Compara la fila de ensayo BUENA (presente) contra la MALA (ausente), en vez de
+#        las dos municipalidades del modo local -`stg` ya tiene las que tenga sembradas
+#        de verdad, y este guion no las toca-. Promueve y prueba una escritura real.
+#
+# Lo que se preserva -`pgdata.antes-de-restaurar` en el volumen, la fila de ensayo
+# BUENA que queda en el padron- no se limpia solo: es la misma decision que toma el
+# runbook («no en el mismo paso»). Limpiarlo es un paso aparte, deliberado.
+#
+#   uso: respaldo/simulacro-de-restauracion.sh [--ambiente stg|prod] [--contra-cluster]
 set -euo pipefail
 
 AMBIENTE=stg
+CONTRA_CLUSTER=no
 while [ $# -gt 0 ]; do
     case "$1" in
         --ambiente) AMBIENTE=${2:?falta el valor de --ambiente}; shift 2 ;;
+        --contra-cluster) CONTRA_CLUSTER=si; shift ;;
         *) echo "Opcion desconocida: $1" >&2; exit 2 ;;
     esac
 done
+
+if [ "$CONTRA_CLUSTER" = "si" ]; then
+    [ "$AMBIENTE" = "stg" ] \
+        || { echo "FALLO: --contra-cluster solo corre contra stg. Es destructivo sobre" >&2
+             echo "el volumen en marcha, y prod no se ensaya con datos reales de nadie." >&2
+             exit 1; }
+
+    AQUI=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    INFRA=$(cd "$AQUI/.." && pwd)
+    # shellcheck source=contra-cluster.sh
+    source "$AQUI/contra-cluster.sh"
+    ensayar_contra_cluster
+    exit 0
+fi
 
 AQUI=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 INFRA=$(cd "$AQUI/.." && pwd)
@@ -319,6 +373,31 @@ motor_como_su_usuario env \
 PID_RESTAURADO=si
 motor_esperar || { tail -40 "$TRABAJO/restaurado.log"; echo "FALLO: el motor restaurado no acepto conexiones." >&2; exit 1; }
 
+# `motor_esperar` solo confirma que el socket acepta conexiones, y eso pasa en cuanto
+# se alcanza el "consistent recovery state" -MUCHO antes de que termine de reproducir
+# el WAL hasta T_BUENO, que sigue corriendo en segundo plano-. Preguntar por los datos
+# justo despues de `motor_esperar` es una carrera contra esa reproduccion: a veces gana
+# la consulta y la tabla todavia no existe -encontrado en CI y reproducido en local,
+# con el log del motor mostrando "database system is ready to accept read-only
+# connections" varios milisegundos ANTES de restaurar los segmentos que contienen la
+# escritura buena-. `pg_get_wal_replay_pause_state()` (PG 15+) es la señal real: pasa a
+# "paused" solo cuando la reproduccion llega de verdad al objetivo -no cuando el socket
+# empieza a responder-.
+echo "· Esperando a que la reproduccion llegue de verdad al objetivo -no solo a que el socket responda-"
+PAUSADO=no
+for _ in $(seq 1 30); do
+    if [ "$(motor_como_superusuario "SELECT pg_get_wal_replay_pause_state()" postgres)" = "paused" ]; then
+        PAUSADO=si
+        break
+    fi
+    sleep 1
+done
+if [ "$PAUSADO" != "si" ]; then
+    echo "FALLO: la reproduccion del WAL no llego a 'paused' en 30s." >&2
+    tail -40 "$TRABAJO/restaurado.log" >&2
+    exit 1
+fi
+
 FIN_DEL_RELOJ=$(date +%s)
 SEGUNDOS=$(( FIN_DEL_RELOJ - INICIO_DEL_RELOJ ))
 
@@ -332,6 +411,16 @@ consultar() {
     motor_como_su_usuario env PGPASSWORD="$CLAVE_SUPER" psql --username=postgres \
         --dbname=sgtm --tuples-only --no-align --command "$1"
 }
+
+if ! consultar "SELECT 1 FROM pg_tables WHERE tablename = 'simulacro_deuda'" | grep -q 1; then
+    echo "FALLO: la tabla simulacro_deuda no existe en lo restaurado -la reproduccion del WAL" >&2
+    echo "se detuvo ANTES de llegar a T_BUENO, no despues. Diagnostico:" >&2
+    echo "-- pg_is_in_recovery / ultimo LSN aplicado --" >&2
+    consultar "SELECT pg_is_in_recovery(), pg_last_wal_replay_lsn()" >&2 || true
+    echo "-- Ultimas 40 lineas del log del motor restaurado --" >&2
+    tail -40 "$TRABAJO/restaurado.log" >&2
+    exit 1
+fi
 
 filas=$(consultar "SELECT count(*) FROM simulacro_deuda")
 [ "$filas" = "3" ] \
@@ -374,7 +463,7 @@ echo "  promovido, y admite escrituras: es un sistema, no una copia"
 
 echo
 echo "─────────────────────────────────────────────────────────────────────"
-echo "  El simulacro de restauracion paso (ambiente «$AMBIENTE», modo $MODO)."
+echo "  El simulacro de restauracion paso (ambiente «${AMBIENTE}», modo $MODO)."
 echo
 echo "  Tiempo de recuperacion medido: ${SEGUNDOS}s"
 echo "    Desde la perdida del directorio de datos hasta un motor que acepta"

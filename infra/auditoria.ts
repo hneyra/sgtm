@@ -104,6 +104,7 @@ export function auditarManifiestos(
         problemas.push(...auditarKeycloak(donde, c.name, c.args ?? []));
         problemas.push(...auditarLaAplicacion(donde, c));
         problemas.push(...auditarRespaldo(donde, c));
+        problemas.push(...auditarSeguridad(donde, c));
         if (
           (clase === "Deployment" || clase === "CronJob") &&
           !COMPONENTES_CON_ACCESO_A_OWNER.includes(etiquetas["componente"] ?? "")
@@ -114,6 +115,80 @@ export function auditarManifiestos(
     }
 
     problemas.push(...auditarEstrategia(m));
+  }
+
+  problemas.push(...auditarPrioridades(manifiestos));
+
+  return problemas;
+}
+
+/**
+ * Que el motor de datos sea **lo ultimo que se desaloja**, leido del manifiesto.
+ *
+ * El bucle de arriba ya exige que todo pod declare `priorityClassName`, y eso es lo
+ * que hacia falta mientras la pregunta era «¿se acordo alguien de ponerlo?». No basta:
+ * **presencia no es orden**. Intercambiando `PRIORIDADES.datos` y `PRIORIDADES.lote`
+ * en `convenciones.ts` —PostgreSQL con la prioridad mas BAJA del clúster y las
+ * emisiones masivas con la mas alta— las 170 pruebas de `yarn verificar` siguen en
+ * verde y la auditoria no dice nada: cada pod sigue declarando su clase, solo que
+ * ahora el kubelet desaloja la base **primero**. Comprobado ejecutandolo, no razonado.
+ *
+ * Es justo la inversion de lo que el issue #157 pone como no-negociable —«clases de
+ * prioridad: la base de datos se desaloja la ultima»— y no tendria ningun sintoma
+ * hasta el dia que el nodo se quede sin memoria, que es el dia que menos conviene
+ * descubrirlo: con un solo nodo no hay a donde mover lo desalojado.
+ *
+ * Dos reglas, las dos legibles del manifiesto:
+ *
+ * 1. Toda clase que un pod nombre tiene que estar **definida en el mismo manifiesto**.
+ *    Kubernetes rechaza un pod cuya `PriorityClass` no existe, asi que un nombre mal
+ *    escrito aqui no es un despliegue degradado: es un pod que no arranca.
+ * 2. Ningun pod puede valer **tanto o mas** que el del motor, salvo que use su MISMA
+ *    clase. Lo segundo deja sitio a un futuro pod del tramo de datos —una replica—
+ *    sin abrir la puerta a que la interfaz empate con la base.
+ */
+function auditarPrioridades(manifiestos: Manifiesto[]): string[] {
+  const problemas: string[] = [];
+
+  const valorDe = new Map<string, number>();
+  for (const m of manifiestos) {
+    if (m.kind === "PriorityClass") valorDe.set(m.metadata.name, m.value);
+  }
+
+  const pods: { donde: string; clase: string; valor: number; esMotor: boolean }[] = [];
+  for (const m of manifiestos) {
+    for (const { contexto: donde, pod } of podsDe(m)) {
+      const clase = pod.priorityClassName;
+      const valor = valorDe.get(clase);
+      if (valor === undefined) {
+        problemas.push(
+          `${donde} declara \`priorityClassName: ${clase}\`, que ningun PriorityClass de este ` +
+            "manifiesto define. Kubernetes RECHAZA un pod cuya clase de prioridad no existe: " +
+            "no es un despliegue con menos garantias, es un pod que no llega a arrancar.",
+        );
+        continue;
+      }
+      pods.push({
+        donde,
+        clase,
+        valor,
+        esMotor: contenedoresDe(pod).some((c) => c.name === MOTOR),
+      });
+    }
+  }
+
+  const motor = pods.find((p) => p.esMotor);
+  if (motor === undefined) return problemas;
+
+  for (const otro of pods) {
+    if (otro.clase === motor.clase) continue;
+    if (otro.valor < motor.valor) continue;
+    problemas.push(
+      `${otro.donde} tiene prioridad ${otro.valor} (\`${otro.clase}\`) y ${motor.donde} —el motor ` +
+        `de datos— solo ${motor.valor} (\`${motor.clase}\`). INF-01 §4 y el issue #157: la base de ` +
+        "datos es lo ULTIMO que se desaloja. Con un solo nodo no hay a donde mover lo desalojado, " +
+        "asi que este numero es lo unico que decide quien sobrevive a una presion de memoria.",
+    );
   }
 
   return problemas;
@@ -168,6 +243,26 @@ function auditarRecursos(
       "toda carga los declara. Sin ellos el planificador no puede reservar nada y el kubelet " +
       "desaloja a ciegas, que en un nodo unico es la diferencia entre perder un Job y perder " +
       "la base de datos.",
+  ];
+}
+
+/**
+ * El endurecimiento de `INF-01` §4 que no admite excepcion (issue #157): sin
+ * escalada de privilegios, y sin ninguna capacidad Linux de mas. `runAsNonRoot`
+ * queda fuera a proposito —lo audita `verificaciones/componentes.test.ts`, no
+ * aqui, porque su ausencia es una decision nombrada de un puñado de contenedores
+ * (el motor de PostgreSQL, `respaldo-base`) y no un olvido: convertirla en un
+ * incumplimiento bloqueante rompe exactamente los dos casos donde faltar es
+ * correcto.
+ */
+function auditarSeguridad(donde: string, c: Contenedor): string[] {
+  const sc = c.securityContext;
+  if (sc?.allowPrivilegeEscalation === false && sc.capabilities?.drop?.includes("ALL")) return [];
+  return [
+    `${donde}, contenedor «${c.name}»: sin \`securityContext\` endurecido —` +
+      '`allowPrivilegeEscalation: false` y `capabilities: { drop: ["ALL"] }`. ' +
+      "INF-01 §4 (issue #157): ninguna de las dos tiene un motivo legitimo para faltar, ni " +
+      "siquiera en el contenedor que arranca como root a proposito.",
   ];
 }
 

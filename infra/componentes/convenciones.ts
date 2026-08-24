@@ -4,6 +4,7 @@ import type {
   MontajeDeVolumen,
   PriorityClass,
   Recursos,
+  SecurityContext,
   Sonda,
   VariableDeEntorno,
   Volumen,
@@ -264,6 +265,42 @@ export function sondaExec(command: string[], extra: Partial<Sonda> = {}): Sonda 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Endurecimiento de contenedores (issue #157)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Lo que va en TODO contenedor, sin excepcion: nada de escalada de privilegios, y
+ * ninguna capacidad Linux de mas alla de las que el propio contenedor nombra por
+ * `extra.capabilities.add` -casi nunca ninguna: la mayoria no necesita ni una-.
+ *
+ * `allowPrivilegeEscalation: false` si es universal sin excepcion. `capabilities.drop:
+ * ["ALL"]` tambien lo es, pero dropear TODO vuelve a "root" literalmente incapaz de sus
+ * propias operaciones -en Linux el privilegio de root viene de las capacidades, no del
+ * UID-: el `entrypoint` de PostgreSQL, que arranca como root a proposito para tomar
+ * posesion de `PGDATA` con `chown`, se rompio exactamente asi -"Operation not
+ * permitted", encontrado en CI-. La correccion no es dejar de dropear TODO: es que ESE
+ * contenedor re-conceda por nombre lo que su `entrypoint` necesita (ver
+ * `BaseDeDatos.ts`), y ningun otro.
+ */
+export function seguridadBase(extra: Partial<SecurityContext> = {}): SecurityContext {
+  return {
+    allowPrivilegeEscalation: false,
+    ...extra,
+    capabilities: { drop: ["ALL"], ...extra.capabilities },
+  };
+}
+
+/**
+ * La misma base, mas `runAsNonRoot: true`: lo que usa casi todo contenedor de este
+ * repositorio. Los que NO la usan lo dicen en su propio sitio, con el motivo —hoy,
+ * solo el `entrypoint` del motor de PostgreSQL (`BaseDeDatos.ts`), que necesita
+ * arrancar como root para tomar posesion del volumen antes de bajar privilegios.
+ */
+export function seguridadSinRoot(extra: Partial<SecurityContext> = {}): SecurityContext {
+  return seguridadBase({ runAsNonRoot: true, ...extra });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Nombres de servicio y de base
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -426,14 +463,64 @@ export function contenedorDeDescargaDeWalg(): Contenedor {
         "rm -f /tmp/wal-g.tar.gz",
       ].join(" && "),
     ],
+    // `curlimages/curl` ya trae su propio usuario sin privilegios -`curl_user`-,
+    // pero `runAsUser` SI hace falta nombrarlo (issue #157): la imagen fija ese
+    // usuario por NOMBRE, no por numero, y el kubelet rechaza el contenedor sin
+    // poder verificar que es no-root -"container has runAsNonRoot and image has
+    // non-numeric user (curl_user), cannot verify user is non-root", encontrado en
+    // CI-. 65534 no es necesariamente el UID real de `curl_user`, y no hace falta
+    // que lo sea: el volumen que monta es un `emptyDir` -escribible por cualquier
+    // UID por convencion del kubelet- y el resto de la tarea (`curl`, `sha256sum`,
+    // `tar`, `chmod`, `mv`) no depende de poseer ningun archivo de la imagen.
+    // `readOnlyRootFilesystem` es lo que el issue #157 pide «donde se pueda», y aqui
+    // se puede sin adivinar: la tarea entera escribe en exactamente dos sitios, los
+    // dos leibles de sus propios `args` de arriba -`/tmp`, para el `.tar.gz` que
+    // descarga y desempaqueta, y `WALG_DIRECTORIO`, que es el `emptyDir` compartido-.
+    // Ninguno de los dos es el sistema de archivos raiz una vez que `/tmp` tambien
+    // viene montado (`volumenDeTmpDeWalg`), asi que sellarlo no le quita nada y le
+    // cierra al binario descargado la posibilidad de dejar algo fuera de su volumen.
+    //
+    // **Ejecutado, no razonado**, contra la imagen real -`curlimages/curl:8.11.0`, los
+    // `args` exactos de abajo, `--read-only`, UID 65534, todas las capacidades caidas y
+    // `no-new-privileges`, con los dos `emptyDir` emulados como directorios 1777-:
+    //
+    //   A) con `/tmp` montado, como lo declara este manifiesto -> exit 0. Deja
+    //      `/opt/wal-g/wal-g` de 64 402 920 bytes en modo 0755, `/tmp` vacio tras el
+    //      `rm` final, y el binario arranca: «wal-g version v3.0.5 94bf839». De paso
+    //      confirma que `WALG_SHA256` es el del release de verdad.
+    //   B) sellando la raiz SIN montar `/tmp` -> exit 23, «curl: (23) client returned
+    //      ERROR on write of 16384 bytes». En Kubernetes eso es un init container que
+    //      no termina, y detras un motor que nunca llega a Ready.
+    //   C) sin sellar la raiz y sin `/tmp` -haciendo memoria: el estado anterior a este
+    //      cambio- -> exit 0. Por eso el par no se notaba: solo importa una vez sellada.
+    //
+    // De ahi que el montaje de `/tmp` y este `readOnlyRootFilesystem` sean una sola
+    // decision y no dos, y que `componentes.test.ts` los exija juntos.
+    securityContext: seguridadSinRoot({ runAsUser: 65534, readOnlyRootFilesystem: true }),
     resources: RECURSOS.auxiliar,
-    volumeMounts: [{ name: "wal-g-bin", mountPath: WALG_DIRECTORIO }],
+    volumeMounts: [
+      { name: "wal-g-bin", mountPath: WALG_DIRECTORIO },
+      { name: "wal-g-tmp", mountPath: "/tmp" },
+    ],
   };
 }
 
 /** El volumen `emptyDir` que comparte el binario entre el contenedor de descarga y el que lo usa. */
 export function volumenDeWalg(): Volumen {
   return { name: "wal-g-bin", emptyDir: {} };
+}
+
+/**
+ * El `/tmp` del contenedor de descarga, para que su raiz pueda ir de solo lectura.
+ *
+ * Va aparte de `wal-g-bin` a proposito: ese lo monta tambien el contenedor principal
+ * —de solo lectura, con `montajeDeWalg()`—, y el `.tar.gz` intermedio no tiene por que
+ * asomar ahi. Un `emptyDir` es escribible por cualquier UID por convencion del
+ * kubelet, que es lo que deja que el `runAsUser: 65534` de arriba escriba en el sin
+ * tener que coincidir con el usuario de la imagen.
+ */
+export function volumenDeTmpDeWalg(): Volumen {
+  return { name: "wal-g-tmp", emptyDir: {} };
 }
 
 /** Donde monta el binario el contenedor que YA no lo descarga: siempre de solo lectura. */
@@ -449,19 +536,24 @@ export function montajeDeWalg(): MontajeDeVolumen {
  * (`Respaldo.ts`). Definirlas una vez es lo que impide que un cambio de proveedor de
  * almacenamiento se aplique en un sitio y se olvide en el otro.
  *
- * `WALG_S3_FORCE_PATH_STYLE=true` porque el proveedor del almacenamiento de objetos
- * todavia no esta decidido (`INF-01` §7): el estilo de ruta funciona contra
- * practicamente cualquier S3 compatible, y el virtual-hosted-style que asume AWS por
- * omision no funciona contra la mayoria de los que no son AWS.
+ * `WALG_S3_FORCE_PATH_STYLE=true` se dejó puesto al decidir el proveedor —AWS S3
+ * (issue #158)— porque sigue funcionando ahí, y quitarlo no aporta nada: no hay
+ * necesidad de arriesgar el cambio a virtual-hosted-style sin un motivo concreto.
+ *
+ * `AWS_REGION` es obligatorio contra un S3 real: el SDK firma cada petición con la
+ * región incluida, y un valor equivocado —o ausente— no da un error de permisos, da
+ * uno de firma que no dice cuál es la región correcta (confirmado contra un bucket
+ * real, issue #158).
  */
 export function variablesWalg(args: {
-  backup: { endpoint: string; bucket: string };
+  backup: { endpoint: string; region: string; bucket: string };
   credenciales: string;
   secretoDeRespaldo: string;
 }): VariableDeEntorno[] {
   return [
     { name: "WALG_S3_PREFIX", value: `s3://${args.backup.bucket}` },
     { name: "AWS_ENDPOINT", value: args.backup.endpoint },
+    { name: "AWS_REGION", value: args.backup.region },
     { name: "WALG_S3_FORCE_PATH_STYLE", value: "true" },
     { name: "WALG_COMPRESSION_METHOD", value: "lz4" },
     {
