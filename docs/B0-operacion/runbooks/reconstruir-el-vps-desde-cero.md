@@ -4,7 +4,7 @@
 |---|---|
 | Cuándo | Pérdida total del nodo: el proveedor lo destruye, el disco no arranca, el VPS se cancela por error |
 | RTO objetivo | 4 horas (RNF-077) |
-| Estado del ensayo | **Parcialmente ejecutado, 2026-08-24.** Pasos 3–4 (secreto de arranque, `pulumi up` del stack completo) y las cuatro comprobaciones de «Cómo se comprueba que terminó bien» —salvo el cortafuegos— corridas contra el VPS real de `stg`, con once defectos de infraestructura y dos de documentación encontrados y corregidos. Pasos 1–2 (VPS nuevo, cortafuegos) y la restauración PITR en sí siguen sin ensayar: bloqueada en la decisión del almacenamiento de objetos, no en código. Ver «Estado del ensayo» |
+| Estado del ensayo | **Parcialmente ejecutado, 2026-08-24.** Pasos 3–4 (secreto de arranque, `pulumi up` del stack completo) y las cuatro comprobaciones de «Cómo se comprueba que terminó bien» —salvo el cortafuegos— corridas contra el VPS real de `stg`, con catorce defectos de infraestructura y dos de documentación encontrados y corregidos. El proveedor de almacenamiento de objetos ya se decidió (AWS S3) y el respaldo —continuo y base— llega de verdad. Pasos 1–2 (VPS nuevo, cortafuegos) y la restauración PITR en sí siguen sin ensayar: falta la bandera `--contra-cluster`, no una decisión. Ver «Estado del ensayo» |
 
 ## Síntoma
 
@@ -170,20 +170,33 @@ revisión de código había visto, seis documentados aparte
 | 9 | `sgtm_app` no tenía `SELECT` sobre `flyway_schema_history` (V7 la dejó fuera a propósito, por no ser tabla de negocio); el contenedor de espera de `implantacion` la consulta con esas credenciales y esperaba en bucle algo que nunca iba a poder ver | `implantacion` llevaba 4 h en `Init:0/1` con la migración ya terminada hacía 3 h | `c3ddcbf` + migración `V21` |
 | 10 | `psql --command`/`-c` no interpola `:'var'` en este cliente: las tres consultas del `CronJob` de respaldo (abrir la fila `EN_CURSO`, cerrarla `EXITOSO`/`FALLIDO`) llegaban a Postgres con el token literal — `syntax error at or near ":"`, siempre, en cualquier corrida | Reproducido a mano: `--command` no interpola, el mismo `-v` por `stdin` (heredoc) sí | `998fc78` |
 | 11 | El binario oficial de wal-g está enlazado contra glibc; `postgres:16.4-alpine` es musl. El motor llevaba desde su primer WAL sin poder archivar ninguno (`sh: /opt/wal-g/wal-g: not found`, exit 127, cada `archive_timeout`), y el `CronJob` de respaldo fallaba en `backup-push` por lo mismo. **Afecta igual a `prod`**: usa la misma imagen | Logs del motor real, siete intentos idénticos del Job de migración con el mismo síntoma de fondo | `e83f1e4` |
+| 14 | Contra un S3 real, sin `AWS_REGION`: el SDK firma cada petición con la región incluida, y su ausencia no da un error de permisos — da uno de firma que no dice cuál es la región correcta | `variablesWalg` solo tenía `AWS_ENDPOINT`; se agregó `backupRegion` como valor obligatorio de configuración | pendiente |
+| 15 | `backup-push` con `PGDATABASE` sin fijar: libpq usa el nombre del usuario como base por omisión, y `sgtm_respaldo` no es una base — `database "sgtm_respaldo" does not exist`. El primer intento de arreglo fue peor: `PGDATABASE=sgtm` conectó, pero `sgtm_respaldo` no tiene `CONNECT` ahí **a propósito** (`40-rol-de-respaldo.sh`: `pg_backup_start`/`stop` son del clúster entero, no de una base) — `permission denied for database "sgtm"` | Reproducido a mano, dos veces, hasta dar con `PGDATABASE=postgres` | pendiente |
+| 16 | `respaldo-base` sin `runAsUser`: hereda root, pero `capabilities.drop: ["ALL"]` le quita `CAP_DAC_OVERRIDE`, y PGDATA se monta en modo `0700` — root sin esa capacidad no lo puede leer (`PgControl file not found... permission denied`). Fijar `runAsUser: 70` (el dueño) rompió a su vez el primer paso del guion, que instala `gcompat` con `apk add` y necesita escribir la base de paquetes de la imagen, propiedad de root: `Unable to lock database: Permission denied`. La salida es una tercera: seguir como root, pero devolverle solo `CAP_DAC_READ_SEARCH` —lectura, no `CAP_DAC_OVERRIDE`, que además dejaría escribir | Reproducido a mano, tres veces, hasta dar con la capacidad exacta | pendiente |
 
-Los cinco se corrigieron, se aplicaron contra el clúster real con `pulumi up`, y se
-confirmaron ahí mismo — no solo en las pruebas. El estado al cerrar la sesión: los 9
+Los defectos 7–11 se corrigieron, se aplicaron contra el clúster real con `pulumi up`, y
+se confirmaron ahí mismo — no solo en las pruebas. El estado al cerrar esa sesión: los 9
 `Deployment` sanos, los 3 `Job` (`migracion`, `implantacion`, `realm`) en `Complete`, el
 `CronJob` de respaldo escribiendo bien sus filas de auditoría, y wal-g ejecutando de
-verdad (se ve corriendo bajo el cargador de `gcompat`, en vez de morir al instante).
+verdad (se ve corriendo bajo el cargador de `gcompat`, en vez de morir al instante) — pero
+contra el marcador de posición `s3.example.net`, así que sin poder confirmar que un
+respaldo *llegue* a destino.
 
-**Lo que el defecto 11 dejó a la vista, y no es un defecto:** `sgtm:backupEndpoint`
-sigue siendo el marcador de posición `s3.example.net` — no hay proveedor de
-almacenamiento de objetos decidido (`Red.ts` ya lo documentaba: «sin proveedor decidido
-no hay `ipBlock` que fijar»). Sin un extremo real, `wal-push` se queda esperando una
-conexión que no va a ningún lado: no se pudo verificar que un respaldo *llegue* a
-destino, solo que el proceso ya no muere al arrancar. Esa decisión no está en
-[Decisiones abiertas](../../00-gobierno/decisiones-abiertas.md) todavía.
+**2026-08-24, más tarde el mismo día: se decidió el proveedor — AWS S3.** Los buckets
+`sgtm-stg-respaldos` y `sgtm-prod-respaldos` se crearon (`us-east-1`, acceso público
+bloqueado, cifrado por omisión) y se conectaron con las credenciales que ya estaban en
+`GitHub Secrets`. Conectar un S3 real —no un marcador, no un simulacro— sacó a la luz los
+defectos 14–16, los tres corregidos y confirmados contra el bucket real:
+
+- **Archivado continuo**: 35 segmentos de WAL, confirmados con `aws s3 ls`, no solo con
+  `pg_stat_archiver`.
+- **Respaldo base**: `Respaldo #6 EXITOSO` en la tabla `respaldo`, con `base_*_backup_stop_sentinel.json`
+  confirmado en el bucket — las filas `FALLIDO` #1–5 de los intentos anteriores **no se
+  borraron**, quedan como el rastro honesto de lo que costó llegar ahí (regla 4).
+
+Con esto, el bloqueo del defecto 11 queda cerrado: ya hay un extremo real, y un respaldo
+—continuo y base— *llega* a destino. Lo que sigue sin poder cerrarse no es la conexión al
+almacenamiento, es la restauración en sí — ver «Lo que queda pendiente» abajo.
 
 **La escalera de identidad, contra el sistema real, con los cuatro peldaños en el
 código que le corresponden:**
@@ -216,8 +229,13 @@ en `stg` lo confirma en cualquier documento que las toque.
 Lo que queda pendiente de este mismo ensayo, sin necesidad de reconstruir el clúster de
 nuevo:
 
-- Restaurar a un punto en el tiempo de verdad — bloqueado en la decisión del
-  almacenamiento de objetos de arriba, no en D-01 ni en código.
+- **Restaurar a un punto en el tiempo de verdad.** Ya no está bloqueado en la decisión
+  del almacenamiento de objetos —eso se cerró arriba—: está bloqueado en que
+  [`simulacro-de-restauracion.sh`](../../../infra/respaldo/simulacro-de-restauracion.sh)
+  no tiene la bandera `--contra-cluster` (paso 4 de
+  [Restaurar a un punto en el tiempo](restaurar-a-un-punto-en-el-tiempo.md)) y en que
+  hace falta más de un respaldo base real —hoy hay uno— para elegir un instante objetivo
+  con sentido.
 - El cortafuegos con `nmap` y los pasos 1–2 — necesitan un VPS que se reconstruya desde
   el proveedor, no uno cuyo clúster se vacía y se vuelve a llenar.
 

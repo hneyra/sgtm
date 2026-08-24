@@ -37,7 +37,9 @@ config:
   # La municipalidad de stg se da de alta MARCADA: todo documento que emita sale
   # marcado en los tres formatos (INF-03 §3.2, issue #122). `config.ts` lo exige.
   sgtm:esDemostracion: "true"
-  sgtm:backupEndpoint: https://s3.example.net
+  # AWS S3 (issue #158, decision de 2026-08-24). us-east-1: es donde vive el bucket.
+  sgtm:backupEndpoint: https://s3.us-east-1.amazonaws.com
+  sgtm:backupRegion: us-east-1
   sgtm:backupBucket: sgtm-stg-respaldos
   sgtm:walArchiveTimeoutSeconds: "300"
   # De dónde lee stg para ensayar la restauración. Es el contenedor de prod, y la

@@ -5,7 +5,7 @@
 | Cuándo | Borrado accidental, corrupción de datos, o el primer paso de una reconstrucción completa |
 | RTO objetivo | Parte del RTO de 4 horas de RNF-077 ([`INF-01`](../../80-infraestructura/arquitectura-de-infraestructura.md) §5) |
 | RPO objetivo | 5 minutos (RNF-076) |
-| Estado del ensayo | **El procedimiento se ensaya en cada PR** que toca `infra/`, contra un PostgreSQL real ([`INF-08`](../../80-infraestructura/respaldo-y-recuperacion.md) §5). Las dos comprobaciones de «Cómo se comprueba que terminó bien» ya se corrieron contra `stg` real, 2026-08-24 — con datos sintéticos, sin una restauración real de por medio. **No** se ha ensayado el PITR en sí contra `stg`: bloqueado en el proveedor de almacenamiento de objetos, no en D-01 (ver «Estado del ensayo» abajo) |
+| Estado del ensayo | **El procedimiento se ensaya en cada PR** que toca `infra/`, contra un PostgreSQL real ([`INF-08`](../../80-infraestructura/respaldo-y-recuperacion.md) §5). Las dos comprobaciones de «Cómo se comprueba que terminó bien» ya se corrieron contra `stg` real, 2026-08-24 — con datos sintéticos, sin una restauración real de por medio. El proveedor de almacenamiento de objetos ya se decidió (AWS S3) y el respaldo llega de verdad. **No** se ha ensayado el PITR en sí contra `stg`: falta la bandera `--contra-cluster`, no una decisión (ver «Estado del ensayo» abajo) |
 
 ## Síntoma
 
@@ -185,18 +185,30 @@ ejecutaron las dos comprobaciones de arriba tal cual quedan escritas ahora:
    La comprobación de verdad —número calculado antes del incidente contra número que
    sale después de restaurar— sigue sin poder correr hasta que exista ese cálculo.
 
+**2026-08-24, más tarde el mismo día: se decidió el proveedor de almacenamiento de
+objetos — AWS S3.** Con los buckets reales conectados, tanto el archivado continuo (35
+segmentos de WAL, confirmados con `aws s3 ls`) como el respaldo base
+(`Respaldo #6 EXITOSO` en la tabla `respaldo`, sentinela confirmado en el bucket)
+*llegan* a destino de verdad — ya no hay que imaginar si el mecanismo funciona contra un
+S3 real, se confirmó. Conectar un extremo real sacó a la luz tres defectos más que el
+marcador de posición nunca habría revelado: `AWS_REGION` ausente (un S3 real firma cada
+petición con la región, y sin ella el error no dice cuál falta), `PGDATABASE` sin fijar
+en `backup-push` (`sgtm_respaldo` no tiene `CONNECT` sobre el padrón a propósito —
+`40-rol-de-respaldo.sh` — así que la base correcta es `postgres`, no `sgtm`), y
+`respaldo-base` sin la capacidad exacta para leer `PGDATA` sin también poder escribirla.
+El detalle de los tres queda en el «Estado del ensayo» de
+[Reconstruir el VPS desde cero](reconstruir-el-vps-desde-cero.md#estado-del-ensayo), no
+repetido aquí.
+
 **Lo que este runbook todavía no tiene:**
 
 - La bandera `--contra-cluster` del paso 4, que hoy no existe: el guion solo restaura
   sobre un motor que él mismo levanta, no sobre el volumen de un `Deployment` en marcha.
+  Ya no es solo una bandera que falta: ahora hay un respaldo real esperando del otro
+  lado para poder ensayarla contra él.
 - Ejecución completa contra `stg`, con datos anonimizados de volumetría real
   ([`INF-03`](../../80-infraestructura/ambientes.md) §2) — es donde saldría el RTO real,
   no el de 2 segundos con 4 filas que mide el simulacro de hoy.
-- La restauración desde el almacenamiento de objetos externo, en vez del sistema de
-  archivos local que usa el simulacro (`INF-08` §6): bloqueada en la decisión del
-  proveedor de almacenamiento de objetos, sin la cual `sgtm:backupEndpoint` sigue
-  siendo el marcador `s3.example.net` — no en D-01, que ya se cerró en su mitad de
-  municipalidad piloto.
 - Una comprobación 2 con una cifra real, calculada por el sistema: depende de D-02a,
   no de este runbook ni del VPS.
 

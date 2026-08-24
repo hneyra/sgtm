@@ -39,6 +39,7 @@ export function construirManifiestos(s: Invariants): Manifiesto[] {
       storageSize: s.database.storageSize,
       backup: {
         endpoint: s.backup.endpoint,
+        region: s.backup.region,
         bucket: s.backup.bucket,
         walArchiveTimeoutSeconds: s.backup.walArchiveTimeoutSeconds,
       },
@@ -49,6 +50,7 @@ export function construirManifiestos(s: Invariants): Manifiesto[] {
       postgresImage: s.database.image,
       backup: {
         endpoint: s.backup.endpoint,
+        region: s.backup.region,
         bucket: s.backup.bucket,
       },
       alertWebhookUrl: s.backup.alertWebhookUrl,
