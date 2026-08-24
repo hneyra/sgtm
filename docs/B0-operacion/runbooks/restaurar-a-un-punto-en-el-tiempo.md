@@ -5,7 +5,7 @@
 | Cuándo | Borrado accidental, corrupción de datos, o el primer paso de una reconstrucción completa |
 | RTO objetivo | Parte del RTO de 4 horas de RNF-077 ([`INF-01`](../../80-infraestructura/arquitectura-de-infraestructura.md) §5) |
 | RPO objetivo | 5 minutos (RNF-076) |
-| Estado del ensayo | **El procedimiento se ensaya en cada PR** que toca `infra/`, contra un PostgreSQL real ([`INF-08`](../../80-infraestructura/respaldo-y-recuperacion.md) §5). **No** se ha ensayado contra `stg` con volumetría real ni contra el almacenamiento de objetos externo — ver «Estado del ensayo» abajo |
+| Estado del ensayo | **El procedimiento se ensaya en cada PR** que toca `infra/`, contra un PostgreSQL real ([`INF-08`](../../80-infraestructura/respaldo-y-recuperacion.md) §5). Las dos comprobaciones de «Cómo se comprueba que terminó bien» ya se corrieron contra `stg` real, 2026-08-24 — con datos sintéticos, sin una restauración real de por medio. **No** se ha ensayado el PITR en sí contra `stg`: bloqueado en el proveedor de almacenamiento de objetos, no en D-01 (ver «Estado del ensayo» abajo) |
 
 ## Síntoma
 
@@ -106,10 +106,15 @@ conectando como `sgtm_app` — nunca como superusuario, que omite RLS
    ```bash
    kubectl -n sgtm-<amb> exec deployment/sgtm-<amb>-postgres -c postgres -- \
      psql -U sgtm_app -d sgtm -c \
-     "SET LOCAL sgtm.municipalidad_id = '<id-municipalidad-1>'; \
+     "SET LOCAL app.municipalidad_id = '<id-municipalidad-1>'; \
       SELECT count(*) FROM predio"
    # y de nuevo con el id de la municipalidad 2: el conteo tiene que cambiar
    ```
+
+   > El GUC es `app.municipalidad_id`, no `sgtm.municipalidad_id` —
+   > confirmado contra `V6__rls.sql` y el propio motor real (issue #158): con el
+   > nombre equivocado, `sgtm_app` no ve el error de RLS, ve
+   > `unrecognized configuration parameter`, antes de llegar siquiera a la política.
 
 2. **La deuda de un contribuyente conocido sale con su fecha** (RNF-075), y **coincide
    al céntimo** con lo que se sabía que tenía a esa fecha antes del incidente — no un
@@ -117,9 +122,15 @@ conectando como `sgtm_app` — nunca como superusuario, que omite RLS
 
    ```bash
    curl -H "Authorization: Bearer $TOKEN" \
-     https://<dominio>/api/v1/cuentacorriente/deuda/<contribuyente-conocido>
-   # la respuesta trae "fechaCalculo" y el total tiene que cuadrar con el registro previo
+     "https://<dominio>/api/v1/consultas/deuda?codContribuyente=<codigo>&fechaDeCorte=<aaaa-mm-dd>"
+   # la respuesta trae "actualizadoA" por cada concepto y el total tiene que cuadrar
+   # con el registro previo — sin fechaDeCorte, se calcula a hoy
    ```
+
+   > La ruta es `/api/v1/consultas/deuda`, con `codContribuyente` y `fechaDeCorte` como
+   > parámetros de consulta — no `/api/v1/cuentacorriente/deuda/<id>` en la ruta, que no
+   > existe (issue #158: la ruta original de este runbook nunca se ejecutó contra el
+   > sistema real).
 
 Si las dos pasan, se reanuda la aplicación (`replicas=1`) y se borra
 `data.antes-de-restaurar` **solo después de que la ventanilla confirme que el padrón se
@@ -141,6 +152,39 @@ respaldo base, cifrado, PITR, verificación, promoción— corre en cada PR que 
 `infra/`, y las seis formas de romperlo a propósito lo ponen en rojo
 ([`INF-08`](../../80-infraestructura/respaldo-y-recuperacion.md) §5.1).
 
+**2026-08-24, contra `stg` real, sin una restauración de por medio** —el VPS ya existe;
+lo que falta es la restauración en sí, no el sistema sobre el que correría—, se
+ejecutaron las dos comprobaciones de arriba tal cual quedan escritas ahora:
+
+1. **El aislamiento se sostiene**, con una segunda municipalidad sembrada a mano
+   (`999999`, «Municipalidad de Ensayo (aislamiento #158)», nunca comiteada como
+   infraestructura: es un `Job` de implantación de un solo uso, igual que
+   `crear-usuario.sh` para los usuarios de Keycloak). `predio` dio 1 fila en la
+   municipalidad 1 y 0 en la 2; lo mismo para `contribuyente`. Encontró además el bug
+   del GUC de arriba: con `sgtm.municipalidad_id`, la comprobación ni siquiera llega a
+   evaluar la política.
+
+2. **La deuda con fecha, con una cadena sintética explícita** —un contribuyente, un
+   predio, un `conjunto_parametros` sin sellar y un asiento `INSOLUTO`/`CARGO` de
+   `1234.56`, todos con `usuario_registro`/`motivo` marcados «ensayo-158», nunca
+   escritos por un caso de uso real—: `GET /api/v1/consultas/deuda` devolvió
+   `total.importe: "1234.56"` con `fechaDeCorte` igual a la fecha del asiento, y `"0"`
+   un día antes — la fecha exacta, no una aproximada, exactamente lo que
+   `deudaActualizadaA(fecha)` promete (regla 9). El código de la municipalidad 2 no
+   encontró ese contribuyente: sin fuga entre tenants, tampoco en este endpoint.
+   Encontró de paso el bug de la ruta de arriba, y que `porContribuyente` resuelve las
+   obligaciones existentes a través de `saldo_proyectado` —un índice, no la fuente de
+   verdad (`ConsultarDeuda`)— antes de recalcular desde el libro: sin una fila ahí, la
+   API no encuentra nada que recalcular aunque el asiento real exista.
+
+   **Lo que esto demuestra y lo que no:** que la ruta completa —ledger, índice de
+   descubrimiento, `deudaActualizadaA`, RLS— funciona de punta a punta con una cifra
+   exacta y una fecha exacta. **No** demuestra que `1234.56` sea lo que un predio real
+   debería pagar: no hay una sola regla de cálculo tributario implementada todavía
+   (D-02a sigue abierta), y esta cifra se escribió a mano, nunca la calculó el sistema.
+   La comprobación de verdad —número calculado antes del incidente contra número que
+   sale después de restaurar— sigue sin poder correr hasta que exista ese cálculo.
+
 **Lo que este runbook todavía no tiene:**
 
 - La bandera `--contra-cluster` del paso 4, que hoy no existe: el guion solo restaura
@@ -149,9 +193,12 @@ respaldo base, cifrado, PITR, verificación, promoción— corre en cada PR que 
   ([`INF-03`](../../80-infraestructura/ambientes.md) §2) — es donde saldría el RTO real,
   no el de 2 segundos con 4 filas que mide el simulacro de hoy.
 - La restauración desde el almacenamiento de objetos externo, en vez del sistema de
-  archivos local que usa el simulacro (`INF-08` §6).
-
-Las tres dependen del VPS de `stg`, que no existe mientras D-01 siga abierta.
+  archivos local que usa el simulacro (`INF-08` §6): bloqueada en la decisión del
+  proveedor de almacenamiento de objetos, sin la cual `sgtm:backupEndpoint` sigue
+  siendo el marcador `s3.example.net` — no en D-01, que ya se cerró en su mitad de
+  municipalidad piloto.
+- Una comprobación 2 con una cifra real, calculada por el sistema: depende de D-02a,
+  no de este runbook ni del VPS.
 
 ## Documentos relacionados
 

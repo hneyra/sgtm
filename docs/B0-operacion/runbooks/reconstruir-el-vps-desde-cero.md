@@ -4,7 +4,7 @@
 |---|---|
 | Cuándo | Pérdida total del nodo: el proveedor lo destruye, el disco no arranca, el VPS se cancela por error |
 | RTO objetivo | 4 horas (RNF-077) |
-| Estado del ensayo | **Parcialmente ejecutado, 2026-08-24.** Pasos 3–4 (secreto de arranque, `pulumi up` del stack completo) y la escalera de identidad de «Cómo se comprueba que terminó bien» corridos contra el VPS real de `stg`, con once defectos reales encontrados y corregidos. Pasos 1–2 (VPS nuevo, cortafuegos), la restauración PITR y las dos comprobaciones que esta exige siguen sin ensayar. Ver «Estado del ensayo» |
+| Estado del ensayo | **Parcialmente ejecutado, 2026-08-24.** Pasos 3–4 (secreto de arranque, `pulumi up` del stack completo) y las cuatro comprobaciones de «Cómo se comprueba que terminó bien» —salvo el cortafuegos— corridas contra el VPS real de `stg`, con once defectos de infraestructura y dos de documentación encontrados y corregidos. Pasos 1–2 (VPS nuevo, cortafuegos) y la restauración PITR en sí siguen sin ensayar: bloqueada en la decisión del almacenamiento de objetos, no en código. Ver «Estado del ensayo» |
 
 ## Síntoma
 
@@ -204,13 +204,20 @@ los siembra ningún manifiesto: se crean con
 adaptado de `docker compose exec` a `kcadm` contra el clúster. Quedan en el realm de
 `stg` para el próximo ensayo.
 
+**El aislamiento sostenido y la deuda con fecha** —las dos comprobaciones que
+[Restaurar a un punto en el tiempo](restaurar-a-un-punto-en-el-tiempo.md) exige— también
+se corrieron, 2026-08-24, sin una restauración real de por medio (el detalle completo y
+sus dos hallazgos —un GUC mal documentado, una ruta que nunca se ejecutó— quedan en el
+«Estado del ensayo» de ese runbook, no repetidos aquí). Sembraron una segunda
+municipalidad de un solo uso (`999999`) y una cadena sintética de deuda, marcadas las dos
+como ensayo en cada campo de trazabilidad: no son datos reales, y `es_demostracion=true`
+en `stg` lo confirma en cualquier documento que las toque.
+
 Lo que queda pendiente de este mismo ensayo, sin necesidad de reconstruir el clúster de
 nuevo:
 
-- El aislamiento sostenido y la deuda con fecha (las dos comprobaciones que
-  [Restaurar a un punto en el tiempo](restaurar-a-un-punto-en-el-tiempo.md) exige).
-- Restaurar a un punto en el tiempo de verdad — bloqueado en la decisión de arriba, no
-  en código.
+- Restaurar a un punto en el tiempo de verdad — bloqueado en la decisión del
+  almacenamiento de objetos de arriba, no en D-01 ni en código.
 - El cortafuegos con `nmap` y los pasos 1–2 — necesitan un VPS que se reconstruya desde
   el proveedor, no uno cuyo clúster se vacía y se vuelve a llenar.
 
