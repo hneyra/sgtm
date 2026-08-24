@@ -14,55 +14,122 @@
 ## 1. La tabla tal como está en la norma
 
 **Sin reordenar, sin convertir unidades, sin corregir un encabezado.** El Anexo I del Reglamento
-Nacional de Tasaciones trae **cuatro tablas**, una por uso de la edificación, cada una cruzando
-**material estructural predominante** × **estado de conservación** × **antigüedad** (en años):
+Nacional de Tasaciones trae **cuatro tablas**, una por uso de la edificación, cada una titulada
+«Porcentaje de depreciación por antigüedad y estado de conservación según el material estructural
+predominante» y cruzando **material estructural predominante** (Concreto, Ladrillo, Liviano/Adobe)
+× **estado de conservación** (Muy Bueno, Bueno, Regular, Malo) × **antigüedad** (once tramos, de
+«Hasta 5 años» a «Más de 50 años» — así los rotula la norma, no como rango «6-10»):
 
 | Tabla | Uso de la edificación |
 |---|---|
-| 01 | Casa habitación y departamentos |
-| 02 | Edificios — oficinas |
-| 03 | Tiendas, depósitos, centros de recreación o esparcimiento, clubes sociales e instituciones |
-| 04 | Edificaciones de salud, cines, industrias, uso educativo, talleres |
+| 01 | Casa habitación, departamentos para viviendas incluido los ubicados en edificios |
+| 02 | Tiendas, depósitos, centros de recreación o esparcimiento, clubes sociales o instituciones |
+| 03 | Edificios — oficinas |
+| 04 | Edificaciones de salud, cines, industrias, edificaciones de uso educativo, talleres |
 
-Cada tabla tiene esta forma (Tabla 01 como ejemplo de estructura; el contenido numérico se explica
-abajo):
+**Corrección respecto a una versión anterior de este archivo:** las tablas 02 y 03 estaban
+invertidas — un borrador previo tenía «02 = oficinas, 03 = tiendas»; el orden real, tal como
+aparece en el propio Anexo I (leído en un ejemplar íntegro, no en un resumen), es «02 = tiendas,
+depósitos, recreación...; 03 = oficinas» — ver procedencia abajo.
 
-| Material estructural | Estado de conservación | 0-5 | 6-10 | 11-15 | 16-20 | 21-25 | 26-30 | 31-35 | 36-40 | 41-45 | 46-50 | +50 |
+El asterisco (`*`) marca las combinaciones que la norma no tabula, en las celdas de mayor
+antigüedad y peor estado: ahí «el perito fija los porcentajes no tabulados» (nota literal del
+Anexo I, al pie de cada par de tablas). Ninguna celda con `*` se reemplaza aquí por un número.
+
+### Tabla 01 — Casa habitación, departamentos para viviendas incluido los ubicados en edificios
+
+| Material | Estado | Hasta 5 | Hasta 10 | Hasta 15 | Hasta 20 | Hasta 25 | Hasta 30 | Hasta 35 | Hasta 40 | Hasta 45 | Hasta 50 | Más de 50 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Concreto | Muy bueno | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› |
-| Concreto | Bueno | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› |
-| Concreto | Regular | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› |
-| Concreto | Malo | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› |
-| Ladrillo | Muy bueno | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› |
-| Ladrillo | Bueno | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› |
-| Ladrillo | Regular | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› |
-| Ladrillo | Malo | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› |
-| Adobe / madera (liviano) | Muy bueno | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› |
-| Adobe / madera (liviano) | Bueno | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› |
-| Adobe / madera (liviano) | Regular | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› |
-| Adobe / madera (liviano) | Malo | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› | ‹NC› |
+| Concreto | Muy Bueno | 0 | 0 | 3 | 6 | 9 | 12 | 15 | 18 | 21 | 24 | 27 |
+| Concreto | Bueno | 5 | 5 | 8 | 11 | 14 | 17 | 20 | 23 | 26 | 29 | 32 |
+| Concreto | Regular | 10 | 10 | 13 | 16 | 19 | 22 | 25 | 28 | 31 | 34 | 37 |
+| Concreto | Malo | 55 | 55 | 58 | 61 | 64 | 67 | 70 | 73 | 76 | 79 | 82 |
+| Ladrillo | Muy Bueno | 0 | 3 | 6 | 9 | 12 | 15 | 18 | 21 | 24 | 27 | 30 |
+| Ladrillo | Bueno | 8 | 11 | 14 | 17 | 20 | 23 | 26 | 29 | 32 | 35 | 38 |
+| Ladrillo | Regular | 20 | 23 | 26 | 29 | 32 | 35 | 38 | 41 | 44 | 47 | 50 |
+| Ladrillo | Malo | 60 | 63 | 66 | 69 | 72 | 75 | 78 | 81 | 84 | 87 | 90 |
+| Liviano/Adobe | Muy Bueno | 5 | 10 | 15 | 20 | 25 | 30 | 35 | 40 | 45 | 50 | 55 |
+| Liviano/Adobe | Bueno | 15 | 20 | 25 | 30 | 35 | 40 | 45 | 50 | 55 | 60 | 65 |
+| Liviano/Adobe | Regular | 30 | 35 | 40 | 45 | 50 | 55 | 60 | 65 | 70 | 75 | 80 |
+| Liviano/Adobe | Malo | 65 | 70 | 75 | 80 | 85 | 90 | * | * | * | * | * |
 
-> Columnas: años de antigüedad. El reglamento marca con asterisco (`*`) las combinaciones «no
-> tabuladas», donde el perito fija el porcentaje — eso sí es un dato estructural confirmado (varias
-> reproducciones coinciden en dónde caen los asteriscos en las celdas de mayor antigüedad y peor
-> estado), pero como no se confirmaron los números vecinos tampoco se transcribe aquí cuáles celdas
-> exactas llevan asterisco.
->
-> `‹NC›` = **‹NO CONFIRMADO EN FUENTE OFICIAL: el porcentaje exacto de cada celda no pudo
-> verificarse›**. Se intentó lo mismo que en `valores-unitarios-2026.md` (`gob.pe/vivienda`
-> bloqueado con 418; El Peruano remite el anexo a un archivo aparte que no se pudo abrir) y,
-> además, dos reproducciones de terceros alojadas en dominios `.gob.pe` de municipalidades
-> (dos fuentes que deberían citar la misma Tabla 01, material Concreto): **dieron series de
-> porcentajes distintas entre sí** para las mismas celdas (una con incrementos de ~3 puntos por
-> tramo de 5 años, la otra con incrementos ligeramente distintos y un desfase de un tramo). Una
-> tercera reproducción, la que se presenta como separata oficial de El Peruano, confirmó que el
-> Anexo I **no viene como texto extraíble** en esa copia —es imagen escaneada—, lo que explica por
-> qué dos intentos de lectura del mismo cuadro dieron números distintos: son reconstrucciones, no
-> lecturas fiables. Publicar cualquiera de las dos como si fuera la norma habría sido inventar una
-> cifra con apariencia de fuente oficial, que es exactamente lo que se pidió no hacer. **Sí están
-> confirmadas, por coincidir en las tres fuentes**: los cuatro materiales, los cinco estados (el
-> reglamento admite hasta «muy malo» además de los cuatro de la tabla), los once tramos de
-> antigüedad, y que las cuatro tablas (01-04) existen y se distinguen por uso de la edificación.
+### Tabla 02 — Tiendas, depósitos, centros de recreación o esparcimiento, clubes sociales o instituciones
+
+| Material | Estado | Hasta 5 | Hasta 10 | Hasta 15 | Hasta 20 | Hasta 25 | Hasta 30 | Hasta 35 | Hasta 40 | Hasta 45 | Hasta 50 | Más de 50 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Concreto | Muy Bueno | 0 | 2 | 5 | 8 | 11 | 14 | 17 | 20 | 23 | 26 | 29 |
+| Concreto | Bueno | 5 | 7 | 10 | 13 | 16 | 19 | 22 | 25 | 28 | 31 | 34 |
+| Concreto | Regular | 10 | 12 | 15 | 18 | 21 | 24 | 27 | 30 | 33 | 36 | 39 |
+| Concreto | Malo | 55 | 57 | 60 | 63 | 66 | 69 | 72 | 75 | 78 | 81 | 84 |
+| Ladrillo | Muy Bueno | 0 | 4 | 8 | 12 | 16 | 20 | 24 | 28 | 32 | 36 | 40 |
+| Ladrillo | Bueno | 8 | 12 | 16 | 20 | 24 | 28 | 32 | 36 | 40 | 44 | 48 |
+| Ladrillo | Regular | 20 | 24 | 28 | 32 | 36 | 40 | 44 | 48 | 52 | 56 | 60 |
+| Ladrillo | Malo | 60 | 64 | 68 | 72 | 76 | 80 | 84 | 88 | * | * | * |
+| Liviano/Adobe | Muy Bueno | 7 | 12 | 17 | 22 | 27 | 32 | 37 | 42 | 47 | 52 | 57 |
+| Liviano/Adobe | Bueno | 17 | 22 | 27 | 32 | 37 | 42 | 47 | 52 | 57 | 62 | 67 |
+| Liviano/Adobe | Regular | 32 | 37 | 42 | 47 | 52 | 57 | 62 | 67 | 72 | 77 | 82 |
+| Liviano/Adobe | Malo | 67 | 72 | 77 | 82 | 87 | * | * | * | * | * | * |
+
+### Tabla 03 — Edificios, oficinas
+
+| Material | Estado | Hasta 5 | Hasta 10 | Hasta 15 | Hasta 20 | Hasta 25 | Hasta 30 | Hasta 35 | Hasta 40 | Hasta 45 | Hasta 50 | Más de 50 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Concreto | Muy Bueno | 0 | 3 | 6 | 9 | 12 | 15 | 18 | 21 | 24 | 27 | 30 |
+| Concreto | Bueno | 5 | 8 | 11 | 14 | 17 | 20 | 23 | 26 | 29 | 32 | 35 |
+| Concreto | Regular | 10 | 13 | 16 | 19 | 22 | 25 | 28 | 31 | 34 | 37 | 40 |
+| Concreto | Malo | 55 | 58 | 61 | 64 | 67 | 70 | 73 | 76 | 79 | 82 | 85 |
+| Ladrillo | Muy Bueno | 0 | 5 | 9 | 13 | 17 | 21 | 25 | 29 | 33 | 37 | 41 |
+| Ladrillo | Bueno | 8 | 13 | 17 | 21 | 25 | 29 | 33 | 37 | 41 | 45 | 49 |
+| Ladrillo | Regular | 20 | 25 | 29 | 33 | 37 | 41 | 45 | 49 | 53 | 57 | 61 |
+| Ladrillo | Malo | 60 | 65 | 69 | 73 | 77 | 81 | 85 | 89 | * | * | * |
+| Liviano/Adobe | Muy Bueno | 9 | 14 | 19 | 24 | 29 | 34 | 39 | 44 | 49 | 54 | 59 |
+| Liviano/Adobe | Bueno | 19 | 24 | 29 | 34 | 39 | 44 | 49 | 54 | 59 | 64 | 69 |
+| Liviano/Adobe | Regular | 34 | 39 | 44 | 49 | 54 | 59 | 64 | 69 | 74 | 79 | 84 |
+| Liviano/Adobe | Malo | 69 | 74 | 79 | 84 | 89 | * | * | * | * | * | * |
+
+### Tabla 04 — Edificaciones de salud, cines, industrias, edificaciones de uso educativo, talleres
+
+| Material | Estado | Hasta 5 | Hasta 10 | Hasta 15 | Hasta 20 | Hasta 25 | Hasta 30 | Hasta 35 | Hasta 40 | Hasta 45 | Hasta 50 | Más de 50 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Concreto | Muy Bueno | 0 | 3 | 6 | 9 | 12 | 15 | 18 | 21 | 24 | 27 | 30 |
+| Concreto | Bueno | 5 | 10 | 13 | 16 | 18 | 20 | 23 | 26 | 29 | 32 | 35 |
+| Concreto | Regular | 20 | 22 | 25 | 27 | 30 | 32 | 34 | 37 | 39 | 42 | 44 |
+| Concreto | Malo | 59 | 61 | 64 | 67 | 70 | 72 | 75 | 77 | 80 | * | * |
+| Ladrillo | Muy Bueno | 0 | 5 | 9 | 13 | 17 | 21 | 25 | 29 | 33 | 37 | 41 |
+| Ladrillo | Bueno | 12 | 16 | 20 | 24 | 28 | 32 | 36 | 40 | 44 | 48 | 52 |
+| Ladrillo | Regular | 24 | 28 | 32 | 36 | 40 | 44 | 48 | 52 | 56 | 60 | 64 |
+| Ladrillo | Malo | 63 | 68 | 72 | 77 | 81 | 83 | * | * | * | * | * |
+| Liviano/Adobe | Muy Bueno | 9 | 14 | 19 | 24 | 29 | 34 | 39 | 44 | 49 | 54 | 60 |
+| Liviano/Adobe | Bueno | 21 | 26 | 30 | 35 | 40 | 45 | 50 | 54 | 59 | 64 | 70 |
+| Liviano/Adobe | Regular | 34 | 39 | 44 | 49 | 52 | 59 | 64 | 69 | 74 | 79 | 84 |
+| Liviano/Adobe | Malo | 69 | 74 | 79 | 84 | 89 | * | * | * | * | * | * |
+
+> Valores en porcentaje de depreciación (%). «El perito fija los porcentajes no tabulados» — nota
+> literal del Anexo I para cada `*`. El reglamento admite además un quinto estado, «Muy malo», sin
+> tabular en ninguna de las cuatro tablas: como en las celdas `*`, el porcentaje lo fija el perito
+> (o, en autoavalúo, la municipalidad según su instructivo).
+
+### Procedencia de estos valores
+
+**Igual que en `valores-unitarios-2026.md`, no se pudo leer el PDF del Anexo I directamente desde
+`gob.pe/vivienda`** (error 418, bloqueo de bot) **ni desde El Peruano** (el anexo va como archivo
+aparte, no como texto del cuerpo de la resolución). A diferencia de un intento anterior de esta
+transcripción —que había encontrado dos reproducciones municipales con series de porcentajes
+distintas entre sí, y por eso dejó la matriz en blanco—, esta vez se localizó un ejemplar íntegro
+del Anexo I (las cuatro tablas completas, con su título, orden y nota al pie originales) alojado
+por la Municipalidad de Talara, encabezado literalmente «RESOLUCIÓN MINISTERIAL N.º 172-2016-VIVIENDA
+... Anexo I - Tabla 01, 02, 03, 04». Se cotejó celda por celda —132 valores por tabla, las cuatro
+tablas— contra la sugerencia que motivó esta revisión, y coinciden **sin ninguna discrepancia**; el
+primer tramo de la Tabla 01 (Concreto/Ladrillo/Liviano-Adobe, «Hasta 5 años») coincide además con
+una tercera reproducción municipal independiente, consultada por separado.
+
+`‹NO CONFIRMADO EN FUENTE OFICIAL: que este ejemplar (una reproducción municipal, no el PDF de El
+Peruano ni de gob.pe/vivienda) sea idéntico palabra por palabra al Anexo I tal como lo publicó la
+resolución original›`. La coincidencia total entre dos fuentes que antes discrepaban, más una
+tercera que coincide en el tramo que se pudo contrastar, es la mejor evidencia disponible en esta
+sesión — pero sigue sin ser una lectura directa del documento oficial. Alguien con acceso de
+navegador normal a `gob.pe/vivienda` debería cotejar estas cuatro tablas contra el PDF original
+antes de que este archivo pase a `VERIFICADO`.
 
 ## 2. Cómo entra al sistema
 
@@ -77,10 +144,10 @@ abajo):
 
 ## 3. Qué no cabe hoy
 
-- **Los porcentajes de la matriz quedan `‹NC›`** (§1), por el motivo explicado ahí: dos
-  reproducciones de terceros dieron cifras distintas para la misma celda, y no se pudo acceder a
-  una copia del Anexo I con texto verificable. Antes de cargar esta tabla hace falta el PDF oficial
-  del Anexo I con las cuatro tablas completas.
+- **El estado «Muy malo»** no está tabulado en ninguna de las cuatro tablas (§1): el esquema
+  (`depreciacion`, clave arriba) no tiene dónde guardar un porcentaje para esa combinación porque
+  la norma no lo fija — igual que las celdas `*`, el sistema necesita permitir un valor manual
+  justificado, no solo lectura de tabla.
 - **«Y sus modificatorias»** (art. 4 de la RM 277-2025-VIVIENDA cita el reglamento así): se
   encontró al menos una resolución posterior, la RM N.º 186-2021-VIVIENDA, que modifica el numeral
   18.4 del artículo 18 del Reglamento Nacional de Tasaciones — no se confirmó si toca las Tablas
