@@ -79,6 +79,7 @@ class ContratoDeApiTest {
                     "GET /consultas/constancias/no-adeudo",
                     "GET /consultas/vehiculos",
                     "GET /consultas/pagos",
+                    "GET /consultas/predios",
                     "POST /rentas/deuda/altas",
                     "POST /rentas/deuda/bajas",
                     "GET /seguridad/modulos",
