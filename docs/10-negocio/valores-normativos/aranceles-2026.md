@@ -108,33 +108,36 @@ S/m². El núcleo urbano de Catacaos es continuo entre el borde derecho de la l�
 4/5/9/10/14/15) y el borde izquierdo de la B-1 (zonas 1/2/6/7), con un asentamiento menor adicional
 en la B-2 (zonas 8/9/13) — en total, varios cientos de tramos de vía.
 
-**No se transcribió el plano completo en esta pasada.** Es factible —el ejemplo de arriba lo
-demuestra— pero es un trabajo de extracción distinto en naturaleza al resto de este corpus: no es
-leer una tabla, es releer un mapa denso calle por calle, y el resultado no se puede cargar de todos
-modos hasta que exista el catálogo de vías de Catacaos con código de referencia catastral (#16,
-#121 — la capacidad ya existe; falta la carga de datos) contra el cual casar cada nombre de calle.
-Hacerlo dos veces —transcribir todas las calles por nombre ahora, y volver a cruzarlas contra los
-códigos después— es más trabajo que extraerlas una sola vez, ya con el catálogo cargado, cuando
-alguien pueda cruzar nombre de calle ↔ código en la misma pasada. Ver §3.
+**No se transcribió el plano completo en esta pasada, y no es esta transcripción manual la que va
+a cerrar esa fila.** Es factible leerlo a mano —el ejemplo de arriba lo demuestra—, pero **los
+valores arancelarios de la ciudad se van a importar desde un sistema GIS**, con información más
+exacta que la que un recorte de PDF a 600 dpi puede ofrecer (el GIS trae el polígono de cada
+predio y su vía asociada, no solo un número junto a un nombre de calle leído a ojo). Releer el
+plano calle por calle a mano sería trabajo que la importación GIS vuelve a hacer de todos modos, y
+con más precisión. Lo que este archivo deja documentado es que la fuente (el plano oficial,
+código 200105, láminas A-1/B-1/B-2) existe, está descargada y es legible — no que haya que
+transcribirla a mano. Ver §3.
 
 ## 2. Cómo entra al sistema
 
 | Qué | Dónde |
 |---|---|
-| Tipo | `parametro_tributario` (tipo `ARANCEL_RUSTICO`, una fila por combinación grupo de tierra × calidad agrológica; `ARANCEL_CENTRO_POBLADO_MENOR`, una fila por combinación calzada × ancho × infraestructura); `ARANCEL_VIA` para el plano urbano de la ciudad de Catacaos (§1.3), pendiente de transcribir |
-| Clave | `ARANCEL_RUSTICO` + grupo (`A`/`C`/`P`/`ERIAZO`) + calidad (`1`/`2`/`3` donde aplique), con el ejercicio como parte de la clave compuesta; `ARANCEL_CENTRO_POBLADO_MENOR` + tipo de calzada + tramo de ancho + columna A-H; `ARANCEL_VIA` + `(municipalidad_id, ejercicio, código de referencia catastral de la vía)` |
-| Ámbito | nacional (rústico y centros poblados menores, código 200105); municipal para el plano urbano de Catacaos, cuando se transcriba |
+| Tipo | `parametro_tributario` (tipo `ARANCEL_RUSTICO`, una fila por combinación grupo de tierra × calidad agrológica; `ARANCEL_CENTRO_POBLADO_MENOR`, una fila por combinación calzada × ancho × infraestructura); `ARANCEL_VIA` para el plano urbano de la ciudad de Catacaos (§1.3), que se **importa desde el sistema GIS**, no se transcribe a mano |
+| Clave | `ARANCEL_RUSTICO` + grupo (`A`/`C`/`P`/`ERIAZO`) + calidad (`1`/`2`/`3` donde aplique), con el ejercicio como parte de la clave compuesta; `ARANCEL_CENTRO_POBLADO_MENOR` + tipo de calzada + tramo de ancho + columna A-H; `ARANCEL_VIA` + `(municipalidad_id, ejercicio, código de referencia catastral de la vía)`, poblada por el importador GIS |
+| Ámbito | nacional (rústico y centros poblados menores, código 200105); municipal para el plano urbano de Catacaos, vía importación GIS |
 | Vigencia | 2026 |
 
 **No se carga con este archivo.** La carga depende de D-13.
 
 ## 3. Qué no cabe hoy
 
-- **El plano urbano de la ciudad de Catacaos (§1.3) sigue sin transcribir**, pese a que ya no está
-  bloqueado por falta de fuente —los tres planos (A-1, B-1, B-2) están descargados y son legibles—
-  ni por la municipalidad (D-01 ya resolvió Catacaos). Lo que falta es el catálogo de vías con
-  código de referencia catastral (#16/#121: capacidad cerrada, datos de Catacaos sin cargar) para
-  no transcribir cientos de nombres de calle que habría que volver a cruzar después.
+- **El plano urbano de la ciudad de Catacaos (§1.3) sigue sin transcribir, y no lo va a transcribir
+  este archivo.** La fuente ya no está bloqueada —los tres planos (A-1, B-1, B-2) están descargados
+  y son legibles— ni la municipalidad (D-01 ya resolvió Catacaos); lo que corresponde no es una
+  transcripción manual, sino la **importación desde el sistema GIS** que trae esos mismos valores
+  con más precisión (polígono de predio y vía asociada, no un número leído junto a un nombre de
+  calle). Esa importación depende igual del catálogo de vías con código de referencia catastral
+  (#16/#121: capacidad cerrada, datos de Catacaos sin cargar).
 - El listado rústico agrupa Catacaos con La Arena y La Unión (§1.1): la clave de
   `ARANCEL_RUSTICO` no distingue distrito porque la norma tampoco lo hace — la zonificación
   agrológica es la unidad real, no el límite distrital.
