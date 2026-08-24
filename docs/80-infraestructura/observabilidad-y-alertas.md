@@ -90,6 +90,15 @@ dos.
 | `CertificadoPorExpirar` | Menos de 14 días para que venza un certificado TLS |
 | `PresionDeCPUDelNodo` | PSI de CPU sostenida — la señal del incidente de `../iaac` del 2026-05-29, que el promedio de 5 minutos no alcanza a ver antes de que las sondas expiren |
 
+**Cada regla lleva una anotación `runbook`** con la ruta al procedimiento de
+[`docs/B0-operacion/runbooks/`](../B0-operacion/runbooks/) que le corresponde (issue
+#158): quien recibe la alerta en el receptor configurado recibe también qué hacer con
+ella, no solo que algo está mal. `RespaldoQueNoCorrio` apunta al runbook de restauración
+—no porque haya que restaurar, sino porque esa alerta es la señal de que restaurar
+todavía no se puede—; las cinco de presión de nodo (CPU, memoria, CrashLoopBackOff, pod
+no listo, PSI) apuntan todas al mismo runbook de mantenimiento, que empieza por un
+diagnóstico que las distingue.
+
 ## 6. Sin receptor, la regla se evalúa y nadie se entera — y eso se demuestra
 
 Es la frase que gobierna todo el diseño de Alertmanager: *«una regla que no notifica a
@@ -150,4 +159,5 @@ Keycloak (issue #153)—: se administra por el mismo túnel SSH que ya usa CI.
 [`INF-01`](arquitectura-de-infraestructura.md) §4 (prioridades y presión de memoria) ·
 [`INF-08`](respaldo-y-recuperacion.md) (la regla `RespaldoQueNoCorrio` lee su
 `CronJob`) · [`ADR-0011`](../30-arquitectura/adr/ADR-0011-infraestructura-como-codigo.md) ·
+[Runbooks de operación](../B0-operacion/runbooks/) — a donde apunta cada alerta ·
 [`infra/README.md`](../../infra/README.md)

@@ -314,4 +314,4 @@ decisión de las personas del proyecto, no una que este repositorio pueda tomar.
 | El archivado continuo de WAL y el PITR: el `Deployment` de PostgreSQL **no los trae** | #155 |
 | El cortafuegos del VPS, que no es un objeto de Kubernetes | #157, y `vps/cortafuegos.sh` |
 | De dónde salen los secretos de la aplicación | #154 |
-| Los runbooks de restauración | #158 |
+| Los runbooks de operación — escritos; el de reconstrucción, sin ensayar contra un VPS real | [`docs/B0-operacion/runbooks/`](../docs/B0-operacion/runbooks/), issue #158 |

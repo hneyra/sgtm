@@ -228,17 +228,20 @@ Dónde se ejecuta entonces, que es donde el criterio de #149 se cumple igual:
 |---|---|---|---|
 | Un pod muere (aplicación, interfaz, Keycloak) | k3s lo reprograma en el mismo nodo | Automática, segundos | No hace falta |
 | El pod de PostgreSQL muere | La aplicación devuelve error mientras tanto | Automática con `Recreate`; el volumen sigue ahí | No hace falta |
-| **El nodo se cae o se reinicia** | **Caída completa del servicio.** No hay quórum que sobreviva ni réplica que promover | Vuelve solo al arrancar el VPS: k3s reinicia y los pods se reprograman. Si el disco está sano, minutos | **Pendiente** — issue #158 |
-| **El disco se llena** | PostgreSQL deja de aceptar escrituras; los pods nuevos no arrancan; el nodo puede pasar a `DiskPressure` y desalojar. **Es el escenario más probable de los tres**, y el que más se parece a una caída sin serlo | Liberar espacio: el WAL retenido cuando el almacenamiento de objetos no está accesible, los registros de contenedor y las imágenes viejas. La alerta de espacio libre tiene que llegar antes (issue #156) | **Pendiente** — issue #158 |
-| **Se pierde el VPS entero** | Todo lo de dentro deja de existir | VPS nuevo → k3s → `pulumi up` del stack → restauración PITR desde el almacenamiento de objetos → verificar → apuntar el DNS. **RTO objetivo: 4 h (RNF-077)** | **Pendiente** — issue #158, y el simulacro en INF-03 §2 |
-| El almacenamiento de objetos no está accesible | La operación **sigue**. El WAL se acumula en el disco local, y de ahí a la fila anterior | Restablecer el destino; el WAL acumulado se drena solo. Alerta inmediata: es el aviso de que el RPO ya no se cumple | **Pendiente** — issue #158 |
-| Keycloak no está disponible | Quien ya entró sigue hasta que expire su token; **nadie nuevo entra**. La aplicación **no** se cae: con `jwk-set-uri` configurado el validador no necesita descubrimiento | Reprogramación del pod | No hace falta |
-| El certificado no renueva | El navegador rechaza la conexión. El desafío HTTP-01 necesita el puerto 80 abierto | Alerta a 21 días del vencimiento, no el día del vencimiento | **Pendiente** — issue #158 |
+| **El nodo se cae o se reinicia** | **Caída completa del servicio.** No hay quórum que sobreviva ni réplica que promover | Vuelve solo al arrancar el VPS: k3s reinicia y los pods se reprograman. Si el disco está sano, minutos | [Reconstruir el VPS desde cero](../B0-operacion/runbooks/reconstruir-el-vps-desde-cero.md) |
+| **El disco se llena** | PostgreSQL deja de aceptar escrituras; los pods nuevos no arrancan; el nodo puede pasar a `DiskPressure` y desalojar. **Es el escenario más probable de los tres**, y el que más se parece a una caída sin serlo | Liberar espacio: el WAL retenido cuando el almacenamiento de objetos no está accesible, los registros de contenedor y las imágenes viejas. La alerta de espacio libre tiene que llegar antes (issue #156) | [El disco del nodo se llenó](../B0-operacion/runbooks/el-disco-del-nodo-se-lleno.md) |
+| **Se pierde el VPS entero** | Todo lo de dentro deja de existir | VPS nuevo → k3s → `pulumi up` del stack → restauración PITR desde el almacenamiento de objetos → verificar → apuntar el DNS. **RTO objetivo: 4 h (RNF-077)** | [Reconstruir el VPS desde cero](../B0-operacion/runbooks/reconstruir-el-vps-desde-cero.md), y el simulacro en INF-03 §2 |
+| El almacenamiento de objetos no está accesible | La operación **sigue**. El WAL se acumula en el disco local, y de ahí a la fila anterior | Restablecer el destino; el WAL acumulado se drena solo. Alerta inmediata: es el aviso de que el RPO ya no se cumple | [El disco del nodo se llenó](../B0-operacion/runbooks/el-disco-del-nodo-se-lleno.md) §1 |
+| Keycloak no está disponible | Quien ya entró sigue hasta que expire su token; **nadie nuevo entra**. La aplicación **no** se cae: con `jwk-set-uri` configurado el validador no necesita descubrimiento | Reprogramación del pod | [Keycloak no responde](../B0-operacion/runbooks/keycloak-no-responde.md) — solo si el pod no vuelve solo |
+| El certificado no renueva | El navegador rechaza la conexión. El desafío HTTP-01 necesita el puerto 80 abierto | Alerta a 21 días del vencimiento, no el día del vencimiento | [Mantenimiento del VPS](../B0-operacion/runbooks/mantenimiento-del-vps.md) §5 |
 | Pulumi Cloud no está disponible | **No se puede modificar la infraestructura.** Lo que corre sigue corriendo | Esperar, o tomar la salida de `ADR-0011` §3 | No hace falta |
 
-**De las tres filas que la épica exige responder, hoy ninguna tiene runbook.** Están todas en el
-issue #158 y hasta que se escriban, la recuperación depende de que quien la haga recuerde los pasos.
-Decirlo por escrito es la diferencia entre una deuda y una sorpresa.
+**Los ocho runbooks de issue #158 están escritos**, en
+[`docs/B0-operacion/runbooks/`](../B0-operacion/runbooks/). Lo que ninguno tiene todavía
+es el ensayo completo contra un VPS real —el propio índice de runbooks lo dice sin
+adornarlo—, porque ese VPS no existe mientras D-01 siga abierta. Escribir el
+procedimiento es necesario y no es lo mismo que haberlo corrido: es la distinción que
+cada runbook marca en su propia sección «Estado del ensayo».
 
 La fila del RTO de 4 h es la que hay que probar y la que se posterga con más facilidad. **Un RTO que
 nunca se ensayó es una aspiración, no un requisito**, y el sitio donde se ensaya está en INF-03 §2.
@@ -257,7 +260,7 @@ Detalle en [`ambientes.md`](ambientes.md) (INF-03). Resumen de topología:
 
 - [ ] Confirmar el proveedor del VPS y el dimensionamiento de §2 con volumetría real (bloqueado por D-01).
 - [ ] Definir el proveedor del almacenamiento de objetos externo, que es donde vive el RPO (§1.3).
-- [ ] Escribir los runbooks de §5 (issue #158) y anotar el tiempo real del primer simulacro.
+- [ ] Ensayar [reconstruir el VPS desde cero](../B0-operacion/runbooks/reconstruir-el-vps-desde-cero.md) contra un VPS real y anotar el tiempo (issue #158; los ocho runbooks ya están escritos).
 - [ ] Definir la ventana de mantenimiento y cómo se anuncia (RNF-078).
 - [ ] Definir la lista de destinos de salida permitidos cuando aparezca la primera integración (§3).
 - [ ] Medir cuánto tarda de verdad la restauración con el padrón del piloto, y corregir RNF-077 si
@@ -269,4 +272,6 @@ Detalle en [`ambientes.md`](ambientes.md) (INF-03). Resumen de topología:
 [`ADR-0011`](../30-arquitectura/adr/ADR-0011-infraestructura-como-codigo.md) ·
 [`REQ-02 §Operación`](../20-requisitos/requisitos-no-funcionales.md) ·
 [`ARQ-03 — Estrategia multi-tenant`](../30-arquitectura/estrategia-multitenant.md) ·
+[`entorno-local-de-desarrollo.md`](entorno-local-de-desarrollo.md) (INF-11) ·
+[Runbooks de operación](../B0-operacion/runbooks/) (§5 de este documento) ·
 [`despliegue/README.md`](../../despliegue/README.md) — el compose, que sigue siendo el entorno local
