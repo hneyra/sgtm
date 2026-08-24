@@ -101,6 +101,14 @@ export function manifiestosDeRespaldo(args: RespaldoArgs): Manifiesto[] {
   const guion = [
     "set -uo pipefail",
     "",
+    "# 0. El binario oficial de wal-g esta enlazado contra glibc; esta imagen es musl",
+    "#    (Alpine). Sin gcompat, wal-push/backup-push mueren con «not found» (exit",
+    "#    127) -confirmado contra un cluster real, issue #158: el motor llevaba desde",
+    "#    su primer WAL sin poder archivar ni uno solo-. Requiere la salida a :443 que",
+    "#    permitirSalidaAlAlmacenamiento ya abre para este pod.",
+    "apk add --no-cache gcompat >/tmp/apk.log 2>&1 || { cat /tmp/apk.log >&2; " +
+      'echo "FALLO: no se pudo instalar gcompat (glibc para wal-g)." >&2; exit 1; }',
+    "",
     "# 1. Se registra ANTES de intentar nada: si el pod muere a mitad, la fila que",
     "#    se queda en EN_CURSO es la pista de que algo no termino, no un silencio.",
     // `--command`/`-c` NO interpola `:'var'` en este cliente -confirmado contra un
