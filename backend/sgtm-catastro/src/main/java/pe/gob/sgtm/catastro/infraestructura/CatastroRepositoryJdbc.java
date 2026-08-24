@@ -13,6 +13,7 @@ import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.CondicionDeTitularidad;
 import pe.gob.sgtm.catastro.dominio.EstadoPredio;
+import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.Sector;
@@ -47,6 +48,10 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
     private static final String COLUMNAS_TITULARIDAD =
             "id, predio_id, contribuyente_id, condicion, porcentaje, vigencia_desde,"
                     + " vigencia_hasta, documento_origen";
+
+    private static final String COLUMNAS_INQUILINO =
+            "id, predio_id, contribuyente_id, uso, vigencia_desde, vigencia_hasta,"
+                    + " documento_origen";
 
     private static final OrdenSeguro ORDEN_SECTOR =
             OrdenSeguro.sobre("codigo", "nombre", "zona", "id");
@@ -325,6 +330,78 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
         return titularidad;
     }
 
+    // ---------- Inquilinos (#31) ----------
+
+    @Override
+    public List<Inquilino> inquilinosDe(long predioId, LocalDate fecha) {
+        Objects.requireNonNull(fecha, "Quien ocupa el predio se pregunta a una fecha (regla 9)");
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS_INQUILINO
+                                + " FROM inquilino"
+                                + " WHERE predio_id = :predio AND"
+                                + VIGENTE_A_LA_FECHA
+                                + " ORDER BY id")
+                .param("predio", predioId)
+                .param("fecha", fecha)
+                .query(CatastroRepositoryJdbc::mapearInquilino)
+                .list();
+    }
+
+    @Override
+    public Optional<Inquilino> inquilino(long id) {
+        return jdbc().sql("SELECT " + COLUMNAS_INQUILINO + " FROM inquilino WHERE id = :id")
+                .param("id", id)
+                .query(CatastroRepositoryJdbc::mapearInquilino)
+                .optional();
+    }
+
+    @Override
+    public Inquilino guardar(Inquilino inquilino) {
+        if (inquilino.esNuevo()) {
+            Long id =
+                    jdbc().sql(
+                                    "INSERT INTO inquilino"
+                                            + " (municipalidad_id, predio_id, contribuyente_id,"
+                                            + "  uso, vigencia_desde, vigencia_hasta,"
+                                            + "  documento_origen)"
+                                            + " VALUES ("
+                                            + MUNICIPALIDAD_ACTUAL
+                                            + ", :predio, :contribuyente, :uso, :desde, :hasta,"
+                                            + "  :documento)"
+                                            + " RETURNING id")
+                            .param("predio", inquilino.predioId())
+                            .param("contribuyente", inquilino.contribuyenteId())
+                            .param("uso", inquilino.uso())
+                            .param("desde", inquilino.vigenciaDesde())
+                            .param("hasta", inquilino.vigenciaHasta())
+                            .param("documento", inquilino.documentoOrigen())
+                            .query(Long.class)
+                            .single();
+            return new Inquilino(
+                    id,
+                    inquilino.predioId(),
+                    inquilino.contribuyenteId(),
+                    inquilino.uso(),
+                    inquilino.vigenciaDesde(),
+                    inquilino.vigenciaHasta(),
+                    inquilino.documentoOrigen());
+        }
+
+        long id = Objects.requireNonNull(inquilino.id(), "Un inquilino existente tiene id");
+        int filas =
+                jdbc().sql(
+                                "UPDATE inquilino SET vigencia_hasta = :hasta"
+                                        + " WHERE id = :id AND vigencia_hasta IS NULL")
+                        .param("id", id)
+                        .param("hasta", inquilino.vigenciaHasta())
+                        .update();
+        if (filas == 0) {
+            throw new NoEncontrado("inquilino vigente", id);
+        }
+        return inquilino;
+    }
+
     // ---------- Mapeos ----------
 
     private static Map<String, Object> camposDe(Predio predio) {
@@ -394,6 +471,18 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
                 fila.getLong("contribuyente_id"),
                 CondicionDeTitularidad.valueOf(fila.getString("condicion")),
                 new Porcentaje(fila.getBigDecimal("porcentaje")),
+                fila.getDate("vigencia_desde").toLocalDate(),
+                hasta == null ? null : hasta.toLocalDate(),
+                fila.getString("documento_origen"));
+    }
+
+    private static Inquilino mapearInquilino(ResultSet fila, int numeroDeFila) throws SQLException {
+        java.sql.Date hasta = fila.getDate("vigencia_hasta");
+        return new Inquilino(
+                fila.getLong("id"),
+                fila.getLong("predio_id"),
+                fila.getLong("contribuyente_id"),
+                fila.getString("uso"),
                 fila.getDate("vigencia_desde").toLocalDate(),
                 hasta == null ? null : hasta.toLocalDate(),
                 fila.getString("documento_origen"));

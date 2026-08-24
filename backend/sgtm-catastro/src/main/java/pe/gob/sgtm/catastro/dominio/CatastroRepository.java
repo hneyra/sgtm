@@ -51,4 +51,14 @@ public interface CatastroRepository {
     Optional<Titularidad> titularidad(long id);
 
     Titularidad guardar(Titularidad titularidad);
+
+    // ---------- Inquilinos (#31) ----------
+
+    /** Quien ocupa el predio en esa fecha. Puede haber mas de uno vigente a la vez. */
+    List<Inquilino> inquilinosDe(long predioId, LocalDate fecha);
+
+    /** Un registro de inquilino por su identificador, vigente o ya cerrado. */
+    Optional<Inquilino> inquilino(long id);
+
+    Inquilino guardar(Inquilino inquilino);
 }
