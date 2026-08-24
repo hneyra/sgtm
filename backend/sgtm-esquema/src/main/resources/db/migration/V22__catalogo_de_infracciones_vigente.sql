@@ -1,5 +1,5 @@
 -- ============================================================================
---  V21 — Una sola versión vigente por código de infracción (#43)
+--  V22 — Una sola versión vigente por código de infracción (#43)
 --
 --  codigo_infraccion ya vive desde V4, con vigencia_desde/vigencia_hasta. Falta
 --  la garantia que V1 ya usa en ficha_catastral (ficha_vigente_uq): que no
