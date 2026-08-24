@@ -536,19 +536,24 @@ export function montajeDeWalg(): MontajeDeVolumen {
  * (`Respaldo.ts`). Definirlas una vez es lo que impide que un cambio de proveedor de
  * almacenamiento se aplique en un sitio y se olvide en el otro.
  *
- * `WALG_S3_FORCE_PATH_STYLE=true` porque el proveedor del almacenamiento de objetos
- * todavia no esta decidido (`INF-01` §7): el estilo de ruta funciona contra
- * practicamente cualquier S3 compatible, y el virtual-hosted-style que asume AWS por
- * omision no funciona contra la mayoria de los que no son AWS.
+ * `WALG_S3_FORCE_PATH_STYLE=true` se dejó puesto al decidir el proveedor —AWS S3
+ * (issue #158)— porque sigue funcionando ahí, y quitarlo no aporta nada: no hay
+ * necesidad de arriesgar el cambio a virtual-hosted-style sin un motivo concreto.
+ *
+ * `AWS_REGION` es obligatorio contra un S3 real: el SDK firma cada petición con la
+ * región incluida, y un valor equivocado —o ausente— no da un error de permisos, da
+ * uno de firma que no dice cuál es la región correcta (confirmado contra un bucket
+ * real, issue #158).
  */
 export function variablesWalg(args: {
-  backup: { endpoint: string; bucket: string };
+  backup: { endpoint: string; region: string; bucket: string };
   credenciales: string;
   secretoDeRespaldo: string;
 }): VariableDeEntorno[] {
   return [
     { name: "WALG_S3_PREFIX", value: `s3://${args.backup.bucket}` },
     { name: "AWS_ENDPOINT", value: args.backup.endpoint },
+    { name: "AWS_REGION", value: args.backup.region },
     { name: "WALG_S3_FORCE_PATH_STYLE", value: "true" },
     { name: "WALG_COMPRESSION_METHOD", value: "lz4" },
     {

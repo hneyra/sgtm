@@ -95,6 +95,8 @@ export interface BaseDeDatosArgs {
   backup: {
     /** El `AWS_ENDPOINT` de wal-g: el almacenamiento de objetos, FUERA del VPS. */
     endpoint: string;
+    /** El `AWS_REGION` de wal-g. Obligatorio contra un S3 real (issue #158). */
+    region: string;
     /** El contenedor. `WALG_S3_PREFIX` sale de aqui: `s3://<bucket>`. */
     bucket: string;
     /** `archive_timeout`, en segundos. Es RNF-076 escrito en el proceso del motor. */
