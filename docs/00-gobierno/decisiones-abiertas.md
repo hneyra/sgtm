@@ -6,7 +6,6 @@ sale de esta tabla y entra como ADR o como cambio en el documento que correspond
 | # | Decisión | Decide | Bloquea | Estado |
 |---|---|---|---|---|
 | **D-01** | Municipalidad piloto y validador funcional de reglas tributarias. **Municipalidad piloto: Municipalidad Distrital de Catacaos** (decidido 2026-08-24 por Dirección del proyecto, en reemplazo de la Municipalidad Distrital de Chala que se había decidido el 2026-08-23). El validador funcional de reglas tributarias sigue sin nombrarse | Dirección del proyecto | La primera iteración de negocio completa | Abierta — **la municipalidad ya no bloquea** D-02b/E-6 (#202); el validador funcional, pendiente |
-| **D-02a** | **Lo que fija una norma nacional publicada.** Enumeración exacta: las filas 1-9, 15, 16, 17, 20, 21, 22, 24 y 27 del [mapa normativo](../10-negocio/marco-normativo.md) —UIT, tramos y alícuotas, mínimo, deducciones, plazos y reajuste del predial, valores unitarios, aranceles, depreciación, alcabala, vehicular, espectáculos, prescripción, plazos de notificación, tabla de infracciones de tránsito y multa tributaria—. **No se decide: se busca, se transcribe y se firma** (E-3, #200) | Asesoría legal | #188, #190, #192, #194, #195, #196, #197, #198 | Abierta — **no depende de D-01** |
 | **D-02b** | **Lo que fija una ordenanza de la municipalidad en materia tributaria**, con su **acuerdo de ratificación provincial** cuando la emite una distrital: filas 11-14, 18, 19, 25, 28 y 29 del mapa —arbitrios y sus criterios de distribución, descuento por pago adelantado, inafectaciones, anuncios, TIM, CUIS, interés y máximo de cuotas del fraccionamiento, y derecho de trámite del TUPA—. Sin ratificación no habilita emisión (ARQ-09 §2.4, riesgo R-04) | Rentas del piloto | #189, #191, #196, #197, #199 | Abierta — **la municipalidad ya está elegida (Catacaos, D-01)**; falta su ordenanza y la ratificación provincial (E-6, #202 sigue abierto por eso) |
 | **D-02c** | **Lo que fija un acto propio de la municipalidad que no es ordenanza tributaria ratificada**: filas 23 y 26 del mapa —arancel de costas coactivas ‹confirmar quién lo aprueba› y descuentos por pronto pago de papeletas—. Ni se busca en El Peruano ni se ratifica: hay que producirlo | Rentas + asesoría legal | #193, #195, #196 | Abierta — la municipalidad ya está elegida (Catacaos, D-01); falta producir el acto propio |
 | **D-03a** | **Escala de cálculo intermedio.** Casi decidida de hecho: `../srtm/docs/40-datos/ddl/esquema-verificado.sql` ya define `monto_calc numeric(18,6)` frente a `dinero numeric(15,2)`. Falta **ratificarlo**, no inventarlo | Arquitectura + contabilidad | La primera regla de cálculo | Abierta — trámite |
@@ -43,7 +42,12 @@ Mientras D-02 esté abierta —cualquiera de sus tres partes—:
 Era una sola fila que cubría ~27 datos de siete tributos, y por eso bloqueaba en bloque. Pero los
 tres grupos tienen responsables y bloqueos distintos:
 
-- **D-02a** son normas nacionales publicadas. **Se pueden cerrar hoy**, sin municipalidad piloto.
+- **D-02a** son normas nacionales publicadas. **Cerrada el 2026-08-25** ([#200](https://github.com/hneyra/sgtm/issues/200)):
+  los 14 archivos de [`valores-normativos/`](../10-negocio/valores-normativos/) están `VERIFICADO`,
+  con segunda firma distinta cada uno. Cerrar la firma no habilita todavía escribir una regla con
+  cifra real: la carga a la base sigue esperando D-13 (para las tres tablas de valuación) y un
+  mecanismo que invoque `AdministrarParametros.abrirVersion` contra un ambiente real, y casi toda
+  regla del predial sigue esperando además D-03c y D-11 (H-12, [GOB-03](plan-de-desbloqueo-D-02.md) §0.6).
 - **D-02b** exige la ordenanza del piloto *y* su ratificación provincial. No se puede empezar.
 - **D-02c** está en medio.
 
