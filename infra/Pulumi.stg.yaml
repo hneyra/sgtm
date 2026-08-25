@@ -24,7 +24,7 @@ config:
   sgtm:keycloakRealm: sgtm
   sgtm:keycloakSeedTestUsers: "true"
   sgtm:applicationImageRepository: ghcr.io/hneyra
-  sgtm:applicationBootstrapVersion: b974d5db73cfaa91ffa891dd3dc4f15a409a1a36
+  sgtm:applicationBootstrapVersion: 1ec6bd62a3d772b8583827a80b4fbe63f014a8ad
   sgtm:webReplicas: "1"
   # La municipalidad de ensayo. El ubigeo es el de Catacaos, igual que en prod (D-01,
   # 2026-08-24), porque stg restaura los respaldos de prod anonimizados (INF-03 §2 y
