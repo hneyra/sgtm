@@ -11,6 +11,7 @@ import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -52,15 +53,23 @@ import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 @DisplayName("Carga masiva de aranceles de terreno por via desde archivo")
 class ImportarArancelTest {
 
+    private static final AtomicInteger SIGUIENTE_VERSION = new AtomicInteger(1);
+
     private static BaseDeDatosDePrueba base;
     private static long municipalidadA;
     private static long municipalidadB;
     private static long viaX;
-    private static long conjuntoAbierto;
     private static long conjuntoSellado;
     private static ImportarArancel importarArancel;
     private static JdbcClient jdbc;
     private static TenantTransactionManager gestor;
+
+    // Instancia, no estatico: cada prueba abre SU PROPIO conjunto (V25 exige un arancel unico
+    // por via sin tramo dentro de un mismo conjunto, y varias pruebas insertan "VA-1" sin
+    // tramo; compartir un unico conjunto entre pruebas haria que la segunda en correr viera su
+    // insercion rechazada por la primera, con el mismo motivo que demuestra V25 pero por una
+    // razon que no es la que cada prueba quiere demostrar).
+    private long conjuntoAbierto;
 
     @BeforeAll
     static void provisionar() throws SQLException, IOException {
@@ -69,7 +78,6 @@ class ImportarArancelTest {
         municipalidadB = crearMunicipalidad("250102", "Municipalidad B (arancel)");
         viaX = crearVia(municipalidadA, "VA-1", "Via Uno");
         crearVia(municipalidadA, "VA-2", "Via Dos");
-        conjuntoAbierto = crearConjuntoAbierto(municipalidadA, 2026, 1);
         conjuntoSellado = crearConjuntoSellado(municipalidadA, 2027, 1);
 
         DriverManagerDataSource pool = new DriverManagerDataSource();
@@ -105,9 +113,11 @@ class ImportarArancelTest {
     }
 
     @BeforeEach
-    void fijarContexto() {
+    void fijarContexto() throws SQLException {
         TenantContext.fijar(new MunicipalidadId(municipalidadA));
         OrigenContext.fijar(new Origen("catastro.tecnico", "PC-CATASTRO-02", "10.1.1.10"));
+        conjuntoAbierto =
+                crearConjuntoAbierto(municipalidadA, 2026, SIGUIENTE_VERSION.getAndIncrement());
     }
 
     @AfterEach
