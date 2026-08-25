@@ -82,6 +82,14 @@ public class TransferenciaRepositoryJdbc extends RepositorioJdbc
     }
 
     @Override
+    public Optional<Transferencia> findById(long id) {
+        return jdbc().sql("SELECT " + COLUMNAS + " FROM transferencia t WHERE t.id = :id")
+                .param("id", id)
+                .query(TransferenciaRepositoryJdbc::mapear)
+                .optional();
+    }
+
+    @Override
     public List<Transferencia> historicoDePredio(long predioId) {
         return jdbc().sql(
                         "SELECT "
