@@ -25,11 +25,12 @@ import pe.gob.sgtm.sanciones.dominio.Papeleta;
 import pe.gob.sgtm.sanciones.dominio.PapeletaRepository;
 
 /**
- * #46 — sin base de datos: lo que se verifica aquí es la orquestación (código vigente a la fecha
- * del hecho, referencia externa estable para el cargo). El aislamiento y "reimprimir da los mismos
- * seis importes" contra PostgreSQL real viven en {@code PapeletaRepositoryJdbcTest}.
+ * #46/#47 — sin base de datos: lo que se verifica aquí es la orquestación (código vigente a la
+ * fecha del hecho, referencia externa estable para el cargo, y que administrativa admite una
+ * papeleta sin notificación previa). El aislamiento y "reimprimir da los mismos seis importes"
+ * contra PostgreSQL real viven en {@code PapeletaRepositoryJdbcTest}.
  */
-@DisplayName("#46 — RegistrarPapeleta")
+@DisplayName("#46/#47 — RegistrarPapeleta")
 class RegistrarPapeletaTest {
 
     private static final Observacion OBSERVACION = Observacion.de("Se registra para la prueba");
@@ -49,9 +50,10 @@ class RegistrarPapeletaTest {
     }
 
     @Test
-    @DisplayName("registra la papeleta y asienta el cargo con referencia externa estable")
+    @DisplayName(
+            "registra la papeleta de transito y asienta el cargo con referencia externa estable")
     void registraLaPapeletaYAsientaElCargo() {
-        Papeleta guardada = registrarUna();
+        Papeleta guardada = registrarTransito();
 
         assertThat(guardada.id()).isNotNull();
         assertThat(cargos.generados).hasSize(1);
@@ -64,7 +66,7 @@ class RegistrarPapeletaTest {
     @Test
     @DisplayName("la referencia externa del cargo usa el id, nunca el numero")
     void laReferenciaExternaUsaElIdNoElNumero() {
-        Papeleta guardada = registrarUna();
+        Papeleta guardada = registrarTransito();
 
         assertThat(cargos.generados.get(0).referenciaExterna()).doesNotContain(guardada.numero());
     }
@@ -74,7 +76,7 @@ class RegistrarPapeletaTest {
     void unCodigoQueNoEstaVigenteEsaFechaFalla() {
         assertThatThrownBy(
                         () ->
-                                servicio.registrar(
+                                servicio.registrarTransito(
                                         "PT-9999",
                                         "G-99",
                                         FECHA_INFRACCION,
@@ -99,8 +101,39 @@ class RegistrarPapeletaTest {
         assertThat(cargos.generados).isEmpty();
     }
 
-    private Papeleta registrarUna() {
-        return servicio.registrar(
+    @Test
+    @DisplayName("registra una papeleta administrativa sin notificacion previa (#47 AC1)")
+    void registraUnaPapeletaAdministrativaSinNotificacionPrevia() {
+        Papeleta guardada = registrarAdministrativa(300L, null, null);
+
+        assertThat(guardada.id()).isNotNull();
+        assertThat(guardada.familia()).isEqualTo(Familia.ADMINISTRATIVA);
+        assertThat(guardada.notificacionPreviaId()).isNull();
+        assertThat(cargos.generados).hasSize(1);
+        assertThat(cargos.generados.get(0).referenciaExterna())
+                .isEqualTo("PAPELETA-" + guardada.id());
+    }
+
+    @Test
+    @DisplayName("registra una papeleta administrativa enlazada a su notificacion previa")
+    void registraUnaPapeletaAdministrativaEnlazadaANotificacion() {
+        Papeleta guardada = registrarAdministrativa(300L, null, 55L);
+
+        assertThat(guardada.notificacionPreviaId()).isEqualTo(55L);
+    }
+
+    @Test
+    @DisplayName("la papeleta administrativa asienta el cargo con el predio, no con el vehiculo")
+    void laPapeletaAdministrativaAsientaElCargoConElPredio() {
+        registrarAdministrativa(null, 400L, null);
+
+        assertThat(cargos.generados).hasSize(1);
+        assertThat(cargos.generados.get(0).predioId()).isEqualTo(400L);
+        assertThat(cargos.generados.get(0).vehiculoId()).isNull();
+    }
+
+    private Papeleta registrarTransito() {
+        return servicio.registrarTransito(
                 "PT-0001",
                 "G-01",
                 FECHA_INFRACCION,
@@ -121,6 +154,27 @@ class RegistrarPapeletaTest {
                 OBSERVACION);
     }
 
+    private Papeleta registrarAdministrativa(
+            Long contribuyenteId, Long predioId, Long notificacionPreviaId) {
+        return servicio.registrarAdministrativa(
+                "PA-0001",
+                "G-ADM",
+                FECHA_INFRACCION,
+                null,
+                "Av. Grau",
+                contribuyenteId,
+                predioId,
+                notificacionPreviaId,
+                300L,
+                Dinero.de("5500"),
+                Alicuota.de("8"),
+                Dinero.de("440"),
+                Alicuota.de("100"),
+                Dinero.de("440"),
+                null,
+                OBSERVACION);
+    }
+
     private static CodigoInfraccionRepository codigosDeMentira() {
         return new CodigoInfraccionRepository() {
             @Override
@@ -131,21 +185,35 @@ class RegistrarPapeletaTest {
             @Override
             public Optional<CodigoInfraccion> vigenteA(
                     Familia familia, String codigo, LocalDate fecha) {
-                if (!"G-01".equals(codigo)) {
-                    return Optional.empty();
+                if (familia == Familia.TRANSITO && "G-01".equals(codigo)) {
+                    return Optional.of(
+                            new CodigoInfraccion(
+                                    77L,
+                                    Familia.TRANSITO,
+                                    "G-01",
+                                    "Exceso de velocidad",
+                                    Alicuota.de("8"),
+                                    null,
+                                    null,
+                                    "RNT art. 300",
+                                    LocalDate.of(2020, 1, 1),
+                                    null));
                 }
-                return Optional.of(
-                        new CodigoInfraccion(
-                                77L,
-                                Familia.TRANSITO,
-                                "G-01",
-                                "Exceso de velocidad",
-                                Alicuota.de("8"),
-                                null,
-                                null,
-                                "RNT art. 300",
-                                LocalDate.of(2020, 1, 1),
-                                null));
+                if (familia == Familia.ADMINISTRATIVA && "G-ADM".equals(codigo)) {
+                    return Optional.of(
+                            new CodigoInfraccion(
+                                    88L,
+                                    Familia.ADMINISTRATIVA,
+                                    "G-ADM",
+                                    "Falta administrativa",
+                                    Alicuota.de("8"),
+                                    null,
+                                    null,
+                                    "Ordenanza CUIS",
+                                    LocalDate.of(2020, 1, 1),
+                                    null));
+                }
+                return Optional.empty();
             }
 
             @Override
@@ -176,6 +244,7 @@ class RegistrarPapeletaTest {
             Papeleta guardada =
                     new Papeleta(
                             siguiente++,
+                            papeleta.familia(),
                             papeleta.numero(),
                             papeleta.codigoInfraccionId(),
                             papeleta.fechaInfraccion(),
@@ -186,6 +255,9 @@ class RegistrarPapeletaTest {
                             papeleta.licenciaConducir(),
                             papeleta.infractorId(),
                             papeleta.propietarioId(),
+                            papeleta.contribuyenteId(),
+                            papeleta.predioId(),
+                            papeleta.notificacionPreviaId(),
                             papeleta.baseImponible(),
                             papeleta.porcentajeInfraccion(),
                             papeleta.importeInfraccion(),
@@ -232,9 +304,16 @@ class RegistrarPapeletaTest {
                 LocalDate fechaValor,
                 String documentoOrigen,
                 Observacion observacion) {
-            generados.add(new CargoGenerado(contribuyenteId, referenciaExterna, monto));
+            generados.add(
+                    new CargoGenerado(
+                            contribuyenteId, predioId, vehiculoId, referenciaExterna, monto));
         }
     }
 
-    private record CargoGenerado(long contribuyenteId, String referenciaExterna, Dinero monto) {}
+    private record CargoGenerado(
+            long contribuyenteId,
+            Long predioId,
+            Long vehiculoId,
+            String referenciaExterna,
+            Dinero monto) {}
 }

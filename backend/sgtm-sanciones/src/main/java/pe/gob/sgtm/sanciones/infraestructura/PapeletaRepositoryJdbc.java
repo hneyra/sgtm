@@ -20,11 +20,12 @@ import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 import pe.gob.sgtm.sanciones.dominio.CriterioDePapeleta;
 import pe.gob.sgtm.sanciones.dominio.EstadoDePapeleta;
+import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.sanciones.dominio.Papeleta;
 import pe.gob.sgtm.sanciones.dominio.PapeletaRepository;
 
 /**
- * Las papeletas de tránsito contra PostgreSQL. Sigue la plantilla de {@code
+ * Las papeletas —de las dos familias, #46 y #47— contra PostgreSQL. Sigue la plantilla de {@code
  * CodigoInfraccionRepositoryJdbc} (#43): ninguna consulta filtra por {@code municipalidad_id} —lo
  * hace la política RLS—, y no hay ningún {@code DELETE} (regla 4, RNF-051; {@code papeleta} está en
  * {@code TABLAS_PROTEGIDAS}).
@@ -33,9 +34,10 @@ import pe.gob.sgtm.sanciones.dominio.PapeletaRepository;
 public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaRepository {
 
     private static final String COLUMNAS =
-            "p.id, p.numero, p.codigo_infraccion_id, p.fecha_infraccion, p.hora_infraccion,"
-                    + " p.lugar, p.placa, p.vehiculo_id, p.licencia_conducir, p.infractor_id,"
-                    + " p.propietario_id, p.base_imponible, p.porcentaje_infraccion,"
+            "p.id, p.familia, p.numero, p.codigo_infraccion_id, p.fecha_infraccion,"
+                    + " p.hora_infraccion, p.lugar, p.placa, p.vehiculo_id, p.licencia_conducir,"
+                    + " p.infractor_id, p.propietario_id, p.contribuyente_id, p.predio_id,"
+                    + " p.notificacion_previa_id, p.base_imponible, p.porcentaje_infraccion,"
                     + " p.importe_infraccion, p.porcentaje_a_cobrar, p.importe_a_pagar,"
                     + " p.importe_con_beneficio, p.estado, p.usuario_registro, p.observacion";
 
@@ -50,6 +52,7 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
     @Override
     public Papeleta insertar(Papeleta papeleta) {
         Map<String, Object> campos = new HashMap<>();
+        campos.put("familia", papeleta.familia().name());
         campos.put("numero", papeleta.numero());
         campos.put("codigoInfraccionId", papeleta.codigoInfraccionId());
         campos.put("fechaInfraccion", papeleta.fechaInfraccion());
@@ -62,6 +65,9 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
         campos.put("licenciaConducir", papeleta.licenciaConducir());
         campos.put("infractorId", papeleta.infractorId());
         campos.put("propietarioId", papeleta.propietarioId());
+        campos.put("contribuyenteId", papeleta.contribuyenteId());
+        campos.put("predioId", papeleta.predioId());
+        campos.put("notificacionPreviaId", papeleta.notificacionPreviaId());
         campos.put("baseImponible", papeleta.baseImponible().valor());
         campos.put("porcentajeInfraccion", papeleta.porcentajeInfraccion().valor());
         campos.put("importeInfraccion", papeleta.importeInfraccion().valor());
@@ -83,19 +89,22 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
                                         + " (municipalidad_id, familia, numero, codigo_infraccion_id,"
                                         + "  fecha_infraccion, hora_infraccion, lugar, placa,"
                                         + "  vehiculo_id, licencia_conducir, infractor_id,"
-                                        + "  propietario_id, base_imponible, porcentaje_infraccion,"
-                                        + "  importe_infraccion, porcentaje_a_cobrar,"
-                                        + "  importe_a_pagar, importe_con_beneficio, estado,"
-                                        + "  usuario_registro, observacion)"
+                                        + "  propietario_id, contribuyente_id, predio_id,"
+                                        + "  notificacion_previa_id, base_imponible,"
+                                        + "  porcentaje_infraccion, importe_infraccion,"
+                                        + "  porcentaje_a_cobrar, importe_a_pagar,"
+                                        + "  importe_con_beneficio, estado, usuario_registro,"
+                                        + "  observacion)"
                                         + " VALUES ("
                                         + MUNICIPALIDAD_ACTUAL
-                                        + ", 'TRANSITO', :numero, :codigoInfraccionId,"
+                                        + ", :familia, :numero, :codigoInfraccionId,"
                                         + "  :fechaInfraccion, :horaInfraccion, :lugar, :placa,"
                                         + "  :vehiculoId, :licenciaConducir, :infractorId,"
-                                        + "  :propietarioId, :baseImponible, :porcentajeInfraccion,"
-                                        + "  :importeInfraccion, :porcentajeACobrar,"
-                                        + "  :importeAPagar, :importeConBeneficio, :estado,"
-                                        + "  :usuario, :observacion)"
+                                        + "  :propietarioId, :contribuyenteId, :predioId,"
+                                        + "  :notificacionPreviaId, :baseImponible,"
+                                        + "  :porcentajeInfraccion, :importeInfraccion,"
+                                        + "  :porcentajeACobrar, :importeAPagar,"
+                                        + "  :importeConBeneficio, :estado, :usuario, :observacion)"
                                         + " RETURNING id")
                         .params(campos)
                         .query(Long.class)
@@ -122,7 +131,8 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
         Map<String, Object> parametros = new HashMap<>();
         String desde = DESDE;
 
-        condiciones.add("p.familia = 'TRANSITO'");
+        condiciones.add("p.familia = :familia");
+        parametros.put("familia", criterio.familia().name());
 
         if (criterio.numero() != null) {
             condiciones.add("p.numero = :numero");
@@ -133,9 +143,19 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
             parametros.put("placa", criterio.placa());
         }
         if (criterio.documentoInfractor() != null) {
-            desde = DESDE + " JOIN contribuyente ci ON ci.id = p.infractor_id";
-            condiciones.add("ci.numero_documento = :documento");
-            parametros.put("documento", criterio.documentoInfractor());
+            desde = desde + " JOIN contribuyente ci ON ci.id = p.infractor_id";
+            condiciones.add("ci.numero_documento = :documentoInfractor");
+            parametros.put("documentoInfractor", criterio.documentoInfractor());
+        }
+        if (criterio.documentoAdministrado() != null) {
+            desde = desde + " JOIN contribuyente ca ON ca.id = p.contribuyente_id";
+            condiciones.add("ca.numero_documento = :documentoAdministrado");
+            parametros.put("documentoAdministrado", criterio.documentoAdministrado());
+        }
+        if (criterio.codigoInfraccion() != null) {
+            desde = desde + " JOIN codigo_infraccion cx ON cx.id = p.codigo_infraccion_id";
+            condiciones.add("cx.codigo = :codigoInfraccion");
+            parametros.put("codigoInfraccion", criterio.codigoInfraccion());
         }
         if (criterio.desde() != null) {
             condiciones.add("p.fecha_infraccion >= :desde");
@@ -212,6 +232,7 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
     private static Papeleta conId(Papeleta papeleta, long id, String usuarioRegistro) {
         return new Papeleta(
                 id,
+                papeleta.familia(),
                 papeleta.numero(),
                 papeleta.codigoInfraccionId(),
                 papeleta.fechaInfraccion(),
@@ -222,6 +243,9 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
                 papeleta.licenciaConducir(),
                 papeleta.infractorId(),
                 papeleta.propietarioId(),
+                papeleta.contribuyenteId(),
+                papeleta.predioId(),
+                papeleta.notificacionPreviaId(),
                 papeleta.baseImponible(),
                 papeleta.porcentajeInfraccion(),
                 papeleta.importeInfraccion(),
@@ -239,10 +263,14 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
         Long vehiculoId = (Long) fila.getObject("vehiculo_id");
         Long infractorId = (Long) fila.getObject("infractor_id");
         Long propietarioId = (Long) fila.getObject("propietario_id");
+        Long contribuyenteId = (Long) fila.getObject("contribuyente_id");
+        Long predioId = (Long) fila.getObject("predio_id");
+        Long notificacionPreviaId = (Long) fila.getObject("notificacion_previa_id");
         java.math.BigDecimal importeConBeneficio = fila.getBigDecimal("importe_con_beneficio");
 
         return new Papeleta(
                 fila.getLong("id"),
+                Familia.valueOf(fila.getString("familia")),
                 fila.getString("numero"),
                 fila.getLong("codigo_infraccion_id"),
                 fila.getDate("fecha_infraccion").toLocalDate(),
@@ -253,6 +281,9 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
                 fila.getString("licencia_conducir"),
                 infractorId,
                 propietarioId,
+                contribuyenteId,
+                predioId,
+                notificacionPreviaId,
                 new Dinero(fila.getBigDecimal("base_imponible")),
                 new Alicuota(fila.getBigDecimal("porcentaje_infraccion")),
                 new Dinero(fila.getBigDecimal("importe_infraccion")),

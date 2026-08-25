@@ -31,16 +31,18 @@ import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.sanciones.dominio.CriterioDePapeleta;
+import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.sanciones.dominio.Papeleta;
 
 /**
- * Las papeletas de tránsito contra PostgreSQL de verdad, conectado como {@code sgtm_app} (#46).
+ * Las papeletas —de las dos familias, #46 y #47— contra PostgreSQL de verdad, conectado como {@code
+ * sgtm_app}.
  *
  * <p>El AC "reimprimir una papeleta de hace tres años devuelve los mismos seis importes" se
  * verifica aquí releyendo la fila tal cual quedó guardada: nada en el camino de lectura recalcula
  * nada.
  */
-@DisplayName("#46 — Papeletas de transito")
+@DisplayName("#46/#47 — Papeletas")
 class PapeletaRepositoryJdbcTest {
 
     private static final LocalDate FECHA = LocalDate.of(2023, 3, 15);
@@ -94,11 +96,12 @@ class PapeletaRepositoryJdbcTest {
         @DisplayName("reimprimir devuelve los mismos seis importes, sin recalcular nada")
         void reimprimirDevuelveLosMismosSeisImportes() {
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
-            long codigoId = crearCodigo(municipalidadA, "G-0001");
+            long codigoId = crearCodigo(municipalidadA, Familia.TRANSITO, "G-0001");
 
             Papeleta guardada =
                     transaccion.execute(
-                            estado -> repositorio.insertar(papeletaDe("PT-0001", codigoId)));
+                            estado ->
+                                    repositorio.insertar(papeletaTransitoDe("PT-0001", codigoId)));
 
             Papeleta reimpresa =
                     transaccion.execute(estado -> repositorio.porNumero("PT-0001")).orElseThrow();
@@ -116,11 +119,12 @@ class PapeletaRepositoryJdbcTest {
         @DisplayName("cambiar el numero deja traza y no cambia el id ni el desglose")
         void cambiarElNumeroDejaTraza() {
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
-            long codigoId = crearCodigo(municipalidadA, "G-0002");
+            long codigoId = crearCodigo(municipalidadA, Familia.TRANSITO, "G-0002");
 
             Papeleta guardada =
                     transaccion.execute(
-                            estado -> repositorio.insertar(papeletaDe("PT-0002", codigoId)));
+                            estado ->
+                                    repositorio.insertar(papeletaTransitoDe("PT-0002", codigoId)));
 
             Papeleta renumerada =
                     transaccion.execute(
@@ -137,6 +141,30 @@ class PapeletaRepositoryJdbcTest {
             long trazas = transaccion.execute(estado -> contarTrazas(guardada.id()));
             assertThat(trazas).isEqualTo(1L);
         }
+
+        @Test
+        @DisplayName("una papeleta administrativa se guarda sin notificacion previa (#47 AC1)")
+        void unaPapeletaAdministrativaSeGuardaSinNotificacionPrevia() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long codigoId = crearCodigo(municipalidadA, Familia.ADMINISTRATIVA, "G-ADM-01");
+            long contribuyenteId = crearContribuyente(municipalidadA, "10000001");
+
+            Papeleta guardada =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.insertar(
+                                            papeletaAdministrativaDe(
+                                                    "PA-0001",
+                                                    codigoId,
+                                                    contribuyenteId,
+                                                    null,
+                                                    null)));
+
+            assertThat(guardada.id()).isNotNull();
+            assertThat(guardada.familia()).isEqualTo(Familia.ADMINISTRATIVA);
+            assertThat(guardada.notificacionPreviaId()).isNull();
+            assertThat(guardada.placa()).isNull();
+        }
     }
 
     @Nested
@@ -147,8 +175,9 @@ class PapeletaRepositoryJdbcTest {
         @DisplayName("la busqueda por placa no cruza la municipalidad")
         void laBusquedaPorPlacaNoCruzaLaMunicipalidad() {
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
-            long codigoId = crearCodigo(municipalidadA, "G-0003");
-            transaccion.execute(estado -> repositorio.insertar(papeletaDe("PT-0003", codigoId)));
+            long codigoId = crearCodigo(municipalidadA, Familia.TRANSITO, "G-0003");
+            transaccion.execute(
+                    estado -> repositorio.insertar(papeletaTransitoDe("PT-0003", codigoId)));
 
             TenantContext.limpiar();
             TenantContext.fijar(new MunicipalidadId(municipalidadB));
@@ -157,9 +186,7 @@ class PapeletaRepositoryJdbcTest {
                     transaccion.execute(
                             estado ->
                                     repositorio.buscar(
-                                            new CriterioDePapeleta(
-                                                    null, "ABC-123", null, null, null, null, null,
-                                                    false),
+                                            criterioTransito("ABC-123"),
                                             Paginacion.de(0, 20, "fechaInfraccion")));
 
             assertThat(desdeB.totalElementos()).isZero();
@@ -169,26 +196,136 @@ class PapeletaRepositoryJdbcTest {
         @DisplayName("soloPendientes excluye PAGADA, ANULADA y PRESCRITA")
         void soloPendientesExcluyeLasCerradas() {
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
-            long codigoId = crearCodigo(municipalidadA, "G-0004");
-            transaccion.execute(estado -> repositorio.insertar(papeletaDe("PT-0004", codigoId)));
+            long codigoId = crearCodigo(municipalidadA, Familia.TRANSITO, "G-0004");
+            transaccion.execute(
+                    estado -> repositorio.insertar(papeletaTransitoDe("PT-0004", codigoId)));
 
             Pagina<Papeleta> pendientes =
                     transaccion.execute(
                             estado ->
                                     repositorio.buscar(
                                             new CriterioDePapeleta(
-                                                    "PT-0004", null, null, null, null, null, null,
+                                                    Familia.TRANSITO,
+                                                    "PT-0004",
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
                                                     true),
                                             Paginacion.de(0, 20, "fechaInfraccion")));
 
             assertThat(pendientes.totalElementos()).isEqualTo(1);
         }
+
+        @Test
+        @DisplayName("la busqueda de administrativa no devuelve papeletas de transito")
+        void laBusquedaDeAdministrativaNoDevuelvePapeletasDeTransito() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long codigoTransito = crearCodigo(municipalidadA, Familia.TRANSITO, "G-0005");
+            transaccion.execute(
+                    estado -> repositorio.insertar(papeletaTransitoDe("PT-0005", codigoTransito)));
+
+            Pagina<Papeleta> administrativas =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.buscar(
+                                            new CriterioDePapeleta(
+                                                    Familia.ADMINISTRATIVA,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    false),
+                                            Paginacion.de(0, 20, "fechaInfraccion")));
+
+            assertThat(administrativas.totalElementos()).isZero();
+        }
+
+        @Test
+        @DisplayName("busca la papeleta administrativa por el documento del contribuyente")
+        void buscaLaPapeletaAdministrativaPorElDocumentoDelContribuyente() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long codigoId = crearCodigo(municipalidadA, Familia.ADMINISTRATIVA, "G-ADM-02");
+            long contribuyenteId = crearContribuyente(municipalidadA, "10000002");
+            transaccion.execute(
+                    estado ->
+                            repositorio.insertar(
+                                    papeletaAdministrativaDe(
+                                            "PA-0002", codigoId, contribuyenteId, null, null)));
+
+            Pagina<Papeleta> encontradas =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.buscar(
+                                            new CriterioDePapeleta(
+                                                    Familia.ADMINISTRATIVA,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    "10000002",
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    false),
+                                            Paginacion.de(0, 20, "fechaInfraccion")));
+
+            assertThat(encontradas.totalElementos()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("busca por el codigo del catalogo, con el JOIN a codigo_infraccion")
+        void buscaPorElCodigoDelCatalogo() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long codigoId = crearCodigo(municipalidadA, Familia.ADMINISTRATIVA, "G-ADM-03");
+            long contribuyenteId = crearContribuyente(municipalidadA, "10000003");
+            transaccion.execute(
+                    estado ->
+                            repositorio.insertar(
+                                    papeletaAdministrativaDe(
+                                            "PA-0003", codigoId, contribuyenteId, null, null)));
+
+            Pagina<Papeleta> encontradas =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.buscar(
+                                            new CriterioDePapeleta(
+                                                    Familia.ADMINISTRATIVA,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    "G-ADM-03",
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    false),
+                                            Paginacion.de(0, 20, "fechaInfraccion")));
+
+            assertThat(encontradas.totalElementos()).isEqualTo(1);
+        }
     }
 
     // ------------------------------------------------------------------
 
-    private static Papeleta papeletaDe(String numero, long codigoInfraccionId) {
-        return Papeleta.nueva(
+    private static CriterioDePapeleta criterioTransito(String placa) {
+        return new CriterioDePapeleta(
+                Familia.TRANSITO, null, placa, null, null, null, null, null, null, null, false);
+    }
+
+    private static Papeleta papeletaTransitoDe(String numero, long codigoInfraccionId) {
+        return Papeleta.nuevaTransito(
                 numero,
                 codigoInfraccionId,
                 FECHA,
@@ -199,6 +336,30 @@ class PapeletaRepositoryJdbcTest {
                 null,
                 null,
                 null,
+                Dinero.de("4950"),
+                Alicuota.de("8"),
+                Dinero.de("396"),
+                Alicuota.de("100"),
+                Dinero.de("396"),
+                Dinero.de("198"),
+                Observacion.de("Se registra para la prueba"));
+    }
+
+    private static Papeleta papeletaAdministrativaDe(
+            String numero,
+            long codigoInfraccionId,
+            Long contribuyenteId,
+            Long predioId,
+            Long notificacionPreviaId) {
+        return Papeleta.nuevaAdministrativa(
+                numero,
+                codigoInfraccionId,
+                FECHA,
+                null,
+                "Av. Grau",
+                contribuyenteId,
+                predioId,
+                notificacionPreviaId,
                 Dinero.de("4950"),
                 Alicuota.de("8"),
                 Dinero.de("396"),
@@ -233,17 +394,45 @@ class PapeletaRepositoryJdbcTest {
         }
     }
 
-    private static long crearCodigo(long municipalidadId, String codigo) {
+    private static long crearCodigo(long municipalidadId, Familia familia, String codigo) {
         try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
             ContextoDeTenant.fijar(app, municipalidadId);
             try (PreparedStatement sentencia =
                     app.prepareStatement(
                             "INSERT INTO codigo_infraccion (municipalidad_id, familia, codigo,"
                                     + " descripcion, porcentaje_uit, base_legal, vigencia_desde)"
-                                    + " VALUES (?, 'TRANSITO', ?, 'Infraccion de prueba', 8.0000,"
-                                    + "         'RNT art. 300', '2020-01-01') RETURNING id")) {
+                                    + " VALUES (?, ?, ?, 'Infraccion de prueba', 8.0000,"
+                                    + "         'Base legal de prueba', '2020-01-01')"
+                                    + " RETURNING id")) {
                 sentencia.setLong(1, municipalidadId);
-                sentencia.setString(2, codigo);
+                sentencia.setString(2, familia.name());
+                sentencia.setString(3, codigo);
+                try (ResultSet resultado = sentencia.executeQuery()) {
+                    resultado.next();
+                    long id = resultado.getLong(1);
+                    app.commit();
+                    return id;
+                }
+            }
+        } catch (SQLException excepcion) {
+            throw new IllegalStateException(excepcion);
+        }
+    }
+
+    private static long crearContribuyente(long municipalidadId, String numeroDocumento) {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidadId);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO contribuyente"
+                                    + " (municipalidad_id, codigo_contribuyente, tipo_documento,"
+                                    + "  numero_documento, tipo_persona, nombre_razon_social,"
+                                    + "  usuario_registro)"
+                                    + " VALUES (?, ?, 'DNI', ?, 'NATURAL', 'Contribuyente de"
+                                    + " prueba', 'prueba') RETURNING id")) {
+                sentencia.setLong(1, municipalidadId);
+                sentencia.setString(2, "C-" + numeroDocumento);
+                sentencia.setString(3, numeroDocumento);
                 try (ResultSet resultado = sentencia.executeQuery()) {
                     resultado.next();
                     long id = resultado.getLong(1);

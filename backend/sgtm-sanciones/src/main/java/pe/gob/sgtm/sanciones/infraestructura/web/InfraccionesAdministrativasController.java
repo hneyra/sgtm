@@ -15,45 +15,45 @@ import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
- * Estado de cuenta de infracciones: {@code GET /api/v1/transito/estado-cuenta} (RF-062).
+ * Papeletas administrativas: {@code GET /api/v1/infracciones/actas} (RF-071, #47).
  *
- * <p>Papeletas pendientes de pago de un conductor o de un vehículo, con su importe y su beneficio
- * —los dos ya guardados en la propia papeleta (#46)—. La situación de coactiva que describe el
- * contrato no sale de aquí todavía: {@code coactiva} es un contexto acotado vacío; cuando publique
- * su API, este controlador la incorpora sin cambiar la ruta.
+ * <p>Solo lectura: el registro ({@code RegistrarPapeleta.registrarAdministrativa}) no se publica
+ * todavía —igual que {@code papeletas} de tránsito (#46)—; el contrato no declara ningún {@code
+ * POST} en esta ruta.
  */
 @RestController
-@RequestMapping(Api.RAIZ + "/transito/estado-cuenta")
-@RequiereAcceso(acceso = "transito_estado_cuenta", privilegio = Privilegio.LECTURA)
-public class EstadoDeCuentaTransitoController {
+@RequestMapping(Api.RAIZ + "/infracciones/actas")
+@RequiereAcceso(acceso = "infracciones_adm", privilegio = Privilegio.LECTURA)
+public class InfraccionesAdministrativasController {
 
     private static final String ORDEN_POR_OMISION = "fechaInfraccion";
 
     private final PapeletaRepository repositorio;
 
-    public EstadoDeCuentaTransitoController(PapeletaRepository repositorio) {
+    public InfraccionesAdministrativasController(PapeletaRepository repositorio) {
         this.repositorio = repositorio;
     }
 
     @GetMapping
     public RespuestaPaginada<PapeletaResource> buscar(
-            @RequestParam(required = false) @Nullable String conductor,
-            @RequestParam(required = false) @Nullable String placa,
+            @RequestParam(required = false) @Nullable String nroDeActa,
+            @RequestParam(required = false) @Nullable String administrado,
+            @RequestParam(required = false) @Nullable String codigoCuis,
             ParametrosDePaginacion paginacion) {
 
         CriterioDePapeleta criterio =
                 new CriterioDePapeleta(
-                        Familia.TRANSITO,
-                        null,
-                        placa,
-                        conductor,
+                        Familia.ADMINISTRATIVA,
+                        nroDeActa,
                         null,
                         null,
+                        administrado,
+                        codigoCuis,
                         null,
                         null,
                         null,
                         null,
-                        true);
+                        false);
 
         return RespuestaPaginada.de(
                 repositorio.buscar(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),

@@ -59,12 +59,16 @@ class CambiarNumeroDePapeletaTest {
             Papeleta nueva =
                     new Papeleta(
                             siguiente++,
+                            pe.gob.sgtm.sanciones.dominio.Familia.TRANSITO,
                             numero,
                             1L,
                             LocalDate.of(2026, 3, 1),
                             null,
                             "Av. Grau",
                             "ABC-123",
+                            null,
+                            null,
+                            null,
                             null,
                             null,
                             null,

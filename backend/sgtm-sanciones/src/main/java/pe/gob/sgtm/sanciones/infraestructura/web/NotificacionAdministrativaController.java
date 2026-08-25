@@ -1,0 +1,120 @@
+package pe.gob.sgtm.sanciones.infraestructura.web;
+
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import org.jspecify.annotations.Nullable;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.sanciones.aplicacion.RegistrarNotificacionAdministrativa;
+import pe.gob.sgtm.web.Api;
+import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
+
+/**
+ * Notificación administrativa previa: {@code POST
+ * /api/v1/infracciones/administrativas/notificaciones} (RF-070, #47).
+ *
+ * <p>"Un paso previo a la generación de la multa administrativa" —no exige contribuyente ni predio
+ * identificados, ni un plazo: sin uno, la notificación nunca vence (#47 AC3).
+ */
+@RestController
+@RequestMapping(Api.RAIZ + "/infracciones/administrativas/notificaciones")
+@RequiereAcceso(acceso = "adm_notificacion", privilegio = Privilegio.REGISTRO)
+public class NotificacionAdministrativaController {
+
+    private final RegistrarNotificacionAdministrativa servicio;
+
+    public NotificacionAdministrativaController(RegistrarNotificacionAdministrativa servicio) {
+        this.servicio = servicio;
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public NotificacionAdministrativaResource registrar(
+            @RequestBody PeticionDeNotificacion peticion) {
+        Observacion observacion = observacionDe(peticion.observacion());
+
+        try {
+            return NotificacionAdministrativaResource.de(
+                    servicio.registrar(
+                            exigir(peticion.numero(), "numero"),
+                            fechaDe(peticion.fecha(), "fecha"),
+                            peticion.contribuyenteId(),
+                            peticion.predioId(),
+                            exigir(peticion.direccion(), "direccion"),
+                            exigir(peticion.motivo(), "motivo"),
+                            plazoDe(peticion.plazoDias()),
+                            observacion));
+        } catch (IllegalArgumentException invalido) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
+        }
+    }
+
+    // ------------------------------------------------------------------
+
+    private static Observacion observacionDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Toda modificacion exige la observacion del usuario: sin ella no se guarda");
+        }
+        try {
+            return Observacion.de(texto);
+        } catch (IllegalArgumentException invalida) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalida));
+        }
+    }
+
+    private static LocalDate fechaDe(@Nullable String texto, String campo) {
+        try {
+            return LocalDate.parse(exigir(texto, campo).strip());
+        } catch (DateTimeParseException malFormada) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION, "La fecha va en formato AAAA-MM-DD: '" + texto + "'");
+        }
+    }
+
+    private static @Nullable Short plazoDe(@Nullable Integer plazoDias) {
+        if (plazoDias == null) {
+            return null;
+        }
+        try {
+            return plazoDias.shortValue();
+        } catch (ArithmeticException fueraDeRango) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION, "El plazo en dias es demasiado grande: " + plazoDias);
+        }
+    }
+
+    private static String exigir(@Nullable String valor, String campo) {
+        if (valor == null || valor.isBlank()) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, "Falta el campo '" + campo + "'");
+        }
+        return valor.strip();
+    }
+
+    private static String mensajeDe(RuntimeException excepcion) {
+        String mensaje = excepcion.getMessage();
+        return mensaje == null ? "El valor recibido no es valido" : mensaje;
+    }
+
+    /**
+     * El cuerpo de un registro de notificación. <b>Lista blanca</b>: lo que no está aquí no entra.
+     */
+    public record PeticionDeNotificacion(
+            @Nullable String observacion,
+            @Nullable String numero,
+            @Nullable String fecha,
+            @Nullable Long contribuyenteId,
+            @Nullable Long predioId,
+            @Nullable String direccion,
+            @Nullable String motivo,
+            @Nullable Integer plazoDias) {}
+}

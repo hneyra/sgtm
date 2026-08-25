@@ -10,7 +10,7 @@ import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
 
-@DisplayName("#46 — Papeleta")
+@DisplayName("#46/#47 — Papeleta")
 class PapeletaTest {
 
     private static final Observacion OBSERVACION = Observacion.de("Se registra para la prueba");
@@ -19,10 +19,11 @@ class PapeletaTest {
     @Test
     @DisplayName("una papeleta nueva no tiene id, y nace IMPUESTA")
     void unaPapeletaNuevaNoTieneIdYNaceImpuesta() {
-        Papeleta papeleta = papeletaDe("PT-0001", "ABC-123");
+        Papeleta papeleta = transitoDe("PT-0001", "ABC-123");
 
         assertThat(papeleta.esNueva()).isTrue();
         assertThat(papeleta.estado()).isEqualTo(EstadoDePapeleta.IMPUESTA);
+        assertThat(papeleta.familia()).isEqualTo(Familia.TRANSITO);
     }
 
     @Test
@@ -30,7 +31,7 @@ class PapeletaTest {
     void unaPapeletaDeTransitoExigePlaca() {
         assertThatThrownBy(
                         () ->
-                                Papeleta.nueva(
+                                Papeleta.nuevaTransito(
                                         "PT-0002",
                                         1L,
                                         FECHA,
@@ -56,7 +57,7 @@ class PapeletaTest {
     void sinObservacionNoSeConstruye() {
         assertThatThrownBy(
                         () ->
-                                Papeleta.nueva(
+                                Papeleta.nuevaTransito(
                                         "PT-0003",
                                         1L,
                                         FECHA,
@@ -80,7 +81,7 @@ class PapeletaTest {
     @Test
     @DisplayName("conNumero conserva el desglose, y solo cambia el numero")
     void conNumeroConservaElDesglose() {
-        Papeleta original = papeletaConId("PT-0004", "ABC-123", 1L);
+        Papeleta original = transitoConId("PT-0004", "ABC-123", 1L);
 
         Papeleta renumerada = original.conNumero("PT-0004-B");
 
@@ -93,14 +94,40 @@ class PapeletaTest {
     @Test
     @DisplayName("no se cambia el numero de una papeleta que no esta guardada")
     void noSeCambiaElNumeroDeUnaPapeletaSinGuardar() {
-        Papeleta sinGuardar = papeletaDe("PT-0005", "ABC-123");
+        Papeleta sinGuardar = transitoDe("PT-0005", "ABC-123");
 
         assertThatThrownBy(() -> sinGuardar.conNumero("PT-0005-B"))
                 .isInstanceOf(NullPointerException.class);
     }
 
-    private static Papeleta papeletaDe(String numero, String placa) {
-        return Papeleta.nueva(
+    @Test
+    @DisplayName("una papeleta administrativa exige contribuyente o predio (papeleta_familia_ck)")
+    void unaPapeletaAdministrativaExigeContribuyenteOPredio() {
+        assertThatThrownBy(() -> administrativaDe(null, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("una papeleta administrativa se admite sin notificacion previa (#47 AC1)")
+    void unaPapeletaAdministrativaSeAdmiteSinNotificacionPrevia() {
+        Papeleta papeleta = administrativaDe(100L, null, null);
+
+        assertThat(papeleta.familia()).isEqualTo(Familia.ADMINISTRATIVA);
+        assertThat(papeleta.notificacionPreviaId()).isNull();
+        assertThat(papeleta.placa()).isNull();
+    }
+
+    @Test
+    @DisplayName("una papeleta administrativa se admite solo con predio, sin contribuyente")
+    void unaPapeletaAdministrativaSeAdmiteSoloConPredio() {
+        Papeleta papeleta = administrativaDe(null, 200L, null);
+
+        assertThat(papeleta.contribuyenteId()).isNull();
+        assertThat(papeleta.predioId()).isEqualTo(200L);
+    }
+
+    private static Papeleta transitoDe(String numero, String placa) {
+        return Papeleta.nuevaTransito(
                 numero,
                 1L,
                 FECHA,
@@ -120,10 +147,31 @@ class PapeletaTest {
                 OBSERVACION);
     }
 
-    private static Papeleta papeletaConId(String numero, String placa, long id) {
-        Papeleta nueva = papeletaDe(numero, placa);
+    private static Papeleta administrativaDe(
+            Long contribuyenteId, Long predioId, Long notificacionPreviaId) {
+        return Papeleta.nuevaAdministrativa(
+                "PA-0001",
+                1L,
+                FECHA,
+                null,
+                "Av. Grau",
+                contribuyenteId,
+                predioId,
+                notificacionPreviaId,
+                Dinero.de("5500"),
+                Alicuota.de("8"),
+                Dinero.de("440"),
+                Alicuota.de("100"),
+                Dinero.de("440"),
+                null,
+                OBSERVACION);
+    }
+
+    private static Papeleta transitoConId(String numero, String placa, long id) {
+        Papeleta nueva = transitoDe(numero, placa);
         return new Papeleta(
                 id,
+                nueva.familia(),
                 nueva.numero(),
                 nueva.codigoInfraccionId(),
                 nueva.fechaInfraccion(),
@@ -134,6 +182,9 @@ class PapeletaTest {
                 nueva.licenciaConducir(),
                 nueva.infractorId(),
                 nueva.propietarioId(),
+                nueva.contribuyenteId(),
+                nueva.predioId(),
+                nueva.notificacionPreviaId(),
                 nueva.baseImponible(),
                 nueva.porcentajeInfraccion(),
                 nueva.importeInfraccion(),
