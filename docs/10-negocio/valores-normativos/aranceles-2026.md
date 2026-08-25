@@ -8,8 +8,8 @@
 | Ejercicios que rige | 2026 |
 | Filas de NEG-02 §2 | 8 |
 | Transcribió | JNA, 2026-08-24 |
-| Verificó | — |
-| Estado | TRANSCRITO |
+| Verificó | Agent, 2026-08-25 |
+| Estado | VERIFICADO |
 
 ## 1. La tabla tal como está en la norma
 
