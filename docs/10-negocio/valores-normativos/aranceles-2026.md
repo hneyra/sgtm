@@ -151,6 +151,12 @@ cualquier municipalidad calcule un predial con estas cifras hace falta, en este 
 2. El gpkg fuente se archiva en S3 con `scripts/valores-normativos/archivar_fuente_normativa.sh`,
    con el UBIGEO en la ruta (`fuentes-normativas/aranceles/200105/…`) y con historial —nunca
    sobrescribe una subida anterior—, y esa URI reemplaza a la ruta local en `documentoFuente`.
+   **Hecho**: archivado 2026-08-25 en
+   `s3://sgtm-fuentes-normativas/fuentes-normativas/aranceles/200105/2026-08-25T19-24-59Z__Catacaos_arancel.gpkg`
+   (sha256 `6a4b002a1c154247ecfc2a234f807f14021adbd0bc41ff4d958458865ad16f39`, verificado tras la
+   subida). Los CSV de §1.4 se regeneraron contra esa URI —`documentoFuente` ya no cita una ruta
+   local—, y `vias.csv`/`arancel_2026.csv`/`arancel_2026_detalle.csv`/`resumen.txt` quedaron
+   archivados junto al gpkg, bajo `…/2026-08-25T19-24-59Z__derivados/`.
 3. Alguien abre un conjunto de parámetros del ejercicio (`AdministrarParametros.abrirVersion`) y
    solo entonces se cargan estas filas contra ese conjunto, con `ImportarArancel` (backend,
    `pe.gob.sgtm.catastro.aplicacion`) — nunca contra uno ya sellado: el disparador de `V18` lo
