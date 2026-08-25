@@ -37,7 +37,7 @@ config:
   # queda ignorado después (ADR-0011 §5), así que cambiar esta línea no despliega nada
   # sobre un clúster que ya corre. Es con lo que arranca un VPS reconstruido desde
   # cero, antes de que el flujo de liberación lo ponga al día.
-  sgtm:applicationBootstrapVersion: 64de42b4c56eb2491e2a61287bceb4b66b6e53d1
+  sgtm:applicationBootstrapVersion: 3bdf66b2a84b764779b6d2b0324defd7384a39bf
   # La municipalidad que se implanta. D-01 —municipalidad piloto— se decidió el
   # 2026-08-24: Municipalidad Distrital de Catacaos (`decisiones-abiertas.md`), en
   # reemplazo de la Municipalidad Distrital de Chala que se había decidido un día antes.
