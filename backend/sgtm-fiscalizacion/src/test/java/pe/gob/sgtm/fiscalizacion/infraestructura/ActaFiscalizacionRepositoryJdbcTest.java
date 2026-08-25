@@ -1,0 +1,331 @@
+package pe.gob.sgtm.fiscalizacion.infraestructura;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.transaction.support.TransactionTemplate;
+import pe.gob.sgtm.auditoria.Origen;
+import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.dominio.MunicipalidadId;
+import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
+import pe.gob.sgtm.esquema.ContextoDeTenant;
+import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacion;
+import pe.gob.sgtm.fiscalizacion.dominio.Hallazgo;
+import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
+
+/**
+ * Las actas de fiscalización contra PostgreSQL de verdad, conectado como {@code sgtm_app} (#45).
+ *
+ * <p>El AC "registrar un acta no modifica ninguna fila de catastro" se verifica aquí como el propio
+ * AC lo pide: contando las filas de {@code predio} y {@code ficha_catastral} antes y después,
+ * contra la base real — no razonando sobre el código.
+ */
+@DisplayName("#45 — Actas de fiscalizacion")
+class ActaFiscalizacionRepositoryJdbcTest {
+
+    private static final Observacion OBSERVACION = Observacion.de("Se fiscaliza para la prueba");
+    private static final LocalDate VISITA = LocalDate.of(2026, 3, 15);
+
+    private static BaseDeDatosDePrueba base;
+    private static long municipalidadA;
+    private static TransactionTemplate transaccion;
+    private static ActaFiscalizacionRepositoryJdbc repositorio;
+    private static JdbcClient jdbc;
+
+    @BeforeAll
+    static void provisionar() throws SQLException, IOException {
+        base = BaseDeDatosDePrueba.provisionar();
+        municipalidadA = crearMunicipalidad("250401", "Municipalidad de fiscalizacion A");
+
+        DriverManagerDataSource pool = new DriverManagerDataSource();
+        pool.setUrl(base.url());
+        pool.setUsername(BaseDeDatosDePrueba.APP);
+        pool.setPassword(base.clave(BaseDeDatosDePrueba.APP));
+
+        jdbc = JdbcClient.create(pool);
+        transaccion = new TransactionTemplate(new TenantTransactionManager(pool));
+        repositorio = new ActaFiscalizacionRepositoryJdbc(jdbc);
+    }
+
+    @AfterAll
+    static void cerrar() {
+        if (base != null) {
+            base.close();
+        }
+    }
+
+    @BeforeEach
+    void fijarOrigen() {
+        OrigenContext.fijar(new Origen("fiscalizador.campo", null, null));
+    }
+
+    @AfterEach
+    void limpiarContexto() {
+        TenantContext.limpiar();
+        OrigenContext.limpiar();
+    }
+
+    @Nested
+    @DisplayName("Escritura")
+    class Escritura {
+
+        @Test
+        @DisplayName("un acta predial se guarda y trae la ficha vigente que se le paso")
+        void unActaPredialSeGuardaYTraeLaFichaVigente() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "F-0001", "60100001");
+            long predioId = crearPredio(municipalidadA, "F-0001");
+            long programaId = crearPrograma(municipalidadA, "PF-0001", "PREDIAL");
+            long fichaId = crearFicha(municipalidadA, predioId);
+
+            ActaFiscalizacion guardada =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.insertar(
+                                            ActaFiscalizacion.nuevaPredial(
+                                                    programaId,
+                                                    1,
+                                                    titular,
+                                                    predioId,
+                                                    fichaId,
+                                                    VISITA,
+                                                    "J. Perez",
+                                                    Hallazgo.CONFORME,
+                                                    pe.gob.sgtm.dominio.AreaM2.de("125.50"),
+                                                    "sin novedad",
+                                                    OBSERVACION)));
+
+            assertThat(guardada.id()).isNotNull();
+            assertThat(guardada.fichaId()).isEqualTo(fichaId);
+        }
+
+        @Test
+        @DisplayName("registrar un acta no modifica ninguna fila de catastro (AC de #45)")
+        void registrarUnActaNoModificaNingunaFilaDeCatastro() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "F-0002", "60100002");
+            long predioId = crearPredio(municipalidadA, "F-0002");
+            long programaId = crearPrograma(municipalidadA, "PF-0002", "PREDIAL");
+            long fichaId = crearFicha(municipalidadA, predioId);
+
+            long prediosAntes = transaccion.execute(estado -> contar("predio"));
+            long fichasAntes = transaccion.execute(estado -> contar("ficha_catastral"));
+
+            transaccion.execute(
+                    estado ->
+                            repositorio.insertar(
+                                    ActaFiscalizacion.nuevaPredial(
+                                            programaId,
+                                            1,
+                                            titular,
+                                            predioId,
+                                            fichaId,
+                                            VISITA,
+                                            "J. Perez",
+                                            Hallazgo.SUBVALUADOR,
+                                            pe.gob.sgtm.dominio.AreaM2.de("300.00"),
+                                            "area distinta a la declarada",
+                                            OBSERVACION)));
+
+            assertThat((long) transaccion.execute(estado -> contar("predio")))
+                    .as("ninguna fila de predio cambia")
+                    .isEqualTo(prediosAntes);
+            assertThat((long) transaccion.execute(estado -> contar("ficha_catastral")))
+                    .as("ninguna fila de ficha_catastral cambia")
+                    .isEqualTo(fichasAntes);
+        }
+
+        @Test
+        @DisplayName("un acta vehicular se guarda sin ficha")
+        void unActaVehicularSeGuardaSinFicha() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "F-0003", "60100003");
+            long vehiculoId = crearVehiculo(municipalidadA, titular, "F03");
+            long programaId = crearPrograma(municipalidadA, "PF-0003", "VEHICULAR");
+
+            ActaFiscalizacion guardada =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.insertar(
+                                            ActaFiscalizacion.nuevaVehicular(
+                                                    programaId,
+                                                    1,
+                                                    titular,
+                                                    vehiculoId,
+                                                    VISITA,
+                                                    "J. Perez",
+                                                    Hallazgo.OMISO,
+                                                    "no declarado",
+                                                    OBSERVACION)));
+
+            assertThat(guardada.fichaId()).isNull();
+            assertThat(guardada.vehiculoId()).isEqualTo(vehiculoId);
+        }
+    }
+
+    @Nested
+    @DisplayName("Version")
+    class Version {
+
+        @Test
+        @DisplayName("sin actas previas, la siguiente version es 1; tras una, es 2")
+        void laSiguienteVersionSube() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "F-0004", "60100004");
+            long vehiculoId = crearVehiculo(municipalidadA, titular, "F04");
+            long programaId = crearPrograma(municipalidadA, "PF-0004", "VEHICULAR");
+
+            int primera =
+                    transaccion.execute(
+                            estado -> repositorio.siguienteVersion(programaId, titular));
+            transaccion.execute(
+                    estado ->
+                            repositorio.insertar(
+                                    ActaFiscalizacion.nuevaVehicular(
+                                            programaId,
+                                            primera,
+                                            titular,
+                                            vehiculoId,
+                                            VISITA,
+                                            "J. Perez",
+                                            null,
+                                            null,
+                                            OBSERVACION)));
+            int segunda =
+                    transaccion.execute(
+                            estado -> repositorio.siguienteVersion(programaId, titular));
+
+            assertThat(primera).isEqualTo(1);
+            assertThat(segunda).isEqualTo(2);
+        }
+    }
+
+    // ------------------------------------------------------------------
+
+    private static long contar(String tabla) {
+        return jdbc.sql("SELECT count(*) FROM " + tabla).query(Long.class).single();
+    }
+
+    private static long crearMunicipalidad(String ubigeo, String nombre) throws SQLException {
+        try (Connection owner = base.conexion(BaseDeDatosDePrueba.OWNER);
+                PreparedStatement sentencia =
+                        owner.prepareStatement(
+                                "INSERT INTO municipalidad (ubigeo, nombre, tipo)"
+                                        + " VALUES (?, ?, 'DISTRITAL') RETURNING id")) {
+            sentencia.setString(1, ubigeo);
+            sentencia.setString(2, nombre);
+            try (ResultSet resultado = sentencia.executeQuery()) {
+                resultado.next();
+                long id = resultado.getLong(1);
+                owner.commit();
+                return id;
+            }
+        }
+    }
+
+    private static long crearContribuyente(long municipalidadId, String codigo, String dni) {
+        return ejecutarComoApp(
+                municipalidadId,
+                "INSERT INTO contribuyente (municipalidad_id, codigo_contribuyente,"
+                        + " tipo_documento, numero_documento, tipo_persona,"
+                        + " nombre_razon_social, usuario_registro)"
+                        + " VALUES (?, ?, 'DNI', ?, 'NATURAL', 'TITULAR, PRUEBA',"
+                        + " 'siembra') RETURNING id",
+                municipalidadId,
+                codigo,
+                dni);
+    }
+
+    private static long crearPredio(long municipalidadId, String sufijo) {
+        return ejecutarComoApp(
+                municipalidadId,
+                "INSERT INTO predio (municipalidad_id, codigo_ref_catastral, tipo, direccion)"
+                        + " VALUES (?, ?, 'URBANO', 'Jr. Union de prueba') RETURNING id",
+                municipalidadId,
+                codigoCatastralDe(sufijo));
+    }
+
+    private static long crearFicha(long municipalidadId, long predioId) {
+        return ejecutarComoApp(
+                municipalidadId,
+                "INSERT INTO ficha_catastral (municipalidad_id, predio_id, tipo, version,"
+                        + " area_terreno, uso, vigencia_desde, origen, documento_origen,"
+                        + " observacion, usuario_registro)"
+                        + " VALUES (?, ?, 'UNICA', 1, 120.00, 'CASA_HABITACION', ?,"
+                        + "         'DECLARACION_JURADA', 'DJ-001', 'ficha de prueba', 'prueba')"
+                        + " RETURNING id",
+                municipalidadId,
+                predioId,
+                LocalDate.of(2026, 1, 1));
+    }
+
+    private static long crearVehiculo(long municipalidadId, long contribuyenteId, String sufijo) {
+        return ejecutarComoApp(
+                municipalidadId,
+                "INSERT INTO vehiculo (municipalidad_id, placa, contribuyente_id, marca, modelo,"
+                        + " categoria, anio_fabricacion, anio_inscripcion)"
+                        + " VALUES (?, ?, ?, 'MARCA', 'MODELO', 'M1', 2020, 2021) RETURNING id",
+                municipalidadId,
+                "ABC-" + sufijo,
+                contribuyenteId);
+    }
+
+    private static long crearPrograma(long municipalidadId, String codigo, String tipo) {
+        return ejecutarComoApp(
+                municipalidadId,
+                "INSERT INTO programa_fiscalizacion (municipalidad_id, codigo, descripcion, tipo,"
+                        + " fecha_inicio)"
+                        + " VALUES (?, ?, 'Programa de prueba', ?, ?) RETURNING id",
+                municipalidadId,
+                codigo,
+                tipo,
+                LocalDate.of(2026, 1, 1));
+    }
+
+    private static final AtomicInteger SIGUIENTE_CATASTRAL = new AtomicInteger(1);
+    private static final ConcurrentHashMap<String, String> CODIGOS_CATASTRALES =
+            new ConcurrentHashMap<>();
+
+    /** Codigo catastral de relleno: el dominio {@code cod_catastral} exige 18-25 digitos. */
+    private static String codigoCatastralDe(String sufijo) {
+        return CODIGOS_CATASTRALES.computeIfAbsent(
+                sufijo, s -> String.format("%018d", SIGUIENTE_CATASTRAL.getAndIncrement()));
+    }
+
+    private static long ejecutarComoApp(long municipalidadId, String sql, Object... valores) {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidadId);
+            try (PreparedStatement sentencia = app.prepareStatement(sql)) {
+                for (int i = 0; i < valores.length; i++) {
+                    sentencia.setObject(i + 1, valores[i]);
+                }
+                try (ResultSet resultado = sentencia.executeQuery()) {
+                    resultado.next();
+                    long id = resultado.getLong(1);
+                    app.commit();
+                    return id;
+                }
+            }
+        } catch (SQLException excepcion) {
+            throw new IllegalStateException(excepcion);
+        }
+    }
+}

@@ -1,0 +1,26 @@
+package pe.gob.sgtm.fiscalizacion.infraestructura.web;
+
+import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacion;
+
+/** Un programa de fiscalización tal como sale por HTTP. Campos en español {@code camelCase}. */
+public record ProgramaResource(
+        long id,
+        String codigo,
+        String descripcion,
+        String tipo,
+        String fechaInicio,
+        @Nullable String fechaFin,
+        String estado) {
+
+    public static ProgramaResource de(ProgramaFiscalizacion programa) {
+        return new ProgramaResource(
+                programa.id() == null ? 0L : programa.id(),
+                programa.codigo(),
+                programa.descripcion(),
+                programa.tipo().name(),
+                programa.fechaInicio().toString(),
+                programa.fechaFin() == null ? null : programa.fechaFin().toString(),
+                programa.estado().name());
+    }
+}
