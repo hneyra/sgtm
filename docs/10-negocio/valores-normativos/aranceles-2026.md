@@ -108,38 +108,97 @@ S/m². El núcleo urbano de Catacaos es continuo entre el borde derecho de la l�
 4/5/9/10/14/15) y el borde izquierdo de la B-1 (zonas 1/2/6/7), con un asentamiento menor adicional
 en la B-2 (zonas 8/9/13) — en total, varios cientos de tramos de vía.
 
-**No se transcribió el plano completo en esta pasada, y no es esta transcripción manual la que va
-a cerrar esa fila.** Es factible leerlo a mano —el ejemplo de arriba lo demuestra—, pero **los
-valores arancelarios de la ciudad se van a importar desde un sistema GIS**, con información más
-exacta que la que un recorte de PDF a 600 dpi puede ofrecer (el GIS trae el polígono de cada
-predio y su vía asociada, no solo un número junto a un nombre de calle leído a ojo). Releer el
-plano calle por calle a mano sería trabajo que la importación GIS vuelve a hacer de todos modos, y
-con más precisión. Lo que este archivo deja documentado es que la fuente (el plano oficial,
-código 200105, láminas A-1/B-1/B-2) existe, está descargada y es legible — no que haya que
-transcribirla a mano. Ver §3.
+**No se transcribió el plano completo a mano, y no fue una transcripción manual la que cerró esta
+fila.** Es factible leerlo a mano —el ejemplo de arriba lo demuestra—, pero como quedó dicho
+arriba, **los valores arancelarios de la ciudad se importan desde un sistema GIS**, con información
+más exacta que la que un recorte de PDF a 600 dpi puede ofrecer.
+
+### 1.4 El plano urbano, importado desde GIS
+
+El origen es un GeoPackage del MEF con el código 200105 en el nombre de su capa
+(`m2001050`, cobertura de líneas heredada de ArcInfo: cada arco es un tramo de vía, con
+`TIPO`/`NOMBRE`/`CUADRA` y una columna `VAL_V<ejercicio>` por cada ejercicio vigente —2023 a
+2026—), archivo `77176357-Catacaos_arancel.gpkg`, recibido 2026-08-25. Es el mismo plano que §1.3
+describe —las láminas A-1/B-1/B-2—, en la forma en que un sistema GIS lo entrega: geometría de
+cada tramo más sus atributos, no un número anotado junto a un nombre de calle.
+
+`scripts/valores-normativos/importar_arancel_via_gpkg.py` lee ese gpkg (con `sqlite3` de la
+librería estándar: un GeoPackage es SQLite, y esto no toca la geometría, así que no hace falta
+GDAL) y produce, por ejercicio, el catálogo de vías y las filas de arancel listas para cargar
+—ver §2—. Corrida sobre este archivo:
+
+| Qué | Cuánto |
+|---|---|
+| Arcos en el gpkg | 2 884 |
+| Arcos de límite de manzana/sector (sin `TIPO` ni `NOMBRE`; no son vía) | 285 |
+| Arcos de vía reconocidos | 2 599 |
+| Arcos sin ningún arancel asignado en ningún ejercicio (excluidos) | 29 |
+| **Vías con al menos un arancel** | **259** |
+| Filas de arancel por ejercicio (2023 a 2026) | 369 cada uno |
+
+Los números coinciden con el ejemplo leído a mano en §1.3: la vía `200105-0002` (Av. C. Heredia)
+sale con seis valores distintos a lo largo de su extensión —224, 190, 178, 133, 98, 80— dentro del
+mismo rango «178-224» que describe el párrafo de arriba, ahora con el arco exacto de cada tramo en
+vez de un rango leído a ojo.
+
+**Esto es una transcripción automática de un archivo público del MEF, no una carga.** Antes de que
+cualquier municipalidad calcule un predial con estas cifras hace falta, en este orden:
+
+1. Un segundo revisor —no quien corrió el script— confirma contra el gpkg y contra los planos
+   A-1/B-1/B-2 que la lectura es correcta, y firma como «Verificó» en la cabecera de este archivo
+   (ADR-0007: dos personas, y distintas). **Sigue sin firma**: el estado de este documento
+   permanece `TRANSCRITO`.
+2. El gpkg fuente se archiva en S3 con `scripts/valores-normativos/archivar_fuente_normativa.sh`,
+   con el UBIGEO en la ruta (`fuentes-normativas/aranceles/200105/…`) y con historial —nunca
+   sobrescribe una subida anterior—, y esa URI reemplaza a la ruta local en `documentoFuente`.
+3. Alguien abre un conjunto de parámetros del ejercicio (`AdministrarParametros.abrirVersion`) y
+   solo entonces se cargan estas filas contra ese conjunto, con `ImportarArancel` (backend,
+   `pe.gob.sgtm.catastro.aplicacion`) — nunca contra uno ya sellado: el disparador de `V18` lo
+   rechaza fila a fila.
+
+Ver §3 para lo que este archivo todavía no resuelve.
 
 ## 2. Cómo entra al sistema
 
 | Qué | Dónde |
 |---|---|
-| Tipo | `parametro_tributario` (tipo `ARANCEL_RUSTICO`, una fila por combinación grupo de tierra × calidad agrológica; `ARANCEL_CENTRO_POBLADO_MENOR`, una fila por combinación calzada × ancho × infraestructura); `ARANCEL_VIA` para el plano urbano de la ciudad de Catacaos (§1.3), que se **importa desde el sistema GIS**, no se transcribe a mano |
-| Clave | `ARANCEL_RUSTICO` + grupo (`A`/`C`/`P`/`ERIAZO`) + calidad (`1`/`2`/`3` donde aplique), con el ejercicio como parte de la clave compuesta; `ARANCEL_CENTRO_POBLADO_MENOR` + tipo de calzada + tramo de ancho + columna A-H; `ARANCEL_VIA` + `(municipalidad_id, ejercicio, código de referencia catastral de la vía)`, poblada por el importador GIS |
-| Ámbito | nacional (rústico y centros poblados menores, código 200105); municipal para el plano urbano de Catacaos, vía importación GIS |
-| Vigencia | 2026 |
+| Tipo | `parametro_tributario` (tipo `ARANCEL_RUSTICO`, una fila por combinación grupo de tierra × calidad agrológica; `ARANCEL_CENTRO_POBLADO_MENOR`, una fila por combinación calzada × ancho × infraestructura); la tabla dedicada `arancel` (vía + tramo, backend `pe.gob.sgtm.catastro.dominio.Arancel`) para el plano urbano de la ciudad de Catacaos (§1.3/§1.4), poblada por `ImportarArancel` a partir del CSV que produce el importador GIS |
+| Clave | `ARANCEL_RUSTICO` + grupo (`A`/`C`/`P`/`ERIAZO`) + calidad (`1`/`2`/`3` donde aplique), con el ejercicio como parte de la clave compuesta; `ARANCEL_CENTRO_POBLADO_MENOR` + tipo de calzada + tramo de ancho + columna A-H; `arancel` se identifica por `(municipalidad_id, conjunto_id, via_id, tramo)` —**no** por ejercicio suelto: cuelga de un conjunto de parámetros sellado (#17), igual que el valor referencial vehicular, para que dos versiones selladas del mismo ejercicio no se confundan |
+| Ámbito | nacional (rústico y centros poblados menores, código 200105); municipal para el plano urbano de Catacaos —`arancel.via_id` referencia el catálogo vial de esa municipalidad— |
+| Vigencia | 2026 (rústico y centros poblados menores); 2023-2026 disponibles en el gpkg para el plano urbano, ver §1.4 |
 
-**No se carga con este archivo.** La carga depende de D-13.
+**No se carga con este archivo.** Para `ARANCEL_RUSTICO` y `ARANCEL_CENTRO_POBLADO_MENOR`, la
+carga depende de D-13 (son datos de norma nacional, y D-13 no resuelve si esos van con
+`municipalidad_id` nulo o no). **`arancel` no tiene esa ambigüedad —D-13 no la nombra— porque es
+inherentemente municipal**: un arancel de vía solo tiene sentido contra el catálogo vial de una
+municipalidad concreta. Por eso `docs/10-negocio/verificar-valores-normativos.mjs` no incluye
+`arancel` en las tablas que bloquea (`TABLAS_DE_VALORES`, sí bloqueadas: `parametro_tributario`,
+`valor_unitario_edificacion`, `depreciacion`, `valor_referencial_vehiculo`) — un `INSERT` en
+`arancel` no está prohibido en el código fuente. Lo que sigue bloqueando una carga real es la
+segunda firma de §1.4: sin «Verificó», este documento sigue en `TRANSCRITO`.
 
 ## 3. Qué no cabe hoy
 
-- **El plano urbano de la ciudad de Catacaos (§1.3) sigue sin transcribir, y no lo va a transcribir
-  este archivo.** La fuente ya no está bloqueada —los tres planos (A-1, B-1, B-2) están descargados
-  y son legibles— ni la municipalidad (D-01 ya resolvió Catacaos); lo que corresponde no es una
-  transcripción manual, sino la **importación desde el sistema GIS** que trae esos mismos valores
-  con más precisión (polígono de predio y vía asociada, no un número leído junto a un nombre de
-  calle). Esa importación depende igual del catálogo de vías con código de referencia catastral
-  (#16/#121: capacidad cerrada, datos de Catacaos sin cargar).
+- **El plano urbano de la ciudad de Catacaos (§1.4) está importado, no cargado.** El script
+  produjo `vias.csv` (259 vías) y `arancel_<ejercicio>.csv` (369 filas por ejercicio, 2023-2026),
+  pero nada de eso está todavía en la base. Faltan, en orden: (a) cargar `vias.csv` con
+  `ImportarVias` (#121) —el catálogo vial de Catacaos sigue sin datos cargados—; (b) la segunda
+  firma de §1.4 (ADR-0007); (c) abrir un conjunto de parámetros del ejercicio y cargar con
+  `ImportarArancel`. Ninguno de los tres pasos lo hace este archivo.
+- **`ARANCEL_VIA` como tipo de `parametro_tributario`** —como decía una versión anterior de la
+  fila de arriba— **no es lo que se construyó.** El esquema real (`backend/sgtm-esquema`,
+  migraciones V1 y V18) tiene una tabla `arancel` dedicada, con `via_id` y `tramo`, colgando de
+  `conjunto_parametros`: encaja con el plano urbano (una vía, uno o más tramos) mejor que una
+  clave genérica de `parametro_tributario`. `ARANCEL_RUSTICO` y `ARANCEL_CENTRO_POBLADO_MENOR`
+  —que no se atan a ninguna vía— sí van en `parametro_tributario`, como siempre se documentó.
 - El listado rústico agrupa Catacaos con La Arena y La Unión (§1.1): la clave de
   `ARANCEL_RUSTICO` no distingue distrito porque la norma tampoco lo hace — la zonificación
   agrológica es la unidad real, no el límite distrital.
 - El esquema (`parametro_tributario`, claves arriba) admite bien las dos matrices ya transcritas
   (rústico y centros poblados menores); no hay hallazgo de forma pendiente en ellas.
+- **29 arcos de vía no entraron en la importación**: el plano los dibuja (con su `TIPO` y
+  `NOMBRE`, p. ej. tramos de «HNOS. SULLON P.») pero el MEF no les puso arancel en ningún
+  ejercicio de 2023 a 2026 —ver el `resumen.txt` que produce el script para el detalle—. Las
+  abreviaturas de `TIPO` que trae este gpkg mapearon todas a un `TipoVia` conocido: 0 arcos
+  quedaron fuera por esa causa esta vez, pero el script lo reporta si otra municipalidad trae una
+  abreviatura nueva (`Ca.`, `Mz.`, `Ov.`, `Pz.`, además de las cinco de Catacaos).

@@ -19,6 +19,10 @@ dist/
 frontend/test-results/
 frontend/playwright-report/
 
+# Python (scripts/)
+__pycache__/
+*.pyc
+
 # Sistema
 .DS_Store
 
