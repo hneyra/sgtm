@@ -530,6 +530,20 @@ public final class DatosDePrueba {
                 predioId,
                 EJERCICIO,
                 CIEN);
+        ejecutar(
+                app,
+                "INSERT INTO determinacion_arbitrio (municipalidad_id, ejercicio, servicio,"
+                        + " periodo, contribuyente_id, predio_id, conjunto_id, monto,"
+                        + " parametro_aplicado, fecha_calculo, usuario_calculo)"
+                        + " VALUES (?, ?, 'LIMPIEZA_PUBLICA', 1, ?, ?, ?, ?,"
+                        + "         'TASA_LIMPIEZA_PUBLICA:S-01:CASA_HABITACION', ?, 'prueba')",
+                muni,
+                EJERCICIO,
+                titular,
+                predioId,
+                conjuntoId,
+                CIEN,
+                VIGENCIA);
         return vehiculoId;
     }
 
