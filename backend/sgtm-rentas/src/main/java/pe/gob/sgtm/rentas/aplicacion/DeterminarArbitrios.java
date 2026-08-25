@@ -164,6 +164,7 @@ public class DeterminarArbitrios {
                 periodo,
                 predioId,
                 null,
+                null,
                 monto,
                 vencimientoDe(ejercicio, periodo),
                 documentoOrigenDe(ejercicio, servicio),

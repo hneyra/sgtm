@@ -10,6 +10,11 @@ plugins {
 }
 
 dependencies {
+    // La papeleta asienta su cargo por referencia externa, sin depender de
+    // ninguna clase interna de cuentacorriente (#46, ARQ-01 §4 regla 2): solo se
+    // importa el paquete raiz, que es su API publica: GeneradorDeCargos.
+    implementation(project(":sgtm-cuentacorriente"))
+
     // La prueba del repositorio corre contra PostgreSQL de verdad: provisiona la
     // base como un ambiente real y se conecta como sgtm_app, no como el
     // superusuario que entrega Testcontainers (CAL-01 §3.2).

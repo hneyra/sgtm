@@ -30,6 +30,9 @@ public interface GeneradorDeCargos {
      * @param periodo la cuota o el mes, si el tributo se divide; {@code null} si no aplica
      * @param predioId la unidad, si la obligación es predial o de arbitrios
      * @param vehiculoId la unidad, si la obligación es vehicular
+     * @param referenciaExterna como entra una papeleta o una licencia, sin clave foránea (ARQ-01 §4
+     *     regla 2); {@code null} cuando quien pide el cargo ya tiene su propia cabecera de
+     *     determinación con la que explicarlo
      * @param monto siempre positivo
      * @param fechaValor fecha a la que se imputa el cargo
      * @param documentoOrigen el documento que lo origina
@@ -42,6 +45,7 @@ public interface GeneradorDeCargos {
             @Nullable Integer periodo,
             @Nullable Long predioId,
             @Nullable Long vehiculoId,
+            @Nullable String referenciaExterna,
             Dinero monto,
             LocalDate fechaValor,
             String documentoOrigen,

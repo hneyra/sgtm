@@ -303,6 +303,7 @@ class DeterminarArbitriosTest {
                 Integer periodo,
                 Long predioId,
                 Long vehiculoId,
+                String referenciaExterna,
                 Dinero monto,
                 LocalDate fechaValor,
                 String documentoOrigen,
