@@ -78,10 +78,23 @@ if (problemas.length > 0) {
  * `enableServerSideApply` deja que el API server resuelva las fusiones de campos, que es
  * lo que permite que el flujo de liberación cambie `image` sin que Pulumi lo reclame
  * como suyo en el siguiente `up`.
+ *
+ * `upsertExistingObjects` existe por el `Namespace` (issue #158, encontrado reconstruyendo
+ * el VPS de verdad): `bootstrap-secretos.sh` corre ANTES que este `up` a propósito —el
+ * `ConfigGroup` de abajo no se da por creado hasta que todos sus Deployment quedan
+ * `Ready`, y los Pods no arrancan sin sus secretos—, y crea el namespace él mismo
+ * (`kubectl apply`, idempotente) porque en un clúster nunca antes gestionado no hay
+ * dónde escribir nada todavía. El primer `create` del `Namespace` que declara Pulumi
+ * choca entonces con «already exists»: no es un resto de una corrida anterior, es
+ * estructural en **cada** reconstrucción desde cero del VPS. Sin esta opción, el primer
+ * `pulumi up` de un clúster nuevo falla siempre en el mismo punto. El riesgo que
+ * documenta Pulumi —adoptar-y-borrar en silencio un recurso renombrado sin alias— exige
+ * un renombre sin alias, que este repositorio no hace.
  */
 const proveedor = new k8s.Provider(resourceName(env, "kubernetes"), {
   kubeconfig: settings.kubeconfig,
   enableServerSideApply: true,
+  upsertExistingObjects: true,
 });
 
 /**
