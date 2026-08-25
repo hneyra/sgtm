@@ -9,7 +9,7 @@
 | Filas de NEG-02 §2 | 1 |
 | Transcribió | JNA, 2026-08-24 |
 | Verificó | Agent, 2026-08-25 |
-| Estado | TRANSCRITO |
+| Estado | VERIFICADO |
 
 ## 1. La tabla tal como está en la norma
 
