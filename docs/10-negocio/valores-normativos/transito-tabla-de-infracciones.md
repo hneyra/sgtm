@@ -8,8 +8,8 @@
 | Ejercicios que rige | 2009– (con el Anexo I modificado en las fechas de arriba; la última modificación que localicé es del D.S. 002-2026-MTC, El Peruano, 2026-01-15) |
 | Filas de NEG-02 §2 | 24 |
 | Transcribió | JNA, 2026-08-24 |
-| Verificó | — |
-| Estado | TRANSCRITO |
+| Verificó | Agente, 2026-08-25 |
+| Estado | VERIFICADO |
 
 ## 1. La tabla tal como está en la norma
 

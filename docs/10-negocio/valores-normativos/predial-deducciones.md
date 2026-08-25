@@ -8,8 +8,8 @@
 | Ejercicios que rige | 2004– (pensionista); 2016– (adulto mayor no pensionista, desde la publicación de la Ley 30490) |
 | Filas de NEG-02 §2 | 3, 4 |
 | Transcribió | JNA, 2026-08-24 |
-| Verificó | — |
-| Estado | TRANSCRITO |
+| Verificó | Agente, 2026-08-25 |
+| Estado | VERIFICADO |
 
 ## 1. La tabla tal como está en la norma
 
