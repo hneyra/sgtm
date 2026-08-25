@@ -14,9 +14,10 @@ import pe.gob.sgtm.dominio.Observacion;
 
 /**
  * Implementa {@link GeneradorDeCargos} sobre {@link RegistrarAsiento}: el cargo que otro contexto
- * pide siempre es insoluto y de fase ordinaria, sin referencia externa —a diferencia de una
- * papeleta o una licencia, quien pide esto ya tiene su propia cabecera de determinación con la que
- * explicar el cargo, así que no hace falta la referencia libre de ARQ-01 §4 regla 2—.
+ * pide siempre es insoluto y de fase ordinaria. La referencia externa es la que el llamador pase
+ * —una papeleta o una licencia la usan para no necesitar clave foránea (ARQ-01 §4 regla 2); quien
+ * ya tiene su propia cabecera de determinación, como {@code DeterminarArbitrios}, pasa {@code
+ * null}—.
  */
 @Service
 public class GeneradorDeCargosCuentaCorriente implements GeneradorDeCargos {
@@ -35,6 +36,7 @@ public class GeneradorDeCargosCuentaCorriente implements GeneradorDeCargos {
             @Nullable Integer periodo,
             @Nullable Long predioId,
             @Nullable Long vehiculoId,
+            @Nullable String referenciaExterna,
             Dinero monto,
             LocalDate fechaValor,
             String documentoOrigen,
@@ -50,7 +52,7 @@ public class GeneradorDeCargosCuentaCorriente implements GeneradorDeCargos {
                         periodo,
                         predioId,
                         vehiculoId,
-                        null,
+                        referenciaExterna,
                         monto,
                         fechaValor,
                         documentoOrigen);
