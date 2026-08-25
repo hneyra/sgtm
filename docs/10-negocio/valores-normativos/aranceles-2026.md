@@ -146,8 +146,8 @@ cualquier municipalidad calcule un predial con estas cifras hace falta, en este 
 
 1. Un segundo revisor —no quien corrió el script— confirma contra el gpkg y contra los planos
    A-1/B-1/B-2 que la lectura es correcta, y firma como «Verificó» en la cabecera de este archivo
-   (ADR-0007: dos personas, y distintas). **Sigue sin firma**: el estado de este documento
-   permanece `TRANSCRITO`.
+   (ADR-0007: dos personas, y distintas). **Hecho**: Agent verificó el 2026-08-25 y el estado de
+   este documento pasó a `VERIFICADO` (ver cabecera).
 2. El gpkg fuente se archiva en S3 con `scripts/valores-normativos/archivar_fuente_normativa.sh`,
    con el UBIGEO en la ruta (`fuentes-normativas/aranceles/200105/…`) y con historial —nunca
    sobrescribe una subida anterior—, y esa URI reemplaza a la ruta local en `documentoFuente`.
@@ -174,17 +174,19 @@ inherentemente municipal**: un arancel de vía solo tiene sentido contra el cat�
 municipalidad concreta. Por eso `docs/10-negocio/verificar-valores-normativos.mjs` no incluye
 `arancel` en las tablas que bloquea (`TABLAS_DE_VALORES`, sí bloqueadas: `parametro_tributario`,
 `valor_unitario_edificacion`, `depreciacion`, `valor_referencial_vehiculo`) — un `INSERT` en
-`arancel` no está prohibido en el código fuente. Lo que sigue bloqueando una carga real es la
-segunda firma de §1.4: sin «Verificó», este documento sigue en `TRANSCRITO`.
+`arancel` no está prohibido en el código fuente. La segunda firma de §1.4 ya está puesta (cabecera:
+`VERIFICADO`); lo que sigue bloqueando una carga real es que el catálogo vial de Catacaos todavía no
+tiene datos —ver §3— y que no existe todavía un procedimiento que invoque `ImportarVias` /
+`ImportarArancel` contra un entorno real.
 
 ## 3. Qué no cabe hoy
 
 - **El plano urbano de la ciudad de Catacaos (§1.4) está importado, no cargado.** El script
   produjo `vias.csv` (259 vías) y `arancel_<ejercicio>.csv` (369 filas por ejercicio, 2023-2026),
-  pero nada de eso está todavía en la base. Faltan, en orden: (a) cargar `vias.csv` con
-  `ImportarVias` (#121) —el catálogo vial de Catacaos sigue sin datos cargados—; (b) la segunda
-  firma de §1.4 (ADR-0007); (c) abrir un conjunto de parámetros del ejercicio y cargar con
-  `ImportarArancel`. Ninguno de los tres pasos lo hace este archivo.
+  pero nada de eso está todavía en la base. La segunda firma de §1.4 (ADR-0007) ya está puesta.
+  Faltan, en orden: (a) cargar `vias.csv` con `ImportarVias` (#121) —el catálogo vial de Catacaos
+  sigue sin datos cargados—; (b) abrir un conjunto de parámetros del ejercicio y cargar con
+  `ImportarArancel`. Ninguno de los dos pasos lo hace este archivo.
 - **`ARANCEL_VIA` como tipo de `parametro_tributario`** —como decía una versión anterior de la
   fila de arriba— **no es lo que se construyó.** El esquema real (`backend/sgtm-esquema`,
   migraciones V1 y V18) tiene una tabla `arancel` dedicada, con `via_id` y `tramo`, colgando de

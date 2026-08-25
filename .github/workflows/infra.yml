@@ -752,6 +752,23 @@ jobs:
           ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
               -i ~/.ssh/despliegue -f -N -L 6443:localhost:6445 "$VPS_USER@$VPS_HOST"
 
+      # `bootstrap-secretos.sh` habla con el API por `kubectl` suelto, no por el
+      # proveedor de Pulumi: sin esto, `kubectl` no encuentra ningun kubeconfig y cae al
+      # `http://localhost:8080` heredado, que nadie escucha —el tunel de arriba sirve
+      # TLS en 6443—. Es el mismo `secrets.KUBECONFIG` que el paso de abajo le pasa a
+      # Pulumi; aqui se escribe ademas a un archivo para que `kubectl` lo use por su
+      # cuenta (issue: bootstrap-secretos.sh fallaba con "connection refused" en la
+      # primera corrida real de este trabajo, 2026-08-24, PR #236).
+      - name: Escribir el kubeconfig para kubectl (el mismo que usa pulumi up)
+        if: steps.credenciales.outputs.hay == 'si'
+        env:
+          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
+        run: |
+          install -m 700 -d ~/.kube
+          install -m 600 /dev/null ~/.kube/config-ci
+          echo "$KUBECONFIG_VALUE" > ~/.kube/config-ci
+          echo "KUBECONFIG=$HOME/.kube/config-ci" >> "$GITHUB_ENV"
+
       # ANTES de `pulumi up`: los Deployment y Job que va a crear referencian estos
       # Secret por nombre, y sin ellos los pods se quedan en Pending. Idempotente —
       # correrlo en cada integración no cambia nada una vez que existen— y nunca pasa
@@ -833,6 +850,17 @@ jobs:
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/despliegue
           ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
               -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
+
+      # Ver el mismo paso en aplicar-stg: sin esto, kubectl no tiene kubeconfig y
+      # bootstrap-secretos.sh falla contra localhost:8080.
+      - name: Escribir el kubeconfig para kubectl (el mismo que usa pulumi up)
+        env:
+          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
+        run: |
+          install -m 700 -d ~/.kube
+          install -m 600 /dev/null ~/.kube/config-ci
+          echo "$KUBECONFIG_VALUE" > ~/.kube/config-ci
+          echo "KUBECONFIG=$HOME/.kube/config-ci" >> "$GITHUB_ENV"
 
       - name: Generar los secretos que falten (INF-06)
         working-directory: infra
