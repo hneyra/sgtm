@@ -78,7 +78,7 @@ class BusquedaDePapeletasControllerTest {
         public Pagina<Papeleta> buscar(CriterioDePapeleta criterio, Paginacion paginacion) {
             this.ultimoCriterio = criterio;
             Papeleta papeleta =
-                    Papeleta.nueva(
+                    Papeleta.nuevaTransito(
                             "PT-0001",
                             1L,
                             LocalDate.of(2026, 3, 1),

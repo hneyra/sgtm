@@ -10,8 +10,12 @@ import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
 
 /**
- * La papeleta de infracción de tránsito, con su desglose <b>guardado, no recalculado</b> (#46,
- * DAT-01 §4.5, RF-060).
+ * La papeleta de infracción, con su desglose <b>guardado, no recalculado</b> (#46, DAT-01 §4.5,
+ * RF-060). Cubre las dos familias de {@code papeleta} (V4): {@code TRANSITO} —placa, vehículo,
+ * infractor, propietario— y {@code ADMINISTRATIVA} —contribuyente, predio, notificación previa—,
+ * "mismo esqueleto, distinta base legal" (#47, ARQ-01 §3.6). Es <b>un solo tipo</b> para las dos,
+ * igual que la tabla es una sola: no hay lógica que duplicar entre familias, solo qué grupo de
+ * campos aplica.
  *
  * <p>Los seis importes —{@code baseImponible}, {@code porcentajeInfraccion}, {@code
  * importeInfraccion}, {@code porcentajeACobrar}, {@code importeAPagar} e {@code
@@ -23,22 +27,27 @@ import pe.gob.sgtm.dominio.Observacion;
  * <p><b>Nunca se borra</b> (regla 4, RNF-051): se anula con acto, cambiando {@link #estado}, no
  * borrando la fila.
  *
- * <p>Este tipo cubre solo la familia {@code TRANSITO} de {@code papeleta} (V4): el {@code placa IS
- * NOT NULL} que exige {@code papeleta_familia_ck} para esa familia está en el compacto. La familia
- * {@code ADMINISTRATIVA} —contribuyente, predio, notificación previa— es alcance de #47.
- *
  * @param id nulo mientras no se ha guardado; lo asigna la base
+ * @param familia {@code TRANSITO} o {@code ADMINISTRATIVA}
  * @param numero identifica la papeleta, único junto con la familia; puede corregirse con {@code
- *     CambiarNumeroDePapeleta} dejando traza (RF-067)
- * @param codigoInfraccionId el código del catálogo vigente el día de la infracción
+ *     CambiarNumeroDePapeleta} dejando traza (RF-067, solo tránsito)
+ * @param codigoInfraccionId el código del catálogo vigente el día de la infracción, de la misma
+ *     familia que la papeleta
  * @param fechaInfraccion cuándo ocurrió
  * @param horaInfraccion a qué hora, si el acta la trae
  * @param lugar dónde ocurrió
- * @param placa del vehículo infractor
- * @param vehiculoId el vehículo del padrón, si está registrado
- * @param licenciaConducir del infractor, si el acta la trae
- * @param infractorId quien conducía, si se identificó
+ * @param placa del vehículo infractor; nulo salvo en {@code TRANSITO}, donde {@code
+ *     papeleta_familia_ck} lo exige
+ * @param vehiculoId el vehículo del padrón, si está registrado (tránsito)
+ * @param licenciaConducir del infractor, si el acta la trae (tránsito)
+ * @param infractorId quien conducía, si se identificó (tránsito)
  * @param propietarioId el titular del vehículo según el padrón, si es distinto del infractor
+ *     (tránsito)
+ * @param contribuyenteId el administrado, si se identificó (administrativa)
+ * @param predioId el predio inspeccionado, si aplica (administrativa)
+ * @param notificacionPreviaId la notificación que la origina, si hubo una: el manual permite una
+ *     papeleta administrativa sin notificación previa, y forzar el enlace inventaría un requisito
+ *     (#47 AC1)
  * @param baseImponible la UIT del ejercicio de la infracción, tal como se aplicó en el acta
  * @param porcentajeInfraccion el porcentaje que fija el código de infracción
  * @param importeInfraccion base por porcentaje, ya calculado en el acta
@@ -52,16 +61,20 @@ import pe.gob.sgtm.dominio.Observacion;
  */
 public record Papeleta(
         @Nullable Long id,
+        Familia familia,
         String numero,
         long codigoInfraccionId,
         LocalDate fechaInfraccion,
         @Nullable LocalTime horaInfraccion,
         String lugar,
-        String placa,
+        @Nullable String placa,
         @Nullable Long vehiculoId,
         @Nullable String licenciaConducir,
         @Nullable Long infractorId,
         @Nullable Long propietarioId,
+        @Nullable Long contribuyenteId,
+        @Nullable Long predioId,
+        @Nullable Long notificacionPreviaId,
         Dinero baseImponible,
         Alicuota porcentajeInfraccion,
         Dinero importeInfraccion,
@@ -78,6 +91,7 @@ public record Papeleta(
     private static final int LICENCIA_MAXIMA = 20;
 
     public Papeleta {
+        Objects.requireNonNull(familia, "La papeleta necesita su familia");
         Objects.requireNonNull(numero, "La papeleta necesita su numero");
         numero = numero.strip().toUpperCase(Locale.ROOT);
         if (numero.isEmpty() || numero.length() > NUMERO_MAXIMO) {
@@ -94,12 +108,29 @@ public record Papeleta(
             throw new IllegalArgumentException(
                     "El lugar va de 1 a " + LUGAR_MAXIMO + " caracteres");
         }
-        Objects.requireNonNull(
-                placa, "Una papeleta de transito necesita la placa (papeleta_familia_ck)");
-        placa = placa.strip().toUpperCase(Locale.ROOT);
-        if (placa.isEmpty() || placa.length() > PLACA_MAXIMA) {
-            throw new IllegalArgumentException(
-                    "La placa va de 1 a " + PLACA_MAXIMA + " caracteres: '" + placa + "'");
+        if (familia == Familia.TRANSITO) {
+            Objects.requireNonNull(
+                    placa, "Una papeleta de transito necesita la placa (papeleta_familia_ck)");
+            placa = placa.strip().toUpperCase(Locale.ROOT);
+            if (placa.isEmpty() || placa.length() > PLACA_MAXIMA) {
+                throw new IllegalArgumentException(
+                        "La placa va de 1 a " + PLACA_MAXIMA + " caracteres: '" + placa + "'");
+            }
+        } else {
+            if (contribuyenteId == null && predioId == null) {
+                throw new IllegalArgumentException(
+                        "Una papeleta administrativa necesita contribuyente o predio"
+                                + " (papeleta_familia_ck)");
+            }
+            if (placa != null) {
+                placa = placa.strip().toUpperCase(Locale.ROOT);
+                if (placa.isEmpty()) {
+                    placa = null;
+                } else if (placa.length() > PLACA_MAXIMA) {
+                    throw new IllegalArgumentException(
+                            "La placa va de 1 a " + PLACA_MAXIMA + " caracteres: '" + placa + "'");
+                }
+            }
         }
         if (licenciaConducir != null) {
             licenciaConducir = licenciaConducir.strip();
@@ -122,7 +153,7 @@ public record Papeleta(
     }
 
     /** Una papeleta de tránsito nueva, todavía sin guardar. */
-    public static Papeleta nueva(
+    public static Papeleta nuevaTransito(
             String numero,
             long codigoInfraccionId,
             LocalDate fechaInfraccion,
@@ -142,6 +173,7 @@ public record Papeleta(
             Observacion observacion) {
         return new Papeleta(
                 null,
+                Familia.TRANSITO,
                 numero,
                 codigoInfraccionId,
                 fechaInfraccion,
@@ -152,6 +184,56 @@ public record Papeleta(
                 licenciaConducir,
                 infractorId,
                 propietarioId,
+                null,
+                null,
+                null,
+                baseImponible,
+                porcentajeInfraccion,
+                importeInfraccion,
+                porcentajeACobrar,
+                importeAPagar,
+                importeConBeneficio,
+                EstadoDePapeleta.IMPUESTA,
+                null,
+                observacion);
+    }
+
+    /**
+     * Una papeleta administrativa nueva, todavía sin guardar. Enlazada o no a una notificación
+     * previa —el manual la permite sin ella (#47 AC1)—.
+     */
+    public static Papeleta nuevaAdministrativa(
+            String numero,
+            long codigoInfraccionId,
+            LocalDate fechaInfraccion,
+            @Nullable LocalTime horaInfraccion,
+            String lugar,
+            @Nullable Long contribuyenteId,
+            @Nullable Long predioId,
+            @Nullable Long notificacionPreviaId,
+            Dinero baseImponible,
+            Alicuota porcentajeInfraccion,
+            Dinero importeInfraccion,
+            Alicuota porcentajeACobrar,
+            Dinero importeAPagar,
+            @Nullable Dinero importeConBeneficio,
+            Observacion observacion) {
+        return new Papeleta(
+                null,
+                Familia.ADMINISTRATIVA,
+                numero,
+                codigoInfraccionId,
+                fechaInfraccion,
+                horaInfraccion,
+                lugar,
+                null,
+                null,
+                null,
+                null,
+                null,
+                contribuyenteId,
+                predioId,
+                notificacionPreviaId,
                 baseImponible,
                 porcentajeInfraccion,
                 importeInfraccion,
@@ -170,12 +252,13 @@ public record Papeleta(
     /**
      * La misma papeleta con otro número, para {@code CambiarNumeroDePapeleta}. Sus demás datos,
      * incluido el desglose, no cambian: el cambio de número corrige un error del operador, nunca
-     * recalcula nada (RF-067).
+     * recalcula nada (RF-067, solo tránsito).
      */
     public Papeleta conNumero(String otroNumero) {
         Objects.requireNonNull(id, "Solo se cambia el numero de una papeleta ya guardada");
         return new Papeleta(
                 id,
+                familia,
                 otroNumero,
                 codigoInfraccionId,
                 fechaInfraccion,
@@ -186,6 +269,9 @@ public record Papeleta(
                 licenciaConducir,
                 infractorId,
                 propietarioId,
+                contribuyenteId,
+                predioId,
+                notificacionPreviaId,
                 baseImponible,
                 porcentajeInfraccion,
                 importeInfraccion,

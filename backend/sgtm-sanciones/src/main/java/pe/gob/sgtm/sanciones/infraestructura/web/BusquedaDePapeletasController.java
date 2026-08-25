@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.sanciones.dominio.CriterioDePapeleta;
+import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.sanciones.dominio.PapeletaRepository;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
@@ -46,8 +47,11 @@ public class BusquedaDePapeletasController {
 
         CriterioDePapeleta criterio =
                 new CriterioDePapeleta(
+                        Familia.TRANSITO,
                         papeleta,
                         nPlaca,
+                        null,
+                        null,
                         null,
                         null,
                         null,

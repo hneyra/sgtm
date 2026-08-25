@@ -18,23 +18,21 @@ import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.sanciones.dominio.CriterioDePapeleta;
+import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.sanciones.dominio.Papeleta;
 import pe.gob.sgtm.sanciones.dominio.PapeletaRepository;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
 import pe.gob.sgtm.web.ManejadorDeErrores;
 import tools.jackson.databind.json.JsonMapper;
 
-/**
- * #46 — Capa web: se prueba el transporte (forma del JSON, traduccion de filtros), no la
- * persistencia —eso ya lo verifica {@code PapeletaRepositoryJdbcTest} contra PostgreSQL real.
- */
-@DisplayName("Capa web — GET /api/v1/transito/papeletas")
-class PapeletasControllerTest {
+@DisplayName("Capa web — GET /api/v1/infracciones/administrativas/reportes/por-contribuyente")
+class NotificacionesPorContribuyenteControllerTest {
 
     private final RepositorioDeMentira repositorio = new RepositorioDeMentira();
 
     private final MockMvc mvc =
-            MockMvcBuilders.standaloneSetup(new PapeletasController(repositorio))
+            MockMvcBuilders.standaloneSetup(
+                            new NotificacionesPorContribuyenteController(repositorio))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(
@@ -46,43 +44,42 @@ class PapeletasControllerTest {
                     .build();
 
     @Test
-    @DisplayName("traslada nroPapeleta y placa al criterio")
-    void trasladaNroPapeletaYPlacaAlCriterio() throws Exception {
+    @DisplayName("ano se traduce al rango del ejercicio completo")
+    void anoSeTraduceAlRangoDelEjercicio() throws Exception {
         mvc.perform(
-                        get("/api/v1/transito/papeletas")
-                                .param("nroPapeleta", "PT-0001")
-                                .param("placa", "abc-123"))
+                        get("/api/v1/infracciones/administrativas/reportes/por-contribuyente")
+                                .param("ano", "2025"))
                 .andReturn();
 
-        assertThat(repositorio.ultimoCriterio.numero()).isEqualTo("PT-0001");
-        assertThat(repositorio.ultimoCriterio.placa()).isEqualTo("ABC-123");
+        assertThat(repositorio.ultimoCriterio.desde()).isEqualTo(LocalDate.of(2025, 1, 1));
+        assertThat(repositorio.ultimoCriterio.hasta()).isEqualTo(LocalDate.of(2025, 12, 31));
+        assertThat(repositorio.ultimoCriterio.familia()).isEqualTo(Familia.ADMINISTRATIVA);
     }
 
     @Test
-    @DisplayName("un estado desconocido es 422")
-    void unEstadoDesconocidoEs422() throws Exception {
+    @DisplayName("un ano invalido es 422")
+    void unAnoInvalidoEs422() throws Exception {
         MvcResult resultado =
-                mvc.perform(get("/api/v1/transito/papeletas").param("estado", "VOLADA"))
+                mvc.perform(
+                                get("/api/v1/infracciones/administrativas/reportes/por-contribuyente")
+                                        .param("ano", "no-es-un-anio"))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
     }
 
     @Test
-    @DisplayName("devuelve la pagina en la forma unica, con los seis importes en camelCase")
-    void devuelveLaPaginaEnLaFormaUnica() throws Exception {
-        MvcResult resultado = mvc.perform(get("/api/v1/transito/papeletas")).andReturn();
+    @DisplayName("estadoDeDeuda presente activa soloPendientes")
+    void estadoDeDeudaPresenteActivaSoloPendientes() throws Exception {
+        mvc.perform(
+                        get("/api/v1/infracciones/administrativas/reportes/por-contribuyente")
+                                .param("estadoDeDeuda", "PENDIENTE"))
+                .andReturn();
 
-        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
-        assertThat(resultado.getResponse().getContentAsString())
-                .contains("\"contenido\"")
-                .contains("\"baseImponible\":\"5500\"")
-                .contains("\"importeAPagar\":\"440\"")
-                .doesNotContain("municipalidad");
+        assertThat(repositorio.ultimoCriterio.soloPendientes()).isTrue();
     }
 
     private static final class RepositorioDeMentira implements PapeletaRepository {
-
         private CriterioDePapeleta ultimoCriterio;
 
         @Override
@@ -99,15 +96,13 @@ class PapeletasControllerTest {
         public Pagina<Papeleta> buscar(CriterioDePapeleta criterio, Paginacion paginacion) {
             this.ultimoCriterio = criterio;
             Papeleta papeleta =
-                    Papeleta.nuevaTransito(
-                            "PT-0001",
+                    Papeleta.nuevaAdministrativa(
+                            "PA-0001",
                             1L,
-                            LocalDate.of(2026, 3, 1),
+                            LocalDate.of(2025, 6, 1),
                             null,
                             "Av. Grau",
-                            "ABC-123",
-                            null,
-                            null,
+                            10L,
                             null,
                             null,
                             Dinero.de("5500"),

@@ -15,39 +15,40 @@ import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
- * Estado de cuenta de infracciones: {@code GET /api/v1/transito/estado-cuenta} (RF-062).
+ * Estado de cuenta de papeleta administrativa: {@code GET
+ * /api/v1/infracciones/administrativas/estado-cuenta} (RF-074, #47).
  *
- * <p>Papeletas pendientes de pago de un conductor o de un vehículo, con su importe y su beneficio
- * —los dos ya guardados en la propia papeleta (#46)—. La situación de coactiva que describe el
- * contrato no sale de aquí todavía: {@code coactiva} es un contexto acotado vacío; cuando publique
- * su API, este controlador la incorpora sin cambiar la ruta.
+ * <p>Mismo patrón que {@code EstadoDeCuentaTransitoController} (#46): papeletas pendientes de pago,
+ * con su importe y su beneficio ya guardados en la propia fila. El reajuste, el interés y los
+ * gastos que describe el contrato no salen de aquí: dependen de {@code tesoreria}, que todavía no
+ * publica su cálculo de deuda actualizada.
  */
 @RestController
-@RequestMapping(Api.RAIZ + "/transito/estado-cuenta")
-@RequiereAcceso(acceso = "transito_estado_cuenta", privilegio = Privilegio.LECTURA)
-public class EstadoDeCuentaTransitoController {
+@RequestMapping(Api.RAIZ + "/infracciones/administrativas/estado-cuenta")
+@RequiereAcceso(acceso = "adm_estado_cuenta", privilegio = Privilegio.LECTURA)
+public class EstadoDeCuentaAdministrativoController {
 
     private static final String ORDEN_POR_OMISION = "fechaInfraccion";
 
     private final PapeletaRepository repositorio;
 
-    public EstadoDeCuentaTransitoController(PapeletaRepository repositorio) {
+    public EstadoDeCuentaAdministrativoController(PapeletaRepository repositorio) {
         this.repositorio = repositorio;
     }
 
     @GetMapping
     public RespuestaPaginada<PapeletaResource> buscar(
-            @RequestParam(required = false) @Nullable String conductor,
-            @RequestParam(required = false) @Nullable String placa,
+            @RequestParam(required = false) @Nullable String papeleta,
+            @RequestParam(required = false) @Nullable String codContribuyente,
             ParametrosDePaginacion paginacion) {
 
         CriterioDePapeleta criterio =
                 new CriterioDePapeleta(
-                        Familia.TRANSITO,
+                        Familia.ADMINISTRATIVA,
+                        papeleta,
                         null,
-                        placa,
-                        conductor,
                         null,
+                        codContribuyente,
                         null,
                         null,
                         null,

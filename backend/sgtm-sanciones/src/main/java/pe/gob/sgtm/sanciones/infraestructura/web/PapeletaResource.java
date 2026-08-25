@@ -4,7 +4,8 @@ import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.sanciones.dominio.Papeleta;
 
 /**
- * Una papeleta tal como sale por HTTP. Campos en español {@code camelCase} (ARQ-04 §3).
+ * Una papeleta tal como sale por HTTP, de cualquier familia. Campos en español {@code camelCase}
+ * (ARQ-04 §3).
  *
  * <p>Los seis importes viajan como texto y no como {@link pe.gob.sgtm.dominio.Dinero}: son la cifra
  * fija con que se determinó la papeleta —tomada del acta física—, no un saldo que cambie con el
@@ -14,14 +15,18 @@ import pe.gob.sgtm.sanciones.dominio.Papeleta;
  */
 public record PapeletaResource(
         long id,
+        String familia,
         String numero,
         String fechaInfraccion,
         @Nullable String horaInfraccion,
         String lugar,
-        String placa,
+        @Nullable String placa,
         @Nullable Long vehiculoId,
         @Nullable Long infractorId,
         @Nullable Long propietarioId,
+        @Nullable Long contribuyenteId,
+        @Nullable Long predioId,
+        @Nullable Long notificacionPreviaId,
         String baseImponible,
         String porcentajeInfraccion,
         String importeInfraccion,
@@ -34,6 +39,7 @@ public record PapeletaResource(
     public static PapeletaResource de(Papeleta papeleta) {
         return new PapeletaResource(
                 papeleta.id() == null ? 0L : papeleta.id(),
+                papeleta.familia().name(),
                 papeleta.numero(),
                 papeleta.fechaInfraccion().toString(),
                 papeleta.horaInfraccion() == null ? null : papeleta.horaInfraccion().toString(),
@@ -42,6 +48,9 @@ public record PapeletaResource(
                 papeleta.vehiculoId(),
                 papeleta.infractorId(),
                 papeleta.propietarioId(),
+                papeleta.contribuyenteId(),
+                papeleta.predioId(),
+                papeleta.notificacionPreviaId(),
                 papeleta.baseImponible().valor().toPlainString(),
                 papeleta.porcentajeInfraccion().valor().toPlainString(),
                 papeleta.importeInfraccion().valor().toPlainString(),
