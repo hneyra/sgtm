@@ -82,9 +82,14 @@ spec:
         proyecto: sgtm
         ambiente: $AMBIENTE
         componente: carga-arancel
-        app: carga-arancel
+        # Ver el mismo comentario en cargar-catalogo-vial.sh: "lote" es la etiqueta que
+        # NetworkPolicy "permitir-ingreso-postgres" deja pasar al puerto 5432 para un
+        # Job de un solo uso; con otra etiqueta el pod arranca y la conexion cae con
+        # "Connection refused".
+        app: lote
     spec:
       restartPolicy: Never
+      priorityClassName: sgtm-${AMBIENTE}-prioridad-lote
       containers:
         - name: carga-arancel
           image: $IMAGEN
