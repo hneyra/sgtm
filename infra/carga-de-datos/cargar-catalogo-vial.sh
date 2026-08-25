@@ -76,9 +76,16 @@ spec:
         proyecto: sgtm
         ambiente: $AMBIENTE
         componente: carga-vial
-        app: carga-vial
+        # NetworkPolicy "permitir-ingreso-postgres" (infra/componentes/Red.ts) solo deja
+        # pasar al puerto 5432 a pods con app en {aplicacion, identidad, migracion,
+        # implantacion, lote, respaldo}: "lote" es la etiqueta generica para un Job de
+        # un solo uso que necesita hablar con la base. Con "carga-vial" el pod arranca
+        # pero la conexion cae con "Connection refused" -denegacion por omision
+        # funcionando como se disenio, no un error de credenciales.
+        app: lote
     spec:
       restartPolicy: Never
+      priorityClassName: sgtm-${AMBIENTE}-prioridad-lote
       containers:
         - name: carga-vial
           image: $IMAGEN
