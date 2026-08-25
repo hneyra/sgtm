@@ -235,7 +235,9 @@ class RegistrarDeterminacionPredialTest {
                             .toList();
 
             assertThat(nombresDeMetodo)
-                    .containsExactlyInAnyOrder("findById", "detalleDe", "insertar")
+                    // "insertar" aparece dos veces: la sobrecarga con detalle (predial) y la de
+                    // una sola partida sin detalle (vehicular, alcabala, espectaculos — #32).
+                    .containsExactlyInAnyOrder("findById", "detalleDe", "insertar", "insertar")
                     .as("sin actualizar ni eliminar: recalcular solo puede insertar otra fila")
                     .noneMatch(
                             nombre ->
