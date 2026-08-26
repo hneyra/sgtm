@@ -197,10 +197,15 @@ igual de bien y deja lo asignable intacto.
 
 ### Pendiente: aplicar la corrección en `vmd120205`
 
-El repositorio ya lleva el guion corregido y `Pulumi.prod.yaml` ya declara los 3 CPU que resultan,
-pero **el nodo sigue reservando 2 hasta que alguien corra el guion en él**. Hasta entonces
-`aplicar-prod` se detiene en su paso «Lo declarado cabe en el nodo real», en segundos y diciendo
-las dos cifras — la dirección segura del error: nunca deja pasar un despliegue que no cabe.
+El repositorio ya lleva el guion corregido, pero **el nodo sigue reservando 2 CPU hasta que alguien
+lo corra en él**.
+
+⚠ **Esto ya no bloquea el despliegue, y conviene saber por qué.** El 2026-08-26 se declararon los
+3 CPU resultantes en `Pulumi.prod.yaml` antes de aplicar la reserva, y `aplicar-prod` se detuvo en
+su paso «Lo declarado cabe en el nodo real»: ese paso rechaza toda declaración MAYOR que lo real, y
+adelantarse al nodo solo cambia el paso en el que falla. `prod` se redimensionó entonces para caber
+en los 2 CPU que el nodo reparte hoy (INF-01 §2), así que **correr esto es ahora una mejora de
+margen —~1 000m—, no un desbloqueo**.
 
 En el VPS, como root, en su propia ventana de mantenimiento:
 
@@ -218,6 +223,10 @@ kubectl get node -o jsonpath='{.items[0].status.allocatable.cpu}{"/"}{.items[0].
 # se espera: 3/6029348Ki
 yarn capacidad --ambiente prod
 ```
+
+`Pulumi.prod.yaml` **no hay que tocarlo** después: sigue declarando "2", y declarar por debajo de
+lo real está admitido —solo aprieta la comprobación—. Subirlo a "3" es opcional, y lo que gana es
+margen.
 
 ## 5. Escaneo de vulnerabilidades de imágenes
 
