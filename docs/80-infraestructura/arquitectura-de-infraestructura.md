@@ -165,12 +165,25 @@ más—, y dice explícitamente lo que la estimación por sí sola no podía: po
 clúster ni siquiera termina de programar sus propios pods, mucho antes de que nadie note falta de
 rendimiento.
 
-**Y el nodo de `prod` está hoy por debajo de ese piso (2026-08-26, issue #252).** `vmd120205` es
-un 4 CPU / 8 GB, la mitad de lo que esta tabla dimensiona, y con la reserva de §4 aplicada le
-quedan **2 CPU y 5,75 Gi asignables** — medido, no estimado: es el registro de la ejecución de
-`reservar-recursos-del-nodo.sh` del 2026-08-23. El stack de `prod` pide 2 040m solo en sus
-`Deployment`, así que **no cabe ni en reposo**, y eso es la razón de que `prod` no se haya
-desplegado entero ni una vez.
+**El nodo de `prod` está por debajo de ese piso, y aun así el stack cabe (2026-08-26, issue
+#252).** `vmd120205` es un 4 CPU / 8 GB, la mitad de lo que esta tabla dimensiona. Con la reserva
+de §4 tal como se aplicó el 2026-08-23 le quedaban **2 CPU y 5,75 Gi asignables** —medido, no
+estimado—, y el stack no cabía ni en reposo: esa es la razón de que `prod` no se desplegara entero
+ni una vez.
+
+De las dos cifras, **la que estaba mal era la CPU, y no por el tamaño del nodo sino por la reserva
+misma**. `reservar-recursos-del-nodo.sh` escribía 1 CPU y 1 Gi en `system-reserved` **y otro tanto
+en `kube-reserved`**, que son dos descuentos distintos y kubelet los **suma**: el nodo reservaba
+2 CPU y 2 Gi donde §4 dimensiona «~1 CPU y ~1 GB». La medición del 2026-08-23 lo dice sin
+ambigüedad —«la diferencia es 2 097 152 Ki = 2 Gi exactos, y 2 CPU»— pero se leyó como el coste
+esperado de la reserva, no como el doble de ella.
+
+Corregido el reparto (500m + 500m), el nodo vuelve a ofrecer **3 CPU**. La reserva de **memoria se
+deja en 2 Gi**: ahí el consumo sí es ese —el API server ronda el medio giga, y el sistema con
+containerd completan el resto—, así que bajarla no habría devuelto memoria, solo habría dejado de
+contar la que ya está en uso. Con 3 CPU y 5,75 Gi asignables, y `webReplicas: 1` como en `stg`, el
+stack de `prod` cabe: 2 060m y 5 344Mi en el pico del arranque contra 2 800m y 5 728Mi
+disponibles.
 
 Lo que ese descubrimiento costó es la parte que conviene no repetir: un pod que el planificador no
 puede ubicar no falla, se queda `Pending`; y el `ConfigGroup` de Pulumi lo espera sin error, sin

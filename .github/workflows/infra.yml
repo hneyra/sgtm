@@ -999,9 +999,15 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
+          # KUBECONFIG entra en la cuenta desde 2026-08-26. Sin el, el `preview` de
+          # abajo no arrancaba —«Missing required configuration variable
+          # sgtm:kubeconfig»— y este trabajo salia rojo TODAS las noches por falta de
+          # una credencial, no por deriva. Una alarma que suena siempre deja de ser una
+          # alarma: si falta, esto se salta y lo dice, como hacen los demas trabajos.
+          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
         run: |
           if [ -n "$PULUMI_ACCESS_TOKEN" ] && [ -n "$SSH_PRIVATE_KEY" ] \
-             && [ -n "$VPS_USER" ] && [ -n "$VPS_HOST" ]; then
+             && [ -n "$VPS_USER" ] && [ -n "$VPS_HOST" ] && [ -n "$KUBECONFIG_VALUE" ]; then
             echo "hay=si" >> "$GITHUB_OUTPUT"
           else
             echo "hay=no" >> "$GITHUB_OUTPUT"
@@ -1027,6 +1033,25 @@ jobs:
         run: |
           curl -fsSL https://get.pulumi.com | sh
           echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
+
+      # El mismo paso que `aplicar-prod`, y por el mismo motivo (ADR-0011 §3): los
+      # secretos de infraestructura NO se versionan, ni siquiera cifrados, asi que cada
+      # corrida los inyecta frescos en la copia efimera del checkout. `preview` los
+      # necesita igual que `up` —`index.ts` lee `kubeconfig` para construir el
+      # proveedor—, y sin ellos esto no llegaba a comparar nada: fallaba antes, en la
+      # lectura de la configuracion.
+      - name: Configurar los secretos de infraestructura del stack (ADR-0011 §3)
+        if: steps.credenciales.outputs.hay == 'si'
+        working-directory: infra
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
+          BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
+          BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+        run: |
+          pulumi config set --secret --stack prod kubeconfig -- "$KUBECONFIG_VALUE"
+          pulumi config set --secret --stack prod backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
+          pulumi config set --secret --stack prod backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
 
       # `--expect-no-changes` es la comprobación: sale en rojo si el plan no está vacío,
       # que es exactamente lo que pasa cuando alguien corrió un `kubectl apply` a mano
