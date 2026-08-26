@@ -301,6 +301,21 @@ export interface Settings extends Invariants {
     accessKeyId: pulumi.Output<string>;
     secretAccessKey: pulumi.Output<string>;
   };
+  /**
+   * Credenciales de solo lectura contra el registro de imágenes (`INF-06`, issue #257).
+   *
+   * Misma clasificación que `backupCredentials`: `ADR-0011` §3 las trata como secreto
+   * de *arranque de la infraestructura* —lo que el nodo necesita para poder traer las
+   * imágenes de `sgtm:applicationImageRepository`—, no de la aplicación. Sin esto, un
+   * clúster nuevo (o reconstruido desde cero) no puede completar el primer `pulumi up`:
+   * los tres paquetes de `ghcr.io/hneyra` que no son PostgreSQL ni Keycloak son
+   * privados, y sin credencial la respuesta es `401` al pedir el token anónimo, antes
+   * de que importe si la etiqueta existe.
+   */
+  registryCredentials: {
+    username: string;
+    token: pulumi.Output<string>;
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -738,6 +753,10 @@ export function loadSettings(): Settings {
     backupCredentials: {
       accessKeyId: config.requireSecret("backupAccessKeyId"),
       secretAccessKey: config.requireSecret("backupSecretAccessKey"),
+    },
+    registryCredentials: {
+      username: config.require("registryUsername"),
+      token: config.requireSecret("registryPullToken"),
     },
   };
 }

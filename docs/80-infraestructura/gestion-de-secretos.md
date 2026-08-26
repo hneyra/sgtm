@@ -48,15 +48,30 @@ existe para no dejar que se difumine:
 |---|---|---|
 | `kubeconfig` | `pulumi config` (cifrado, por stack) | Semestral |
 | `backupAccessKeyId` / `backupSecretAccessKey` | `pulumi config` (cifrado, por stack) | Semestral |
+| `registryPullToken` (PAT de GHCR, `read:packages`) | `pulumi config` (cifrado, por stack) | Semestral |
 | `PULUMI_ACCESS_TOKEN` | Secreto de GitHub Actions | Semestral |
 | `SSH_PRIVATE_KEY` (clave de despliegue) | Secreto de GitHub Actions | Semestral |
 
-Ninguno de estos cuatro abre el padrón de una municipalidad por sí solo: son lo que
+Ninguno de estos cinco abre el padrón de una municipalidad por sí solo: son lo que
 Pulumi necesita para **crear** el mecanismo —el clúster, el `Namespace`, el destino de
-respaldo—, no un dato del sistema. Es la distinción de `ADR-0011` §3, y `infra/
-componentes/secretos.ts` la hace estructural: `SECRETOS_DE_ARRANQUE` y
-`inventarioDeSecretos()` son dos listas, y una prueba (`verificaciones/secretos.
-test.ts`) exige que ninguna clave aparezca en las dos.
+respaldo, el acceso al registro de imágenes—, no un dato del sistema. Es la distinción
+de `ADR-0011` §3, y `infra/componentes/secretos.ts` la hace estructural:
+`SECRETOS_DE_ARRANQUE` y `inventarioDeSecretos()` son dos listas, y una prueba
+(`verificaciones/secretos.test.ts`) exige que ninguna clave aparezca en las dos.
+
+**`registryPullToken` es el más nuevo de los cinco (issue #257).** `sgtm-aplicacion`,
+`sgtm-migrador` y `sgtm-interfaz` son paquetes **privados** en `ghcr.io/hneyra`:
+`publicar-imagenes.yml` los sube con el `GITHUB_TOKEN` efímero de cada corrida, sin
+ningún paso que los marque públicos. Un nodo nuevo —o uno reconstruido desde cero,
+exactamente el escenario que describe `sgtm:applicationBootstrapVersion`— no tiene de
+dónde sacar una credencial para esas tres imágenes, y hasta este issue **ningún**
+archivo del repositorio lo resolvía: ni `bootstrap-secretos.sh`, ni un
+`imagePullSecrets` en los manifiestos, ni un `registries.yaml` documentado. `index.ts`
+crea un `Secret` de `kubernetes.io/dockerconfigjson` a partir de
+`registryUsername`/`registryPullToken` y lo cuelga del `ServiceAccount` `default` del
+namespace con un `ServiceAccountPatch` (Server-Side Apply, no reclama la cuenta
+entera). `registryUsername` no es secreto — vive en claro en
+`Pulumi.<ambiente>.yaml`, igual que `applicationImageRepository`.
 
 **La clave del administrador de Keycloak estuvo aquí, y ya no.** El andamio original de
 `infra/` (issue #146, antes de que este documento existiera) la leía como secreto de

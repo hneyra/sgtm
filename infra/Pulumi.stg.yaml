@@ -42,6 +42,9 @@ config:
   sgtm:keycloakRealm: sgtm
   sgtm:keycloakSeedTestUsers: "true"
   sgtm:applicationImageRepository: ghcr.io/hneyra
+  # No es secreto; `registryPullToken` (un PAT con `read:packages`) sí lo es, y CI lo
+  # inyecta igual que `backupAccessKeyId` (issue #257).
+  sgtm:registryUsername: hneyra
   sgtm:applicationBootstrapVersion: 1ec6bd62a3d772b8583827a80b4fbe63f014a8ad
   sgtm:webReplicas: "1"
   # La municipalidad de ensayo. El ubigeo es el de Catacaos, igual que en prod (D-01,

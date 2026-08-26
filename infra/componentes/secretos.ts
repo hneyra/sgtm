@@ -189,6 +189,11 @@ export const SECRETOS_DE_ARRANQUE = [
     donde: "pulumi config (cifrado)",
     periodicidad: "semestral" as Periodicidad,
   },
+  {
+    clave: "registryPullToken",
+    donde: "pulumi config (cifrado)",
+    periodicidad: "semestral" as Periodicidad,
+  },
   { clave: "PULUMI_ACCESS_TOKEN", donde: "GitHub Actions secret", periodicidad: "semestral" as Periodicidad },
   { clave: "SSH_PRIVATE_KEY", donde: "GitHub Actions secret", periodicidad: "semestral" as Periodicidad },
 ] as const;
