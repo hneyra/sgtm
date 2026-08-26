@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # La reserva de CPU y memoria del nodo para kubelet, containerd y el sistema
-# operativo (`INF-01` §2 y §4, issue #157): ~1 CPU y ~1 GB, los mismos numeros que
-# ya declara la tabla de dimensionamiento. Sin esta reserva, una rafaga de la
-# aplicacion puede dejar sin CPU al kubelet, y las sondas de TODO el nodo empiezan
+# operativo (`INF-01` §2 y §4, issue #157): 1 CPU y 2 Gi EN TOTAL, repartidos entre
+# `system-reserved` y `kube-reserved` -que kubelet suma-. Las cifras y el porque de
+# que no sean simetricas estan mas abajo, donde se declaran.
+#
+# Sin esta reserva, una rafaga de la aplicacion puede dejar sin CPU al kubelet, y las sondas de TODO el nodo empiezan
 # a expirar a la vez -el incidente que `../iaac` ya tuvo sobre esta misma
 # combinacion (k3s, un solo nodo, PostgreSQL en un volumen `ReadWriteOnce`)-.
 #
