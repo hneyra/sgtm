@@ -127,7 +127,7 @@ yarn capacidad --ambiente prod --cpu 8 --memoria 16Gi   # ¿y si el nodo fuera o
 ```
 
 **Los dos valores del nodo son lo *asignable*, no la capacidad.** La reserva del kubelet
-(`vps/reservar-recursos-del-nodo.sh`, #157) se lleva 2 CPU y 2 Gi, y confundir las dos
+(`vps/reservar-recursos-del-nodo.sh`, #157) se lleva 1 CPU y 2 Gi, y confundir las dos
 cifras es exactamente lo que dejó a `prod` sin poder ubicar su propio stack. Se miden:
 
 ```bash

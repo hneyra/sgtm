@@ -122,8 +122,15 @@ base.
 ## 4. La reserva del nodo, y su ventana de mantenimiento
 
 [`infra/vps/reservar-recursos-del-nodo.sh`](../../infra/vps/reservar-recursos-del-nodo.sh) aplica
-la reserva de `INF-01` §2: ~1 CPU y ~1 GB para kubelet, containerd y el sistema operativo, vía
+la reserva de `INF-01` §2 para kubelet, containerd y el sistema operativo, vía
 `kubelet-arg: [system-reserved=..., kube-reserved=...]` en `/etc/rancher/k3s/config.yaml`.
+
+**El total se reparte entre las dos partidas; no se escribe entero en cada una.** `system-reserved`
+y `kube-reserved` son dos descuentos distintos y kubelet los **suma**, así que `cpu=1` en las dos
+no reserva 1 CPU: reserva 2. Hoy el guion escribe `cpu=500m,memory=1Gi` en cada una — **1 CPU y
+2 Gi en total**—, y `infra/verificaciones/reserva-del-nodo.test.ts` ejecuta el guion sobre un
+archivo de mentira y exige que las dos partidas sumen eso. La prueba se demuestra devolviendo la
+duplicación: tres de sus seis casos se ponen rojos, uno diciendo «expected 2000 to be 3000».
 
 **Aplicar esto reinicia k3s.** El API server queda inalcanzable unos segundos, y cualquier
 `pulumi up`/`pulumi preview` en marcha en ese instante falla a mitad de camino — no por un error
@@ -151,6 +158,7 @@ mantenimiento, con una credencial que sí tenga esa capacidad.
 | El API server vuelve | «El API server responde» |
 | El nodo vuelve a `Ready` | `node/vmd120205 condition met` |
 | **kubelet aplicó la reserva** —lo asignable baja, la capacidad no— | CPU 4 → asignable **2**; memoria 8 126 500 Ki → asignable **6 029 348 Ki**. La diferencia es **2 097 152 Ki = 2 Gi exactos**, y 2 CPU: justo `system-reserved` + `kube-reserved` (1 CPU y 1 Gi cada uno). La capacidad no se movió |
+| …y lo que esa misma fila estaba diciendo sin que nadie lo leyera así | **2 CPU y 2 Gi es el doble de los «~1 CPU y ~1 GB» que `INF-01` §2 dimensiona.** La cifra estaba delante y se leyó como el coste esperado de la reserva. Es el defecto del issue #252, corregido el 2026-08-26 repartiendo el total entre las dos partidas |
 | «El clúster vuelve solo» | Ningún pod fuera de `Running`/`Succeeded` tras el reinicio |
 
 La reserva se lee en lo **asignable**, no en la capacidad, y esa es la comprobación que distingue
@@ -170,11 +178,46 @@ igual de bien y deja lo asignable intacto.
 > se vio. Apareció tres días después, al intentar el primer despliegue completo, con la forma
 > que menos se parece a su causa: `pulumi up` esperando indefinidamente, sin error ni registro.
 >
-> La reserva **no está mal**: protege lo que `INF-01` §2 explica y no se toca. Lo que faltaba
-> era cruzar lo asignable con lo que el stack pide, y eso ahora lo hace
-> [`infra/capacidad.ts`](../../infra/capacidad.ts) en cada PR. La lección para la próxima fila
-> de esta tabla: **después de aplicar la reserva, correr `yarn capacidad --ambiente <ambiente>`**
-> — quitarle 2 CPU a un nodo es cambiar lo que cabe en él, y eso hay que volver a comprobarlo.
+> **Y la reserva sí estaba mal, aunque durante tres días se concluyó lo contrario.** La primera
+> lectura fue «la reserva protege lo que `INF-01` §2 explica y no se toca; lo que faltaba era
+> cruzar lo asignable con lo que el stack pide». Lo segundo era cierto y lo hace ahora
+> [`infra/capacidad.ts`](../../infra/capacidad.ts) en cada PR. Lo primero no: `INF-01` §2
+> dimensiona **~1 CPU**, y el guion estaba reservando **2**, porque escribía la cifra entera en
+> `system-reserved` y otra vez en `kube-reserved`. La medición de esta misma tabla lo decía —«2 Gi
+> exactos, y 2 CPU»— pero se leyó como el precio esperado, no como el doble de él.
+>
+> Corregido el reparto, `vmd120205` vuelve a ofrecer **3 CPU**. La memoria se queda en 2 Gi a
+> propósito: ahí el consumo sí es ese, y bajarla no devolvería memoria, solo dejaría de contar la
+> que el sistema ya usa.
+>
+> La lección para la próxima fila de esta tabla: **después de aplicar la reserva, correr
+> `yarn capacidad --ambiente <ambiente>`** — quitarle CPU a un nodo es cambiar lo que cabe en él —
+> y **contrastar lo asignable con lo dimensionado**, no solo comprobar que bajó. Que baje solo
+> dice que kubelet tomó los argumentos; cuánto bajó es lo que dice si son los argumentos correctos.
+
+### Pendiente: aplicar la corrección en `vmd120205`
+
+El repositorio ya lleva el guion corregido y `Pulumi.prod.yaml` ya declara los 3 CPU que resultan,
+pero **el nodo sigue reservando 2 hasta que alguien corra el guion en él**. Hasta entonces
+`aplicar-prod` se detiene en su paso «Lo declarado cabe en el nodo real», en segundos y diciendo
+las dos cifras — la dirección segura del error: nunca deja pasar un despliegue que no cabe.
+
+En el VPS, como root, en su propia ventana de mantenimiento:
+
+```bash
+cd infra && ./vps/reservar-recursos-del-nodo.sh
+```
+
+Detecta que la reserva actual la escribió él mismo con otras cifras, guarda una copia con marca de
+tiempo, sustituye **solo** esas dos líneas, muestra el `diff` y reinicia k3s. Volver a correrlo no
+cambia nada ni reinicia (es idempotente), y si encuentra un `kubelet-arg` que no escribió él, se
+niega y dice qué poner a mano. Después, comprobar y anotar la fila:
+
+```bash
+kubectl get node -o jsonpath='{.items[0].status.allocatable.cpu}{"/"}{.items[0].status.allocatable.memory}'
+# se espera: 3/6029348Ki
+yarn capacidad --ambiente prod
+```
 
 ## 5. Escaneo de vulnerabilidades de imágenes
 

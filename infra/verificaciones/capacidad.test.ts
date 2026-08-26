@@ -164,13 +164,63 @@ describe("y se demuestra que puede fallar", () => {
     expect(problemas.join("\n")).toMatch(/Faltan \d+m/);
   });
 
-  it("lo PERMANENTE de prod ya no cabe: no es solo el pico de los Jobs", () => {
-    // La distincion importa para no arreglar lo que no es. Bajar los `requests` de los
-    // Jobs de arranque (2026-08-26) quito 1 500m del pico, y aun asi `prod` no cabe:
-    // los `Deployment` por si solos piden mas CPU de la que el nodo reparte. Si esto
-    // pasara en verde, alguien podria creer que tocando los Jobs basta.
-    const soloDeployments = demandaDelStack(manifiestosDe("prod")).permanente;
-    expect(soloDeployments.cpuEnMili).toBeGreaterThan(2000 - 200);
+  /**
+   * Por que se comprueba el PICO y no lo permanente, con el caso que lo demuestra.
+   *
+   * Sobre los 2 CPU que la reserva duplicada dejo en `prod`, el stack de hoy —una
+   * replica— tiene lo permanente DENTRO del presupuesto y el pico del arranque FUERA.
+   * Un `pulumi up` contra ese nodo no habria dado ningun sintoma util: el sistema en
+   * regimen cabe, y lo que no entra son los dos Jobs que solo existen durante el
+   * despliegue. Se habria colgado igual, y mirando `kubectl top` despues no se habria
+   * visto nada raro.
+   *
+   * Si `auditarCapacidad` mirase lo permanente, este caso pasaria en verde y el
+   * despliegue se colgaria de todos modos. Es justo la confusion que la cabecera de
+   * `capacidad.ts` describe, escrita como prueba.
+   */
+  it("lo permanente cabe en 2 CPU y el pico del arranque no: por eso se mide el pico", () => {
+    const nodoDuplicado = { cpuAsignable: "2", memoriaAsignable: "6029348Ki" };
+    const demanda = demandaDelStack(manifiestosDe("prod"));
+    // 1 800m: los 2 CPU asignables menos lo que los pods de serie de k3s ya ocupan.
+    const disponible = 2000 - 200;
+
+    expect(demanda.permanente.cpuEnMili).toBeLessThanOrEqual(disponible);
+    expect(demanda.picoDeArranque.cpuEnMili).toBeGreaterThan(disponible);
+    expect(auditarCapacidad(manifiestosDe("prod"), nodoDuplicado).join("\n")).toMatch(
+      /no cabe en el nodo por CPU/,
+    );
+  });
+
+  /**
+   * Y el otro lado: con la reserva ya repartida, `prod` cabe.
+   *
+   * Esto es lo que ata `Pulumi.prod.yaml` al guion del nodo. El dia que alguien
+   * devuelva la duplicacion —o suba la demanda— una de las dos mitades se pone roja.
+   */
+  it("con los 3 CPU que deja la reserva repartida, prod cabe", () => {
+    expect(
+      auditarCapacidad(manifiestosDe("prod"), {
+        cpuAsignable: "3",
+        memoriaAsignable: "6029348Ki",
+      }),
+    ).toEqual([]);
+  });
+
+  /**
+   * La memoria es lo que fija `webReplicas: 1` en `prod`, y conviene que se vea.
+   *
+   * Con dos replicas el pico pedia 6 368Mi contra los 5 728Mi disponibles: no es una
+   * preferencia, es que no entra en los ~6 GB que el nodo reparte.
+   */
+  it("dos replicas no caben en los ~6 GB de prod, y por eso va con una", () => {
+    const invariantes = invariantesDe("prod");
+    const conDos = construirManifiestos({
+      ...invariantes,
+      application: { ...invariantes.application, webReplicas: 2 },
+    });
+    expect(
+      auditarCapacidad(conDos, { cpuAsignable: "3", memoriaAsignable: "6029348Ki" }).join("\n"),
+    ).toMatch(/no cabe en el nodo por memoria/);
   });
 
   it("con 4 GB —el nodo que el issue #158 ya probo insuficiente—, NO cabe por memoria", () => {
