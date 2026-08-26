@@ -218,8 +218,51 @@ export interface ObservabilitySettings {
 }
 
 /** Todo lo que no es secreto, y por tanto se puede validar sin resolver un `Output`. */
+/**
+ * Lo que el nodo del ambiente puede repartir entre pods, **medido**, no estimado.
+ *
+ * Es lo **asignable** (`allocatable`), no la capacidad: el kubelet reserva una parte
+ * para el sistema y para sí mismo (`infra/vps/reservar-recursos-del-nodo.sh`, issue
+ * #157), y esa parte no está disponible para ningún pod. Confundir las dos es
+ * exactamente lo que dejó a `prod` sin poder ubicar su propio stack: `vmd120205` tiene
+ * 4 CPU de capacidad y **2 asignables** desde que la reserva se aplicó el 2026-08-23.
+ *
+ * Se mide contra el nodo, con el túnel abierto:
+ *
+ * ```
+ * kubectl get node -o jsonpath='{.items[0].status.allocatable.cpu}{"/"}{.items[0].status.allocatable.memory}'
+ * ```
+ *
+ * Es obligatorio en los dos stacks y no tiene valor por omisión, a propósito: un valor
+ * por omisión aquí es una cifra inventada sobre la que `capacidad.ts` dictaminaría que
+ * todo cabe, que es peor que no comprobar nada.
+ */
+export interface NodeSettings {
+  /** CPU asignable del nodo. `"2"` o `"2000m"`. */
+  allocatableCpu: string;
+  /** Memoria asignable del nodo. Se admite `Ki`, que es lo que devuelve `kubectl`. */
+  allocatableMemory: string;
+  /**
+   * El issue que sigue una brecha **conocida y aceptada** entre el nodo y el stack.
+   *
+   * Existe por una razón concreta y estrecha: `verificar` es `needs:` de todos los demás
+   * trabajos de `infra.yml`, incluido `aplicar-stg`. Sin esta declaración, un nodo de
+   * `prod` que se queda corto pone rojo `yarn verificar` y **deja de desplegarse `stg`**,
+   * que no tiene culpa de nada. Un ambiente no puede secuestrar al otro.
+   *
+   * Lo que **no** es: un interruptor para silenciar la comprobación. `index.ts` sigue
+   * lanzando antes de `pulumi up` aunque esté declarado —el despliegue de ese ambiente
+   * falla igual, en veinte segundos y diciendo cuánto falta, en vez de colgarse seis
+   * horas— y `capacidad.test.ts` exige que un ambiente que lo declara **siga sin caber**:
+   * el día que el nodo crezca, la prueba se pone roja y obliga a retirar la marca. No se
+   * puede usar para tapar una brecha nueva, ni se queda puesta cuando deja de ser cierta.
+   */
+  capacityGapIssue?: string;
+}
+
 export interface Invariants {
   environment: Environment;
+  node: NodeSettings;
   ingress: IngressSettings;
   database: DatabaseSettings;
   backup: BackupSettings;
@@ -302,6 +345,21 @@ function requireText(reader: ConfigReader, key: string, purpose: string): string
 export function readInvariants(environment: Environment, reader: ConfigReader): Invariants {
   return {
     environment,
+    node: {
+      allocatableCpu: requireText(
+        reader,
+        "nodeAllocatableCpu",
+        "la CPU ASIGNABLE del nodo, medida con kubectl; no su capacidad (INF-01 §2)",
+      ),
+      allocatableMemory: requireText(
+        reader,
+        "nodeAllocatableMemory",
+        "la memoria ASIGNABLE del nodo, medida con kubectl; no su capacidad (INF-01 §2)",
+      ),
+      ...(reader.text("nodeCapacityGapIssue") === undefined
+        ? {}
+        : { capacityGapIssue: reader.text("nodeCapacityGapIssue") }),
+    },
     ingress: {
       domain: requireText(reader, "domain", "el nombre público por el que llega el navegador"),
       acmeEmail: requireText(

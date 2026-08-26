@@ -99,6 +99,37 @@ configuración **no contradiga lo que el proyecto ya decidió por escrito**.
 | `applicationBootstrapVersion` fija una versión, y es una etiqueta, no una imagen | `ADR-0011` §5 |
 | En `prod`, `esDemostracion` **se declara**; heredarlo del valor por omisión no cuenta | #150, D-02a |
 | El ubigeo son seis dígitos y el tipo de municipalidad es DISTRITAL o PROVINCIAL | #150 |
+| `nodeAllocatableCpu`/`nodeAllocatableMemory` son obligatorios, y **medidos** | `INF-01` §2, #252 |
+
+Y una que no es de `config.ts` sino de `capacidad.ts`, porque no mira un valor sino la
+suma de todos:
+
+| Invariante | De dónde sale |
+|---|---|
+| **El stack cabe en el nodo que declara**, contando los Jobs del arranque | `INF-01` §2, #252 |
+
+Esta última es la que convierte un despliegue colgado en un fallo de veinte segundos.
+Un pod que el planificador no puede ubicar se queda `Pending` sin error ni registro, y
+el `ConfigGroup` de `index.ts` lo espera indefinidamente: `aplicar-prod` se quedó así
+cuatro veces entre el 25 y el 26 de agosto de 2026, una de ellas casi seis horas.
+
+```bash
+yarn capacidad --ambiente prod                      # ¿cabe? y cuánto sobra o falta
+yarn capacidad --ambiente prod --cpu 8 --memoria 16Gi   # ¿y si el nodo fuera otro?
+```
+
+**Los dos valores del nodo son lo *asignable*, no la capacidad.** La reserva del kubelet
+(`vps/reservar-recursos-del-nodo.sh`, #157) se lleva 2 CPU y 2 Gi, y confundir las dos
+cifras es exactamente lo que dejó a `prod` sin poder ubicar su propio stack. Se miden:
+
+```bash
+kubectl get node -o jsonpath='{.items[0].status.allocatable.cpu}{"/"}{.items[0].status.allocatable.memory}'
+```
+
+Y no se cree lo declarado sin contrastarlo: `aplicar-stg`/`aplicar-prod` corren
+`vps/comprobar-lo-asignable.sh` contra el nodo real antes de `pulumi up`, y rechazan un
+stack que se declare **más grande** de lo que su nodo es — la única dirección del error
+que deja pasar un despliegue que no cabe.
 
 Y sobre los manifiestos, en `auditoria.ts`:
 
@@ -301,6 +332,16 @@ reviewers** → añadir a quien tenga que aprobar. Sin este paso, GitHub trata `
 un nombre libre sin protección y el trabajo corre sin que nadie lo mire — que es
 exactamente el estado que esta separación existe para impedir. Quién aprueba es una
 decisión de las personas del proyecto, no una que este repositorio pueda tomar.
+
+> **Una espera larga entre «trabajo creado» y «trabajo arrancado» en `aplicar-prod` es
+> esta aprobación pendiente, no una corrida colgada.** Se ha diagnosticado como avería
+> más de una vez: en las corridas del 25 de agosto de 2026 el trabajo pasó 2 h 53 min y
+> 1 h 38 min en ese estado, sin un solo registro, simplemente porque nadie había entrado
+> a aprobarlo. Se ve en la pestaña Actions, con el botón *Review deployments*. Lo que sí
+> es una corrida colgada es que **el paso `Run pulumi/actions@v6` lleve minutos** —un
+> `pulumi up` sano de cualquiera de los dos ambientes termina en 15–25 s—, y para eso
+> están el `timeout-minutes` de los dos trabajos y el volcado de diagnóstico que corre
+> al fallar.
 
 ## Lo que no está aquí, y dónde está
 

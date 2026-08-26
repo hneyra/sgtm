@@ -28,6 +28,9 @@ function baseline(environment: Environment = "prod"): Invariants {
   const isStg = environment === "stg";
   return {
     environment,
+    // Un nodo holgado: esta prueba mira las invariantes de `config.ts`, y que el stack
+    // quepa en su nodo es cosa de `capacidad.ts` y de `capacidad.test.ts`.
+    node: { allocatableCpu: "8", allocatableMemory: "16Gi" },
     ingress: {
       domain: isStg ? "stg.sgtm.example.pe" : "sgtm.example.pe",
       acmeEmail: "operaciones@example.pe",
@@ -292,6 +295,11 @@ function reader(values: Record<string, string | number | boolean | unknown[]>): 
 }
 
 const VALORES_MINIMOS = {
+  // Lo asignable del nodo (`capacidad.ts`, issue #252). Obligatorio y sin valor por
+  // omisión a propósito: una cifra inventada aquí haría que `capacidad.ts` dictaminase
+  // que todo cabe, que es peor que no comprobar nada.
+  nodeAllocatableCpu: "8",
+  nodeAllocatableMemory: "16Gi",
   domain: "sgtm.example.pe",
   acmeEmail: "operaciones@example.pe",
   postgresImage: "postgres:16.4-alpine",

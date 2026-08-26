@@ -165,6 +165,25 @@ más—, y dice explícitamente lo que la estimación por sí sola no podía: po
 clúster ni siquiera termina de programar sus propios pods, mucho antes de que nadie note falta de
 rendimiento.
 
+**Y el nodo de `prod` está hoy por debajo de ese piso (2026-08-26, issue #252).** `vmd120205` es
+un 4 CPU / 8 GB, la mitad de lo que esta tabla dimensiona, y con la reserva de §4 aplicada le
+quedan **2 CPU y 5,75 Gi asignables** — medido, no estimado: es el registro de la ejecución de
+`reservar-recursos-del-nodo.sh` del 2026-08-23. El stack de `prod` pide 2 040m solo en sus
+`Deployment`, así que **no cabe ni en reposo**, y eso es la razón de que `prod` no se haya
+desplegado entero ni una vez.
+
+Lo que ese descubrimiento costó es la parte que conviene no repetir: un pod que el planificador no
+puede ubicar no falla, se queda `Pending`; y el `ConfigGroup` de Pulumi lo espera sin error, sin
+registro y sin fin. `aplicar-prod` se colgó así cuatro veces, una de ellas casi seis horas, hasta
+que la plataforma mató el runner. **El síntoma no se parecía en nada a la causa**, y `stg` seguía
+desplegando en veinte segundos — porque pide menos y porque la reserva nunca se le aplicó.
+
+De ahí sale [`infra/capacidad.ts`](../../infra/capacidad.ts): la capacidad del nodo es un dato y
+lo que el stack pide se puede sumar, así que la comparación es aritmética y cuesta milisegundos.
+Corre en `yarn verificar` y en `index.ts` antes de crear nada, y convierte ese colgado en un
+fallo inmediato que dice cuántos milicores faltan. `yarn capacidad --ambiente prod` lo responde
+sin desplegar.
+
 ## 3. Red
 
 | Elemento | Decisión |

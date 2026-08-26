@@ -163,6 +163,19 @@ igual de bien y deja lo asignable intacto.
 |---|---|---|---|---|
 | 2026-08-23 | hneyra | `vmd120205` (`prod`) | **Sí** | Primera ejecución. Reserva aplicada y confirmada en lo asignable (2 CPU y 2 Gi menos, capacidad intacta). Sin intervención manual: el API server volvió, el nodo pasó a `Ready` y ningún pod quedó fuera de `Running`/`Succeeded`. Lo que la corrida comprueba es que el nodo se recupera del reinicio; que la aplicación entera sobreviva a él se verá cuando `aplicar-prod` haya desplegado el sistema completo |
 
+> ⚠ **Lo que esa fila no dijo, y costó cuatro despliegues colgados (issue #252).** La reserva
+> dejó `vmd120205` en **2 CPU asignables**, y el stack de `prod` pide 2 040m solo en sus
+> `Deployment`. Desde ese día `prod` no puede ubicar su propio stack — pero como el nodo tenía
+> entonces poco desplegado, «ningún pod quedó fuera de `Running`» salió cierto y el problema no
+> se vio. Apareció tres días después, al intentar el primer despliegue completo, con la forma
+> que menos se parece a su causa: `pulumi up` esperando indefinidamente, sin error ni registro.
+>
+> La reserva **no está mal**: protege lo que `INF-01` §2 explica y no se toca. Lo que faltaba
+> era cruzar lo asignable con lo que el stack pide, y eso ahora lo hace
+> [`infra/capacidad.ts`](../../infra/capacidad.ts) en cada PR. La lección para la próxima fila
+> de esta tabla: **después de aplicar la reserva, correr `yarn capacidad --ambiente <ambiente>`**
+> — quitarle 2 CPU a un nodo es cambiar lo que cabe en él, y eso hay que volver a comprobarlo.
+
 ## 5. Escaneo de vulnerabilidades de imágenes
 
 [`.github/workflows/escaneo-de-imagenes.yml`](../../.github/workflows/escaneo-de-imagenes.yml)

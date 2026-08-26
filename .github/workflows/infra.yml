@@ -289,6 +289,39 @@ jobs:
             echo "::endgroup::"
           done
 
+  capacidad:
+    name: capacidad.ts predice lo que el planificador hace
+    runs-on: ubuntu-latest
+    needs: verificar
+    if: github.event_name != 'schedule'
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: infra/yarn.lock
+
+      - name: Instalar dependencias
+        working-directory: infra
+        run: yarn install --frozen-lockfile
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: capacidad
+
+      # `capacidad.test.ts` comprueba la aritmética; esto comprueba que la aritmética
+      # describe a Kubernetes. Un modelo que se equivoque HACIA ARRIBA —decir «cabe»
+      # cuando no— devuelve el colgado del issue #252 con la guarda en verde, que es
+      # el peor de los estados posibles. Lleva dentro su propia demostración: un pod
+      # que pide más CPU de la que el nodo tiene se queda `Pending` por «Insufficient
+      # cpu», y sin eso el caso principal podría estar pasando por otro motivo.
+      - name: verificar-contra-el-planificador.sh
+        run: infra/verificaciones/capacidad/verificar-contra-el-planificador.sh
+
   secretos:
     name: Los secretos se generan solos, y ninguno se repite
     runs-on: ubuntu-latest
@@ -685,6 +718,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: verificar
     if: github.event_name == 'push'
+    # Un `pulumi up` sano de stg tarda 15-25 s. Este tope no existe para corridas
+    # lentas: existe para las que NO terminan (issue #252). Un pod que el planificador
+    # no puede ubicar se queda `Pending` para siempre, y el `ConfigGroup` lo espera sin
+    # error ni registro; sin tope, el limite real es el de la plataforma —360 min— y
+    # entretanto el grupo de concurrencia de abajo retiene toda integracion posterior.
+    # Es la misma leccion que `observabilidad-alertas` ya aprendio el 2026-08-23.
+    timeout-minutes: 15
     # stg y prod son DOS VPS con IP distinta. Sin este `environment`, `secrets.VPS_HOST`
     # y compañía resolverían a los secretos de nivel-repositorio —que son los de prod—
     # y este trabajo abriría el túnel al nodo equivocado: `pulumi up --stack stg`
@@ -769,6 +809,15 @@ jobs:
           echo "$KUBECONFIG_VALUE" > ~/.kube/config-ci
           echo "KUBECONFIG=$HOME/.kube/config-ci" >> "$GITHUB_ENV"
 
+      # `capacidad.ts` decide si el stack cabe comparándolo con lo que
+      # `Pulumi.stg.yaml` DICE del nodo. Aquí se comprueba que ese dato no sea
+      # optimista, contra el nodo real: declarar más de lo que hay deja pasar
+      # exactamente el despliegue que no cabe (issue #252).
+      - name: Lo declarado cabe en el nodo real
+        if: steps.credenciales.outputs.hay == 'si'
+        working-directory: infra
+        run: ./vps/comprobar-lo-asignable.sh --ambiente stg
+
       # ANTES de `pulumi up`: los Deployment y Job que va a crear referencian estos
       # Secret por nombre, y sin ellos los pods se quedan en Pending. Idempotente —
       # correrlo en cada integración no cambia nada una vez que existen— y nunca pasa
@@ -800,6 +849,10 @@ jobs:
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
 
+      - name: Qué quedó a medias, si algo falló
+        if: failure() && steps.credenciales.outputs.hay == 'si'
+        run: .github/diagnostico-del-namespace.sh sgtm-stg
+
   aplicar-prod:
     name: pulumi up en prod (con aprobación)
     runs-on: ubuntu-latest
@@ -820,6 +873,13 @@ jobs:
     concurrency:
       group: infra-aplicar-prod
       cancel-in-progress: false
+    # Ver el mismo tope en `aplicar-stg`. Aquí es donde se pagó: los días 25 y 26 de
+    # agosto de 2026 este trabajo se quedó colgado en `pulumi up` cuatro veces, una de
+    # ellas casi seis horas, esperando `Deployment` que nunca podrían quedar `Ready`
+    # porque sus pods no cabían en el nodo (issue #252). Con `capacidad.ts` eso ya no
+    # llega a `pulumi up` —falla antes, en segundos—, pero el tope se queda: es la red
+    # que no depende de haber previsto la causa.
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -862,6 +922,11 @@ jobs:
           echo "$KUBECONFIG_VALUE" > ~/.kube/config-ci
           echo "KUBECONFIG=$HOME/.kube/config-ci" >> "$GITHUB_ENV"
 
+      # Ver el mismo paso en `aplicar-stg` (issue #252).
+      - name: Lo declarado cabe en el nodo real
+        working-directory: infra
+        run: ./vps/comprobar-lo-asignable.sh --ambiente prod
+
       - name: Generar los secretos que falten (INF-06)
         working-directory: infra
         run: ./secretos/bootstrap-secretos.sh --ambiente prod
@@ -885,6 +950,10 @@ jobs:
           work-dir: infra
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      - name: Qué quedó a medias, si algo falló
+        if: failure()
+        run: .github/diagnostico-del-namespace.sh sgtm-prod
 
   deteccion-de-deriva:
     name: Detección de deriva en prod

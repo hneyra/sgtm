@@ -1,5 +1,6 @@
 import * as k8s from "@pulumi/kubernetes";
 import { auditarManifiestos, describirAuditoria } from "./auditoria";
+import { auditarCapacidad, describirCapacidad } from "./capacidad";
 import { construirManifiestos } from "./componentes";
 import {
   CLAVES_DE_CREDENCIALES_DE_RESPALDO,
@@ -70,6 +71,26 @@ const problemas = auditarManifiestos(manifiestos, {
 });
 if (problemas.length > 0) {
   throw new Error(describirAuditoria(env, problemas));
+}
+
+/**
+ * Y que quepa en el nodo (`capacidad.ts`).
+ *
+ * Va **después** de la auditoría y **antes** del proveedor, por lo mismo que ella está
+ * antes de crear nada: un `up` que falla al principio es mejor que uno que deja el
+ * ingreso a medias. Solo que aquí el listón es más alto todavía, porque un stack que no
+ * cabe **no deja el despliegue a medias: lo deja colgado**. El `ConfigGroup` de abajo
+ * espera a que todos sus `Deployment` queden `Ready`, y un pod `Pending` por falta de
+ * CPU no lo está nunca. Sin esta guarda, `aplicar-prod` consume el runner hasta que la
+ * plataforma lo mata a las seis horas —cuatro veces seguidas el 2026-08-25— y lo único
+ * que se ve en Actions es «el trabajo sigue corriendo».
+ */
+const noCabe = auditarCapacidad(manifiestos, {
+  cpuAsignable: settings.node.allocatableCpu,
+  memoriaAsignable: settings.node.allocatableMemory,
+});
+if (noCabe.length > 0) {
+  throw new Error(describirCapacidad(env, noCabe));
 }
 
 /**
