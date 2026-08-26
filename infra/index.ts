@@ -213,6 +213,18 @@ new k8s.core.v1.Secret(
  * `serviceAccountName`— en vez de repetir `imagePullSecrets` en cada manifiesto. El
  * `ServiceAccountPatch` usa Server-Side Apply: no reclama la cuenta entera, que crea
  * Kubernetes al crear el `Namespace`, solo el campo que le falta.
+ *
+ * **`pulumi.com/patchForce`, y por qué es intencional (issue #257, primer `pulumi up`
+ * real contra `stg`):** el `ServiceAccount` `default` de `stg` YA tenía
+ * `imagePullSecrets` puesto por fuera de Pulumi —el campo lo tenía el field manager
+ * genérico `before-first-apply`, es decir: alguien lo puso a mano, en algún momento,
+ * sin dejar rastro en este repositorio. Es la prueba misma de lo que #257 documenta:
+ * la credencial de pull existía, pero era conocimiento tribal. Sin `patchForce`, Server-
+ * Side Apply rechaza el conflicto y `pulumi up` falla en este único recurso —el resto
+ * del stack, sin relación con `imagePullSecrets`, no se ve afectado—. Con `patchForce`,
+ * Pulumi toma la propiedad del campo y lo deja igual a como lo declara este archivo, que
+ * es precisamente el punto: que a partir de aquí el campo lo gobierne el código, no una
+ * mano que nadie puede auditar.
  */
 const registroDeImagenes = pulumi
   .output(settings.application.imageRepository)
@@ -251,7 +263,11 @@ const secretoDeRegistro = new k8s.core.v1.Secret(
 new k8s.core.v1.ServiceAccountPatch(
   resourceName(env, "default-registro"),
   {
-    metadata: { name: "default", namespace },
+    metadata: {
+      name: "default",
+      namespace,
+      annotations: { "pulumi.com/patchForce": "true" },
+    },
     imagePullSecrets: [{ name: secretoDeRegistro.metadata.name }],
   },
   { provider: proveedor },
