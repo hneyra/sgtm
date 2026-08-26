@@ -818,6 +818,16 @@ jobs:
         working-directory: infra
         run: ./vps/comprobar-lo-asignable.sh --ambiente stg
 
+      # Y el stack cabe en lo declarado. Este es el paso que impide el colgado del
+      # issue #252: `pulumi up` no llega a empezar si los pods no caben, porque si
+      # empieza espera indefinidamente a que queden `Ready` y nunca lo estaran.
+      # `index.ts` solo AVISA cuando la brecha esta declarada -lanzar alli rompe
+      # tambien `pulumi preview`, que corre en cada PR-; el bloqueo duro vive aqui.
+      - name: 'El stack cabe en su nodo (issue #252)'
+        if: steps.credenciales.outputs.hay == 'si'
+        working-directory: infra
+        run: yarn --silent capacidad --ambiente stg --estricto
+
       # ANTES de `pulumi up`: los Deployment y Job que va a crear referencian estos
       # Secret por nombre, y sin ellos los pods se quedan en Pending. Idempotente —
       # correrlo en cada integración no cambia nada una vez que existen— y nunca pasa
@@ -926,6 +936,15 @@ jobs:
       - name: Lo declarado cabe en el nodo real
         working-directory: infra
         run: ./vps/comprobar-lo-asignable.sh --ambiente prod
+
+      # Y el stack cabe en lo declarado. Este es el paso que impide el colgado del
+      # issue #252: `pulumi up` no llega a empezar si los pods no caben, porque si
+      # empieza espera indefinidamente a que queden `Ready` y nunca lo estaran.
+      # `index.ts` solo AVISA cuando la brecha esta declarada -lanzar alli rompe
+      # tambien `pulumi preview`, que corre en cada PR-; el bloqueo duro vive aqui.
+      - name: 'El stack cabe en su nodo (issue #252)'
+        working-directory: infra
+        run: yarn --silent capacidad --ambiente prod --estricto
 
       - name: Generar los secretos que falten (INF-06)
         working-directory: infra

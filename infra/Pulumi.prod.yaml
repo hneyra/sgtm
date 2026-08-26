@@ -38,11 +38,13 @@ config:
   # para lo permanente (2 040m), así que los pods se quedaban `Pending` y `pulumi up` se
   # colgaba hasta que la plataforma mataba el runner a las seis horas.
   #
-  # Declararlo aquí NO lo silencia. `index.ts` sigue negándose a aplicar `prod` —ahora en
-  # veinte segundos y diciendo cuántos milicores faltan— y `capacidad.test.ts` exige que
-  # la brecha siga existiendo, así que retirar esta línea antes de tiempo pone la prueba
-  # roja. Lo único que hace es impedir que el nodo de `prod` deje sin desplegar a `stg`,
-  # que comparte el trabajo `verificar`.
+  # Declararlo aquí NO lo silencia. `aplicar-prod` sigue negándose a desplegar —en su
+  # paso «El stack cabe en su nodo», antes de invocar a Pulumi, diciendo cuántos
+  # milicores faltan— y `capacidad.test.ts` exige que la brecha siga existiendo, así que
+  # retirar esta línea antes de tiempo pone la prueba roja. Lo que la marca hace es dos
+  # cosas, las dos para no castigar a quien no tiene culpa: que el nodo de `prod` no deje
+  # sin desplegar a `stg` (comparten el trabajo `verificar`), y que `pulumi preview` —que
+  # corre en CADA PR— avise en vez de reventar.
   #
   # Se cierra agrandando el nodo a lo que INF-01 §2 dimensiona (8 CPU / 16 GB) y midiendo
   # otra vez las dos líneas de arriba. Las alternativas sin gastar —bajar `webReplicas` a

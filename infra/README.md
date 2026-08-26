@@ -113,6 +113,14 @@ Un pod que el planificador no puede ubicar se queda `Pending` sin error ni regis
 el `ConfigGroup` de `index.ts` lo espera indefinidamente: `aplicar-prod` se quedó así
 cuatro veces entre el 25 y el 26 de agosto de 2026, una de ellas casi seis horas.
 
+Se comprueba en tres sitios, y cada uno hace algo distinto:
+
+| Dónde | Qué hace |
+|---|---|
+| `yarn verificar` | Rojo si un ambiente **sin** `nodeCapacityGapIssue` no cabe |
+| `index.ts` | Lanza si no cabe; **avisa** si la brecha está declarada — reventar aquí rompería `pulumi preview`, que corre en cada PR |
+| `aplicar-stg`/`aplicar-prod` | **Detiene el despliegue** antes de invocar a Pulumi. Es el bloqueo duro |
+
 ```bash
 yarn capacidad --ambiente prod                      # ¿cabe? y cuánto sobra o falta
 yarn capacidad --ambiente prod --cpu 8 --memoria 16Gi   # ¿y si el nodo fuera otro?

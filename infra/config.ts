@@ -250,12 +250,17 @@ export interface NodeSettings {
    * `prod` que se queda corto pone rojo `yarn verificar` y **deja de desplegarse `stg`**,
    * que no tiene culpa de nada. Un ambiente no puede secuestrar al otro.
    *
-   * Lo que **no** es: un interruptor para silenciar la comprobación. `index.ts` sigue
-   * lanzando antes de `pulumi up` aunque esté declarado —el despliegue de ese ambiente
-   * falla igual, en veinte segundos y diciendo cuánto falta, en vez de colgarse seis
-   * horas— y `capacidad.test.ts` exige que un ambiente que lo declara **siga sin caber**:
-   * el día que el nodo crezca, la prueba se pone roja y obliga a retirar la marca. No se
-   * puede usar para tapar una brecha nueva, ni se queda puesta cuando deja de ser cierta.
+   * Lo que **no** es: un interruptor para silenciar la comprobación. El despliegue de
+   * ese ambiente sigue sin poder ocurrir — lo detiene el paso «El stack cabe en su
+   * nodo» de `aplicar-stg`/`aplicar-prod`, **antes** de invocar a Pulumi, en segundos y
+   * diciendo cuánto falta. Lo único que la marca cambia es que `index.ts` avise en vez
+   * de lanzar, y eso es para no romper `pulumi preview`, que corre en cada PR.
+   *
+   * Y no se queda puesta cuando deja de ser cierta: `capacidad.test.ts` exige que un
+   * ambiente que la declara **siga sin caber**, así que el día que el nodo crezca la
+   * prueba se pone roja y obliga a retirarla. Tampoco puede tapar una brecha nueva: un
+   * ambiente sin marca que no quepa pone rojo `yarn verificar` y hace lanzar a
+   * `index.ts`.
    */
   capacityGapIssue?: string;
 }

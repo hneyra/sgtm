@@ -59,44 +59,53 @@ echo "── Aplicando el stack de «${AMBIENTE}» (sin los recursos de Traefik:
       ' \
     | kubectl apply --filename - >/dev/null
 
-# Al planificador le sobra con unos segundos: no espera a que la imagen baje ni a que el
-# contenedor arranque, solo decide el nodo. Lo que tarda es que los controladores creen
-# los pods a partir de los Deployment y los Job.
-echo "   esperando a que se creen los pods..."
-for _ in $(seq 1 30); do
-    CREADOS="$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' ')"
-    [ "$CREADOS" -ge 9 ] && break
-    sleep 2
+# Los pods que el planificador RECHAZA POR RECURSOS, que es lo unico que `capacidad.ts`
+# predice.
+#
+# La senal es la condicion `PodScheduled=False` con «Insufficient» en su mensaje, no
+# `Pending` a secas ni la ausencia de `spec.nodeName`. La diferencia no es sutil y esta
+# medida: en la primera corrida de este guion, `postgres`, `prometheus` y `grafana`
+# aparecian sin ubicar seis segundos despues del `apply` —los tres tienen volumen con
+# `WaitForFirstConsumer`, asi que esperaban a que se aprovisionara, no a que hubiera
+# CPU—. Contarlos como "no caben" daba un rojo por un motivo que no es el que se mide.
+sin_recursos() {
+    kubectl get pods -n "$NAMESPACE" -o jsonpath='{range .items[*]}{.metadata.name}{" -> "}{range .status.conditions[?(@.type=="PodScheduled")]}{.message}{end}{"\n"}{end}' \
+        2>/dev/null | grep -i "insufficient" || true
+}
+
+# Y los que todavia no tienen nodo asignado, para saber cuando dejar de esperar.
+sin_ubicar() {
+    local total ubicados
+    total="$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | grep -c . || true)"
+    ubicados="$(kubectl get pods -n "$NAMESPACE" \
+        -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' 2>/dev/null | grep -c . || true)"
+    echo "$(( total - ubicados ))"
+}
+
+echo "   esperando al planificador (hasta 2 min)..."
+FALTAN=""
+for _ in $(seq 1 24); do
+    FALTAN="$(sin_recursos)"
+    # Un rechazo por recursos es definitivo: no hay que seguir esperando.
+    [ -n "$FALTAN" ] && break
+    [ "$(sin_ubicar)" = "0" ] && break
+    sleep 5
 done
-sleep 5
 
 echo
 echo "── ¿Ubico el planificador todos los pods?"
 kubectl get pods -n "$NAMESPACE" -o wide 2>/dev/null || true
+echo "   sin ubicar todavia: $(sin_ubicar) (volumen o imagen; no es lo que se mide)"
 
-# Un pod ubicado tiene `spec.nodeName`. Es la senal exacta de lo que `capacidad.ts`
-# predice, y no depende de que la imagen exista ni de que el contenedor arranque.
-#
-# Se cuenta por diferencia, y NO con un filtro `@.spec.nodeName==""`: en un pod sin
-# ubicar ese campo esta AUSENTE, no vacio, y el filtro de jsonpath no casa con lo que
-# no existe. Escrito asi, la comprobacion devolveria siempre cero y pasaria en verde
-# incluso con el nodo desbordado -una comprobacion que no puede fallar-.
-TOTAL="$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | grep -c . || true)"
-UBICADOS="$(kubectl get pods -n "$NAMESPACE" \
-    -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' \
-    2>/dev/null | grep -c . || true)"
-SIN_UBICAR="$(( TOTAL - UBICADOS ))"
-echo "   pods: ${TOTAL}, ubicados: ${UBICADOS}"
-
-if [ "$SIN_UBICAR" != "0" ]; then
+if [ -n "$FALTAN" ]; then
     echo
-    echo "::error::capacidad.ts dijo «cabe» y el planificador dejo ${SIN_UBICAR} pod(s) sin" \
-         "ubicar. La aritmetica del modulo es OPTIMISTA, que es justo la direccion en que" \
-         "el error reintroduce el colgado del issue #252."
-    kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp | tail -30 || true
+    echo "::error::capacidad.ts dijo «cabe» y el planificador rechazo pods POR RECURSOS." \
+         "La aritmetica del modulo es OPTIMISTA, que es justo la direccion en que el error" \
+         "reintroduce el colgado del issue #252."
+    echo "$FALTAN"
     exit 1
 fi
-echo "   Correcto: todos ubicados, como capacidad.ts predijo."
+echo "   Correcto: ninguno rechazado por recursos, como capacidad.ts predijo."
 
 echo
 echo "── Caso B: y un pod que NO cabe se queda Pending (el mecanismo que A da por supuesto)"
@@ -123,18 +132,22 @@ spec:
         limits: { cpu: "${PIDE}", memory: "128Mi" }
 POD
 
-sleep 10
-FASE="$(kubectl get pod no-cabe-a-proposito -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
-MOTIVO="$(kubectl get events -n "$NAMESPACE" --field-selector involvedObject.name=no-cabe-a-proposito \
-    -o jsonpath='{range .items[*]}{.message}{"\n"}{end}' 2>/dev/null | grep -i "insufficient" || true)"
+# El MISMO detector del caso A. Es lo que hace que el caso A valga: si `sin_recursos`
+# no supiera ver un rechazo por CPU, aqui saldria vacio y este caso se pondria rojo.
+MOTIVO=""
+for _ in $(seq 1 12); do
+    MOTIVO="$(sin_recursos | grep "no-cabe-a-proposito" || true)"
+    [ -n "$MOTIVO" ] && break
+    sleep 5
+done
 
-echo "   fase: ${FASE:-<sin fase>}"
-echo "   motivo: ${MOTIVO:-<ninguno>}"
+echo "   ${MOTIVO:-<el detector no vio nada>}"
 
-if [ "$FASE" != "Pending" ] || [ -z "$MOTIVO" ]; then
-    echo "::error::Un pod que pide ${PIDE} sobre un nodo de ${CPU} tenia que quedarse Pending" \
-         "por «Insufficient cpu», y no fue asi. El mecanismo que capacidad.ts modela no es" \
-         "el que este clúster aplica, asi que el caso A no demuestra lo que dice demostrar."
+if [ -z "$MOTIVO" ]; then
+    echo "::error::Un pod que pide ${PIDE} sobre un nodo de ${CPU} tenia que quedar sin" \
+         "programar por «Insufficient cpu», y el detector no lo vio. Sin eso, el caso A no" \
+         "demuestra nada: estaria pasando porque el detector no encuentra nunca nada."
+    kubectl describe pod no-cabe-a-proposito -n "$NAMESPACE" 2>/dev/null | tail -20 || true
     exit 1
 fi
 

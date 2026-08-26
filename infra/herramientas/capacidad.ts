@@ -50,8 +50,20 @@ console.error(
 // Todo lo demas va a `stderr` para que se vea en el registro sin ensuciar la lectura.
 if (problemas.length === 0) {
   console.log("cabe");
-} else {
-  console.error("");
-  console.error(describirCapacidad(ambiente, problemas));
-  console.log("no-cabe");
+  process.exit(0);
+}
+
+console.error("");
+console.error(describirCapacidad(ambiente, problemas));
+console.log("no-cabe");
+
+// `--estricto` es lo que usa el paso previo a `pulumi up` en `infra.yml`: ahi «no cabe»
+// tiene que DETENER el despliegue, porque seguir es colgarse. Sin la bandera solo
+// informa, que es lo que quiere quien lo corre a mano para probar tamanos de nodo.
+if (process.argv.includes("--estricto")) {
+  console.error(
+    `\n«${ambiente}» no se despliega: los pods no cabrian en su nodo y \`pulumi up\` ` +
+      "esperaria indefinidamente a que quedaran Ready (issue #252).",
+  );
+  process.exit(1);
 }
