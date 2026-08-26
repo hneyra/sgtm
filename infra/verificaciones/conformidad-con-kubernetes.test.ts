@@ -82,7 +82,7 @@ describe("cada manifiesto es asignable a su tipo de @pulumi/kubernetes", () => {
   it("NetworkPolicy: denegar-todo mas las excepciones nombradas (issue #157)", () => {
     const politicas: k8s.types.input.networking.v1.NetworkPolicy[] = de("NetworkPolicy");
 
-    expect(politicas).toHaveLength(23);
+    expect(politicas).toHaveLength(24);
   });
 
   it("los recursos de Traefik llevan el grupo de la v3", () => {

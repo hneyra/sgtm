@@ -31,10 +31,6 @@ import type { Manifiesto, NetworkPolicy } from "./tipos";
  *
  * ## Lo que NO cubre, y por que
  *
- * - **kube-state-metrics** no tiene politica de salida (ver su funcion): habla con
- *   el API de Kubernetes, que en k3s no es un pod normal del clúster —es el propio
- *   proceso del nodo, detras de un `Service` sin `Endpoints` de pod—, y una regla
- *   `ipBlock` fija romperia el primer dia que la IP del clúster cambiara.
  * - El motor de PostgreSQL y el `CronJob` de respaldo tienen salida a **todo**
  *   `:443` (ver `permitirSalidaAlAlmacenamiento`): el proveedor de almacenamiento
  *   de objetos no esta decidido (`INF-01` §7, `D-04`), asi que no hay un `ipBlock`
@@ -43,9 +39,21 @@ import type { Manifiesto, NetworkPolicy } from "./tipos";
  * - **Alertmanager** tiene la misma salida amplia a `:443`, por el mismo motivo:
  *   `alertWebhookUrl` es una URL arbitraria que la municipalidad configura, no un
  *   destino que este repositorio pueda fijar de antemano.
+ * - **kube-state-metrics** tambien sale a `:443` ancho, pero por un motivo
+ *   distinto: su destino SI es fijo —el API de Kubernetes—, solo que en k3s ese
+ *   API no es un pod al que `podSelector`/`namespaceSelector` puedan apuntar —es
+ *   el propio proceso del nodo, detras de un `Service` sin `Endpoints` de pod—, y
+ *   un `ipBlock` con su IP de servicio se rompe el dia que esa IP cambie.
  *
- * Las dos excepciones de salida amplia son deliberadas y estrechas —un puerto,
- * TCP, `:443`—, no «salida libre»: siguen sin poder alcanzar el resto del rango
+ *   La version anterior de este archivo no le daba salida ninguna, asumiendo que
+ *   sin una politica de Egress propia `denegar-todo` lo dejaba pasar. Es al reves:
+ *   `denegar-todo` selecciona TODOS los pods para Egress, y sin una politica que
+ *   abra algo, no queda nada abierto. Se vio contra el clúster real de `prod`: el
+ *   contenedor quedaba en `CrashLoopBackOff` con `dial tcp 10.43.0.1:443: connect:
+ *   connection refused` (2026-08-26).
+ *
+ * Las excepciones de salida amplia son deliberadas y estrechas —un puerto, TCP,
+ * `:443`—, no «salida libre»: siguen sin poder alcanzar el resto del rango
  * privado del clúster ni un puerto administrativo de un tercero.
  */
 
@@ -335,13 +343,25 @@ function politicasDeObservabilidad(environment: Environment, namespace: string):
       policyTypes: ["Ingress"],
       ingress: [{ from: [deApp(prometheus)], ports: [puerto(9100)] }],
     }),
-    // `kube-state-metrics`: ingreso restringido, SIN politica de salida (issue
-    // #157). Ver el docstring del modulo — el API de Kubernetes en k3s no es un
-    // pod al que `podSelector`/`namespaceSelector` puedan apuntar.
     politica(namespace, "permitir-ingreso-kube-state-metrics", {
       podSelector: { matchLabels: { app: kubeStateMetrics } },
       policyTypes: ["Ingress"],
       ingress: [{ from: [deApp(prometheus)], ports: [puerto(8080)] }],
+    }),
+    // Salida al API de Kubernetes. Ver el docstring del modulo: mismo acotamiento
+    // que `permitirSalidaAlAlmacenamiento` —el puerto, no el destino—, porque el
+    // API en k3s no tiene un `Service` con `Endpoints` de pod al que apuntar.
+    //
+    // El puerto es 6443, NO el 443 del `Service` `kubernetes`: k3s hace DNAT hacia
+    // el `Endpoints` real —el proceso del nodo en :6443— antes de que el trafico
+    // llegue a la cadena donde se evalua `NetworkPolicy`, asi que la regla ve el
+    // puerto de despues de la traduccion. Se comprobo contra el cluster real de
+    // `prod`: con :443 el contenedor seguia en `CrashLoopBackOff` con la misma
+    // `connection refused`; con :6443 conecta (2026-08-26).
+    politica(namespace, `permitir-salida-${kubeStateMetrics}-al-apiserver`, {
+      podSelector: { matchLabels: { app: kubeStateMetrics } },
+      policyTypes: ["Egress"],
+      egress: [{ to: [{ ipBlock: { cidr: "0.0.0.0/0" } }], ports: [puerto(6443)] }],
     }),
     // Grafana no tiene politica de ingreso: nadie del clúster la consume —ni
     // Traefik, que no la publica (`Observabilidad.ts`)—, y el tunel SSH con que
