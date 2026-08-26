@@ -148,6 +148,35 @@ const proveedor = new k8s.Provider(resourceName(env, "kubernetes"), {
 const IGNORAR_LA_VERSION = ["spec.template.spec.containers[*].image"];
 
 /**
+ * `pulumi.com/patchForce`, en TODOS los objetos del `ConfigGroup` (issue #257,
+ * confirmado contra `prod` real: el `Job` de migración chocó con el mismo conflicto de
+ * Server-Side Apply que ya se vio en el `ServiceAccountPatch` del registro).
+ *
+ * La causa es la misma que motiva `upsertExistingObjects` más abajo, solo que no
+ * limitada al `Namespace`: `aplicar-prod` se colgó y se mató a mitad de camino varias
+ * veces entre el 25 y el 26 de agosto de 2026 (issue #252), y un `pulumi up` matado a
+ * mitad de un `create` deja el objeto YA CREADO en Kubernetes sin que el estado de
+ * Pulumi llegue a registrarlo. La corrida siguiente intenta crearlo de nuevo, choca
+ * con "already exists" —que `upsertExistingObjects` sí resuelve—, pero el campo que
+ * ese objeto ya tenía queda en disputa entre el field manager de ESA corrida muerta y
+ * el de esta: sin `patchForce`, Server-Side Apply se niega a decidir por su cuenta.
+ *
+ * Forzar es seguro aquí porque lo que se está reconciliando es SIEMPRE el mismo
+ * manifiesto que ya generaba `construirManifiestos()`: no hay dos verdades en pugna,
+ * solo dos corridas de la misma intención. Y en un `Job` en particular no puede haber
+ * ademas un cambio de valor real —su `spec.template` es inmutable una vez creado—, así
+ * que forzar aquí es tomar propiedad de un campo, nunca sobrescribir un valor distinto.
+ */
+function conPatchForce(props: Record<string, unknown>): Record<string, unknown> {
+  const metadata = (props.metadata as Record<string, unknown> | undefined) ?? {};
+  const annotations = (metadata.annotations as Record<string, string> | undefined) ?? {};
+  return {
+    ...props,
+    metadata: { ...metadata, annotations: { ...annotations, "pulumi.com/patchForce": "true" } },
+  };
+}
+
+/**
  * Trae el `Namespace` entre sus 68 objetos (issue #158: encontrado reconstruyendo un
  * clúster de verdad desde cero, no en revisión).
  */
@@ -158,10 +187,11 @@ const recursos = new k8s.yaml.v2.ConfigGroup(
     provider: proveedor,
     transformations: [
       (args) => {
+        const props = conPatchForce(args.props as Record<string, unknown>);
         if (args.type.startsWith("kubernetes:apps/v1:Deployment")) {
-          return { props: args.props, opts: { ...args.opts, ignoreChanges: IGNORAR_LA_VERSION } };
+          return { props, opts: { ...args.opts, ignoreChanges: IGNORAR_LA_VERSION } };
         }
-        return undefined;
+        return { props, opts: args.opts };
       },
     ],
   },
