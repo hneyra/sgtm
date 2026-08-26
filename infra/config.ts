@@ -280,6 +280,25 @@ export interface Settings extends Invariants {
     accessKeyId: pulumi.Output<string>;
     secretAccessKey: pulumi.Output<string>;
   };
+  /**
+   * La credencial con que el kubelet descarga las tres imagenes propias (issue #252).
+   *
+   * **Opcional a proposito.** Un paquete de GHCR publico no la necesita, y hacerla
+   * obligatoria pondria rojo todo `pulumi preview` —y con el, cada PR— hasta que
+   * alguien creara el token: el mismo «rojo permanente que nadie puede arreglar desde
+   * un PR» del que avisa la cabecera de `infra.yml`. Cuando falta, no se crea el
+   * `Secret` y ningun pod declara `imagePullSecrets`.
+   *
+   * Lo que NO queda sin comprobar por ser opcional es lo que de verdad importa: que las
+   * imagenes se puedan descargar. Eso lo verifica `vps/verificar-imagenes.sh` contra el
+   * registro real, antes de cada `pulumi up`.
+   */
+  registryCredentials?: {
+    /** El servidor, derivado de `applicationImageRepository`. `ghcr.io`. */
+    server: string;
+    username: pulumi.Output<string>;
+    token: pulumi.Output<string>;
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -708,6 +727,11 @@ export function loadSettings(): Settings {
     return raw;
   });
 
+  // El servidor sale del repositorio, no de otro valor que pueda contradecirlo:
+  // `ghcr.io/hneyra` -> `ghcr.io`.
+  const registryServer = invariants.application.imageRepository.split("/")[0] ?? "";
+  const registryToken = config.getSecret("registryToken");
+
   return {
     ...invariants,
     kubeconfig,
@@ -715,6 +739,21 @@ export function loadSettings(): Settings {
       accessKeyId: config.requireSecret("backupAccessKeyId"),
       secretAccessKey: config.requireSecret("backupSecretAccessKey"),
     },
+    ...(registryToken === undefined
+      ? {}
+      : {
+          registryCredentials: {
+            server: registryServer,
+            // El usuario no es secreto -es el propietario del repositorio- pero se lee
+            // igual de la configuracion: quien rota el token puede tener que cambiarlo.
+            username: pulumi.output(
+              config.get("registryUsername") ??
+                invariants.application.imageRepository.split("/")[1] ??
+                "",
+            ),
+            token: registryToken,
+          },
+        }),
   };
 }
 

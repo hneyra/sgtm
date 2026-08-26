@@ -321,9 +321,24 @@ por VPS, para que `secrets.VPS_HOST` (y compañía) resuelva al nodo correcto en
 | `KUBECONFIG` | *Environment* `stg` / `prod` | El kubeconfig del paso 1, completo |
 | `BACKUP_ACCESS_KEY_ID` | *Environment* `stg` / `prod` | Credencial de escritura del contenedor de respaldo de ESE ambiente |
 | `BACKUP_SECRET_ACCESS_KEY` | *Environment* `stg` / `prod` | Su secreto |
+| `GHCR_TOKEN` | *Environment* `stg` / `prod` | PAT con **`read:packages`**, para descargar las tres imágenes propias |
+| `GHCR_USUARIO` | *Environment* `stg` / `prod` | La cuenta de ese PAT. Opcional: por omisión, el propietario de `applicationImageRepository` |
+
+> **`GHCR_TOKEN` es opcional, y su ausencia no es un descuido silencioso.** Los paquetes
+> de GHCR son **privados por omisión** y `publicar-imagenes.yml` no cambia su
+> visibilidad, así que sin esta credencial el kubelet pide un token anónimo, recibe un
+> 401 y los pods propios se quedan en `ImagePullBackOff` — que no se cura solo. Es lo que
+> paró el primer despliegue completo de `prod` (issue #252): el `Secret` no existía en el
+> repositorio, alguien lo había creado a mano en `stg`, y el único rastro estaba en un
+> mensaje de commit.
+>
+> Si los paquetes se hacen públicos, no hace falta: se deja sin poner y ningún pod
+> declara `imagePullSecrets`. Lo que **no** depende de esa elección es la comprobación —
+> `vps/verificar-imagenes.sh` le pregunta al registro, con lo que haya, antes de cada
+> `pulumi up`, y falla nombrando la imagen que no se puede descargar.
 
 Además, un tercer *environment* **`prod-preview`**, sin protección, con una **copia** de
-los siete valores de `prod` (menos el token, que ya es de repositorio): existe solo para
+los valores de `prod` (menos el token, que ya es de repositorio): existe solo para
 que `previsualizar-prod` pueda correr en cada PR sin quedar detrás de la aprobación que
 sí exige `aplicar-prod` — el `up` real nunca lee de `prod-preview`.
 

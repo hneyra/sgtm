@@ -153,6 +153,16 @@ export interface EspecificacionDePod {
   initContainers?: Contenedor[];
   containers: Contenedor[];
   volumes?: Volumen[];
+  /**
+   * La credencial con que el kubelet descarga las imagenes del registro privado
+   * (issue #252).
+   *
+   * No se pone a mano en ningun componente: lo deriva `conCredencialDelRegistro` de la
+   * imagen de cada contenedor, y `auditoria.ts` exige que este exactamente en los pods
+   * que tiran del repositorio privado y en ninguno mas. Ponerlo a mano es como se
+   * olvida en el sexto pod.
+   */
+  imagePullSecrets?: { name: string }[];
 }
 
 export interface PlantillaDePod {

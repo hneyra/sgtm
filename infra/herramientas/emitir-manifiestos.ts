@@ -1,6 +1,6 @@
 import { auditarManifiestos, describirAuditoria } from "../auditoria";
 import { construirManifiestos } from "../componentes";
-import { secretos } from "../componentes/convenciones";
+import { secretoDelRegistro, secretos } from "../componentes/convenciones";
 import { namespaceName, ENVIRONMENTS, type Environment } from "../config";
 import { invariantesDe } from "../verificaciones/stacks";
 
@@ -56,13 +56,16 @@ export function leerOpciones(argv: string[]): Opciones {
 
 export function emitir(opciones: Opciones): string {
   const ambiente = opciones.ambiente;
-  const todos = construirManifiestos(invariantesDe(ambiente));
+  const invariantes = invariantesDe(ambiente);
+  const todos = construirManifiestos(invariantes);
 
   // Se audita SIEMPRE lo entero, aunque se emita un componente: un manifiesto que
   // incumple no se copia a un archivo para aplicarlo a mano.
   const problemas = auditarManifiestos(todos, {
     secretoDeOwner: secretos(ambiente).owner,
     namespace: namespaceName(ambiente),
+    repositorioPrivado: invariantes.application.imageRepository,
+    secretoDelRegistro: secretoDelRegistro(ambiente),
   });
   if (problemas.length > 0) {
     throw new Error(describirAuditoria(ambiente, problemas));

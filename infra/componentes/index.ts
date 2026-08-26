@@ -7,8 +7,38 @@ import { manifiestosDeObservabilidad } from "./Observabilidad";
 import { manifiestosDeMigracion } from "./Migracion";
 import { manifiestosDeRed } from "./Red";
 import { manifiestosDeRespaldo } from "./Respaldo";
-import { clasesDePrioridad } from "./convenciones";
-import type { Manifiesto, Namespace } from "./tipos";
+import { clasesDePrioridad, secretoDelRegistro } from "./convenciones";
+import { contenedoresDe, podsDe, type Manifiesto, type Namespace } from "./tipos";
+
+/**
+ * Le cuelga la credencial del registro privado a los pods que tiran de el, y solo a
+ * esos (issue #252).
+ *
+ * **Derivado de la imagen, nunca escrito a mano.** Hoy son cinco pods —los dos Jobs del
+ * arranque, la aplicacion, la interfaz y el CronJob de lote— y nueve tiran de registros
+ * publicos. Repartir `imagePullSecrets` a mano por los componentes funciona hasta que
+ * alguien agrega el sexto pod privado y no se acuerda; entonces el sintoma es un
+ * `ImagePullBackOff` en el despliegue, que es tarde y lejos. Aqui se calcula de lo unico
+ * que no se puede falsear: de donde sale la imagen.
+ *
+ * `auditoria.ts` cierra el circulo por los dos lados: un pod privado sin la credencial
+ * es un incumplimiento, y un pod publico que la lleva tambien —una credencial de mas es
+ * una credencial que alguien puede usar.
+ */
+function conCredencialDelRegistro(
+  manifiestos: Manifiesto[],
+  environment: Invariants["environment"],
+  repositorioPrivado: string,
+): Manifiesto[] {
+  const credencial = [{ name: secretoDelRegistro(environment) }];
+  for (const m of manifiestos) {
+    for (const { pod } of podsDe(m)) {
+      const privado = contenedoresDe(pod).some((c) => c.image.startsWith(`${repositorioPrivado}/`));
+      if (privado) pod.imagePullSecrets = credencial;
+    }
+  }
+  return manifiestos;
+}
 
 /**
  * Los cinco componentes de la fase B, mas el respaldo de la fase C (issue #155),
@@ -29,7 +59,7 @@ export function construirManifiestos(s: Invariants): Manifiesto[] {
     metadata: { name: namespace, labels: commonLabels(environment, "namespace") },
   };
 
-  return [
+  const sistema: Manifiesto[] = [
     espacio,
     ...clasesDePrioridad(environment),
     ...manifiestosDeBaseDeDatos({
@@ -109,6 +139,10 @@ export function construirManifiestos(s: Invariants): Manifiesto[] {
     // que decide con quien puede hablar.
     ...manifiestosDeRed({ environment, namespace }),
   ];
+
+  // La credencial del registro se cuelga al final, sobre los manifiestos ya armados:
+  // los componentes no saben —ni tienen que saber— si su registro pide autenticacion.
+  return conCredencialDelRegistro(sistema, environment, s.application.imageRepository);
 }
 
 export * from "./tipos";

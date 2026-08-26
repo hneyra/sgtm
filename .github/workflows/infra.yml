@@ -607,10 +607,28 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          GHCR_TOKEN_VALUE: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USUARIO_VALUE: ${{ secrets.GHCR_USUARIO }}
         run: |
           pulumi config set --secret --stack stg kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack stg backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
           pulumi config set --secret --stack stg backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
+          # La credencial del registro privado (issue #252). Solo si existe: es opcional
+          # a proposito -un paquete publico no la necesita- y ponerla vacia crearia un
+          # `Secret` de descarga que no autentica nada.
+          if [ -n "${GHCR_TOKEN_VALUE:-}" ]; then
+            pulumi config set --secret --stack stg registryToken -- "$GHCR_TOKEN_VALUE"
+            [ -z "${GHCR_USUARIO_VALUE:-}" ] \
+              || pulumi config set --stack stg registryUsername -- "$GHCR_USUARIO_VALUE"
+          fi
+          # La credencial del registro privado (issue #252). Solo si existe: es opcional
+          # a proposito -un paquete publico no la necesita- y ponerla vacia crearia un
+          # `Secret` de descarga que no autentica nada.
+          if [ -n "${GHCR_TOKEN_VALUE:-}" ]; then
+            pulumi config set --secret --stack stg registryToken -- "$GHCR_TOKEN_VALUE"
+            [ -z "${GHCR_USUARIO_VALUE:-}" ] \
+              || pulumi config set --stack stg registryUsername -- "$GHCR_USUARIO_VALUE"
+          fi
 
       - uses: pulumi/actions@v6
         if: steps.token.outputs.hay == 'si'
@@ -698,10 +716,28 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          GHCR_TOKEN_VALUE: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USUARIO_VALUE: ${{ secrets.GHCR_USUARIO }}
         run: |
           pulumi config set --secret --stack prod kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack prod backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
           pulumi config set --secret --stack prod backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
+          # La credencial del registro privado (issue #252). Solo si existe: es opcional
+          # a proposito -un paquete publico no la necesita- y ponerla vacia crearia un
+          # `Secret` de descarga que no autentica nada.
+          if [ -n "${GHCR_TOKEN_VALUE:-}" ]; then
+            pulumi config set --secret --stack prod registryToken -- "$GHCR_TOKEN_VALUE"
+            [ -z "${GHCR_USUARIO_VALUE:-}" ] \
+              || pulumi config set --stack prod registryUsername -- "$GHCR_USUARIO_VALUE"
+          fi
+          # La credencial del registro privado (issue #252). Solo si existe: es opcional
+          # a proposito -un paquete publico no la necesita- y ponerla vacia crearia un
+          # `Secret` de descarga que no autentica nada.
+          if [ -n "${GHCR_TOKEN_VALUE:-}" ]; then
+            pulumi config set --secret --stack prod registryToken -- "$GHCR_TOKEN_VALUE"
+            [ -z "${GHCR_USUARIO_VALUE:-}" ] \
+              || pulumi config set --stack prod registryUsername -- "$GHCR_USUARIO_VALUE"
+          fi
 
       - uses: pulumi/actions@v6
         if: steps.token.outputs.hay == 'si'
@@ -828,6 +864,19 @@ jobs:
         working-directory: infra
         run: yarn --silent capacidad --ambiente stg --estricto
 
+      # Y las imagenes se pueden descargar de verdad (issue #252). La auditoria ya
+      # comprueba que el manifiesto DECLARE `imagePullSecrets`; esto pregunta al
+      # registro, que es otra cosa: un token caducado, un usuario mal escrito o un
+      # paquete que alguien volvio privado pasan la auditoria y dejan igual los pods
+      # en `ImagePullBackOff`. Reproduce la misma peticion que hace el kubelet.
+      - name: Las imagenes se pueden descargar
+        if: steps.credenciales.outputs.hay == 'si'
+        working-directory: infra
+        env:
+          SGTM_REGISTRO_USUARIO: ${{ secrets.GHCR_USUARIO }}
+          SGTM_REGISTRO_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: ./vps/verificar-imagenes.sh --ambiente stg
+
       # ANTES de `pulumi up`: los Deployment y Job que va a crear referencian estos
       # Secret por nombre, y sin ellos los pods se quedan en Pending. Idempotente —
       # correrlo en cada integración no cambia nada una vez que existen— y nunca pasa
@@ -845,6 +894,8 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          GHCR_TOKEN_VALUE: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USUARIO_VALUE: ${{ secrets.GHCR_USUARIO }}
         run: |
           pulumi config set --secret --stack stg kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack stg backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
@@ -946,6 +997,18 @@ jobs:
         working-directory: infra
         run: yarn --silent capacidad --ambiente prod --estricto
 
+      # Y las imagenes se pueden descargar de verdad (issue #252). La auditoria ya
+      # comprueba que el manifiesto DECLARE `imagePullSecrets`; esto pregunta al
+      # registro, que es otra cosa: un token caducado, un usuario mal escrito o un
+      # paquete que alguien volvio privado pasan la auditoria y dejan igual los pods
+      # en `ImagePullBackOff`. Reproduce la misma peticion que hace el kubelet.
+      - name: Las imagenes se pueden descargar
+        working-directory: infra
+        env:
+          SGTM_REGISTRO_USUARIO: ${{ secrets.GHCR_USUARIO }}
+          SGTM_REGISTRO_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: ./vps/verificar-imagenes.sh --ambiente prod
+
       - name: Generar los secretos que falten (INF-06)
         working-directory: infra
         run: ./secretos/bootstrap-secretos.sh --ambiente prod
@@ -957,6 +1020,8 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          GHCR_TOKEN_VALUE: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USUARIO_VALUE: ${{ secrets.GHCR_USUARIO }}
         run: |
           pulumi config set --secret --stack prod kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack prod backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"

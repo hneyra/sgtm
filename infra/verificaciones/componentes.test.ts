@@ -7,12 +7,18 @@ import { manifiestosDeIdentidad, documentosDelRealm, RUTA_DE_IDENTIDAD } from ".
 import { nginxDelCluster } from "../componentes/Aplicacion";
 import { valoresDeTraefik } from "../componentes/Ingreso";
 import { manifiestosDeObservabilidad } from "../componentes/Observabilidad";
-import { PRIORIDADES, nombreDePrioridad, secretos } from "../componentes/convenciones";
+import {
+  PRIORIDADES,
+  nombreDePrioridad,
+  secretoDelRegistro,
+  secretos,
+} from "../componentes/convenciones";
 import { raizDelRepositorio } from "../componentes/fuentes";
 import {
   contenedoresDe,
   podsDe,
   type Contenedor,
+  type Deployment,
   type EspecificacionDePod,
   type Manifiesto,
   type NetworkPolicy,
@@ -90,6 +96,8 @@ describe("los manifiestos de los dos ambientes pasan su propia auditoria", () =>
       auditarManifiestos(ms, {
         secretoDeOwner: secretos(ambiente).owner,
         namespace: namespaceName(ambiente),
+        repositorioPrivado: invariantesDe(ambiente).application.imageRepository,
+        secretoDelRegistro: secretoDelRegistro(ambiente),
       }),
     ).toEqual([]);
   });
@@ -1272,6 +1280,66 @@ describe("#157 · la demostracion: la auditoria se pone roja", () => {
   });
 });
 
+describe("#252 · la credencial del registro privado", () => {
+  const privado = (s: EspecificacionDePod) =>
+    contenedoresDe(s).some((c) =>
+      c.image.startsWith(`${invariantesDe(AMBIENTE).application.imageRepository}/`),
+    );
+
+  it("la llevan los pods que tiran del registro privado, y solo esos", () => {
+    const conCredencial: string[] = [];
+    const sinCredencial: string[] = [];
+    for (const m of manifiestosDe(AMBIENTE)) {
+      for (const { pod } of podsDe(m)) {
+        const nombre = m.metadata.name;
+        ((pod.imagePullSecrets ?? []).length > 0 ? conCredencial : sinCredencial).push(nombre);
+        // La afirmacion que importa: llevarla equivale a necesitarla.
+        expect((pod.imagePullSecrets ?? []).length > 0, `${nombre}`).toBe(privado(pod));
+      }
+    }
+    // Y que ninguno de los dos grupos este vacio: si todos fueran publicos, la
+    // comprobacion de arriba pasaria sin haber mirado nada.
+    expect(conCredencial.length).toBeGreaterThan(0);
+    expect(sinCredencial.length).toBeGreaterThan(0);
+  });
+
+  it("apunta al `Secret` que `index.ts` crea, por nombre", () => {
+    const app = buscar(manifiestosDe(AMBIENTE), "Deployment", resourceName(AMBIENTE, "aplicacion"));
+    expect(comoObjeto<Deployment>(app).spec.template.spec.imagePullSecrets).toEqual([
+      { name: secretoDelRegistro(AMBIENTE) },
+    ]);
+  });
+});
+
+describe("#252 · la demostracion: la auditoria se pone roja", () => {
+  it("quitandosela a un pod que SI tira del registro privado", () => {
+    // Es lo que paso de verdad en el primer despliegue completo de prod: sin la
+    // credencial, `sgtm-interfaz` se quedo en ImagePullBackOff con un 401 de GHCR, y
+    // eso no se cura solo.
+    const rotos = construirManifiestos(invariantesDe(AMBIENTE));
+    const interfaz = comoObjeto<Deployment>(
+      buscar(rotos, "Deployment", resourceName(AMBIENTE, "interfaz")),
+    );
+    delete interfaz.spec.template.spec.imagePullSecrets;
+
+    const problemas = auditar(rotos);
+    expect(problemas.join("\n")).toMatch(/no declara `imagePullSecrets`/);
+    expect(problemas.join("\n")).toMatch(/ImagePullBackOff/);
+  });
+
+  it("y poniendosela a uno que NO la necesita", () => {
+    // La otra direccion, y no es simetrica por capricho: una credencial de mas es una
+    // credencial al alcance de un contenedor que no tiene por que poder leerla.
+    const rotos = construirManifiestos(invariantesDe(AMBIENTE));
+    const postgres = comoObjeto<Deployment>(
+      buscar(rotos, "Deployment", resourceName(AMBIENTE, "postgres")),
+    );
+    postgres.spec.template.spec.imagePullSecrets = [{ name: secretoDelRegistro(AMBIENTE) }];
+
+    expect(auditar(rotos).join("\n")).toMatch(/todas sus imagenes salen de registros publicos/);
+  });
+});
+
 describe("#156 · la demostracion: la auditoria se pone roja", () => {
   it("quitando resources del sidecar de metricas, la auditoria lo detecta", () => {
     const ms = manifiestosDe(AMBIENTE);
@@ -1318,5 +1386,7 @@ function auditar(ms: Manifiesto[]): string[] {
   return auditarManifiestos(ms, {
     secretoDeOwner: secretos(AMBIENTE).owner,
     namespace: namespaceName(AMBIENTE),
+    repositorioPrivado: invariantesDe(AMBIENTE).application.imageRepository,
+    secretoDelRegistro: secretoDelRegistro(AMBIENTE),
   });
 }

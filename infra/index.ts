@@ -1,10 +1,12 @@
 import * as k8s from "@pulumi/kubernetes";
+import * as pulumi from "@pulumi/pulumi";
 import { auditarManifiestos, describirAuditoria } from "./auditoria";
 import { auditarCapacidad, describirCapacidad } from "./capacidad";
 import { construirManifiestos } from "./componentes";
 import {
   CLAVES_DE_CREDENCIALES_DE_RESPALDO,
   secretoDeCredencialesDeRespaldo,
+  secretoDelRegistro,
   secretos,
 } from "./componentes/convenciones";
 import { commonLabels, loadSettings, namespaceName, resourceName } from "./config";
@@ -68,6 +70,8 @@ const manifiestos = construirManifiestos(settings);
 const problemas = auditarManifiestos(manifiestos, {
   secretoDeOwner: secretos(env).owner,
   namespace,
+  repositorioPrivado: settings.application.imageRepository,
+  secretoDelRegistro: secretoDelRegistro(env),
 });
 if (problemas.length > 0) {
   throw new Error(describirAuditoria(env, problemas));
@@ -179,6 +183,52 @@ new k8s.core.v1.Secret(
   },
   { provider: proveedor },
 );
+
+/**
+ * La credencial con que el kubelet descarga las tres imagenes propias (issue #252).
+ *
+ * Misma familia que el `Secret` de arriba y por el mismo motivo de `ADR-0011` §3: es un
+ * secreto de **arranque de la infraestructura** —lo que hace falta para que el mecanismo
+ * exista—, no de la aplicacion. Un token de `read:packages` no abre el padron de ninguna
+ * municipalidad; lo unico que puede hacer es descargar imagenes que ya se publicaron.
+ *
+ * Solo se crea si el stack declara el token. Sin el, los paquetes se asumen publicos y
+ * `componentes/index.ts` no le cuelga `imagePullSecrets` a nadie — la auditoria comprueba
+ * que las dos decisiones vayan juntas.
+ */
+if (settings.registryCredentials !== undefined) {
+  const { server, username, token } = settings.registryCredentials;
+  new k8s.core.v1.Secret(
+    resourceName(env, "registro"),
+    {
+      metadata: {
+        name: secretoDelRegistro(env),
+        namespace,
+        labels: commonLabels(env, "registro"),
+      },
+      type: "kubernetes.io/dockerconfigjson",
+      stringData: {
+        // El formato que espera el kubelet. `auth` es redundante con usuario y clave
+        // -es su base64- pero hay registros que solo miran ese campo, asi que van los
+        // tres: es el mismo JSON que escribe `kubectl create secret docker-registry`.
+        ".dockerconfigjson": pulumi
+          .all([username, token])
+          .apply(([usuario, clave]) =>
+            JSON.stringify({
+              auths: {
+                [server]: {
+                  username: usuario,
+                  password: clave,
+                  auth: Buffer.from(`${usuario}:${clave}`).toString("base64"),
+                },
+              },
+            }),
+          ),
+      },
+    },
+    { provider: proveedor },
+  );
+}
 
 // Salidas del stack. Sirven de comprobante de que la configuración se leyó, se validó y
 // los manifiestos pasaron la auditoría: si algo contradijera la documentación,

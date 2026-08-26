@@ -116,6 +116,25 @@ export function secretoDeCredencialesDeRespaldo(environment: Environment): strin
   return resourceName(environment, "postgres-respaldo-credenciales");
 }
 
+/**
+ * El `Secret` de tipo `kubernetes.io/dockerconfigjson` con que el kubelet se
+ * autentica contra el registro privado (issue #252).
+ *
+ * Las tres imagenes propias se publican en GHCR, y **los paquetes de GHCR son privados
+ * por omision** —`publicar-imagenes.yml` no cambia su visibilidad—. Sin esta credencial
+ * el kubelet pide un token anonimo y recibe un 401, con la forma
+ * «failed to fetch anonymous token: 401 Unauthorized»: los pods entran en
+ * `ImagePullBackOff` y ahi se quedan, porque eso no se cura solo.
+ *
+ * Hasta el 2026-08-26 este `Secret` no existia en el repositorio: en `stg` lo habia
+ * creado alguien a mano, y el unico rastro estaba en el mensaje de commit del issue
+ * #158 («con las tres piezas puestas antes: kubeconfig, credenciales de respaldo,
+ * imagePullSecret de GHCR»). Un `prod` reconstruido desde cero no lo tenia.
+ */
+export function secretoDelRegistro(environment: Environment): string {
+  return resourceName(environment, "registro");
+}
+
 /** Las claves del `Secret` de `secretoDeCredencialesDeRespaldo`. */
 export const CLAVES_DE_CREDENCIALES_DE_RESPALDO = {
   accessKeyId: "access-key-id",

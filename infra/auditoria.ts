@@ -3,6 +3,7 @@ import {
   podsDe,
   sondasDe,
   type Contenedor,
+  type EspecificacionDePod,
   type Manifiesto,
 } from "./componentes/tipos";
 
@@ -74,6 +75,54 @@ export interface ContextoDeAuditoria {
   secretoDeOwner: string;
   /** El namespace del ambiente. Todo lo demas tiene que estar dentro. */
   namespace: string;
+  /** El repositorio privado de las tres imagenes propias, SIN etiqueta. */
+  repositorioPrivado: string;
+  /** El `Secret` de tipo `dockerconfigjson` con que se descargan (issue #252). */
+  secretoDelRegistro: string;
+}
+
+/**
+ * Quien tira del registro privado lleva su credencial, y quien no, no (issue #252).
+ *
+ * Las dos direcciones importan, y por motivos distintos:
+ *
+ * - **Falta:** el kubelet pide un token anonimo, GHCR responde 401 y el pod se queda en
+ *   `ImagePullBackOff` para siempre. Es lo que paso en el primer despliegue completo de
+ *   `prod`: `sgtm-interfaz` no arranco nunca, y el `Secret` no existia en el
+ *   repositorio —lo habia creado alguien a mano en `stg`—.
+ * - **Sobra:** un pod que no necesita la credencial y la monta igual es una credencial
+ *   de mas al alcance de un contenedor de mas. Nueve de los catorce pods de este stack
+ *   tiran de registros publicos y ninguno tiene por que poder leerla.
+ *
+ * `componentes/index.ts` la reparte derivandola de la imagen; esto comprueba que el
+ * reparto salio bien, que es lo que permite cambiar aquella funcion sin miedo.
+ */
+function auditarCredencialDelRegistro(
+  donde: string,
+  pod: EspecificacionDePod,
+  contexto: ContextoDeAuditoria,
+): string[] {
+  const privado = contenedoresDe(pod).some((c) =>
+    c.image.startsWith(`${contexto.repositorioPrivado}/`),
+  );
+  const declarada = (pod.imagePullSecrets ?? []).some((s) => s.name === contexto.secretoDelRegistro);
+
+  if (privado && !declarada) {
+    return [
+      `${donde} descarga del repositorio privado «${contexto.repositorioPrivado}» y no ` +
+        `declara \`imagePullSecrets\` con «${contexto.secretoDelRegistro}». El kubelet pedira ` +
+        "un token anonimo, GHCR respondera 401 y el pod se quedara en `ImagePullBackOff`: " +
+        "eso no se cura solo (issue #252).",
+    ];
+  }
+  if (!privado && (pod.imagePullSecrets ?? []).length > 0) {
+    return [
+      `${donde} declara \`imagePullSecrets\` y todas sus imagenes salen de registros ` +
+        "publicos. Una credencial de mas es una credencial al alcance de un contenedor " +
+        "que no la necesita.",
+    ];
+  }
+  return [];
 }
 
 export function auditarManifiestos(
@@ -96,6 +145,8 @@ export function auditarManifiestos(
             "donde mover lo desalojado.",
         );
       }
+
+      problemas.push(...auditarCredencialDelRegistro(donde, pod, contexto));
 
       for (const c of contenedoresDe(pod)) {
         problemas.push(...auditarImagen(donde, c.name, c.image));
