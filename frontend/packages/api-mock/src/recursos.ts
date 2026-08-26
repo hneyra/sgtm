@@ -16,11 +16,11 @@ import { RESPUESTAS } from './respuestas.generado';
  * backend: las once de seguridad (#9, #12, #13), el catalogo vial y los
  * sectores (#16), las cuatro fichas (#18, #19), su consulta (#20), los
  * aranceles (#17), el padron de contribuyentes (#11), la ficha de vehiculo
- * (#26), la declaracion jurada (#28) y los beneficios (#27) desde #73, y desde
- * #72 la consulta de deuda (#22, #175), la constancia de no adeudo (#25,
- * #179), el padron vehicular consultable (#25, #184), las altas y bajas de
- * deuda (#24, #72), el historial de pagos (#25, #219) y los predios de un
- * contribuyente (#25, #222).
+ * (#26), la declaracion jurada (#28), los beneficios (#27) y los arbitrios
+ * (#31) desde #73, y desde #72 la consulta de deuda (#22, #175), la
+ * constancia de no adeudo (#25, #179), el padron vehicular consultable (#25,
+ * #184), las altas y bajas de deuda (#24, #72), el historial de pagos (#25,
+ * #219) y los predios de un contribuyente (#25, #222).
  * **Esta lista crece cuando crece aquella**, no antes: publicar aqui
  * una forma que el backend todavia no sirve seria inventarsela.
  *
@@ -196,6 +196,46 @@ const beneficios = (): Paginado =>
         };
       }),
   );
+
+/**
+ * Arbitrios municipales (`ArbitrioResource`, #31): cada fila de «Determinación
+ * por servicio» del prototipo —un servicio con su tasa mensual— se convierte
+ * en **una** cuota de un mes, no en las doce que tendria un ejercicio
+ * completo: el proxy no inventa un padron que el prototipo no dibuja, igual
+ * que ya hace con `beneficios`.
+ *
+ * El prototipo separa «LIMPIEZA PÚBLICA — BARRIDO» de «— RECOLECCIÓN»; el
+ * dominio real solo conoce un `Servicio.LIMPIEZA_PUBLICA` (V2, #31), asi que
+ * las dos colapsan en el mismo codigo — la distincion es del prototipo, no
+ * del dominio que el backend publica.
+ */
+const SERVICIO_DEL_MOCK: Readonly<Record<string, string>> = {
+  'LIMPIEZA PÚBLICA': 'LIMPIEZA_PUBLICA',
+  'PARQUES Y JARDINES': 'PARQUES_JARDINES',
+  SERENAZGO: 'SERENAZGO',
+};
+
+const arbitrios = (): Paginado => {
+  const ejercicio =
+    typeof RESPUESTAS['arbitrios']?.campos?.['ejercicio'] === 'string'
+      ? (RESPUESTAS['arbitrios'].campos['ejercicio'] as string)
+      : '2026';
+  return unaPagina(
+    filasDe('arbitrios').map(([servicio, , , tasaMensual], i) => {
+      const [nombre] = (servicio ?? '').split(' — ');
+      return {
+        id: i + 1,
+        ejercicio,
+        servicio: SERVICIO_DEL_MOCK[(nombre ?? '').trim()] ?? 'LIMPIEZA_PUBLICA',
+        periodo: 1,
+        contribuyenteId: 1,
+        predioId: 1,
+        monto: tasaMensual,
+        fechaCalculo: '2026-08-13',
+      };
+    }),
+  );
+};
 
 /* ── Consultas: deuda y constancia ──────────────────────────────────────── */
 
@@ -838,6 +878,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/catastro/vias': vias,
   '/rentas/contribuyentes': contribuyentes,
   '/rentas/beneficios': beneficios,
+  '/rentas/arbitrios': arbitrios,
   '/consultas/cuenta-corriente/{codigo}': cuentaCorriente,
   '/consultas/deuda': consultaDeuda,
   '/consultas/vehiculos': consultaVehiculos,

@@ -15,19 +15,21 @@ import { SIN_DATO } from '../seguridad/listado';
  * ocho formularios que no guardan sin ella, asi que aqui se comprueba sobre las
  * ocho a la vez y no una por una.
  *
- * Conectadas para lectura hay cuatro: el padron de contribuyentes (#11), la
- * ficha de vehiculo (#26), la declaracion jurada (#28) y los beneficios
- * (#27). `alta_deuda` (#24) se suma como la primera escritura conectada del
- * modulo, con su lista blanca en `escrituras.ts` — ver ahi por que
- * `unidadPredioPlaca` y `cuotaHasta` no viajan todavia.
+ * Conectadas para lectura hay cinco: el padron de contribuyentes (#11), la
+ * ficha de vehiculo (#26), la declaracion jurada (#28), los beneficios (#27)
+ * y los arbitrios (#31). `alta_deuda` (#24) se suma como la primera escritura
+ * conectada del modulo, con su lista blanca en `escrituras.ts` — ver ahi por
+ * que `unidadPredioPlaca` y `cuotaHasta` no viajan todavia.
  *
  * `transferencia_predio`, `transferencia_vehiculo` y `baja_deuda` quedan
  * fuera a proposito: las dos primeras necesitan resolver un codigo contra un
  * identificador interno antes de poder enviar (busqueda que no existe
  * todavia), y `baja_deuda` es buscar-y-seleccionar-varias-filas, no un
  * formulario plano — ninguna de las tres es solo una entrada mas en la lista
- * blanca (ver #73). Las demas esperan a su backend, y los cuatro calculos
- * esperan ademas a D-02.
+ * blanca (ver #73). `alcabala`, `vehicular_calculo` y `espectaculos` tienen
+ * ya su backend (#32) pero el mismo tipo de hueco: un identificador interno o
+ * un valor que el catalogo marca de solo lectura y que el controlador no
+ * calcula (ver el doc de `rentas/index.ts`). Las demas esperan a su backend.
  */
 
 /** Las ocho opciones del modulo cuya operacion escribe, por su ranura. */
@@ -92,12 +94,11 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
     ]);
   });
 
-  it('las once restantes siguen sin conectar', () => {
+  it('las diez restantes siguen sin Conexion propia', () => {
     for (const opcion of [
       'predios_rentas',
       'predial_individual',
       'predial_masivo',
-      'arbitrios',
       'transferencia_predio',
       'alcabala',
       'vehicular_calculo',
@@ -108,7 +109,13 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
     ]) {
       expect(OPCIONES_CONECTADAS).not.toContain(opcion);
     }
-    for (const opcion of ['contribuyentes', 'vehiculos', 'declaracion_jurada', 'beneficios']) {
+    for (const opcion of [
+      'contribuyentes',
+      'vehiculos',
+      'declaracion_jurada',
+      'beneficios',
+      'arbitrios',
+    ]) {
       expect(OPCIONES_CONECTADAS).toContain(opcion);
     }
   });
@@ -163,6 +170,37 @@ describe('los beneficios leen BeneficioResource', () => {
       '50.00%',
       'VIGENTE',
     ]);
+  });
+});
+
+describe('los arbitrios leen ArbitrioResource', () => {
+  it('cada fila es la cuota de un mes, y lo que el recurso no publica sale vacio', async () => {
+    montarEnRuta('/rentas-registro/arbitrios');
+
+    const fila = (await screen.findByText('PARQUES_JARDINES')).closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      'PARQUES_JARDINES',
+      // Criterio de distribucion y frecuencia no estan en ArbitrioResource.
+      SIN_DATO,
+      SIN_DATO,
+      // La cuota de ese mes, tal cual la publica el recurso.
+      '6.10',
+      // El anual no se compone sumando cuotas (RNF-083), y la condicion
+      // tampoco esta en el recurso.
+      SIN_DATO,
+      SIN_DATO,
+    ]);
+  });
+
+  it('«— BARRIDO» y «— RECOLECCIÓN» colapsan en el mismo Servicio del dominio', async () => {
+    montarEnRuta('/rentas-registro/arbitrios');
+
+    // El prototipo dibuja dos filas de limpieza publica; el dominio solo
+    // conoce un LIMPIEZA_PUBLICA (V2) — las dos llegan con ese mismo codigo.
+    const filas = await screen.findAllByText('LIMPIEZA_PUBLICA');
+    expect(filas).toHaveLength(2);
   });
 });
 
