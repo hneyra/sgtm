@@ -63,6 +63,11 @@ config:
   sgtm:keycloakRealm: sgtm
   # Sin etiqueta, a propósito: la pone el flujo de liberación (ADR-0011 §5, issue #148).
   sgtm:applicationImageRepository: ghcr.io/hneyra
+  # El usuario con que el nodo se autentica contra ghcr.io para traer sgtm-aplicacion,
+  # sgtm-migrador y sgtm-interfaz —los tres privados—. No es secreto; lo que sí lo es
+  # es `registryPullToken` (un PAT con `read:packages`), que CI inyecta igual que
+  # `backupAccessKeyId` (issue #257).
+  sgtm:registryUsername: hneyra
   # Una réplica, como `stg`. Dos no caben en los ~6 GB que este nodo reparte: el pico
   # del arranque —los Deployment más los Jobs de migración e implantación, que conviven
   # con ellos durante el `pulumi up`— pedía 6 368Mi contra 5 728Mi disponibles. Con una

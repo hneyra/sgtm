@@ -200,6 +200,63 @@ new k8s.core.v1.Secret(
   { provider: proveedor },
 );
 
+/**
+ * La credencial de pull del registro (issue #257), la segunda excepción de «Lo que
+ * este archivo NO crea» de arriba. Misma clasificación que la de arriba: sin esto, un
+ * clúster nuevo no puede traer `sgtm-aplicacion`, `sgtm-migrador` ni `sgtm-interfaz`
+ * —los tres son privados en `ghcr.io/hneyra`— y cada `Deployment`/`Job` se queda en
+ * `ImagePullBackOff` o `ErrImagePull` con un `401` de fondo, sin que nada en este
+ * repositorio lo explicara hasta ahora.
+ *
+ * Va como `Secret` de `kubernetes.io/dockerconfigjson` más un `ServiceAccountPatch`
+ * sobre `default` —la que usan todos los `Deployment`/`Job` de arriba, ninguno declara
+ * `serviceAccountName`— en vez de repetir `imagePullSecrets` en cada manifiesto. El
+ * `ServiceAccountPatch` usa Server-Side Apply: no reclama la cuenta entera, que crea
+ * Kubernetes al crear el `Namespace`, solo el campo que le falta.
+ */
+const registroDeImagenes = pulumi
+  .output(settings.application.imageRepository)
+  .apply((repo) => repo.split("/")[0] ?? repo);
+
+const secretoDeRegistro = new k8s.core.v1.Secret(
+  resourceName(env, "registro-credenciales"),
+  {
+    metadata: {
+      name: resourceName(env, "registro-credenciales"),
+      namespace,
+      labels: commonLabels(env, "registro"),
+    },
+    type: "kubernetes.io/dockerconfigjson",
+    stringData: {
+      ".dockerconfigjson": pulumi
+        .all([registroDeImagenes, settings.registryCredentials.token])
+        .apply(([servidor, token]: [string, string]) =>
+          JSON.stringify({
+            auths: {
+              [servidor]: {
+                username: settings.registryCredentials.username,
+                password: token,
+                auth: Buffer.from(`${settings.registryCredentials.username}:${token}`).toString(
+                  "base64",
+                ),
+              },
+            },
+          }),
+        ),
+    },
+  },
+  { provider: proveedor },
+);
+
+new k8s.core.v1.ServiceAccountPatch(
+  resourceName(env, "default-registro"),
+  {
+    metadata: { name: "default", namespace },
+    imagePullSecrets: [{ name: secretoDeRegistro.metadata.name }],
+  },
+  { provider: proveedor },
+);
+
 // Salidas del stack. Sirven de comprobante de que la configuración se leyó, se validó y
 // los manifiestos pasaron la auditoría: si algo contradijera la documentación,
 // `loadSettings` o `auditarManifiestos` ya habrían lanzado y no se llegaría aquí.

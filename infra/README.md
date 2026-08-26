@@ -311,6 +311,7 @@ por VPS, para que `secrets.VPS_HOST` (y compañía) resuelva al nodo correcto en
 | Secreto | Alcance | Valor |
 |---|---|---|
 | `PULUMI_ACCESS_TOKEN` | Repositorio | Token de Pulumi Cloud |
+| `REGISTRY_PULL_TOKEN` | Repositorio | PAT de GHCR con `read:packages` (issue #257) — de solo lectura, sin motivo para variar por ambiente |
 | `SSH_PRIVATE_KEY` | *Environment* `stg` / `prod` | La **privada** de despliegue de ESE VPS, completa |
 | `VPS_USER` | *Environment* `stg` / `prod` | El usuario con el que se conecta esa clave |
 | `VPS_HOST` | *Environment* `stg` / `prod` | La IP o el nombre de ESE VPS |
@@ -319,13 +320,14 @@ por VPS, para que `secrets.VPS_HOST` (y compañía) resuelva al nodo correcto en
 | `BACKUP_SECRET_ACCESS_KEY` | *Environment* `stg` / `prod` | Su secreto |
 
 Además, un tercer *environment* **`prod-preview`**, sin protección, con una **copia** de
-los siete valores de `prod` (menos el token, que ya es de repositorio): existe solo para
-que `previsualizar-prod` pueda correr en cada PR sin quedar detrás de la aprobación que
-sí exige `aplicar-prod` — el `up` real nunca lee de `prod-preview`.
+los seis valores por-VPS de `prod` (los dos de repositorio no se copian: ya los ve
+cualquier *environment*): existe solo para que `previsualizar-prod` pueda correr en cada
+PR sin quedar detrás de la aprobación que sí exige `aplicar-prod` — el `up` real nunca
+lee de `prod-preview`.
 
-Con `stg` y `prod-preview` puestos (más el token), `previsualizar-stg`,
+Con `stg` y `prod-preview` puestos (más los dos de repositorio), `previsualizar-stg`,
 `previsualizar-prod` y `aplicar-stg` corren solos. `aplicar-prod` necesita además que el
-*environment* `prod` tenga sus siete valores y el paso 5.
+*environment* `prod` tenga sus seis valores y el paso 5.
 
 ### 5. El *environment* `prod`, con aprobación requerida
 

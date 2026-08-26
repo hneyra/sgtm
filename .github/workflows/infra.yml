@@ -607,10 +607,12 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          REGISTRY_PULL_TOKEN_VALUE: ${{ secrets.REGISTRY_PULL_TOKEN }}
         run: |
           pulumi config set --secret --stack stg kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack stg backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
           pulumi config set --secret --stack stg backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
+          pulumi config set --secret --stack stg registryPullToken -- "$REGISTRY_PULL_TOKEN_VALUE"
 
       - uses: pulumi/actions@v6
         if: steps.token.outputs.hay == 'si'
@@ -698,10 +700,12 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          REGISTRY_PULL_TOKEN_VALUE: ${{ secrets.REGISTRY_PULL_TOKEN }}
         run: |
           pulumi config set --secret --stack prod kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack prod backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
           pulumi config set --secret --stack prod backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
+          pulumi config set --secret --stack prod registryPullToken -- "$REGISTRY_PULL_TOKEN_VALUE"
 
       - uses: pulumi/actions@v6
         if: steps.token.outputs.hay == 'si'
@@ -845,10 +849,12 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          REGISTRY_PULL_TOKEN_VALUE: ${{ secrets.REGISTRY_PULL_TOKEN }}
         run: |
           pulumi config set --secret --stack stg kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack stg backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
           pulumi config set --secret --stack stg backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
+          pulumi config set --secret --stack stg registryPullToken -- "$REGISTRY_PULL_TOKEN_VALUE"
 
       - uses: pulumi/actions@v6
         if: steps.credenciales.outputs.hay == 'si'
@@ -957,10 +963,12 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          REGISTRY_PULL_TOKEN_VALUE: ${{ secrets.REGISTRY_PULL_TOKEN }}
         run: |
           pulumi config set --secret --stack prod kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack prod backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
           pulumi config set --secret --stack prod backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
+          pulumi config set --secret --stack prod registryPullToken -- "$REGISTRY_PULL_TOKEN_VALUE"
 
       - uses: pulumi/actions@v6
         with:
@@ -1048,10 +1056,12 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          REGISTRY_PULL_TOKEN_VALUE: ${{ secrets.REGISTRY_PULL_TOKEN }}
         run: |
           pulumi config set --secret --stack prod kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack prod backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
           pulumi config set --secret --stack prod backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
+          pulumi config set --secret --stack prod registryPullToken -- "$REGISTRY_PULL_TOKEN_VALUE"
 
       # `--expect-no-changes` es la comprobación: sale en rojo si el plan no está vacío,
       # que es exactamente lo que pasa cuando alguien corrió un `kubectl apply` a mano
