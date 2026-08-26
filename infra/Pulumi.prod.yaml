@@ -29,21 +29,29 @@ config:
   # cambian: la reserva de memoria del issue #157 —2 Gi— modela lo que el sistema
   # operativo, containerd y el API server usan de verdad, así que sigue en pie.
   #
-  # La CPU sí cambió, y es la corrección del issue #252. La medición de aquel día decía
-  # «CPU 4 → asignable 2»: `reservar-recursos-del-nodo.sh` escribía 1 CPU en
-  # `system-reserved` **y** otra en `kube-reserved`, y kubelet las suma, así que el nodo
-  # reservaba 2 de sus 4 núcleos en lugar del «~1 CPU» que INF-01 §2 dimensiona. Con la
-  # reserva repartida (500m + 500m) el nodo vuelve a repartir 3.
+  # La CPU es **2, lo que el nodo dice hoy**, y esto ya se equivocó una vez en la
+  # dirección contraria: el 2026-08-26 se declaró "3" —lo que el nodo dará una vez
+  # aplicada la reserva corregida del issue #252— y `aplicar-prod` se detuvo en el paso
+  # «Lo declarado cabe en el nodo real», que existe justo para eso. Adelantarse al nodo
+  # no despliega nada; solo cambia el paso en el que falla.
   #
-  # ⚠ ESTE VALOR SE ADELANTA AL NODO. Hasta que alguien corra el guion corregido sobre
-  # `vmd120205` —su propia ventana de mantenimiento, INF-01 §4—, el nodo sigue diciendo
-  # 2. El paso «Lo declarado cabe en el nodo real» de `aplicar-prod` lo detecta y falla
-  # en segundos diciendo las dos cifras, que es la dirección segura del error: nunca
-  # deja pasar un despliegue que no cabe.
+  # Que siga en "2" es correcto **también después** de corregir la reserva. Declarar por
+  # DEBAJO de lo real está admitido y solo aprieta la comprobación (`comprobar-lo-
+  # asignable.sh`: solo se rechaza declarar de MÁS). Así que esta línea no hay que
+  # tocarla el día de la ventana de mantenimiento; subirla a "3" es opcional, y lo que
+  # gana es margen, no la posibilidad de desplegar.
+  #
+  # Para que quepa en 2 se bajó el `request` de CPU de los dos Jobs de arranque
+  # (`RECURSOS.arranque`, 250m → 100m): eran los 500m del pico que sobraban. Lo
+  # permanente (1 540m) siempre cupo; el pico ahora son 1 760m contra 1 800m.
+  #
+  # La reserva del nodo sigue estando mal en `vmd120205` —reserva 2 de sus 4 núcleos por
+  # la duplicación de #252— y corregirla sigue mereciendo la pena: devuelve ~1 000m de
+  # margen. Pero ya no bloquea el despliegue. INF-02 §4 tiene el procedimiento.
   #
   # Volver a medirlo después de tocar el nodo o la reserva:
   #   kubectl get node -o jsonpath='{.items[0].status.allocatable.cpu}{"/"}{.items[0].status.allocatable.memory}'
-  sgtm:nodeAllocatableCpu: "3"
+  sgtm:nodeAllocatableCpu: "2"
   sgtm:nodeAllocatableMemory: 6029348Ki
   sgtm:domain: vmd120205.contabo.net
   sgtm:acmeEmail: operaciones@example.pe

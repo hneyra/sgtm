@@ -148,12 +148,22 @@ describe("cada ambiente cabe en el nodo que declara", () => {
 
 describe("y se demuestra que puede fallar", () => {
   /**
-   * El nodo de `prod` tal como estaba el 2026-08-25, con la reserva del issue #157
-   * aplicada y `webReplicas: 2`: 2 CPU asignables. Es la configuracion exacta que
-   * colgo `aplicar-prod` cuatro veces, y aqui tiene que ponerse roja.
+   * La configuracion EXACTA que colgo `aplicar-prod` cuatro veces el 25 y 26 de agosto
+   * de 2026: `webReplicas: 2` contra los 2 CPU que la reserva duplicada dejo en el
+   * nodo. Aqui tiene que ponerse roja.
+   *
+   * Se construye a proposito en vez de leer `Pulumi.prod.yaml`: el stack real ya no es
+   * asi —y por eso hoy despliega—, pero el caso historico tiene que seguir detectandose
+   * el dia que alguien devuelva las dos replicas sin mirar el nodo.
    */
-  it("con los 2 CPU asignables que la reserva de #157 dejo en prod, NO cabe", () => {
-    const problemas = auditarCapacidad(manifiestosDe("prod"), {
+  it("la configuracion que colgo prod en agosto de 2026 NO cabe", () => {
+    const invariantes = invariantesDe("prod");
+    const conDosReplicas = construirManifiestos({
+      ...invariantes,
+      application: { ...invariantes.application, webReplicas: 2 },
+    });
+
+    const problemas = auditarCapacidad(conDosReplicas, {
       cpuAsignable: "2",
       memoriaAsignable: "6029348Ki",
     });
@@ -167,28 +177,42 @@ describe("y se demuestra que puede fallar", () => {
   /**
    * Por que se comprueba el PICO y no lo permanente, con el caso que lo demuestra.
    *
-   * Sobre los 2 CPU que la reserva duplicada dejo en `prod`, el stack de hoy —una
-   * replica— tiene lo permanente DENTRO del presupuesto y el pico del arranque FUERA.
-   * Un `pulumi up` contra ese nodo no habria dado ningun sintoma util: el sistema en
-   * regimen cabe, y lo que no entra son los dos Jobs que solo existen durante el
-   * despliegue. Se habria colgado igual, y mirando `kubectl top` despues no se habria
-   * visto nada raro.
+   * Se elige un nodo deliberadamente justo —1 900m asignables— porque es donde los dos
+   * numeros se separan: lo permanente de `prod` (1 540m) entra, y el pico del arranque
+   * (1 760m) no. Un `pulumi up` contra un nodo asi no daria ningun sintoma util: el
+   * sistema en regimen cabe, y lo que no entra son los dos Jobs que solo existen
+   * durante el despliegue. Se colgaria igual, y mirando `kubectl top` despues no se
+   * veria nada raro.
    *
    * Si `auditarCapacidad` mirase lo permanente, este caso pasaria en verde y el
    * despliegue se colgaria de todos modos. Es justo la confusion que la cabecera de
    * `capacidad.ts` describe, escrita como prueba.
    */
-  it("lo permanente cabe en 2 CPU y el pico del arranque no: por eso se mide el pico", () => {
-    const nodoDuplicado = { cpuAsignable: "2", memoriaAsignable: "6029348Ki" };
+  it("lo permanente cabe y el pico no: por eso se mide el pico", () => {
+    const nodoJusto = { cpuAsignable: "1900m", memoriaAsignable: "6029348Ki" };
     const demanda = demandaDelStack(manifiestosDe("prod"));
-    // 1 800m: los 2 CPU asignables menos lo que los pods de serie de k3s ya ocupan.
-    const disponible = 2000 - 200;
+    // 1 700m: los 1 900m asignables menos lo que los pods de serie de k3s ya ocupan.
+    const disponible = 1900 - 200;
 
     expect(demanda.permanente.cpuEnMili).toBeLessThanOrEqual(disponible);
     expect(demanda.picoDeArranque.cpuEnMili).toBeGreaterThan(disponible);
-    expect(auditarCapacidad(manifiestosDe("prod"), nodoDuplicado).join("\n")).toMatch(
+    expect(auditarCapacidad(manifiestosDe("prod"), nodoJusto).join("\n")).toMatch(
       /no cabe en el nodo por CPU/,
     );
+  });
+
+  /**
+   * Y el caso que de verdad importa hoy: `prod` cabe en el nodo TAL COMO ESTA, con su
+   * reserva todavia duplicada. Es lo que separa «desplegable» de «desplegable cuando
+   * alguien entre al VPS».
+   */
+  it("prod cabe en los 2 CPU que el nodo reparte hoy", () => {
+    expect(
+      auditarCapacidad(manifiestosDe("prod"), {
+        cpuAsignable: "2",
+        memoriaAsignable: "6029348Ki",
+      }),
+    ).toEqual([]);
   });
 
   /**

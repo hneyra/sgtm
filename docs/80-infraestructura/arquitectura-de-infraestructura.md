@@ -178,12 +178,27 @@ en `kube-reserved`**, que son dos descuentos distintos y kubelet los **suma**: e
 ambigüedad —«la diferencia es 2 097 152 Ki = 2 Gi exactos, y 2 CPU»— pero se leyó como el coste
 esperado de la reserva, no como el doble de ella.
 
-Corregido el reparto (500m + 500m), el nodo vuelve a ofrecer **3 CPU**. La reserva de **memoria se
+Corregido el reparto (500m + 500m), el nodo pasaría a ofrecer **3 CPU**. La reserva de **memoria se
 deja en 2 Gi**: ahí el consumo sí es ese —el API server ronda el medio giga, y el sistema con
 containerd completan el resto—, así que bajarla no habría devuelto memoria, solo habría dejado de
-contar la que ya está en uso. Con 3 CPU y 5,75 Gi asignables, y `webReplicas: 1` como en `stg`, el
-stack de `prod` cabe: 2 060m y 5 344Mi en el pico del arranque contra 2 800m y 5 728Mi
-disponibles.
+contar la que ya está en uso.
+
+**Pero el stack no espera a esa ventana de mantenimiento.** Declarar los 3 CPU antes de aplicarlos
+no despliega nada: el paso «Lo declarado cabe en el nodo real» de `aplicar-prod` rechaza toda
+declaración mayor que lo que el nodo reparte, y así se comprobó el 2026-08-26. `prod` se dimensionó
+entonces contra el nodo **tal como está**, con dos cambios:
+
+- `webReplicas: 1`, como `stg`. Dos réplicas no caben en los ~6 GB del nodo.
+- El `request` de CPU de los dos Jobs de arranque (`RECURSOS.arranque`) baja de 250m a 100m. Eran
+  todo el desajuste: lo permanente (1 540m) siempre cupo en los 1 800m disponibles, y el pico
+  llegaba a 2 060m solo porque `migración` e `implantación` conviven con los `Deployment` durante
+  el `pulumi up`. Sus `limits` siguen en 2 CPU, así que pueden usar toda la que el nodo tenga
+  libre; lo único que se cede es la garantía previa, que para un trabajo corto y dominado por E/S
+  es lo que sobra.
+
+Resultado: **1 760m y 5 344Mi en el pico contra 1 800m y 5 728Mi disponibles**. `prod` cabe en el
+nodo que hay hoy. Corregir la reserva sigue mereciendo la pena —devuelve ~1 000m de margen— pero ya
+no bloquea el despliegue.
 
 Lo que ese descubrimiento costó es la parte que conviene no repetir: un pod que el planificador no
 puede ubicar no falla, se queda `Pending`; y el `ConfigGroup` de Pulumi lo espera sin error, sin

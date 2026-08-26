@@ -215,9 +215,23 @@ export const RECURSOS = {
    *
    * El `CronJob` de `lote` NO usa este perfil y sigue con `aplicacionLote`: una emision
    * masiva a las 02:00 sí quiere su CPU reservada, y a esa hora el nodo la tiene.
+   *
+   * **250m → 100m el 2026-08-26**, por el mismo razonamiento y una medicion mas: sobre
+   * `vmd120205` estos dos Jobs eran TODO el desajuste. Lo permanente de `prod` pide
+   * 1 540m y el nodo reparte 1 800m; el pico llegaba a 2 060m porque `migracion` e
+   * `implantacion` sumaban 500m que solo existen durante el `pulumi up`. Con 100m cada
+   * uno el pico baja a 1 760m y `prod` cabe en el nodo **tal como esta hoy**, sin
+   * esperar a la ventana de mantenimiento que corrige la reserva.
+   *
+   * Lo que NO cambia: el `limits` sigue en 2 CPU, asi que los dos Jobs siguen pudiendo
+   * usar toda la CPU que el nodo tenga libre —y la tiene: 1 760m pedidos de 1 800m es
+   * lo RESERVADO, no lo usado, y los `Deployment` en reposo no gastan lo suyo—. Un
+   * `request` bajo solo significa poca garantia previa, y para un trabajo corto,
+   * dominado por E/S contra PostgreSQL y que puede tardar treinta segundos mas, esa
+   * garantia es justo lo que sobra.
    */
   arranque: {
-    requests: { cpu: "250m", memory: "512Mi" },
+    requests: { cpu: "100m", memory: "512Mi" },
     limits: { cpu: "2", memory: "2Gi" },
   },
   interfaz: {
