@@ -193,6 +193,33 @@ export const RECURSOS = {
     requests: { cpu: "1", memory: "1Gi" },
     limits: { cpu: "2", memory: "2Gi" },
   },
+  /**
+   * Los Jobs de un solo uso del despliegue: `migracion` e `implantacion`.
+   *
+   * Mismos `limits` que `aplicacionLote` —siguen pudiendo usar 2 CPU y 2 Gi cuando el
+   * nodo los tiene libres— y `requests` mucho mas bajos. La diferencia no es cosmetica:
+   * el `request` es lo que el planificador **reserva y bloquea**, y estos dos Jobs
+   * corren a la vez que todos los `Deployment` durante un `pulumi up`.
+   *
+   * Con 1 CPU de `request` cada uno se llevaban 2 CPU del nodo en el peor momento, y en
+   * un nodo justo eso no es lentitud: es que no entran. Y como llevan la clase de
+   * prioridad `lote` —la mas baja del clúster a proposito— no pueden desalojar a nadie
+   * para entrar, mientras `aplicacion` espera a `implantacion` en su `initContainer`.
+   * Nadie cede y el despliegue se cuelga (`capacidad.ts`, issue #252).
+   *
+   * Bajar el `request` no les quita capacidad de computo: la JVM dimensiona su monton
+   * con `MaxRAMPercentage` sobre el **limite**, no sobre la peticion, y los dos son
+   * trabajos cortos y dominados por E/S contra PostgreSQL. Lo unico que se pierde es la
+   * garantia de tener esa CPU reservada de antemano, que para un Job que puede esperar
+   * treinta segundos mas es exactamente lo que sobra.
+   *
+   * El `CronJob` de `lote` NO usa este perfil y sigue con `aplicacionLote`: una emision
+   * masiva a las 02:00 sí quiere su CPU reservada, y a esa hora el nodo la tiene.
+   */
+  arranque: {
+    requests: { cpu: "250m", memory: "512Mi" },
+    limits: { cpu: "2", memory: "2Gi" },
+  },
   interfaz: {
     requests: { cpu: "50m", memory: "64Mi" },
     limits: { cpu: "200m", memory: "128Mi" },

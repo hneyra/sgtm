@@ -251,7 +251,7 @@ export function manifiestosDeMigracion(args: MigracionArgs): Manifiesto[] {
               // `USER 10002` en el propio Dockerfile del migrador (issue #157): la
               // imagen ya no corre como root, esto solo lo declara.
               securityContext: seguridadSinRoot(),
-              resources: RECURSOS.aplicacionLote,
+              resources: RECURSOS.arranque,
             },
           ],
         },
@@ -313,7 +313,7 @@ export function manifiestosDeMigracion(args: MigracionArgs): Manifiesto[] {
               env: variablesDeImplantacion,
               // `USER 10001` en el Dockerfile, la misma imagen que `aplicacion` (issue #157).
               securityContext: seguridadSinRoot(),
-              resources: RECURSOS.aplicacionLote,
+              resources: RECURSOS.arranque,
             },
           ],
         },

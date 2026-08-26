@@ -22,6 +22,35 @@
 # El `server` del kubeconfig tiene que ser `https://localhost:6443`: CI llega por un
 # túnel SSH y `config.ts` se pone rojo si apunta al VPS (INF-01 §1.4).
 config:
+  # Lo ASIGNABLE del nodo, medido — no su capacidad (`capacidad.ts`). Los dos valores
+  # salen del registro de ejecución de `reservar-recursos-del-nodo.sh` sobre `vmd120205`
+  # el 2026-08-23 (INF-02 §4): «CPU 4 → asignable 2; memoria 8 126 500 Ki → asignable
+  # 6 029 348 Ki». La reserva del issue #157 —1 CPU y 1 Gi de `system-reserved` más otro
+  # tanto de `kube-reserved`— es la diferencia, y es la razón por la que este nodo pasó a
+  # tener la mitad de CPU repartible de la que su factura dice.
+  #
+  # Volver a medirlo después de tocar el nodo o la reserva:
+  #   kubectl get node -o jsonpath='{.items[0].status.allocatable.cpu}{"/"}{.items[0].status.allocatable.memory}'
+  sgtm:nodeAllocatableCpu: "2"
+  sgtm:nodeAllocatableMemory: 6029348Ki
+  # ⚠ BRECHA CONOCIDA — issue #252. Este nodo NO da para este stack, y por eso `prod`
+  # todavía no se ha desplegado entero ni una vez: los 2 CPU asignables no alcanzan ni
+  # para lo permanente (2 040m), así que los pods se quedaban `Pending` y `pulumi up` se
+  # colgaba hasta que la plataforma mataba el runner a las seis horas.
+  #
+  # Declararlo aquí NO lo silencia. `aplicar-prod` sigue negándose a desplegar —en su
+  # paso «El stack cabe en su nodo», antes de invocar a Pulumi, diciendo cuántos
+  # milicores faltan— y `capacidad.test.ts` exige que la brecha siga existiendo, así que
+  # retirar esta línea antes de tiempo pone la prueba roja. Lo que la marca hace es dos
+  # cosas, las dos para no castigar a quien no tiene culpa: que el nodo de `prod` no deje
+  # sin desplegar a `stg` (comparten el trabajo `verificar`), y que `pulumi preview` —que
+  # corre en CADA PR— avise en vez de reventar.
+  #
+  # Se cierra agrandando el nodo a lo que INF-01 §2 dimensiona (8 CPU / 16 GB) y midiendo
+  # otra vez las dos líneas de arriba. Las alternativas sin gastar —bajar `webReplicas` a
+  # 1, o recortar la reserva del issue #157— se descartaron el 2026-08-26: las dos ceden
+  # algo que se decidió a propósito.
+  sgtm:nodeCapacityGapIssue: "252"
   sgtm:domain: vmd120205.contabo.net
   sgtm:acmeEmail: operaciones@example.pe
   # Versiones fijadas. Una etiqueta móvil convierte cualquier reinicio del VPS en una
