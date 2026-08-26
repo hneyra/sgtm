@@ -76,9 +76,17 @@ kubectl get pods -n "$NAMESPACE" -o wide 2>/dev/null || true
 
 # Un pod ubicado tiene `spec.nodeName`. Es la senal exacta de lo que `capacidad.ts`
 # predice, y no depende de que la imagen exista ni de que el contenedor arranque.
-SIN_UBICAR="$(kubectl get pods -n "$NAMESPACE" \
-    -o jsonpath='{range .items[?(@.spec.nodeName=="")]}{.metadata.name}{"\n"}{end}' \
+#
+# Se cuenta por diferencia, y NO con un filtro `@.spec.nodeName==""`: en un pod sin
+# ubicar ese campo esta AUSENTE, no vacio, y el filtro de jsonpath no casa con lo que
+# no existe. Escrito asi, la comprobacion devolveria siempre cero y pasaria en verde
+# incluso con el nodo desbordado -una comprobacion que no puede fallar-.
+TOTAL="$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | grep -c . || true)"
+UBICADOS="$(kubectl get pods -n "$NAMESPACE" \
+    -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' \
     2>/dev/null | grep -c . || true)"
+SIN_UBICAR="$(( TOTAL - UBICADOS ))"
+echo "   pods: ${TOTAL}, ubicados: ${UBICADOS}"
 
 if [ "$SIN_UBICAR" != "0" ]; then
     echo
