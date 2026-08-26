@@ -32,11 +32,51 @@ command -v kubectl >/dev/null 2>&1 || { echo "Falta kubectl." >&2; exit 1; }
 command -v systemctl >/dev/null 2>&1 || { echo "Falta systemctl -esto asume k3s como servicio de systemd." >&2; exit 1; }
 
 CONFIG=/etc/rancher/k3s/config.yaml
-CPU_RESERVADA=1
-MEMORIA_RESERVADA=1Gi
+
+# El TOTAL que se le quita al nodo: ~1 CPU y ~1 GB, los numeros de la tabla de INF-01
+# §2. El kubelet resta `system-reserved` Y `kube-reserved` por separado
+# (allocatable = capacity - system-reserved - kube-reserved - eviction), asi que el
+# total se REPARTE entre los dos; no se pone entero en cada uno.
+#
+# ⚠ Esto es un arreglo, y costo cuatro despliegues colgados (issue #252). Hasta el
+# 2026-08-26 este guion ponia 1 CPU y 1 Gi en CADA bucket, o sea el DOBLE de lo que su
+# propia cabecera y la tabla dicen reservar. En el nodo de 8 CPU que la tabla dimensiona
+# eso son 2 de 8 —notable pero soportable—; en el de 4 que tiene `prod` de verdad es LA
+# MITAD DE LA MAQUINA, y dejo al stack sin poder ubicarse: 2 CPU asignables contra 2 040m
+# que piden sus Deployment. Quedo medido en el registro de abajo el 2026-08-23 —«2 CPU y
+# 2 Gi menos»— sin que nadie notara que era el doble de lo previsto.
+CPU_RESERVADA_TOTAL_MILI=1000
+MEMORIA_RESERVADA_TOTAL_MI=1024
+
+CPU_RESERVADA="$(( CPU_RESERVADA_TOTAL_MILI / 2 ))m"
+MEMORIA_RESERVADA="$(( MEMORIA_RESERVADA_TOTAL_MI / 2 ))Mi"
+
+# La reserva se dimensiono para el nodo de 8 CPU / 16 GB de la tabla de INF-01 §2. Un
+# nodo mas pequeño la recibe igual, y la misma cifra pasa de ser el 12 % de la maquina a
+# ser una mordida que no deja sitio al stack -que es como `prod` acabo sin poder
+# desplegarse-. Un tercio es el limite: por encima de eso, lo que hay que revisar no es
+# el guion, es si ese nodo da para lo que se le quiere poner encima.
+CAPACIDAD_CPU_MILI="$(kubectl get nodes -o jsonpath='{.items[0].status.capacity.cpu}' | \
+    awk '{ printf "%d", ($0 ~ /m$/) ? substr($0, 1, length($0)-1) : $0 * 1000 }')"
+
+if [ -n "$CAPACIDAD_CPU_MILI" ] \
+   && [ "$(( CPU_RESERVADA_TOTAL_MILI * 3 ))" -gt "$CAPACIDAD_CPU_MILI" ]; then
+    echo >&2
+    echo "FALLO: reservar ${CPU_RESERVADA_TOTAL_MILI}m sobre un nodo de ${CAPACIDAD_CPU_MILI}m" >&2
+    echo "es mas de un tercio de su CPU. La reserva de INF-01 §2 se dimensiono para un nodo" >&2
+    echo "de 8 CPU; aplicarla tal cual a uno bastante menor deja al stack sin sitio, que es" >&2
+    echo "exactamente lo que colgo \`aplicar-prod\` cuatro veces (issue #252)." >&2
+    echo >&2
+    echo "Comprobar antes que hay para las dos cosas:  cd infra && yarn capacidad --ambiente <amb>" >&2
+    exit 1
+fi
 
 cat <<AVISO
 ⚠  Esto va a reiniciar k3s. El API server queda inalcanzable unos segundos.
+
+   Reserva: ${CPU_RESERVADA} + ${CPU_RESERVADA} de CPU y ${MEMORIA_RESERVADA} + ${MEMORIA_RESERVADA}
+   de memoria (system-reserved y kube-reserved), o sea ${CPU_RESERVADA_TOTAL_MILI}m y
+   ${MEMORIA_RESERVADA_TOTAL_MI}Mi EN TOTAL sobre un nodo de ${CAPACIDAD_CPU_MILI}m.
 
    Si hay un "pulumi up" o "pulumi preview" en marcha en cualquier terminal ahora
    mismo, DETENGALO antes de continuar -va a fallar a mitad de camino, y un

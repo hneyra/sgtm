@@ -118,30 +118,8 @@ describe("lo que pide el stack", () => {
 
 describe("cada ambiente cabe en el nodo que declara", () => {
   for (const ambiente of ENVIRONMENTS) {
-    const brecha = invariantesDe(ambiente).node.capacityGapIssue;
-
-    if (brecha === undefined) {
-      it(`«${ambiente}» cabe`, () => {
-        expect(auditarCapacidad(manifiestosDe(ambiente), nodoDe(ambiente))).toEqual([]);
-      });
-      continue;
-    }
-
-    /**
-     * El otro lado de `nodeCapacityGapIssue`, y lo que impide que sea un interruptor
-     * para silenciar la comprobacion: un ambiente que declara la brecha tiene que
-     * **seguir sin caber**. El dia que el nodo crezca —o que la demanda baje— esto se
-     * pone rojo y obliga a retirar la marca del stack, en vez de dejarla puesta
-     * tapando lo siguiente que no quepa.
-     */
-    it(`«${ambiente}» declara la brecha del issue #${brecha}, y la brecha sigue ahi`, () => {
-      const problemas = auditarCapacidad(manifiestosDe(ambiente), nodoDe(ambiente));
-      expect(
-        problemas,
-        `«${ambiente}» ya cabe en su nodo: retira \`nodeCapacityGapIssue\` de ` +
-          `Pulumi.${ambiente}.yaml y cierra el issue #${brecha}.`,
-      ).not.toEqual([]);
-      expect(brecha).toMatch(/^\d+$/);
+    it(`«${ambiente}»`, () => {
+      expect(auditarCapacidad(manifiestosDe(ambiente), nodoDe(ambiente))).toEqual([]);
     });
   }
 });
@@ -152,25 +130,38 @@ describe("y se demuestra que puede fallar", () => {
    * aplicada y `webReplicas: 2`: 2 CPU asignables. Es la configuracion exacta que
    * colgo `aplicar-prod` cuatro veces, y aqui tiene que ponerse roja.
    */
-  it("con los 2 CPU asignables que la reserva de #157 dejo en prod, NO cabe", () => {
+  /**
+   * El defecto del issue #252, encerrado en una prueba.
+   *
+   * `reservar-recursos-del-nodo.sh` ponia 1 CPU y 1 Gi en `system-reserved` **y otro
+   * tanto** en `kube-reserved`, y el kubelet resta los dos: 2 CPU y 2 Gi, el DOBLE de
+   * lo que la tabla de INF-01 §2 —y la propia cabecera del guion— dicen reservar. En el
+   * nodo de 8 CPU que la tabla dimensiona eso pasa desapercibido; en el de 4 que tiene
+   * `prod` es la mitad de la maquina.
+   *
+   * Las dos mitades de esta prueba son las dos cifras medidas del mismo nodo, con la
+   * reserva mal y bien. Si alguien devuelve el guion a poner el total en cada bucket, la
+   * primera sigue en verde —describe el pasado— y la de arriba, «cada ambiente cabe en
+   * el nodo que declara», se pone roja en cuanto se actualicen los valores del stack.
+   */
+  it("con la reserva DUPLICADA (2 CPU asignables), prod no cabia", () => {
     const problemas = auditarCapacidad(manifiestosDe("prod"), {
       cpuAsignable: "2",
       memoriaAsignable: "6029348Ki",
     });
-    expect(problemas.length).toBeGreaterThan(0);
     expect(problemas.join("\n")).toMatch(/no cabe en el nodo por CPU/);
     // El mensaje tiene que decir CUANTO falta: «no cabe» sin la cifra no dice si el
     // arreglo es una replica menos o un nodo entero mas.
     expect(problemas.join("\n")).toMatch(/Faltan \d+m/);
   });
 
-  it("lo PERMANENTE de prod ya no cabe: no es solo el pico de los Jobs", () => {
-    // La distincion importa para no arreglar lo que no es. Bajar los `requests` de los
-    // Jobs de arranque (2026-08-26) quito 1 500m del pico, y aun asi `prod` no cabe:
-    // los `Deployment` por si solos piden mas CPU de la que el nodo reparte. Si esto
-    // pasara en verde, alguien podria creer que tocando los Jobs basta.
-    const soloDeployments = demandaDelStack(manifiestosDe("prod")).permanente;
-    expect(soloDeployments.cpuEnMili).toBeGreaterThan(2000 - 200);
+  it("y con la reserva corregida (3 CPU asignables), el MISMO nodo si da", () => {
+    // Mismo VPS, mismo stack: lo unico que cambia es que la reserva deja de llevarse el
+    // doble de lo previsto. Es lo que demuestra que el problema nunca fue el tamano del
+    // nodo -8 GB bastan- sino cuanto se le estaba quitando.
+    expect(
+      auditarCapacidad(manifiestosDe("prod"), { cpuAsignable: "3", memoriaAsignable: "6912Mi" }),
+    ).toEqual([]);
   });
 
   it("con 4 GB —el nodo que el issue #158 ya probo insuficiente—, NO cabe por memoria", () => {

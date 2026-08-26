@@ -95,8 +95,15 @@ FALLO=0
 if [ "$(a_mili "$DICHO_CPU")" -gt "$(a_mili "$REAL_CPU")" ]; then
     echo "::error::«${AMBIENTE}» declara MAS CPU asignable de la que el nodo tiene:" \
          "$(a_mili "$DICHO_CPU")m declarados contra $(a_mili "$REAL_CPU")m reales." \
-         "capacidad.ts esta autorizando un despliegue que no cabe. Corregir" \
-         "nodeAllocatableCpu en Pulumi.${AMBIENTE}.yaml con el valor de arriba."
+         "capacidad.ts esta autorizando un despliegue que no cabe."
+    echo "::notice::La causa mas probable es la reserva del kubelet. Si este nodo todavia" \
+         "tiene la reserva DUPLICADA que corrigio el issue #252 —el total entero en" \
+         "system-reserved Y en kube-reserved, o sea el doble de lo que INF-01 §2" \
+         "dimensiona—, hay que volver a configurarlo: correr" \
+         "infra/vps/reservar-recursos-del-nodo.sh (o, si /etc/rancher/k3s/config.yaml ya" \
+         "define kubelet-arg, editar esas dos lineas a mano) y reiniciar k3s. Si el nodo" \
+         "es el que tiene que ser, entonces lo que sobra es lo declarado: corregir" \
+         "nodeAllocatableCpu en Pulumi.${AMBIENTE}.yaml con el valor real de arriba."
     FALLO=1
 fi
 if [ "$(a_mi "$DICHO_MEM")" -gt "$(a_mi "$REAL_MEM")" ]; then

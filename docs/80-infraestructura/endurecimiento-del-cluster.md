@@ -170,11 +170,21 @@ igual de bien y deja lo asignable intacto.
 > se vio. Apareció tres días después, al intentar el primer despliegue completo, con la forma
 > que menos se parece a su causa: `pulumi up` esperando indefinidamente, sin error ni registro.
 >
-> La reserva **no está mal**: protege lo que `INF-01` §2 explica y no se toca. Lo que faltaba
-> era cruzar lo asignable con lo que el stack pide, y eso ahora lo hace
-> [`infra/capacidad.ts`](../../infra/capacidad.ts) en cada PR. La lección para la próxima fila
-> de esta tabla: **después de aplicar la reserva, correr `yarn capacidad --ambiente <ambiente>`**
-> — quitarle 2 CPU a un nodo es cambiar lo que cabe en él, y eso hay que volver a comprobarlo.
+> **Y la reserva estaba mal: se llevaba el doble de lo que dice reservar.** El guion ponía el
+> total de `INF-01` §2 —~1 CPU, ~1 GB— en `system-reserved` **y otro tanto** en `kube-reserved`,
+> y el kubelet resta los dos. La fila de arriba lo midió y lo escribió —«2 CPU y 2 Gi menos»—
+> y aun así pasó por correcto, porque coincidía con lo que el guion hacía; nadie lo comparó con
+> lo que el guion *decía* hacer.
+>
+> Corregido el 2026-08-26 (reparto de 500m y 512Mi en cada bucket), el mismo nodo reparte 3 CPU
+> y 6,75 Gi, y el stack de `prod` entra con holgura. **El VPS de 8 GB siempre dio de sí**; lo
+> que no daba era lo que quedaba después de la reserva.
+>
+> Dos cosas quedan puestas para que no vuelva: el guion **se niega** si el total a reservar pasa
+> de un tercio de la CPU del nodo, y [`infra/capacidad.ts`](../../infra/capacidad.ts) cruza lo
+> asignable con lo que el stack pide en cada PR. La lección para la próxima fila de esta tabla:
+> **después de aplicar la reserva, correr `yarn capacidad --ambiente <ambiente>`** — cambiar lo
+> que el nodo reparte es cambiar lo que cabe en él.
 
 ## 5. Escaneo de vulnerabilidades de imágenes
 

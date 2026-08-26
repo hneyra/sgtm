@@ -165,24 +165,41 @@ más—, y dice explícitamente lo que la estimación por sí sola no podía: po
 clúster ni siquiera termina de programar sus propios pods, mucho antes de que nadie note falta de
 rendimiento.
 
-**Y el nodo de `prod` está hoy por debajo de ese piso (2026-08-26, issue #252).** `vmd120205` es
-un 4 CPU / 8 GB, la mitad de lo que esta tabla dimensiona, y con la reserva de §4 aplicada le
-quedan **2 CPU y 5,75 Gi asignables** — medido, no estimado: es el registro de la ejecución de
-`reservar-recursos-del-nodo.sh` del 2026-08-23. El stack de `prod` pide 2 040m solo en sus
-`Deployment`, así que **no cabe ni en reposo**, y eso es la razón de que `prod` no se haya
-desplegado entero ni una vez.
+**La reserva se llevaba el doble de lo que esta tabla dice, y eso colgó cuatro despliegues
+(2026-08-26, issue #252).** `reservar-recursos-del-nodo.sh` ponía ~1 CPU y ~1 GB —los números de
+la fila de arriba— en `system-reserved` **y otro tanto** en `kube-reserved`, y el kubelet resta
+los dos: **2 CPU y 2 GiB**. Sobre el nodo de 8 CPU que esta tabla dimensiona eso son 2 de 8,
+notable pero soportable; sobre el 4 CPU / 8 GB que `prod` tiene de verdad es **la mitad de la
+máquina**, y dejaba solo 2 CPU asignables contra los 2 040m que piden sus `Deployment`.
 
-Lo que ese descubrimiento costó es la parte que conviene no repetir: un pod que el planificador no
-puede ubicar no falla, se queda `Pending`; y el `ConfigGroup` de Pulumi lo espera sin error, sin
-registro y sin fin. `aplicar-prod` se colgó así cuatro veces, una de ellas casi seis horas, hasta
-que la plataforma mató el runner. **El síntoma no se parecía en nada a la causa**, y `stg` seguía
+Quedó **medido** en el registro de ejecución de [`INF-02` §4](endurecimiento-del-cluster.md) el
+2026-08-23 —«2 CPU y 2 Gi menos»— sin que nadie notara que era el doble de lo previsto, porque
+entonces el nodo tenía poco encima y nada falló. Apareció tres días después, al intentar el primer
+despliegue completo.
+
+Lo que costó descubrirlo es la parte que conviene no repetir: un pod que el planificador no puede
+ubicar no falla, se queda `Pending`; y el `ConfigGroup` de Pulumi lo espera sin error, sin registro
+y sin fin. `aplicar-prod` se colgó así cuatro veces, una de ellas casi seis horas, hasta que la
+plataforma mató el runner. **El síntoma no se parecía en nada a la causa**, y `stg` seguía
 desplegando en veinte segundos — porque pide menos y porque la reserva nunca se le aplicó.
+
+Corregida la reserva al total que esta tabla dimensiona —repartido entre los dos buckets, 500m y
+512Mi cada uno—, el mismo VPS reparte **3 CPU y 6,75 Gi**, y el stack de `prod` entra con holgura:
+2 040m/5 280Mi en reposo y 2 560m/6 368Mi en el pico del arranque. **8 GB bastan**; lo que no
+bastaba era lo que quedaba después de la reserva.
 
 De ahí sale [`infra/capacidad.ts`](../../infra/capacidad.ts): la capacidad del nodo es un dato y
 lo que el stack pide se puede sumar, así que la comparación es aritmética y cuesta milisegundos.
 Corre en `yarn verificar` y en `index.ts` antes de crear nada, y convierte ese colgado en un
 fallo inmediato que dice cuántos milicores faltan. `yarn capacidad --ambiente prod` lo responde
-sin desplegar.
+sin desplegar, y `--cpu`/`--memoria` responden «¿y si el nodo fuera otro?».
+
+> **Los `limits` siguen dimensionados para el nodo de 16 GB de esta tabla, y el nodo real tiene
+> 7,75 GiB.** Suman 15,25 Gi, y `postgres` solo ya declara un límite de 8 GiB que **su nodo no
+> puede darle**. No es lo que colgaba el despliegue —el planificador suma `requests`, nunca
+> `limits`— pero un límite inalcanzable no protege de nada: quien corta cuando la memoria se
+> acaba deja de ser el límite del contenedor y pasa a ser el OOM killer del nodo. Ajustarlos al
+> nodo que hay es trabajo pendiente, y no de este issue.
 
 ## 3. Red
 

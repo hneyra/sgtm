@@ -1,5 +1,4 @@
 import * as k8s from "@pulumi/kubernetes";
-import * as pulumi from "@pulumi/pulumi";
 import { auditarManifiestos, describirAuditoria } from "./auditoria";
 import { auditarCapacidad, describirCapacidad } from "./capacidad";
 import { construirManifiestos } from "./componentes";
@@ -85,32 +84,13 @@ if (problemas.length > 0) {
  * CPU no lo está nunca. Sin esta guarda, `aplicar-prod` consume el runner hasta que la
  * plataforma lo mata a las seis horas —cuatro veces seguidas el 2026-08-25— y lo único
  * que se ve en Actions es «el trabajo sigue corriendo».
- *
- * **Con la brecha declarada, avisa en vez de lanzar**, y la diferencia importa: lanzar
- * aquí rompe también `pulumi preview`, que corre en CADA PR. Un ambiente cuyo nodo se
- * sabe pequeño dejaría entonces rojo todo PR del repositorio por algo que nadie puede
- * arreglar dentro de un PR —el aviso que `infra.yml` lleva escrito desde su cabecera:
- * «un rojo permanente por algo que nadie en el PR puede arreglar enseña a ignorar el
- * flujo»—. Lo que no puede pasar es que `pulumi up` avance: eso lo impide el paso «El
- * stack cabe en su nodo» de `aplicar-stg`/`aplicar-prod`, antes de invocar a Pulumi.
- *
- * Y la marca no se puede quedar puesta de más: `capacidad.test.ts` exige que un
- * ambiente que la declara **siga sin caber**.
  */
 const noCabe = auditarCapacidad(manifiestos, {
   cpuAsignable: settings.node.allocatableCpu,
   memoriaAsignable: settings.node.allocatableMemory,
 });
 if (noCabe.length > 0) {
-  const informe = describirCapacidad(env, noCabe);
-  if (settings.node.capacityGapIssue === undefined) {
-    throw new Error(informe);
-  }
-  pulumi.log.warn(
-    `BRECHA DECLARADA (issue #${settings.node.capacityGapIssue}): este stack NO se puede ` +
-      `desplegar sobre el nodo que declara. \`pulumi up\` se detiene antes de empezar; ` +
-      `este \`preview\` sigue para que el PR se pueda revisar.\n\n${informe}`,
-  );
+  throw new Error(describirCapacidad(env, noCabe));
 }
 
 /**

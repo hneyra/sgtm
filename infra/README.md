@@ -117,8 +117,8 @@ Se comprueba en tres sitios, y cada uno hace algo distinto:
 
 | Dónde | Qué hace |
 |---|---|
-| `yarn verificar` | Rojo si un ambiente **sin** `nodeCapacityGapIssue` no cabe |
-| `index.ts` | Lanza si no cabe; **avisa** si la brecha está declarada — reventar aquí rompería `pulumi preview`, que corre en cada PR |
+| `yarn verificar` | Rojo si un ambiente no cabe en el nodo que declara |
+| `index.ts` | Lanza si no cabe, antes de crear ningún recurso |
 | `aplicar-stg`/`aplicar-prod` | **Detiene el despliegue** antes de invocar a Pulumi. Es el bloqueo duro |
 
 ```bash
@@ -127,8 +127,12 @@ yarn capacidad --ambiente prod --cpu 8 --memoria 16Gi   # ¿y si el nodo fuera o
 ```
 
 **Los dos valores del nodo son lo *asignable*, no la capacidad.** La reserva del kubelet
-(`vps/reservar-recursos-del-nodo.sh`, #157) se lleva 2 CPU y 2 Gi, y confundir las dos
-cifras es exactamente lo que dejó a `prod` sin poder ubicar su propio stack. Se miden:
+(`vps/reservar-recursos-del-nodo.sh`, #157) se lleva ~1 CPU y ~1 Gi, y confundir las dos
+cifras es la mitad de lo que dejó a `prod` sin poder ubicar su propio stack. La otra
+mitad fue que esa reserva **se aplicaba por duplicado** —el total entero en
+`system-reserved` y otro tanto en `kube-reserved`—, lo que se llevaba 2 CPU de las 4 del
+nodo. Corregido en #252; el guion ahora se niega si el total pasa de un tercio del nodo.
+Se miden:
 
 ```bash
 kubectl get node -o jsonpath='{.items[0].status.allocatable.cpu}{"/"}{.items[0].status.allocatable.memory}'

@@ -242,27 +242,6 @@ export interface NodeSettings {
   allocatableCpu: string;
   /** Memoria asignable del nodo. Se admite `Ki`, que es lo que devuelve `kubectl`. */
   allocatableMemory: string;
-  /**
-   * El issue que sigue una brecha **conocida y aceptada** entre el nodo y el stack.
-   *
-   * Existe por una razón concreta y estrecha: `verificar` es `needs:` de todos los demás
-   * trabajos de `infra.yml`, incluido `aplicar-stg`. Sin esta declaración, un nodo de
-   * `prod` que se queda corto pone rojo `yarn verificar` y **deja de desplegarse `stg`**,
-   * que no tiene culpa de nada. Un ambiente no puede secuestrar al otro.
-   *
-   * Lo que **no** es: un interruptor para silenciar la comprobación. El despliegue de
-   * ese ambiente sigue sin poder ocurrir — lo detiene el paso «El stack cabe en su
-   * nodo» de `aplicar-stg`/`aplicar-prod`, **antes** de invocar a Pulumi, en segundos y
-   * diciendo cuánto falta. Lo único que la marca cambia es que `index.ts` avise en vez
-   * de lanzar, y eso es para no romper `pulumi preview`, que corre en cada PR.
-   *
-   * Y no se queda puesta cuando deja de ser cierta: `capacidad.test.ts` exige que un
-   * ambiente que la declara **siga sin caber**, así que el día que el nodo crezca la
-   * prueba se pone roja y obliga a retirarla. Tampoco puede tapar una brecha nueva: un
-   * ambiente sin marca que no quepa pone rojo `yarn verificar` y hace lanzar a
-   * `index.ts`.
-   */
-  capacityGapIssue?: string;
 }
 
 export interface Invariants {
@@ -361,9 +340,6 @@ export function readInvariants(environment: Environment, reader: ConfigReader): 
         "nodeAllocatableMemory",
         "la memoria ASIGNABLE del nodo, medida con kubectl; no su capacidad (INF-01 §2)",
       ),
-      ...(reader.text("nodeCapacityGapIssue") === undefined
-        ? {}
-        : { capacityGapIssue: reader.text("nodeCapacityGapIssue") }),
     },
     ingress: {
       domain: requireText(reader, "domain", "el nombre público por el que llega el navegador"),
