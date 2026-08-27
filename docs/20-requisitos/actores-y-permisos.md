@@ -52,7 +52,8 @@ instalación crea los suyos; estos son la plantilla inicial.
 
 | Grupo | Alcance típico |
 |---|---|
-| **Administrador del sistema** | El catálogo completo, los siete privilegios: administra la municipalidad entera. Único que configura permisos. La implantación crea con este alcance al primer administrador (`ImplantarMunicipalidad`); las reglas de separación de funciones (§4) siguen verificándose en el servidor al margen de los permisos |
+| **Administrador del sistema** | El catálogo completo, los siete privilegios: administra la municipalidad entera (como el superadministrador de un ERP). La implantación (`ImplantarMunicipalidad`) crea con este alcance al primer administrador; las reglas de separación de funciones (§4) siguen verificándose en el servidor al margen de los permisos |
+| **Seguridad** | Solo el módulo de seguridad: administra el acceso de los usuarios —grupos, usuarios, permisos, miembros— sin tocar el resto. Es el alcance que tuvo «Administrador del sistema» antes de recibir el catálogo completo. La implantación lo crea **sin miembros**, como plantilla |
 | **Jefe de Rentas** | Todo el módulo de rentas, valores y consultas. Autoriza altas y bajas de deuda |
 | **Registrador de catastro** | Fichas catastrales, catálogos catastrales. Sin acceso a caja |
 | **Fiscalizador** | Módulo de fiscalización y consultas. No modifica el padrón de rentas directamente: solo por transferencia |
