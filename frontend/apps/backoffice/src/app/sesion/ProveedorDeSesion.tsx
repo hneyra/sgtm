@@ -16,8 +16,8 @@ import {
   configurarRenovacion,
   irAAutenticar,
   leerToken,
-  pedirOperacion,
   renovar,
+  solicitar,
 } from '@sgtm/api-client';
 import type { ConfiguracionDeIdentidad, DatosDelToken } from '@sgtm/api-client';
 import { NINGUNO, SIN_PROVEEDOR, permisosDelClaim } from './permisos';
@@ -137,6 +137,11 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
   // el token —renovacion incluida—, asi un cambio de permisos entra sin re-login.
   // Si la peticion falla, NINGUNO: negacion por omision, no menu completo que
   // falla en cada pulsacion.
+  //
+  // Se llama con `solicitar` y no con `pedirOperacion`: este proveedor esta en
+  // el arranque, y `pedirOperacion` arrastra el mapa de las 136 operaciones al
+  // paquete inicial (se pasaba del presupuesto por 0,1 KB). El contrato lo
+  // sigue guardando la prueba del backend.
   useEffect(() => {
     if (configuracion === null || datos === null) {
       fijarMatriz(NINGUNO);
@@ -145,7 +150,7 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
     let vivo = true;
     void (async () => {
       try {
-        const cuerpo = await pedirOperacion('permisos_de_la_sesion', {});
+        const cuerpo = await solicitar<unknown>('/seguridad/sesion/permisos');
         if (vivo) fijarMatriz(permisosDelClaim(cuerpo));
       } catch {
         if (vivo) fijarMatriz(NINGUNO);

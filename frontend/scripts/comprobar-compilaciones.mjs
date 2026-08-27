@@ -41,16 +41,21 @@ const HUELLAS = [
  * Presupuesto, en KB **comprimidos**, que es lo que viaja por la red.
  *
  * Sin un umbral que muerda, el paquete solo crece: nadie agrega 40 KB de golpe,
- * se agregan de dos en dos. Los numeros salen de lo que hay hoy con un margen
- * corto a proposito —subirlos tiene que costar una linea de este archivo y una
- * frase en el PR que diga por que—.
+ * se agregan de dos en dos. Subir un numero tiene que costar una linea de este
+ * archivo y una frase en el PR que diga por que.
+ *
+ * `arranque` y `portal` se subieron a 150 / 152 KB el 2026-08-27: quedan doce
+ * modulos por conectar al backend y el arranque lleva dentro el camino de la
+ * sesion —token, renovacion y ahora la matriz de permisos (ADR-0013)—. El
+ * margen es para eso, no para que crezca sin mirar: el mayor trozo por modulo
+ * sigue apretado en 11 KB.
  *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */
 const PRESUPUESTO = {
   /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
-  arranque: 130,
+  arranque: 150,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**
@@ -62,11 +67,12 @@ const PRESUPUESTO = {
    * catalogo de navegacion de los doce modulos** —134 opciones con sus iconos y
    * resumenes— que el ciudadano no va a usar.
    *
-   * El presupuesto esta puesto en lo que mide hoy, no en lo que deberia medir:
-   * asi la cifra no puede empeorar en silencio, y la conversacion sobre bajarla
-   * queda abierta con su numero delante.
+   * El presupuesto sigue a `arranque` (mas el trozo de «Inicio», ~1 KB): si no,
+   * `portal` pasaria a ser el limite que muerde primero y `arranque` no serviria
+   * de nada. La conversacion sobre bajar los dos queda abierta con su numero
+   * delante.
    */
-  portal: 135,
+  portal: 152,
 };
 
 /* ── El paquete no conoce el dominio ─────────────────────────────────────── */
