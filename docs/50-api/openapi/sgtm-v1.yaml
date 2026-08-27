@@ -194,6 +194,27 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/urbana":
+    post:
+      operationId: registrar_ficha_urbana
+      summary: "Alta de ficha urbana individual"
+      description: "Inscribe la primera versión de la ficha urbana individual (RF-001) de un predio, y da de alta el predio en el mismo acto si todavía no existe. El cuerpo lleva el código de referencia catastral, la ubicación del predio, los datos de la ficha —áreas y categorías, ningún importe—, su titularidad inicial si ya se conoce, y la observación del usuario, obligatoria (RNF-052). Si el predio ya tiene ficha de ese tipo, es 409: lo que toca entonces es actualizarla."
+      tags: ["Catastro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/catastro/fichas/economica/{codRefCatastral}":
     get:
       operationId: ficha_economica
@@ -234,6 +255,27 @@ paths:
           schema: { type: string }
       responses:
         200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/economica":
+    post:
+      operationId: registrar_ficha_economica
+      summary: "Alta de ficha económica"
+      description: "Inscribe la primera versión de la ficha económica (RF-002) de un predio, y da de alta el predio en el mismo acto si todavía no existe. El cuerpo lleva el código de referencia catastral, la ubicación del predio, los datos de la ficha —áreas y categorías, ningún importe—, su titularidad inicial si ya se conoce, y la observación del usuario, obligatoria (RNF-052). Si el predio ya tiene ficha de ese tipo, es 409: lo que toca entonces es actualizarla."
+      tags: ["Catastro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
           description: Operacion realizada
           content:
             application/json:
@@ -303,6 +345,27 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/bienes-comunes":
+    post:
+      operationId: registrar_ficha_bienes
+      summary: "Alta de ficha de bienes comunes"
+      description: "Inscribe la primera versión de la ficha de bienes comunes (RF-003) de un predio, y da de alta el predio en el mismo acto si todavía no existe. El cuerpo lleva el código de referencia catastral, la ubicación del predio, los datos de la ficha —áreas y categorías, ningún importe—, su titularidad inicial si ya se conoce, y la observación del usuario, obligatoria (RNF-052). Si el predio ya tiene ficha de ese tipo, es 409: lo que toca entonces es actualizarla."
+      tags: ["Catastro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/catastro/fichas/rural/{codUnidad}":
     get:
       operationId: ficha_rural
@@ -343,6 +406,27 @@ paths:
           schema: { type: string }
       responses:
         200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/rural":
+    post:
+      operationId: registrar_ficha_rural
+      summary: "Alta de ficha rural"
+      description: "Inscribe la primera versión de la ficha rural (RF-004) de un predio, y da de alta el predio en el mismo acto si todavía no existe. El cuerpo lleva el código de referencia catastral, la ubicación del predio, los datos de la ficha —áreas y categorías, ningún importe—, su titularidad inicial si ya se conoce, y la observación del usuario, obligatoria (RNF-052). Si el predio ya tiene ficha de ese tipo, es 409: lo que toca entonces es actualizarla."
+      tags: ["Catastro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
           description: Operacion realizada
           content:
             application/json:
@@ -446,6 +530,84 @@ paths:
           in: query
           required: false
           description: "Filtro «Tipo de actualización» de la pantalla"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/economica/{codRefCatastral}/actualizacion":
+    put:
+      operationId: actualizar_ficha_economica
+      summary: "Actualización de la ficha económica"
+      description: "Crea la versión siguiente de la ficha económica y cierra la anterior, que queda entera. Lo que el cuerpo no manda, no cambia: una lista ausente copia la de la versión vigente y una lista presente aunque vacía la reemplaza."
+      tags: ["Catastro"]
+      parameters:
+        - name: codRefCatastral
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/bienes-comunes/{codEdificacion}/actualizacion":
+    put:
+      operationId: actualizar_ficha_bienes
+      summary: "Actualización de la ficha de bienes comunes"
+      description: "Crea la versión siguiente de la ficha de bienes comunes y cierra la anterior. Las áreas comunes y su reparto se copian si el cuerpo no los declara; declararlos los reemplaza."
+      tags: ["Catastro"]
+      parameters:
+        - name: codEdificacion
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/rural/{codUnidad}/actualizacion":
+    put:
+      operationId: actualizar_ficha_rural
+      summary: "Actualización de la ficha rural"
+      description: "Crea la versión siguiente de la ficha rural y cierra la anterior. Los grupos de tierra van en hectáreas —el arancel rural se publica por hectárea— y se copian si el cuerpo no los declara."
+      tags: ["Catastro"]
+      parameters:
+        - name: codUnidad
+          in: path
+          required: true
           schema: { type: string }
       requestBody:
         required: true

@@ -14,7 +14,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -34,6 +37,7 @@ import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.catastro.dominio.ActividadEconomica;
 import pe.gob.sgtm.catastro.dominio.BienComun;
 import pe.gob.sgtm.catastro.dominio.Colindante;
+import pe.gob.sgtm.catastro.dominio.CondicionDeTitularidad;
 import pe.gob.sgtm.catastro.dominio.DetalleDeBienesComunes;
 import pe.gob.sgtm.catastro.dominio.DetalleEconomico;
 import pe.gob.sgtm.catastro.dominio.DetalleRural;
@@ -43,9 +47,17 @@ import pe.gob.sgtm.catastro.dominio.ParticipacionComun;
 import pe.gob.sgtm.catastro.dominio.Riego;
 import pe.gob.sgtm.catastro.dominio.TierraRural;
 import pe.gob.sgtm.catastro.dominio.TipoFicha;
+import pe.gob.sgtm.catastro.dominio.Via;
+import pe.gob.sgtm.catastro.dominio.ViaRepository;
+import pe.gob.sgtm.catastro.infraestructura.CatastroRepositoryJdbc;
 import pe.gob.sgtm.catastro.infraestructura.FichaCatastralRepositoryJdbc;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
+import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.dominio.AreaM2;
+import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.Porcentaje;
@@ -75,16 +87,19 @@ class FichasDeTodoTipoTest {
 
     private static BaseDeDatosDePrueba base;
     private static long municipalidad;
+    private static long contribuyente;
 
     private static TransactionTemplate transaccion;
     private static FichaCatastralRepositoryJdbc repositorio;
     private static ActualizarFichaCatastral fichas;
+    private static InscribirFicha inscribir;
     private static JdbcClient jdbc;
 
     @BeforeAll
     static void provisionar() throws SQLException, IOException {
         base = BaseDeDatosDePrueba.provisionar();
         municipalidad = crearMunicipalidad("250101", "Municipalidad de los cuatro tipos");
+        contribuyente = crearContribuyente("CT-0001", "PEREZ GARCIA, JUAN");
 
         DriverManagerDataSource pool = new DriverManagerDataSource();
         pool.setUrl(base.url());
@@ -99,6 +114,17 @@ class FichasDeTodoTipoTest {
                 envolver(
                         new ActualizarFichaCatastral(
                                 repositorio, new AuditoriaJdbc(jdbc, RELOJ), RELOJ),
+                        gestor);
+
+        CatastroRepositoryJdbc catastro = new CatastroRepositoryJdbc(jdbc);
+        RegistrarPredio predios =
+                envolver(
+                        new RegistrarPredio(catastro, new AuditoriaJdbc(jdbc, RELOJ), RELOJ),
+                        gestor);
+        inscribir =
+                envolver(
+                        new InscribirFicha(
+                                catastro, new SinVias(), new PadronDePrueba(), predios, fichas),
                         gestor);
     }
 
@@ -579,7 +605,380 @@ class FichasDeTodoTipoTest {
         }
     }
 
+    @Nested
+    @DisplayName("La inscripcion: el predio nace con su primera ficha (#290)")
+    class Inscripcion {
+
+        @Test
+        @DisplayName("predio, ficha y titularidad quedan escritos, con la MISMA observacion")
+        void elActoEnteroQuedaEscrito() throws SQLException {
+            FichaCatastral ficha =
+                    inscribir.inscribir(
+                            predioNuevo("25010100100100101010501", "AV. INSCRITA 100"),
+                            fichaUrbana(),
+                            new InscribirFicha.DatosDelTitular(
+                                    "CT-0001",
+                                    CondicionDeTitularidad.PROPIETARIO_UNICO,
+                                    null,
+                                    "Partida registral 11223344"),
+                            Observacion.de("Inscripcion del predio por levantamiento catastral"));
+
+            assertThat(ficha.id()).isNotNull();
+            assertThat(ficha.version()).isEqualTo(1);
+
+            long predioId = ficha.predioId();
+            assertThat(contarEn("predio", "id = " + predioId)).isEqualTo(1);
+            assertThat(contarEn("titularidad", "predio_id = " + predioId)).isEqualTo(1);
+
+            // Por ->>'campo' y no por subcadena: jsonb renormaliza lo que se le escribe y una
+            // comparacion por texto se rompe por donde no es.
+            assertThat(
+                            unaColumna(
+                                    "SELECT datos_nuevos->>'codigo' FROM auditoria"
+                                            + " WHERE tabla = 'predio' AND clave = '"
+                                            + predioId
+                                            + "'"))
+                    .isEqualTo("25010100100100101010501");
+            assertThat(
+                            unaColumna(
+                                    "SELECT datos_nuevos->>'contribuyenteId' FROM auditoria"
+                                            + " WHERE tabla = 'titularidad' AND observacion LIKE"
+                                            + " 'Inscripcion del predio%'"))
+                    .isEqualTo(String.valueOf(contribuyente));
+
+            assertThat(
+                            contarEn(
+                                    "auditoria",
+                                    "observacion = 'Inscripcion del predio por levantamiento"
+                                            + " catastral'"))
+                    .as("es un acto, no tres: las tres filas llevan la observacion del usuario")
+                    .isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("si el titular no existe, NO queda ni el predio ni la ficha ni la auditoria")
+        void siElTitularNoExisteNoQuedaNada() throws SQLException {
+            assertThatThrownBy(
+                            () ->
+                                    inscribir.inscribir(
+                                            predioNuevo(
+                                                    "25010100100100101010511", "AV. DESHECHA 200"),
+                                            fichaUrbana(),
+                                            new InscribirFicha.DatosDelTitular(
+                                                    "NO-EXISTE",
+                                                    CondicionDeTitularidad.PROPIETARIO_UNICO,
+                                                    null,
+                                                    "Partida registral 99999999"),
+                                            Observacion.de("Inscripcion con un titular que no")))
+                    .isInstanceOf(InscribirFicha.ReferenciaInexistente.class);
+
+            assertThat(contarEn("predio", "codigo_ref_catastral = '25010100100100101010511'"))
+                    .as(
+                            "el predio se escribio antes que la titularidad; si la transaccion no"
+                                    + " fuera una sola, ese predio se quedaria en el padron sin"
+                                    + " ficha y sin que ninguna pantalla lo muestre")
+                    .isZero();
+            assertThat(contarEn("auditoria", "observacion = 'Inscripcion con un titular que no'"))
+                    .as("no queda constancia de algo que no paso")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("el titular es opcional: el predio se ficha antes de saber de quien es")
+        void elTitularEsOpcional() throws SQLException {
+            FichaCatastral ficha =
+                    inscribir.inscribir(
+                            predioNuevo("25010100100100101010521", "AV. SIN TITULAR 300"),
+                            fichaUrbana(),
+                            null,
+                            Observacion.de("Levantamiento sin titular identificado todavia"));
+
+            assertThat(contarEn("titularidad", "predio_id = " + ficha.predioId())).isZero();
+            assertThat(contarEn("predio", "id = " + ficha.predioId())).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("sobre un predio que ya existe no se crea otro: se abre la otra ficha")
+        void sobreUnPredioExistenteSeAbreLaOtraFicha() throws SQLException {
+            FichaCatastral urbana =
+                    inscribir.inscribir(
+                            predioNuevo("25010100100100101010531", "AV. DOS FICHAS 400"),
+                            fichaUrbana(),
+                            null,
+                            Observacion.de("Alta de la ficha urbana del predio"));
+
+            FichaCatastral economica =
+                    inscribir.inscribir(
+                            predioNuevo("25010100100100101010531", "AV. DOS FICHAS 400"),
+                            new InscribirFicha.DatosDeLaFicha(
+                                    TipoFicha.ECONOMICA,
+                                    new AreaM2(new BigDecimal("200.00")),
+                                    "COMERCIO",
+                                    null,
+                                    ALTA,
+                                    pe.gob.sgtm.catastro.dominio.OrigenDeLaFicha.DECLARACION_JURADA,
+                                    "DJ 531-2026",
+                                    List.of(),
+                                    List.of(),
+                                    DetalleEconomico.de(
+                                            ActividadEconomica.de("Bodega el Sol", "4711"))),
+                            null,
+                            Observacion.de("El mismo predio abre su ficha economica"));
+
+            assertThat(economica.predioId())
+                    .as("un predio tiene una ficha de cada tipo, no un predio por ficha")
+                    .isEqualTo(urbana.predioId());
+            assertThat(contarEn("predio", "codigo_ref_catastral = '25010100100100101010531'"))
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("una segunda ficha del mismo tipo se rechaza: lo que toca es actualizarla")
+        void unaSegundaDelMismoTipoSeRechaza() {
+            inscribir.inscribir(
+                    predioNuevo("25010100100100101010541", "AV. REPETIDA 500"),
+                    fichaUrbana(),
+                    null,
+                    Observacion.de("Alta de la ficha urbana del predio"));
+
+            assertThatThrownBy(
+                            () ->
+                                    inscribir.inscribir(
+                                            predioNuevo(
+                                                    "25010100100100101010541", "AV. REPETIDA 500"),
+                                            fichaUrbana(),
+                                            null,
+                                            Observacion.de("Segunda primera version")))
+                    .isInstanceOf(ActualizarFichaCatastral.YaTieneFicha.class);
+        }
+
+        @Test
+        @DisplayName("el sector y la manzana entran por codigo y se resuelven dentro del acto")
+        void laUbicacionSeResuelvePorCodigo() throws SQLException {
+            long sector = crearSector("SC-500", "Sector de la inscripcion");
+            long manzana = crearManzana(sector, "001");
+
+            FichaCatastral ficha =
+                    inscribir.inscribir(
+                            new InscribirFicha.DatosDelPredio(
+                                    CodigoReferenciaCatastral.de("25010100100100101010551"),
+                                    pe.gob.sgtm.catastro.dominio.TipoPredio.URBANO,
+                                    "AV. UBICADA 600",
+                                    null,
+                                    null,
+                                    "SC-500",
+                                    "001",
+                                    "12",
+                                    null),
+                            fichaUrbana(),
+                            null,
+                            Observacion.de("Alta con la ubicacion territorial completa"));
+
+            assertThat(
+                            unaColumna(
+                                    "SELECT sector_id || '/' || manzana_id FROM predio"
+                                            + " WHERE id = "
+                                            + ficha.predioId()))
+                    .isEqualTo(sector + "/" + manzana);
+        }
+
+        @Test
+        @DisplayName("un sector que no existe deshace el acto entero")
+        void unSectorInexistenteDeshaceElActo() throws SQLException {
+            assertThatThrownBy(
+                            () ->
+                                    inscribir.inscribir(
+                                            new InscribirFicha.DatosDelPredio(
+                                                    CodigoReferenciaCatastral.de(
+                                                            "25010100100100101010561"),
+                                                    pe.gob.sgtm.catastro.dominio.TipoPredio.URBANO,
+                                                    "AV. SIN SECTOR 700",
+                                                    null,
+                                                    null,
+                                                    "SC-NADA",
+                                                    null,
+                                                    null,
+                                                    null),
+                                            fichaUrbana(),
+                                            null,
+                                            Observacion.de("Alta con un sector inexistente")))
+                    .isInstanceOf(InscribirFicha.ReferenciaInexistente.class);
+
+            assertThat(contarEn("predio", "codigo_ref_catastral = '25010100100100101010561'"))
+                    .isZero();
+        }
+
+        private InscribirFicha.DatosDelPredio predioNuevo(String codigo, String direccion) {
+            return new InscribirFicha.DatosDelPredio(
+                    CodigoReferenciaCatastral.de(codigo),
+                    pe.gob.sgtm.catastro.dominio.TipoPredio.URBANO,
+                    direccion,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null);
+        }
+
+        private InscribirFicha.DatosDeLaFicha fichaUrbana() {
+            return new InscribirFicha.DatosDeLaFicha(
+                    TipoFicha.UNICA,
+                    new AreaM2(new BigDecimal("200.00")),
+                    "CASA HABITACION",
+                    null,
+                    ALTA,
+                    pe.gob.sgtm.catastro.dominio.OrigenDeLaFicha.DECLARACION_JURADA,
+                    "DJ 500-2026",
+                    List.of(),
+                    List.of(),
+                    null);
+        }
+    }
+
     // ------------------------------------------------------------------
+
+    /** El catalogo vial no participa en estas pruebas: ningun predio declara su via. */
+    private static final class SinVias implements ViaRepository {
+
+        @Override
+        public Optional<Via> findByCodigo(String codigo) {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<Via> findById(long id) {
+            throw new UnsupportedOperationException("La inscripcion resuelve la via por codigo");
+        }
+
+        @Override
+        public Pagina<Via> findAll(Paginacion paginacion) {
+            throw new UnsupportedOperationException("La inscripcion no lista vias");
+        }
+
+        @Override
+        public Via save(Via via) {
+            throw new UnsupportedOperationException("La inscripcion no crea vias");
+        }
+    }
+
+    /**
+     * El padron, por su API publica.
+     *
+     * <p>Es un doble y no {@code DirectorioJdbc} porque lo que estas pruebas verifican es la
+     * <b>atomicidad del acto</b>, no como se lee el padron; lo que si es real es el identificador
+     * que devuelve, que es el de una fila de {@code contribuyente} sembrada en esta base. Con uno
+     * inventado la clave ajena de {@code titularidad} lo rechazaria, y el rojo no diria nada del
+     * caso que se prueba.
+     */
+    private static final class PadronDePrueba implements DirectorioDeContribuyentes {
+
+        @Override
+        public Optional<ResumenDeContribuyente> porCodigo(String codigo) {
+            return "CT-0001".equals(codigo)
+                    ? Optional.of(
+                            new ResumenDeContribuyente(
+                                    contribuyente, "CT-0001", "PEREZ GARCIA, JUAN", "DNI 12345678"))
+                    : Optional.empty();
+        }
+
+        @Override
+        public List<ResumenDeContribuyente> buscar(String texto, int maximo) {
+            throw new UnsupportedOperationException("La inscripcion no busca en el padron");
+        }
+
+        @Override
+        public Map<Long, ResumenDeContribuyente> porIds(Set<Long> ids) {
+            throw new UnsupportedOperationException("La inscripcion no resuelve nombres");
+        }
+
+        @Override
+        public Optional<String> domicilioFiscalDe(long contribuyenteId, LocalDate fecha) {
+            throw new UnsupportedOperationException("La inscripcion no lee domicilios");
+        }
+    }
+
+    private static long contarEn(String tabla, String condicion) throws SQLException {
+        String valor = unaColumna("SELECT count(*) FROM " + tabla + " WHERE " + condicion);
+        return valor == null ? 0L : Long.parseLong(valor);
+    }
+
+    /** Se consulta como administrador: lo que se comprueba es que la fila este o no este. */
+    private static @Nullable String unaColumna(String consulta) throws SQLException {
+        try (Connection admin = base.conexionAdmin();
+                PreparedStatement sentencia = admin.prepareStatement(consulta);
+                ResultSet fila = sentencia.executeQuery()) {
+            return fila.next() ? fila.getString(1) : null;
+        }
+    }
+
+    private static long crearSector(String codigo, String nombre) throws SQLException {
+        return insertar(
+                "INSERT INTO sector (municipalidad_id, codigo, nombre) VALUES (?, ?, ?)"
+                        + " RETURNING id",
+                codigo,
+                nombre);
+    }
+
+    private static long crearManzana(long sectorId, String codigo) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO manzana (municipalidad_id, sector_id, codigo)"
+                                    + " VALUES (?, ?, ?) RETURNING id")) {
+                sentencia.setLong(1, municipalidad);
+                sentencia.setLong(2, sectorId);
+                sentencia.setString(3, codigo);
+                try (ResultSet resultado = sentencia.executeQuery()) {
+                    resultado.next();
+                    long id = resultado.getLong(1);
+                    app.commit();
+                    return id;
+                }
+            }
+        }
+    }
+
+    private static long crearContribuyente(String codigo, String nombre) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO contribuyente (municipalidad_id, codigo_contribuyente,"
+                                    + " tipo_documento, numero_documento, tipo_persona,"
+                                    + " nombre_razon_social, usuario_registro)"
+                                    + " VALUES (?, ?, 'DNI', '12345678', 'NATURAL', ?,"
+                                    + " 'catastro.tecnico') RETURNING id")) {
+                sentencia.setLong(1, municipalidad);
+                sentencia.setString(2, codigo);
+                sentencia.setString(3, nombre);
+                try (ResultSet resultado = sentencia.executeQuery()) {
+                    resultado.next();
+                    long id = resultado.getLong(1);
+                    app.commit();
+                    return id;
+                }
+            }
+        }
+    }
+
+    private static long insertar(String sql, String primero, String segundo) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia = app.prepareStatement(sql)) {
+                sentencia.setLong(1, municipalidad);
+                sentencia.setString(2, primero);
+                sentencia.setString(3, segundo);
+                try (ResultSet resultado = sentencia.executeQuery()) {
+                    resultado.next();
+                    long id = resultado.getLong(1);
+                    app.commit();
+                    return id;
+                }
+            }
+        }
+    }
 
     private void registrarYVersionar(long predio, TipoFicha tipo, String uso) {
         fichas.registrarPrimera(
