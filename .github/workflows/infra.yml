@@ -289,6 +289,39 @@ jobs:
             echo "::endgroup::"
           done
 
+  capacidad:
+    name: capacidad.ts predice lo que el planificador hace
+    runs-on: ubuntu-latest
+    needs: verificar
+    if: github.event_name != 'schedule'
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: infra/yarn.lock
+
+      - name: Instalar dependencias
+        working-directory: infra
+        run: yarn install --frozen-lockfile
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: capacidad
+
+      # `capacidad.test.ts` comprueba la aritmética; esto comprueba que la aritmética
+      # describe a Kubernetes. Un modelo que se equivoque HACIA ARRIBA —decir «cabe»
+      # cuando no— devuelve el colgado del issue #252 con la guarda en verde, que es
+      # el peor de los estados posibles. Lleva dentro su propia demostración: un pod
+      # que pide más CPU de la que el nodo tiene se queda `Pending` por «Insufficient
+      # cpu», y sin eso el caso principal podría estar pasando por otro motivo.
+      - name: verificar-contra-el-planificador.sh
+        run: infra/verificaciones/capacidad/verificar-contra-el-planificador.sh
+
   secretos:
     name: Los secretos se generan solos, y ninguno se repite
     runs-on: ubuntu-latest
@@ -574,10 +607,12 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          REGISTRY_PULL_TOKEN_VALUE: ${{ secrets.REGISTRY_PULL_TOKEN }}
         run: |
           pulumi config set --secret --stack stg kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack stg backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
           pulumi config set --secret --stack stg backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
+          pulumi config set --secret --stack stg registryPullToken -- "$REGISTRY_PULL_TOKEN_VALUE"
 
       - uses: pulumi/actions@v6
         if: steps.token.outputs.hay == 'si'
@@ -665,10 +700,12 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          REGISTRY_PULL_TOKEN_VALUE: ${{ secrets.REGISTRY_PULL_TOKEN }}
         run: |
           pulumi config set --secret --stack prod kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack prod backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
           pulumi config set --secret --stack prod backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
+          pulumi config set --secret --stack prod registryPullToken -- "$REGISTRY_PULL_TOKEN_VALUE"
 
       - uses: pulumi/actions@v6
         if: steps.token.outputs.hay == 'si'
@@ -685,6 +722,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: verificar
     if: github.event_name == 'push'
+    # Un `pulumi up` sano de stg tarda 15-25 s. Este tope no existe para corridas
+    # lentas: existe para las que NO terminan (issue #252). Un pod que el planificador
+    # no puede ubicar se queda `Pending` para siempre, y el `ConfigGroup` lo espera sin
+    # error ni registro; sin tope, el limite real es el de la plataforma —360 min— y
+    # entretanto el grupo de concurrencia de abajo retiene toda integracion posterior.
+    # Es la misma leccion que `observabilidad-alertas` ya aprendio el 2026-08-23.
+    timeout-minutes: 15
     # stg y prod son DOS VPS con IP distinta. Sin este `environment`, `secrets.VPS_HOST`
     # y compañía resolverían a los secretos de nivel-repositorio —que son los de prod—
     # y este trabajo abriría el túnel al nodo equivocado: `pulumi up --stack stg`
@@ -752,6 +796,42 @@ jobs:
           ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
               -i ~/.ssh/despliegue -f -N -L 6443:localhost:6445 "$VPS_USER@$VPS_HOST"
 
+      # `bootstrap-secretos.sh` habla con el API por `kubectl` suelto, no por el
+      # proveedor de Pulumi: sin esto, `kubectl` no encuentra ningun kubeconfig y cae al
+      # `http://localhost:8080` heredado, que nadie escucha —el tunel de arriba sirve
+      # TLS en 6443—. Es el mismo `secrets.KUBECONFIG` que el paso de abajo le pasa a
+      # Pulumi; aqui se escribe ademas a un archivo para que `kubectl` lo use por su
+      # cuenta (issue: bootstrap-secretos.sh fallaba con "connection refused" en la
+      # primera corrida real de este trabajo, 2026-08-24, PR #236).
+      - name: Escribir el kubeconfig para kubectl (el mismo que usa pulumi up)
+        if: steps.credenciales.outputs.hay == 'si'
+        env:
+          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
+        run: |
+          install -m 700 -d ~/.kube
+          install -m 600 /dev/null ~/.kube/config-ci
+          echo "$KUBECONFIG_VALUE" > ~/.kube/config-ci
+          echo "KUBECONFIG=$HOME/.kube/config-ci" >> "$GITHUB_ENV"
+
+      # `capacidad.ts` decide si el stack cabe comparándolo con lo que
+      # `Pulumi.stg.yaml` DICE del nodo. Aquí se comprueba que ese dato no sea
+      # optimista, contra el nodo real: declarar más de lo que hay deja pasar
+      # exactamente el despliegue que no cabe (issue #252).
+      - name: Lo declarado cabe en el nodo real
+        if: steps.credenciales.outputs.hay == 'si'
+        working-directory: infra
+        run: ./vps/comprobar-lo-asignable.sh --ambiente stg
+
+      # Y el stack cabe en lo declarado. Este es el paso que impide el colgado del
+      # issue #252: `pulumi up` no llega a empezar si los pods no caben, porque si
+      # empieza espera indefinidamente a que queden `Ready` y nunca lo estaran.
+      # `index.ts` solo AVISA cuando la brecha esta declarada -lanzar alli rompe
+      # tambien `pulumi preview`, que corre en cada PR-; el bloqueo duro vive aqui.
+      - name: 'El stack cabe en su nodo (issue #252)'
+        if: steps.credenciales.outputs.hay == 'si'
+        working-directory: infra
+        run: yarn --silent capacidad --ambiente stg --estricto
+
       # ANTES de `pulumi up`: los Deployment y Job que va a crear referencian estos
       # Secret por nombre, y sin ellos los pods se quedan en Pending. Idempotente —
       # correrlo en cada integración no cambia nada una vez que existen— y nunca pasa
@@ -769,10 +849,12 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          REGISTRY_PULL_TOKEN_VALUE: ${{ secrets.REGISTRY_PULL_TOKEN }}
         run: |
           pulumi config set --secret --stack stg kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack stg backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
           pulumi config set --secret --stack stg backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
+          pulumi config set --secret --stack stg registryPullToken -- "$REGISTRY_PULL_TOKEN_VALUE"
 
       - uses: pulumi/actions@v6
         if: steps.credenciales.outputs.hay == 'si'
@@ -782,6 +864,10 @@ jobs:
           work-dir: infra
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      - name: Qué quedó a medias, si algo falló
+        if: failure() && steps.credenciales.outputs.hay == 'si'
+        run: .github/diagnostico-del-namespace.sh sgtm-stg
 
   aplicar-prod:
     name: pulumi up en prod (con aprobación)
@@ -803,6 +889,13 @@ jobs:
     concurrency:
       group: infra-aplicar-prod
       cancel-in-progress: false
+    # Ver el mismo tope en `aplicar-stg`. Aquí es donde se pagó: los días 25 y 26 de
+    # agosto de 2026 este trabajo se quedó colgado en `pulumi up` cuatro veces, una de
+    # ellas casi seis horas, esperando `Deployment` que nunca podrían quedar `Ready`
+    # porque sus pods no cabían en el nodo (issue #252). Con `capacidad.ts` eso ya no
+    # llega a `pulumi up` —falla antes, en segundos—, pero el tope se queda: es la red
+    # que no depende de haber previsto la causa.
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -834,6 +927,31 @@ jobs:
           ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
               -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
 
+      # Ver el mismo paso en aplicar-stg: sin esto, kubectl no tiene kubeconfig y
+      # bootstrap-secretos.sh falla contra localhost:8080.
+      - name: Escribir el kubeconfig para kubectl (el mismo que usa pulumi up)
+        env:
+          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
+        run: |
+          install -m 700 -d ~/.kube
+          install -m 600 /dev/null ~/.kube/config-ci
+          echo "$KUBECONFIG_VALUE" > ~/.kube/config-ci
+          echo "KUBECONFIG=$HOME/.kube/config-ci" >> "$GITHUB_ENV"
+
+      # Ver el mismo paso en `aplicar-stg` (issue #252).
+      - name: Lo declarado cabe en el nodo real
+        working-directory: infra
+        run: ./vps/comprobar-lo-asignable.sh --ambiente prod
+
+      # Y el stack cabe en lo declarado. Este es el paso que impide el colgado del
+      # issue #252: `pulumi up` no llega a empezar si los pods no caben, porque si
+      # empieza espera indefinidamente a que queden `Ready` y nunca lo estaran.
+      # `index.ts` solo AVISA cuando la brecha esta declarada -lanzar alli rompe
+      # tambien `pulumi preview`, que corre en cada PR-; el bloqueo duro vive aqui.
+      - name: 'El stack cabe en su nodo (issue #252)'
+        working-directory: infra
+        run: yarn --silent capacidad --ambiente prod --estricto
+
       - name: Generar los secretos que falten (INF-06)
         working-directory: infra
         run: ./secretos/bootstrap-secretos.sh --ambiente prod
@@ -845,10 +963,12 @@ jobs:
           KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
           BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
           BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          REGISTRY_PULL_TOKEN_VALUE: ${{ secrets.REGISTRY_PULL_TOKEN }}
         run: |
           pulumi config set --secret --stack prod kubeconfig -- "$KUBECONFIG_VALUE"
           pulumi config set --secret --stack prod backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
           pulumi config set --secret --stack prod backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
+          pulumi config set --secret --stack prod registryPullToken -- "$REGISTRY_PULL_TOKEN_VALUE"
 
       - uses: pulumi/actions@v6
         with:
@@ -857,6 +977,10 @@ jobs:
           work-dir: infra
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      - name: Qué quedó a medias, si algo falló
+        if: failure()
+        run: .github/diagnostico-del-namespace.sh sgtm-prod
 
   deteccion-de-deriva:
     name: Detección de deriva en prod
@@ -883,9 +1007,15 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
+          # KUBECONFIG entra en la cuenta desde 2026-08-26. Sin el, el `preview` de
+          # abajo no arrancaba —«Missing required configuration variable
+          # sgtm:kubeconfig»— y este trabajo salia rojo TODAS las noches por falta de
+          # una credencial, no por deriva. Una alarma que suena siempre deja de ser una
+          # alarma: si falta, esto se salta y lo dice, como hacen los demas trabajos.
+          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
         run: |
           if [ -n "$PULUMI_ACCESS_TOKEN" ] && [ -n "$SSH_PRIVATE_KEY" ] \
-             && [ -n "$VPS_USER" ] && [ -n "$VPS_HOST" ]; then
+             && [ -n "$VPS_USER" ] && [ -n "$VPS_HOST" ] && [ -n "$KUBECONFIG_VALUE" ]; then
             echo "hay=si" >> "$GITHUB_OUTPUT"
           else
             echo "hay=no" >> "$GITHUB_OUTPUT"
@@ -911,6 +1041,27 @@ jobs:
         run: |
           curl -fsSL https://get.pulumi.com | sh
           echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
+
+      # El mismo paso que `aplicar-prod`, y por el mismo motivo (ADR-0011 §3): los
+      # secretos de infraestructura NO se versionan, ni siquiera cifrados, asi que cada
+      # corrida los inyecta frescos en la copia efimera del checkout. `preview` los
+      # necesita igual que `up` —`index.ts` lee `kubeconfig` para construir el
+      # proveedor—, y sin ellos esto no llegaba a comparar nada: fallaba antes, en la
+      # lectura de la configuracion.
+      - name: Configurar los secretos de infraestructura del stack (ADR-0011 §3)
+        if: steps.credenciales.outputs.hay == 'si'
+        working-directory: infra
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
+          BACKUP_ACCESS_KEY_ID_VALUE: ${{ secrets.BACKUP_ACCESS_KEY_ID }}
+          BACKUP_SECRET_ACCESS_KEY_VALUE: ${{ secrets.BACKUP_SECRET_ACCESS_KEY }}
+          REGISTRY_PULL_TOKEN_VALUE: ${{ secrets.REGISTRY_PULL_TOKEN }}
+        run: |
+          pulumi config set --secret --stack prod kubeconfig -- "$KUBECONFIG_VALUE"
+          pulumi config set --secret --stack prod backupAccessKeyId -- "$BACKUP_ACCESS_KEY_ID_VALUE"
+          pulumi config set --secret --stack prod backupSecretAccessKey -- "$BACKUP_SECRET_ACCESS_KEY_VALUE"
+          pulumi config set --secret --stack prod registryPullToken -- "$REGISTRY_PULL_TOKEN_VALUE"
 
       # `--expect-no-changes` es la comprobación: sale en rojo si el plan no está vacío,
       # que es exactamente lo que pasa cuando alguien corrió un `kubectl apply` a mano

@@ -10,12 +10,13 @@ import { SIN_DATO } from '../seguridad/listado';
  * Consultas (#72): **ninguna cifra sin su fecha**.
  *
  * Es el modulo que mas usa quien atiende en ventanilla, y donde la regla 9 de
- * CLAUDE.md se ve o no se ve. Cinco de las once ya tienen backend y estan
+ * CLAUDE.md se ve o no se ve. Siete de las once ya tienen backend y estan
  * conectadas —`cuenta_corriente` (#21), `consulta_deuda` (#22, #175),
- * `constancia` (#25, #179), `consulta_vehiculos` (#25, #184) y
- * `consulta_altas_bajas` (#24)—; las otras seis esperan al resto de #25. Lo
- * que **no** espera a nadie es la propiedad que da sentido al modulo, y es lo
- * que se verifica aqui sobre las once a la vez.
+ * `constancia` (#25, #179), `consulta_vehiculos` (#25, #184),
+ * `consulta_altas_bajas` (#24), `consulta_pagos` (#25, #219) y
+ * `consulta_predios` (#25, #222)—; las otras cuatro esperan al resto de #25.
+ * Lo que **no** espera a nadie es la propiedad que da sentido al modulo, y es
+ * lo que se verifica aqui sobre las once a la vez.
  */
 
 /** Las once opciones del modulo, por su ranura. Si el catalogo cambia, cambia esto. */
@@ -124,13 +125,11 @@ describe('el estado de cuenta es el libro, y se ve como tal', () => {
     expect(acciones.some((texto) => /modificar|editar|anular|corregir/i.test(texto))).toBe(false);
   });
 
-  it('las seis restantes siguen sin conectar: esperan el resto de #25', () => {
+  it('las cuatro restantes siguen sin conectar: esperan el resto de #25', () => {
     for (const opcion of [
       'consulta_unificada',
       'consulta_resumen_predial',
       'consulta_deudas_beneficio',
-      'consulta_pagos',
-      'consulta_predios',
       'consulta_valores',
     ]) {
       expect(OPCIONES_CONECTADAS).not.toContain(opcion);
@@ -141,6 +140,8 @@ describe('el estado de cuenta es el libro, y se ve como tal', () => {
       'constancia',
       'consulta_vehiculos',
       'consulta_altas_bajas',
+      'consulta_pagos',
+      'consulta_predios',
     ]) {
       expect(OPCIONES_CONECTADAS).toContain(opcion);
     }
@@ -228,5 +229,50 @@ describe('consulta_altas_bajas lee AsientoResource, la misma forma que cuenta_co
     expect(celdas[2]?.textContent).toBe(SIN_DATO);
     expect(celdas[3]?.textContent).toBe(SIN_DATO);
     expect(celdas[5]?.textContent).toBe(SIN_DATO);
+  });
+});
+
+describe('consulta_pagos lee AsientoResource, la misma forma que consulta_altas_bajas', () => {
+  it('el recibo y el importe salen del asiento, con su fecha', async () => {
+    montarEnRuta('/consultas/consulta-pagos');
+
+    await screen.findByText(/Cifras actualizadas al/);
+    expect(await screen.findByText('0003-0041182')).toBeInTheDocument();
+  });
+
+  it('«Medio» y «Caja» salen vacias: el asiento no las trae todavia', async () => {
+    montarEnRuta('/consultas/consulta-pagos');
+
+    const tabla = await screen.findByRole('table');
+    const fila = (await within(tabla).findByText('0003-0041182')).closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+    // Fecha, Recibo, Concepto, Año, Medio, Caja, Importe S/.
+    expect(celdas[4]?.textContent).toBe(SIN_DATO);
+    expect(celdas[5]?.textContent).toBe(SIN_DATO);
+  });
+});
+
+describe('consulta_predios lee PredioEncontradoResource', () => {
+  it('el codigo, la direccion y la deuda salen del recurso, con su fecha', async () => {
+    montarEnRuta('/consultas/consulta-predios');
+
+    await screen.findByText(/Cifras actualizadas al/);
+    expect(await screen.findByText('02-014-D-14-01')).toBeInTheDocument();
+  });
+
+  it('«Titular», «Uso», «Terreno m²», «Const. m²» y «Autovalúo S/» salen vacias (#25, D-02a)', async () => {
+    montarEnRuta('/consultas/consulta-predios');
+
+    const tabla = await screen.findByRole('table');
+    const fila = (await within(tabla).findByText('02-014-D-14-01')).closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+    // Código predial, Titular, Dirección, Uso, Terreno m², Const. m², Autovalúo S/, Deuda S/.
+    expect(celdas[1]?.textContent).toBe(SIN_DATO);
+    expect(celdas[3]?.textContent).toBe(SIN_DATO);
+    expect(celdas[4]?.textContent).toBe(SIN_DATO);
+    expect(celdas[5]?.textContent).toBe(SIN_DATO);
+    expect(celdas[6]?.textContent).toBe(SIN_DATO);
   });
 });

@@ -1,9 +1,10 @@
 /* Comprueba lo que llega al navegador de una municipalidad, y lo que no.
  *
- * Dos cosas, y las dos hay que medirlas porque las dos se pierden sin avisar:
+ * Tres cosas, y las tres hay que medirlas porque las tres se pierden sin avisar:
  *
  *   1. Que el juego de datos de ejemplo **no llega a produccion**.
  *   2. Que el paquete no pasa de su presupuesto, ni el arranque ni cada modulo.
+ *   3. Que el paquete **no conoce el dominio** donde se sirve.
  *
  * El proxy de datos pesa mas que la aplicacion entera: son las respuestas de
  * las 134 operaciones. Se carga con `import()` y detras de una bandera para que
@@ -40,16 +41,21 @@ const HUELLAS = [
  * Presupuesto, en KB **comprimidos**, que es lo que viaja por la red.
  *
  * Sin un umbral que muerda, el paquete solo crece: nadie agrega 40 KB de golpe,
- * se agregan de dos en dos. Los numeros salen de lo que hay hoy con un margen
- * corto a proposito —subirlos tiene que costar una linea de este archivo y una
- * frase en el PR que diga por que—.
+ * se agregan de dos en dos. Subir un numero tiene que costar una linea de este
+ * archivo y una frase en el PR que diga por que.
+ *
+ * `arranque` y `portal` se subieron a 150 / 152 KB el 2026-08-27: quedan doce
+ * modulos por conectar al backend y el arranque lleva dentro el camino de la
+ * sesion —token, renovacion y ahora la matriz de permisos (ADR-0013)—. El
+ * margen es para eso, no para que crezca sin mirar: el mayor trozo por modulo
+ * sigue apretado en 11 KB.
  *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */
 const PRESUPUESTO = {
   /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
-  arranque: 130,
+  arranque: 150,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**
@@ -61,12 +67,90 @@ const PRESUPUESTO = {
    * catalogo de navegacion de los doce modulos** —134 opciones con sus iconos y
    * resumenes— que el ciudadano no va a usar.
    *
-   * El presupuesto esta puesto en lo que mide hoy, no en lo que deberia medir:
-   * asi la cifra no puede empeorar en silencio, y la conversacion sobre bajarla
-   * queda abierta con su numero delante.
+   * El presupuesto sigue a `arranque` (mas el trozo de «Inicio», ~1 KB): si no,
+   * `portal` pasaria a ser el limite que muerde primero y `arranque` no serviria
+   * de nada. La conversacion sobre bajar los dos queda abierta con su numero
+   * delante.
    */
-  portal: 135,
+  portal: 152,
 };
+
+/* ── El paquete no conoce el dominio ─────────────────────────────────────── */
+
+/**
+ * Los valores de identidad con los que CI construye la imagen, leidos del PROPIO
+ * flujo de publicacion.
+ *
+ * Compilar aqui con otros valores no comprobaria nada: lo que llega a la
+ * municipalidad es lo que `publicar-imagenes.yml` pasa como `build-args`, y es
+ * ahi donde el defecto se reintroduce. Si alguien vuelve a poner una URL
+ * absoluta, esta compilacion la hornea y el paso de abajo la encuentra.
+ *
+ * Si no encuentra los valores, **falla**. Una comprobacion que se salta a si
+ * misma cuando no halla lo que buscaba deja el verde intacto y no protege nada.
+ */
+function identidadDeCI() {
+  const flujo = readFileSync(join(raiz, '../.github/workflows/publicar-imagenes.yml'), 'utf8');
+  const valores = {};
+  for (const [, clave, valor] of flujo.matchAll(/^\s*(VITE_SGTM_OIDC_[A-Z_]+)=(.+)$/gm)) {
+    valores[clave] = valor.trim();
+  }
+  const exigidas = [
+    'VITE_SGTM_OIDC_CLIENTE',
+    'VITE_SGTM_OIDC_AUTORIZACION',
+    'VITE_SGTM_OIDC_TOKEN',
+    'VITE_SGTM_OIDC_FIN_DE_SESION',
+  ];
+  const faltan = exigidas.filter((c) => !valores[c]);
+  if (faltan.length > 0) {
+    console.error(
+      `\n\u2717 No se pudieron leer de publicar-imagenes.yml: ${faltan.join(', ')}.\n  Sin esos valores esta comprobacion no mide nada; se para en vez de pasar en verde.\n`,
+    );
+    process.exit(1);
+  }
+  return valores;
+}
+
+/** Los dominios que `infra/` declara hoy, uno por ambiente. */
+function dominiosDeclarados() {
+  const infra = join(raiz, '../infra');
+  const dominios = [];
+  for (const archivo of readdirSync(infra)) {
+    if (!/^Pulumi\..+\.yaml$/.test(archivo)) continue;
+    const encontrado = readFileSync(join(infra, archivo), 'utf8').match(
+      /^\s*sgtm:domain:\s*(.+)$/m,
+    );
+    if (encontrado) dominios.push(encontrado[1].trim().replace(/['"]/g, ''));
+  }
+  if (dominios.length === 0) {
+    console.error(
+      '\n\u2717 Ningun Pulumi.<ambiente>.yaml declara `sgtm:domain`; no hay nada que buscar.\n',
+    );
+    process.exit(1);
+  }
+  return dominios;
+}
+
+const IDENTIDAD = identidadDeCI();
+const DOMINIOS = dominiosDeclarados();
+
+/* Vite resuelve las `VITE_*` AL COMPILAR: una URL absoluta aqui hornea el nombre
+ * del servidor dentro del paquete. Como la etiqueta de la imagen vive fuera del
+ * estado de Pulumi (`ADR-0011` §5), cambiar `sgtm:domain` actualiza el ingreso y
+ * NO el paquete: las dos mitades quedan apuntando a sitios distintos, en verde y
+ * sin un solo sintoma. Keycloak se sirve en el mismo origen, asi que basta una
+ * ruta y el navegador la resuelve contra el origen desde el que se descargo. */
+const absolutas = Object.entries(IDENTIDAD).filter(([, valor]) => valor.includes('://'));
+if (absolutas.length > 0) {
+  console.error(
+    `\n\u2717 publicar-imagenes.yml hornea una URL absoluta en el paquete:\n${absolutas
+      .map(([clave, valor]) => `    ${clave}=${valor}`)
+      .join(
+        '\n',
+      )}\n  Keycloak se sirve en el mismo origen: usa una ruta (\u00abtoken\u00bb y \u00abfin de sesion\u00bb ya\n  funcionan tal cual, y \u00abautorizacion\u00bb la resuelve new URL(valor, origin)).\n`,
+  );
+  process.exit(1);
+}
 
 const comprimido = (contenido) => gzipSync(contenido).length / 1024;
 
@@ -75,13 +159,17 @@ function compilar(conProxy) {
   execFileSync('yarn', ['build'], {
     cwd: raiz,
     stdio: 'pipe',
-    env: { ...process.env, VITE_SGTM_PROXY_DE_DATOS: conProxy ? 'true' : 'false' },
+    // Con la identidad que usa CI, no sin ella: si se compilara sin estas
+    // variables, el paquete no podria contener el dominio y la comprobacion de
+    // abajo pasaria siempre.
+    env: { ...process.env, ...IDENTIDAD, VITE_SGTM_PROXY_DE_DATOS: conProxy ? 'true' : 'false' },
   });
 
   const activos = join(salida, 'assets');
   let bytes = 0;
   let arranque = 0;
   const trae = new Set();
+  const dominios = new Set();
   const modulos = [];
 
   for (const archivo of readdirSync(activos)) {
@@ -93,6 +181,7 @@ function compilar(conProxy) {
       bytes += contenido.length;
       const texto = contenido.toString('utf8');
       for (const huella of HUELLAS) if (texto.includes(huella.texto)) trae.add(huella.que);
+      for (const dominio of DOMINIOS) if (texto.includes(dominio)) dominios.add(dominio);
     }
 
     // Los trozos por modulo llevan el nombre de su archivo generado; lo demas
@@ -100,7 +189,7 @@ function compilar(conProxy) {
     if (archivo.includes('.generado-')) modulos.push({ archivo, kb });
     else arranque += kb;
   }
-  return { bytes, trae, arranque, modulos };
+  return { bytes, trae, dominios, arranque, modulos };
 }
 
 const con = compilar(true);
@@ -129,6 +218,24 @@ if (sin.bytes >= con.bytes) {
 console.log(
   `Ni el juego de datos ni el proxy llegan a produccion: ${kb(con.bytes - sin.bytes)} menos.`,
 );
+
+/* ── Ningun dominio dentro del paquete ───────────────────────────────────── */
+
+/* Lo anterior mira la fuente —lo que el flujo pasa—; esto mira el ARTEFACTO. No
+ * es redundante: el dominio podria entrar por otro camino, una constante escrita
+ * a mano en cualquier archivo, y esa no la ve leyendo el flujo. */
+const horneados = [...new Set([...con.dominios, ...sin.dominios])];
+if (horneados.length > 0) {
+  console.error(
+    `\n\u2717 El paquete lleva dentro el dominio donde se sirve: ${horneados.join(', ')}.\n` +
+      '  La etiqueta de la imagen vive fuera del estado de Pulumi (`ADR-0011` §5), asi que\n' +
+      '  cambiar `sgtm:domain` actualiza el ingreso y NO el paquete: las dos mitades acaban\n' +
+      '  apuntando a sitios distintos, en verde. Usa rutas del mismo origen.\n',
+  );
+  process.exit(1);
+}
+
+console.log(`El paquete no conoce su dominio: ninguno de ${DOMINIOS.join(', ')} aparece dentro.`);
 
 /* ── Presupuesto ─────────────────────────────────────────────────────────── */
 

@@ -1,0 +1,84 @@
+package pe.gob.sgtm.valores.dominio;
+
+import java.util.List;
+import java.util.Optional;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.dominio.Ejercicio;
+
+/**
+ * Los valores emitidos.
+ *
+ * <p>Ningun metodo recibe la municipalidad (regla 2). No hay ningun metodo que actualice ni que
+ * borre una fila de {@code valor} o {@code valor_detalle}: ni siquiera existe el privilegio en la
+ * base (V26). "Se anula, se da de baja o se reversa" (regla 4) es un acto distinto, todavia sin
+ * issue propio.
+ */
+public interface ValorRepository {
+
+    /**
+     * Guarda la cabecera y su detalle en una sola operacion.
+     *
+     * @param valor el valor a guardar; {@link Valor#esNuevo()} tiene que ser verdadero
+     * @param detalle las obligaciones que formaliza; ninguna puede estar ya guardada
+     * @return el mismo valor, con su {@code id} asignado
+     */
+    Valor insertar(Valor valor, List<ValorDetalle> detalle);
+
+    Optional<Valor> porNumero(TipoValor tipo, Ejercicio ejercicio, String numero);
+
+    /**
+     * El valor por su numero, sin decir de que tipo es.
+     *
+     * <p>Existe porque las tres opciones de #39 identifican el valor solo por su numero -asi lo
+     * declaran sus rutas: {@code /valores/{nro}/notificacion} y {@code /valores/{numero}/
+     * movimientos}-, y pedirle el tipo a quien ya escribio "OP-2026-000001" seria pedirle que
+     * repita lo que el numero ya dice.
+     *
+     * <p>La unicidad real es {@code (municipalidad_id, tipo, numero)} (V3), asi que en teoria dos
+     * tipos podrian compartir numero. Si eso llegara a pasar, esto falla en vez de elegir uno: un
+     * valor notificado por error es un acto administrativo sobre la deuda equivocada.
+     */
+    Optional<Valor> porNumero(String numero);
+
+    /** El mismo valor por su identificador, para quien ya lo resolvio antes (p. ej. #38). */
+    Optional<Valor> porId(long id);
+
+    /** El detalle de un valor ya guardado, en el orden en que se congelo. */
+    List<ValorDetalle> detalleDe(long valorId);
+
+    Pagina<Valor> buscar(CriterioDeValor criterio, Paginacion paginacion);
+
+    /**
+     * Los valores del contribuyente que formalizan ese tributo y ese ejercicio, y que todavia se
+     * pueden cobrar.
+     *
+     * <p>Existe para la prescripcion (#39): la solicitud se presenta por contribuyente, tributo y
+     * rango de ejercicios, y hay que saber que valores alcanza. Los que ya estan {@code PAGADO},
+     * {@code ANULADO} o {@code PRESCRITO} no se devuelven: sobre ellos no hay accion de cobro que
+     * prescriba.
+     */
+    List<Valor> cobrablesDe(long contribuyenteId, String tributo, Ejercicio ejercicio);
+
+    /**
+     * Mueve el estado de un valor ya emitido, sin tocar su desglose congelado.
+     *
+     * <p>Es el unico {@code UPDATE} que {@code valor} admite, y solo sobre {@code estado}: lo que
+     * cambia despues de emitir es en que punto de la cobranza esta el valor, nunca cuanto dice.
+     * Reimprimirlo dos anios despues sigue devolviendo el mismo desglose (AC de #37).
+     *
+     * @return el valor releido, con su estado nuevo
+     * @throws IllegalArgumentException si el valor no existe
+     */
+    Valor cambiarEstado(long valorId, EstadoDeValor nuevo);
+
+    /**
+     * El siguiente correlativo para ese tipo y ejercicio, unico y sin huecos bajo concurrencia real
+     * (AC de #37).
+     *
+     * <p>D-09 decide el formato del numero final —con que ceros, si se reinicia—; lo que aqui se
+     * garantiza es que la secuencia no se repita ni salte, y lo garantiza un {@code UPDATE} atomico
+     * contra {@code valor_correlativo}, no una lectura seguida de una escritura.
+     */
+    long siguienteCorrelativo(TipoValor tipo, Ejercicio ejercicio);
+}

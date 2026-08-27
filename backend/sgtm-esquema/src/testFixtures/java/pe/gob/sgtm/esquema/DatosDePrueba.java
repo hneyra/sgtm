@@ -86,7 +86,7 @@ public final class DatosDePrueba {
             long vehiculoId =
                     sembrarRentas(app, muni, sufijo, titular, segundo, predioId, conjuntoId);
             long reciboId = sembrarTesoreria(app, muni, sufijo, titular);
-            long valorId = sembrarValoresYCoactiva(app, muni, sufijo, titular);
+            long valorId = sembrarValoresYCoactiva(app, muni, sufijo, titular, conjuntoId);
             sembrarSanciones(app, muni, sufijo, titular, segundo, vehiculoId, predioId);
             sembrarLicencias(app, muni, sufijo, titular, predioId, reciboId);
             sembrarSeguridad(app, muni, sufijo);
@@ -530,6 +530,20 @@ public final class DatosDePrueba {
                 predioId,
                 EJERCICIO,
                 CIEN);
+        ejecutar(
+                app,
+                "INSERT INTO determinacion_arbitrio (municipalidad_id, ejercicio, servicio,"
+                        + " periodo, contribuyente_id, predio_id, conjunto_id, monto,"
+                        + " parametro_aplicado, fecha_calculo, usuario_calculo)"
+                        + " VALUES (?, ?, 'LIMPIEZA_PUBLICA', 1, ?, ?, ?, ?,"
+                        + "         'TASA_LIMPIEZA_PUBLICA:S-01:CASA_HABITACION', ?, 'prueba')",
+                muni,
+                EJERCICIO,
+                titular,
+                predioId,
+                conjuntoId,
+                CIEN,
+                VIGENCIA);
         return vehiculoId;
     }
 
@@ -629,7 +643,8 @@ public final class DatosDePrueba {
     // ------------------------------------------------------------------
 
     private static long sembrarValoresYCoactiva(
-            Connection app, long muni, String sufijo, long titular) throws SQLException {
+            Connection app, long muni, String sufijo, long titular, long conjuntoId)
+            throws SQLException {
         long valorId =
                 insertar(
                         app,
@@ -656,12 +671,110 @@ public final class DatosDePrueba {
                 CIEN);
         ejecutar(
                 app,
-                "INSERT INTO notificacion (municipalidad_id, objeto, objeto_id, numero,"
-                        + " fecha_notificacion, modalidad, resultado, notificador)"
-                        + " VALUES (?, 'VALOR', ?, ?, ?, 'PERSONAL', 'NOTIFICADO', 'prueba')",
+                "INSERT INTO valor_correlativo (municipalidad_id, tipo, ejercicio, ultimo)"
+                        + " VALUES (?, 'OP', ?, 1)",
+                muni,
+                EJERCICIO);
+
+        // #38: una corrida masiva ya resuelta -el mismo valor de arriba, referenciado
+        // desde su item- y una todavia pendiente, para que la prueba de aislamiento
+        // tenga fila que ver en los dos estados de valor_masivo_item.
+        long corridaMasivaId =
+                insertar(
+                        app,
+                        "INSERT INTO valor_masivo (municipalidad_id, tipo, ejercicio_desde,"
+                                + " ejercicio_hasta, fecha_criterio, origen, total_candidatos,"
+                                + " usuario_registro, observacion)"
+                                + " VALUES (?, 'OP', ?, ?, ?, 'SELECCION', 1, 'prueba',"
+                                + "         'corrida masiva de prueba') RETURNING id",
+                        muni,
+                        EJERCICIO,
+                        EJERCICIO,
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO valor_masivo_item (municipalidad_id, corrida_id, contribuyente_id,"
+                        + " estado, valor_id, fecha_procesado)"
+                        + " VALUES (?, ?, ?, 'GENERADO', ?, now())",
+                muni,
+                corridaMasivaId,
+                titular,
+                valorId);
+        // #39: dos diligencias sobre el mismo valor. La primera no ubico el domicilio
+        // -y por eso no lleva exigibilidad-; la segunda notifico. Las dos filas conviven:
+        // es el reintento que la tabla tiene que admitir sin borrar el intento anterior.
+        ejecutar(
+                app,
+                "INSERT INTO notificacion (municipalidad_id, objeto, objeto_id, numero, intento,"
+                        + " fecha_notificacion, modalidad, resultado, notificador, direccion,"
+                        + " usuario_registro, observacion)"
+                        + " VALUES (?, 'VALOR', ?, ?, 1, ?, 'PERSONAL', 'NO_UBICADO', 'prueba',"
+                        + "         'domicilio de prueba', 'prueba', 'no se ubico el domicilio')",
                 muni,
                 valorId,
-                "NT-" + sufijo,
+                "NT1-" + sufijo,
+                VIGENCIA);
+        long notificacionId =
+                insertar(
+                        app,
+                        "INSERT INTO notificacion (municipalidad_id, objeto, objeto_id, numero,"
+                                + " intento, fecha_notificacion, modalidad, resultado, notificador,"
+                                + " direccion, receptor, exigible_desde, conjunto_id,"
+                                + " usuario_registro, observacion)"
+                                + " VALUES (?, 'VALOR', ?, ?, 2, ?, 'PERSONAL', 'NOTIFICADO',"
+                                + "         'prueba', 'domicilio de prueba', 'quien recibe', ?, ?,"
+                                + "         'prueba', 'notificacion de prueba') RETURNING id",
+                        muni,
+                        valorId,
+                        "NT2-" + sufijo,
+                        VIGENCIA,
+                        VIGENCIA,
+                        conjuntoId);
+        ejecutar(
+                app,
+                "INSERT INTO valor_movimiento (municipalidad_id, valor_id, tipo, fecha,"
+                        + " notificacion_id, exigible_desde, usuario_registro, observacion)"
+                        + " VALUES (?, ?, 'PCO', ?, ?, ?, 'prueba', 'pase de prueba')",
+                muni,
+                valorId,
+                VIGENCIA,
+                notificacionId,
+                VIGENCIA);
+
+        long prescripcionId =
+                insertar(
+                        app,
+                        "INSERT INTO prescripcion (municipalidad_id, contribuyente_id, tributo,"
+                                + " ejercicio_desde, ejercicio_hasta, fecha_presentacion, causal,"
+                                + " plazo_anios, conjunto_id, resultado, usuario_registro,"
+                                + " observacion)"
+                                + " VALUES (?, ?, 'PREDIAL', ?, ?, ?, 'DECLARACION_PRESENTADA', 4,"
+                                + "         ?, 'NO_PROCEDE', 'prueba', 'solicitud de prueba')"
+                                + " RETURNING id",
+                        muni,
+                        titular,
+                        EJERCICIO,
+                        EJERCICIO,
+                        VIGENCIA,
+                        conjuntoId);
+        ejecutar(
+                app,
+                "INSERT INTO prescripcion_ejercicio (municipalidad_id, prescripcion_id, ejercicio,"
+                        + " inicio_computo, inicio_vigente, fecha_prescripcion, prescrita)"
+                        + " VALUES (?, ?, ?, ?, ?, ?, false)",
+                muni,
+                prescripcionId,
+                EJERCICIO,
+                VIGENCIA,
+                VIGENCIA,
+                VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO prescripcion_hecho (municipalidad_id, prescripcion_id, clase, causal,"
+                        + " fecha_desde)"
+                        + " VALUES (?, ?, 'INTERRUPCION', 'pago parcial de la deuda', ?)",
+                muni,
+                prescripcionId,
                 VIGENCIA);
 
         long expedienteId =

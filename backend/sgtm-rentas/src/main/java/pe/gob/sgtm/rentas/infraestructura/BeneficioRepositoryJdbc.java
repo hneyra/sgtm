@@ -2,6 +2,7 @@ package pe.gob.sgtm.rentas.infraestructura;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -97,6 +98,22 @@ public class BeneficioRepositoryJdbc extends RepositorioJdbc implements Benefici
                                 + " WHERE b.contribuyente_id = :contribuyenteId AND b.tipo = :tipo")
                 .param("contribuyenteId", contribuyenteId)
                 .param("tipo", tipo)
+                .query(BeneficioRepositoryJdbc::mapear)
+                .list();
+    }
+
+    @Override
+    public List<Beneficio> vigentesDelPredio(long predioId, String tributo, LocalDate fecha) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS
+                                + DESDE
+                                + " WHERE b.predio_id = :predioId AND b.tributo = :tributo"
+                                + "   AND b.vigencia_desde <= :fecha"
+                                + "   AND (b.vigencia_hasta IS NULL OR b.vigencia_hasta >= :fecha)")
+                .param("predioId", predioId)
+                .param("tributo", tributo)
+                .param("fecha", fecha)
                 .query(BeneficioRepositoryJdbc::mapear)
                 .list();
     }

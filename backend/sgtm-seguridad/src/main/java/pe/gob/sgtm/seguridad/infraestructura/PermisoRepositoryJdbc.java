@@ -4,7 +4,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -75,6 +77,90 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
                 .param("grupo", grupoId)
                 .query(PermisoRepositoryJdbc::mapear)
                 .list();
+    }
+
+    /**
+     * La matriz efectiva, en <b>una</b> consulta: por cada acceso activo, la fila de la excepcion
+     * del usuario si existe, y si no la union de sus grupos vigentes. La precedencia —el {@code
+     * CASE} sobre {@code ux.acceso_id}— es la misma que {@code ComprobadorDeAccesoJdbc}: una fila
+     * de excepcion, aunque niegue, sustituye al grupo entero para ese acceso.
+     */
+    @Override
+    public Map<String, Set<Privilegio>> efectivosDe(String cuenta, LocalDate fecha) {
+        String sql =
+                "SELECT a.codigo,"
+                        + columnaEfectiva("ejecucion")
+                        + ", "
+                        + columnaEfectiva("lectura")
+                        + ", "
+                        + columnaEfectiva("registro")
+                        + ", "
+                        + columnaEfectiva("modificacion")
+                        + ", "
+                        + columnaEfectiva("eliminacion")
+                        + ", "
+                        + columnaEfectiva("impresion")
+                        + ", "
+                        + columnaEfectiva("especial")
+                        + " FROM acceso a"
+                        + " LEFT JOIN LATERAL ("
+                        + "   SELECT p.acceso_id, p.ejecucion, p.lectura, p.registro, p.modificacion,"
+                        + "          p.eliminacion, p.impresion, p.especial"
+                        + "     FROM permiso p JOIN usuario u ON u.id = p.usuario_id"
+                        + "    WHERE p.acceso_id = a.id AND u.cuenta = :cuenta"
+                        + " ) ux ON true"
+                        + " LEFT JOIN LATERAL ("
+                        + "   SELECT bool_or(p.ejecucion) AS ejecucion, bool_or(p.lectura) AS lectura,"
+                        + "          bool_or(p.registro) AS registro,"
+                        + "          bool_or(p.modificacion) AS modificacion,"
+                        + "          bool_or(p.eliminacion) AS eliminacion,"
+                        + "          bool_or(p.impresion) AS impresion,"
+                        + "          bool_or(p.especial) AS especial"
+                        + "     FROM permiso p"
+                        + "     JOIN grupo g ON g.id = p.grupo_id AND g.habilitado"
+                        + "                 AND (g.vigencia_desde IS NULL OR g.vigencia_desde <= :fecha)"
+                        + "                 AND (g.vigencia_hasta IS NULL OR g.vigencia_hasta >= :fecha)"
+                        + "     JOIN miembro m ON m.grupo_id = g.id AND m.activo"
+                        + "     JOIN usuario u ON u.id = m.usuario_id AND u.cuenta = :cuenta"
+                        + "    WHERE p.acceso_id = a.id"
+                        + " ) gx ON true"
+                        + " WHERE a.activo"
+                        + "   AND EXISTS (SELECT 1 FROM usuario u"
+                        + "                WHERE u.cuenta = :cuenta AND u.habilitado"
+                        + "                  AND (u.vigencia_desde IS NULL OR u.vigencia_desde <= :fecha)"
+                        + "                  AND (u.vigencia_hasta IS NULL OR u.vigencia_hasta >= :fecha))";
+
+        Map<String, Set<Privilegio>> matriz = new LinkedHashMap<>();
+        jdbc().sql(sql)
+                .param("cuenta", cuenta)
+                .param("fecha", fecha)
+                .query(
+                        (fila, numero) -> {
+                            Set<Privilegio> otorgados = EnumSet.noneOf(Privilegio.class);
+                            for (Privilegio privilegio : Privilegio.values()) {
+                                if (fila.getBoolean(privilegio.columna())) {
+                                    otorgados.add(privilegio);
+                                }
+                            }
+                            if (!otorgados.isEmpty()) {
+                                matriz.put(fila.getString("codigo"), otorgados);
+                            }
+                            return null;
+                        })
+                .list();
+        return matriz;
+    }
+
+    /**
+     * {@code CASE WHEN ux.acceso_id IS NOT NULL THEN ux.<col> ELSE COALESCE(gx.<col>, false) END}.
+     */
+    private static String columnaEfectiva(String columna) {
+        return "CASE WHEN ux.acceso_id IS NOT NULL THEN ux."
+                + columna
+                + " ELSE COALESCE(gx."
+                + columna
+                + ", false) END AS "
+                + columna;
     }
 
     /**

@@ -52,7 +52,7 @@ for i in "${!AMBIENTES[@]}"; do
         valor=$(kubectl -n "$namespace" get secret "$secreto" -o jsonpath="{.data.$clave}" \
             | base64 --decode)
         [ -n "$valor" ] || {
-            echo "FALLO: «$secreto/$clave» en «$namespace» esta vacio o no existe." >&2
+            echo "FALLO: «${secreto}/${clave}» en «${namespace}» esta vacio o no existe." >&2
             exit 1
         }
         printf '%s\t%s\t%s\t%s\n' "$namespace" "$secreto" "$clave" "$valor" >> "$REGISTRO"

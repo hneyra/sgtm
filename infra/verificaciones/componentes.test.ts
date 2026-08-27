@@ -3,7 +3,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { auditarManifiestos } from "../auditoria";
 import { construirManifiestos } from "../componentes";
-import { manifiestosDeIdentidad, documentosDelRealm, RUTA_DE_IDENTIDAD } from "../componentes/Identidad";
+import {
+  manifiestosDeIdentidad,
+  documentosDelRealm,
+  documentosDeIdentidades,
+  RUTA_DE_IDENTIDAD,
+  PUERTO_DE_LA_CONSOLA,
+} from "../componentes/Identidad";
 import { nginxDelCluster } from "../componentes/Aplicacion";
 import { valoresDeTraefik } from "../componentes/Ingreso";
 import { manifiestosDeObservabilidad } from "../componentes/Observabilidad";
@@ -38,6 +44,15 @@ import { invariantesDe } from "./stacks";
  */
 
 const AMBIENTE: Environment = "prod";
+
+/** Un relay SMTP de forma valida, para las llamadas directas a `documentosDelRealm`. */
+const SMTP_DE_PRUEBA = {
+  host: "smtp.example.pe",
+  port: 587,
+  from: "no-responder@example.pe",
+  startTls: true,
+  auth: true,
+} as const;
 
 function manifiestosDe(ambiente: Environment): Manifiesto[] {
   return construirManifiestos(invariantesDe(ambiente));
@@ -345,6 +360,39 @@ describe("#151 · identidad", () => {
     expect(variables.get("KC_DB_URL")?.endsWith("/sgtm")).toBe(false);
   });
 
+  it("la consola de administracion vive tras un tunel local, nunca en el dominio publico", () => {
+    // `KC_HOSTNAME_STRICT` hace que Keycloak construya TODAS sus URLs absolutas
+    // contra `KC_HOSTNAME`, sin mirar por donde llego la peticion. Sin esta
+    // variable, abrir la consola por un `port-forward` acababa en un 302 al dominio
+    // publico -y ahi, excluida del enrutado por `!PathPrefix`, la peticion caia a la
+    // ruta de la interfaz y aparecia el formulario de acceso del SGTM-. Las dos
+    // protecciones encadenadas dejaban la consola inalcanzable tambien para quien
+    // tiene derecho a entrar. Se vio contra el Keycloak real de `prod`.
+    const variables = variablesDe(contenedor);
+    const consola = variables.get("KC_HOSTNAME_ADMIN");
+    expect(consola).toBe(`http://localhost:${PUERTO_DE_LA_CONSOLA}${RUTA_DE_IDENTIDAD}`);
+
+    // La unica forma de equivocarse aqui que importa: apuntarla al dominio publico.
+    // Eso pondria las URLs de administracion en internet y dejaria la exclusion del
+    // ingreso sosteniendolo todo sola.
+    expect(new URL(consola as string).hostname).toBe("localhost");
+    expect(consola).not.toContain(invariantesDe(AMBIENTE).ingress.domain);
+
+    // Y no afloja el nombre publico: el `iss` de los tokens no se toca.
+    expect(variables.get("KC_HOSTNAME_STRICT")).toBe("true");
+  });
+
+  it("el tunel es la unica via: el ingreso sigue sin publicar la consola", () => {
+    // La otra mitad. `KC_HOSTNAME_ADMIN` hace la consola ALCANZABLE por el tunel; lo
+    // que la mantiene fuera de internet es esta exclusion. Se comprueban juntas
+    // porque quitar cualquiera de las dos rompe la propiedad entera: sin la
+    // exclusion -«total, ya hay tunel»- la consola de identidad queda publicada.
+    const identidad = buscar(ms, "IngressRoute", "identidad") as {
+      spec: { routes: { match: string }[] };
+    };
+    expect(identidad.spec.routes[0]?.match).toContain("!PathPrefix(`/keycloak/admin`)");
+  });
+
   it("el emisor es el nombre publico; el JWKS, el interno", () => {
     const dominio = invariantesDe(AMBIENTE).ingress.domain;
     expect(variablesDe(contenedor).get("KC_HOSTNAME")).toBe(
@@ -367,6 +415,7 @@ describe("#151 · identidad", () => {
       domain: "sgtm.example.pe",
       realm: "sgtm",
       clienteDeVerificacion: false,
+      smtp: SMTP_DE_PRUEBA,
     });
     for (const cliente of clientesDe(documentos.clientes)) {
       expect(
@@ -428,6 +477,10 @@ describe("#151 · identidad", () => {
         realm: "otro-realm",
         domain: invariantesDe(AMBIENTE).ingress.domain,
         clienteDeVerificacion: false,
+        correoDePrueba: false,
+        smtp: SMTP_DE_PRUEBA,
+        ubigeo: invariantesDe(AMBIENTE).implantacion.ubigeo,
+        administrador: invariantesDe(AMBIENTE).implantacion.administrador,
       }),
       "Job",
       "realm",
@@ -437,6 +490,231 @@ describe("#151 · identidad", () => {
     // mismo nombre, el Job ya existiria y `pulumi up` no volveria a ejecutarlo.
     expect(despues).not.toBe(antes);
   });
+
+  it("un cambio del POD que lo aplica tambien cambia el nombre del Job", () => {
+    // La otra mitad, y la que faltaba. La huella cubria lo que se aplica —realm, perfil,
+    // clientes, TSV, guion— pero no COMO se aplica. Con `spec.template` de un Job
+    // inmutable, corregir el pod conservando el nombre no produce un Job nuevo: produce
+    // un `pulumi up` que el API server rechaza con «field is immutable», y la correccion
+    // no llega. Se ejerce con `image`, el unico dato del pod que no entra en ninguno de
+    // los cinco documentos.
+    const antes = buscar(ms, "Job", "realm").metadata.name;
+    const despues = buscar(
+      manifiestosDeIdentidad({
+        environment: AMBIENTE,
+        namespace: namespaceName(AMBIENTE),
+        image: "quay.io/keycloak/keycloak:26.1",
+        realm: "sgtm",
+        domain: invariantesDe(AMBIENTE).ingress.domain,
+        clienteDeVerificacion: false,
+        correoDePrueba: false,
+        smtp: SMTP_DE_PRUEBA,
+        ubigeo: invariantesDe(AMBIENTE).implantacion.ubigeo,
+        administrador: invariantesDe(AMBIENTE).implantacion.administrador,
+      }),
+      "Job",
+      "realm",
+    ).metadata.name;
+
+    expect(despues).not.toBe(antes);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADR-0012 — alta declarativa de usuarios y grupos, sin clave en git
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("ADR-0012 · alta declarativa de usuarios", () => {
+  const ms = manifiestosDe(AMBIENTE);
+  const realmCm = buscar(ms, "ConfigMap", "realm") as { data: Record<string, string> };
+  const inv = invariantesDe(AMBIENTE);
+
+  function municipalidad(over: Record<string, unknown> = {}): { ubigeo: string; contenido: string }[] {
+    const base = {
+      ubigeo: "200105",
+      municipalidadId: 1,
+      grupo: "200105 - Municipalidad Distrital de Catacaos",
+      usuarios: [
+        {
+          cuenta: "administrador",
+          nombre: "Administrador",
+          apellido: "del Sistema",
+          correo: "administrador@catacaos.gob.pe",
+          administrador: true,
+        },
+      ],
+      ...over,
+    };
+    return [{ ubigeo: "200105", contenido: JSON.stringify(base) }];
+  }
+
+  it("el ConfigMap del realm trae el guion y el TSV, y el TSV no lleva clave", () => {
+    expect(realmCm.data["reconciliar-identidades.sh"]).toContain("execute-actions-email");
+    const tsv = realmCm.data["identidades.tsv"] ?? "";
+    expect(tsv).toContain("USUARIO\t");
+    expect(tsv.toLowerCase()).not.toContain("password");
+    expect(tsv.toLowerCase()).not.toContain("clave");
+  });
+
+  it("el TSV declara el grupo y el administrador de la municipalidad implantada", () => {
+    const tsv = realmCm.data["identidades.tsv"] ?? "";
+    expect(tsv).toContain(`GRUPO\t`);
+    expect(tsv).toContain(`\t${inv.implantacion.administrador}\t`);
+    // El municipalidadId viaja como ultima columna del GRUPO y penultima del USUARIO.
+    expect(tsv).toMatch(/GRUPO\t[^\t]+\t\d+\n/);
+  });
+
+  it("exige exactamente un usuario «administrador: true»", () => {
+    expect(() =>
+      documentosDeIdentidades({
+        municipalidades: municipalidad({
+          usuarios: [
+            { cuenta: "a", nombre: "A", apellido: "A", correo: "a@x.pe", administrador: true },
+            { cuenta: "b", nombre: "B", apellido: "B", correo: "b@x.pe", administrador: true },
+          ],
+        }),
+        ubigeo: "200105",
+        administrador: "a",
+      }),
+    ).toThrow(/exactamente un usuario/);
+  });
+
+  it("el administrador del archivo tiene que ser el de la implantacion", () => {
+    expect(() =>
+      documentosDeIdentidades({
+        municipalidades: municipalidad(),
+        ubigeo: "200105",
+        administrador: "otra-cuenta",
+      }),
+    ).toThrow(/la misma\s+cuenta/);
+  });
+
+  it("rechaza un municipalidadId que no es un entero positivo", () => {
+    expect(() =>
+      documentosDeIdentidades({
+        municipalidades: municipalidad({ municipalidadId: "1" }),
+        ubigeo: "200105",
+        administrador: "administrador",
+      }),
+    ).toThrow(/entero positivo/);
+  });
+
+  it("se niega si no hay archivo para el ubigeo implantado", () => {
+    expect(() =>
+      documentosDeIdentidades({
+        municipalidades: municipalidad(),
+        ubigeo: "999999",
+        administrador: "administrador",
+      }),
+    ).toThrow(/999999\.json/);
+  });
+
+  it("un cambio del archivo versionado cambia el nombre del Job", () => {
+    const otra = buscar(
+      manifiestosDeIdentidad({
+        environment: AMBIENTE,
+        namespace: namespaceName(AMBIENTE),
+        image: "quay.io/keycloak/keycloak:26.0",
+        realm: inv.identity.realm,
+        domain: inv.ingress.domain,
+        clienteDeVerificacion: false,
+        correoDePrueba: false,
+        smtp: SMTP_DE_PRUEBA,
+        // El repositorio versiona 200101.json (marcha blanca) ademas de 200105.json:
+        // reconciliar otra municipalidad es otro TSV, y por tanto otro Job.
+        ubigeo: "200101",
+        administrador: "jperez",
+      }),
+      "Job",
+      "realm",
+    ).metadata.name;
+    expect(otra).not.toBe(buscar(ms, "Job", "realm").metadata.name);
+  });
+
+  it("el Job monta sus guiones con permiso de ejecucion, porque los ejecuta", () => {
+    const job = buscar(ms, "Job", "realm") as { spec: { template: { spec: EspecificacionDePod } } };
+    const volumen = (job.spec.template.spec.volumes ?? []).find((v) => v.name === "realm");
+    // 0o755. Con el 0644 por omision de un `ConfigMap`, `bash -c "/realm/x.sh && …"`
+    // muere en «exit 126» sin llegar a hablar con Keycloak.
+    expect(volumen?.configMap?.defaultMode).toBe(493);
+  });
+
+  it("el Job encadena los dos guiones y monta el TSV", () => {
+    const job = buscar(ms, "Job", "realm") as {
+      spec: { template: { spec: { containers: Contenedor[] } } };
+    };
+    const c = job.spec.template.spec.containers[0] as Contenedor;
+    expect(c.command?.join(" ")).toContain("reconciliar-realm.sh && /realm/reconciliar-identidades.sh");
+    expect(variablesDe(c).get("KC_DIRECTORIO")).toBe("/realm");
+  });
+
+  it("Mailpit va en stg y no en prod", () => {
+    const enStg = manifiestosDe("stg").some((m) => m.kind === "Deployment" && m.metadata.name.endsWith("-correo"));
+    const enProd = manifiestosDe("prod").some((m) => m.kind === "Deployment" && m.metadata.name.endsWith("-correo"));
+    expect(enStg).toBe(true);
+    expect(enProd).toBe(false);
+  });
+
+  it("stg tiene salida SMTP al buzon Mailpit; prod, sin relay, no tiene ninguna", () => {
+    const salidaStg = manifiestosDe("stg").find(
+      (m) => m.kind === "NetworkPolicy" && m.metadata.name === "permitir-salida-identidad",
+    ) as { spec: { egress?: { to?: { podSelector?: { matchLabels: Record<string, string> }; ipBlock?: unknown }[]; ports?: { port: number }[] }[] } };
+    const aMailpit = (salidaStg.spec.egress ?? []).find((r) =>
+      (r.to ?? []).some((d) => d.podSelector?.matchLabels.app === resourceName("stg", "correo")),
+    );
+    expect(aMailpit?.ports?.map((p) => p.port)).toEqual([1025]);
+    expect(
+      manifiestosDe("stg").some(
+        (m) => m.kind === "NetworkPolicy" && m.metadata.name === "permitir-ingreso-correo",
+      ),
+    ).toBe(true);
+
+    // prod (Opción B): la unica regla de salida de identidad es la de PostgreSQL.
+    const salidaProd = manifiestosDe("prod").find(
+      (m) => m.kind === "NetworkPolicy" && m.metadata.name === "permitir-salida-identidad",
+    ) as { spec: { egress?: { to?: { ipBlock?: unknown; podSelector?: { matchLabels: Record<string, string> } }[]; ports?: { port: number }[] }[] } };
+    const reglas = salidaProd.spec.egress ?? [];
+    expect(reglas).toHaveLength(1);
+    expect(reglas[0]?.ports?.map((p) => p.port)).toEqual([5432]);
+    expect((reglas[0]?.to ?? []).some((d) => d.ipBlock !== undefined)).toBe(false);
+    expect(
+      manifiestosDe("prod").some(
+        (m) => m.kind === "NetworkPolicy" && m.metadata.name === "permitir-ingreso-correo",
+      ),
+    ).toBe(false);
+  });
+
+  it("stg lleva smtpServer en el realm; prod (sin relay) no lo lleva", () => {
+    const realmStg = JSON.parse(
+      (buscar(manifiestosDe("stg"), "ConfigMap", "realm") as { data: Record<string, string> }).data[
+        "realm.json"
+      ] ?? "{}",
+    ) as { smtpServer?: Record<string, string> };
+    expect(realmStg.smtpServer?.host).toBe("sgtm-stg-correo");
+
+    const realmProd = JSON.parse(realmCm.data["realm.json"] ?? "{}") as {
+      smtpServer?: Record<string, string>;
+    };
+    expect(realmProd.smtpServer).toBeUndefined();
+  });
+
+  it("prod, sin relay, pasa SIN_CORREO=1 al Job y no monta ningun secreto SMTP", () => {
+    const env = (
+      (buscar(ms, "Job", "realm") as { spec: { template: { spec: { containers: Contenedor[] } } } })
+        .spec.template.spec.containers[0] as Contenedor
+    ).env ?? [];
+    expect(env.find((e) => e.name === "SIN_CORREO")?.value).toBe("1");
+    expect(env.some((e) => e.name === "KC_SMTP_USUARIO")).toBe(false);
+
+    // stg (Mailpit, sin auth): ni SIN_CORREO ni secreto.
+    const envStg = (
+      (buscar(manifiestosDe("stg"), "Job", "realm") as {
+        spec: { template: { spec: { containers: Contenedor[] } } };
+      }).spec.template.spec.containers[0] as Contenedor
+    ).env ?? [];
+    expect(envStg.some((e) => e.name === "SIN_CORREO")).toBe(false);
+    expect(envStg.some((e) => e.name === "KC_SMTP_USUARIO")).toBe(false);
+  });
 });
 
 describe("#151 · la demostracion", () => {
@@ -445,6 +723,7 @@ describe("#151 · la demostracion", () => {
       domain: "sgtm.example.pe",
       realm: "sgtm",
       clienteDeVerificacion: false,
+      smtp: SMTP_DE_PRUEBA,
     });
     const clientes: ClienteLeido[] = clientesDe(documentos.clientes).map((c) => ({
       ...c,
@@ -548,6 +827,18 @@ describe("#152 · la aplicacion y la interfaz", () => {
     expect(contenedor.startupProbe?.httpGet?.path).toBe("/actuator/health");
   });
 
+  it("el rollout de la aplicacion no pide un pod de mas: `maxSurge: 0`", () => {
+    // El default de Kubernetes levanta un segundo pod de la JVM antes de matar el
+    // viejo. En `prod` —un nodo, una replica— no cabe: se queda `Pending` con
+    // `Insufficient cpu` y a los diez minutos el `pulumi up` falla por
+    // `ProgressDeadlineExceeded`. Pasó de verdad el 2026-08-27.
+    const aplicacion = buscar(ms, "Deployment", "aplicacion") as {
+      spec: { strategy: { type: string; rollingUpdate?: { maxSurge?: number | string } } };
+    };
+    expect(aplicacion.spec.strategy.type).toBe("RollingUpdate");
+    expect(aplicacion.spec.strategy.rollingUpdate?.maxSurge).toBe(0);
+  });
+
   it("el perfil batch corre sin abrir puerto ninguno", () => {
     const lote = buscar(ms, "CronJob", "lote") as {
       spec: { jobTemplate: { spec: { template: { spec: { containers: Contenedor[] } } } } };
@@ -635,15 +926,75 @@ describe("#153 · el ingreso", () => {
 
   it("80 redirige a 443, no coexiste", () => {
     const valores = valoresDelIngreso(ms);
-    expect(valores).toContain("redirectTo:");
-    expect(valores).toContain("port: websecure");
+    expect(valores).toContain("redirections:");
+    expect(valores).toContain("to: websecure");
   });
 
   it("`acme.json` vive en un volumen: reprogramar el pod no vuelve a pedir certificados", () => {
     const valores = valoresDelIngreso(ms);
     expect(valores).toContain("persistence:");
-    expect(valores).toContain("storage: /data/acme.json");
+    expect(valores).toContain("acme.storage=/data/acme.json");
     expect(valores).toContain("type: Recreate");
+  });
+
+  it("acme.json se corrige a 600 antes de que Traefik intente leerlo", () => {
+    // El propio chart lo avisa en sus NOTES: con `persistence`, el `fsGroup`
+    // puede dejar el archivo en 660, y Traefik rechaza usarlo -"permissions 660
+    // ... please use 600"-, saltandose el resolver entero aunque las banderas de
+    // additionalArguments esten correctas. Se vio contra prod real.
+    const valores = valoresDeTraefik({ acmeEmail: "a@b.pe", acmeStaging: false });
+    expect(valores).toContain("name: corregir-permisos-de-acme");
+    expect(valores).toContain("chmod 600 /data/acme.json");
+    expect(valores).toContain("mountPath: /data");
+  });
+
+  it("Traefik espera su propio Endpoint antes de pedir el certificado", () => {
+    // Contra el cluster real de prod: `Recreate` deja el Service sin backend
+    // durante la ventana en que Traefik ya esta pidiendo el ACME -ocho
+    // reinicios seguidos, ocho "Connection refused", con el nodo en quietud
+    // total (no era contencion de CPU). El initContainer espera a verse a si
+    // mismo en el EndpointSlice antes de dejar arrancar al contenedor principal.
+    const valores = valoresDeTraefik({ acmeEmail: "a@b.pe", acmeStaging: false });
+    expect(valores).toContain("initContainers:");
+    expect(valores).toContain("name: esperar-endpoint-propio");
+    expect(valores).toContain("fieldPath: status.podIP");
+    expect(valores).toContain("discovery.k8s.io/v1/namespaces/kube-system/endpointslices");
+    // Falla abierto: un cluster mas lento de lo esperado no debe dejar a
+    // Traefik sin arrancar nunca.
+    expect(valores).toContain("exit 0");
+  });
+
+  it("el puerto 80 enruta antes de que la sonda de readiness pase", () => {
+    // Sin esto, el initContainer de arriba no arregla nada y el dominio entero
+    // queda inalcanzable. `svclb` hace DNAT contra el ClusterIP del Service de
+    // Traefik, y kube-proxy solo reparte un ClusterIP entre endpoints `ready`.
+    // Con la sonda del chart -`initialDelaySeconds: 2`, `periodSeconds: 10`,
+    // `failureThreshold: 1`- el pod real de prod tardo ONCE segundos en estar
+    // `Ready` (contenedor 06:03:27 -> Ready 06:03:38), y Traefik pidio el
+    // certificado a los dos (06:03:29): Let's Encrypt recibio "Connection
+    // refused" en el desafio HTTP-01, `acme.json` quedo con `Certificates:
+    // null`, y el handshake TLS murio con "tlsv1 unrecognized name".
+    const valores = valoresDeTraefik({ acmeEmail: "a@b.pe", acmeStaging: false });
+    expect(valores).toContain("publishNotReadyAddresses: true");
+    // Bajo `service.spec`, que es lo que el chart vuelca tal cual al ServiceSpec
+    // -y no una clave suelta que se ignore en silencio, como ya paso con
+    // `certResolvers:`-. Y sin perder el `type`, que vive en la misma clave.
+    expect(valores).toMatch(/^service:\n {2}spec:\n(?: {4}#.*\n|\s*\n)* {4}type: LoadBalancer\n/m);
+    expect(valores).toMatch(/^ {4}publishNotReadyAddresses: true$/m);
+  });
+
+  it("el resolver de ACME va por additionalArguments, no por una clave que el chart ignora", () => {
+    // Contra el Traefik real de prod: `certResolvers:` de alto nivel y
+    // `ports.websecure.tls.certResolver` no llegaban a ningun flag del
+    // `Deployment` -"Upgrade complete" en verde, y el propio Traefik logueando
+    // "Router uses a nonexistent certificate resolver" desde el primer arranque.
+    const valores = valoresDelIngreso(ms);
+    expect(valores).toContain("additionalArguments:");
+    expect(valores).not.toContain("certResolvers:");
+    expect(valores).not.toMatch(/^\s*certResolver:/m);
+    expect(valores).toContain('"--entryPoints.websecure.http.tls.certResolver=letsencrypt"');
+    expect(valores).toContain('"--certificatesResolvers.letsencrypt.acme.email=');
+    expect(valores).toContain('"--certificatesResolvers.letsencrypt.acme.httpChallenge.entryPoint=web"');
   });
 
   it("la consola de administracion de Keycloak no se publica", () => {
@@ -685,12 +1036,27 @@ describe("#153 · la demostracion", () => {
     expect(auditar(ms)).toContainEqual(expect.stringContaining("80 redirige, no coexiste"));
   });
 
-  it("sin la redireccion del punto de entrada, la comprobacion se pone roja", () => {
-    const sinRedireccion = valoresDeTraefik({ acmeEmail: "a@b.pe", acmeStaging: false });
-    expect(sinRedireccion).toContain("redirectTo:");
-
-    const roto = sinRedireccion.replace("    redirectTo:", "    # redirectTo:");
-    expect(roto.includes("    redirectTo:")).toBe(false);
+  it("la redireccion usa la clave que este chart lee, no la que renombro", () => {
+    // La comprobacion anterior era una tautologia: afirmaba que el texto contenia
+    // `redirectTo:`, lo comentaba, y afirmaba que ya no estaba. Nunca podia
+    // detectar lo unico que importa -si el chart honra esa clave-, y no lo hacia:
+    // `traefik-40.1.4+up40.1.0` la renombro a `http.redirections.entryPoint` (su
+    // Changelog: "move redirectTo => redirections") y `redirectTo` no aparece en
+    // ninguna plantilla. Contra prod, leyendo los argumentos del contenedor: ni
+    // una bandera `--entryPoints.web.http.redirections.*`, y `http://<dominio>/`
+    // devolviendo 404 en vez de 301 -quien teclee el dominio sin `https://` no ve
+    // el sistema-. Mismo fallo silencioso que ya paso con `certResolvers:`.
+    const valores = valoresDeTraefik({ acmeEmail: "a@b.pe", acmeStaging: false });
+    expect(valores).not.toContain("redirectTo:");
+    expect(valores).toMatch(
+      /^ {4}http:\n {6}redirections:\n {8}entryPoint:\n {10}to: websecure$/m,
+    );
+    expect(valores).toContain("scheme: https");
+    expect(valores).toContain("permanent: true");
+    // Por DEBAJO del router que Traefik dedica al desafio ACME: si la redireccion
+    // se comiera `/.well-known/acme-challenge/`, la renovacion de dentro de 60
+    // dias tumbaria el dominio sin que nadie hubiera tocado nada.
+    expect(valores).toMatch(/^ {10}priority: 10$/m);
   });
 });
 
@@ -1038,9 +1404,7 @@ describe("#157 · endurecimiento", () => {
     expect(destinos.some((d) => d.ipBlock !== undefined)).toBe(false);
   });
 
-  it("las dos excepciones de salida a internet son del mismo puerto, y de nadie mas", () => {
-    // El motor y el respaldo, hacia el almacenamiento de objetos (issue #155): la
-    // unica salida amplia que este archivo declara, y acotada a :443.
+  it("las excepciones de salida amplia son de un solo puerto cada una, y de nadie mas", () => {
     const conInternet = politicasDeRed(ms).filter((p) =>
       (p.spec.egress ?? []).some((r) => (r.to ?? []).some((d) => d.ipBlock !== undefined)),
     );
@@ -1050,18 +1414,44 @@ describe("#157 · endurecimiento", () => {
         "permitir-salida-sgtm-prod-observabilidad-alertmanager-a-internet",
         "permitir-salida-sgtm-prod-postgres-a-internet",
         "permitir-salida-sgtm-prod-respaldo-a-internet",
+        "permitir-salida-sgtm-prod-observabilidad-kube-state-metrics-al-apiserver",
       ].sort(),
     );
-    for (const p of conInternet) {
+    // `prod` sin relay SMTP (ADR-0012, Opción B): identidad no tiene salida amplia.
+    expect(nombres).not.toContain("permitir-salida-identidad");
+
+    // El motor y el respaldo, hacia el almacenamiento de objetos (issue #155), y
+    // Alertmanager hacia el webhook: los tres, acotados a :443.
+    const A_INTERNET = conInternet.filter((p) => p.metadata.name.endsWith("-a-internet"));
+    for (const p of A_INTERNET) {
       const puertos = (p.spec.egress ?? []).flatMap((r) => r.ports ?? []).map((pt) => pt.port);
       expect(puertos).toEqual([443]);
     }
+
+    // kube-state-metrics es la excepcion distinta: su destino es el API de
+    // Kubernetes, que en k3s escucha :6443 despues del DNAT del `Service`
+    // `kubernetes` (:443) — ver el docstring de Red.ts.
+    const alApiserver = conInternet.find((p) => p.metadata.name.endsWith("-al-apiserver"));
+    const puertosApiserver = (alApiserver?.spec.egress ?? []).flatMap((r) => r.ports ?? []).map((pt) => pt.port);
+    expect(puertosApiserver).toEqual([6443]);
   });
 
-  it("kube-state-metrics no tiene politica de salida: el API de Kubernetes no es un pod", () => {
-    const p = politicaDe(ms, "permitir-ingreso-kube-state-metrics");
-    expect(p.spec.policyTypes).toEqual(["Ingress"]);
-    expect(p.spec.egress).toBeUndefined();
+  it("kube-state-metrics: ingreso solo de Prometheus, salida solo al apiserver por :6443", () => {
+    const entrada = politicaDe(ms, "permitir-ingreso-kube-state-metrics");
+    expect(entrada.spec.policyTypes).toEqual(["Ingress"]);
+    expect(entrada.spec.egress).toBeUndefined();
+
+    // El API de Kubernetes no es un pod: la unica forma de nombrar el destino sin
+    // un ipBlock fragil es acotar el puerto (ver el docstring de Red.ts). Es 6443
+    // -el puerto real, despues del DNAT del `Service` `kubernetes`- y no 443, que
+    // es solo lo que ese `Service` expone antes de traducirse.
+    const salida = politicaDe(ms, "permitir-salida-sgtm-prod-observabilidad-kube-state-metrics-al-apiserver");
+    expect(salida.spec.policyTypes).toEqual(["Egress"]);
+    expect(salida.spec.ingress).toBeUndefined();
+    const puertos = (salida.spec.egress ?? []).flatMap((r) => r.ports ?? []).map((p) => p.port);
+    expect(puertos).toEqual([6443]);
+    const destinos = salida.spec.egress?.flatMap((r) => r.to ?? []) ?? [];
+    expect(destinos.every((d) => d.ipBlock !== undefined)).toBe(true);
   });
 
   it("toda politica vive en el namespace del ambiente", () => {
@@ -1086,28 +1476,49 @@ describe("#157 · endurecimiento", () => {
     expect(sinNonRoot.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
   });
 
-  it("los contenedores cuya imagen fija un USER por nombre, no por numero, declaran runAsUser", () => {
-    // Encontrado en CI (issue #157): con `runAsNonRoot: true` y sin `runAsUser`
-    // explicito, el kubelet rechaza el contenedor si la imagen fija su usuario por
-    // NOMBRE -"nobody", "nginx", "curl_user"- en vez de por numero, porque no puede
-    // verificar sin ejecutar dentro de la imagen que ese nombre no es root. Esta
-    // lista es la contraparte de `SIN_RUNASNONROOT` de arriba: no contenedores que
-    // se salten el endurecimiento, sino contenedores que lo llevan Y ademas nombran
-    // su UID -sin este `runAsUser`, `yarn manifiestos` compila y pasa la auditoria
-    // igual, y el fallo solo aparece contra un API server de verdad, como paso aqui.
-    const CON_USER_NO_NUMERICO = new Set([
-      "prometheus",
-      "alertmanager",
-      "node-exporter",
-      "kube-state-metrics",
-      "postgres-exporter",
-      "wal-g-instalar",
-      "interfaz",
+  it("todo contenedor endurecido fija su `runAsUser`, salvo si su imagen ya lo fija por numero", () => {
+    // Encontrado en CI dos veces, y la segunda porque esta prueba estaba escrita al
+    // reves. Con `runAsNonRoot: true` y sin `runAsUser`, quien decide si el pod arranca
+    // es la imagen: si fija su usuario por NOMBRE —"nobody", "nginx"— o no lo fija en
+    // absoluto, el kubelet no puede comprobar sin ejecutarla que ese usuario no es root,
+    // y rechaza el contenedor con `CreateContainerConfigError`.
+    //
+    // La version anterior llevaba la lista COMPLEMENTARIA: enumeraba los contenedores
+    // que SI debian declarar `runAsUser`. Una lista asi solo protege a lo que ya esta en
+    // ella —un contenedor nuevo nace exento y nadie se entera—, y es exactamente lo que
+    // paso con `mailpit` (#268): su imagen no declara `USER`, corria como root, y `yarn
+    // verificar` no dijo nada mientras `pulumi up` esperaba 600 s por un Deployment que
+    // nunca iba a quedar Ready. Invertida, el que nace exento es nadie: o el contenedor
+    // fija su UID, o alguien escribe aqui por que no hace falta, y eso se ve en el diff.
+    //
+    // Cada exencion es un `USER` numerico LEIDO del Dockerfile de esa imagen, no una
+    // suposicion. Si no se puede leer, no es exencion: es un `runAsUser`.
+    const IMAGEN_CON_UID_NUMERICO = new Set([
+      // ghcr.io/hneyra/sgtm-aplicacion — `USER 10001` (backend/Dockerfile).
+      "aplicacion",
+      "implantacion",
+      "lote",
+      // ghcr.io/hneyra/sgtm-migrador — `USER 10002` (backend/Dockerfile).
+      "migrador",
+      // quay.io/keycloak/keycloak:26.0 — `USER 1000` (quarkus/container/Dockerfile).
+      "keycloak",
+      "reconciliar-realm",
+      // grafana/grafana:11.3.0 — `USER "$GF_UID"`, con `ARG GF_UID="472"`.
+      "grafana",
     ]);
-    const sinRunAsUser = contenedoresDeTodo(ms).filter(
-      ({ c }) => CON_USER_NO_NUMERICO.has(c.name) && c.securityContext?.runAsUser === undefined,
-    );
-    expect(sinRunAsUser.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
+
+    // Sobre los DOS ambientes, no solo sobre `prod`: `mailpit` vive unicamente en `stg`,
+    // asi que una comprobacion que solo mire `prod` no lo veria ni estando bien escrita.
+    // Es la segunda mitad de por que se colo.
+    for (const ambiente of ENVIRONMENTS) {
+      const sinRunAsUser = contenedoresDeTodo(manifiestosDe(ambiente)).filter(
+        ({ c }) =>
+          c.securityContext?.runAsNonRoot === true &&
+          c.securityContext.runAsUser === undefined &&
+          !IMAGEN_CON_UID_NUMERICO.has(c.name),
+      );
+      expect(sinRunAsUser.map(({ donde, c }) => `${ambiente} ${donde}/${c.name}`)).toEqual([]);
+    }
   });
 
   it("el motor re-concede las capacidades que su entrypoint necesita para tomar posesion de PGDATA", () => {
@@ -1308,6 +1719,90 @@ interface LimiteDeTasa {
 function comoObjeto<T>(m: Manifiesto): T {
   return m as unknown as T;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #268 — Un guion de ConfigMap que se ejecuta necesita el bit de ejecucion
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("la demostracion: la auditoria se pone roja con un guion no ejecutable", () => {
+  /** Un pod minimo que monta un `ConfigMap` en `/guiones` y hace algo con el. */
+  function conGuion(argv: { command?: string[]; args?: string[] }, defaultMode?: number): Manifiesto[] {
+    return [
+      {
+        apiVersion: "batch/v1",
+        kind: "Job",
+        metadata: { name: "muestra", namespace: namespaceName(AMBIENTE), labels: {} },
+        spec: {
+          backoffLimit: 3,
+          template: {
+            metadata: { labels: {} },
+            spec: {
+              restartPolicy: "Never",
+              priorityClassName: nombreDePrioridad(AMBIENTE, "lote"),
+              containers: [
+                {
+                  name: "muestra",
+                  image: "ejemplo:1.0",
+                  ...argv,
+                  resources: {
+                    requests: { cpu: "10m", memory: "32Mi" },
+                    limits: { cpu: "200m", memory: "128Mi" },
+                  },
+                  securityContext: {
+                    allowPrivilegeEscalation: false,
+                    capabilities: { drop: ["ALL"] },
+                  },
+                  volumeMounts: [{ name: "guiones", mountPath: "/guiones", readOnly: true }],
+                },
+              ],
+              volumes: [{ name: "guiones", configMap: { name: "guiones", defaultMode } }],
+            },
+          },
+        },
+      } as unknown as Manifiesto,
+    ];
+  }
+
+  const EJECUTA = { command: ["/bin/bash", "-c", "/guiones/a.sh && /guiones/b.sh"] };
+
+  /**
+   * Lo que dice ESTA regla, y no la auditoria entera: el pod de muestra es minimo a
+   * proposito —no trae el `PriorityClass` que declara, y la auditoria se lo reprocha—,
+   * asi que comparar la lista completa contra `[]` mediria otra cosa.
+   */
+  function guiones(ms: Manifiesto[]): string[] {
+    return auditar(ms).filter((p) => p.includes("exit 126"));
+  }
+
+  it("ejecutar el guion con el 0644 por omision lo pone rojo, y nombra los dos", () => {
+    const problemas = guiones(conGuion(EJECUTA));
+    expect(problemas).toContainEqual(expect.stringContaining("exit 126"));
+    expect(problemas).toContainEqual(expect.stringContaining("/guiones/a.sh, /guiones/b.sh"));
+  });
+
+  it("como `argv[0]` tambien, que es la otra forma de ejecutarlo", () => {
+    expect(guiones(conGuion({ command: ["/guiones/a.sh"] }))).toContainEqual(
+      expect.stringContaining("exit 126"),
+    );
+  });
+
+  it("con `defaultMode: 493` se calla", () => {
+    expect(guiones(conGuion(EJECUTA, 493))).toEqual([]);
+  });
+
+  // Las dos de abajo son la otra mitad: una regla que dijera que no a todo no protegeria
+  // nada. Son las dos formas en que el resto del stack monta ficheros de un `ConfigMap`
+  // sin ejecutarlos, y las dos tienen que seguir en verde.
+  it("pasarselo al interprete como argumento NO necesita el bit —es lo que hacia #268 antes—", () => {
+    expect(guiones(conGuion({ command: ["/bin/bash", "/guiones/a.sh"] }))).toEqual([]);
+  });
+
+  it("nombrar la ruta como valor de una opcion tampoco —asi monta Prometheus su config—", () => {
+    expect(
+      guiones(conGuion({ command: ["/bin/prometheus"], args: ["--config.file=/guiones/a.yml"] })),
+    ).toEqual([]);
+  });
+});
 
 function valoresDelIngreso(ms: Manifiesto[]): string {
   return (buscar(ms, "HelmChartConfig", "traefik") as { spec: { valuesContent: string } }).spec

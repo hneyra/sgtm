@@ -220,23 +220,107 @@ class ImplantarMunicipalidadTest {
         }
 
         @Test
-        @DisplayName("el administrador NO recibe las 134 opciones: solo las de seguridad")
-        void elAdministradorNoRecibeTodo() {
+        @DisplayName("el administrador recibe el catalogo entero, no solo el modulo de seguridad")
+        void elAdministradorRecibeTodoElCatalogo() {
             long municipalidad = implantar("250203", "admin.250203");
             TenantContext.fijar(new MunicipalidadId(municipalidad));
 
-            // Puede administrar la seguridad...
+            // Administra la seguridad...
             assertThat(comprobador.autoriza("admin.250203", "usuarios", Privilegio.REGISTRO, HOY))
                     .isTrue();
-            // ...y no puede, de entrada, tocar el padron.
+            // ...y tambien el padron, la caja y todo lo demas: administra la municipalidad
+            // entera, no solo su seguridad (REQ-03 §3).
             assertThat(
                             comprobador.autoriza(
                                     "admin.250203", "contribuyentes", Privilegio.REGISTRO, HOY))
-                    .as(
-                            "darle de entrada las 134 opciones seria comodo el primer dia y dejaria"
-                                    + " una cuenta con todo para siempre: nadie vuelve a quitarle nada"
-                                    + " a la cuenta que funciona")
+                    .as("el administrador inicial administra toda la municipalidad")
+                    .isTrue();
+
+            // Cada opcion del catalogo, con cada uno de los siete privilegios.
+            for (CatalogoDeOpciones.Opcion opcion : CatalogoDeOpciones.leer()) {
+                for (Privilegio privilegio : EnumSet.allOf(Privilegio.class)) {
+                    assertThat(
+                                    comprobador.autoriza(
+                                            "admin.250203", opcion.codigo(), privilegio, HOY))
+                            .as("%s / %s", opcion.codigo(), privilegio)
+                            .isTrue();
+                }
+            }
+
+            TenantContext.limpiar();
+        }
+    }
+
+    @Nested
+    @DisplayName("El grupo Seguridad delegado")
+    class GrupoDeSeguridad {
+
+        @Test
+        @DisplayName("un miembro administra el acceso de los usuarios, y nada mas")
+        void unMiembroSoloAdministraElAccesoDeLosUsuarios() {
+            long municipalidad = implantar("250209", "admin.250209");
+            TenantContext.fijar(new MunicipalidadId(municipalidad));
+            pe.gob.sgtm.auditoria.OrigenContext.fijar(
+                    pe.gob.sgtm.auditoria.Origen.deProceso("admin.250209"));
+
+            long grupoSeguridad =
+                    transaccion.execute(
+                            estado ->
+                                    administracion
+                                            .grupoPorNombre(
+                                                    ImplantarMunicipalidad.GRUPO_DE_SEGURIDAD)
+                                            .orElseThrow()
+                                            .id());
+
+            Usuario operador =
+                    administrar.registrarUsuario(
+                            Usuario.nuevo("operador.accesos", "Operadora de accesos", null),
+                            Observacion.de("prueba: miembro del grupo Seguridad"));
+            administrar.afiliar(
+                    grupoSeguridad,
+                    operador.id(),
+                    Observacion.de("prueba: miembro del grupo Seguridad"));
+
+            // Administra el acceso: grupos, usuarios, permisos, miembros.
+            assertThat(
+                            comprobador.autoriza(
+                                    "operador.accesos", "usuarios", Privilegio.MODIFICACION, HOY))
+                    .isTrue();
+            assertThat(
+                            comprobador.autoriza(
+                                    "operador.accesos", "permisos", Privilegio.MODIFICACION, HOY))
+                    .isTrue();
+            // Y nada mas: es el alcance que tuvo el administrador antes de recibir el catalogo.
+            assertThat(
+                            comprobador.autoriza(
+                                    "operador.accesos", "contribuyentes", Privilegio.LECTURA, HOY))
+                    .as("el grupo Seguridad solo administra el acceso de los usuarios")
                     .isFalse();
+
+            pe.gob.sgtm.auditoria.OrigenContext.limpiar();
+            TenantContext.limpiar();
+        }
+
+        @Test
+        @DisplayName("se crea sin miembros: es una plantilla")
+        void seCreaSinMiembros() {
+            long municipalidad = implantar("250210", "admin.250210");
+            TenantContext.fijar(new MunicipalidadId(municipalidad));
+
+            long miembros =
+                    transaccion.execute(
+                            estado ->
+                                    jdbc.sql(
+                                                    "SELECT count(*) FROM miembro m"
+                                                            + " JOIN grupo g ON g.id = m.grupo_id"
+                                                            + " WHERE g.nombre = :n")
+                                            .param("n", ImplantarMunicipalidad.GRUPO_DE_SEGURIDAD)
+                                            .query(Long.class)
+                                            .single());
+
+            assertThat(miembros)
+                    .as("la implantacion no mete a nadie en el grupo Seguridad")
+                    .isZero();
 
             TenantContext.limpiar();
         }
@@ -308,6 +392,15 @@ class ImplantarMunicipalidadTest {
                                     .count())
                     .as(
                             "un grupo de administracion duplicado deja permisos repartidos en dos sitios")
+                    .isEqualTo(1);
+            assertThat(
+                            grupos.contenido().stream()
+                                    .filter(
+                                            g ->
+                                                    ImplantarMunicipalidad.GRUPO_DE_SEGURIDAD
+                                                            .equals(g.nombre()))
+                                    .count())
+                    .as("y el grupo Seguridad tampoco se duplica al relanzar")
                     .isEqualTo(1);
 
             Pagina<Usuario> usuarios = administrar.usuarios(TODO);

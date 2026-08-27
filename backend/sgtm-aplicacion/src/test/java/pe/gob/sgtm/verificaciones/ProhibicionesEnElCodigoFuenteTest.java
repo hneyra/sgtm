@@ -289,6 +289,32 @@ class ProhibicionesEnElCodigoFuenteTest {
                 .hasSize(3);
     }
 
+    @Test
+    @DisplayName("el escaner detecta la muestra con los plazos del Codigo Tributario compilados")
+    void elEscanerDetectaLaMuestraDePlazosCompilados() throws IOException {
+        // #39: un plazo compilado no cobra de mas ni de menos -produce expedientes coactivos
+        // nulos-, y por eso PLAZO y PRESCRIPCION entraron en la lista de nombres de la regla 5.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDePlazosCompilados.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las tres constantes, y ninguno de los comentarios que las explican")
+                .hasSize(3);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).contains("PLAZO_DE_RECLAMACION_EN_DIAS"))
+                .anySatisfy(f -> assertThat(f).contains("PRESCRIPCION_ANIOS"))
+                .anySatisfy(f -> assertThat(f).contains("PLAZO_INICIO_COMPUTO"));
+    }
+
     private static List<Path> fuentesDeProduccion(Path raiz) throws IOException {
         try (Stream<Path> rutas = Files.walk(raiz)) {
             return rutas.filter(Files::isRegularFile)

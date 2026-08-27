@@ -83,6 +83,14 @@ export interface BackupSettings {
    * único de falla.
    */
   endpoint: string;
+  /**
+   * La región AWS del almacenamiento de objetos (issue #158). El SDK de AWS firma
+   * cada petición con la región incluida; sin ella, `wal-g` falla al primer intento
+   * contra un S3 real —a diferencia de un S3-compatible generico, donde a veces no
+   * importa—. `us-east-1` no es un valor por omisión razonable para otra región: se
+   * declara siempre, aunque el bucket viva ahí.
+   */
+  region: string;
   /** Contenedor de destino. Distinto por ambiente (`INF-03` §4). */
   bucket: string;
   /**
@@ -125,6 +133,37 @@ export interface IdentitySettings {
   developmentMode: boolean;
   /** Usuarios de prueba con clave conocida. Prohibido en `prod` (`INF-03` §4). */
   seedTestUsers: boolean;
+  /**
+   * El relay SMTP con el que Keycloak envía el enlace de un solo uso para fijar la
+   * clave en el alta declarativa de usuarios (ADR-0012, `execute-actions-email` con
+   * `UPDATE_PASSWORD`).
+   *
+   * **Opcional.** Un ambiente que no declara `keycloakSmtpHost` se queda sin relay: el
+   * realm no lleva `smtpServer`, el Job de reconciliación pasa `SIN_CORREO=1` y el
+   * usuario nuevo se crea **sin clave** y con `UPDATE_PASSWORD` pendiente — un operador
+   * se la fija con el runbook «Recuperar el acceso de un usuario». Es el estado de la
+   * marcha blanca de `prod` mientras no haya un relay decidido (D-05).
+   *
+   * Cuando sí se declara: el servidor y el remitente no son secretos —van en claro en
+   * `Pulumi.<stack>.yaml`, como `domain`—; el usuario y la clave del relay, si `auth`
+   * es true, viven en el `Secret` `sgtm-<amb>-smtp` y **no** los genera
+   * `bootstrap-secretos.sh` (INF-06 §1.2). En `stg` el relay es un buzón Mailpit del
+   * propio clúster, sin `auth`.
+   */
+  smtp?: SmtpSettings;
+}
+
+export interface SmtpSettings {
+  /** Anfitrión del relay. En `prod` no puede ser un buzón de pruebas (`INF-03` §4). */
+  host: string;
+  /** Puerto del relay: 25, 465, 587 o el 1025 de un Mailpit. */
+  port: number;
+  /** Dirección desde la que sale el correo. Tiene que tener forma de correo. */
+  from: string;
+  /** STARTTLS al conectar. */
+  startTls: boolean;
+  /** El relay exige usuario y clave. Si es true, se leen del `Secret` `sgtm-<amb>-smtp`. */
+  auth: boolean;
 }
 
 export interface ApplicationSettings {
@@ -210,8 +249,56 @@ export interface ObservabilitySettings {
 }
 
 /** Todo lo que no es secreto, y por tanto se puede validar sin resolver un `Output`. */
+/**
+ * Lo que el nodo del ambiente puede repartir entre pods, **medido**, no estimado.
+ *
+ * Es lo **asignable** (`allocatable`), no la capacidad: el kubelet reserva una parte
+ * para el sistema y para sí mismo (`infra/vps/reservar-recursos-del-nodo.sh`, issue
+ * #157), y esa parte no está disponible para ningún pod. Confundir las dos es
+ * exactamente lo que dejó a `prod` sin poder ubicar su propio stack: `vmd120205` tiene
+ * 4 CPU de capacidad y **2 asignables** desde que la reserva se aplicó el 2026-08-23.
+ *
+ * Se mide contra el nodo, con el túnel abierto:
+ *
+ * ```
+ * kubectl get node -o jsonpath='{.items[0].status.allocatable.cpu}{"/"}{.items[0].status.allocatable.memory}'
+ * ```
+ *
+ * Es obligatorio en los dos stacks y no tiene valor por omisión, a propósito: un valor
+ * por omisión aquí es una cifra inventada sobre la que `capacidad.ts` dictaminaría que
+ * todo cabe, que es peor que no comprobar nada.
+ */
+export interface NodeSettings {
+  /** CPU asignable del nodo. `"2"` o `"2000m"`. */
+  allocatableCpu: string;
+  /** Memoria asignable del nodo. Se admite `Ki`, que es lo que devuelve `kubectl`. */
+  allocatableMemory: string;
+  /**
+   * El issue que sigue una brecha **conocida y aceptada** entre el nodo y el stack.
+   *
+   * Existe por una razón concreta y estrecha: `verificar` es `needs:` de todos los demás
+   * trabajos de `infra.yml`, incluido `aplicar-stg`. Sin esta declaración, un nodo de
+   * `prod` que se queda corto pone rojo `yarn verificar` y **deja de desplegarse `stg`**,
+   * que no tiene culpa de nada. Un ambiente no puede secuestrar al otro.
+   *
+   * Lo que **no** es: un interruptor para silenciar la comprobación. El despliegue de
+   * ese ambiente sigue sin poder ocurrir — lo detiene el paso «El stack cabe en su
+   * nodo» de `aplicar-stg`/`aplicar-prod`, **antes** de invocar a Pulumi, en segundos y
+   * diciendo cuánto falta. Lo único que la marca cambia es que `index.ts` avise en vez
+   * de lanzar, y eso es para no romper `pulumi preview`, que corre en cada PR.
+   *
+   * Y no se queda puesta cuando deja de ser cierta: `capacidad.test.ts` exige que un
+   * ambiente que la declara **siga sin caber**, así que el día que el nodo crezca la
+   * prueba se pone roja y obliga a retirarla. Tampoco puede tapar una brecha nueva: un
+   * ambiente sin marca que no quepa pone rojo `yarn verificar` y hace lanzar a
+   * `index.ts`.
+   */
+  capacityGapIssue?: string;
+}
+
 export interface Invariants {
   environment: Environment;
+  node: NodeSettings;
   ingress: IngressSettings;
   database: DatabaseSettings;
   backup: BackupSettings;
@@ -244,6 +331,21 @@ export interface Settings extends Invariants {
   backupCredentials: {
     accessKeyId: pulumi.Output<string>;
     secretAccessKey: pulumi.Output<string>;
+  };
+  /**
+   * Credenciales de solo lectura contra el registro de imágenes (`INF-06`, issue #257).
+   *
+   * Misma clasificación que `backupCredentials`: `ADR-0011` §3 las trata como secreto
+   * de *arranque de la infraestructura* —lo que el nodo necesita para poder traer las
+   * imágenes de `sgtm:applicationImageRepository`—, no de la aplicación. Sin esto, un
+   * clúster nuevo (o reconstruido desde cero) no puede completar el primer `pulumi up`:
+   * los tres paquetes de `ghcr.io/hneyra` que no son PostgreSQL ni Keycloak son
+   * privados, y sin credencial la respuesta es `401` al pedir el token anónimo, antes
+   * de que importe si la etiqueta existe.
+   */
+  registryCredentials: {
+    username: string;
+    token: pulumi.Output<string>;
   };
 }
 
@@ -286,6 +388,27 @@ function requireText(reader: ConfigReader, key: string, purpose: string): string
 }
 
 /**
+ * El relay SMTP, o `undefined` si el ambiente no lo declara.
+ *
+ * `keycloakSmtpHost` es el interruptor: sin él no hay relay (ADR-0012, Opción B).
+ * Con él, `keycloakSmtpFrom` es obligatorio —medio relay configurado es un defecto,
+ * no un ambiente sin correo—.
+ */
+function readSmtp(reader: ConfigReader): SmtpSettings | undefined {
+  const host = reader.text("keycloakSmtpHost");
+  if (host === undefined || host.trim() === "") {
+    return undefined;
+  }
+  return {
+    host,
+    port: reader.number("keycloakSmtpPort") ?? 587,
+    from: requireText(reader, "keycloakSmtpFrom", "la dirección remitente del correo de Keycloak"),
+    startTls: reader.boolean("keycloakSmtpStartTls") ?? true,
+    auth: reader.boolean("keycloakSmtpAuth") ?? true,
+  };
+}
+
+/**
  * Arma las invariantes desde un lector cualquiera.
  *
  * No valida: valida `checkInvariants`. Aquí solo se decide qué es obligatorio y qué
@@ -294,6 +417,21 @@ function requireText(reader: ConfigReader, key: string, purpose: string): string
 export function readInvariants(environment: Environment, reader: ConfigReader): Invariants {
   return {
     environment,
+    node: {
+      allocatableCpu: requireText(
+        reader,
+        "nodeAllocatableCpu",
+        "la CPU ASIGNABLE del nodo, medida con kubectl; no su capacidad (INF-01 §2)",
+      ),
+      allocatableMemory: requireText(
+        reader,
+        "nodeAllocatableMemory",
+        "la memoria ASIGNABLE del nodo, medida con kubectl; no su capacidad (INF-01 §2)",
+      ),
+      ...(reader.text("nodeCapacityGapIssue") === undefined
+        ? {}
+        : { capacityGapIssue: reader.text("nodeCapacityGapIssue") }),
+    },
     ingress: {
       domain: requireText(reader, "domain", "el nombre público por el que llega el navegador"),
       acmeEmail: requireText(
@@ -319,6 +457,7 @@ export function readInvariants(environment: Environment, reader: ConfigReader): 
         "backupEndpoint",
         "el almacenamiento de objetos, FUERA del VPS, donde viven el WAL y los respaldos",
       ),
+      region: requireText(reader, "backupRegion", "la región AWS del almacenamiento de objetos"),
       bucket: requireText(reader, "backupBucket", "el contenedor de destino de los respaldos"),
       walArchiveTimeoutSeconds: reader.number("walArchiveTimeoutSeconds") ?? 300,
       ...(reader.text("restoreSourceBucket") === undefined
@@ -333,6 +472,10 @@ export function readInvariants(environment: Environment, reader: ConfigReader): 
       realm: reader.text("keycloakRealm") ?? "sgtm",
       developmentMode: reader.boolean("keycloakDevelopmentMode") ?? false,
       seedTestUsers: reader.boolean("keycloakSeedTestUsers") ?? false,
+      // Opcional: sin `keycloakSmtpHost` no hay relay, y el alta declarativa crea el
+      // usuario sin clave (ver el docstring de `IdentitySettings.smtp`). Con host
+      // puesto, `keycloakSmtpFrom` pasa a ser obligatorio: medio relay es un defecto.
+      smtp: readSmtp(reader),
     },
     application: {
       imageRepository: requireText(
@@ -502,6 +645,39 @@ export function checkInvariants(s: Invariants): string[] {
     );
   }
 
+  // ── ADR-0012 — el relay SMTP del alta declarativa de usuarios ──────────────
+  // Opcional: un ambiente sin `keycloakSmtpHost` no incumple nada —el alta crea al
+  // usuario sin clave y un operador se la fija—. Lo que se comprueba es que un relay
+  // DECLARADO esté bien declarado.
+  const smtp = s.identity.smtp;
+  if (smtp !== undefined) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(smtp.from)) {
+      problems.push(
+        `\`keycloakSmtpFrom\` vale «${smtp.from}» y no tiene forma de dirección de correo. Es el ` +
+          "remitente del enlace de un solo uso con que un usuario nuevo fija su clave (ADR-0012); " +
+          "un remitente inválido lo rechazan los relays.",
+      );
+    }
+    if (smtp.port < 1 || smtp.port > 65535) {
+      problems.push(`\`keycloakSmtpPort\` vale ${smtp.port} y no es un puerto.`);
+    }
+    if (isProd && /mailpit|mailhog|-correo(\b|$)|localhost|127\.0\.0\.1/i.test(smtp.host)) {
+      problems.push(
+        `\`keycloakSmtpHost\` vale «${smtp.host}» en «prod». Es un buzón de pruebas, y en prod el ` +
+          "enlace para fijar la clave tiene que salir por un relay de verdad (INF-03 §4): un buzón " +
+          "que nadie lee deja a cada usuario nuevo sin forma de entrar. Sin relay decidido, no " +
+          "declares `keycloakSmtpHost` y el alta creará al usuario sin clave (ADR-0012, Opción B).",
+      );
+    }
+    if (isProd && !smtp.auth) {
+      problems.push(
+        "`keycloakSmtpAuth` es false en «prod». Un relay abierto entrega correo de cualquiera; el " +
+          "de prod se autentica, y su usuario y clave viven en el `Secret` `sgtm-prod-smtp` " +
+          "(INF-06 §1.2).",
+      );
+    }
+  }
+
   // ── ADR-0011 §3 — ningún secreto de la aplicación en el estado de Pulumi ───
   if (s.database.generateRolePasswords) {
     problems.push(
@@ -666,6 +842,10 @@ export function loadSettings(): Settings {
     backupCredentials: {
       accessKeyId: config.requireSecret("backupAccessKeyId"),
       secretAccessKey: config.requireSecret("backupSecretAccessKey"),
+    },
+    registryCredentials: {
+      username: config.require("registryUsername"),
+      token: config.requireSecret("registryPullToken"),
     },
   };
 }

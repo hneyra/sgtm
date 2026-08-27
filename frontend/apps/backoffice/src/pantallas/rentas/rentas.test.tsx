@@ -15,13 +15,21 @@ import { SIN_DATO } from '../seguridad/listado';
  * ocho formularios que no guardan sin ella, asi que aqui se comprueba sobre las
  * ocho a la vez y no una por una.
  *
- * Conectadas hay cuatro, todas de lectura: el padron de contribuyentes (#11),
- * la ficha de vehiculo (#26), la declaracion jurada (#28) y los beneficios
- * (#27). Las escrituras con backend ya publicado —transferencias (#29), alta y
- * baja de deuda (#24)— quedan fuera de este PR a proposito: son las primeras
- * que se conectarian en toda la interfaz, y `escrituras.ts` merece su propio
- * PR para declararlas con cuidado. Las demas esperan a su backend, y los
- * cuatro calculos esperan ademas a D-02.
+ * Conectadas para lectura hay cinco: el padron de contribuyentes (#11), la
+ * ficha de vehiculo (#26), la declaracion jurada (#28), los beneficios (#27)
+ * y los arbitrios (#31). `alta_deuda` (#24) se suma como la primera escritura
+ * conectada del modulo, con su lista blanca en `escrituras.ts` — ver ahi por
+ * que `unidadPredioPlaca` y `cuotaHasta` no viajan todavia.
+ *
+ * `transferencia_predio`, `transferencia_vehiculo` y `baja_deuda` quedan
+ * fuera a proposito: las dos primeras necesitan resolver un codigo contra un
+ * identificador interno antes de poder enviar (busqueda que no existe
+ * todavia), y `baja_deuda` es buscar-y-seleccionar-varias-filas, no un
+ * formulario plano — ninguna de las tres es solo una entrada mas en la lista
+ * blanca (ver #73). `alcabala`, `vehicular_calculo` y `espectaculos` tienen
+ * ya su backend (#32) pero el mismo tipo de hueco: un identificador interno o
+ * un valor que el catalogo marca de solo lectura y que el controlador no
+ * calcula (ver el doc de `rentas/index.ts`). Las demas esperan a su backend.
  */
 
 /** Las ocho opciones del modulo cuya operacion escribe, por su ranura. */
@@ -86,12 +94,11 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
     ]);
   });
 
-  it('las once restantes siguen sin conectar', () => {
+  it('las diez restantes siguen sin Conexion propia', () => {
     for (const opcion of [
       'predios_rentas',
       'predial_individual',
       'predial_masivo',
-      'arbitrios',
       'transferencia_predio',
       'alcabala',
       'vehicular_calculo',
@@ -102,7 +109,13 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
     ]) {
       expect(OPCIONES_CONECTADAS).not.toContain(opcion);
     }
-    for (const opcion of ['contribuyentes', 'vehiculos', 'declaracion_jurada', 'beneficios']) {
+    for (const opcion of [
+      'contribuyentes',
+      'vehiculos',
+      'declaracion_jurada',
+      'beneficios',
+      'arbitrios',
+    ]) {
       expect(OPCIONES_CONECTADAS).toContain(opcion);
     }
   });
@@ -160,6 +173,37 @@ describe('los beneficios leen BeneficioResource', () => {
   });
 });
 
+describe('los arbitrios leen ArbitrioResource', () => {
+  it('cada fila es la cuota de un mes, y lo que el recurso no publica sale vacio', async () => {
+    montarEnRuta('/rentas-registro/arbitrios');
+
+    const fila = (await screen.findByText('PARQUES_JARDINES')).closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      'PARQUES_JARDINES',
+      // Criterio de distribucion y frecuencia no estan en ArbitrioResource.
+      SIN_DATO,
+      SIN_DATO,
+      // La cuota de ese mes, tal cual la publica el recurso.
+      '6.10',
+      // El anual no se compone sumando cuotas (RNF-083), y la condicion
+      // tampoco esta en el recurso.
+      SIN_DATO,
+      SIN_DATO,
+    ]);
+  });
+
+  it('«— BARRIDO» y «— RECOLECCIÓN» colapsan en el mismo Servicio del dominio', async () => {
+    montarEnRuta('/rentas-registro/arbitrios');
+
+    // El prototipo dibuja dos filas de limpieza publica; el dominio solo
+    // conoce un LIMPIEZA_PUBLICA (V2) — las dos llegan con ese mismo codigo.
+    const filas = await screen.findAllByText('LIMPIEZA_PUBLICA');
+    expect(filas).toHaveLength(2);
+  });
+});
+
 /* ── SoD-2: quien cobra no da de baja lo que cobra ─────────────────────── */
 
 describe('un cajero no ve el alta ni la baja de deuda', () => {
@@ -182,5 +226,91 @@ describe('un cajero no ve el alta ni la baja de deuda', () => {
     // Y el padron lo consulta sin poder tocarlo.
     expect(puedeVer(CAJERO, 'contribuyentes')).toBe(true);
     expect(puedeEscribir(CAJERO, 'contribuyentes')).toBe(false);
+  });
+});
+
+/* ── alta_deuda: la primera escritura conectada del modulo (#24, #73) ───── */
+
+describe('alta_deuda manda solo lo que su lista blanca declara', () => {
+  const original = globalThis.fetch;
+  let peticiones: { url: string; metodo: string; cuerpo: string }[] = [];
+
+  function laApiResponde(): void {
+    peticiones = [];
+    globalThis.fetch = (entrada, opciones) => {
+      peticiones.push({
+        url: typeof entrada === 'string' ? entrada : String(entrada),
+        metodo: opciones?.method ?? 'GET',
+        cuerpo: typeof opciones?.body === 'string' ? opciones.body : '',
+      });
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: 1 }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    };
+  }
+
+  afterEach(() => {
+    globalThis.fetch = original;
+  });
+
+  it('traduce el tributo al codigo corto, y deja fuera lo que no se resuelve todavia', async () => {
+    const usuario = userEvent.setup();
+    laApiResponde();
+    montarEnRuta('/rentas-registro/alta-deuda');
+
+    await usuario.type(await screen.findByLabelText('Cod. Contribuyente'), '00000025673');
+    await usuario.selectOptions(screen.getByLabelText('Concepto / tributo'), 'IMPUESTO PREDIAL');
+    // «Unidad (predio / placa)» se llena pero no viaja: ver escrituras.ts.
+    await usuario.type(screen.getByLabelText('Unidad (predio / placa)'), '01-02-03-04-05-06');
+    await usuario.selectOptions(screen.getByLabelText('Año'), '2026');
+    await usuario.type(screen.getByLabelText('Cuota desde'), '1');
+    await usuario.type(screen.getByLabelText('Cuota hasta'), '4');
+    await usuario.type(screen.getByLabelText('Insoluto (S/)'), '150.50');
+    await usuario.type(screen.getByLabelText('Nº del documento'), 'RD-2026-0042');
+    await usuario.type(
+      within(await screen.findByRole('region', { name: 'Observación del usuario' })).getByLabelText(
+        'Observación',
+      ),
+      'Determinación de fiscalización.',
+    );
+    await usuario.click(screen.getByRole('button', { name: 'Dar de alta' }));
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    expect(peticiones[0]?.metodo).toBe('POST');
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).toEqual({
+      codContribuyente: '00000025673',
+      // «IMPUESTO PREDIAL» del prototipo, «PREDIAL» del backend.
+      tributo: 'PREDIAL',
+      ano: '2026',
+      // Solo la cuota desde: el backend no admite un rango (ver escrituras.ts).
+      cuota: 1,
+      insoluto: '150.50',
+      documentoOrigen: 'RD-2026-0042',
+      observacion: 'Determinación de fiscalización.',
+    });
+  });
+
+  it('un tributo sin codigo establecido no viaja, y la peticion falla en el backend', async () => {
+    const usuario = userEvent.setup();
+    laApiResponde();
+    montarEnRuta('/rentas-registro/alta-deuda');
+
+    await usuario.type(await screen.findByLabelText('Cod. Contribuyente'), '00000025673');
+    // Ninguna de las tres tiene codigo de tributo establecido todavia.
+    await usuario.selectOptions(screen.getByLabelText('Concepto / tributo'), 'MULTA TRIBUTARIA');
+    await usuario.type(
+      within(await screen.findByRole('region', { name: 'Observación del usuario' })).getByLabelText(
+        'Observación',
+      ),
+      'Multa por declaración jurada omisa.',
+    );
+    await usuario.click(screen.getByRole('button', { name: 'Dar de alta' }));
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo['tributo']).toBeUndefined();
   });
 });

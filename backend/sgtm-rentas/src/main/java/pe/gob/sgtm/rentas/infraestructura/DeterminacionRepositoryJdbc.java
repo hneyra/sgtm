@@ -78,37 +78,7 @@ public class DeterminacionRepositoryJdbc extends RepositorioJdbc
                             + " salir su base (NEG-05 §1)");
         }
         String usuario = OrigenContext.actual().usuario();
-
-        Long id =
-                jdbc().sql(
-                                "INSERT INTO determinacion"
-                                        + " (municipalidad_id, ejercicio, tributo, periodo,"
-                                        + "  contribuyente_id, predio_id, vehiculo_id, conjunto_id,"
-                                        + "  base_imponible, monto_determinado, reglas_aplicadas,"
-                                        + "  origen, estado, usuario_calculo)"
-                                        + " VALUES ("
-                                        + MUNICIPALIDAD_ACTUAL
-                                        + ", :ejercicio, :tributo, :periodo, :contribuyenteId,"
-                                        + "  :predioId, :vehiculoId, :conjuntoId, :baseImponible,"
-                                        + "  :montoDeterminado,"
-                                        + "  string_to_array(:reglas, ',')::varchar(200)[],"
-                                        + "  :origen, :estado, :usuario)"
-                                        + " RETURNING id")
-                        .param("ejercicio", determinacion.ejercicio().valor())
-                        .param("tributo", determinacion.tributo())
-                        .param("periodo", determinacion.periodo())
-                        .param("contribuyenteId", determinacion.contribuyenteId())
-                        .param("predioId", determinacion.predioId())
-                        .param("vehiculoId", determinacion.vehiculoId())
-                        .param("conjuntoId", determinacion.conjuntoId())
-                        .param("baseImponible", determinacion.baseImponible().valor())
-                        .param("montoDeterminado", determinacion.montoDeterminado().valor())
-                        .param("reglas", String.join(",", determinacion.reglasAplicadas()))
-                        .param("origen", determinacion.origen().name())
-                        .param("estado", determinacion.estado().name())
-                        .param("usuario", usuario)
-                        .query(Long.class)
-                        .single();
+        Long id = insertarCabecera(determinacion, usuario);
 
         for (DetalleDeterminacionPredio fila : detalle) {
             jdbc().sql(
@@ -128,6 +98,49 @@ public class DeterminacionRepositoryJdbc extends RepositorioJdbc
                     .update();
         }
 
+        return conId(determinacion, id, usuario);
+    }
+
+    @Override
+    public Determinacion insertar(Determinacion determinacion) {
+        String usuario = OrigenContext.actual().usuario();
+        Long id = insertarCabecera(determinacion, usuario);
+        return conId(determinacion, id, usuario);
+    }
+
+    private Long insertarCabecera(Determinacion determinacion, String usuario) {
+        return jdbc().sql(
+                        "INSERT INTO determinacion"
+                                + " (municipalidad_id, ejercicio, tributo, periodo,"
+                                + "  contribuyente_id, predio_id, vehiculo_id, conjunto_id,"
+                                + "  base_imponible, monto_determinado, reglas_aplicadas,"
+                                + "  origen, estado, usuario_calculo)"
+                                + " VALUES ("
+                                + MUNICIPALIDAD_ACTUAL
+                                + ", :ejercicio, :tributo, :periodo, :contribuyenteId,"
+                                + "  :predioId, :vehiculoId, :conjuntoId, :baseImponible,"
+                                + "  :montoDeterminado,"
+                                + "  string_to_array(:reglas, ',')::varchar(200)[],"
+                                + "  :origen, :estado, :usuario)"
+                                + " RETURNING id")
+                .param("ejercicio", determinacion.ejercicio().valor())
+                .param("tributo", determinacion.tributo())
+                .param("periodo", determinacion.periodo())
+                .param("contribuyenteId", determinacion.contribuyenteId())
+                .param("predioId", determinacion.predioId())
+                .param("vehiculoId", determinacion.vehiculoId())
+                .param("conjuntoId", determinacion.conjuntoId())
+                .param("baseImponible", determinacion.baseImponible().valor())
+                .param("montoDeterminado", determinacion.montoDeterminado().valor())
+                .param("reglas", String.join(",", determinacion.reglasAplicadas()))
+                .param("origen", determinacion.origen().name())
+                .param("estado", determinacion.estado().name())
+                .param("usuario", usuario)
+                .query(Long.class)
+                .single();
+    }
+
+    private static Determinacion conId(Determinacion determinacion, Long id, String usuario) {
         return new Determinacion(
                 id,
                 determinacion.ejercicio(),

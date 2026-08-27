@@ -31,6 +31,7 @@ import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.catastro.dominio.CondicionDeTitularidad;
+import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.Sector;
 import pe.gob.sgtm.catastro.dominio.Titularidad;
@@ -473,6 +474,120 @@ class RegistrarPredioTest {
             assertThat(susPredios)
                     .as("la base del predial es por contribuyente: hace falta juntar sus predios")
                     .isNotEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Inquilinos del predio (#31)")
+    class InquilinoDelPredio {
+
+        @Test
+        @DisplayName("un documento de origen en blanco se rechaza")
+        void unDocumentoEnBlancoSeRechaza() {
+            assertThatThrownBy(
+                            () ->
+                                    Inquilino.nuevo(
+                                            1L, titular, null, LocalDate.of(2026, 1, 1), "   "))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("un inquilino que termina antes de empezar se rechaza")
+        void terminarAntesDeEmpezarSeRechaza() {
+            assertThatThrownBy(
+                            () ->
+                                    new Inquilino(
+                                            null,
+                                            1L,
+                                            titular,
+                                            null,
+                                            LocalDate.of(2026, 6, 1),
+                                            LocalDate.of(2026, 1, 1),
+                                            "Contrato de arrendamiento"))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("se registra y se lee vigente a la fecha")
+        void unInquilinoSeRegistra() {
+            long predio = predioNuevo("20010100100100101010301", "AV. ARRENDADA 100");
+
+            Inquilino guardado =
+                    registrar.registrarInquilino(
+                            Inquilino.nuevo(
+                                    predio,
+                                    comprador,
+                                    "Comercio",
+                                    LocalDate.of(2026, 1, 1),
+                                    "Contrato de arrendamiento 001-2026"),
+                            Observacion.de("Inquilino declarado por el propietario"));
+
+            assertThat(guardado.id()).isNotNull();
+            List<Inquilino> vigentes =
+                    transaccion.execute(
+                            estado -> repositorio.inquilinosDe(predio, LocalDate.of(2026, 6, 1)));
+            assertThat(vigentes).hasSize(1);
+            assertThat(vigentes.get(0).uso()).isEqualTo("Comercio");
+        }
+
+        @Test
+        @DisplayName(
+                "un predio admite mas de un inquilino vigente a la vez: no hay total que cuadrar")
+        void masDeUnInquilinoALaVez() {
+            long predio = predioNuevo("20010100100100101010302", "AV. COMPARTIDA 200");
+
+            registrar.registrarInquilino(
+                    Inquilino.nuevo(
+                            predio,
+                            titular,
+                            "Comercio",
+                            LocalDate.of(2026, 1, 1),
+                            "Contrato 002-2026"),
+                    Observacion.de("Primer ambiente arrendado"));
+            registrar.registrarInquilino(
+                    Inquilino.nuevo(
+                            predio,
+                            comprador,
+                            "Comercio",
+                            LocalDate.of(2026, 1, 1),
+                            "Contrato 003-2026"),
+                    Observacion.de("Segundo ambiente arrendado"));
+
+            List<Inquilino> vigentes =
+                    transaccion.execute(
+                            estado -> repositorio.inquilinosDe(predio, LocalDate.of(2026, 6, 1)));
+            assertThat(vigentes).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("finalizar cierra sin borrar: deja de salir vigente, pero sigue en la base")
+        void finalizarCierraSinBorrar() {
+            long predio = predioNuevo("20010100100100101010303", "AV. QUE SE MUDA 300");
+
+            Inquilino inquilino =
+                    registrar.registrarInquilino(
+                            Inquilino.nuevo(
+                                    predio,
+                                    titular,
+                                    "Comercio",
+                                    LocalDate.of(2026, 1, 1),
+                                    "Contrato 004-2026"),
+                            Observacion.de("Inquilino que luego se muda"));
+
+            registrar.finalizarInquilino(
+                    inquilino,
+                    LocalDate.of(2026, 6, 30),
+                    Observacion.de("El inquilino dejo el predio"));
+
+            List<Inquilino> enJulio =
+                    transaccion.execute(
+                            estado -> repositorio.inquilinosDe(predio, LocalDate.of(2026, 7, 1)));
+            assertThat(enJulio).as("ya se fue: en julio no deberia figurar como vigente").isEmpty();
+
+            Optional<Inquilino> releido =
+                    transaccion.execute(estado -> repositorio.inquilino(inquilino.id()));
+            assertThat(releido).as("no se borra: sigue en la base, cerrado").isPresent();
+            assertThat(releido.orElseThrow().estaVigente()).isFalse();
         }
     }
 

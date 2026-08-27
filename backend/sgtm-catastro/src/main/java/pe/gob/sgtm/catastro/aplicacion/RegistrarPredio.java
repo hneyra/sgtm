@@ -8,6 +8,7 @@ import pe.gob.sgtm.auditoria.Auditoria;
 import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
+import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.Titularidad;
 import pe.gob.sgtm.dominio.Observacion;
@@ -121,6 +122,35 @@ public class RegistrarPredio {
         return abierta;
     }
 
+    /** Alta de un inquilino: el manual lo registra para la cobranza de arbitrios (#31). */
+    @Transactional
+    public Inquilino registrarInquilino(Inquilino inquilino, Observacion observacion) {
+        Inquilino guardado = repositorio.guardar(inquilino);
+        auditar(
+                "inquilino",
+                guardado.id(),
+                Operacion.ALTA,
+                observacion,
+                null,
+                descripcion(guardado));
+        return guardado;
+    }
+
+    /** Deja de ocupar el predio. No se borra: una determinacion anterior pudo apoyarse en el. */
+    @Transactional
+    public Inquilino finalizarInquilino(
+            Inquilino inquilino, LocalDate fecha, Observacion observacion) {
+        Inquilino cerrado = repositorio.guardar(inquilino.cerradoEl(fecha));
+        auditar(
+                "inquilino",
+                cerrado.id(),
+                Operacion.BAJA,
+                observacion,
+                descripcion(inquilino),
+                descripcion(cerrado));
+        return cerrado;
+    }
+
     private void auditar(
             String tabla,
             @org.jspecify.annotations.Nullable Long clave,
@@ -161,6 +191,18 @@ public class RegistrarPredio {
                 + (titularidad.vigenciaHasta() == null
                         ? "null"
                         : "\"" + titularidad.vigenciaHasta() + "\"")
+                + "}";
+    }
+
+    private static String descripcion(Inquilino inquilino) {
+        return "{\"contribuyenteId\":"
+                + inquilino.contribuyenteId()
+                + ",\"uso\":"
+                + (inquilino.uso() == null ? "null" : "\"" + inquilino.uso() + "\"")
+                + ",\"vigenciaHasta\":"
+                + (inquilino.vigenciaHasta() == null
+                        ? "null"
+                        : "\"" + inquilino.vigenciaHasta() + "\"")
                 + "}";
     }
 }

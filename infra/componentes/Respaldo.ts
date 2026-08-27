@@ -75,6 +75,7 @@ export interface RespaldoArgs {
   postgresImage: string;
   backup: {
     endpoint: string;
+    region: string;
     bucket: string;
   };
   /** Ver «El aviso de fallo» arriba. `undefined` = sin aviso activo todavia. */
@@ -101,12 +102,26 @@ export function manifiestosDeRespaldo(args: RespaldoArgs): Manifiesto[] {
   const guion = [
     "set -uo pipefail",
     "",
+    "# 0. El binario oficial de wal-g esta enlazado contra glibc; esta imagen es musl",
+    "#    (Alpine). Sin gcompat, wal-push/backup-push mueren con «not found» (exit",
+    "#    127) -confirmado contra un cluster real, issue #158: el motor llevaba desde",
+    "#    su primer WAL sin poder archivar ni uno solo-. Requiere la salida a :443 que",
+    "#    permitirSalidaAlAlmacenamiento ya abre para este pod.",
+    "apk add --no-cache gcompat >/tmp/apk.log 2>&1 || { cat /tmp/apk.log >&2; " +
+      'echo "FALLO: no se pudo instalar gcompat (glibc para wal-g)." >&2; exit 1; }',
+    "",
     "# 1. Se registra ANTES de intentar nada: si el pod muere a mitad, la fila que",
     "#    se queda en EN_CURSO es la pista de que algo no termino, no un silencio.",
+    // `--command`/`-c` NO interpola `:'var'` en este cliente -confirmado contra un
+    // Postgres real (issue #158)-: la consulta llegaba con el token `:'destino'`
+    // sin sustituir y `syntax error at or near ":"`. Por `stdin` (heredoc) si
+    // interpola; las tres consultas de este guion pasan por ahi en vez de
+    // `--command`.
     'respaldoId=$(PGUSER=sgtm_owner PGPASSWORD="$CLAVE_OWNER" psql --host="$PGHOST" ' +
-      `--dbname=${BASE_DEL_PADRON} --quiet --tuples-only --no-align \\`,
-    '    -v destino="$DESTINO" ' +
-      '--command "INSERT INTO respaldo (inicio, resultado, destino) VALUES (now(), \'EN_CURSO\', :\'destino\') RETURNING id")',
+      `--dbname=${BASE_DEL_PADRON} --quiet --tuples-only --no-align -v destino="$DESTINO" <<'SQL'`,
+    "INSERT INTO respaldo (inicio, resultado, destino) VALUES (now(), 'EN_CURSO', :'destino') RETURNING id;",
+    "SQL",
+    ")",
     'if [ -z "$respaldoId" ]; then',
     '    echo "FALLO: no se pudo registrar el inicio en la tabla respaldo (RF-126)." >&2',
     "    exit 1",
@@ -114,19 +129,28 @@ export function manifiestosDeRespaldo(args: RespaldoArgs): Manifiesto[] {
     'echo "Respaldo #$respaldoId iniciado hacia $DESTINO."',
     "",
     "# 2. El respaldo en si. sgtm_respaldo, nunca sgtm_owner ni el superusuario.",
-    `if PGUSER=sgtm_respaldo PGPASSWORD="$CLAVE_RESPALDO" "${WALG_BINARIO}" backup-push "$PGDATA_RESPALDO" ` +
+    "#    PGDATABASE=postgres explicito: backup-push llama a pg_backup_start/stop,",
+    "#    que si necesita una conexion real -a diferencia de wal-push/wal-fetch, que",
+    "#    solo hablan con el almacenamiento de objetos-, y sin PGDATABASE libpq usa",
+    "#    el nombre del usuario como base y falla porque esa base no existe. NO es",
+    `#    ${BASE_DEL_PADRON}: sgtm_respaldo no tiene CONNECT ahi a proposito`,
+    "#    (40-rol-de-respaldo.sh) -pg_backup_start/stop son del cluster entero, no",
+    "#    de una base, y postgres alcanza- (confirmado contra un cluster real, issue #158).",
+    `if PGUSER=sgtm_respaldo PGDATABASE=postgres PGPASSWORD="$CLAVE_RESPALDO" "${WALG_BINARIO}" backup-push "$PGDATA_RESPALDO" ` +
       "> /tmp/walg.log 2>&1; then",
     `    PGUSER=sgtm_respaldo PGPASSWORD="$CLAVE_RESPALDO" "${WALG_BINARIO}" delete retain "$RETENCION" ` +
       "--confirm >> /tmp/walg.log 2>&1 || true",
     '    PGUSER=sgtm_owner PGPASSWORD="$CLAVE_OWNER" psql --host="$PGHOST" ' +
-      `--dbname=${BASE_DEL_PADRON} --quiet -v id="$respaldoId" \\`,
-    "        --command \"UPDATE respaldo SET fin = now(), resultado = 'EXITOSO' WHERE id = :id\"",
+      `--dbname=${BASE_DEL_PADRON} --quiet -v id="$respaldoId" <<'SQL'`,
+    "UPDATE respaldo SET fin = now(), resultado = 'EXITOSO' WHERE id = :id;",
+    "SQL",
     '    echo "Respaldo #$respaldoId EXITOSO."',
     "else",
     "    detalle=$(tail -c 480 /tmp/walg.log | tr '\\n' ' ' | tr -d \"'\")",
     '    PGUSER=sgtm_owner PGPASSWORD="$CLAVE_OWNER" psql --host="$PGHOST" ' +
-      `--dbname=${BASE_DEL_PADRON} --quiet -v id="$respaldoId" -v detalle="$detalle" \\`,
-    "        --command \"UPDATE respaldo SET fin = now(), resultado = 'FALLIDO', detalle = :'detalle' WHERE id = :id\"",
+      `--dbname=${BASE_DEL_PADRON} --quiet -v id="$respaldoId" -v detalle="$detalle" <<'SQL'`,
+    "UPDATE respaldo SET fin = now(), resultado = 'FALLIDO', detalle = :'detalle' WHERE id = :id;",
+    "SQL",
     '    echo "FALLO: el respaldo #$respaldoId no se completo. Detalle: $detalle" >&2',
     "",
     "    # Aviso por /dev/tcp: ver la nota de por que, en el docstring de Respaldo.ts.",
@@ -193,13 +217,22 @@ export function manifiestosDeRespaldo(args: RespaldoArgs): Manifiesto[] {
                   image: postgresImage,
                   command: ["/bin/bash", "-c"],
                   args: [guion],
-                  // Sin `runAsNonRoot` (issue #157), y no por el mismo motivo que el
-                  // motor: PGDATA lo monta de solo lectura con el permiso `0700` que la
-                  // propia imagen le da al iniciar (dueno `postgres`, UID que este
-                  // manifiesto no fija en ningun otro sitio), y forzar aqui un UID
-                  // distinto -sin verificarlo contra un clúster real- cambia un guion de
-                  // respaldo que funciona por uno que falla leyendo su propio origen.
-                  securityContext: seguridadBase(),
+                  // Root, a proposito, y no por descuido: el primer paso del guion instala
+                  // gcompat con `apk add`, que escribe la base de paquetes de la imagen
+                  // -root la posee, UID 70 no puede- (issue #158, encontrado contra un
+                  // cluster real: "Unable to lock database: Permission denied" con
+                  // `runAsUser: 70`). Pero PGDATA se monta de solo lectura en modo `0700`,
+                  // dueno `postgres` (UID 70), y `capabilities.drop: ["ALL"]` le quita a
+                  // root el `CAP_DAC_OVERRIDE` que le dejaria leerlo igual: sin ella,
+                  // "PgControl file not found... permission denied", el mismo hallazgo que
+                  // llevo a fijar `runAsUser: 70` la primera vez, antes de encontrar el
+                  // choque con `apk`. La salida no es una tercera credencial: es devolverle
+                  // a root, con nombre y motivo, solo el permiso de LECTURA que ya tenia
+                  // por ser root -`CAP_DAC_READ_SEARCH`, no el `CAP_DAC_OVERRIDE` que
+                  // ademas dejaria escribir.
+                  securityContext: seguridadBase({
+                    capabilities: { drop: ["ALL"], add: ["DAC_READ_SEARCH"] },
+                  }),
                   env: [
                     { name: "PGHOST", value: servicioDeBaseDeDatos(environment) },
                     { name: "AMBIENTE", value: environment },

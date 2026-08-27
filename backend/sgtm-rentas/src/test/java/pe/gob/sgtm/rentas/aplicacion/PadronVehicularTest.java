@@ -452,7 +452,10 @@ class PadronVehicularTest {
                     null,
                     vehiculoId,
                     LocalDate.of(2026, 8, 20),
-                    total);
+                    total,
+                    Dinero.CERO,
+                    Dinero.CERO,
+                    Dinero.CERO);
         }
     }
 

@@ -99,6 +99,45 @@ configuración **no contradiga lo que el proyecto ya decidió por escrito**.
 | `applicationBootstrapVersion` fija una versión, y es una etiqueta, no una imagen | `ADR-0011` §5 |
 | En `prod`, `esDemostracion` **se declara**; heredarlo del valor por omisión no cuenta | #150, D-02a |
 | El ubigeo son seis dígitos y el tipo de municipalidad es DISTRITAL o PROVINCIAL | #150 |
+| `nodeAllocatableCpu`/`nodeAllocatableMemory` son obligatorios, y **medidos** | `INF-01` §2, #252 |
+
+Y una que no es de `config.ts` sino de `capacidad.ts`, porque no mira un valor sino la
+suma de todos:
+
+| Invariante | De dónde sale |
+|---|---|
+| **El stack cabe en el nodo que declara**, contando los Jobs del arranque | `INF-01` §2, #252 |
+
+Esta última es la que convierte un despliegue colgado en un fallo de veinte segundos.
+Un pod que el planificador no puede ubicar se queda `Pending` sin error ni registro, y
+el `ConfigGroup` de `index.ts` lo espera indefinidamente: `aplicar-prod` se quedó así
+cuatro veces entre el 25 y el 26 de agosto de 2026, una de ellas casi seis horas.
+
+Se comprueba en tres sitios, y cada uno hace algo distinto:
+
+| Dónde | Qué hace |
+|---|---|
+| `yarn verificar` | Rojo si un ambiente **sin** `nodeCapacityGapIssue` no cabe |
+| `index.ts` | Lanza si no cabe; **avisa** si la brecha está declarada — reventar aquí rompería `pulumi preview`, que corre en cada PR |
+| `aplicar-stg`/`aplicar-prod` | **Detiene el despliegue** antes de invocar a Pulumi. Es el bloqueo duro |
+
+```bash
+yarn capacidad --ambiente prod                      # ¿cabe? y cuánto sobra o falta
+yarn capacidad --ambiente prod --cpu 8 --memoria 16Gi   # ¿y si el nodo fuera otro?
+```
+
+**Los dos valores del nodo son lo *asignable*, no la capacidad.** La reserva del kubelet
+(`vps/reservar-recursos-del-nodo.sh`, #157) se lleva 1 CPU y 2 Gi, y confundir las dos
+cifras es exactamente lo que dejó a `prod` sin poder ubicar su propio stack. Se miden:
+
+```bash
+kubectl get node -o jsonpath='{.items[0].status.allocatable.cpu}{"/"}{.items[0].status.allocatable.memory}'
+```
+
+Y no se cree lo declarado sin contrastarlo: `aplicar-stg`/`aplicar-prod` corren
+`vps/comprobar-lo-asignable.sh` contra el nodo real antes de `pulumi up`, y rechazan un
+stack que se declare **más grande** de lo que su nodo es — la única dirección del error
+que deja pasar un despliegue que no cabe.
 
 Y sobre los manifiestos, en `auditoria.ts`:
 
@@ -178,6 +217,14 @@ Sin estos `Secret`, `pulumi up` crea los objetos y los pods se quedan esperando,
 `Secret` ausente en sus eventos. Es preferible a la alternativa: una clave generada por
 Pulumi vive en el estado de Pulumi, y esa clave abre el padrón de todas las
 municipalidades.
+
+**Uno más, y este `bootstrap-secretos.sh` no lo genera: `sgtm-<amb>-smtp`** (`usuario`,
+`clave`), que el Job de identidad usa para el relay con que Keycloak envía el enlace de
+clave del alta declarativa de usuarios (ADR-0012). No se genera porque no es un valor que
+se pueda fabricar aquí: lo emite el proveedor del relay, y se pone a mano con
+`kubectl create secret generic sgtm-<amb>-smtp --from-literal=usuario=… --from-literal=clave=…`
+(`INF-06` §1.2). En `stg` no hace falta: el relay es un buzón Mailpit del propio clúster
+(`sgtm-stg-correo`), sin autenticación.
 
 ## Liberar una versión nueva
 
@@ -272,6 +319,7 @@ por VPS, para que `secrets.VPS_HOST` (y compañía) resuelva al nodo correcto en
 | Secreto | Alcance | Valor |
 |---|---|---|
 | `PULUMI_ACCESS_TOKEN` | Repositorio | Token de Pulumi Cloud |
+| `REGISTRY_PULL_TOKEN` | Repositorio | PAT de GHCR con `read:packages` (issue #257) — de solo lectura, sin motivo para variar por ambiente |
 | `SSH_PRIVATE_KEY` | *Environment* `stg` / `prod` | La **privada** de despliegue de ESE VPS, completa |
 | `VPS_USER` | *Environment* `stg` / `prod` | El usuario con el que se conecta esa clave |
 | `VPS_HOST` | *Environment* `stg` / `prod` | La IP o el nombre de ESE VPS |
@@ -280,13 +328,14 @@ por VPS, para que `secrets.VPS_HOST` (y compañía) resuelva al nodo correcto en
 | `BACKUP_SECRET_ACCESS_KEY` | *Environment* `stg` / `prod` | Su secreto |
 
 Además, un tercer *environment* **`prod-preview`**, sin protección, con una **copia** de
-los siete valores de `prod` (menos el token, que ya es de repositorio): existe solo para
-que `previsualizar-prod` pueda correr en cada PR sin quedar detrás de la aprobación que
-sí exige `aplicar-prod` — el `up` real nunca lee de `prod-preview`.
+los seis valores por-VPS de `prod` (los dos de repositorio no se copian: ya los ve
+cualquier *environment*): existe solo para que `previsualizar-prod` pueda correr en cada
+PR sin quedar detrás de la aprobación que sí exige `aplicar-prod` — el `up` real nunca
+lee de `prod-preview`.
 
-Con `stg` y `prod-preview` puestos (más el token), `previsualizar-stg`,
+Con `stg` y `prod-preview` puestos (más los dos de repositorio), `previsualizar-stg`,
 `previsualizar-prod` y `aplicar-stg` corren solos. `aplicar-prod` necesita además que el
-*environment* `prod` tenga sus siete valores y el paso 5.
+*environment* `prod` tenga sus seis valores y el paso 5.
 
 ### 5. El *environment* `prod`, con aprobación requerida
 
@@ -302,6 +351,16 @@ un nombre libre sin protección y el trabajo corre sin que nadie lo mire — que
 exactamente el estado que esta separación existe para impedir. Quién aprueba es una
 decisión de las personas del proyecto, no una que este repositorio pueda tomar.
 
+> **Una espera larga entre «trabajo creado» y «trabajo arrancado» en `aplicar-prod` es
+> esta aprobación pendiente, no una corrida colgada.** Se ha diagnosticado como avería
+> más de una vez: en las corridas del 25 de agosto de 2026 el trabajo pasó 2 h 53 min y
+> 1 h 38 min en ese estado, sin un solo registro, simplemente porque nadie había entrado
+> a aprobarlo. Se ve en la pestaña Actions, con el botón *Review deployments*. Lo que sí
+> es una corrida colgada es que **el paso `Run pulumi/actions@v6` lleve minutos** —un
+> `pulumi up` sano de cualquiera de los dos ambientes termina en 15–25 s—, y para eso
+> están el `timeout-minutes` de los dos trabajos y el volcado de diagnóstico que corre
+> al fallar.
+
 ## Lo que no está aquí, y dónde está
 
 | Cosa | Dónde |
@@ -314,4 +373,4 @@ decisión de las personas del proyecto, no una que este repositorio pueda tomar.
 | El archivado continuo de WAL y el PITR: el `Deployment` de PostgreSQL **no los trae** | #155 |
 | El cortafuegos del VPS, que no es un objeto de Kubernetes | #157, y `vps/cortafuegos.sh` |
 | De dónde salen los secretos de la aplicación | #154 |
-| Los runbooks de restauración | #158 |
+| Los runbooks de operación — escritos; el de reconstrucción, sin ensayar contra un VPS real | [`docs/B0-operacion/runbooks/`](../docs/B0-operacion/runbooks/), issue #158 |

@@ -4,9 +4,18 @@
   "displayName": "SGTM — marcha blanca",
   "sslRequired": "external",
   "registrationAllowed": false,
-  "resetPasswordAllowed": false,
+  "resetPasswordAllowed": true,
   "accessTokenLifespan": 900,
   "ssoSessionIdleTimeout": 1800,
+  "smtpServer": {
+    "host": "correo",
+    "port": "1025",
+    "from": "no-responder@sgtm.local",
+    "fromDisplayName": "SGTM",
+    "ssl": "false",
+    "starttls": "false",
+    "auth": "false"
+  },
   "clients": [
     {
       "clientId": "sgtm-backoffice",

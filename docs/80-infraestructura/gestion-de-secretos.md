@@ -48,15 +48,30 @@ existe para no dejar que se difumine:
 |---|---|---|
 | `kubeconfig` | `pulumi config` (cifrado, por stack) | Semestral |
 | `backupAccessKeyId` / `backupSecretAccessKey` | `pulumi config` (cifrado, por stack) | Semestral |
+| `registryPullToken` (PAT de GHCR, `read:packages`) | `pulumi config` (cifrado, por stack) | Semestral |
 | `PULUMI_ACCESS_TOKEN` | Secreto de GitHub Actions | Semestral |
 | `SSH_PRIVATE_KEY` (clave de despliegue) | Secreto de GitHub Actions | Semestral |
 
-Ninguno de estos cuatro abre el padrón de una municipalidad por sí solo: son lo que
+Ninguno de estos cinco abre el padrón de una municipalidad por sí solo: son lo que
 Pulumi necesita para **crear** el mecanismo —el clúster, el `Namespace`, el destino de
-respaldo—, no un dato del sistema. Es la distinción de `ADR-0011` §3, y `infra/
-componentes/secretos.ts` la hace estructural: `SECRETOS_DE_ARRANQUE` y
-`inventarioDeSecretos()` son dos listas, y una prueba (`verificaciones/secretos.
-test.ts`) exige que ninguna clave aparezca en las dos.
+respaldo, el acceso al registro de imágenes—, no un dato del sistema. Es la distinción
+de `ADR-0011` §3, y `infra/componentes/secretos.ts` la hace estructural:
+`SECRETOS_DE_ARRANQUE` y `inventarioDeSecretos()` son dos listas, y una prueba
+(`verificaciones/secretos.test.ts`) exige que ninguna clave aparezca en las dos.
+
+**`registryPullToken` es el más nuevo de los cinco (issue #257).** `sgtm-aplicacion`,
+`sgtm-migrador` y `sgtm-interfaz` son paquetes **privados** en `ghcr.io/hneyra`:
+`publicar-imagenes.yml` los sube con el `GITHUB_TOKEN` efímero de cada corrida, sin
+ningún paso que los marque públicos. Un nodo nuevo —o uno reconstruido desde cero,
+exactamente el escenario que describe `sgtm:applicationBootstrapVersion`— no tiene de
+dónde sacar una credencial para esas tres imágenes, y hasta este issue **ningún**
+archivo del repositorio lo resolvía: ni `bootstrap-secretos.sh`, ni un
+`imagePullSecrets` en los manifiestos, ni un `registries.yaml` documentado. `index.ts`
+crea un `Secret` de `kubernetes.io/dockerconfigjson` a partir de
+`registryUsername`/`registryPullToken` y lo cuelga del `ServiceAccount` `default` del
+namespace con un `ServiceAccountPatch` (Server-Side Apply, no reclama la cuenta
+entera). `registryUsername` no es secreto — vive en claro en
+`Pulumi.<ambiente>.yaml`, igual que `applicationImageRepository`.
 
 **La clave del administrador de Keycloak estuvo aquí, y ya no.** El andamio original de
 `infra/` (issue #146, antes de que este documento existiera) la leía como secreto de
@@ -64,6 +79,34 @@ arranque de Pulumi. Es un error de clasificación: `ADR-0011` §3 la nombra expl
 como secreto de la *aplicación*, de la misma familia que `sgtm_owner` y `sgtm_app`. Se
 corrigió con este issue — `config.ts` ya no la pide, y vive solo en el `Secret` de
 Kubernetes que genera `bootstrap-secretos.sh`.
+
+### 1.2 El secreto SMTP, que no se genera: lo emite el relay (ADR-0012)
+
+El alta declarativa de usuarios ([`ADR-0012`](../30-arquitectura/adr/ADR-0012-usuarios-y-grupos-declarativos.md))
+envía por correo el enlace de un solo uso con que un usuario nuevo fija su clave. **Solo hace
+falta este `Secret` si el ambiente declara un relay** (`keycloakSmtpHost`) **y ese relay pide
+autenticación** (`keycloakSmtpAuth`). Sin relay —Opción B, el estado de la marcha blanca de
+`prod`— no hay `Secret`, no hay correo, y el operador fija la primera clave a mano.
+
+Cuando sí hace falta, su credencial es la única entrada del inventario que
+`bootstrap-secretos.sh` **no** genera, por el mismo motivo que el superusuario de PostgreSQL no
+se rota desde el nodo: no es un valor que se pueda fabricar aquí, lo emite otro sistema.
+
+| Secreto · claves | Consumidor | De dónde sale | Rotación |
+|---|---|---|---|
+| `sgtm-<amb>-smtp` · `usuario`, `clave` | El Job que reconcilia identidades, que las pone en el realm con `kcadm` | La consola del proveedor del relay. Se ponen con `kubectl create secret generic sgtm-<amb>-smtp --from-literal=usuario=… --from-literal=clave=…` | Según el proveedor |
+
+- **El servidor y el remitente no son secretos.** `keycloakSmtpHost`, `keycloakSmtpPort` y
+  `keycloakSmtpFrom` viven en claro en `Pulumi.<stack>.yaml`, igual que `domain`. Solo
+  `usuario`/`clave` son secreto, y solo cuando `keycloakSmtpAuth` es true.
+- **`stg` no tiene este `Secret`.** Su relay es un buzón Mailpit del propio clúster
+  (`sgtm-stg-correo`), sin autenticación: la escalera comprueba que Keycloak *envía* el
+  enlace, no que llegue a un correo real. `config.ts` prohíbe un buzón así en `prod`
+  (`INF-03` §4).
+- **`prod` tampoco lo tiene hoy** (Opción B): no declara `keycloakSmtpHost`, así que el Job de
+  reconciliación no monta este `Secret` y el alta se completa sin correo. Cuando se decida un
+  relay, se añaden las tres variables en claro a `Pulumi.prod.yaml` y —si pide auth— se crea
+  el `Secret` con el `kubectl create secret` de la tabla, antes del siguiente `pulumi up`.
 
 ## 2. Cómo se generan: `bootstrap-secretos.sh`, nunca Pulumi
 
@@ -209,6 +252,8 @@ corre sobre **todo el repositorio**, no solo `infra/`, en cada PR y en cada inte
 | Que `completar-secreto.ts` genere un valor repetido | `verificaciones/completar-secreto.test.ts`, con un generador roto a propósito |
 | Reintroducir `keycloakAdminPassword` en `SECRETOS_DE_ARRANQUE` | `verificaciones/secretos.test.ts`: las dos listas no pueden compartir una clave |
 | Quitar el `ALTER ROLE` de la rotación | `verificar-rotacion.sh`: una conexión nueva con la clave vieja sigue funcionando, y el guion falla |
+| Apuntar `keycloakSmtpHost` de `prod` a un buzón (`sgtm-prod-correo`, Mailpit), o dejar `keycloakSmtpAuth` en false | `config.test.ts`, «ADR-0012 — el relay SMTP»: `checkInvariants` lo rechaza citando `INF-03` §4 |
+| Quitar del guion el `execute-actions-email` del alta declarativa | `despliegue.yml`, peldaño «3b»: el buzón Mailpit queda vacío y el paso se pone rojo |
 
 ## 6. Lo que sigue sin verificarse, y por qué
 
@@ -225,4 +270,6 @@ probado.
 [`ADR-0011`](../30-arquitectura/adr/ADR-0011-infraestructura-como-codigo.md) §3 ·
 [`INF-01`](arquitectura-de-infraestructura.md) · [`infra/README.md`](../../infra/README.md)
 §«Los secretos que estos manifiestos leen y no crean» ·
+[Rotar la clave de un rol](../B0-operacion/runbooks/rotar-la-clave-de-un-rol.md) — el
+runbook de §3.1 ·
 [`despliegue/README.md`](../../despliegue/README.md) — la misma regla en el entorno local

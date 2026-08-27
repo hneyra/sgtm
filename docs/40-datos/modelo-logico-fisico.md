@@ -120,6 +120,9 @@ una tabla vacía no hay ninguna. `VALIDATE CONSTRAINT` después chocaría con lo
 | `V15__documentos_emitidos.sql` | Documentos emitidos con los datos que los generaron, para reimprimirlos idénticos |
 | `V16__instalacion_de_demostracion.sql` | `municipalidad.es_demostracion`: todo documento que emita el tenant sale marcado |
 | `V17__placa_normalizada_y_valores_por_conjunto.sql` | La placa es única sin su guion, y el valor referencial cuelga del conjunto sellado (ver §0, hallazgo 4) |
+| `V26__valores_correlativo.sql` | Numeración correlativa de OP/RD/RM, por municipalidad, tipo y ejercicio (#37) |
+| `V27__valores_masivo.sql` | Criterio e items de una corrida de generación masiva de valores (#38) |
+| `V28__notificacion_prescripcion_y_pase_a_coactiva.sql` | Acuse de notificación, pase a coactiva (`valor_movimiento`) y declaración de prescripción con su cómputo por ejercicio y sus hechos interruptivos/suspensivos (#39). Le revoca el `UPDATE` que `V7` le daba a `notificacion` |
 
 Los roles se crean **antes**, con `db/roles/crear-roles.sql`, que no es una migración: las
 políticas de `V6` los nombran, y un rol no puede crearse a sí mismo.
@@ -260,7 +263,11 @@ en el esquema, no en una convención:
 - Anular, reformular o quebrar un convenio exige `fecha_estado` y `motivo_estado`, por `CHECK`.
 
 Y el libro de asientos, la auditoría y la traza de cambio de número de papeleta tampoco admiten
-`UPDATE`.
+`UPDATE`. Desde `V28` (#39), tampoco `notificacion`, `valor_movimiento` ni `prescripcion`: una
+diligencia de notificación, un pase a coactiva y una declaración de prescripción son actos
+administrativos, no el estado de un proceso interno —a diferencia de `valor_correlativo` (`V26`) y
+`valor_masivo_item` (`V27`), que sí se actualizan en el sitio por ser infraestructura de un proceso—.
+Un intento no hallado no se corrige: se vuelve a diligenciar, con otra fila.
 
 ## 7. Índices
 

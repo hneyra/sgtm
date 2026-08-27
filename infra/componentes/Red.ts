@@ -1,4 +1,4 @@
-import { namespaceName, resourceName, type Environment } from "../config";
+import { namespaceName, resourceName, type Environment, type SmtpSettings } from "../config";
 import {
   servicioDeAlertmanager,
   servicioDeAplicacion,
@@ -31,10 +31,6 @@ import type { Manifiesto, NetworkPolicy } from "./tipos";
  *
  * ## Lo que NO cubre, y por que
  *
- * - **kube-state-metrics** no tiene politica de salida (ver su funcion): habla con
- *   el API de Kubernetes, que en k3s no es un pod normal del clúster —es el propio
- *   proceso del nodo, detras de un `Service` sin `Endpoints` de pod—, y una regla
- *   `ipBlock` fija romperia el primer dia que la IP del clúster cambiara.
  * - El motor de PostgreSQL y el `CronJob` de respaldo tienen salida a **todo**
  *   `:443` (ver `permitirSalidaAlAlmacenamiento`): el proveedor de almacenamiento
  *   de objetos no esta decidido (`INF-01` §7, `D-04`), asi que no hay un `ipBlock`
@@ -43,15 +39,37 @@ import type { Manifiesto, NetworkPolicy } from "./tipos";
  * - **Alertmanager** tiene la misma salida amplia a `:443`, por el mismo motivo:
  *   `alertWebhookUrl` es una URL arbitraria que la municipalidad configura, no un
  *   destino que este repositorio pueda fijar de antemano.
+ * - **Keycloak (identidad)** sale al puerto del relay SMTP **solo si el ambiente
+ *   declara uno** (ADR-0012). Con `keycloakSmtpHost` puesto y `stg` —buzon Mailpit
+ *   del propio namespace—, la regla apunta a su `podSelector`, sin salida amplia; con
+ *   un relay externo, es un `ipBlock 0.0.0.0/0` acotado a ese puerto. Sin relay
+ *   (Opción B, la marcha blanca de `prod`), Keycloak no tiene ninguna regla de salida
+ *   SMTP: el alta crea al usuario sin clave y no manda correo.
+ * - **kube-state-metrics** tambien sale a `:443` ancho, pero por un motivo
+ *   distinto: su destino SI es fijo —el API de Kubernetes—, solo que en k3s ese
+ *   API no es un pod al que `podSelector`/`namespaceSelector` puedan apuntar —es
+ *   el propio proceso del nodo, detras de un `Service` sin `Endpoints` de pod—, y
+ *   un `ipBlock` con su IP de servicio se rompe el dia que esa IP cambie.
  *
- * Las dos excepciones de salida amplia son deliberadas y estrechas —un puerto,
- * TCP, `:443`—, no «salida libre»: siguen sin poder alcanzar el resto del rango
+ *   La version anterior de este archivo no le daba salida ninguna, asumiendo que
+ *   sin una politica de Egress propia `denegar-todo` lo dejaba pasar. Es al reves:
+ *   `denegar-todo` selecciona TODOS los pods para Egress, y sin una politica que
+ *   abra algo, no queda nada abierto. Se vio contra el clúster real de `prod`: el
+ *   contenedor quedaba en `CrashLoopBackOff` con `dial tcp 10.43.0.1:443: connect:
+ *   connection refused` (2026-08-26).
+ *
+ * Las excepciones de salida amplia son deliberadas y estrechas —un puerto, TCP,
+ * `:443`—, no «salida libre»: siguen sin poder alcanzar el resto del rango
  * privado del clúster ni un puerto administrativo de un tercero.
  */
 
 interface ArgsDeRed {
   environment: Environment;
   namespace: string;
+  /** El relay SMTP (ADR-0012); `undefined` = el ambiente no tiene, y Keycloak no sale a ninguno. */
+  smtp?: SmtpSettings;
+  /** El relay es un buzon Mailpit del propio namespace (`stg`), no uno externo. */
+  correoDePrueba: boolean;
 }
 
 /** El namespace de sistema donde vive Traefik, en k3s. Kubernetes etiqueta todo namespace con este nombre desde 1.21. */
@@ -199,6 +217,53 @@ function permitirIngresoPostgres(environment: Environment, namespace: string): N
   });
 }
 
+/**
+ * Keycloak: solo a su propia base (issue #158, encontrado reconstruyendo un cluster
+ * real desde cero — nunca se probo un arranque de Keycloak sin el namespace ya con
+ * trafico existente, y sin esta politica queda en CrashLoopBackOff indefinido:
+ * `permitir-ingreso-postgres` deja entrar, pero nada dejaba salir).
+ */
+function permitirSalidaIdentidad(
+  environment: Environment,
+  namespace: string,
+  smtp: SmtpSettings | undefined,
+  correoDePrueba: boolean,
+): NetworkPolicy[] {
+  const politicas: NetworkPolicy[] = [
+    politica(namespace, "permitir-salida-identidad", {
+      podSelector: { matchLabels: { app: servicioDeIdentidad(environment) } },
+      policyTypes: ["Egress"],
+      egress: [
+        { to: [deApp(servicioDeBaseDeDatos(environment))], ports: [puerto(5432)] },
+        // El relay SMTP del alta declarativa de usuarios (ADR-0012). En `stg` es el
+        // buzon Mailpit del propio namespace; en `prod` con relay, uno externo —solo
+        // su puerto, ver el docstring del modulo—. Sin relay (Opción B), Keycloak no
+        // sale a ninguno: no hay regla.
+        ...(smtp === undefined
+          ? []
+          : [
+              correoDePrueba
+                ? { to: [deApp(resourceName(environment, "correo"))], ports: [puerto(smtp.port)] }
+                : { to: [{ ipBlock: { cidr: "0.0.0.0/0" } }], ports: [puerto(smtp.port)] },
+            ]),
+      ],
+    }),
+  ];
+  if (correoDePrueba && smtp !== undefined) {
+    // El buzon Mailpit: solo Keycloak le entrega correo, por su puerto SMTP.
+    politicas.push(
+      politica(namespace, "permitir-ingreso-correo", {
+        podSelector: { matchLabels: { app: resourceName(environment, "correo") } },
+        policyTypes: ["Ingress"],
+        ingress: [
+          { from: [deApp(servicioDeIdentidad(environment))], ports: [puerto(smtp.port)] },
+        ],
+      }),
+    );
+  }
+  return politicas;
+}
+
 /** La aplicacion: sale a lo que necesita, y no hay ningun destino de internet en la lista. */
 function permitirSalidaAplicacion(environment: Environment, namespace: string): NetworkPolicy {
   return politica(namespace, "permitir-salida-aplicacion", {
@@ -321,13 +386,25 @@ function politicasDeObservabilidad(environment: Environment, namespace: string):
       policyTypes: ["Ingress"],
       ingress: [{ from: [deApp(prometheus)], ports: [puerto(9100)] }],
     }),
-    // `kube-state-metrics`: ingreso restringido, SIN politica de salida (issue
-    // #157). Ver el docstring del modulo — el API de Kubernetes en k3s no es un
-    // pod al que `podSelector`/`namespaceSelector` puedan apuntar.
     politica(namespace, "permitir-ingreso-kube-state-metrics", {
       podSelector: { matchLabels: { app: kubeStateMetrics } },
       policyTypes: ["Ingress"],
       ingress: [{ from: [deApp(prometheus)], ports: [puerto(8080)] }],
+    }),
+    // Salida al API de Kubernetes. Ver el docstring del modulo: mismo acotamiento
+    // que `permitirSalidaAlAlmacenamiento` —el puerto, no el destino—, porque el
+    // API en k3s no tiene un `Service` con `Endpoints` de pod al que apuntar.
+    //
+    // El puerto es 6443, NO el 443 del `Service` `kubernetes`: k3s hace DNAT hacia
+    // el `Endpoints` real —el proceso del nodo en :6443— antes de que el trafico
+    // llegue a la cadena donde se evalua `NetworkPolicy`, asi que la regla ve el
+    // puerto de despues de la traduccion. Se comprobo contra el cluster real de
+    // `prod`: con :443 el contenedor seguia en `CrashLoopBackOff` con la misma
+    // `connection refused`; con :6443 conecta (2026-08-26).
+    politica(namespace, `permitir-salida-${kubeStateMetrics}-al-apiserver`, {
+      podSelector: { matchLabels: { app: kubeStateMetrics } },
+      policyTypes: ["Egress"],
+      egress: [{ to: [{ ipBlock: { cidr: "0.0.0.0/0" } }], ports: [puerto(6443)] }],
     }),
     // Grafana no tiene politica de ingreso: nadie del clúster la consume —ni
     // Traefik, que no la publica (`Observabilidad.ts`)—, y el tunel SSH con que
@@ -342,7 +419,7 @@ function politicasDeObservabilidad(environment: Environment, namespace: string):
 }
 
 export function manifiestosDeRed(args: ArgsDeRed): Manifiesto[] {
-  const { environment, namespace } = args;
+  const { environment, namespace, smtp, correoDePrueba } = args;
   if (namespace !== namespaceName(environment)) {
     throw new Error(
       `manifiestosDeRed recibio namespace «${namespace}», y el de «${environment}» es ` +
@@ -357,6 +434,7 @@ export function manifiestosDeRed(args: ArgsDeRed): Manifiesto[] {
     permitirDns(namespace),
     ...permitirIngresoPublico(environment, namespace),
     permitirIngresoPostgres(environment, namespace),
+    ...permitirSalidaIdentidad(environment, namespace, smtp, correoDePrueba),
     permitirSalidaAplicacion(environment, namespace),
     ...permitirSalidaDeLote(environment, namespace),
     permitirSalidaPostgres(environment, namespace),

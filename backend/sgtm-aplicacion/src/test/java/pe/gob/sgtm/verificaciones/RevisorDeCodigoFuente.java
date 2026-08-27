@@ -40,6 +40,9 @@ public final class RevisorDeCodigoFuente {
                     "recibo_detalle",
                     "valor",
                     "valor_detalle",
+                    "valor_movimiento",
+                    "notificacion",
+                    "prescripcion",
                     "papeleta",
                     "convenio",
                     "expediente_coactivo",
@@ -53,7 +56,18 @@ public final class RevisorDeCodigoFuente {
      * y la traza del cambio de numero de papeleta. Se corrigen agregando, no editando.
      */
     public static final Set<String> TABLAS_INMUTABLES =
-            Set.of("cuenta_corriente_asiento", "auditoria", "papeleta_cambio_numero");
+            Set.of(
+                    "cuenta_corriente_asiento",
+                    "auditoria",
+                    "papeleta_cambio_numero",
+                    // Una diligencia de notificacion y un pase a coactiva son actos, no estados de
+                    // un proceso: no se corrigen en el sitio. Un intento no hallado se reintenta
+                    // con otra fila (#39); un movimiento equivocado se corrige con otro
+                    // movimiento. V28 les revoca el privilegio de UPDATE, y esto rompe el build
+                    // antes de que nadie lo descubra en ejecucion.
+                    "notificacion",
+                    "valor_movimiento",
+                    "prescripcion");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =
@@ -116,11 +130,19 @@ public final class RevisorDeCodigoFuente {
      * <p>Es la otra forma en que aparece: no llamando a {@code Alicuota.de}, sino declarando {@code
      * private static final BigDecimal UIT = new BigDecimal("5350")}. El nombre delata la intencion,
      * y por eso la lista es de nombres y no de tipos.
+     *
+     * <p>{@code PLAZO} y {@code PRESCRIPCION} entran con #39. Un plazo del Codigo Tributario es una
+     * cifra normativa igual que una alicuota, y compilarlo tiene una consecuencia peor: la alicuota
+     * equivocada cobra de mas o de menos, mientras que el plazo equivocado produce expedientes
+     * coactivos <b>nulos</b>, que se descubren cuando el primero se impugna. La delimitacion {@code
+     * \b} es la que hace esto usable: solo caza identificadores que <b>empiezan</b> por esas
+     * palabras, asi que {@code TIPO_PARAMETRO_PLAZO = "PLAZO"} —el nombre del tipo con el que se
+     * LEE el parametro— no es un hallazgo, y {@code PLAZO_DE_RECLAMACION = 20} si.
      */
     private static final Pattern CONSTANTE_NORMATIVA =
             Pattern.compile(
                     "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
-                            + "|INTERES_MORATORIO|REAJUSTE)\\w*\\s*=\\s*[^;\\n]*[0-9]");
+                            + "|INTERES_MORATORIO|REAJUSTE|PLAZO|PRESCRIPCION)\\w*\\s*=\\s*[^;\\n]*[0-9]");
 
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
     private static final Pattern COMENTARIO_DE_BLOQUE = Pattern.compile("(?s)/\\*.*?\\*/");

@@ -14,22 +14,50 @@ import {
 } from '../seguridad/listado';
 
 /**
- * Rentas · Registro, conectado hasta donde llega el backend: **siete opciones de quince**.
+ * Rentas · Registro, conectado hasta donde llega el backend: **seis opciones de quince**.
  *
- * `contribuyentes` (#11) ya estaba. Se suman `vehiculos` (#26), `declaracion_jurada` (#28) y
- * `beneficios` (#27): las tres son lectura, y las tres tenian su endpoint publicado desde hace
- * dias sin que nadie las conectara. Quedan fuera de este PR, deliberadamente:
+ * `contribuyentes` (#11), `vehiculos` (#26), `declaracion_jurada` (#28), `beneficios` (#27) y
+ * `alta_deuda` (#24, escritura en `escrituras.ts`) ya estaban. Se suma `arbitrios` (#31): lectura,
+ * con el mismo hueco de forma que ya tenia `declaracion_jurada` — `GET /rentas/arbitrios` trae un
+ * padron de **cuotas mensuales** (una fila por servicio y mes), y el catalogo dibuja
+ * «Determinacion por servicio» como si cada fila fuera un servicio con su tasa mensual y su total
+ * anual ya sumado. No se recompone: `anualS`, `criterioDeDistribucion`, `frecuencia` y `condicion`
+ * no estan en `ArbitrioResource`, y sumar doce cuotas para inventar el anual es exactamente lo que
+ * RNF-083 prohibe — se dejan en `SIN_DATO`.
+ *
+ * Quedan fuera de este PR, deliberadamente:
  *
  * - `predios_rentas`, `predial_individual`, `predial_masivo`: el backend no publica todavia
- *   ningun `Controller` para `Determinacion` — #30 dejo la regla de negocio y su prueba, pero
- *   "los dos endpoints... siguen sin capa web" es literal, no una figura retorica.
- * - `arbitrios`, `alcabala`, `vehicular_calculo`, `espectaculos`: bloqueados por D-02 (#31, #32).
- * - `transferencia_predio`, `transferencia_vehiculo`, `alta_deuda`, `baja_deuda`: **tienen**
- *   backend (#29, #24) pero son las primeras escrituras que se conectarian en toda la interfaz —
- *   `escrituras.ts` hoy solo declara `cambiar_anio` y `cambiar_clave`, dos formularios triviales.
- *   Merecen su propio PR: cada campo que se declare ahi es el unico que su formulario podra
- *   mandar (la lista blanca de #64), y apurarlo junto con tres lecturas mas es la forma de
- *   equivocarse en un campo que nadie revisa con cuidado.
+ *   ningun `Controller` para `Determinacion` — #30 dejo la regla de negocio y su prueba, no la
+ *   capa web.
+ * - `alcabala`, `vehicular_calculo`, `espectaculos`: #32 (este mismo `onda:2`) resolvio la parte
+ *   **estructural** de D-02 para los tres —sus controladores calculan de verdad, sin ningun
+ *   literal tributario—, pero ninguno se puede conectar todavia y **no es por D-02**:
+ *     - `alcabala` pide `transferenciaId` (identificador interno de una `Transferencia` ya
+ *       registrada) y `autoavaluoAjustado` como los dos argumentos que decide quien llama; el
+ *       catalogo no dibuja ningun campo escribible para el primero, y marca el segundo `"ro"`
+ *       (`autovaluoAjustadoS`) esperando que el servidor calcule el ajuste por IPM — que D-11 dice
+ *       explicitamente que no se calcula aqui.
+ *     - `vehicular_calculo` pide `placa`/`codContribuyente`/`ejercicio` en el **cuerpo** de la
+ *       peticion (`VehicularController`), pero `sgtm-v1.yaml` los declara como parametros de
+ *       **consulta** de una pantalla que solo tiene `filtros` —sin `secciones`, asi que
+ *       `escrituras.ts` no tiene formulario al que declararle campos—, y los filtros viajan por la
+ *       URL, nunca por el cuerpo. Conectarlo de verdad es corregir el contrato o el controlador,
+ *       no una entrada en la lista blanca.
+ *     - `espectaculos` pide `organizadorId` (identificador interno) e `ingresoDeclarado`; el
+ *       catalogo solo ofrece `organizador2`/`rUC` (texto) para lo primero y marca
+ *       `recaudacionDeclaradaS` `"ro"` para lo segundo, esperando que el servidor la componga de
+ *       aforo por precio — cosa que el controlador no hace.
+ *   Los tres necesitan resolver un codigo contra un identificador interno antes de poder enviar,
+ *   igual que ya le falta a `transferencia_predio`/`transferencia_vehiculo` (ver abajo).
+ * - `transferencia_predio`, `transferencia_vehiculo`: el backend pide un identificador interno
+ *   (`predioId`) y el codigo exacto de contribuyente, y el prototipo solo pide un codigo
+ *   catastral y un numero de documento — hace falta una busqueda que resuelva uno contra el
+ *   otro antes de poder enviar, y `escrituras.ts` no tiene forma de expresar eso (ver #73).
+ * - `baja_deuda`: a diferencia de `alta_deuda`, su pantalla es buscar-y-seleccionar-varias-filas
+ *   sobre una tabla de deuda existente, no un formulario plano — cada fila seleccionada es su
+ *   propio `POST` a `/rentas/deuda/bajas`, y eso es una pieza de interfaz que no existe todavia,
+ *   no una entrada mas en la lista blanca.
  */
 
 /** El registro que abre la ficha o la declaracion. Sin el no hay peticion. */
@@ -210,10 +238,45 @@ const beneficios = definirConexion({
     ),
 });
 
+/**
+ * Arbitrios municipales (RF-022, #31). `GET /rentas/arbitrios?anio=&ejercicio=&codigoPredial=&zona=&uso=`
+ * trae un padron paginado de `CuotaDeArbitrio` —una fila por servicio y mes—, no una fila por
+ * servicio con su tasa mensual y su anual ya sumado como dibuja «Determinacion por servicio»: por
+ * eso solo dos de las seis columnas del catalogo salen de `ArbitrioResource` (`servicio`, y
+ * `monto` en «Tasa mensual», que es literalmente eso —la cuota de un mes—). `criterioDeDistribucion`,
+ * `frecuencia`, `anualS` y `condicion` no estan en el recurso, y componer el anual sumando doce
+ * cuotas es justo lo que RNF-083 prohibe: se dejan en `SIN_DATO`.
+ *
+ * `zona` y `uso` viajan porque el contrato los declara como filtro de esta pantalla, pero
+ * `ArbitriosController` todavia no los lee (solo `anio` y `codigoPredial`) — un filtro que el
+ * backend no aplica todavia, no uno que esta pantalla se inventa (ADR-0010).
+ */
+const arbitrios = definirConexion({
+  operacion: 'arbitrios',
+  parametros: ({ busqueda }) => parametrosDeBusqueda('arbitrios', undefined, busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'los arbitrios'),
+  adaptar: (paginado) =>
+    datosDe(
+      tablaDe(
+        paginado,
+        (cuota): readonly Celda[] => [
+          { texto: texto(cuota['servicio']) },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: texto(cuota['monto']) },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+        ],
+        'cuotas de arbitrio',
+      ),
+    ),
+});
+
 /** Las opciones de Rentas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_RENTAS: Readonly<Record<string, Conexion>> = {
   contribuyentes,
   vehiculos,
   declaracion_jurada,
   beneficios,
+  arbitrios,
 };

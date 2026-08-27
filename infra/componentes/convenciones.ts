@@ -193,6 +193,47 @@ export const RECURSOS = {
     requests: { cpu: "1", memory: "1Gi" },
     limits: { cpu: "2", memory: "2Gi" },
   },
+  /**
+   * Los Jobs de un solo uso del despliegue: `migracion` e `implantacion`.
+   *
+   * Mismos `limits` que `aplicacionLote` —siguen pudiendo usar 2 CPU y 2 Gi cuando el
+   * nodo los tiene libres— y `requests` mucho mas bajos. La diferencia no es cosmetica:
+   * el `request` es lo que el planificador **reserva y bloquea**, y estos dos Jobs
+   * corren a la vez que todos los `Deployment` durante un `pulumi up`.
+   *
+   * Con 1 CPU de `request` cada uno se llevaban 2 CPU del nodo en el peor momento, y en
+   * un nodo justo eso no es lentitud: es que no entran. Y como llevan la clase de
+   * prioridad `lote` —la mas baja del clúster a proposito— no pueden desalojar a nadie
+   * para entrar, mientras `aplicacion` espera a `implantacion` en su `initContainer`.
+   * Nadie cede y el despliegue se cuelga (`capacidad.ts`, issue #252).
+   *
+   * Bajar el `request` no les quita capacidad de computo: la JVM dimensiona su monton
+   * con `MaxRAMPercentage` sobre el **limite**, no sobre la peticion, y los dos son
+   * trabajos cortos y dominados por E/S contra PostgreSQL. Lo unico que se pierde es la
+   * garantia de tener esa CPU reservada de antemano, que para un Job que puede esperar
+   * treinta segundos mas es exactamente lo que sobra.
+   *
+   * El `CronJob` de `lote` NO usa este perfil y sigue con `aplicacionLote`: una emision
+   * masiva a las 02:00 sí quiere su CPU reservada, y a esa hora el nodo la tiene.
+   *
+   * **250m → 100m el 2026-08-26**, por el mismo razonamiento y una medicion mas: sobre
+   * `vmd120205` estos dos Jobs eran TODO el desajuste. Lo permanente de `prod` pide
+   * 1 540m y el nodo reparte 1 800m; el pico llegaba a 2 060m porque `migracion` e
+   * `implantacion` sumaban 500m que solo existen durante el `pulumi up`. Con 100m cada
+   * uno el pico baja a 1 760m y `prod` cabe en el nodo **tal como esta hoy**, sin
+   * esperar a la ventana de mantenimiento que corrige la reserva.
+   *
+   * Lo que NO cambia: el `limits` sigue en 2 CPU, asi que los dos Jobs siguen pudiendo
+   * usar toda la CPU que el nodo tenga libre —y la tiene: 1 760m pedidos de 1 800m es
+   * lo RESERVADO, no lo usado, y los `Deployment` en reposo no gastan lo suyo—. Un
+   * `request` bajo solo significa poca garantia previa, y para un trabajo corto,
+   * dominado por E/S contra PostgreSQL y que puede tardar treinta segundos mas, esa
+   * garantia es justo lo que sobra.
+   */
+  arranque: {
+    requests: { cpu: "100m", memory: "512Mi" },
+    limits: { cpu: "2", memory: "2Gi" },
+  },
   interfaz: {
     requests: { cpu: "50m", memory: "64Mi" },
     limits: { cpu: "200m", memory: "128Mi" },
@@ -423,6 +464,13 @@ export const WALG_SHA256 = "b412489168a4ab74aaeb91c06e297573e3950599e839116177f1
 /** Imagen minima con `curl`, `tar` y `sha256sum` para el contenedor que lo descarga. */
 export const IMAGEN_DE_DESCARGA = "curlimages/curl:8.11.0";
 
+/**
+ * Buzon SMTP de pruebas (ADR-0012). Solo `stg`: la escalera comprueba que Keycloak
+ * ENVIA el enlace de clave, no que llegue a un correo real. En `prod` el relay es
+ * externo y de verdad (`INF-03` §4).
+ */
+export const IMAGEN_DE_MAILPIT = "axllent/mailpit:v1.20";
+
 /** Donde queda el binario dentro del pod, en el volumen compartido `wal-g-bin`. */
 export const WALG_DIRECTORIO = "/opt/wal-g";
 export const WALG_BINARIO = `${WALG_DIRECTORIO}/wal-g`;
@@ -536,19 +584,24 @@ export function montajeDeWalg(): MontajeDeVolumen {
  * (`Respaldo.ts`). Definirlas una vez es lo que impide que un cambio de proveedor de
  * almacenamiento se aplique en un sitio y se olvide en el otro.
  *
- * `WALG_S3_FORCE_PATH_STYLE=true` porque el proveedor del almacenamiento de objetos
- * todavia no esta decidido (`INF-01` §7): el estilo de ruta funciona contra
- * practicamente cualquier S3 compatible, y el virtual-hosted-style que asume AWS por
- * omision no funciona contra la mayoria de los que no son AWS.
+ * `WALG_S3_FORCE_PATH_STYLE=true` se dejó puesto al decidir el proveedor —AWS S3
+ * (issue #158)— porque sigue funcionando ahí, y quitarlo no aporta nada: no hay
+ * necesidad de arriesgar el cambio a virtual-hosted-style sin un motivo concreto.
+ *
+ * `AWS_REGION` es obligatorio contra un S3 real: el SDK firma cada petición con la
+ * región incluida, y un valor equivocado —o ausente— no da un error de permisos, da
+ * uno de firma que no dice cuál es la región correcta (confirmado contra un bucket
+ * real, issue #158).
  */
 export function variablesWalg(args: {
-  backup: { endpoint: string; bucket: string };
+  backup: { endpoint: string; region: string; bucket: string };
   credenciales: string;
   secretoDeRespaldo: string;
 }): VariableDeEntorno[] {
   return [
     { name: "WALG_S3_PREFIX", value: `s3://${args.backup.bucket}` },
     { name: "AWS_ENDPOINT", value: args.backup.endpoint },
+    { name: "AWS_REGION", value: args.backup.region },
     { name: "WALG_S3_FORCE_PATH_STYLE", value: "true" },
     { name: "WALG_COMPRESSION_METHOD", value: "lz4" },
     {

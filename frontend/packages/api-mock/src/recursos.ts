@@ -16,9 +16,12 @@ import { RESPUESTAS } from './respuestas.generado';
  * backend: las once de seguridad (#9, #12, #13), el catalogo vial y los
  * sectores (#16), las cuatro fichas (#18, #19), su consulta (#20), los
  * aranceles (#17), el padron de contribuyentes (#11), la ficha de vehiculo
- * (#26), la declaracion jurada (#28) y los beneficios (#27) desde #73, y desde
- * #72 la consulta de deuda (#22, #175), la constancia de no adeudo (#25,
- * #179), el padron vehicular consultable (#25, #184) y las altas y bajas de deuda (#24, #72).
+ * (#26), la declaracion jurada (#28), los beneficios (#27) y los arbitrios
+ * (#31) desde #73, y desde #72 la consulta de deuda (#22, #175), la
+ * constancia de no adeudo (#25, #179), el padron vehicular consultable (#25,
+ * #184), las altas y bajas de deuda (#24, #72), el historial de pagos (#25,
+ * #219), los predios de un contribuyente (#25, #222) y, desde #75, los
+ * valores emitidos (#37).
  * **Esta lista crece cuando crece aquella**, no antes: publicar aqui
  * una forma que el backend todavia no sirve seria inventarsela.
  *
@@ -195,6 +198,101 @@ const beneficios = (): Paginado =>
       }),
   );
 
+/**
+ * Arbitrios municipales (`ArbitrioResource`, #31): cada fila de «Determinación
+ * por servicio» del prototipo —un servicio con su tasa mensual— se convierte
+ * en **una** cuota de un mes, no en las doce que tendria un ejercicio
+ * completo: el proxy no inventa un padron que el prototipo no dibuja, igual
+ * que ya hace con `beneficios`.
+ *
+ * El prototipo separa «LIMPIEZA PÚBLICA — BARRIDO» de «— RECOLECCIÓN»; el
+ * dominio real solo conoce un `Servicio.LIMPIEZA_PUBLICA` (V2, #31), asi que
+ * las dos colapsan en el mismo codigo — la distincion es del prototipo, no
+ * del dominio que el backend publica.
+ */
+const SERVICIO_DEL_MOCK: Readonly<Record<string, string>> = {
+  'LIMPIEZA PÚBLICA': 'LIMPIEZA_PUBLICA',
+  'PARQUES Y JARDINES': 'PARQUES_JARDINES',
+  SERENAZGO: 'SERENAZGO',
+};
+
+const arbitrios = (): Paginado => {
+  const ejercicio =
+    typeof RESPUESTAS['arbitrios']?.campos?.['ejercicio'] === 'string'
+      ? (RESPUESTAS['arbitrios'].campos['ejercicio'] as string)
+      : '2026';
+  return unaPagina(
+    filasDe('arbitrios').map(([servicio, , , tasaMensual], i) => {
+      const [nombre] = (servicio ?? '').split(' — ');
+      return {
+        id: i + 1,
+        ejercicio,
+        servicio: SERVICIO_DEL_MOCK[(nombre ?? '').trim()] ?? 'LIMPIEZA_PUBLICA',
+        periodo: 1,
+        contribuyenteId: 1,
+        predioId: 1,
+        monto: tasaMensual,
+        fechaCalculo: '2026-08-13',
+      };
+    }),
+  );
+};
+
+/**
+ * Como escribe el prototipo el tipo de valor —«ORDEN DE PAGO», «RES. DETERMINACIÓN»,
+ * «RES. DE MULTA»— frente al codigo de tres letras que publica `ValorResource.tipo`
+ * (`TipoValor.codigo()`, V26): `OP`, `RD`, `RM`.
+ */
+const TIPO_DE_VALOR_DEL_MOCK: Readonly<Record<string, string>> = {
+  'ORDEN DE PAGO': 'OP',
+  'RES. DETERMINACIÓN': 'RD',
+  'RES. DE MULTA': 'RM',
+};
+
+/**
+ * Como escribe el prototipo el estado de un valor frente al `enum EstadoDeValor` (V3) que
+ * `ValorResource.estado` publica de verdad. «Firme» y «Reclamado» no son ningun valor del
+ * enum —la firmeza es una fecha derivada de la notificacion (`NotificacionResource
+ * .exigibleDesde`, #39), no un estado, y el reclamo todavia no tiene estado propio—: el mas
+ * cercano que el dominio ya modela es `NOTIFICADO`, que es el estado del que ambos parten.
+ */
+const ESTADO_DE_VALOR_DEL_MOCK: Readonly<Record<string, string>> = {
+  Emitido: 'EMITIDO',
+  Firme: 'NOTIFICADO',
+  Reclamado: 'NOTIFICADO',
+  Coactiva: 'COACTIVA',
+};
+
+/**
+ * Valores emitidos (`ValorResource`, #37). `numero` sigue el formato provisional de
+ * `RegistrarValor` —`TIPO-EJERCICIO-000001`, D-09 abierta—, y de ahi se lee el ejercicio:
+ * es el mismo dato que publicaria el recurso real, sin inventar uno aparte.
+ *
+ * `codContribuyente` sale vacio: el prototipo solo dibuja el nombre en esta tabla, nunca
+ * el codigo, y la busqueda de esta pantalla no se filtra de verdad (`proxy.ts`) — no hay
+ * ningun filtro que dependa de que el codigo aqui sea real.
+ */
+const valores = (): Paginado =>
+  unaPagina(
+    filasDe('valores_busqueda').map(([numero, tipo, contribuyente, , , montoS, , estado], i) => {
+      const ejercicio = Number((numero ?? '').split('-')[1]) || new Date().getFullYear();
+      return {
+        id: i + 1,
+        tipo: TIPO_DE_VALOR_DEL_MOCK[tipo ?? ''] ?? 'OP',
+        numero,
+        ejercicio,
+        codContribuyente: '',
+        nombreContribuyente: contribuyente,
+        baseLegal: '',
+        estado: ESTADO_DE_VALOR_DEL_MOCK[estado ?? ''] ?? 'EMITIDO',
+        proyectadoA: '2026-08-13',
+        total: montoS,
+        fechaEmision: '2026-08-13',
+        observacion: '',
+      };
+    }),
+  );
+
 /* ── Consultas: deuda y constancia ──────────────────────────────────────── */
 
 /** «Ordinaria», «Valor emitido», «Coactiva» del prototipo → el `enum Fase` (V2). */
@@ -358,6 +456,58 @@ function altasBajas(): Paginado {
       asientoReversadoId: null,
       usuarioId: null,
       motivo: null,
+    })),
+  );
+}
+
+/**
+ * Historial de pagos (`AsientoResource`, RF-048, #25, #219): la misma forma que publica
+ * `cuenta_corriente` y `consulta_altas_bajas`, filtrada a los abonos de concepto `PAGO`.
+ *
+ * «Concepto» del prototipo es un texto libre («Impuesto predial cuotas 1 y 2»), no un tributo del
+ * enum: se guarda tal cual en `tributo` porque es lo mas cercano que hay, y la pantalla solo lo
+ * muestra como texto — no lo compara contra ningun valor. «Recibo» va a `documentoOrigen`, que es
+ * el unico campo de documento que trae el recurso real. «Medio» y «Caja» no viajan: el recurso no
+ * los publica todavia (ver `ConsultaPagosController` en el backend).
+ */
+function pagos(): Paginado {
+  return unaPagina(
+    filasDe('consulta_pagos').map(([fecha, recibo, concepto, ano, , , importeS], i) => ({
+      id: i + 1,
+      ejercicio: Number(ano) || new Date().getFullYear(),
+      tributo: concepto || 'PAGO',
+      concepto: 'PAGO',
+      tipo: 'ABONO',
+      fase: 'ORDINARIA',
+      periodo: null,
+      predioId: null,
+      vehiculoId: null,
+      referenciaExterna: null,
+      monto: { importe: importeS ?? '0.00', actualizadoA: fechaDe(fecha ?? '') ?? '2026-08-13' },
+      documentoOrigen: recibo || 'S/D',
+      asientoReversadoId: null,
+      usuarioId: null,
+      motivo: null,
+    })),
+  );
+}
+
+/**
+ * Predios de un contribuyente (`PredioEncontradoResource`, #25, #222): solo los campos que el
+ * recurso real publica — código, tipo, dirección, porcentaje de titularidad y deuda. «Titular»,
+ * «Uso», «Terreno m²», «Const. m²» y «Autovalúo S/» del prototipo no tienen con que llenarse
+ * todavia (ver el adaptador de la pantalla).
+ */
+function predios(): Paginado {
+  const fecha = '2026-08-13';
+  return unaPagina(
+    filasDe('consulta_predios').map(([codigoPredial, , direccion, , , , , deudaS], i) => ({
+      predioId: i + 1,
+      codigoReferenciaCatastral: codigoPredial,
+      tipo: 'URBANO',
+      direccion,
+      porcentajeTitularidad: '100.0000',
+      deuda: { importe: deudaS ?? '0.00', actualizadoA: fecha },
     })),
   );
 }
@@ -629,6 +779,27 @@ const rural = (): Readonly<Record<string, unknown>> =>
   });
 
 /** Recursos que no son listados: se sirven tal cual, sin sobre paginado. */
+/**
+ * La matriz de permisos efectivos de la sesion (`GET /seguridad/sesion/permisos`, ADR-0013).
+ *
+ * Contra el proxy —modo prototipo, sin backend— se devuelven **todas** las opciones del catalogo
+ * con los siete privilegios: el proxy no tiene una sesion de la que sacar permisos reales, y la
+ * demostracion tiene que poder llegar a las 134 pantallas. La forma es la del backend:
+ * `{ opcion: [privilegios] }`, con los privilegios en minuscula como los nombra el manual.
+ */
+const SIETE_PRIVILEGIOS = [
+  'ejecucion',
+  'lectura',
+  'registro',
+  'modificacion',
+  'eliminacion',
+  'impresion',
+  'especial',
+] as const;
+
+const permisosDeLaSesion = (): Readonly<Record<string, unknown>> =>
+  Object.fromEntries(filasDe('accesos').map(([codigo]) => [codigo, SIETE_PRIVILEGIOS]));
+
 const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>> = {
   '/catastro/fichas/urbana/{codRefCatastral}': urbana,
   '/catastro/fichas/economica/{codRefCatastral}': economica,
@@ -637,6 +808,7 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/rentas/vehiculos/{placa}': vehiculo,
   '/rentas/declaraciones/{djNro}': declaracionJurada,
   '/consultas/constancias/no-adeudo': constanciaDeNoAdeudo,
+  '/seguridad/sesion/permisos': permisosDeLaSesion,
 };
 
 /* ── Una funcion por recurso, con los campos que declara su `Resource` ──── */
@@ -784,10 +956,14 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/catastro/vias': vias,
   '/rentas/contribuyentes': contribuyentes,
   '/rentas/beneficios': beneficios,
+  '/rentas/arbitrios': arbitrios,
+  '/valores': valores,
   '/consultas/cuenta-corriente/{codigo}': cuentaCorriente,
   '/consultas/deuda': consultaDeuda,
   '/consultas/vehiculos': consultaVehiculos,
   '/consultas/altas-bajas': altasBajas,
+  '/consultas/pagos': pagos,
+  '/consultas/predios': predios,
   '/catastro/sectores': sectores,
   '/catastro/fichas': fichas,
   '/seguridad/modulos': modulos,

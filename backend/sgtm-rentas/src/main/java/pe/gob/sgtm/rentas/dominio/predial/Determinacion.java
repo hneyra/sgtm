@@ -26,9 +26,12 @@ import pe.gob.sgtm.rentas.dominio.OrigenDeDeterminacion;
  * actualizar}: es estructural, no una convencion que alguien pueda romper con un {@code UPDATE}
  * suelto.
  *
- * <p>Alcance de #30: solo {@code PREDIAL}. La tabla ya admite otros seis tributos (V2), pero
- * arbitrios, vehicular, alcabala, etc. no tienen su regla de calculo todavia (D-02b, D-02a) y no
- * son de esta cabecera todavia: por eso el unico constructor publico es {@link #nuevaPredial}.
+ * <p>Nacio en #30 con un unico constructor publico, {@link #nuevaPredial}, porque «arbitrios,
+ * vehicular, alcabala, etc. no tenian su regla de calculo todavia». #32 agrega {@link
+ * #nuevaVehicular}, {@link #nuevaAlcabala} y {@link #nuevaEspectaculos}: los tres son
+ * determinaciones de una sola partida —nunca llevan {@link DetalleDeterminacionPredio}— y por eso
+ * usan {@link DeterminacionRepository#insertar(Determinacion)}, no la sobrecarga con detalle que
+ * sigue siendo exclusiva del predial.
  *
  * @param id nulo mientras no se ha guardado; lo asigna la base
  * @param ejercicio el ejercicio que determina
@@ -64,6 +67,9 @@ public record Determinacion(
         @Nullable String usuarioCalculo) {
 
     private static final String PREDIAL = "PREDIAL";
+    private static final String VEHICULAR = "VEHICULAR";
+    private static final String ALCABALA = "ALCABALA";
+    private static final String ESPECTACULOS = "ESPECTACULOS";
 
     public Determinacion {
         Objects.requireNonNull(ejercicio, "La determinacion necesita su ejercicio");
@@ -76,6 +82,21 @@ public record Determinacion(
             throw new IllegalArgumentException(
                     "El predial se determina por contribuyente, nunca por un solo predio (NEG-05"
                             + " §1): predioId debe ser null. Ver determinacion_predial_sin_predio_ck");
+        }
+        if (VEHICULAR.equals(tributo) && (vehiculoId == null || predioId != null)) {
+            throw new IllegalArgumentException(
+                    "El vehicular se determina por vehiculo: vehiculoId es obligatorio y predioId"
+                            + " debe ser null");
+        }
+        if (ALCABALA.equals(tributo) && (predioId == null || vehiculoId != null)) {
+            throw new IllegalArgumentException(
+                    "La alcabala grava la transferencia de un predio (TUO LTM art. 21): predioId es"
+                            + " obligatorio y vehiculoId debe ser null");
+        }
+        if (ESPECTACULOS.equals(tributo) && (predioId != null || vehiculoId != null)) {
+            throw new IllegalArgumentException(
+                    "Los espectaculos publicos no gravan un predio ni un vehiculo: predioId y"
+                            + " vehiculoId deben ser null");
         }
         if (conjuntoId <= 0) {
             throw new IllegalArgumentException(
@@ -95,10 +116,21 @@ public record Determinacion(
             throw new IllegalArgumentException(
                     "Una determinacion sin ninguna regla aplicada no es reproducible (ADR-0007)");
         }
-        // Valida el formato de cada identificador (defensa en profundidad: ya lo hizo el motor),
-        // y normaliza a la representacion canonica antes de guardar.
-        reglasAplicadas =
-                reglasAplicadas.stream().map(r -> IdentificadorDeRegla.de(r).valor()).toList();
+        if (PREDIAL.equals(tributo)) {
+            // Valida el formato de cada identificador (defensa en profundidad: ya lo hizo el
+            // motor), y normaliza a la representacion canonica antes de guardar. Solo el predial
+            // tiene un catalogo RT-xxx registrado en NEG-05; los demas tributos citan la llave del
+            // parametro que aplicaron (tipo:clave), que no tiene ese formato.
+            reglasAplicadas =
+                    reglasAplicadas.stream().map(r -> IdentificadorDeRegla.de(r).valor()).toList();
+        } else {
+            reglasAplicadas = List.copyOf(reglasAplicadas);
+            for (String regla : reglasAplicadas) {
+                if (regla.isBlank()) {
+                    throw new IllegalArgumentException("Una regla aplicada no puede ir en blanco");
+                }
+            }
+        }
         Objects.requireNonNull(origen, "La determinacion necesita su origen");
         Objects.requireNonNull(estado, "La determinacion necesita su estado");
     }
@@ -119,6 +151,93 @@ public record Determinacion(
                 null,
                 ejercicio,
                 PREDIAL,
+                null,
+                contribuyenteId,
+                null,
+                null,
+                conjuntoId,
+                baseImponible,
+                montoDeterminado,
+                reglasAplicadas,
+                OrigenDeDeterminacion.ORDINARIA,
+                EstadoDeDeterminacion.BORRADOR,
+                null);
+    }
+
+    /**
+     * Una determinacion vehicular nueva, todavia sin guardar: {@code origen = ORDINARIA}, {@code
+     * estado = BORRADOR}, sin periodo (el vehicular es anual) y sobre el vehiculo indicado, nunca
+     * un predio (#32).
+     */
+    public static Determinacion nuevaVehicular(
+            Ejercicio ejercicio,
+            long contribuyenteId,
+            long vehiculoId,
+            long conjuntoId,
+            Dinero baseImponible,
+            Dinero montoDeterminado,
+            List<String> reglasAplicadas) {
+        return new Determinacion(
+                null,
+                ejercicio,
+                VEHICULAR,
+                null,
+                contribuyenteId,
+                null,
+                vehiculoId,
+                conjuntoId,
+                baseImponible,
+                montoDeterminado,
+                reglasAplicadas,
+                OrigenDeDeterminacion.ORDINARIA,
+                EstadoDeDeterminacion.BORRADOR,
+                null);
+    }
+
+    /**
+     * Una determinacion de alcabala nueva, todavia sin guardar: sobre el predio transferido, nunca
+     * un vehiculo (TUO LTM art. 21; #32).
+     */
+    public static Determinacion nuevaAlcabala(
+            Ejercicio ejercicio,
+            long contribuyenteId,
+            long predioId,
+            long conjuntoId,
+            Dinero baseImponible,
+            Dinero montoDeterminado,
+            List<String> reglasAplicadas) {
+        return new Determinacion(
+                null,
+                ejercicio,
+                ALCABALA,
+                null,
+                contribuyenteId,
+                predioId,
+                null,
+                conjuntoId,
+                baseImponible,
+                montoDeterminado,
+                reglasAplicadas,
+                OrigenDeDeterminacion.ORDINARIA,
+                EstadoDeDeterminacion.BORRADOR,
+                null);
+    }
+
+    /**
+     * Una determinacion de espectaculos publicos nueva, todavia sin guardar: sobre el organizador
+     * —{@code contribuyenteId}—, sin predio ni vehiculo (#32).
+     */
+    public static Determinacion nuevaEspectaculos(
+            Ejercicio ejercicio,
+            long contribuyenteId,
+            long conjuntoId,
+            Dinero baseImponible,
+            Dinero montoDeterminado,
+            List<String> reglasAplicadas) {
+        return new Determinacion(
+                null,
+                ejercicio,
+                ESPECTACULOS,
                 null,
                 contribuyenteId,
                 null,

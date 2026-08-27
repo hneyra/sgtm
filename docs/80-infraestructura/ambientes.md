@@ -168,4 +168,6 @@ sola forma honesta de responderse que no sea «sí», y está en el recuadro de 
 [`ADR-0011`](../30-arquitectura/adr/ADR-0011-infraestructura-como-codigo.md) ·
 [`REQ-02 §Operación`](../20-requisitos/requisitos-no-funcionales.md) ·
 [`GOB-04 — Plan de marcha blanca`](../00-gobierno/plan-de-marcha-blanca.md) ·
+[Reconstruir el VPS desde cero](../B0-operacion/runbooks/reconstruir-el-vps-desde-cero.md)
+— el runbook que se ensaya aquí, en `stg` ·
 [`despliegue/README.md`](../../despliegue/README.md)

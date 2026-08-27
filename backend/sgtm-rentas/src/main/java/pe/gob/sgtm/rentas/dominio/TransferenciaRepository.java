@@ -16,6 +16,12 @@ public interface TransferenciaRepository {
     Transferencia insertar(Transferencia transferencia);
 
     /**
+     * La transferencia sobre la que se determina la alcabala (#32), si existe en esta
+     * municipalidad.
+     */
+    Optional<Transferencia> findById(long id);
+
+    /**
      * La cadena completa de transferencias de un predio, de la mas antigua a la mas reciente
      * (RF-030): quien fue titular, de quien, y desde cuando.
      */

@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { commonLabels, resourceName, type Environment } from "../config";
+import { commonLabels, resourceName, type Environment, type SmtpSettings } from "../config";
 import {
   BASE_DE_IDENTIDAD,
   CLAVES,
+  IMAGEN_DE_MAILPIT,
   RECURSOS,
   ROL_DE_IDENTIDAD,
   nombreDePrioridad,
@@ -12,8 +13,20 @@ import {
   servicioDeIdentidad,
   sondaHttp,
 } from "./convenciones";
-import { realmSgtmJson, reconciliarRealmSh } from "./fuentes";
-import type { ConfigMap, Deployment, Job, Manifiesto, Service } from "./tipos";
+import {
+  municipalidadesJson,
+  realmSgtmJson,
+  reconciliarIdentidadesSh,
+  reconciliarRealmSh,
+} from "./fuentes";
+import type {
+  ConfigMap,
+  Deployment,
+  EspecificacionDePod,
+  Job,
+  Manifiesto,
+  Service,
+} from "./tipos";
 
 /**
  * Keycloak en modo produccion, con su base y su realm como codigo (issue #151).
@@ -70,6 +83,26 @@ export interface IdentidadArgs {
    * que nadie necesita (`INF-03` §4).
    */
   clienteDeVerificacion: boolean;
+  /**
+   * Desplegar un buzon Mailpit del clúster como relay SMTP (`sgtm-<amb>-correo`).
+   *
+   * Solo `stg`: la escalera comprueba que Keycloak ENVIA el enlace de clave, no que
+   * llegue a un correo real. En `prod` el relay es de verdad y externo (ADR-0012,
+   * `INF-03` §4).
+   */
+  correoDePrueba: boolean;
+  /**
+   * El relay SMTP con el que Keycloak manda el enlace de clave (ADR-0012).
+   *
+   * `undefined` = el ambiente no tiene relay: el realm no lleva `smtpServer`, el Job
+   * pasa `SIN_CORREO=1` y el usuario se crea sin clave (Opción B, marcha blanca de
+   * `prod`).
+   */
+  smtp?: SmtpSettings;
+  /** Ubigeo de la municipalidad implantada: se reconcilian sus usuarios y su grupo. */
+  ubigeo: string;
+  /** Cuenta del primer administrador. Tiene que ser la del archivo versionado. */
+  administrador: string;
 }
 
 /** El cliente que existe solo para que CI consiga un token sin navegador. */
@@ -80,6 +113,22 @@ export const CLIENTE_DEL_BACKOFFICE = "sgtm-backoffice";
 
 /** Ruta bajo la que cuelga Keycloak. La comparte con `publicar-imagenes.yml`. */
 export const RUTA_DE_IDENTIDAD = "/keycloak";
+
+/**
+ * Puerto local del tunel por el que se abre la consola de administracion.
+ *
+ * Vive aqui, y exportado, porque **tiene que coincidir** con el del
+ * `port-forward`: la consola construye sus enlaces desde `KC_HOSTNAME_ADMIN`, asi
+ * que con otro puerto carga y se rompe en cuanto se navega. Un numero suelto en un
+ * runbook se desincroniza del codigo; una constante no.
+ */
+export const PUERTO_DE_LA_CONSOLA = 8180;
+
+/**
+ * Donde existe la consola de administracion: al otro lado de un tunel local, y en
+ * ningun otro sitio. El runbook `abrir-la-consola-de-keycloak.md` lo explica.
+ */
+export const URL_DE_LA_CONSOLA = `http://localhost:${PUERTO_DE_LA_CONSOLA}${RUTA_DE_IDENTIDAD}`;
 
 interface MapeadorDeProtocolo {
   name: string;
@@ -127,10 +176,28 @@ export function documentosDelRealm(args: {
   domain: string;
   realm: string;
   clienteDeVerificacion: boolean;
+  smtp?: SmtpSettings;
 }): DocumentosDelRealm {
   const versionado = JSON.parse(realmSgtmJson()) as RealmVersionado;
 
+  // El `smtpServer` del archivo versionado apunta al buzon `correo` del compose y NUNCA
+  // llega asi al clúster: o lo decide el stack (ADR-0012), o el ambiente no tiene relay
+  // y el realm va sin `smtpServer` —el Job pasa `SIN_CORREO=1` (Opción B)—.
   const { clients = [], components = {}, ...ajustes } = versionado;
+  delete ajustes.smtpServer;
+
+  const smtpServer: Record<string, string> | undefined =
+    args.smtp === undefined
+      ? undefined
+      : {
+          host: args.smtp.host,
+          port: String(args.smtp.port),
+          from: args.smtp.from,
+          fromDisplayName: "SGTM",
+          ssl: "false",
+          starttls: String(args.smtp.startTls),
+          auth: String(args.smtp.auth),
+        };
 
   const clientes = clients
     // En `prod` no entra el cliente de verificacion. Lo decide la configuracion del
@@ -170,7 +237,12 @@ export function documentosDelRealm(args: {
     // nadie pidio—. La marca de instalacion de demostracion es otra cosa, y va en los
     // documentos que el sistema emite (INF-03 §3.2), no en el formulario de entrada.
     realm: JSON.stringify(
-      { ...ajustes, realm: args.realm, displayName: "SGTM" },
+      {
+        ...ajustes,
+        realm: args.realm,
+        displayName: "SGTM",
+        ...(smtpServer === undefined ? {} : { smtpServer }),
+      },
       null,
       2,
     ),
@@ -181,13 +253,147 @@ export function documentosDelRealm(args: {
   };
 }
 
+interface UsuarioVersionado {
+  cuenta: string;
+  nombre: string;
+  apellido: string;
+  correo: string;
+  administrador?: boolean;
+}
+interface MunicipalidadVersionada {
+  ubigeo: string;
+  municipalidadId: number;
+  grupo: string;
+  usuarios: UsuarioVersionado[];
+}
+
+/** El TSV de identidades y lo que el Job comprueba, derivado del archivo versionado. */
+export interface DocumentosDeIdentidades {
+  /**
+   * Una fila por linea, campos con tabulador. Lo lee `reconciliar-identidades.sh` en
+   * el modo «directo» (la imagen de Keycloak no trae python ni jq).
+   *
+   *   GRUPO   <grupo>  <municipalidadId>
+   *   USUARIO <cuenta> <nombre> <apellido> <correo> <municipalidadId> <grupo>
+   */
+  tsv: string;
+  /** El grupo que el Job crea. */
+  grupo: string;
+  /** Las cuentas que el Job comprueba al terminar. */
+  cuentas: string[];
+}
+
+/**
+ * Deriva el TSV de usuarios y grupos para la municipalidad implantada (ADR-0012).
+ *
+ * Se deriva y se valida AQUI, en TypeScript, por lo mismo que los documentos del
+ * realm: la imagen de Keycloak no trae con que parsear JSON, y hacerlo aqui lo deja
+ * cubierto por `componentes.test.ts`. El cruce con `administrador` es la fuente unica
+ * de ADR-0012: si la cuenta del archivo no es la que implanta el Job, el claim del
+ * token no encontraria fila de `usuario` y la persona entraria sin ser nadie.
+ */
+export function documentosDeIdentidades(args: {
+  municipalidades: { ubigeo: string; contenido: string }[];
+  ubigeo: string;
+  administrador: string;
+}): DocumentosDeIdentidades {
+  const fuente = args.municipalidades.find((m) => m.ubigeo === args.ubigeo);
+  if (fuente === undefined) {
+    throw new Error(
+      `No hay «despliegue/identidad/municipalidades/${args.ubigeo}.json». Es la fuente ` +
+        "versionada de los usuarios y el grupo de la municipalidad que se implanta " +
+        "(ADR-0012); sin ella el alta de personas volveria a ser un paso manual.",
+    );
+  }
+
+  const m = JSON.parse(fuente.contenido) as MunicipalidadVersionada;
+
+  if (m.ubigeo !== args.ubigeo) {
+    throw new Error(
+      `El archivo ${args.ubigeo}.json declara ubigeo «${m.ubigeo}»: el nombre del archivo ` +
+        "y el ubigeo de dentro tienen que coincidir.",
+    );
+  }
+  if (!Number.isInteger(m.municipalidadId) || m.municipalidadId <= 0) {
+    throw new Error(
+      `${args.ubigeo}.json: «municipalidadId» es un entero positivo, y es ` +
+        `${JSON.stringify(m.municipalidadId)}. Es el id que asigno la implantacion —sale de ` +
+        "su log— y el que va al atributo del que sale el claim (`::bigint` en RLS).",
+    );
+  }
+  if (!m.grupo || m.grupo.includes("\t")) {
+    throw new Error(`${args.ubigeo}.json: «grupo» es obligatorio y sin tabuladores.`);
+  }
+  if (!Array.isArray(m.usuarios) || m.usuarios.length === 0) {
+    throw new Error(`${args.ubigeo}.json: no declara ningun usuario.`);
+  }
+
+  const admins = m.usuarios.filter((u) => u.administrador === true);
+  if (admins.length !== 1) {
+    throw new Error(
+      `${args.ubigeo}.json: tiene que haber exactamente un usuario con «administrador: true», ` +
+        `y hay ${admins.length}.`,
+    );
+  }
+  if (admins[0]?.cuenta !== args.administrador) {
+    throw new Error(
+      `${args.ubigeo}.json: el usuario «administrador: true» es «${admins[0]?.cuenta}», pero la ` +
+        `implantacion da de alta a «${args.administrador}» (stack). Tienen que ser la misma ` +
+        "cuenta: es lo unico que une la fila de `usuario` con la identidad del token (ADR-0005).",
+    );
+  }
+
+  const filas: string[] = [["GRUPO", m.grupo, String(m.municipalidadId)].join("\t")];
+  for (const u of m.usuarios) {
+    for (const [campo, valor] of Object.entries({
+      cuenta: u.cuenta,
+      nombre: u.nombre,
+      apellido: u.apellido,
+      correo: u.correo,
+    })) {
+      if (!valor || String(valor).includes("\t")) {
+        throw new Error(`${args.ubigeo}.json: usuario «${u.cuenta}» sin «${campo}» valido.`);
+      }
+    }
+    filas.push(
+      ["USUARIO", u.cuenta, u.nombre, u.apellido, u.correo, String(m.municipalidadId), m.grupo].join(
+        "\t",
+      ),
+    );
+  }
+
+  return {
+    tsv: `${filas.join("\n")}\n`,
+    grupo: m.grupo,
+    cuentas: m.usuarios.map((u) => u.cuenta),
+  };
+}
+
 export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
-  const { environment, namespace, image, realm, domain, clienteDeVerificacion } = args;
+  const {
+    environment,
+    namespace,
+    image,
+    realm,
+    domain,
+    clienteDeVerificacion,
+    correoDePrueba,
+    smtp,
+    ubigeo,
+    administrador,
+  } = args;
   const nombre = servicioDeIdentidad(environment);
+  const nombreDelCorreo = resourceName(environment, "correo");
+  const secretoSmtp = resourceName(environment, "smtp");
   const etiquetas = commonLabels(environment, "identidad");
   const secreto = secretos(environment);
 
-  const documentos = documentosDelRealm({ domain, realm, clienteDeVerificacion });
+  const documentos = documentosDelRealm({ domain, realm, clienteDeVerificacion, smtp });
+  const identidades = documentosDeIdentidades({
+    municipalidades: municipalidadesJson(),
+    ubigeo,
+    administrador,
+  });
 
   const configuracionDelRealm: ConfigMap = {
     apiVersion: "v1",
@@ -198,6 +404,10 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
       "perfil-de-usuario.json": documentos.perfilDeUsuario,
       "clientes.json": documentos.clientes,
       "reconciliar-realm.sh": reconciliarRealmSh(),
+      // El alta declarativa de usuarios (ADR-0012): el mismo guion que el compose y el
+      // TSV que `documentosDeIdentidades` deriva del archivo versionado.
+      "reconciliar-identidades.sh": reconciliarIdentidadesSh(),
+      "identidades.tsv": identidades.tsv,
     },
   };
 
@@ -256,6 +466,22 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
                 // El nombre PUBLICO. De aqui sale el `iss` de cada token.
                 { name: "KC_HOSTNAME", value: `https://${domain}${RUTA_DE_IDENTIDAD}` },
                 { name: "KC_HOSTNAME_STRICT", value: "true" },
+                // La consola de administracion NO se publica: la `IngressRoute` la
+                // excluye con `!PathPrefix(/keycloak/admin)`, y eso no se toca. Pero
+                // `KC_HOSTNAME_STRICT` hace que Keycloak construya TODAS sus URLs
+                // absolutas contra `KC_HOSTNAME` sin mirar por donde llego la peticion,
+                // asi que abrirla por un `port-forward` acababa en un 302 al dominio
+                // publico -y ahi, excluida del enrutado, la peticion caia a la ruta de
+                // la interfaz y aparecia el formulario de acceso del SGTM-. Las dos
+                // protecciones encadenadas dejaban la consola inalcanzable tambien para
+                // quien tiene derecho a entrar. Se vio contra el Keycloak de `prod`.
+                //
+                // `KC_HOSTNAME_ADMIN` le da a las URLs de administracion un anfitrion
+                // propio sin tocar los publicos: el `iss` de los tokens sigue saliendo
+                // de `KC_HOSTNAME`. No amplia la superficie de ataque, la reduce -esas
+                // URLs dejan de nombrar el dominio publico, y `localhost` no es
+                // enrutable desde fuera-.
+                { name: "KC_HOSTNAME_ADMIN", value: URL_DE_LA_CONSOLA },
                 // ── Sonda y agrupamiento ────────────────────────────────────
                 { name: "KC_HEALTH_ENABLED", value: "true" },
                 // Desde Keycloak 25 la sonda vive en el puerto 9000. Su ruta se fija
@@ -319,13 +545,97 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
     },
   };
 
-  // El nombre del Job lleva la huella de lo que aplica: mientras el realm no cambie,
-  // `pulumi up` no crea ningun Job nuevo; en cuanto cambie una linea, crea uno. Es lo
-  // que hace cierto el criterio «un cambio del realm versionado llega al clúster».
+  // El nombre del Job lleva la huella de lo que aplica: mientras nada cambie, `pulumi
+  // up` no crea ningun Job nuevo; en cuanto cambie una linea —del realm o del archivo
+  // versionado de una municipalidad— crea uno. Es lo que hace cierto el criterio «un
+  // cambio versionado llega al clúster», ahora tambien para usuarios y grupos.
+  /**
+   * El pod que reconcilia, aparte del Job, porque entra en la huella de abajo.
+   *
+   * Es lo que hace que un cambio en COMO se aplica —el mandato, la imagen, el modo con
+   * que se monta el `ConfigMap`— produzca un Job nuevo y no un intento de modificar el
+   * que ya existe. `spec.template` de un Job es inmutable: sin esto, corregir el pod
+   * deja un `pulumi up` que el API server rechaza con «field is immutable», y la
+   * correccion no llega nunca al clúster.
+   */
+  const plantillaDeReconciliacion: EspecificacionDePod = {
+    restartPolicy: "Never",
+    priorityClassName: nombreDePrioridad(environment, "lote"),
+    containers: [
+      {
+        name: "reconciliar-realm",
+        // La imagen de Keycloak, por su `kcadm.sh`. No hace falta ninguna otra.
+        image,
+        // Primero el realm y el perfil, despues los usuarios y grupos: el alta
+        // declarativa necesita que el atributo `municipalidad_id` ya lo admita el
+        // perfil (ADR-0012).
+        command: [
+          "/bin/bash",
+          "-c",
+          "/realm/reconciliar-realm.sh && /realm/reconciliar-identidades.sh",
+        ],
+        env: [
+          { name: "KC_SERVIDOR", value: `http://${nombre}:8080${RUTA_DE_IDENTIDAD}` },
+          { name: "KC_REALM", value: realm },
+          { name: "KC_ADMIN", value: "admin" },
+          {
+            name: "KC_CLAVE",
+            valueFrom: {
+              secretKeyRef: {
+                name: secreto.identidad,
+                key: CLAVES.administradorDeIdentidad,
+              },
+            },
+          },
+          { name: "KC_CLIENTES", value: documentos.clientesComprobados.join(" ") },
+          // Lee `identidades.tsv` del propio ConfigMap (modo «directo»).
+          { name: "KC_DIRECTORIO", value: "/realm" },
+          // Sin relay (Opción B): el guion crea al usuario y OMITE el enlace de
+          // clave, en vez de fallar. Un operador la fija con el runbook.
+          ...(smtp === undefined ? [{ name: "SIN_CORREO", value: "1" }] : []),
+          // Si el relay pide auth, el usuario y la clave salen del `Secret`
+          // `sgtm-<amb>-smtp` —que NO genera `bootstrap-secretos.sh`: lo emite el
+          // proveedor del relay (INF-06 §1.2)—. El guion los pone en el realm con
+          // `kcadm`, nunca quedan en el `realm.json` versionado.
+          ...(smtp?.auth
+            ? [
+                {
+                  name: "KC_SMTP_USUARIO",
+                  valueFrom: { secretKeyRef: { name: secretoSmtp, key: "usuario" } },
+                },
+                {
+                  name: "KC_SMTP_CLAVE",
+                  valueFrom: { secretKeyRef: { name: secretoSmtp, key: "clave" } },
+                },
+              ]
+            : []),
+        ],
+        securityContext: seguridadSinRoot(),
+        resources: RECURSOS.auxiliar,
+        volumeMounts: [{ name: "realm", mountPath: "/realm", readOnly: true }],
+      },
+    ],
+    // 0o755 en decimal, igual que la inicializacion del motor (`BaseDeDatos.ts`). Los
+    // dos guiones de arriba se EJECUTAN —`bash -c "a.sh && b.sh"`, no `bash a.sh`—, y
+    // el modo por omision de un `ConfigMap` (0644) los deja sin permiso de ejecucion:
+    // el contenedor muere con «exit 126» antes de tocar Keycloak. Comprobado contra el
+    // clúster: el Job agoto sus cuatro intentos y `pulumi up` espero 10 minutos.
+    volumes: [
+      {
+        name: "realm",
+        configMap: { name: configuracionDelRealm.metadata.name, defaultMode: 493 },
+      },
+    ],
+  };
+
   const huella = createHash("sha256")
     .update(documentos.realm)
     .update(documentos.perfilDeUsuario)
     .update(documentos.clientes)
+    .update(identidades.tsv)
+    .update(reconciliarIdentidadesSh())
+    // Y el pod que los aplica, no solo lo que aplica. Ver el docstring de arriba.
+    .update(JSON.stringify(plantillaDeReconciliacion))
     .digest("hex")
     .slice(0, 10);
 
@@ -341,40 +651,78 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
       backoffLimit: 3,
       template: {
         metadata: { labels: { ...etiquetas, app: "realm" } },
-        spec: {
-          restartPolicy: "Never",
-          priorityClassName: nombreDePrioridad(environment, "lote"),
-          containers: [
-            {
-              name: "reconciliar-realm",
-              // La imagen de Keycloak, por su `kcadm.sh`. No hace falta ninguna otra.
-              image,
-              command: ["/bin/bash", "/realm/reconciliar-realm.sh"],
-              env: [
-                { name: "KC_SERVIDOR", value: `http://${nombre}:8080${RUTA_DE_IDENTIDAD}` },
-                { name: "KC_REALM", value: realm },
-                { name: "KC_ADMIN", value: "admin" },
-                {
-                  name: "KC_CLAVE",
-                  valueFrom: {
-                    secretKeyRef: {
-                      name: secreto.identidad,
-                      key: CLAVES.administradorDeIdentidad,
-                    },
-                  },
-                },
-                { name: "KC_CLIENTES", value: documentos.clientesComprobados.join(" ") },
-              ],
-              securityContext: seguridadSinRoot(),
-              resources: RECURSOS.auxiliar,
-              volumeMounts: [{ name: "realm", mountPath: "/realm", readOnly: true }],
-            },
-          ],
-          volumes: [{ name: "realm", configMap: { name: configuracionDelRealm.metadata.name } }],
-        },
+        spec: plantillaDeReconciliacion,
       },
     },
   };
 
-  return [configuracionDelRealm, identidad, servicio, reconciliacion];
+  // Solo `stg`: el buzon Mailpit que hace de relay SMTP para que la escalera pueda
+  // comprobar que el enlace de clave SE ENVIA (ADR-0012). En `prod` el relay es
+  // externo y `keycloakSmtpHost` no puede apuntar a un buzon (`config.ts`).
+  const etiquetasCorreo = commonLabels(environment, "correo");
+  const correo: Manifiesto[] = correoDePrueba
+    ? [
+        {
+          apiVersion: "apps/v1",
+          kind: "Deployment",
+          metadata: { name: nombreDelCorreo, namespace, labels: etiquetasCorreo },
+          spec: {
+            replicas: 1,
+            strategy: { type: "Recreate" },
+            selector: { matchLabels: { app: nombreDelCorreo } },
+            template: {
+              metadata: { labels: { ...etiquetasCorreo, app: nombreDelCorreo } },
+              spec: {
+                priorityClassName: nombreDePrioridad(environment, "lote"),
+                containers: [
+                  {
+                    name: "mailpit",
+                    image: IMAGEN_DE_MAILPIT,
+                    env: [
+                      { name: "MP_SMTP_AUTH_ACCEPT_ANY", value: "true" },
+                      { name: "MP_SMTP_AUTH_ALLOW_INSECURE", value: "true" },
+                    ],
+                    ports: [
+                      { name: "smtp", containerPort: 1025 },
+                      { name: "http", containerPort: 8025 },
+                    ],
+                    // `runAsUser` explicito, y no solo `runAsNonRoot`. El Dockerfile de
+                    // Mailpit no declara `USER` —`ENTRYPOINT ["/mailpit"]` sobre alpine y
+                    // nada mas—, asi que la imagen corre como root y el kubelet se niega
+                    // a arrancarla: `CreateContainerConfigError`, «container has
+                    // runAsNonRoot and image will run as root». `runAsNonRoot` a secas
+                    // delega en la imagen la respuesta a si el pod arranca; con el UID
+                    // puesto, la decide el manifiesto. 65534 vale aqui: los dos puertos
+                    // estan por encima de 1024, y sin `MP_DATABASE` el buzon escribe su
+                    // SQLite temporal en `/tmp`, que alpine trae en 1777.
+                    securityContext: seguridadSinRoot({ runAsUser: 65534 }),
+                    resources: RECURSOS.auxiliar,
+                    readinessProbe: sondaHttp("/readyz", 8025, { failureThreshold: 3 }),
+                    livenessProbe: sondaHttp("/", 8025, {
+                      periodSeconds: 20,
+                      failureThreshold: 5,
+                    }),
+                  },
+                ],
+              },
+            },
+          },
+        },
+        {
+          apiVersion: "v1",
+          kind: "Service",
+          metadata: { name: nombreDelCorreo, namespace, labels: etiquetasCorreo },
+          spec: {
+            type: "ClusterIP",
+            selector: { app: nombreDelCorreo },
+            ports: [
+              { name: "smtp", port: 1025, targetPort: 1025 },
+              { name: "http", port: 8025, targetPort: 8025 },
+            ],
+          },
+        },
+      ]
+    : [];
+
+  return [configuracionDelRealm, identidad, servicio, reconciliacion, ...correo];
 }

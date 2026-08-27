@@ -22,7 +22,15 @@ public interface DeterminacionRepository {
 
     /**
      * Inserta la cabecera y su detalle por predio, en la misma transaccion. Devuelve la cabecera
-     * guardada, con su {@code id} y su usuario.
+     * guardada, con su {@code id} y su usuario. Exclusiva del predial: es el unico tributo con
+     * detalle por predio.
      */
     Determinacion insertar(Determinacion determinacion, List<DetalleDeterminacionPredio> detalle);
+
+    /**
+     * Inserta una cabecera de una sola partida, sin detalle: vehicular, alcabala y espectaculos
+     * (#32), que nunca llevan {@link DetalleDeterminacionPredio}. Devuelve la cabecera guardada,
+     * con su {@code id} y su usuario.
+     */
+    Determinacion insertar(Determinacion determinacion);
 }

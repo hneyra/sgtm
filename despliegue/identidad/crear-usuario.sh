@@ -7,7 +7,13 @@
 # —clientes, PKCE, el mapeador del claim— y las personas las crea quien
 # provisiona, con las claves de su gestor de secretos.
 #
-#   ./crear-usuario.sh <usuario> <clave> [municipalidad_id]
+#   ./crear-usuario.sh [--reset] <usuario> <clave> [municipalidad_id]
+#
+# Con `--reset` la clave se asigna como TEMPORAL, se marca UPDATE_PASSWORD y se
+# envia el enlace de correo de Keycloak: el usuario fija su clave en el primer
+# acceso (ADR-0012). Sin `--reset` la clave es permanente —que es lo que necesitan
+# los usuarios `sgtm-verificacion` de CI para el direct grant—. Para el alta
+# declarativa de una municipalidad entera, ver `reconciliar-identidades.sh`.
 #
 # El correo, el nombre y el apellido salen de SGTM_CORREO, SGTM_NOMBRE y
 # SGTM_APELLIDO; sin ellas se ponen marcadores. No son adorno: Keycloak exige los
@@ -22,7 +28,13 @@
 # Idempotente: si el usuario existe, le actualiza clave y atributo.
 set -euo pipefail
 
-usuario="${1:?uso: crear-usuario.sh <usuario> <clave> [municipalidad_id]}"
+reset=0
+if [ "${1:-}" = "--reset" ]; then
+  reset=1
+  shift
+fi
+
+usuario="${1:?uso: crear-usuario.sh [--reset] <usuario> <clave> [municipalidad_id]}"
 clave="${2:?falta la clave}"
 municipalidad="${3:-}"
 
@@ -91,5 +103,16 @@ else
   echo "Usuario $usuario ya existia; actualizado."
 fi
 
-kc set-password -r sgtm --username "$usuario" --new-password "$clave" >/dev/null
-echo "Clave asignada. Municipalidad: ${municipalidad:-«ninguna, solo para verificar el 403»}"
+if [ "$reset" = 1 ]; then
+  kc set-password -r sgtm --username "$usuario" --new-password "$clave" --temporary >/dev/null
+  kc update "users/$existente" -r sgtm -s 'requiredActions=["UPDATE_PASSWORD"]' >/dev/null
+  if kc update "users/$existente/execute-actions-email" -r sgtm -b '["UPDATE_PASSWORD"]' >/dev/null 2>&1; then
+    echo "Clave TEMPORAL asignada y enlace de UPDATE_PASSWORD enviado a «$usuario»."
+  else
+    echo "Clave TEMPORAL asignada; el correo de UPDATE_PASSWORD no salio (¿SMTP sin configurar?)." >&2
+  fi
+  echo "Municipalidad: ${municipalidad:-«ninguna, solo para verificar el 403»}"
+else
+  kc set-password -r sgtm --username "$usuario" --new-password "$clave" >/dev/null
+  echo "Clave asignada. Municipalidad: ${municipalidad:-«ninguna, solo para verificar el 403»}"
+fi

@@ -11,6 +11,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -36,6 +38,7 @@ import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.seguridad.infraestructura.ComprobadorDeAccesoJdbc;
+import pe.gob.sgtm.seguridad.infraestructura.PermisoRepositoryJdbc;
 
 /**
  * RF-121 a RF-123, contra PostgreSQL real: la siembra de accesos y la comprobacion de privilegios.
@@ -58,6 +61,7 @@ class AutorizacionTest {
     private static TransactionTemplate transaccion;
     private static SembradorDeAccesos sembrador;
     private static ComprobadorDeAcceso comprobador;
+    private static PermisoRepositoryJdbc permisos;
 
     @BeforeAll
     static void provisionar() throws SQLException, IOException {
@@ -73,6 +77,7 @@ class AutorizacionTest {
         TenantTransactionManager gestor = new TenantTransactionManager(pool);
         transaccion = new TransactionTemplate(gestor);
         comprobador = new ComprobadorDeAccesoJdbc(jdbc);
+        permisos = new PermisoRepositoryJdbc(jdbc);
 
         SembradorDeAccesos objetivo =
                 new SembradorDeAccesos(jdbc, new AuditoriaJdbc(jdbc, RELOJ), RELOJ);
@@ -232,7 +237,103 @@ class AutorizacionTest {
         }
     }
 
+    @Nested
+    @DisplayName("ADR-0013 — La matriz de permisos efectivos de la sesion")
+    class Matriz {
+
+        @Test
+        @DisplayName("solo trae las opciones con algun privilegio, y con los privilegios que hay")
+        void soloLasOpcionesConAlgunPrivilegio() throws SQLException {
+            sembrar();
+            long usuario = crearUsuario("con.calles", null, null);
+            // Dos privilegios en la MISMA fila: `permiso` es unico por (usuario, acceso).
+            ejecutar(
+                    "INSERT INTO permiso (municipalidad_id, acceso_id, usuario_id, lectura,"
+                            + " impresion, usuario_registro) SELECT"
+                            + " current_setting('app.municipalidad_id')::bigint, a.id, "
+                            + usuario
+                            + ", true, true, 'prueba' FROM acceso a WHERE a.codigo = 'calles'");
+
+            Map<String, Set<Privilegio>> matriz = efectivosDe("con.calles");
+
+            assertThat(matriz)
+                    .as("de las 134 opciones sembradas, solo aparece sobre la que tiene permiso")
+                    .containsOnlyKeys("calles");
+            assertThat(matriz.get("calles"))
+                    .containsExactlyInAnyOrder(Privilegio.LECTURA, Privilegio.IMPRESION);
+        }
+
+        @Test
+        @DisplayName("la excepcion del usuario manda: amplia sobre lo del grupo")
+        void laExcepcionDelUsuarioAmplia() throws SQLException {
+            sembrar();
+            long usuario = crearUsuario("amplia", null, null);
+            long grupo = crearGrupo("Grupo base", null, null);
+            afiliar(grupo, usuario, true);
+            otorgarAGrupo(grupo, "calles", Privilegio.LECTURA);
+            otorgarAUsuario(usuario, "calles", Privilegio.MODIFICACION);
+
+            assertThat(efectivosDe("amplia").get("calles"))
+                    .as("la fila de excepcion sustituye al grupo entero para ese acceso")
+                    .containsExactly(Privilegio.MODIFICACION);
+        }
+
+        @Test
+        @DisplayName("la excepcion del usuario manda: tambien cuando restringe")
+        void laExcepcionDelUsuarioRestringe() throws SQLException {
+            sembrar();
+            long usuario = crearUsuario("restringe", null, null);
+            long grupo = crearGrupo("Grupo generoso", null, null);
+            afiliar(grupo, usuario, true);
+            otorgarAGrupo(grupo, "sectores", Privilegio.LECTURA);
+            // Excepcion de usuario sobre `sectores` sin ningun privilegio en true: niega.
+            ejecutar(
+                    "INSERT INTO permiso (municipalidad_id, acceso_id, usuario_id, usuario_registro)"
+                            + " SELECT current_setting('app.municipalidad_id')::bigint, a.id, "
+                            + usuario
+                            + ", 'prueba' FROM acceso a WHERE a.codigo = 'sectores'");
+
+            assertThat(efectivosDe("restringe"))
+                    .as("una excepcion que no otorga nada quita lo que el grupo daba")
+                    .doesNotContainKey("sectores");
+        }
+
+        @Test
+        @DisplayName("un usuario deshabilitado recibe la matriz vacia")
+        void unUsuarioDeshabilitadoRecibeLaMatrizVacia() throws SQLException {
+            sembrar();
+            long usuario = crearUsuario("inhabil", null, null);
+            otorgarAUsuario(usuario, "calles", Privilegio.LECTURA);
+            ejecutar("UPDATE usuario SET habilitado = false WHERE id = " + usuario);
+
+            assertThat(efectivosDe("inhabil"))
+                    .as("igual que el guardia: deshabilitado no entra, conserve o no permisos")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("un grupo fuera de vigencia no aporta a la matriz")
+        void unGrupoFueraDeVigenciaNoAporta() throws SQLException {
+            sembrar();
+            long usuario = crearUsuario("por.grupo.vencido", null, null);
+            long grupo = crearGrupo("Vencido", LocalDate.of(2020, 1, 1), LocalDate.of(2026, 1, 1));
+            afiliar(grupo, usuario, true);
+            otorgarAGrupo(grupo, "calles", Privilegio.LECTURA);
+
+            assertThat(efectivosDe("por.grupo.vencido")).doesNotContainKey("calles");
+        }
+    }
+
     // ------------------------------------------------------------------
+
+    private static Map<String, Set<Privilegio>> efectivosDe(String cuenta) {
+        Map<String, Set<Privilegio>> resultado =
+                transaccion.execute(estado -> permisos.efectivosDe(cuenta, HOY));
+        if (resultado == null) {
+            throw new IllegalStateException("efectivosDe no devolvio matriz");
+        }
+        return resultado;
+    }
 
     private static boolean autoriza(String usuario, String acceso, Privilegio privilegio) {
         return Boolean.TRUE.equals(

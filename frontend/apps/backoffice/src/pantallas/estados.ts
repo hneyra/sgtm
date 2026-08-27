@@ -9,11 +9,19 @@ import { ProblemaDeApi } from '@sgtm/api-client';
  * son el estado normal de la pantalla varias veces al dia.
  *
  * **Donde vive cada estado, y por que.** Hay una peticion por pantalla, asi
- * que el error y el sin permiso son de la pantalla entera: no puede fallar la
- * tabla y no el formulario si los dos salen de la misma respuesta. La carga y
- * el vacio si son de cada bloque, porque cada uno sabe que le falta.
+ * que el error, el sin permiso y el no disponible son de la pantalla entera: no
+ * puede fallar la tabla y no el formulario si los dos salen de la misma
+ * respuesta. La carga y el vacio si son de cada bloque, porque cada uno sabe
+ * que le falta.
+ *
+ * **`no-disponible` no es un error.** El contrato declara 134 operaciones y el
+ * backend publica una fraccion; el resto responde 404. Una pantalla portada del
+ * prototipo cuyo backend todavia no se escribio no esta rota: esta pendiente, y
+ * se cuenta sin alarma y sin boton de reintentar —reintentar daria el mismo 404
+ * hasta que exista el endpoint—.
  */
-export type EstadoDePantalla = 'sin-registro' | 'cargando' | 'sin-permiso' | 'error' | 'con-datos';
+export type EstadoDePantalla =
+  'sin-registro' | 'cargando' | 'sin-permiso' | 'no-disponible' | 'error' | 'con-datos';
 
 export interface ConsultaDeLaPantalla {
   readonly isPending: boolean;
@@ -32,7 +40,11 @@ export function estadoDePantalla(
   pide = true,
 ): EstadoDePantalla {
   if (faltaRegistro !== undefined) return 'sin-registro';
-  if (consulta.isError) return esSinPermiso(consulta.error) ? 'sin-permiso' : 'error';
+  if (consulta.isError) {
+    if (esSinPermiso(consulta.error)) return 'sin-permiso';
+    if (esNoDisponible(consulta.error)) return 'no-disponible';
+    return 'error';
+  }
   if (!pide) return 'con-datos';
   if (consulta.isPending) return 'cargando';
   return 'con-datos';
@@ -40,6 +52,14 @@ export function estadoDePantalla(
 
 const esSinPermiso = (error: unknown): boolean =>
   error instanceof ProblemaDeApi && error.problema.status === 403;
+
+/**
+ * La operacion existe en el contrato pero el backend todavia no la publica: un
+ * `NoResourceFoundException` que el servidor traduce a 404 (ver
+ * `ManejadorDeErrores`). No hay nada que reintentar.
+ */
+const esNoDisponible = (error: unknown): boolean =>
+  error instanceof ProblemaDeApi && error.problema.status === 404;
 
 /**
  * Que decir cuando no hay filas.
@@ -95,4 +115,18 @@ export const SIN_PERMISO = {
   titulo: 'No tienes permiso para esta opción',
   detalle:
     'Tu usuario no tiene acceso a esta opción del menú. Si crees que deberías tenerlo, pídeselo al administrador del sistema de tu municipalidad.',
+} as const;
+
+/**
+ * Todavía no disponible: la pantalla existe pero su operación aún no la sirve el
+ * backend (404).
+ *
+ * No es un error del servidor ni un problema de la municipalidad: es trabajo
+ * pendiente. Se dice sin alarma, sin traza y sin «Reintentar» —el endpoint no
+ * aparece por reintentar—. Cuando se publique, la pantalla carga sola.
+ */
+export const NO_DISPONIBLE = {
+  titulo: 'Esta opción todavía no está disponible',
+  detalle:
+    'La pantalla ya está en el sistema, pero la operación que la alimenta aún no se ha habilitado en el servidor. Estará disponible sin que tengas que hacer nada cuando se publique.',
 } as const;

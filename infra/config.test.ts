@@ -28,6 +28,9 @@ function baseline(environment: Environment = "prod"): Invariants {
   const isStg = environment === "stg";
   return {
     environment,
+    // Un nodo holgado: esta prueba mira las invariantes de `config.ts`, y que el stack
+    // quepa en su nodo es cosa de `capacidad.ts` y de `capacidad.test.ts`.
+    node: { allocatableCpu: "8", allocatableMemory: "16Gi" },
     ingress: {
       domain: isStg ? "stg.sgtm.example.pe" : "sgtm.example.pe",
       acmeEmail: "operaciones@example.pe",
@@ -40,7 +43,8 @@ function baseline(environment: Environment = "prod"): Invariants {
       generateRolePasswords: false,
     },
     backup: {
-      endpoint: "https://s3.example.net",
+      endpoint: "https://s3.us-east-1.amazonaws.com",
+      region: "us-east-1",
       bucket: `sgtm-${environment}-respaldos`,
       walArchiveTimeoutSeconds: 300,
       ...(isStg ? { restoreSourceBucket: "sgtm-prod-respaldos" } : {}),
@@ -50,6 +54,17 @@ function baseline(environment: Environment = "prod"): Invariants {
       realm: "sgtm",
       developmentMode: false,
       seedTestUsers: isStg,
+      // `stg` tiene relay —el buzon Mailpit del clúster—; `prod` no (ADR-0012,
+      // Opción B): sin relay, el alta crea al usuario sin clave y no incumple nada.
+      smtp: isStg
+        ? {
+            host: "sgtm-stg-correo",
+            port: 1025,
+            from: "no-responder@stg.example.pe",
+            startTls: false,
+            auth: false,
+          }
+        : undefined,
     },
     application: {
       imageRepository: "ghcr.io/hneyra/sgtm",
@@ -196,6 +211,38 @@ describe("INF-03 §4 — nada de atajos de desarrollo en producción", () => {
       expectViolation(c, "perder el pod es perder los usuarios");
     }
   });
+
+  it("un buzon de pruebas como relay SMTP declarado en prod", () => {
+    const c = baseline("prod");
+    c.identity.smtp = { host: "sgtm-prod-correo", port: 1025, from: "x@y.pe", startTls: false, auth: true };
+    expectViolation(c, "buzón que nadie lee");
+  });
+
+  it("un relay declarado en prod sin autenticacion", () => {
+    const c = baseline("prod");
+    c.identity.smtp = { host: "smtp.real.pe", port: 587, from: "x@y.pe", startTls: true, auth: false };
+    expectViolation(c, "relay abierto entrega correo de cualquiera");
+  });
+});
+
+describe("ADR-0012 — el relay SMTP, opcional, y bien declarado si se declara", () => {
+  it("prod sin relay (smtp undefined) no incumple nada", () => {
+    const c = baseline("prod");
+    expect(c.identity.smtp).toBeUndefined();
+    expect(checkInvariants(c)).toEqual([]);
+  });
+
+  it("un remitente sin forma de correo, en el ambiente que sí declara relay", () => {
+    const c = baseline("stg");
+    if (c.identity.smtp) c.identity.smtp.from = "no-es-un-correo";
+    expectViolation(c, "no tiene forma de dirección de correo");
+  });
+
+  it("un puerto que no es un puerto", () => {
+    const c = baseline("stg");
+    if (c.identity.smtp) c.identity.smtp.port = 70000;
+    expectViolation(c, "no es un puerto");
+  });
 });
 
 describe("ADR-0011 — el estado de Pulumi no guarda ni versiones ni secretos", () => {
@@ -291,11 +338,17 @@ function reader(values: Record<string, string | number | boolean | unknown[]>): 
 }
 
 const VALORES_MINIMOS = {
+  // Lo asignable del nodo (`capacidad.ts`, issue #252). Obligatorio y sin valor por
+  // omisión a propósito: una cifra inventada aquí haría que `capacidad.ts` dictaminase
+  // que todo cabe, que es peor que no comprobar nada.
+  nodeAllocatableCpu: "8",
+  nodeAllocatableMemory: "16Gi",
   domain: "sgtm.example.pe",
   acmeEmail: "operaciones@example.pe",
   postgresImage: "postgres:16.4-alpine",
   postgresStorageSize: "100Gi",
-  backupEndpoint: "https://s3.example.net",
+  backupEndpoint: "https://s3.us-east-1.amazonaws.com",
+  backupRegion: "us-east-1",
   backupBucket: "sgtm-prod-respaldos",
   keycloakImage: "quay.io/keycloak/keycloak:26.0",
   applicationImageRepository: "ghcr.io/hneyra/sgtm",
@@ -360,10 +413,25 @@ describe("un valor obligatorio que falta revienta al principio, y dice cuál", (
     expect(leidas.backup.walArchiveTimeoutSeconds).toBe(300);
     expect(leidas.application.webReplicas).toBe(2);
     expect(leidas.identity.realm).toBe("sgtm");
+    // Sin `keycloakSmtpHost` no hay relay (ADR-0012, Opción B).
+    expect(leidas.identity.smtp).toBeUndefined();
     expect(leidas.implantacion.tipo).toBe("DISTRITAL");
     expect(leidas.implantacion.nombreDelAdministrador).toBe("Administrador del sistema");
     expect(leidas.ingress.publishedNodePorts).toEqual([]);
     expect(leidas.backup.restoreSourceBucket).toBeUndefined();
+  });
+
+  it("con `keycloakSmtpHost` puesto, `keycloakSmtpFrom` pasa a ser obligatorio", () => {
+    expect(() =>
+      readInvariants("stg", reader({ ...VALORES_MINIMOS, keycloakSmtpHost: "smtp.real.pe" })),
+    ).toThrow(MissingConfigError);
+    const ok = readInvariants("stg", reader({
+      ...VALORES_MINIMOS,
+      keycloakSmtpHost: "smtp.real.pe",
+      keycloakSmtpFrom: "no-responder@real.pe",
+    }));
+    expect(ok.identity.smtp?.host).toBe("smtp.real.pe");
+    expect(ok.identity.smtp?.auth).toBe(true);
   });
 });
 

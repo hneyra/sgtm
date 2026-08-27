@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 135 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 136 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 135 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 136 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 135 operaciones del contrato, por su `operationId`.
+ * Las 136 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 135 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 136 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -956,6 +956,13 @@ export const OPERACIONES = {
     parametrosDeRuta: ['id'],
     parametrosDeConsulta: ['buscarPor', 'grupoUsuario', 'acceso'],
   },
+  /** Permisos efectivos de la sesión — `GET /seguridad/sesion/permisos` */
+  permisos_de_la_sesion: {
+    metodo: 'GET',
+    ruta: '/seguridad/sesion/permisos',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
   /** Cambiar el año de trabajo — `PUT /seguridad/sesion/ejercicio` */
   cambiar_anio: {
     metodo: 'PUT',
@@ -993,7 +1000,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 135 operaciones. */
+/** El `operationId` de una de las 136 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -2045,6 +2052,8 @@ export interface ParametrosPorOperacion {
     readonly grupoUsuario?: string;
     readonly acceso?: string;
   };
+  /** `GET /seguridad/sesion/permisos` */
+  readonly permisos_de_la_sesion: Readonly<Record<string, never>>;
   /** `PUT /seguridad/sesion/ejercicio` */
   readonly cambiar_anio: Readonly<Record<string, never>>;
   /** `PUT /seguridad/usuarios/{id}/clave` */
@@ -2209,6 +2218,7 @@ export interface CuerpoPorOperacion {
   readonly miembros: CuerpoSinEsquema;
   readonly permisos_de_grupo: undefined;
   readonly permisos: CuerpoSinEsquema;
+  readonly permisos_de_la_sesion: undefined;
   readonly cambiar_anio: CuerpoSinEsquema;
   readonly cambiar_clave: CuerpoSinEsquema;
   readonly auditoria: undefined;
@@ -2348,6 +2358,7 @@ export interface RespuestaPorOperacion {
   readonly miembros: CuerpoSinEsquema;
   readonly permisos_de_grupo: CuerpoSinEsquema;
   readonly permisos: CuerpoSinEsquema;
+  readonly permisos_de_la_sesion: CuerpoSinEsquema;
   readonly cambiar_anio: CuerpoSinEsquema;
   readonly cambiar_clave: CuerpoSinEsquema;
   readonly auditoria: CuerpoSinEsquema;

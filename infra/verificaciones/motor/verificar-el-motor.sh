@@ -241,4 +241,4 @@ if [ "$CON_AISLAMIENTO" = "si" ]; then
 fi
 
 echo
-echo "El motor del manifiesto de «$AMBIENTE» cumple lo que el issue #149 exige (modo: $MODO)."
+echo "El motor del manifiesto de «${AMBIENTE}» cumple lo que el issue #149 exige (modo: $MODO)."

@@ -1,5 +1,6 @@
 package pe.gob.sgtm.rentas.dominio;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import pe.gob.sgtm.compartido.Pagina;
@@ -23,6 +24,13 @@ public interface BeneficioRepository {
      * {@code RegistrarBeneficio} antes de dar de alta uno nuevo, para rechazar el que se solape.
      */
     List<Beneficio> delContribuyente(long contribuyenteId, String tipo);
+
+    /**
+     * Los beneficios de ese tributo, vigentes a esa fecha, que tiene el predio —independientemente
+     * de quién sea hoy su titular (#31): un predio sin servicio de limpieza lo sigue sin tener
+     * aunque el predio cambie de dueño.
+     */
+    List<Beneficio> vigentesDelPredio(long predioId, String tributo, LocalDate fecha);
 
     Beneficio insertar(Beneficio beneficio);
 

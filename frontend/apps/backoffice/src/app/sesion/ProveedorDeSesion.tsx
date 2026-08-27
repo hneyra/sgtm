@@ -17,6 +17,7 @@ import {
   irAAutenticar,
   leerToken,
   renovar,
+  solicitar,
 } from '@sgtm/api-client';
 import type { ConfiguracionDeIdentidad, DatosDelToken } from '@sgtm/api-client';
 import { NINGUNO, SIN_PROVEEDOR, permisosDelClaim } from './permisos';
@@ -46,8 +47,9 @@ export interface Sesion {
   readonly datos: DatosDelToken | null;
   /**
    * Lo que este usuario puede ver y hacer. Sin proveedor de identidad no hay
-   * permisos que aplicar —se trabaja como contra el proxy—; con proveedor y sin
-   * claim, no se ve nada: la autorizacion del manual es de negacion por omision.
+   * permisos que aplicar —se trabaja como contra el proxy—; con proveedor, la
+   * matriz se pide a `GET /seguridad/sesion/permisos`, y hasta que llega —o si
+   * falla— no se ve nada: la autorizacion del manual es de negacion por omision.
    */
   readonly permisos: PermisosEfectivos;
   /** Faltan menos de un minuto para que el token expire. */
@@ -69,6 +71,7 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
     configuracion === null ? 'sin-proveedor' : 'entrando',
   );
   const [datos, fijarDatos] = useState<DatosDelToken | null>(null);
+  const [matriz, fijarMatriz] = useState<PermisosEfectivos>(NINGUNO);
   const [porExpirar, fijarPorExpirar] = useState(false);
   const temporizadores = useRef<number[]>([]);
 
@@ -129,10 +132,39 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
     };
   }, [configuracion, programar, renovarAhora]);
 
+  // La matriz de permisos no viene en el token (solo autentica): se pide a
+  // `GET /seguridad/sesion/permisos` (ADR-0013). Se refresca cada vez que cambia
+  // el token —renovacion incluida—, asi un cambio de permisos entra sin re-login.
+  // Si la peticion falla, NINGUNO: negacion por omision, no menu completo que
+  // falla en cada pulsacion.
+  //
+  // Se llama con `solicitar` y no con `pedirOperacion`: este proveedor esta en
+  // el arranque, y `pedirOperacion` arrastra el mapa de las 136 operaciones al
+  // paquete inicial (se pasaba del presupuesto por 0,1 KB). El contrato lo
+  // sigue guardando la prueba del backend.
+  useEffect(() => {
+    if (configuracion === null || datos === null) {
+      fijarMatriz(NINGUNO);
+      return;
+    }
+    let vivo = true;
+    void (async () => {
+      try {
+        const cuerpo = await solicitar<unknown>('/seguridad/sesion/permisos');
+        if (vivo) fijarMatriz(permisosDelClaim(cuerpo));
+      } catch {
+        if (vivo) fijarMatriz(NINGUNO);
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [configuracion, datos]);
+
   const permisos: PermisosEfectivos = useMemo(() => {
     if (configuracion === null) return SIN_PROVEEDOR;
-    return datos === null ? NINGUNO : permisosDelClaim(datos.permisos);
-  }, [configuracion, datos]);
+    return datos === null ? NINGUNO : matriz;
+  }, [configuracion, datos, matriz]);
 
   const sesion: Sesion = useMemo(
     () => ({

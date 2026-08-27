@@ -54,7 +54,7 @@ command -v docker >/dev/null 2>&1 || { echo "FALLO: falta docker." >&2; exit 1; 
 
 CONTENEDOR=wal-g-instalar
 
-echo "· Leyendo «$CONTENEDOR» del manifiesto de $AMBIENTE"
+echo "· Leyendo «${CONTENEDOR}» del manifiesto de $AMBIENTE"
 yarn --silent manifiestos --ambiente "$AMBIENTE" > "$TRABAJO/salida.txt"
 
 node -e '
@@ -99,11 +99,11 @@ echo "  imagen: $IMAGEN · UID: $UID_DEL_CONTENEDOR · binario en: $DIRECTORIO_D
 # El manifiesto tiene que declarar las dos cosas. Si alguien quita una, este guion deja
 # de tener sentido y lo dice, en vez de comprobar en silencio algo distinto.
 [ "$RAIZ_SELLADA" = "true" ] || {
-    echo "FALLO: «$CONTENEDOR» ya no declara readOnlyRootFilesystem en el manifiesto." >&2
+    echo "FALLO: «${CONTENEDOR}» ya no declara readOnlyRootFilesystem en el manifiesto." >&2
     exit 1
 }
 [ "$MONTA_TMP" = "true" ] || {
-    echo "FALLO: «$CONTENEDOR» ya no monta /tmp. Con la raiz sellada no puede arrancar." >&2
+    echo "FALLO: «${CONTENEDOR}» ya no monta /tmp. Con la raiz sellada no puede arrancar." >&2
     exit 1
 }
 
@@ -181,4 +181,4 @@ fi
 
 echo
 [ "$fallos" -eq 0 ] || { echo "FALLO: $fallos de 3 casos no salieron como debian." >&2; exit 1; }
-echo "La raiz sellada de «$CONTENEDOR» arranca, y el /tmp que la acompaña no es decorativo."
+echo "La raiz sellada de «${CONTENEDOR}» arranca, y el /tmp que la acompaña no es decorativo."

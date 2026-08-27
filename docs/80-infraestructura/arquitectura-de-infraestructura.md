@@ -119,8 +119,9 @@ no se publican: es lo que retira la última parte de la frase del README del com
 
 ## 2. Dimensionamiento inicial
 
-⚠ **Estimaciones, no mediciones.** Se recalibran con la volumetría real de la municipalidad piloto,
-que hoy no existe porque D-01 está abierta.
+⚠ **Estimaciones de CPU y de la base, todavía sin volumetría real** —eso sigue esperando a la
+municipalidad piloto—, pero el piso de memoria del nodo **ya se confirmó desplegando el stack
+entero de verdad** (issue #158, ver la nota más abajo): 4 GB no alcanza, 16 GB sí.
 
 | Componente | Réplicas | CPU | Memoria | Almacenamiento |
 |---|---|---|---|---|
@@ -151,6 +152,65 @@ correrá cuando la haya.
 ([`ADR-0004`](../30-arquitectura/adr/ADR-0004-almacenamiento-de-datos.md)) mantiene acotado lo que
 se consulta en caliente, pero el volumen total crece sin límite superior. La memoria de PostgreSQL
 es el recurso crítico, no la CPU.
+
+**Un piso confirmado, no solo estimado (2026-08-24, issue #158):** desplegando el stack entero
+—los 69 objetos, sin recortar ninguno— contra un nodo real de 2 vCPU/4 GB (`t3.medium`), las
+peticiones (`requests`) de los pods por sí solas ya ocupaban el 99 % de la memoria **antes** de que
+Kubernetes lograra ubicar `interfaz` ni ningún componente de observabilidad — se quedaban en
+`Pending` por «`Insufficient memory`», no por un límite artificial. **4 GB de RAM no alcanza.**
+Redimensionando a 4 vCPU/16 GB (`t3.xlarge`), el mismo despliegue completo entró con margen: 43 %
+de CPU y 27 % de memoria en `requests`, los 9 `Deployment` sanos y los 3 `Job` completados. Esto
+confirma como piso realista los 16 GB que esta tabla ya estimaba — no fue necesario revisarlos a
+más—, y dice explícitamente lo que la estimación por sí sola no podía: por debajo de eso, el
+clúster ni siquiera termina de programar sus propios pods, mucho antes de que nadie note falta de
+rendimiento.
+
+**El nodo de `prod` está por debajo de ese piso, y aun así el stack cabe (2026-08-26, issue
+#252).** `vmd120205` es un 4 CPU / 8 GB, la mitad de lo que esta tabla dimensiona. Con la reserva
+de §4 tal como se aplicó el 2026-08-23 le quedaban **2 CPU y 5,75 Gi asignables** —medido, no
+estimado—, y el stack no cabía ni en reposo: esa es la razón de que `prod` no se desplegara entero
+ni una vez.
+
+De las dos cifras, **la que estaba mal era la CPU, y no por el tamaño del nodo sino por la reserva
+misma**. `reservar-recursos-del-nodo.sh` escribía 1 CPU y 1 Gi en `system-reserved` **y otro tanto
+en `kube-reserved`**, que son dos descuentos distintos y kubelet los **suma**: el nodo reservaba
+2 CPU y 2 Gi donde §4 dimensiona «~1 CPU y ~1 GB». La medición del 2026-08-23 lo dice sin
+ambigüedad —«la diferencia es 2 097 152 Ki = 2 Gi exactos, y 2 CPU»— pero se leyó como el coste
+esperado de la reserva, no como el doble de ella.
+
+Corregido el reparto (500m + 500m), el nodo pasaría a ofrecer **3 CPU**. La reserva de **memoria se
+deja en 2 Gi**: ahí el consumo sí es ese —el API server ronda el medio giga, y el sistema con
+containerd completan el resto—, así que bajarla no habría devuelto memoria, solo habría dejado de
+contar la que ya está en uso.
+
+**Pero el stack no espera a esa ventana de mantenimiento.** Declarar los 3 CPU antes de aplicarlos
+no despliega nada: el paso «Lo declarado cabe en el nodo real» de `aplicar-prod` rechaza toda
+declaración mayor que lo que el nodo reparte, y así se comprobó el 2026-08-26. `prod` se dimensionó
+entonces contra el nodo **tal como está**, con dos cambios:
+
+- `webReplicas: 1`, como `stg`. Dos réplicas no caben en los ~6 GB del nodo.
+- El `request` de CPU de los dos Jobs de arranque (`RECURSOS.arranque`) baja de 250m a 100m. Eran
+  todo el desajuste: lo permanente (1 540m) siempre cupo en los 1 800m disponibles, y el pico
+  llegaba a 2 060m solo porque `migración` e `implantación` conviven con los `Deployment` durante
+  el `pulumi up`. Sus `limits` siguen en 2 CPU, así que pueden usar toda la que el nodo tenga
+  libre; lo único que se cede es la garantía previa, que para un trabajo corto y dominado por E/S
+  es lo que sobra.
+
+Resultado: **1 760m y 5 344Mi en el pico contra 1 800m y 5 728Mi disponibles**. `prod` cabe en el
+nodo que hay hoy. Corregir la reserva sigue mereciendo la pena —devuelve ~1 000m de margen— pero ya
+no bloquea el despliegue.
+
+Lo que ese descubrimiento costó es la parte que conviene no repetir: un pod que el planificador no
+puede ubicar no falla, se queda `Pending`; y el `ConfigGroup` de Pulumi lo espera sin error, sin
+registro y sin fin. `aplicar-prod` se colgó así cuatro veces, una de ellas casi seis horas, hasta
+que la plataforma mató el runner. **El síntoma no se parecía en nada a la causa**, y `stg` seguía
+desplegando en veinte segundos — porque pide menos y porque la reserva nunca se le aplicó.
+
+De ahí sale [`infra/capacidad.ts`](../../infra/capacidad.ts): la capacidad del nodo es un dato y
+lo que el stack pide se puede sumar, así que la comparación es aritmética y cuesta milisegundos.
+Corre en `yarn verificar` y en `index.ts` antes de crear nada, y convierte ese colgado en un
+fallo inmediato que dice cuántos milicores faltan. `yarn capacidad --ambiente prod` lo responde
+sin desplegar.
 
 ## 3. Red
 
@@ -228,17 +288,20 @@ Dónde se ejecuta entonces, que es donde el criterio de #149 se cumple igual:
 |---|---|---|---|
 | Un pod muere (aplicación, interfaz, Keycloak) | k3s lo reprograma en el mismo nodo | Automática, segundos | No hace falta |
 | El pod de PostgreSQL muere | La aplicación devuelve error mientras tanto | Automática con `Recreate`; el volumen sigue ahí | No hace falta |
-| **El nodo se cae o se reinicia** | **Caída completa del servicio.** No hay quórum que sobreviva ni réplica que promover | Vuelve solo al arrancar el VPS: k3s reinicia y los pods se reprograman. Si el disco está sano, minutos | **Pendiente** — issue #158 |
-| **El disco se llena** | PostgreSQL deja de aceptar escrituras; los pods nuevos no arrancan; el nodo puede pasar a `DiskPressure` y desalojar. **Es el escenario más probable de los tres**, y el que más se parece a una caída sin serlo | Liberar espacio: el WAL retenido cuando el almacenamiento de objetos no está accesible, los registros de contenedor y las imágenes viejas. La alerta de espacio libre tiene que llegar antes (issue #156) | **Pendiente** — issue #158 |
-| **Se pierde el VPS entero** | Todo lo de dentro deja de existir | VPS nuevo → k3s → `pulumi up` del stack → restauración PITR desde el almacenamiento de objetos → verificar → apuntar el DNS. **RTO objetivo: 4 h (RNF-077)** | **Pendiente** — issue #158, y el simulacro en INF-03 §2 |
-| El almacenamiento de objetos no está accesible | La operación **sigue**. El WAL se acumula en el disco local, y de ahí a la fila anterior | Restablecer el destino; el WAL acumulado se drena solo. Alerta inmediata: es el aviso de que el RPO ya no se cumple | **Pendiente** — issue #158 |
-| Keycloak no está disponible | Quien ya entró sigue hasta que expire su token; **nadie nuevo entra**. La aplicación **no** se cae: con `jwk-set-uri` configurado el validador no necesita descubrimiento | Reprogramación del pod | No hace falta |
-| El certificado no renueva | El navegador rechaza la conexión. El desafío HTTP-01 necesita el puerto 80 abierto | Alerta a 21 días del vencimiento, no el día del vencimiento | **Pendiente** — issue #158 |
+| **El nodo se cae o se reinicia** | **Caída completa del servicio.** No hay quórum que sobreviva ni réplica que promover | Vuelve solo al arrancar el VPS: k3s reinicia y los pods se reprograman. Si el disco está sano, minutos | [Reconstruir el VPS desde cero](../B0-operacion/runbooks/reconstruir-el-vps-desde-cero.md) |
+| **El disco se llena** | PostgreSQL deja de aceptar escrituras; los pods nuevos no arrancan; el nodo puede pasar a `DiskPressure` y desalojar. **Es el escenario más probable de los tres**, y el que más se parece a una caída sin serlo | Liberar espacio: el WAL retenido cuando el almacenamiento de objetos no está accesible, los registros de contenedor y las imágenes viejas. La alerta de espacio libre tiene que llegar antes (issue #156) | [El disco del nodo se llenó](../B0-operacion/runbooks/el-disco-del-nodo-se-lleno.md) |
+| **Se pierde el VPS entero** | Todo lo de dentro deja de existir | VPS nuevo → k3s → `pulumi up` del stack → restauración PITR desde el almacenamiento de objetos → verificar → apuntar el DNS. **RTO objetivo: 4 h (RNF-077)** | [Reconstruir el VPS desde cero](../B0-operacion/runbooks/reconstruir-el-vps-desde-cero.md), y el simulacro en INF-03 §2 |
+| El almacenamiento de objetos no está accesible | La operación **sigue**. El WAL se acumula en el disco local, y de ahí a la fila anterior | Restablecer el destino; el WAL acumulado se drena solo. Alerta inmediata: es el aviso de que el RPO ya no se cumple | [El disco del nodo se llenó](../B0-operacion/runbooks/el-disco-del-nodo-se-lleno.md) §1 |
+| Keycloak no está disponible | Quien ya entró sigue hasta que expire su token; **nadie nuevo entra**. La aplicación **no** se cae: con `jwk-set-uri` configurado el validador no necesita descubrimiento | Reprogramación del pod | [Keycloak no responde](../B0-operacion/runbooks/keycloak-no-responde.md) — solo si el pod no vuelve solo |
+| El certificado no renueva | El navegador rechaza la conexión. El desafío HTTP-01 necesita el puerto 80 abierto | Alerta a 21 días del vencimiento, no el día del vencimiento | [Mantenimiento del VPS](../B0-operacion/runbooks/mantenimiento-del-vps.md) §5 |
 | Pulumi Cloud no está disponible | **No se puede modificar la infraestructura.** Lo que corre sigue corriendo | Esperar, o tomar la salida de `ADR-0011` §3 | No hace falta |
 
-**De las tres filas que la épica exige responder, hoy ninguna tiene runbook.** Están todas en el
-issue #158 y hasta que se escriban, la recuperación depende de que quien la haga recuerde los pasos.
-Decirlo por escrito es la diferencia entre una deuda y una sorpresa.
+**Los ocho runbooks de issue #158 están escritos**, en
+[`docs/B0-operacion/runbooks/`](../B0-operacion/runbooks/). Lo que ninguno tiene todavía
+es el ensayo completo contra un VPS real —el propio índice de runbooks lo dice sin
+adornarlo—, porque ese VPS no existe mientras D-01 siga abierta. Escribir el
+procedimiento es necesario y no es lo mismo que haberlo corrido: es la distinción que
+cada runbook marca en su propia sección «Estado del ensayo».
 
 La fila del RTO de 4 h es la que hay que probar y la que se posterga con más facilidad. **Un RTO que
 nunca se ensayó es una aspiración, no un requisito**, y el sitio donde se ensaya está en INF-03 §2.
@@ -256,12 +319,13 @@ Detalle en [`ambientes.md`](ambientes.md) (INF-03). Resumen de topología:
 ## 7. Pendientes
 
 - [ ] Confirmar el proveedor del VPS y el dimensionamiento de §2 con volumetría real (bloqueado por D-01).
-- [ ] Definir el proveedor del almacenamiento de objetos externo, que es donde vive el RPO (§1.3).
-- [ ] Escribir los runbooks de §5 (issue #158) y anotar el tiempo real del primer simulacro.
+- [x] Definir el proveedor del almacenamiento de objetos externo, que es donde vive el RPO (§1.3). AWS S3, 2026-08-24 — buckets `sgtm-stg-respaldos`/`sgtm-prod-respaldos`, `us-east-1`, confirmado contra un respaldo real (issue #158).
+- [ ] Ensayar [reconstruir el VPS desde cero](../B0-operacion/runbooks/reconstruir-el-vps-desde-cero.md) contra un VPS real y anotar el tiempo (issue #158; los ocho runbooks ya están escritos, y su clúster **y su restauración PITR** —no el VPS mismo— ya se reconstruyeron una vez, 2026-08-24, 359s medidos).
 - [ ] Definir la ventana de mantenimiento y cómo se anuncia (RNF-078).
 - [ ] Definir la lista de destinos de salida permitidos cuando aparezca la primera integración (§3).
 - [ ] Medir cuánto tarda de verdad la restauración con el padrón del piloto, y corregir RNF-077 si
-      el número no se sostiene.
+      el número no se sostiene. El procedimiento ya se cronometró (359s, issue #158) pero con unas
+      pocas filas de ensayo, no con volumetría real — ese número sigue pendiente.
 
 ## 8. Documentos relacionados
 
@@ -269,4 +333,6 @@ Detalle en [`ambientes.md`](ambientes.md) (INF-03). Resumen de topología:
 [`ADR-0011`](../30-arquitectura/adr/ADR-0011-infraestructura-como-codigo.md) ·
 [`REQ-02 §Operación`](../20-requisitos/requisitos-no-funcionales.md) ·
 [`ARQ-03 — Estrategia multi-tenant`](../30-arquitectura/estrategia-multitenant.md) ·
+[`entorno-local-de-desarrollo.md`](entorno-local-de-desarrollo.md) (INF-11) ·
+[Runbooks de operación](../B0-operacion/runbooks/) (§5 de este documento) ·
 [`despliegue/README.md`](../../despliegue/README.md) — el compose, que sigue siendo el entorno local
