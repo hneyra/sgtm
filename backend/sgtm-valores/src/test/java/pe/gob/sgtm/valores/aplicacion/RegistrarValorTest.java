@@ -25,6 +25,7 @@ import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.valores.dominio.CriterioDeValor;
+import pe.gob.sgtm.valores.dominio.EstadoDeValor;
 import pe.gob.sgtm.valores.dominio.SelectorDeObligacion;
 import pe.gob.sgtm.valores.dominio.TipoValor;
 import pe.gob.sgtm.valores.dominio.Valor;
@@ -261,6 +262,21 @@ class RegistrarValorTest {
             guardados.add(conId);
             detalleGuardado = List.copyOf(detalle);
             return conId;
+        }
+
+        @Override
+        public Optional<Valor> porNumero(String numero) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<Valor> cobrablesDe(long contribuyenteId, String tributo, Ejercicio ejercicio) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Valor cambiarEstado(long valorId, EstadoDeValor nuevo) {
+            throw new UnsupportedOperationException();
         }
 
         @Override

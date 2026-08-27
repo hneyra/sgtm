@@ -15,8 +15,13 @@ dependencies {
     // emitir (MovimientoDeFase): las dos APIs publicas de cuentacorriente
     // que un "acto posterior" a la determinacion necesita (ARQ-01 §4 regla 2).
     implementation(project(":sgtm-cuentacorriente"))
-    // Resolver el codigo de contribuyente de la peticion a su identificador.
+    // Resolver el codigo de contribuyente de la peticion a su identificador, y el
+    // domicilio fiscal vigente a la fecha de la diligencia, que es donde se notifica (#15, #39).
     implementation(project(":sgtm-contribuyentes"))
+    // Los plazos del Codigo Tributario -notificacion, prescripcion, inicio del computo-
+    // salen del conjunto sellado vigente a la fecha del hecho, nunca de una constante
+    // (regla 5, #39). `parametros` es de solo lectura para todos los demas (ARQ-01 §4 regla 3).
+    implementation(project(":sgtm-parametros"))
 
     // La prueba del repositorio corre contra PostgreSQL de verdad: provisiona la
     // base como un ambiente real y se conecta como sgtm_app, no como el

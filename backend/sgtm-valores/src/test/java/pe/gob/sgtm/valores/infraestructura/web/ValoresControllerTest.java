@@ -6,11 +6,8 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,9 +18,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
-import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
-import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
 import pe.gob.sgtm.cuentacorriente.MovimientoDeFase;
@@ -32,15 +27,19 @@ import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.valores.aplicacion.IniciarCorridaMasiva;
+import pe.gob.sgtm.valores.aplicacion.PasarACoactiva;
+import pe.gob.sgtm.valores.aplicacion.PlazosParametrizados;
+import pe.gob.sgtm.valores.aplicacion.RegistrarNotificacion;
 import pe.gob.sgtm.valores.aplicacion.RegistrarValor;
+import pe.gob.sgtm.valores.dobles.ContribuyentesDeMentira;
+import pe.gob.sgtm.valores.dobles.MovimientosEnMemoria;
+import pe.gob.sgtm.valores.dobles.NotificacionesEnMemoria;
+import pe.gob.sgtm.valores.dobles.ParametrosDeMentira;
+import pe.gob.sgtm.valores.dobles.ValoresEnMemoria;
 import pe.gob.sgtm.valores.dominio.CriterioDeValor;
-import pe.gob.sgtm.valores.dominio.TipoValor;
-import pe.gob.sgtm.valores.dominio.Valor;
-import pe.gob.sgtm.valores.dominio.ValorDetalle;
 import pe.gob.sgtm.valores.dominio.ValorMasivo;
 import pe.gob.sgtm.valores.dominio.ValorMasivoItem;
 import pe.gob.sgtm.valores.dominio.ValorMasivoRepository;
-import pe.gob.sgtm.valores.dominio.ValorRepository;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
 import pe.gob.sgtm.web.ManejadorDeErrores;
 import tools.jackson.databind.json.JsonMapper;
@@ -55,7 +54,7 @@ class ValoresControllerTest {
     private static final LocalDate HOY = LocalDate.of(2026, 3, 15);
     private static final Ejercicio EJERCICIO_DEUDA = new Ejercicio(2025);
 
-    private final RepositorioDeMentira repositorio = new RepositorioDeMentira();
+    private final ValoresEnMemoria repositorio = new ValoresEnMemoria();
     private final DeudaDeMentira deuda = new DeudaDeMentira();
     private final ContribuyentesDeMentira contribuyentes = new ContribuyentesDeMentira();
     private final RepositorioMasivoDeMentira repositorioMasivo = new RepositorioMasivoDeMentira();
@@ -86,10 +85,34 @@ class ValoresControllerTest {
                     (RegistroDeAuditoria registro) -> {},
                     Clock.fixed(HOY.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC));
 
+    private final NotificacionesEnMemoria notificaciones = new NotificacionesEnMemoria();
+    private final MovimientosEnMemoria movimientos = new MovimientosEnMemoria();
+    private final ParametrosDeMentira parametros =
+            new ParametrosDeMentira().con("PLAZO", "NOTIFICACION_VALOR-OP", "20 DIAS_HABILES");
+    private final RegistrarNotificacion notificar =
+            new RegistrarNotificacion(
+                    repositorio,
+                    notificaciones,
+                    contribuyentes,
+                    new PlazosParametrizados(parametros),
+                    (RegistroDeAuditoria registro) -> {});
+    private final PasarACoactiva pasarACoactiva =
+            new PasarACoactiva(
+                    repositorio,
+                    notificaciones,
+                    movimientos,
+                    (RegistroDeAuditoria registro) -> {},
+                    Clock.fixed(HOY.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC));
+
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
                             new ValoresController(
-                                    registrar, repositorio, contribuyentes, iniciarMasivo))
+                                    registrar,
+                                    repositorio,
+                                    contribuyentes,
+                                    iniciarMasivo,
+                                    notificar,
+                                    pasarACoactiva))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(
@@ -166,7 +189,13 @@ class ValoresControllerTest {
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
-        assertThat(repositorio.guardados).isEmpty();
+        assertThat(
+                        repositorio
+                                .buscar(
+                                        new CriterioDeValor(null, null, null, null),
+                                        Paginacion.de(1, 20, "numero"))
+                                .contenido())
+                .isEmpty();
     }
 
     @Test
@@ -300,62 +329,172 @@ class ValoresControllerTest {
 
     // ------------------------------------------------------------------
 
-    private static final class RepositorioDeMentira implements ValorRepository {
+    // ------------------------------------------------------------------
+    //  #39 — notificacion y pase a coactiva
+    // ------------------------------------------------------------------
 
-        private long siguienteId = 1;
-        private final Map<String, Long> correlativos = new HashMap<>();
-        private final List<Valor> guardados = new ArrayList<>();
+    @Test
+    @DisplayName("notifica un valor y devuelve 201 con la fecha desde la que es exigible")
+    void notificaUnValorYDevuelve201() throws Exception {
+        emitirUnValor();
 
-        @Override
-        public Valor insertar(Valor valor, List<ValorDetalle> detalle) {
-            Valor conId =
-                    new Valor(
-                            siguienteId++,
-                            valor.tipo(),
-                            valor.numero(),
-                            valor.ejercicio(),
-                            valor.contribuyenteId(),
-                            valor.baseLegal(),
-                            valor.montoInsoluto(),
-                            valor.montoReajuste(),
-                            valor.montoInteres(),
-                            valor.montoGasto(),
-                            valor.proyectadoA(),
-                            valor.estado(),
-                            valor.fechaEmision(),
-                            "prueba",
-                            valor.observacion());
-            guardados.add(conId);
-            return conId;
-        }
+        MvcResult resultado = notificar("NOTIFICADO", "2026-04-03");
 
-        @Override
-        public Optional<Valor> porNumero(TipoValor tipo, Ejercicio ejercicio, String numero) {
-            return Optional.empty();
-        }
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("\"surtioEfecto\":true");
+        assertThat(cuerpo).contains("\"exigibleDesde\":\"2026-05-");
+        assertThat(cuerpo).contains("\"intento\":1");
+    }
 
-        @Override
-        public Optional<Valor> porId(long id) {
-            return guardados.stream().filter(v -> v.id() != null && v.id() == id).findFirst();
-        }
+    @Test
+    @DisplayName("una diligencia no hallada sale con exigibleDesde nulo, no con una fecha")
+    void laDiligenciaNoHalladaSaleSinExigibilidad() throws Exception {
+        emitirUnValor();
 
-        @Override
-        public List<ValorDetalle> detalleDe(long valorId) {
-            return List.of();
-        }
+        MvcResult resultado = notificar("NO_UBICADO", "2026-04-03");
 
-        @Override
-        public Pagina<Valor> buscar(CriterioDeValor criterio, Paginacion paginacion) {
-            return Pagina.de(guardados, paginacion, guardados.size());
-        }
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"surtioEfecto\":false")
+                .contains("\"exigibleDesde\":null");
+    }
 
-        @Override
-        public long siguienteCorrelativo(TipoValor tipo, Ejercicio ejercicio) {
-            String clave = tipo.codigo() + "-" + ejercicio.valor();
-            long siguiente = correlativos.getOrDefault(clave, 0L) + 1;
-            correlativos.put(clave, siguiente);
-            return siguiente;
-        }
+    @Test
+    @DisplayName("notificar sin observacion, 422")
+    void notificarSinObservacionRechaza() throws Exception {
+        emitirUnValor();
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post(
+                                                "/api/v1/valores/OP-2026-000001/notificacion")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"fechaDeNotificacion":"2026-04-03",
+                                                 "tipoDeNotificacion":"PERSONAL",
+                                                 "resultado":"NOTIFICADO",
+                                                 "notificador":"J. RUIZ PALACIOS",
+                                                 "direccion":"CALLE 1"}
+                                                """))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+    }
+
+    @Test
+    @DisplayName("notificar un valor que no existe, 404")
+    void notificarUnValorInexistente404() throws Exception {
+        MvcResult resultado = notificar("NOTIFICADO", "2026-04-03");
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(404);
+    }
+
+    @Test
+    @DisplayName("un valor no notificado no pasa a coactiva: 422")
+    void unValorNoNotificadoNoPasa() throws Exception {
+        emitirUnValor();
+
+        MvcResult resultado = pasarACoactiva("2026-06-01");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("no esta notificado");
+    }
+
+    @Test
+    @DisplayName("pasar dos veces devuelve el mismo movimiento, no dos")
+    void pasarDosVecesDevuelveElMismo() throws Exception {
+        emitirUnValor();
+        notificar("NOTIFICADO", "2026-04-03");
+
+        String primero = pasarACoactiva("2026-06-01").getResponse().getContentAsString();
+        String segundo = pasarACoactiva("2026-06-10").getResponse().getContentAsString();
+
+        assertThat(primero).contains("\"tipoDeMovimiento\":\"PCO\"");
+        assertThat(segundo).isEqualTo(primero);
+        assertThat(movimientos.cuantos()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("ACO y RCO se rechazan con un mensaje que dice de quien son")
+    void aceptadoYRechazadoSeRechazan() throws Exception {
+        emitirUnValor();
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post(
+                                                "/api/v1/valores/OP-2026-000001/movimientos")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"tipoDeMovimiento":"ACO",
+                                                 "observacion":"Aceptado en coactivas"}
+                                                """))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("modulo coactiva");
+    }
+
+    // ------------------------------------------------------------------
+
+    private void emitirUnValor() throws Exception {
+        contribuyentes
+                .con(new ResumenDeContribuyente(7L, "C-0007", "TITULAR, PRUEBA", "DNI 12345678"))
+                .conDomicilio(7L, LocalDate.of(2020, 1, 1), "CALLE VIEJA 100");
+        deuda.con(
+                new ObligacionPublica(
+                        "PREDIAL",
+                        EJERCICIO_DEUDA,
+                        55L,
+                        null,
+                        HOY,
+                        Dinero.de(100),
+                        Dinero.CERO,
+                        Dinero.CERO,
+                        Dinero.CERO));
+        mvc.perform(
+                        MockMvcRequestBuilders.post("/api/v1/valores")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {"tipo":"OP","codContribuyente":"C-0007",
+                                         "obligaciones":[
+                                            {"tributo":"PREDIAL","ejercicio":2025,"predioId":55}],
+                                         "observacion":"Se emite para la prueba"}
+                                        """))
+                .andReturn();
+    }
+
+    private MvcResult notificar(String resultado, String fecha) throws Exception {
+        return mvc.perform(
+                        MockMvcRequestBuilders.post("/api/v1/valores/OP-2026-000001/notificacion")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {"fechaDeNotificacion":"%s",
+                                         "tipoDeNotificacion":"PERSONAL",
+                                         "resultado":"%s",
+                                         "notificador":"J. RUIZ PALACIOS",
+                                         "personaQueRecibe":"TITULAR",
+                                         "observacion":"Se diligencia para la prueba"}
+                                        """
+                                                .formatted(fecha, resultado)))
+                .andReturn();
+    }
+
+    private MvcResult pasarACoactiva(String fecha) throws Exception {
+        return mvc.perform(
+                        MockMvcRequestBuilders.post("/api/v1/valores/OP-2026-000001/movimientos")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {"tipoDeMovimiento":"PCO",
+                                         "fechaDelMovimiento":"%s",
+                                         "observacion":"Se pasa para la prueba"}
+                                        """
+                                                .formatted(fecha)))
+                .andReturn();
     }
 
     private static final class DeudaDeMentira implements ConsultaDeDeudaPublica {
@@ -370,41 +509,6 @@ class ValoresControllerTest {
         public List<ObligacionPublica> deTodoElContribuyente(
                 long contribuyenteId, LocalDate fecha) {
             return List.copyOf(obligaciones);
-        }
-    }
-
-    private static final class ContribuyentesDeMentira implements DirectorioDeContribuyentes {
-
-        private final Map<String, ResumenDeContribuyente> porCodigo = new HashMap<>();
-
-        void con(ResumenDeContribuyente contribuyente) {
-            porCodigo.put(contribuyente.codigo(), contribuyente);
-        }
-
-        @Override
-        public List<ResumenDeContribuyente> buscar(String texto, int maximo) {
-            return List.copyOf(porCodigo.values());
-        }
-
-        @Override
-        public Optional<ResumenDeContribuyente> porCodigo(String codigo) {
-            return Optional.ofNullable(porCodigo.get(codigo));
-        }
-
-        @Override
-        public Map<Long, ResumenDeContribuyente> porIds(Set<Long> ids) {
-            Map<Long, ResumenDeContribuyente> resultado = new HashMap<>();
-            for (ResumenDeContribuyente contribuyente : porCodigo.values()) {
-                if (ids.contains(contribuyente.id())) {
-                    resultado.put(contribuyente.id(), contribuyente);
-                }
-            }
-            return resultado;
-        }
-
-        @Override
-        public Optional<String> domicilioFiscalDe(long contribuyenteId, LocalDate fecha) {
-            return Optional.empty();
         }
     }
 

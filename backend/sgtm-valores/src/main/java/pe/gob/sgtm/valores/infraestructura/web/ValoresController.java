@@ -18,6 +18,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,9 +32,17 @@ import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.valores.aplicacion.IniciarCorridaMasiva;
+import pe.gob.sgtm.valores.aplicacion.PasarACoactiva;
+import pe.gob.sgtm.valores.aplicacion.PlazosParametrizados;
+import pe.gob.sgtm.valores.aplicacion.RegistrarNotificacion;
 import pe.gob.sgtm.valores.aplicacion.RegistrarValor;
 import pe.gob.sgtm.valores.dominio.CriterioDeValor;
+import pe.gob.sgtm.valores.dominio.ModalidadDeNotificacion;
+import pe.gob.sgtm.valores.dominio.MovimientoDeValor;
+import pe.gob.sgtm.valores.dominio.Notificacion;
+import pe.gob.sgtm.valores.dominio.ResultadoDeNotificacion;
 import pe.gob.sgtm.valores.dominio.SelectorDeObligacion;
+import pe.gob.sgtm.valores.dominio.TipoDeMovimiento;
 import pe.gob.sgtm.valores.dominio.TipoValor;
 import pe.gob.sgtm.valores.dominio.Valor;
 import pe.gob.sgtm.valores.dominio.ValorMasivo;
@@ -45,11 +54,12 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
- * Generacion individual, masiva y busqueda de valores: {@code POST/GET /api/v1/valores} y {@code
- * POST /api/v1/valores/masivo} (RF-090, RF-091, RF-092).
+ * Todo lo que le pasa a un valor por HTTP: generacion individual y masiva, busqueda, notificacion y
+ * pase a coactiva (RF-090 a RF-093 y RF-095).
  *
  * <p>Un valor emitido no se corrige, se anula (regla 4): este controlador no tiene ningun {@code
- * PUT} ni {@code PATCH}.
+ * PUT} ni {@code PATCH}. Lo que cambia despues de emitirlo llega como un {@code POST} a un recurso
+ * nuevo -una notificacion, un movimiento-, porque eso es lo que son: actos que se agregan.
  *
  * <p>{@link #generarMasivo} solo registra la etapa "criterio" (#38): la generacion en si -leer la
  * deuda de cada candidato y emitir su valor- corre en el perfil batch (ADR-0003), aparte de esta
@@ -66,16 +76,22 @@ public class ValoresController {
     private final ValorRepository repositorio;
     private final DirectorioDeContribuyentes contribuyentes;
     private final IniciarCorridaMasiva iniciarMasivo;
+    private final RegistrarNotificacion notificar;
+    private final PasarACoactiva pasarACoactiva;
 
     public ValoresController(
             RegistrarValor registrar,
             ValorRepository repositorio,
             DirectorioDeContribuyentes contribuyentes,
-            IniciarCorridaMasiva iniciarMasivo) {
+            IniciarCorridaMasiva iniciarMasivo,
+            RegistrarNotificacion notificar,
+            PasarACoactiva pasarACoactiva) {
         this.registrar = registrar;
         this.repositorio = repositorio;
         this.contribuyentes = contribuyentes;
         this.iniciarMasivo = iniciarMasivo;
+        this.notificar = notificar;
+        this.pasarACoactiva = pasarACoactiva;
     }
 
     @PostMapping
@@ -145,6 +161,89 @@ public class ValoresController {
             throw new ProblemaDeNegocio(
                     CodigoDeError.VALIDACION, mensajeDe(invalidos), invalidos.motivos());
         } catch (IllegalArgumentException invalido) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
+        }
+    }
+
+    /**
+     * Registra el acto de notificacion de un valor (RF-093).
+     *
+     * <p>La ruta lleva el numero del valor y el cuerpo, la diligencia. Desde cuando la deuda queda
+     * exigible <b>no</b> viaja en el cuerpo: lo deriva el servidor del plazo parametrizado, porque
+     * dejarlo entrar seria dejar que el cliente decidiera cuando puede empezar la cobranza
+     * coactiva.
+     */
+    @PostMapping("/{nro}/notificacion")
+    @RequiereAcceso(acceso = "notificacion_valores", privilegio = Privilegio.REGISTRO)
+    public ResponseEntity<NotificacionResource> notificar(
+            @PathVariable String nro, @RequestBody PeticionDeNotificacion peticion) {
+
+        LocalDate fecha = fechaRequeridaDe(peticion.fechaDeNotificacion(), "fechaDeNotificacion");
+        ModalidadDeNotificacion modalidad = modalidadDe(peticion.tipoDeNotificacion());
+        ResultadoDeNotificacion resultado = resultadoDe(peticion.resultado());
+        String notificador = exigir(peticion.notificador(), "notificador");
+        Observacion observacion = observacionDe(peticion.observacion());
+
+        try {
+            Notificacion guardada =
+                    notificar.registrar(
+                            exigir(nro, "nro"),
+                            fecha,
+                            modalidad,
+                            resultado,
+                            notificador,
+                            vacioAnulo(peticion.direccion()),
+                            vacioAnulo(peticion.personaQueRecibe()),
+                            vacioAnulo(peticion.documentoDeQuienRecibe()),
+                            vacioAnulo(peticion.vinculo()),
+                            vacioAnulo(peticion.acuse()),
+                            observacion);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(NotificacionResource.de(guardada, exigir(nro, "nro")));
+        } catch (RegistrarNotificacion.ValorInexistente noExiste) {
+            throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(noExiste));
+        } catch (RegistrarNotificacion.DiligenciaAnteriorALaEmision
+                | RegistrarNotificacion.SinDomicilio
+                | PlazosParametrizados.PlazoSinParametrizar
+                | IllegalArgumentException invalido) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
+        }
+    }
+
+    /**
+     * Pasa un valor a coactiva (RF-095).
+     *
+     * <p>Idempotente: pedirlo dos veces devuelve el mismo movimiento, no dos. Lo garantiza la base
+     * (V28), no una comprobacion previa —dos peticiones simultaneas pasarian las dos por cualquier
+     * {@code if}—.
+     */
+    @PostMapping("/{numero}/movimientos")
+    @RequiereAcceso(acceso = "pase_coactiva", privilegio = Privilegio.REGISTRO)
+    public ResponseEntity<MovimientoResource> mover(
+            @PathVariable String numero, @RequestBody PeticionDeMovimiento peticion) {
+
+        TipoDeMovimiento tipo = tipoDeMovimientoDe(peticion.tipoDeMovimiento());
+        if (tipo != TipoDeMovimiento.PCO) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "#39 registra el pase (PCO). "
+                            + tipo.name()
+                            + " es la respuesta de coactiva, y la escribe el modulo coactiva");
+        }
+        LocalDate fecha = fechaOpcionalDe(peticion.fechaDelMovimiento(), "fechaDelMovimiento");
+        Observacion observacion = observacionDe(peticion.observacion());
+        String valor = exigir(numero, "numero");
+
+        try {
+            MovimientoDeValor pase =
+                    fecha == null
+                            ? pasarACoactiva.pasar(valor, observacion)
+                            : pasarACoactiva.pasar(valor, fecha, observacion);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(MovimientoResource.de(pase, valor));
+        } catch (PasarACoactiva.ValorInexistente noExiste) {
+            throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(noExiste));
+        } catch (PasarACoactiva.ValorSinNotificar | PasarACoactiva.PlazoVigente invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
     }
@@ -237,6 +336,10 @@ public class ValoresController {
     }
 
     private static @Nullable LocalDate fechaOpcionalDe(@Nullable String texto) {
+        return fechaOpcionalDe(texto, "fechaCriterio");
+    }
+
+    private static @Nullable LocalDate fechaOpcionalDe(@Nullable String texto, String campo) {
         if (texto == null || texto.isBlank()) {
             return null;
         }
@@ -245,7 +348,50 @@ public class ValoresController {
         } catch (DateTimeParseException invalida) {
             throw new ProblemaDeNegocio(
                     CodigoDeError.VALIDACION,
-                    "El campo 'fechaCriterio' no es una fecha ISO valida: '" + texto + "'");
+                    "El campo '" + campo + "' no es una fecha ISO valida: '" + texto + "'");
+        }
+    }
+
+    private static LocalDate fechaRequeridaDe(@Nullable String texto, String campo) {
+        LocalDate fecha = fechaOpcionalDe(texto, campo);
+        if (fecha == null) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, "Falta el campo '" + campo + "'");
+        }
+        return fecha;
+    }
+
+    private static ModalidadDeNotificacion modalidadDe(@Nullable String texto) {
+        String valor = exigir(texto, "tipoDeNotificacion");
+        try {
+            return ModalidadDeNotificacion.valueOf(valor.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException desconocida) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Modalidad de notificacion desconocida: '"
+                            + texto
+                            + "'. Se admite PERSONAL, CEDULON, PUBLICACION, CORREO o NEGATIVA");
+        }
+    }
+
+    private static ResultadoDeNotificacion resultadoDe(@Nullable String texto) {
+        String valor = exigir(texto, "resultado");
+        try {
+            return ResultadoDeNotificacion.valueOf(valor.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException desconocido) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Resultado desconocido: '"
+                            + texto
+                            + "'. Se admite NOTIFICADO, NO_UBICADO o RECHAZADO");
+        }
+    }
+
+    private static TipoDeMovimiento tipoDeMovimientoDe(@Nullable String texto) {
+        String valor = exigir(texto, "tipoDeMovimiento");
+        try {
+            return TipoDeMovimiento.porCodigo(valor);
+        } catch (IllegalArgumentException desconocido) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(desconocido));
         }
     }
 
