@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 138 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 141 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 138 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 141 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 138 operaciones del contrato, por su `operationId`.
+ * Las 141 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 138 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 141 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -136,6 +136,27 @@ export const OPERACIONES = {
     ruta: '/catastro/sectores',
     parametrosDeRuta: [],
     parametrosDeConsulta: ['sector', 'manzana', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+  },
+  /** Alta de sector — `POST /catastro/sectores` */
+  registrar_sector: {
+    metodo: 'POST',
+    ruta: '/catastro/sectores',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
+  /** Edición de sector — `PUT /catastro/sectores/{codigo}` */
+  editar_sector: {
+    metodo: 'PUT',
+    ruta: '/catastro/sectores/{codigo}',
+    parametrosDeRuta: ['codigo'],
+    parametrosDeConsulta: [],
+  },
+  /** Alta de manzana — `POST /catastro/sectores/{codigo}/manzanas` */
+  registrar_manzana: {
+    metodo: 'POST',
+    ruta: '/catastro/sectores/{codigo}/manzanas',
+    parametrosDeRuta: ['codigo'],
+    parametrosDeConsulta: [],
   },
   /** Aranceles de terreno — `GET /catastro/tablas/aranceles` */
   aranceles: {
@@ -1014,7 +1035,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 138 operaciones. */
+/** El `operationId` de una de las 141 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1131,6 +1152,16 @@ export interface ParametrosPorOperacion {
     readonly tamano?: string;
     readonly ordenarPor?: string;
     readonly direccion?: string;
+  };
+  /** `POST /catastro/sectores` */
+  readonly registrar_sector: Readonly<Record<string, never>>;
+  /** `PUT /catastro/sectores/{codigo}` */
+  readonly editar_sector: {
+    readonly codigo: string;
+  };
+  /** `POST /catastro/sectores/{codigo}/manzanas` */
+  readonly registrar_manzana: {
+    readonly codigo: string;
   };
   /** `GET /catastro/tablas/aranceles` */
   readonly aranceles: {
@@ -2121,6 +2152,9 @@ export interface CuerpoPorOperacion {
   readonly registrar_via: CuerpoSinEsquema;
   readonly editar_via: CuerpoSinEsquema;
   readonly sectores: undefined;
+  readonly registrar_sector: CuerpoSinEsquema;
+  readonly editar_sector: CuerpoSinEsquema;
+  readonly registrar_manzana: CuerpoSinEsquema;
   readonly aranceles: undefined;
   readonly valores_unitarios: undefined;
   readonly depreciacion: undefined;
@@ -2263,6 +2297,9 @@ export interface RespuestaPorOperacion {
   readonly registrar_via: CuerpoSinEsquema;
   readonly editar_via: CuerpoSinEsquema;
   readonly sectores: CuerpoSinEsquema;
+  readonly registrar_sector: CuerpoSinEsquema;
+  readonly editar_sector: CuerpoSinEsquema;
+  readonly registrar_manzana: CuerpoSinEsquema;
   readonly aranceles: CuerpoSinEsquema;
   readonly valores_unitarios: CuerpoSinEsquema;
   readonly depreciacion: CuerpoSinEsquema;
