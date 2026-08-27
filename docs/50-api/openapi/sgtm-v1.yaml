@@ -555,6 +555,52 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: registrar_via
+      summary: "Alta de vía"
+      description: "Da de alta una vía del catálogo vial (RF-008). El cuerpo lleva tipo, código, nombre y la observación del usuario, obligatoria (RNF-052)."
+      tags: ["Catastro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/vias/{codigo}":
+    put:
+      operationId: editar_via
+      summary: "Edición de vía"
+      description: "Modifica una vía existente o la da de baja (activa=false). No se borra: la baja es la misma fila con otro estado (RNF-051). El código de la ruta identifica la vía y no cambia."
+      tags: ["Catastro"]
+      parameters:
+        - name: codigo
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/catastro/sectores":
     get:
       operationId: sectores

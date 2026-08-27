@@ -174,6 +174,10 @@ const DEL_BACKEND = {
  * su propio estado sin esto. El `operationId` es distinto del `id` de la
  * pantalla porque los dos verbos comparten ruta y opcion de menu, y el
  * generador de tipos del frontend exige que cada operationId sea unico.
+ *
+ * `ruta` es opcional: sin ella, la operacion cuelga de la misma ruta que la
+ * pantalla (el caso de `permisos`, dos verbos en una ruta); con ella, de otra
+ * —`calles` lee en `/catastro/vias` y edita en `/catastro/vias/{codigo}`—.
  */
 const OPERACIONES_ADICIONALES = {
   permisos: [
@@ -185,6 +189,29 @@ const OPERACIONES_ADICIONALES = {
         'Los permisos que el grupo ya tiene configurados, para cargar la matriz antes' +
         ' de guardarla (PUT de la misma ruta). No trae las 134 opciones del catalogo:' +
         ' solo las que el grupo ya tiene.',
+    },
+  ],
+  // `calles` declara «GET /catastro/vias» como su endpoint —la lectura del
+  // catalogo vial—; el alta y la edicion que pide su pantalla de mantenimiento
+  // (RF-008, #290) necesitan un verbo aparte.
+  calles: [
+    {
+      operationId: 'registrar_via',
+      metodo: 'post',
+      titulo: 'Alta de vía',
+      descripcion:
+        'Da de alta una vía del catálogo vial (RF-008). El cuerpo lleva tipo, código,' +
+        ' nombre y la observación del usuario, obligatoria (RNF-052).',
+    },
+    {
+      operationId: 'editar_via',
+      metodo: 'put',
+      ruta: '/api/v1/catastro/vias/{codigo}',
+      titulo: 'Edición de vía',
+      descripcion:
+        'Modifica una vía existente o la da de baja (activa=false). No se borra: la baja' +
+        ' es la misma fila con otro estado (RNF-051). El código de la ruta identifica la' +
+        ' vía y no cambia.',
     },
   ],
 };
@@ -233,17 +260,21 @@ for (const grupo of NAV) {
     });
 
     for (const extra of OPERACIONES_ADICIONALES[id] ?? []) {
+      // `ruta` conserva el prefijo /api/v1 igual que la de la pantalla; el
+      // serializador lo quita para todas por igual mas abajo.
+      const rutaExtra = extra.ruta ?? ruta;
+      const parametrosDeRutaExtra = [...rutaExtra.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
       operaciones.push({
         id,
         operationId: extra.operationId,
         etiqueta,
         modulo: grupo.label,
         metodo: extra.metodo,
-        ruta,
+        ruta: rutaExtra,
         titulo: extra.titulo,
         descripcion: extra.descripcion,
-        parametrosDeRuta,
-        parametrosDeConsulta: reunir(parametrosDeRuta, []),
+        parametrosDeRuta: parametrosDeRutaExtra,
+        parametrosDeConsulta: reunir(parametrosDeRutaExtra, []),
       });
     }
   }
