@@ -222,8 +222,10 @@ jobs:
           kc config credentials --server http://localhost:8080 --realm master \
             --user "${SGTM_KEYCLOAK_ADMIN:-admin}" --password "$SGTM_CLAVE_KEYCLOAK" >/dev/null
 
-          jperez=$(kc get users -r sgtm -q username=jperez -q exact=true \
-            --fields id,username,requiredActions,attributes)
+          # Sin `--fields`: kcadm devuelve `attributes` y `requiredActions` vacios
+          # cuando se filtran por campo (el mismo defecto que ya anota
+          # `reconciliar-realm.sh` para los mapeadores). Se pide el usuario entero.
+          jperez=$(kc get users -r sgtm -q username=jperez -q exact=true)
           echo "$jperez"
 
           echo "--- jperez nace con UPDATE_PASSWORD pendiente"
