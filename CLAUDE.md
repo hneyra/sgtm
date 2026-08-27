@@ -309,6 +309,7 @@ Lo verificado hasta hoy, ejecutando contra PostgreSQL 16:
 | Autorización contra PostgreSQL (7 pruebas) | Quitando `@RequiereAcceso` de `ViaController` | Rojo en `verificarArquitectura` |
 | Administración de seguridad (9 pruebas) | Sembrando dos municipalidades y consultando cruzado | Desde B, el usuario de A no existe |
 | Permisos y precedencia (9 pruebas) | Quitando la guarda del último administrador | Rojo: el sistema se queda sin quien administre |
+| El administrador inicial administra toda la municipalidad, y un grupo `Seguridad` delegado (14 pruebas) | Devolviendo el filtro por módulo a `permisosDeSeguridad`; ampliando el alcance del grupo `Seguridad` a todo el catálogo | Rojo: el admin deja de llegar al padrón; rojo: un miembro de `Seguridad` entra donde no debe. Y **la marcha blanca destapó de paso** que `GET /catastro/vias` corría sin transacción —sin `SET LOCAL`, RLS falla— porque nadie con permiso había llegado nunca a él: se arregló con `ConsultaDeVias` |
 | Sesión y auditoría (15 pruebas) | Consultando `auditoria_2026` en vez de la tabla padre | La aplicación no tiene privilegio sobre la partición |
 | Sellado de parámetros (9 pruebas) | Quitando el disparador de inmutabilidad de `V9` | Rojo: un conjunto sellado se deja editar |
 | Lectura sellada (6 pruebas) | Quitando `AND estado = 'SELLADO'` de la consulta, y resolviendo por ejercicio en vez de por conjunto | Rojo: se deja leer un conjunto abierto; rojo: el recálculo devuelve la v2 donde la determinación usó la v1 |
