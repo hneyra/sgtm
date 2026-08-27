@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 /**
@@ -105,6 +105,49 @@ export function realmSgtmJson(): string {
 /** El guion que reconcilia el realm contra Keycloak. Vive en `infra/`. */
 export function reconciliarRealmSh(): string {
   return leer(join(raizDeInfra(), "componentes/identidad/reconciliar-realm.sh"));
+}
+
+/**
+ * El guion que reconcilia usuarios y grupos contra Keycloak (ADR-0012).
+ *
+ * Vive en `despliegue/` y no en `infra/` —al reves que `reconciliar-realm.sh`—
+ * porque el compose SI lo usa: alli el alta de usuarios pasa por el mismo guion,
+ * no por `--import-realm`. Un solo guion, dos modos (ver su cabecera).
+ */
+export function reconciliarIdentidadesSh(): string {
+  return leer(join(raizDelRepositorio(), "despliegue/identidad/reconciliar-identidades.sh"));
+}
+
+/** Un archivo `municipalidades/<ubigeo>.json` del repositorio, ya leido. */
+export interface FuenteDeMunicipalidad {
+  /** El nombre del archivo sin extension: tiene que ser el ubigeo. */
+  ubigeo: string;
+  /** El contenido crudo, para que `Identidad.ts` lo parsee y lo valide. */
+  contenido: string;
+}
+
+/**
+ * Los `despliegue/identidad/municipalidades/*.json`: la fuente versionada de las
+ * personas y el grupo de cada municipalidad (ADR-0012). Sin credenciales.
+ *
+ * `Identidad.ts` los deriva a un `identidades.tsv` que monta en el `ConfigMap`;
+ * el Job los aplica con el mismo guion que el compose.
+ */
+export function municipalidadesJson(): FuenteDeMunicipalidad[] {
+  const carpeta = join(raizDelRepositorio(), "despliegue/identidad/municipalidades");
+  if (!existsSync(carpeta)) {
+    throw new Error(
+      `Falta «${carpeta}». Es la fuente versionada de usuarios y grupos por ` +
+        "municipalidad (ADR-0012); si se movio, hay que actualizar esta ruta.",
+    );
+  }
+  return readdirSync(carpeta)
+    .filter((n) => n.endsWith(".json"))
+    .sort()
+    .map((n) => ({
+      ubigeo: n.replace(/\.json$/, ""),
+      contenido: readFileSync(join(carpeta, n), "utf8"),
+    }));
 }
 
 /**

@@ -6,6 +6,7 @@ import { construirManifiestos } from "../componentes";
 import {
   manifiestosDeIdentidad,
   documentosDelRealm,
+  documentosDeIdentidades,
   RUTA_DE_IDENTIDAD,
   PUERTO_DE_LA_CONSOLA,
 } from "../componentes/Identidad";
@@ -43,6 +44,15 @@ import { invariantesDe } from "./stacks";
  */
 
 const AMBIENTE: Environment = "prod";
+
+/** Un relay SMTP de forma valida, para las llamadas directas a `documentosDelRealm`. */
+const SMTP_DE_PRUEBA = {
+  host: "smtp.example.pe",
+  port: 587,
+  from: "no-responder@example.pe",
+  startTls: true,
+  auth: true,
+} as const;
 
 function manifiestosDe(ambiente: Environment): Manifiesto[] {
   return construirManifiestos(invariantesDe(ambiente));
@@ -405,6 +415,7 @@ describe("#151 · identidad", () => {
       domain: "sgtm.example.pe",
       realm: "sgtm",
       clienteDeVerificacion: false,
+      smtp: SMTP_DE_PRUEBA,
     });
     for (const cliente of clientesDe(documentos.clientes)) {
       expect(
@@ -466,6 +477,10 @@ describe("#151 · identidad", () => {
         realm: "otro-realm",
         domain: invariantesDe(AMBIENTE).ingress.domain,
         clienteDeVerificacion: false,
+        correoDePrueba: false,
+        smtp: SMTP_DE_PRUEBA,
+        ubigeo: invariantesDe(AMBIENTE).implantacion.ubigeo,
+        administrador: invariantesDe(AMBIENTE).implantacion.administrador,
       }),
       "Job",
       "realm",
@@ -477,12 +492,194 @@ describe("#151 · identidad", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ADR-0012 — alta declarativa de usuarios y grupos, sin clave en git
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("ADR-0012 · alta declarativa de usuarios", () => {
+  const ms = manifiestosDe(AMBIENTE);
+  const realmCm = buscar(ms, "ConfigMap", "realm") as { data: Record<string, string> };
+  const inv = invariantesDe(AMBIENTE);
+
+  function municipalidad(over: Record<string, unknown> = {}): { ubigeo: string; contenido: string }[] {
+    const base = {
+      ubigeo: "200105",
+      municipalidadId: 1,
+      grupo: "200105 - Municipalidad Distrital de Catacaos",
+      usuarios: [
+        {
+          cuenta: "administrador",
+          nombre: "Administrador",
+          apellido: "del Sistema",
+          correo: "administrador@catacaos.gob.pe",
+          administrador: true,
+        },
+      ],
+      ...over,
+    };
+    return [{ ubigeo: "200105", contenido: JSON.stringify(base) }];
+  }
+
+  it("el ConfigMap del realm trae el guion y el TSV, y el TSV no lleva clave", () => {
+    expect(realmCm.data["reconciliar-identidades.sh"]).toContain("execute-actions-email");
+    const tsv = realmCm.data["identidades.tsv"] ?? "";
+    expect(tsv).toContain("USUARIO\t");
+    expect(tsv.toLowerCase()).not.toContain("password");
+    expect(tsv.toLowerCase()).not.toContain("clave");
+  });
+
+  it("el TSV declara el grupo y el administrador de la municipalidad implantada", () => {
+    const tsv = realmCm.data["identidades.tsv"] ?? "";
+    expect(tsv).toContain(`GRUPO\t`);
+    expect(tsv).toContain(`\t${inv.implantacion.administrador}\t`);
+    // El municipalidadId viaja como ultima columna del GRUPO y penultima del USUARIO.
+    expect(tsv).toMatch(/GRUPO\t[^\t]+\t\d+\n/);
+  });
+
+  it("exige exactamente un usuario «administrador: true»", () => {
+    expect(() =>
+      documentosDeIdentidades({
+        municipalidades: municipalidad({
+          usuarios: [
+            { cuenta: "a", nombre: "A", apellido: "A", correo: "a@x.pe", administrador: true },
+            { cuenta: "b", nombre: "B", apellido: "B", correo: "b@x.pe", administrador: true },
+          ],
+        }),
+        ubigeo: "200105",
+        administrador: "a",
+      }),
+    ).toThrow(/exactamente un usuario/);
+  });
+
+  it("el administrador del archivo tiene que ser el de la implantacion", () => {
+    expect(() =>
+      documentosDeIdentidades({
+        municipalidades: municipalidad(),
+        ubigeo: "200105",
+        administrador: "otra-cuenta",
+      }),
+    ).toThrow(/la misma\s+cuenta/);
+  });
+
+  it("rechaza un municipalidadId que no es un entero positivo", () => {
+    expect(() =>
+      documentosDeIdentidades({
+        municipalidades: municipalidad({ municipalidadId: "1" }),
+        ubigeo: "200105",
+        administrador: "administrador",
+      }),
+    ).toThrow(/entero positivo/);
+  });
+
+  it("se niega si no hay archivo para el ubigeo implantado", () => {
+    expect(() =>
+      documentosDeIdentidades({
+        municipalidades: municipalidad(),
+        ubigeo: "999999",
+        administrador: "administrador",
+      }),
+    ).toThrow(/999999\.json/);
+  });
+
+  it("un cambio del archivo versionado cambia el nombre del Job", () => {
+    const otra = buscar(
+      manifiestosDeIdentidad({
+        environment: AMBIENTE,
+        namespace: namespaceName(AMBIENTE),
+        image: "quay.io/keycloak/keycloak:26.0",
+        realm: inv.identity.realm,
+        domain: inv.ingress.domain,
+        clienteDeVerificacion: false,
+        correoDePrueba: false,
+        smtp: SMTP_DE_PRUEBA,
+        // El repositorio versiona 200101.json (marcha blanca) ademas de 200105.json:
+        // reconciliar otra municipalidad es otro TSV, y por tanto otro Job.
+        ubigeo: "200101",
+        administrador: "jperez",
+      }),
+      "Job",
+      "realm",
+    ).metadata.name;
+    expect(otra).not.toBe(buscar(ms, "Job", "realm").metadata.name);
+  });
+
+  it("el Job encadena los dos guiones y monta el TSV", () => {
+    const job = buscar(ms, "Job", "realm") as {
+      spec: { template: { spec: { containers: Contenedor[] } } };
+    };
+    const c = job.spec.template.spec.containers[0] as Contenedor;
+    expect(c.command?.join(" ")).toContain("reconciliar-realm.sh && /realm/reconciliar-identidades.sh");
+    expect(variablesDe(c).get("KC_DIRECTORIO")).toBe("/realm");
+  });
+
+  it("Mailpit va en stg y no en prod", () => {
+    const enStg = manifiestosDe("stg").some((m) => m.kind === "Deployment" && m.metadata.name.endsWith("-correo"));
+    const enProd = manifiestosDe("prod").some((m) => m.kind === "Deployment" && m.metadata.name.endsWith("-correo"));
+    expect(enStg).toBe(true);
+    expect(enProd).toBe(false);
+  });
+
+  it("Keycloak tiene salida al relay SMTP: a Mailpit en stg, al puerto del relay en prod", () => {
+    const salidaStg = manifiestosDe("stg").find(
+      (m) => m.kind === "NetworkPolicy" && m.metadata.name === "permitir-salida-identidad",
+    ) as { spec: { egress?: { to?: { podSelector?: { matchLabels: Record<string, string> }; ipBlock?: unknown }[]; ports?: { port: number }[] }[] } };
+    const aMailpit = (salidaStg.spec.egress ?? []).find((r) =>
+      (r.to ?? []).some((d) => d.podSelector?.matchLabels.app === resourceName("stg", "correo")),
+    );
+    expect(aMailpit?.ports?.map((p) => p.port)).toEqual([1025]);
+    // Y el buzon acepta ese trafico: la contraparte de ingreso existe.
+    expect(
+      manifiestosDe("stg").some(
+        (m) => m.kind === "NetworkPolicy" && m.metadata.name === "permitir-ingreso-correo",
+      ),
+    ).toBe(true);
+
+    const salidaProd = manifiestosDe("prod").find(
+      (m) => m.kind === "NetworkPolicy" && m.metadata.name === "permitir-salida-identidad",
+    ) as { spec: { egress?: { to?: { ipBlock?: unknown }[]; ports?: { port: number }[] }[] } };
+    const aRelay = (salidaProd.spec.egress ?? []).find((r) =>
+      (r.to ?? []).some((d) => d.ipBlock !== undefined),
+    );
+    expect(aRelay?.ports?.map((p) => p.port)).toEqual([invariantesDe("prod").identity.smtp.port]);
+    // En prod no hay buzon, asi que tampoco su politica de ingreso.
+    expect(
+      manifiestosDe("prod").some(
+        (m) => m.kind === "NetworkPolicy" && m.metadata.name === "permitir-ingreso-correo",
+      ),
+    ).toBe(false);
+  });
+
+  it("el realm.json lleva smtpServer con el host del stack, y en prod no es un buzon", () => {
+    const realm = JSON.parse(realmCm.data["realm.json"] ?? "{}") as {
+      smtpServer?: Record<string, string>;
+    };
+    expect(realm.smtpServer?.host).toBe(inv.identity.smtp.host);
+    expect(realm.smtpServer?.host).not.toMatch(/mailpit|-correo$/);
+  });
+
+  it("en prod el Job lee las credenciales del relay del Secret sgtm-prod-smtp", () => {
+    const job = buscar(ms, "Job", "realm") as {
+      spec: { template: { spec: { containers: Contenedor[] } } };
+    };
+    const env = (job.spec.template.spec.containers[0] as Contenedor).env ?? [];
+    const usuario = env.find((e) => e.name === "KC_SMTP_USUARIO");
+    expect(usuario?.valueFrom?.secretKeyRef?.name).toBe(resourceName("prod", "smtp"));
+    // Y en stg (Mailpit, sin auth) no hay ninguna de las dos.
+    const jobStg = buscar(manifiestosDe("stg"), "Job", "realm") as {
+      spec: { template: { spec: { containers: Contenedor[] } } };
+    };
+    const envStg = (jobStg.spec.template.spec.containers[0] as Contenedor).env ?? [];
+    expect(envStg.some((e) => e.name === "KC_SMTP_USUARIO")).toBe(false);
+  });
+});
+
 describe("#151 · la demostracion", () => {
   it("sin el mapeador, la comprobacion del realm se pone roja", () => {
     const documentos = documentosDelRealm({
       domain: "sgtm.example.pe",
       realm: "sgtm",
       clienteDeVerificacion: false,
+      smtp: SMTP_DE_PRUEBA,
     });
     const clientes: ClienteLeido[] = clientesDe(documentos.clientes).map((c) => ({
       ...c,
@@ -1162,6 +1359,9 @@ describe("#157 · endurecimiento", () => {
         "permitir-salida-sgtm-prod-postgres-a-internet",
         "permitir-salida-sgtm-prod-respaldo-a-internet",
         "permitir-salida-sgtm-prod-observabilidad-kube-state-metrics-al-apiserver",
+        // El relay SMTP del alta declarativa (ADR-0012): en `prod` es externo, asi
+        // que la salida es un `ipBlock` acotado a su puerto y nada mas.
+        "permitir-salida-identidad",
       ].sort(),
     );
 
@@ -1172,6 +1372,16 @@ describe("#157 · endurecimiento", () => {
       const puertos = (p.spec.egress ?? []).flatMap((r) => r.ports ?? []).map((pt) => pt.port);
       expect(puertos).toEqual([443]);
     }
+
+    // El relay SMTP de `prod`: la regla con `ipBlock` es de un solo puerto, el del
+    // relay, y solo ese (la otra regla de esta politica es la de PostgreSQL).
+    const identidad = conInternet.find((p) => p.metadata.name === "permitir-salida-identidad");
+    const salidaSmtp = (identidad?.spec.egress ?? []).filter((r) =>
+      (r.to ?? []).some((d) => d.ipBlock !== undefined),
+    );
+    expect(salidaSmtp.flatMap((r) => (r.ports ?? []).map((pt) => pt.port))).toEqual([
+      invariantesDe(AMBIENTE).identity.smtp.port,
+    ]);
 
     // kube-state-metrics es la excepcion distinta: su destino es el API de
     // Kubernetes, que en k3s escucha :6443 despues del DNAT del `Service`

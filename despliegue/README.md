@@ -8,11 +8,14 @@ esto, y no por grado de avance
 ```bash
 cd despliegue
 cp .env.ejemplo .env          # y poner claves generadas, una distinta por rol
-docker compose up --build --wait aplicacion interfaz
-./identidad/crear-usuario.sh jperez 'una-clave' 1     # usuario de la municipalidad 1
+./identidad/datos-de-implantacion.sh 200101 >> .env   # el administrador, del archivo versionado
+docker compose up --build --wait aplicacion interfaz correo
+./identidad/reconciliar-identidades.sh                # crea los usuarios de municipalidades/*.json
 ```
 
-La interfaz queda en <http://localhost:8081> y Keycloak en <http://localhost:8180>.
+La interfaz queda en <http://localhost:8081>, Keycloak en <http://localhost:8180> y el buzón de
+correo (Mailpit) en <http://localhost:8025> — ahí llega el enlace con que cada usuario nuevo fija
+su clave en el primer acceso (ADR-0012).
 
 ## Las piezas y su orden
 
@@ -26,6 +29,7 @@ identidad ──(arrancada)─────────────────�
 |---|---|---|
 | `base` | superusuario, solo dentro del contenedor | siempre |
 | `identidad` | Keycloak, con su propio administrador | siempre |
+| `correo` | Mailpit: buzón que atrapa el correo de Keycloak (el enlace de clave del alta declarativa) | siempre |
 | `migraciones` | `sgtm_owner` — **el único con DDL** | corre y termina |
 | `implantacion` | `sgtm_owner` para **una** sentencia; el resto como `sgtm_app` | corre y termina |
 | `aplicacion` | `sgtm_app` — sin DDL, sin `BYPASSRLS`, sin `DELETE`, propietaria de nada | siempre |
@@ -77,8 +81,18 @@ reproducible. Fija los dos clientes, el PKCE obligatorio y **el mapeador que pon
 él la separación entre municipalidades (ADR-0005).
 
 **Lo que el realm no trae es ni un usuario ni una clave.** Un realm versionado con
-usuarios es la forma más cómoda de que una contraseña acabe en producción; las
-personas las crea `identidad/crear-usuario.sh`, con las claves de quien provisiona.
+usuarios es la forma más cómoda de que una contraseña acabe en producción. Las
+personas y el grupo de cada municipalidad se declaran —**sin clave**— en
+[`identidad/municipalidades/<ubigeo>.json`](identidad/municipalidades/README.md) y los
+aplica `identidad/reconciliar-identidades.sh` (ADR-0012): el usuario nuevo recibe un
+correo de Keycloak —que en la marcha blanca cae en el buzón `correo`— con un enlace de
+un solo uso y **fija su clave en el primer acceso**. `identidad/crear-usuario.sh` sigue
+existiendo para los usuarios `verificacion` de CI, que necesitan una clave conocida; con
+`--reset` hace lo mismo que el alta declarativa.
+
+Sin SMTP no llega el correo. En el compose lo cubre el servicio `correo`; si se levanta
+sin él, `reconciliar-identidades.sh` falla al enviar y apunta al fallback:
+`kcadm set-password --temporary` a mano, o `SIN_CORREO=1` para crear el usuario sin clave.
 
 Un detalle que cuesta una tarde si se descubre por las malas: **el emisor es una
 identidad, no una dirección de red**. El navegador llega a Keycloak por su nombre
@@ -111,8 +125,9 @@ Dos cosas que no hace, y conviene saberlas:
 
 - **No crea ninguna contraseña.** El sistema no guarda claves ni las transporta
   (ADR-0005). La credencial vive en Keycloak: `SGTM_ADMINISTRADOR` tiene que ser
-  la misma cuenta que se cree con `identidad/crear-usuario.sh`, porque es lo único
-  que une la fila con la identidad del token.
+  la misma cuenta que el usuario marcado `administrador: true` en el archivo de la
+  municipalidad —de ahí lo saca `identidad/datos-de-implantacion.sh`—, porque es lo
+  único que une la fila con la identidad del token.
 - **No fija ningún ejercicio de trabajo.** El ejercicio vive en `sesion`, es de
   cada sesión y se elige al entrar.
 

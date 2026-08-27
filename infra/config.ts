@@ -133,6 +133,31 @@ export interface IdentitySettings {
   developmentMode: boolean;
   /** Usuarios de prueba con clave conocida. Prohibido en `prod` (`INF-03` §4). */
   seedTestUsers: boolean;
+  /**
+   * El relay SMTP con el que Keycloak envía el enlace de un solo uso para fijar la
+   * clave en el alta declarativa de usuarios (ADR-0012, `execute-actions-email` con
+   * `UPDATE_PASSWORD`). Sin esto no llega el correo y el alta queda a medias.
+   *
+   * El servidor y el remitente no son secretos —van en claro en `Pulumi.<stack>.yaml`,
+   * como `domain`—. El usuario y la clave del relay, si `auth` es true, viven en el
+   * `Secret` `sgtm-<amb>-smtp` y **no** los genera `bootstrap-secretos.sh`: los emite
+   * el proveedor del relay (INF-06 §1.2). En `stg` el relay es un buzón Mailpit del
+   * propio clúster, sin `auth`.
+   */
+  smtp: SmtpSettings;
+}
+
+export interface SmtpSettings {
+  /** Anfitrión del relay. En `prod` no puede ser un buzón de pruebas (`INF-03` §4). */
+  host: string;
+  /** Puerto del relay: 25, 465, 587 o el 1025 de un Mailpit. */
+  port: number;
+  /** Dirección desde la que sale el correo. Tiene que tener forma de correo. */
+  from: string;
+  /** STARTTLS al conectar. */
+  startTls: boolean;
+  /** El relay exige usuario y clave. Si es true, se leen del `Secret` `sgtm-<amb>-smtp`. */
+  auth: boolean;
 }
 
 export interface ApplicationSettings {
@@ -420,6 +445,17 @@ export function readInvariants(environment: Environment, reader: ConfigReader): 
       realm: reader.text("keycloakRealm") ?? "sgtm",
       developmentMode: reader.boolean("keycloakDevelopmentMode") ?? false,
       seedTestUsers: reader.boolean("keycloakSeedTestUsers") ?? false,
+      smtp: {
+        host: requireText(
+          reader,
+          "keycloakSmtpHost",
+          "el relay SMTP con el que Keycloak envía el enlace de clave del alta declarativa (ADR-0012)",
+        ),
+        port: reader.number("keycloakSmtpPort") ?? 587,
+        from: requireText(reader, "keycloakSmtpFrom", "la dirección remitente del correo de Keycloak"),
+        startTls: reader.boolean("keycloakSmtpStartTls") ?? true,
+        auth: reader.boolean("keycloakSmtpAuth") ?? true,
+      },
     },
     application: {
       imageRepository: requireText(
@@ -586,6 +622,32 @@ export function checkInvariants(s: Invariants): string[] {
         "de Keycloak dentro del contenedor: perder el pod es perder los usuarios. Es lo " +
         "correcto en el compose de la marcha blanca y lo incorrecto en el clúster, donde " +
         "Keycloak va en modo `start` con su propia base (INF-01 §1).",
+    );
+  }
+
+  // ── ADR-0012 — el relay SMTP del alta declarativa de usuarios ──────────────
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.identity.smtp.from)) {
+    problems.push(
+      `\`keycloakSmtpFrom\` vale «${s.identity.smtp.from}» y no tiene forma de dirección de ` +
+        "correo. Es el remitente del enlace de un solo uso con que un usuario nuevo fija su " +
+        "clave (ADR-0012); un remitente inválido lo rechazan los relays.",
+    );
+  }
+  if (s.identity.smtp.port < 1 || s.identity.smtp.port > 65535) {
+    problems.push(`\`keycloakSmtpPort\` vale ${s.identity.smtp.port} y no es un puerto.`);
+  }
+  if (isProd && /mailpit|mailhog|-correo(\b|$)|localhost|127\.0\.0\.1/i.test(s.identity.smtp.host)) {
+    problems.push(
+      `\`keycloakSmtpHost\` vale «${s.identity.smtp.host}» en «prod». Es un buzón de pruebas, y ` +
+        "en prod el enlace para fijar la clave tiene que salir por un relay de verdad (INF-03 " +
+        "§4): un buzón que nadie lee deja a cada usuario nuevo sin forma de entrar.",
+    );
+  }
+  if (isProd && !s.identity.smtp.auth) {
+    problems.push(
+      "`keycloakSmtpAuth` es false en «prod». Un relay abierto entrega correo de cualquiera; el " +
+        "de prod se autentica, y su usuario y clave viven en el `Secret` `sgtm-prod-smtp` " +
+        "(INF-06 §1.2).",
     );
   }
 

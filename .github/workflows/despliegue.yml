@@ -10,6 +10,13 @@
 #      escrito, o un migrador que no se ejecuta, dejan la base a medias sin que
 #      nada falle.
 #   2. ¿Responde la sonda de vida, sin publicar detalles?
+#   3b. EL ALTA DECLARATIVA DE USUARIOS (ADR-0012). El mismo guion que el cluster,
+#      en modo compose, crea `jperez` SIN clave a partir del archivo versionado
+#      `identidad/municipalidades/200101.json`. Se comprueba: que nace con
+#      UPDATE_PASSWORD pendiente, que Keycloak ENVIA el enlace de clave (esta en el
+#      buzon Mailpit `correo`), que sin clave no consigue token por password, y que
+#      el `municipalidadId` cuadra en el archivo, en la base y en el atributo de
+#      Keycloak (cruce a tres bandas).
 #   4. LA ESCALERA DE IDENTIDAD, peldano a peldano. Cada uno responde con su
 #      codigo del catalogo, y el codigo es lo que hace la asercion precisa —dice
 #      HASTA DONDE llego la peticion, no solo que fallo—:
@@ -56,6 +63,10 @@
 #     pasa de SIN_PRIVILEGIO a SIN_MUNICIPALIDAD; se apunta `issuer-uri` al realm
 #     master y el peldano del emisor ajeno pasa a valer; se quita el
 #     `oauth2ResourceServer` de SeguridadWeb y los cinco peldanos cambian a la vez.
+#   - La 3b: se quita el `execute-actions-email` de `reconciliar-identidades.sh` y
+#     el buzon Mailpit queda vacio —el paso se pone rojo—; se cambia el
+#     `municipalidadId` de `identidad/municipalidades/200101.json` y el cruce a
+#     tres bandas deja de cuadrar.
 
 name: Despliegue
 
@@ -132,7 +143,7 @@ jobs:
       # contenedor que sale con exito no es un contenedor sano. Sus dependencias
       # arrastran a los otros dos igualmente.
       - name: Levantar la instalacion completa
-        run: docker compose up --build --detach --wait aplicacion interfaz
+        run: docker compose up --build --detach --wait aplicacion interfaz correo
 
       - name: 1 · Todas las migraciones del repositorio estan aplicadas
         run: |
@@ -185,6 +196,60 @@ jobs:
           # controlador. No se puede comprobar sin tenerlo.
           ./identidad/crear-usuario.sh verificacion "$SGTM_CLAVE_VERIFICACION" 1
           ./identidad/crear-usuario.sh sin-municipalidad "$SGTM_CLAVE_VERIFICACION"
+
+      # ADR-0012: el alta de personas de una municipalidad es declarativa —el archivo
+      # versionado `identidad/municipalidades/<ubigeo>.json`, SIN una sola clave— y la
+      # clave la fija el usuario en su primer acceso, con el enlace que Keycloak le
+      # manda por correo. Este peldano usa el MISMO guion que el cluster, en modo
+      # compose, y comprueba las tres cosas que lo hacen cierto:
+      #
+      #   - Keycloak ENVIA el enlace (esta en el buzon Mailpit `correo`). Quitar el
+      #     `execute-actions-email` del guion deja el buzon vacio y este paso rojo.
+      #   - el usuario nace SIN clave y con UPDATE_PASSWORD pendiente: no consigue
+      #     token por password hasta fijarla.
+      #   - el `municipalidadId` cuadra en archivo, base y Keycloak (cruce a tres
+      #     bandas). Falsear el numero del archivo pone este paso rojo.
+      - name: 3b · El alta declarativa manda el enlace de clave (ADR-0012)
+        run: |
+          set -euo pipefail
+          source .env
+          export SGTM_CLAVE_KEYCLOAK
+          export SGTM_KEYCLOAK_SERVICIO=identidad
+
+          UBIGEO=200101 ./identidad/reconciliar-identidades.sh
+
+          kc() { docker compose exec -T identidad /opt/keycloak/bin/kcadm.sh "$@"; }
+          kc config credentials --server http://localhost:8080 --realm master \
+            --user "${SGTM_KEYCLOAK_ADMIN:-admin}" --password "$SGTM_CLAVE_KEYCLOAK" >/dev/null
+
+          jperez=$(kc get users -r sgtm -q username=jperez -q exact=true \
+            --fields id,username,requiredActions,attributes)
+          echo "$jperez"
+
+          echo "--- jperez nace con UPDATE_PASSWORD pendiente"
+          echo "$jperez" | grep -q UPDATE_PASSWORD
+
+          echo "--- Keycloak envio el enlace: esta en el buzon Mailpit"
+          curl --fail --silent http://localhost:8025/api/v1/messages \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("messages_count",0)>=1 and "jperez@sullana.gob.pe" in json.dumps(d), d; print("mensajes:", d["messages_count"])'
+
+          echo "--- sin clave, jperez no consigue token por password"
+          sin=$(curl --silent --request POST \
+            http://localhost:8180/realms/sgtm/protocol/openid-connect/token \
+            --data "grant_type=password&client_id=sgtm-verificacion&username=jperez&password=cualquiera" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))' 2>/dev/null || true)
+          test -z "$sin"
+
+          echo "--- el municipalidadId cuadra en archivo, base y Keycloak"
+          delArchivo=$(python3 -c 'import json; print(json.load(open("identidad/municipalidades/200101.json"))["municipalidadId"])')
+          deLaBase=$(docker compose exec -T -e PGPASSWORD="$SGTM_CLAVE_SUPERUSUARIO" base \
+            psql --username postgres --dbname sgtm --tuples-only --no-align \
+            --command "SELECT id FROM municipalidad WHERE ubigeo='200101'" | tr -d '\r')
+          deKeycloak=$(echo "$jperez" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["attributes"]["municipalidad_id"][0])')
+          echo "archivo=$delArchivo  base=$deLaBase  keycloak=$deKeycloak"
+          test "$delArchivo" = "$deLaBase"
+          test "$delArchivo" = "$deKeycloak"
 
       - name: 4 · La escalera de identidad, peldano a peldano
         run: |
