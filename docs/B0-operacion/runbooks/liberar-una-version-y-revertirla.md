@@ -52,9 +52,11 @@ kubectl -n sgtm-<amb> set image deployment/sgtm-<amb>-aplicacion \
 kubectl -n sgtm-<amb> rollout status deployment/sgtm-<amb>-aplicacion
 ```
 
-Y lo mismo para la interfaz, con su imagen propia por ambiente
-(`sgtm-interfaz:<amb>-<sha>` — dos imágenes porque Vite resuelve el emisor de identidad
-al compilar, `publicar-imagenes.yml`):
+Y lo mismo para la interfaz. Su etiqueta todavía lleva el prefijo del ambiente
+(`sgtm-interfaz:<amb>-<sha>`), pero **ya no son dos imágenes**: el flujo publica una sola
+compilación —el mismo digest— bajo las dos etiquetas, porque el paquete dejó de conocer el
+dominio donde se sirve (`ADR-0011` §5). Promover de `stg` a `prod` es reetiquetar, no
+reconstruir:
 
 ```bash
 kubectl -n sgtm-<amb> set image deployment/sgtm-<amb>-interfaz \

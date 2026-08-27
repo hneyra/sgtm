@@ -5,9 +5,19 @@
 # Dos cosas que conviene saber antes de tocarla:
 #
 #   1. Vite resuelve las variables VITE_* AL COMPILAR. No son configuracion de
-#      ejecucion: cambiar el emisor de identidad exige reconstruir la imagen. Es
-#      la consecuencia de servir archivos estaticos, y es preferible a inyectar
-#      configuracion en el HTML, que obligaria a que cada pantalla la leyera.
+#      ejecucion. Por eso las `VITE_SGTM_OIDC_*` que pasa `publicar-imagenes.yml`
+#      son RUTAS del mismo origen -`/keycloak/realms/...`-, nunca URLs absolutas:
+#      un dominio ahi queda horneado en el paquete estatico, y como la etiqueta
+#      de la imagen vive fuera del estado de Pulumi (`ADR-0011` §5), cambiar
+#      `sgtm:domain` actualizaria el ingreso y NO el paquete. Las dos mitades
+#      acabarian apuntando a sitios distintos, en verde y sin un solo sintoma:
+#      paso en `prod`, con el boton de acceso mandando el navegador a un nombre
+#      sin registro A. `comprobar-compilaciones` lo vigila por los dos lados -lo
+#      que el flujo pasa, y lo que acaba dentro del paquete-.
+#      Keycloak se sirve en el mismo origen que la interfaz, asi que el navegador
+#      resuelve la ruta solo. Un despliegue donde NO lo este -`despliegue/
+#      compose.yaml`, con Keycloak en `localhost:8180`- sigue pudiendo pasar una
+#      URL absoluta: `new URL(valor, origin)` la respeta.
 #   2. `/api/v1` lo reenvia nginx al backend, en la misma red del compose. Por eso
 #      la aplicacion pide a su propio origen y no hay CORS que configurar: el
 #      navegador nunca habla con el backend directamente.

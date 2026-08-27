@@ -94,7 +94,20 @@ export async function irAAutenticar(
   const intercambio: Intercambio = { verificador, estado, volverA };
   sessionStorage.setItem(DONDE_ESPERA, JSON.stringify(intercambio));
 
-  const url = new URL(configuracion.autorizacion);
+  // Con `window.location.origin` de base, `autorizacion` puede ser una RUTA del
+  // mismo origen —`/keycloak/realms/...`— y no una URL absoluta. Es lo que
+  // permite que el dominio no viaje dentro del paquete: Vite resuelve las
+  // `VITE_*` al compilar, asi que una URL absoluta ahi convierte el nombre del
+  // servidor en una constante horneada, y cambiarlo obliga a reconstruir la
+  // imagen. Cuando no se reconstruye, el ingreso apunta a un dominio y el
+  // paquete a otro, sin que nada se ponga rojo: paso en `prod`, con el boton de
+  // acceso mandando el navegador a un nombre que ni siquiera resolvia.
+  //
+  // No rompe lo que ya funciona: `new URL()` ignora la base cuando el primer
+  // argumento YA es absoluto, asi que `despliegue/compose.yaml` —donde Keycloak
+  // vive en otro origen, `localhost:8180`— sigue igual. Lo absoluto gana; lo
+  // relativo pasa a ser posible.
+  const url = new URL(configuracion.autorizacion, window.location.origin);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', configuracion.cliente);
   url.searchParams.set('redirect_uri', configuracion.redireccion);
