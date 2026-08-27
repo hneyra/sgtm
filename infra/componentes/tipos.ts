@@ -209,7 +209,13 @@ export interface Deployment {
   metadata: Metadatos;
   spec: {
     replicas: number;
-    strategy: { type: "Recreate" | "RollingUpdate" };
+    strategy: {
+      type: "Recreate" | "RollingUpdate";
+      // Solo con `RollingUpdate`. `maxSurge: 0` obliga a matar un pod viejo antes de
+      // crear el nuevo: en un nodo sin holgura, un pod extra durante el despliegue no
+      // agenda y el rollout se cuelga (`Insufficient cpu`).
+      rollingUpdate?: { maxSurge?: number | string; maxUnavailable?: number | string };
+    };
     selector: { matchLabels: Record<string, string> };
     template: PlantillaDePod;
   };
