@@ -12,7 +12,7 @@ import pe.gob.sgtm.catastro.dominio.ViaRepository;
 import pe.gob.sgtm.dominio.Observacion;
 
 /**
- * Da de alta una via del catalogo vial.
+ * Da de alta una via del catalogo vial, la edita o la da de baja.
  *
  * <p>Es el primer caso de uso de escritura del sistema, y esta escrito para servir de plantilla.
  * Tres cosas que conviene copiar tal cual:
@@ -30,6 +30,19 @@ import pe.gob.sgtm.dominio.Observacion;
  *       tiene que poder fijarla.
  * </ol>
  *
+ * <h2>Dos metodos y no uno, porque son tres operaciones de auditoria</h2>
+ *
+ * <p>{@link #registrar} es el alta y solo el alta: asienta {@link Operacion#ALTA}. {@link #editar}
+ * recibe <b>el estado anterior</b> ademas del nuevo, y de la comparacion salen las otras dos: si la
+ * via estaba activa y deja de estarlo, es una {@link Operacion#BAJA} —«una via retirada del
+ * catalogo», dice el enum—; en cualquier otro caso, una {@link Operacion#MODIFICACION}.
+ *
+ * <p>El estado anterior no es un adorno. El contrato de {@code MODIFICACION} es explicito —«los
+ * datos anteriores quedan en la propia auditoria»— y sin el la fila registra que algo cambio pero
+ * no desde que: una auditoria que no permite reconstruir el valor previo no sirve para deshacer un
+ * error ni para sostener una reclamacion. Por eso entra en la firma en lugar de releerse aqui: el
+ * que llama ya lo tiene, y volver a leerlo abriria la ventana entre la lectura y la escritura.
+ *
  * <p>Ningun argumento es el identificador de municipalidad (regla 2): sale del token y lo aplica la
  * politica RLS.
  */
@@ -46,8 +59,20 @@ public class RegistrarVia {
         this.reloj = reloj;
     }
 
+    /**
+     * Alta de una via que todavia no esta en la base.
+     *
+     * <p>Rechaza una via que ya tiene identificador en lugar de tratarla como edicion: una via con
+     * id llega de la base, y guardarla por aqui asentaria un {@code ALTA} sobre algo que ya existia
+     * y perderia el estado anterior. Para eso esta {@link #editar}.
+     */
     @Transactional
     public Via registrar(Via via, Observacion observacion) {
+        if (!via.esNueva()) {
+            throw new IllegalArgumentException(
+                    "registrar da de alta una via nueva; la que llego ya tiene identificador."
+                            + " Para cambiar una via existente esta editar(anterior, cambiada, …)");
+        }
         Via guardada = repositorio.save(via);
 
         auditoria.registrar(
@@ -55,11 +80,57 @@ public class RegistrarVia {
                                 LocalDate.now(reloj),
                                 "via",
                                 String.valueOf(guardada.id()),
-                                via.esNueva() ? Operacion.ALTA : Operacion.MODIFICACION,
+                                Operacion.ALTA,
                                 observacion)
                         .con(null, descripcion(guardada)));
 
         return guardada;
+    }
+
+    /**
+     * Edicion de una via existente, o su baja logica.
+     *
+     * <p>{@code anterior} es la via tal como esta en la base y {@code cambiada} la que se quiere
+     * dejar; las dos han de ser la misma fila. La operacion que se asienta la decide el paso de
+     * {@code activa} de {@code true} a {@code false}: eso es una {@link Operacion#BAJA}, y no un
+     * borrado (RNF-051) —la fila sigue ahi con {@code activa = false}—. Reactivar una via dada de
+     * baja es una {@link Operacion#MODIFICACION} como cualquier otra.
+     */
+    @Transactional
+    public Via editar(Via anterior, Via cambiada, Observacion observacion) {
+        Long idAnterior = anterior.id();
+        Long idCambiada = cambiada.id();
+        if (idAnterior == null || idCambiada == null) {
+            throw new IllegalArgumentException(
+                    "editar cambia una via ya guardada; alguna de las dos no tiene identificador");
+        }
+        if (!idAnterior.equals(idCambiada)) {
+            throw new IllegalArgumentException(
+                    "El antes y el despues han de ser la misma via; llegaron la "
+                            + idAnterior
+                            + " y la "
+                            + idCambiada);
+        }
+
+        Via guardada = repositorio.save(cambiada);
+
+        auditoria.registrar(
+                RegistroDeAuditoria.enLaFechaDe(
+                                LocalDate.now(reloj),
+                                "via",
+                                String.valueOf(guardada.id()),
+                                esBaja(anterior, guardada)
+                                        ? Operacion.BAJA
+                                        : Operacion.MODIFICACION,
+                                observacion)
+                        .con(descripcion(anterior), descripcion(guardada)));
+
+        return guardada;
+    }
+
+    /** Retirar del catalogo: estaba activa y deja de estarlo. */
+    private static boolean esBaja(Via anterior, Via despues) {
+        return anterior.activa() && !despues.activa();
     }
 
     /**

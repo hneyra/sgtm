@@ -9,15 +9,26 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import pe.gob.sgtm.auditoria.Operacion;
+import pe.gob.sgtm.auditoria.Origen;
+import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
+import pe.gob.sgtm.autorizacion.ComprobadorDeAcceso;
+import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDeVias;
 import pe.gob.sgtm.catastro.aplicacion.RegistrarVia;
 import pe.gob.sgtm.catastro.dominio.TipoVia;
@@ -45,16 +56,32 @@ class ViaControllerTest {
 
     private final RepositorioEnMemoria repositorio = new RepositorioEnMemoria();
 
+    /** Lo que la auditoria recibio, para poder afirmar sobre la operacion que se asento. */
+    private final List<RegistroDeAuditoria> asentado = new ArrayList<>();
+
     /** La fecha no importa al transporte; se fija para no depender del dia de ejecucion. */
-    private final RegistrarVia registrarVia =
-            new RegistrarVia(
-                    repositorio,
-                    registro -> {},
-                    Clock.fixed(Instant.parse("2026-08-27T10:00:00Z"), ZoneId.of("America/Lima")));
+    private final Clock reloj =
+            Clock.fixed(Instant.parse("2026-08-27T10:00:00Z"), ZoneId.of("America/Lima"));
+
+    private final RegistrarVia registrarVia = new RegistrarVia(repositorio, asentado::add, reloj);
+
+    /**
+     * Quien tiene que privilegio. Empieza con los tres que la pantalla usa; una prueba le quita
+     * {@code ELIMINACION} para comprobar que la baja se niega sin el.
+     */
+    private final Set<Privilegio> privilegios =
+            EnumSet.of(Privilegio.LECTURA, Privilegio.REGISTRO, Privilegio.MODIFICACION);
+
+    private final ComprobadorDeAcceso comprobador =
+            (usuario, acceso, privilegio, fecha) -> privilegios.contains(privilegio);
 
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
-                            new ViaController(new ConsultaDeVias(repositorio), registrarVia))
+                            new ViaController(
+                                    new ConsultaDeVias(repositorio),
+                                    registrarVia,
+                                    comprobador,
+                                    reloj))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(
@@ -64,6 +91,20 @@ class ViaControllerTest {
                                                             .moduloDeObjetosDeValor())
                                             .build()))
                     .build();
+
+    /**
+     * El origen de la peticion lo fija el borde de la aplicacion; aqui no hay borde, asi que se
+     * fija a mano. Sin el, la comprobacion del privilegio de baja no sabria por quien preguntar.
+     */
+    @BeforeEach
+    void fijarOrigen() {
+        OrigenContext.fijar(new Origen("mtorres", "PC-CATASTRO-01", "10.1.1.9"));
+    }
+
+    @AfterEach
+    void limpiarOrigen() {
+        OrigenContext.limpiar();
+    }
 
     @Test
     @DisplayName("devuelve la pagina en la forma unica, con campos en español camelCase")
@@ -206,6 +247,32 @@ class ViaControllerTest {
     }
 
     @Test
+    @DisplayName("un codigo que ya existe es 409, no una incidencia, y no nombra la restriccion")
+    void unCodigoRepetidoEs409() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/catastro/vias")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"codigo":"V-1","tipo":"CALLE","nombre":"Otra via",
+                                                 "observacion":"Alta con un codigo ya usado"}
+                                                """))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("lo mando mal el cliente, y el estado actual no admite la operacion")
+                .isEqualTo(409);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("\"codigo\":\"CONFLICTO\"").contains("V-1");
+        assertThat(cuerpo)
+                .as("ni tabla, ni restriccion, ni SQL: eso reconstruye el esquema")
+                .doesNotContain("via_codigo_uq")
+                .doesNotContain("duplicate key")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
     @DisplayName("editar una via cambia su nombre y conserva su codigo")
     void editarUnaViaCambiaSuNombre() throws Exception {
         MvcResult resultado =
@@ -223,11 +290,102 @@ class ViaControllerTest {
         assertThat(resultado.getResponse().getContentAsString())
                 .contains("\"codigo\":\"V-1\"")
                 .contains("\"nombre\":\"Avenida Miguel Grau\"");
+        assertThat(ultimoAsiento().operacion()).isEqualTo(Operacion.MODIFICACION);
+        assertThat(ultimoAsiento().datosAnteriores())
+                .as("una MODIFICACION sin el estado previo no permite reconstruir nada")
+                .isNotNull()
+                .contains("Avenida Grau");
     }
 
     @Test
-    @DisplayName("la baja es un PUT con activa=false, no un DELETE (RNF-051)")
+    @DisplayName("editar solo el nombre conserva el ubigeo y el tipo que la via ya tenia")
+    void editarSoloElNombreConservaLoDemas() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                put("/api/v1/catastro/vias/V-1")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"nombre":"Avenida Miguel Grau",
+                                                 "observacion":"Solo el nombre"}
+                                                """))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("lo que no viene en el cuerpo, no cambia")
+                .contains("\"tipo\":\"AVENIDA\"")
+                .contains("\"ubigeo\":\"200101\"")
+                .contains("\"activa\":true")
+                .contains("\"nombre\":\"Avenida Miguel Grau\"");
+    }
+
+    @Test
+    @DisplayName("un ubigeo en blanco si lo borra: es una instruccion, no una omision")
+    void unUbigeoEnBlancoLoBorra() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                put("/api/v1/catastro/vias/V-1")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"ubigeo":"","observacion":"El ubigeo estaba mal"}
+                                                """))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        assertThat(resultado.getResponse().getContentAsString()).contains("\"ubigeo\":null");
+    }
+
+    @Test
+    @DisplayName("el codigo del cuerpo se ignora en el PUT: la via la identifica la ruta")
+    void elCodigoDelCuerpoSeIgnora() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                put("/api/v1/catastro/vias/V-1")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"codigo":"V-OTRA","nombre":"Avenida Grau",
+                                                 "observacion":"Intento de renombrar el codigo"}
+                                                """))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        assertThat(resultado.getResponse().getContentAsString()).contains("\"codigo\":\"V-1\"");
+        assertThat(repositorio.findByCodigo("V-OTRA"))
+                .as("no se creo ni se renombro nada por el codigo del cuerpo")
+                .isEmpty();
+        assertThat(repositorio.findByCodigo("V-1")).isPresent();
+    }
+
+    @Test
+    @DisplayName("un PUT sin observacion es 422: sin ella no se guarda (regla 10)")
+    void unPutSinObservacionEs422() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                put("/api/v1/catastro/vias/V-1")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("{\"nombre\":\"Avenida sin motivo\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"codigo\":\"VALIDACION\"")
+                .contains("observacion");
+        assertThat(repositorio.findByCodigo("V-1"))
+                .get()
+                .extracting(Via::nombre)
+                .isEqualTo("Avenida Grau");
+        assertThat(asentado).as("no se asento nada").isEmpty();
+    }
+
+    @Test
+    @DisplayName(
+            "la baja es un PUT con activa=false, no un DELETE (RNF-051), y se audita como BAJA")
     void laBajaEsUnPutConActivaFalse() throws Exception {
+        privilegios.add(Privilegio.ELIMINACION);
+
         MvcResult resultado =
                 mvc.perform(
                                 put("/api/v1/catastro/vias/V-2")
@@ -242,6 +400,57 @@ class ViaControllerTest {
         assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
         assertThat(resultado.getResponse().getContentAsString()).contains("\"activa\":false");
         assertThat(repositorio.findByCodigo("V-2")).isPresent();
+        assertThat(ultimoAsiento().operacion())
+                .as("Operacion.BAJA es, literalmente, «una via retirada del catalogo»")
+                .isEqualTo(Operacion.BAJA);
+        assertThat(ultimoAsiento().datosAnteriores()).isNotNull().contains("\"activa\":true");
+    }
+
+    @Test
+    @DisplayName("sin el privilegio ELIMINACION la baja se niega, con el mismo 403 del guardia")
+    void sinEliminacionLaBajaSeNiega() throws Exception {
+        privilegios.remove(Privilegio.ELIMINACION);
+
+        MvcResult resultado =
+                mvc.perform(
+                                put("/api/v1/catastro/vias/V-2")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"activa":false,
+                                                 "observacion":"Baja sin tener el privilegio"}
+                                                """))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(403);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"codigo\":\"SIN_PRIVILEGIO\"");
+        assertThat(repositorio.findByCodigo("V-2"))
+                .get()
+                .extracting(Via::activa)
+                .as("la via sigue activa: no se guardo nada")
+                .isEqualTo(true);
+        assertThat(asentado).isEmpty();
+    }
+
+    @Test
+    @DisplayName("editar sin dar de baja no necesita ELIMINACION")
+    void editarSinDarDeBajaNoNecesitaEliminacion() throws Exception {
+        privilegios.remove(Privilegio.ELIMINACION);
+
+        MvcResult resultado =
+                mvc.perform(
+                                put("/api/v1/catastro/vias/V-2")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"nombre":"Calle Lima Sur",
+                                                 "observacion":"Correccion de nomenclatura"}
+                                                """))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        assertThat(ultimoAsiento().operacion()).isEqualTo(Operacion.MODIFICACION);
     }
 
     @Test
@@ -262,12 +471,19 @@ class ViaControllerTest {
         assertThat(repositorio.findByCodigo("V-NADA")).isEmpty();
     }
 
+    private RegistroDeAuditoria ultimoAsiento() {
+        assertThat(asentado).as("la escritura tenia que dejar su asiento").isNotEmpty();
+        return asentado.get(asentado.size() - 1);
+    }
+
     /**
      * Repositorio en memoria: aqui se prueba el transporte, no la persistencia.
      *
-     * <p>{@link #save} si funciona —el transporte de un alta llega hasta el— pero no impone la
-     * unicidad de {@code codigo} ni la politica RLS: eso lo verifica {@code ViaRepositoryJdbcTest}
-     * contra PostgreSQL.
+     * <p>{@link #save} si funciona —el transporte de un alta llega hasta el— y <b>si impone la
+     * unicidad de {@code codigo}</b>, lanzando la misma {@link DuplicateKeyException} que Spring
+     * traduce del {@code duplicate key value violates unique constraint} de PostgreSQL. Sin eso, la
+     * prueba de que un codigo repetido sale como 409 no tendria nada que traducir. Lo que no imita
+     * es la politica RLS: eso lo verifica {@code ViaRepositoryJdbcTest} contra PostgreSQL.
      */
     private static final class RepositorioEnMemoria implements ViaRepository {
 
@@ -305,6 +521,10 @@ class ViaControllerTest {
         @Override
         public Via save(Via via) {
             if (via.esNueva()) {
+                if (findByCodigo(via.codigo()).isPresent()) {
+                    throw new DuplicateKeyException(
+                            "duplicate key value violates unique constraint \"via_codigo_uq\"");
+                }
                 Via guardada =
                         new Via(
                                 siguienteId++,

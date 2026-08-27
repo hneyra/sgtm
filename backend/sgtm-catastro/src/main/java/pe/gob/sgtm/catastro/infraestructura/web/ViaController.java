@@ -1,7 +1,11 @@
 package pe.gob.sgtm.catastro.infraestructura.web;
 
+import java.text.Normalizer;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.Locale;
 import org.jspecify.annotations.Nullable;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -11,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.autorizacion.ComprobadorDeAcceso;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDeVias;
@@ -40,6 +46,16 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * /seguridad/grupos/{grupo}/miembros}: la baja <b>no es un borrado</b> (RNF-051), es la misma fila
  * con {@code activa = false}.
  *
+ * <p><b>Y la baja exige ademas {@code ELIMINACION}</b>, comprobado aqui dentro. La anotacion
+ * declara lo que exige la <i>ruta</i>, y la ruta es una sola para editar y para retirar del
+ * catalogo; cual de las dos es depende del cuerpo, que el guardia no lee. El privilegio {@code
+ * ELIMINACION} del manual «gobierna la baja —desactivar—, no un {@code DELETE}» (ver {@link
+ * Privilegio}), asi que dejar la baja solo bajo {@code MODIFICACION} lo volveria un privilegio que
+ * no gobierna nada. La comprobacion usa el mismo puerto que el guardia —{@link
+ * ComprobadorDeAcceso}, con el usuario de {@link OrigenContext} y la fecha del reloj inyectado— y
+ * lanza el mismo {@code ProblemaDeNegocio} con {@code SIN_PRIVILEGIO}, de modo que quien no la
+ * tiene recibe el 403 de siempre y no distingue este camino del otro.
+ *
  * <p><b>La lectura pasa por {@link ConsultaDeVias}</b>, no por el repositorio directamente: es esa
  * capa la que lleva el {@code @Transactional(readOnly = true)} donde se fija el tenant. Sin ella la
  * consulta corre sin {@code SET LOCAL} y la politica RLS de {@code via} falla. La escritura pasa
@@ -56,18 +72,29 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/catastro/vias")
-@RequiereAcceso(acceso = "calles", privilegio = Privilegio.LECTURA)
+@RequiereAcceso(acceso = ViaController.ACCESO, privilegio = Privilegio.LECTURA)
 public class ViaController {
+
+    /** Id de esta opcion en el catalogo de pantallas (NEG-03) y en la tabla {@code acceso}. */
+    static final String ACCESO = "calles";
 
     /** Por codigo: es el orden con el que se lee un catalogo vial en pantalla. */
     private static final String ORDEN_POR_OMISION = "codigo";
 
     private final ConsultaDeVias consulta;
     private final RegistrarVia registrarVia;
+    private final ComprobadorDeAcceso comprobador;
+    private final Clock reloj;
 
-    public ViaController(ConsultaDeVias consulta, RegistrarVia registrarVia) {
+    public ViaController(
+            ConsultaDeVias consulta,
+            RegistrarVia registrarVia,
+            ComprobadorDeAcceso comprobador,
+            Clock reloj) {
         this.consulta = consulta;
         this.registrarVia = registrarVia;
+        this.comprobador = comprobador;
+        this.reloj = reloj;
     }
 
     @GetMapping
@@ -76,30 +103,56 @@ public class ViaController {
                 consulta.listar(paginacion.aPaginacion(ORDEN_POR_OMISION)), ViaResource::de);
     }
 
-    /** Alta de una via del catalogo vial (RF-008). */
+    /**
+     * Alta de una via del catalogo vial (RF-008).
+     *
+     * <p>{@code codigo}, {@code tipo} y {@code nombre} son obligatorios: no hay via anterior de la
+     * que heredarlos. {@code ubigeo} es opcional.
+     *
+     * <p>Un codigo que ya existe sale como {@code 409} y no como incidencia: la unicidad la exige
+     * la base —es la unica que puede—, pero su mensaje nombra la tabla y la restriccion, asi que se
+     * traduce aqui. Lo que el cliente recibe dice que el codigo esta tomado y nada mas.
+     */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @RequiereAcceso(acceso = "calles", privilegio = Privilegio.REGISTRO)
+    @RequiereAcceso(acceso = ACCESO, privilegio = Privilegio.REGISTRO)
     public ViaResource registrar(@RequestBody PeticionDeVia peticion) {
         Observacion observacion = observacionDe(peticion.observacion());
+        String codigo = exigir(peticion.codigo(), "codigo");
         Via nueva =
                 Via.nueva(
-                        exigir(peticion.codigo(), "codigo"),
+                        codigo,
                         tipoDe(peticion.tipo()),
                         exigir(peticion.nombre(), "nombre"),
                         vacioANulo(peticion.ubigeo()));
-        return ViaResource.de(registrarVia.registrar(nueva, observacion));
+        try {
+            return ViaResource.de(registrarVia.registrar(nueva, observacion));
+        } catch (DuplicateKeyException repetido) {
+            // Ni tabla, ni restriccion, ni SQL: solo el dato que el usuario escribio.
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.CONFLICTO,
+                    "Ya existe una via con el codigo '" + codigo + "' en esta municipalidad");
+        }
     }
 
     /**
      * Edicion de una via ya existente, o su baja logica.
      *
+     * <p><b>Lo que no viene, no cambia.</b> Todo campo ausente —{@code null}— conserva el valor que
+     * la via ya tiene: {@code tipo}, {@code nombre}, {@code ubigeo} y {@code activa}. Es la unica
+     * regla que se puede escribir sin sorpresas en un PUT parcial; la anterior —obligatorios el
+     * tipo y el nombre, y un {@code ubigeo} ausente borrando el guardado— hacia que editar solo el
+     * nombre perdiera el ubigeo sin que nadie lo pidiera. Para <b>borrar</b> el ubigeo se manda la
+     * cadena vacia, que es una instruccion y no una omision.
+     *
+     * <p>La {@code observacion} sigue siendo obligatoria (regla 10, RNF-052): sin ella, 422.
+     *
      * <p>El {@code codigo} de la ruta identifica la via y <b>no se cambia</b> por esta operacion:
-     * el {@code codigo} del cuerpo, si viene, se ignora. {@code activa = false} es la baja; sin
-     * {@code activa} en el cuerpo, la via conserva el estado que tenia.
+     * el {@code codigo} del cuerpo, si viene, se ignora. {@code activa = false} es la baja, y exige
+     * ademas el privilegio {@code ELIMINACION} —ver el javadoc de la clase—.
      */
     @PutMapping("/{codigo}")
-    @RequiereAcceso(acceso = "calles", privilegio = Privilegio.MODIFICACION)
+    @RequiereAcceso(acceso = ACCESO, privilegio = Privilegio.MODIFICACION)
     public ViaResource modificar(@PathVariable String codigo, @RequestBody PeticionDeVia peticion) {
         Observacion observacion = observacionDe(peticion.observacion());
         Via existente =
@@ -115,14 +168,41 @@ public class ViaController {
                 new Via(
                         existente.id(),
                         existente.codigo(),
-                        tipoDe(peticion.tipo()),
-                        exigir(peticion.nombre(), "nombre"),
-                        vacioANulo(peticion.ubigeo()),
+                        peticion.tipo() == null ? existente.tipo() : tipoDe(peticion.tipo()),
+                        peticion.nombre() == null
+                                ? existente.nombre()
+                                : exigir(peticion.nombre(), "nombre"),
+                        peticion.ubigeo() == null
+                                ? existente.ubigeo()
+                                : vacioANulo(peticion.ubigeo()),
                         peticion.activa() == null ? existente.activa() : peticion.activa());
-        return ViaResource.de(registrarVia.registrar(cambiada, observacion));
+
+        if (existente.activa() && !cambiada.activa()) {
+            exigirPrivilegioDeBaja();
+        }
+        return ViaResource.de(registrarVia.editar(existente, cambiada, observacion));
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * Retirar una via del catalogo exige {@code ELIMINACION}, y se pregunta por el mismo puerto que
+     * usa el guardia.
+     *
+     * <p>No se toca {@link pe.gob.sgtm.autorizacion.GuardiaDeAcceso}: la anotacion no puede
+     * expresar «segun lo que traiga el cuerpo» y el interceptor corre antes de que el cuerpo se
+     * lea. Lo que si se conserva es la respuesta: el mismo {@code CodigoDeError.SIN_PRIVILEGIO} y
+     * un mensaje de la misma forma, para que negar por esta via no se distinga de negar por aquella
+     * —y no revele, de paso, que la peticion llego a interpretarse—.
+     */
+    private void exigirPrivilegioDeBaja() {
+        String usuario = OrigenContext.actual().usuario();
+        if (!comprobador.autoriza(usuario, ACCESO, Privilegio.ELIMINACION, LocalDate.now(reloj))) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.SIN_PRIVILEGIO,
+                    "No tiene el privilegio " + Privilegio.ELIMINACION + " sobre " + ACCESO);
+        }
+    }
 
     private static Observacion observacionDe(@Nullable String texto) {
         if (texto == null || texto.isBlank()) {
@@ -140,7 +220,7 @@ public class ViaController {
     private static TipoVia tipoDe(@Nullable String texto) {
         String limpio = exigir(texto, "tipo");
         String normalizado =
-                java.text.Normalizer.normalize(limpio, java.text.Normalizer.Form.NFD)
+                Normalizer.normalize(limpio, Normalizer.Form.NFD)
                         .replaceAll("\\p{M}", "")
                         .toUpperCase(Locale.ROOT);
         try {

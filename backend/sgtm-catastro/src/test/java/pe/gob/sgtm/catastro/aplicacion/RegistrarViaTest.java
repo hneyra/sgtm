@@ -42,8 +42,12 @@ import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
  * anotacion {@code @Transactional} del caso de uso abre la transaccion —y por tanto emite el {@code
  * SET LOCAL}— y que la auditoria cae dentro de ella. Con el objeto desnudo, la transaccion la
  * abriria la prueba y la anotacion podria estar puesta o no sin que nada cambiara.
+ *
+ * <p>Cubre las <b>tres</b> operaciones de auditoria que el caso de uso puede asentar —{@code ALTA},
+ * {@code MODIFICACION} con los datos anteriores y {@code BAJA}— porque la que se elige es la unica
+ * decision del caso de uso, y una que se equivoque no rompe nada: deja la pista mintiendo.
  */
-@DisplayName("Caso de uso: registrar via, con su auditoria")
+@DisplayName("Caso de uso: registrar, editar y dar de baja una via, con su auditoria")
 class RegistrarViaTest {
 
     private static BaseDeDatosDePrueba base;
@@ -129,6 +133,95 @@ class RegistrarViaTest {
                 assertThat(fila.next()).as("y solo una").isFalse();
             }
         }
+    }
+
+    @Test
+    @DisplayName("la edicion se audita como MODIFICACION y deja los datos anteriores")
+    void laEdicionSeAuditaComoModificacion() throws SQLException {
+        Via original =
+                registrarVia.registrar(
+                        Via.nueva("V-101", TipoVia.CALLE, "Calle Piura", "220101"),
+                        Observacion.de("Alta previa a la correccion"));
+
+        Via cambiada =
+                new Via(
+                        original.id(),
+                        original.codigo(),
+                        original.tipo(),
+                        "Calle Piura Norte",
+                        original.ubigeo(),
+                        original.activa());
+        registrarVia.editar(
+                original, cambiada, Observacion.de("Correccion de nomenclatura, oficio 2026-31"));
+
+        try (Connection admin = base.conexionAdmin();
+                PreparedStatement sentencia =
+                        admin.prepareStatement(
+                                "SELECT operacion, datos_anteriores->>'nombre',"
+                                        + " datos_nuevos->>'nombre'"
+                                        + " FROM auditoria WHERE tabla = 'via' AND clave = ?"
+                                        + " ORDER BY id DESC LIMIT 1")) {
+            sentencia.setString(1, String.valueOf(original.id()));
+            try (ResultSet fila = sentencia.executeQuery()) {
+                assertThat(fila.next()).isTrue();
+                assertThat(fila.getString(1)).isEqualTo("MODIFICACION");
+                assertThat(fila.getString(2))
+                        .as("el contrato de MODIFICACION es que el estado previo quede aqui")
+                        .isEqualTo("Calle Piura");
+                assertThat(fila.getString(3)).isEqualTo("Calle Piura Norte");
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("retirar del catalogo se audita como BAJA, no como MODIFICACION")
+    void retirarDelCatalogoSeAuditaComoBaja() throws SQLException {
+        Via original =
+                registrarVia.registrar(
+                        Via.nueva("V-102", TipoVia.PASAJE, "Pasaje Los Olivos", "220101"),
+                        Observacion.de("Alta previa a la baja"));
+
+        registrarVia.editar(
+                original,
+                original.dadaDeBaja(),
+                Observacion.de("Via absorbida por la Av. San Martin"));
+
+        try (Connection admin = base.conexionAdmin();
+                PreparedStatement sentencia =
+                        admin.prepareStatement(
+                                "SELECT operacion, datos_anteriores->>'activa',"
+                                        + " datos_nuevos->>'activa'"
+                                        + " FROM auditoria WHERE tabla = 'via' AND clave = ?"
+                                        + " ORDER BY id DESC LIMIT 1")) {
+            sentencia.setString(1, String.valueOf(original.id()));
+            try (ResultSet fila = sentencia.executeQuery()) {
+                assertThat(fila.next()).isTrue();
+                assertThat(fila.getString(1))
+                        .as("Operacion.BAJA es, literalmente, «una via retirada del catalogo»")
+                        .isEqualTo("BAJA");
+                assertThat(fila.getString(2)).isEqualTo("true");
+                assertThat(fila.getString(3)).isEqualTo("false");
+            }
+        }
+
+        assertThat(contar("SELECT count(*) FROM via WHERE codigo = 'V-102'"))
+                .as("dar de baja no es borrar (RNF-051): la fila sigue ahi")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("registrar no acepta una via que ya tiene identificador: para eso esta editar")
+    void registrarNoAceptaUnaViaYaGuardada() {
+        Via original =
+                registrarVia.registrar(
+                        Via.nueva("V-103", TipoVia.JIRON, "Jiron Union", null),
+                        Observacion.de("Alta para la comprobacion"));
+
+        assertThatThrownBy(
+                        () ->
+                                registrarVia.registrar(
+                                        original, Observacion.de("Alta encubierta de una edicion")))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
