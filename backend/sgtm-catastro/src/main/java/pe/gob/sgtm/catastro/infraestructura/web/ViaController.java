@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
-import pe.gob.sgtm.catastro.dominio.ViaRepository;
+import pe.gob.sgtm.catastro.aplicacion.ConsultaDeVias;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.RespuestaPaginada;
@@ -22,6 +22,11 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * (NEG-03), el mismo que la siembra pone en la tabla {@code acceso}. Una regla de ArchUnit rompe el
  * build si un endpoint no lo declara, y el guardia niega si no lo encuentra.
  *
+ * <p><b>La lectura pasa por {@link ConsultaDeVias}</b>, no por el repositorio directamente: es esa
+ * capa la que lleva el {@code @Transactional(readOnly = true)} donde se fija el tenant. Sin ella la
+ * consulta corre sin {@code SET LOCAL} y la politica RLS de {@code via} falla —lo tapaba el 403 del
+ * guardia hasta que alguien tuvo permiso para llegar aqui—.
+ *
  * <p><b>Ningun metodo recibe la municipalidad</b>, ni como parametro de consulta ni como
  * encabezado, y no es cuestion de disciplina: sale del token (ADR-0005, regla 2) y hay una regla de
  * ArchUnit que rechaza el build si alguien la anade «por comodidad».
@@ -34,15 +39,15 @@ public class ViaController {
     /** Por codigo: es el orden con el que se lee un catalogo vial en pantalla. */
     private static final String ORDEN_POR_OMISION = "codigo";
 
-    private final ViaRepository repositorio;
+    private final ConsultaDeVias consulta;
 
-    public ViaController(ViaRepository repositorio) {
-        this.repositorio = repositorio;
+    public ViaController(ConsultaDeVias consulta) {
+        this.consulta = consulta;
     }
 
     @GetMapping
     public RespuestaPaginada<ViaResource> listar(ParametrosDePaginacion paginacion) {
         return RespuestaPaginada.de(
-                repositorio.findAll(paginacion.aPaginacion(ORDEN_POR_OMISION)), ViaResource::de);
+                consulta.listar(paginacion.aPaginacion(ORDEN_POR_OMISION)), ViaResource::de);
     }
 }
