@@ -128,6 +128,26 @@ describe('sin permiso: se dice que falta, no que hay detras', () => {
   });
 });
 
+describe('todavia no disponible: el contrato la declara, el backend aun no la sirve', () => {
+  it('un 404 no es un error rojo: se dice sin alarma y sin «Reintentar»', async () => {
+    laApiResponde(404, {
+      type: 'https://sgtm.gob.pe/errores/no_encontrado',
+      title: 'No se encontro lo solicitado',
+      status: 404,
+      detail: 'No se encontro lo solicitado',
+      codigo: 'NO_ENCONTRADO',
+    });
+
+    montarEnRuta('/catastro/calles');
+
+    expect(await screen.findByText('Esta opción todavía no está disponible')).toBeInTheDocument();
+    // Ni el estado rojo ni su boton: reintentar daria el mismo 404.
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument();
+    // Y no dibuja la estructura de la pantalla que hay detras.
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+});
+
 describe('vacio: no es lo mismo un padron vacio que un filtro sin resultados', () => {
   beforeEach(() => {
     globalThis.fetch = () =>

@@ -15,7 +15,7 @@ import {
   registroQueFalta,
   PAGINA,
 } from './busqueda';
-import { SIN_PERMISO, estadoDePantalla, textoDeError } from './estados';
+import { NO_DISPONIBLE, SIN_PERMISO, estadoDePantalla, textoDeError } from './estados';
 import { useCatalogoVisible } from '../app/sesion/useCatalogoVisible';
 import { useEscritura } from './escritura';
 import { useFocoTrasGuardar } from './foco';
@@ -263,7 +263,9 @@ function Bloques({
   // hook se llama siempre —no se puede llamar a un hook a veces— y se pasa al
   // bloque de reporte solo cuando esta es la pantalla, para que las otras doce
   // sigan con su boton deshabilitado de siempre.
-  const descargaDeFicha = useDescargaDeArchivo('ficha_contribuyente_reporte', { codigo: codigo ?? '' });
+  const descargaDeFicha = useDescargaDeArchivo('ficha_contribuyente_reporte', {
+    codigo: codigo ?? '',
+  });
   const escritura = useEscritura(
     operacion !== undefined && escribe(operacion) && puedeEscribirAqui ? operacion : undefined,
     operacion === undefined ? {} : parametrosDeBusqueda(operacion, codigo, busqueda),
@@ -298,6 +300,14 @@ function Bloques({
   // filtrar ni el titulo ni los campos de lo que hay detras (REQ-03 §5).
   if (estado === 'sin-permiso') {
     return <Aviso tipo="sin-permiso" titulo={SIN_PERMISO.titulo} detalle={SIN_PERMISO.detalle} />;
+  }
+
+  // La operacion esta en el contrato pero el backend todavia no la sirve (404).
+  // No es un error: ni traza que dictar ni «Reintentar» —daria el mismo 404
+  // hasta que se publique el endpoint—. Tampoco dibuja la estructura, igual que
+  // el sin permiso: no hay datos que ensenar.
+  if (estado === 'no-disponible') {
+    return <Aviso titulo={NO_DISPONIBLE.titulo} detalle={NO_DISPONIBLE.detalle} />;
   }
 
   if (estado === 'error') {
