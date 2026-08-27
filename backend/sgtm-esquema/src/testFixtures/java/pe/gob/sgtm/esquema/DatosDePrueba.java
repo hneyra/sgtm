@@ -670,6 +670,12 @@ public final class DatosDePrueba {
                 CIEN);
         ejecutar(
                 app,
+                "INSERT INTO valor_correlativo (municipalidad_id, tipo, ejercicio, ultimo)"
+                        + " VALUES (?, 'OP', ?, 1)",
+                muni,
+                EJERCICIO);
+        ejecutar(
+                app,
                 "INSERT INTO notificacion (municipalidad_id, objeto, objeto_id, numero,"
                         + " fecha_notificacion, modalidad, resultado, notificador)"
                         + " VALUES (?, 'VALOR', ?, ?, ?, 'PERSONAL', 'NOTIFICADO', 'prueba')",
