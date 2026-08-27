@@ -31,15 +31,18 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas dos companeras de sesion y permisos', () => {
-    // Dos operaciones que no son opciones del catalogo, y no tienen pantalla
-    // propia de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
+  it('son las 134 del manual, mas cuatro operaciones sin pantalla propia', () => {
+    // Operaciones que no son opciones del catalogo y no tienen pantalla propia
+    // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
     //     guarda antes de guardarla.
     //   - `permisos_de_la_sesion` (ADR-0013): la matriz de permisos efectivos
     //     del usuario en curso, de la que la interfaz dibuja el menu.
+    //   - `registrar_via` / `editar_via` (#290): el alta y la edicion de la
+    //     pantalla `calles`, que declara «GET /catastro/vias» como su endpoint
+    //     —la lectura— y necesita un verbo aparte para escribir.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(136);
+    expect(Object.keys(OPERACIONES)).toHaveLength(138);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

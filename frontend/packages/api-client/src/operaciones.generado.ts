@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 136 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 138 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 136 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 138 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 136 operaciones del contrato, por su `operationId`.
+ * Las 138 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 136 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 138 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -115,6 +115,20 @@ export const OPERACIONES = {
     ruta: '/catastro/vias',
     parametrosDeRuta: [],
     parametrosDeConsulta: ['codigoDeVia', 'nombreDeCalle', 'tipoDeVia', 'sector', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+  },
+  /** Alta de vía — `POST /catastro/vias` */
+  registrar_via: {
+    metodo: 'POST',
+    ruta: '/catastro/vias',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
+  /** Edición de vía — `PUT /catastro/vias/{codigo}` */
+  editar_via: {
+    metodo: 'PUT',
+    ruta: '/catastro/vias/{codigo}',
+    parametrosDeRuta: ['codigo'],
+    parametrosDeConsulta: [],
   },
   /** Sectores, manzanas y lotes — `GET /catastro/sectores` */
   sectores: {
@@ -1000,7 +1014,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 136 operaciones. */
+/** El `operationId` de una de las 138 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1102,6 +1116,12 @@ export interface ParametrosPorOperacion {
     readonly tamano?: string;
     readonly ordenarPor?: string;
     readonly direccion?: string;
+  };
+  /** `POST /catastro/vias` */
+  readonly registrar_via: Readonly<Record<string, never>>;
+  /** `PUT /catastro/vias/{codigo}` */
+  readonly editar_via: {
+    readonly codigo: string;
   };
   /** `GET /catastro/sectores` */
   readonly sectores: {
@@ -2098,6 +2118,8 @@ export interface CuerpoPorOperacion {
   readonly actualizacion_catastro: CuerpoSinEsquema;
   readonly ficha_contribuyente_reporte: undefined;
   readonly calles: undefined;
+  readonly registrar_via: CuerpoSinEsquema;
+  readonly editar_via: CuerpoSinEsquema;
   readonly sectores: undefined;
   readonly aranceles: undefined;
   readonly valores_unitarios: undefined;
@@ -2238,6 +2260,8 @@ export interface RespuestaPorOperacion {
   readonly actualizacion_catastro: CuerpoSinEsquema;
   readonly ficha_contribuyente_reporte: CuerpoSinEsquema;
   readonly calles: CuerpoSinEsquema;
+  readonly registrar_via: CuerpoSinEsquema;
+  readonly editar_via: CuerpoSinEsquema;
   readonly sectores: CuerpoSinEsquema;
   readonly aranceles: CuerpoSinEsquema;
   readonly valores_unitarios: CuerpoSinEsquema;

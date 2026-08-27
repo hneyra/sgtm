@@ -1,5 +1,6 @@
 package pe.gob.sgtm.catastro.aplicacion;
 
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.catastro.dominio.Via;
@@ -33,5 +34,16 @@ public class ConsultaDeVias {
     @Transactional(readOnly = true)
     public Pagina<Via> listar(Paginacion paginacion) {
         return vias.findAll(paginacion);
+    }
+
+    /**
+     * La via de un codigo, para que la edicion sepa que id esta tocando.
+     *
+     * <p>Lleva su propia transaccion por lo mismo que {@link #listar}: sin ella no hay {@code SET
+     * LOCAL} y la politica RLS de {@code via} no tiene contexto de tenant.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Via> buscarPorCodigo(String codigo) {
+        return vias.findByCodigo(codigo);
     }
 }
