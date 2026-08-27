@@ -81,6 +81,22 @@ export const CLIENTE_DEL_BACKOFFICE = "sgtm-backoffice";
 /** Ruta bajo la que cuelga Keycloak. La comparte con `publicar-imagenes.yml`. */
 export const RUTA_DE_IDENTIDAD = "/keycloak";
 
+/**
+ * Puerto local del tunel por el que se abre la consola de administracion.
+ *
+ * Vive aqui, y exportado, porque **tiene que coincidir** con el del
+ * `port-forward`: la consola construye sus enlaces desde `KC_HOSTNAME_ADMIN`, asi
+ * que con otro puerto carga y se rompe en cuanto se navega. Un numero suelto en un
+ * runbook se desincroniza del codigo; una constante no.
+ */
+export const PUERTO_DE_LA_CONSOLA = 8180;
+
+/**
+ * Donde existe la consola de administracion: al otro lado de un tunel local, y en
+ * ningun otro sitio. El runbook `abrir-la-consola-de-keycloak.md` lo explica.
+ */
+export const URL_DE_LA_CONSOLA = `http://localhost:${PUERTO_DE_LA_CONSOLA}${RUTA_DE_IDENTIDAD}`;
+
 interface MapeadorDeProtocolo {
   name: string;
   protocol: string;
@@ -256,6 +272,22 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
                 // El nombre PUBLICO. De aqui sale el `iss` de cada token.
                 { name: "KC_HOSTNAME", value: `https://${domain}${RUTA_DE_IDENTIDAD}` },
                 { name: "KC_HOSTNAME_STRICT", value: "true" },
+                // La consola de administracion NO se publica: la `IngressRoute` la
+                // excluye con `!PathPrefix(/keycloak/admin)`, y eso no se toca. Pero
+                // `KC_HOSTNAME_STRICT` hace que Keycloak construya TODAS sus URLs
+                // absolutas contra `KC_HOSTNAME` sin mirar por donde llego la peticion,
+                // asi que abrirla por un `port-forward` acababa en un 302 al dominio
+                // publico -y ahi, excluida del enrutado, la peticion caia a la ruta de
+                // la interfaz y aparecia el formulario de acceso del SGTM-. Las dos
+                // protecciones encadenadas dejaban la consola inalcanzable tambien para
+                // quien tiene derecho a entrar. Se vio contra el Keycloak de `prod`.
+                //
+                // `KC_HOSTNAME_ADMIN` le da a las URLs de administracion un anfitrion
+                // propio sin tocar los publicos: el `iss` de los tokens sigue saliendo
+                // de `KC_HOSTNAME`. No amplia la superficie de ataque, la reduce -esas
+                // URLs dejan de nombrar el dominio publico, y `localhost` no es
+                // enrutable desde fuera-.
+                { name: "KC_HOSTNAME_ADMIN", value: URL_DE_LA_CONSOLA },
                 // ── Sonda y agrupamiento ────────────────────────────────────
                 { name: "KC_HEALTH_ENABLED", value: "true" },
                 // Desde Keycloak 25 la sonda vive en el puerto 9000. Su ruta se fija

@@ -3,7 +3,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { auditarManifiestos } from "../auditoria";
 import { construirManifiestos } from "../componentes";
-import { manifiestosDeIdentidad, documentosDelRealm, RUTA_DE_IDENTIDAD } from "../componentes/Identidad";
+import {
+  manifiestosDeIdentidad,
+  documentosDelRealm,
+  RUTA_DE_IDENTIDAD,
+  PUERTO_DE_LA_CONSOLA,
+} from "../componentes/Identidad";
 import { nginxDelCluster } from "../componentes/Aplicacion";
 import { valoresDeTraefik } from "../componentes/Ingreso";
 import { manifiestosDeObservabilidad } from "../componentes/Observabilidad";
@@ -343,6 +348,39 @@ describe("#151 · identidad", () => {
     // Su base, no la del padron: Keycloak hace DDL sobre la suya en cada actualizacion
     // menor, y eso sobre la base que sostiene RLS seria abrirle DDL al padron.
     expect(variables.get("KC_DB_URL")?.endsWith("/sgtm")).toBe(false);
+  });
+
+  it("la consola de administracion vive tras un tunel local, nunca en el dominio publico", () => {
+    // `KC_HOSTNAME_STRICT` hace que Keycloak construya TODAS sus URLs absolutas
+    // contra `KC_HOSTNAME`, sin mirar por donde llego la peticion. Sin esta
+    // variable, abrir la consola por un `port-forward` acababa en un 302 al dominio
+    // publico -y ahi, excluida del enrutado por `!PathPrefix`, la peticion caia a la
+    // ruta de la interfaz y aparecia el formulario de acceso del SGTM-. Las dos
+    // protecciones encadenadas dejaban la consola inalcanzable tambien para quien
+    // tiene derecho a entrar. Se vio contra el Keycloak real de `prod`.
+    const variables = variablesDe(contenedor);
+    const consola = variables.get("KC_HOSTNAME_ADMIN");
+    expect(consola).toBe(`http://localhost:${PUERTO_DE_LA_CONSOLA}${RUTA_DE_IDENTIDAD}`);
+
+    // La unica forma de equivocarse aqui que importa: apuntarla al dominio publico.
+    // Eso pondria las URLs de administracion en internet y dejaria la exclusion del
+    // ingreso sosteniendolo todo sola.
+    expect(new URL(consola as string).hostname).toBe("localhost");
+    expect(consola).not.toContain(invariantesDe(AMBIENTE).ingress.domain);
+
+    // Y no afloja el nombre publico: el `iss` de los tokens no se toca.
+    expect(variables.get("KC_HOSTNAME_STRICT")).toBe("true");
+  });
+
+  it("el tunel es la unica via: el ingreso sigue sin publicar la consola", () => {
+    // La otra mitad. `KC_HOSTNAME_ADMIN` hace la consola ALCANZABLE por el tunel; lo
+    // que la mantiene fuera de internet es esta exclusion. Se comprueban juntas
+    // porque quitar cualquiera de las dos rompe la propiedad entera: sin la
+    // exclusion -«total, ya hay tunel»- la consola de identidad queda publicada.
+    const identidad = buscar(ms, "IngressRoute", "identidad") as {
+      spec: { routes: { match: string }[] };
+    };
+    expect(identidad.spec.routes[0]?.match).toContain("!PathPrefix(`/keycloak/admin`)");
   });
 
   it("el emisor es el nombre publico; el JWKS, el interno", () => {
