@@ -827,6 +827,18 @@ describe("#152 · la aplicacion y la interfaz", () => {
     expect(contenedor.startupProbe?.httpGet?.path).toBe("/actuator/health");
   });
 
+  it("el rollout de la aplicacion no pide un pod de mas: `maxSurge: 0`", () => {
+    // El default de Kubernetes levanta un segundo pod de la JVM antes de matar el
+    // viejo. En `prod` —un nodo, una replica— no cabe: se queda `Pending` con
+    // `Insufficient cpu` y a los diez minutos el `pulumi up` falla por
+    // `ProgressDeadlineExceeded`. Pasó de verdad el 2026-08-27.
+    const aplicacion = buscar(ms, "Deployment", "aplicacion") as {
+      spec: { strategy: { type: string; rollingUpdate?: { maxSurge?: number | string } } };
+    };
+    expect(aplicacion.spec.strategy.type).toBe("RollingUpdate");
+    expect(aplicacion.spec.strategy.rollingUpdate?.maxSurge).toBe(0);
+  });
+
   it("el perfil batch corre sin abrir puerto ninguno", () => {
     const lote = buscar(ms, "CronJob", "lote") as {
       spec: { jobTemplate: { spec: { template: { spec: { containers: Contenedor[] } } } } };

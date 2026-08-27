@@ -96,10 +96,24 @@ export function manifiestosDeAplicacion(args: AplicacionArgs): Manifiesto[] {
     metadata: { name: nombreDeLaAplicacion, namespace, labels: etiquetasDeLaAplicacion },
     spec: {
       replicas: webReplicas,
-      // Aqui si `RollingUpdate`: la aplicacion no monta volumen ninguno y son varias
-      // replicas. Es lo que hace que matar un pod no deje la interfaz sirviendo errores
-      // mas de unos segundos.
-      strategy: { type: "RollingUpdate" },
+      // `RollingUpdate` —la aplicacion no monta volumen— pero con `maxSurge: 0`: el
+      // rollout mata el pod viejo ANTES de crear el nuevo, no despues.
+      //
+      // El default de Kubernetes (`maxSurge: 25%`, que para una replica redondea a 1)
+      // levanta un segundo pod de `aplicacion` mientras el viejo sigue en pie. En
+      // `prod` —un solo nodo, una replica— ese segundo pod de la JVM no cabe: se
+      // queda `Pending` con `Insufficient cpu` y a los diez minutos el Deployment se
+      // da por vencido (`ProgressDeadlineExceeded`) y el `pulumi up` entero falla.
+      // Paso de verdad el 2026-08-27, al subir `applicationBootstrapVersion`.
+      //
+      // Con `maxSurge: 0` no hace falta holgura para un pod de mas: hay unos segundos
+      // sin backend por despliegue —aceptable para una marcha blanca de una replica—,
+      // y si algun dia `webReplicas > 1`, `maxUnavailable: 1` lo sigue rodando de a
+      // uno.
+      strategy: {
+        type: "RollingUpdate",
+        rollingUpdate: { maxSurge: 0, maxUnavailable: 1 },
+      },
       selector: { matchLabels: { app: nombreDeLaAplicacion } },
       template: {
         metadata: { labels: { ...etiquetasDeLaAplicacion, app: nombreDeLaAplicacion } },
