@@ -303,21 +303,43 @@ jobs:
             echo "$estado $(python3 -c 'import json;print(json.load(open("/tmp/cuerpo")).get("codigo","ok"))' 2>/dev/null || echo 'ok')"
           }
 
+          # Como `intento`, pero comparando: si no cuadra, dice QUE obtuvo y enseña
+          # el cuerpo. Un `test "$(intento …)" = "…"` a secas solo deja el numero de
+          # linea, y entonces hay que ir a los registros del contenedor a adivinar
+          # si fue un 500, un codigo del catalogo distinto o un token que no salio.
+          espera() {
+            local esperado="$1" ruta="$2"; shift 2
+            local obtenido
+            obtenido=$(intento "$ruta" "$@")
+            if [ "$obtenido" != "$esperado" ]; then
+              echo "  FALLO $ruta: esperaba «$esperado», obtuve «$obtenido»" >&2
+              echo "  cuerpo: $(cat /tmp/cuerpo 2>/dev/null)" >&2
+              return 1
+            fi
+            echo "  ok $ruta -> $obtenido"
+          }
+
           echo "--- sin token"
-          test "$(intento /catastro/vias)" = "401 NO_AUTENTICADO"
+          espera "401 NO_AUTENTICADO" /catastro/vias
 
           echo "--- con un token que no es un token"
-          test "$(intento /catastro/vias --header 'Authorization: Bearer esto-no-es-un-token')" = "401 NO_AUTENTICADO"
+          espera "401 NO_AUTENTICADO" /catastro/vias --header 'Authorization: Bearer esto-no-es-un-token'
 
           echo "--- con un token de OTRO emisor: el realm master del mismo Keycloak"
           ajeno=$(token master admin-cli "${SGTM_KEYCLOAK_ADMIN:-admin}" "$SGTM_CLAVE_KEYCLOAK")
-          test "$(intento /catastro/vias --header "Authorization: Bearer $ajeno")" = "401 NO_AUTENTICADO"
+          espera "401 NO_AUTENTICADO" /catastro/vias --header "Authorization: Bearer $ajeno"
 
           echo "--- con un token del realm correcto pero SIN el claim municipalidad_id"
           sinClaim=$(token sgtm sgtm-verificacion sin-municipalidad "$SGTM_CLAVE_VERIFICACION")
-          test "$(intento /catastro/vias --header "Authorization: Bearer $sinClaim")" = "403 SIN_MUNICIPALIDAD"
+          espera "403 SIN_MUNICIPALIDAD" /catastro/vias --header "Authorization: Bearer $sinClaim"
 
           conClaim=$(token sgtm sgtm-verificacion verificacion "$SGTM_CLAVE_VERIFICACION")
+
+          echo "--- (diagnostico) lo que la implantacion dejo en permiso/grupo"
+          docker compose exec -T -e PGPASSWORD="$SGTM_CLAVE_SUPERUSUARIO" base \
+            psql --username postgres --dbname sgtm --tuples-only --no-align --command \
+            "SELECT g.nombre, count(*) FROM permiso p JOIN grupo g ON g.id = p.grupo_id GROUP BY g.nombre" || true
+          docker compose logs --no-color --tail 40 implantacion || true
 
           echo "--- el administrador implantado ENTRA, y en toda la municipalidad"
           # Aqui se cierra el camino entero: token emitido por Keycloak, validado por
@@ -325,16 +347,16 @@ jobs:
           # enlazado por su cuenta, y permisos que la implantacion otorgo. El
           # administrador inicial administra la municipalidad ENTERA (#275), asi que
           # llega tanto a la seguridad como al catastro.
-          test "$(intento /seguridad/usuarios --header "Authorization: Bearer $conClaim")" = "200 ok"
-          test "$(intento /catastro/vias --header "Authorization: Bearer $conClaim")" = "200 ok"
+          espera "200 ok" /seguridad/usuarios --header "Authorization: Bearer $conClaim"
+          espera "200 ok" /catastro/vias --header "Authorization: Bearer $conClaim"
 
           echo "--- pero los permisos son barrera, no sello: sin fila de usuario, 403"
           # Un token con el claim correcto cuya cuenta no tiene fila en `usuario`
           # —ni, por tanto, permisos— no entra a ningun controlador. Si esto
           # respondiera 200, la autorizacion seria decorativa.
           sinPermisos=$(token sgtm sgtm-verificacion sin-permisos "$SGTM_CLAVE_VERIFICACION")
-          test "$(intento /catastro/vias --header "Authorization: Bearer $sinPermisos")" = "403 SIN_PRIVILEGIO"
-          test "$(intento /seguridad/usuarios --header "Authorization: Bearer $sinPermisos")" = "403 SIN_PRIVILEGIO"
+          espera "403 SIN_PRIVILEGIO" /catastro/vias --header "Authorization: Bearer $sinPermisos"
+          espera "403 SIN_PRIVILEGIO" /seguridad/usuarios --header "Authorization: Bearer $sinPermisos"
 
       - name: 5 · Ninguna otra ruta se atiende
         run: |
