@@ -5,15 +5,20 @@ import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { BarraDeAcciones } from '../bloques/BarraDeAcciones';
 import { esIrreversible } from '../escritura';
 import type { Escritura } from '../escritura';
+import { OPCIONES_CONECTADAS } from '../conexiones';
+import { SIN_DATO } from '../seguridad/listado';
 import { montarEnRuta } from '../../pruebas/montar';
 
 /**
  * Valores (#75): **un valor emitido es un acto administrativo**.
  *
- * Sale de la municipalidad, se notifica y no se corrige: se anula. Ninguno de
- * sus seis endpoints existe todavia, asi que lo que se comprueba aqui es lo que
- * la interfaz tiene que hacer bien **antes** de que exista, porque despues ya
- * habria valores emitidos de por medio.
+ * Sale de la municipalidad, se notifica y no se corrige: se anula. De sus seis
+ * endpoints, tres ya existen (#37, #38) y tres siguen en progreso (#39). Lo que
+ * se comprueba aqui primero es lo que la interfaz tiene que hacer bien **para
+ * las seis**, tengan o no backend: sin eso, conectar una no la distinguiria de
+ * las que todavia esperan. `valores_busqueda` se conecta para lectura al final
+ * de este archivo — ver `pantallas/valores/index.ts` para por que las otras
+ * cinco no se conectan todavia.
  */
 
 /** Las seis opciones del modulo, por su ranura. */
@@ -174,4 +179,59 @@ const escrituraDeMentira = (): Escritura => ({
   error: null,
   enviar: () => {},
   clave: 'clave-de-prueba',
+});
+
+describe('valores_busqueda lee ValorResource, conectado hasta donde llega el backend (#37)', () => {
+  it('es la unica de las seis ya conectada', () => {
+    expect(OPCIONES_CONECTADAS).toContain('valores_busqueda');
+    for (const opcion of [
+      'valores_individual',
+      'valores_masivo',
+      'notificacion_valores',
+      'prescripcion',
+      'pase_coactiva',
+    ]) {
+      expect(OPCIONES_CONECTADAS).not.toContain(opcion);
+    }
+  });
+
+  it('cada fila es un valor, y lo que ValorResource no publica sale vacio', async () => {
+    montarEnRuta('/valores/valores-busqueda');
+
+    const fila = (await screen.findByText('OP-2026-004182')).closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      'OP-2026-004182',
+      'OP',
+      'CASTILLO PASCUALA, MARÍA E.',
+      // Tributo y periodo son de ValorDetalle, que este recurso no publica.
+      SIN_DATO,
+      SIN_DATO,
+      '195.98',
+      // La notificacion es #39: todavia no existe ningun campo que la traiga.
+      SIN_DATO,
+      // El estado es el nombre literal de EstadoDeValor, no la etiqueta del
+      // prototipo: «Firme» no es ningun valor del enum (ver el mock).
+      'NOTIFICADO',
+    ]);
+  });
+
+  it('el «Estado» nunca es una etiqueta que EstadoDeValor no reconoce', async () => {
+    montarEnRuta('/valores/valores-busqueda');
+
+    const tabla = (await screen.findByText('OP-2026-004182')).closest('table');
+    expect(tabla).not.toBeNull();
+    const dentroDeLaTabla = within(tabla as HTMLElement);
+
+    // Las cuatro filas del mock, con su estado ya en el vocabulario del
+    // backend: «Firme» y «Reclamado» —que EstadoDeValor no tiene— colapsan en
+    // NOTIFICADO, que es el estado del que ambos parten.
+    for (const invalido of ['Firme', 'Reclamado']) {
+      expect(dentroDeLaTabla.queryByText(invalido)).not.toBeInTheDocument();
+    }
+    expect(dentroDeLaTabla.getAllByText('NOTIFICADO')).toHaveLength(2);
+    expect(dentroDeLaTabla.getByText('EMITIDO')).toBeInTheDocument();
+    expect(dentroDeLaTabla.getByText('COACTIVA')).toBeInTheDocument();
+  });
 });
