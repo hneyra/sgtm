@@ -51,18 +51,25 @@ El guion dispara `execute-actions-email` con `UPDATE_PASSWORD`: Keycloak envía 
 solo uso a su correo, y la persona **fija su clave al entrar**. Nadie —ni el operador, ni CI, ni
 un log— llega a ver una clave.
 
-Exige SMTP configurado en el realm. El servidor y el remitente no son secretos (van en claro en
-`Pulumi.<stack>.yaml`); el usuario y la clave del relay, si hace falta, viven en el `Secret`
-`sgtm-<amb>-smtp` y **no** los genera `bootstrap-secretos.sh` —los emite el proveedor del relay
-([`INF-06`](../../80-infraestructura/gestion-de-secretos.md) §1.2)—. En `stg` el relay es un
-buzón Mailpit del propio clúster; en `prod` es un relay de verdad y externo, y `config.ts`
-rechaza que `keycloakSmtpHost` apunte a un buzón (`INF-03` §4).
+El relay SMTP es **opcional** (`keycloakSmtpHost` en `Pulumi.<stack>.yaml` es el interruptor):
 
-Si el correo no llega —SMTP mal configurado, filtrado, dirección equivocada— hay dos salidas,
-las dos con el usuario eligiendo su clave al final: reenviar el enlace
-(`execute-actions-email`) una vez arreglado el relay, o fijar una clave **temporal** a mano
-con `kcadm set-password --temporary` y entregarla fuera de banda. El procedimiento copiable
-está en el runbook
+- **Con relay** — el servidor y el remitente no son secretos (van en claro); el usuario y la
+  clave del relay, si `keycloakSmtpAuth`, viven en el `Secret` `sgtm-<amb>-smtp` y **no** los
+  genera `bootstrap-secretos.sh` —los emite el proveedor del relay
+  ([`INF-06`](../../80-infraestructura/gestion-de-secretos.md) §1.2)—. En `stg` el relay es un
+  buzón Mailpit del propio clúster; `config.ts` rechaza que en `prod` `keycloakSmtpHost` apunte
+  a un buzón (`INF-03` §4).
+- **Sin relay (Opción B)** — un ambiente que **no declara** `keycloakSmtpHost`: el realm no
+  lleva `smtpServer`, el Job de reconciliación pasa `SIN_CORREO=1`, `reconciliar-identidades.sh`
+  omite `execute-actions-email`, y el usuario se crea **sin clave** y con `UPDATE_PASSWORD`
+  pendiente. Un operador se la fija con `kcadm set-password --temporary` (runbook abajo). Es el
+  estado de la marcha blanca de `prod` mientras no haya un relay decidido (D-05): el alta
+  funciona igual, solo cambia cómo llega la primera clave. Añadir el relay después es poner las
+  claves en `Pulumi.<stack>.yaml` y reenviar el enlace a cada usuario —no se recrea nada—.
+
+Si hay relay y aun así el correo no llega —SMTP mal configurado, filtrado, dirección
+equivocada— las salidas son las mismas: reenviar el enlace (`execute-actions-email`) una vez
+arreglado el relay, o la clave temporal a mano. El procedimiento copiable está en el runbook
 [Recuperar el acceso de un usuario](../../B0-operacion/runbooks/recuperar-el-acceso-de-un-usuario.md).
 
 ### 3. Reconciliación, como el realm
@@ -98,8 +105,11 @@ que une las dos mitades (ADR-0005)—.
 
 **Negativas / costos aceptados**
 
-- **Depende de SMTP.** Sin relay, el alta queda a medias (usuario sin clave) y el despliegue lo
-  dice. En `prod` el relay es un prerrequisito operativo, como el VPS: no se fabrica en un PR.
+- **Sin relay, la primera clave la reparte un operador.** El alta crea al usuario y el sistema
+  queda administrable, pero cada uno necesita que alguien le fije una clave temporal a mano
+  hasta que exista un relay. Es un costo real de operación, no un bloqueo: la alternativa
+  —exigir relay para desplegar— dejaba `prod` sin poder implantar por una pieza que aún no
+  está decidida (D-05).
 - **Dos derivadores del TSV** —`Identidad.ts` para el clúster, el python del guion para el
   compose—, porque la imagen de Keycloak no trae con qué parsear JSON. La trampa es que se
   separen; lo limita que los dos validan lo mismo y `componentes.test.ts` compara.

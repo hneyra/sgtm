@@ -2,19 +2,24 @@
 
 | Campo | Valor |
 |---|---|
-| Cuándo | Un usuario dado de alta con el flujo declarativo (ADR-0012) dice que **nunca recibió el correo** para fijar su clave, o que **el enlace ya caducó** |
-| Qué cubre | Reenviar el enlace, o —si el correo no es una opción— fijarle una clave temporal a mano. En los dos casos la clave la termina eligiendo el usuario |
+| Cuándo | Un usuario dado de alta con el flujo declarativo (ADR-0012) no puede entrar porque no tiene clave: **el ambiente no tiene relay SMTP** (Opción B — hoy `prod`, y entonces esto es el procedimiento **normal**, no una falla), o lo tiene pero **el correo nunca llegó** o **el enlace caducó** |
+| Qué cubre | Fijarle una clave temporal a mano (siempre funciona), o —si hay relay— reenviar el enlace. En los dos casos la clave la termina eligiendo el usuario |
 | Qué **no** cubre | «Nadie puede entrar» → [Keycloak no responde](keycloak-no-responde.md). Un usuario **ya establecido** que olvidó su clave usa el enlace «¿Olvidó su contraseña?» de la pantalla de acceso (`resetPasswordAllowed` está activo) |
 | Estado del ensayo | El reenvío y el `set-password --temporary` se ejercitan en CI en el peldaño **3b** de `despliegue.yml`, contra el Keycloak del compose con un buzón Mailpit. Contra el `prod` real, no |
 
 ## Síntoma
 
 El alta declarativa (`reconciliar-identidades.sh`) creó al usuario **sin credenciales** y
-con `UPDATE_PASSWORD` pendiente, y Keycloak le envió un enlace de un solo uso a su correo
-(ADR-0012). El usuario no lo recibió —SMTP no estaba configurado, el correo se filtró,
-la dirección estaba mal— o lo recibió tarde y el enlace ya no vale.
+con `UPDATE_PASSWORD` pendiente (ADR-0012). Falta que el usuario fije su clave, y no ha
+podido porque:
 
-La cuenta **existe y está `enabled`**; lo único que falta es que el usuario fije su clave.
+- **el ambiente no declara `keycloakSmtpHost`** (Opción B): el Job pasó `SIN_CORREO=1` y no
+  se envió ningún enlace — es lo que pasa hoy en `prod`, y este runbook es cómo se le da
+  acceso a cada persona; o
+- **hay relay pero el correo no llegó** — SMTP mal configurado, filtrado, dirección
+  equivocada, o el enlace ya caducó.
+
+La cuenta **existe y está `enabled`**; lo único que falta es la clave.
 
 ## Precondiciones
 

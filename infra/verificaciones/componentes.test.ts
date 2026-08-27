@@ -655,7 +655,7 @@ describe("ADR-0012 · alta declarativa de usuarios", () => {
     expect(enProd).toBe(false);
   });
 
-  it("Keycloak tiene salida al relay SMTP: a Mailpit en stg, al puerto del relay en prod", () => {
+  it("stg tiene salida SMTP al buzon Mailpit; prod, sin relay, no tiene ninguna", () => {
     const salidaStg = manifiestosDe("stg").find(
       (m) => m.kind === "NetworkPolicy" && m.metadata.name === "permitir-salida-identidad",
     ) as { spec: { egress?: { to?: { podSelector?: { matchLabels: Record<string, string> }; ipBlock?: unknown }[]; ports?: { port: number }[] }[] } };
@@ -663,21 +663,20 @@ describe("ADR-0012 · alta declarativa de usuarios", () => {
       (r.to ?? []).some((d) => d.podSelector?.matchLabels.app === resourceName("stg", "correo")),
     );
     expect(aMailpit?.ports?.map((p) => p.port)).toEqual([1025]);
-    // Y el buzon acepta ese trafico: la contraparte de ingreso existe.
     expect(
       manifiestosDe("stg").some(
         (m) => m.kind === "NetworkPolicy" && m.metadata.name === "permitir-ingreso-correo",
       ),
     ).toBe(true);
 
+    // prod (Opción B): la unica regla de salida de identidad es la de PostgreSQL.
     const salidaProd = manifiestosDe("prod").find(
       (m) => m.kind === "NetworkPolicy" && m.metadata.name === "permitir-salida-identidad",
-    ) as { spec: { egress?: { to?: { ipBlock?: unknown }[]; ports?: { port: number }[] }[] } };
-    const aRelay = (salidaProd.spec.egress ?? []).find((r) =>
-      (r.to ?? []).some((d) => d.ipBlock !== undefined),
-    );
-    expect(aRelay?.ports?.map((p) => p.port)).toEqual([invariantesDe("prod").identity.smtp.port]);
-    // En prod no hay buzon, asi que tampoco su politica de ingreso.
+    ) as { spec: { egress?: { to?: { ipBlock?: unknown; podSelector?: { matchLabels: Record<string, string> } }[]; ports?: { port: number }[] }[] } };
+    const reglas = salidaProd.spec.egress ?? [];
+    expect(reglas).toHaveLength(1);
+    expect(reglas[0]?.ports?.map((p) => p.port)).toEqual([5432]);
+    expect((reglas[0]?.to ?? []).some((d) => d.ipBlock !== undefined)).toBe(false);
     expect(
       manifiestosDe("prod").some(
         (m) => m.kind === "NetworkPolicy" && m.metadata.name === "permitir-ingreso-correo",
@@ -685,26 +684,35 @@ describe("ADR-0012 · alta declarativa de usuarios", () => {
     ).toBe(false);
   });
 
-  it("el realm.json lleva smtpServer con el host del stack, y en prod no es un buzon", () => {
-    const realm = JSON.parse(realmCm.data["realm.json"] ?? "{}") as {
+  it("stg lleva smtpServer en el realm; prod (sin relay) no lo lleva", () => {
+    const realmStg = JSON.parse(
+      (buscar(manifiestosDe("stg"), "ConfigMap", "realm") as { data: Record<string, string> }).data[
+        "realm.json"
+      ] ?? "{}",
+    ) as { smtpServer?: Record<string, string> };
+    expect(realmStg.smtpServer?.host).toBe("sgtm-stg-correo");
+
+    const realmProd = JSON.parse(realmCm.data["realm.json"] ?? "{}") as {
       smtpServer?: Record<string, string>;
     };
-    expect(realm.smtpServer?.host).toBe(inv.identity.smtp.host);
-    expect(realm.smtpServer?.host).not.toMatch(/mailpit|-correo$/);
+    expect(realmProd.smtpServer).toBeUndefined();
   });
 
-  it("en prod el Job lee las credenciales del relay del Secret sgtm-prod-smtp", () => {
-    const job = buscar(ms, "Job", "realm") as {
-      spec: { template: { spec: { containers: Contenedor[] } } };
-    };
-    const env = (job.spec.template.spec.containers[0] as Contenedor).env ?? [];
-    const usuario = env.find((e) => e.name === "KC_SMTP_USUARIO");
-    expect(usuario?.valueFrom?.secretKeyRef?.name).toBe(resourceName("prod", "smtp"));
-    // Y en stg (Mailpit, sin auth) no hay ninguna de las dos.
-    const jobStg = buscar(manifiestosDe("stg"), "Job", "realm") as {
-      spec: { template: { spec: { containers: Contenedor[] } } };
-    };
-    const envStg = (jobStg.spec.template.spec.containers[0] as Contenedor).env ?? [];
+  it("prod, sin relay, pasa SIN_CORREO=1 al Job y no monta ningun secreto SMTP", () => {
+    const env = (
+      (buscar(ms, "Job", "realm") as { spec: { template: { spec: { containers: Contenedor[] } } } })
+        .spec.template.spec.containers[0] as Contenedor
+    ).env ?? [];
+    expect(env.find((e) => e.name === "SIN_CORREO")?.value).toBe("1");
+    expect(env.some((e) => e.name === "KC_SMTP_USUARIO")).toBe(false);
+
+    // stg (Mailpit, sin auth): ni SIN_CORREO ni secreto.
+    const envStg = (
+      (buscar(manifiestosDe("stg"), "Job", "realm") as {
+        spec: { template: { spec: { containers: Contenedor[] } } };
+      }).spec.template.spec.containers[0] as Contenedor
+    ).env ?? [];
+    expect(envStg.some((e) => e.name === "SIN_CORREO")).toBe(false);
     expect(envStg.some((e) => e.name === "KC_SMTP_USUARIO")).toBe(false);
   });
 });
@@ -1395,11 +1403,10 @@ describe("#157 · endurecimiento", () => {
         "permitir-salida-sgtm-prod-postgres-a-internet",
         "permitir-salida-sgtm-prod-respaldo-a-internet",
         "permitir-salida-sgtm-prod-observabilidad-kube-state-metrics-al-apiserver",
-        // El relay SMTP del alta declarativa (ADR-0012): en `prod` es externo, asi
-        // que la salida es un `ipBlock` acotado a su puerto y nada mas.
-        "permitir-salida-identidad",
       ].sort(),
     );
+    // `prod` sin relay SMTP (ADR-0012, Opción B): identidad no tiene salida amplia.
+    expect(nombres).not.toContain("permitir-salida-identidad");
 
     // El motor y el respaldo, hacia el almacenamiento de objetos (issue #155), y
     // Alertmanager hacia el webhook: los tres, acotados a :443.
@@ -1408,16 +1415,6 @@ describe("#157 · endurecimiento", () => {
       const puertos = (p.spec.egress ?? []).flatMap((r) => r.ports ?? []).map((pt) => pt.port);
       expect(puertos).toEqual([443]);
     }
-
-    // El relay SMTP de `prod`: la regla con `ipBlock` es de un solo puerto, el del
-    // relay, y solo ese (la otra regla de esta politica es la de PostgreSQL).
-    const identidad = conInternet.find((p) => p.metadata.name === "permitir-salida-identidad");
-    const salidaSmtp = (identidad?.spec.egress ?? []).filter((r) =>
-      (r.to ?? []).some((d) => d.ipBlock !== undefined),
-    );
-    expect(salidaSmtp.flatMap((r) => (r.ports ?? []).map((pt) => pt.port))).toEqual([
-      invariantesDe(AMBIENTE).identity.smtp.port,
-    ]);
 
     // kube-state-metrics es la excepcion distinta: su destino es el API de
     // Kubernetes, que en k3s escucha :6443 despues del DNAT del `Service`

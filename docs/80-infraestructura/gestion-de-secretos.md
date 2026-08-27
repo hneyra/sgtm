@@ -83,11 +83,14 @@ Kubernetes que genera `bootstrap-secretos.sh`.
 ### 1.2 El secreto SMTP, que no se genera: lo emite el relay (ADR-0012)
 
 El alta declarativa de usuarios ([`ADR-0012`](../30-arquitectura/adr/ADR-0012-usuarios-y-grupos-declarativos.md))
-envía por correo el enlace de un solo uso con que un usuario nuevo fija su clave. Eso exige
-un relay SMTP, y su credencial —**si el relay pide autenticación**— es la única entrada del
-inventario que `bootstrap-secretos.sh` **no** genera, por el mismo motivo que el superusuario
-de PostgreSQL no se rota desde el nodo: no es un valor que se pueda fabricar aquí, lo emite
-otro sistema.
+envía por correo el enlace de un solo uso con que un usuario nuevo fija su clave. **Solo hace
+falta este `Secret` si el ambiente declara un relay** (`keycloakSmtpHost`) **y ese relay pide
+autenticación** (`keycloakSmtpAuth`). Sin relay —Opción B, el estado de la marcha blanca de
+`prod`— no hay `Secret`, no hay correo, y el operador fija la primera clave a mano.
+
+Cuando sí hace falta, su credencial es la única entrada del inventario que
+`bootstrap-secretos.sh` **no** genera, por el mismo motivo que el superusuario de PostgreSQL no
+se rota desde el nodo: no es un valor que se pueda fabricar aquí, lo emite otro sistema.
 
 | Secreto · claves | Consumidor | De dónde sale | Rotación |
 |---|---|---|---|
@@ -100,9 +103,10 @@ otro sistema.
   (`sgtm-stg-correo`), sin autenticación: la escalera comprueba que Keycloak *envía* el
   enlace, no que llegue a un correo real. `config.ts` prohíbe un buzón así en `prod`
   (`INF-03` §4).
-- **En `prod` es un prerrequisito operativo.** Mientras el `Secret` no exista, el Job de
-  reconciliación queda `Pending` con el `Secret` ausente en sus eventos —igual que cualquier
-  otro secreto que falte (§2)— y el alta de usuarios no se completa.
+- **`prod` tampoco lo tiene hoy** (Opción B): no declara `keycloakSmtpHost`, así que el Job de
+  reconciliación no monta este `Secret` y el alta se completa sin correo. Cuando se decida un
+  relay, se añaden las tres variables en claro a `Pulumi.prod.yaml` y —si pide auth— se crea
+  el `Secret` con el `kubectl create secret` de la tabla, antes del siguiente `pulumi up`.
 
 ## 2. Cómo se generan: `bootstrap-secretos.sh`, nunca Pulumi
 
