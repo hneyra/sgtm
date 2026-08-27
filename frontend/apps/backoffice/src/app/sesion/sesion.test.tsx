@@ -366,13 +366,17 @@ describe('la municipalidad del token es para mostrarla, no para mandarla', () =>
     await screen.findByText(/Sullana/);
 
     // Lo que el token deja ver: quien es, donde trabaja y hasta cuando. No hay
-    // identificador que mandar, asi que no se puede mandar (regla 2, FRO-01 §4).
-    // Lo que hay: quien es, donde trabaja, hasta cuando, y que puede hacer. No
-    // hay identificador de municipalidad, asi que no se puede mandar.
+    // identificador de municipalidad que mandar, asi que no se puede mandar
+    // (regla 2, FRO-01 §4). Los permisos NO estan aqui: solo autentica; la
+    // matriz la pide `GET /seguridad/sesion/permisos` (ADR-0013).
     expect(screen.getByTestId('datos')).toHaveTextContent(
-      '["usuario","municipalidad","expira","permisos"]',
+      '["usuario","municipalidad","expira"]',
     );
 
+    // Lo que la sesion ya pidio al abrirse —el token y la matriz de permisos
+    // (ADR-0013)— no es lo que esta prueba mira: interesa la peticion de datos
+    // que viene despues.
+    peticiones.length = 0;
     await solicitar('/catastro/vias', { consulta: { sector: '01' } });
     const alBackend = peticiones.filter((u) => !u.startsWith('https://identidad'));
     expect(alBackend).toHaveLength(1);

@@ -158,7 +158,7 @@ describe('«Recientes» no resucita lo que ya no se puede ver', () => {
 });
 
 describe('si no se pueden leer los permisos, no se ve nada', () => {
-  it('el endpoint de permisos falla y la barra lateral queda vacia: negacion por omision', async () => {
+  it('el endpoint de permisos falla y ningun modulo se dibuja: negacion por omision', async () => {
     const token = `${base64url('{"alg":"none"}')}.${base64url(
       JSON.stringify({ name: 'María Quispe', exp: 2_000_000_000 }),
     )}.firma`;
@@ -176,14 +176,12 @@ describe('si no se pueden leer los permisos, no se ve nada', () => {
       return proxy(entrada, opciones);
     }) as typeof fetch;
 
-    montarEnRuta('/tesoreria/caja-tributaria');
-
-    const navegacion = await screen.findByRole('complementary');
-    // Ni un modulo: un menu vacio dice la verdad mejor que uno completo que
-    // falla en cada pulsacion. Si esto mostrara algo, la interfaz estaria
-    // adivinando permisos que no tiene.
-    expect(within(navegacion).queryByText('Tesorería')).not.toBeInTheDocument();
-    expect(within(navegacion).queryByText('Seguridad')).not.toBeInTheDocument();
+    // Con la matriz vacia (negacion por omision), ningun modulo existe para la
+    // interfaz: un menu vacio dice la verdad mejor que uno completo que falla en
+    // cada pulsacion. Es la misma comprobacion que «un modulo sin opciones no se
+    // dibuja», llevada al extremo.
+    montarEnRuta('/tesoreria');
+    expect(await screen.findByText('Ese módulo no existe')).toBeInTheDocument();
   });
 });
 
