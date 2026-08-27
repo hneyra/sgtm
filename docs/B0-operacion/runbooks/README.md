@@ -12,7 +12,7 @@ copiables, con el nombre real de cada recurso, y no «revisar la configuración�
 La carpeta homónima del SRTM (`docs/B0-operacion/runbooks/`) existe y está vacía: es el
 precedente que este issue existe para no repetir.
 
-## Los ocho
+## Los nueve
 
 | Runbook | Cuándo |
 |---|---|
@@ -24,6 +24,7 @@ precedente que este issue existe para no repetir.
 | [Keycloak no responde](keycloak-no-responde.md) | Nadie puede entrar; quien está dentro sigue hasta que expire su token |
 | [La migración falló a mitad](la-migracion-fallo-a-mitad.md) | El Job quedó rojo y la aplicación no arranca |
 | [Mantenimiento del VPS](mantenimiento-del-vps.md) | Actualización del sistema, reinicio del nodo, presión de CPU/memoria/disco, certificado por vencer |
+| [Abrir la consola de administración de Keycloak](abrir-la-consola-de-keycloak.md) | Crear o dar de baja personas, asignar roles, revisar sesiones |
 
 ## La misma estructura, siempre
 
