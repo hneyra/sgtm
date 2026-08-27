@@ -8,8 +8,8 @@
 | Ejercicios que rige | 2023– (el propio municipio lo identifica como "TUPA vigente 2024"; no hay evidencia en las páginas revisadas de una ordenanza posterior que lo derogue o modifique) |
 | Filas de NEG-02 §2 | 29 |
 | Transcribió | Agent, 2026-08-27 |
-| Verificó | — |
-| Estado | TRANSCRITO |
+| Verificó | hneyra, 2026-08-27 |
+| Estado | VERIFICADO |
 
 ## 1. La tabla tal como está en la norma
 
