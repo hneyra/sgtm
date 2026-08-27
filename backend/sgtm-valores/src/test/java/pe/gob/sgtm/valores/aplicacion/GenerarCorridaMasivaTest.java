@@ -21,6 +21,7 @@ import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.valores.dominio.CriterioDeValor;
 import pe.gob.sgtm.valores.dominio.EstadoDeItemMasivo;
+import pe.gob.sgtm.valores.dominio.EstadoDeValor;
 import pe.gob.sgtm.valores.dominio.OrigenDeCriterio;
 import pe.gob.sgtm.valores.dominio.TipoValor;
 import pe.gob.sgtm.valores.dominio.Valor;
@@ -224,6 +225,21 @@ class GenerarCorridaMasivaTest {
                             valor.observacion());
             guardados.add(conId);
             return conId;
+        }
+
+        @Override
+        public Optional<Valor> porNumero(String numero) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<Valor> cobrablesDe(long contribuyenteId, String tributo, Ejercicio ejercicio) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Valor cambiarEstado(long valorId, EstadoDeValor nuevo) {
+            throw new UnsupportedOperationException();
         }
 
         @Override

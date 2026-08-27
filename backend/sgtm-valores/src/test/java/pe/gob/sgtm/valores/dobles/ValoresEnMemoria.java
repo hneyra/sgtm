@@ -1,0 +1,150 @@
+package pe.gob.sgtm.valores.dobles;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.valores.dominio.CriterioDeValor;
+import pe.gob.sgtm.valores.dominio.EstadoDeValor;
+import pe.gob.sgtm.valores.dominio.TipoValor;
+import pe.gob.sgtm.valores.dominio.Valor;
+import pe.gob.sgtm.valores.dominio.ValorDetalle;
+import pe.gob.sgtm.valores.dominio.ValorRepository;
+
+/**
+ * Un {@link ValorRepository} en memoria, para las pruebas de los casos de uso de #39.
+ *
+ * <p>Existe como clase aparte y no como doble anonimo dentro de cada prueba porque los tres casos
+ * de uso de #39 lo necesitan igual, y porque {@link #cobrablesDe} tiene reglas propias -filtra por
+ * estado- que conviene escribir una vez.
+ *
+ * <p>Lo que este doble <b>no</b> puede verificar es lo que solo hace la base: la unicidad del
+ * intento, el {@code ON CONFLICT} del pase o la ausencia del privilegio de {@code UPDATE}. Eso vive
+ * en {@code NotificacionYPaseJdbcTest}, contra PostgreSQL de verdad.
+ */
+public final class ValoresEnMemoria implements ValorRepository {
+
+    private final Map<Long, Valor> porId = new HashMap<>();
+    private final Map<Long, List<ValorDetalle>> detalles = new HashMap<>();
+    private long siguienteId = 1;
+
+    /** Guarda un valor y devuelve el que quedo, con su identificador. */
+    public Valor con(Valor valor, ValorDetalle... detalle) {
+        long id = valor.id() == null ? siguienteId++ : valor.id();
+        Valor conId =
+                new Valor(
+                        id,
+                        valor.tipo(),
+                        valor.numero(),
+                        valor.ejercicio(),
+                        valor.contribuyenteId(),
+                        valor.baseLegal(),
+                        valor.montoInsoluto(),
+                        valor.montoReajuste(),
+                        valor.montoInteres(),
+                        valor.montoGasto(),
+                        valor.proyectadoA(),
+                        valor.estado(),
+                        valor.fechaEmision(),
+                        "prueba",
+                        valor.observacion());
+        porId.put(id, conId);
+        detalles.put(id, List.of(detalle));
+        return conId;
+    }
+
+    @Override
+    public Valor insertar(Valor valor, List<ValorDetalle> detalle) {
+        return con(valor, detalle.toArray(new ValorDetalle[0]));
+    }
+
+    @Override
+    public Optional<Valor> porNumero(TipoValor tipo, Ejercicio ejercicio, String numero) {
+        return porId.values().stream()
+                .filter(v -> v.tipo() == tipo && v.numero().equals(numero))
+                .findFirst();
+    }
+
+    @Override
+    public Optional<Valor> porNumero(String numero) {
+        return porId.values().stream().filter(v -> v.numero().equals(numero)).findFirst();
+    }
+
+    @Override
+    public Optional<Valor> porId(long id) {
+        return Optional.ofNullable(porId.get(id));
+    }
+
+    @Override
+    public List<ValorDetalle> detalleDe(long valorId) {
+        return detalles.getOrDefault(valorId, List.of());
+    }
+
+    @Override
+    public Pagina<Valor> buscar(CriterioDeValor criterio, Paginacion paginacion) {
+        List<Valor> todos = new ArrayList<>(porId.values());
+        return Pagina.de(todos, paginacion, todos.size());
+    }
+
+    @Override
+    public List<Valor> cobrablesDe(long contribuyenteId, String tributo, Ejercicio ejercicio) {
+        List<Valor> encontrados = new ArrayList<>();
+        for (Valor valor : porId.values()) {
+            if (valor.contribuyenteId() != contribuyenteId || !esCobrable(valor.estado())) {
+                continue;
+            }
+            boolean coincide =
+                    detalleDe(valor.id() == null ? 0 : valor.id()).stream()
+                            .anyMatch(
+                                    d ->
+                                            d.tributo().equalsIgnoreCase(tributo)
+                                                    && d.ejercicio().equals(ejercicio));
+            if (coincide) {
+                encontrados.add(valor);
+            }
+        }
+        return encontrados;
+    }
+
+    @Override
+    public Valor cambiarEstado(long valorId, EstadoDeValor nuevo) {
+        Valor actual = porId.get(valorId);
+        if (actual == null) {
+            throw new IllegalArgumentException("No existe el valor " + valorId);
+        }
+        Valor cambiado =
+                new Valor(
+                        actual.id(),
+                        actual.tipo(),
+                        actual.numero(),
+                        actual.ejercicio(),
+                        actual.contribuyenteId(),
+                        actual.baseLegal(),
+                        actual.montoInsoluto(),
+                        actual.montoReajuste(),
+                        actual.montoInteres(),
+                        actual.montoGasto(),
+                        actual.proyectadoA(),
+                        nuevo,
+                        actual.fechaEmision(),
+                        actual.usuarioRegistro(),
+                        actual.observacion());
+        porId.put(valorId, cambiado);
+        return cambiado;
+    }
+
+    @Override
+    public long siguienteCorrelativo(TipoValor tipo, Ejercicio ejercicio) {
+        return siguienteId++;
+    }
+
+    private static boolean esCobrable(EstadoDeValor estado) {
+        return estado == EstadoDeValor.EMITIDO
+                || estado == EstadoDeValor.NOTIFICADO
+                || estado == EstadoDeValor.COACTIVA;
+    }
+}

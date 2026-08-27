@@ -40,6 +40,9 @@ public final class RevisorDeCodigoFuente {
                     "recibo_detalle",
                     "valor",
                     "valor_detalle",
+                    "valor_movimiento",
+                    "notificacion",
+                    "prescripcion",
                     "papeleta",
                     "convenio",
                     "expediente_coactivo",
@@ -53,7 +56,18 @@ public final class RevisorDeCodigoFuente {
      * y la traza del cambio de numero de papeleta. Se corrigen agregando, no editando.
      */
     public static final Set<String> TABLAS_INMUTABLES =
-            Set.of("cuenta_corriente_asiento", "auditoria", "papeleta_cambio_numero");
+            Set.of(
+                    "cuenta_corriente_asiento",
+                    "auditoria",
+                    "papeleta_cambio_numero",
+                    // Una diligencia de notificacion y un pase a coactiva son actos, no estados de
+                    // un proceso: no se corrigen en el sitio. Un intento no hallado se reintenta
+                    // con otra fila (#39); un movimiento equivocado se corrige con otro
+                    // movimiento. V28 les revoca el privilegio de UPDATE, y esto rompe el build
+                    // antes de que nadie lo descubra en ejecucion.
+                    "notificacion",
+                    "valor_movimiento",
+                    "prescripcion");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =
