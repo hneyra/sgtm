@@ -16,6 +16,7 @@ import {
   configurarRenovacion,
   irAAutenticar,
   leerToken,
+  pedirOperacion,
   renovar,
 } from '@sgtm/api-client';
 import type { ConfiguracionDeIdentidad, DatosDelToken } from '@sgtm/api-client';
@@ -46,8 +47,9 @@ export interface Sesion {
   readonly datos: DatosDelToken | null;
   /**
    * Lo que este usuario puede ver y hacer. Sin proveedor de identidad no hay
-   * permisos que aplicar —se trabaja como contra el proxy—; con proveedor y sin
-   * claim, no se ve nada: la autorizacion del manual es de negacion por omision.
+   * permisos que aplicar —se trabaja como contra el proxy—; con proveedor, la
+   * matriz se pide a `GET /seguridad/sesion/permisos`, y hasta que llega —o si
+   * falla— no se ve nada: la autorizacion del manual es de negacion por omision.
    */
   readonly permisos: PermisosEfectivos;
   /** Faltan menos de un minuto para que el token expire. */
@@ -69,6 +71,7 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
     configuracion === null ? 'sin-proveedor' : 'entrando',
   );
   const [datos, fijarDatos] = useState<DatosDelToken | null>(null);
+  const [matriz, fijarMatriz] = useState<PermisosEfectivos>(NINGUNO);
   const [porExpirar, fijarPorExpirar] = useState(false);
   const temporizadores = useRef<number[]>([]);
 
@@ -129,10 +132,34 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
     };
   }, [configuracion, programar, renovarAhora]);
 
+  // La matriz de permisos no viene en el token (solo autentica): se pide a
+  // `GET /seguridad/sesion/permisos` (ADR-0013). Se refresca cada vez que cambia
+  // el token —renovacion incluida—, asi un cambio de permisos entra sin re-login.
+  // Si la peticion falla, NINGUNO: negacion por omision, no menu completo que
+  // falla en cada pulsacion.
+  useEffect(() => {
+    if (configuracion === null || datos === null) {
+      fijarMatriz(NINGUNO);
+      return;
+    }
+    let vivo = true;
+    void (async () => {
+      try {
+        const cuerpo = await pedirOperacion('permisos_de_la_sesion', {});
+        if (vivo) fijarMatriz(permisosDelClaim(cuerpo));
+      } catch {
+        if (vivo) fijarMatriz(NINGUNO);
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [configuracion, datos]);
+
   const permisos: PermisosEfectivos = useMemo(() => {
     if (configuracion === null) return SIN_PROVEEDOR;
-    return datos === null ? NINGUNO : permisosDelClaim(datos.permisos);
-  }, [configuracion, datos]);
+    return datos === null ? NINGUNO : matriz;
+  }, [configuracion, datos, matriz]);
 
   const sesion: Sesion = useMemo(
     () => ({

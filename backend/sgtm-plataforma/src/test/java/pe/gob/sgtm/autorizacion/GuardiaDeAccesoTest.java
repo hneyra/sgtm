@@ -37,7 +37,10 @@ class GuardiaDeAccesoTest {
     private final ComprobadorDeAccesoDeMentira comprobador = new ComprobadorDeAccesoDeMentira();
 
     private final MockMvc mvc =
-            MockMvcBuilders.standaloneSetup(new ControladorDePrueba(), new ControladorSinDeclarar())
+            MockMvcBuilders.standaloneSetup(
+                            new ControladorDePrueba(),
+                            new ControladorSinDeclarar(),
+                            new ControladorDeSesionPropia())
                     .addInterceptors(new GuardiaDeAcceso(comprobador, RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .build();
@@ -93,6 +96,21 @@ class GuardiaDeAccesoTest {
     }
 
     @Test
+    @DisplayName("SESION_PROPIA pasa con solo estar autenticado: no se comprueba el catalogo")
+    void sesionPropiaPasaSinComprobarElCatalogo() throws Exception {
+        comprobador.autoriza = false;
+
+        MvcResult resultado = mvc.perform(get("/api/v1/prueba/sesion")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("leer los permisos propios no es una opcion del catalogo (ADR-0013)")
+                .isEqualTo(200);
+        assertThat(comprobador.preguntas)
+                .as("el guardia no pregunta al comprobador: no hay privilegio que exigir")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("un endpoint sin acceso declarado se deniega; no se deja pasar por omision")
     void sinAccesoDeclaradoSeDeniega() throws Exception {
         comprobador.autoriza = true;
@@ -131,6 +149,17 @@ class GuardiaDeAccesoTest {
 
         @GetMapping("/api/v1/prueba/sin-declarar")
         String sinDeclarar() {
+            return "ok";
+        }
+    }
+
+    /** Declara {@link RequiereAcceso#SESION_PROPIA}: pasa con solo un token valido. */
+    @RestController
+    @RequiereAcceso(acceso = RequiereAcceso.SESION_PROPIA, privilegio = Privilegio.LECTURA)
+    static class ControladorDeSesionPropia {
+
+        @GetMapping("/api/v1/prueba/sesion")
+        String sesion() {
             return "ok";
         }
     }

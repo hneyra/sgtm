@@ -2,6 +2,9 @@ package pe.gob.sgtm.seguridad.infraestructura.web;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,6 +18,7 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.seguridad.aplicacion.AdministrarSesion;
+import pe.gob.sgtm.seguridad.aplicacion.PermisosDeLaSesion;
 import pe.gob.sgtm.seguridad.dominio.ConsultaDeAuditoria;
 import pe.gob.sgtm.seguridad.dominio.RegistroAuditado;
 import pe.gob.sgtm.seguridad.dominio.Respaldo;
@@ -31,9 +35,37 @@ import pe.gob.sgtm.web.RespuestaPaginada;
 public class SesionController {
 
     private final AdministrarSesion administrar;
+    private final PermisosDeLaSesion permisos;
 
-    public SesionController(AdministrarSesion administrar) {
+    public SesionController(AdministrarSesion administrar, PermisosDeLaSesion permisos) {
         this.administrar = administrar;
+        this.permisos = permisos;
+    }
+
+    /**
+     * La matriz de permisos efectivos del usuario en curso: por cada opcion del catalogo sobre la
+     * que tiene algun privilegio, la lista de privilegios (RF-121, ADR-0013). La interfaz la usa
+     * para dibujar el menu.
+     *
+     * <p><b>No es una opcion del catalogo</b>: leer los permisos propios no revela nada que no se
+     * pueda enumerar probando cada endpoint (REQ-03 §5). Por eso declara el centinela {@link
+     * RequiereAcceso#SESION_PROPIA}, que el guardia deja pasar con solo un token valido. Un usuario
+     * sin ningun permiso recibe {@code {}}, no un 403.
+     */
+    @GetMapping(Api.RAIZ + "/seguridad/sesion/permisos")
+    @RequiereAcceso(acceso = RequiereAcceso.SESION_PROPIA, privilegio = Privilegio.LECTURA)
+    public Map<String, List<String>> permisosDeLaSesion() {
+        Map<String, List<String>> salida = new LinkedHashMap<>();
+        permisos.efectivos()
+                .forEach(
+                        (opcion, privilegios) ->
+                                salida.put(
+                                        opcion,
+                                        privilegios.stream()
+                                                .sorted()
+                                                .map(Privilegio::columna)
+                                                .toList()));
+        return salida;
     }
 
     /**

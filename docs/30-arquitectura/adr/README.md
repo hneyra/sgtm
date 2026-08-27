@@ -18,6 +18,7 @@ historial de por qué se hizo algo vale más que la coherencia del documento.
 | [0010](ADR-0010-catalogo-portado-y-proxy-de-datos.md) | El catálogo se porta como estructura; los datos llegan por HTTP desde un proxy simulado | Aceptado |
 | [0011](ADR-0011-infraestructura-como-codigo.md) | Pulumi en TypeScript con yarn, sobre un k3s de un solo nodo en un VPS propio | Aceptado |
 | [0012](ADR-0012-usuarios-y-grupos-declarativos.md) | Usuarios y grupos de Keycloak declarativos, sin clave en git; la fija el usuario por correo en su primer acceso | Aceptado |
+| [0013](ADR-0013-permisos-de-la-sesion.md) | La interfaz pide sus permisos efectivos a `GET /seguridad/sesion/permisos`, no a un claim del token | Aceptado |
 
 Decisiones **pendientes**: [GOB-02](../../00-gobierno/decisiones-abiertas.md).
 

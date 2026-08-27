@@ -93,6 +93,7 @@ class ContratoDeApiTest {
                     "POST /seguridad/grupos/{grupo}/miembros",
                     "PUT /seguridad/grupos/{id}/permisos",
                     "GET /seguridad/grupos/{id}/permisos",
+                    "GET /seguridad/sesion/permisos",
                     "PUT /seguridad/sesion/ejercicio",
                     "PUT /seguridad/usuarios/{id}/clave",
                     "GET /seguridad/auditoria",

@@ -723,6 +723,27 @@ const rural = (): Readonly<Record<string, unknown>> =>
   });
 
 /** Recursos que no son listados: se sirven tal cual, sin sobre paginado. */
+/**
+ * La matriz de permisos efectivos de la sesion (`GET /seguridad/sesion/permisos`, ADR-0013).
+ *
+ * Contra el proxy —modo prototipo, sin backend— se devuelven **todas** las opciones del catalogo
+ * con los siete privilegios: el proxy no tiene una sesion de la que sacar permisos reales, y la
+ * demostracion tiene que poder llegar a las 134 pantallas. La forma es la del backend:
+ * `{ opcion: [privilegios] }`, con los privilegios en minuscula como los nombra el manual.
+ */
+const SIETE_PRIVILEGIOS = [
+  'ejecucion',
+  'lectura',
+  'registro',
+  'modificacion',
+  'eliminacion',
+  'impresion',
+  'especial',
+] as const;
+
+const permisosDeLaSesion = (): Readonly<Record<string, unknown>> =>
+  Object.fromEntries(filasDe('accesos').map(([codigo]) => [codigo, SIETE_PRIVILEGIOS]));
+
 const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>> = {
   '/catastro/fichas/urbana/{codRefCatastral}': urbana,
   '/catastro/fichas/economica/{codRefCatastral}': economica,
@@ -731,6 +752,7 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/rentas/vehiculos/{placa}': vehiculo,
   '/rentas/declaraciones/{djNro}': declaracionJurada,
   '/consultas/constancias/no-adeudo': constanciaDeNoAdeudo,
+  '/seguridad/sesion/permisos': permisosDeLaSesion,
 };
 
 /* ── Una funcion por recurso, con los campos que declara su `Resource` ──── */
