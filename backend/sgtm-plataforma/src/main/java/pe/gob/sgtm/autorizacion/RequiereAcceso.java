@@ -32,6 +32,17 @@ import java.lang.annotation.Target;
 @Target({ElementType.TYPE, ElementType.METHOD})
 public @interface RequiereAcceso {
 
+    /**
+     * Centinela para {@link #acceso()}: la operacion <b>no es una opcion del catalogo</b>, sino la
+     * lectura de la propia sesion del usuario autenticado —quien es, y que puede hacer—.
+     *
+     * <p>El guardia no la comprueba contra el catalogo: no hay ningun privilegio que configurar, y
+     * leer los permisos propios no revela nada que el usuario no pueda enumerar probando cada
+     * endpoint (REQ-03 §5: que la interfaz oculte una opcion es comodidad, no seguridad). Lo que
+     * sigue exigiendo es un token valido, igual que cualquier otro endpoint. Ver ADR-0013.
+     */
+    String SESION_PROPIA = "__sesion_propia__";
+
     /** Id de la opcion en el catalogo de pantallas (NEG-03), tal como esta en {@code acceso}. */
     String acceso();
 

@@ -2,7 +2,10 @@ package pe.gob.sgtm.seguridad.dominio;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import pe.gob.sgtm.autorizacion.Privilegio;
 
 /**
  * Puerto de persistencia de los permisos (RF-121).
@@ -21,6 +24,20 @@ public interface PermisoRepository {
 
     /** Todos los permisos de un grupo, para la pantalla de niveles de accesibilidad. */
     List<Permiso> todosLosDeGrupo(long grupoId);
+
+    /**
+     * La matriz de permisos <b>efectivos</b> de un usuario: por cada opcion del catalogo sobre la
+     * que tiene algun privilegio, el conjunto de privilegios. Las opciones sin ninguno no aparecen.
+     *
+     * <p>Misma precedencia que el guardia ({@code ComprobadorDeAcceso}): la excepcion del usuario
+     * decide —otorgue o niegue—, y si no la hay manda la union de sus grupos vigentes. Vigencia y
+     * habilitacion se comprueban en el usuario, en el grupo y en la pertenencia (RF-123); un
+     * usuario deshabilitado o fuera de vigencia recibe la matriz vacia.
+     *
+     * <p>Es la fuente del menu de la interfaz (ADR-0013): resolverlo con otra regla que la del
+     * guardia mostraria opciones que despues responden 403, o esconderia opciones que si funcionan.
+     */
+    Map<String, Set<Privilegio>> efectivosDe(String cuenta, LocalDate fecha);
 
     /**
      * Cuantos usuarios habilitados y vigentes pueden hoy administrar permisos.

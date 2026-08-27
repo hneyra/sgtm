@@ -39,14 +39,18 @@ const base64url = (texto: string) =>
 
 const originalFetch = globalThis.fetch;
 
-/** Entra un usuario con estos permisos: el proveedor emite su token y ya. */
+/**
+ * Entra un usuario con estos permisos.
+ *
+ * El token **no lleva los permisos** (ADR-0013): solo autentica. La matriz la pide la interfaz a
+ * `GET /seguridad/sesion/permisos`, y aqui se responde con la del rol que la prueba describe.
+ */
 function entraCon(permisos: Readonly<Record<string, readonly string[]>>): void {
   const token = `${base64url('{"alg":"none"}')}.${base64url(
     JSON.stringify({
       name: 'María Quispe',
       municipalidad_nombre: 'Municipalidad Provincial de Sullana',
       exp: 2_000_000_000,
-      permisos,
     }),
   )}.firma`;
 
@@ -57,6 +61,9 @@ function entraCon(permisos: Readonly<Record<string, readonly string[]>>): void {
       return Promise.resolve(
         new Response(JSON.stringify({ access_token: token, expires_in: 300 }), { status: 200 }),
       );
+    }
+    if (url.replace(/^.*\/api\/v1/, '') === '/seguridad/sesion/permisos') {
+      return Promise.resolve(new Response(JSON.stringify(permisos), { status: 200 }));
     }
     return proxy(entrada, opciones);
   }) as typeof fetch;
@@ -147,6 +154,36 @@ describe('«Recientes» no resucita lo que ya no se puede ver', () => {
     // y la que ya no puede, no resucita.
     expect(within(navegacion).getAllByText('Caja tributaria').length).toBeGreaterThan(0);
     expect(within(navegacion).queryByText('Expedientes coactivos')).not.toBeInTheDocument();
+  });
+});
+
+describe('si no se pueden leer los permisos, no se ve nada', () => {
+  it('el endpoint de permisos falla y la barra lateral queda vacia: negacion por omision', async () => {
+    const token = `${base64url('{"alg":"none"}')}.${base64url(
+      JSON.stringify({ name: 'María Quispe', exp: 2_000_000_000 }),
+    )}.firma`;
+    const proxy = globalThis.fetch;
+    globalThis.fetch = ((entrada: RequestInfo | URL, opciones?: RequestInit) => {
+      const url = typeof entrada === 'string' ? entrada : String(entrada);
+      if (url.startsWith('https://identidad.gob.pe')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ access_token: token, expires_in: 300 }), { status: 200 }),
+        );
+      }
+      if (url.replace(/^.*\/api\/v1/, '') === '/seguridad/sesion/permisos') {
+        return Promise.resolve(new Response('', { status: 500 }));
+      }
+      return proxy(entrada, opciones);
+    }) as typeof fetch;
+
+    montarEnRuta('/tesoreria/caja-tributaria');
+
+    const navegacion = await screen.findByRole('complementary');
+    // Ni un modulo: un menu vacio dice la verdad mejor que uno completo que
+    // falla en cada pulsacion. Si esto mostrara algo, la interfaz estaria
+    // adivinando permisos que no tiene.
+    expect(within(navegacion).queryByText('Tesorería')).not.toBeInTheDocument();
+    expect(within(navegacion).queryByText('Seguridad')).not.toBeInTheDocument();
   });
 });
 

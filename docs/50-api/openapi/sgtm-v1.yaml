@@ -6044,6 +6044,36 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/sesion/permisos":
+    get:
+      operationId: permisos_de_la_sesion
+      summary: "Permisos efectivos de la sesión"
+      description: |
+        La matriz de permisos del usuario en curso: por cada opción del catálogo
+        sobre la que tiene algún privilegio, la lista de privilegios. La interfaz
+        la usa para dibujar el menú y la paleta de comandos.
+
+        Autenticada, pero **no es una opción del catálogo**: leer los permisos
+        propios no revela nada que no se pueda enumerar probando cada endpoint
+        (REQ-03 §5). Un usuario sin ningún permiso recibe `{}`, no un 403.
+      tags: ["Seguridad"]
+      responses:
+        200:
+          description: "La matriz de permisos efectivos del usuario en curso"
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    type: string
+                    enum: [ejecucion, lectura, registro, modificacion, eliminacion, impresion, especial]
+              example:
+                modulos: [lectura, registro, modificacion, eliminacion, impresion, ejecucion, especial]
+                contribuyentes: [lectura]
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
   "/seguridad/sesion/ejercicio":
     put:
       operationId: cambiar_anio

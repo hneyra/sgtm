@@ -31,9 +31,10 @@ const PRIVILEGIOS: readonly Privilegio[] = [
  * Los permisos efectivos: la union de los del usuario y los de sus grupos, ya
  * restringidos por vigencia y habilitacion (REQ-03 §5).
  *
- * La union y el recorte los hace **el servidor**: aqui llega el resultado. Que
- * lo traiga el token o una operacion del contrato lo deciden #9 y #12; mientras
- * tanto se lee del token, y el sitio donde se lee es uno solo.
+ * La union y el recorte los hace **el servidor**, con la misma precedencia que el
+ * guardia; aqui llega el resultado ya resuelto. Se pide una vez por sesion a
+ * `GET /seguridad/sesion/permisos` (ADR-0013): el token solo autentica, la
+ * autorizacion vive en la base (ADR-0005). El sitio donde se lee es uno solo.
  */
 export interface PermisosEfectivos {
   readonly porOpcion: Readonly<Record<string, readonly Privilegio[]>>;
@@ -51,17 +52,19 @@ export const SIN_PROVEEDOR: PermisosEfectivos = { porOpcion: {}, sinProveedor: t
 export const NINGUNO: PermisosEfectivos = { porOpcion: {}, sinProveedor: false };
 
 /**
- * Lee los permisos del claim del token.
+ * Interpreta la matriz que devuelve `GET /seguridad/sesion/permisos`: un objeto
+ * `{ opcion: [privilegios] }`.
  *
- * Sin claim no hay permisos, y sin permisos no se ve nada: la autorizacion del
- * manual es **de negacion por omision**, y un menu vacio dice la verdad mucho
- * mejor que un menu completo que falla en cada pulsacion.
+ * Si la peticion falla, o la respuesta no tiene forma de matriz, se devuelve
+ * {@link NINGUNO}: la autorizacion del manual es **de negacion por omision**, y un
+ * menu vacio dice la verdad mucho mejor que un menu completo que falla en cada
+ * pulsacion.
  */
-export function permisosDelClaim(claim: unknown): PermisosEfectivos {
-  if (typeof claim !== 'object' || claim === null) return NINGUNO;
+export function permisosDelClaim(matriz: unknown): PermisosEfectivos {
+  if (typeof matriz !== 'object' || matriz === null) return NINGUNO;
 
   const porOpcion: Record<string, readonly Privilegio[]> = {};
-  for (const [opcion, valor] of Object.entries(claim as Record<string, unknown>)) {
+  for (const [opcion, valor] of Object.entries(matriz as Record<string, unknown>)) {
     const privilegios = Array.isArray(valor)
       ? valor.filter((p): p is Privilegio => PRIVILEGIOS.includes(p as Privilegio))
       : [];

@@ -28,6 +28,10 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *
  * <p>Se exceptua lo que no es un metodo de controlador: recursos estaticos, el manejador de errores
  * y las rutas del propio contenedor.
+ *
+ * <p>Y se exceptua, <b>declarandolo</b>, la lectura de la sesion propia: un endpoint anotado
+ * {@code @RequiereAcceso(acceso = SESION_PROPIA, …)} pasa con solo un token valido, sin comprobar
+ * el catalogo. Es lo que permite que la interfaz sepa que puede dibujar (ADR-0013).
  */
 public class GuardiaDeAcceso implements HandlerInterceptor {
 
@@ -59,6 +63,14 @@ public class GuardiaDeAcceso implements HandlerInterceptor {
             throw new ProblemaDeNegocio(
                     CodigoDeError.SIN_PRIVILEGIO,
                     "La operacion no declara que acceso exige, asi que no se autoriza");
+        }
+
+        if (RequiereAcceso.SESION_PROPIA.equals(requisito.acceso())) {
+            // La operacion lee la sesion propia del usuario autenticado: no es una opcion
+            // del catalogo y no hay privilegio que comprobar. El token ya lo valido Spring
+            // Security y el contexto de tenant ya lo fijo su filtro; llegar hasta aqui es,
+            // por si mismo, estar autenticado. Ver RequiereAcceso.SESION_PROPIA (ADR-0013).
+            return true;
         }
 
         String usuario = OrigenContext.actual().usuario();

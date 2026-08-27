@@ -226,20 +226,15 @@ function limpiarLaBarraDeDirecciones(): void {
  * (regla 2, FRO-01 §4): el backend lo toma del claim del token que el mismo
  * valida. Aqui se lee para poder escribir el nombre de la municipalidad activa
  * en la cabecera, que es distinto.
+ *
+ * **Los permisos no estan aqui**: el token solo autentica. La matriz de permisos
+ * efectivos se pide a `GET /seguridad/sesion/permisos` (ADR-0013, ADR-0005).
  */
 export interface DatosDelToken {
   readonly usuario: string;
   readonly municipalidad: string;
   /** Instante de expiracion, en segundos desde la epoca. */
   readonly expira: number;
-  /**
-   * Los permisos efectivos, tal como los manda el servidor.
-   *
-   * Se devuelve **sin interpretar**: quien sabe que significa cada privilegio es
-   * la aplicacion, no el cliente HTTP. Que los traiga el token o una operacion
-   * del contrato lo deciden #9 y #12; el sitio donde se leen es este.
-   */
-  readonly permisos: unknown;
 }
 
 export function leerToken(token: string): DatosDelToken | null {
@@ -254,7 +249,6 @@ export function leerToken(token: string): DatosDelToken | null {
       municipalidad:
         typeof json['municipalidad_nombre'] === 'string' ? json['municipalidad_nombre'] : '',
       expira: typeof json['exp'] === 'number' ? json['exp'] : 0,
-      permisos: json['permisos'] ?? null,
     };
   } catch {
     return null;
