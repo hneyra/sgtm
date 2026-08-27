@@ -42,12 +42,35 @@ services:
       timeout: 3s
       retries: 40
 
+  correo:
+    # Atrapa el correo que Keycloak envia: el enlace de un solo uso para fijar la
+    # clave en el alta declarativa de usuarios (ADR-0012, `execute-actions-email`
+    # con UPDATE_PASSWORD). No sale de aqui —es un buzon de marcha blanca—; la
+    # bandeja queda en http://localhost:${SGTM_PUERTO_CORREO:-8025}.
+    image: axllent/mailpit:v1.20
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    ports:
+      - "${SGTM_PUERTO_CORREO:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
   identidad:
     # Keycloak emite los tokens (ADR-0005). `start-dev` es lo correcto para una
     # marcha blanca —HTTP en claro detras del proxy, sin cluster— y lo incorrecto
     # para produccion, donde va `start` con TLS y su propia base.
     image: quay.io/keycloak/keycloak:26.0
     command: ["start-dev", "--import-realm", "--http-port=8080"]
+    # El realm trae `smtpServer` apuntando al buzon `correo`. Keycloak no lo
+    # necesita para arrancar —solo al enviar el enlace de clave—, asi que basta con
+    # que el servicio exista.
+    depends_on:
+      correo:
+        condition: service_started
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${SGTM_KEYCLOAK_ADMIN:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${SGTM_CLAVE_KEYCLOAK:?falta SGTM_CLAVE_KEYCLOAK en .env}
@@ -150,7 +173,12 @@ services:
       SGTM_IMPLANTACION_UBIGEO: ${SGTM_UBIGEO:?falta SGTM_UBIGEO en .env}
       SGTM_IMPLANTACION_NOMBRE: ${SGTM_MUNICIPALIDAD:?falta SGTM_MUNICIPALIDAD en .env}
       SGTM_IMPLANTACION_TIPO: ${SGTM_TIPO_DE_MUNICIPALIDAD:-DISTRITAL}
-      SGTM_IMPLANTACION_ADMINISTRADOR: ${SGTM_ADMINISTRADOR:?falta SGTM_ADMINISTRADOR en .env}
+      # La cuenta TIENE que ser la misma que el usuario de Keycloak: es lo unico
+      # que une la fila de `usuario` con la identidad del token (ADR-0005). Para no
+      # tener que cuidarlo a mano, estas dos salen del archivo versionado de la
+      # municipalidad: `./identidad/datos-de-implantacion.sh <ubigeo> >> .env`
+      # (ADR-0012).
+      SGTM_IMPLANTACION_ADMINISTRADOR: ${SGTM_ADMINISTRADOR:?falta SGTM_ADMINISTRADOR en .env (ver identidad/datos-de-implantacion.sh)}
       SGTM_IMPLANTACION_NOMBREDELADMINISTRADOR: ${SGTM_NOMBRE_DEL_ADMINISTRADOR:-Administrador del sistema}
       # Mientras D-02a este abierta, toda cifra que el sistema calcule sale de
       # parametros que nadie ha firmado. Una instalacion declarada de demostracion

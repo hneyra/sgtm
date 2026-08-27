@@ -464,6 +464,13 @@ export const WALG_SHA256 = "b412489168a4ab74aaeb91c06e297573e3950599e839116177f1
 /** Imagen minima con `curl`, `tar` y `sha256sum` para el contenedor que lo descarga. */
 export const IMAGEN_DE_DESCARGA = "curlimages/curl:8.11.0";
 
+/**
+ * Buzon SMTP de pruebas (ADR-0012). Solo `stg`: la escalera comprueba que Keycloak
+ * ENVIA el enlace de clave, no que llegue a un correo real. En `prod` el relay es
+ * externo y de verdad (`INF-03` §4).
+ */
+export const IMAGEN_DE_MAILPIT = "axllent/mailpit:v1.20";
+
 /** Donde queda el binario dentro del pod, en el volumen compartido `wal-g-bin`. */
 export const WALG_DIRECTORIO = "/opt/wal-g";
 export const WALG_BINARIO = `${WALG_DIRECTORIO}/wal-g`;

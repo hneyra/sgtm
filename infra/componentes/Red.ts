@@ -1,4 +1,4 @@
-import { namespaceName, resourceName, type Environment } from "../config";
+import { namespaceName, resourceName, type Environment, type SmtpSettings } from "../config";
 import {
   servicioDeAlertmanager,
   servicioDeAplicacion,
@@ -39,6 +39,11 @@ import type { Manifiesto, NetworkPolicy } from "./tipos";
  * - **Alertmanager** tiene la misma salida amplia a `:443`, por el mismo motivo:
  *   `alertWebhookUrl` es una URL arbitraria que la municipalidad configura, no un
  *   destino que este repositorio pueda fijar de antemano.
+ * - **Keycloak (identidad)**, en `prod`, sale al puerto del relay SMTP —solo ese
+ *   puerto, TCP, `ipBlock 0.0.0.0/0`— para enviar el enlace de clave del alta
+ *   declarativa de usuarios (ADR-0012): `keycloakSmtpHost` es un relay externo que
+ *   la municipalidad aporta, no un pod. En `stg` no hay salida amplia: el relay es
+ *   el buzon Mailpit del propio namespace y la regla apunta a su `podSelector`.
  * - **kube-state-metrics** tambien sale a `:443` ancho, pero por un motivo
  *   distinto: su destino SI es fijo —el API de Kubernetes—, solo que en k3s ese
  *   API no es un pod al que `podSelector`/`namespaceSelector` puedan apuntar —es
@@ -60,6 +65,10 @@ import type { Manifiesto, NetworkPolicy } from "./tipos";
 interface ArgsDeRed {
   environment: Environment;
   namespace: string;
+  /** El relay SMTP con el que Keycloak envia el enlace de clave (ADR-0012). */
+  smtp: SmtpSettings;
+  /** El relay es un buzon Mailpit del propio namespace (`stg`), no uno externo. */
+  correoDePrueba: boolean;
 }
 
 /** El namespace de sistema donde vive Traefik, en k3s. Kubernetes etiqueta todo namespace con este nombre desde 1.21. */
@@ -213,12 +222,40 @@ function permitirIngresoPostgres(environment: Environment, namespace: string): N
  * trafico existente, y sin esta politica queda en CrashLoopBackOff indefinido:
  * `permitir-ingreso-postgres` deja entrar, pero nada dejaba salir).
  */
-function permitirSalidaIdentidad(environment: Environment, namespace: string): NetworkPolicy {
-  return politica(namespace, "permitir-salida-identidad", {
-    podSelector: { matchLabels: { app: servicioDeIdentidad(environment) } },
-    policyTypes: ["Egress"],
-    egress: [{ to: [deApp(servicioDeBaseDeDatos(environment))], ports: [puerto(5432)] }],
-  });
+function permitirSalidaIdentidad(
+  environment: Environment,
+  namespace: string,
+  smtp: SmtpSettings,
+  correoDePrueba: boolean,
+): NetworkPolicy[] {
+  const politicas: NetworkPolicy[] = [
+    politica(namespace, "permitir-salida-identidad", {
+      podSelector: { matchLabels: { app: servicioDeIdentidad(environment) } },
+      policyTypes: ["Egress"],
+      egress: [
+        { to: [deApp(servicioDeBaseDeDatos(environment))], ports: [puerto(5432)] },
+        // El relay SMTP del alta declarativa de usuarios (ADR-0012). En `stg` es el
+        // buzon Mailpit del propio namespace; en `prod`, un relay externo —solo su
+        // puerto, ver el docstring del modulo—.
+        correoDePrueba
+          ? { to: [deApp(resourceName(environment, "correo"))], ports: [puerto(smtp.port)] }
+          : { to: [{ ipBlock: { cidr: "0.0.0.0/0" } }], ports: [puerto(smtp.port)] },
+      ],
+    }),
+  ];
+  if (correoDePrueba) {
+    // El buzon Mailpit: solo Keycloak le entrega correo, por su puerto SMTP.
+    politicas.push(
+      politica(namespace, "permitir-ingreso-correo", {
+        podSelector: { matchLabels: { app: resourceName(environment, "correo") } },
+        policyTypes: ["Ingress"],
+        ingress: [
+          { from: [deApp(servicioDeIdentidad(environment))], ports: [puerto(smtp.port)] },
+        ],
+      }),
+    );
+  }
+  return politicas;
 }
 
 /** La aplicacion: sale a lo que necesita, y no hay ningun destino de internet en la lista. */
@@ -376,7 +413,7 @@ function politicasDeObservabilidad(environment: Environment, namespace: string):
 }
 
 export function manifiestosDeRed(args: ArgsDeRed): Manifiesto[] {
-  const { environment, namespace } = args;
+  const { environment, namespace, smtp, correoDePrueba } = args;
   if (namespace !== namespaceName(environment)) {
     throw new Error(
       `manifiestosDeRed recibio namespace «${namespace}», y el de «${environment}» es ` +
@@ -391,7 +428,7 @@ export function manifiestosDeRed(args: ArgsDeRed): Manifiesto[] {
     permitirDns(namespace),
     ...permitirIngresoPublico(environment, namespace),
     permitirIngresoPostgres(environment, namespace),
-    permitirSalidaIdentidad(environment, namespace),
+    ...permitirSalidaIdentidad(environment, namespace, smtp, correoDePrueba),
     permitirSalidaAplicacion(environment, namespace),
     ...permitirSalidaDeLote(environment, namespace),
     permitirSalidaPostgres(environment, namespace),

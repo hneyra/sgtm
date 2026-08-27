@@ -218,6 +218,14 @@ Sin estos `Secret`, `pulumi up` crea los objetos y los pods se quedan esperando,
 Pulumi vive en el estado de Pulumi, y esa clave abre el padrón de todas las
 municipalidades.
 
+**Uno más, y este `bootstrap-secretos.sh` no lo genera: `sgtm-<amb>-smtp`** (`usuario`,
+`clave`), que el Job de identidad usa para el relay con que Keycloak envía el enlace de
+clave del alta declarativa de usuarios (ADR-0012). No se genera porque no es un valor que
+se pueda fabricar aquí: lo emite el proveedor del relay, y se pone a mano con
+`kubectl create secret generic sgtm-<amb>-smtp --from-literal=usuario=… --from-literal=clave=…`
+(`INF-06` §1.2). En `stg` no hace falta: el relay es un buzón Mailpit del propio clúster
+(`sgtm-stg-correo`), sin autenticación.
+
 ## Liberar una versión nueva
 
 La etiqueta de la imagen **no la mueve Pulumi** (`ADR-0011` §5): el campo `image` lleva

@@ -41,6 +41,15 @@ config:
   sgtm:keycloakImage: quay.io/keycloak/keycloak:26.0
   sgtm:keycloakRealm: sgtm
   sgtm:keycloakSeedTestUsers: "true"
+  # El relay SMTP del alta declarativa de usuarios (ADR-0012). En stg es un buzón
+  # Mailpit del propio clúster —`Identidad.ts` lo despliega— sin autenticación: la
+  # escalera de identidad comprueba que el enlace de clave se envía de verdad, no
+  # que llegue a un buzón real. En prod está prohibido un buzón así (INF-03 §4).
+  sgtm:keycloakSmtpHost: sgtm-stg-correo
+  sgtm:keycloakSmtpPort: "1025"
+  sgtm:keycloakSmtpFrom: no-responder@sv-RFoVCw2ifaqy3G9NZ1eT.cloud.elastika.pe
+  sgtm:keycloakSmtpStartTls: "false"
+  sgtm:keycloakSmtpAuth: "false"
   sgtm:applicationImageRepository: ghcr.io/hneyra
   # No es secreto; `registryPullToken` (un PAT con `read:packages`) sí lo es, y CI lo
   # inyecta igual que `backupAccessKeyId` (issue #257).

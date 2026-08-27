@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { commonLabels, resourceName, type Environment } from "../config";
+import { commonLabels, resourceName, type Environment, type SmtpSettings } from "../config";
 import {
   BASE_DE_IDENTIDAD,
   CLAVES,
+  IMAGEN_DE_MAILPIT,
   RECURSOS,
   ROL_DE_IDENTIDAD,
   nombreDePrioridad,
@@ -12,7 +13,12 @@ import {
   servicioDeIdentidad,
   sondaHttp,
 } from "./convenciones";
-import { realmSgtmJson, reconciliarRealmSh } from "./fuentes";
+import {
+  municipalidadesJson,
+  realmSgtmJson,
+  reconciliarIdentidadesSh,
+  reconciliarRealmSh,
+} from "./fuentes";
 import type { ConfigMap, Deployment, Job, Manifiesto, Service } from "./tipos";
 
 /**
@@ -70,6 +76,20 @@ export interface IdentidadArgs {
    * que nadie necesita (`INF-03` §4).
    */
   clienteDeVerificacion: boolean;
+  /**
+   * Desplegar un buzon Mailpit del clúster como relay SMTP (`sgtm-<amb>-correo`).
+   *
+   * Solo `stg`: la escalera comprueba que Keycloak ENVIA el enlace de clave, no que
+   * llegue a un correo real. En `prod` el relay es de verdad y externo (ADR-0012,
+   * `INF-03` §4).
+   */
+  correoDePrueba: boolean;
+  /** El relay SMTP con el que Keycloak manda el enlace de clave (ADR-0012). */
+  smtp: SmtpSettings;
+  /** Ubigeo de la municipalidad implantada: se reconcilian sus usuarios y su grupo. */
+  ubigeo: string;
+  /** Cuenta del primer administrador. Tiene que ser la del archivo versionado. */
+  administrador: string;
 }
 
 /** El cliente que existe solo para que CI consiga un token sin navegador. */
@@ -143,10 +163,24 @@ export function documentosDelRealm(args: {
   domain: string;
   realm: string;
   clienteDeVerificacion: boolean;
+  smtp: SmtpSettings;
 }): DocumentosDelRealm {
   const versionado = JSON.parse(realmSgtmJson()) as RealmVersionado;
 
   const { clients = [], components = {}, ...ajustes } = versionado;
+
+  // El `smtpServer` del archivo versionado apunta al buzon `correo` del compose. En el
+  // clúster el relay lo decide el stack (ADR-0012): host y remitente en claro, y —si
+  // pide auth— usuario y clave que el Job pone desde el `Secret`, nunca aqui.
+  const smtpServer: Record<string, string> = {
+    host: args.smtp.host,
+    port: String(args.smtp.port),
+    from: args.smtp.from,
+    fromDisplayName: "SGTM",
+    ssl: "false",
+    starttls: String(args.smtp.startTls),
+    auth: String(args.smtp.auth),
+  };
 
   const clientes = clients
     // En `prod` no entra el cliente de verificacion. Lo decide la configuracion del
@@ -186,7 +220,7 @@ export function documentosDelRealm(args: {
     // nadie pidio—. La marca de instalacion de demostracion es otra cosa, y va en los
     // documentos que el sistema emite (INF-03 §3.2), no en el formulario de entrada.
     realm: JSON.stringify(
-      { ...ajustes, realm: args.realm, displayName: "SGTM" },
+      { ...ajustes, realm: args.realm, displayName: "SGTM", smtpServer },
       null,
       2,
     ),
@@ -197,13 +231,147 @@ export function documentosDelRealm(args: {
   };
 }
 
+interface UsuarioVersionado {
+  cuenta: string;
+  nombre: string;
+  apellido: string;
+  correo: string;
+  administrador?: boolean;
+}
+interface MunicipalidadVersionada {
+  ubigeo: string;
+  municipalidadId: number;
+  grupo: string;
+  usuarios: UsuarioVersionado[];
+}
+
+/** El TSV de identidades y lo que el Job comprueba, derivado del archivo versionado. */
+export interface DocumentosDeIdentidades {
+  /**
+   * Una fila por linea, campos con tabulador. Lo lee `reconciliar-identidades.sh` en
+   * el modo «directo» (la imagen de Keycloak no trae python ni jq).
+   *
+   *   GRUPO   <grupo>  <municipalidadId>
+   *   USUARIO <cuenta> <nombre> <apellido> <correo> <municipalidadId> <grupo>
+   */
+  tsv: string;
+  /** El grupo que el Job crea. */
+  grupo: string;
+  /** Las cuentas que el Job comprueba al terminar. */
+  cuentas: string[];
+}
+
+/**
+ * Deriva el TSV de usuarios y grupos para la municipalidad implantada (ADR-0012).
+ *
+ * Se deriva y se valida AQUI, en TypeScript, por lo mismo que los documentos del
+ * realm: la imagen de Keycloak no trae con que parsear JSON, y hacerlo aqui lo deja
+ * cubierto por `componentes.test.ts`. El cruce con `administrador` es la fuente unica
+ * de ADR-0012: si la cuenta del archivo no es la que implanta el Job, el claim del
+ * token no encontraria fila de `usuario` y la persona entraria sin ser nadie.
+ */
+export function documentosDeIdentidades(args: {
+  municipalidades: { ubigeo: string; contenido: string }[];
+  ubigeo: string;
+  administrador: string;
+}): DocumentosDeIdentidades {
+  const fuente = args.municipalidades.find((m) => m.ubigeo === args.ubigeo);
+  if (fuente === undefined) {
+    throw new Error(
+      `No hay «despliegue/identidad/municipalidades/${args.ubigeo}.json». Es la fuente ` +
+        "versionada de los usuarios y el grupo de la municipalidad que se implanta " +
+        "(ADR-0012); sin ella el alta de personas volveria a ser un paso manual.",
+    );
+  }
+
+  const m = JSON.parse(fuente.contenido) as MunicipalidadVersionada;
+
+  if (m.ubigeo !== args.ubigeo) {
+    throw new Error(
+      `El archivo ${args.ubigeo}.json declara ubigeo «${m.ubigeo}»: el nombre del archivo ` +
+        "y el ubigeo de dentro tienen que coincidir.",
+    );
+  }
+  if (!Number.isInteger(m.municipalidadId) || m.municipalidadId <= 0) {
+    throw new Error(
+      `${args.ubigeo}.json: «municipalidadId» es un entero positivo, y es ` +
+        `${JSON.stringify(m.municipalidadId)}. Es el id que asigno la implantacion —sale de ` +
+        "su log— y el que va al atributo del que sale el claim (`::bigint` en RLS).",
+    );
+  }
+  if (!m.grupo || m.grupo.includes("\t")) {
+    throw new Error(`${args.ubigeo}.json: «grupo» es obligatorio y sin tabuladores.`);
+  }
+  if (!Array.isArray(m.usuarios) || m.usuarios.length === 0) {
+    throw new Error(`${args.ubigeo}.json: no declara ningun usuario.`);
+  }
+
+  const admins = m.usuarios.filter((u) => u.administrador === true);
+  if (admins.length !== 1) {
+    throw new Error(
+      `${args.ubigeo}.json: tiene que haber exactamente un usuario con «administrador: true», ` +
+        `y hay ${admins.length}.`,
+    );
+  }
+  if (admins[0]?.cuenta !== args.administrador) {
+    throw new Error(
+      `${args.ubigeo}.json: el usuario «administrador: true» es «${admins[0]?.cuenta}», pero la ` +
+        `implantacion da de alta a «${args.administrador}» (stack). Tienen que ser la misma ` +
+        "cuenta: es lo unico que une la fila de `usuario` con la identidad del token (ADR-0005).",
+    );
+  }
+
+  const filas: string[] = [["GRUPO", m.grupo, String(m.municipalidadId)].join("\t")];
+  for (const u of m.usuarios) {
+    for (const [campo, valor] of Object.entries({
+      cuenta: u.cuenta,
+      nombre: u.nombre,
+      apellido: u.apellido,
+      correo: u.correo,
+    })) {
+      if (!valor || String(valor).includes("\t")) {
+        throw new Error(`${args.ubigeo}.json: usuario «${u.cuenta}» sin «${campo}» valido.`);
+      }
+    }
+    filas.push(
+      ["USUARIO", u.cuenta, u.nombre, u.apellido, u.correo, String(m.municipalidadId), m.grupo].join(
+        "\t",
+      ),
+    );
+  }
+
+  return {
+    tsv: `${filas.join("\n")}\n`,
+    grupo: m.grupo,
+    cuentas: m.usuarios.map((u) => u.cuenta),
+  };
+}
+
 export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
-  const { environment, namespace, image, realm, domain, clienteDeVerificacion } = args;
+  const {
+    environment,
+    namespace,
+    image,
+    realm,
+    domain,
+    clienteDeVerificacion,
+    correoDePrueba,
+    smtp,
+    ubigeo,
+    administrador,
+  } = args;
   const nombre = servicioDeIdentidad(environment);
+  const nombreDelCorreo = resourceName(environment, "correo");
+  const secretoSmtp = resourceName(environment, "smtp");
   const etiquetas = commonLabels(environment, "identidad");
   const secreto = secretos(environment);
 
-  const documentos = documentosDelRealm({ domain, realm, clienteDeVerificacion });
+  const documentos = documentosDelRealm({ domain, realm, clienteDeVerificacion, smtp });
+  const identidades = documentosDeIdentidades({
+    municipalidades: municipalidadesJson(),
+    ubigeo,
+    administrador,
+  });
 
   const configuracionDelRealm: ConfigMap = {
     apiVersion: "v1",
@@ -214,6 +382,10 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
       "perfil-de-usuario.json": documentos.perfilDeUsuario,
       "clientes.json": documentos.clientes,
       "reconciliar-realm.sh": reconciliarRealmSh(),
+      // El alta declarativa de usuarios (ADR-0012): el mismo guion que el compose y el
+      // TSV que `documentosDeIdentidades` deriva del archivo versionado.
+      "reconciliar-identidades.sh": reconciliarIdentidadesSh(),
+      "identidades.tsv": identidades.tsv,
     },
   };
 
@@ -351,13 +523,16 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
     },
   };
 
-  // El nombre del Job lleva la huella de lo que aplica: mientras el realm no cambie,
-  // `pulumi up` no crea ningun Job nuevo; en cuanto cambie una linea, crea uno. Es lo
-  // que hace cierto el criterio «un cambio del realm versionado llega al clúster».
+  // El nombre del Job lleva la huella de lo que aplica: mientras nada cambie, `pulumi
+  // up` no crea ningun Job nuevo; en cuanto cambie una linea —del realm o del archivo
+  // versionado de una municipalidad— crea uno. Es lo que hace cierto el criterio «un
+  // cambio versionado llega al clúster», ahora tambien para usuarios y grupos.
   const huella = createHash("sha256")
     .update(documentos.realm)
     .update(documentos.perfilDeUsuario)
     .update(documentos.clientes)
+    .update(identidades.tsv)
+    .update(reconciliarIdentidadesSh())
     .digest("hex")
     .slice(0, 10);
 
@@ -381,7 +556,14 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
               name: "reconciliar-realm",
               // La imagen de Keycloak, por su `kcadm.sh`. No hace falta ninguna otra.
               image,
-              command: ["/bin/bash", "/realm/reconciliar-realm.sh"],
+              // Primero el realm y el perfil, despues los usuarios y grupos: el alta
+              // declarativa necesita que el atributo `municipalidad_id` ya lo admita el
+              // perfil (ADR-0012).
+              command: [
+                "/bin/bash",
+                "-c",
+                "/realm/reconciliar-realm.sh && /realm/reconciliar-identidades.sh",
+              ],
               env: [
                 { name: "KC_SERVIDOR", value: `http://${nombre}:8080${RUTA_DE_IDENTIDAD}` },
                 { name: "KC_REALM", value: realm },
@@ -396,6 +578,24 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
                   },
                 },
                 { name: "KC_CLIENTES", value: documentos.clientesComprobados.join(" ") },
+                // Lee `identidades.tsv` del propio ConfigMap (modo «directo»).
+                { name: "KC_DIRECTORIO", value: "/realm" },
+                // Si el relay pide auth, el usuario y la clave salen del `Secret`
+                // `sgtm-<amb>-smtp` —que NO genera `bootstrap-secretos.sh`: lo emite el
+                // proveedor del relay (INF-06 §1.2)—. El guion los pone en el realm con
+                // `kcadm`, nunca quedan en el `realm.json` versionado.
+                ...(smtp.auth
+                  ? [
+                      {
+                        name: "KC_SMTP_USUARIO",
+                        valueFrom: { secretKeyRef: { name: secretoSmtp, key: "usuario" } },
+                      },
+                      {
+                        name: "KC_SMTP_CLAVE",
+                        valueFrom: { secretKeyRef: { name: secretoSmtp, key: "clave" } },
+                      },
+                    ]
+                  : []),
               ],
               securityContext: seguridadSinRoot(),
               resources: RECURSOS.auxiliar,
@@ -408,5 +608,64 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
     },
   };
 
-  return [configuracionDelRealm, identidad, servicio, reconciliacion];
+  // Solo `stg`: el buzon Mailpit que hace de relay SMTP para que la escalera pueda
+  // comprobar que el enlace de clave SE ENVIA (ADR-0012). En `prod` el relay es
+  // externo y `keycloakSmtpHost` no puede apuntar a un buzon (`config.ts`).
+  const etiquetasCorreo = commonLabels(environment, "correo");
+  const correo: Manifiesto[] = correoDePrueba
+    ? [
+        {
+          apiVersion: "apps/v1",
+          kind: "Deployment",
+          metadata: { name: nombreDelCorreo, namespace, labels: etiquetasCorreo },
+          spec: {
+            replicas: 1,
+            strategy: { type: "Recreate" },
+            selector: { matchLabels: { app: nombreDelCorreo } },
+            template: {
+              metadata: { labels: { ...etiquetasCorreo, app: nombreDelCorreo } },
+              spec: {
+                priorityClassName: nombreDePrioridad(environment, "lote"),
+                containers: [
+                  {
+                    name: "mailpit",
+                    image: IMAGEN_DE_MAILPIT,
+                    env: [
+                      { name: "MP_SMTP_AUTH_ACCEPT_ANY", value: "true" },
+                      { name: "MP_SMTP_AUTH_ALLOW_INSECURE", value: "true" },
+                    ],
+                    ports: [
+                      { name: "smtp", containerPort: 1025 },
+                      { name: "http", containerPort: 8025 },
+                    ],
+                    securityContext: seguridadSinRoot(),
+                    resources: RECURSOS.auxiliar,
+                    readinessProbe: sondaHttp("/readyz", 8025, { failureThreshold: 3 }),
+                    livenessProbe: sondaHttp("/", 8025, {
+                      periodSeconds: 20,
+                      failureThreshold: 5,
+                    }),
+                  },
+                ],
+              },
+            },
+          },
+        },
+        {
+          apiVersion: "v1",
+          kind: "Service",
+          metadata: { name: nombreDelCorreo, namespace, labels: etiquetasCorreo },
+          spec: {
+            type: "ClusterIP",
+            selector: { app: nombreDelCorreo },
+            ports: [
+              { name: "smtp", port: 1025, targetPort: 1025 },
+              { name: "http", port: 8025, targetPort: 8025 },
+            ],
+          },
+        },
+      ]
+    : [];
+
+  return [configuracionDelRealm, identidad, servicio, reconciliacion, ...correo];
 }

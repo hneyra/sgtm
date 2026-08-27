@@ -28,6 +28,11 @@ fija tres cosas:
   uno.
 - **`sgtm-verificacion`**, con `direct access grants`, que es como CI consigue un
   token sin abrir un navegador. No sirve para personas: no tiene redirección.
+- **`smtpServer`**, apuntando al buzón `correo` de la marcha blanca. Es lo que deja a
+  Keycloak enviar el enlace de un solo uso con que un usuario nuevo fija su clave
+  (ADR-0012). En el clúster, `Identidad.ts` reescribe este bloque con el relay del
+  stack —host y remitente en claro; usuario y clave, si hace falta, del `Secret`
+  `sgtm-<amb>-smtp`—.
 
 **El archivo no lleva comentarios**, y no por estilo: Keycloak analiza el realm
 con `RealmRepresentation` y **rechaza cualquier campo que no conozca**, así que un
@@ -37,16 +42,34 @@ romper nada.
 
 ## Ni un usuario, ni una clave
 
-El realm fija la **estructura**; las personas las crea quien provisiona:
+El realm fija la **estructura**. Las personas y el grupo de cada municipalidad se
+declaran —**sin clave**— en
+[`municipalidades/<ubigeo>.json`](municipalidades/README.md), y los aplica
+`reconciliar-identidades.sh` (ADR-0012), el mismo guion en el compose y en el clúster:
 
 ```bash
 cd despliegue
-./identidad/crear-usuario.sh jperez 'su-clave' 1
+docker compose up --wait aplicacion interfaz correo
+./identidad/reconciliar-identidades.sh
 ```
 
-El tercer argumento es la municipalidad. Omitirlo crea un usuario **sin** el
-claim, que sirve para una sola cosa: comprobar que un token válido pero sin
-municipalidad recibe 403 y no llega a ningún controlador.
+El usuario nuevo se crea **sin credenciales** y con `UPDATE_PASSWORD` pendiente;
+Keycloak le manda un enlace de un solo uso —que en la marcha blanca cae en el buzón
+`correo`, <http://localhost:8025>— y **fija su clave al entrar**. Nadie llega a ver una
+clave. Idempotente: volver a correrlo no reenvía el correo ni toca a quien ya existe.
+
+`crear-usuario.sh` sigue aquí para los usuarios `verificacion` de CI, que necesitan una
+clave conocida para el *direct grant*:
+
+```bash
+./identidad/crear-usuario.sh verificacion 'su-clave' 1   # con municipalidad
+./identidad/crear-usuario.sh sin-municipalidad 'su-clave' # sin el claim: para el 403
+./identidad/crear-usuario.sh --reset jperez 'temporal' 1  # como el alta declarativa
+```
+
+El tercer argumento es la municipalidad. Omitirlo crea un usuario **sin** el claim, que
+sirve para una sola cosa: comprobar que un token válido pero sin municipalidad recibe 403
+y no llega a ningún controlador.
 
 Un realm versionado que trae usuarios con contraseña es la forma más cómoda de
 que esa contraseña acabe en producción. Por eso se separan, aunque cueste un paso

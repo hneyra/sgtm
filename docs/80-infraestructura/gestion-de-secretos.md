@@ -80,6 +80,30 @@ como secreto de la *aplicación*, de la misma familia que `sgtm_owner` y `sgtm_a
 corrigió con este issue — `config.ts` ya no la pide, y vive solo en el `Secret` de
 Kubernetes que genera `bootstrap-secretos.sh`.
 
+### 1.2 El secreto SMTP, que no se genera: lo emite el relay (ADR-0012)
+
+El alta declarativa de usuarios ([`ADR-0012`](../30-arquitectura/adr/ADR-0012-usuarios-y-grupos-declarativos.md))
+envía por correo el enlace de un solo uso con que un usuario nuevo fija su clave. Eso exige
+un relay SMTP, y su credencial —**si el relay pide autenticación**— es la única entrada del
+inventario que `bootstrap-secretos.sh` **no** genera, por el mismo motivo que el superusuario
+de PostgreSQL no se rota desde el nodo: no es un valor que se pueda fabricar aquí, lo emite
+otro sistema.
+
+| Secreto · claves | Consumidor | De dónde sale | Rotación |
+|---|---|---|---|
+| `sgtm-<amb>-smtp` · `usuario`, `clave` | El Job que reconcilia identidades, que las pone en el realm con `kcadm` | La consola del proveedor del relay. Se ponen con `kubectl create secret generic sgtm-<amb>-smtp --from-literal=usuario=… --from-literal=clave=…` | Según el proveedor |
+
+- **El servidor y el remitente no son secretos.** `keycloakSmtpHost`, `keycloakSmtpPort` y
+  `keycloakSmtpFrom` viven en claro en `Pulumi.<stack>.yaml`, igual que `domain`. Solo
+  `usuario`/`clave` son secreto, y solo cuando `keycloakSmtpAuth` es true.
+- **`stg` no tiene este `Secret`.** Su relay es un buzón Mailpit del propio clúster
+  (`sgtm-stg-correo`), sin autenticación: la escalera comprueba que Keycloak *envía* el
+  enlace, no que llegue a un correo real. `config.ts` prohíbe un buzón así en `prod`
+  (`INF-03` §4).
+- **En `prod` es un prerrequisito operativo.** Mientras el `Secret` no exista, el Job de
+  reconciliación queda `Pending` con el `Secret` ausente en sus eventos —igual que cualquier
+  otro secreto que falte (§2)— y el alta de usuarios no se completa.
+
 ## 2. Cómo se generan: `bootstrap-secretos.sh`, nunca Pulumi
 
 Un despliegue desde cero necesita las cinco claves de §1 antes de que `pulumi up` cree
@@ -224,6 +248,8 @@ corre sobre **todo el repositorio**, no solo `infra/`, en cada PR y en cada inte
 | Que `completar-secreto.ts` genere un valor repetido | `verificaciones/completar-secreto.test.ts`, con un generador roto a propósito |
 | Reintroducir `keycloakAdminPassword` en `SECRETOS_DE_ARRANQUE` | `verificaciones/secretos.test.ts`: las dos listas no pueden compartir una clave |
 | Quitar el `ALTER ROLE` de la rotación | `verificar-rotacion.sh`: una conexión nueva con la clave vieja sigue funcionando, y el guion falla |
+| Apuntar `keycloakSmtpHost` de `prod` a un buzón (`sgtm-prod-correo`, Mailpit), o dejar `keycloakSmtpAuth` en false | `config.test.ts`, «ADR-0012 — el relay SMTP»: `checkInvariants` lo rechaza citando `INF-03` §4 |
+| Quitar del guion el `execute-actions-email` del alta declarativa | `despliegue.yml`, peldaño «3b»: el buzón Mailpit queda vacío y el paso se pone rojo |
 
 ## 6. Lo que sigue sin verificarse, y por qué
 

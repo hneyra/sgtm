@@ -79,6 +79,14 @@ export function construirManifiestos(s: Invariants): Manifiesto[] {
       // El cliente de verificacion existe donde se siembran usuarios de prueba, y en
       // ningun otro sitio: es lo que hace posible pedir un token sin navegador.
       clienteDeVerificacion: s.identity.seedTestUsers,
+      // El buzon Mailpit va con los usuarios de prueba: los dos son de `stg` y de
+      // ningun otro sitio (ADR-0012, INF-03 §4).
+      correoDePrueba: s.identity.seedTestUsers,
+      smtp: s.identity.smtp,
+      // Los usuarios y el grupo que se reconcilian son los de la municipalidad que
+      // implanta el Job de arriba: una fuente, un administrador (ADR-0012).
+      ubigeo: s.implantacion.ubigeo,
+      administrador: s.implantacion.administrador,
     }),
     ...manifiestosDeAplicacion({
       environment,
@@ -107,7 +115,12 @@ export function construirManifiestos(s: Invariants): Manifiesto[] {
     // no tiene «orden de aplicacion», las politicas se unen— pero deja el
     // manifiesto en el orden en que se razona: primero lo que corre, despues lo
     // que decide con quien puede hablar.
-    ...manifiestosDeRed({ environment, namespace }),
+    ...manifiestosDeRed({
+      environment,
+      namespace,
+      smtp: s.identity.smtp,
+      correoDePrueba: s.identity.seedTestUsers,
+    }),
   ];
 }
 

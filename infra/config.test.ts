@@ -54,6 +54,21 @@ function baseline(environment: Environment = "prod"): Invariants {
       realm: "sgtm",
       developmentMode: false,
       seedTestUsers: isStg,
+      smtp: isStg
+        ? {
+            host: "sgtm-stg-correo",
+            port: 1025,
+            from: "no-responder@stg.example.pe",
+            startTls: false,
+            auth: false,
+          }
+        : {
+            host: "smtp.example.pe",
+            port: 587,
+            from: "no-responder@example.pe",
+            startTls: true,
+            auth: true,
+          },
     },
     application: {
       imageRepository: "ghcr.io/hneyra/sgtm",
@@ -200,6 +215,34 @@ describe("INF-03 §4 — nada de atajos de desarrollo en producción", () => {
       expectViolation(c, "perder el pod es perder los usuarios");
     }
   });
+
+  it("un buzon de pruebas como relay SMTP de prod", () => {
+    const c = baseline("prod");
+    c.identity.smtp.host = "sgtm-prod-correo";
+    expectViolation(c, "buzón que nadie lee");
+  });
+
+  it("el relay SMTP de prod sin autenticacion", () => {
+    const c = baseline("prod");
+    c.identity.smtp.auth = false;
+    expectViolation(c, "relay abierto entrega correo de cualquiera");
+  });
+});
+
+describe("ADR-0012 — el relay SMTP del alta declarativa de usuarios", () => {
+  it("un remitente sin forma de correo", () => {
+    for (const environment of ["stg", "prod"] as const) {
+      const c = baseline(environment);
+      c.identity.smtp.from = "no-es-un-correo";
+      expectViolation(c, "no tiene forma de dirección de correo");
+    }
+  });
+
+  it("un puerto que no es un puerto", () => {
+    const c = baseline("stg");
+    c.identity.smtp.port = 70000;
+    expectViolation(c, "no es un puerto");
+  });
 });
 
 describe("ADR-0011 — el estado de Pulumi no guarda ni versiones ni secretos", () => {
@@ -308,6 +351,8 @@ const VALORES_MINIMOS = {
   backupRegion: "us-east-1",
   backupBucket: "sgtm-prod-respaldos",
   keycloakImage: "quay.io/keycloak/keycloak:26.0",
+  keycloakSmtpHost: "smtp.example.pe",
+  keycloakSmtpFrom: "no-responder@example.pe",
   applicationImageRepository: "ghcr.io/hneyra/sgtm",
   applicationBootstrapVersion: "64de42b4c56eb2491e2a61287bceb4b66b6e53d1",
   ubigeo: "200101",
