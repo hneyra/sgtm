@@ -490,6 +490,34 @@ describe("#151 · identidad", () => {
     // mismo nombre, el Job ya existiria y `pulumi up` no volveria a ejecutarlo.
     expect(despues).not.toBe(antes);
   });
+
+  it("un cambio del POD que lo aplica tambien cambia el nombre del Job", () => {
+    // La otra mitad, y la que faltaba. La huella cubria lo que se aplica —realm, perfil,
+    // clientes, TSV, guion— pero no COMO se aplica. Con `spec.template` de un Job
+    // inmutable, corregir el pod conservando el nombre no produce un Job nuevo: produce
+    // un `pulumi up` que el API server rechaza con «field is immutable», y la correccion
+    // no llega. Se ejerce con `image`, el unico dato del pod que no entra en ninguno de
+    // los cinco documentos.
+    const antes = buscar(ms, "Job", "realm").metadata.name;
+    const despues = buscar(
+      manifiestosDeIdentidad({
+        environment: AMBIENTE,
+        namespace: namespaceName(AMBIENTE),
+        image: "quay.io/keycloak/keycloak:26.1",
+        realm: "sgtm",
+        domain: invariantesDe(AMBIENTE).ingress.domain,
+        clienteDeVerificacion: false,
+        correoDePrueba: false,
+        smtp: SMTP_DE_PRUEBA,
+        ubigeo: invariantesDe(AMBIENTE).implantacion.ubigeo,
+        administrador: invariantesDe(AMBIENTE).implantacion.administrador,
+      }),
+      "Job",
+      "realm",
+    ).metadata.name;
+
+    expect(despues).not.toBe(antes);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -601,6 +629,14 @@ describe("ADR-0012 · alta declarativa de usuarios", () => {
       "realm",
     ).metadata.name;
     expect(otra).not.toBe(buscar(ms, "Job", "realm").metadata.name);
+  });
+
+  it("el Job monta sus guiones con permiso de ejecucion, porque los ejecuta", () => {
+    const job = buscar(ms, "Job", "realm") as { spec: { template: { spec: EspecificacionDePod } } };
+    const volumen = (job.spec.template.spec.volumes ?? []).find((v) => v.name === "realm");
+    // 0o755. Con el 0644 por omision de un `ConfigMap`, `bash -c "/realm/x.sh && …"`
+    // muere en «exit 126» sin llegar a hablar con Keycloak.
+    expect(volumen?.configMap?.defaultMode).toBe(493);
   });
 
   it("el Job encadena los dos guiones y monta el TSV", () => {
@@ -1431,28 +1467,49 @@ describe("#157 · endurecimiento", () => {
     expect(sinNonRoot.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
   });
 
-  it("los contenedores cuya imagen fija un USER por nombre, no por numero, declaran runAsUser", () => {
-    // Encontrado en CI (issue #157): con `runAsNonRoot: true` y sin `runAsUser`
-    // explicito, el kubelet rechaza el contenedor si la imagen fija su usuario por
-    // NOMBRE -"nobody", "nginx", "curl_user"- en vez de por numero, porque no puede
-    // verificar sin ejecutar dentro de la imagen que ese nombre no es root. Esta
-    // lista es la contraparte de `SIN_RUNASNONROOT` de arriba: no contenedores que
-    // se salten el endurecimiento, sino contenedores que lo llevan Y ademas nombran
-    // su UID -sin este `runAsUser`, `yarn manifiestos` compila y pasa la auditoria
-    // igual, y el fallo solo aparece contra un API server de verdad, como paso aqui.
-    const CON_USER_NO_NUMERICO = new Set([
-      "prometheus",
-      "alertmanager",
-      "node-exporter",
-      "kube-state-metrics",
-      "postgres-exporter",
-      "wal-g-instalar",
-      "interfaz",
+  it("todo contenedor endurecido fija su `runAsUser`, salvo si su imagen ya lo fija por numero", () => {
+    // Encontrado en CI dos veces, y la segunda porque esta prueba estaba escrita al
+    // reves. Con `runAsNonRoot: true` y sin `runAsUser`, quien decide si el pod arranca
+    // es la imagen: si fija su usuario por NOMBRE —"nobody", "nginx"— o no lo fija en
+    // absoluto, el kubelet no puede comprobar sin ejecutarla que ese usuario no es root,
+    // y rechaza el contenedor con `CreateContainerConfigError`.
+    //
+    // La version anterior llevaba la lista COMPLEMENTARIA: enumeraba los contenedores
+    // que SI debian declarar `runAsUser`. Una lista asi solo protege a lo que ya esta en
+    // ella —un contenedor nuevo nace exento y nadie se entera—, y es exactamente lo que
+    // paso con `mailpit` (#268): su imagen no declara `USER`, corria como root, y `yarn
+    // verificar` no dijo nada mientras `pulumi up` esperaba 600 s por un Deployment que
+    // nunca iba a quedar Ready. Invertida, el que nace exento es nadie: o el contenedor
+    // fija su UID, o alguien escribe aqui por que no hace falta, y eso se ve en el diff.
+    //
+    // Cada exencion es un `USER` numerico LEIDO del Dockerfile de esa imagen, no una
+    // suposicion. Si no se puede leer, no es exencion: es un `runAsUser`.
+    const IMAGEN_CON_UID_NUMERICO = new Set([
+      // ghcr.io/hneyra/sgtm-aplicacion — `USER 10001` (backend/Dockerfile).
+      "aplicacion",
+      "implantacion",
+      "lote",
+      // ghcr.io/hneyra/sgtm-migrador — `USER 10002` (backend/Dockerfile).
+      "migrador",
+      // quay.io/keycloak/keycloak:26.0 — `USER 1000` (quarkus/container/Dockerfile).
+      "keycloak",
+      "reconciliar-realm",
+      // grafana/grafana:11.3.0 — `USER "$GF_UID"`, con `ARG GF_UID="472"`.
+      "grafana",
     ]);
-    const sinRunAsUser = contenedoresDeTodo(ms).filter(
-      ({ c }) => CON_USER_NO_NUMERICO.has(c.name) && c.securityContext?.runAsUser === undefined,
-    );
-    expect(sinRunAsUser.map(({ donde, c }) => `${donde}/${c.name}`)).toEqual([]);
+
+    // Sobre los DOS ambientes, no solo sobre `prod`: `mailpit` vive unicamente en `stg`,
+    // asi que una comprobacion que solo mire `prod` no lo veria ni estando bien escrita.
+    // Es la segunda mitad de por que se colo.
+    for (const ambiente of ENVIRONMENTS) {
+      const sinRunAsUser = contenedoresDeTodo(manifiestosDe(ambiente)).filter(
+        ({ c }) =>
+          c.securityContext?.runAsNonRoot === true &&
+          c.securityContext.runAsUser === undefined &&
+          !IMAGEN_CON_UID_NUMERICO.has(c.name),
+      );
+      expect(sinRunAsUser.map(({ donde, c }) => `${ambiente} ${donde}/${c.name}`)).toEqual([]);
+    }
   });
 
   it("el motor re-concede las capacidades que su entrypoint necesita para tomar posesion de PGDATA", () => {
@@ -1653,6 +1710,90 @@ interface LimiteDeTasa {
 function comoObjeto<T>(m: Manifiesto): T {
   return m as unknown as T;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #268 — Un guion de ConfigMap que se ejecuta necesita el bit de ejecucion
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("la demostracion: la auditoria se pone roja con un guion no ejecutable", () => {
+  /** Un pod minimo que monta un `ConfigMap` en `/guiones` y hace algo con el. */
+  function conGuion(argv: { command?: string[]; args?: string[] }, defaultMode?: number): Manifiesto[] {
+    return [
+      {
+        apiVersion: "batch/v1",
+        kind: "Job",
+        metadata: { name: "muestra", namespace: namespaceName(AMBIENTE), labels: {} },
+        spec: {
+          backoffLimit: 3,
+          template: {
+            metadata: { labels: {} },
+            spec: {
+              restartPolicy: "Never",
+              priorityClassName: nombreDePrioridad(AMBIENTE, "lote"),
+              containers: [
+                {
+                  name: "muestra",
+                  image: "ejemplo:1.0",
+                  ...argv,
+                  resources: {
+                    requests: { cpu: "10m", memory: "32Mi" },
+                    limits: { cpu: "200m", memory: "128Mi" },
+                  },
+                  securityContext: {
+                    allowPrivilegeEscalation: false,
+                    capabilities: { drop: ["ALL"] },
+                  },
+                  volumeMounts: [{ name: "guiones", mountPath: "/guiones", readOnly: true }],
+                },
+              ],
+              volumes: [{ name: "guiones", configMap: { name: "guiones", defaultMode } }],
+            },
+          },
+        },
+      } as unknown as Manifiesto,
+    ];
+  }
+
+  const EJECUTA = { command: ["/bin/bash", "-c", "/guiones/a.sh && /guiones/b.sh"] };
+
+  /**
+   * Lo que dice ESTA regla, y no la auditoria entera: el pod de muestra es minimo a
+   * proposito —no trae el `PriorityClass` que declara, y la auditoria se lo reprocha—,
+   * asi que comparar la lista completa contra `[]` mediria otra cosa.
+   */
+  function guiones(ms: Manifiesto[]): string[] {
+    return auditar(ms).filter((p) => p.includes("exit 126"));
+  }
+
+  it("ejecutar el guion con el 0644 por omision lo pone rojo, y nombra los dos", () => {
+    const problemas = guiones(conGuion(EJECUTA));
+    expect(problemas).toContainEqual(expect.stringContaining("exit 126"));
+    expect(problemas).toContainEqual(expect.stringContaining("/guiones/a.sh, /guiones/b.sh"));
+  });
+
+  it("como `argv[0]` tambien, que es la otra forma de ejecutarlo", () => {
+    expect(guiones(conGuion({ command: ["/guiones/a.sh"] }))).toContainEqual(
+      expect.stringContaining("exit 126"),
+    );
+  });
+
+  it("con `defaultMode: 493` se calla", () => {
+    expect(guiones(conGuion(EJECUTA, 493))).toEqual([]);
+  });
+
+  // Las dos de abajo son la otra mitad: una regla que dijera que no a todo no protegeria
+  // nada. Son las dos formas en que el resto del stack monta ficheros de un `ConfigMap`
+  // sin ejecutarlos, y las dos tienen que seguir en verde.
+  it("pasarselo al interprete como argumento NO necesita el bit —es lo que hacia #268 antes—", () => {
+    expect(guiones(conGuion({ command: ["/bin/bash", "/guiones/a.sh"] }))).toEqual([]);
+  });
+
+  it("nombrar la ruta como valor de una opcion tampoco —asi monta Prometheus su config—", () => {
+    expect(
+      guiones(conGuion({ command: ["/bin/prometheus"], args: ["--config.file=/guiones/a.yml"] })),
+    ).toEqual([]);
+  });
+});
 
 function valoresDelIngreso(ms: Manifiesto[]): string {
   return (buscar(ms, "HelmChartConfig", "traefik") as { spec: { valuesContent: string } }).spec

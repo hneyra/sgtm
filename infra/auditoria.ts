@@ -3,6 +3,7 @@ import {
   podsDe,
   sondasDe,
   type Contenedor,
+  type EspecificacionDePod,
   type Manifiesto,
 } from "./componentes/tipos";
 
@@ -96,6 +97,8 @@ export function auditarManifiestos(
             "donde mover lo desalojado.",
         );
       }
+
+      problemas.push(...auditarGuionesEjecutables(donde, pod));
 
       for (const c of contenedoresDe(pod)) {
         problemas.push(...auditarImagen(donde, c.name, c.image));
@@ -255,6 +258,112 @@ function auditarRecursos(
  * incumplimiento bloqueante rompe exactamente los dos casos donde faltar es
  * correcto.
  */
+/** El bit de ejecucion, en el `defaultMode` de un volumen proyectado. */
+const BIT_DE_EJECUCION = 0o111;
+
+/** Los interpretes que reciben el guion como ARGUMENTO: ahi se lee, no se ejecuta. */
+const INTERPRETES = /(?:^|\/)(?:ba|da|a|k|z)?sh$/;
+
+/**
+ * Un guion montado desde un `ConfigMap` y **ejecutado** exige el bit de ejecucion.
+ *
+ * El modo por omision de un `ConfigMap` es 0644. Mientras el guion se pase como
+ * argumento del interprete —`bash /realm/x.sh`— da igual: quien necesita permiso ahi es
+ * bash, y le basta con leerlo. En cuanto se ejecuta directamente —`bash -c "/realm/x.sh
+ * && ..."`, o como `argv[0]`— el kernel pide el bit de ejecucion, no lo encuentra, y el
+ * contenedor muere con **exit 126** sin correr una linea.
+ *
+ * No es hipotetico: es lo que paso al pasar el Job del realm de la primera forma a la
+ * segunda (#268). Sus cuatro intentos murieron en 126, `pulumi up` espero 10 minutos por
+ * un Job que ya no podia terminar, y ninguna de las pruebas de manifiestos lo vio,
+ * porque todas preguntaban por lo que el manifiesto DECLARA y ninguna por si sus dos
+ * mitades —como se invoca el guion, y con que modo se monta— encajan. `BaseDeDatos.ts`
+ * ya ponia el `defaultMode` correcto desde el principio; lo que faltaba es la regla que
+ * obliga a los dos sitios a la vez.
+ *
+ * Se lee entero del manifiesto, sin clúster: que argv ejecuta el guion, de que volumen
+ * cuelga su ruta, y que modo declara ese volumen.
+ */
+function auditarGuionesEjecutables(donde: string, pod: EspecificacionDePod): string[] {
+  const problemas: string[] = [];
+  const porNombre = new Map((pod.volumes ?? []).map((v) => [v.name, v]));
+
+  for (const c of contenedoresDe(pod)) {
+    for (const montaje of c.volumeMounts ?? []) {
+      const proyectado = porNombre.get(montaje.name)?.configMap ?? porNombre.get(montaje.name)?.secret;
+      if (!proyectado) continue;
+
+      const ejecutadas = rutasEjecutadas(c, montaje.mountPath);
+      if (ejecutadas.length === 0) continue;
+      if (((proyectado.defaultMode ?? 0) & BIT_DE_EJECUCION) !== 0) continue;
+
+      const modo =
+        proyectado.defaultMode === undefined
+          ? "por omision (0644)"
+          : `0o${proyectado.defaultMode.toString(8)}`;
+      problemas.push(
+        `${donde}, contenedor «${c.name}»: ejecuta ${ejecutadas.join(", ")} del volumen ` +
+          `«${montaje.name}», que se monta con modo ${modo}, sin permiso de ejecucion. El ` +
+          "contenedor morira con «exit 126» antes de correr una sola linea. O se monta con " +
+          "`defaultMode: 493` (0o755), o se invoca el guion como argumento del interprete " +
+          "(`bash /ruta/guion.sh`), que solo necesita leerlo.",
+      );
+    }
+  }
+
+  return problemas;
+}
+
+/**
+ * Las rutas bajo `mountPath` que el contenedor ejecuta —no las que solo nombra—.
+ *
+ * Dos formas, que son las dos que aparecen en este repositorio: la ruta como `argv[0]`,
+ * y la ruta en posicion de mandato dentro del guion de un `sh -c`. Lo que NO cuenta:
+ * `bash /ruta/x.sh` (argumento del interprete), `source`/`.` (se lee), y una ruta que es
+ * el valor de una opcion —`--config.file=/etc/prometheus/prometheus.yml`—, que es como
+ * monta su configuracion casi todo lo demas del stack.
+ */
+function rutasEjecutadas(c: Contenedor, mountPath: string): string[] {
+  const argv = [...(c.command ?? []), ...(c.args ?? [])];
+  if (argv.length === 0) return [];
+  const bajoElMontaje = `${mountPath.replace(/\/$/, "")}/`;
+  const encontradas = new Set<string>();
+
+  // 1. `argv[0]`: el kernel lo exec-uta, sea lo que sea.
+  const primero = argv[0] ?? "";
+  if (primero.startsWith(bajoElMontaje)) encontradas.add(primero);
+
+  // 2. El guion de un `sh -c`. Solo se mira si `argv[0]` es de verdad un interprete: un
+  //    `-c` de otro binario no es un guion de shell.
+  if (INTERPRETES.test(primero)) {
+    for (let i = 1; i < argv.length; i += 1) {
+      if (!/^-[a-z]*c$/.test(argv[i] ?? "")) continue;
+      const guion = argv[i + 1];
+      if (guion !== undefined) {
+        for (const ruta of enPosicionDeMandato(guion, bajoElMontaje)) encontradas.add(ruta);
+      }
+      break;
+    }
+  }
+
+  return [...encontradas];
+}
+
+/** Las apariciones de `prefijo…` que ocupan la posicion de mandato del guion. */
+function enPosicionDeMandato(guion: string, prefijo: string): string[] {
+  const rutas: string[] = [];
+  for (let desde = guion.indexOf(prefijo); desde !== -1; desde = guion.indexOf(prefijo, desde + 1)) {
+    // Lo que precede a la ruta decide si es un mandato o un argumento. Un separador
+    // —principio, `;`, `&&`, `||`, `|`, `(`— o `exec`, la ejecutan; un interprete,
+    // `source` o `.` la leen; cualquier otra cosa la deja en argumento.
+    const antes = guion.slice(0, desde).replace(/[ \t]+$/, "");
+    if (!/(?:^|[\n;&|(]|\bexec)$/.test(antes)) continue;
+    const hasta = guion.slice(desde).search(/[\s;&|)]/);
+    rutas.push(hasta === -1 ? guion.slice(desde) : guion.slice(desde, desde + hasta));
+  }
+  return rutas;
+}
+
 function auditarSeguridad(donde: string, c: Contenedor): string[] {
   const sc = c.securityContext;
   if (sc?.allowPrivilegeEscalation === false && sc.capabilities?.drop?.includes("ALL")) return [];
