@@ -39,11 +39,12 @@ import type { Manifiesto, NetworkPolicy } from "./tipos";
  * - **Alertmanager** tiene la misma salida amplia a `:443`, por el mismo motivo:
  *   `alertWebhookUrl` es una URL arbitraria que la municipalidad configura, no un
  *   destino que este repositorio pueda fijar de antemano.
- * - **Keycloak (identidad)**, en `prod`, sale al puerto del relay SMTP —solo ese
- *   puerto, TCP, `ipBlock 0.0.0.0/0`— para enviar el enlace de clave del alta
- *   declarativa de usuarios (ADR-0012): `keycloakSmtpHost` es un relay externo que
- *   la municipalidad aporta, no un pod. En `stg` no hay salida amplia: el relay es
- *   el buzon Mailpit del propio namespace y la regla apunta a su `podSelector`.
+ * - **Keycloak (identidad)** sale al puerto del relay SMTP **solo si el ambiente
+ *   declara uno** (ADR-0012). Con `keycloakSmtpHost` puesto y `stg` —buzon Mailpit
+ *   del propio namespace—, la regla apunta a su `podSelector`, sin salida amplia; con
+ *   un relay externo, es un `ipBlock 0.0.0.0/0` acotado a ese puerto. Sin relay
+ *   (Opción B, la marcha blanca de `prod`), Keycloak no tiene ninguna regla de salida
+ *   SMTP: el alta crea al usuario sin clave y no manda correo.
  * - **kube-state-metrics** tambien sale a `:443` ancho, pero por un motivo
  *   distinto: su destino SI es fijo —el API de Kubernetes—, solo que en k3s ese
  *   API no es un pod al que `podSelector`/`namespaceSelector` puedan apuntar —es
@@ -65,8 +66,8 @@ import type { Manifiesto, NetworkPolicy } from "./tipos";
 interface ArgsDeRed {
   environment: Environment;
   namespace: string;
-  /** El relay SMTP con el que Keycloak envia el enlace de clave (ADR-0012). */
-  smtp: SmtpSettings;
+  /** El relay SMTP (ADR-0012); `undefined` = el ambiente no tiene, y Keycloak no sale a ninguno. */
+  smtp?: SmtpSettings;
   /** El relay es un buzon Mailpit del propio namespace (`stg`), no uno externo. */
   correoDePrueba: boolean;
 }
@@ -225,7 +226,7 @@ function permitirIngresoPostgres(environment: Environment, namespace: string): N
 function permitirSalidaIdentidad(
   environment: Environment,
   namespace: string,
-  smtp: SmtpSettings,
+  smtp: SmtpSettings | undefined,
   correoDePrueba: boolean,
 ): NetworkPolicy[] {
   const politicas: NetworkPolicy[] = [
@@ -235,15 +236,20 @@ function permitirSalidaIdentidad(
       egress: [
         { to: [deApp(servicioDeBaseDeDatos(environment))], ports: [puerto(5432)] },
         // El relay SMTP del alta declarativa de usuarios (ADR-0012). En `stg` es el
-        // buzon Mailpit del propio namespace; en `prod`, un relay externo —solo su
-        // puerto, ver el docstring del modulo—.
-        correoDePrueba
-          ? { to: [deApp(resourceName(environment, "correo"))], ports: [puerto(smtp.port)] }
-          : { to: [{ ipBlock: { cidr: "0.0.0.0/0" } }], ports: [puerto(smtp.port)] },
+        // buzon Mailpit del propio namespace; en `prod` con relay, uno externo —solo
+        // su puerto, ver el docstring del modulo—. Sin relay (Opción B), Keycloak no
+        // sale a ninguno: no hay regla.
+        ...(smtp === undefined
+          ? []
+          : [
+              correoDePrueba
+                ? { to: [deApp(resourceName(environment, "correo"))], ports: [puerto(smtp.port)] }
+                : { to: [{ ipBlock: { cidr: "0.0.0.0/0" } }], ports: [puerto(smtp.port)] },
+            ]),
       ],
     }),
   ];
-  if (correoDePrueba) {
+  if (correoDePrueba && smtp !== undefined) {
     // El buzon Mailpit: solo Keycloak le entrega correo, por su puerto SMTP.
     politicas.push(
       politica(namespace, "permitir-ingreso-correo", {

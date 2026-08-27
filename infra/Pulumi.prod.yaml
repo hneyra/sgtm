@@ -61,18 +61,14 @@ config:
   sgtm:postgresStorageSize: 100Gi
   sgtm:keycloakImage: quay.io/keycloak/keycloak:26.0
   sgtm:keycloakRealm: sgtm
-  # El relay SMTP con el que Keycloak manda el enlace de un solo uso para fijar la
-  # clave en el alta declarativa de usuarios (ADR-0012). El servidor y el remitente
-  # NO son secretos; el usuario y la clave del relay SÍ, y viven en el `Secret`
-  # `sgtm-prod-smtp` (`usuario`/`clave`), que NO genera `bootstrap-secretos.sh`: lo
-  # emite el proveedor del relay y se pone a mano (INF-06 §1.2). ⚠ PROVISIONAL: el
-  # relay real de la municipalidad piloto se confirma antes de `aplicar-prod`;
-  # mientras no exista, el alta de usuarios queda a medias y el paso lo dice.
-  sgtm:keycloakSmtpHost: smtp.example.pe
-  sgtm:keycloakSmtpPort: "587"
-  sgtm:keycloakSmtpFrom: no-responder@example.pe
-  sgtm:keycloakSmtpStartTls: "true"
-  sgtm:keycloakSmtpAuth: "true"
+  # SIN relay SMTP, a propósito (ADR-0012, Opción B). Esta marcha blanca no tiene un
+  # relay de correo decidido (D-05), así que NO se declara `keycloakSmtpHost`: el realm
+  # va sin `smtpServer`, el Job de reconciliación crea el usuario sin clave y con
+  # UPDATE_PASSWORD pendiente, y un operador se la fija con el runbook «Recuperar el
+  # acceso de un usuario». Cuando haya relay, se añaden aquí `keycloakSmtpHost` /
+  # `keycloakSmtpPort` / `keycloakSmtpFrom` (en claro) y —si pide auth— el `Secret`
+  # `sgtm-prod-smtp` (`usuario`/`clave`), que NO genera `bootstrap-secretos.sh`
+  # (INF-06 §1.2). No hace falta relanzar el alta: reenviar el enlace a cada usuario.
   # Sin etiqueta, a propósito: la pone el flujo de liberación (ADR-0011 §5, issue #148).
   sgtm:applicationImageRepository: ghcr.io/hneyra
   # El usuario con que el nodo se autentica contra ghcr.io para traer sgtm-aplicacion,

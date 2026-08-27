@@ -91,8 +91,14 @@ export interface IdentidadArgs {
    * `INF-03` §4).
    */
   correoDePrueba: boolean;
-  /** El relay SMTP con el que Keycloak manda el enlace de clave (ADR-0012). */
-  smtp: SmtpSettings;
+  /**
+   * El relay SMTP con el que Keycloak manda el enlace de clave (ADR-0012).
+   *
+   * `undefined` = el ambiente no tiene relay: el realm no lleva `smtpServer`, el Job
+   * pasa `SIN_CORREO=1` y el usuario se crea sin clave (Opción B, marcha blanca de
+   * `prod`).
+   */
+  smtp?: SmtpSettings;
   /** Ubigeo de la municipalidad implantada: se reconcilian sus usuarios y su grupo. */
   ubigeo: string;
   /** Cuenta del primer administrador. Tiene que ser la del archivo versionado. */
@@ -170,24 +176,28 @@ export function documentosDelRealm(args: {
   domain: string;
   realm: string;
   clienteDeVerificacion: boolean;
-  smtp: SmtpSettings;
+  smtp?: SmtpSettings;
 }): DocumentosDelRealm {
   const versionado = JSON.parse(realmSgtmJson()) as RealmVersionado;
 
+  // El `smtpServer` del archivo versionado apunta al buzon `correo` del compose y NUNCA
+  // llega asi al clúster: o lo decide el stack (ADR-0012), o el ambiente no tiene relay
+  // y el realm va sin `smtpServer` —el Job pasa `SIN_CORREO=1` (Opción B)—.
   const { clients = [], components = {}, ...ajustes } = versionado;
+  delete ajustes.smtpServer;
 
-  // El `smtpServer` del archivo versionado apunta al buzon `correo` del compose. En el
-  // clúster el relay lo decide el stack (ADR-0012): host y remitente en claro, y —si
-  // pide auth— usuario y clave que el Job pone desde el `Secret`, nunca aqui.
-  const smtpServer: Record<string, string> = {
-    host: args.smtp.host,
-    port: String(args.smtp.port),
-    from: args.smtp.from,
-    fromDisplayName: "SGTM",
-    ssl: "false",
-    starttls: String(args.smtp.startTls),
-    auth: String(args.smtp.auth),
-  };
+  const smtpServer: Record<string, string> | undefined =
+    args.smtp === undefined
+      ? undefined
+      : {
+          host: args.smtp.host,
+          port: String(args.smtp.port),
+          from: args.smtp.from,
+          fromDisplayName: "SGTM",
+          ssl: "false",
+          starttls: String(args.smtp.startTls),
+          auth: String(args.smtp.auth),
+        };
 
   const clientes = clients
     // En `prod` no entra el cliente de verificacion. Lo decide la configuracion del
@@ -227,7 +237,12 @@ export function documentosDelRealm(args: {
     // nadie pidio—. La marca de instalacion de demostracion es otra cosa, y va en los
     // documentos que el sistema emite (INF-03 §3.2), no en el formulario de entrada.
     realm: JSON.stringify(
-      { ...ajustes, realm: args.realm, displayName: "SGTM", smtpServer },
+      {
+        ...ajustes,
+        realm: args.realm,
+        displayName: "SGTM",
+        ...(smtpServer === undefined ? {} : { smtpServer }),
+      },
       null,
       2,
     ),
@@ -575,11 +590,14 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
           { name: "KC_CLIENTES", value: documentos.clientesComprobados.join(" ") },
           // Lee `identidades.tsv` del propio ConfigMap (modo «directo»).
           { name: "KC_DIRECTORIO", value: "/realm" },
+          // Sin relay (Opción B): el guion crea al usuario y OMITE el enlace de
+          // clave, en vez de fallar. Un operador la fija con el runbook.
+          ...(smtp === undefined ? [{ name: "SIN_CORREO", value: "1" }] : []),
           // Si el relay pide auth, el usuario y la clave salen del `Secret`
           // `sgtm-<amb>-smtp` —que NO genera `bootstrap-secretos.sh`: lo emite el
           // proveedor del relay (INF-06 §1.2)—. El guion los pone en el realm con
           // `kcadm`, nunca quedan en el `realm.json` versionado.
-          ...(smtp.auth
+          ...(smtp?.auth
             ? [
                 {
                   name: "KC_SMTP_USUARIO",

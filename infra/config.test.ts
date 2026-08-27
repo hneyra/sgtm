@@ -54,6 +54,8 @@ function baseline(environment: Environment = "prod"): Invariants {
       realm: "sgtm",
       developmentMode: false,
       seedTestUsers: isStg,
+      // `stg` tiene relay —el buzon Mailpit del clúster—; `prod` no (ADR-0012,
+      // Opción B): sin relay, el alta crea al usuario sin clave y no incumple nada.
       smtp: isStg
         ? {
             host: "sgtm-stg-correo",
@@ -62,13 +64,7 @@ function baseline(environment: Environment = "prod"): Invariants {
             startTls: false,
             auth: false,
           }
-        : {
-            host: "smtp.example.pe",
-            port: 587,
-            from: "no-responder@example.pe",
-            startTls: true,
-            auth: true,
-          },
+        : undefined,
     },
     application: {
       imageRepository: "ghcr.io/hneyra/sgtm",
@@ -216,31 +212,35 @@ describe("INF-03 §4 — nada de atajos de desarrollo en producción", () => {
     }
   });
 
-  it("un buzon de pruebas como relay SMTP de prod", () => {
+  it("un buzon de pruebas como relay SMTP declarado en prod", () => {
     const c = baseline("prod");
-    c.identity.smtp.host = "sgtm-prod-correo";
+    c.identity.smtp = { host: "sgtm-prod-correo", port: 1025, from: "x@y.pe", startTls: false, auth: true };
     expectViolation(c, "buzón que nadie lee");
   });
 
-  it("el relay SMTP de prod sin autenticacion", () => {
+  it("un relay declarado en prod sin autenticacion", () => {
     const c = baseline("prod");
-    c.identity.smtp.auth = false;
+    c.identity.smtp = { host: "smtp.real.pe", port: 587, from: "x@y.pe", startTls: true, auth: false };
     expectViolation(c, "relay abierto entrega correo de cualquiera");
   });
 });
 
-describe("ADR-0012 — el relay SMTP del alta declarativa de usuarios", () => {
-  it("un remitente sin forma de correo", () => {
-    for (const environment of ["stg", "prod"] as const) {
-      const c = baseline(environment);
-      c.identity.smtp.from = "no-es-un-correo";
-      expectViolation(c, "no tiene forma de dirección de correo");
-    }
+describe("ADR-0012 — el relay SMTP, opcional, y bien declarado si se declara", () => {
+  it("prod sin relay (smtp undefined) no incumple nada", () => {
+    const c = baseline("prod");
+    expect(c.identity.smtp).toBeUndefined();
+    expect(checkInvariants(c)).toEqual([]);
+  });
+
+  it("un remitente sin forma de correo, en el ambiente que sí declara relay", () => {
+    const c = baseline("stg");
+    if (c.identity.smtp) c.identity.smtp.from = "no-es-un-correo";
+    expectViolation(c, "no tiene forma de dirección de correo");
   });
 
   it("un puerto que no es un puerto", () => {
     const c = baseline("stg");
-    c.identity.smtp.port = 70000;
+    if (c.identity.smtp) c.identity.smtp.port = 70000;
     expectViolation(c, "no es un puerto");
   });
 });
@@ -351,8 +351,6 @@ const VALORES_MINIMOS = {
   backupRegion: "us-east-1",
   backupBucket: "sgtm-prod-respaldos",
   keycloakImage: "quay.io/keycloak/keycloak:26.0",
-  keycloakSmtpHost: "smtp.example.pe",
-  keycloakSmtpFrom: "no-responder@example.pe",
   applicationImageRepository: "ghcr.io/hneyra/sgtm",
   applicationBootstrapVersion: "64de42b4c56eb2491e2a61287bceb4b66b6e53d1",
   ubigeo: "200101",
@@ -415,10 +413,25 @@ describe("un valor obligatorio que falta revienta al principio, y dice cuál", (
     expect(leidas.backup.walArchiveTimeoutSeconds).toBe(300);
     expect(leidas.application.webReplicas).toBe(2);
     expect(leidas.identity.realm).toBe("sgtm");
+    // Sin `keycloakSmtpHost` no hay relay (ADR-0012, Opción B).
+    expect(leidas.identity.smtp).toBeUndefined();
     expect(leidas.implantacion.tipo).toBe("DISTRITAL");
     expect(leidas.implantacion.nombreDelAdministrador).toBe("Administrador del sistema");
     expect(leidas.ingress.publishedNodePorts).toEqual([]);
     expect(leidas.backup.restoreSourceBucket).toBeUndefined();
+  });
+
+  it("con `keycloakSmtpHost` puesto, `keycloakSmtpFrom` pasa a ser obligatorio", () => {
+    expect(() =>
+      readInvariants("stg", reader({ ...VALORES_MINIMOS, keycloakSmtpHost: "smtp.real.pe" })),
+    ).toThrow(MissingConfigError);
+    const ok = readInvariants("stg", reader({
+      ...VALORES_MINIMOS,
+      keycloakSmtpHost: "smtp.real.pe",
+      keycloakSmtpFrom: "no-responder@real.pe",
+    }));
+    expect(ok.identity.smtp?.host).toBe("smtp.real.pe");
+    expect(ok.identity.smtp?.auth).toBe(true);
   });
 });
 

@@ -136,15 +136,21 @@ export interface IdentitySettings {
   /**
    * El relay SMTP con el que Keycloak envía el enlace de un solo uso para fijar la
    * clave en el alta declarativa de usuarios (ADR-0012, `execute-actions-email` con
-   * `UPDATE_PASSWORD`). Sin esto no llega el correo y el alta queda a medias.
+   * `UPDATE_PASSWORD`).
    *
-   * El servidor y el remitente no son secretos —van en claro en `Pulumi.<stack>.yaml`,
-   * como `domain`—. El usuario y la clave del relay, si `auth` es true, viven en el
-   * `Secret` `sgtm-<amb>-smtp` y **no** los genera `bootstrap-secretos.sh`: los emite
-   * el proveedor del relay (INF-06 §1.2). En `stg` el relay es un buzón Mailpit del
+   * **Opcional.** Un ambiente que no declara `keycloakSmtpHost` se queda sin relay: el
+   * realm no lleva `smtpServer`, el Job de reconciliación pasa `SIN_CORREO=1` y el
+   * usuario nuevo se crea **sin clave** y con `UPDATE_PASSWORD` pendiente — un operador
+   * se la fija con el runbook «Recuperar el acceso de un usuario». Es el estado de la
+   * marcha blanca de `prod` mientras no haya un relay decidido (D-05).
+   *
+   * Cuando sí se declara: el servidor y el remitente no son secretos —van en claro en
+   * `Pulumi.<stack>.yaml`, como `domain`—; el usuario y la clave del relay, si `auth`
+   * es true, viven en el `Secret` `sgtm-<amb>-smtp` y **no** los genera
+   * `bootstrap-secretos.sh` (INF-06 §1.2). En `stg` el relay es un buzón Mailpit del
    * propio clúster, sin `auth`.
    */
-  smtp: SmtpSettings;
+  smtp?: SmtpSettings;
 }
 
 export interface SmtpSettings {
@@ -382,6 +388,27 @@ function requireText(reader: ConfigReader, key: string, purpose: string): string
 }
 
 /**
+ * El relay SMTP, o `undefined` si el ambiente no lo declara.
+ *
+ * `keycloakSmtpHost` es el interruptor: sin él no hay relay (ADR-0012, Opción B).
+ * Con él, `keycloakSmtpFrom` es obligatorio —medio relay configurado es un defecto,
+ * no un ambiente sin correo—.
+ */
+function readSmtp(reader: ConfigReader): SmtpSettings | undefined {
+  const host = reader.text("keycloakSmtpHost");
+  if (host === undefined || host.trim() === "") {
+    return undefined;
+  }
+  return {
+    host,
+    port: reader.number("keycloakSmtpPort") ?? 587,
+    from: requireText(reader, "keycloakSmtpFrom", "la dirección remitente del correo de Keycloak"),
+    startTls: reader.boolean("keycloakSmtpStartTls") ?? true,
+    auth: reader.boolean("keycloakSmtpAuth") ?? true,
+  };
+}
+
+/**
  * Arma las invariantes desde un lector cualquiera.
  *
  * No valida: valida `checkInvariants`. Aquí solo se decide qué es obligatorio y qué
@@ -445,17 +472,10 @@ export function readInvariants(environment: Environment, reader: ConfigReader): 
       realm: reader.text("keycloakRealm") ?? "sgtm",
       developmentMode: reader.boolean("keycloakDevelopmentMode") ?? false,
       seedTestUsers: reader.boolean("keycloakSeedTestUsers") ?? false,
-      smtp: {
-        host: requireText(
-          reader,
-          "keycloakSmtpHost",
-          "el relay SMTP con el que Keycloak envía el enlace de clave del alta declarativa (ADR-0012)",
-        ),
-        port: reader.number("keycloakSmtpPort") ?? 587,
-        from: requireText(reader, "keycloakSmtpFrom", "la dirección remitente del correo de Keycloak"),
-        startTls: reader.boolean("keycloakSmtpStartTls") ?? true,
-        auth: reader.boolean("keycloakSmtpAuth") ?? true,
-      },
+      // Opcional: sin `keycloakSmtpHost` no hay relay, y el alta declarativa crea el
+      // usuario sin clave (ver el docstring de `IdentitySettings.smtp`). Con host
+      // puesto, `keycloakSmtpFrom` pasa a ser obligatorio: medio relay es un defecto.
+      smtp: readSmtp(reader),
     },
     application: {
       imageRepository: requireText(
@@ -626,29 +646,36 @@ export function checkInvariants(s: Invariants): string[] {
   }
 
   // ── ADR-0012 — el relay SMTP del alta declarativa de usuarios ──────────────
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.identity.smtp.from)) {
-    problems.push(
-      `\`keycloakSmtpFrom\` vale «${s.identity.smtp.from}» y no tiene forma de dirección de ` +
-        "correo. Es el remitente del enlace de un solo uso con que un usuario nuevo fija su " +
-        "clave (ADR-0012); un remitente inválido lo rechazan los relays.",
-    );
-  }
-  if (s.identity.smtp.port < 1 || s.identity.smtp.port > 65535) {
-    problems.push(`\`keycloakSmtpPort\` vale ${s.identity.smtp.port} y no es un puerto.`);
-  }
-  if (isProd && /mailpit|mailhog|-correo(\b|$)|localhost|127\.0\.0\.1/i.test(s.identity.smtp.host)) {
-    problems.push(
-      `\`keycloakSmtpHost\` vale «${s.identity.smtp.host}» en «prod». Es un buzón de pruebas, y ` +
-        "en prod el enlace para fijar la clave tiene que salir por un relay de verdad (INF-03 " +
-        "§4): un buzón que nadie lee deja a cada usuario nuevo sin forma de entrar.",
-    );
-  }
-  if (isProd && !s.identity.smtp.auth) {
-    problems.push(
-      "`keycloakSmtpAuth` es false en «prod». Un relay abierto entrega correo de cualquiera; el " +
-        "de prod se autentica, y su usuario y clave viven en el `Secret` `sgtm-prod-smtp` " +
-        "(INF-06 §1.2).",
-    );
+  // Opcional: un ambiente sin `keycloakSmtpHost` no incumple nada —el alta crea al
+  // usuario sin clave y un operador se la fija—. Lo que se comprueba es que un relay
+  // DECLARADO esté bien declarado.
+  const smtp = s.identity.smtp;
+  if (smtp !== undefined) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(smtp.from)) {
+      problems.push(
+        `\`keycloakSmtpFrom\` vale «${smtp.from}» y no tiene forma de dirección de correo. Es el ` +
+          "remitente del enlace de un solo uso con que un usuario nuevo fija su clave (ADR-0012); " +
+          "un remitente inválido lo rechazan los relays.",
+      );
+    }
+    if (smtp.port < 1 || smtp.port > 65535) {
+      problems.push(`\`keycloakSmtpPort\` vale ${smtp.port} y no es un puerto.`);
+    }
+    if (isProd && /mailpit|mailhog|-correo(\b|$)|localhost|127\.0\.0\.1/i.test(smtp.host)) {
+      problems.push(
+        `\`keycloakSmtpHost\` vale «${smtp.host}» en «prod». Es un buzón de pruebas, y en prod el ` +
+          "enlace para fijar la clave tiene que salir por un relay de verdad (INF-03 §4): un buzón " +
+          "que nadie lee deja a cada usuario nuevo sin forma de entrar. Sin relay decidido, no " +
+          "declares `keycloakSmtpHost` y el alta creará al usuario sin clave (ADR-0012, Opción B).",
+      );
+    }
+    if (isProd && !smtp.auth) {
+      problems.push(
+        "`keycloakSmtpAuth` es false en «prod». Un relay abierto entrega correo de cualquiera; el " +
+          "de prod se autentica, y su usuario y clave viven en el `Secret` `sgtm-prod-smtp` " +
+          "(INF-06 §1.2).",
+      );
+    }
   }
 
   // ── ADR-0011 §3 — ningún secreto de la aplicación en el estado de Pulumi ───
