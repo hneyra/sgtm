@@ -53,7 +53,7 @@ config:
   #   kubectl get node -o jsonpath='{.items[0].status.allocatable.cpu}{"/"}{.items[0].status.allocatable.memory}'
   sgtm:nodeAllocatableCpu: "2"
   sgtm:nodeAllocatableMemory: 6029348Ki
-  sgtm:domain: vmd120205.contabo.net
+  sgtm:domain: vmd120205.contaboserver.net
   sgtm:acmeEmail: operaciones@example.pe
   # Versiones fijadas. Una etiqueta móvil convierte cualquier reinicio del VPS en una
   # actualización no planificada, y en un solo nodo eso pasa en cada mantenimiento.
