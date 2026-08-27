@@ -6,9 +6,11 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
 
@@ -119,6 +121,26 @@ class ManejadorDeErroresTest {
         assertThat(respuesta.getBody().getDetail())
                 .as("este mensaje lo escribimos nosotros y habla del dato, no del esquema")
                 .contains("23 posiciones");
+    }
+
+    @Test
+    @DisplayName("una ruta que ningun controlador mapea es 404, no una incidencia 500")
+    void unaRutaSinControladorEs404() {
+        ResponseEntity<ProblemDetail> respuesta =
+                manejador.rutaNoEncontrada(
+                        new NoResourceFoundException(
+                                HttpMethod.GET,
+                                "/api/v1/indicadores/recaudacion",
+                                "No static resource api/v1/indicadores/recaudacion"));
+
+        assertThat(respuesta.getStatusCode())
+                .as("un endpoint del contrato aun sin implementar no es un error del servidor")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(respuesta.getBody()).isNotNull();
+        assertThat(respuesta.getBody().getProperties())
+                .containsEntry(ManejadorDeErrores.CAMPO_CODIGO, CodigoDeError.NO_ENCONTRADO.name())
+                .as("no es una incidencia: no lleva identificador que buscar en el registro")
+                .doesNotContainKey(ManejadorDeErrores.CAMPO_INCIDENCIA);
     }
 
     @Test
