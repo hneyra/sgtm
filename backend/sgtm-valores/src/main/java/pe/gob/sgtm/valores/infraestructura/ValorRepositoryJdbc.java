@@ -152,6 +152,14 @@ public class ValorRepositoryJdbc extends RepositorioJdbc implements ValorReposit
     }
 
     @Override
+    public Optional<Valor> porId(long id) {
+        return jdbc().sql("SELECT " + COLUMNAS_VALOR + " FROM valor WHERE id = :id")
+                .param("id", id)
+                .query(this::mapearValor)
+                .optional();
+    }
+
+    @Override
     public List<ValorDetalle> detalleDe(long valorId) {
         return jdbc().sql(
                         "SELECT id, valor_id, tributo, ejercicio, periodo, predio_id,"
