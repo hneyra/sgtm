@@ -58,6 +58,30 @@ Keycloak le manda un enlace de un solo uso —que en la marcha blanca cae en el 
 `correo`, <http://localhost:8025>— y **fija su clave al entrar**. Nadie llega a ver una
 clave. Idempotente: volver a correrlo no reenvía el correo ni toca a quien ya existe.
 
+### Si a un usuario no le llegó el correo
+
+Dos caminos, según haya SMTP o no; los dos terminan con el usuario eligiendo su clave.
+`kc()` aquí es `docker compose exec -T identidad /opt/keycloak/bin/kcadm.sh`. El
+equivalente para el clúster y las comprobaciones de que salió bien están en el runbook
+[Recuperar el acceso de un usuario](../../docs/B0-operacion/runbooks/recuperar-el-acceso-de-un-usuario.md).
+
+```bash
+kc config credentials --server http://localhost:8080 --realm master \
+  --user admin --password "$SGTM_CLAVE_KEYCLOAK"
+UID=$(kc get users -r sgtm -q username=<cuenta> -q exact=true \
+  --fields id --format csv --noquotes | tr -d '\r' | sed -n 1p)
+
+# A) Reenviar el enlace (con el buzon `correo` arriba). El anterior queda invalidado.
+kc update "users/$UID/execute-actions-email" -r sgtm -b '["UPDATE_PASSWORD"]'
+
+# B) Sin correo: clave TEMPORAL que Keycloak obliga a cambiar en el primer acceso.
+#    Se entrega fuera de banda; no se escribe en un ticket.
+kc set-password -r sgtm --username <cuenta> --new-password "$(openssl rand -base64 18)" --temporary
+```
+
+Un usuario **ya establecido** que olvidó su clave no necesita nada de esto: usa el enlace
+«¿Olvidó su contraseña?» de la pantalla de acceso (`resetPasswordAllowed` está activo).
+
 `crear-usuario.sh` sigue aquí para los usuarios `verificacion` de CI, que necesitan una
 clave conocida para el *direct grant*:
 

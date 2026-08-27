@@ -56,8 +56,14 @@ Exige SMTP configurado en el realm. El servidor y el remitente no son secretos (
 `sgtm-<amb>-smtp` y **no** los genera `bootstrap-secretos.sh` —los emite el proveedor del relay
 ([`INF-06`](../../80-infraestructura/gestion-de-secretos.md) §1.2)—. En `stg` el relay es un
 buzón Mailpit del propio clúster; en `prod` es un relay de verdad y externo, y `config.ts`
-rechaza que `keycloakSmtpHost` apunte a un buzón (`INF-03` §4). Fallback sin SMTP: fijar una
-clave temporal a mano con `kcadm set-password --temporary`.
+rechaza que `keycloakSmtpHost` apunte a un buzón (`INF-03` §4).
+
+Si el correo no llega —SMTP mal configurado, filtrado, dirección equivocada— hay dos salidas,
+las dos con el usuario eligiendo su clave al final: reenviar el enlace
+(`execute-actions-email`) una vez arreglado el relay, o fijar una clave **temporal** a mano
+con `kcadm set-password --temporary` y entregarla fuera de banda. El procedimiento copiable
+está en el runbook
+[Recuperar el acceso de un usuario](../../B0-operacion/runbooks/recuperar-el-acceso-de-un-usuario.md).
 
 ### 3. Reconciliación, como el realm
 
@@ -127,6 +133,8 @@ que une las dos mitades (ADR-0005)—.
   [`ADR-0011`](ADR-0011-infraestructura-como-codigo.md) §3, §5 — la frontera con los secretos y
   con el flujo de liberación
 - [`INF-06`](../../80-infraestructura/gestion-de-secretos.md) §1.2 — el `Secret` `sgtm-<amb>-smtp`
+- [Recuperar el acceso de un usuario](../../B0-operacion/runbooks/recuperar-el-acceso-de-un-usuario.md)
+  — el runbook para cuando el correo no llega
 - [`despliegue/identidad/README.md`](../../../despliegue/identidad/README.md) ·
   [`despliegue/identidad/municipalidades/README.md`](../../../despliegue/identidad/municipalidades/README.md)
 - `ImplantarMunicipalidad` — el otro lado del alta: la fila de `usuario`, el grupo del dominio y
