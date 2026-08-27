@@ -220,23 +220,32 @@ class ImplantarMunicipalidadTest {
         }
 
         @Test
-        @DisplayName("el administrador NO recibe las 134 opciones: solo las de seguridad")
-        void elAdministradorNoRecibeTodo() {
+        @DisplayName("el administrador recibe el catalogo entero, no solo el modulo de seguridad")
+        void elAdministradorRecibeTodoElCatalogo() {
             long municipalidad = implantar("250203", "admin.250203");
             TenantContext.fijar(new MunicipalidadId(municipalidad));
 
-            // Puede administrar la seguridad...
+            // Administra la seguridad...
             assertThat(comprobador.autoriza("admin.250203", "usuarios", Privilegio.REGISTRO, HOY))
                     .isTrue();
-            // ...y no puede, de entrada, tocar el padron.
+            // ...y tambien el padron, la caja y todo lo demas: administra la municipalidad
+            // entera, no solo su seguridad (REQ-03 §3).
             assertThat(
                             comprobador.autoriza(
                                     "admin.250203", "contribuyentes", Privilegio.REGISTRO, HOY))
-                    .as(
-                            "darle de entrada las 134 opciones seria comodo el primer dia y dejaria"
-                                    + " una cuenta con todo para siempre: nadie vuelve a quitarle nada"
-                                    + " a la cuenta que funciona")
-                    .isFalse();
+                    .as("el administrador inicial administra toda la municipalidad")
+                    .isTrue();
+
+            // Cada opcion del catalogo, con cada uno de los siete privilegios.
+            for (CatalogoDeOpciones.Opcion opcion : CatalogoDeOpciones.leer()) {
+                for (Privilegio privilegio : EnumSet.allOf(Privilegio.class)) {
+                    assertThat(
+                                    comprobador.autoriza(
+                                            "admin.250203", opcion.codigo(), privilegio, HOY))
+                            .as("%s / %s", opcion.codigo(), privilegio)
+                            .isTrue();
+                }
+            }
 
             TenantContext.limpiar();
         }

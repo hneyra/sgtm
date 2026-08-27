@@ -83,16 +83,6 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
     /** El grupo del que cuelgan los permisos del primer administrador. */
     static final String GRUPO_DE_ADMINISTRACION = "Administracion del sistema";
 
-    /**
-     * Modulo del catalogo cuyas opciones recibe el administrador inicial.
-     *
-     * <p>Es el codigo que el catalogo <b>deriva</b> del nombre del modulo —«Seguridad» en
-     * mayusculas, sin tildes ni puntuacion—, no el nombre del contexto acotado. La diferencia entre
-     * los dos hizo que la primera version otorgara cero permisos, y lo detecto la comprobacion de
-     * abajo en vez de dejar una municipalidad implantada sin quien la administre.
-     */
-    static final String MODULO_DE_SEGURIDAD = "SEGURIDAD";
-
     /** La opcion que hace administrador a quien la tiene. Se otorga primero; ver mas abajo. */
     static final String ACCESO_QUE_ADMINISTRA = "permisos";
 
@@ -158,7 +148,9 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
                                 Usuario admin = administrador(porQue);
                                 afiliar(grupo, admin, porQue);
                                 return new Resumen(
-                                        nuevos, admin.cuenta(), permisosDeSeguridad(grupo, porQue));
+                                        nuevos,
+                                        admin.cuenta(),
+                                        permisosDelAdministrador(grupo, porQue));
                             });
             if (resumen == null) {
                 throw new IllegalStateException("La implantacion no devolvio resumen");
@@ -237,24 +229,31 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
     }
 
     /**
-     * Los permisos con que arranca el administrador: <b>los del modulo de seguridad, y ninguno
-     * mas</b>.
+     * Los permisos con que arranca el administrador: <b>el catalogo entero, los siete
+     * privilegios</b>.
      *
-     * <p>Es deliberadamente poco. Con ellos puede crear grupos, usuarios y permisos, y desde ahi
-     * repartir el resto del sistema segun quien haga que en la municipalidad. Darle de entrada las
-     * 134 opciones seria mas comodo el primer dia y dejaria una cuenta con todo para siempre,
-     * porque nadie vuelve a quitarle nada a la cuenta que funciona.
+     * <p>El administrador inicial de una municipalidad la administra <b>toda</b>, no solo su
+     * seguridad: recibe las 134 opciones de los 12 modulos con {@link Privilegio} completo. Desde
+     * ahi crea los grupos funcionales de REQ-03 §3 —Jefe de Rentas, Cajero, Fiscalizador…— y les
+     * reparte lo que a cada uno le toca; lo que no se puede es que la primera cuenta capaz de
+     * repartir permisos no llegue a la pantalla donde se reparten.
      *
-     * <p>La lista sale del catalogo y no de constantes: una pantalla nueva de seguridad entra sola,
-     * que es lo mismo que promete la siembra de accesos.
+     * <p>Esto no deja una cuenta que lo pueda todo sin control: las reglas de separacion de
+     * funciones (REQ-03 §4, SoD-1…SoD-5) se verifican en el servidor <b>al margen de los
+     * permisos</b> —quien carga un parametro sigue sin poder aprobarlo, tenga o no el privilegio—.
+     * Y es idempotente y no destructivo: si despues se le acota el alcance a este grupo, un
+     * relanzamiento del despliegue no lo vuelve a abrir (la guarda del ultimo administrador impide
+     * que quede en cero, no que quede en poco).
+     *
+     * <p>La lista sale del catalogo y no de constantes: una pantalla nueva entra sola, que es lo
+     * mismo que promete la siembra de accesos.
      */
-    private int permisosDeSeguridad(Grupo grupo, Observacion porQue) {
+    private int permisosDelAdministrador(Grupo grupo, Observacion porQue) {
         long grupoId = exigirId(grupo.id(), "grupo");
         Set<Privilegio> todos = EnumSet.allOf(Privilegio.class);
 
         List<String> opciones =
                 CatalogoDeOpciones.leer().stream()
-                        .filter(opcion -> MODULO_DE_SEGURIDAD.equals(opcion.moduloCodigo()))
                         .map(CatalogoDeOpciones.Opcion::codigo)
                         // `permisos` primero, y no es cosmetico: AdministrarPermisos rechaza
                         // —despues de escribir, dentro de la misma transaccion— cualquier cambio
@@ -274,11 +273,9 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
 
         if (opciones.isEmpty()) {
             throw new IllegalStateException(
-                    "El catalogo no trae ninguna opcion del modulo '"
-                            + MODULO_DE_SEGURIDAD
-                            + "'. Un administrador sin permisos sobre la seguridad no puede darse"
-                            + " permisos a si mismo ni a nadie, y de ahi solo se sale por la base"
-                            + " de datos");
+                    "El catalogo de opciones vino vacio. Un administrador sin ningun permiso no"
+                            + " puede darse permisos a si mismo ni a nadie, y de ahi solo se sale"
+                            + " por la base de datos");
         }
 
         for (String codigo : opciones) {
