@@ -111,6 +111,27 @@ describe('las insignias de estado, texto sobre su propio fondo', () => {
     expect(razon, `${frente} sobre ${fondo}: ${razon.toFixed(2)}:1`).toBeGreaterThanOrEqual(MINIMO);
   });
 
+  it('el texto sobre el relleno del acento se lee en los dos temas', () => {
+    // `--accent-ink` sobre `--accent-soft` es el par del avatar de la cabecera y
+    // del icono del lanzador abierto. El tema oscuro redefinia el relleno y no
+    // la tinta: el icono quedaba a 1,2:1 sobre su propio fondo, que es
+    // exactamente el sitio donde nadie mira hasta que un usuario lo dice.
+    for (const [tema, tokens] of [
+      ['claro', CLARO],
+      ['oscuro', OSCURO],
+    ] as const) {
+      const tinta = tokens['--accent-ink'];
+      const relleno = tokens['--accent-soft'];
+      expect(tinta, `--accent-ink sin valor en el tema ${tema}`).toBeDefined();
+      expect(relleno, `--accent-soft sin valor en el tema ${tema}`).toBeDefined();
+      const razon = contraste(tinta ?? '#000000', relleno ?? '#ffffff');
+      expect(
+        razon,
+        `--accent-ink sobre --accent-soft en tema ${tema}: ${razon.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(MINIMO);
+    }
+  });
+
   it('la de advertencia es la que FRO-02 §5 dejo escrita', () => {
     expect(CLARO['--warn-bg']).toBe('#f6ecd9');
     expect(CLARO['--warn-fg']).toBe('#8a6420');

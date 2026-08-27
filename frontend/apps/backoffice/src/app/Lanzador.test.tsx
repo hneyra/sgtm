@@ -1,66 +1,24 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { montarEnRuta } from '../pruebas/montar';
+import { CAJERO, entraCon, entraSinPoderLeerPermisos, limpiarSesion } from '../pruebas/sesion';
 
 /**
- * Las dos puertas de la cabecera (ADR-0014 §2 y §3): el lanzador de nueve
- * puntos y el menu de la persona.
+ * El lanzador de nueve puntos (ADR-0014 §2).
  *
- * Lo que se comprueba no es que «se abra un menu»: es que las dos puertas
- * ensenan **el catalogo visible y solo el** (REQ-03 §5), que se operan enteras
- * con el teclado (RNF-082), y que sin sesion el menu dice la verdad: no ofrece
- * cerrar lo que no esta abierto.
+ * Lo que se comprueba no es que «se abra un menu»: es que ensena **el catalogo
+ * visible y solo el** (REQ-03 §5) y que se opera entero con el teclado
+ * (RNF-082) con el patron `menu` de APG —foco itinerante, Enter sobre la
+ * entrada **enfocada**, Esc desde donde sea—.
+ *
+ * Las pruebas del menu de la persona viven en `MenuDeLaPersona.test.tsx`, junto
+ * a su componente (FRO-04 §2).
  */
 
-/** Los permisos de un cajero, tal como los describe REQ-03 §3: caja, sin coactiva. */
-const CAJERO = {
-  caja_tributaria: ['ejecucion', 'lectura', 'registro'],
-  caja_tasas: ['ejecucion', 'lectura', 'registro'],
-  duplicado_recibo: ['ejecucion', 'lectura', 'impresion'],
-};
-
-const CONFIGURACION = {
-  VITE_SGTM_OIDC_CLIENTE: 'sgtm-backoffice',
-  VITE_SGTM_OIDC_AUTORIZACION: 'https://identidad.gob.pe/oauth2/authorize',
-  VITE_SGTM_OIDC_TOKEN: 'https://identidad.gob.pe/oauth2/token',
-};
-
-const base64url = (texto: string) =>
-  btoa(texto).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-const originalFetch = globalThis.fetch;
-
-/**
- * Entra un usuario con estos permisos, como en `permisos.test.tsx`: el token
- * solo autentica y la matriz la responde `GET /seguridad/sesion/permisos`
- * (ADR-0013).
- */
-function entraCon(permisos: Readonly<Record<string, readonly string[]>>): void {
-  for (const [clave, valor] of Object.entries(CONFIGURACION)) vi.stubEnv(clave, valor);
-  const token = `${base64url('{"alg":"none"}')}.${base64url(
-    JSON.stringify({
-      name: 'María Quispe',
-      municipalidad_nombre: 'Municipalidad Provincial de Sullana',
-      exp: 2_000_000_000,
-    }),
-  )}.firma`;
-
-  const proxy = globalThis.fetch;
-  globalThis.fetch = ((entrada: RequestInfo | URL, opciones?: RequestInit) => {
-    const url = typeof entrada === 'string' ? entrada : String(entrada);
-    if (url.startsWith('https://identidad.gob.pe')) {
-      return Promise.resolve(
-        new Response(JSON.stringify({ access_token: token, expires_in: 300 }), { status: 200 }),
-      );
-    }
-    if (url.replace(/^.*\/api\/v1/, '') === '/seguridad/sesion/permisos') {
-      return Promise.resolve(new Response(JSON.stringify(permisos), { status: 200 }));
-    }
-    return proxy(entrada, opciones);
-  }) as typeof fetch;
-}
+/** Las entradas del panel, en el orden en que se dibujan. */
+const entradasDelPanel = () => screen.getAllByRole('menuitem');
 
 beforeEach(() => {
   instalarProxyDeDatos({ latencia: false });
@@ -68,9 +26,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.unstubAllEnvs();
+  limpiarSesion();
   desinstalarProxyDeDatos();
-  globalThis.fetch = originalFetch;
 });
 
 describe('el lanzador ensena el catalogo visible, no el entero', () => {
@@ -83,7 +40,7 @@ describe('el lanzador ensena el catalogo visible, no el entero', () => {
     expect(boton).toHaveAttribute('aria-expanded', 'false');
     await usuario.click(boton);
 
-    const menu = screen.getByRole('menu', { name: 'Módulos del sistema' });
+    const menu = screen.getByRole('menu', { name: 'Lanzador de módulos' });
     // El mismo filtro que la barra, el hub y la paleta (REQ-03 §5): el modulo
     // del cajero esta, y el que sus permisos niegan no aparece ni vacio.
     expect(within(menu).getByText('Tesorería')).toBeInTheDocument();
@@ -98,7 +55,18 @@ describe('el lanzador ensena el catalogo visible, no el entero', () => {
     montarEnRuta('/inicio/inicio');
 
     await usuario.click(screen.getByRole('button', { name: 'Abrir los módulos' }));
-    expect(screen.getAllByRole('menuitem')).toHaveLength(12);
+    expect(entradasDelPanel()).toHaveLength(12);
+  });
+
+  it('sin ningun modulo visible el boton no existe: no hay nada que lanzar', async () => {
+    // Con proveedor y la matriz ilegible (500) la autorizacion es negacion por
+    // omision: cero modulos. Un lanzador que abriera un panel vacio prometeria
+    // lo que los permisos niegan, asi que no se dibuja el boton siquiera.
+    entraSinPoderLeerPermisos();
+    montarEnRuta('/tesoreria');
+
+    expect(await screen.findByText('Ese módulo no existe')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Abrir los módulos' })).not.toBeInTheDocument();
   });
 
   it('elegir un modulo con el raton navega a su hub y cierra el panel', async () => {
@@ -111,34 +79,97 @@ describe('el lanzador ensena el catalogo visible, no el entero', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(await screen.findByRole('heading', { level: 2, name: 'Valores' })).toBeInTheDocument();
   });
+
+  it('al abrir con el raton ninguna entrada sale resaltada', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/inicio/inicio');
+
+    const boton = screen.getByRole('button', { name: 'Abrir los módulos' });
+    await usuario.click(boton);
+
+    // El foco se queda en el boton: sin resalte fantasma sobre la primera
+    // entrada, que con el raton nadie ha elegido.
+    expect(boton).toHaveFocus();
+    expect(entradasDelPanel().some((entrada) => entrada === document.activeElement)).toBe(false);
+  });
 });
 
 describe('el lanzador se opera entero con el teclado (RNF-082)', () => {
-  it('Enter abre, las flechas recorren, Enter navega y el panel se cierra', async () => {
+  it('Enter abre y el foco entra a la primera entrada', async () => {
     const usuario = userEvent.setup();
     montarEnRuta('/inicio/inicio');
 
     const boton = screen.getByRole('button', { name: 'Abrir los módulos' });
     boton.focus();
     await usuario.keyboard('{Enter}');
-    const menu = screen.getByRole('menu', { name: 'Módulos del sistema' });
+
     expect(boton).toHaveAttribute('aria-expanded', 'true');
+    // `aria-controls` apunta al panel que el boton acaba de abrir.
+    const menu = screen.getByRole('menu', { name: 'Lanzador de módulos' });
+    expect(boton).toHaveAttribute('aria-controls', menu.id);
+    expect(entradasDelPanel()[0]).toHaveFocus();
+  });
+
+  it('las flechas mueven el foco de verdad, y Enter abre la entrada enfocada', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/inicio/inicio');
+
+    const boton = screen.getByRole('button', { name: 'Abrir los módulos' });
+    boton.focus();
+    await usuario.keyboard('{Enter}');
 
     // Dos flechas abajo: del primero (Inicio) al tercero (Rentas · Registro).
     await usuario.keyboard('{ArrowDown}{ArrowDown}');
-    expect(within(menu).getByRole('menuitem', { current: true })).toHaveTextContent(
-      'Rentas · Registro',
-    );
+    expect(entradasDelPanel()[2]).toHaveFocus();
+    expect(document.activeElement).toHaveTextContent('Rentas · Registro');
     // Una arriba: el recorrido va en las dos direcciones.
     await usuario.keyboard('{ArrowUp}');
-    expect(within(menu).getByRole('menuitem', { current: true })).toHaveTextContent('Catastro');
+    expect(document.activeElement).toHaveTextContent('Catastro');
 
     await usuario.keyboard('{Enter}');
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(await screen.findByRole('heading', { level: 2, name: 'Catastro' })).toBeInTheDocument();
   });
 
-  it('Esc cierra sin navegar y el foco queda en el boton', async () => {
+  it('Enter abre la entrada que tiene el foco, no la primera', async () => {
+    // Este es el defecto que el patron APG corrige: el panel interceptaba Enter
+    // y abria la entrada que llevaba marcada, que con el foco en otra —llegando
+    // con Tab, o tras mover el foco— no era la que el usuario estaba mirando.
+    const usuario = userEvent.setup();
+    montarEnRuta('/inicio/inicio');
+
+    await usuario.click(screen.getByRole('button', { name: 'Abrir los módulos' }));
+    const quinta = entradasDelPanel()[4];
+    expect(quinta).toBeDefined();
+    quinta?.focus();
+    await usuario.keyboard('{Enter}');
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tránsito' })).toBeInTheDocument();
+  });
+
+  it('las entradas no son tabulables: el recorrido es con flechas', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/inicio/inicio');
+
+    await usuario.click(screen.getByRole('button', { name: 'Abrir los módulos' }));
+    for (const entrada of entradasDelPanel()) expect(entrada).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('la flecha abajo abre y entra sin pasar por Enter, y Fin lleva a la ultima', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/inicio/inicio');
+
+    screen.getByRole('button', { name: 'Abrir los módulos' }).focus();
+    await usuario.keyboard('{ArrowDown}');
+    expect(entradasDelPanel()[0]).toHaveFocus();
+
+    await usuario.keyboard('{End}');
+    expect(entradasDelPanel().at(-1)).toHaveFocus();
+    expect(document.activeElement).toHaveTextContent('Seguridad');
+  });
+
+  it('Esc cierra sin navegar y el foco vuelve al boton', async () => {
     const usuario = userEvent.setup();
     montarEnRuta('/inicio/inicio');
 
@@ -153,6 +184,21 @@ describe('el lanzador se opera entero con el teclado (RNF-082)', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/recaudación/i);
   });
 
+  it('Esc cierra aunque el foco haya salido del panel', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/inicio/inicio');
+
+    const boton = screen.getByRole('button', { name: 'Abrir los módulos' });
+    await usuario.click(boton);
+    // El foco se va a otro control de la cabecera —con Tab, o con un clic que
+    // no cierre—: el oyente del panel ya no lo ve pasar.
+    screen.getByRole('button', { name: 'Abrir la navegación' }).focus();
+    await usuario.keyboard('{Escape}');
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(boton).toHaveFocus();
+  });
+
   it('el clic fuera cierra el panel', async () => {
     const usuario = userEvent.setup();
     montarEnRuta('/inicio/inicio');
@@ -162,56 +208,5 @@ describe('el lanzador se opera entero con el teclado (RNF-082)', () => {
 
     await usuario.click(screen.getByRole('heading', { level: 1 }));
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-  });
-});
-
-describe('el menu de la persona dice la verdad', () => {
-  it('sin sesion no ofrece «Cerrar sesión», y lo personal sale del catalogo', async () => {
-    const usuario = userEvent.setup();
-    // Sin proveedor de identidad: como contra el proxy de datos. Hay catalogo
-    // entero que ver, pero ninguna sesion que cerrar.
-    montarEnRuta('/inicio/inicio');
-
-    expect(screen.getByText('Sin sesión')).toBeInTheDocument();
-    await usuario.click(screen.getByRole('button', { name: 'Abrir el menú personal' }));
-
-    const menu = screen.getByRole('menu', { name: 'Menú personal' });
-    // Las dos puertas del catalogo, resueltas por el catalogo: la opcion
-    // `cambiar_anio` con su titulo y el modulo Seguridad con su etiqueta.
-    expect(
-      within(menu).getByRole('menuitem', { name: 'Cambiar el año de trabajo' }),
-    ).toBeInTheDocument();
-    expect(within(menu).getByRole('menuitem', { name: 'Seguridad' })).toBeInTheDocument();
-    expect(within(menu).queryByRole('menuitem', { name: 'Cerrar sesión' })).not.toBeInTheDocument();
-  });
-
-  it('«Cambiar el año de trabajo» lleva a la opcion de Seguridad', async () => {
-    const usuario = userEvent.setup();
-    montarEnRuta('/inicio/inicio');
-
-    await usuario.click(screen.getByRole('button', { name: 'Abrir el menú personal' }));
-    await usuario.click(screen.getByRole('menuitem', { name: 'Cambiar el año de trabajo' }));
-
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
-      'Cambiar el año de trabajo',
-    );
-  });
-
-  it('con la sesion del cajero ofrece cerrar sesion, y no lo que sus permisos niegan', async () => {
-    const usuario = userEvent.setup();
-    entraCon(CAJERO);
-    montarEnRuta('/tesoreria/caja-tributaria');
-
-    await usuario.click(await screen.findByRole('button', { name: 'Abrir el menú personal' }));
-
-    const menu = screen.getByRole('menu', { name: 'Menú personal' });
-    expect(within(menu).getByRole('menuitem', { name: 'Cerrar sesión' })).toBeInTheDocument();
-    // El cajero no ve la opcion `cambiar_anio` ni el modulo Seguridad: sus
-    // entradas no estan, igual que no estan en la barra ni en la paleta.
-    expect(
-      within(menu).queryByRole('menuitem', { name: 'Cambiar el año de trabajo' }),
-    ).not.toBeInTheDocument();
-    expect(within(menu).queryByRole('menuitem', { name: 'Seguridad' })).not.toBeInTheDocument();
   });
 });

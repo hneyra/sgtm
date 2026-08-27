@@ -66,6 +66,11 @@
   --line: #2a2620;
   --line-2: #3a352c;
   --accent-soft: #1c2a3f;
+  /* El tema oscuro redefinia el relleno del acento y no su tinta: #0e1f33
+     sobre #1c2a3f da 1,15:1, y ahi van el icono del lanzador abierto y las
+     iniciales del avatar. Navy aclarado, 10,76:1, verificado en
+     contraste.test.ts. */
+  --accent-ink: #cfe0f5;
   /* Terracota aclarada: 7,2:1 sobre la tarjeta oscura. */
   --error-texto: #d98f6b;
 }

@@ -43,6 +43,12 @@ const BLOQUES_TECNICOS = new Set([
  * con cuantas opciones lleva cada uno. Es la contraparte de la tabla
  * `GRUPOS_POR_TAREA` del portador: si una regeneracion perdiera una opcion,
  * la moviera de grupo o desordenara los grupos, aqui se pone rojo.
+ *
+ * **Esta copiada a mano a proposito, y no se «simplifica» derivandola de
+ * `modulo.bloques`**: derivarla la volveria tautologica —el generado se
+ * compararia consigo mismo— y dejaria de cazar lo unico que viene a cazar, que
+ * es un archivo generado editado a mano o regenerado desde una tabla cambiada
+ * sin querer.
  */
 const GRUPOS_POR_TAREA_ESPERADOS: Readonly<Record<string, readonly (readonly [string, number])[]>> =
   {

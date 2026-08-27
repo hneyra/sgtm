@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Icono, IconoDeModulo } from '@sgtm/design-system';
-import { bloquesDe, rutaDeModulo, rutaDeOpcion } from '../catalogo';
+import { bloquesDe, conteoDeOpciones, rutaDeModulo, rutaDeOpcion } from '../catalogo';
 import { useCatalogoVisible } from './sesion/useCatalogoVisible';
 import type { ModuloDelCatalogo } from '../catalogo';
 import { usePreferencias } from './preferencias';
@@ -106,9 +106,7 @@ export function BarraLateral({
               </span>
               <span className="sgtm-nav__modulo-texto">
                 <span className="sgtm-nav__modulo-etiqueta">{m.label}</span>
-                <span className="sgtm-nav__modulo-conteo">
-                  {m.opciones.length} {m.opciones.length === 1 ? 'opción' : 'opciones'}
-                </span>
+                <span className="sgtm-nav__modulo-conteo">{conteoDeOpciones(m)}</span>
               </span>
               <Icono nombre="chevronDerecha" tamano={14} />
             </button>

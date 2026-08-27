@@ -3,7 +3,7 @@ import { rutaDeModulo } from '../catalogo';
 import { usePreferencias } from './preferencias';
 import { useSesion } from './sesion/ProveedorDeSesion';
 import { useCatalogoVisible } from './sesion/useCatalogoVisible';
-import { useMenuDeCabecera } from './useMenuDeCabecera';
+import { MenuDeCabecera } from './MenuDeCabecera';
 
 /**
  * El menu de la persona: el usuario de la cabecera abre lo suyo (ADR-0014 §3).
@@ -11,12 +11,16 @@ import { useMenuDeCabecera } from './useMenuDeCabecera';
  * Cada entrada existe **solo si opera de verdad** —sin sesion, el menu dice la
  * verdad—:
  *
- * - «Cambiar el año de trabajo» es la opcion `cambiar_anio` de Seguridad, y se
- *   resuelve por el catalogo visible: si los permisos no la dejan ver, no esta.
+ * - «Cambiar el año» es la opcion `cambiar_anio` de Seguridad, y se resuelve
+ *   por el catalogo visible: si los permisos no la dejan ver, no esta.
  * - «Seguridad» es la ruta del modulo, si es visible. El modulo conserva su
  *   entrada en el lanzador: dos puertas, mismo permiso, misma pantalla.
  * - «Cerrar sesión» solo con sesion abierta, con el cierre que expone
  *   `ProveedorDeSesion` (`salir`).
+ *
+ * De las tres entradas que ADR-0014 §3 enumera falta **«Preferencias»**, y es
+ * deliberado: todavia no hay panel de preferencias que abrir, y una entrada que
+ * no lleva a ningun sitio es peor que no tenerla.
  *
  * Si no queda ninguna entrada, el usuario se muestra como hasta ahora: un
  * chip, no un boton que no abre nada.
@@ -27,6 +31,13 @@ interface EntradaDelMenu {
   readonly etiqueta: string;
   readonly elegir: () => void;
 }
+
+const CLASES = {
+  contenedor: 'sgtm-menu-persona',
+  boton: 'sgtm-cabecera__usuario sgtm-menu-persona__boton',
+  panel: 'sgtm-menu-persona__panel',
+  entrada: 'sgtm-menu-persona__entrada',
+};
 
 export function MenuDeLaPersona() {
   const navegar = useNavigate();
@@ -40,12 +51,13 @@ export function MenuDeLaPersona() {
   const entradas: EntradaDelMenu[] = [];
   // La opcion se busca por su identificador de catalogo —la clave del
   // permiso—, no por una ruta cableada: si manana cambia de ranura, esta
-  // puerta la sigue.
+  // puerta la sigue. Se nombra con su `label`, que es como la nombran la
+  // barra, la paleta y el lanzador: misma opcion, mismo nombre en cada puerta.
   const cambiarAnio = catalogo.opciones.find((opcion) => opcion.id === 'cambiar_anio');
   if (cambiarAnio) {
     entradas.push({
       id: cambiarAnio.id,
-      etiqueta: cambiarAnio.title,
+      etiqueta: cambiarAnio.label,
       elegir: () => navegar(cambiarAnio.ruta),
     });
   }
@@ -60,8 +72,6 @@ export function MenuDeLaPersona() {
   if (sesion.datos !== null) {
     entradas.push({ id: 'salir', etiqueta: 'Cerrar sesión', elegir: sesion.salir });
   }
-
-  const menu = useMenuDeCabecera(entradas.length, (indice) => entradas[indice]?.elegir());
 
   const chip = (
     <>
@@ -81,49 +91,21 @@ export function MenuDeLaPersona() {
   }
 
   return (
-    <div className="sgtm-menu-persona" ref={menu.contenedor}>
-      <button
-        type="button"
-        ref={menu.boton}
-        className="sgtm-cabecera__usuario sgtm-menu-persona__boton"
-        aria-label="Abrir el menú personal"
-        aria-haspopup="menu"
-        aria-expanded={menu.abierto}
-        onClick={menu.alternar}
-        onKeyDown={menu.alTeclear}
-      >
-        {chip}
-      </button>
-      {menu.abierto && (
-        // El teclado tambien se atiende aqui por si el foco entro a una
-        // entrada con Tab: las flechas siguen recorriendo el menu.
-        <div
-          className="sgtm-menu-persona__panel"
-          role="menu"
-          aria-label="Menú personal"
-          onKeyDown={menu.alTeclear}
-          // Focalizable por codigo, nunca por Tab: el foco vive en el boton.
-          tabIndex={-1}
-        >
-          {entradas.map((entrada, i) => (
-            <button
-              key={entrada.id}
-              type="button"
-              role="menuitem"
-              className="sgtm-menu-persona__entrada"
-              data-elegido={i === menu.activo ? '1' : '0'}
-              aria-current={i === menu.activo ? 'true' : undefined}
-              onClick={() => {
-                entrada.elegir();
-                menu.cerrar();
-              }}
-            >
-              {entrada.etiqueta}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <MenuDeCabecera
+      clases={CLASES}
+      // El nombre accesible **contiene el nombre visible** (WCAG 2.5.3): quien
+      // dicta por voz dice lo que lee, y es ademas el unico sitio de la
+      // cabecera que dice quien esta en la caja.
+      etiquetaDelBoton={`Menú de ${quien}`}
+      etiquetaDelPanel="Menú personal"
+      entradas={entradas.map((entrada) => ({
+        id: entrada.id,
+        contenido: entrada.etiqueta,
+        elegir: entrada.elegir,
+      }))}
+    >
+      {chip}
+    </MenuDeCabecera>
   );
 }
 

@@ -109,7 +109,19 @@ const normalizar = (texto: string): string =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
-/** Las opciones de un modulo repartidas en sus bloques, en el orden de FRO-03 §4. */
+/**
+ * «12 opciones», o «1 opción». La misma fila la dibujan la barra lateral y el
+ * lanzador, y una de las dos pluralizando distinto seria un defecto tonto.
+ */
+export const conteoDeOpciones = (modulo: ModuloDelCatalogo): string =>
+  `${modulo.opciones.length} ${modulo.opciones.length === 1 ? 'opción' : 'opciones'}`;
+
+/**
+ * Las opciones de un modulo repartidas en sus bloques, **en el orden que el
+ * propio modulo declara**: los grupos por tarea donde el modulo esta disenado
+ * (ADR-0014 §4) y los cuatro bloques tecnicos de FRO-03 §4 en los demas. El
+ * orden lo fija el portador del catalogo; aqui solo se reparte.
+ */
 export function bloquesDe(
   modulo: ModuloDelCatalogo,
 ): readonly { readonly label: string; readonly opciones: readonly OpcionDelCatalogo[] }[] {
