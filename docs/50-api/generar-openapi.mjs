@@ -214,6 +214,41 @@ const OPERACIONES_ADICIONALES = {
         ' vía y no cambia.',
     },
   ],
+  // `sectores` declara «GET /catastro/sectores» como su endpoint —la lectura del
+  // catálogo territorial—; el alta y la edición del sector, y el alta de una
+  // manzana dentro de él, necesitan sus propios verbos (#290).
+  sectores: [
+    {
+      operationId: 'registrar_sector',
+      metodo: 'post',
+      titulo: 'Alta de sector',
+      descripcion:
+        'Da de alta un sector del catastro. El cuerpo lleva código, nombre, la zona' +
+        ' —opcional— y la observación del usuario, obligatoria (RNF-052). Un sector nace' +
+        ' activo: darlo de baja es el PUT.',
+    },
+    {
+      operationId: 'editar_sector',
+      metodo: 'put',
+      ruta: '/api/v1/catastro/sectores/{codigo}',
+      titulo: 'Edición de sector',
+      descripcion:
+        'Modifica un sector existente o lo da de baja (activo=false). No se borra: la baja' +
+        ' es la misma fila con otro estado (RNF-051), y tiene que serlo porque su código es' +
+        ' un tramo del código catastral de sus predios. El código de la ruta identifica el' +
+        ' sector y no cambia.',
+    },
+    {
+      operationId: 'registrar_manzana',
+      metodo: 'post',
+      ruta: '/api/v1/catastro/sectores/{codigo}/manzanas',
+      titulo: 'Alta de manzana',
+      descripcion:
+        'Da de alta una manzana dentro del sector que identifica el código de la ruta. No hay' +
+        ' verbo para editarla: el código de una manzana es un tramo del código catastral de' +
+        ' sus predios, así que cambiarlo desalinearía el de todos ellos.',
+    },
+  ],
 };
 
 /* ── Recoger las operaciones ──────────────────────────────────────────── */

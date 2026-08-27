@@ -135,6 +135,50 @@ class RegistrarManzanaTest {
                 .isEqualTo(antes);
     }
 
+    @Test
+    @DisplayName("el mismo codigo de manzana en otro sector es otra manzana, y entra")
+    void elMismoCodigoEnOtroSectorEsOtraManzana() {
+        registrarSector.registrar(
+                sectorNuevo("MZ-SEC-A"), Observacion.de("Alta del primer sector"));
+        registrarSector.registrar(
+                sectorNuevo("MZ-SEC-B"), Observacion.de("Alta del segundo sector"));
+
+        Manzana enA =
+                registrarManzana.registrarPorCodigoDeSector(
+                        "MZ-SEC-A", "001", Observacion.de("Manzana 001 del sector A"));
+        Manzana enB =
+                registrarManzana.registrarPorCodigoDeSector(
+                        "MZ-SEC-B", "001", Observacion.de("Manzana 001 del sector B"));
+
+        assertThat(enB.id())
+                .as("el codigo es unico dentro de su sector, no en toda la municipalidad")
+                .isNotEqualTo(enA.id());
+        assertThat(enB.sectorId()).isNotEqualTo(enA.sectorId());
+    }
+
+    @Test
+    @DisplayName("una manzana repetida en el mismo sector falla y no deja auditoria")
+    void unaManzanaRepetidaEnElMismoSectorFalla() throws SQLException {
+        registrarSector.registrar(
+                sectorNuevo("MZ-SEC-REP"), Observacion.de("Alta del sector de la repeticion"));
+        registrarManzana.registrarPorCodigoDeSector(
+                "MZ-SEC-REP", "007", Observacion.de("Primera alta, esta si debe quedar"));
+
+        long antes = contar("SELECT count(*) FROM auditoria WHERE tabla = 'manzana'");
+
+        assertThatThrownBy(
+                        () ->
+                                registrarManzana.registrarPorCodigoDeSector(
+                                        "MZ-SEC-REP",
+                                        "007",
+                                        Observacion.de("Segunda alta con codigo ya usado")))
+                .isNotNull();
+
+        assertThat(contar("SELECT count(*) FROM auditoria WHERE tabla = 'manzana'"))
+                .as("una auditoria de una operacion deshecha seria una constancia falsa")
+                .isEqualTo(antes);
+    }
+
     private static Sector sectorNuevo(String codigo) {
         return Sector.nuevo(codigo, "Sector " + codigo);
     }

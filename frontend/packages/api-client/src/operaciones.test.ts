@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas cuatro operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas siete operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -41,8 +41,13 @@ describe('las operaciones generadas son las del contrato', () => {
     //   - `registrar_via` / `editar_via` (#290): el alta y la edicion de la
     //     pantalla `calles`, que declara «GET /catastro/vias» como su endpoint
     //     —la lectura— y necesita un verbo aparte para escribir.
+    //   - `registrar_sector` / `editar_sector` / `registrar_manzana` (#290): lo
+    //     mismo para `sectores`, que declara «GET /catastro/sectores». Las
+    //     manzanas no tienen pantalla propia en el manual: cuelgan del sector,
+    //     y solo se dan de alta —el codigo de una manzana es un tramo del
+    //     codigo catastral de sus predios, asi que no se edita—.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(138);
+    expect(Object.keys(OPERACIONES)).toHaveLength(141);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {
