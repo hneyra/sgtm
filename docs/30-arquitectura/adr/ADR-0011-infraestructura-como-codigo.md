@@ -126,6 +126,32 @@ convierte una reversión de tres minutos en una operación que toca el clúster 
 del flujo de liberación (issue #148) y entra al clúster como una actualización de la imagen del
 despliegue.
 
+**La interfaz fue una excepción a esto, y dejó de serlo.** Vite resuelve las `VITE_*` al compilar,
+así que el emisor de identidad quedaba horneado en el paquete estático y hacían falta **dos**
+imágenes, una por ambiente, construidas desde el `sgtm:domain` de cada `Pulumi.<ambiente>.yaml`. El
+problema no era el coste de la segunda imagen: era que `sgtm:domain` alimentaba **dos sistemas con
+ciclos de vida distintos** —el ingreso, por `pulumi up`; el paquete, por una reconstrucción de
+imagen— y **nada obligaba a que coincidieran**. Cambiar el dominio dejaba el ingreso en el nombre
+nuevo y el paquete en el viejo, en verde y sin un solo síntoma.
+
+No es hipotético: pasó en `prod`. `sgtm:domain` decía `vmd120205.contabo.net` —sin `server`, un
+nombre sin registro A—, se corrigió en `infra/`, el clúster quedó bien… y el botón de acceso siguió
+mandando el navegador al nombre inexistente, porque el paquete desplegado era el anterior.
+
+La salida no fue añadir un detector, sino quitarle al paquete el dato: Keycloak se sirve en el mismo
+origen que la interfaz, así que las `VITE_SGTM_OIDC_*` son **rutas** (`/keycloak/realms/…`) y el
+navegador las resuelve contra el origen desde el que se descargó la página. Con eso el dominio deja
+de ser entrada de la compilación, queda **un solo consumidor** —`infra/`, que gestiona Pulumi— y la
+interfaz vuelve a la regla general de esta sección: **un artefacto que se promueve, no se
+reconstruye**. `frontend/scripts/comprobar-compilaciones.mjs` lo vigila por los dos lados: lee los
+`build-args` del propio flujo y compila con ellos, y exige que ningún dominio declarado en
+`infra/Pulumi.*.yaml` aparezca dentro del paquete.
+
+> Queda un resto: `infra/componentes/Aplicacion.ts` todavía compone la etiqueta como
+> `<ambiente>-<versión>`, así que el flujo publica la misma imagen —el mismo digest— bajo las dos
+> etiquetas. Retirar el prefijo exige que `applicationBootstrapVersion` apunte a un sha posterior a
+> este cambio, y es un paso aparte para no dejar a `prod` pidiendo una etiqueta que aún no existe.
+
 ### 6. El flujo en CI
 
 | Evento | Acción |

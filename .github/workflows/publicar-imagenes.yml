@@ -9,24 +9,30 @@
 #   |---------------------|---------------------------------------|---------|
 #   | `sgtm-aplicacion`   | `backend/Dockerfile`, destino `aplicacion` | 1 |
 #   | `sgtm-migrador`     | el mismo Dockerfile, destino `migrador`    | 1 |
-#   | `sgtm-interfaz`     | `frontend/Dockerfile`, destino `interfaz`  | **2, una por ambiente** |
+#   | `sgtm-interfaz`     | `frontend/Dockerfile`, destino `interfaz`  | 1 |
 #
-# Las dos primeras no dependen del ambiente: la configuración de la aplicación entra
-# por variables de entorno en tiempo de ejecución, así que el mismo artefacto sirve
-# para `stg` y para `prod` — es lo que ADR-0011 §5 llama «promover el mismo
-# artefacto».
+# Ninguna depende del ambiente: la configuración de la aplicación entra por variables
+# de entorno en tiempo de ejecución, y la interfaz ya no necesita saber en qué dominio
+# la sirven. El mismo artefacto vale para `stg` y para `prod` — es lo que ADR-0011 §5
+# llama «promover el mismo artefacto».
 #
-# **La interfaz es la excepción, y a propósito.** Vite resuelve `VITE_SGTM_OIDC_*` AL
-# COMPILAR (`frontend/Dockerfile`): el emisor de identidad queda incrustado en el
-# paquete estático. Con un emisor por ambiente, hacen falta dos imágenes —no una
-# reconfigurable—, y las dos build args que cambian entre ellas son exactamente las
-# que dependen del emisor. La fuente de esos valores es a propósito la más aburrida
-# posible: el `sgtm:domain` que cada `Pulumi.<ambiente>.yaml` YA fija, con la misma
-# forma de URL que `despliegue/compose.yaml` y `../iaac` ya usan para Keycloak
-# (`https://<dominio>/keycloak`). No es una decisión nueva de este flujo: es aplicar
-# una convención que ya existe a los dos dominios que `infra/` ya declara. Cuando el
-# emisor cambie —dominio nuevo, otro realm—, cambia en `Pulumi.<ambiente>.yaml` y este
-# flujo reconstruye la imagen de esa municipalidad sola, sin tocar la otra.
+# **La interfaz fue la excepción, y dejó de serlo.** Vite resuelve `VITE_SGTM_OIDC_*`
+# AL COMPILAR, así que una URL absoluta ahí hornea el nombre del servidor dentro del
+# paquete estático, y hacían falta dos imágenes. El problema no era el coste de la
+# segunda: era que `sgtm:domain` alimentaba **dos sistemas con ciclos de vida
+# distintos** —el ingreso, por `pulumi up`; el paquete, por una reconstrucción de
+# imagen— sin que nada obligara a que coincidieran. Cambiarlo dejaba a `prod` con el
+# ingreso en un dominio y el paquete en otro, en verde y sin un solo síntoma: pasó, y
+# el botón de acceso mandaba el navegador a un nombre sin registro A.
+#
+# Keycloak se sirve en el mismo origen que la interfaz, así que basta una RUTA
+# (`/keycloak/realms/...`) y el navegador la resuelve contra el origen desde el que
+# se descargó la página. El dominio deja de ser entrada de la compilación, y con eso
+# desaparece la pregunta de si el cambio se propaga: queda un solo consumidor,
+# `infra/`, y lo gestiona Pulumi.
+#
+# `despliegue/compose.yaml` no se toca: ahí Keycloak vive en otro origen y sigue
+# pasando una URL absoluta, que `new URL(valor, origin)` respeta.
 #
 # **El tercer job demuestra los otros dos criterios de #148** —«el clúster corre una
 # versión identificable, sin abrir el estado de Pulumi» y «revertir no ejecuta
@@ -110,11 +116,8 @@ jobs:
           tags: ghcr.io/${{ steps.repositorio.outputs.propietario }}/${{ matrix.imagen }}:${{ github.sha }}
 
   interfaz:
-    name: sgtm-interfaz (${{ matrix.ambiente }})
+    name: sgtm-interfaz
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        ambiente: [stg, prod]
 
     steps:
       - uses: actions/checkout@v4
@@ -133,21 +136,6 @@ jobs:
           echo "propietario=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" \
             >> "$GITHUB_OUTPUT"
 
-      # El dominio sale de infra/Pulumi.<ambiente>.yaml, la misma fuente que usa
-      # `infra/verificaciones/stacks.test.ts` — sin instalar Pulumi ni pedir su
-      # token, porque `domain` no es un secreto.
-      - name: Leer el dominio del ambiente
-        id: dominio
-        run: |
-          dominio=$(sed -n 's/^[[:space:]]*sgtm:domain:[[:space:]]*//p' \
-            "infra/Pulumi.${{ matrix.ambiente }}.yaml" | head -n1 | tr -d '"' | tr -d "'")
-          if [ -z "$dominio" ]; then
-            echo "::error file=infra/Pulumi.${{ matrix.ambiente }}.yaml::No se encontro sgtm:domain" \
-              >&2
-            exit 1
-          fi
-          echo "dominio=$dominio" >> "$GITHUB_OUTPUT"
-
       # `frontend`, no la raíz: `nginx.conf` vive junto al Dockerfile, y `despliegue/
       # compose.yaml` ya fija `context: ../frontend` para este mismo destino. La
       # aplicación y el migrador sí necesitan la raíz —el catálogo de NEG-03 vive en
@@ -158,14 +146,27 @@ jobs:
           file: frontend/Dockerfile
           target: interfaz
           push: true
-          tags: >-
-            ghcr.io/${{ steps.repositorio.outputs.propietario }}/sgtm-interfaz:${{ matrix.ambiente }}-${{ github.sha }}
+          # Las dos etiquetas salen de la MISMA compilacion, con el mismo digest:
+          # promover de `stg` a `prod` deja de ser reconstruir y pasa a ser
+          # reetiquetar. El prefijo del ambiente se conserva porque
+          # `infra/componentes/Aplicacion.ts` todavia lo compone —retirarlo exige
+          # que `applicationBootstrapVersion` apunte a un sha posterior a este
+          # cambio, y eso es un paso aparte para no dejar `prod` pidiendo una
+          # etiqueta que aun no existe—.
+          tags: |
+            ghcr.io/${{ steps.repositorio.outputs.propietario }}/sgtm-interfaz:stg-${{ github.sha }}
+            ghcr.io/${{ steps.repositorio.outputs.propietario }}/sgtm-interfaz:prod-${{ github.sha }}
+          # RUTAS, no URLs absolutas. Keycloak se sirve en el mismo origen que la
+          # interfaz, asi que el navegador las resuelve solo y el dominio no entra
+          # nunca al paquete. `comprobar-compilaciones` lee ESTOS valores, compila
+          # con ellos y exige que ningun dominio de `infra/Pulumi.*.yaml` aparezca
+          # en la salida: volver a poner aqui un `https://...` lo pone rojo.
           build-args: |
             VITE_SGTM_API=/api/v1
             VITE_SGTM_OIDC_CLIENTE=sgtm-backoffice
-            VITE_SGTM_OIDC_AUTORIZACION=https://${{ steps.dominio.outputs.dominio }}/keycloak/realms/sgtm/protocol/openid-connect/auth
-            VITE_SGTM_OIDC_TOKEN=https://${{ steps.dominio.outputs.dominio }}/keycloak/realms/sgtm/protocol/openid-connect/token
-            VITE_SGTM_OIDC_FIN_DE_SESION=https://${{ steps.dominio.outputs.dominio }}/keycloak/realms/sgtm/protocol/openid-connect/logout
+            VITE_SGTM_OIDC_AUTORIZACION=/keycloak/realms/sgtm/protocol/openid-connect/auth
+            VITE_SGTM_OIDC_TOKEN=/keycloak/realms/sgtm/protocol/openid-connect/token
+            VITE_SGTM_OIDC_FIN_DE_SESION=/keycloak/realms/sgtm/protocol/openid-connect/logout
 
   demostrar-liberacion-y-reversion:
     name: El mecanismo de liberación funciona, sin pulumi up

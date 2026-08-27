@@ -111,9 +111,9 @@ jobs:
           build-args: |
             VITE_SGTM_API=/api/v1
             VITE_SGTM_OIDC_CLIENTE=sgtm-backoffice
-            VITE_SGTM_OIDC_AUTORIZACION=https://escaneo.invalido/keycloak/realms/sgtm/protocol/openid-connect/auth
-            VITE_SGTM_OIDC_TOKEN=https://escaneo.invalido/keycloak/realms/sgtm/protocol/openid-connect/token
-            VITE_SGTM_OIDC_FIN_DE_SESION=https://escaneo.invalido/keycloak/realms/sgtm/protocol/openid-connect/logout
+            VITE_SGTM_OIDC_AUTORIZACION=/keycloak/realms/sgtm/protocol/openid-connect/auth
+            VITE_SGTM_OIDC_TOKEN=/keycloak/realms/sgtm/protocol/openid-connect/token
+            VITE_SGTM_OIDC_FIN_DE_SESION=/keycloak/realms/sgtm/protocol/openid-connect/logout
 
       - name: Trivy — resumen (CRITICAL y HIGH, no bloqueante)
         uses: aquasecurity/trivy-action@v0.36.0
