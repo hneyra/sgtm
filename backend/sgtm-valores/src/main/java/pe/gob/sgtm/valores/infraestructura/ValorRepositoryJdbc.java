@@ -27,11 +27,11 @@ import pe.gob.sgtm.valores.dominio.ValorRepository;
 /**
  * Los valores contra PostgreSQL (V3, V26).
  *
- * <p>No hay ningun {@code UPDATE} sobre {@code valor} ni {@code valor_detalle} en esta clase: #37
- * solo produce el estado inicial, {@code EMITIDO}. Las transiciones de estado (notificado, pasado a
- * coactiva, pagado, anulado, prescrito) son de issues posteriores, y el privilegio de {@code
- * UPDATE} ya existe en la base (V7) para cuando las escriban — pero solo sobre {@code estado} y sus
- * campos de auditoria de la transicion, nunca sobre el desglose congelado.
+ * <p>El unico {@code UPDATE} de esta clase es {@link #cambiarEstado}, y su {@code SET} tiene una
+ * sola columna: {@code estado}. Es la restriccion que #37 dejo escrita cuando todavia no habia
+ * ninguna transicion —"solo sobre {@code estado}, nunca sobre el desglose congelado"— y que #39
+ * estrena con las tres primeras: notificado, en coactiva y prescrito. Sobre {@code valor_detalle}
+ * no hay ninguno: lo que se congelo al emitir se relee identico dos anios despues (AC de #37).
  */
 @Repository
 public class ValorRepositoryJdbc extends RepositorioJdbc implements ValorRepository {
@@ -40,6 +40,12 @@ public class ValorRepositoryJdbc extends RepositorioJdbc implements ValorReposit
             "id, tipo, numero, ejercicio, contribuyente_id, base_legal,"
                     + " monto_insoluto, monto_reajuste, monto_interes, monto_gasto,"
                     + " proyectado_a, estado, fecha_emision, usuario_registro, observacion";
+
+    private static final String COLUMNAS_VALOR_CON_PREFIJO =
+            "v.id, v.tipo, v.numero, v.ejercicio, v.contribuyente_id, v.base_legal,"
+                    + " v.monto_insoluto, v.monto_reajuste, v.monto_interes, v.monto_gasto,"
+                    + " v.proyectado_a, v.estado, v.fecha_emision, v.usuario_registro,"
+                    + " v.observacion";
 
     private static final OrdenSeguro ORDEN =
             OrdenSeguro.sobre("numero", "ejercicio", "fecha_emision", "monto_total");
@@ -152,6 +158,24 @@ public class ValorRepositoryJdbc extends RepositorioJdbc implements ValorReposit
     }
 
     @Override
+    public Optional<Valor> porNumero(String numero) {
+        List<Valor> encontrados =
+                jdbc().sql("SELECT " + COLUMNAS_VALOR + " FROM valor WHERE numero = :numero")
+                        .param("numero", numero.strip())
+                        .query(this::mapearValor)
+                        .list();
+        if (encontrados.size() > 1) {
+            throw new IllegalStateException(
+                    "Hay "
+                            + encontrados.size()
+                            + " valores con el numero '"
+                            + numero
+                            + "': notificar uno al azar seria un acto sobre la deuda equivocada");
+        }
+        return encontrados.stream().findFirst();
+    }
+
+    @Override
     public Optional<Valor> porId(long id) {
         return jdbc().sql("SELECT " + COLUMNAS_VALOR + " FROM valor WHERE id = :id")
                 .param("id", id)
@@ -199,6 +223,46 @@ public class ValorRepositoryJdbc extends RepositorioJdbc implements ValorReposit
         String conteo = "SELECT count(*) FROM valor WHERE " + condiciones;
 
         return paginar(seleccion, conteo, parametros, paginacion, ORDEN, this::mapearValor);
+    }
+
+    @Override
+    public List<Valor> cobrablesDe(long contribuyenteId, String tributo, Ejercicio ejercicio) {
+        // El tributo y el ejercicio viven en el detalle congelado, no en la cabecera: un valor
+        // puede formalizar varias obligaciones. DISTINCT porque un mismo valor puede tener mas de
+        // una fila de detalle del mismo tributo y ejercicio -una por predio-.
+        return jdbc().sql(
+                        "SELECT DISTINCT "
+                                + COLUMNAS_VALOR_CON_PREFIJO
+                                + " FROM valor v"
+                                + " JOIN valor_detalle d ON d.valor_id = v.id"
+                                + " WHERE v.contribuyente_id = :contribuyenteId"
+                                + "   AND upper(d.tributo) = upper(:tributo)"
+                                + "   AND d.ejercicio = :ejercicio"
+                                + "   AND v.estado IN ('EMITIDO', 'NOTIFICADO', 'COACTIVA')"
+                                + " ORDER BY v.id")
+                .param("contribuyenteId", contribuyenteId)
+                .param("tributo", tributo)
+                .param("ejercicio", ejercicio.valor())
+                .query(this::mapearValor)
+                .list();
+    }
+
+    @Override
+    public Valor cambiarEstado(long valorId, EstadoDeValor nuevo) {
+        // Solo la columna `estado`. El desglose congelado no aparece en el SET, y no es un
+        // descuido que se pueda arreglar mas tarde: reimprimir un valor dos anios despues tiene
+        // que devolver el mismo importe (AC de #37).
+        int filas =
+                jdbc().sql("UPDATE valor SET estado = :estado WHERE id = :id")
+                        .param("estado", nuevo.name())
+                        .param("id", valorId)
+                        .update();
+        if (filas == 0) {
+            throw new IllegalArgumentException("No existe el valor " + valorId);
+        }
+        return porId(valorId)
+                .orElseThrow(
+                        () -> new IllegalStateException("El valor " + valorId + " se desvanecio"));
     }
 
     @Override

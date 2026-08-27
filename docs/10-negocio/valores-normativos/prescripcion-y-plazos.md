@@ -97,8 +97,12 @@ acaecimiento del acto interruptorio:
 
 ## 3. Qué no cabe hoy
 
-El esquema hoy no distingue, dentro de un mismo `tipo`, la causal de interrupción o suspensión que
-aplicó a un expediente concreto (por ejemplo, «se interrumpió por pago parcial» frente a «se
-interrumpió por solicitud de fraccionamiento»): esa tabla de causales queda transcrita aquí como
-referencia normativa, pero no hay dónde guardar, fila a fila, cuál causal se activó para una deuda
-determinada.
+**Resuelto por #39.** `prescripcion_hecho` (V28) guarda, fila a fila y por cada solicitud de
+prescripción, qué causal de interrupción (art. 45) o de suspensión (art. 46) se alegó, con su
+fecha —o su intervalo, si es una suspensión—. Ya no hace falta reconstruir por fuera de la base
+«se interrumpió por pago parcial» frente a «se interrumpió por solicitud de fraccionamiento»: cada
+hecho queda en su propia fila, ligado a la declaración que lo evaluó.
+
+Lo que sigue sin cargarse son las **cifras**: el plazo de prescripción (4, 6 o 10 años según la
+causal), el de notificación y el de inicio de la cobranza coactiva. Están `VERIFICADO` en la
+tabla de §1, pero la carga depende de D-13 y la sigue #192.
