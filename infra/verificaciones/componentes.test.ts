@@ -635,15 +635,75 @@ describe("#153 · el ingreso", () => {
 
   it("80 redirige a 443, no coexiste", () => {
     const valores = valoresDelIngreso(ms);
-    expect(valores).toContain("redirectTo:");
-    expect(valores).toContain("port: websecure");
+    expect(valores).toContain("redirections:");
+    expect(valores).toContain("to: websecure");
   });
 
   it("`acme.json` vive en un volumen: reprogramar el pod no vuelve a pedir certificados", () => {
     const valores = valoresDelIngreso(ms);
     expect(valores).toContain("persistence:");
-    expect(valores).toContain("storage: /data/acme.json");
+    expect(valores).toContain("acme.storage=/data/acme.json");
     expect(valores).toContain("type: Recreate");
+  });
+
+  it("acme.json se corrige a 600 antes de que Traefik intente leerlo", () => {
+    // El propio chart lo avisa en sus NOTES: con `persistence`, el `fsGroup`
+    // puede dejar el archivo en 660, y Traefik rechaza usarlo -"permissions 660
+    // ... please use 600"-, saltandose el resolver entero aunque las banderas de
+    // additionalArguments esten correctas. Se vio contra prod real.
+    const valores = valoresDeTraefik({ acmeEmail: "a@b.pe", acmeStaging: false });
+    expect(valores).toContain("name: corregir-permisos-de-acme");
+    expect(valores).toContain("chmod 600 /data/acme.json");
+    expect(valores).toContain("mountPath: /data");
+  });
+
+  it("Traefik espera su propio Endpoint antes de pedir el certificado", () => {
+    // Contra el cluster real de prod: `Recreate` deja el Service sin backend
+    // durante la ventana en que Traefik ya esta pidiendo el ACME -ocho
+    // reinicios seguidos, ocho "Connection refused", con el nodo en quietud
+    // total (no era contencion de CPU). El initContainer espera a verse a si
+    // mismo en el EndpointSlice antes de dejar arrancar al contenedor principal.
+    const valores = valoresDeTraefik({ acmeEmail: "a@b.pe", acmeStaging: false });
+    expect(valores).toContain("initContainers:");
+    expect(valores).toContain("name: esperar-endpoint-propio");
+    expect(valores).toContain("fieldPath: status.podIP");
+    expect(valores).toContain("discovery.k8s.io/v1/namespaces/kube-system/endpointslices");
+    // Falla abierto: un cluster mas lento de lo esperado no debe dejar a
+    // Traefik sin arrancar nunca.
+    expect(valores).toContain("exit 0");
+  });
+
+  it("el puerto 80 enruta antes de que la sonda de readiness pase", () => {
+    // Sin esto, el initContainer de arriba no arregla nada y el dominio entero
+    // queda inalcanzable. `svclb` hace DNAT contra el ClusterIP del Service de
+    // Traefik, y kube-proxy solo reparte un ClusterIP entre endpoints `ready`.
+    // Con la sonda del chart -`initialDelaySeconds: 2`, `periodSeconds: 10`,
+    // `failureThreshold: 1`- el pod real de prod tardo ONCE segundos en estar
+    // `Ready` (contenedor 06:03:27 -> Ready 06:03:38), y Traefik pidio el
+    // certificado a los dos (06:03:29): Let's Encrypt recibio "Connection
+    // refused" en el desafio HTTP-01, `acme.json` quedo con `Certificates:
+    // null`, y el handshake TLS murio con "tlsv1 unrecognized name".
+    const valores = valoresDeTraefik({ acmeEmail: "a@b.pe", acmeStaging: false });
+    expect(valores).toContain("publishNotReadyAddresses: true");
+    // Bajo `service.spec`, que es lo que el chart vuelca tal cual al ServiceSpec
+    // -y no una clave suelta que se ignore en silencio, como ya paso con
+    // `certResolvers:`-. Y sin perder el `type`, que vive en la misma clave.
+    expect(valores).toMatch(/^service:\n {2}spec:\n(?: {4}#.*\n|\s*\n)* {4}type: LoadBalancer\n/m);
+    expect(valores).toMatch(/^ {4}publishNotReadyAddresses: true$/m);
+  });
+
+  it("el resolver de ACME va por additionalArguments, no por una clave que el chart ignora", () => {
+    // Contra el Traefik real de prod: `certResolvers:` de alto nivel y
+    // `ports.websecure.tls.certResolver` no llegaban a ningun flag del
+    // `Deployment` -"Upgrade complete" en verde, y el propio Traefik logueando
+    // "Router uses a nonexistent certificate resolver" desde el primer arranque.
+    const valores = valoresDelIngreso(ms);
+    expect(valores).toContain("additionalArguments:");
+    expect(valores).not.toContain("certResolvers:");
+    expect(valores).not.toMatch(/^\s*certResolver:/m);
+    expect(valores).toContain('"--entryPoints.websecure.http.tls.certResolver=letsencrypt"');
+    expect(valores).toContain('"--certificatesResolvers.letsencrypt.acme.email=');
+    expect(valores).toContain('"--certificatesResolvers.letsencrypt.acme.httpChallenge.entryPoint=web"');
   });
 
   it("la consola de administracion de Keycloak no se publica", () => {
@@ -685,12 +745,27 @@ describe("#153 · la demostracion", () => {
     expect(auditar(ms)).toContainEqual(expect.stringContaining("80 redirige, no coexiste"));
   });
 
-  it("sin la redireccion del punto de entrada, la comprobacion se pone roja", () => {
-    const sinRedireccion = valoresDeTraefik({ acmeEmail: "a@b.pe", acmeStaging: false });
-    expect(sinRedireccion).toContain("redirectTo:");
-
-    const roto = sinRedireccion.replace("    redirectTo:", "    # redirectTo:");
-    expect(roto.includes("    redirectTo:")).toBe(false);
+  it("la redireccion usa la clave que este chart lee, no la que renombro", () => {
+    // La comprobacion anterior era una tautologia: afirmaba que el texto contenia
+    // `redirectTo:`, lo comentaba, y afirmaba que ya no estaba. Nunca podia
+    // detectar lo unico que importa -si el chart honra esa clave-, y no lo hacia:
+    // `traefik-40.1.4+up40.1.0` la renombro a `http.redirections.entryPoint` (su
+    // Changelog: "move redirectTo => redirections") y `redirectTo` no aparece en
+    // ninguna plantilla. Contra prod, leyendo los argumentos del contenedor: ni
+    // una bandera `--entryPoints.web.http.redirections.*`, y `http://<dominio>/`
+    // devolviendo 404 en vez de 301 -quien teclee el dominio sin `https://` no ve
+    // el sistema-. Mismo fallo silencioso que ya paso con `certResolvers:`.
+    const valores = valoresDeTraefik({ acmeEmail: "a@b.pe", acmeStaging: false });
+    expect(valores).not.toContain("redirectTo:");
+    expect(valores).toMatch(
+      /^ {4}http:\n {6}redirections:\n {8}entryPoint:\n {10}to: websecure$/m,
+    );
+    expect(valores).toContain("scheme: https");
+    expect(valores).toContain("permanent: true");
+    // Por DEBAJO del router que Traefik dedica al desafio ACME: si la redireccion
+    // se comiera `/.well-known/acme-challenge/`, la renovacion de dentro de 60
+    // dias tumbaria el dominio sin que nadie hubiera tocado nada.
+    expect(valores).toMatch(/^ {10}priority: 10$/m);
   });
 });
 
