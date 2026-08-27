@@ -44,6 +44,41 @@ const TRIBUTO_DEL_BACKEND: Readonly<Record<string, string>> = {
 
 const tributoDe = (texto: string): string | undefined => TRIBUTO_DEL_BACKEND[texto];
 
+/**
+ * Modalidad de notificacion del prototipo → `ModalidadDeNotificacion` (V3, art. 104 del Codigo
+ * Tributario). «BUZÓN ELECTRÓNICO» es la unica que no se lee literal: el enum del backend la llama
+ * `CORREO` (art. 104 b, medios electronicos con constancia de entrega).
+ */
+const MODALIDAD_DE_NOTIFICACION_DEL_BACKEND: Readonly<Record<string, string>> = {
+  'PERSONAL EN DOMICILIO FISCAL': 'PERSONAL',
+  'CEDULÓN': 'CEDULON',
+  'PUBLICACIÓN': 'PUBLICACION',
+  'BUZÓN ELECTRÓNICO': 'CORREO',
+};
+
+const modalidadDeNotificacionDe = (texto: string): string | undefined =>
+  MODALIDAD_DE_NOTIFICACION_DEL_BACKEND[texto];
+
+/**
+ * Resultado de la diligencia del prototipo → `ResultadoDeNotificacion` (V28), que solo admite
+ * tres valores. Las seis opciones del catalogo colapsan asi: recibir —por el titular, por
+ * tercero, o fijando el cedulon— surte efecto (`NOTIFICADO`); no encontrar a nadie en el
+ * domicilio, este cerrado o no, es lo que `NO_UBICADO` describe literalmente y lo que el backend
+ * reintenta (AC de #39); rehusar recibir es notificacion valida igual, pero con su propio
+ * resultado (`RECHAZADO`, art. 104 a).
+ */
+const RESULTADO_DE_NOTIFICACION_DEL_BACKEND: Readonly<Record<string, string>> = {
+  'RECIBIDO POR EL TITULAR': 'NOTIFICADO',
+  'RECIBIDO POR TERCERO': 'NOTIFICADO',
+  'CEDULÓN FIJADO': 'NOTIFICADO',
+  RECHAZADO: 'RECHAZADO',
+  'DOMICILIO CERRADO': 'NO_UBICADO',
+  'NO UBICADO': 'NO_UBICADO',
+};
+
+const resultadoDeNotificacionDe = (texto: string): string | undefined =>
+  RESULTADO_DE_NOTIFICACION_DEL_BACKEND[texto];
+
 const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   /**
    * Cambiar el año de trabajo.
@@ -104,6 +139,42 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
     },
     nota: 'Solo se admiten los tributos con código establecido: predial, arbitrios, vehicular y alcabala. La unidad (predio o placa) y el rango de cuotas todavía no se resuelven aquí: el alta queda a nivel de contribuyente y con una sola cuota.',
   },
+
+  /**
+   * Notificacion de valores (RF-093, #39, #75). `PeticionDeNotificacion` es un cuerpo plano —a
+   * diferencia de `valores_individual`/`valores_masivo`, que piden un arreglo (ver
+   * `pantallas/valores/index.ts`)—, y el catalogo dibuja el mismo formulario campo a campo.
+   *
+   * `nroDeValor2`, `contribuyente` y `domicilioFiscal` son `"ro"`: los pinta el servidor, no
+   * viajan de vuelta. `hora` tampoco: `fechaDeNotificacion` es `LocalDate` en el backend (ISO,
+   * sin hora), y `PeticionDeNotificacion` no tiene ningun campo para ella. `fechaDeFirmeza` es
+   * `"ro"` por la misma razon que en `prescripcion`: la deriva el servidor, no se declara.
+   *
+   * `observaciones` (el campo del bloque «Acto de notificación») no viaja: es el mismo texto que
+   * ya exige `useEscritura` para cualquier escritura (regla 10) — declararlo aparte le daria al
+   * usuario dos cajas para lo que el backend guarda en un solo `observacion`.
+   *
+   * `direccion` no tiene campo en el catalogo (la pantalla solo muestra el domicilio fiscal,
+   * `"ro"`): no viaja, y el backend ya sabe que hacer sin ella —usa el domicilio vigente a esa
+   * fecha (#15)—. `acuse` tampoco: el prototipo no dibuja ningun campo para adjuntar la
+   * constancia todavia.
+   */
+  notificacion_valores: {
+    campos: {
+      tipoDeNotificacion: { campo: 'tipoDeNotificacion', valor: modalidadDeNotificacionDe },
+      fechaDeNotificacion: { campo: 'fechaDeNotificacion' },
+      notificador2: { campo: 'notificador' },
+      resultado2: { campo: 'resultado', valor: resultadoDeNotificacionDe },
+      personaQueRecibe: { campo: 'personaQueRecibe' },
+      documentoDeQuienRecibe: { campo: 'documentoDeQuienRecibe' },
+      vinculo: { campo: 'vinculo' },
+    },
+    nota: 'La hora y la dirección de la diligencia no se guardan todavía: el backend solo pide la fecha (sin hora) y, si no se indica una dirección, usa el domicilio fiscal vigente a esa fecha.',
+  },
+
+  // `pase_coactiva` no esta aqui a proposito, aunque `PeticionDeMovimiento` (#39) es un cuerpo
+  // tan plano como el de `notificacion_valores`: ver `pantallas/valores/index.ts` para por que
+  // conectarla hoy la haria menos segura, no mas.
 };
 
 export const escrituraDe = (opcion: string): EscrituraDeclarada | undefined => ESCRITURAS[opcion];

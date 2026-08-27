@@ -20,7 +20,8 @@ import { RESPUESTAS } from './respuestas.generado';
  * (#31) desde #73, y desde #72 la consulta de deuda (#22, #175), la
  * constancia de no adeudo (#25, #179), el padron vehicular consultable (#25,
  * #184), las altas y bajas de deuda (#24, #72), el historial de pagos (#25,
- * #219) y los predios de un contribuyente (#25, #222).
+ * #219), los predios de un contribuyente (#25, #222) y, desde #75, los
+ * valores emitidos (#37).
  * **Esta lista crece cuando crece aquella**, no antes: publicar aqui
  * una forma que el backend todavia no sirve seria inventarsela.
  *
@@ -236,6 +237,61 @@ const arbitrios = (): Paginado => {
     }),
   );
 };
+
+/**
+ * Como escribe el prototipo el tipo de valor —«ORDEN DE PAGO», «RES. DETERMINACIÓN»,
+ * «RES. DE MULTA»— frente al codigo de tres letras que publica `ValorResource.tipo`
+ * (`TipoValor.codigo()`, V26): `OP`, `RD`, `RM`.
+ */
+const TIPO_DE_VALOR_DEL_MOCK: Readonly<Record<string, string>> = {
+  'ORDEN DE PAGO': 'OP',
+  'RES. DETERMINACIÓN': 'RD',
+  'RES. DE MULTA': 'RM',
+};
+
+/**
+ * Como escribe el prototipo el estado de un valor frente al `enum EstadoDeValor` (V3) que
+ * `ValorResource.estado` publica de verdad. «Firme» y «Reclamado» no son ningun valor del
+ * enum —la firmeza es una fecha derivada de la notificacion (`NotificacionResource
+ * .exigibleDesde`, #39), no un estado, y el reclamo todavia no tiene estado propio—: el mas
+ * cercano que el dominio ya modela es `NOTIFICADO`, que es el estado del que ambos parten.
+ */
+const ESTADO_DE_VALOR_DEL_MOCK: Readonly<Record<string, string>> = {
+  Emitido: 'EMITIDO',
+  Firme: 'NOTIFICADO',
+  Reclamado: 'NOTIFICADO',
+  Coactiva: 'COACTIVA',
+};
+
+/**
+ * Valores emitidos (`ValorResource`, #37). `numero` sigue el formato provisional de
+ * `RegistrarValor` —`TIPO-EJERCICIO-000001`, D-09 abierta—, y de ahi se lee el ejercicio:
+ * es el mismo dato que publicaria el recurso real, sin inventar uno aparte.
+ *
+ * `codContribuyente` sale vacio: el prototipo solo dibuja el nombre en esta tabla, nunca
+ * el codigo, y la busqueda de esta pantalla no se filtra de verdad (`proxy.ts`) — no hay
+ * ningun filtro que dependa de que el codigo aqui sea real.
+ */
+const valores = (): Paginado =>
+  unaPagina(
+    filasDe('valores_busqueda').map(([numero, tipo, contribuyente, , , montoS, , estado], i) => {
+      const ejercicio = Number((numero ?? '').split('-')[1]) || new Date().getFullYear();
+      return {
+        id: i + 1,
+        tipo: TIPO_DE_VALOR_DEL_MOCK[tipo ?? ''] ?? 'OP',
+        numero,
+        ejercicio,
+        codContribuyente: '',
+        nombreContribuyente: contribuyente,
+        baseLegal: '',
+        estado: ESTADO_DE_VALOR_DEL_MOCK[estado ?? ''] ?? 'EMITIDO',
+        proyectadoA: '2026-08-13',
+        total: montoS,
+        fechaEmision: '2026-08-13',
+        observacion: '',
+      };
+    }),
+  );
 
 /* ── Consultas: deuda y constancia ──────────────────────────────────────── */
 
@@ -901,6 +957,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/rentas/contribuyentes': contribuyentes,
   '/rentas/beneficios': beneficios,
   '/rentas/arbitrios': arbitrios,
+  '/valores': valores,
   '/consultas/cuenta-corriente/{codigo}': cuentaCorriente,
   '/consultas/deuda': consultaDeuda,
   '/consultas/vehiculos': consultaVehiculos,
