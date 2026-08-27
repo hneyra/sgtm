@@ -17,7 +17,10 @@ export interface ModuloDelCatalogo {
   readonly label: string;
   /** Trazos del icono de linea, viewBox 24x24 (FRO-03 §3). */
   readonly icono: readonly string[];
-  /** Los bloques que este modulo usa, en el orden de FRO-03 §4. */
+  /**
+   * Los bloques que este modulo usa, en orden: grupos por tarea si el modulo
+   * los tiene disenados (ADR-0014 §4), y si no los bloques de FRO-03 §4.
+   */
   readonly bloques: readonly string[];
   readonly opciones: readonly OpcionDelCatalogo[];
 }
@@ -28,7 +31,7 @@ export interface OpcionDelCatalogo {
   readonly label: string;
   /** Segmento de la ruta: `ficha-urbana`. */
   readonly ranura: string;
-  /** Bloque de navegacion, ya clasificado en el build (FRO-03 §4). */
+  /** Bloque de navegacion, ya clasificado en el build (ADR-0014 §4 o FRO-03 §4). */
   readonly bloque: string;
   /**
    * Titulo de la pantalla, que no siempre coincide con la etiqueta del menu.
