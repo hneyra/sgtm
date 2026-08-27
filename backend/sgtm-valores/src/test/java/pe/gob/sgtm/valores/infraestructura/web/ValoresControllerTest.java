@@ -31,11 +31,15 @@ import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.valores.aplicacion.IniciarCorridaMasiva;
 import pe.gob.sgtm.valores.aplicacion.RegistrarValor;
 import pe.gob.sgtm.valores.dominio.CriterioDeValor;
 import pe.gob.sgtm.valores.dominio.TipoValor;
 import pe.gob.sgtm.valores.dominio.Valor;
 import pe.gob.sgtm.valores.dominio.ValorDetalle;
+import pe.gob.sgtm.valores.dominio.ValorMasivo;
+import pe.gob.sgtm.valores.dominio.ValorMasivoItem;
+import pe.gob.sgtm.valores.dominio.ValorMasivoRepository;
 import pe.gob.sgtm.valores.dominio.ValorRepository;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
 import pe.gob.sgtm.web.ManejadorDeErrores;
@@ -54,6 +58,12 @@ class ValoresControllerTest {
     private final RepositorioDeMentira repositorio = new RepositorioDeMentira();
     private final DeudaDeMentira deuda = new DeudaDeMentira();
     private final ContribuyentesDeMentira contribuyentes = new ContribuyentesDeMentira();
+    private final RepositorioMasivoDeMentira repositorioMasivo = new RepositorioMasivoDeMentira();
+    private final IniciarCorridaMasiva iniciarMasivo =
+            new IniciarCorridaMasiva(
+                    repositorioMasivo,
+                    contribuyentes,
+                    Clock.fixed(HOY.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC));
     private final RegistrarValor registrar =
             new RegistrarValor(
                     repositorio,
@@ -78,7 +88,8 @@ class ValoresControllerTest {
 
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
-                            new ValoresController(registrar, repositorio, contribuyentes))
+                            new ValoresController(
+                                    registrar, repositorio, contribuyentes, iniciarMasivo))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(
@@ -191,6 +202,102 @@ class ValoresControllerTest {
         assertThat(resultado.getResponse().getContentAsString()).contains("\"totalElementos\":0");
     }
 
+    @Test
+    @DisplayName("masivo por seleccion: registra la corrida en CRITERIO, sin generar nada todavia")
+    void masivoPorSeleccionRegistraLaCorrida() throws Exception {
+        contribuyentes.con(
+                new ResumenDeContribuyente(7L, "C-0007", "TITULAR, PRUEBA", "DNI 12345678"));
+
+        String cuerpo =
+                """
+                {"tipo":"OP","ejercicioDesde":2024,"ejercicioHasta":2026,
+                 "contribuyentes":["C-0007"],"observacion":"Corrida de prueba"}
+                """;
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post("/api/v1/valores/masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"totalCandidatos\":1")
+                .contains("\"origen\":\"SELECCION\"");
+    }
+
+    @Test
+    @DisplayName("masivo con un codigo que no existe, rechaza la corrida entera (RF-133)")
+    void masivoConCodigoInexistenteRechazaTodo() throws Exception {
+        contribuyentes.con(
+                new ResumenDeContribuyente(7L, "C-0007", "TITULAR, PRUEBA", "DNI 12345678"));
+
+        String cuerpo =
+                """
+                {"tipo":"OP","ejercicioDesde":2024,"ejercicioHasta":2026,
+                 "contribuyentes":["C-0007","NO-EXISTE"],"observacion":"Corrida de prueba"}
+                """;
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post("/api/v1/valores/masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(repositorioMasivo.corridas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("masivo sin 'contribuyentes' ni 'archivoCsv', 422")
+    void masivoSinCriterioRechaza() throws Exception {
+        String cuerpo =
+                """
+                {"tipo":"OP","ejercicioDesde":2024,"ejercicioHasta":2026,
+                 "observacion":"Corrida de prueba"}
+                """;
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post("/api/v1/valores/masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+    }
+
+    @Test
+    @DisplayName("masivo por importacion: lee el CSV en base64 y registra la corrida")
+    void masivoPorImportacionRegistraLaCorrida() throws Exception {
+        contribuyentes.con(
+                new ResumenDeContribuyente(7L, "C-0007", "TITULAR, PRUEBA", "DNI 12345678"));
+        String csv = "codContribuyente\nC-0007\n";
+        String base64 =
+                java.util.Base64.getEncoder()
+                        .encodeToString(csv.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        String cuerpo =
+                """
+                {"tipo":"RD","ejercicioDesde":2024,"ejercicioHasta":2026,
+                 "archivoCsv":"%s","observacion":"Corrida importada"}
+                """
+                        .formatted(base64);
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post("/api/v1/valores/masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"origen\":\"IMPORTACION\"");
+    }
+
     // ------------------------------------------------------------------
 
     private static final class RepositorioDeMentira implements ValorRepository {
@@ -225,6 +332,11 @@ class ValoresControllerTest {
         @Override
         public Optional<Valor> porNumero(TipoValor tipo, Ejercicio ejercicio, String numero) {
             return Optional.empty();
+        }
+
+        @Override
+        public Optional<Valor> porId(long id) {
+            return guardados.stream().filter(v -> v.id() != null && v.id() == id).findFirst();
         }
 
         @Override
@@ -294,5 +406,56 @@ class ValoresControllerTest {
         public Optional<String> domicilioFiscalDe(long contribuyenteId, LocalDate fecha) {
             return Optional.empty();
         }
+    }
+
+    private static final class RepositorioMasivoDeMentira implements ValorMasivoRepository {
+
+        private long siguienteId = 1;
+        private final List<ValorMasivo> corridas = new ArrayList<>();
+
+        @Override
+        public ValorMasivo iniciar(ValorMasivo corrida, List<Long> contribuyenteIds) {
+            ValorMasivo conId =
+                    new ValorMasivo(
+                            siguienteId++,
+                            corrida.tipo(),
+                            corrida.tributo(),
+                            corrida.ejercicioDesde(),
+                            corrida.ejercicioHasta(),
+                            corrida.fechaCriterio(),
+                            corrida.origen(),
+                            contribuyenteIds.size(),
+                            "prueba",
+                            null,
+                            corrida.observacion());
+            corridas.add(conId);
+            return conId;
+        }
+
+        @Override
+        public Optional<ValorMasivo> porId(long id) {
+            return corridas.stream().filter(c -> c.id() != null && c.id() == id).findFirst();
+        }
+
+        @Override
+        public List<ValorMasivoItem> itemsPendientes(long corridaId, long desdeId, int maximo) {
+            return List.of();
+        }
+
+        @Override
+        public List<ValorMasivoItem> itemsGenerados(long corridaId) {
+            return List.of();
+        }
+
+        @Override
+        public long contarPendientes(long corridaId) {
+            return 0;
+        }
+
+        @Override
+        public void marcarGenerado(long itemId, long valorId) {}
+
+        @Override
+        public void marcarSinDeuda(long itemId) {}
     }
 }

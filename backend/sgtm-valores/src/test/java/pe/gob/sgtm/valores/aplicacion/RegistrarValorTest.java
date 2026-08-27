@@ -271,6 +271,11 @@ class RegistrarValorTest {
         }
 
         @Override
+        public Optional<Valor> porId(long id) {
+            return guardados.stream().filter(v -> v.id() != null && v.id() == id).findFirst();
+        }
+
+        @Override
         public List<ValorDetalle> detalleDe(long valorId) {
             return detalleGuardado;
         }

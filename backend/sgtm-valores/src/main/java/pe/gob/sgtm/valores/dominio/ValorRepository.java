@@ -27,6 +27,9 @@ public interface ValorRepository {
 
     Optional<Valor> porNumero(TipoValor tipo, Ejercicio ejercicio, String numero);
 
+    /** El mismo valor por su identificador, para quien ya lo resolvio antes (p. ej. #38). */
+    Optional<Valor> porId(long id);
+
     /** El detalle de un valor ya guardado, en el orden en que se congelo. */
     List<ValorDetalle> detalleDe(long valorId);
 

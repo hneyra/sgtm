@@ -74,7 +74,7 @@ public class RegistrarValor {
     }
 
     /**
-     * Emite el valor: congela la deuda seleccionada, la numera y mueve su fase.
+     * Emite el valor a la fecha de hoy: congela la deuda seleccionada, la numera y mueve su fase.
      *
      * @param tipo OP, RD o RM
      * @param contribuyenteId a quien se emite; ya resuelto por quien llama
@@ -90,12 +90,36 @@ public class RegistrarValor {
             long contribuyenteId,
             List<SelectorDeObligacion> obligaciones,
             Observacion observacion) {
+        return emitir(tipo, contribuyenteId, obligaciones, observacion, LocalDate.now(reloj));
+    }
+
+    /**
+     * Emite el valor a una fecha explicita: congela la deuda seleccionada, la numera y mueve su
+     * fase.
+     *
+     * <p>Existe para la generacion masiva (#38): una corrida congela su {@code fechaCriterio} al
+     * registrarse, y la etapa "generacion" tiene que evaluar la deuda de cada candidato a esa misma
+     * fecha aunque se reanude dias despues -nunca a la fecha en que efectivamente corre-, o dos
+     * ejecuciones de la misma corrida verian deuda distinta para el mismo contribuyente.
+     *
+     * @param fecha a que fecha se evalua la deuda disponible, y con la que nace el valor
+     * @throws SinObligaciones si {@code obligaciones} llega vacia
+     * @throws ObligacionSinDeuda si algun selector no coincide con ninguna obligacion con deuda del
+     *     contribuyente a esa fecha
+     */
+    @Transactional
+    public Valor emitir(
+            TipoValor tipo,
+            long contribuyenteId,
+            List<SelectorDeObligacion> obligaciones,
+            Observacion observacion,
+            LocalDate fecha) {
 
         if (obligaciones.isEmpty()) {
             throw new SinObligaciones();
         }
 
-        LocalDate hoy = LocalDate.now(reloj);
+        LocalDate hoy = fecha;
         List<ObligacionPublica> disponibles = deuda.deTodoElContribuyente(contribuyenteId, hoy);
 
         List<ValorDetalle> detalle = new ArrayList<>(obligaciones.size());

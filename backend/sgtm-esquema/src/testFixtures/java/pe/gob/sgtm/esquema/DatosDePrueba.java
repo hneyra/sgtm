@@ -674,6 +674,31 @@ public final class DatosDePrueba {
                         + " VALUES (?, 'OP', ?, 1)",
                 muni,
                 EJERCICIO);
+
+        // #38: una corrida masiva ya resuelta -el mismo valor de arriba, referenciado
+        // desde su item- y una todavia pendiente, para que la prueba de aislamiento
+        // tenga fila que ver en los dos estados de valor_masivo_item.
+        long corridaMasivaId =
+                insertar(
+                        app,
+                        "INSERT INTO valor_masivo (municipalidad_id, tipo, ejercicio_desde,"
+                                + " ejercicio_hasta, fecha_criterio, origen, total_candidatos,"
+                                + " usuario_registro, observacion)"
+                                + " VALUES (?, 'OP', ?, ?, ?, 'SELECCION', 1, 'prueba',"
+                                + "         'corrida masiva de prueba') RETURNING id",
+                        muni,
+                        EJERCICIO,
+                        EJERCICIO,
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO valor_masivo_item (municipalidad_id, corrida_id, contribuyente_id,"
+                        + " estado, valor_id, fecha_procesado)"
+                        + " VALUES (?, ?, ?, 'GENERADO', ?, now())",
+                muni,
+                corridaMasivaId,
+                titular,
+                valorId);
         ejecutar(
                 app,
                 "INSERT INTO notificacion (municipalidad_id, objeto, objeto_id, numero,"
