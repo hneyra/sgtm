@@ -95,9 +95,9 @@ acaecimiento del acto interruptorio:
 
 **No se carga con este archivo.** La carga depende de D-13.
 
-## 3. Qué no cabía, y qué resolvió #39
+## 3. Qué no cabe hoy
 
-**Resuelto.** `prescripcion_hecho` (V28, #39) guarda, fila a fila y por cada solicitud de
+**Resuelto por #39.** `prescripcion_hecho` (V28) guarda, fila a fila y por cada solicitud de
 prescripción, qué causal de interrupción (art. 45) o de suspensión (art. 46) se alegó, con su
 fecha —o su intervalo, si es una suspensión—. Ya no hace falta reconstruir por fuera de la base
 «se interrumpió por pago parcial» frente a «se interrumpió por solicitud de fraccionamiento»: cada

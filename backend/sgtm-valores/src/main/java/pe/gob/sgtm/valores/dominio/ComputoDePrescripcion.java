@@ -82,6 +82,9 @@ public final class ComputoDePrescripcion {
                     vencimiento =
                             vencimiento.plusDays(ChronoUnit.DAYS.between(hecho.desde(), hasta));
                 }
+                default ->
+                        throw new IllegalStateException(
+                                "Clase de hecho sin cubrir: " + hecho.clase());
             }
         }
 
