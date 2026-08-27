@@ -4,6 +4,7 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +53,18 @@ import pe.gob.sgtm.seguridad.dominio.Usuario;
  * va por el camino normal de la aplicacion, como {@code sgtm_app} y con su auditoria, porque son
  * escrituras de negocio y tienen que dejar el mismo rastro que dejarian hechas a mano.
  *
+ * <h2>Los dos grupos que deja</h2>
+ *
+ * <ul>
+ *   <li><b>{@code Administracion del sistema}</b> — el catalogo entero, los siete privilegios. Es
+ *       el grupo del primer administrador, que gestiona la municipalidad completa (como el
+ *       superadministrador de un ERP).
+ *   <li><b>{@code Seguridad}</b> — solo el modulo de seguridad: administra el acceso de los
+ *       usuarios —grupos, usuarios, permisos, miembros— sin tocar el resto. Se crea <b>sin
+ *       miembros</b>, como plantilla; una municipalidad afilia en el a quien lleve las altas y
+ *       bajas de usuarios.
+ * </ul>
+ *
  * <h2>Idempotente, entera</h2>
  *
  * <p>Se ejecuta en cada despliegue. Lo que ya existe se queda como esta —con los permisos que
@@ -84,12 +97,21 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
     static final String GRUPO_DE_ADMINISTRACION = "Administracion del sistema";
 
     /**
-     * Modulo del catalogo cuyas opciones recibe el administrador inicial.
+     * Grupo delegado que solo administra el <b>acceso de los usuarios</b>: grupos, usuarios,
+     * permisos y miembros, con los siete privilegios. Es el alcance que tuvo {@link
+     * #GRUPO_DE_ADMINISTRACION} antes de pasar a recibir el catalogo entero.
      *
-     * <p>Es el codigo que el catalogo <b>deriva</b> del nombre del modulo —«Seguridad» en
-     * mayusculas, sin tildes ni puntuacion—, no el nombre del contexto acotado. La diferencia entre
-     * los dos hizo que la primera version otorgara cero permisos, y lo detecto la comprobacion de
-     * abajo en vez de dejar una municipalidad implantada sin quien la administre.
+     * <p>La implantacion lo crea <b>sin miembros</b>, como plantilla: una municipalidad afilia en
+     * el a quien lleva las altas y bajas de usuarios sin darle con ello el resto del sistema.
+     */
+    static final String GRUPO_DE_SEGURIDAD = "Seguridad";
+
+    /**
+     * Modulo del catalogo cuyas opciones recibe el grupo {@link #GRUPO_DE_SEGURIDAD}.
+     *
+     * <p>Es el codigo que el catalogo <b>deriva</b> del nombre del modulo —«SEGURIDAD», en
+     * mayusculas y sin tildes—, no el nombre del contexto acotado. Confundir los dos hizo que una
+     * version otorgara cero permisos, y lo caza {@code ImplantarMunicipalidadTest}.
      */
     static final String MODULO_DE_SEGURIDAD = "SEGURIDAD";
 
@@ -157,23 +179,15 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
                                 Grupo grupo = grupoDeAdministracion(porQue);
                                 Usuario admin = administrador(porQue);
                                 afiliar(grupo, admin, porQue);
+                                int alAdministrador = permisosDelAdministrador(grupo, porQue);
+                                int aSeguridad =
+                                        permisosDeSeguridad(grupoDeSeguridad(porQue), porQue);
                                 return new Resumen(
-                                        nuevos, admin.cuenta(), permisosDeSeguridad(grupo, porQue));
+                                        nuevos, admin.cuenta(), alAdministrador, aSeguridad);
                             });
             if (resumen == null) {
                 throw new IllegalStateException("La implantacion no devolvio resumen");
             }
-            int accesos = resumen.accesosNuevos();
-            int otorgados = resumen.permisosOtorgados();
-            Usuario administrador =
-                    new Usuario(
-                            null,
-                            resumen.cuenta(),
-                            null,
-                            resumen.cuenta(),
-                            null,
-                            true,
-                            pe.gob.sgtm.dominio.Vigencia.SIEMPRE);
 
             // El regimen se registra aqui aunque sea una sola palabra: es lo unico del
             // resultado que no se puede comprobar mirando pantallas. Una instalacion que
@@ -181,14 +195,16 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
             // descubre es quien recibe uno (#122).
             log.info(
                     "Municipalidad {} lista ({}): id {}, {} accesos nuevos, administrador '{}',"
-                            + " {} permisos otorgados al grupo '{}'",
+                            + " {} permisos al grupo '{}', {} al grupo '{}'",
                     datos.ubigeo(),
                     datos.esDemostracion() ? "DEMOSTRACION" : "instalacion real",
                     municipalidadId,
                     resumen.accesosNuevos(),
                     resumen.cuenta(),
-                    resumen.permisosOtorgados(),
-                    GRUPO_DE_ADMINISTRACION);
+                    resumen.permisosDelAdministrador(),
+                    GRUPO_DE_ADMINISTRACION,
+                    resumen.permisosDeSeguridad(),
+                    GRUPO_DE_SEGURIDAD);
         } finally {
             OrigenContext.limpiar();
             TenantContext.limpiar();
@@ -204,7 +220,22 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
                                         Grupo.nuevo(
                                                 GRUPO_DE_ADMINISTRACION,
                                                 "Creado por la implantacion: administra la"
-                                                        + " seguridad del sistema"),
+                                                        + " municipalidad entera"),
+                                        porQue));
+    }
+
+    private Grupo grupoDeSeguridad(Observacion porQue) {
+        return administracion
+                .grupoPorNombre(GRUPO_DE_SEGURIDAD)
+                .orElseGet(
+                        () ->
+                                seguridad.registrarGrupo(
+                                        Grupo.nuevo(
+                                                GRUPO_DE_SEGURIDAD,
+                                                "Creado por la implantacion: administra el acceso"
+                                                        + " de los usuarios (grupos, usuarios,"
+                                                        + " permisos, miembros). Sin miembros:"
+                                                        + " es una plantilla"),
                                         porQue));
     }
 
@@ -237,24 +268,50 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
     }
 
     /**
-     * Los permisos con que arranca el administrador: <b>los del modulo de seguridad, y ninguno
-     * mas</b>.
+     * Los permisos con que arranca {@link #GRUPO_DE_ADMINISTRACION}: <b>el catalogo entero, los
+     * siete privilegios</b>.
      *
-     * <p>Es deliberadamente poco. Con ellos puede crear grupos, usuarios y permisos, y desde ahi
-     * repartir el resto del sistema segun quien haga que en la municipalidad. Darle de entrada las
-     * 134 opciones seria mas comodo el primer dia y dejaria una cuenta con todo para siempre,
-     * porque nadie vuelve a quitarle nada a la cuenta que funciona.
+     * <p>El administrador inicial de una municipalidad la administra <b>toda</b>, no solo su
+     * seguridad: recibe las 134 opciones de los 12 modulos con {@link Privilegio} completo. Desde
+     * ahi crea los grupos funcionales de REQ-03 §3 —Jefe de Rentas, Cajero, Fiscalizador…— y les
+     * reparte lo que a cada uno le toca.
      *
-     * <p>La lista sale del catalogo y no de constantes: una pantalla nueva de seguridad entra sola,
-     * que es lo mismo que promete la siembra de accesos.
+     * <p>Esto no deja una cuenta que lo pueda todo sin control: las reglas de separacion de
+     * funciones (REQ-03 §4, SoD-1…SoD-5) se verifican en el servidor <b>al margen de los
+     * permisos</b> —quien carga un parametro sigue sin poder aprobarlo, tenga o no el privilegio—.
+     * Y es idempotente y no destructivo: si despues se le acota el alcance a este grupo, un
+     * relanzamiento del despliegue no lo vuelve a abrir (la guarda del ultimo administrador impide
+     * que quede en cero, no que quede en poco).
+     */
+    private int permisosDelAdministrador(Grupo grupo, Observacion porQue) {
+        return otorgarSietePrivilegios(grupo, opcion -> true, porQue);
+    }
+
+    /**
+     * Los permisos de {@link #GRUPO_DE_SEGURIDAD}: <b>solo el modulo de seguridad</b>, los siete
+     * privilegios. Es el alcance con que se administra el acceso de los usuarios —grupos, usuarios,
+     * permisos, miembros— sin tocar el resto del sistema. El grupo se crea sin miembros; una
+     * municipalidad afilia en el a quien haga esa tarea.
      */
     private int permisosDeSeguridad(Grupo grupo, Observacion porQue) {
+        return otorgarSietePrivilegios(
+                grupo, opcion -> MODULO_DE_SEGURIDAD.equals(opcion.moduloCodigo()), porQue);
+    }
+
+    /**
+     * Otorga los siete privilegios sobre cada opcion del catalogo que pase el filtro.
+     *
+     * <p>La lista sale del catalogo y no de constantes: una pantalla nueva entra sola, que es lo
+     * mismo que promete la siembra de accesos.
+     */
+    private int otorgarSietePrivilegios(
+            Grupo grupo, Predicate<CatalogoDeOpciones.Opcion> filtro, Observacion porQue) {
         long grupoId = exigirId(grupo.id(), "grupo");
         Set<Privilegio> todos = EnumSet.allOf(Privilegio.class);
 
         List<String> opciones =
                 CatalogoDeOpciones.leer().stream()
-                        .filter(opcion -> MODULO_DE_SEGURIDAD.equals(opcion.moduloCodigo()))
+                        .filter(filtro)
                         .map(CatalogoDeOpciones.Opcion::codigo)
                         // `permisos` primero, y no es cosmetico: AdministrarPermisos rechaza
                         // —despues de escribir, dentro de la misma transaccion— cualquier cambio
@@ -274,11 +331,9 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
 
         if (opciones.isEmpty()) {
             throw new IllegalStateException(
-                    "El catalogo no trae ninguna opcion del modulo '"
-                            + MODULO_DE_SEGURIDAD
-                            + "'. Un administrador sin permisos sobre la seguridad no puede darse"
-                            + " permisos a si mismo ni a nadie, y de ahi solo se sale por la base"
-                            + " de datos");
+                    "El filtro del catalogo no dejo ninguna opcion que otorgar. Un grupo de"
+                            + " administracion sin permisos no puede repartir ninguno, y de ahi"
+                            + " solo se sale por la base de datos");
         }
 
         for (String codigo : opciones) {
@@ -288,7 +343,11 @@ public class ImplantarMunicipalidad implements ApplicationRunner {
     }
 
     /** Lo que la implantacion hizo, para el mensaje final. */
-    private record Resumen(int accesosNuevos, String cuenta, int permisosOtorgados) {}
+    private record Resumen(
+            int accesosNuevos,
+            String cuenta,
+            int permisosDelAdministrador,
+            int permisosDeSeguridad) {}
 
     private static long exigirId(@Nullable Long id, String que) {
         if (id == null) {

@@ -11,6 +11,7 @@ import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import pe.gob.sgtm.catastro.aplicacion.ConsultaDeVias;
 import pe.gob.sgtm.catastro.dominio.TipoVia;
 import pe.gob.sgtm.catastro.dominio.Via;
 import pe.gob.sgtm.catastro.dominio.ViaRepository;
@@ -36,7 +37,7 @@ class ViaControllerTest {
     private final RepositorioEnMemoria repositorio = new RepositorioEnMemoria();
 
     private final MockMvc mvc =
-            MockMvcBuilders.standaloneSetup(new ViaController(repositorio))
+            MockMvcBuilders.standaloneSetup(new ViaController(new ConsultaDeVias(repositorio)))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(
