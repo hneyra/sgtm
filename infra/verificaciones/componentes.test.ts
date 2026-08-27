@@ -1151,9 +1151,7 @@ describe("#157 · endurecimiento", () => {
     expect(destinos.some((d) => d.ipBlock !== undefined)).toBe(false);
   });
 
-  it("las dos excepciones de salida a internet son del mismo puerto, y de nadie mas", () => {
-    // El motor y el respaldo, hacia el almacenamiento de objetos (issue #155): la
-    // unica salida amplia que este archivo declara, y acotada a :443.
+  it("las excepciones de salida amplia son de un solo puerto cada una, y de nadie mas", () => {
     const conInternet = politicasDeRed(ms).filter((p) =>
       (p.spec.egress ?? []).some((r) => (r.to ?? []).some((d) => d.ipBlock !== undefined)),
     );
@@ -1163,18 +1161,42 @@ describe("#157 · endurecimiento", () => {
         "permitir-salida-sgtm-prod-observabilidad-alertmanager-a-internet",
         "permitir-salida-sgtm-prod-postgres-a-internet",
         "permitir-salida-sgtm-prod-respaldo-a-internet",
+        "permitir-salida-sgtm-prod-observabilidad-kube-state-metrics-al-apiserver",
       ].sort(),
     );
-    for (const p of conInternet) {
+
+    // El motor y el respaldo, hacia el almacenamiento de objetos (issue #155), y
+    // Alertmanager hacia el webhook: los tres, acotados a :443.
+    const A_INTERNET = conInternet.filter((p) => p.metadata.name.endsWith("-a-internet"));
+    for (const p of A_INTERNET) {
       const puertos = (p.spec.egress ?? []).flatMap((r) => r.ports ?? []).map((pt) => pt.port);
       expect(puertos).toEqual([443]);
     }
+
+    // kube-state-metrics es la excepcion distinta: su destino es el API de
+    // Kubernetes, que en k3s escucha :6443 despues del DNAT del `Service`
+    // `kubernetes` (:443) — ver el docstring de Red.ts.
+    const alApiserver = conInternet.find((p) => p.metadata.name.endsWith("-al-apiserver"));
+    const puertosApiserver = (alApiserver?.spec.egress ?? []).flatMap((r) => r.ports ?? []).map((pt) => pt.port);
+    expect(puertosApiserver).toEqual([6443]);
   });
 
-  it("kube-state-metrics no tiene politica de salida: el API de Kubernetes no es un pod", () => {
-    const p = politicaDe(ms, "permitir-ingreso-kube-state-metrics");
-    expect(p.spec.policyTypes).toEqual(["Ingress"]);
-    expect(p.spec.egress).toBeUndefined();
+  it("kube-state-metrics: ingreso solo de Prometheus, salida solo al apiserver por :6443", () => {
+    const entrada = politicaDe(ms, "permitir-ingreso-kube-state-metrics");
+    expect(entrada.spec.policyTypes).toEqual(["Ingress"]);
+    expect(entrada.spec.egress).toBeUndefined();
+
+    // El API de Kubernetes no es un pod: la unica forma de nombrar el destino sin
+    // un ipBlock fragil es acotar el puerto (ver el docstring de Red.ts). Es 6443
+    // -el puerto real, despues del DNAT del `Service` `kubernetes`- y no 443, que
+    // es solo lo que ese `Service` expone antes de traducirse.
+    const salida = politicaDe(ms, "permitir-salida-sgtm-prod-observabilidad-kube-state-metrics-al-apiserver");
+    expect(salida.spec.policyTypes).toEqual(["Egress"]);
+    expect(salida.spec.ingress).toBeUndefined();
+    const puertos = (salida.spec.egress ?? []).flatMap((r) => r.ports ?? []).map((p) => p.port);
+    expect(puertos).toEqual([6443]);
+    const destinos = salida.spec.egress?.flatMap((r) => r.to ?? []) ?? [];
+    expect(destinos.every((d) => d.ipBlock !== undefined)).toBe(true);
   });
 
   it("toda politica vive en el namespace del ambiente", () => {
