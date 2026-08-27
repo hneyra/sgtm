@@ -252,9 +252,9 @@ const TIPO_DE_VALOR_DEL_MOCK: Readonly<Record<string, string>> = {
 /**
  * Como escribe el prototipo el estado de un valor frente al `enum EstadoDeValor` (V3) que
  * `ValorResource.estado` publica de verdad. «Firme» y «Reclamado» no son ningun valor del
- * enum —la firmeza es una fecha derivada (#39) y el reclamo todavia no tiene estado propio
- * (`sgtm-coactiva` sigue vacio)—: el mas cercano que el dominio ya modela es `NOTIFICADO`,
- * que es el estado del que ambos parten.
+ * enum —la firmeza es una fecha derivada de la notificacion (`NotificacionResource
+ * .exigibleDesde`, #39), no un estado, y el reclamo todavia no tiene estado propio—: el mas
+ * cercano que el dominio ya modela es `NOTIFICADO`, que es el estado del que ambos parten.
  */
 const ESTADO_DE_VALOR_DEL_MOCK: Readonly<Record<string, string>> = {
   Emitido: 'EMITIDO',
