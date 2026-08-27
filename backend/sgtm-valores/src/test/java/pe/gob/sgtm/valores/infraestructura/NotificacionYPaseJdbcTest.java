@@ -615,15 +615,6 @@ class NotificacionYPaseJdbcTest {
             sentencia.ejecutar();
         } catch (SQLException fallo) {
             return fallo.getSQLState();
-        } catch (RuntimeException fallo) {
-            Throwable causa = fallo;
-            while (causa != null) {
-                if (causa instanceof SQLException sql) {
-                    return sql.getSQLState();
-                }
-                causa = causa.getCause();
-            }
-            return "sin SQLException: " + fallo;
         }
         return "no fallo";
     }
