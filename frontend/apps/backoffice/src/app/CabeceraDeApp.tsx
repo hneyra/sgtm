@@ -1,11 +1,13 @@
 import { Icono } from '@sgtm/design-system';
 import { useEjercicio } from './ejercicio';
 import { usePreferencias } from './preferencias';
-import { useSesion } from './sesion/ProveedorDeSesion';
+import { Lanzador } from './Lanzador';
+import { MenuDeLaPersona } from './MenuDeLaPersona';
 
 /**
  * Cabecera fija: modulo, titulo de la pantalla, buscador, operacion del
- * contrato y quien esta en la caja.
+ * contrato y las dos puertas de ADR-0014 —el lanzador de modulos y el menu de
+ * la persona—.
  *
  * El chip con el endpoint se puede apagar (`mostrarEndpoint`): en desarrollo
  * dice contra que operacion se esta trabajando, y en ventanilla no le dice nada
@@ -16,10 +18,9 @@ import { useSesion } from './sesion/ProveedorDeSesion';
  * fallo de formato sino una respuesta equivocada a quien vino a preguntar
  * cuanto debe.
  *
- * Quien esta en la caja sale del token, y con el la municipalidad activa —que
- * es para lo unico que el frontend lee ese claim (FRO-01 §4)—. Sin proveedor de
- * identidad no hay usuario que mostrar, y se dice: inventarse uno seria pintar
- * una sesion que no existe.
+ * **El lanzador tambien se ve en movil**: con la barra lateral plegada en
+ * cajon, es la puerta corta a los modulos, y por eso no va dentro del bloque
+ * `data-oculto-en-movil`.
  */
 export interface CabeceraDeAppProps {
   readonly modulo: string;
@@ -37,10 +38,7 @@ export function CabeceraDeApp({
   onAbrirPaleta,
 }: CabeceraDeAppProps) {
   const { preferencias } = usePreferencias();
-  const sesion = useSesion();
   const { ejercicio } = useEjercicio();
-  const quien = sesion.datos?.usuario ?? 'Sin sesión';
-  const donde = sesion.datos?.municipalidad ?? preferencias.entidad;
 
   return (
     <header className="sgtm-cabecera" data-no-imprimible="1">
@@ -68,29 +66,13 @@ export function CabeceraDeApp({
         <span>Ejercicio</span>
         <strong>{ejercicio}</strong>
       </p>
+      <Lanzador />
       <div className="sgtm-cabecera__derecha" data-oculto-en-movil="1">
         {preferencias.mostrarEndpoint && endpoint && (
           <code className="sgtm-cabecera__endpoint">{endpoint}</code>
         )}
-        <div className="sgtm-cabecera__usuario">
-          <span className="sgtm-cabecera__avatar" aria-hidden="true">
-            {iniciales(quien)}
-          </span>
-          <span className="sgtm-cabecera__identidad">
-            <span className="sgtm-cabecera__nombre">{quien}</span>
-            <span className="sgtm-cabecera__rol">{donde}</span>
-          </span>
-        </div>
+        <MenuDeLaPersona />
       </div>
     </header>
   );
-}
-
-/** «María Quispe» → «MQ». Sin sesion, el hueco no se rellena con nada inventado. */
-function iniciales(nombre: string): string {
-  const partes = nombre.split(/\s+/).filter(Boolean);
-  return partes
-    .slice(0, 2)
-    .map((parte) => parte[0]?.toUpperCase() ?? '')
-    .join('');
 }
