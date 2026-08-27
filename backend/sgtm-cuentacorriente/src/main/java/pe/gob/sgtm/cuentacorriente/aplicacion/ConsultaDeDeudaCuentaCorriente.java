@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
 import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
+import pe.gob.sgtm.cuentacorriente.dominio.DeudaActualizada;
 import pe.gob.sgtm.cuentacorriente.dominio.ObligacionConDeuda;
 
 /** Implementa {@link ConsultaDeDeudaPublica} sobre {@link ConsultarDeuda} (#25). */
@@ -27,12 +28,16 @@ public class ConsultaDeDeudaCuentaCorriente implements ConsultaDeDeudaPublica {
     }
 
     private static ObligacionPublica aPublica(ObligacionConDeuda obligacion) {
+        DeudaActualizada deuda = obligacion.deuda();
         return new ObligacionPublica(
                 obligacion.tributo(),
                 obligacion.ejercicio(),
                 obligacion.predioId(),
                 obligacion.vehiculoId(),
-                obligacion.deuda().fecha(),
-                obligacion.deuda().total());
+                deuda.fecha(),
+                deuda.insoluto(),
+                deuda.reajuste(),
+                deuda.interes(),
+                deuda.gasto());
     }
 }

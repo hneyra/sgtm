@@ -1,0 +1,84 @@
+package pe.gob.sgtm.cuentacorriente.aplicacion;
+
+import java.time.LocalDate;
+import org.jspecify.annotations.Nullable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import pe.gob.sgtm.cuentacorriente.MovimientoDeFase;
+import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
+import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
+import pe.gob.sgtm.cuentacorriente.dominio.Fase;
+import pe.gob.sgtm.cuentacorriente.dominio.TipoAsiento;
+import pe.gob.sgtm.dominio.Dinero;
+import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.dominio.Observacion;
+
+/**
+ * Implementa {@link MovimientoDeFase} como un par de asientos: un abono en fase ordinaria y un
+ * cargo por el mismo importe en fase {@link Fase#VALOR}, con {@link Concepto#AJUSTE} —el mismo
+ * concepto que ya usa cualquier movimiento administrativo que no altera el total adeudado, y que ya
+ * exige {@code motivo} por {@code asiento_motivo_ck} (RNF-052)—.
+ *
+ * <p>Las dos escrituras van en la misma transaccion: si la segunda fallara, la primera se revierte
+ * con ella. Un abono sin su cargo dejaria una obligacion con menos deuda de la que en realidad
+ * tiene, y eso es peor que no mover nada.
+ */
+@Service
+public class MovimientoDeFaseCuentaCorriente implements MovimientoDeFase {
+
+    private final RegistrarAsiento registrar;
+
+    public MovimientoDeFaseCuentaCorriente(RegistrarAsiento registrar) {
+        this.registrar = registrar;
+    }
+
+    @Override
+    @Transactional
+    public void moverAValor(
+            Ejercicio ejercicio,
+            long contribuyenteId,
+            String tributo,
+            @Nullable Integer periodo,
+            @Nullable Long predioId,
+            @Nullable Long vehiculoId,
+            String referenciaExterna,
+            Dinero monto,
+            LocalDate fechaValor,
+            String documentoOrigen,
+            Observacion observacion) {
+
+        Asiento abonoOrdinario =
+                Asiento.nuevo(
+                        ejercicio,
+                        contribuyenteId,
+                        tributo,
+                        Concepto.AJUSTE,
+                        TipoAsiento.ABONO,
+                        Fase.ORDINARIA,
+                        periodo,
+                        predioId,
+                        vehiculoId,
+                        referenciaExterna,
+                        monto,
+                        fechaValor,
+                        documentoOrigen);
+        registrar.asentar(abonoOrdinario, observacion);
+
+        Asiento cargoEnValor =
+                Asiento.nuevo(
+                        ejercicio,
+                        contribuyenteId,
+                        tributo,
+                        Concepto.AJUSTE,
+                        TipoAsiento.CARGO,
+                        Fase.VALOR,
+                        periodo,
+                        predioId,
+                        vehiculoId,
+                        referenciaExterna,
+                        monto,
+                        fechaValor,
+                        documentoOrigen);
+        registrar.asentar(cargoEnValor, observacion);
+    }
+}
