@@ -10,6 +10,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
 
 /**
@@ -74,6 +75,21 @@ public class ManejadorDeErrores {
     @ExceptionHandler(DataAccessException.class)
     public ResponseEntity<ProblemDetail> accesoADatos(DataAccessException error) {
         return interno(error);
+    }
+
+    /**
+     * Una ruta que ningun controlador mapea. Es {@code 404}, no {@code 500}.
+     *
+     * <p>Sin este manejador, {@link NoResourceFoundException} —que Spring lanza para toda peticion
+     * sin handler— cae en {@link #cualquierOtra} y sale como {@code 500} con identificador de
+     * incidencia. El contrato declara 134 operaciones y hoy hay una implementada: cada pantalla del
+     * prototipo cuyo endpoint todavia no existe generaria una «incidencia» por carga. El {@code
+     * 404} dice la verdad —la operacion aun no esta publicada— y no ensucia el registro.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ProblemDetail> rutaNoEncontrada(NoResourceFoundException error) {
+        return respuesta(
+                CodigoDeError.NO_ENCONTRADO, CodigoDeError.NO_ENCONTRADO.mensaje(), List.of());
     }
 
     @ExceptionHandler(Exception.class)
