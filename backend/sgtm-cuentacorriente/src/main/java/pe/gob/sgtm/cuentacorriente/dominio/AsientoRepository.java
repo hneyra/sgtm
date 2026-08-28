@@ -1,5 +1,6 @@
 package pe.gob.sgtm.cuentacorriente.dominio;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import pe.gob.sgtm.compartido.Pagina;
@@ -75,6 +76,27 @@ public interface AsientoRepository {
      * indice por particion y no un recorrido completo.
      */
     List<Asiento> porDocumentoOrigen(String documentoOrigen);
+
+    /**
+     * Lo que cada uno de esos documentos <b>sigue</b> abonando, en una sola consulta (#36).
+     *
+     * <p>Es como el cierre de caja cuadra contra el libro. {@link #porDocumentoOrigen} sirve para
+     * uno; esto sirve para los de un turno entero, que pueden ser cientos, y hacerlo documento por
+     * documento serian cientos de viajes al motor por cada arqueo.
+     *
+     * <p>«Sigue» es la palabra que importa. Solo se suman los asientos de tipo {@code ABONO} —el
+     * cargo con el que la cobranza cristaliza el devengo no es dinero que entro— y solo los que
+     * <b>nadie ha reversado</b>. Un recibo anulado conserva sus asientos, porque no se borran, se
+     * reversan (V2): preguntar «cuanto abono» devolveria el importe de un recibo que ya no vale.
+     *
+     * <p>La consecuencia util es que quien pregunta no tiene que saber que documento reversa a que
+     * otro, ni que la reversion de un abono se escribe como cargo. Ese conocimiento se queda aqui.
+     *
+     * <p>Un documento que no asento nada <b>no aparece</b> en el mapa. Distinguir «cero» de «no
+     * estaba» es cosa de quien pregunta: {@code AbonadoEnElLibro} lo resuelve devolviendo cero.
+     */
+    java.util.Map<String, pe.gob.sgtm.dominio.Dinero> abonadoPorDocumento(
+            Collection<String> documentosOrigen);
 
     /**
      * El identificador del contribuyente con ese codigo, si existe en esta municipalidad.

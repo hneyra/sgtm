@@ -5,7 +5,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import pe.gob.sgtm.cuentacorriente.AbonadoEnElLibro;
 import pe.gob.sgtm.cuentacorriente.AbonoAsentado;
+import pe.gob.sgtm.cuentacorriente.ConciliacionDeCaja;
 import pe.gob.sgtm.cuentacorriente.RegistroDeAbonos;
 import pe.gob.sgtm.cuentacorriente.ReversionDeAbonos;
 import pe.gob.sgtm.cuentacorriente.SeleccionDeObligacion;
@@ -22,12 +24,23 @@ import pe.gob.sgtm.dominio.Observacion;
  * dinero. La demostracion de que el bloqueo funciona bajo concurrencia real es otra cosa, y esa la
  * hace {@code CajaJdbcTest} contra PostgreSQL.
  */
-public final class LibroDeMentira implements RegistroDeAbonos {
+public final class LibroDeMentira implements RegistroDeAbonos, ConciliacionDeCaja {
 
     private final Map<SeleccionDeObligacion, Dinero[]> deuda = new LinkedHashMap<>();
     private final List<String> documentosOrigen = new ArrayList<>();
     private final Map<String, List<AbonoAsentado>> cobradoPorDocumento = new LinkedHashMap<>();
     private final List<String> documentosReversados = new ArrayList<>();
+
+    /**
+     * Lo que cada documento <b>sigue</b> abonando (#36).
+     *
+     * <p>Reproduce la semantica del repositorio de verdad, que es la que hace util el cuadre del
+     * cierre: al reversar, el documento de la cobranza pasa a cero —sus abonos siguen en el libro,
+     * pero alguien los reverso— en vez de desaparecer. Un doble que lo borrara haria pasar en verde
+     * un cuadre que en produccion distinguiria «recibo anulado» de «recibo que nunca abono», y esos
+     * dos casos llevan a sitios distintos.
+     */
+    private final Map<String, Dinero> abonadoPorDocumento = new LinkedHashMap<>();
 
     /** Declara la deuda de una obligacion, con su desglose. */
     public LibroDeMentira con(
@@ -84,6 +97,11 @@ public final class LibroDeMentira implements RegistroDeAbonos {
         }
         documentosOrigen.add(documentoOrigen);
         cobradoPorDocumento.put(documentoOrigen, List.copyOf(abonados));
+        Dinero total = Dinero.CERO;
+        for (AbonoAsentado abono : abonados) {
+            total = total.mas(abono.total());
+        }
+        abonadoPorDocumento.merge(documentoOrigen, total, Dinero::mas);
         return List.copyOf(abonados);
     }
 
@@ -121,6 +139,29 @@ public final class LibroDeMentira implements RegistroDeAbonos {
             abonado = abonado.mas(abono.total());
         }
         documentosReversados.add(documentoOrigen);
+        // Lo que ese documento SIGUE abonando pasa a ser cero: sus abonos estan reversados.
+        abonadoPorDocumento.put(documentoOrigen, Dinero.CERO);
         return new ReversionDeAbonos(abonados.size(), abonado, fecha);
+    }
+
+    /**
+     * Lo que cada documento sigue abonando, para el cuadre del cierre (#36).
+     *
+     * <p>Un documento que no asento nada no aparece en el mapa, igual que en el repositorio de
+     * verdad: es {@link AbonadoEnElLibro} quien decide que eso vale cero. Reproducirlo asi es lo
+     * que hace que la prueba del cuadre distinga «no abono» de «abono cero», que es exactamente la
+     * distincion que un recibo de tasas obliga a hacer.
+     */
+    @Override
+    public AbonadoEnElLibro abonadoPor(
+            java.util.Collection<String> documentosOrigen, LocalDate aLaFecha) {
+        Map<String, Dinero> encontrados = new LinkedHashMap<>();
+        for (String documento : documentosOrigen) {
+            Dinero abonado = abonadoPorDocumento.get(documento);
+            if (abonado != null) {
+                encontrados.put(documento, abonado);
+            }
+        }
+        return new AbonadoEnElLibro(encontrados, aLaFecha);
     }
 }

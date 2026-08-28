@@ -159,6 +159,25 @@ const DEL_BACKEND = {
       descripcion: 'PDF | XLS | RTF. Sin el, responde JSON: lo que la pantalla dibuja',
     },
   ],
+  // El avance en vivo del turno de un cajero: lo que la pantalla de cierre llama
+  // «Cuadrar», y que se mira ANTES de firmar el arqueo (#36, RF-087). La pantalla
+  // de avance dibuja ejercicio, rango y tributo, y ninguno de los dos identifica
+  // una ventanilla; sin ellos, «Cierre y arqueo de caja» no tendria de donde leer
+  // sus totales sin bloquear el turno, que es lo que hace la cobranza
+  // (`RecaudacionController`, #36).
+  avance_recaudacion: [
+    {
+      nombre: 'caja',
+      ejemplo: 'C-01',
+      descripcion:
+        'Codigo de la ventanilla. Con `cajero`, responde ademas el arqueo en vivo de su turno',
+    },
+    {
+      nombre: 'cajero',
+      ejemplo: 'jperez',
+      descripcion: 'Cajero del turno. Solo tiene efecto junto con `caja`',
+    },
+  ],
 };
 
 /**

@@ -31,5 +31,32 @@ public enum TipoDePago {
     A_CUENTA,
     PRECONVENIO,
     CUOTA_CONVENIO,
-    TASA
+    TASA;
+
+    /**
+     * Si un recibo de esta clase deja asientos en el libro de cuenta corriente (#36, RF-087).
+     *
+     * <p>Lo necesita el <b>cierre de caja</b>, y es la distincion sin la cual el arqueo no puede
+     * cuadrar. Dos clases de recibo cobran dinero de verdad y no tocan el libro:
+     *
+     * <ul>
+     *   <li>{@link #TASA}: un derecho de tramite no es deuda tributaria —no se determina, no
+     *       devenga interes, no prescribe—, asi que no hay cargo que abonar (#33).
+     *   <li>{@link #PRECONVENIO}: la cuota inicial <b>formaliza</b> el convenio; su efecto sobre el
+     *       libro es el acogimiento entero a fase de convenio, no un abono, porque cuanto de la
+     *       deuda acogida extingue esa inicial es una regla de imputacion que no esta firmada (#35,
+     *       art. 31 del Codigo Tributario).
+     * </ul>
+     *
+     * <p>Esos dos <b>cuadran contra el recibo, no contra asientos</b>. Meterlos en el cuadre contra
+     * el libro haria que todo turno que cobrara una tasa saliera descuadrado, y la salida comoda
+     * ante eso —relajar la comprobacion— dejaria de detectar el descuadre de verdad.
+     *
+     * <p>{@link #A_CUENTA} y {@link #CUOTA_CONVENIO} si abonarian: son pagos parciales de deuda.
+     * Hoy la caja los rechaza, asi que ningun recibo puede llevarlos; se responde lo que serian
+     * para que el dia que se implementen el cuadre ya los cuente.
+     */
+    public boolean abonaEnElLibro() {
+        return this != TASA && this != PRECONVENIO;
+    }
 }

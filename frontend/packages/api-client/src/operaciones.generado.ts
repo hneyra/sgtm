@@ -702,7 +702,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/tesoreria/recaudacion/avance',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['ejercicio', 'desde', 'hasta', 'tributo', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['caja', 'cajero', 'ejercicio', 'desde', 'hasta', 'tributo', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Recaudación por área — `GET /tesoreria/recaudacion/por-area` */
   recaudacion_area: {
@@ -1762,6 +1762,8 @@ export interface ParametrosPorOperacion {
   readonly cierre_caja: Readonly<Record<string, never>>;
   /** `GET /tesoreria/recaudacion/avance` */
   readonly avance_recaudacion: {
+    readonly caja?: string;
+    readonly cajero?: string;
     readonly ejercicio?: string;
     readonly desde?: string;
     readonly hasta?: string;

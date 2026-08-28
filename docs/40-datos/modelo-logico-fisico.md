@@ -266,6 +266,12 @@ en el esquema, no en una convención:
   anulado—, y una columna que miente es peor que una columna que falta. El estado de un recibo se
   deriva de sus movimientos.
 - Anular, reformular o quebrar un convenio exige `fecha_estado` y `motivo_estado`, por `CHECK`.
+- Corregir el cierre de una caja es **agregar** una reversión a `cierre_turno`, que lo deja sin
+  efecto y **reabre** el turno (`V32`, #36). Las columnas `estado`, `total_efectivo`, `total_otros`,
+  `cantidad_recibos`, `fecha_cierre` y `usuario_cierre` que `V3` había puesto en `cierre_caja` se
+  **retiraron**, por lo mismo que las de `recibo`: dirían `ABIERTO` para siempre. El estado del
+  turno se deriva de sus movimientos, y su arqueo se congela medio de pago por medio de pago en
+  `cierre_turno_detalle` —en dos cajones no se puede conciliar con el banco—.
 
 Y el libro de asientos, la auditoría y la traza de cambio de número de papeleta tampoco admiten
 `UPDATE`. Desde `V28` (#39), tampoco `notificacion`, `valor_movimiento` ni `prescripcion`: una
@@ -277,6 +283,26 @@ Un intento no hallado no se corrige: se vuelve a diligenciar, con otra fila.
 Desde `V29` (#33), tampoco `recibo` ni `recibo_detalle` —el contribuyente se lleva el papel—, y desde
 `V30` (#34) tampoco `recibo_movimiento`: si el recibo ya no se puede tocar, la salida con rodeo es
 corregir la fila que dice si está anulado, y es la misma pérdida por otra puerta.
+
+Desde `V32` (#36), tampoco `cierre_turno` ni `cierre_turno_detalle`: un arqueo es un acto firmado
+contra el que se concilia el depósito, y si la cifra declarada se puede reescribir, el descuadre
+desaparece justo cuando alguien lo está buscando.
+
+### El `REVOKE` que no se puede hacer: `cierre_caja`
+
+`V32` iba a revocarle también el `UPDATE` a `cierre_caja` —el turno se abre una vez y no se edita—.
+**No se puede, y se descubrió ejecutándolo:** en PostgreSQL, `SELECT … FOR UPDATE` exige el
+privilegio de `UPDATE` sobre la tabla (también `FOR NO KEY UPDATE` y `FOR SHARE`; no hay forma de
+bloquear una fila con solo `SELECT`). Y esa fila es **el punto de serialización de la ventanilla**
+desde `V29` §2: bloquear el turno es lo que ordena dos cobranzas simultáneas de la misma caja.
+Revocarlo no habría hecho el turno inmutable —habría dejado la caja sin poder cobrar—, y el síntoma
+no se parece a su causa: `BadSqlGrammarException` en la primera cobranza, porque el `SQLSTATE`
+`42501` cae en la clase 42.
+
+`cierre_caja` es por eso la **primera tabla del esquema cuya inmutabilidad no puede apoyarse en el
+privilegio**. La sostienen dos cosas: que las columnas que se actualizarían ya no existen, y que la
+tabla está en `TABLAS_INMUTABLES` del revisor de código fuente con su muestra que lo viola, de modo
+que un `UPDATE cierre_caja SET` en `src/main` rompe el build.
 
 ## 7. Índices
 
