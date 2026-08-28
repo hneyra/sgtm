@@ -65,10 +65,10 @@ Reglas de lectura del mapa:
 
 | # | Dato | Norma que lo fija | Parte | Issues |
 |---|---|---|---|---|
-| 7 | Tabla de **valores unitarios** oficiales de edificación por categoría (A–G), partida **y año de construcción** | Resolución anual del sector Vivienda, conforme al TUO LTM art. 11. **La tabla actual no tiene la dimensión «año de construcción»** (hallazgo H-4) | D-02a | #188, #194, #197, #198 |
+| 7 | Tabla de **valores unitarios** oficiales de edificación por categoría (**A–I**, nueve, leídas en el Anexo I.2), partida **y año de construcción** | Resolución anual del sector Vivienda, conforme al TUO LTM art. 11: para 2026, la R.M. 277-2025-VIVIENDA, art. 1 y Anexo I (I.1 a I.4, uno por región). **La tabla actual no tiene la dimensión «año de construcción»** (hallazgo H-4), y el anexo leído no la tiene tampoco: cruza categoría × **3 partidas** | D-02a | #188, #194, #197, #198 |
 | 8 | **Aranceles** de terreno por vía y ejercicio | Planos arancelares aprobados por el sector Vivienda (TUO LTM art. 11). Norma nacional, pero **sus valores están referidos a las vías de cada localidad**: la transcripción es por municipalidad y necesita #16 | D-02a | #188 |
 | 9 | Tabla de **depreciación** por material, antigüedad y estado de conservación | Anexa a la resolución anual del sector Vivienda `‹confirmar si la fija esa resolución o el Reglamento Nacional de Tasaciones›` | D-02a | #188, #194, #198 |
-| 10 | Valorización de **otras instalaciones** y obras complementarias | `‹POR CLASIFICAR: NEG-05 §RT-005 deja abierto si el valor declarado se deprecia o se toma tal cual, y el «factor de oficialización» que multiplica el resultado no tiene fuente identificada (D-11). Sin saber qué norma lo fija no se puede decir qué parte lo bloquea›` | `‹POR CLASIFICAR›` | #188 |
+| 10 | Valorización de **otras instalaciones** y obras complementarias, y el **factor de oficialización** que multiplica el resultado | Resolución anual del sector Vivienda, conforme al TUO LTM art. 11: para 2026, la R.M. 277-2025-VIVIENDA, cuyo art. 2 aprueba el Instructivo (Anexo II, que fija `Fo = 0,68`) y cuyo art. 3 aprueba los valores unitarios a costo directo (Anexo III, de uso **opcional** según la propia resolución). La metodología es la del Reglamento Nacional de Tasaciones, R.M. 172-2016-VIVIENDA art. 31 | D-02a | #188 |
 
 ### 2.4 Arbitrios
 
@@ -114,6 +114,7 @@ otros dos **bloqueaban un issue sin tener línea en este mapa**. Aquí están:
 | 29 | Derecho de trámite del TUPA para la licencia de edificación | Ordenanza que aprueba el TUPA, con su ratificación cuando corresponde | D-02b | #197 |
 | 30 | Plazo de reclamación de los valores y exigibilidad coactiva municipal (RD, RM y OP) | TUO del Código Tributario arts. 78, 136 y 137, y TUO de la Ley 26979 art. 25 (con los arts. 29 y 31.2) | D-02a | #192 |
 | 31 | Inicio del cómputo de la prescripción, como desfase por tributo | TUO del Código Tributario art. 44, y TUO LTM art. 34 (la DJ anual del vehicular) | D-02a | #192 |
+| 32 | Porcentaje de la deducción del valor del predio en la Amazonía, y el ámbito territorial que da derecho a ella | Ley 27037 arts. 3 y 18, y su reglamento en esta materia, el D.S. 031-99-EF arts. 1 a 4. **El ámbito lo fija la Ley; el porcentaje, no**: el art. 3 del D.S. dice que «las Municipalidades de la Amazonía establecerán anualmente, el porcentaje de deducción» | D-02b — confirmado el 2026-08-28 por la Dirección del proyecto: el instrumento con que la municipalidad fija el porcentaje es una ordenanza en materia tributaria, ratificable (LOM art. 40). El D.S. 031-99-EF no lo nombra, por eso hubo que decidirlo | ninguno todavía — el factor lo esperaba D-11, y la deducción no aplica a la municipalidad piloto (Catacaos no está en el ámbito del art. 3) |
 
 **Son 29 filas, no 27.** El número creció porque el mapa se construyó desde los issues hacia la
 norma y no al revés: un issue bloqueado sin fila era un dato que nadie iba a buscar.
@@ -124,6 +125,18 @@ notificada de una deuda exigible coactivamente, y el desfase por tributo con el 
 computa—; el verificador del corpus exige un archivo dueño por fila, y estos dos viven en
 `valores-plazos-de-reclamacion.md` y `prescripcion-inicio-del-computo.md`, no en el archivo de
 las filas 21 y 22.
+
+**Y son 32 desde que D-11 se buscó en la fuente.** La fila 32 —la deducción del predio en la
+Amazonía— es uno de los cuatro factores que NEG-05 §0.1 marcaba «sin fuente identificada» y que
+**ninguna fila del mapa nombraba**: no se podía buscar lo que nadie había escrito que faltaba.
+Ahora tiene norma —Ley 27037 art. 18 y D.S. 031-99-EF— y archivo dueño,
+`predial-deduccion-amazonia.md`. Lo que la búsqueda encontró es que la cifra **no es de norma
+nacional**: la Ley fija el ámbito y el reglamento la mecánica, pero el porcentaje lo pone cada
+municipalidad de la Amazonía todos los años, así que la fila nace en D-02b y no en D-02a. Los otros
+dos factores de D-11 que se buscaron a la vez —el incremento del 5 % por piso y el factor de
+oficialización— **no piden fila nueva**: el 5 % es una nota al pie del propio Cuadro de Valores
+Unitarios (fila 7) y el `Fo = 0,68` es el Anexo II de la resolución del sector Vivienda (fila 10),
+que por eso deja de estar `‹POR CLASIFICAR›`.
 
 ### 2.8 Los issues que esperan, y por qué
 
@@ -195,7 +208,7 @@ node docs/10-negocio/verificar-mapa-normativo.mjs
 
 Comprueba, **en las dos direcciones**, que este documento y el tablero dicen lo mismo:
 
-- las 29 filas tienen norma y parte, y todo `‹POR CLASIFICAR›` y todo `‹confirmar›` lleva su motivo;
+- las 32 filas tienen norma y parte, y todo `‹POR CLASIFICAR›` y todo `‹confirmar›` lleva su motivo;
 - todo issue nombrado en una fila aparece en §2.8 con esa parte, y al revés;
 - §2.8 coincide **exactamente** con las etiquetas reales del tablero, que viven en
   [`etiquetas-de-bloqueo.json`](etiquetas-de-bloqueo.json).
