@@ -19,6 +19,7 @@ import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.Sector;
+import pe.gob.sgtm.catastro.dominio.SectorConConteos;
 import pe.gob.sgtm.catastro.dominio.TipoFicha;
 import pe.gob.sgtm.catastro.dominio.Titularidad;
 import pe.gob.sgtm.catastro.dominio.VersionDeLaFicha;
@@ -110,7 +111,7 @@ final class CatastroEnMemoria
     // ------------------------------------------------------------------
 
     @Override
-    public Pagina<Sector> sectores(Paginacion paginacion) {
+    public Pagina<SectorConConteos> sectores(Paginacion paginacion) {
         throw new UnsupportedOperationException("La carga desde archivo no pagina sectores");
     }
 
