@@ -92,7 +92,9 @@ public record Internamiento(
         tasaCustodia = tasaCustodia.strip().toUpperCase(Locale.ROOT);
         if (tasaCustodia.isEmpty() || tasaCustodia.length() > CODIGO_DE_TASA_MAXIMO) {
             throw new IllegalArgumentException(
-                    "El codigo de la tasa de custodia va de 1 a " + CODIGO_DE_TASA_MAXIMO + " caracteres");
+                    "El codigo de la tasa de custodia va de 1 a "
+                            + CODIGO_DE_TASA_MAXIMO
+                            + " caracteres");
         }
         Objects.requireNonNull(registradoEn, "El internamiento dice cuando se registro");
         if (usuarioRegistro != null) {
