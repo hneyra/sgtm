@@ -139,6 +139,26 @@ export interface TablaDelCuerpo {
    * mano con `cuerpo`, que es justo lo que la lista blanca vino a evitar.
    */
   readonly unica?: boolean;
+  /**
+   * El backend declara la obligacion **en el cuerpo plano**, sin nombre de
+   * lista: las columnas declaradas de la fila elegida se despliegan en el nivel
+   * superior, y `campo` no se usa.
+   *
+   * Es el tercer caso de una tabla, y existe por `baja_deuda`:
+   * `MovimientosDeDeudaController.PeticionDeMovimiento` es un cuerpo plano
+   * —`tributo`, `ano`, `cuota`, `insoluto`, `interes`— porque **da de baja una
+   * obligacion por acto**, y lo que la pantalla elige es exactamente esa
+   * obligacion, en una fila de su tabla. Sin esto, la unica forma de mandarla
+   * seria volver a teclear a mano lo que la tabla ya muestra, o abrir el cuerpo
+   * entero con `cuerpo` —la salida de emergencia— y perder la lista blanca.
+   *
+   * **Solo viaja la primera fila.** Una tabla `plana` no puede expresar dos
+   * obligaciones, y por eso la opcion que la declara exige tambien —con
+   * `exigir`— que haya exactamente una elegida: mandar la primera y callarse las
+   * demas seria dar de baja una cuota y dejar tres sin dar de baja, sin que nada
+   * lo dijera.
+   */
+  readonly plana?: boolean;
 }
 
 /** Sin campos declarados. Constante para que la lista blanca no cambie cada render. */
@@ -358,9 +378,13 @@ function soloDeclarados(
       const traducido = declarado.valor(limpio);
       if (traducido !== undefined) cuerpo[declarado.campo] = traducido;
     } else if (declarado.entero === true) {
-      const entero = Number.parseInt(limpio, 10);
-      // Un entero que no lo es no viaja: mandar `NaN` produciria un 400 con un
-      // mensaje del deserializador en vez de un error del dominio.
+      // Un entero es entero **entero**. `Number.parseInt` se queda con el
+      // prefijo, y eso no es una conversion: es una reinterpretacion silenciosa
+      // —una cuota escrita «1-4», que es como el manual escribe las cuatro
+      // cuotas de un ano, viajaria como la cuota 1 y las otras tres se
+      // perderian sin que nada lo dijera—. Lo que no es un entero no viaja,
+      // igual que un campo vacio.
+      const entero = /^[+-]?\d+$/.test(limpio) ? Number(limpio) : Number.NaN;
       if (Number.isInteger(entero)) cuerpo[declarado.campo] = entero;
     } else {
       cuerpo[declarado.campo] = limpio;
@@ -423,7 +447,13 @@ function soloDeclaradas(
   const cuerpo: Record<string, unknown> = {};
   for (const [tabla, declarada] of Object.entries(tablas)) {
     const escritas = (filas[tabla] ?? []).map((fila) => soloDeclarados(fila, declarada.columnas));
-    if (declarada.unica === true) {
+    if (declarada.plana === true) {
+      // El cuerpo plano del backend: las columnas de la fila elegida, en el
+      // nivel superior. Sin fila no viaja nada —igual que un bloque `unica` sin
+      // escribir—, y nunca se mezclan dos filas: ver `TablaDelCuerpo.plana`.
+      const [primera] = escritas;
+      if (primera !== undefined) Object.assign(cuerpo, primera);
+    } else if (declarada.unica === true) {
       // Un bloque sin escribir **no viaja**: mandarlo vacio no es «no lo se»,
       // es «esto es», y el backend lo rechazaria por faltarle sus campos.
       const [primera] = escritas;

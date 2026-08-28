@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, waitFor } from '@testing-library/react';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { permisosDelClaim, puedeVer } from '../../app/sesion/permisos';
 import { cifrasDeLaTabla, cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
 import { montarEnRuta } from '../../pruebas/montar';
+import { motivoDeLaPrimaria, primariaDeLaPantalla } from '../../pruebas/acciones';
 
 /**
  * Infracciones administrativas (#78).
@@ -73,21 +73,32 @@ describe('ninguna cifra de sancion se recompone', () => {
   });
 });
 
-describe('toda escritura pide su observacion', () => {
-  it.each(ESCRIBEN)('%s no habilita su accion primaria sin ella', async (ranura) => {
-    const usuario = userEvent.setup();
+/**
+ * **La semantica que cambio en #332.** Estas tres decian «no habilita su accion
+ * primaria sin observacion, y con ella si»: era cierto y era el defecto. Ninguna
+ * de las tres declara su escritura en `escrituras.ts`, asi que lo que la
+ * observacion habilitaba era mandar **solo la observacion** —un acto que el
+ * backend rechaza, o que no rechaza nadie porque no existe—.
+ *
+ * Ahora la primaria se queda apagada y **dice por que**. La observacion sigue
+ * siendo la condicion de guardado de toda opcion que si escribe (regla 10,
+ * RNF-052): eso se comprueba en `pantallas/escritura.test.tsx`, sobre las que
+ * pueden recorrer el camino entero.
+ */
+describe('ningun acto de este modulo promete lo que no puede', () => {
+  it.each(ESCRIBEN)('%s deja su primaria apagada, y la franja dice por que', async (ranura) => {
     const montada = montarEnRuta(`/infracciones-administrativas/${ranura}`);
     await dibujada('.sgtm-acciones');
 
-    const acciones = document.querySelectorAll<HTMLButtonElement>('.sgtm-acciones .sgtm-boton');
-    const primaria = acciones[acciones.length - 1];
-    expect(primaria).toBeDefined();
-    if (!primaria) return;
-    expect(primaria.disabled).toBe(true);
+    expect(primariaDeLaPantalla().disabled).toBe(true);
 
-    const caja = await screen.findByRole('region', { name: 'Observación del usuario' });
-    await usuario.type(within(caja).getByLabelText('Observación'), 'Acto del procedimiento.');
-    await waitFor(() => expect(primaria.disabled).toBe(false));
+    // Sin declaracion no hay a donde escribir, asi que tampoco hay caja de
+    // observacion: pedirla seria pedirla para nada.
+    expect(
+      screen.queryByRole('region', { name: 'Observación del usuario' }),
+    ).not.toBeInTheDocument();
+
+    expect(motivoDeLaPrimaria()).toMatch(/todavía no puede guardar/i);
 
     montada.unmount();
   });

@@ -56,6 +56,28 @@ const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
     detalle:
       'Un predio sin sector asignado no cuenta en ninguno de estos sectores: no se reparte ni se imputa al sector de su manzana, así que la suma de «Predios inscritos» puede ser menor que el padrón. Es información —hay predios sin ubicación territorial—, no un descuadre. «Lotes» cuenta lotes distintos: tres departamentos de un mismo lote son tres predios y un lote.',
   },
+  /**
+   * El padron del contribuyente y la ficha de vehiculo, llenos de «—» (#330).
+   *
+   * De los 56 campos que el manual reparte en nueve pestanas, `ContribuyenteResource`
+   * publica seis; de los 54 de la ficha de vehiculo, `VehiculoResource` ocho. Con las
+   * secciones apiladas eso se ve de golpe, y sin esta linea la lectura natural es que **el
+   * contribuyente no tiene esos datos** —que su domicilio esta en blanco, que no debe nada—.
+   * Con ella, la lectura correcta: el dato no ha llegado, y se sabe de quien depende.
+   *
+   * Es el mismo criterio del aviso de los conteos de sectores: explicar una cifra que no
+   * cuadra vale mas que esconderla.
+   */
+  contribuyentes: {
+    titulo: 'Lo que el padrón publica hoy, y lo que no',
+    detalle:
+      'El backend publica seis de los campos que el manual reparte en nueve pestañas: código, nombre o razón social, tipo y número de documento y estado. El domicilio fiscal vigente, los predios, los vehículos y la deuda vienen de otros registros que todavía no se publican, y salen con «—»: un guion es que el dato no llegó, no que valga cero ni que esté en blanco.',
+  },
+  vehiculos: {
+    titulo: 'Registro del vehículo, sin su determinación',
+    detalle:
+      'El recurso publica el registro: placa, año, marca, modelo, categoría, motor y serie. El titular llega como identificador interno —sin nombre—, y la base imponible, el impuesto y el estado de afectación dependen de la tabla referencial del MEF, que es un valor normativo todavía sin cerrar. Todo eso sale con «—».',
+  },
   fisc_historico: {
     titulo: 'Versiones del proceso, no del padrón',
     detalle:

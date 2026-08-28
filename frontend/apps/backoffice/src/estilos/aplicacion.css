@@ -498,6 +498,17 @@
   overflow-wrap: anywhere;
 }
 
+/* La linea de lo que el padron no publica todavia (#330). No es un error ni una
+   advertencia: es un guion **explicado**, y por eso no lleva tono de aviso. */
+.sgtm-resumen__pendiente {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
 /* ── El codigo catastral, tramo a tramo (#318) ──────────────────────────
    Cada tramo con su nombre encima: la posicion equivocada se ve mientras se
    escribe, no cuando dos predios colisionan. */
@@ -1721,6 +1732,20 @@
 
 /* —— Bloque 10: barra de acciones —————————————————————————————— */
 
+/* Por que la primaria no puede guardar todavia (#332). Se **pinta**: un `title`
+   sobre un boton `disabled` no lo lee ni el teclado ni el lector de pantalla. */
+.sgtm-acciones__motivo {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ink-4);
+  border-radius: 8px;
+  background: var(--bg-card);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2, var(--ink-3));
+}
+
 .sgtm-acciones {
   position: sticky;
   bottom: 0;
@@ -1861,6 +1886,42 @@
 .sgtm-tabla__desplegar {
   width: 34px;
   text-align: center;
+}
+
+/* La columna de seleccion (#332): es la primera columna del catalogo —la que el
+   prototipo dibuja vacia—, no una columna nueva al lado. */
+.sgtm-tabla__elegir {
+  width: 34px;
+  text-align: center;
+}
+
+.sgtm-tabla__casilla {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.sgtm-tabla__casilla input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* La banda de la seleccion: cuantas filas, y **ninguna cifra** (RNF-083). */
+.sgtm-seleccion {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-suave, var(--bg-card));
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.sgtm-seleccion strong {
+  color: var(--ink);
 }
 
 .sgtm-tabla__desplegar button {

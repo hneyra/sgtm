@@ -124,25 +124,34 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
 
   it('ninguna otra pantalla gana indice: la composicion es opt-in por opcion', async () => {
     // Una pantalla con secciones que no lo declara sigue dibujandose igual.
-    expect(composicionDe('vehiculos').indice).toBeUndefined();
-    montarEnRuta('/rentas-registro/vehiculos/ABC-123');
+    // Era «vehiculos» hasta que #330 le dio indice a la ficha de vehiculo; se
+    // usa otra que sigue sin declararlo, que es lo que la prueba comprueba.
+    expect(composicionDe('transferencia_predio').indice).toBeUndefined();
+    montarEnRuta('/rentas-registro/transferencia-predio');
     await screen.findByRole('heading', { level: 1 });
     expect(
       screen.queryByRole('navigation', { name: 'Secciones de la pantalla' }),
     ).not.toBeInTheDocument();
   });
 
-  it('las cuatro fichas lo declaran, y solo las cuatro', async () => {
+  it('las cuatro fichas lo declaran con pestanas, y las dos de rentas en vez de ellas', async () => {
     const pantallas = await todasLasPantallas();
-    const conIndice = Object.keys(pantallas).filter(
-      (opcion) => composicionDe(opcion).indice === true,
-    );
-    expect(conIndice.sort()).toEqual([
+    const declarado = (valor: unknown): readonly string[] =>
+      Object.keys(pantallas)
+        .filter((opcion) => composicionDe(opcion).indice === valor)
+        .sort();
+
+    // `true` conserva la barra de pestanas y indexa la activa: las once de la
+    // ficha urbana siguen siendo once.
+    expect(declarado(true)).toEqual([
       'ficha_bienes',
       'ficha_economica',
       'ficha_rural',
       'ficha_urbana',
     ]);
+    // `'en-vez-de-pestanas'` las sustituye (#330): nueve pestanas de
+    // contribuyentes y seis de la ficha de vehiculo pasan a una sola pagina.
+    expect(declarado('en-vez-de-pestanas')).toEqual(['contribuyentes', 'vehiculos']);
   });
 });
 

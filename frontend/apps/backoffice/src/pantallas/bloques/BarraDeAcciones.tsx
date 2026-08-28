@@ -60,7 +60,26 @@ export interface BarraDeAccionesProps {
    * servidor va a rechazar con 403.
    */
   readonly altas?: Readonly<Record<string, () => void>>;
+  /**
+   * Por que la accion primaria **no puede guardar todavia** (#332): la operacion
+   * no escribe, o la opcion no ha declarado sus campos (`pantallas/actos.ts`).
+   *
+   * Cuando lo hay no hay escritura ninguna —ni caja de observacion—, porque no
+   * hay a donde escribir; lo que hay es esta franja diciendolo. Sin ella, la
+   * primaria se quedaba apagada y muda, que en ventanilla se lee como un error
+   * de quien atiende y acaba en una llamada a soporte.
+   */
+  readonly impedimento?: string;
+  /**
+   * Cuantas filas hay elegidas, cuando la pantalla elige las suyas: la primaria
+   * lo dice —«Dar de baja (2)»—, porque el acto es sobre lo elegido y no sobre
+   * lo que se ve. No renombra la accion (RNF-080): le anade su cuenta.
+   */
+  readonly contadorDeLaPrimaria?: number;
 }
+
+/** El `id` de la franja, para que la primaria la referencie con `aria-describedby`. */
+const MOTIVO = 'sgtm-motivo-de-la-accion';
 
 export function BarraDeAcciones({
   acciones,
@@ -68,9 +87,17 @@ export function BarraDeAcciones({
   alcance,
   enlace,
   altas,
+  impedimento,
+  contadorDeLaPrimaria,
 }: BarraDeAccionesProps) {
   const [porConfirmar, fijarPorConfirmar] = useState<string | null>(null);
   const escribe = escritura?.operacion !== undefined;
+  /* Los tres estados de una accion, y solo uno se pinta a la vez:
+     puede guardar (sin motivo) · puede guardar y le falta algo del formulario
+     (`escritura.motivo`) · no puede guardar todavia (`impedimento`).
+     Con `enlace` no se pinta ninguno: la primaria es el enlace, y esa lleva a
+     otra pantalla en vez de guardar aqui. */
+  const motivo = enlace !== undefined ? undefined : (impedimento ?? escritura?.motivo);
   // Si el acto de la pantalla es abrir un alta, la ultima accion deja de ser la
   // primaria: si no, quedarian dos botones primarios y uno de ellos apagado.
   const altaEsElActo =
@@ -127,6 +154,16 @@ export function BarraDeAcciones({
         </section>
       )}
 
+      {/* El motivo se **pinta**, no se pone en un `title`: un `title` sobre un
+          boton `disabled` no existe ni para el teclado —no se puede enfocar— ni
+          para el lector de pantalla (FRO-04 §6). Con `role="status"`, ademas, se
+          anuncia cuando cambia. */}
+      {motivo !== undefined && (
+        <p className="sgtm-acciones__motivo" role="status" id={MOTIVO} data-no-imprimible="1">
+          {motivo}
+        </p>
+      )}
+
       <div className="sgtm-acciones" data-no-imprimible="1">
         {acciones.map((accion, i) => {
           // Una accion que abre un alta **es** el acto de esta pantalla cuando no
@@ -155,6 +192,7 @@ export function BarraDeAcciones({
               key={accion}
               variante={esPrimaria ? 'primario' : 'secundario'}
               disabled={!habilitada}
+              {...(esPrimaria && motivo !== undefined ? { 'aria-describedby': MOTIVO } : {})}
               title={tituloDe(accion, esPrimaria, escribe, escritura)}
               onClick={() => {
                 if (!escritura) return;
@@ -164,7 +202,11 @@ export function BarraDeAcciones({
                 else escritura.enviar();
               }}
             >
-              {escritura?.enviando && esPrimaria ? `${accion}…` : accion}
+              {escritura?.enviando && esPrimaria
+                ? `${accion}…`
+                : esPrimaria && contadorDeLaPrimaria !== undefined
+                  ? `${accion} (${contadorDeLaPrimaria})`
+                  : accion}
             </Boton>
           );
         })}

@@ -12,6 +12,7 @@ import {
   tablaDe,
   texto,
 } from '../seguridad/listado';
+import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
 
 /**
  * Rentas · Registro, conectado hasta donde llega el backend: **seis opciones de quince**.
@@ -272,6 +273,63 @@ const arbitrios = definirConexion({
     ),
 });
 
+/**
+ * La deuda que se puede dar de baja (RF-044, #332).
+ *
+ * **Es la unica conexion del sistema cuya operacion no se llama como su opcion**, y esa
+ * excepcion tiene un motivo concreto: la operacion de `baja_deuda` es un `POST`, y una
+ * operacion que escribe no se pide al abrir la pantalla —abrir «Baja de deuda» no puede dar
+ * de baja nada—. Su tabla se quedaba por tanto vacia para siempre, y la columna de seleccion
+ * que el prototipo dibuja no tenia sobre que actuar.
+ *
+ * Lo que se lee es `GET /consultas/deuda`, que es **exactamente** lo que la pantalla necesita:
+ * las obligaciones pendientes de un contribuyente, con su desglose calculado por el backend a
+ * una fecha de corte (#22, #175). No es un dato inventado ni un cruce de dos respuestas: es la
+ * misma deuda, publicada por la unica operacion que la publica.
+ *
+ * Lo que no viaja, y por que:
+ *
+ * - `ano` y `tributo` (los otros dos filtros de la pantalla): `consulta_deuda` no los declara
+ *   como parametros, y `parametrosDeBusqueda` no manda lo que el contrato no declara
+ *   (ADR-0010). Se quedan en la URL hasta que el backend decida su semantica.
+ * - `Unidad` (el predio o la placa de la fila): `ObligacionDeDeudaResource` publica el
+ *   identificador interno, no el codigo catastral ni la placa. Ensenar un identificador
+ *   interno en la columna que dice «Unidad» seria ensenar otra cosa con ese rotulo.
+ *
+ * La primera celda va vacia a proposito: es la columna de la casilla, y la dibuja
+ * `TablaDePantalla` cuando la opcion declara seleccion (`rentas/composicion.ts`).
+ */
+const baja_deuda = definirConexion({
+  operacion: 'consulta_deuda',
+  parametros: ({ busqueda }) => parametrosDeBusqueda('consulta_deuda', undefined, busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'la deuda del contribuyente'),
+  adaptar: (paginado): DatosDePantalla => ({
+    // Toda cifra con su fecha de calculo (regla 9, RNF-075): la de corte con que
+    // el backend actualizo el interes, no la del reloj del navegador.
+    fechaCalculo: fechaDeCorteDe(paginado.contenido),
+    tabla: tablaDe(
+      paginado,
+      (obligacion): readonly Celda[] => {
+        const leida = obligacionDeDeuda(obligacion);
+        return [
+          { texto: '' },
+          { texto: leida.ejercicio },
+          { texto: SIN_DATO },
+          { texto: leida.cuota },
+          { texto: leida.tributo },
+          { texto: leida.insoluto },
+          { texto: leida.interes },
+          // El total lo calcula el backend. Sumar insoluto e interes aqui daria
+          // una cifra parecida y equivocada: falta el reajuste y faltan los
+          // gastos (RNF-083).
+          { texto: leida.total },
+        ];
+      },
+      'cuotas',
+    ),
+  }),
+});
+
 /** Las opciones de Rentas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_RENTAS: Readonly<Record<string, Conexion>> = {
   contribuyentes,
@@ -279,4 +337,5 @@ export const CONEXIONES_DE_RENTAS: Readonly<Record<string, Conexion>> = {
   declaracion_jurada,
   beneficios,
   arbitrios,
+  baja_deuda,
 };

@@ -115,6 +115,7 @@ estado de React cuando el backend no la pide. Desde #320 la declaración cubre t
 | `campos` | Un campo plano, con su nombre en el cuerpo | `documentoOrigen` |
 | `tablas` | Una **lista de filas**, con su lista blanca por columna | los pisos de una ficha |
 | `tablas` + `unica` | Un **bloque** que el backend declara como objeto, no lista | el `titular` de un alta |
+| `tablas` + `plana` | Una fila **elegida en la tabla** que el backend declara en el cuerpo plano | la cuota de una baja de deuda |
 
 La tabla existe porque media docena de formularios del manual son una tabla, y sin ella cada uno
 tenía que armar su cuerpo entero a mano con `cuerpo` —la salida de emergencia—, y entonces la
@@ -139,8 +140,20 @@ un campo de solo espacios es no haber escrito nada, no un campo lleno que el bac
 
 Y el motivo por el que la acción está apagada **se pinta**, no se pone en un `title`: un `title`
 sobre un botón `disabled` no existe ni para el teclado —no se puede enfocar— ni para el lector de
-pantalla. `useEscritura` expone `motivo`, que es `exigir` más «falta la observación»; quien lo
-dibuje, con `role="status"` y referenciado desde el botón con `aria-describedby`.
+pantalla. `useEscritura` expone `motivo`, que es `exigir` más «falta la observación»; lo dibuja
+`BarraDeAcciones`, con `role="status"` y referenciado desde el botón con `aria-describedby`.
+
+**Una opción con verbo de escritura y sin declaración no escribe, y lo dice** (#332). Antes «mandaba
+solo su observación», que en un cobro o una transferencia no es guardar nada: el operador rellenaba
+catorce campos, pulsaba la primaria y el backend la rechazaba —o no la rechazaba nadie, porque no
+existe—. La negación por omisión se conserva; lo que cambia es que ahora hay **tres estados** y no
+dos, y `pantallas/actos.ts` distingue los dos que faltaban leyendo lo que ya se sabe:
+
+| Estado | Cuándo | Qué pide a quien lo lee |
+|---|---|---|
+| Puede guardar | la opción está en `ESCRITURAS` | la observación, y lo que `exigir` añada |
+| `sin-declaracion` | su operación escribe en el contrato, y no está declarada | trabajo, del que escribe el sistema |
+| `sin-backend` | su operación es de lectura, o no está en el contrato | paciencia |
 
 ## 7. Accesibilidad
 

@@ -29,6 +29,10 @@ import { formatearCodigoCatastral } from './codigo';
  *                    muestra; hasta entonces, el hueco dice a quien le toca
  */
 export function ResumenDeFicha({ codigo, datos, cargando }: ResumenDePantallaProps) {
+  // Sin registro abierto no hay ficha que resumir. Lo decide la cabecera y no el
+  // renderizador porque «cual es el registro» no es igual en todas: en catastro
+  // es el parametro de la ruta y en el padron de contribuyentes es el filtro.
+  if (codigo === undefined || codigo === '') return null;
   if (cargando) return <Esqueleto alto={72} />;
 
   const campos = datos?.campos ?? {};

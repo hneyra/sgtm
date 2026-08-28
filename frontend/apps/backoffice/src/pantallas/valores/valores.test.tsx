@@ -34,6 +34,13 @@ const LAS_SEIS: readonly string[] = [
   'pase-coactiva',
 ];
 
+/**
+ * La unica del modulo que **escribe de verdad**: declara su lista blanca en
+ * `escrituras.ts` (#39, #75), y por eso su accion primaria llega a habilitarse.
+ * Las otras cinco se quedan apagadas diciendo por que (#332).
+ */
+const NOTIFICACION = '/valores/notificacion-valores/OP-2026-004182';
+
 const original = globalThis.fetch;
 let peticiones = 0;
 
@@ -93,16 +100,19 @@ describe('en el SGTM no se borra: se anula (regla 4)', () => {
 describe('lo irreversible se confirma diciendo que va a pasar y sobre cuantos', () => {
   it('dice **que** va a pasar, no «¿estas seguro?»', async () => {
     const usuario = userEvent.setup();
-    // Sobre una pantalla que **escribe** y cuya accion primaria es
-    // irreversible: «Buscar valores» es un `GET` —y una accion de lectura sigue
-    // deshabilitada (#64)—, y la primaria de «pase a coactiva» es «Imprimir».
-    montarEnRuta('/valores/valores-masivo');
+    // Sobre una pantalla que **escribe de verdad** y cuya accion primaria es
+    // irreversible. Era «Generación masiva» hasta #332: esa opcion no declara su
+    // escritura en `escrituras.ts`, y desde entonces su primaria se queda
+    // apagada diciendo por que en vez de habilitarse con la observacion sola
+    // —que es exactamente lo que #332 corrigio—. «Notificación de valores» si
+    // esta declarada, y notificar tampoco se deshace: el acuse sostiene el plazo.
+    montarEnRuta(NOTIFICACION);
 
-    await usuario.type(await observacion(), 'Emisión anual del ejercicio 2026.');
+    await usuario.type(await observacion(), 'Diligencia del 13 de agosto.');
     await usuario.click(primaria());
 
     const aviso = await screen.findByText(/y eso no se deshace/);
-    expect(aviso.textContent).toMatch(/generar valores/i);
+    expect(aviso.textContent).toMatch(/registrar notificación/i);
     // «¿Estas seguro?» no da ninguna informacion nueva: quien pulsa siempre
     // esta seguro. Lo que hace falta saber es que va a pasar.
     expect(aviso.textContent).not.toMatch(/seguro/i);
@@ -131,11 +141,11 @@ describe('lo irreversible se confirma diciendo que va a pasar y sobre cuantos', 
     expect(aviso.textContent).toContain('sobre 4,182 valores · S/ 3.84 M');
   });
 
-  it('cancelar no emite, y confirmar emite una vez', async () => {
+  it('cancelar no registra, y confirmar registra una vez', async () => {
     const usuario = userEvent.setup();
-    montarEnRuta('/valores/valores-masivo');
+    montarEnRuta(NOTIFICACION);
 
-    await usuario.type(await observacion(), 'Emisión anual del ejercicio 2026.');
+    await usuario.type(await observacion(), 'Diligencia del 13 de agosto.');
     await usuario.click(primaria());
     await usuario.click(await screen.findByRole('button', { name: 'Cancelar' }));
     expect(peticiones).toBe(0);
@@ -146,12 +156,12 @@ describe('lo irreversible se confirma diciendo que va a pasar y sobre cuantos', 
   });
 });
 
-describe('emitir la misma tanda dos veces es imposible desde la interfaz', () => {
-  it('tras emitir, la accion vuelve a estar deshabilitada hasta que haya otra observacion', async () => {
+describe('registrar el mismo acto dos veces es imposible desde la interfaz', () => {
+  it('tras registrarlo, la accion vuelve a estar deshabilitada hasta que haya otra observacion', async () => {
     const usuario = userEvent.setup();
-    montarEnRuta('/valores/valores-masivo');
+    montarEnRuta(NOTIFICACION);
 
-    await usuario.type(await observacion(), 'Emisión anual del ejercicio 2026.');
+    await usuario.type(await observacion(), 'Diligencia del 13 de agosto.');
     await usuario.click(primaria());
     const confirmar = screen.queryByRole('button', { name: /^Confirmar/ });
     if (confirmar) await usuario.click(confirmar);
@@ -160,8 +170,8 @@ describe('emitir la misma tanda dos veces es imposible desde la interfaz', () =>
     await waitFor(() => expect(peticiones).toBe(1));
 
     // La observacion se vacia al guardar, asi que la accion vuelve a estar
-    // deshabilitada: para emitir otra tanda hay que decir por que, y eso es lo
-    // que impide emitir la misma dos veces de un doble golpe.
+    // deshabilitada: para registrar otro acto hay que decir por que, y eso es lo
+    // que impide registrar el mismo dos veces de un doble golpe.
     await waitFor(() => expect(primaria().disabled).toBe(true));
     expect(await observacion()).toHaveValue('');
   });

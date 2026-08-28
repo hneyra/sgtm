@@ -1,10 +1,16 @@
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Aviso, Boton, Esqueleto } from '@sgtm/design-system';
 import { descriptorDe, escribe } from '@sgtm/api-client';
 import type { ValorDeCampo } from '@sgtm/api-client';
-import { esHojaDelCentro, opcionPorRuta, pantallasDelModulo, seccionesDe } from '../catalogo';
+import {
+  esHojaDelCentro,
+  opcionPorRuta,
+  pantallasDelModulo,
+  seccionesApiladas,
+  seccionesDe,
+} from '../catalogo';
 import type { EstructuraDePantalla } from '../catalogo';
 import { CentroDeReportes } from './CentroDeReportes';
 import {
@@ -22,6 +28,7 @@ import { useEscritura } from './escritura';
 import { useFocoEnLaAccion, useFocoTrasGuardar } from './foco';
 import { avisoDe } from './avisos';
 import { escrituraDe } from './escrituras';
+import { impedimentoDelActo } from './actos';
 import { useEjercicio } from '../app/ejercicio';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
@@ -261,6 +268,11 @@ function Bloques({
   // sola a la vez —dos paneles encima del otro no se pueden operar—.
   const [altaAbierta, fijarAltaAbierta] = useState<AltaAbierta | null>(null);
   const [flujoAbierto, fijarFlujoAbierto] = useState(false);
+  // Que filas de la tabla estan elegidas, cuando la opcion declara seleccion
+  // (#332). Se guardan los **indices de la pagina que se esta viendo**, y por
+  // eso buscar o cambiar de pagina los vacia: el indice 3 de la pagina nueva es
+  // otra cuota, y dejarlo marcado daria de baja la que no era.
+  const [elegidas, fijarElegidas] = useState<ReadonlySet<number>>(new Set());
   const [busqueda, fijarBusqueda] = useSearchParams();
   const navegar = useNavigate();
   const catalogo = useCatalogoVisible();
@@ -292,12 +304,23 @@ function Bloques({
   const descargaDeFicha = useDescargaDeArchivo('ficha_contribuyente_reporte', {
     codigo: codigo ?? '',
   });
+  // Por que la primaria no puede guardar todavia, cuando no puede (#332). Se
+  // pregunta **solo con permiso de escritura**: sin el, lo que apaga la accion
+  // es el permiso, y decir «el backend no lo publica» seria contestar otra cosa.
+  const impedimento = puedeEscribirAqui ? impedimentoDelActo(estructura.id) : undefined;
   const escritura = useEscritura(
-    operacion !== undefined && escribe(operacion) && puedeEscribirAqui ? operacion : undefined,
+    // Una opcion **sin declarar** no escribe: mandaba solo su observacion, que
+    // para un cobro o una transferencia no es guardar nada —y el backend lo
+    // rechazaba despues de que alguien rellenara la pantalla entera—. Ahora la
+    // accion se queda apagada y la franja de arriba dice por que (#332).
+    operacion !== undefined && escribe(operacion) && puedeEscribirAqui && declarada !== undefined
+      ? operacion
+      : undefined,
     operacion === undefined ? {} : parametrosDeBusqueda(operacion, codigo, busqueda),
     {
       campos: declarada?.campos ?? {},
       tablas: declarada?.tablas ?? {},
+      ...(declarada?.exigir === undefined ? {} : { exigir: declarada.exigir }),
       ...(declarada?.cambiaElEjercicio === true ? { alGuardar: trabajo.adoptar } : {}),
     },
   );
@@ -312,7 +335,6 @@ function Bloques({
   const cargando = pide && consulta.isPending && faltaRegistro === undefined;
   const datos = consulta.data;
   const valores: Readonly<Record<string, ValorDeCampo>> = datos?.campos ?? {};
-  const secciones = seccionesDe(estructura, pestana);
   // Las cuatro fichas: su backend versiona y nunca sobrescribe (#18). Se sabe
   // aqui y no por el catalogo porque es una propiedad de la operacion, no del
   // dibujo —el prototipo no tiene forma de expresarla—.
@@ -322,12 +344,20 @@ function Bloques({
   // vive en otra pantalla. Vacio para 130 de las 134, y entonces no cambia nada.
   const composicion = composicionDe(estructura.id);
   const Resumen = composicion.resumen;
+  // Cuando el indice **sustituye** a las pestanas (#330), las secciones de todas
+  // ellas se apilan en una sola pagina y la barra de pestanas deja de dibujarse:
+  // era navegacion, y el indice hace la misma navegacion desplazando. Las otras
+  // pantallas con pestanas del sistema no se enteran —es opt-in por opcion—.
+  const enVezDePestanas = composicion.indice === 'en-vez-de-pestanas';
+  const secciones = enVezDePestanas
+    ? seccionesApiladas(estructura)
+    : seccionesDe(estructura, pestana);
   // El ancla de cada seccion lleva la pestana dentro: dos pestanas pueden
   // declarar secciones con el mismo rotulo, y dos anclas iguales en la misma
   // pagina llevan siempre a la primera.
   const anclaDe = (indice: number): string => `sgtm-seccion-${pestana}-${indice}`;
   const conIndice = (formulario: React.JSX.Element): React.JSX.Element =>
-    composicion.indice === true ? (
+    composicion.indice !== undefined ? (
       <div className="sgtm-conindice">
         <IndiceDeSecciones secciones={secciones} anclaDe={anclaDe} />
         <div className="sgtm-conindice__panel">{formulario}</div>
@@ -345,6 +375,53 @@ function Bloques({
     const indice = (composicion.altas ?? []).findIndex((alta) => alta.accion === accion);
     if (indice >= 0) fijarAltaAbierta({ indice });
   };
+  /* ── La seleccion de filas, y por que no vive en un efecto ───────────────
+     Lo elegido se traslada al cuerpo **en el mismo gesto que lo elige**, no en
+     un `useEffect` que mire el estado: `fijarFilas` cambia el estado de la
+     escritura, asi que un efecto que dependiera de ella volveria a dispararse
+     con cada render y no pararia nunca. */
+  const seleccionable = composicion.seleccion;
+  const filasDeLaTabla = datos?.tabla?.filas ?? [];
+  const clavesDeLaTabla = estructura.tabla?.claves ?? [];
+
+  const limpiarSeleccion = (): void => {
+    fijarElegidas(new Set());
+    if (seleccionable !== undefined) escritura.fijarFilas(seleccionable.tabla, []);
+  };
+
+  const alternarEleccion = (indice: number): void => {
+    if (seleccionable === undefined) return;
+    const siguientes = new Set(elegidas);
+    if (siguientes.has(indice)) siguientes.delete(indice);
+    else siguientes.add(indice);
+    fijarElegidas(siguientes);
+    // La fila que viaja son **sus columnas del catalogo**, con su clave, mas lo
+    // que la seleccion aporte del contexto. De ahi en adelante manda la lista
+    // blanca por columna de `escrituras.ts`: lo que no este declarado no entra
+    // ni en el estado de React.
+    const contexto = seleccionable.contexto?.(busqueda) ?? {};
+    const filas = [...siguientes]
+      .sort((a, b) => a - b)
+      .map((fila) => {
+        const celdas = filasDeLaTabla[fila] ?? [];
+        const elegida: Record<string, string> = { ...contexto };
+        clavesDeLaTabla.forEach((clave, columna) => {
+          const celda = celdas[columna];
+          if (celda !== undefined) elegida[clave] = celda.texto;
+        });
+        return elegida;
+      });
+    escritura.fijarFilas(seleccionable.tabla, filas);
+  };
+
+  // Guardado el acto, lo elegido deja de estarlo: la escritura ya vacio sus
+  // filas, y dejar las casillas marcadas diria que aquello sigue por dar de baja.
+  useEffect(() => {
+    if (escritura.enviada) {
+      fijarElegidas((previas) => (previas.size === 0 ? previas : new Set()));
+    }
+  }, [escritura.enviada]);
+
   // Tras cobrar, el foco vuelve al campo de identificacion: entra el siguiente
   // contribuyente y hay que poder teclear su documento sin buscar donde.
   const refDeBusqueda = useFocoTrasGuardar(escritura.enviada);
@@ -423,10 +500,19 @@ function Bloques({
       {estructura.kind === 'portal' && <Portal pasos={estructura.steps ?? []} />}
 
       {/* La cabecera-resumen: cual ficha es, de quien, de que uso y de cuando.
-          Solo con registro abierto —sin el no hay nada que resumir— y compuesta
-          con lo que el adaptador ya trajo: no pide nada nuevo (#319). */}
-      {Resumen !== undefined && codigo !== undefined && codigo !== '' && (
-        <Resumen codigo={codigo} datos={datos} cargando={cargando} />
+          Compuesta con lo que el adaptador ya trajo: no pide nada nuevo (#319).
+          **Que hay registro abierto lo decide ella**, no esto: en catastro el
+          registro es el parametro de la ruta y en el padron de contribuyentes es
+          el filtro de la busqueda (#330), y sin registro devuelve `null`.
+          El `Suspense` es para las que llegan en el trozo de su modulo. */}
+      {Resumen !== undefined && (
+        <Suspense fallback={<Esqueleto alto={92} />}>
+          <Resumen
+            {...(codigo === undefined ? {} : { codigo })}
+            {...(datos === undefined ? {} : { datos })}
+            cargando={cargando}
+          />
+        </Suspense>
       )}
 
       {/* Que version se esta viendo va **antes** que sus datos: es lo que dice
@@ -456,6 +542,9 @@ function Bloques({
             // Buscar reescribe la URL: es donde vive lo buscado. Y devuelve a la
             // primera pagina, porque la pagina 7 de otra busqueda no es ninguna.
             onBuscar={(valores) => {
+              // Otra busqueda son otras filas: lo elegido de la anterior deja de
+              // señalar a nada.
+              limpiarSeleccion();
               const siguiente = conCambio(new URLSearchParams(busqueda), {
                 ...vaciar(busquedaActiva.filtros),
                 ...valores,
@@ -488,14 +577,28 @@ function Bloques({
           hayFiltros={Object.keys(busquedaActiva.filtros).length > 0}
           {...(busquedaActiva.orden === undefined ? {} : { orden: busquedaActiva.orden })}
           sentido={busquedaActiva.sentido}
-          onOrdenar={(clave) => fijarBusqueda(conOrden(new URLSearchParams(busqueda), clave))}
-          onPagina={(pagina) =>
+          onOrdenar={(clave) => {
+            limpiarSeleccion();
+            fijarBusqueda(conOrden(new URLSearchParams(busqueda), clave));
+          }}
+          onPagina={(pagina) => {
+            limpiarSeleccion();
             fijarBusqueda(
               conCambio(new URLSearchParams(busqueda), {
                 [PAGINA]: pagina <= 1 ? undefined : String(pagina),
               }),
-            )
-          }
+            );
+          }}
+          {...(seleccionable === undefined
+            ? {}
+            : {
+                seleccion: {
+                  elegidas,
+                  onAlternar: alternarEleccion,
+                  una: seleccionable.una,
+                  varias: seleccionable.varias,
+                },
+              })}
           {...(composicion.altaDeFila !== undefined && puedeRegistrarAqui
             ? {
                 altaDeFila: {
@@ -511,7 +614,7 @@ function Bloques({
         <Totales estructura={estructura.totales} datos={datos?.totales} cargando={cargando} />
       )}
 
-      {estructura.tabs && estructura.tabs.length > 0 && (
+      {estructura.tabs && estructura.tabs.length > 0 && !enVezDePestanas && (
         <div className="sgtm-pestanas" role="tablist" aria-label="Secciones de la pantalla">
           {estructura.tabs.map((tab, i) => (
             <button
@@ -552,7 +655,7 @@ function Bloques({
             onAlternar={(clave, cerrada) =>
               fijarCerradas((previas) => ({ ...previas, [clave]: cerrada }))
             }
-            {...(composicion.indice === true ? { anclaDe } : {})}
+            {...(composicion.indice === undefined ? {} : { anclaDe })}
           />,
         )}
 
@@ -582,8 +685,20 @@ function Bloques({
           {...(puedeRegistrarAqui ? { altas: altasDeLaBarra(composicion, abrirAlta) } : {})}
           // Sobre cuantos actua: lo cuenta el backend —«47 valores»— y aqui solo
           // se traslada. Contar las filas dibujadas diria «20», que es cuantas
-          // caben en la pagina, no cuantas se van a emitir.
-          {...(datos?.tabla?.conteo === undefined ? {} : { alcance: datos.tabla.conteo })}
+          // caben en la pagina, no cuantas se van a emitir. La excepcion es una
+          // pantalla que **elige** sus filas: ahi el alcance es lo elegido, y eso
+          // sí lo sabe la interfaz porque lo eligio quien la usa.
+          {...(seleccionable !== undefined
+            ? {
+                alcance: `${elegidas.size} ${elegidas.size === 1 ? seleccionable.una : seleccionable.varias}`,
+                contadorDeLaPrimaria: elegidas.size,
+              }
+            : datos?.tabla?.conteo === undefined
+              ? {}
+              : { alcance: datos.tabla.conteo })}
+          /* Y por que la primaria no puede guardar todavia, cuando no puede
+             (#332): se pinta junto a ella en vez de dejarla apagada y muda. */
+          {...(impedimento === undefined ? {} : { impedimento: impedimento.detalle })}
           /* El acto de esta pantalla, cuando vive en otra opcion y hay un
              registro abierto que llevarse. Sin registro no hay a donde ir. */
           {...(composicion.acto !== undefined && codigo !== undefined && codigo !== ''

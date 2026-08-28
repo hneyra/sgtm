@@ -114,9 +114,14 @@ describe('las secciones colapsables', () => {
 
   it('se abren y se cierran al pulsarlas', async () => {
     const usuario = userEvent.setup();
-    montarEnRuta('/rentas-registro/vehiculos/T2G-418');
+    // Sobre «Papeletas» y no sobre la ficha de vehiculo: desde #330 esa lleva
+    // indice, y el indice repite el rotulo de cada seccion como una entrada mas
+    // —dos botones con el mismo nombre, que es un problema de la busqueda de la
+    // prueba y no del dibujo—. Lo que aqui se comprueba es el colapso, que es
+    // igual en las 134.
+    montarEnRuta('/transito/papeletas');
 
-    const cabecera = await screen.findByRole('button', { name: /Identificación/ });
+    const cabecera = await screen.findByRole('button', { name: /Infractor y vehículo/ });
     expect(cabecera).toHaveAttribute('aria-expanded', 'true');
     await usuario.click(cabecera);
     expect(cabecera).toHaveAttribute('aria-expanded', 'false');
@@ -126,7 +131,10 @@ describe('las secciones colapsables', () => {
 describe('las pestanas', () => {
   it('cambiar de pestana cambia las secciones que se ven', async () => {
     const usuario = userEvent.setup();
-    montarEnRuta('/rentas-registro/vehiculos/T2G-418');
+    // «Papeletas» conserva sus cuatro pestanas: el indice que las sustituye es
+    // opt-in por opcion (#330), y las demas pantallas con pestanas del sistema
+    // se dibujan exactamente como se dibujaban. Esto es lo que lo comprueba.
+    montarEnRuta('/transito/papeletas');
 
     const pestanas = await screen.findAllByRole('tab');
     expect(pestanas[0]).toHaveAttribute('aria-selected', 'true');

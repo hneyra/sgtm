@@ -24,6 +24,14 @@ export interface EscrituraDeclarada {
   readonly campos: Readonly<Record<string, CampoDelCuerpo>>;
   /** Las tablas del formulario, con su propia lista blanca por columna. */
   readonly tablas?: Readonly<Record<string, TablaDelCuerpo>>;
+  /**
+   * Lo que **ademas de la observacion** hace falta para poder guardar, dicho
+   * como el motivo por el que todavia no se puede. Ver `OpcionesDeEscritura.exigir`.
+   */
+  readonly exigir?: (
+    borrador: Readonly<Record<string, string>>,
+    filas: Readonly<Record<string, readonly Readonly<Record<string, string>>[]>>,
+  ) => string | undefined;
   /** Lo guardado cambia el ejercicio de trabajo de la sesion, no solo esta pantalla. */
   readonly cambiaElEjercicio?: boolean;
   /** Aviso que la pantalla muestra antes del formulario, si hace falta explicar algo. */
@@ -46,8 +54,21 @@ export interface EscrituraDeclarada {
 const TRIBUTO_DEL_BACKEND: Readonly<Record<string, string>> = {
   'IMPUESTO PREDIAL': 'PREDIAL',
   'ARBITRIOS MUNICIPALES': 'ARBITRIO',
+  // El mismo tributo, escrito corto: es como lo rotula la tabla de deuda de
+  // «Baja de deuda», y como lo lista su filtro. Dos rotulos del prototipo, un
+  // solo codigo del dominio; inventar un segundo codigo para el mismo tributo
+  // partiria el padron en dos.
+  ARBITRIOS: 'ARBITRIO',
   'PATRIMONIO VEHICULAR': 'VEHICULAR',
   ALCABALA: 'ALCABALA',
+  // Y los codigos del dominio, tal cual. No es redundancia: la tabla de «Baja de
+  // deuda» **no sale del prototipo, sale del backend** (`consulta_deuda` publica
+  // `tributo` ya en el vocabulario del libro), asi que la fila elegida trae
+  // «PREDIAL» y no «IMPUESTO PREDIAL». Sin estas cuatro lineas, el tributo de una
+  // baja no viajaria y el backend la rechazaria por un campo que si estaba.
+  PREDIAL: 'PREDIAL',
+  ARBITRIO: 'ARBITRIO',
+  VEHICULAR: 'VEHICULAR',
 };
 
 const tributoDe = (texto: string): string | undefined => TRIBUTO_DEL_BACKEND[texto];
@@ -59,6 +80,9 @@ const tributoDe = (texto: string): string | undefined => TRIBUTO_DEL_BACKEND[tex
  */
 const MODALIDAD_DE_NOTIFICACION_DEL_BACKEND: Readonly<Record<string, string>> = {
   'PERSONAL EN DOMICILIO FISCAL': 'PERSONAL',
+  // Entrecomilladas a proposito: sin las comillas, la regla de tildes en
+  // identificadores las señala —son claves validas de JavaScript, y Prettier las
+  // desentrecomilla si se le deja—.
   'CEDULÓN': 'CEDULON',
   'PUBLICACIÓN': 'PUBLICACION',
   'BUZÓN ELECTRÓNICO': 'CORREO',
@@ -140,6 +164,33 @@ const TITULAR: TablaDelCuerpo = {
   },
 };
 
+/**
+ * La cuota que se da de baja, tal como la elige la tabla de «Baja de deuda».
+ *
+ * Es `plana` porque `PeticionDeMovimiento` declara la obligacion en el cuerpo plano; ver
+ * `TablaDelCuerpo.plana` y la nota de `baja_deuda`. Las claves de la izquierda son las de
+ * las columnas del catalogo (`estructura.tabla.claves`), salvo `codContribuyente`, que lo
+ * aporta el contexto de la seleccion —la pantalla entera es de un contribuyente y su codigo
+ * esta en el filtro, no en una columna—.
+ *
+ * `unidad` y `totalS` **no estan**: la primera es un codigo que el backend no acepta —pide
+ * el identificador interno del predio o del vehiculo— y el segundo es una suma que el
+ * backend rehace. Ninguna de las dos entra ni en el estado ni en el cuerpo, que es
+ * exactamente lo que la lista blanca por columna vino a garantizar.
+ */
+const CUOTAS_DE_LA_BAJA: TablaDelCuerpo = {
+  campo: 'cuotas',
+  plana: true,
+  columnas: {
+    codContribuyente: { campo: 'codContribuyente' },
+    tributo: { campo: 'tributo', valor: tributoDe },
+    ano: { campo: 'ano' },
+    cuota: { campo: 'cuota', entero: true },
+    insolutoS: { campo: 'insoluto' },
+    interesS: { campo: 'interes' },
+  },
+};
+
 const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   /**
    * Cambiar el año de trabajo.
@@ -199,6 +250,67 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
       nDelDocumento: { campo: 'documentoOrigen' },
     },
     nota: 'Solo se admiten los tributos con código establecido: predial, arbitrios, vehicular y alcabala. La unidad (predio o placa) y el rango de cuotas todavía no se resuelven aquí: el alta queda a nivel de contribuyente y con una sola cuota.',
+  },
+
+  /**
+   * Baja de deuda (RF-044, #24, #332): extingue una obligacion de la cuenta corriente.
+   *
+   * Es la primera opcion cuyo acto **se elige en una tabla** en vez de teclearse: la fila que
+   * se marca *es* la obligacion, y por eso viaja por `tablas` —con su lista blanca por
+   * columna— y no como seis campos que alguien vuelve a escribir mirando la pantalla.
+   *
+   * La tabla va `plana` porque `MovimientosDeDeudaController.PeticionDeMovimiento` es un
+   * cuerpo plano: **una obligacion por acto**. De ahi las dos consecuencias que `exigir`
+   * hace visibles en vez de esconder: se puede marcar mas de una fila —marcar es mirar—,
+   * pero guardar exige que quede **una**, porque mandar la primera y callarse las demas
+   * daria de baja una cuota y dejaria tres vivas sin que nada lo dijera. El dia que la
+   * operacion acepte una lista, esto es quitar `plana` y el limite de `exigir`.
+   *
+   * Lo que **no** viaja, y por que:
+   *
+   * - `causal` («PRESCRIPCIÓN DECLARADA», «ERROR MATERIAL»…): `PeticionDeMovimiento` no
+   *   tiene ningun campo para ella. `referenciaExterna` no lo es —el dominio la describe
+   *   como «por donde entra una papeleta o una licencia»—, y meter ahi la causal la
+   *   convertiria en un dato que nadie sabria leer. Va en la observacion, que es donde el
+   *   backend la audita, y la `nota` lo dice antes de que alguien la busque.
+   * - `motivo`: es el mismo texto que ya exige `useEscritura` (regla 10). Declararlo aparte
+   *   daria dos cajas para lo que el backend guarda en un solo `observacion`.
+   * - `autorizadoPor` y `montoTotalAExtinguirS` son `"ro"`: los pone el servidor. El
+   *   segundo, ademas, es la previsualizacion del total —y la calcula el, no la interfaz
+   *   (RNF-083)—.
+   * - `unidad` (la columna con el codigo del predio o la placa): el backend pide
+   *   `predioId`/`vehiculoId`, identificadores internos, y esta pantalla no resuelve un
+   *   codigo contra ellos. Es el mismo hueco que ya tiene `alta_deuda`.
+   * - `totalS`: es la suma de insoluto e interes, que el backend rehace. Mandarla seria
+   *   dejar que el cliente proponga un total (RNF-083).
+   */
+  baja_deuda: {
+    campos: {
+      nDeResolucion: { campo: 'documentoOrigen' },
+      fechaDeResolucion: { campo: 'fechaValor' },
+    },
+    tablas: { cuotas: CUOTAS_DE_LA_BAJA },
+    exigir: (borrador, filas) => {
+      const elegidas = filas['cuotas'] ?? [];
+      const [primera] = elegidas;
+      if (primera === undefined) {
+        return 'Elige en la tabla la cuota que se da de baja: la baja es sobre una obligación concreta, no sobre la cuenta entera.';
+      }
+      if (elegidas.length > 1) {
+        return `Hay ${elegidas.length} cuotas elegidas y la baja registra una obligación por acto: deja una elegida y repite la baja para las demás.`;
+      }
+      if ((primera['codContribuyente'] ?? '').trim() === '') {
+        return 'Falta el código de contribuyente: búscalo arriba, porque la baja se registra sobre su cuenta corriente.';
+      }
+      if ((borrador['nDeResolucion'] ?? '').trim() === '') {
+        return 'Falta el documento que sustenta: sin la resolución que la aprueba, una baja de deuda no se puede defender ante nadie.';
+      }
+      if ((borrador['fechaDeResolucion'] ?? '').trim() === '') {
+        return 'Falta la fecha de la resolución: es la fecha con efecto tributario de la baja.';
+      }
+      return undefined;
+    },
+    nota: 'La baja registra una obligación por acto: se elige su cuota en la tabla y se repite para las demás. La causal no tiene campo propio en el backend —va en la observación, que es donde queda auditada— y el total a extinguir lo calcula el servidor: aquí no se suma ninguna columna. Una fila cuya cuota es un rango («1-4») viaja sin cuota, que es como el backend expresa «todo el año».',
   },
 
   /**

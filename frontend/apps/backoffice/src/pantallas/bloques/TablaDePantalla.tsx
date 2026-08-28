@@ -47,6 +47,22 @@ export interface TablaDePantallaProps {
     readonly etiqueta: string;
     readonly onAbrir: (clave: string) => void;
   };
+  /**
+   * La tabla **elige filas** (#332), cuando la opcion lo declara
+   * (`composicion.ts`). Sin esto se dibuja como siempre.
+   *
+   * La casilla ocupa la primera columna del catalogo, que es la que el prototipo
+   * dibuja vacia para esto mismo —no se anade una columna al lado: dos columnas
+   * de seleccion, una viva y una muerta, no se distinguen—.
+   */
+  readonly seleccion?: {
+    /** Los indices de fila elegidos, de la pagina que se esta viendo. */
+    readonly elegidas: ReadonlySet<number>;
+    readonly onAlternar: (indice: number) => void;
+    /** Como nombrar una fila: «cuota» / «cuotas». Del manual, no inventado. */
+    readonly una: string;
+    readonly varias: string;
+  };
 }
 
 const ARIA_SENTIDO = { ASCENDENTE: 'ascending', DESCENDENTE: 'descending' } as const;
@@ -61,6 +77,7 @@ export function TablaDePantalla({
   onPagina,
   hayFiltros = false,
   altaDeFila,
+  seleccion,
 }: TablaDePantallaProps) {
   const numericas = new Set(estructura.num ?? []);
   const filas = datos?.filas ?? [];
@@ -89,6 +106,13 @@ export function TablaDePantalla({
           </div>
         )}
       </div>
+      {seleccion !== undefined && !vacia && (
+        <BandaDeSeleccion
+          elegidas={seleccion.elegidas.size}
+          una={seleccion.una}
+          varias={seleccion.varias}
+        />
+      )}
       {vacia ? (
         <Vacio hayFiltros={hayFiltros} que={estructura.title.toLowerCase()} />
       ) : (
@@ -102,6 +126,16 @@ export function TablaDePantalla({
                   </th>
                 )}
                 {estructura.cols.map((columna, i) => {
+                  // La primera columna del catalogo es la de la casilla cuando
+                  // la opcion declara seleccion: se rotula, para que la columna
+                  // tenga cabecera y el lector de pantalla pueda anunciarla.
+                  if (seleccion !== undefined && i === 0) {
+                    return (
+                      <th key={columna} className="sgtm-tabla__elegir">
+                        <span className="sgtm-portal__oculto">Elegir</span>
+                      </th>
+                    );
+                  }
                   const clave = estructura.claves[i];
                   const ordenable = onOrdenar !== undefined && clave !== undefined;
                   const activa = ordenable && clave === orden;
@@ -170,9 +204,25 @@ export function TablaDePantalla({
                           {fila.map((celda, c) => (
                             <td
                               key={estructura.cols[c] ?? c}
-                              className={numericas.has(c) ? 'sgtm-tabla--numerica' : undefined}
+                              className={
+                                seleccion !== undefined && c === 0
+                                  ? 'sgtm-tabla__elegir'
+                                  : numericas.has(c)
+                                    ? 'sgtm-tabla--numerica'
+                                    : undefined
+                              }
                             >
-                              {celda.tono ? (
+                              {seleccion !== undefined && c === 0 ? (
+                                <Casilla
+                                  elegida={seleccion.elegidas.has(f)}
+                                  onAlternar={() => seleccion.onAlternar(f)}
+                                  // La etiqueta accesible nombra **la fila**, no
+                                  // «fila 3»: quien la oye tiene que saber que
+                                  // esta marcando, y eso son sus dos primeras
+                                  // columnas con dato.
+                                  etiqueta={etiquetaDeFila(fila, seleccion.una)}
+                                />
+                              ) : celda.tono ? (
                                 <Insignia tono={TONO_DE_INSIGNIA[celda.tono]}>
                                   {celda.texto}
                                 </Insignia>
@@ -208,6 +258,66 @@ export function TablaDePantalla({
       {estructura.note && <p className="sgtm-tarjeta__pie">{estructura.note}</p>}
     </section>
   );
+}
+
+/**
+ * La banda de la seleccion: **cuantas filas hay elegidas, y nada mas**.
+ *
+ * Lo que no dice es el importe, y es lo mas importante de este bloque: sumar las
+ * columnas que tiene delante daria una cifra que el backend no puede sustentar
+ * (RNF-083), y el total de una baja no es la suma de lo que se ve —el interes
+ * corre hasta la fecha del acto—. Quien lo calcula es el servidor; mientras no
+ * publique la previsualizacion, la banda lo dice en vez de ensenar un numero.
+ */
+function BandaDeSeleccion({
+  elegidas,
+  una,
+  varias,
+}: {
+  readonly elegidas: number;
+  readonly una: string;
+  readonly varias: string;
+}) {
+  return (
+    <p className="sgtm-seleccion" role="status">
+      <strong>
+        {elegidas} {elegidas === 1 ? una : varias} {elegidas === 1 ? 'elegida' : 'elegidas'}
+      </strong>
+      <span>
+        {' '}
+        · el total lo calcula el servidor, y la previsualización todavía no está disponible: aquí no
+        se suma ninguna columna.
+      </span>
+    </p>
+  );
+}
+
+/** La casilla de una fila, con su etiqueta accesible. */
+function Casilla({
+  elegida,
+  onAlternar,
+  etiqueta,
+}: {
+  readonly elegida: boolean;
+  readonly onAlternar: () => void;
+  readonly etiqueta: string;
+}) {
+  return (
+    <label className="sgtm-tabla__casilla">
+      <input type="checkbox" checked={elegida} onChange={onAlternar} />
+      <span className="sgtm-portal__oculto">{etiqueta}</span>
+    </label>
+  );
+}
+
+/** «Elegir la cuota 2016 · 1-4 · IMPUESTO PREDIAL»: lo que se marca, dicho con sus datos. */
+function etiquetaDeFila(fila: readonly { readonly texto: string }[], una: string): string {
+  const datos = fila
+    .slice(1)
+    .map((celda) => celda.texto)
+    .filter((texto) => texto !== '')
+    .slice(0, 3);
+  return `Elegir la ${una} ${datos.join(' · ')}`.trimEnd();
 }
 
 /**
