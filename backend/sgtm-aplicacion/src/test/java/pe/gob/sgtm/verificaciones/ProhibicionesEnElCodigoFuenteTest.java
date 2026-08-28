@@ -721,6 +721,39 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra con el descuento de un beneficio compilado")
+    void elEscanerDetectaLaMuestraDeBeneficio() throws IOException {
+        // #72: cuanto descuenta una campana de amnistia lo fija una ordenanza local (D-02b) o un
+        // acuerdo de concejo (D-02c). NINGUNA de las dieciseis palabras anteriores cazaba
+        // BENEFICIO_AMNISTIA_2026 —ni ALICUOTA, ni DEDUCCION, ni TASA—, el mismo hueco que #35
+        // destapo con INTERES_DE_FRACCIONAMIENTO, #42 con COSTA_DE_LA_REC2, #51 con TASA_PANEL y
+        // #54 con VIGENCIA_DEL_CERTIFICADO. Por eso entran BENEFICIO, DESCUENTO y CONDONACION.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeBeneficioCompilado.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las cuatro constantes y la alicuota sin nombre; ningun comentario")
+                .hasSize(5);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).contains("BENEFICIO_AMNISTIA_2026"))
+                .anySatisfy(f -> assertThat(f).contains("DESCUENTO_PRONTO_PAGO"))
+                .anySatisfy(f -> assertThat(f).contains("CONDONACION_DE_INTERESES"))
+                .anySatisfy(f -> assertThat(f).contains("ALICUOTA_DE_LA_CAMPANIA"))
+                // La quinta no tiene nombre que la delate: es la cifra dentro de la expresion,
+                // que es como se escribe un valor por omision y lo que #72 destapo.
+                .anySatisfy(f -> assertThat(f).contains("new Alicuota(new BigDecimal(\""));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra con la tasa de anuncios compilada (regla 5)")
     void elEscanerDetectaLaMuestraDeTasaDeAnuncio() throws IOException {
         // #51: la tasa por anuncios y propaganda es de ordenanza local (D-02b, #199 bloqueado).
