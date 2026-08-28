@@ -194,6 +194,9 @@ const SIN_CAMPOS: Readonly<Record<string, CampoDelCuerpo>> = {};
 /** Sin tablas declaradas. Misma razon que `SIN_CAMPOS`. */
 const SIN_TABLAS: Readonly<Record<string, TablaDelCuerpo>> = {};
 
+/** Sin claves de presentacion. Misma razon que `SIN_CAMPOS`. */
+const SIN_PRESENTACION: readonly string[] = [];
+
 export interface OpcionesDeEscritura {
   /**
    * Los unicos campos del formulario que viajan, **por su clave del catalogo**,
@@ -208,6 +211,17 @@ export interface OpcionesDeEscritura {
    * observacion**, y sus controles no se pueden escribir.
    */
   readonly campos?: Readonly<Record<string, CampoDelCuerpo>>;
+  /**
+   * Claves que el formulario puede **guardar sin mandar nunca**.
+   *
+   * Entran en `campos` de {@link Escritura} —el conjunto de lo escribible, que
+   * es lo que `fijarCampo` deja entrar— y **no** en el registro de campos del
+   * cuerpo, que es el unico que `soloDeclarados` recorre. Por eso la garantia de
+   * que no viajan no depende de acordarse: no hay declaracion que las traduzca.
+   *
+   * Ver `EscrituraDeclarada.presentacion` para por que existen.
+   */
+  readonly presentacion?: readonly string[];
   /**
    * Las tablas del formulario que viajan, por su clave, con su lista blanca de
    * columnas. Ver {@link TablaDelCuerpo}.
@@ -261,7 +275,14 @@ export interface OpcionesDeEscritura {
 export function useEscritura(
   operacion: IdDeOperacion | undefined,
   parametros: Readonly<Record<string, string>>,
-  { campos = SIN_CAMPOS, tablas = SIN_TABLAS, exigir, alGuardar, cuerpo }: OpcionesDeEscritura = {},
+  {
+    campos = SIN_CAMPOS,
+    presentacion = SIN_PRESENTACION,
+    tablas = SIN_TABLAS,
+    exigir,
+    alGuardar,
+    cuerpo,
+  }: OpcionesDeEscritura = {},
 ): Escritura {
   const [observacion, fijarTexto] = useState('');
   const [borrador, fijarBorrador] = useState<Readonly<Record<string, string>>>({});
@@ -272,7 +293,10 @@ export function useEscritura(
   const clientes = useQueryClient();
   // La lista blanca en forma de conjunto, estable entre renders: entra en la
   // dependencia de lo que se manda y en si un control se puede escribir.
-  const declarados = useMemo(() => new Set(Object.keys(campos)), [campos]);
+  const declarados = useMemo(
+    () => new Set([...Object.keys(campos), ...presentacion]),
+    [campos, presentacion],
+  );
   const declaradas = useMemo(() => new Set(Object.keys(tablas)), [tablas]);
   // Lo que ademas de la observacion falta para poder guardar. Se pregunta en
   // cada render porque es un cierre sobre el estado de quien lo declara.

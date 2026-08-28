@@ -33,12 +33,25 @@ export interface IndiceDeSeccionesProps {
    * justamente el sitio donde esa salida se busca.
    */
   readonly haciaLasAcciones?: boolean;
+  /**
+   * Una entrada **antes** de las secciones, para el bloque que la pantalla
+   * dibuja encima de ellas y fuera de la rejilla del indice: hoy, la tabla
+   * (FRO-03 §5).
+   *
+   * Existe porque un indice que empieza por la segunda cosa de la pagina no es
+   * un indice de la pagina. En «Cálculo individual del impuesto predial» eso se
+   * veia sin disimulo: el paso 1 del calculo —los predios que integran la base—
+   * no tenia entrada, y el indice arrancaba en la escala. El rotulo es el del
+   * catalogo, no uno inventado (RNF-080).
+   */
+  readonly previa?: { readonly rotulo: string; readonly ancla: string };
 }
 
 export function IndiceDeSecciones({
   secciones,
   anclaDe,
   haciaLasAcciones = false,
+  previa,
 }: IndiceDeSeccionesProps) {
   const [activa, fijarActiva] = useState(0);
 
@@ -47,11 +60,20 @@ export function IndiceDeSecciones({
      y no el arreglo: `seccionesDe` devuelve uno nuevo en cada dibujo, y con el
      arreglo por dependencia el efecto correria siempre y borraria la entrada
      que se acaba de pulsar. */
-  const rotulos = secciones.map((seccion) => seccion.label).join('|');
+  /* Las entradas del indice, en el orden de la pagina: el bloque de encima
+     —cuando lo hay— y despues las secciones. Se compone una sola lista para que
+     `activa`, el observador y el dibujo cuenten lo mismo; con dos listas, la
+     entrada marcada dejaria de ser la que se esta viendo en cuanto hubiera
+     previa. */
+  const entradas = [
+    ...(previa === undefined ? [] : [{ rotulo: previa.rotulo, ancla: previa.ancla }]),
+    ...secciones.map((seccion, indice) => ({ rotulo: seccion.label, ancla: anclaDe(indice) })),
+  ];
+
+  const rotulos = entradas.map((entrada) => entrada.rotulo).join('|');
   useEffect(() => fijarActiva(0), [rotulos]);
 
-  const anclas = secciones.map((_, indice) => anclaDe(indice));
-  const anclasEnUnaLinea = anclas.join('|');
+  const anclasEnUnaLinea = entradas.map((entrada) => entrada.ancla).join('|');
 
   /* **`aria-current` dice cual se esta viendo, no cual se pulso.**
      Se marcaba en el `onClick` y ahi se quedaba: rodando la pagina con la rueda
@@ -69,8 +91,11 @@ export function IndiceDeSecciones({
   useEffect(() => {
     if (typeof IntersectionObserver !== 'function') return undefined;
     const observador = new IntersectionObserver(
-      (entradas) => {
-        const visibles = entradas
+      // `observadas` y no `entradas`: las del indice se llaman asi desde que
+      // hay una que no sale de las secciones, y dos cosas distintas con el
+      // mismo nombre en el mismo componente se confunden a la primera lectura.
+      (observadas) => {
+        const visibles = observadas
           .filter((entrada) => entrada.isIntersecting)
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
         const primera = visibles[0];
@@ -87,16 +112,16 @@ export function IndiceDeSecciones({
     return () => observador.disconnect();
   }, [anclasEnUnaLinea]);
 
-  if (secciones.length === 0) return null;
+  if (entradas.length === 0) return null;
 
   return (
     <nav className="sgtm-indice" aria-label="Secciones de la pantalla" data-no-imprimible="1">
       <p className="sgtm-indice__eyebrow">
-        {secciones.length} {secciones.length === 1 ? 'sección' : 'secciones'}
+        {entradas.length} {entradas.length === 1 ? 'sección' : 'secciones'}
       </p>
-      {secciones.map((seccion, indice) => (
+      {entradas.map((entrada, indice) => (
         <button
-          key={`${indice}|${seccion.label}`}
+          key={`${indice}|${entrada.rotulo}`}
           type="button"
           className="sgtm-indice__entrada"
           /* **El nombre accesible dice que hace, no solo a que se refiere.**
@@ -106,12 +131,12 @@ export function IndiceDeSecciones({
              lleva a la seccion y el otro la esconde. El rotulo visible no
              cambia: es el de la seccion, que es lo que hay que leer en el
              indice. */
-          aria-label={`Ir a ${seccion.label}`}
+          aria-label={`Ir a ${entrada.rotulo}`}
           data-activa={indice === activa ? '1' : '0'}
           aria-current={indice === activa ? 'true' : undefined}
           onClick={() => {
             fijarActiva(indice);
-            const ancla = document.getElementById(anclaDe(indice));
+            const ancla = document.getElementById(entrada.ancla);
             // `scrollIntoView` no existe en jsdom, y aqui no hace falta fingirlo:
             // lo que se prueba es que la entrada lleva a **su** ancla, no que el
             // navegador sepa desplazarse.
@@ -121,7 +146,7 @@ export function IndiceDeSecciones({
             ancla?.focus?.({ preventScroll: true });
           }}
         >
-          {seccion.label}
+          {entrada.rotulo}
         </button>
       ))}
       {haciaLasAcciones && (

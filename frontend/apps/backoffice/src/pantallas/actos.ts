@@ -23,12 +23,16 @@ import { escrituraDe } from './escrituras';
  *   `sin-declaracion`  la operacion escribe, pero esta opcion no ha declarado
  *                      que campos suyos acepta el backend. Pide **trabajo**, y
  *                      de quien escribe el sistema, no de quien atiende
+ *   `sin-determinacion` la primaria **no guarda lo que hay en pantalla: pide una
+ *                      determinacion**. Ninguna de las dos frases de arriba es
+ *                      cierta ahi (#333)
  *
- * La distincion se lee de lo que ya se sabe —el verbo del contrato y el registro
- * de escrituras—, sin ninguna lista aparte que alguien tenga que mantener al
- * dia. Una opcion que se declare deja de tener impedimento el mismo dia.
+ * La distincion se lee de lo que ya se sabe —el verbo del contrato, el rotulo de
+ * la primaria y el registro de escrituras—, sin ninguna lista aparte que alguien
+ * tenga que mantener al dia. Una opcion que se declare deja de tener impedimento
+ * el mismo dia.
  */
-export type CausaDelImpedimento = 'sin-backend' | 'sin-declaracion';
+export type CausaDelImpedimento = 'sin-backend' | 'sin-declaracion' | 'sin-determinacion';
 
 export interface ImpedimentoDelActo {
   /**
@@ -75,6 +79,34 @@ const SIN_DECLARACION = `Lo que se escriba aquí todavía no se guarda: la panta
 const DE_SALIDA =
   /^(imprimir|impresi|exportar|excel|pdf|descargar|limpiar|ver\b|abrir|visualizar|previsualizar|consultar|buscar)/i;
 
+const SIN_DETERMINACION =
+  'Aquí no se calcula nada: la determinación la hace el servidor y esta pantalla la muestra. ' +
+  `Mientras no llegue, los importes salen con «—» y ninguno se puede recomponer aquí. ${SALIDA}`;
+
+/**
+ * Acciones que **piden una determinacion en vez de guardar lo que hay en
+ * pantalla**: calcular, simular, liquidar (#333).
+ *
+ * Existe porque de las dos causas de arriba **ninguna es cierta** en una
+ * pantalla asi, y la que le tocaba era la mas equivocada de las dos. «Cálculo
+ * individual del impuesto predial» declara un `POST` en el contrato y no declara
+ * escritura, asi que la franja decia `sin-declaracion`: «lo que se escriba aquí
+ * todavía no se guarda: la pantalla aún no manda estos campos». Las dos mitades
+ * son falsas —15 de sus 19 campos son `"ro"`, ahi no se escribe nada, y lo que
+ * falta no es una entrada en la lista blanca sino la **capa web entera** de la
+ * determinacion: el dominio calcula (`RT-001`…`RT-016`,
+ * `RegistrarDeterminacionPredial`) y ningun controlador lo publica—. Con la
+ * franja equivocada, quien atiende busca un campo que rellenar y no lo hay.
+ *
+ * Se mira el rotulo de la primaria y no la opcion, por lo mismo que
+ * `esIrreversible` y `DE_SALIDA`: es lo que el usuario lee, y una lista de
+ * pantallas empieza a mentir el dia que una cambie su primaria. Y se deja
+ * **deliberadamente estrecho** —`ejecutar` no entra— porque «Ejecutar proceso»
+ * de «Predial — masivo» si manda sus parametros (ejercicio, alcance, derecho de
+ * emision), y ahi `sin-declaracion` dice la verdad.
+ */
+const DE_CALCULO = /^(calcular|recalcular|simular|determinar|liquidar)/i;
+
 /**
  * Por que la accion primaria de esta opcion no puede guardar todavia, o nada si
  * puede.
@@ -107,6 +139,11 @@ export function impedimentoDelActo(
   if (escrituraDe(opcion) !== undefined) return undefined;
   const primaria = acciones[acciones.length - 1];
   if (primaria !== undefined && DE_SALIDA.test(primaria.trim())) return undefined;
+  // Antes que el verbo del contrato: una primaria que pide una determinacion no
+  // guarda campos, asi que ninguna de las otras dos causas la describe.
+  if (primaria !== undefined && DE_CALCULO.test(primaria.trim())) {
+    return { causa: 'sin-determinacion', detalle: SIN_DETERMINACION };
+  }
   const operacion = operacionDe(opcion);
   if (operacion === undefined || !escribe(operacion)) {
     return { causa: 'sin-backend', detalle: SIN_BACKEND };

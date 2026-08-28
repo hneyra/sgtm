@@ -38,6 +38,17 @@ export interface TablaDePantallaProps {
   /** Hay filtros aplicados: cambia lo que significa que no haya filas. */
   readonly hayFiltros?: boolean;
   /**
+   * El `id` con que la tarjeta queda anclada, cuando la pantalla lleva indice
+   * de secciones (`composicion.ts`).
+   *
+   * La tabla se dibuja **antes** que las secciones y fuera de la rejilla del
+   * indice (FRO-03 §5), asi que sin esto el indice de una pantalla con tabla
+   * empieza por la segunda cosa que hay en la pagina: en «Cálculo individual
+   * del impuesto predial» el paso 1 del calculo —los predios que integran la
+   * base— quedaba sin entrada.
+   */
+  readonly ancla?: string;
+  /**
    * El alta que cuelga de una fila desplegada, cuando quien mira puede darla.
    *
    * Solo se dibuja si la respuesta trae `detalles`: sin desplegable no hay
@@ -88,6 +99,7 @@ export function TablaDePantalla({
   onOrdenar,
   onPagina,
   hayFiltros = false,
+  ancla,
   altaDeFila,
   seleccion,
 }: TablaDePantallaProps) {
@@ -104,7 +116,13 @@ export function TablaDePantalla({
   const columnas = estructura.cols.length + (detalles === undefined ? 0 : 1);
 
   return (
-    <section className="sgtm-tarjeta">
+    <section
+      className="sgtm-tarjeta"
+      // `tabIndex` negativo, no positivo (FRO-04 §7), igual que las secciones
+      // del formulario: la tarjeta no entra en el recorrido del tabulador, pero
+      // el indice puede llevarle el foco al saltar a ella.
+      {...(ancla === undefined ? {} : { id: ancla, tabIndex: -1 })}
+    >
       <div className="sgtm-tarjeta__cabecera">
         <h2 className="sgtm-tarjeta__titulo">{estructura.title}</h2>
         <span className="sgtm-tarjeta__conteo">{cargando ? '…' : (datos?.conteo ?? '')}</span>
