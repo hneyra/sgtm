@@ -38,6 +38,12 @@ const CASOS = [
   ['texto-reescrito', 'no esta en «predial-deducciones.md»'],
   ['archivo-que-no-existe', 'que no existe en'],
   ['llave-repetida', 'repite la llave'],
+  // Las tres de #192, por la columna `valor_maquina`. La segunda es la que importa:
+  // veinte dias habiles y veinte calendario no son lo mismo, y de esa diferencia
+  // depende si un expediente coactivo nacio antes de tiempo.
+  ['cifra-que-el-plazo-no-dice', '«5 ANIOS» publica 5 y la fila declara'],
+  ['unidad-que-no-es-la-de-la-norma', 'dice «DIAS_CALENDARIO» y el texto verbatim no dice'],
+  ['plazo-sin-forma-de-maquina', 'no trae valor_maquina'],
 ];
 
 const fallos = [];
