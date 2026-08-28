@@ -52,13 +52,18 @@ test('de la pregunta del inicio a la ficha, solo con el teclado', async ({ page 
  *
  * La ficha compone seis opciones en seis pestañas, y una barra de pestañas a la
  * que solo se llega con el ratón deja media ficha fuera del alcance de quien
- * atiende. Este camino la recorre con el teclado: tabula hasta la barra, se mueve
- * con las flechas —que activan la pestaña **y se llevan el foco**— y comprueba
- * que lo que se activa es lo que se ve.
+ * atiende. Este camino la recorre con el teclado, y recorre además **el traspaso
+ * del foco**: al llegar a la ficha nadie le dice al navegador dónde está —una
+ * navegación de React Router deja el foco en `body`, y desde ahí hay diecinueve
+ * pulsaciones del tabulador hasta la barra—, así que la ficha se lo lleva al
+ * nombre de quien se atiende. Antes esta prueba enfocaba la primera pestaña **a
+ * mano**, que es justamente saltarse lo que había que comprobar.
+ *
+ * Y la barra va con **activación manual**: las flechas mueven el foco y Enter
+ * activa. Recorrerla con activación automática pedía las cinco lecturas por el
+ * camino, que es lo que ADR-0016 §2 evita al no consultarlas al abrir.
  */
-test('la ficha 360° se recorre con las flechas, y el foco sigue a la pestaña activa', async ({
-  page,
-}) => {
+test('la ficha 360° recibe el foco y se recorre con el teclado', async ({ page }) => {
   await page.goto('/');
   // El trozo del inicio llega diferido: se espera al foco, que es la señal de
   // que la caja ya existe. Sin esto lo tecleado se pierde antes de aterrizar.
@@ -69,6 +74,12 @@ test('la ficha 360° se recorre con las flechas, y el foco sigue a la pestaña a
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/atencion\/\d+$/);
 
+  // **El foco llega solo**: al nombre de quien se atiende, que es lo primero que
+  // hay que saber al abrir una ficha. Se pide por el nombre y no por el nivel:
+  // las tarjetas de dentro también encabezan con `h2`.
+  const nombre = page.getByRole('heading', { name: /MEDINA/ });
+  await expect(nombre).toBeFocused();
+
   // La cabecera dice quién es y cuánto debe, con la fecha de la respuesta.
   await expect(page.getByRole('region', { name: 'Resumen de saldos' })).toContainText(
     /Cifras actualizadas al/,
@@ -77,22 +88,33 @@ test('la ficha 360° se recorre con las flechas, y el foco sigue a la pestaña a
   const barra = page.getByRole('tablist', { name: /se compone de esta persona/i });
   await expect(barra).toBeVisible();
 
-  // La primera pestaña es la única tabulable: el foco entra en la barra por ella.
+  // Y desde el nombre se llega a la barra tabulando, sin tocar el ratón: dos
+  // pulsaciones —la acción de la cabecera va en medio—, no diecinueve. La
+  // primera pestaña es la única tabulable de las seis.
   const primera = page.getByRole('tab').first();
-  await primera.focus();
   await expect(primera).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await expect(primera).toBeFocused();
 
+  // La flecha mueve el foco y **no activa**: pasar por encima no pide su padrón.
   await page.keyboard.press('ArrowRight');
   const segunda = page.getByRole('tab').nth(1);
   await expect(segunda).toBeFocused();
-  await expect(segunda).toHaveAttribute('aria-selected', 'true');
+  await expect(segunda).toHaveAttribute('aria-selected', 'false');
+  await expect(page.getByRole('tabpanel')).toContainText(
+    'Fuente: Consultas · Consulta unificada predial-arbitrios',
+  );
 
-  // Y lo que se ve es lo de la pestaña activa, con su fuente dicha.
+  // Enter sí: y entonces lo que se ve es lo de la pestaña activa, con su fuente.
+  await page.keyboard.press('Enter');
+  await expect(segunda).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tabpanel')).toContainText('Fuente: Consultas · Consulta de predios');
 
-  // Fin lleva a la última, que es el expediente coactivo.
+  // Fin lleva a la última, que es el expediente coactivo, y Enter la abre.
   await page.keyboard.press('End');
   await expect(page.getByRole('tab').last()).toBeFocused();
+  await page.keyboard.press('Enter');
   await expect(page.getByRole('tabpanel')).toContainText(
     'Fuente: Coactiva · Expedientes coactivos',
   );

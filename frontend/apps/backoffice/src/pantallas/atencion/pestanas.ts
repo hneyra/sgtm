@@ -9,10 +9,25 @@ import { importeDe } from '../consultas';
  * ADR decide. Cada entrada nombra **una opción del catálogo** y de ella salen
  * las cuatro cosas que la pestaña necesita, sin que la ficha invente ninguna:
  *
- *   el rótulo    `opcion.label`, y el de su módulo para la línea «Fuente»
+ *   el rótulo    `opcion.title`, y el de su módulo para la línea «Fuente»
  *   la lectura   su operación del contrato, con los parámetros de aquí
  *   el permiso   el suyo: sin él la pestaña **no se dibuja** (ADR-0016 §2)
  *   la vuelta    su ruta, con el contexto puesto en el filtro
+ *
+ * El rótulo es el **título** y no la etiqueta del menú: en el menú cada opción
+ * está bajo su módulo y «Papeletas» se entiende, pero en una barra donde caen
+ * juntas las de Tránsito y las de Infracciones administrativas, «Papeletas» y
+ * «Estado de cuenta de papeleta» se leen como la misma cosa. El título del
+ * catálogo las separa —«Papeletas de infracción de tránsito» y «Estado de
+ * cuenta de papeleta administrativa»— y sigue siendo texto del manual (RNF-080).
+ *
+ * ── Cada pestaña dibuja una página, y dice cuántas hay ─────────────────────
+ *
+ * Ninguna pestaña pagina: la ficha no ordena ni pagina, porque las dos cosas son
+ * del servidor y su sitio es la opción, con sus filtros y su paginador. Lo que
+ * sí hace es **decir cuántas hay** —«20 de 43 deudas»— y dar la salida a la
+ * opción que las pagina. Enseñar veinte sin decir que hay cuarenta y tres es lo
+ * que hace que alguien se vaya de la ventanilla creyendo que no debe nada más.
  *
  * ── Una pestaña por opción, y no una por rejilla ───────────────────────────
  *
@@ -86,8 +101,21 @@ export interface RejillaDeLaFicha {
   readonly titulo: string;
   /** La sección de `ConsultaUnificadaResource` de la que salen sus filas. */
   readonly clave: string;
-  /** La opción de cuyo catálogo salen los rótulos de sus columnas. */
+  /**
+   * La opción de cuyo catálogo salen los rótulos de sus columnas, **y a la que
+   * se sale cuando la sección trae más de lo que cabe**: es la que pagina.
+   */
   readonly rotulos: string;
+  /**
+   * Cómo se llama **una** de sus filas, y cómo se llaman varias.
+   *
+   * El conteo se redacta con esto —«3 de 43 deudas»— y no con «filas»: quien
+   * atiende lee obligaciones, pagos y convenios, no filas de una tabla. Contar
+   * no es redactar en lenguaje del dominio (RNF-080), pero **nombrar lo que se
+   * cuenta sí**, y el nombre sale del manual.
+   */
+  readonly una: string;
+  readonly varias: string;
   readonly cols: readonly string[];
   readonly num?: readonly number[];
   readonly fila: (registro: Readonly<Record<string, unknown>>) => readonly Celda[];
@@ -182,6 +210,8 @@ export const REJILLAS_DE_LA_UNIFICADA: readonly RejillaDeLaFicha[] = [
   {
     titulo: 'Deudas Pendientes',
     clave: 'deudasPendientes',
+    una: 'deuda',
+    varias: 'deudas',
     rotulos: 'consulta_deuda',
     cols: ['Año', 'Tributo', 'Insoluto S/', 'Reajuste S/', 'Interés S/', 'Gastos S/', 'Total S/'],
     num: [2, 3, 4, 5, 6],
@@ -202,6 +232,8 @@ export const REJILLAS_DE_LA_UNIFICADA: readonly RejillaDeLaFicha[] = [
   {
     titulo: 'Pagos Realizados',
     clave: 'pagosRealizados',
+    una: 'pago',
+    varias: 'pagos',
     rotulos: 'consulta_pagos',
     cols: ['Fecha', 'Recibo', 'Concepto', 'Año', 'Importe S/'],
     num: [4],
@@ -219,6 +251,8 @@ export const REJILLAS_DE_LA_UNIFICADA: readonly RejillaDeLaFicha[] = [
   {
     titulo: 'Altas y Bajas',
     clave: 'altasYBajas',
+    una: 'movimiento',
+    varias: 'movimientos',
     rotulos: 'consulta_altas_bajas',
     cols: ['A/B', 'Doc. Aprob.', 'Fecha Reg.'],
     fila: (asiento) => [
@@ -233,6 +267,8 @@ export const REJILLAS_DE_LA_UNIFICADA: readonly RejillaDeLaFicha[] = [
   {
     titulo: 'Fraccionamientos',
     clave: 'fraccionamientos',
+    una: 'convenio',
+    varias: 'convenios',
     rotulos: 'consulta_convenios',
     cols: ['Nro. convenio', 'Fecha', 'Cuotas', 'Pagadas', 'Vencidas', 'Saldo S/', 'Estado'],
     num: [2, 3, 4, 5],
@@ -255,6 +291,8 @@ export const REJILLAS_DE_LA_UNIFICADA: readonly RejillaDeLaFicha[] = [
   {
     titulo: 'Valores',
     clave: 'valores',
+    una: 'valor',
+    varias: 'valores',
     rotulos: 'consulta_valores',
     cols: ['Nro. valor', 'Tipo', 'Tributo', 'Periodo', 'Estado'],
     fila: (valor) => [
@@ -273,6 +311,8 @@ export const REJILLAS_DE_LA_UNIFICADA: readonly RejillaDeLaFicha[] = [
   {
     titulo: 'Declaraciones presentadas',
     clave: 'declaracionesJuradas',
+    una: 'declaración',
+    varias: 'declaraciones',
     rotulos: 'declaracion_jurada',
     cols: ['DJ N°', 'Año', 'Tipo', 'Fecha', 'Estado'],
     fila: (declaracion) => [
@@ -368,6 +408,15 @@ export const PESTANAS: readonly PestanaDeLaFicha[] = [
       ],
       num: [6, 7],
     },
+    /* **La salida a su propia opción, que es la que pagina.** La ficha dibuja
+       la primera página de las que el backend devuelve y no lleva paginador
+       —ordenar y paginar son del servidor, y su sitio es la opción con sus
+       filtros—, así que sin este enlace quien tenga más vehículos de los que
+       caben se queda sin camino hasta los demás. Es el mismo filtro con el que
+       la pestaña ya preguntó. */
+    acciones: [
+      { opcion: 'consulta_vehiculos', filtro: (contexto) => ({ contribuyente: contexto.codigo }) },
+    ],
   },
   {
     opcion: 'papeletas',
@@ -375,6 +424,15 @@ export const PESTANAS: readonly PestanaDeLaFicha[] = [
     // /transito/papeletas` ofrece para una persona: no hay filtro por código de
     // contribuyente. Y el documento lo publica el padrón, así que hacen falta
     // los dos permisos.
+    //
+    // **Y el documento va sin su tipo, porque el contrato no lo admite.**
+    // `PapeletaRepositoryJdbc` resuelve el filtro con `JOIN contribuyente ci …
+    // WHERE ci.numero_documento = :documentoInfractor`: compara **el número
+    // solo**. Dos personas con el mismo número y distinto tipo de documento
+    // —un DNI y un carné de extranjería— entrarían las dos en esta lista, y
+    // desde aquí no hay forma de acotarlo. Se anota en vez de fingir que la
+    // pestaña filtra por persona: el día que el contrato publique
+    // `tipoDocumento`, este es el sitio donde se pone.
     tambien: ['contribuyentes'],
     parametros: (contexto) =>
       contexto.numeroDocumento === ''
@@ -396,6 +454,21 @@ export const PESTANAS: readonly PestanaDeLaFicha[] = [
     },
     acciones: [
       {
+        /* **El número de documento acaba en la barra de direcciones, y es una
+           decisión, no un descuido.** `conductor` es el filtro que el contrato
+           declara para `GET /transito/estado-cuenta` y viaja como viaja
+           cualquier filtro de las 134: en la consulta de la URL, igual que
+           `codContribuyente` en las otras cinco acciones y que `codRefCatastral`
+           en el enlace del predio del inicio. La dirección es además lo que
+           hace que la pantalla se pueda compartir y volver a abrir.
+
+           **Y no se va más lejos que eso**: no se guarda —las atenciones
+           recientes viven en memoria y se olvidan al cerrar sesión
+           (`atenciones.ts`)—, no se manda a ningún registro y no se escribe en
+           `localStorage`. Quien no tenga el permiso de la opción de destino no
+           ve siquiera el enlace. Ocultarlo aquí —un identificador opaco, una
+           redirección— exigiría que el backend publicara otra forma de
+           preguntar, y hoy publica esta. */
         opcion: 'transito_estado_cuenta',
         filtro: (contexto) => ({ conductor: contexto.numeroDocumento }),
       },
@@ -451,15 +524,53 @@ export const PESTANAS: readonly PestanaDeLaFicha[] = [
       ],
       num: [2, 3, 4],
     },
+    /* La misma salida que la de vehículos, y por lo mismo: una persona con más
+       expedientes de los que la primera página trae necesita llegar a los
+       demás, y quien pagina es la opción. */
+    acciones: [
+      {
+        opcion: 'coactiva_expedientes',
+        filtro: (contexto) => ({ codContribuyente: contexto.codigo }),
+      },
+    ],
   },
 ];
 
-/** Las filas de una sección paginada de la respuesta de la unificada. */
-export function filasDeLaSeccion(
+/**
+ * Una sección paginada de la respuesta de la unificada: **sus filas y cuántas
+ * hay detrás**.
+ *
+ * Las tres cosas juntas y no solo las filas, que era el defecto: cada sección
+ * viaja en su propio sobre `RespuestaPaginada` y el agregador **la pagina a
+ * veinte**, así que dibujar `contenido.length` decía «20 deudas» junto a un
+ * total de cabecera que cubre las cuarenta y tres. La cifra no estaba mal
+ * calculada: estaba contando otra cosa, y nada en la pantalla lo decía.
+ *
+ * `totalElementos` y `hayMas` los trae la propia sección; aquí no se deducen.
+ * Cuando falten —una respuesta sin sobre— el total es lo que se ve, que es la
+ * única afirmación que se puede sostener.
+ */
+export interface SeccionDeLaFicha {
+  readonly filas: readonly Readonly<Record<string, unknown>>[];
+  /** Cuántas hay en total, según la propia sección. Nunca deducido. */
+  readonly totalElementos: number;
+  /** Quedan más detrás de las que llegaron: la salida es la opción que pagina. */
+  readonly hayMas: boolean;
+}
+
+export function seccionDeLaFicha(
   ficha: Readonly<Record<string, unknown>> | undefined,
   clave: string,
-): readonly Readonly<Record<string, unknown>>[] {
+): SeccionDeLaFicha {
   const seccion = ficha?.[clave];
-  if (!esObjeto(seccion) || !Array.isArray(seccion['contenido'])) return [];
-  return seccion['contenido'].filter(esObjeto);
+  if (!esObjeto(seccion) || !Array.isArray(seccion['contenido'])) {
+    return { filas: [], totalElementos: 0, hayMas: false };
+  }
+  const filas = seccion['contenido'].filter(esObjeto);
+  const total = seccion['totalElementos'];
+  return {
+    filas,
+    totalElementos: typeof total === 'number' ? total : filas.length,
+    hayMas: seccion['hayMas'] === true,
+  };
 }
