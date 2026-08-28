@@ -547,6 +547,75 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que edita un anuncio o borra su autorizacion")
+    void elEscanerDetectaLaMuestraQueEditaUnAnuncio() throws IOException {
+        // #51: `anuncio` y `anuncio_movimiento` entran en TABLAS_INMUTABLES, por lo mismo que la
+        // licencia en #44 y con un motivo mas que ninguna de las anteriores tenia: la fila
+        // del movimiento lleva `referencia_cargo`, que es la MISMA cadena con la que la tasa entro
+        // en el libro. Su indice unico es lo unico que impide devengarla dos veces, asi que poder
+        // editarla en el sitio seria poder cobrar dos veces el mismo ejercicio cambiando una letra.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnAnuncio.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los tres UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(4);
+
+        List<String> fragmentos = hallazgos.stream().map(Hallazgo::fragmento).toList();
+        assertThat(fragmentos)
+                .filteredOn(
+                        f -> f.toLowerCase(java.util.Locale.ROOT).contains("update anuncio set"))
+                .as("el UPDATE de la denominacion y el del estado, los dos")
+                .hasSize(2);
+        assertThat(fragmentos)
+                .as("y el que reescribiria la referencia con la que el cargo entro en el libro")
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update anuncio_movimiento set"));
+        assertThat(fragmentos)
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from anuncio"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra con la tasa de anuncios compilada (regla 5)")
+    void elEscanerDetectaLaMuestraDeTasaDeAnuncio() throws IOException {
+        // #51: la tasa por anuncios y propaganda es de ordenanza local (D-02b, #199 bloqueado).
+        // NINGUNA palabra de la lista anterior la cazaba -TASA_PANEL no empieza por UIT, TRAMO,
+        // ALICUOTA ni ninguna de las otras-, que es el mismo hueco que #35 destapo con
+        // INTERES_DE_FRACCIONAMIENTO y #42 con COSTA_DE_LA_REC2. Por eso entran TASA y TARIFA.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeTasaDeAnuncioCompilada.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las cuatro constantes, y ninguno de los comentarios que las explican")
+                .hasSize(4);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).contains("TASA_PANEL"))
+                .anySatisfy(f -> assertThat(f).contains("TARIFA_POR_M2_DE_ANUNCIO"))
+                .anySatisfy(f -> assertThat(f).contains("TASAS_POR_CLASE"))
+                .anySatisfy(f -> assertThat(f).contains("ARANCEL_DEL_ANUNCIO"));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra con valores tributarios compilados (regla 5)")
     void elEscanerDetectaLaMuestraDeValoresCompilados() throws IOException {
         Path muestra =

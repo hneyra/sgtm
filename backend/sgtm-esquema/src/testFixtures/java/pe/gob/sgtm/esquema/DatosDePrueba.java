@@ -1499,17 +1499,54 @@ public final class DatosDePrueba {
                 "INSERT INTO edificacion_correlativo (municipalidad_id, ejercicio, ultimo)"
                         + " VALUES (?, 2026, 1)",
                 muni);
+        // V45 (#51) le puso a `anuncio` su clase -de la que sale la tasa-, su establecimiento, su
+        // traza y su clave de idempotencia, y le quito la columna `estado`, que ahora se deriva de
+        // `anuncio_movimiento`. La siembra rellena las NOT NULL nuevas: sin ellas, la prueba de
+        // aislamiento no tendria filas de anuncios que aislar.
+        long anuncioId =
+                insertar(
+                        app,
+                        "INSERT INTO anuncio (municipalidad_id, numero, contribuyente_id,"
+                                + " predio_id, licencia_id, clase, tipo, emplazamiento, forma,"
+                                + " denominacion, ubicacion, area, lados, cantidad,"
+                                + " fecha_autorizacion, vigencia_hasta, expediente,"
+                                + " clave_idempotencia, usuario_registro, fecha_registro,"
+                                + " observacion)"
+                                + " VALUES (?, ?, ?, ?, ?, 'PANEL', 'AVISO_LUMINOSO',"
+                                + "         'FACHADA', 'ADOSADO', 'BODEGA SAN MARTIN',"
+                                + "         'AV. GRAU 100', 6.00, 2, 1, ?, ?, ?, ?, 'prueba', ?,"
+                                + "         'anuncio de prueba') RETURNING id",
+                        muni,
+                        "AN-" + sufijo,
+                        titular,
+                        predioId,
+                        licenciaId,
+                        VIGENCIA,
+                        VIGENCIA,
+                        "EXPA-" + sufijo,
+                        "idem-anuncio-" + sufijo,
+                        VIGENCIA);
+        // El acto que la creo, con la referencia del cargo que pidio al libro. Es la fila que
+        // `anuncio_movimiento_cargo_uq` protege, y el importe va copiado del acto -no es una cifra
+        // normativa sembrada, es lo que se asento aquel dia-.
         ejecutar(
                 app,
-                "INSERT INTO anuncio (municipalidad_id, numero, contribuyente_id, predio_id, tipo,"
-                        + " ubicacion, area, fecha_autorizacion, usuario_registro, observacion)"
-                        + " VALUES (?, ?, ?, ?, 'PANEL', 'Fachada', 6.00, ?, 'prueba',"
-                        + "         'anuncio de prueba')",
+                "INSERT INTO anuncio_movimiento (municipalidad_id, anuncio_id, tipo, fecha,"
+                        + " ejercicio, referencia_cargo, tasa, vigencia_hasta, usuario_registro,"
+                        + " fecha_registro, observacion)"
+                        + " VALUES (?, ?, 'AUTORIZACION', ?, 2026, ?, 90.00, ?, 'prueba', ?,"
+                        + "         'autorizacion de prueba')",
                 muni,
-                "AN-" + sufijo,
-                titular,
-                predioId,
+                anuncioId,
+                VIGENCIA,
+                "ANUNCIO-AN-" + sufijo + "-2026",
+                VIGENCIA,
                 VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO anuncio_correlativo (municipalidad_id, ejercicio, ultimo)"
+                        + " VALUES (?, 2026, 1)",
+                muni);
     }
 
     // ------------------------------------------------------------------

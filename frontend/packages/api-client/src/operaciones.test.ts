@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas veintisiete operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas treinta y una operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -88,8 +88,15 @@ describe('las operaciones generadas son las del contrato', () => {
     //     (`fue_edificacion`) declara el GET de la grilla como su endpoint, y
     //     los cuatro actos necesitan verbo propio bajo la misma opcion. No hay
     //     PUT: las secciones se versionan, y la cabecera no admite UPDATE.
+    //   - `registrar_anuncio` / `renovar_anuncio` / `cesar_anuncio` /
+    //     `retirar_anuncio` (#51): el registro de la autorizacion de anuncio
+    //     —que ademas genera su deuda por la tasa— y los tres tramites que la
+    //     pantalla `anuncios` enumera. Ella declara «GET /autorizaciones/
+    //     anuncios» como su endpoint —la grilla—, y `anuncio` no admite UPDATE
+    //     desde V45: renovar, cesar y retirar son ACTOS que producen una fila
+    //     nueva, no ediciones del formulario, asi que cada uno lleva su verbo.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(161);
+    expect(Object.keys(OPERACIONES)).toHaveLength(165);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

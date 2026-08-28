@@ -201,7 +201,16 @@ class ContratoDeApiTest {
                     "POST /licencias/edificacion/{expediente}/secciones",
                     "POST /licencias/edificacion/{expediente}/licencia",
                     "POST /licencias/edificacion/{expediente}/revalidacion",
-                    "GET /licencias/edificacion/reportes/general");
+                    "GET /licencias/edificacion/reportes/general",
+                    // #51 — RF-114: anuncios y propaganda, con la deuda por la tasa generada al
+                    // registrar. Los tres POST de acto son tramites, no ediciones: `anuncio` no
+                    // admite UPDATE desde V45.
+                    "GET /autorizaciones/anuncios",
+                    "POST /autorizaciones/anuncios",
+                    "POST /autorizaciones/anuncios/{id}/renovacion",
+                    "POST /autorizaciones/anuncios/{id}/cese",
+                    "POST /autorizaciones/anuncios/{id}/retiro",
+                    "POST /autorizaciones/anuncios/reportes");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

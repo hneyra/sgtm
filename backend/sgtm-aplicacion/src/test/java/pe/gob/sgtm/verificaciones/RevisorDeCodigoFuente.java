@@ -111,6 +111,13 @@ public final class RevisorDeCodigoFuente {
                     "resolucion_gerencia",
                     "internamiento",
                     "internamiento_movimiento",
+                    // Con #51: la autorizacion de anuncio y su historial. Borrar un anuncio seria
+                    // borrar la unica explicacion de un cargo que YA ESTA EN EL LIBRO -registrar la
+                    // autorizacion genera la deuda por su tasa-, y borrar un movimiento seria
+                    // ademas borrar la referencia con la que ese cargo entro, que es lo que impide
+                    // que se pida dos veces. Un anuncio no se borra: se cesa (regla 4, AC de #51).
+                    "anuncio",
+                    "anuncio_movimiento",
                     "ficha_catastral",
                     "acta_fiscalizacion",
                     // Con #49: la liquidacion de fiscalizacion, su contraste linea a linea y
@@ -282,7 +289,20 @@ public final class RevisorDeCodigoFuente {
                     "edificacion_profesional",
                     "edificacion_requisito",
                     "edificacion_movimiento",
-                    "edificacion_vigencia");
+                    "edificacion_vigencia",
+                    // Y la autorizacion de anuncio con su historial, con #51. Undecima vez seguida
+                    // y
+                    // por el mismo camino: V45 le retira a `anuncio` la columna de estado que V4 le
+                    // habia puesto -decia VIGENTE para siempre- y le revoca el UPDATE. El estado se
+                    // deriva de `anuncio_movimiento`, que solo se agrega.
+                    //
+                    // Aqui hay ademas un motivo que ninguna de las siete anteriores tenia: la fila
+                    // del movimiento lleva `referencia_cargo`, que es la MISMA cadena con la que la
+                    // tasa entro en el libro, y su indice unico es lo unico que impide cobrarla dos
+                    // veces. Poder editarla en el sitio seria poder devengar de nuevo el mismo
+                    // ejercicio cambiando una letra.
+                    "anuncio",
+                    "anuncio_movimiento");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =
@@ -368,11 +388,26 @@ public final class RevisorDeCodigoFuente {
      * «treinta y cinco soles por resolucion» es un detalle de implementacion. El arancel de costas
      * es de ordenanza local —D-02c, #193 esta bloqueado esperandolo— y compilarlo produce un cobro
      * sin sustento normativo en toda la cartera coactiva.
+     *
+     * <p>Con #51 entran {@code TASA} y {@code TARIFA}. La tasa por anuncios y propaganda la fija
+     * una ordenanza municipal ratificada por la provincia —D-02b, #199 esta bloqueado esperandola—
+     * y <b>ninguna palabra de la lista anterior la cazaba</b>: {@code TASA_PANEL = new
+     * BigDecimal("90.00")} pasaba sin ruido, igual que {@code INTERES_DE_FRACCIONAMIENTO} pasaba
+     * antes de #35 y {@code COSTA_DE_LA_REC2} antes de #42. Es la tercera vez que el mismo hueco
+     * aparece, y siempre del mismo modo: una familia de cifras nueva con un nombre nuevo.
+     *
+     * <p>{@code TARIFA} va con ella porque es como se escribe la misma cifra cuando a alguien le
+     * parece que «tasa» suena a tributo: {@code TARIFA_POR_M2 = ...} es exactamente el mismo dato.
+     *
+     * <p>Ojo con el {@code \b}: no caza {@code TIPO_TASA = "TASA_ANUNCIO"} —el identificador no
+     * <b>empieza</b> por la palabra— ni ningun {@code tasa_id = 1} de un SQL, porque el patron es
+     * sensible a mayusculas y esta pensado para nombres de constante.
      */
     private static final Pattern CONSTANTE_NORMATIVA =
             Pattern.compile(
                     "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
-                            + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA)\\w*\\s*=\\s*[^;\\n]*[0-9]");
+                            + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA|TASA|TARIFA)"
+                            + "\\w*\\s*=\\s*[^;\\n]*[0-9]");
 
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
     private static final Pattern COMENTARIO_DE_BLOQUE = Pattern.compile("(?s)/\\*.*?\\*/");

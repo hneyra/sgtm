@@ -446,6 +446,58 @@ const OPERACIONES_ADICIONALES = {
         ' licencia lo pone el sistema desde su correlativo: no viene en el cuerpo.',
     },
   ],
+  // `anuncios` declara «GET /autorizaciones/anuncios» como su endpoint —la
+  // grilla—; registrar la autorización y los tres trámites que la pantalla
+  // enumera necesitan sus propios verbos (#51, RF-114). No hay PUT ni PATCH:
+  // `anuncio` no admite UPDATE desde V45, y renovar, cesar y retirar son ACTOS
+  // que producen una fila nueva de `anuncio_movimiento`, no ediciones del
+  // formulario.
+  anuncios: [
+    {
+      operationId: 'registrar_anuncio',
+      metodo: 'post',
+      titulo: 'Registro de autorización de anuncio',
+      descripcion:
+        'Registra una autorización de anuncio y GENERA SU DEUDA por la tasa (RF-114). El cuerpo' +
+        ' lleva el titular, el establecimiento asociado —opcional—, la clase y el tipo del' +
+        ' elemento, sus medidas, la ubicación, la vigencia y la observación del usuario,' +
+        ' obligatoria (RNF-052). El número de la autorización lo pone el sistema desde su' +
+        ' correlativo y la tasa sale del conjunto sellado: ninguno de los dos viene en el cuerpo.' +
+        ' La cabecera `Idempotency-Key` se lee: reenviar el mismo registro devuelve 200 con la' +
+        ' autorización de la primera vez y no genera un segundo cargo.',
+    },
+    {
+      operationId: 'renovar_anuncio',
+      metodo: 'post',
+      ruta: '/api/v1/autorizaciones/anuncios/{id}/renovacion',
+      titulo: 'Renovación de autorización de anuncio',
+      descripcion:
+        'Prorroga la autorización por otro ejercicio y devenga otra vez la tasa (RF-114). Un' +
+        ' anuncio cesado o retirado no se renueva, y una misma autorización no devenga dos veces' +
+        ' el mismo ejercicio. El `id` de la ruta es el número impreso de la autorización.',
+    },
+    {
+      operationId: 'cesar_anuncio',
+      metodo: 'post',
+      ruta: '/api/v1/autorizaciones/anuncios/{id}/cese',
+      titulo: 'Cese de autorización de anuncio',
+      descripcion:
+        'Deja sin efecto la autorización, con su motivo (RF-114). Detiene la deuda futura —un' +
+        ' anuncio cesado no se renueva— y NO toca la ya devengada: no borra ni reversa ningún' +
+        ' cargo (regla 4, RNF-051). El cuerpo lleva la fecha, el motivo y la observación del' +
+        ' usuario, obligatoria (RNF-052).',
+    },
+    {
+      operationId: 'retirar_anuncio',
+      metodo: 'post',
+      ruta: '/api/v1/autorizaciones/anuncios/{id}/retiro',
+      titulo: 'Retiro del elemento publicitario',
+      descripcion:
+        'Registra que el elemento se retiró de la calle, comprobado en campo (RF-114). Va después' +
+        ' del cese: primero la autorización deja de regir y después el soporte desaparece. Al' +
+        ' revés, el padrón diría que se desmontó un anuncio que sigue autorizado.',
+    },
+  ],
   // `fue_edificacion` declara «GET /api/v1/licencias/edificacion» como su
   // endpoint —la grilla del Formulario Único de Edificaciones—; el FUE se
   // presenta, se completa POR PARTES y sólo entonces se emite (#48, RF-113), y
