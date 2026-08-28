@@ -17,7 +17,18 @@ public interface CatastroRepository {
 
     // ---------- Sectores y manzanas ----------
 
-    Pagina<Sector> sectores(Paginacion paginacion);
+    /**
+     * El catalogo de sectores con sus conteos (#290).
+     *
+     * <p>Devuelve {@link SectorConConteos} y no {@link Sector} porque la pantalla de sectores del
+     * manual muestra las tres cifras junto a cada fila, y contarlas es cosa de la base: hacerlo
+     * arriba —traerse las manzanas y los predios de cada sector para llamar a {@code size()}— seria
+     * traerse el padron entero para escribir un numero de dos digitos.
+     *
+     * <p>Los conteos son de <b>la pagina</b>, no del catalogo: se cuentan los sectores que la
+     * pagina devuelve y ningun otro.
+     */
+    Pagina<SectorConConteos> sectores(Paginacion paginacion);
 
     Optional<Sector> sectorPorCodigo(String codigo);
 

@@ -16,8 +16,17 @@ import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
  * <p>El titular sale por identificador y el nombre lo pone despues el caso de uso, preguntandoselo
  * al padron. Aqui no hay ningun {@code JOIN} a la tabla del vecino.
  *
+ * <p><b>El area construida viene sumada</b> (RNF-083, #290): es la suma de las construcciones de
+ * <b>esta</b> version de la ficha —la vigente a la fecha consultada—, hecha por la base. La
+ * interfaz no suma nada: si sumara, dos pantallas podrian mostrar dos totales distintos del mismo
+ * predio y ninguna sabria explicar cual es el bueno.
+ *
  * @param titularId nulo si el predio no tiene titular vigente a la fecha consultada
  * @param titular nombre resuelto contra el padron; nulo mientras no se resuelva
+ * @param areaConstruida suma de las construcciones de la version; <b>nulo</b> cuando la version no
+ *     declara ninguna. Nulo y no cero a proposito: un terreno sin construir y una construccion
+ *     declarada con area cero son cosas distintas —la segunda es un error de captura que hay que
+ *     poder ver—, y el cero las confundiria. La pantalla pinta un guion, que no es un cero
  */
 public record FichaEncontrada(
         long fichaId,
@@ -29,6 +38,7 @@ public record FichaEncontrada(
         TipoFicha tipo,
         int version,
         AreaM2 areaTerreno,
+        @Nullable AreaM2 areaConstruida,
         String uso,
         LocalDate vigenciaDesde,
         @Nullable Long titularId,
@@ -55,9 +65,35 @@ public record FichaEncontrada(
                 tipo,
                 version,
                 areaTerreno,
+                areaConstruida,
                 uso,
                 vigenciaDesde,
                 titularId,
                 nombre);
+    }
+
+    /**
+     * La misma fila con el area construida ya sumada por la base.
+     *
+     * <p>Va aparte de la fila que trae la grilla porque se suma <b>despues</b> del {@code LIMIT}:
+     * sumar dentro de la consulta paginada haria el trabajo para todas las fichas que cumplen el
+     * filtro y tiraria todas menos las veinte que se ven.
+     */
+    public FichaEncontrada conAreaConstruida(@Nullable AreaM2 sumada) {
+        return new FichaEncontrada(
+                fichaId,
+                predioId,
+                codigo,
+                direccion,
+                manzana,
+                lote,
+                tipo,
+                version,
+                areaTerreno,
+                sumada,
+                uso,
+                vigenciaDesde,
+                titularId,
+                titular);
     }
 }

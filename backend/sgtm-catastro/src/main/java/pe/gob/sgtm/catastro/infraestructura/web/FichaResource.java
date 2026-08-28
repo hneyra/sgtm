@@ -11,6 +11,7 @@ import pe.gob.sgtm.catastro.dominio.DetalleDeLaFicha;
 import pe.gob.sgtm.catastro.dominio.DetalleEconomico;
 import pe.gob.sgtm.catastro.dominio.DetalleRural;
 import pe.gob.sgtm.catastro.dominio.FichaCatastral;
+import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
 import pe.gob.sgtm.catastro.dominio.ParticipacionComun;
 import pe.gob.sgtm.catastro.dominio.TierraRural;
 import pe.gob.sgtm.catastro.dominio.VersionDeLaFicha;
@@ -33,6 +34,22 @@ import pe.gob.sgtm.catastro.dominio.VersionDeLaFicha;
  * <p>Los tres bloques de detalle son <b>nulos salvo el que toca</b>. Una ficha rural no publica un
  * bloque economico vacio: quien lea el JSON tiene que poder distinguir «este predio no declara
  * actividad» de «esta ficha no es de las que la declaran».
+ *
+ * <h2>Lo que el recurso publica y antes recortaba (#290)</h2>
+ *
+ * <p>La cabecera lleva {@code frontis}, {@code condicionPropiedad} y {@code tipoEdificacion}; las
+ * construcciones, su {@code porcentajeConstruido}; y la ficha entera, sus <b>obras
+ * complementarias</b> ({@code instalaciones}). Estaban en el dominio y en la base desde {@code V1}
+ * —se guardaban al inscribir la ficha y se copiaban al versionar— pero no salian por HTTP, asi que
+ * la pantalla que las declaraba no podia volver a verlas. Publicar lo que ya se guarda no es
+ * modelado nuevo: es dejar de perderlo en el ultimo tramo.
+ *
+ * <p>{@code frontis} sale con su unidad —{@code "12.50 ML"}— por lo mismo que la superficie rural:
+ * son metros lineales, y un numero suelto invita a leerlos como metros cuadrados.
+ *
+ * <p><b>Sigue sin salir un solo importe.</b> Ni valor unitario, ni arancel, ni valor de la obra
+ * complementaria, ni autovaluo: son D-02a/D-11 y viven en datos versionados (regla 5). Lo que se
+ * publica es lo que el tecnico midio y clasifico.
  */
 public record FichaResource(
         long id,
@@ -41,6 +58,9 @@ public record FichaResource(
         int version,
         String areaTerreno,
         String uso,
+        @Nullable String frontis,
+        @Nullable String condicionPropiedad,
+        @Nullable String tipoEdificacion,
         String vigenciaDesde,
         @Nullable String vigenciaHasta,
         boolean vigente,
@@ -49,6 +69,7 @@ public record FichaResource(
         String observacion,
         @Nullable String denominacion,
         List<ConstruccionResource> construcciones,
+        List<InstalacionResource> instalaciones,
         @Nullable EconomicoResource economico,
         @Nullable BienesComunesResource bienesComunes,
         @Nullable RuralResource rural,
@@ -73,6 +94,9 @@ public record FichaResource(
                 ficha.version(),
                 ficha.areaTerreno().toString(),
                 ficha.uso(),
+                ficha.frontis() == null ? null : ficha.frontis().toString(),
+                ficha.condicionPropiedad(),
+                ficha.tipoEdificacion(),
                 ficha.vigenciaDesde().toString(),
                 ficha.vigenciaHasta() == null ? null : ficha.vigenciaHasta().toString(),
                 ficha.estaVigente(),
@@ -81,6 +105,7 @@ public record FichaResource(
                 ficha.observacion().texto(),
                 ficha.denominacion(),
                 ficha.construcciones().stream().map(ConstruccionResource::de).toList(),
+                ficha.instalaciones().stream().map(InstalacionResource::de).toList(),
                 detalle instanceof DetalleEconomico economico
                         ? EconomicoResource.de(economico)
                         : null,
@@ -129,7 +154,14 @@ public record FichaResource(
         }
     }
 
-    /** Lo construido en un piso: medidas y categorias, cero importes. */
+    /**
+     * Lo construido en un piso: medidas y categorias, cero importes.
+     *
+     * <p>{@code porcentajeConstruido} es cuanto del piso esta efectivamente construido —una obra a
+     * medias, un piso que se levanto solo en parte—. Sale con su signo, {@code "60.00 %"}, igual
+     * que los demas porcentajes del sistema. Nulo significa que la ficha no lo declara, que es
+     * distinto de declarar cero.
+     */
     public record ConstruccionResource(
             long id,
             String piso,
@@ -137,7 +169,8 @@ public record FichaResource(
             @Nullable Integer anioConstruccion,
             @Nullable String material,
             @Nullable String estadoConservacion,
-            String categorias) {
+            String categorias,
+            @Nullable String porcentajeConstruido) {
 
         public static ConstruccionResource de(Construccion construccion) {
             return new ConstruccionResource(
@@ -151,7 +184,45 @@ public record FichaResource(
                     construccion.estadoConservacion() == null
                             ? null
                             : construccion.estadoConservacion().name(),
-                    construccion.categorias().toString());
+                    construccion.categorias().toString(),
+                    construccion.porcentajeConstruido() == null
+                            ? null
+                            : construccion.porcentajeConstruido().toString());
+        }
+    }
+
+    /**
+     * Una obra complementaria: cerco, piscina, tanque, pavimento (#290).
+     *
+     * <p>Lleva <b>que es</b>, <b>cuanto</b> y <b>en que unidad</b>. La cantidad viaja con su unidad
+     * dentro —{@code "30.00 ML"}— porque «30» no significa lo mismo en metros lineales que en
+     * unidades, y ademas por separado en {@code unidad}, que es lo que una grilla pinta en su
+     * columna sin tener que partir una cadena.
+     *
+     * <p><b>Sin su valor.</b> Cuanto vale la obra sale de un valor unitario, el incremento del 5 %,
+     * la depreciacion y un factor de oficializacion que ni siquiera tiene fuente identificada
+     * (D-11): todo eso es dato normativo y no sale de aqui (regla 5).
+     */
+    public record InstalacionResource(
+            long id,
+            String descripcion,
+            String unidad,
+            String cantidad,
+            @Nullable Integer anioConstruccion,
+            @Nullable String estadoConservacion) {
+
+        public static InstalacionResource de(OtraInstalacion instalacion) {
+            return new InstalacionResource(
+                    instalacion.id() == null ? 0L : instalacion.id(),
+                    instalacion.descripcion(),
+                    instalacion.cantidad().unidad(),
+                    instalacion.cantidad().toString(),
+                    instalacion.anioConstruccion() == null
+                            ? null
+                            : instalacion.anioConstruccion().valor(),
+                    instalacion.estadoConservacion() == null
+                            ? null
+                            : instalacion.estadoConservacion().name());
         }
     }
 
@@ -174,6 +245,11 @@ public record FichaResource(
      *
      * <p>{@code licenciaNumero} nulo no es un dato que falte: es el hallazgo. La pantalla lo pinta
      * distinto y fiscalizacion sale de ahi.
+     *
+     * <p>{@code anuncioFecha} acompana al numero de la autorizacion del anuncio —el dominio no deja
+     * que una viaje sin la otra— y {@code vigenciaDesde} dice desde cuando se declara la actividad:
+     * sin ella, «este local no tiene licencia» no se puede fechar, y una fiscalizacion sin fecha no
+     * se sostiene (#290, regla 9).
      */
     public record ActividadResource(
             long id,
@@ -183,7 +259,9 @@ public record FichaResource(
             @Nullable String areaOcupada,
             @Nullable String licenciaNumero,
             @Nullable String licenciaFecha,
-            @Nullable String anuncioNumero) {
+            @Nullable String anuncioNumero,
+            @Nullable String anuncioFecha,
+            @Nullable String vigenciaDesde) {
 
         public static ActividadResource de(ActividadEconomica actividad) {
             return new ActividadResource(
@@ -194,7 +272,11 @@ public record FichaResource(
                     actividad.areaOcupada() == null ? null : actividad.areaOcupada().toString(),
                     actividad.licenciaNumero(),
                     actividad.licenciaFecha() == null ? null : actividad.licenciaFecha().toString(),
-                    actividad.anuncioNumero());
+                    actividad.anuncioNumero(),
+                    actividad.anuncioFecha() == null ? null : actividad.anuncioFecha().toString(),
+                    actividad.vigenciaDesde() == null
+                            ? null
+                            : actividad.vigenciaDesde().toString());
         }
     }
 
@@ -212,12 +294,18 @@ public record FichaResource(
         }
     }
 
+    /**
+     * Un area comun con su antiguedad (#290): el bien comun se valoriza como una construccion mas,
+     * y de que ano es decide su depreciacion. Publicarlo sin el ano deja la fila sin la mitad de lo
+     * que la explica.
+     */
     public record BienResource(
             long id,
             String descripcion,
             String area,
             @Nullable String material,
-            @Nullable String estadoConservacion) {
+            @Nullable String estadoConservacion,
+            @Nullable Integer anioConstruccion) {
 
         public static BienResource de(BienComun bien) {
             return new BienResource(
@@ -225,7 +313,8 @@ public record FichaResource(
                     bien.descripcion(),
                     bien.area().toString(),
                     bien.material() == null ? null : bien.material().name(),
-                    bien.estadoConservacion() == null ? null : bien.estadoConservacion().name());
+                    bien.estadoConservacion() == null ? null : bien.estadoConservacion().name(),
+                    bien.anioConstruccion() == null ? null : bien.anioConstruccion().valor());
         }
     }
 
@@ -257,12 +346,20 @@ public record FichaResource(
         }
     }
 
+    /**
+     * Un grupo de tierra, con la superficie que le toca de las <b>areas comunes</b> del predio
+     * rustico cuando la ficha la declara (#290).
+     *
+     * <p>Las dos van en hectareas y con su unidad dentro. {@code hectareasComunes} nulo es «esta
+     * ficha no reparte area comun», que no es lo mismo que repartir cero.
+     */
     public record TierraResource(
             long id,
             String clasificacion,
             @Nullable String calidadAgrologica,
             String riego,
-            String hectareas) {
+            String hectareas,
+            @Nullable String hectareasComunes) {
 
         public static TierraResource de(TierraRural tierra) {
             return new TierraResource(
@@ -270,7 +367,10 @@ public record FichaResource(
                     tierra.clasificacion(),
                     tierra.calidadAgrologica(),
                     tierra.riego().name(),
-                    tierra.hectareas().toString());
+                    tierra.hectareas().toString(),
+                    tierra.hectareasComunes() == null
+                            ? null
+                            : tierra.hectareasComunes().toString());
         }
     }
 
