@@ -801,12 +801,8 @@ class LicenciaDeFuncionamientoJdbcTest {
                     enContexto(
                             () ->
                                     consulta.buscar(
-                                            new CriterioDeLicencias(
-                                                    null,
-                                                    null,
-                                                    null,
-                                                    null,
-                                                    java.util.Set.of(sinLicencias)),
+                                            CriterioDeLicencias.ninguno()
+                                                    .conTitulares(java.util.Set.of(sinLicencias)),
                                             null,
                                             HOY,
                                             Paginacion.de(0, 20, "numero")));

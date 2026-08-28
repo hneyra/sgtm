@@ -8,7 +8,7 @@
 | Ejercicios que rige | 2016– |
 | Filas de NEG-02 §2 | 9 |
 | Transcribió | JNA, 2026-08-24 |
-| Verificó | Agente, 2026-08-25 |
+| Verificó | HNA, 2026-08-25 |
 | Estado | VERIFICADO |
 
 ## 1. La tabla tal como está en la norma

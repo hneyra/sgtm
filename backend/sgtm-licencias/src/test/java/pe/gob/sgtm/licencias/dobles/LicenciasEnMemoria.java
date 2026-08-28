@@ -1,16 +1,23 @@
 package pe.gob.sgtm.licencias.dobles;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.licencias.dominio.CriterioDeLicencias;
+import pe.gob.sgtm.licencias.dominio.EstadoDeLicencia;
 import pe.gob.sgtm.licencias.dominio.LicenciaDeFuncionamiento;
 import pe.gob.sgtm.licencias.dominio.LicenciaRepository;
+import pe.gob.sgtm.licencias.dominio.ResumenDelPadronDeLicencias;
+import pe.gob.sgtm.licencias.dominio.TipoDeLicencia;
 
 /**
  * Un {@link LicenciaRepository} en memoria.
@@ -102,5 +109,44 @@ public final class LicenciasEnMemoria implements LicenciaRepository {
                                                         .contains(l.contribuyenteId()))
                         .toList();
         return Pagina.de(filtradas, paginacion, filtradas.size());
+    }
+
+    /**
+     * El padron, sin derivar el estado.
+     *
+     * <p>El doble <b>no</b> filtra por estado y es deliberado: derivarlo aqui seria escribir por
+     * segunda vez la regla que {@code EstadoDeLicencia} ya expresa, y entonces las pruebas que usan
+     * este doble comprobarian que las dos copias coinciden en vez de comprobar la de verdad. El
+     * padron a una fecha se prueba contra PostgreSQL, en {@code CertificadosYPadronesJdbcTest}.
+     */
+    @Override
+    public Pagina<LicenciaDeFuncionamiento> padron(
+            CriterioDeLicencias criterio,
+            @Nullable EstadoDeLicencia estado,
+            LocalDate aLaFecha,
+            Paginacion paginacion) {
+        return buscar(criterio, paginacion);
+    }
+
+    @Override
+    public ResumenDelPadronDeLicencias resumen(
+            CriterioDeLicencias criterio, @Nullable EstadoDeLicencia estado, LocalDate aLaFecha) {
+        // El doble no pagina: `buscar` devuelve todo lo filtrado y el total es su tamanio. El
+        // tamanio de pagina que se le pasa aqui solo tiene que ser uno valido.
+        long total = buscar(criterio, Paginacion.de(0, 20, "numero")).totalElementos();
+        return new ResumenDelPadronDeLicencias(total, total, 0, 0);
+    }
+
+    @Override
+    public ConteosDelAno conteosDelAno(
+            Ejercicio ejercicio, @Nullable TipoDeLicencia tipo, LocalDate alCierre) {
+        List<LicenciaDeFuncionamiento> delAno =
+                licencias.stream()
+                        .filter(l -> l.fechaEmision().getYear() == ejercicio.valor())
+                        .filter(l -> tipo == null || l.tipoLicencia() == tipo)
+                        .toList();
+        Set<Long> recibos =
+                delAno.stream().map(LicenciaDeFuncionamiento::reciboId).collect(Collectors.toSet());
+        return new ConteosDelAno(delAno.size(), 0, 0, delAno.size(), recibos);
     }
 }

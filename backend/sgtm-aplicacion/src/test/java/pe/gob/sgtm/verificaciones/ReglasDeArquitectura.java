@@ -324,6 +324,52 @@ public final class ReglasDeArquitectura {
                                     + " sgtm_owner: un proceso de arranque sin perfil le exige esa"
                                     + " credencial al contenedor que atiende peticiones (#202)");
 
+    /**
+     * ARQ-01 §3.5: la transferencia a rentas es el <b>unico</b> camino de escritura de {@code
+     * fiscalizacion} hacia {@code catastro}, {@code rentas} y el libro (#52, RF-054, AC 1).
+     *
+     * <p>Es la frontera delicada del sistema. Hasta la transferencia, todo lo que este contexto
+     * registra vive sobre <b>copias</b>: el acta guarda el area medida en campo y la version de
+     * ficha que regia el dia de la visita, y la liquidacion guarda el contraste hallado/declarado.
+     * Nada de eso es el dato oficial del padron. Si un segundo camino de escritura apareciera —una
+     * pantalla que «corrige» la ficha al liquidar, un proceso masivo que asienta directamente—, lo
+     * hallado entraria al padron sin resolucion que lo justifique y sin version que lo pueda
+     * deshacer.
+     *
+     * <p>La regla tiene <b>dos mitades</b>, y hacen falta las dos:
+     *
+     * <ol>
+     *   <li><b>Solo la transferencia usa un puerto de escritura ajeno.</b> Los puertos estan
+     *       enumerados en {@link SinEscribirFueraDeLaTransferencia#PUERTOS_DE_ESCRITURA}: hoy son
+     *       {@code catastro.TransferenciaDeFiscalizacion} y {@code
+     *       cuentacorriente.GeneradorDeCargos}. Cualquier otra clase de este contexto que dependa
+     *       de uno viola la regla.
+     *   <li><b>Todo tipo ajeno que este contexto toque esta clasificado.</b> Sin esta mitad la
+     *       primera no protege nada: bastaria con publicar un puerto de escritura nuevo —o anadirle
+     *       una escritura a un lector— y usarlo desde donde fuera. Con ella, cruzar el limite
+     *       cuesta <b>una linea</b> en {@link
+     *       SinEscribirFueraDeLaTransferencia#TIPOS_AJENOS_QUE_SOLO_SE_LEEN}, y esa linea la
+     *       escribe alguien que tiene que decidir si lo que abre es una lectura o una escritura. El
+     *       diff lo dice.
+     * </ol>
+     *
+     * <p><b>Lo que esta regla NO dice</b>, para no prometer de mas: ARQ-01 §4 regla 4 esta
+     * redactada en absoluto —«nadie escribe en catastro salvo catastro y la transferencia de
+     * fiscalizacion»— y la realidad ya es mas ancha: {@code rentas} escribe en {@code catastro} por
+     * {@code GestorDeTitularidad} desde #29, porque una transferencia de predio cambia al titular.
+     * Eso es legitimo y esta fuera del alcance de #52. Lo que esta regla garantiza, y garantiza
+     * mecanicamente, es la mitad de {@code fiscalizacion}.
+     */
+    public static final ArchRule SOLO_LA_TRANSFERENCIA_ESCRIBE_FUERA_DE_FISCALIZACION =
+            ArchRuleDefinition.classes()
+                    .that()
+                    .resideInAPackage("..fiscalizacion..")
+                    .should(new SinEscribirFueraDeLaTransferencia())
+                    .because(
+                            "hasta la transferencia, fiscalizacion trabaja sobre copias: un segundo"
+                                    + " camino de escritura meteria lo hallado en el padron sin"
+                                    + " resolucion que lo justifique (ARQ-01 §3.5, RF-054)");
+
     public static List<ArchRule> todas() {
         return List.of(
                 EL_DOMINIO_NO_CONOCE_FRAMEWORKS,
@@ -338,7 +384,8 @@ public final class ReglasDeArquitectura {
                 TODA_CIFRA_DE_LA_WEB_LLEVA_SU_FECHA,
                 TODO_ENDPOINT_DECLARA_SU_ACCESO,
                 TODO_COMPONENTE_DECLARA_QUE_CONSTRUCTOR_INYECTAR,
-                TODA_SIEMBRA_CORRE_SOLO_EN_EL_PERFIL_BATCH);
+                TODA_SIEMBRA_CORRE_SOLO_EN_EL_PERFIL_BATCH,
+                SOLO_LA_TRANSFERENCIA_ESCRIBE_FUERA_DE_FISCALIZACION);
     }
 
     /** Clases del sistema, sin las de prueba ni las de fixtures. */
@@ -354,6 +401,163 @@ public final class ReglasDeArquitectura {
     // ------------------------------------------------------------------
     // Condiciones propias
     // ------------------------------------------------------------------
+
+    /**
+     * La frontera de {@code fiscalizacion} hacia {@code catastro}, {@code rentas} y el libro.
+     *
+     * <p>Mira las dependencias reales del bytecode y no los {@code import}: un {@code import} sin
+     * uso no deja rastro y un uso por nombre completo no deja {@code import}, asi que la lista de
+     * importaciones no sirve para esto.
+     */
+    private static final class SinEscribirFueraDeLaTransferencia extends ArchCondition<JavaClass> {
+
+        /**
+         * Los contextos cuyo limite vigila esta regla.
+         *
+         * <p>{@code catastro} y {@code rentas} porque los nombra el AC 1 de #52. {@code
+         * cuentacorriente} porque es donde acaban los cargos de la diferencia, y dejarlo fuera
+         * habria hecho que «el unico camino de escritura» no cubriera la escritura que mas pesa: la
+         * deuda que se le cobra a alguien.
+         *
+         * <p>{@code contribuyentes} y {@code parametros} no estan, y no es un descuido: los dos son
+         * de solo lectura para todos por definicion (ARQ-01 §3.4 y §3.1), y ninguno publica un
+         * puerto de escritura que este contexto pudiera usar.
+         */
+        private static final Set<String> CONTEXTOS_VIGILADOS =
+                Set.of(
+                        PAQUETE_RAIZ + ".catastro",
+                        PAQUETE_RAIZ + ".rentas",
+                        PAQUETE_RAIZ + ".cuentacorriente");
+
+        /** El unico camino de escritura, y el unico que puede usar los puertos de abajo. */
+        private static final String LA_TRANSFERENCIA =
+                PAQUETE_RAIZ + ".fiscalizacion.aplicacion.TransferirARentas";
+
+        /**
+         * Los puertos por los que se ESCRIBE en otro contexto.
+         *
+         * <p>Dos, y cada uno con su motivo:
+         *
+         * <ul>
+         *   <li>{@code catastro.TransferenciaDeFiscalizacion}: la version nueva de la ficha. Es la
+         *       puerta que ARQ-01 §3.5 llama la frontera delicada.
+         *   <li>{@code cuentacorriente.GeneradorDeCargos}: el cargo de la diferencia. Es la puerta
+         *       comun por la que todo contexto que determina asienta (ARQ-01 §4 regla 2), pero
+         *       dentro de fiscalizacion la usa solo la transferencia: asentar deuda desde una
+         *       pantalla de liquidacion seria cobrar antes de haber notificado nada.
+         * </ul>
+         */
+        private static final Set<String> PUERTOS_DE_ESCRITURA =
+                Set.of(
+                        PAQUETE_RAIZ + ".catastro.TransferenciaDeFiscalizacion",
+                        PAQUETE_RAIZ + ".cuentacorriente.GeneradorDeCargos");
+
+        /**
+         * Todo lo demas que {@code fiscalizacion} puede tocar de esos tres contextos, uno por uno.
+         *
+         * <p>Que cueste una linea es deliberado, igual que en {@code SIN_USUARIO_QUE_OBSERVE}:
+         * exime a un <b>tipo</b> concreto y el diff dice cual. Un tipo ajeno nuevo sin clasificar
+         * rompe el build, y quien lo agregue tiene que decidir —y dejar escrito— si lo que abre es
+         * una lectura o una escritura.
+         */
+        private static final Set<String> TIPOS_AJENOS_QUE_SOLO_SE_LEEN =
+                Set.of(
+                        // La ficha que sustenta un acta y la que sustenta una declaracion (#45,
+                        // #49). Devuelven identificador y area: ni un metodo que escriba.
+                        PAQUETE_RAIZ + ".catastro.LectorDeFichas",
+                        // El uso y las caracteristicas del predio a una fecha (#49).
+                        PAQUETE_RAIZ + ".catastro.LectorDeCaracteristicas",
+                        PAQUETE_RAIZ + ".catastro.CaracteristicasDelPredio",
+                        // El padron entero, paginado, para la deteccion de omisos (RF-055).
+                        PAQUETE_RAIZ + ".catastro.PadronDePredios",
+                        PAQUETE_RAIZ + ".catastro.PredioDelPadron",
+                        // Lo que la transferencia DEVOLVIO. Es un registro de resultado, no una
+                        // puerta: no tiene un metodo que escriba, y lo lee tambien quien dibuja el
+                        // papel. Si estuviera entre los puertos, imprimir la resolucion exigiria
+                        // ser la transferencia.
+                        PAQUETE_RAIZ + ".catastro.VersionTransferida",
+                        // Y su excepcion: atraparla no es escribir. La captura la capa web, que
+                        // traduce a 422 «el predio no tiene ficha vigente».
+                        PAQUETE_RAIZ
+                                + ".catastro.TransferenciaDeFiscalizacion$SinFichaQueVersionar",
+                        // Si un predio declaro en un ejercicio, por lote (RF-055).
+                        PAQUETE_RAIZ + ".rentas.DeclaracionesDelEjercicio",
+                        PAQUETE_RAIZ + ".rentas.DeclaracionDelEjercicio",
+                        // Cuanto se debe a una fecha, para el estado de cuenta de fiscalizacion
+                        // (RF-056). Arista al reves de las otras: la excepcion de ARQ-01 §4 regla
+                        // 2.
+                        PAQUETE_RAIZ + ".cuentacorriente.ConsultaDeDeudaPublica",
+                        PAQUETE_RAIZ + ".cuentacorriente.ObligacionPublica");
+
+        SinEscribirFueraDeLaTransferencia() {
+            super(
+                    "no escribir en catastro, rentas ni el libro fuera de la transferencia, y"
+                            + " declarar uno por uno los tipos ajenos que lee");
+        }
+
+        @Override
+        public void check(JavaClass clase, ConditionEvents eventos) {
+            for (JavaClass destino :
+                    clase.getDirectDependenciesFromSelf().stream()
+                            .map(dependencia -> dependencia.getTargetClass())
+                            .distinct()
+                            .toList()) {
+
+                String nombre = destino.getFullName();
+                if (!estaVigilado(nombre)) {
+                    continue;
+                }
+                if (PUERTOS_DE_ESCRITURA.contains(nombre)) {
+                    if (!esLaTransferencia(clase)) {
+                        eventos.add(
+                                SimpleConditionEvent.violated(
+                                        clase,
+                                        clase.getName()
+                                                + " usa el puerto de escritura "
+                                                + nombre
+                                                + " sin ser la transferencia a rentas: la"
+                                                + " transferencia es el UNICO camino por el que lo"
+                                                + " hallado pasa a ser el dato oficial del padron"
+                                                + " (ARQ-01 §3.5, AC 1 de #52)"));
+                    }
+                    continue;
+                }
+                if (!TIPOS_AJENOS_QUE_SOLO_SE_LEEN.contains(nombre)) {
+                    eventos.add(
+                            SimpleConditionEvent.violated(
+                                    clase,
+                                    clase.getName()
+                                            + " depende de "
+                                            + nombre
+                                            + ", que no esta clasificado: agreguelo a"
+                                            + " TIPOS_AJENOS_QUE_SOLO_SE_LEEN si solo lee, o a"
+                                            + " PUERTOS_DE_ESCRITURA si escribe —y entonces solo lo"
+                                            + " podra usar la transferencia—"));
+                }
+            }
+        }
+
+        /** Si el tipo pertenece a uno de los contextos vigilados, sea de su raiz o de dentro. */
+        private static boolean estaVigilado(String nombre) {
+            for (String contexto : CONTEXTOS_VIGILADOS) {
+                if (nombre.equals(contexto) || nombre.startsWith(contexto + ".")) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * La transferencia, con sus tipos anidados.
+         *
+         * <p>{@code TransferirARentas$Transferencia} —lo que devuelve— lleva dentro la version que
+         * el padron inscribio, y es tan parte del caso de uso como su metodo.
+         */
+        private static boolean esLaTransferencia(JavaClass clase) {
+            String nombre = clase.getFullName();
+            return nombre.equals(LA_TRANSFERENCIA) || nombre.startsWith(LA_TRANSFERENCIA + "$");
+        }
+    }
 
     /** Lo que Spring corre al arrancar el proceso, antes de atender nada. */
     private static final class EsUnProcesoDeArranque extends DescribedPredicate<JavaClass> {

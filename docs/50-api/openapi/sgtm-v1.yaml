@@ -2078,6 +2078,27 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/transferencias":
+    post:
+      operationId: transferir_a_rentas
+      summary: "Transferencia a rentas del resultado fiscalizado"
+      description: "Inscribe lo hallado en el padrón como versión NUEVA de la ficha catastral —con origen FISCALIZACION, el documento que la sustenta y la observación del usuario—, asienta los cargos de la diferencia en la cuenta corriente y emite la resolución de determinación. Los tres pasos van en una transacción: ficha nueva, asientos y resolución, o nada. La versión anterior queda intacta, así que el padrón anterior se reconstruye pidiendo la ficha vigente a una fecha anterior. Sin sustento documental no se transfiere, y transferir dos veces la misma liquidación se rechaza."
+      tags: ["Fiscalización"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/fiscalizacion/liquidaciones/{numero}/estados":
     patch:
       operationId: estado_de_liquidacion
@@ -2526,7 +2547,12 @@ paths:
     post:
       operationId: transito_valores
       summary: "Generación de valores de tránsito"
-      description: "Genera masivamente los valores por papeletas de tránsito pendientes de pago. El criterio define el tipo de recaudo, la oficina y el vencimiento; las papeletas se agregan por selección o manualmente."
+      description: >-
+        Registra el criterio de una generación masiva de valores por papeletas de tránsito, por
+        selección de números o por rango de fechas (#53, RF-066, RF-073). Devuelve la corrida y
+        sus candidatos; **no emite ningún valor**: la generación corre después, en el perfil
+        batch. El número de cada resolución de multa lo pone `valor_correlativo` (#37) y **no
+        entra por el cuerpo**.
       tags: ["Tránsito"]
       parameters:
         - name: codigoDescripcionDelCriterio
@@ -2600,8 +2626,17 @@ paths:
     get:
       operationId: transito_record_conductor
       summary: "Record de conductor"
-      description: "Historial de infracciones cometidas por un conductor y el estado de deuda de cada papeleta impuesta."
+      description: >-
+        Historial de infracciones de un conductor, por licencia de conducir o por documento del
+        infractor (#53, RF-068). Uno de los dos es obligatorio: sin filtro esto sería el padrón
+        entero con otro título. Con `?formato=PDF|XLS|RTF` sale como documento (RF-132).
       tags: ["Tránsito"]
+      parameters:
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
+          schema: { type: string }
       responses:
         200:
           description: Operacion realizada
@@ -2616,8 +2651,17 @@ paths:
     get:
       operationId: transito_record_vehicular
       summary: "Record vehicular"
-      description: "Historial de papeletas de infracción de tránsito de un solo vehículo, con el estado de pago de cada una."
+      description: >-
+        Historial de papeletas de un vehículo (#53, RF-068). La placa es obligatoria, por el mismo
+        motivo que la licencia en el record de conductor. Con `?formato=PDF|XLS|RTF` sale como
+        documento (RF-132).
       tags: ["Tránsito"]
+      parameters:
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
+          schema: { type: string }
       responses:
         200:
           description: Operacion realizada
@@ -2632,7 +2676,12 @@ paths:
     post:
       operationId: transito_constancia_libre
       summary: "Constancia libre de infracciones"
-      description: "Documento con el que la municipalidad acredita que un vehículo no registra papeletas de tránsito pendientes de pago."
+      description: >-
+        Emite el documento con el que la municipalidad acredita que un vehículo no registra
+        papeletas de tránsito pendientes (#53, RF-068). `verificadaAl` es el día al que se
+        acredita —no el de emisión— y viaja impreso en el papel (regla 9, RNF-075). Si a esa fecha
+        hay una sola papeleta pendiente responde **409** con los números que lo impiden. La
+        respuesta es el archivo, en el formato pedido.
       tags: ["Tránsito"]
       requestBody:
         required: true
@@ -2653,9 +2702,17 @@ paths:
     get:
       operationId: transito_padron
       summary: "Padrón de papeletas de tránsito"
-      description: "Listado de las papeletas registradas en un intervalo de fechas, filtrable por estado de deuda, infracción y placa."
+      description: >-
+        Padrón de papeletas de tránsito por intervalo de fechas de infracción y estado (#53,
+        RF-073). El importe de cada fila es el **del acta**, congelado al registrar la papeleta, y
+        viaja con su fecha. Con `?formato=PDF|XLS|RTF` sale como documento (RF-132).
       tags: ["Tránsito"]
       parameters:
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
+          schema: { type: string }
         - name: desde
           in: query
           required: false
@@ -2869,9 +2926,18 @@ paths:
     get:
       operationId: transito_padron_coactiva
       summary: "Padrón de papeletas enviadas a coactiva"
-      description: "Control de las papeletas derivadas al área de cobranza coactiva por intervalo de fechas."
+      description: >-
+        Padrón de las papeletas que ya tienen su resolución de multa emitida (#53, RF-073). El
+        ejecutor y el estado del expediente **no** son columnas de la papeleta: viven en el
+        expediente coactivo y ese corte lo sirve `GET /coactiva/expedientes`; mandarlos aquí
+        responde 422 diciéndolo, en vez de devolver el padrón sin filtrar.
       tags: ["Tránsito"]
       parameters:
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
+          schema: { type: string }
         - name: desde
           in: query
           required: false
@@ -2929,9 +2995,17 @@ paths:
     get:
       operationId: transito_padron_constancias
       summary: "Padrón de constancias libres de infracciones"
-      description: "Padrón general de constancias libres de infracciones emitidas por la unidad competente."
+      description: >-
+        Padrón de constancias libres de infracciones emitidas (#53, RF-068). Cada fila lleva su
+        `verificadaAl` junto a la fecha de emisión: son cosas distintas y la que acredita es la
+        primera.
       tags: ["Tránsito"]
       parameters:
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
+          schema: { type: string }
         - name: desde
           in: query
           required: false
@@ -2989,9 +3063,19 @@ paths:
     get:
       operationId: transito_resumen_recaudacion
       summary: "Resumen de recaudación de tránsito"
-      description: "Recaudación por papeletas organizada por tipo de cobranza, año y mes."
+      description: >-
+        Lo recaudado por papeletas de tránsito, según el **libro de cuenta corriente**: la suma
+        exacta de los abonos vivos, desglosada por ejercicio, mes y tipo de cobranza (#53,
+        RF-073). No se recompone sumando papeletas pagadas —esa cifra no cuenta los intereses
+        cobrados, cuenta entero un pago parcial y sigue contando un recibo anulado—. El filtro por
+        caja no se sirve aquí: la caja es de tesorería (`GET /tesoreria/recaudacion/por-area`).
       tags: ["Tránsito"]
       parameters:
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
+          schema: { type: string }
         - name: ano
           in: query
           required: false
@@ -3049,9 +3133,18 @@ paths:
     get:
       operationId: transito_resumen_papeletas
       summary: "Resumen de papeletas pendientes y pagadas"
-      description: "Cantidades e importes de papeletas pendientes y pagadas, diferenciando cobranza ordinaria de cobranza coactiva."
+      description: >-
+        Cuántas papeletas hay y por cuánto, agrupadas por estado, código, iniciales de placa o mes
+        (#53, RF-073). Todos los importes son los **de las actas**, no lo cobrado: lo cobrado está
+        en `transito_resumen_recaudacion`. Cada línea trae las pendientes y las que están en
+        coactiva en columnas separadas, así que no hace falta pedir el resumen dos veces.
       tags: ["Tránsito"]
       parameters:
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
+          schema: { type: string }
         - name: desde
           in: query
           required: false
@@ -3109,9 +3202,15 @@ paths:
     get:
       operationId: transito_resumen_codigo
       summary: "Resumen de papeletas por código de infracción"
-      description: "Cantidades e importes de papeletas pendientes y pagadas de una infracción determinada."
+      description: >-
+        El mismo resumen agrupado por código de infracción, con su descripción (#53, RF-073).
       tags: ["Tránsito"]
       parameters:
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
+          schema: { type: string }
         - name: codigoDeInfraccion
           in: query
           required: false
@@ -3169,9 +3268,17 @@ paths:
     get:
       operationId: transito_resumen_placa
       summary: "Resumen de papeletas por iniciales de placa"
-      description: "Resumen de papeletas filtrado por las dos letras iniciales del número de placa del vehículo."
+      description: >-
+        El mismo resumen agrupado por las dos letras iniciales de la placa (#53, RF-073). El
+        filtro por iniciales se resuelve como rango y no como `LIKE`: bajo RLS un `LIKE 'AB%'` no
+        llega nunca al índice.
       tags: ["Tránsito"]
       parameters:
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
+          schema: { type: string }
         - name: iniciales2Letras
           in: query
           required: false
@@ -3441,7 +3548,10 @@ paths:
     post:
       operationId: adm_valores
       summary: "Generación de valores administrativa"
-      description: "Selecciona un conjunto de papeletas administrativas con deuda según un criterio y genera masivamente un valor por papeleta para su impresión y notificación posterior."
+      description: >-
+        Lo mismo que `transito_valores` para la familia administrativa, con su propio permiso
+        (#53, RF-066). Detrás es el mismo caso de uso con otra familia: quien puede emitir los
+        valores administrativos no tiene por qué poder emitir los de tránsito.
       tags: ["Infracciones administrativas"]
       parameters:
         - name: codigoDescripcionDelCriterio
@@ -3575,7 +3685,12 @@ paths:
     post:
       operationId: adm_reportes
       summary: "Reportes de infracción administrativa"
-      description: "Emisor de los reportes del módulo de papeletas administrativas. El tipo de reporte habilita los criterios y el destino puede ser pantalla, impresora o Excel."
+      description: >-
+        Emisor de los reportes del módulo de infracciones administrativas (#53, RF-074). El campo
+        `reporte` elige entre `PADRON_NOTIFICACIONES`, `RESUMEN_PAPELETAS` y
+        `RESUMEN_RECAUDACION`; con `formato` la respuesta es el documento en PDF, hoja de cálculo
+        o texto enriquecido (RF-132), y sin él, el JSON. No hay ninguna consulta nueva detrás:
+        llama a las mismas que los GET.
       tags: ["Infracciones administrativas"]
       requestBody:
         required: true
@@ -3596,9 +3711,17 @@ paths:
     get:
       operationId: adm_padron_notificaciones
       summary: "Padrón de notificaciones"
-      description: "Relación de las notificaciones emitidas por el sistema y el estado de la deuda cuando ya existe papeleta."
+      description: >-
+        Relación de notificaciones administrativas emitidas en un intervalo, con la papeleta que
+        las siguió cuando la hay (#53, RF-074). Las tres columnas de la papeleta —número, estado e
+        importe del acta— solo tienen valor cuando existe.
       tags: ["Infracciones administrativas"]
       parameters:
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
+          schema: { type: string }
         - name: desde
           in: query
           required: false
@@ -3776,9 +3899,16 @@ paths:
     get:
       operationId: adm_resumen_recaudacion
       summary: "Resumen de recaudación de papeletas"
-      description: "Recaudación por multas administrativas por año y mes, diferenciando cobranza ordinaria, coactiva y por convenio."
+      description: >-
+        Lo recaudado por multas administrativas, según el libro (#53, RF-074). Mismo criterio que
+        el de tránsito: la suma exacta de los abonos vivos.
       tags: ["Infracciones administrativas"]
       parameters:
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
+          schema: { type: string }
         - name: ano
           in: query
           required: false
@@ -5842,6 +5972,104 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: registrar_anuncio
+      summary: "Registro de autorización de anuncio"
+      description: "Registra una autorización de anuncio y GENERA SU DEUDA por la tasa (RF-114). El cuerpo lleva el titular, el establecimiento asociado —opcional—, la clase y el tipo del elemento, sus medidas, la ubicación, la vigencia y la observación del usuario, obligatoria (RNF-052). El número de la autorización lo pone el sistema desde su correlativo y la tasa sale del conjunto sellado: ninguno de los dos viene en el cuerpo. La cabecera `Idempotency-Key` se lee: reenviar el mismo registro devuelve 200 con la autorización de la primera vez y no genera un segundo cargo."
+      tags: ["Autorizaciones y licencias"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/autorizaciones/anuncios/{id}/renovacion":
+    post:
+      operationId: renovar_anuncio
+      summary: "Renovación de autorización de anuncio"
+      description: "Prorroga la autorización por otro ejercicio y devenga otra vez la tasa (RF-114). Un anuncio cesado o retirado no se renueva, y una misma autorización no devenga dos veces el mismo ejercicio. El `id` de la ruta es el número impreso de la autorización."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/autorizaciones/anuncios/{id}/cese":
+    post:
+      operationId: cesar_anuncio
+      summary: "Cese de autorización de anuncio"
+      description: "Deja sin efecto la autorización, con su motivo (RF-114). Detiene la deuda futura —un anuncio cesado no se renueva— y NO toca la ya devengada: no borra ni reversa ningún cargo (regla 4, RNF-051). El cuerpo lleva la fecha, el motivo y la observación del usuario, obligatoria (RNF-052)."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/autorizaciones/anuncios/{id}/retiro":
+    post:
+      operationId: retirar_anuncio
+      summary: "Retiro del elemento publicitario"
+      description: "Registra que el elemento se retiró de la calle, comprobado en campo (RF-114). Va después del cese: primero la autorización deja de regir y después el soporte desaparece. Al revés, el padrón diría que se desmontó un anuncio que sigue autorizado."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/autorizaciones/anuncios/reportes":
     post:
       operationId: anuncios_reportes
@@ -6382,6 +6610,65 @@ paths:
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
   "/licencias/certificados":
+    get:
+      operationId: certificados_listado
+      summary: "Certificados emitidos"
+      description: "La grilla «Certificados emitidos» de la pantalla `certificados`, que declara el POST —la emisión— como su endpoint y necesita un verbo aparte para listar. Hacer que el POST devolviera también la grilla convertiría una consulta en una escritura, y una pantalla que lista al abrirse consumiría un correlativo cada vez. El estado de cada fila —VIGENTE o CADUCADO— se deriva a la fecha de hoy y viaja con ella (RNF-075)."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: nDeCertificado
+          in: query
+          required: false
+          description: "Filtro «Nº de certificado» de la pantalla"
+          schema: { type: string }
+        - name: tipo
+          in: query
+          required: false
+          description: "Filtro «Tipo» de la pantalla"
+          schema: { type: string }
+        - name: predio
+          in: query
+          required: false
+          description: "Filtro «Predio» de la pantalla"
+          schema: { type: string }
+        - name: solicitante
+          in: query
+          required: false
+          description: "Filtro por nombre del solicitante; se resuelve contra el padrón por aproximación"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
     post:
       operationId: certificados
       summary: "Certificados de numeración y zonificación"
@@ -6414,6 +6701,33 @@ paths:
           content:
             application/json:
               schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/certificados/{numero}/impresion":
+    post:
+      operationId: imprimir_certificado
+      summary: "Impresión de un certificado emitido"
+      description: "Vuelve a sacar un certificado ya emitido, con su número original y en el formato que se pida —PDF, hoja de cálculo o texto enriquecido (RF-132)—. El contenido sale de los datos guardados el día de la emisión, no de lo que hoy digan el padrón o el TUPA, y el backend comprueba el SHA-256 antes de entregarlo: si dibujar esos datos ya no da los mismos bytes, la reimpresión falla en lugar de entregar un papel distinto al original con el mismo número. Escribe —cuenta la reimpresión y deja su traza—, así que el cuerpo lleva la observación del usuario, obligatoria (RNF-052). Es la acción «Imprimir certificado» de la pantalla."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          description: "El número del certificado, tal como está impreso"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
         "403":
           $ref: "#/components/responses/SinMunicipalidad"
         "422":

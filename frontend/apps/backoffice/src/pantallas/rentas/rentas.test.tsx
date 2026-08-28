@@ -39,8 +39,8 @@ import {
  */
 
 /**
- * Las siete opciones del modulo cuya operacion escribe y que **no declaran**
- * todavia que campos suyos acepta el backend.
+ * Las opciones del modulo cuya operacion escribe y que **no declaran** todavia
+ * que campos suyos acepta el backend.
  *
  * Hasta #332 esta lista eran las nueve, y la prueba decia: sin observacion la
  * primaria esta apagada, con observacion se habilita. Las dos mitades eran
@@ -51,10 +51,22 @@ import {
  * condicion de guardado de `alta_deuda` y de `baja_deuda`, que si estan
  * declaradas, y eso se comprueba abajo y en `pantallas/escritura.test.tsx`.
  */
-const LAS_QUE_ESCRIBEN_SIN_DECLARAR: readonly string[] = [
-  'predial-masivo',
+const LAS_QUE_ESCRIBEN_SIN_DECLARAR: readonly string[] = ['predial-masivo', 'vehicular-calculo'];
+
+/**
+ * Y las dos a las que **no les falta la declaracion: les falta un campo** (#73).
+ *
+ * Estaban en la lista de arriba, y ahi decian «la pantalla aún no manda estos
+ * campos», que invita a la correccion equivocada: declararlos en `escrituras.ts`
+ * no cambia nada, porque el que falta no esta en el formulario. Los dos
+ * controladores de transferencia exigen `valorTransferencia` —la base sobre la
+ * que se liquida la alcabala— y **ninguna de las dos pantallas del manual dibuja
+ * un campo para el**; el prototipo lo dibuja en «Impuesto de alcabala», que es
+ * justo la que el backend no lee. La bateria entera esta en
+ * `transferencias.test.tsx`.
+ */
+const LAS_QUE_NO_TIENEN_EL_CAMPO: readonly string[] = [
   'transferencia-predio',
-  'vehicular-calculo',
   'transferencia-vehiculo',
 ];
 
@@ -110,6 +122,29 @@ describe('ningun acto del modulo promete lo que no puede', () => {
       expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
         'data-causa',
         'sin-declaracion',
+      );
+
+      montada.unmount();
+    },
+  );
+
+  it.each(LAS_QUE_NO_TIENEN_EL_CAMPO)(
+    '%s deja su primaria apagada, y la franja nombra el dato que falta',
+    async (ranura) => {
+      const montada = montarEnRuta(`/rentas-registro/${ranura}`);
+      await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+      primariaApagada();
+      expect(
+        screen.queryByRole('region', { name: 'Observación del usuario' }),
+      ).not.toBeInTheDocument();
+
+      // La franja dice **que dato** falta, no que falte una lista blanca.
+      expect(motivoDeLaPrimaria()).toMatch(/valor de la transferencia/);
+      expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
+      expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
+        'data-causa',
+        'sin-campo',
       );
 
       montada.unmount();

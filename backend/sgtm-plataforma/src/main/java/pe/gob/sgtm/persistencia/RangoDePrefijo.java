@@ -1,5 +1,6 @@
-package pe.gob.sgtm.licencias.infraestructura;
+package pe.gob.sgtm.persistencia;
 
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -15,12 +16,16 @@ import org.jspecify.annotations.Nullable;
  * Seq Scan}. Los operadores de {@code text_pattern_ops} —{@code ~&gt;=~}, {@code ~&lt;~}— si son
  * leakproof y expresan el mismo prefijo como un rango que el indice recorre.
  *
- * <p>La logica es la misma que {@code FichaCatastralRepositoryJdbc#siguienteAlPrefijo} verifico en
- * #47 midiendo los dos planes. Se repite aqui —y no se comparte— porque moverla a {@code
- * pe.gob.sgtm.persistencia} tocaria un modulo compartido por los doce contextos; el dia que
- * aparezca la tercera copia, ese es su sitio.
+ * <h2>Por que vive aqui</h2>
+ *
+ * <p>Nacio en {@code catastro} (#47, midiendo los dos planes) y se repitio en {@code licencias}
+ * (#44), que dejo escrito: «el dia que aparezca la tercera copia, ese es su sitio». Los resumenes
+ * por iniciales de placa de #53 son la tercera, asi que se muda a {@code pe.gob.sgtm.persistencia},
+ * al lado de {@link OrdenSeguro} —la otra pieza que existe para que doce contextos no inventen doce
+ * dialectos de lo mismo—. Repetirla una cuarta vez es como se acaba colando un {@code LIKE} en la
+ * quinta.
  */
-final class RangoDePrefijo {
+public final class RangoDePrefijo {
 
     private RangoDePrefijo() {}
 
@@ -31,7 +36,7 @@ final class RangoDePrefijo {
      *     LIKE}: incrementar el ultimo caracter en UTF-16 no equivale a incrementarlo en bytes, y
      *     una comparacion por bytes con un limite calculado en caracteres dejaria filas fuera
      */
-    static @Nullable String siguienteA(String prefijo) {
+    public static @Nullable String siguienteA(String prefijo) {
         if (prefijo.isEmpty()) {
             return null;
         }
@@ -51,18 +56,15 @@ final class RangoDePrefijo {
     /**
      * Anade una condicion de prefijo a un {@code WHERE}, por rango cuando se puede.
      *
-     * <p>Se escribe una vez y la usan los cuatro filtros de texto del modulo: repetir el rango a
-     * mano en cada uno es como se acaba colando un {@code LIKE} en el quinto.
-     *
      * @param donde el {@code WHERE} que se esta construyendo
      * @param parametros los parametros con nombre de la consulta
      * @param columna la columna sobre la que se busca
      * @param prefijo lo que el usuario escribio
      * @param alias raiz del nombre de los parametros, para que dos filtros no se pisen
      */
-    static void condicion(
+    public static void condicion(
             StringBuilder donde,
-            java.util.Map<String, Object> parametros,
+            Map<String, Object> parametros,
             String columna,
             String prefijo,
             String alias) {

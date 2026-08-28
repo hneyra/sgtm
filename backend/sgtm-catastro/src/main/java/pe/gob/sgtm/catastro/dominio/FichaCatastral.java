@@ -255,6 +255,36 @@ public record FichaCatastral(
         return copia(vigenciaHasta, otraArea, construcciones, instalaciones, denominacion, detalle);
     }
 
+    /**
+     * La misma version con otro uso.
+     *
+     * <p>Existe desde #52: la transferencia de fiscalizacion inscribe el uso <b>observado</b>, que
+     * es el otro lado del contraste que la liquidacion guarda —un predio declarado como casa
+     * habitacion y hallado como comercio no cambia de area y si de tributacion—. Pasa por el
+     * constructor, que es quien valida el largo.
+     */
+    public FichaCatastral conUso(String otroUso) {
+        return new FichaCatastral(
+                id,
+                predioId,
+                tipo,
+                version,
+                areaTerreno,
+                otroUso,
+                frontis,
+                condicionPropiedad,
+                tipoEdificacion,
+                denominacion,
+                vigenciaDesde,
+                vigenciaHasta,
+                origen,
+                documentoOrigen,
+                observacion,
+                construcciones,
+                instalaciones,
+                detalle);
+    }
+
     public FichaCatastral conDenominacion(@Nullable String otra) {
         return copia(vigenciaHasta, areaTerreno, construcciones, instalaciones, otra, detalle);
     }

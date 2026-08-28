@@ -34,15 +34,41 @@ import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
  * `vehiculos`, que son las dos lecturas que **si publican** el identificador interno
  * —`FichaEncontradaResource.predioId` y `VehiculoResource.id`—.
  *
- * Las otras cuatro **no se cablean aqui**, y la frontera es distinta en cada una. Lo que falta no
- * es el mecanismo: es la lectura que resuelva (ADR-0010 §4 — se anota, no se finge en el proxy).
+ * Las otras cuatro **no se cablean aqui**, y la frontera es distinta en cada una. En ninguna
+ * falta el mecanismo: en dos falta la lectura que resuelva el identificador, y en las otras dos
+ * —las transferencias— falta **un campo en la pantalla**, que no es lo mismo y no se arregla
+ * declarando nada. Ninguna de las cuatro se finge en el proxy (ADR-0010 §4): se anotan.
  *
- * - `transferencia_predio` pide `predioId`. Es **resoluble hoy** con el mismo `consulta_fichas`,
- *   y queda fuera por alcance, no por falta de lectura: su formulario pide ademas el codigo
- *   exacto del transferente y del adquirente, que es otra resolucion —contra `contribuyentes`,
- *   que tambien existe— y otro control.
- * - `transferencia_vehiculo` pide el vehiculo y los dos contribuyentes. Misma situacion:
- *   `vehiculos` resuelve el primero por placa.
+ * - `transferencia_predio` y `transferencia_vehiculo` **no se paran donde se creia** (#73). Lo
+ *   que decia aqui —«resolubles hoy, quedan fuera por alcance»— era cierto de los
+ *   identificadores y no del acto: `consulta_fichas` resuelve el `predioId`, la placa la teclea
+ *   quien atiende y **los dos contribuyentes no hay que resolverlos**, porque los controladores
+ *   reciben `codTransferente`/`codAdquiriente` como **codigos** y los resuelven ellos contra
+ *   `contribuyente.codigo_contribuyente`. Lo que las para es otra cosa, y esta un nivel mas
+ *   abajo: los dos controladores exigen **`valorTransferencia`** —`dineroDe` lo pasa por
+ *   `exigir`, y `Transferencia` lo declara obligatorio— y **ninguna de las dos pantallas del
+ *   manual dibuja un campo para el**. El prototipo lo dibuja en **otra**: «Impuesto de
+ *   alcabala», `valorDeTransferenciaS`, que es justo la que el backend **no** lee
+ *   —`RegistrarAlcabala` lo toma de `transferencia.valorTransferencia()`, y de su peticion solo
+ *   lee `transferenciaId` y `autoavaluoAjustado`—. Conectarlas hoy seria rellenar catorce
+ *   campos, confirmar un acto irreversible y recibir «Falta el campo 'valorTransferencia'»; y
+ *   rellenarlo con un cero seria peor, porque ese importe es la **base imponible** de la
+ *   alcabala (art. 24 de la LTM, `docs/10-negocio/valores-normativos/alcabala.md`). Se anota y
+ *   se dice en la pantalla: `ACTOS_SIN_CAMPO` de `pantallas/actos.ts` — la franja de la primaria
+ *   nombra el dato que falta en vez de decir «la pantalla aún no manda estos campos», que ahi
+ *   invita a la correccion equivocada.
+ *
+ *   Y hay un segundo desajuste, menor y del mismo tipo: las dos pantallas rotulan «Transferente
+ *   — documento» y «Adquirente — documento», y lo que el backend resuelve es el **codigo del
+ *   contribuyente**, no su DNI ni su RUC (el prototipo escribe ahi «44218937», que es un DNI).
+ *   Eso si tiene solucion desde aqui —un resolutor contra `contribuyentes`, que publica el
+ *   codigo y el documento—, y se hara junto con el campo que falta: un control que resuelve para
+ *   un acto que no se puede registrar es trabajo que acaba en un rechazo.
+ *
+ *   **El historico de las transferencias tampoco se puede dibujar todavia** (criterio de #73):
+ *   `TransferenciaRepository.historicoDePredio` existe en el dominio y **ningun controlador lo
+ *   publica**, asi que no hay `GET` que devuelva quien transfirio, cuando y con que sustento. No
+ *   se compone de otra lectura: se anota (ADR-0010 §4).
  * - `alcabala` pide `transferenciaId`, el identificador interno de una `Transferencia` **ya
  *   registrada**. Ninguna operacion del contrato lista transferencias: `POST /rentas/transferencias/predio`
  *   la crea y no hay ningun `GET` que la devuelva. **Ese identificador no es resoluble con las

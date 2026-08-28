@@ -26,13 +26,17 @@ import { escrituraDe } from './escrituras';
  *   `sin-determinacion` la primaria **no guarda lo que hay en pantalla: pide una
  *                      determinacion**. Ninguna de las dos frases de arriba es
  *                      cierta ahi (#333)
+ *   `sin-campo`        el acto necesita **un dato que la pantalla no tiene donde
+ *                      escribir**: no falta la lista blanca, falta el campo (#73)
  *
- * La distincion se lee de lo que ya se sabe —el verbo del contrato, el rotulo de
- * la primaria y el registro de escrituras—, sin ninguna lista aparte que alguien
- * tenga que mantener al dia. Una opcion que se declare deja de tener impedimento
- * el mismo dia.
+ * Las tres primeras se leen de lo que ya se sabe —el verbo del contrato, el
+ * rotulo de la primaria y el registro de escrituras—, sin ninguna lista aparte
+ * que alguien tenga que mantener al dia. Una opcion que se declare deja de tener
+ * impedimento el mismo dia. La cuarta **si** se declara, y tiene que declararse:
+ * ver {@link ACTOS_SIN_CAMPO}.
  */
-export type CausaDelImpedimento = 'sin-backend' | 'sin-declaracion' | 'sin-determinacion';
+export type CausaDelImpedimento =
+  'sin-backend' | 'sin-declaracion' | 'sin-determinacion' | 'sin-campo';
 
 export interface ImpedimentoDelActo {
   /**
@@ -108,6 +112,85 @@ const SIN_DETERMINACION =
 const DE_CALCULO = /^(calcular|recalcular|simular|determinar|liquidar)/i;
 
 /**
+ * Un acto al que le falta **un dato que su pantalla no dibuja** (#73).
+ *
+ * @see ACTOS_SIN_CAMPO para por que esta es la unica causa que se declara.
+ */
+export interface ActoSinCampo {
+  /**
+   * El dato que falta, **dicho para quien atiende**: «el valor de la
+   * transferencia», no `valorTransferencia`. Ver {@link ImpedimentoDelActo.causa}
+   * para el reparto entre los dos lectores.
+   */
+  readonly dato: string;
+  /** Y por que sin el no se puede registrar el acto. Una frase, del dominio. */
+  readonly porque: string;
+  /**
+   * Como lo llama el backend. **No se pinta**: esta aqui para que quien
+   * mantenga sepa que campo es sin abrir el controlador, y para que la prueba
+   * pueda nombrarlo.
+   */
+  readonly campos: readonly string[];
+}
+
+/**
+ * Las opciones cuyo acto **no se puede registrar porque a la pantalla le falta
+ * un campo**, no una declaracion (#73).
+ *
+ * Es la unica de las cuatro causas que se declara en una lista, y esa asimetria
+ * necesita defensa: las otras tres se deducen de lo que ya hay —el verbo del
+ * contrato, el rotulo de la primaria, el registro de escrituras—, y esta no se
+ * puede deducir de nada que el frontend tenga delante. Lo que la decide es la
+ * comparacion entre **lo que el controlador exige** y **lo que el catalogo
+ * dibuja**, y el catalogo no sabe nada del controlador.
+ *
+ * Existe por el mismo motivo que `sin-determinacion` (#333): de las causas de
+ * arriba, ninguna dice la verdad en estas dos pantallas, y la que les tocaba
+ * —`sin-declaracion`, «la pantalla aún no manda estos campos»— **invita a la
+ * correccion equivocada**. Declarar los campos en `escrituras.ts` no arregla
+ * nada aqui: el cuerpo saldria igual sin el valor de la transferencia, y lo que
+ * llegaria a ventanilla es un 422 despues de rellenar catorce campos y de
+ * confirmar un acto irreversible.
+ *
+ * **Las dos transferencias, y el dato es el mismo.**
+ * `TransferenciaPredioController` y `TransferenciaVehiculoController` exigen
+ * `valorTransferencia` —lo pasan por `dineroDe`, que llama a `exigir`— y
+ * `Transferencia` lo declara obligatorio: «el valor declarado del acto». Ninguna
+ * de las dos pantallas del manual tiene un campo para el; el prototipo lo dibuja
+ * en **otra** pantalla, «Impuesto de alcabala» (`valorDeTransferenciaS`), que es
+ * justamente la que el backend **no** lee —`RegistrarAlcabala` lo toma de
+ * `transferencia.valorTransferencia()` para calcular la base, y de su peticion
+ * solo lee `transferenciaId` y `autoavaluoAjustado`—. O sea: el mismo dato, en
+ * dos sitios distintos segun a quien se le pregunte, y ninguno de los dos es
+ * inventable desde aqui —es la base sobre la que se liquida la alcabala (art. 24
+ * de la Ley de Tributacion Municipal, `docs/10-negocio/valores-normativos/alcabala.md`),
+ * asi que un 0,00 de relleno no seria un campo vacio: seria una base imponible
+ * falsa—.
+ *
+ * Se sale de aqui el dia que se decida **donde se captura**: o la pantalla gana
+ * su campo, o el acto deja de exigirlo. Las dos son decisiones de diseño, y
+ * ninguna cabe en la interfaz.
+ */
+export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
+  transferencia_predio: {
+    dato: 'el valor de la transferencia, el que figura en la minuta o en la escritura',
+    porque:
+      'Sin él la transferencia no se puede registrar, porque es la base sobre la que se liquida la alcabala.',
+    campos: ['valorTransferencia'],
+  },
+  transferencia_vehiculo: {
+    dato: 'el valor de la transferencia, el que figura en el acta o en el parte registral',
+    porque:
+      'Sin él la transferencia no se puede registrar: el valor con que el vehículo cambia de manos es parte del hecho que queda asentado.',
+    campos: ['valorTransferencia'],
+  },
+};
+
+/** Lo que declara esa opcion, o nada. `Object.hasOwn`, como el resto del camino. */
+const actoSinCampo = (opcion: string): ActoSinCampo | undefined =>
+  Object.hasOwn(ACTOS_SIN_CAMPO, opcion) ? ACTOS_SIN_CAMPO[opcion] : undefined;
+
+/**
  * Por que la accion primaria de esta opcion no puede guardar todavia, o nada si
  * puede.
  *
@@ -139,6 +222,16 @@ export function impedimentoDelActo(
   if (escrituraDe(opcion) !== undefined) return undefined;
   const primaria = acciones[acciones.length - 1];
   if (primaria !== undefined && DE_SALIDA.test(primaria.trim())) return undefined;
+  /* Antes que ninguna de las otras: es la unica declarada, y las otras dos que
+     podrian alcanzarla —`sin-declaracion` por el verbo del contrato— dirian algo
+     falso sobre la misma pantalla. Ver `ACTOS_SIN_CAMPO`. */
+  const sinCampo = actoSinCampo(opcion);
+  if (sinCampo !== undefined) {
+    return {
+      causa: 'sin-campo',
+      detalle: `Falta un dato que esta pantalla no tiene dónde escribir: ${sinCampo.dato}. ${sinCampo.porque} ${SALIDA}`,
+    };
+  }
   // Antes que el verbo del contrato: una primaria que pide una determinacion no
   // guarda campos, asi que ninguna de las otras dos causas la describe.
   if (primaria !== undefined && DE_CALCULO.test(primaria.trim())) {

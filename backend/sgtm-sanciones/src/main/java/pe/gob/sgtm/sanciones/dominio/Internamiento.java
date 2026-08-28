@@ -59,7 +59,7 @@ public record Internamiento(
     public static final int ACTA_MAXIMA = 40;
 
     /** {@code internamiento.tasa_custodia varchar(20)}. */
-    public static final int TASA_MAXIMA = 20;
+    public static final int CODIGO_DE_TASA_MAXIMO = 20;
 
     public Internamiento {
         Objects.requireNonNull(placa, "Un internamiento es de un vehiculo con placa");
@@ -90,9 +90,11 @@ public record Internamiento(
                 tasaCustodia,
                 "El internamiento dice con que concepto del TUPA se cobra la custodia");
         tasaCustodia = tasaCustodia.strip().toUpperCase(Locale.ROOT);
-        if (tasaCustodia.isEmpty() || tasaCustodia.length() > TASA_MAXIMA) {
+        if (tasaCustodia.isEmpty() || tasaCustodia.length() > CODIGO_DE_TASA_MAXIMO) {
             throw new IllegalArgumentException(
-                    "El codigo de la tasa de custodia va de 1 a " + TASA_MAXIMA + " caracteres");
+                    "El codigo de la tasa de custodia va de 1 a "
+                            + CODIGO_DE_TASA_MAXIMO
+                            + " caracteres");
         }
         Objects.requireNonNull(registradoEn, "El internamiento dice cuando se registro");
         if (usuarioRegistro != null) {

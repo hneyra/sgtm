@@ -21,7 +21,9 @@ import { RESPUESTAS } from './respuestas.generado';
  * constancia de no adeudo (#25, #179), el padron vehicular consultable (#25,
  * #184), las altas y bajas de deuda (#24, #72), el historial de pagos (#25,
  * #219), los predios de un contribuyente (#25, #222) y, desde #75, los
- * valores emitidos (#37).
+ * valores emitidos (#37). Desde #72 se suman las tres ultimas de Consultas
+ * que tienen controlador: la ficha unificada de un contribuyente, el resumen
+ * predial y la consulta de valores emitidos (#25).
  * **Esta lista crece cuando crece aquella**, no antes: publicar aqui
  * una forma que el backend todavia no sirve seria inventarsela.
  *
@@ -532,6 +534,266 @@ function predios(): Paginado {
   );
 }
 
+/* ── Consultas: resumen predial, valores y ficha unificada (#25, #72) ───── */
+
+/**
+ * El dia al que esta escrito el prototipo entero.
+ *
+ * Se nombra una vez en vez de repetir el literal: es la fecha de la que salen
+ * todas sus capturas, no un valor de negocio.
+ */
+const EL_DIA_DEL_PROTOTIPO = '2026-08-13';
+
+/**
+ * Predios del resumen predial (`PredioDelResumenResource`, RF-046, #25, #72).
+ *
+ * Las cuatro columnas de «Predios encontrados» del prototipo son exactamente las
+ * cuatro que publica el recurso, asi que aqui no falta ni sobra ninguna. Lo que
+ * se anade —`fichaId`, `predioId`, `uso`, `tipo`, `version`, `vigenciaDesde`— es
+ * lo que el recurso lleva y la tabla no dibuja: con `codCatastral` y `tipo` se
+ * pide el historico de la ficha, que es la pestaña «Movimientos del Predio».
+ *
+ * **No lleva ningun importe, y eso es el dato**: el recurso real tampoco lo
+ * lleva. Ponerle uno aqui construiria la pantalla contra una forma que el
+ * servidor no tiene.
+ */
+function resumenPredial(): Paginado {
+  return unaPagina(
+    filasDe('consulta_resumen_predial').map(
+      ([codCatastral, codPropietario, nombre, direccion], i) => ({
+        fichaId: i + 1,
+        predioId: i + 1,
+        codCatastral,
+        codPropietario: codPropietario || null,
+        nombreDelPropietario: nombre || null,
+        direccionDelPredio: direccion,
+        uso: 'CASA HABITACION',
+        tipo: 'URBANA',
+        version: 1,
+        vigenciaDesde: '2026-01-01',
+      }),
+    ),
+  );
+}
+
+/**
+ * Como escribe el prototipo el estado de un valor frente a `SituacionDelValor`,
+ * que es lo que publica `ValorConsultadoResource.situacion`.
+ *
+ * «Firme» es `EXIGIBLE` —el plazo vencio—, y asi lo dice el propio enum.
+ * «Reclamado» **no existe en el dominio**: no hay reclamacion de valores
+ * todavia, y el mas cercano que si se modela es `NOTIFICADO`, que es del que
+ * parte. Es la misma traduccion que ya hacia `ESTADO_DE_VALOR_DEL_MOCK` para la
+ * cabecera, con el vocabulario de la situacion en vez del de la cabecera.
+ */
+const SITUACION_DEL_MOCK: Readonly<Record<string, string>> = {
+  Emitido: 'EMITIDO',
+  Firme: 'EXIGIBLE',
+  Reclamado: 'NOTIFICADO',
+  Coactiva: 'COACTIVA',
+};
+
+/** El `EstadoDeValor` (V3) del que parte cada situacion del prototipo. */
+const ESTADO_TRAS_LA_SITUACION: Readonly<Record<string, string>> = {
+  EMITIDO: 'EMITIDO',
+  EXIGIBLE: 'NOTIFICADO',
+  NOTIFICADO: 'NOTIFICADO',
+  COACTIVA: 'COACTIVA',
+};
+
+/**
+ * Valores emitidos consultados (`ValorConsultadoResource`, RF-041, #25, #72).
+ *
+ * **Dos fechas distintas, y ninguna es la otra.** `monto.actualizadoA` es
+ * `proyectadoA` —el dia al que estaban proyectados los importes cuando se emitio
+ * el valor, congelado desde entonces (AC de #37)— y `situacionA` es el dia desde
+ * el que se miro si el plazo ya vencio. El prototipo dibuja una sola fecha,
+ * «Notificado», que es una tercera: la de la diligencia. Aqui se respetan las
+ * tres, porque es lo que hace el recurso real.
+ *
+ * «Pendiente» en la columna «Notificado» del prototipo no es una fecha: es la
+ * ausencia de diligencia, y el recurso la publica como `null` — la pantalla
+ * pinta un guion.
+ */
+function valoresConsultados(): Paginado {
+  return unaPagina(
+    filasDe('consulta_valores').map(
+      ([numero, tipoLargo, contribuyente, tributo, periodo, montoS, notificado, estado], i) => {
+        const situacion = SITUACION_DEL_MOCK[estado ?? ''] ?? 'EMITIDO';
+        const notificadoEl = fechaDe(notificado ?? '');
+        // El prototipo dibuja **una** fecha por fila, la de la diligencia, y de
+        // la emision no dibuja ninguna. Aqui se usa la misma para las dos: el
+        // proxy no inventa una tercera. Lo que si respeta es que sean campos
+        // distintos, porque en el recurso real lo son y no coinciden.
+        const emision = notificadoEl ?? EL_DIA_DEL_PROTOTIPO;
+        return {
+          id: i + 1,
+          numero,
+          tipo: TIPO_DE_VALOR_DEL_MOCK[tipoLargo ?? ''] ?? 'OP',
+          codContribuyente: '',
+          contribuyente,
+          tributo: tributo || null,
+          periodo: periodo || null,
+          // Congelado a `proyectadoA`, la fecha de la emision: no es la de hoy,
+          // y no lo es a proposito.
+          monto: { importe: comoImporte(montoS ?? '0.00'), actualizadoA: emision },
+          notificadoEl,
+          // La exigibilidad la fija la diligencia: sin acuse no hay desde
+          // cuando, y sin fecha de notificacion tampoco.
+          exigibleDesde: situacion === 'EXIGIBLE' ? notificadoEl : null,
+          situacion,
+          estado: ESTADO_TRAS_LA_SITUACION[situacion] ?? 'EMITIDO',
+          // El dia desde el que se miro el plazo. Es de la consulta, no de la
+          // fila: todas las filas comparten la misma.
+          situacionA: EL_DIA_DEL_PROTOTIPO,
+          fechaEmision: emision,
+        };
+      },
+    ),
+  );
+}
+
+/**
+ * La ficha unificada de un contribuyente (`ConsultaUnificadaResource`, RF-046, #25, #72).
+ *
+ * No es un listado: es **un objeto** con cabecera, resumen y seis rejillas
+ * paginadas dentro, cada una con su propio sobre de `RespuestaPaginada`. Se
+ * sirve entero con esa forma porque es la que tiene el backend; que la pantalla
+ * hoy solo dibuje el resumen no es motivo para publicar menos.
+ *
+ * **Lo que no lleva, y no por olvido**: ninguna clave de la rejilla «Impuesto
+ * anual» del prototipo —`valuoAfecto`, `imptoPredial`, `limpPublica`,
+ * `parqYJardines`, `rellSanitario`, `serenazgo`—. El recurso real tampoco las
+ * lleva (D-02a, D-02b, y el predial es por contribuyente), asi que ponerlas aqui
+ * seria construir la pantalla contra una respuesta que el servidor no da.
+ *
+ * `valores` sale como pagina vacia y es la unica seccion que se queda sin
+ * filas: `ValorDeLaFicha` publica el desglose del valor en cinco cifras
+ * —insoluto, reajuste, interes, gasto y total— y el prototipo dibuja **una**,
+ * el monto. Repartirla en cinco seria inventar un desglose; ponerla en el total
+ * y cero en las otras cuatro tambien. Las demas secciones se leen de las filas
+ * que el prototipo ya dibuja en las pantallas de esas mismas pestañas.
+ */
+function consultaUnificada(): Readonly<Record<string, unknown>> {
+  const campos = RESPUESTAS['consulta_unificada']?.campos ?? {};
+  const valor = (clave: string): string =>
+    typeof campos[clave] === 'string' ? (campos[clave] as string) : '';
+  const fecha = RESPUESTAS['consulta_unificada']?.fechaCalculo ?? '2026-08-13';
+  const aLaFecha = (cifra: string) => ({
+    importe: comoImporte(cifra || '0.00'),
+    actualizadoA: fecha,
+  });
+
+  // Una sola persona en la cabecera, la primera del padron del prototipo: el
+  // proxy no filtra, y mezclar el codigo de una con el nombre de otra daria una
+  // ficha de nadie.
+  const [titular] = filasDe('contribuyentes');
+  const [, codigo = '', nombre = '', dni = '', ruc = ''] = titular ?? [];
+
+  return {
+    contribuyente: {
+      codigo,
+      nombre,
+      documento: ruc && ruc !== '—' ? ruc : dni,
+    },
+    aLaFecha: fecha,
+    resumenDeSaldos: {
+      insoluto: aLaFecha(valor('insoluto')),
+      reajuste: aLaFecha(valor('reajuste')),
+      interes: aLaFecha(valor('interes')),
+      gasto: aLaFecha(valor('gasto')),
+      total: aLaFecha(valor('total')),
+      estadoDeLaConsulta: valor('estadoDeLaConsulta'),
+    },
+    deudasPendientes: unaPagina(deudasDeLaFicha(fecha)),
+    pagosRealizados: unaPagina(pagos().contenido.map(movimientoDeLaFicha)),
+    altasYBajas: unaPagina(altasBajas().contenido.map(movimientoDeLaFicha)),
+    fraccionamientos: unaPagina(conveniosDeLaFicha(fecha)),
+    valores: unaPagina([]),
+    declaracionesJuradas: unaPagina([declaracionJurada()]),
+  };
+}
+
+/**
+ * «Deudas Pendientes» de la ficha (`ObligacionDeLaFicha`): las mismas filas que
+ * `consulta_deuda`, con el desglose **plano** en vez de anidado bajo `deuda`.
+ * Son dos recursos distintos del mismo dato, y el proxy respeta las dos formas.
+ */
+function deudasDeLaFicha(fecha: string): readonly Readonly<Record<string, unknown>>[] {
+  const importe = (cifra: string) => ({ importe: comoImporte(cifra), actualizadoA: fecha });
+  return filasDe('consulta_deuda').map(
+    ([ano, tributo, , insoluto, reajuste, interes, gasto, total], i) => ({
+      tributo,
+      ejercicio: Number(ano) || new Date().getFullYear(),
+      predioId: i + 1,
+      vehiculoId: null,
+      insoluto: importe(insoluto ?? '0.00'),
+      reajuste: importe(reajuste ?? '0.00'),
+      interes: importe(interes ?? '0.00'),
+      gasto: importe(gasto ?? '0.00'),
+      total: importe(total ?? '0.00'),
+    }),
+  );
+}
+
+/**
+ * Un asiento del libro, con la forma que tiene dentro de la ficha unificada.
+ *
+ * `MovimientoDeLaFicha` es `AsientoResource` menos lo que la ficha no necesita
+ * —`referenciaExterna`, `asientoReversadoId`, `usuarioId`— y con el monto a su
+ * **fecha valor**, que es lo que ya trae el asiento: un pago de marzo no se
+ * actualiza.
+ */
+function movimientoDeLaFicha(
+  asiento: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  return {
+    id: asiento['id'],
+    ejercicio: asiento['ejercicio'],
+    tributo: asiento['tributo'],
+    concepto: asiento['concepto'],
+    tipo: asiento['tipo'],
+    fase: asiento['fase'],
+    periodo: asiento['periodo'],
+    predioId: asiento['predioId'],
+    vehiculoId: asiento['vehiculoId'],
+    monto: asiento['monto'],
+    documentoOrigen: asiento['documentoOrigen'],
+    motivo: asiento['motivo'],
+  };
+}
+
+/**
+ * «Fraccionamientos» de la ficha (`ConvenioDeLaFicha`), de las filas de
+ * `consulta_convenios`.
+ *
+ * Las dos cifras llevan **fechas distintas** y por eso viajan separadas: la
+ * deuda acogida a la fecha de corte del convenio —la del propio convenio— y el
+ * saldo a la de la consulta. Aplanarlas dejaria dos cifras de dias distintos
+ * bajo la misma cabecera, que es justo lo que el recurso real evita.
+ */
+function conveniosDeLaFicha(fecha: string): readonly Readonly<Record<string, unknown>>[] {
+  return filasDe('consulta_convenios').map(
+    ([numero, , suscrito, acogida, cuotas, pagadas, vencidas, saldo, estado]) => {
+      const fechaDelConvenio = fechaDe(suscrito ?? '') ?? fecha;
+      return {
+        numero,
+        fecha: fechaDelConvenio,
+        deudaAcogida: {
+          importe: comoImporte(acogida ?? '0.00'),
+          actualizadoA: fechaDelConvenio,
+        },
+        cuotas: Number(cuotas) || 0,
+        pagadas: Number(pagadas) || 0,
+        vencidas: Number(vencidas) || 0,
+        saldo: { importe: comoImporte(saldo ?? '0.00'), actualizadoA: fecha },
+        estado: (estado ?? '').toUpperCase(),
+        motivoDelCierre: null,
+      };
+    },
+  );
+}
+
 /* ── Cuenta corriente: el libro de asientos ────────────────────────────── */
 
 /**
@@ -840,6 +1102,7 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/rentas/vehiculos/{placa}': vehiculo,
   '/rentas/declaraciones/{djNro}': declaracionJurada,
   '/consultas/constancias/no-adeudo': constanciaDeNoAdeudo,
+  '/consultas/unificada': consultaUnificada,
   '/seguridad/sesion/permisos': permisosDeLaSesion,
 };
 
@@ -996,6 +1259,8 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/consultas/altas-bajas': altasBajas,
   '/consultas/pagos': pagos,
   '/consultas/predios': predios,
+  '/consultas/resumen-predial': resumenPredial,
+  '/consultas/valores': valoresConsultados,
   '/catastro/sectores': sectores,
   '/catastro/fichas': fichas,
   '/seguridad/modulos': modulos,

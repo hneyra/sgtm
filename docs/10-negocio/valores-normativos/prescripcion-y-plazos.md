@@ -8,7 +8,7 @@
 | Ejercicios que rige | 1998– (Ley 26979); 2013– (TUO del Código Tributario, con modificaciones posteriores; el art. 104 lo modificó el D. Leg. 1523, vigente desde el 2023-03-01) |
 | Filas de NEG-02 §2 | 21, 22 |
 | Transcribió | JNA, 2026-08-24 |
-| Verificó | Agente, 2026-08-25 |
+| Verificó | HNA, 2026-08-25 |
 | Estado | VERIFICADO |
 
 ## 1. La tabla tal como está en la norma

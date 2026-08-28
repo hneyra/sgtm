@@ -131,6 +131,13 @@ class ContratoDeApiTest {
                     "GET /fiscalizacion/omisos",
                     "GET /fiscalizacion/estado-cuenta",
                     "GET /fiscalizacion/predial/historico",
+                    // #52: la transferencia a rentas —la frontera delicada, RF-054— y la
+                    // resolucion de determinacion que la materializa (RF-057). La primera es una
+                    // ruta que la pantalla no declara —`fisc_resultados` declara su grilla— y
+                    // entra por OPERACIONES_ADICIONALES del generador; la segunda ya estaba en el
+                    // contrato desde el prototipo y no la servia nadie.
+                    "POST /fiscalizacion/transferencias",
+                    "GET /fiscalizacion/resoluciones/{numero}",
                     "GET /transito/papeletas",
                     "GET /transito/papeletas/busqueda",
                     "PATCH /transito/papeletas/{numero}/codigo",
@@ -201,7 +208,45 @@ class ContratoDeApiTest {
                     "POST /licencias/edificacion/{expediente}/secciones",
                     "POST /licencias/edificacion/{expediente}/licencia",
                     "POST /licencias/edificacion/{expediente}/revalidacion",
-                    "GET /licencias/edificacion/reportes/general");
+                    "GET /licencias/edificacion/reportes/general",
+                    // #51 — RF-114: anuncios y propaganda, con la deuda por la tasa generada al
+                    // registrar. Los tres POST de acto son tramites, no ediciones: `anuncio` no
+                    // admite UPDATE desde V45.
+                    "GET /autorizaciones/anuncios",
+                    "POST /autorizaciones/anuncios",
+                    "POST /autorizaciones/anuncios/{id}/renovacion",
+                    "POST /autorizaciones/anuncios/{id}/cese",
+                    "POST /autorizaciones/anuncios/{id}/retiro",
+                    "POST /autorizaciones/anuncios/reportes",
+                    // #53 — RF-066, RF-068, RF-073 y RF-074: la generacion masiva de valores por
+                    // papeletas, la constancia libre de infracciones, los tres padrones, los dos
+                    // records y los cinco resumenes. Ninguna es una adicion al contrato: las
+                    // quince ya estaban declaradas desde que el contrato se derivo del prototipo,
+                    // y lo que este issue hace es publicarlas.
+                    "POST /transito/valores/generacion-masiva",
+                    "POST /infracciones/administrativas/valores/generacion-masiva",
+                    "POST /transito/constancias-libres",
+                    "GET /transito/reportes/padron",
+                    "GET /transito/reportes/padron-coactiva",
+                    "GET /transito/reportes/padron-constancias",
+                    "GET /transito/reportes/record-conductor",
+                    "GET /transito/reportes/record-vehicular",
+                    "GET /transito/reportes/resumen-recaudacion",
+                    "GET /transito/reportes/resumen-papeletas",
+                    "GET /transito/reportes/resumen-por-codigo",
+                    "GET /transito/reportes/resumen-por-placa",
+                    "GET /infracciones/administrativas/reportes/padron-notificaciones",
+                    "GET /infracciones/administrativas/reportes/resumen-recaudacion",
+                    "POST /infracciones/administrativas/reportes",
+                    // #54 — RF-115 y RF-132: los padrones de licencias y los certificados de
+                    // numeracion y zonificacion. Las dos ultimas son adiciones al contrato: la
+                    // pantalla `certificados` declara UN endpoint —el POST que emite— y su grilla
+                    // y su accion «Imprimir certificado» necesitan verbo propio.
+                    "POST /licencias/funcionamiento/reportes/padron",
+                    "GET /licencias/funcionamiento/reportes/resumen-anual",
+                    "GET /licencias/certificados",
+                    "POST /licencias/certificados",
+                    "POST /licencias/certificados/{numero}/impresion");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

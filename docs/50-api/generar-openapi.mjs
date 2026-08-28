@@ -410,6 +410,23 @@ const OPERACIONES_ADICIONALES = {
         ' líneas heredan el conjunto sellado de la versión anterior: una reliquidación corrige el' +
         ' contraste, no el marco normativo.',
     },
+    // Y transferir el resultado al padrón (#52, RF-054), que es la acción de la
+    // misma pantalla y la frontera delicada del sistema: el único camino por el
+    // que un dato de fiscalización pasa a ser el dato oficial.
+    {
+      operationId: 'transferir_a_rentas',
+      metodo: 'post',
+      ruta: '/api/v1/fiscalizacion/transferencias',
+      titulo: 'Transferencia a rentas del resultado fiscalizado',
+      descripcion:
+        'Inscribe lo hallado en el padrón como versión NUEVA de la ficha catastral —con origen' +
+        ' FISCALIZACION, el documento que la sustenta y la observación del usuario—, asienta los' +
+        ' cargos de la diferencia en la cuenta corriente y emite la resolución de determinación.' +
+        ' Los tres pasos van en una transacción: ficha nueva, asientos y resolución, o nada. La' +
+        ' versión anterior queda intacta, así que el padrón anterior se reconstruye pidiendo la' +
+        ' ficha vigente a una fecha anterior. Sin sustento documental no se transfiere, y' +
+        ' transferir dos veces la misma liquidación se rechaza.',
+    },
   ],
   // «Histórico de fiscalización predial» declara su GET; mover la liquidación
   // por sus estados —ABIERTA, EN PROCESO, LIQUIDADA, NOTIFICADA, ANULADA, que
@@ -444,6 +461,95 @@ const OPERACIONES_ADICIONALES = {
         ' usuario, obligatoria (RNF-052). Sin un recibo válido —de caja de tasas, no anulado,' +
         ' del titular y por el concepto del TUPA que corresponde— no se emite. El número de la' +
         ' licencia lo pone el sistema desde su correlativo: no viene en el cuerpo.',
+    },
+  ],
+  // `anuncios` declara «GET /autorizaciones/anuncios» como su endpoint —la
+  // grilla—; registrar la autorización y los tres trámites que la pantalla
+  // enumera necesitan sus propios verbos (#51, RF-114). No hay PUT ni PATCH:
+  // `anuncio` no admite UPDATE desde V45, y renovar, cesar y retirar son ACTOS
+  // que producen una fila nueva de `anuncio_movimiento`, no ediciones del
+  // formulario.
+  anuncios: [
+    {
+      operationId: 'registrar_anuncio',
+      metodo: 'post',
+      titulo: 'Registro de autorización de anuncio',
+      descripcion:
+        'Registra una autorización de anuncio y GENERA SU DEUDA por la tasa (RF-114). El cuerpo' +
+        ' lleva el titular, el establecimiento asociado —opcional—, la clase y el tipo del' +
+        ' elemento, sus medidas, la ubicación, la vigencia y la observación del usuario,' +
+        ' obligatoria (RNF-052). El número de la autorización lo pone el sistema desde su' +
+        ' correlativo y la tasa sale del conjunto sellado: ninguno de los dos viene en el cuerpo.' +
+        ' La cabecera `Idempotency-Key` se lee: reenviar el mismo registro devuelve 200 con la' +
+        ' autorización de la primera vez y no genera un segundo cargo.',
+    },
+    {
+      operationId: 'renovar_anuncio',
+      metodo: 'post',
+      ruta: '/api/v1/autorizaciones/anuncios/{id}/renovacion',
+      titulo: 'Renovación de autorización de anuncio',
+      descripcion:
+        'Prorroga la autorización por otro ejercicio y devenga otra vez la tasa (RF-114). Un' +
+        ' anuncio cesado o retirado no se renueva, y una misma autorización no devenga dos veces' +
+        ' el mismo ejercicio. El `id` de la ruta es el número impreso de la autorización.',
+    },
+    {
+      operationId: 'cesar_anuncio',
+      metodo: 'post',
+      ruta: '/api/v1/autorizaciones/anuncios/{id}/cese',
+      titulo: 'Cese de autorización de anuncio',
+      descripcion:
+        'Deja sin efecto la autorización, con su motivo (RF-114). Detiene la deuda futura —un' +
+        ' anuncio cesado no se renueva— y NO toca la ya devengada: no borra ni reversa ningún' +
+        ' cargo (regla 4, RNF-051). El cuerpo lleva la fecha, el motivo y la observación del' +
+        ' usuario, obligatoria (RNF-052).',
+    },
+    {
+      operationId: 'retirar_anuncio',
+      metodo: 'post',
+      ruta: '/api/v1/autorizaciones/anuncios/{id}/retiro',
+      titulo: 'Retiro del elemento publicitario',
+      descripcion:
+        'Registra que el elemento se retiró de la calle, comprobado en campo (RF-114). Va después' +
+        ' del cese: primero la autorización deja de regir y después el soporte desaparece. Al' +
+        ' revés, el padrón diría que se desmontó un anuncio que sigue autorizado.',
+    },
+  ],
+  // `certificados` declara «POST /api/v1/licencias/certificados» como su
+  // endpoint —la emisión—; su grilla «Certificados emitidos» y su acción
+  // «Imprimir certificado» necesitan verbo propio (#54, RF-115, RF-132).
+  //
+  // Mismo reparto que `costas_procesales` (#42): hacer que el POST devolviera
+  // también la grilla convertiría una consulta en una escritura, y una pantalla
+  // que lista al abrirse consumiría un correlativo cada vez.
+  //
+  // No hay PUT ni PATCH: `certificado` no admite UPDATE desde V51. Uno
+  // equivocado se sustituye emitiendo otro, y los dos quedan.
+  certificados: [
+    {
+      operationId: 'certificados_listado',
+      metodo: 'get',
+      titulo: 'Certificados emitidos',
+      descripcion:
+        'La grilla «Certificados emitidos» de la pantalla `certificados`, que declara el POST' +
+        ' —la emisión— como su endpoint y necesita un verbo aparte para listar. Hacer que el POST' +
+        ' devolviera también la grilla convertiría una consulta en una escritura, y una pantalla' +
+        ' que lista al abrirse consumiría un correlativo cada vez. El estado de cada fila' +
+        ' —VIGENTE o CADUCADO— se deriva a la fecha de hoy y viaja con ella (RNF-075).',
+    },
+    {
+      operationId: 'imprimir_certificado',
+      metodo: 'post',
+      ruta: '/api/v1/licencias/certificados/{numero}/impresion',
+      titulo: 'Impresión de un certificado emitido',
+      descripcion:
+        'Vuelve a sacar un certificado ya emitido, con su número original y en el formato que se' +
+        ' pida —PDF, hoja de cálculo o texto enriquecido (RF-132)—. El contenido sale de los' +
+        ' datos guardados el día de la emisión, no de lo que hoy digan el padrón o el TUPA, y el' +
+        ' backend comprueba el SHA-256 antes de entregarlo: si dibujar esos datos ya no da los' +
+        ' mismos bytes, la reimpresión falla en lugar de entregar un papel distinto al original' +
+        ' con el mismo número. Escribe —cuenta la reimpresión y deja su traza—, así que el cuerpo' +
+        ' lleva la observación del usuario, obligatoria (RNF-052).',
     },
   ],
   // `fue_edificacion` declara «GET /api/v1/licencias/edificacion» como su

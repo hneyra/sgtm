@@ -47,8 +47,12 @@ public class MovimientoDeFaseCuentaCorriente implements MovimientoDeFase {
             String documentoOrigen,
             Observacion observacion) {
 
+        // nuevoConMotivo y no nuevo: AJUSTE exige motivo y el constructor de Asiento lo
+        // comprueba, asi que sin el la fila NI SIQUIERA SE PUEDE CONSTRUIR -y este metodo
+        // fallaba con IllegalArgumentException cada vez que la obligacion tenia deuda-.
+        // Lo definitivo lo pone RegistrarAsiento#asentar con la observacion del usuario.
         Asiento abonoOrdinario =
-                Asiento.nuevo(
+                Asiento.nuevoConMotivo(
                         ejercicio,
                         contribuyenteId,
                         tributo,
@@ -61,11 +65,12 @@ public class MovimientoDeFaseCuentaCorriente implements MovimientoDeFase {
                         referenciaExterna,
                         monto,
                         fechaValor,
-                        documentoOrigen);
+                        documentoOrigen,
+                        observacion.texto());
         registrar.asentar(abonoOrdinario, observacion);
 
         Asiento cargoEnValor =
-                Asiento.nuevo(
+                Asiento.nuevoConMotivo(
                         ejercicio,
                         contribuyenteId,
                         tributo,
@@ -78,7 +83,8 @@ public class MovimientoDeFaseCuentaCorriente implements MovimientoDeFase {
                         referenciaExterna,
                         monto,
                         fechaValor,
-                        documentoOrigen);
+                        documentoOrigen,
+                        observacion.texto());
         registrar.asentar(cargoEnValor, observacion);
     }
 }

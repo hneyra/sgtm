@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import * as dominio from '@sgtm/dominio';
 import { OPCIONES_CONECTADAS } from '../conexiones';
@@ -10,13 +11,22 @@ import { SIN_DATO } from '../seguridad/listado';
  * Consultas (#72): **ninguna cifra sin su fecha**.
  *
  * Es el modulo que mas usa quien atiende en ventanilla, y donde la regla 9 de
- * CLAUDE.md se ve o no se ve. Siete de las once ya tienen backend y estan
+ * CLAUDE.md se ve o no se ve. **Diez de las once** ya tienen backend y estan
  * conectadas —`cuenta_corriente` (#21), `consulta_deuda` (#22, #175),
  * `constancia` (#25, #179), `consulta_vehiculos` (#25, #184),
- * `consulta_altas_bajas` (#24), `consulta_pagos` (#25, #219) y
- * `consulta_predios` (#25, #222)—; las otras cuatro esperan al resto de #25.
- * Lo que **no** espera a nadie es la propiedad que da sentido al modulo, y es
- * lo que se verifica aqui sobre las once a la vez.
+ * `consulta_altas_bajas` (#24), `consulta_pagos` (#25, #219),
+ * `consulta_predios` (#25, #222), y ahora `consulta_unificada`,
+ * `consulta_resumen_predial` y `consulta_valores` (#25)—; la que falta,
+ * `consulta_deudas_beneficio`, no tiene controlador. Lo que **no** espera a
+ * nadie es la propiedad que da sentido al modulo, y es lo que se verifica aqui
+ * sobre las once a la vez.
+ *
+ * Las tres que entran con este cambio traen cada una una ausencia, y las
+ * pruebas de abajo defienden sobre todo eso: que el hueco **siga siendo un
+ * hueco**. Rellenarlas con lo que dibuja el prototipo es facil —esta ahi, el
+ * proxy lo sirve para las otras pantallas— y produce una cifra plausible que
+ * nadie puede sustentar. Cada una tiene su prueba y las tres se ponen rojas si
+ * alguien lo hace.
  */
 
 /** Las once opciones del modulo, por su ranura. Si el catalogo cambia, cambia esto. */
@@ -125,15 +135,12 @@ describe('el estado de cuenta es el libro, y se ve como tal', () => {
     expect(acciones.some((texto) => /modificar|editar|anular|corregir/i.test(texto))).toBe(false);
   });
 
-  it('las cuatro restantes siguen sin conectar: esperan el resto de #25', () => {
-    for (const opcion of [
-      'consulta_unificada',
-      'consulta_resumen_predial',
-      'consulta_deudas_beneficio',
-      'consulta_valores',
-    ]) {
-      expect(OPCIONES_CONECTADAS).not.toContain(opcion);
-    }
+  it('diez de las once estan conectadas; la que falta no tiene controlador', () => {
+    // `consulta_deudas_beneficio` no se conecta y no es un olvido: un beneficio
+    // cambia el importe que se debe, y los valores que lo cuantifican son D-02b
+    // —sin ordenanza ratificada—. Sin `Controller` no hay operacion que pedir,
+    // y una tabla rellena con lo del prototipo se leeria como deuda rebajada.
+    expect(OPCIONES_CONECTADAS).not.toContain('consulta_deudas_beneficio');
     for (const opcion of [
       'cuenta_corriente',
       'consulta_deuda',
@@ -142,6 +149,9 @@ describe('el estado de cuenta es el libro, y se ve como tal', () => {
       'consulta_altas_bajas',
       'consulta_pagos',
       'consulta_predios',
+      'consulta_unificada',
+      'consulta_resumen_predial',
+      'consulta_valores',
     ]) {
       expect(OPCIONES_CONECTADAS).toContain(opcion);
     }
@@ -278,6 +288,224 @@ describe('consulta_predios lee PredioEncontradoResource', () => {
     expect(celdas[3]?.textContent).toBe(SIN_DATO);
     expect(celdas[4]?.textContent).toBe(SIN_DATO);
     expect(celdas[5]?.textContent).toBe(SIN_DATO);
+    expect(celdas[6]?.textContent).toBe(SIN_DATO);
+  });
+});
+
+describe('consulta_unificada lee ConsultaUnificadaResource', () => {
+  it('las cinco cifras del resumen las suma el servidor, y traen su fecha de corte', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/consultas/consulta-unificada/00000025673');
+
+    // «Resumen de saldos» lleva el hint «Solo lectura», y esas arrancan
+    // cerradas (FRO-03 §5): hay que abrirla para ver lo que hay dentro.
+    await usuario.click(await screen.findByRole('button', { name: /Resumen de saldos/ }));
+
+    // Las cinco salen de `resumenDeSaldos`, cada una como `ImporteActualizado`:
+    // el total no se recompone aqui a partir de las partes (RNF-083).
+    expect((await screen.findByLabelText('Insoluto')).textContent).toBe('186.48');
+    expect(screen.getByLabelText('Gasto').textContent).toBe('92.55');
+    expect(screen.getByLabelText('Total').textContent).toBe('279.03');
+    // Y la frase que las explica la redacta el backend (RNF-080).
+    expect(screen.getByLabelText('Estado de la consulta').textContent).toBe(
+      'CONSULTA FINALIZADA',
+    );
+    // `aLaFecha` de la respuesta, no el reloj del navegador (regla 9).
+    expect(screen.getByText(/Cifras actualizadas al/).textContent).toContain('13/08/2026');
+  });
+
+  /**
+   * **La prueba que sostiene esta conexion.**
+   *
+   * La rejilla «Impuesto anual» tiene trece columnas y el recurso no publica
+   * ninguna: valuo afecto, valuo exonerado, valuo total, impuesto predial y los
+   * cuatro arbitrios, por ejercicio. El prototipo si las dibuja —«15,821.60» de
+   * valuo afecto de 2026 esta en `respuestas.generado.ts`, a un `filasDe` de
+   * distancia—, asi que rellenarla es de una linea. Si alguien lo hace, esto se
+   * pone rojo y le obliga a decir de donde salio la cifra.
+   */
+  it('la rejilla «Impuesto anual» sale vacia: ninguna de sus trece columnas se publica', async () => {
+    montarEnRuta('/consultas/consulta-unificada/00000025673');
+
+    await screen.findByText(/Cifras actualizadas al/);
+    // Ninguna cifra del prototipo se cuela en la tabla.
+    expect(screen.queryByText('15,821.60')).toBeNull();
+    expect(screen.queryByText('26,320.00')).toBeNull();
+    const tabla = screen.queryByRole('table');
+    // Sin filas no hay tabla que dibujar: se ve el vacio, no una rejilla con
+    // ceros. Un cero aqui se leeria como «este contribuyente no debe nada».
+    expect(tabla).toBeNull();
+  });
+
+  it('y el aviso permanente dice por que esta vacia', async () => {
+    montarEnRuta('/consultas/consulta-unificada/00000025673');
+
+    // Sin esta linea, la tabla vacia dice «Todavía no hay impuesto anual», que
+    // es la lectura equivocada: no es que no deba, es que no existe la cifra.
+    expect(
+      await screen.findByText(/El resumen de saldos es real; la rejilla «Impuesto anual»/),
+    ).toBeInTheDocument();
+  });
+
+  it('sin contribuyente no se pide nada, y lo dice', async () => {
+    // `GET /consultas/unificada` declara `contribuyente` obligatorio: pedirla
+    // sin el es un 400 contra el backend real —el proxy lo tapa, porque
+    // contesta igual con filtro o sin el—, y un 400 ahi no le dice nada a quien
+    // atiende.
+    montarEnRuta('/consultas/consulta-unificada');
+
+    expect(
+      await screen.findByText(/Busca un contribuyente para ver su ficha unificada/),
+    ).toBeInTheDocument();
+    // Y no se dibuja ninguna cifra mientras falte.
+    expect(screen.queryByText('186.48')).toBeNull();
+  });
+});
+
+describe('consulta_resumen_predial lee PredioDelResumenResource', () => {
+  it('las cuatro columnas de la tabla salen del recurso', async () => {
+    montarEnRuta('/consultas/consulta-resumen-predial');
+
+    expect(await screen.findByText('200601005670320A01...')).toBeInTheDocument();
+    expect(screen.getByText('SANTIAGO MOSCOL-GASPAR')).toBeInTheDocument();
+    expect(
+      screen.getByText('A.H. CUATRO DE NOVIEMBRE — SANTO TORIBIO 17'),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * **Las dos pestañas de cifras salen con «—», y por dos motivos distintos.**
+   *
+   * «Impuesto Predial» por predio **no existe**: los tramos se aplican al
+   * conjunto de los predios del contribuyente (NEG-05 §1), asi que una cifra por
+   * predio seria un reparto inventado. «Valúo Predial / Arbitrios» si es del
+   * predio, pero depende de tablas sin firmar (D-02a) y de ordenanzas sin
+   * ratificar (D-02b).
+   *
+   * Las diez cifras del prototipo estan servidas en `respuestas.generado.ts` y
+   * llegarian solas si esta pantalla siguiera sin conectar: la prueba las busca
+   * una a una.
+   */
+  it('las cifras de «Impuesto Predial» salen con «—», no con lo del prototipo', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/consultas/consulta-resumen-predial');
+
+    await screen.findByText(/Cifras actualizadas al/);
+    // «Solo lectura» arranca cerrada: sin abrirla, esta prueba pasaria mirando
+    // una seccion que no esta en la pagina.
+    await usuario.click(await screen.findByRole('button', { name: /Determinación por ejercicio/ }));
+
+    // Los cinco campos de la seccion, los cinco con guion.
+    for (const etiqueta of [
+      'Total deuda predial — insoluto (S/)',
+      'Reajuste (S/)',
+      'Interés (S/)',
+      'Gasto (S/)',
+      'Total (S/)',
+    ]) {
+      expect(screen.getByLabelText(etiqueta).textContent, etiqueta).toBe(SIN_DATO);
+    }
+    // Y ninguna de las del prototipo se cuela.
+    for (const delPrototipo of ['319.32', '141.50', '460.82']) {
+      expect(screen.queryByText(delPrototipo), delPrototipo).toBeNull();
+    }
+  });
+
+  it('y las de «Valúo Predial / Arbitrios» tambien, que es otra decision abierta', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/consultas/consulta-resumen-predial');
+
+    await screen.findByText(/Cifras actualizadas al/);
+    await usuario.click(screen.getByRole('tab', { name: /Valúo Predial \/ Arbitrios/ }));
+    await usuario.click(
+      await screen.findByRole('button', { name: /Valúo y arbitrios por ejercicio/ }),
+    );
+
+    for (const etiqueta of [
+      'Valúo afecto (S/)',
+      'Limpieza pública (S/)',
+      'Parques y jardines (S/)',
+      'Serenazgo (S/)',
+      'Relleno sanitario (S/)',
+    ]) {
+      expect(screen.getByLabelText(etiqueta).textContent, etiqueta).toBe(SIN_DATO);
+    }
+    for (const delPrototipo of ['15,821.60', '84.78', '25.20', '37.08']) {
+      expect(screen.queryByText(delPrototipo), delPrototipo).toBeNull();
+    }
+  });
+
+  it('el aviso permanente separa las dos causas', async () => {
+    montarEnRuta('/consultas/consulta-resumen-predial');
+
+    expect(
+      await screen.findByText(/Lo que este resumen publica hoy, y lo que no/),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * **«Palabra» garantiza un 422** (`ResumenPredialController`).
+   *
+   * Es texto libre sin columna a la que apuntar. Vivo, este campo era la unica
+   * forma de romper la busqueda desde la propia pantalla, y ninguna prueba lo
+   * veia porque el proxy de datos ignora los filtros. Mismo trato —y misma
+   * causa— que `consulta_fichas.conciliadaConRentas`.
+   */
+  it('el filtro «Palabra» se dibuja bloqueado y con su motivo', async () => {
+    montarEnRuta('/consultas/consulta-resumen-predial');
+
+    const palabra = await screen.findByLabelText('Palabra');
+    expect(palabra).toHaveAttribute('readonly');
+    expect(screen.getByText(/La búsqueda por palabra suelta no se puede resolver/)).toBeInTheDocument();
+  });
+});
+
+describe('consulta_valores lee ValorConsultadoResource', () => {
+  it('el numero, el tributo, el periodo y el monto salen del recurso, con su fecha', async () => {
+    montarEnRuta('/consultas/consulta-valores');
+
+    expect(await screen.findByText('OP-2026-004182')).toBeInTheDocument();
+    const fila = screen.getByText('OP-2026-004182').closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+    // Nro. valor, Tipo, Contribuyente, Tributo, Periodo, Monto S/, Notificado, Estado.
+    expect(celdas[3]?.textContent).toBe('IMPUESTO PREDIAL');
+    expect(celdas[4]?.textContent).toBe('2025 — cuota 3');
+    expect(celdas[5]?.textContent).toBe('195.98');
+    // Es lo que `valores_busqueda` (RF-092) no puede dar: su recurso no trae ni
+    // tributo ni periodo, y los deja en «—».
+    await screen.findByText(/Cifras actualizadas al/);
+  });
+
+  /**
+   * **«Estado» es la situacion que publica el backend, no la etiqueta del
+   * prototipo.**
+   *
+   * `SituacionDelValor` no tiene «Firme» ni «Reclamado»: lo primero es
+   * `EXIGIBLE` —el plazo vencio— y lo segundo no existe en el dominio, porque
+   * no hay reclamacion de valores todavia. Reescribirlo a las palabras del
+   * prototipo seria volver a redactar lo que el backend ya redacto (RNF-080), y
+   * ademas diria dos cosas que no son.
+   */
+  it('el estado es el que redacta el backend, no «Firme» ni «Reclamado»', async () => {
+    montarEnRuta('/consultas/consulta-valores');
+
+    await screen.findByText(/Cifras actualizadas al/);
+    const tabla = screen.getByRole('table');
+    expect(within(tabla).getByText('EXIGIBLE')).toBeInTheDocument();
+    expect(within(tabla).queryByText('Firme')).toBeNull();
+    expect(within(tabla).queryByText('Reclamado')).toBeNull();
+  });
+
+  it('un valor sin diligencia no tiene fecha de notificacion: sale «—», no «Pendiente»', async () => {
+    montarEnRuta('/consultas/consulta-valores');
+
+    // «Pendiente» del prototipo no es una fecha: es la ausencia de diligencia,
+    // y el recurso la publica como nulo. Una palabra bajo una cabecera que dice
+    // «Notificado» se lee como un estado mas de la notificacion.
+    const fila = (await screen.findByText('RM-2026-000912')).closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
     expect(celdas[6]?.textContent).toBe(SIN_DATO);
   });
 });
