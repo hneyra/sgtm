@@ -21,6 +21,7 @@ historial de por qué se hizo algo vale más que la coherencia del documento.
 | [0013](ADR-0013-permisos-de-la-sesion.md) | La interfaz pide sus permisos efectivos a `GET /seguridad/sesion/permisos`, no a un claim del token | Aceptado |
 | [0014](ADR-0014-navegacion-centrada-en-la-atencion.md) | La atención al contribuyente como inicio; los módulos detrás de un lanzador, reagrupados por tarea | Aceptado |
 | [0015](ADR-0015-conciliacion-catastro-rentas.md) | La conciliación catastro↔rentas: un derivado que publica rentas, no un estado que guarda catastro | Aceptado |
+| [0016](ADR-0016-el-inicio-pregunta-la-ficha-compone.md) | El inicio busca con un abanico de lecturas por permiso; la ficha 360° compone opciones publicadas; el portal se separa | Aceptado |
 
 Decisiones **pendientes**: [GOB-02](../../00-gobierno/decisiones-abiertas.md).
 

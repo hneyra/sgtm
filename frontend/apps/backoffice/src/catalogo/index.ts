@@ -83,8 +83,12 @@ export async function todasLasPantallas(): Promise<PantallasDeUnModulo> {
   return Object.assign({}, ...porModulo) as PantallasDeUnModulo;
 }
 
-/** La primera opcion del catalogo: el panel de recaudacion. Es la portada. */
-export const OPCION_INICIAL = OPCIONES[0] as OpcionSituada;
+/* La portada **no es una opcion del catalogo** (#296, ADR-0016 §1).
+   Aqui vivia `OPCION_INICIAL`, que era `OPCIONES[0]` —el panel de
+   recaudacion— y a la que `/` redirigia. El panel sigue siendo esa opcion y se
+   sigue abriendo por su ruta; lo que dejo de ser es el inicio. Lo que hay en `/`
+   es la pregunta de a quien se atiende, que no publica ninguna lectura propia y
+   por eso no necesita —ni debe tener— un id en el catalogo ni un permiso. */
 
 /**
  * Busqueda de la paleta de comandos: subcadena sobre etiqueta, titulo y modulo,
