@@ -30,6 +30,13 @@ dependencies {
     implementation(project(":sgtm-cuentacorriente"))
     implementation(project(":sgtm-contribuyentes"))
 
+    // Y la cuarta, desde #41: parametros.LectorDeParametros. De ahi sale el plazo
+    // de los siete dias habiles que la REC-1 concede (art. 14.1 de la Ley 26979).
+    // Que este en una ley no lo convierte en una constante del programa: la regla
+    // 5 lo quiere como dato sellado por ejercicio, igual que #39 hizo con el plazo
+    // de reclamacion de un valor.
+    implementation(project(":sgtm-parametros"))
+
     // Las pruebas de repositorio y del ciclo completo corren contra PostgreSQL de
     // verdad, conectadas como sgtm_app y no como el superusuario que entrega
     // Testcontainers (CAL-01 §3.2). Contra un doble no se puede demostrar ni el

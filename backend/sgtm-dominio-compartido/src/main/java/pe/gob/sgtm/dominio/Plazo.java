@@ -1,4 +1,4 @@
-package pe.gob.sgtm.valores.dominio;
+package pe.gob.sgtm.dominio;
 
 import java.time.LocalDate;
 import java.util.Locale;
@@ -16,6 +16,14 @@ import java.util.Objects;
  *
  * <p>El computo es una funcion pura, sin reloj y sin base (regla 6): el calendario de dias habiles
  * entra como argumento.
+ *
+ * <p><b>Vive en el dominio compartido desde #41, y no en {@code valores}.</b> Nacio ahi con #39
+ * porque el unico plazo del sistema era el de reclamacion de un valor; el de los siete dias del
+ * art. 14.1 de la Ley 26979 —el que la REC-1 concede al obligado antes de la medida cautelar— es el
+ * mismo concepto contado igual, y {@code coactiva} no puede importar {@code valores.dominio}
+ * (Spring Modulith trata como interno todo subpaquete, ARQ-01 §4). La alternativa era un segundo
+ * {@code Plazo} en coactiva: dos escrituras de la misma cuenta de dias habiles, que es como se
+ * llega a que la exigibilidad de un valor y la de una REC caigan en dias distintos.
  */
 public record Plazo(int cantidad, UnidadDePlazo unidad) {
 

@@ -12,16 +12,16 @@ import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.dominio.Plazo;
+import pe.gob.sgtm.dominio.UnidadDePlazo;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 import pe.gob.sgtm.valores.dominio.CausalDePrescripcion;
 import pe.gob.sgtm.valores.dominio.ClaseDeHecho;
 import pe.gob.sgtm.valores.dominio.ComputoDeEjercicio;
 import pe.gob.sgtm.valores.dominio.HechoDelComputo;
-import pe.gob.sgtm.valores.dominio.Plazo;
 import pe.gob.sgtm.valores.dominio.Prescripcion;
 import pe.gob.sgtm.valores.dominio.PrescripcionRepository;
 import pe.gob.sgtm.valores.dominio.ResultadoDeLaSolicitud;
-import pe.gob.sgtm.valores.dominio.UnidadDePlazo;
 
 /**
  * Las declaraciones de prescripcion contra PostgreSQL (V28).

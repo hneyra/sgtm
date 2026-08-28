@@ -1,4 +1,4 @@
-package pe.gob.sgtm.valores.dominio;
+package pe.gob.sgtm.dominio;
 
 /**
  * Con que resultado termino la diligencia (V3, {@code notificacion.resultado}).
@@ -7,6 +7,10 @@ package pe.gob.sgtm.valores.dominio;
  * aqui apareciera uno mas, la insercion fallaria en ejecucion, que es tarde. {@code PENDIENTE}, que
  * V3 admitia, se retiro en V28: una fila de {@code notificacion} se escribe <b>despues</b> de la
  * diligencia, con lo que paso.
+ *
+ * <p>En el dominio compartido desde #41, por lo mismo que {@link ModalidadDeNotificacion}: la
+ * columna es una y su vocabulario tambien. Que {@link #NO_UBICADO} sea el unico que se reintenta
+ * vale igual para el acuse de un valor (#39) y para el de una REC coactiva (#41).
  */
 public enum ResultadoDeNotificacion {
 

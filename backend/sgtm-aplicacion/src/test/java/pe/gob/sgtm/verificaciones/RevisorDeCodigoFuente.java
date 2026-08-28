@@ -146,7 +146,14 @@ public final class RevisorDeCodigoFuente {
                     // pasaria a ser lo unico que lo protege, como pasa con la caja.
                     "expediente_coactivo",
                     "expediente_valor",
-                    "expediente_movimiento");
+                    "expediente_movimiento",
+                    // Y el acto del procedimiento, con #41. V34 le retira el UPDATE por lo mismo
+                    // que V28 se lo retiro a `notificacion`: una REC se NOTIFICA al obligado, que
+                    // se lleva el papel. Corregirla en la base deja al papel notificado y al
+                    // sistema diciendo cosas distintas, y quien tenga el papel gana la discusion.
+                    // Un acto equivocado se deja sin efecto con otro acto -un levantamiento, una
+                    // suspension-, y los dos quedan.
+                    "acto_coactivo");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =

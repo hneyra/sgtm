@@ -1,4 +1,4 @@
-package pe.gob.sgtm.valores.dominio;
+package pe.gob.sgtm.coactiva.dominio;
 
 import java.time.LocalDate;
 import java.util.Objects;
@@ -8,44 +8,60 @@ import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.ResultadoDeNotificacion;
 
 /**
- * El acto de notificar un valor, con su acuse (V3 + V28, #39, RF-093).
+ * El acto de notificar una resolucion coactiva, con su acuse (V3 + V28, #41, RF-103).
+ *
+ * <h2>Es una fila de {@code notificacion}, la misma tabla que notifica un valor</h2>
+ *
+ * <p>V3 nacio esa tabla polimorfica —{@code objeto} admite {@code VALOR}, {@code RESOLUCION},
+ * {@code ACTO_COACTIVO} y {@code PAPELETA}— y V28 le puso, para #39, todo lo que una notificacion
+ * necesita: el intento, el receptor, el acuse, la exigibilidad con el conjunto sellado del que
+ * salio el plazo, y {@code notificacion_intento_uq}. Nada de eso era especifico del valor, asi que
+ * #41 <b>no toca el esquema de la tabla</b>: escribe filas con {@code objeto = 'ACTO_COACTIVO'} y
+ * {@code objeto_id = acto_coactivo.id}.
+ *
+ * <p>Este record existe —en vez de reusar {@code valores.dominio.Notificacion}— porque aquel vive
+ * en un subpaquete de otro contexto y Spring Modulith lo trata como interno (ARQ-01 §4). Lo que
+ * <b>no</b> se duplica es lo que importa: el vocabulario ({@link ModalidadDeNotificacion}, {@link
+ * ResultadoDeNotificacion}) y el computo del plazo viven en el dominio compartido desde #41, porque
+ * la columna es una sola y su restriccion {@code CHECK} tambien.
  *
  * <h2>Una diligencia no se corrige: se vuelve a diligenciar</h2>
  *
  * <p>Un intento {@link ResultadoDeNotificacion#NO_UBICADO} deja su fila y el siguiente entra con el
- * {@link #intento} siguiente (AC de #39). Por eso este tipo no tiene ningun metodo que cambie un
- * campo: {@code notificacion} pierde el privilegio de {@code UPDATE} en V28, y lo que en otros
- * dominios seria una correccion, aqui es una fila mas.
+ * {@link #intento} siguiente. Este tipo no tiene ningun metodo que cambie un campo: {@code
+ * notificacion} perdio el privilegio de {@code UPDATE} en V28, y lo que en otro dominio seria una
+ * correccion, aqui es una fila mas.
  *
- * <h2>La exigibilidad viaja en la fila, no se recalcula al leerla</h2>
+ * <h2>La exigibilidad viaja en la fila</h2>
  *
- * <p>{@link #exigibleDesde} y {@link #conjuntoId} solo existen cuando el resultado {@linkplain
- * ResultadoDeNotificacion#surteEfecto() surte efecto}, y la base lo obliga. Se guardan porque un
- * expediente coactivo tiene que poder explicarse dentro de dos anios con lo que su propia fila
- * dice: si la exigibilidad se recalculara al leer, un plazo sellado despues daria otra fecha y
- * nadie lo notaria (ARQ-09 §3).
+ * <p>{@link #exigibleDesde} es el dia desde el que, vencidos los siete dias habiles del art. 14.1
+ * de la Ley 26979, se puede dictar la medida cautelar. Solo existe cuando el resultado {@linkplain
+ * ResultadoDeNotificacion#surteEfecto() surte efecto}, y la base lo obliga ({@code
+ * notificacion_exigibilidad_ck}, V28). Se guarda junto con el conjunto sellado del que salio el
+ * plazo: si se recalculara al leer, un plazo sellado despues daria otra fecha y nadie lo notaria.
  *
  * @param id nulo mientras no se ha guardado; lo asigna la base
- * @param valorId el valor notificado
+ * @param actoId el acto coactivo notificado
  * @param numero identifica la diligencia; unico por objeto
  * @param intento que diligencia es, desde 1
  * @param fechaDeLaDiligencia cuando se diligencio
- * @param modalidad como se diligencio (art. 104)
+ * @param modalidad como se diligencio (art. 104 del TUO del Codigo Tributario)
  * @param resultado con que resultado termino
  * @param notificador quien la llevo
- * @param direccion donde se diligencio: el domicilio fiscal vigente a esa fecha, no el ultimo (#15)
+ * @param direccion donde se diligencio: la direccion referencial vigente del expediente, o la que
+ *     quien registra haya dado
  * @param receptor quien recibio; nulo si nadie recibio
  * @param documentoReceptor su documento
- * @param vinculo su vinculo con el titular
+ * @param vinculo su vinculo con el obligado
  * @param acuse la constancia del cargo
- * @param exigibleDesde desde cuando la deuda es exigible; nulo si la diligencia no surtio efecto
+ * @param exigibleDesde desde cuando se puede dictar la medida; nulo si no surtio efecto
  * @param conjuntoId de que conjunto sellado salio el plazo; nulo en el mismo caso
  * @param usuarioRegistro quien la registro; nulo mientras no se ha guardado
- * @param observacion por que se registra (regla 10)
+ * @param observacion por que se registra (regla 10, RNF-052)
  */
-public record Notificacion(
+public record NotificacionCoactiva(
         @Nullable Long id,
-        long valorId,
+        long actoId,
         String numero,
         int intento,
         LocalDate fechaDeLaDiligencia,
@@ -62,8 +78,8 @@ public record Notificacion(
         @Nullable String usuarioRegistro,
         Observacion observacion) {
 
-    /** {@code objeto} de {@code notificacion} para un valor (V3). */
-    public static final String OBJETO = "VALOR";
+    /** El valor de {@code notificacion.objeto} para un acto coactivo (V3). */
+    public static final String OBJETO = "ACTO_COACTIVO";
 
     private static final int NUMERO_MAXIMO = 20;
     private static final int NOTIFICADOR_MAXIMO = 60;
@@ -73,10 +89,11 @@ public record Notificacion(
     private static final int VINCULO_MAXIMO = 40;
     private static final int ACUSE_MAXIMO = 80;
 
-    public Notificacion {
-        if (valorId <= 0) {
+    public NotificacionCoactiva {
+        if (actoId <= 0) {
             throw new IllegalArgumentException(
-                    "Una notificacion notifica un valor: el identificador debe ser positivo");
+                    "Una notificacion coactiva notifica un acto: el identificador debe ser"
+                            + " positivo");
         }
         numero = exigirTexto(numero, "numero", NUMERO_MAXIMO);
         if (intento < 1) {
@@ -98,27 +115,32 @@ public record Notificacion(
         if (resultado.surteEfecto() != conExigibilidad) {
             throw new IllegalArgumentException(
                     resultado.surteEfecto()
-                            ? "Una diligencia que surte efecto fija desde cuando la deuda es"
-                                    + " exigible, y con que conjunto sellado se calculo el plazo"
+                            ? "Una diligencia que surte efecto fija desde cuando se puede dictar la"
+                                    + " medida cautelar, y con que conjunto sellado se calculo el"
+                                    + " plazo"
                             : "Una diligencia que no surte efecto no hace exigible nada: no lleva"
                                     + " fecha de exigibilidad ni conjunto");
         }
         if (exigibleDesde != null && exigibleDesde.isBefore(fechaDeLaDiligencia)) {
             throw new IllegalArgumentException(
-                    "La deuda no puede ser exigible antes de la diligencia que la notifico");
+                    "El plazo no puede vencer antes de la diligencia que lo abrio");
         }
         usuarioRegistro = recortar(usuarioRegistro, "usuarioRegistro", NOTIFICADOR_MAXIMO);
-        Objects.requireNonNull(
-                observacion, "Toda modificacion de datos exige la observacion (regla 10)");
+        Objects.requireNonNull(observacion, "Sin observacion no se guarda (regla 10, RNF-052)");
     }
 
     public boolean esNueva() {
         return id == null;
     }
 
-    /** Si esta diligencia hizo exigible la deuda del valor. */
+    /** Si esta diligencia abrio el plazo del art. 14.1. */
     public boolean surtioEfecto() {
         return resultado.surteEfecto();
+    }
+
+    /** El identificador, exigiendo que ya se haya guardado. */
+    public long identificador() {
+        return Objects.requireNonNull(id, "La notificacion todavia no se ha guardado");
     }
 
     private static String exigirTexto(@Nullable String valor, String campo, int maximo) {

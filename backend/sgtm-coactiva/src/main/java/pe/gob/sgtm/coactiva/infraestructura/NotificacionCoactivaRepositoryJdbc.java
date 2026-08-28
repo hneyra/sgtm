@@ -1,65 +1,70 @@
-package pe.gob.sgtm.valores.infraestructura;
+package pe.gob.sgtm.coactiva.infraestructura;
 
+import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
-import org.jspecify.annotations.Nullable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
-import pe.gob.sgtm.auditoria.Origen;
-import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.coactiva.dominio.NotificacionCoactiva;
+import pe.gob.sgtm.coactiva.dominio.NotificacionCoactivaRepository;
 import pe.gob.sgtm.dominio.ModalidadDeNotificacion;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.ResultadoDeNotificacion;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
-import pe.gob.sgtm.valores.dominio.Notificacion;
-import pe.gob.sgtm.valores.dominio.NotificacionRepository;
 
 /**
- * Las notificaciones de valores contra PostgreSQL (V3, V28).
+ * Las notificaciones de actos coactivos contra PostgreSQL (V3 + V28).
  *
- * <p>No hay ningun {@code UPDATE} ni {@code DELETE} aqui, y tampoco existe el privilegio: V28 se lo
+ * <p>Escribe en {@code notificacion} con {@code objeto = 'ACTO_COACTIVO'}: la <b>misma tabla</b>
+ * que #39 usa para los valores, en su rebanada. Los dos repositorios filtran siempre por {@code
+ * objeto}, que es la columna que V3 puso para esto; ninguna consulta de aqui puede ver una
+ * diligencia de un valor ni al reves.
+ *
+ * <p>No hay ningun {@code UPDATE} ni {@code DELETE}, y tampoco existe el privilegio: V28 se lo
  * revoca a {@code sgtm_app}. Un intento no hallado se reintenta con otra fila, y la anterior se
- * queda donde estaba (AC de #39).
+ * queda donde estaba.
  */
 @Repository
-public class NotificacionRepositoryJdbc extends RepositorioJdbc implements NotificacionRepository {
+public class NotificacionCoactivaRepositoryJdbc extends RepositorioJdbc
+        implements NotificacionCoactivaRepository {
 
     private static final String COLUMNAS =
             "id, objeto_id, numero, intento, fecha_notificacion, modalidad, resultado,"
                     + " notificador, direccion, receptor, documento_receptor, vinculo, acuse,"
                     + " exigible_desde, conjunto_id, usuario_registro, observacion";
 
-    public NotificacionRepositoryJdbc(JdbcClient jdbc) {
+    public NotificacionCoactivaRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
     }
 
     @Override
-    public Notificacion insertar(Notificacion notificacion) {
+    public NotificacionCoactiva insertar(NotificacionCoactiva notificacion) {
         if (!notificacion.esNueva()) {
             throw new IllegalArgumentException(
                     "Una diligencia ya registrada no se vuelve a insertar ni se corrige: se"
                             + " diligencia otra vez, con el intento siguiente");
         }
+
         Long id =
                 jdbc().sql(
                                 "INSERT INTO notificacion"
                                         + " (municipalidad_id, objeto, objeto_id, numero, intento,"
-                                        + "  fecha_notificacion, modalidad, resultado, notificador,"
-                                        + "  direccion, receptor, documento_receptor, vinculo,"
-                                        + "  acuse, exigible_desde, conjunto_id, usuario_registro,"
-                                        + "  observacion)"
+                                        + "  fecha_notificacion, modalidad, resultado,"
+                                        + "  notificador, direccion, receptor,"
+                                        + "  documento_receptor, vinculo, acuse, exigible_desde,"
+                                        + "  conjunto_id, usuario_registro, observacion)"
                                         + " VALUES ("
                                         + MUNICIPALIDAD_ACTUAL
-                                        + ", :objeto, :valorId, :numero, :intento, :fecha,"
+                                        + ", :objeto, :actoId, :numero, :intento, :fecha,"
                                         + "  :modalidad, :resultado, :notificador, :direccion,"
                                         + "  :receptor, :documentoReceptor, :vinculo, :acuse,"
                                         + "  :exigibleDesde, :conjuntoId, :usuario, :observacion)"
                                         + " RETURNING id")
-                        .param("objeto", Notificacion.OBJETO)
-                        .param("valorId", notificacion.valorId())
+                        .param("objeto", NotificacionCoactiva.OBJETO)
+                        .param("actoId", notificacion.actoId())
                         .param("numero", notificacion.numero())
                         .param("intento", notificacion.intento())
                         .param("fecha", notificacion.fechaDeLaDiligencia())
@@ -73,77 +78,81 @@ public class NotificacionRepositoryJdbc extends RepositorioJdbc implements Notif
                         .param("acuse", notificacion.acuse())
                         .param("exigibleDesde", notificacion.exigibleDesde())
                         .param("conjuntoId", notificacion.conjuntoId())
-                        .param("usuario", usuarioActual())
+                        .param("usuario", UsuarioDeLaSesion.actual())
                         .param("observacion", notificacion.observacion().texto())
                         .query(Long.class)
                         .single();
 
-        return porId(id)
+        return porId(Objects.requireNonNull(id))
                 .orElseThrow(
                         () ->
                                 new IllegalStateException(
-                                        "La notificacion " + id + " se desvanecio al releerla"));
+                                        "La diligencia recien insertada no se puede releer: eso"
+                                                + " solo pasa sin contexto de tenant"));
     }
 
     @Override
-    public List<Notificacion> deValor(long valorId) {
+    public List<NotificacionCoactiva> deActo(long actoId) {
         return jdbc().sql(
                         "SELECT "
                                 + COLUMNAS
                                 + " FROM notificacion"
-                                + " WHERE objeto = :objeto AND objeto_id = :valorId"
+                                + " WHERE objeto = :objeto AND objeto_id = :actoId"
                                 + " ORDER BY intento")
-                .param("objeto", Notificacion.OBJETO)
-                .param("valorId", valorId)
-                .query(this::mapear)
+                .param("objeto", NotificacionCoactiva.OBJETO)
+                .param("actoId", actoId)
+                .query(NotificacionCoactivaRepositoryJdbc::mapear)
                 .list();
     }
 
     @Override
-    public Optional<Notificacion> queSurtioEfecto(long valorId) {
+    public Optional<NotificacionCoactiva> queSurtioEfecto(long actoId) {
         // La PRIMERA que surtio efecto, por intento: si despues se volviera a diligenciar por
-        // cualquier motivo, el plazo ya habria empezado a correr con aquella.
+        // cualquier motivo, el plazo del art. 14.1 ya habria empezado a correr con aquella.
         return jdbc().sql(
                         "SELECT "
                                 + COLUMNAS
                                 + " FROM notificacion"
-                                + " WHERE objeto = :objeto AND objeto_id = :valorId"
+                                + " WHERE objeto = :objeto AND objeto_id = :actoId"
                                 + "   AND exigible_desde IS NOT NULL"
-                                + " ORDER BY intento"
-                                + " LIMIT 1")
-                .param("objeto", Notificacion.OBJETO)
-                .param("valorId", valorId)
-                .query(this::mapear)
+                                + " ORDER BY intento LIMIT 1")
+                .param("objeto", NotificacionCoactiva.OBJETO)
+                .param("actoId", actoId)
+                .query(NotificacionCoactivaRepositoryJdbc::mapear)
                 .optional();
     }
 
     @Override
-    public int intentosDe(long valorId) {
+    public int intentosDe(long actoId) {
         Integer maximo =
                 jdbc().sql(
                                 "SELECT coalesce(max(intento), 0) FROM notificacion"
-                                        + " WHERE objeto = :objeto AND objeto_id = :valorId")
-                        .param("objeto", Notificacion.OBJETO)
-                        .param("valorId", valorId)
+                                        + " WHERE objeto = :objeto AND objeto_id = :actoId")
+                        .param("objeto", NotificacionCoactiva.OBJETO)
+                        .param("actoId", actoId)
                         .query(Integer.class)
                         .single();
         return maximo == null ? 0 : maximo;
     }
 
-    private Optional<Notificacion> porId(long id) {
-        return jdbc().sql("SELECT " + COLUMNAS + " FROM notificacion WHERE id = :id")
+    private Optional<NotificacionCoactiva> porId(long id) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS
+                                + " FROM notificacion WHERE objeto = :objeto AND id = :id")
+                .param("objeto", NotificacionCoactiva.OBJETO)
                 .param("id", id)
-                .query(this::mapear)
+                .query(NotificacionCoactivaRepositoryJdbc::mapear)
                 .optional();
     }
 
-    private Notificacion mapear(ResultSet fila, int numeroDeFila) throws SQLException {
-        java.sql.Date exigible = fila.getDate("exigible_desde");
-        @Nullable LocalDate exigibleDesde = exigible == null ? null : exigible.toLocalDate();
+    private static NotificacionCoactiva mapear(ResultSet fila, int numeroDeFila)
+            throws SQLException {
+        Date exigible = fila.getDate("exigible_desde");
         long conjunto = fila.getLong("conjunto_id");
         Long conjuntoId = fila.wasNull() ? null : conjunto;
 
-        return new Notificacion(
+        return new NotificacionCoactiva(
                 fila.getLong("id"),
                 fila.getLong("objeto_id"),
                 fila.getString("numero"),
@@ -157,14 +166,9 @@ public class NotificacionRepositoryJdbc extends RepositorioJdbc implements Notif
                 fila.getString("documento_receptor"),
                 fila.getString("vinculo"),
                 fila.getString("acuse"),
-                exigibleDesde,
+                exigible == null ? null : exigible.toLocalDate(),
                 conjuntoId,
                 fila.getString("usuario_registro"),
                 Observacion.de(fila.getString("observacion")));
-    }
-
-    private static String usuarioActual() {
-        Origen origen = OrigenContext.actual();
-        return origen.usuario();
     }
 }

@@ -346,6 +346,43 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que edita un acto coactivo o borra su diligencia")
+    void elEscanerDetectaLaMuestraQueEditaUnActoCoactivo() throws IOException {
+        // #41: acto_coactivo entra en TABLAS_INMUTABLES, por lo mismo que la notificacion en #39
+        // y el historial del expediente en #40. Un acto coactivo se NOTIFICA, y el obligado se
+        // lleva el papel. Y con los dos rodeos cerrados: si la medida ya no se puede tocar, la
+        // tentacion siguiente es mover la fecha -que es la que decide si la REC-2 respeto el
+        // plazo-, o borrar la diligencia que no salio bien en vez de reintentar con otra.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnActoCoactivo.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los dos UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(3);
+        // El fragmento del hallazgo es el patron que casa -«UPDATE acto_coactivo SET»-, no la
+        // sentencia entera, asi que los dos UPDATE de la muestra se cuentan por cantidad: los dos
+        // rodeos tienen que aparecer, no basta con que aparezca uno.
+        List<String> fragmentos = hallazgos.stream().map(Hallazgo::fragmento).toList();
+        assertThat(fragmentos)
+                .filteredOn(f -> f.toLowerCase(java.util.Locale.ROOT).contains("acto_coactivo"))
+                .as("el UPDATE de la medida y el de la fecha, los dos")
+                .hasSize(2);
+        assertThat(fragmentos)
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from notificacion"));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra con valores tributarios compilados (regla 5)")
     void elEscanerDetectaLaMuestraDeValoresCompilados() throws IOException {
         Path muestra =

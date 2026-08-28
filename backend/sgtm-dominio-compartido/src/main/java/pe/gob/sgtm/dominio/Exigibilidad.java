@@ -1,4 +1,4 @@
-package pe.gob.sgtm.valores.dominio;
+package pe.gob.sgtm.dominio;
 
 import java.time.LocalDate;
 import java.util.Objects;
@@ -21,6 +21,11 @@ import java.util.Objects;
  * <p>Funcion pura (regla 6): sin reloj, sin base, sin configuracion. La fecha de la diligencia, el
  * plazo y el calendario entran como argumentos, de modo que recalcular en 2037 la exigibilidad de
  * un valor notificado en 2027 da el mismo dia.
+ *
+ * <p><b>Sirve a los dos actos que abren un plazo</b>, y por eso vive en el dominio compartido desde
+ * #41: la notificacion de un valor —desde cuando su deuda se puede exigir (#39)— y la de una REC-1
+ * —desde cuando, vencidos los siete dias del art. 14.1 de la Ley 26979, se puede dictar la medida
+ * cautelar (#41)—. Es la misma cuenta y se escribe una sola vez.
  */
 public record Exigibilidad(
         LocalDate fechaDeLaDiligencia,

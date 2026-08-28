@@ -955,16 +955,37 @@ public final class DatosDePrueba {
                 muni,
                 expedienteId,
                 VIGENCIA);
+        // El acto coactivo se materializa en un documento emitido (V34, #41): el numero del acto
+        // ES el del documento, y sin la fila del documento el acto no se puede reimprimir. Por eso
+        // la siembra crea las dos, en ese orden.
+        long documentoDeLaRec =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'REC1', ?, 2026, ?, CAST(? AS jsonb), 'PDF',"
+                                + "         repeat('b', 64), ?, 'siembra',"
+                                + "         'REC de prueba') RETURNING id",
+                        muni,
+                        "REC1-2026-" + sufijo,
+                        "EXP-" + sufijo,
+                        "{\"titulo\":\"RESOLUCION DE EJECUCION COACTIVA\",\"subtitulo\":null,"
+                                + "\"aLaFecha\":\"2026-01-01\",\"cabecera\":[],\"tablas\":[],"
+                                + "\"pie\":[],\"duplicado\":null}",
+                        VIGENCIA);
         ejecutar(
                 app,
                 "INSERT INTO acto_coactivo (municipalidad_id, expediente_id, tipo, numero, fecha,"
-                        + " descripcion, usuario_registro)"
-                        + " VALUES (?, ?, 'REC1', ?, ?, 'Resolucion de ejecucion coactiva',"
-                        + "         'prueba')",
+                        + " descripcion, documento_id, usuario_registro, fecha_registro,"
+                        + " observacion)"
+                        + " VALUES (?, ?, 'REC1', ?, ?, 'Resolucion de ejecucion coactiva', ?,"
+                        + "         'prueba', now(), 'REC de prueba')",
                 muni,
                 expedienteId,
-                "REC-" + sufijo,
-                VIGENCIA);
+                "REC1-2026-" + sufijo,
+                VIGENCIA,
+                documentoDeLaRec);
         ejecutar(
                 app,
                 "INSERT INTO costa_procesal (municipalidad_id, expediente_id, concepto, monto,"
