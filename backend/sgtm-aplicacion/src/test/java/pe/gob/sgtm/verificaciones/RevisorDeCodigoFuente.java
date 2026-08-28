@@ -118,6 +118,14 @@ public final class RevisorDeCodigoFuente {
                     // que se pida dos veces. Un anuncio no se borra: se cesa (regla 4, AC de #51).
                     "anuncio",
                     "anuncio_movimiento",
+                    // Con #53: el criterio congelado de una generacion masiva de valores por
+                    // papeletas y la constancia libre de infracciones. Borrar una corrida seria
+                    // borrar la unica explicacion de por que salieron cuatro mil resoluciones de
+                    // multa el mismo dia -y con que fecha se evaluo la deuda de cada una-; borrar
+                    // una constancia, la del papel que la municipalidad entrego acreditando que un
+                    // vehiculo no debia nada.
+                    "papeleta_masivo",
+                    "constancia_libre",
                     "ficha_catastral",
                     "acta_fiscalizacion",
                     // Con #49: la liquidacion de fiscalizacion, su contraste linea a linea y
@@ -129,6 +137,11 @@ public final class RevisorDeCodigoFuente {
                     "liquidacion_fiscalizacion",
                     "liquidacion_detalle",
                     "liquidacion_movimiento",
+                    // Con #52: la transferencia a rentas y su resolucion de determinacion.
+                    // Borrarla seria borrar el unico acto que explica por que el padron cambio
+                    // -y con el, la version de ficha que se inscribio y el cargo que se le
+                    // asento a alguien-. Es la constancia de la frontera delicada del sistema.
+                    "resolucion_determinacion",
                     // Con #54: el certificado de numeracion y zonificacion. Borrarlo seria borrar
                     // la constancia de que la municipalidad certifico un numero municipal o unos
                     // parametros urbanisticos -y el administrado tiene el papel en la mano, o lo
@@ -309,7 +322,35 @@ public final class RevisorDeCodigoFuente {
                     // ejercicio cambiando una letra.
                     "anuncio",
                     "anuncio_movimiento",
-                    // Y el certificado de numeracion y zonificacion, con #54. Duodecima vez, y
+                    // Y la transferencia a rentas con su resolucion, con #52. Duodecima vez por el
+                    // mismo camino: V49 nace sin conceder UPDATE. Aqui el motivo es doble y el
+                    // segundo no lo tenia ninguna de las nueve anteriores: la resolucion se
+                    // NOTIFICA al contribuyente, que se lleva el papel, y ademas su cargo YA ESTA
+                    // en el libro y la version nueva de la ficha YA ESTA inscrita. Corregir la fila
+                    // dejaria al papel, al libro, al padron y a la base diciendo cuatro cosas
+                    // distintas, y la que se cobra en ventanilla es la del libro.
+                    "resolucion_determinacion",
+                    // Y con #53, la decimotercera vez y por el mismo camino. V47 nace
+                    // `papeleta_masivo` y
+                    // `constancia_libre` sin UPDATE.
+                    //
+                    // La constancia es el caso claro: se ENTREGA al administrado, que se lleva el
+                    // papel. Corregirla en la base deja al papel y al sistema diciendo cosas
+                    // distintas, y quien tenga el papel gana la discusion. Una equivocada se deja
+                    // sin efecto con otra, y las dos quedan.
+                    //
+                    // El criterio de la corrida es el otro, y su motivo es propio: `fecha_criterio`
+                    // congela a que dia se evaluo la deuda y el plazo de cada candidato. Editarla
+                    // despues de generar dejaria la corrida diciendo que emitio con un criterio que
+                    // no es el que uso, y no habria manera de reconstruirlo.
+                    //
+                    // `papeleta_masivo_item` NO entra, y es deliberado: su estado es la marca de
+                    // progreso de un proceso interno -PENDIENTE a GENERADO, SIN_DEUDA o
+                    // NO_PROCEDE-, no un acto administrativo. Mismo reparto que V27 hizo entre
+                    // `valor_masivo` y `valor_masivo_item`.
+                    "papeleta_masivo",
+                    "constancia_libre",
+                    // Y el certificado de numeracion y zonificacion, con #54. Decimocuarta vez, y
                     // aqui aplicado desde el principio como en V39: V51 crea `certificado` SIN
                     // conceder UPDATE ni DELETE, en vez de retirarlos despues.
                     //
@@ -422,8 +463,17 @@ public final class RevisorDeCodigoFuente {
      * <p>{@code TARIFA} va con ella porque es como se escribe la misma cifra cuando a alguien le
      * parece que «tasa» suena a tributo: {@code TARIFA_POR_M2 = ...} es exactamente el mismo dato.
      *
+     * <p>Con #52 entra {@code MULTA}, y es la cuarta vez que el mismo hueco se abre por el mismo
+     * sitio. La transferencia a rentas asienta, junto al tributo omitido, la <b>multa tributaria
+     * del art. 176 del Codigo Tributario</b>, que se expresa como un porcentaje de la UIT y depende
+     * ademas del regimen de gradualidad; es D-02c, y hasta que cierre la liquidacion la deja en
+     * {@code null} (#198). Nada de la lista anterior caza {@code MULTA_DEL_ARTICULO_176 = new
+     * BigDecimal("0.50")}: no empieza por {@code UIT}, ni por {@code ALICUOTA}, ni por {@code
+     * TRAMO}. Y la consecuencia de compilarla no es cobrar de mas o de menos: es sancionar sin
+     * norma que lo sostenga, en todo el padron fiscalizado a la vez.
+     *
      * <p>Con #54 entra {@code VIGENCIA}. Un certificado de numeracion o de zonificacion vale
-     * <b>tantos meses</b>, y cuantos lo fija el TUPA de cada municipalidad (D-02b). Es la cuarta
+     * <b>tantos meses</b>, y cuantos lo fija el TUPA de cada municipalidad (D-02b). Es la quinta
      * vez que aparece el mismo hueco: {@code VIGENCIA_DEL_CERTIFICADO = 36} no empieza por ninguna
      * de las quince palabras anteriores —ni por {@code PLAZO}, que es lo que mas se le parece— y
      * pasaba sin ruido. Su consecuencia es propia y peor que la de una tarifa: un certificado con
@@ -440,7 +490,7 @@ public final class RevisorDeCodigoFuente {
             Pattern.compile(
                     "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
                             + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA|TASA|TARIFA"
-                            + "|VIGENCIA)"
+                            + "|MULTA|VIGENCIA)"
                             + "\\w*\\s*=\\s*[^;\\n]*[0-9]");
 
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");

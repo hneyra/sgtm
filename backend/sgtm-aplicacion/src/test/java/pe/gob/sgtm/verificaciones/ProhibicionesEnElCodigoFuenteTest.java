@@ -424,6 +424,72 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que edita o borra una transferencia a rentas (#52)")
+    void elEscanerDetectaLaMuestraQueEditaUnaTransferencia() throws IOException {
+        // #52: `resolucion_determinacion` entra en las dos listas. Decima vez por el mismo
+        // camino, y con un motivo que las nueve anteriores no tenian: esta fila tiene TRES
+        // efectos colgando -el papel notificado, la version de ficha inscrita y el cargo del
+        // libro-, asi que editarla o borrarla no deja el sistema como estaba: deja sus efectos
+        // en pie y sin nada que los explique.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnaTransferencia.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("el UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(2);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(
+                        f ->
+                                assertThat(f)
+                                        .containsIgnoringCase(
+                                                "update resolucion_determinacion set"))
+                .anySatisfy(
+                        f ->
+                                assertThat(f)
+                                        .containsIgnoringCase(
+                                                "delete from resolucion_determinacion"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra con la multa tributaria compilada (regla 5, #52)")
+    void elEscanerDetectaLaMuestraDeMultaTributariaCompilada() throws IOException {
+        // #52 ensancha la lista de nombres de la regla 5 con MULTA, y es la tercera vez que el
+        // mismo hueco se abre por el mismo sitio: el `\b` del patron exige que el identificador
+        // EMPIECE por una palabra vigilada, y `MULTA_DEL_ARTICULO_176` no empieza por ninguna de
+        // las doce anteriores. Antes de esta linea, la muestra entera pasaba en VERDE.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeMultaTributariaCompilada.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las tres constantes, y ninguno de los comentarios que las explican")
+                .hasSize(3);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).contains("MULTA_DEL_ARTICULO_176"))
+                .anySatisfy(f -> assertThat(f).contains("MULTA_GRADUALIDAD_SUBSANACION_VOLUNTARIA"))
+                .anySatisfy(f -> assertThat(f).contains("MULTA_MINIMA_EN_SOLES"));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra que edita una licencia o borra su duplicado")
     void elEscanerDetectaLaMuestraQueEditaUnaLicencia() throws IOException {
         // #44: licencia_funcionamiento, licencia_duplicado y licencia_movimiento entran en
@@ -852,6 +918,40 @@ class ProhibicionesEnElCodigoFuenteTest {
                 .anySatisfy(f -> assertThat(f).contains("ARANCEL_COSTA_REC1"))
                 .anySatisfy(f -> assertThat(f).contains("COSTA_DE_LA_REC2"))
                 .anySatisfy(f -> assertThat(f).contains("COSTAS_PORCENTAJE_SOBRE_LA_DEUDA"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra que edita una constancia libre o su corrida")
+    void elEscanerDetectaLaMuestraQueEditaUnaConstanciaLibre() throws IOException {
+        // #53: papeleta_masivo y constancia_libre entran en TABLAS_INMUTABLES y en
+        // TABLAS_PROTEGIDAS. La constancia por lo de siempre -se entrega, y quien tiene el
+        // papel gana la discusion-; el criterio de la corrida por un motivo propio:
+        // `fecha_criterio` congela a que dia se evaluo la deuda de cada candidato, y moverla
+        // deja la corrida diciendo que emitio con un criterio que no es el que uso.
+        //
+        // `papeleta_masivo_item` NO esta en la lista, y por eso la muestra no lo toca: su
+        // estado es la marca de progreso de un proceso interno, no un acto administrativo.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnaConstanciaLibre.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los dos UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(3);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update constancia_libre set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update papeleta_masivo set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from papeleta_masivo"));
     }
 
     private static List<Path> fuentesDeProduccion(Path raiz) throws IOException {

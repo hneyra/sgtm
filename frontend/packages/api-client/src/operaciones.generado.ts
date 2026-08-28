@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 167 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 168 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 167 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 168 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 167 operaciones del contrato, por su `operationId`.
+ * Las 168 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 167 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 168 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -396,6 +396,13 @@ export const OPERACIONES = {
     parametrosDeRuta: ['numero'],
     parametrosDeConsulta: [],
   },
+  /** Transferencia a rentas del resultado fiscalizado — `POST /fiscalizacion/transferencias` */
+  transferir_a_rentas: {
+    metodo: 'POST',
+    ruta: '/fiscalizacion/transferencias',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
   /** Estado de una liquidación de fiscalización — `PATCH /fiscalizacion/liquidaciones/{numero}/estados` */
   estado_de_liquidacion: {
     metodo: 'PATCH',
@@ -492,14 +499,14 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/transito/reportes/record-conductor',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['formato'],
   },
   /** Record vehicular — `GET /transito/reportes/record-vehicular` */
   transito_record_vehicular: {
     metodo: 'GET',
     ruta: '/transito/reportes/record-vehicular',
     parametrosDeRuta: [],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['formato'],
   },
   /** Constancia libre de infracciones — `POST /transito/constancias-libres` */
   transito_constancia_libre: {
@@ -513,7 +520,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/transito/reportes/padron',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['desde', 'hasta', 'estado', 'ordenadoPor', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['formato', 'desde', 'hasta', 'estado', 'ordenadoPor', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Estado de cuenta de infracciones — `GET /transito/estado-cuenta` */
   transito_estado_cuenta: {
@@ -555,42 +562,42 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/transito/reportes/padron-coactiva',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['desde', 'hasta', 'ejecutor', 'estadoDelExpediente', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['formato', 'desde', 'hasta', 'ejecutor', 'estadoDelExpediente', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Padrón de constancias libres de infracciones — `GET /transito/reportes/padron-constancias` */
   transito_padron_constancias: {
     metodo: 'GET',
     ruta: '/transito/reportes/padron-constancias',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['desde', 'hasta', 'nDeConstancia', 'usuarioQueEmitio', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['formato', 'desde', 'hasta', 'nDeConstancia', 'usuarioQueEmitio', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Resumen de recaudación de tránsito — `GET /transito/reportes/resumen-recaudacion` */
   transito_resumen_recaudacion: {
     metodo: 'GET',
     ruta: '/transito/reportes/resumen-recaudacion',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['ano', 'tipoDeCobranza', 'agrupadoPor', 'caja', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['formato', 'ano', 'tipoDeCobranza', 'agrupadoPor', 'caja', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Resumen de papeletas pendientes y pagadas — `GET /transito/reportes/resumen-papeletas` */
   transito_resumen_papeletas: {
     metodo: 'GET',
     ruta: '/transito/reportes/resumen-papeletas',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['desde', 'hasta', 'agrupadoPor', 'cobranza', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['formato', 'desde', 'hasta', 'agrupadoPor', 'cobranza', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Resumen de papeletas por código de infracción — `GET /transito/reportes/resumen-por-codigo` */
   transito_resumen_codigo: {
     metodo: 'GET',
     ruta: '/transito/reportes/resumen-por-codigo',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['codigoDeInfraccion', 'desde', 'hasta', 'estado', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['formato', 'codigoDeInfraccion', 'desde', 'hasta', 'estado', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Resumen de papeletas por iniciales de placa — `GET /transito/reportes/resumen-por-placa` */
   transito_resumen_placa: {
     metodo: 'GET',
     ruta: '/transito/reportes/resumen-por-placa',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['iniciales2Letras', 'desde', 'hasta', 'estado', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['formato', 'iniciales2Letras', 'desde', 'hasta', 'estado', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Notificación administrativa — `POST /infracciones/administrativas/notificaciones` */
   adm_notificacion: {
@@ -660,7 +667,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/infracciones/administrativas/reportes/padron-notificaciones',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['desde', 'hasta', 'agrupadoPor', 'estado', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['formato', 'desde', 'hasta', 'agrupadoPor', 'estado', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Notificaciones vencidas — `GET /infracciones/administrativas/reportes/vencidas` */
   adm_notificaciones_vencidas: {
@@ -681,7 +688,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/infracciones/administrativas/reportes/resumen-recaudacion',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['ano', 'agrupadoPor', 'tipoDeCobranza', 'caja', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['formato', 'ano', 'agrupadoPor', 'tipoDeCobranza', 'caja', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Caja tributaria — `POST /tesoreria/caja/cobranza` */
   caja_tributaria: {
@@ -1217,7 +1224,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 167 operaciones. */
+/** El `operationId` de una de las 168 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1566,6 +1573,8 @@ export interface ParametrosPorOperacion {
   readonly reliquidar_fiscalizacion: {
     readonly numero: string;
   };
+  /** `POST /fiscalizacion/transferencias` */
+  readonly transferir_a_rentas: Readonly<Record<string, never>>;
   /** `PATCH /fiscalizacion/liquidaciones/{numero}/estados` */
   readonly estado_de_liquidacion: {
     readonly numero: string;
@@ -1653,13 +1662,18 @@ export interface ParametrosPorOperacion {
   /** `POST /transito/reportes` */
   readonly transito_reportes: Readonly<Record<string, never>>;
   /** `GET /transito/reportes/record-conductor` */
-  readonly transito_record_conductor: Readonly<Record<string, never>>;
+  readonly transito_record_conductor: {
+    readonly formato?: string;
+  };
   /** `GET /transito/reportes/record-vehicular` */
-  readonly transito_record_vehicular: Readonly<Record<string, never>>;
+  readonly transito_record_vehicular: {
+    readonly formato?: string;
+  };
   /** `POST /transito/constancias-libres` */
   readonly transito_constancia_libre: Readonly<Record<string, never>>;
   /** `GET /transito/reportes/padron` */
   readonly transito_padron: {
+    readonly formato?: string;
     readonly desde?: string;
     readonly hasta?: string;
     readonly estado?: string;
@@ -1694,6 +1708,7 @@ export interface ParametrosPorOperacion {
   };
   /** `GET /transito/reportes/padron-coactiva` */
   readonly transito_padron_coactiva: {
+    readonly formato?: string;
     readonly desde?: string;
     readonly hasta?: string;
     readonly ejecutor?: string;
@@ -1705,6 +1720,7 @@ export interface ParametrosPorOperacion {
   };
   /** `GET /transito/reportes/padron-constancias` */
   readonly transito_padron_constancias: {
+    readonly formato?: string;
     readonly desde?: string;
     readonly hasta?: string;
     readonly nDeConstancia?: string;
@@ -1716,6 +1732,7 @@ export interface ParametrosPorOperacion {
   };
   /** `GET /transito/reportes/resumen-recaudacion` */
   readonly transito_resumen_recaudacion: {
+    readonly formato?: string;
     readonly ano?: string;
     readonly tipoDeCobranza?: string;
     readonly agrupadoPor?: string;
@@ -1727,6 +1744,7 @@ export interface ParametrosPorOperacion {
   };
   /** `GET /transito/reportes/resumen-papeletas` */
   readonly transito_resumen_papeletas: {
+    readonly formato?: string;
     readonly desde?: string;
     readonly hasta?: string;
     readonly agrupadoPor?: string;
@@ -1738,6 +1756,7 @@ export interface ParametrosPorOperacion {
   };
   /** `GET /transito/reportes/resumen-por-codigo` */
   readonly transito_resumen_codigo: {
+    readonly formato?: string;
     readonly codigoDeInfraccion?: string;
     readonly desde?: string;
     readonly hasta?: string;
@@ -1749,6 +1768,7 @@ export interface ParametrosPorOperacion {
   };
   /** `GET /transito/reportes/resumen-por-placa` */
   readonly transito_resumen_placa: {
+    readonly formato?: string;
     readonly iniciales2Letras?: string;
     readonly desde?: string;
     readonly hasta?: string;
@@ -1821,6 +1841,7 @@ export interface ParametrosPorOperacion {
   readonly adm_reportes: Readonly<Record<string, never>>;
   /** `GET /infracciones/administrativas/reportes/padron-notificaciones` */
   readonly adm_padron_notificaciones: {
+    readonly formato?: string;
     readonly desde?: string;
     readonly hasta?: string;
     readonly agrupadoPor?: string;
@@ -1854,6 +1875,7 @@ export interface ParametrosPorOperacion {
   };
   /** `GET /infracciones/administrativas/reportes/resumen-recaudacion` */
   readonly adm_resumen_recaudacion: {
+    readonly formato?: string;
     readonly ano?: string;
     readonly agrupadoPor?: string;
     readonly tipoDeCobranza?: string;
@@ -2473,6 +2495,7 @@ export interface CuerpoPorOperacion {
   readonly fisc_historico: undefined;
   readonly liquidar_fiscalizacion: CuerpoSinEsquema;
   readonly reliquidar_fiscalizacion: CuerpoSinEsquema;
+  readonly transferir_a_rentas: CuerpoSinEsquema;
   readonly estado_de_liquidacion: CuerpoSinEsquema;
   readonly resolucion_determinacion_fisc: undefined;
   readonly papeletas: undefined;
@@ -2644,6 +2667,7 @@ export interface RespuestaPorOperacion {
   readonly fisc_historico: CuerpoSinEsquema;
   readonly liquidar_fiscalizacion: CuerpoSinEsquema;
   readonly reliquidar_fiscalizacion: CuerpoSinEsquema;
+  readonly transferir_a_rentas: CuerpoSinEsquema;
   readonly estado_de_liquidacion: CuerpoSinEsquema;
   readonly resolucion_determinacion_fisc: CuerpoSinEsquema;
   readonly papeletas: CuerpoSinEsquema;

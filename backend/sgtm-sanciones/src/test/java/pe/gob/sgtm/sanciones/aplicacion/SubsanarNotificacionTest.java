@@ -140,6 +140,17 @@ class SubsanarNotificacionTest {
         }
 
         @Override
+        public pe.gob.sgtm.compartido.Pagina<pe.gob.sgtm.sanciones.dominio.NotificacionDelPadron>
+                buscarPadron(
+                        pe.gob.sgtm.sanciones.dominio.CriterioDelPadronDeNotificaciones criterio,
+                        pe.gob.sgtm.compartido.Paginacion paginacion) {
+            // #53 aniade el padron de notificaciones al puerto. Este doble no lo ejerce:
+            // lo verifica SancionesDeReportesJdbcTest contra PostgreSQL, que es donde el
+            // LEFT JOIN con la papeleta significa algo.
+            throw new UnsupportedOperationException("Este doble no sirve el padron de #53");
+        }
+
+        @Override
         public NotificacionAdministrativa subsanar(long notificacionId) {
             for (int i = 0; i < filas.size(); i++) {
                 NotificacionAdministrativa actual = filas.get(i);

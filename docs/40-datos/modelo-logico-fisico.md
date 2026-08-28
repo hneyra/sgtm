@@ -124,6 +124,7 @@ una tabla vacía no hay ninguna. `VALIDATE CONSTRAINT` después chocaría con lo
 | `V27__valores_masivo.sql` | Criterio e items de una corrida de generación masiva de valores (#38) |
 | `V28__notificacion_prescripcion_y_pase_a_coactiva.sql` | Acuse de notificación, pase a coactiva (`valor_movimiento`) y declaración de prescripción con su cómputo por ejercicio y sus hechos interruptivos/suspensivos (#39). Le revoca el `UPDATE` que `V7` le daba a `notificacion` |
 | `V37__licencia_de_funcionamiento.sql` | La licencia de funcionamiento (#44): retira de `licencia_funcionamiento` las columnas de estado que decían `VIGENTE` para siempre y el `resolucion` de texto libre; exige el recibo y el documento emitido; agrega `licencia_movimiento` —de donde se deriva el estado— y `licencia_correlativo`; le pone al catálogo `ciiu` su sección, su riesgo de ITSE y su traza; y revoca el `UPDATE` sobre la licencia y sus duplicados |
+| `V47__valores_masivos_de_papeletas_y_constancias.sql` | Los valores masivos de papeletas y los reportes de sanciones (#53): `papeleta_masivo` —el criterio congelado de una corrida, con la `fecha_criterio` a la que se evalúa la deuda de cada candidato— y `papeleta_masivo_item`, con `papeleta_valor_unico_uq`, el índice único **parcial** que garantiza un valor por papeleta en toda la vida del padrón; `constancia_libre`, con la fecha a la que se verificó que el vehículo no debía nada; y los índices de los padrones y resúmenes, incluido `papeleta_placa_prefijo_ix` con `text_pattern_ops`, porque el resumen por iniciales busca por rango y no con `LIKE`. **No hay ninguna tabla de correlativos**: el número de cada resolución de multa sale de `valor_correlativo` (`V26`) |
 
 Los roles se crean **antes**, con `db/roles/crear-roles.sql`, que no es una migración: las
 políticas de `V6` los nombran, y un rol no puede crearse a sí mismo.
@@ -321,6 +322,49 @@ administrado se lleva el papel; corregirla en la base deja al papel notificado y
 cosas distintas, y quien tenga el papel gana la discusión. Una resolución equivocada se deja sin
 efecto con otra, y las dos quedan. El descargo es el escrito que otro firmó y presentó. Y el
 internamiento, la constancia de que un vehículo estuvo retenido y devengó custodia.
+
+Desde `V47` (#53), tampoco `constancia_libre` ni `papeleta_masivo`. La constancia es otra vez el caso conocido: **se entrega al administrado**, y como lo que acredita es «al día tal no debía nada», cambiarle la fecha cambia lo que acredita. El criterio de la corrida tiene su propio motivo: `fecha_criterio` congela a qué día se evaluó la deuda y el plazo de cada candidato, y moverla después de generar dejaría la corrida diciendo que emitió con un criterio que no es el que usó. `papeleta_masivo_item` **sí** conserva el `UPDATE`, por lo mismo que `valor_masivo_item` desde `V27`: su estado es la marca de progreso de un proceso interno, no un acto administrativo.
+
+Desde `V49` (#52), tampoco `resolucion_determinacion` —la transferencia a rentas de un resultado de
+fiscalización y la resolución que la materializa—. Es la décima vez por el mismo camino y la única
+con **tres** efectos colgando de la misma fila: el papel notificado, la versión de ficha catastral
+que quedó inscrita y el cargo que se asentó en el libro. Editarla deja a los cuatro diciendo cosas
+distintas, y la que se cobra en ventanilla es la del libro. Borrarla es peor de lo que parece: no
+devuelve el sistema a como estaba —la ficha nueva sigue inscrita, la anterior sigue cerrada y el
+cargo sigue en el libro—, solo desaparece el acto que los explica.
+
+### La frontera delicada: cómo un dato de fiscalización llega al padrón (`V49`, #52)
+
+`ARQ-01` §3.5 lo llama la frontera delicada del sistema, y `V49` es donde vive. Hasta la
+transferencia, todo lo que `fiscalizacion` registra son **copias**: el acta guarda el área medida en
+campo y la versión de ficha que regía el día de la visita (`V4`/`V24`), y la liquidación guarda el
+contraste hallado/declarado (`V39`). Nada de eso es el dato oficial.
+
+`resolucion_determinacion` es **una sola tabla para el acto y su papel**, y no dos. La resolución de
+determinación es el acto administrativo que determina de oficio; transferir es su efecto sobre el
+padrón. Separarlas habría producido dos filas 1:1 que nadie puede desincronizar sin que la otra
+mienta, y una pregunta sin respuesta: cuál de las dos se notifica.
+
+**No es un `valor` de tipo `RD`, y se comprobó antes de crear la tabla.** Un valor *formaliza* deuda
+ya asentada —`RegistrarValor` (#37) la lee del libro y le mueve la fase de `ORDINARIA` a `VALOR`— y
+esta resolución es el acto que la *asienta*: emitirla como valor exigiría que la deuda existiera
+antes del acto que la determina. Y mientras `D-02a` siga abierta la liquidación sale sin importes
+(#198), así que ningún valor se podría emitir, y con él se caería también la mitad de la
+transferencia que **no** depende de `D-02`: inscribir en catastro la estructura hallada. Las dos
+cosas conviven: una vez asentado el cargo, `valores` lo formaliza como RD por el camino ordinario.
+
+`ficha_catastral` **no necesitó ni una columna**: `V1` ya la nació con `origen` —que admite
+`FISCALIZACION`—, `documento_origen`, `usuario_registro` y `observacion`. Se miró antes de escribir
+un `ALTER`.
+
+Y `resolucion_determinacion_liquidacion_uq` es lo que impide transferir dos veces el mismo resultado.
+Va en la base y no en un `if` porque dos peticiones simultáneas pasan las dos por cualquier
+comprobación de Java. Medirlo, en cambio, exige cuidado: el número del papel sale de
+`documento_emitido`, cuyo correlativo es un `count(*) + 1`, así que diez transferencias simultáneas
+chocan antes en `documento_numero_uq` —el resultado es correcto, pero por un motivo que no es el que
+se quiere medir, el mismo hueco que #44 destapó con `licencia_duplicado_uq`—. Por eso el AC se
+comprueba en dos pruebas: una de extremo a extremo que mide el resultado, y otra del repositorio que
+inserta diez filas que solo comparten `liquidacion_id`.
 
 ### El `REVOKE` que no se puede hacer: `cierre_caja`
 

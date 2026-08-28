@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas treinta y una operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas treinta y cuatro operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -95,6 +95,11 @@ describe('las operaciones generadas son las del contrato', () => {
     //     anuncios» como su endpoint —la grilla—, y `anuncio` no admite UPDATE
     //     desde V45: renovar, cesar y retirar son ACTOS que producen una fila
     //     nueva, no ediciones del formulario, asi que cada uno lleva su verbo.
+    //   - `transferir_a_rentas` (#52): la accion de `fisc_resultados` que
+    //     convierte lo hallado en el dato oficial del padron —version nueva de
+    //     la ficha, cargos de la diferencia y resolucion de determinacion, en
+    //     una transaccion—. La pantalla declara su grilla como endpoint, y la
+    //     frontera delicada del sistema necesita verbo propio.
     //   - `certificados_listado` / `imprimir_certificado` (#54): la pantalla
     //     `certificados` declara «POST /licencias/certificados» —la emisión—
     //     como su endpoint, y su grilla y su acción «Imprimir certificado»
@@ -104,7 +109,7 @@ describe('las operaciones generadas son las del contrato', () => {
     //     `certificado` no admite UPDATE desde V51, y uno equivocado se
     //     sustituye emitiendo otro.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(167);
+    expect(Object.keys(OPERACIONES)).toHaveLength(168);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

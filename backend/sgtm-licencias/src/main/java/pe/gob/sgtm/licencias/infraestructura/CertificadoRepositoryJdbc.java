@@ -23,6 +23,7 @@ import pe.gob.sgtm.licencias.dominio.CriterioDeCertificados;
 import pe.gob.sgtm.licencias.dominio.ParametrosUrbanisticos;
 import pe.gob.sgtm.licencias.dominio.TipoDeCertificado;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
+import pe.gob.sgtm.persistencia.RangoDePrefijo;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 
 /**

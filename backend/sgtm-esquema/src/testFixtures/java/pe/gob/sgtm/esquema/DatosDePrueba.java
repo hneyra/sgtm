@@ -94,7 +94,8 @@ public final class DatosDePrueba {
                     sembrarRentas(app, muni, sufijo, titular, segundo, predioId, conjuntoId);
             long reciboId = sembrarTesoreria(app, muni, sufijo, titular, conjuntoId);
             long valorId = sembrarValoresYCoactiva(app, muni, sufijo, titular, conjuntoId);
-            sembrarSanciones(app, muni, sufijo, titular, segundo, vehiculoId, predioId, conjuntoId);
+            sembrarSanciones(
+                    app, muni, sufijo, titular, segundo, vehiculoId, predioId, conjuntoId, valorId);
             sembrarLicencias(app, muni, sufijo, titular, predioId, reciboId);
             sembrarSeguridad(app, muni, sufijo);
 
@@ -1062,7 +1063,8 @@ public final class DatosDePrueba {
             long segundo,
             long vehiculoId,
             long predioId,
-            long conjuntoId)
+            long conjuntoId,
+            long valorId)
             throws SQLException {
         long codigoId =
                 insertar(
@@ -1295,6 +1297,130 @@ public final class DatosDePrueba {
                 "INSERT INTO liquidacion_correlativo (municipalidad_id, ejercicio, ultimo)"
                         + " VALUES (?, 2026, 1)",
                 muni);
+
+        // La transferencia a rentas de esa liquidacion (#52, V49). Se siembra COMO OCURRE de
+        // verdad, y no con dos filas cualesquiera: se cierra la version vigente de la ficha
+        // unica, se abre la siguiente con `origen = FISCALIZACION`, y la resolucion apunta a las
+        // dos. Sembrarla de otro modo dejaria la fila cumpliendo sus CHECK y describiendo un
+        // padron imposible —dos versiones abiertas del mismo predio, o una transferencia predial
+        // sin ficha nueva—, y la prueba de aislamiento estaria aislando datos que no existen.
+        long fichaAnterior =
+                insertar(
+                        app,
+                        "UPDATE ficha_catastral SET vigencia_hasta = ?"
+                                + " WHERE predio_id = ? AND tipo = 'UNICA'"
+                                + "   AND vigencia_hasta IS NULL RETURNING id",
+                        VIGENCIA,
+                        predioId);
+        long fichaNueva =
+                insertar(
+                        app,
+                        "INSERT INTO ficha_catastral (municipalidad_id, predio_id, tipo, version,"
+                                + " area_terreno, uso, vigencia_desde, origen, documento_origen,"
+                                + " observacion, usuario_registro)"
+                                + " VALUES (?, ?, 'UNICA', 2, 300.00, 'CASA_HABITACION', ?,"
+                                + "         'FISCALIZACION', ?, 'version por fiscalizacion de"
+                                + " prueba', 'prueba') RETURNING id",
+                        muni,
+                        predioId,
+                        VIGENCIA,
+                        "LIQ-" + sufijo);
+        long documentoDeLaDeterminacion =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'RDF', ?, 2026, ?, CAST(? AS jsonb), 'PDF',"
+                                + "         repeat('f', 64), ?, 'siembra',"
+                                + "         'resolucion de determinacion de prueba') RETURNING id",
+                        muni,
+                        "RDF-2026-" + sufijo,
+                        "LIQ-" + sufijo,
+                        "{\"titulo\":\"Resolucion de determinacion\",\"subtitulo\":null,"
+                                + "\"aLaFecha\":\"2026-01-01\",\"cabecera\":[],\"tablas\":[],"
+                                + "\"pie\":[],\"duplicado\":null}",
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO resolucion_determinacion (municipalidad_id, numero, documento_id,"
+                        + " liquidacion_id, contribuyente_id, predio_id, ficha_anterior_id,"
+                        + " ficha_nueva_id, fecha, documento_sustento, sustento, base_legal,"
+                        + " usuario_registro, fecha_registro, observacion)"
+                        + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sustento de prueba',"
+                        + "         'Codigo Tributario, arts. 76 y 77', 'prueba', now(),"
+                        + "         'transferencia de prueba')",
+                muni,
+                "RDF-2026-" + sufijo,
+                documentoDeLaDeterminacion,
+                liquidacionId,
+                titular,
+                predioId,
+                fichaAnterior,
+                fichaNueva,
+                VIGENCIA,
+                "ACTA-" + sufijo);
+
+        // #53 — la corrida masiva de valores por papeletas, con su unico candidato ya resuelto,
+        // y la constancia libre de infracciones. Las tres tablas son de V47 y llevan
+        // `municipalidad_id NOT NULL`: sin filas, la prueba de aislamiento no tendria nada que
+        // aislar en ellas.
+        long corridaId =
+                insertar(
+                        app,
+                        "INSERT INTO papeleta_masivo (municipalidad_id, familia, desde, hasta,"
+                                + " fecha_criterio, origen, total_candidatos, usuario_registro,"
+                                + " fecha_registro, observacion)"
+                                + " VALUES (?, 'TRANSITO', ?, ?, ?, 'RANGO', 1, 'prueba', now(),"
+                                + "         'corrida de papeletas de prueba') RETURNING id",
+                        muni,
+                        VIGENCIA,
+                        VIGENCIA,
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO papeleta_masivo_item (municipalidad_id, corrida_id, papeleta_id,"
+                        + " estado, valor_id, valor_numero, fecha_procesado)"
+                        + " VALUES (?, ?, ?, 'GENERADO', ?, ?, now())",
+                muni,
+                corridaId,
+                papeletaId,
+                valorId,
+                "OP-" + sufijo);
+
+        long documentoDeLaConstancia =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'CLI', ?, 2026, ?, CAST(? AS jsonb), 'PDF',"
+                                + "         repeat('a', 64), ?, 'siembra',"
+                                + "         'constancia de prueba') RETURNING id",
+                        muni,
+                        "CLI-2026-" + sufijo,
+                        "ABC-" + numeroDePlaca(sufijo),
+                        "{\"titulo\":\"Constancia libre de infracciones\",\"subtitulo\":null,"
+                                + "\"aLaFecha\":\"2026-01-01\",\"cabecera\":[],\"tablas\":[],"
+                                + "\"pie\":[],\"duplicado\":null}",
+                        VIGENCIA);
+        ejecutar(
+                app,
+                // Sin `vehiculo_id` y con otra placa: la constancia se emite para un vehiculo
+                // SIN papeleta pendiente, y el de esta siembra tiene una. Un vehiculo que no
+                // esta en el padron tambien puede pedirla, y por eso la columna es opcional.
+                "INSERT INTO constancia_libre (municipalidad_id, numero, documento_id, placa,"
+                        + " vehiculo_id, solicitante_id, verificada_al, fecha_emision,"
+                        + " usuario_registro, fecha_registro, observacion)"
+                        + " VALUES (?, ?, ?, ?, NULL, ?, ?, ?, 'prueba', now(),"
+                        + "         'constancia de prueba')",
+                muni,
+                "CLI-2026-" + sufijo,
+                documentoDeLaConstancia,
+                "XYZ-" + numeroDePlaca(sufijo),
+                segundo,
+                VIGENCIA,
+                VIGENCIA);
 
         if (notificacionId <= 0) {
             throw new IllegalStateException("No se sembro la notificacion administrativa");
