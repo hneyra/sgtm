@@ -161,7 +161,9 @@ base imponible de todo el padrón de una municipalidad**.
   establecerán anualmente, el porcentaje» y **no nombra el instrumento**. Si es una ordenanza en
   materia tributaria, necesita el acuerdo de ratificación provincial cuando la emite una distrital
   (LOM art. 40) y la fila 32 del mapa es D-02b; si el acto no es ordenanza tributaria, la fila
-  pasaría a D-02c. La fila 32 lleva ese `‹confirmar›` con su motivo, y no se resuelve aquí.
+  pasaría a D-02c. **Resuelto el 2026-08-28 por la Dirección del proyecto: es ordenanza en materia
+  tributaria, ratificable — la fila 32 queda en D-02b firme.** La duda de fondo sigue siendo real
+  y por eso se deja escrita: el D.S. no nombra el instrumento.
 - **La misma deducción alcanza también al Impuesto de Alcabala** (D.S. 031-99-EF, art. 1 literal c,
   y art. 2). Este archivo cierra la fila 32 —la deducción sobre el predial—; la fila 15 del mapa,
   la de alcabala, la cierra `alcabala.md` y **no se toca desde aquí**. Quien implemente la alcabala
