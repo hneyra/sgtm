@@ -339,6 +339,50 @@ const OPERACIONES_ADICIONALES = {
         ' no los declara.',
     },
   ],
+  // «Resultados y determinaciones» declara «GET /fiscalizacion/resultados» como
+  // su endpoint —la grilla—; emitir la liquidación de un acta y reliquidarla
+  // (RF-053, #49) necesitan sus propios verbos. Sin ellos la pantalla lista un
+  // resultado que nada puede producir.
+  fisc_resultados: [
+    {
+      operationId: 'liquidar_fiscalizacion',
+      metodo: 'post',
+      ruta: '/api/v1/fiscalizacion/liquidaciones',
+      titulo: 'Liquidación de un acta de fiscalización',
+      descripcion:
+        'Emite la liquidación de un acta: el contraste hallado/declarado, una línea por unidad y' +
+        ' ejercicio del periodo fiscalizado. Cada línea fija el conjunto de parámetros SELLADO de' +
+        ' su ejercicio, de modo que cambiar los parámetros de hoy no altera una liquidación ya' +
+        ' emitida. Sin importes: los liquidados y las multas esperan a D-02a (#198). El cuerpo' +
+        ' lleva la observación del usuario, obligatoria (RNF-052).',
+    },
+    {
+      operationId: 'reliquidar_fiscalizacion',
+      metodo: 'post',
+      ruta: '/api/v1/fiscalizacion/liquidaciones/{numero}/reliquidaciones',
+      titulo: 'Reliquidación',
+      descripcion:
+        'Corrige una liquidación emitiendo OTRA versión que la referencia. La anterior no cambia' +
+        ' ni una columna, las dos quedan, y la respuesta explica qué cambió entre ellas. Las' +
+        ' líneas heredan el conjunto sellado de la versión anterior: una reliquidación corrige el' +
+        ' contraste, no el marco normativo.',
+    },
+  ],
+  // «Histórico de fiscalización predial» declara su GET; mover la liquidación
+  // por sus estados —ABIERTA, EN PROCESO, LIQUIDADA, NOTIFICADA, ANULADA, que
+  // son los de su propio desplegable— necesita un verbo aparte (#49, RF-056).
+  fisc_historico: [
+    {
+      operationId: 'estado_de_liquidacion',
+      metodo: 'patch',
+      ruta: '/api/v1/fiscalizacion/liquidaciones/{numero}/estados',
+      titulo: 'Estado de una liquidación de fiscalización',
+      descripcion:
+        'Mueve la liquidación de estado conservando el historial. No actualiza ninguna fila:' +
+        ' agrega un movimiento, y el estado se DERIVA de él. Una liquidación anulada no vuelve:' +
+        ' corregirla es reliquidar.',
+    },
+  ],
 };
 
 /* ── Recoger las operaciones ──────────────────────────────────────────── */

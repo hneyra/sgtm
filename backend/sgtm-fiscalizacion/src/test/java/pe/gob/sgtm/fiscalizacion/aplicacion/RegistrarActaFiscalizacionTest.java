@@ -78,7 +78,18 @@ class RegistrarActaFiscalizacionTest {
                         return Optional.empty();
                     }
                 };
-        LectorDeFichas fichas = (predioId, fecha) -> Optional.of(900L);
+        LectorDeFichas fichas =
+                new LectorDeFichas() {
+                    @Override
+                    public Optional<Long> fichaVigenteEn(long predioId, LocalDate fecha) {
+                        return Optional.of(900L);
+                    }
+
+                    @Override
+                    public Optional<pe.gob.sgtm.dominio.AreaM2> areaDeLaVersion(long fichaId) {
+                        return Optional.of(pe.gob.sgtm.dominio.AreaM2.de("120.00"));
+                    }
+                };
         servicio = new RegistrarActaFiscalizacion(actas, programas, fichas, auditados::add);
     }
 
@@ -208,6 +219,11 @@ class RegistrarActaFiscalizacionTest {
                             acta.observacion());
             filas.add(guardada);
             return guardada;
+        }
+
+        @Override
+        public java.util.Optional<ActaFiscalizacion> findById(long id) {
+            return filas.stream().filter(acta -> acta.id() != null && acta.id() == id).findFirst();
         }
 
         @Override

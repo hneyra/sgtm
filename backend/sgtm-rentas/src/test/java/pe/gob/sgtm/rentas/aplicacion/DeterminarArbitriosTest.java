@@ -72,7 +72,8 @@ class DeterminarArbitriosTest {
                         (predioId, fecha) -> Optional.of(CONTRIBUYENTE),
                         (predioId, fecha) ->
                                 Optional.of(
-                                        new CaracteristicasDelPredio("CASA_HABITACION", "S-01")),
+                                        new CaracteristicasDelPredio(
+                                                "CASA_HABITACION", "S-01", null)),
                         parametrosDeMentira(),
                         cargos,
                         (registro) -> {},
@@ -143,7 +144,8 @@ class DeterminarArbitriosTest {
                         (predioId, fecha) -> Optional.of(CONTRIBUYENTE),
                         (predioId, fecha) ->
                                 Optional.of(
-                                        new CaracteristicasDelPredio("CASA_HABITACION", "S-01")),
+                                        new CaracteristicasDelPredio(
+                                                "CASA_HABITACION", "S-01", null)),
                         new LectorDeParametros() {
                             @Override
                             public ParametrosSellados vigenteEn(Ejercicio ejercicio) {

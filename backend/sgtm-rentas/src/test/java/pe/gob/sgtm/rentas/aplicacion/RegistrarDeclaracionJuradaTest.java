@@ -380,6 +380,13 @@ class RegistrarDeclaracionJuradaTest {
      * guarda lo que devuelve —no la resolucion de vigencia, que es de {@code catastro}—.
      */
     private static final class FichaFija implements LectorDeFichas {
+
+        @Override
+        public java.util.Optional<pe.gob.sgtm.dominio.AreaM2> areaDeLaVersion(long fichaId) {
+            // El area de una version concreta la lee la deteccion de omisos (#49), no la DJ.
+            throw new UnsupportedOperationException("esta prueba no lee superficies");
+        }
+
         @Override
         public Optional<Long> fichaVigenteEn(long predioId, LocalDate fecha) {
             return jdbc().sql(
