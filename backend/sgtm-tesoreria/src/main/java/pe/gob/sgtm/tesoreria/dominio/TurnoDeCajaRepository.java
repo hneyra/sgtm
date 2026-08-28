@@ -37,4 +37,15 @@ public interface TurnoDeCajaRepository {
      * sitios distintos.
      */
     Optional<TurnoDeCaja> bloquear(long cajaId, String cajero, LocalDate fecha);
+
+    /**
+     * El turno con ese identificador, <b>sin bloquear</b>.
+     *
+     * <p>Lo necesita la anulacion (#34): parte del recibo, y el recibo apunta a su turno por
+     * identificador —no por (caja, cajero, fecha)—. Se lee sin bloquear a proposito: lo que la
+     * anulacion serializa es el recibo, y eso lo hace {@code recibo_movimiento_anulacion_uq}, no un
+     * candado sobre la apertura. Bloquear el turno aqui pondria a esperar a toda la ventanilla por
+     * una anulacion que ni siquiera toca su recaudacion hasta que se registre.
+     */
+    Optional<TurnoDeCaja> porId(long id);
 }

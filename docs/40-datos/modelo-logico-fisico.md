@@ -259,7 +259,12 @@ en el esquema, no en una convención:
 
 - Sacar a un usuario de un grupo es `miembro.activo = false`, con `fecha_baja` y `usuario_baja`.
 - Quitar un giro de una licencia es `licencia_giro.activo = false`.
-- Anular un recibo exige `fecha_anulacion`, `usuario_anulacion` y `motivo_anulacion`, por `CHECK`.
+- Anular un recibo es **agregar** una fila a `recibo_movimiento` con su motivo, su importe y su
+  turno, por `CHECK` (`V30`, #34). Las columnas `estado`, `fecha_anulacion`, `usuario_anulacion` y
+  `motivo_anulacion` que `V3` había puesto en `recibo` se **retiraron** ahí mismo: desde que `V29`
+  revocó el `UPDATE` sobre la tabla, `estado` decía `EMITIDO` para siempre —también en un recibo
+  anulado—, y una columna que miente es peor que una columna que falta. El estado de un recibo se
+  deriva de sus movimientos.
 - Anular, reformular o quebrar un convenio exige `fecha_estado` y `motivo_estado`, por `CHECK`.
 
 Y el libro de asientos, la auditoría y la traza de cambio de número de papeleta tampoco admiten
@@ -268,6 +273,10 @@ diligencia de notificación, un pase a coactiva y una declaración de prescripci
 administrativos, no el estado de un proceso interno —a diferencia de `valor_correlativo` (`V26`) y
 `valor_masivo_item` (`V27`), que sí se actualizan en el sitio por ser infraestructura de un proceso—.
 Un intento no hallado no se corrige: se vuelve a diligenciar, con otra fila.
+
+Desde `V29` (#33), tampoco `recibo` ni `recibo_detalle` —el contribuyente se lleva el papel—, y desde
+`V30` (#34) tampoco `recibo_movimiento`: si el recibo ya no se puede tocar, la salida con rodeo es
+corregir la fila que dice si está anulado, y es la misma pérdida por otra puerta.
 
 ## 7. Índices
 

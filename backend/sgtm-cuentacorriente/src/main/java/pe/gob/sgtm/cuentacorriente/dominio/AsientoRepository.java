@@ -57,6 +57,26 @@ public interface AsientoRepository {
     List<Asiento> deLaObligacion(ClaveDeSaldo clave);
 
     /**
+     * Los asientos que un documento origino y que <b>todavia no son una reversion</b> (#34).
+     *
+     * <p>Es como la anulacion de un recibo encuentra lo que tiene que deshacer: la cobranza dejo el
+     * numero del recibo en {@code documento_origen} de cada asiento que escribio (#33), y eso es lo
+     * unico que los relaciona entre si. Sin paginar: son los asientos de <b>una</b> cobranza.
+     *
+     * <p>El filtro {@code asiento_reversado_id IS NULL} es una segunda barrera, no la principal: la
+     * primera es que la reversion se asienta con un documento de origen <b>distinto</b> ({@code
+     * RegistroDeAbonos#reversarAbonos} lo exige). Aun asi se filtra, porque el precio es cero y lo
+     * que evita es que una reversion pueda encontrarse a si misma si algun dia alguien reutilizara
+     * el mismo texto.
+     *
+     * <p>Recorre todas las particiones del libro: un abono se imputa al ejercicio de la
+     * <b>obligacion</b>, no al de la fecha de pago, asi que un solo recibo puede haber tocado
+     * varias. {@code asiento_documento_origen_ix} (V30) es lo que hace que eso sea una lectura de
+     * indice por particion y no un recorrido completo.
+     */
+    List<Asiento> porDocumentoOrigen(String documentoOrigen);
+
+    /**
      * El identificador del contribuyente con ese codigo, si existe en esta municipalidad.
      *
      * <p>Vive aqui y no en un repositorio del contexto {@code contribuyentes} por lo mismo que el

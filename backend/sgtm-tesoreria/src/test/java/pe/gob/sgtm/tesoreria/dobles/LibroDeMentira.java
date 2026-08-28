@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import pe.gob.sgtm.cuentacorriente.AbonoAsentado;
 import pe.gob.sgtm.cuentacorriente.RegistroDeAbonos;
+import pe.gob.sgtm.cuentacorriente.ReversionDeAbonos;
 import pe.gob.sgtm.cuentacorriente.SeleccionDeObligacion;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
@@ -25,6 +26,8 @@ public final class LibroDeMentira implements RegistroDeAbonos {
 
     private final Map<SeleccionDeObligacion, Dinero[]> deuda = new LinkedHashMap<>();
     private final List<String> documentosOrigen = new ArrayList<>();
+    private final Map<String, List<AbonoAsentado>> cobradoPorDocumento = new LinkedHashMap<>();
+    private final List<String> documentosReversados = new ArrayList<>();
 
     /** Declara la deuda de una obligacion, con su desglose. */
     public LibroDeMentira con(
@@ -40,6 +43,16 @@ public final class LibroDeMentira implements RegistroDeAbonos {
     /** Los documentos con que se asentaron los abonos: sirve para ver que numero llego al libro. */
     public List<String> documentosOrigen() {
         return List.copyOf(documentosOrigen);
+    }
+
+    /** Los documentos que se reversaron, en orden. */
+    public List<String> documentosReversados() {
+        return List.copyOf(documentosReversados);
+    }
+
+    /** Si esa obligacion vuelve a tener deuda: es lo que la anulacion tiene que conseguir. */
+    public boolean tieneDeuda(SeleccionDeObligacion obligacion) {
+        return deuda.containsKey(obligacion);
     }
 
     @Override
@@ -70,6 +83,44 @@ public final class LibroDeMentira implements RegistroDeAbonos {
                             + fechaDePago);
         }
         documentosOrigen.add(documentoOrigen);
+        cobradoPorDocumento.put(documentoOrigen, List.copyOf(abonados));
         return List.copyOf(abonados);
+    }
+
+    /**
+     * Deshace lo que ese documento abono, devolviendo la deuda a donde estaba.
+     *
+     * <p>Que el doble <b>reponga la deuda</b> es lo que hace util la prueba del caso de uso: si
+     * {@code AnularRecibo} se saltara la reversion, la obligacion seguiria en cero y la
+     * comprobacion de que vuelve a estar pendiente se pondria roja.
+     */
+    @Override
+    public ReversionDeAbonos reversarAbonos(
+            String documentoOrigen,
+            String documentoDeLaReversion,
+            LocalDate fecha,
+            Observacion observacion) {
+
+        if (documentoOrigen.equalsIgnoreCase(documentoDeLaReversion)) {
+            throw new IllegalArgumentException(
+                    "La reversion tiene que llevar un documento de origen distinto del que"
+                            + " reversa");
+        }
+        List<AbonoAsentado> abonados = cobradoPorDocumento.remove(documentoOrigen);
+        if (abonados == null || abonados.isEmpty()) {
+            throw new SinAbonosQueReversar(
+                    "El documento '" + documentoOrigen + "' no origino ningun asiento reversable");
+        }
+        Dinero abonado = Dinero.CERO;
+        for (AbonoAsentado abono : abonados) {
+            deuda.put(
+                    abono.obligacion(),
+                    new Dinero[] {
+                        abono.insoluto(), abono.reajuste(), abono.interes(), abono.gasto()
+                    });
+            abonado = abonado.mas(abono.total());
+        }
+        documentosReversados.add(documentoOrigen);
+        return new ReversionDeAbonos(abonados.size(), abonado, fecha);
     }
 }

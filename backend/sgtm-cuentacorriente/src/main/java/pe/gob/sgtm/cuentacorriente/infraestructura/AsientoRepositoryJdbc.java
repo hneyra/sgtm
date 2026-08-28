@@ -240,6 +240,20 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
     }
 
     @Override
+    public List<Asiento> porDocumentoOrigen(String documentoOrigen) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS
+                                + DESDE
+                                + " WHERE a.documento_origen = :documento"
+                                + "   AND a.asiento_reversado_id IS NULL"
+                                + " ORDER BY a.id")
+                .param("documento", documentoOrigen)
+                .query(AsientoRepositoryJdbc::mapear)
+                .list();
+    }
+
+    @Override
     public Optional<Long> contribuyentePorCodigo(String codigo) {
         return jdbc().sql(
                         "SELECT c.id FROM contribuyente c"
