@@ -383,6 +383,39 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que edita una resolucion de gerencia (#50)")
+    void elEscanerDetectaLaMuestraQueEditaUnaResolucionDeGerencia() throws IOException {
+        // #50: `descargo`, `resolucion_gerencia`, `internamiento` e `internamiento_movimiento`
+        // entran en las dos listas. La resolucion se NOTIFICA y el administrado se lleva el papel;
+        // la salida del deposito es un acto con su acta, no una fecha rellenada encima del
+        // ingreso; y el descargo es el escrito que otro presento y firmo.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnaResolucionDeGerencia"
+                                        + ".java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        List<String> fragmentos = hallazgos.stream().map(Hallazgo::fragmento).toList();
+        assertThat(hallazgos)
+                .as("los dos UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(3);
+        assertThat(fragmentos)
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update resolucion_gerencia set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update internamiento set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from descargo"));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra con valores tributarios compilados (regla 5)")
     void elEscanerDetectaLaMuestraDeValoresCompilados() throws IOException {
         Path muestra =

@@ -230,6 +230,23 @@ importe de la infracción, porcentaje realmente a cobrar, importe a pagar e impo
 Se guardan **todos** porque explicarle el cobro al contribuyente es parte del requisito, y
 recalcularlos meses después con otros parámetros daría otra cifra.
 
+Lo que `V4` **no** guardaba, y `V41` (#50) agrega, es **a quién se le cobra**: `papeleta.obligado_id`.
+`RegistrarPapeleta` (#46, #47) recibía el obligado por la firma, asentaba el cargo contra él y no lo
+guardaba en ninguna parte. La consecuencia no se ve hasta que un descargo se declara fundado: hay que
+dar de baja **esa misma** obligación del libro, y no hay forma de saber contra cuál se asentó —
+`infractor_id`, `propietario_id` y `contribuyente_id` son tres candidatos y ninguno es la respuesta,
+porque el manual permite cobrarle al propietario aunque condujera otro—. Es también el «Obligado» que
+la resolución de gerencia imprime.
+
+Y el escalado del manual, también con `V41`: `descargo` pierde `resultado`, `resolucion` y
+`fecha_resolucion` —el fallo escrito dentro del escrito que otro presentó—, que pasan a
+`resolucion_gerencia`; e `internamiento` pierde `fecha_salida`, porque liberar un vehículo es un acto
+con su acta, su recibo de custodia y quien lo retira, no una fecha rellenada encima del ingreso. Los
+dos estados —el del recurso y el del vehículo— se **derivan**, como el del recibo y el del turno.
+
+La **tarifa** de la custodia no está en `internamiento`: solo el **código** del concepto del TUPA. La
+tarifa vive en `tasa` con su vigencia (regla 5, ADR-0007), y copiarla la pondría en dos sitios.
+
 ### 4.6 Seguridad y auditoría
 
 El modelo del manual, completo: `modulo_sistema`, `acceso` (opción de menú o política), `grupo`,
@@ -287,6 +304,13 @@ corregir la fila que dice si está anulado, y es la misma pérdida por otra puer
 Desde `V32` (#36), tampoco `cierre_turno` ni `cierre_turno_detalle`: un arqueo es un acto firmado
 contra el que se concilia el depósito, y si la cifra declarada se puede reescribir, el descuadre
 desaparece justo cuando alguien lo está buscando.
+
+Desde `V41` (#50), tampoco `descargo`, `resolucion_gerencia`, `internamiento` ni
+`internamiento_movimiento`. La resolución es el caso claro y ya conocido: **se notifica**, y el
+administrado se lleva el papel; corregirla en la base deja al papel notificado y al sistema diciendo
+cosas distintas, y quien tenga el papel gana la discusión. Una resolución equivocada se deja sin
+efecto con otra, y las dos quedan. El descargo es el escrito que otro firmó y presentó. Y el
+internamiento, la constancia de que un vehículo estuvo retenido y devengó custodia.
 
 ### El `REVOKE` que no se puede hacer: `cierre_caja`
 

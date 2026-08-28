@@ -258,6 +258,7 @@ class RegistrarPapeletaTest {
                             papeleta.contribuyenteId(),
                             papeleta.predioId(),
                             papeleta.notificacionPreviaId(),
+                            1L,
                             papeleta.baseImponible(),
                             papeleta.porcentajeInfraccion(),
                             papeleta.importeInfraccion(),
@@ -274,6 +275,17 @@ class RegistrarPapeletaTest {
         @Override
         public Optional<Papeleta> porNumero(String numero) {
             return filas.stream().filter(p -> p.numero().equals(numero)).findFirst();
+        }
+
+        @Override
+        public Optional<Papeleta> porNumero(
+                pe.gob.sgtm.sanciones.dominio.Familia familia, String numero) {
+            return porNumero(numero);
+        }
+
+        @Override
+        public Optional<Papeleta> porId(long id) {
+            return Optional.empty();
         }
 
         @Override

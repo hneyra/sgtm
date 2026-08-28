@@ -210,6 +210,49 @@ const OPERACIONES_ADICIONALES = {
         ' solo las que el grupo ya tiene.',
     },
   ],
+  // `internamiento` declara «GET /transito/internamientos» como su endpoint —la
+  // grilla del deposito—; sus dos acciones, «Registrar ingreso» y «Liberar
+  // vehiculo», necesitan verbo propio (#50, RF-064).
+  internamiento: [
+    {
+      operationId: 'registrar_internamiento',
+      metodo: 'post',
+      titulo: 'Registro de ingreso al deposito',
+      descripcion:
+        'Interna un vehiculo en el deposito municipal y emite su acta. El cuerpo lleva la' +
+        ' placa, el deposito, el concepto del TUPA con que se cobrara la custodia y la' +
+        ' observacion del usuario, obligatoria (RNF-052).',
+    },
+    {
+      operationId: 'liberar_internamiento',
+      metodo: 'post',
+      ruta: '/api/v1/transito/internamientos/{placa}/liberacion',
+      titulo: 'Liberacion del vehiculo internado',
+      descripcion:
+        'Entrega el vehiculo a quien lo retira y emite el acta de liberacion. Exige el' +
+        ' recibo con que se pago la custodia: el backend lo acredita contra `tesoreria`' +
+        ' por su API publica, y sin esa acreditacion el vehiculo no sale. La casilla' +
+        ' «Custodia cancelada» de la pantalla no basta: la marca quien entrega el vehiculo.',
+    },
+  ],
+  // `transito_rg_ordinaria` declara «POST /transito/resoluciones/ordinaria»
+  // —dictarla—; notificarla necesita ruta propia. Infracciones administrativas
+  // SI tiene su pantalla de notificacion en el manual; transito no, y sin ella
+  // la sancionadora no se puede dictar nunca porque su plazo se cuenta desde
+  // que la ordinaria surte efecto (#50, RF-074).
+  transito_rg_ordinaria: [
+    {
+      operationId: 'notificar_resolucion_transito',
+      metodo: 'post',
+      ruta: '/api/v1/transito/resoluciones/{numero}/notificacion',
+      titulo: 'Notificacion de resolucion de gerencia de transito',
+      descripcion:
+        'Cedula de notificacion de la resolucion ordinaria o sancionadora de transito, con' +
+        ' su acuse. Es de donde sale el derecho a la sancionadora: la diligencia que surte' +
+        ' efecto sobre la ordinaria fija, con el plazo parametrizado del conjunto sellado,' +
+        ' el dia desde el que se puede sancionar.',
+    },
+  ],
   // `calles` declara «GET /catastro/vias» como su endpoint —la lectura del
   // catalogo vial—; el alta y la edicion que pide su pantalla de mantenimiento
   // (RF-008, #290) necesitan un verbo aparte.

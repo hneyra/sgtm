@@ -54,11 +54,20 @@ class PapeletaRepositoryJdbcTest {
     private static PapeletaRepositoryJdbc repositorio;
     private static JdbcClient jdbc;
 
+    /**
+     * A quién se le cobra la multa en las papeletas de tránsito de esta prueba.
+     *
+     * <p>{@code papeleta.obligado_id} es {@code NOT NULL} y tiene clave foránea desde #50 (V41 §1):
+     * sin un contribuyente de verdad detrás, ningún {@code INSERT} de papeleta entra.
+     */
+    private static long obligadoDeA;
+
     @BeforeAll
     static void provisionar() throws SQLException, IOException {
         base = BaseDeDatosDePrueba.provisionar();
         municipalidadA = crearMunicipalidad("250601", "Municipalidad de papeletas A");
         municipalidadB = crearMunicipalidad("250602", "Municipalidad de papeletas B");
+        obligadoDeA = crearContribuyente(municipalidadA, "19000001");
 
         DriverManagerDataSource pool = new DriverManagerDataSource();
         pool.setUrl(base.url());
@@ -336,6 +345,7 @@ class PapeletaRepositoryJdbcTest {
                 null,
                 null,
                 null,
+                obligadoDeA,
                 Dinero.de("4950"),
                 Alicuota.de("8"),
                 Dinero.de("396"),
@@ -360,6 +370,7 @@ class PapeletaRepositoryJdbcTest {
                 contribuyenteId,
                 predioId,
                 notificacionPreviaId,
+                1L,
                 Dinero.de("4950"),
                 Alicuota.de("8"),
                 Dinero.de("396"),
