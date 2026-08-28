@@ -8,7 +8,7 @@
 | Ejercicios que rige | 2013– (TUO); las cifras vigentes de las Tablas rigen desde 2016-12-11 |
 | Filas de NEG-02 §2 | 27 |
 | Transcribió | JNA, 2026-08-24 |
-| Verificó | Agente, 2026-08-25 |
+| Verificó | HNA, 2026-08-25 |
 | Estado | VERIFICADO |
 
 ## 1. La tabla tal como está en la norma

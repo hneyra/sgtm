@@ -8,7 +8,7 @@
 | Ejercicios que rige | 2004– (alícuota y años de afectación, TUO LTM); 2026 (tabla de valores referenciales, propia de ese ejercicio) |
 | Filas de NEG-02 §2 | 16 |
 | Transcribió | JNA, 2026-08-24 |
-| Verificó | Agente, 2026-08-25 |
+| Verificó | HNA, 2026-08-25 |
 | Estado | VERIFICADO |
 
 ## 1. La tabla tal como está en la norma
