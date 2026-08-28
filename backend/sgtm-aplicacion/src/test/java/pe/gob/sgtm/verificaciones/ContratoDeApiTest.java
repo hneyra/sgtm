@@ -131,6 +131,13 @@ class ContratoDeApiTest {
                     "GET /fiscalizacion/omisos",
                     "GET /fiscalizacion/estado-cuenta",
                     "GET /fiscalizacion/predial/historico",
+                    // #52: la transferencia a rentas —la frontera delicada, RF-054— y la
+                    // resolucion de determinacion que la materializa (RF-057). La primera es una
+                    // ruta que la pantalla no declara —`fisc_resultados` declara su grilla— y
+                    // entra por OPERACIONES_ADICIONALES del generador; la segunda ya estaba en el
+                    // contrato desde el prototipo y no la servia nadie.
+                    "POST /fiscalizacion/transferencias",
+                    "GET /fiscalizacion/resoluciones/{numero}",
                     "GET /transito/papeletas",
                     "GET /transito/papeletas/busqueda",
                     "PATCH /transito/papeletas/{numero}/codigo",

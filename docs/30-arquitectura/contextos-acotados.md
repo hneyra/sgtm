@@ -87,6 +87,22 @@ registra es el dato oficial.
 `catastro` y `rentas`, y va con sustento y versión.
 *Módulo Gradle:* `sgtm-fiscalizacion`.
 
+Desde [#52](https://github.com/hneyra/sgtm/issues/52) esa frontera existe y es **una regla, no una
+intención**: `TransferirARentas` versiona la ficha por `catastro.TransferenciaDeFiscalizacion` —el
+único puerto de escritura que `catastro` publica para este contexto, con **un** método—, asienta los
+cargos de la diferencia por `cuentacorriente.GeneradorDeCargos` y emite la resolución de
+determinación, los tres en una transacción. Que ninguna otra clase de `fiscalizacion` pueda hacerlo
+lo verifica `SOLO_LA_TRANSFERENCIA_ESCRIBE_FUERA_DE_FISCALIZACION`, con dos clases de muestra que la
+violan: una que usa el puerto sin ser la transferencia, y otra que cruza el límite con un tipo que
+nadie clasificó —esta segunda es la que sostiene a la primera, porque sin ella bastaría con publicar
+un puerto nuevo para rodearla—.
+
+**Y escribe en `catastro` y en el libro, no en `rentas`.** El nombre es el de RF-054 y el del manual.
+Lo que `rentas` guarda de un ejercicio es la **declaración jurada**, que es el acto del contribuyente
+y la administración no reescribe; lo que la sustituye es la determinación de oficio, cuya cifra
+espera a `D-02a`. Que `rentas` no tenga hoy puerto de escritura no es un olvido: es lo que la regla
+garantiza, y abrirlo costaría una línea visible en el diff.
+
 ### 3.6 `sanciones`
 Papeletas de tránsito y administrativas, catálogos de infracciones (tránsito y CUIS),
 notificaciones previas, descargos, internamiento y resoluciones de gerencia. Un solo modelo, dos
@@ -150,6 +166,11 @@ Transversal: todos dependen de él y él de ninguno.
    una papeleta o de una licencia. Si tuviera que saberlo, el modelo estaría mal.
 3. **`parametros` es de solo lectura** para todos los demás.
 4. **Nadie escribe en `catastro` salvo `catastro` y la transferencia de `fiscalizacion`.**
+   La redacción es absoluta y la realidad ya es más ancha, y conviene que se lea aquí: `rentas`
+   escribe en `catastro` por `GestorDeTitularidad` desde [#29](https://github.com/hneyra/sgtm/issues/29),
+   porque una transferencia de predio cambia al titular, y eso es legítimo. Lo que sí está
+   garantizado **mecánicamente** desde [#52](https://github.com/hneyra/sgtm/issues/52) es la mitad
+   de `fiscalizacion` (§3.5): una regla de ArchUnit con sus dos muestras.
 5. **Ningún método público de un contexto recibe `municipalidadId`.** Sale del token.
    Lo verifica ArchUnit.
 6. Lo compartido entre contextos —`MunicipalidadId`, `Ejercicio`, `Dinero`, `TenantContext`— vive

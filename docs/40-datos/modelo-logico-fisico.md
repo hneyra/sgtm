@@ -322,6 +322,47 @@ cosas distintas, y quien tenga el papel gana la discusión. Una resolución equi
 efecto con otra, y las dos quedan. El descargo es el escrito que otro firmó y presentó. Y el
 internamiento, la constancia de que un vehículo estuvo retenido y devengó custodia.
 
+Desde `V49` (#52), tampoco `resolucion_determinacion` —la transferencia a rentas de un resultado de
+fiscalización y la resolución que la materializa—. Es la décima vez por el mismo camino y la única
+con **tres** efectos colgando de la misma fila: el papel notificado, la versión de ficha catastral
+que quedó inscrita y el cargo que se asentó en el libro. Editarla deja a los cuatro diciendo cosas
+distintas, y la que se cobra en ventanilla es la del libro. Borrarla es peor de lo que parece: no
+devuelve el sistema a como estaba —la ficha nueva sigue inscrita, la anterior sigue cerrada y el
+cargo sigue en el libro—, solo desaparece el acto que los explica.
+
+### La frontera delicada: cómo un dato de fiscalización llega al padrón (`V49`, #52)
+
+`ARQ-01` §3.5 lo llama la frontera delicada del sistema, y `V49` es donde vive. Hasta la
+transferencia, todo lo que `fiscalizacion` registra son **copias**: el acta guarda el área medida en
+campo y la versión de ficha que regía el día de la visita (`V4`/`V24`), y la liquidación guarda el
+contraste hallado/declarado (`V39`). Nada de eso es el dato oficial.
+
+`resolucion_determinacion` es **una sola tabla para el acto y su papel**, y no dos. La resolución de
+determinación es el acto administrativo que determina de oficio; transferir es su efecto sobre el
+padrón. Separarlas habría producido dos filas 1:1 que nadie puede desincronizar sin que la otra
+mienta, y una pregunta sin respuesta: cuál de las dos se notifica.
+
+**No es un `valor` de tipo `RD`, y se comprobó antes de crear la tabla.** Un valor *formaliza* deuda
+ya asentada —`RegistrarValor` (#37) la lee del libro y le mueve la fase de `ORDINARIA` a `VALOR`— y
+esta resolución es el acto que la *asienta*: emitirla como valor exigiría que la deuda existiera
+antes del acto que la determina. Y mientras `D-02a` siga abierta la liquidación sale sin importes
+(#198), así que ningún valor se podría emitir, y con él se caería también la mitad de la
+transferencia que **no** depende de `D-02`: inscribir en catastro la estructura hallada. Las dos
+cosas conviven: una vez asentado el cargo, `valores` lo formaliza como RD por el camino ordinario.
+
+`ficha_catastral` **no necesitó ni una columna**: `V1` ya la nació con `origen` —que admite
+`FISCALIZACION`—, `documento_origen`, `usuario_registro` y `observacion`. Se miró antes de escribir
+un `ALTER`.
+
+Y `resolucion_determinacion_liquidacion_uq` es lo que impide transferir dos veces el mismo resultado.
+Va en la base y no en un `if` porque dos peticiones simultáneas pasan las dos por cualquier
+comprobación de Java. Medirlo, en cambio, exige cuidado: el número del papel sale de
+`documento_emitido`, cuyo correlativo es un `count(*) + 1`, así que diez transferencias simultáneas
+chocan antes en `documento_numero_uq` —el resultado es correcto, pero por un motivo que no es el que
+se quiere medir, el mismo hueco que #44 destapó con `licencia_duplicado_uq`—. Por eso el AC se
+comprueba en dos pruebas: una de extremo a extremo que mide el resultado, y otra del repositorio que
+inserta diez filas que solo comparten `liquidacion_id`.
+
 ### El `REVOKE` que no se puede hacer: `cierre_caja`
 
 `V32` iba a revocarle también el `UPDATE` a `cierre_caja` —el turno se abre una vez y no se edita—.

@@ -2078,6 +2078,27 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/transferencias":
+    post:
+      operationId: transferir_a_rentas
+      summary: "Transferencia a rentas del resultado fiscalizado"
+      description: "Inscribe lo hallado en el padrón como versión NUEVA de la ficha catastral —con origen FISCALIZACION, el documento que la sustenta y la observación del usuario—, asienta los cargos de la diferencia en la cuenta corriente y emite la resolución de determinación. Los tres pasos van en una transacción: ficha nueva, asientos y resolución, o nada. La versión anterior queda intacta, así que el padrón anterior se reconstruye pidiendo la ficha vigente a una fecha anterior. Sin sustento documental no se transfiere, y transferir dos veces la misma liquidación se rechaza."
+      tags: ["Fiscalización"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/fiscalizacion/liquidaciones/{numero}/estados":
     patch:
       operationId: estado_de_liquidacion

@@ -251,11 +251,11 @@ class LiquidarYReliquidarTest {
         }
 
         @Test
-        @DisplayName("los puertos de catastro y rentas que usa no tienen ninguna escritura")
+        @DisplayName("los puertos de catastro y rentas son de solo lectura, salvo la transferencia")
         void losPuertosSonDeSoloLectura() {
-            // AC 4: «nada de esto escribe en catastro ni en rentas». Se comprueba en el TIPO: los
-            // tres puertos que este contexto importa no declaran un solo metodo que escriba, asi
-            // que no hay camino desde aqui al padron ni a las declaraciones.
+            // AC 4 de #49: «nada de esto escribe en catastro ni en rentas». Se comprueba en el
+            // TIPO: los cuatro puertos que la liquidacion usa no declaran un solo metodo que
+            // escriba, asi que no hay camino desde aqui al padron ni a las declaraciones.
             assertThat(metodosDe(pe.gob.sgtm.catastro.PadronDePredios.class))
                     .containsExactly("porSector");
             assertThat(metodosDe(pe.gob.sgtm.catastro.LectorDeFichas.class))
@@ -264,6 +264,20 @@ class LiquidarYReliquidarTest {
                     .containsExactly("de");
             assertThat(metodosDe(pe.gob.sgtm.rentas.DeclaracionesDelEjercicio.class))
                     .containsExactly("dePredios");
+
+            // Con #52 la afirmacion se afina, y esta linea es la que la afina: `catastro` publica
+            // desde entonces UN puerto que escribe, con UN metodo, y es la transferencia. Que
+            // siga teniendo uno solo importa: cada metodo nuevo aqui seria un camino nuevo por el
+            // que lo hallado entra al padron.
+            assertThat(metodosDe(pe.gob.sgtm.catastro.TransferenciaDeFiscalizacion.class))
+                    .as(
+                            "la unica escritura de fiscalizacion hacia catastro, y es una (ARQ-01 §3.5)")
+                    .containsExactly("inscribirLoHallado");
+
+            // Y que solo la use la transferencia no se comprueba aqui —seria comprobar el
+            // codigo de esta clase mirandolo—: lo comprueba
+            // `SOLO_LA_TRANSFERENCIA_ESCRIBE_FUERA_DE_FISCALIZACION` sobre el bytecode de todo el
+            // contexto, con dos clases de muestra que la violan.
         }
 
         @Test
