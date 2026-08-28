@@ -33,10 +33,13 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
 import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.carga.LectorDeFilasCsv;
+import pe.gob.sgtm.carga.LectorDeFilasCsv.FilaCsv;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.dominio.Plazo;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.parametros.dominio.ConjuntoDeParametros;
@@ -330,6 +333,79 @@ class PublicarParametrosTest {
         }
 
         @Test
+        @DisplayName("con valor_maquina, lo que llega a la base es la forma que el codigo lee")
+        void laFormaDeMaquinaEsLaQueSePublica() throws IOException, SQLException {
+            String archivo =
+                    escribir(
+                            "con-maquina.csv",
+                            cabecera()
+                                    + fila(
+                                            "FICTICIO_PLAZO",
+                                            "CON_MAQUINA",
+                                            "2026-01-01",
+                                            "",
+                                            "7",
+                                            "siete (7) dias habiles ficticios",
+                                            "JNA",
+                                            "HNA",
+                                            "7 DIAS_HABILES")
+                                    + "\n");
+
+            proceso(archivo).run(null);
+
+            String publicado =
+                    dato(
+                            "SELECT valor_texto FROM parametro_tributario"
+                                    + " WHERE tipo = 'FICTICIO_PLAZO' AND clave = 'CON_MAQUINA'");
+            assertThat(publicado)
+                    .as(
+                            "el verbatim se queda en el corpus y en el CSV, que es donde se compara"
+                                    + " contra la norma; a la base va lo que el codigo puede leer")
+                    .isEqualTo("7 DIAS_HABILES");
+            assertThat(Plazo.de(publicado))
+                    .as("la ida y la vuelta: lo publicado se vuelve a leer como plazo")
+                    .isEqualTo(new Plazo(7, pe.gob.sgtm.dominio.UnidadDePlazo.DIAS_HABILES));
+        }
+
+        @Test
+        @DisplayName("sin ella se publica el verbatim, y Plazo.de lo rechaza: por eso existe #192")
+        void elVerbatimDeLaNormaNoSeDejaLeerComoPlazo() throws IOException, SQLException {
+            // La razon de ser de la columna, demostrada en vez de afirmada: este es el texto que
+            // el art. 14 de la Ley 26979 imprime, publicado tal cual.
+            String archivo =
+                    escribir(
+                            "sin-maquina.csv",
+                            cabecera()
+                                    + fila(
+                                            "FICTICIO_PLAZO",
+                                            "SIN_MAQUINA",
+                                            "2026-01-01",
+                                            "",
+                                            "7",
+                                            "siete (7) días hábiles",
+                                            "JNA",
+                                            "HNA")
+                                    + "\n");
+
+            proceso(archivo).run(null);
+
+            String publicado =
+                    dato(
+                            "SELECT valor_texto FROM parametro_tributario"
+                                    + " WHERE tipo = 'FICTICIO_PLAZO' AND clave = 'SIN_MAQUINA'");
+            assertThat(publicado)
+                    .as("una fila sin la columna publica su texto, como antes de #192")
+                    .isEqualTo("siete (7) días hábiles");
+            assertThatThrownBy(() -> Plazo.de(publicado))
+                    .as(
+                            "la lectura no es tolerante a proposito: un plazo interpretado «lo mejor"
+                                    + " posible» es plausible y equivocado. Sin la columna, esto"
+                                    + " reventaria contando el plazo de una REC-1 en produccion")
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("cantidad UNIDAD");
+        }
+
+        @Test
         @DisplayName("sgtm_app no puede publicar: por eso este proceso no corre con su credencial")
         void laAplicacionNoPuedePublicar() {
             DriverManagerDataSource pool = new DriverManagerDataSource();
@@ -478,7 +554,7 @@ class PublicarParametrosTest {
     class ElDerivado {
 
         @Test
-        @DisplayName("publica las once filas del corpus, con las firmas que el corpus dice")
+        @DisplayName("publica las quince filas del corpus, con las firmas que el corpus dice")
         void publicaElDerivadoDelCorpus() throws IOException, SQLException {
             assertThat(DERIVADO)
                     .as("es el archivo que publicar-parametros.sh monta en el Job")
@@ -488,7 +564,7 @@ class PublicarParametrosTest {
 
             // Ninguna cifra escrita aqui: lo que se compara es la base contra el archivo.
             List<String> delArchivo = llavesDe(DERIVADO);
-            assertThat(delArchivo).hasSize(11);
+            assertThat(delArchivo).hasSize(15);
             for (String llave : delArchivo) {
                 String[] partes = llave.split("\\|", -1);
                 assertThat(
@@ -516,6 +592,46 @@ class PublicarParametrosTest {
                                     "SELECT count(DISTINCT usuario_aprueba) FROM parametro_tributario"
                                             + " WHERE tipo LIKE 'TRAMO%' OR tipo LIKE 'DEDUCCION%'"))
                     .isEqualTo("1");
+        }
+
+        @Test
+        @DisplayName("los plazos del derivado se vuelven a leer como Plazo: la ida y la vuelta")
+        void losPlazosDelDerivadoSeLeenComoPlazo() throws IOException, SQLException {
+            // 1. Publicar el archivo que se despliega. Volver a correrlo no duplica.
+            proceso(DERIVADO.toString()).run(null);
+
+            // 2. Componer y sellar el ejercicio con EL MISMO archivo.
+            comoLaAplicacion();
+            Observacion porque = Observacion.de("Se parametriza el ejercicio con el derivado");
+            long id =
+                    java.util.Objects.requireNonNull(
+                            administrar.abrirVersion(new Ejercicio(2043), porque).id());
+            try (var lectura = Files.newBufferedReader(DERIVADO, StandardCharsets.UTF_8)) {
+                assertThat(importar.importar(lectura, id, porque).rechazadas())
+                        .as("todo lo publicado tiene que poder componer el conjunto")
+                        .isEmpty();
+            }
+            administrar.sellar(id, porque);
+
+            // 3. Leerlo como lo lee una regla, y volver a convertirlo en plazo.
+            ParametrosSellados sellados = lector.vigenteEn(new Ejercicio(2043));
+            List<FilaCsv> plazos = plazosDelDerivado();
+            assertThat(plazos)
+                    .as("si el derivado se queda sin filas PLAZO, esta prueba no prueba nada")
+                    .isNotEmpty();
+            for (FilaCsv fila : plazos) {
+                String clave = fila.campos().get(1);
+                String maquina = fila.campos().get(10);
+                assertThat(sellados.texto("PLAZO", clave))
+                        .as("PLAZO:%s tiene que estar en el conjunto sellado", clave)
+                        .contains(maquina);
+                Plazo plazo = Plazo.de(sellados.texto("PLAZO", clave).orElseThrow());
+                assertThat(new BigDecimal(plazo.cantidad()))
+                        .as(
+                                "la cantidad que se lee es la cifra verificada de la fila, no otra"
+                                        + " escrita al lado")
+                        .isEqualByComparingTo(new BigDecimal(fila.campos().get(4)));
+            }
         }
     }
 
@@ -569,7 +685,20 @@ class PublicarParametrosTest {
 
     private static String cabecera() {
         return "tipo,clave,vigencia_desde,vigencia_hasta,valor_numerico,valor_texto,"
-                + "documento_fuente,archivo_del_corpus,transcribio,verifico\n";
+                + "documento_fuente,archivo_del_corpus,transcribio,verifico,valor_maquina\n";
+    }
+
+    /** Una fila SIN forma de maquina: lo que se publica es su texto, como antes de #192. */
+    private static String fila(
+            String tipo,
+            String clave,
+            String desde,
+            String hasta,
+            String numerico,
+            String texto,
+            String transcribio,
+            String verifico) {
+        return fila(tipo, clave, desde, hasta, numerico, texto, transcribio, verifico, "");
     }
 
     private static String fila(
@@ -580,7 +709,8 @@ class PublicarParametrosTest {
             String numerico,
             String texto,
             String transcribio,
-            String verifico) {
+            String verifico,
+            String maquina) {
         return String.join(
                         ",",
                         tipo,
@@ -592,8 +722,18 @@ class PublicarParametrosTest {
                         "Valor ficticio de prueba; no representa ninguna norma",
                         "ficticio.md",
                         transcribio,
-                        verifico)
+                        verifico,
+                        maquina)
                 + "\n";
+    }
+
+    /** Las filas de tipo {@code PLAZO} del derivado, leidas como las lee el proceso. */
+    private static List<FilaCsv> plazosDelDerivado() throws IOException {
+        try (var lectura = Files.newBufferedReader(DERIVADO, StandardCharsets.UTF_8)) {
+            return LectorDeFilasCsv.leer(lectura).stream()
+                    .filter(f -> f.campos().get(0).equals("PLAZO"))
+                    .toList();
+        }
     }
 
     private static pe.gob.sgtm.parametros.dominio.ParametroTributario ficticio(String tipo) {

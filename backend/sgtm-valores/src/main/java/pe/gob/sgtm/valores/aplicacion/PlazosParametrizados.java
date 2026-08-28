@@ -175,10 +175,13 @@ public class PlazosParametrizados {
     /**
      * Falta el plazo que la operacion necesita.
      *
-     * <p>Es lo que ocurre hoy con los plazos del Codigo Tributario: las cifras estan transcritas y
-     * verificadas en {@code docs/10-negocio/valores-normativos/prescripcion-y-plazos.md}, pero
-     * todavia no cargadas (#192). Que falle aqui, nombrando la llave, es preferible a que la
-     * operacion siga con un numero inventado.
+     * <p>Los tres plazos del art. 43 —{@code PRESCRIPCION-*}— ya se publican desde #192: estan en
+     * {@code docs/10-negocio/valores-normativos/publicacion/parametros-2026.csv}, transcritos y
+     * verificados en {@code prescripcion-y-plazos.md}. Los que siguen sin cargar son los otros dos
+     * que esta clase lee, y por el mismo motivo: {@code NOTIFICACION_VALOR-*} sale de los arts. 137
+     * y 78, y {@code PRESCRIPCION_INICIO-*} del art. 44, y ninguno de los dos esta transcrito en el
+     * corpus. Que falle aqui, nombrando la llave, es preferible a que la operacion siga con un
+     * numero inventado.
      */
     public static final class PlazoSinParametrizar extends RuntimeException {
 
