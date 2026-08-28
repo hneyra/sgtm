@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas treinta y seis operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas cuarenta operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -122,8 +122,16 @@ describe('las operaciones generadas son las del contrato', () => {
     //     en un extractor de la correlacion predio→persona—, asi que el codigo
     //     se resuelve AL CLIC, de un predio cada vez, con el permiso del padron
     //     (`contribuyentes`) y dejando fila de ACCESO en la bitacora.
+    //   - `presentar_declaracion_jurada`, `rectificar_declaracion_jurada`,
+    //     `observar_declaracion_jurada` y `anular_declaracion_jurada` (#365,
+    //     ADR-0015 §3): la pantalla `declaracion_jurada` declara «GET
+    //     /rentas/declaraciones/{djNro}» —consultar la DJ ya presentada— y los
+    //     cuatro actos necesitan verbo propio. Presentar es **el acto que
+    //     concilia**: hasta #365 el caso de uso existia y ningun controlador lo
+    //     exponia, asi que un predio solo aparecia conciliado si alguien
+    //     sembraba la fila a mano.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(170);
+    expect(Object.keys(OPERACIONES)).toHaveLength(174);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

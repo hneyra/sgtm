@@ -451,6 +451,15 @@ public final class DatosDePrueba {
                 predioId,
                 VIGENCIA,
                 VIGENCIA.plusMonths(2));
+        // El correlativo del ejercicio (#365, V54). En operacion lo crea la primera peticion, por
+        // encima del mayor numero historico; aqui se siembra a 1 porque la prueba de aislamiento
+        // exige que cada tabla con RLS tenga al menos una fila de cada municipalidad.
+        ejecutar(
+                app,
+                "INSERT INTO dj_correlativo (municipalidad_id, ejercicio, ultimo)"
+                        + " VALUES (?, ?, 1)",
+                muni,
+                EJERCICIO);
         ejecutar(
                 app,
                 "INSERT INTO beneficio (municipalidad_id, contribuyente_id, predio_id, tipo,"

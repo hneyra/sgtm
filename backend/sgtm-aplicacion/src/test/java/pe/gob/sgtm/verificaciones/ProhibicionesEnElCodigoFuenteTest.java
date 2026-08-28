@@ -691,6 +691,43 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que borra una declaracion jurada")
+    void elEscanerDetectaLaMuestraQueBorraUnaDeclaracion() throws IOException {
+        // #365: `declaracion_jurada` entra en TABLAS_PROTEGIDAS y NO en TABLAS_INMUTABLES, y las
+        // dos mitades de esa decision se ven aqui. Borrarla esta prohibido porque desde ADR-0015 es
+        // lo unico que mete al predio en el padron afecto: la fila que desaparece produce un omiso
+        // que ningun acto explica. Editarla en el sitio lo impide V54 con privilegio de COLUMNA
+        // —solo `estado`—, que es lo que este escaner no puede ver y por eso se comprueba
+        // ejecutando, en RegistrarDeclaracionJuradaTest.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueBorraUnaDeclaracion.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los dos DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(2);
+
+        List<String> fragmentos = hallazgos.stream().map(Hallazgo::fragmento).toList();
+        assertThat(fragmentos)
+                .filteredOn(
+                        f ->
+                                f.toLowerCase(java.util.Locale.ROOT)
+                                        .contains("delete from declaracion_jurada"))
+                .as("la declaracion y el rodeo de borrar su rectificatoria: los dos")
+                .hasSize(2);
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra con la vigencia del certificado compilada")
     void elEscanerDetectaLaMuestraDeVigenciaDeCertificado() throws IOException {
         // #54: cuantos meses vale un certificado lo fija el TUPA de cada municipalidad (D-02b).

@@ -84,6 +84,16 @@ class ContratoDeApiTest {
                     "GET /rentas/beneficios",
                     "GET /rentas/arbitrios",
                     "GET /rentas/declaraciones/{djNro}",
+                    // #365 — ADR-0015 §3: la escritura de la declaracion jurada, el acto que
+                    // concilia. Las cuatro son adiciones al contrato: la pantalla
+                    // `declaracion_jurada` declara UN endpoint —el GET que consulta la DJ ya
+                    // presentada— y presentarla, rectificarla, observarla y anularla necesitan
+                    // verbo propio. Hasta aqui el caso de uso existia y ningun controlador lo
+                    // exponia, asi que el acto se seguia haciendo fuera del sistema.
+                    "POST /rentas/declaraciones",
+                    "POST /rentas/declaraciones/{djNro}/rectificacion",
+                    "POST /rentas/declaraciones/{djNro}/observacion",
+                    "POST /rentas/declaraciones/{djNro}/anulacion",
                     "POST /rentas/transferencias/predio",
                     "POST /rentas/transferencias/vehiculo",
                     "POST /rentas/vehicular/calculo",

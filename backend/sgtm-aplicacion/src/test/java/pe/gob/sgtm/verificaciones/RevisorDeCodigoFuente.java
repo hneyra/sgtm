@@ -148,6 +148,19 @@ public final class RevisorDeCodigoFuente {
                     // presento ante un notario-. Uno equivocado no se borra: se sustituye emitiendo
                     // otro, con su numero y su derecho de tramite, y los dos quedan (regla 4).
                     "certificado",
+                    // Con #365: la declaracion jurada. Es el documento que el contribuyente firma
+                    // y se lleva, el sustento de toda la determinacion predial y —desde
+                    // ADR-0015— lo UNICO que mete al predio en el padron afecto. Borrarla saca al
+                    // predio de la conciliacion sin dejar acto que lo explique, o sea un omiso
+                    // fabricado. Una DJ equivocada no se borra: se anula, o se rectifica, y en los
+                    // dos casos las filas quedan.
+                    //
+                    // No entra en TABLAS_INMUTABLES, y es deliberado: su `estado` SI cambia en el
+                    // sitio —observar, anular y sustituir son eso, y no llevan mas contenido que
+                    // quien, cuando y por que, que es una fila de auditoria—. Lo que impide tocar
+                    // las demas columnas no es este escaner sino V54, que le concede a sgtm_app el
+                    // UPDATE sobre `estado` y sobre ninguna otra.
+                    "declaracion_jurada",
                     "auditoria");
 
     /**
