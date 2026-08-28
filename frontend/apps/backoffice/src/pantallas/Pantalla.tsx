@@ -59,6 +59,8 @@ import { GeneracionIndividualDeValores } from './valores/GeneracionIndividualDeV
 import { GeneracionMasivaDeValores } from './valores/GeneracionMasivaDeValores';
 import { PrescripcionDeLaDeuda } from './valores/PrescripcionDeLaDeuda';
 import { PaseACoactiva } from './valores/PaseACoactiva';
+import { CambioDeNumeroDePapeleta } from './transito/CambioDeNumeroDePapeleta';
+import { GeneracionMasivaDeValoresDeTransito } from './transito/GeneracionMasivaDeValoresDeTransito';
 
 /**
  * **El renderizador.** Una sola pantalla para las 134 del manual.
@@ -227,6 +229,11 @@ const VERSIONADAS: ReadonlySet<string> = new Set([
  *                            comun siempre trata la ultima como la
  *                            primaria: conectada tal cual, pasaria un
  *                            valor a coactiva sin confirmacion.
+ *   transito_cambio_numero,  (#77) el mismo problema que `pase_coactiva`:
+ *   transito_valores         la ultima accion del catalogo es «Salir» en
+ *                            una y «Imprimir» en la otra, ninguna de las
+ *                            dos escribe. Cada una trae su barra de una
+ *                            sola accion.
  *
  * Viven en su propio componente en vez de forzar al renderizador comun a
  * saber de listas, de booleanos o de un verbo que miente.
@@ -244,6 +251,8 @@ const COMPONENTES_PROPIOS: Readonly<
   valores_masivo: GeneracionMasivaDeValores,
   prescripcion: PrescripcionDeLaDeuda,
   pase_coactiva: PaseACoactiva,
+  transito_cambio_numero: CambioDeNumeroDePapeleta,
+  transito_valores: GeneracionMasivaDeValoresDeTransito,
 };
 
 function Contenido({ estructura }: { readonly estructura: Estructura }) {

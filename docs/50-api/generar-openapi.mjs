@@ -310,8 +310,6 @@ const DEL_BACKEND = {
   // Las once pantallas que salen en papel (#53, RF-132).
   ...Object.fromEntries(
     [
-      'transito_record_conductor',
-      'transito_record_vehicular',
       'transito_padron',
       'transito_padron_coactiva',
       'transito_padron_constancias',
@@ -323,6 +321,35 @@ const DEL_BACKEND = {
       'adm_resumen_recaudacion',
     ].map((id) => [id, [FORMATO_DE_REPORTE]]),
   ),
+  // Los dos records no dibujan ningun filtro en el prototipo —ni siquiera en
+  // `report.meta`, que ahi llega ya resuelto—: `RecordsDeTransitoController`
+  // exige a quien (licencia o documento; placa) porque sin sujeto la consulta
+  // seria el padron entero con otro titulo, y ese sujeto no tiene de donde
+  // salir si el contrato no lo declara (#77).
+  transito_record_conductor: [
+    {
+      nombre: 'licencia',
+      ejemplo: '',
+      descripcion: bloque(`
+        Licencia de conducir del infractor. Uno de los dos —esta o «documento»— es
+        obligatorio: sin ninguno, 422 (RecordsDeTransitoController).
+      `),
+    },
+    {
+      nombre: 'documento',
+      ejemplo: '',
+      descripcion: 'Documento del infractor. Alternativo a «licencia»',
+    },
+    FORMATO_DE_REPORTE,
+  ],
+  transito_record_vehicular: [
+    {
+      nombre: 'placa',
+      ejemplo: '',
+      descripcion: 'Placa del vehiculo. Obligatoria: sin ella, 422 (RecordsDeTransitoController)',
+    },
+    FORMATO_DE_REPORTE,
+  ],
 };
 
 /**

@@ -1207,6 +1207,58 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
         : undefined,
     nota: true,
   },
+
+  /* ── Tránsito (#77) ────────────────────────────────────────────────── */
+
+  /**
+   * Cambio de número de papeleta (`PATCH /transito/papeletas/{numero}/codigo`, RF-067).
+   *
+   * Vive en `CambioDeNumeroDePapeleta.tsx` (`COMPONENTES_PROPIOS` de `Pantalla.tsx`), no en
+   * el renderizador genérico: el catálogo dibuja las acciones de esta pantalla como
+   * `["Consultar", "Modificar", "Salir"]` —la última es «Salir», que no escribe nada—, así
+   * que conectada tal cual el botón que se habilitaría al escribir la observación sería el
+   * de salir de la pantalla. La componente propia trae su propia barra de una acción,
+   * «Cambiar número», siempre la primaria.
+   *
+   * `PeticionDeCambioDeNumero` solo acepta `numeroNuevo`: «Placa Nº»/«Placa nueva» del
+   * catálogo no viajan —esta ruta corrige el número de la papeleta, no la placa del
+   * vehículo, y `CambioDeNumeroController` no tiene ningún campo para eso—.
+   */
+  transito_cambio_numero: {
+    campos: {
+      codPapeletaNueva: { campo: 'numeroNuevo' },
+    },
+  },
+
+  /**
+   * Generación masiva de valores de tránsito (`POST /transito/valores/generacion-masiva`,
+   * #53, RF-066, RF-073).
+   *
+   * Vive en `GeneracionMasivaDeValoresDeTransito.tsx` (`COMPONENTES_PROPIOS`), por el mismo
+   * motivo que `valores_masivo` (#75): la última acción del catálogo es «Imprimir», que no
+   * escribe nada.
+   *
+   * Solo «por rango» (`desde`/`hasta`): el catálogo no dibuja ningún campo de lista o de
+   * selección múltiple de papeletas —«Papeleta» es un único campo de texto, en la sección
+   * «Recaudo / papeletas», que no basta para construir el arreglo `papeletas[]` que la otra
+   * mitad del contrato (`porSeleccion`) exige—. `IniciarCorridaDeValores` rechaza con 422 si
+   * llegan los dos modos a la vez o ninguno, así que `papeletas` sencillamente no se declara
+   * aquí. Las demás secciones del catálogo —«Código de criterio», «Tipo de recaudo»,
+   * «Vencimiento», «Oficina»— tampoco: `PeticionDeCorridaDeValores` no tiene ningún campo
+   * para ellas, y `GeneracionMasivaDeValoresController` no las lee.
+   */
+  transito_valores: {
+    campos: {
+      fecInicio: { campo: 'desde' },
+      fecFin: { campo: 'hasta' },
+    },
+    exigir: (borrador) => {
+      if ((borrador['fecInicio'] ?? '').trim() === '' || (borrador['fecFin'] ?? '').trim() === '') {
+        return 'Elige la fecha de inicio y la fecha de fin del rango de papeletas.';
+      }
+      return undefined;
+    },
+  },
 };
 
 /**
