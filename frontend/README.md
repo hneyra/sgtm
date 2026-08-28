@@ -252,9 +252,10 @@ Lo que hace que esto no sea una regresión encubierta:
 
 **El pliegue se declara en la tabla del portador, no en el componente.** Un grupo de
 `scripts/grupos-por-tarea.mjs` puede llevar `{ centro: true }`; el portador lo emite como
-`centroDeReportes` del módulo y la barra, el hub y el centro leen de ahí. El día que Infracciones
-administrativas o Consultas quieran el suyo es una marca en esa tabla y `yarn portar-catalogo`, no
-una lista de trece ids cableada en tres sitios.
+`centroDeReportes` del módulo y la barra, el hub y el centro leen de ahí. Infracciones administrativas
+(4 hojas) y Autorizaciones y licencias (7) ya lo hicieron en la fase 1c exactamente así: una marca
+en esa tabla y `yarn portar-catalogo`, no una lista de ids cableada en tres sitios. El siguiente
+módulo que quiera el suyo tiene el mismo coste.
 
 Y de paso salió una fuga que llevaba tiempo: **el nivel módulo de la barra lateral se dibujaba del
 catálogo entero**, no del visible. Entrar por URL a un módulo cuyas opciones no se tienen listaba

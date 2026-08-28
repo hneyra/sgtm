@@ -84,7 +84,25 @@ bloques con las opciones y su descripción recortada.
 **Paleta de comandos** — `Ctrl/Cmd + K`. Busca por etiqueta, título y módulo sobre las 134
 opciones. Con 134 opciones en doce módulos, es el camino corto que un menú de dos niveles no da.
 
+> **Los «cuatro bloques colapsables» del nivel módulo están superados por
+> [`ADR-0014`](../30-arquitectura/adr/ADR-0014-navegacion-centrada-en-la-atencion.md) §4–5.** El
+> nivel módulo —y con él el hub— agrupa **por tarea**: grupos que nombran el objeto de trabajo
+> —en Tránsito, Papeletas · Vehículos · Cobranza · Catálogos · Reportes—, declarados módulo a
+> módulo en la tabla del portador del catálogo (`frontend/scripts/grupos-por-tarea.mjs`), que es
+> exhaustiva y de la que sale el orden en que la barra los dibuja. Los cuatro bloques de §4
+> quedan como respaldo (`bloqueDe`) de un módulo que la tabla no cubra. Y donde la tabla pliega
+> un grupo en un **centro de reportes** (ADR-0014 §5), su entrada «Reportes» no es un bloque
+> colapsable: es **un enlace al centro**, que lista las hojas dentro. Los nombres de las opciones
+> no se reescriben (RNF-080); cambia solo su agrupación.
+
 ## 4. Los cuatro bloques
+
+> **Superado por
+> [`ADR-0014`](../30-arquitectura/adr/ADR-0014-navegacion-centrada-en-la-atencion.md) §4** (v.
+> §3): esta clasificación por el título ya no es la que agrupa el menú de un módulo que la tabla
+> de grupos por tarea cubre. Sigue viva en dos sitios: como respaldo de un módulo que esa tabla
+> no cubra, y como la taxonomía del manual con la que
+> [NEG-03](../10-negocio/catalogo-de-opciones.md) publica el catálogo.
 
 Cada opción cae en un bloque según su título, evaluado **en este orden**:
 
@@ -158,4 +176,6 @@ verdad cuando su operación exista, apagando el proxy para esa ruta.
 [`arquitectura-frontend.md`](arquitectura-frontend.md) (FRO-01) ·
 [`design-system.md`](design-system.md) (FRO-02) ·
 [`../10-negocio/catalogo-de-opciones.md`](../10-negocio/catalogo-de-opciones.md) (NEG-03) ·
+[`ADR-0014`](../30-arquitectura/adr/ADR-0014-navegacion-centrada-en-la-atencion.md) —
+la navegación que supera §3–4 ·
 [`../50-api/openapi/sgtm-v1.yaml`](../50-api/openapi/sgtm-v1.yaml)

@@ -6,7 +6,9 @@ import { montarEnRuta } from '../pruebas/montar';
 import { entraCon, limpiarSesion } from '../pruebas/sesion';
 
 /**
- * El centro de reportes de Transito (#295, ADR-0014 §5).
+ * El centro de reportes (#295, ADR-0014 §5), estrenado por Transito y hoy en
+ * tres modulos: la fase 1c le sumo Infracciones administrativas (#304) y
+ * Autorizaciones y licencias (#308).
  *
  * Las trece hojas dejan de competir con las diez operaciones del modulo: en el
  * menu son **una** entrada y el centro las lista dentro. Lo que hay que
@@ -21,6 +23,12 @@ import { entraCon, limpiarSesion } from '../pruebas/sesion';
  *    decision;
  * 4. y que el carril **no se imprima**: el documento que sale de la
  *    municipalidad lleva la hoja, no la lista de hojas (RNF-084).
+ *
+ * Las cuatro se comprueban sobre Transito, que es donde el mecanismo nacio. Al
+ * final del archivo, las mismas dos que mas importan —el conteo de la barra y
+ * lo que el carril lista— se repiten sobre uno de los centros que la fase 1c
+ * anadio **sin tocar un componente**: si el pliegue hubiera acabado cableado en
+ * `CentroDeReportes` o en `BarraLateral`, ese bloque estaria rojo.
  */
 
 /** El modulo del catalogo, con sus trece hojas plegadas. */
@@ -179,5 +187,87 @@ describe('el hub del modulo ensena el centro como una entrada', () => {
     const filas = within(tarjeta).getAllByRole('link');
     expect(filas).toHaveLength(1);
     expect(filas[0]).toHaveAttribute('href', `/transito/${HOJAS[0]?.ranura ?? ''}`);
+  });
+});
+
+/**
+ * El centro que la fase 1c anadio a Autorizaciones y licencias (#308).
+ *
+ * Siete de sus once opciones son hojas: sin plegarlas, el menu del modulo es un
+ * menu de reportes con tres tramites al lado. Y todo lo que hizo falta para
+ * plegarlas fue **una marca en `GRUPOS_POR_TAREA` y una regeneracion**: ni un
+ * componente nuevo, ni una lista de ids en ningun `.tsx`. Esto es lo que lo
+ * demuestra —si el mecanismo estuviera cableado a Transito, aqui no habria ni
+ * carril ni entrada—.
+ */
+const LICENCIAS = MODULOS.find((m) => m.id === 'autorizaciones-y-licencias');
+const HOJAS_DE_LICENCIAS = LICENCIAS ? hojasDelCentro(LICENCIAS) : [];
+
+const carrilDeLicencias = () =>
+  screen.getByRole('navigation', { name: 'Reportes de Autorizaciones y licencias' });
+const menuDeLicencias = () =>
+  screen.getByRole('navigation', { name: 'Opciones de Autorizaciones y licencias' });
+
+describe('Autorizaciones y licencias pliega sus siete hojas sin componente nuevo', () => {
+  it('el catalogo declara siete', () => {
+    expect(HOJAS_DE_LICENCIAS).toHaveLength(7);
+  });
+
+  it('la barra del modulo queda en cinco entradas, una de ellas «Reportes 7»', async () => {
+    montarEnRuta('/autorizaciones-y-licencias/licencia-funcionamiento');
+    await screen.findByRole('heading', { level: 1 });
+
+    // Tres tramites, un catalogo y la entrada del centro. Antes eran once.
+    const entradas = within(menuDeLicencias()).getAllByRole('link');
+    expect(entradas).toHaveLength(5);
+
+    const entrada = within(menuDeLicencias()).getByRole('link', { name: /^Reportes/ });
+    expect(entrada).toHaveTextContent('Reportes7');
+    expect(entrada).toHaveAttribute(
+      'href',
+      `/autorizaciones-y-licencias/${HOJAS_DE_LICENCIAS[0]?.ranura ?? ''}`,
+    );
+  });
+
+  it('el carril lista las siete, marca la abierta y no se imprime', async () => {
+    montarEnRuta('/autorizaciones-y-licencias/licencia-padron');
+    await screen.findByRole('heading', { level: 1 });
+
+    const hojas = within(carrilDeLicencias()).getAllByRole('link');
+    expect(hojas.map((h) => h.textContent)).toEqual(HOJAS_DE_LICENCIAS.map((h) => h.label));
+    expect(within(carrilDeLicencias()).getByRole('link', { current: 'page' })).toHaveTextContent(
+      'Padrón de licencias',
+    );
+    expect(carrilDeLicencias()).toHaveAttribute('data-no-imprimible', '1');
+  });
+
+  it('el carril esconde lo mismo que el menu (REQ-03 §5)', async () => {
+    entraCon({
+      licencia_funcionamiento: ['lectura'],
+      licencia_padron: ['lectura', 'impresion'],
+      certificados: ['lectura', 'impresion'],
+    });
+    montarEnRuta('/autorizaciones-y-licencias/licencia-padron');
+    await screen.findByRole('heading', { level: 1 });
+
+    const hojas = await waitFor(() => {
+      const listadas = within(carrilDeLicencias()).getAllByRole('link');
+      expect(listadas).toHaveLength(2);
+      return listadas;
+    });
+    expect(hojas.map((h) => h.textContent)).toEqual(['Padrón de licencias', 'Certificados']);
+    // Y la barra dice dos, no siete.
+    expect(within(menuDeLicencias()).getByRole('link', { name: /^Reportes/ })).toHaveTextContent(
+      'Reportes2',
+    );
+  });
+
+  it('una opcion que no es hoja se dibuja sin centro', async () => {
+    montarEnRuta('/autorizaciones-y-licencias/ciiu');
+    await screen.findByRole('heading', { level: 1 });
+
+    expect(
+      screen.queryByRole('navigation', { name: 'Reportes de Autorizaciones y licencias' }),
+    ).not.toBeInTheDocument();
   });
 });

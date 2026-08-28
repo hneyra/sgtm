@@ -59,13 +59,15 @@ describe('la barra lateral de dos niveles', () => {
     const usuario = userEvent.setup();
     montarEnRuta('/tesoreria/caja-tributaria');
 
-    const bloque = screen.getByRole('button', { name: /Registro y mantenimiento/ });
+    // Los bloques de Tesoreria son sus grupos por tarea (ADR-0014 §4): «Cobro
+    // en caja», «Convenios», «Recibos» y «Cierre y control».
+    const bloque = screen.getByRole('button', { name: /Cobro en caja/ });
     expect(bloque).toHaveAttribute('aria-expanded', 'true');
     await usuario.click(bloque);
     expect(bloque).toHaveAttribute('aria-expanded', 'false');
 
     // El de al lado sigue como estaba: el colapso es por bloque, no global.
-    expect(screen.getByRole('button', { name: /Consultas/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /Convenios/ })).toHaveAttribute(
       'aria-expanded',
       'true',
     );

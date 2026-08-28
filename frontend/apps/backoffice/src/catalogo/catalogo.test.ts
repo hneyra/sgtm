@@ -51,33 +51,153 @@ const BLOQUES_TECNICOS = new Set([
  * es un archivo generado editado a mano o regenerado desde una tabla cambiada
  * sin querer.
  */
-const GRUPOS_POR_TAREA_ESPERADOS: Readonly<Record<string, readonly (readonly [string, number])[]>> =
-  {
-    transito: [
-      ['Papeletas', 5],
-      ['Vehículos', 1],
-      ['Cobranza', 3],
-      ['Catálogos', 1],
-      // Las 13 hojas, plegadas en el centro de reportes (ADR-0014 §5).
-      ['Reportes', 13],
+const GRUPOS_POR_TAREA_ESPERADOS: Readonly<
+  Record<string, readonly (readonly [string, readonly string[]])[]>
+> = {
+  transito: [
+    [
+      'Papeletas',
+      [
+        'papeletas',
+        'transito_busqueda',
+        'transito_cambio_numero',
+        'transito_descargos',
+        'transito_estado_cuenta',
+      ],
     ],
-    'rentas-registro': [
-      ['Padrones', 3],
-      ['Determinación', 4],
-      ['Movimientos', 4],
-      ['Tributos y beneficios', 4],
+    ['Vehículos', ['internamiento']],
+    ['Cobranza', ['transito_documentos', 'transito_padron_coactiva', 'transito_valores']],
+    ['Catálogos', ['codigos_transito']],
+    [
+      'Reportes',
+      [
+        'transito_constancia_libre',
+        'transito_padron',
+        'transito_padron_constancias',
+        'transito_papeleta_reporte',
+        'transito_record_conductor',
+        'transito_record_vehicular',
+        'transito_reportes',
+        'transito_resumen_codigo',
+        'transito_resumen_papeletas',
+        'transito_resumen_placa',
+        'transito_resumen_recaudacion',
+        'transito_rg_ordinaria',
+        'transito_rg_sancionadora',
+      ],
+    ], // plegado en centro de reportes (ADR-0014 §5)
+  ],
+  'rentas-registro': [
+    ['Padrones', ['contribuyentes', 'predios_rentas', 'vehiculos']],
+    [
+      'Determinación',
+      ['declaracion_jurada', 'predial_individual', 'predial_masivo', 'vehicular_calculo'],
     ],
-    valores: [
-      ['Emisión', 2],
-      ['Gestión del valor', 4],
+    ['Movimientos', ['alta_deuda', 'baja_deuda', 'transferencia_predio', 'transferencia_vehiculo']],
+    ['Tributos y beneficios', ['alcabala', 'arbitrios', 'beneficios', 'espectaculos']],
+  ],
+  valores: [
+    ['Emisión', ['valores_individual', 'valores_masivo']],
+    [
+      'Gestión del valor',
+      ['notificacion_valores', 'pase_coactiva', 'prescripcion', 'valores_busqueda'],
     ],
-    seguridad: [
-      ['Cuentas y accesos', 5],
-      ['Catálogo', 2],
-      ['Sesión', 2],
-      ['Operación', 2],
+  ],
+  seguridad: [
+    ['Cuentas y accesos', ['accesos', 'grupos', 'miembros', 'permisos', 'usuarios']],
+    ['Catálogo', ['modulos', 'parametros']],
+    ['Sesión', ['cambiar_anio', 'cambiar_clave']],
+    ['Operación', ['auditoria', 'respaldo']],
+  ],
+  catastro: [
+    [
+      'Fichas del predio',
+      ['actualizacion_catastro', 'ficha_bienes', 'ficha_economica', 'ficha_rural', 'ficha_urbana'],
     ],
-  };
+    ['Territorio', ['calles', 'sectores']],
+    ['Tablas de valuación', ['aranceles', 'depreciacion', 'valores_unitarios']],
+    ['Consultas', ['consulta_fichas']],
+    ['Documentos', ['ficha_contribuyente_reporte']],
+  ],
+  fiscalizacion: [
+    ['Campaña', ['fisc_omisos', 'fisc_programa']],
+    ['Fiscalización', ['fisc_predial', 'fisc_vehicular']],
+    ['Resultados', ['fisc_estado_cuenta', 'fisc_historico', 'fisc_resultados']],
+    ['Documentos', ['resolucion_determinacion_fisc']],
+  ],
+  'infracciones-administrativas': [
+    ['Infracciones', ['adm_estado_cuenta', 'infracciones_adm']],
+    [
+      'Notificaciones',
+      [
+        'adm_notificacion',
+        'adm_notificacion_resolucion',
+        'adm_notificaciones_contribuyente',
+        'adm_notificaciones_vencidas',
+      ],
+    ],
+    ['Cobranza', ['adm_resolucion_gerencia', 'adm_valores']],
+    ['Catálogos', ['codigos_cuis']],
+    [
+      'Reportes',
+      [
+        'adm_codigos_reporte',
+        'adm_padron_notificaciones',
+        'adm_reportes',
+        'adm_resumen_recaudacion',
+      ],
+    ], // plegado en centro de reportes (ADR-0014 §5)
+  ],
+  tesoreria: [
+    ['Cobro en caja', ['caja_tasas', 'caja_tributaria']],
+    ['Convenios', ['anulacion_convenio', 'consulta_convenios', 'fraccionamiento']],
+    ['Recibos', ['anulacion_recibo', 'duplicado_recibo']],
+    ['Cierre y control', ['avance_recaudacion', 'cierre_caja', 'recaudacion_area']],
+  ],
+  consultas: [
+    [
+      'Del contribuyente',
+      ['consulta_deuda', 'consulta_deudas_beneficio', 'consulta_pagos', 'cuenta_corriente'],
+    ],
+    [
+      'Del padrón',
+      [
+        'consulta_altas_bajas',
+        'consulta_predios',
+        'consulta_unificada',
+        'consulta_valores',
+        'consulta_vehiculos',
+      ],
+    ],
+    ['Documentos', ['constancia', 'consulta_resumen_predial']],
+  ],
+  coactiva: [
+    ['Expedientes', ['coactiva_expedientes', 'expediente_historial', 'importacion_valores']],
+    [
+      'Procedimiento',
+      ['actos_coactivos', 'cambiar_direccion_ref', 'notificaciones_coactivas', 'proceso_coactivo'],
+    ],
+    ['Cobro y costas', ['costas_procesales', 'fraccionamiento_coactivo']],
+    ['Consultas', ['coactiva_consulta_deudas', 'coactiva_deudas_beneficio']],
+    ['Documentos', ['rec_impresion']],
+  ],
+  'autorizaciones-y-licencias': [
+    ['Licencias y autorizaciones', ['anuncios', 'fue_edificacion', 'licencia_funcionamiento']],
+    ['Catálogos', ['ciiu']],
+    [
+      'Reportes',
+      [
+        'anuncios_reportes',
+        'certificados',
+        'edificacion_reporte',
+        'licencia_padron',
+        'licencia_resolucion_cancelacion',
+        'licencia_resolucion_duplicado',
+        'licencia_resumen_anual',
+      ],
+    ], // plegado en centro de reportes (ADR-0014 §5)
+  ],
+};
 
 describe('el catalogo trae el manual entero', () => {
   it('son doce modulos y 134 opciones', () => {
@@ -144,8 +264,10 @@ describe('la clasificacion en bloques viene precalculada', () => {
 
   it('todo modulo con grupos por tarea asigna cada opcion exactamente una vez', () => {
     // ADR-0014 §4: ni huerfanas ni duplicadas, y los grupos en el orden y con
-    // el reparto disenados. Se compara contra la tabla completa —no contra una
-    // suma— para que una opcion movida de grupo tambien se vea.
+    // el reparto disenados. Se comparan los IDS de cada grupo —no sus
+    // conteos— para que una opcion movida entre dos grupos del mismo tamano
+    // tambien se vea; ordenados, porque el orden dentro del grupo lo pone el
+    // prototipo y aqui es documental.
     for (const [moduloId, esperados] of Object.entries(GRUPOS_POR_TAREA_ESPERADOS)) {
       const modulo = MODULOS.find((m) => m.id === moduloId);
       expect(modulo, `el modulo ${moduloId} existe`).toBeDefined();
@@ -153,9 +275,9 @@ describe('la clasificacion en bloques viene precalculada', () => {
 
       const bloques = bloquesDe(modulo);
       expect(
-        bloques.map((b) => [b.label, b.opciones.length]),
+        bloques.map((b) => [b.label, [...b.opciones.map((o) => o.id)].sort()]),
         `grupos de ${moduloId}`,
-      ).toEqual(esperados);
+      ).toEqual(esperados.map(([nombre, ids]) => [nombre, [...ids].sort()]));
 
       // Exactamente una vez: los grupos no comparten opcion y entre todos
       // cubren el modulo entero.
@@ -165,69 +287,109 @@ describe('la clasificacion en bloques viene precalculada', () => {
     }
   });
 
-  it('una pantalla de reporte de un modulo sin grupos va a «Documentos y reportes»', () => {
-    const constancia = OPCIONES.find((o) => o.id === 'constancia');
-    expect(constancia?.bloque).toBe('Documentos y reportes');
+  it('el modulo que no esta en la tabla conserva la clasificacion tecnica', () => {
+    // Tras la fase 1c (#302–#308) el unico sin grupos por tarea es Inicio: sus
+    // dos opciones —el panel y el portal— las clasifica `bloqueDe` por el
+    // titulo, y caen en «Consultas». Es lo que mantiene vivo el respaldo: si
+    // manana se anade un modulo, no nace sin bloques.
+    const sinTabla = MODULOS.filter((m) => GRUPOS_POR_TAREA_ESPERADOS[m.id] === undefined);
+    expect(sinTabla.map((m) => m.id)).toEqual(['inicio']);
+    for (const opcion of sinTabla.flatMap((m) => m.opciones)) {
+      expect(BLOQUES_TECNICOS.has(opcion.bloque), `${opcion.id}: ${opcion.bloque}`).toBe(true);
+    }
+    expect(OPCIONES.find((o) => o.id === 'portal')?.bloque).toBe('Consultas');
   });
 });
 
 /**
- * Las trece hojas que Transito pliega en su centro de reportes (ADR-0014 §5),
- * **en el orden del catalogo**. Copiadas a mano, por el mismo motivo que los
- * grupos de arriba: derivarlas del generado las volveria tautologicas.
+ * Las hojas que cada modulo pliega en su centro de reportes (ADR-0014 §5), **en
+ * el orden del catalogo**. Copiadas a mano, por el mismo motivo que los grupos
+ * de arriba: derivarlas del generado las volveria tautologicas.
  *
  * Esta es la lista que se pone roja si una hoja se cae del mecanismo —porque se
  * desmarco el grupo en la tabla, porque una hoja se movio a otro grupo, o
  * porque el portador dejo de emitir la marca—. Ninguna de las tres rompe la
  * compilacion: la opcion seguiria existiendo, con su ruta y su permiso, solo
  * que fuera del centro y de vuelta compitiendo en el menu.
+ *
+ * Son tres modulos, no uno: Transito estreno el mecanismo (#295) y la fase 1c
+ * (#304, #308) le sumo Infracciones administrativas y Autorizaciones y
+ * licencias sin tocar ni un componente. Que la lista se lea igual para los tres
+ * es lo que demuestra que el pliegue vive en la tabla.
  */
-const HOJAS_DEL_CENTRO_DE_TRANSITO: readonly string[] = [
-  'transito_reportes',
-  'transito_record_conductor',
-  'transito_record_vehicular',
-  'transito_constancia_libre',
-  'transito_padron',
-  'transito_papeleta_reporte',
-  'transito_rg_ordinaria',
-  'transito_rg_sancionadora',
-  'transito_padron_constancias',
-  'transito_resumen_recaudacion',
-  'transito_resumen_papeletas',
-  'transito_resumen_codigo',
-  'transito_resumen_placa',
-];
+const HOJAS_DEL_CENTRO: Readonly<Record<string, readonly string[]>> = {
+  transito: [
+    'transito_reportes',
+    'transito_record_conductor',
+    'transito_record_vehicular',
+    'transito_constancia_libre',
+    'transito_padron',
+    'transito_papeleta_reporte',
+    'transito_rg_ordinaria',
+    'transito_rg_sancionadora',
+    'transito_padron_constancias',
+    'transito_resumen_recaudacion',
+    'transito_resumen_papeletas',
+    'transito_resumen_codigo',
+    'transito_resumen_placa',
+  ],
+  'infracciones-administrativas': [
+    'adm_codigos_reporte',
+    'adm_reportes',
+    'adm_padron_notificaciones',
+    'adm_resumen_recaudacion',
+  ],
+  'autorizaciones-y-licencias': [
+    'anuncios_reportes',
+    'licencia_padron',
+    'licencia_resumen_anual',
+    'licencia_resolucion_cancelacion',
+    'licencia_resolucion_duplicado',
+    'edificacion_reporte',
+    'certificados',
+  ],
+};
 
 describe('el centro de reportes se declara en el catalogo, no en el componente', () => {
-  it('Transito pliega su bloque «Reportes», y es el unico modulo que pliega alguno', () => {
+  it('los tres que pliegan son estos tres, y el bloque plegado se llama «Reportes»', () => {
     const plegadores = MODULOS.filter((m) => m.centroDeReportes !== undefined).map((m) => [
       m.id,
       m.centroDeReportes,
     ]);
-    expect(plegadores).toEqual([['transito', 'Reportes']]);
+    expect(plegadores).toEqual([
+      ['transito', 'Reportes'],
+      ['infracciones-administrativas', 'Reportes'],
+      ['autorizaciones-y-licencias', 'Reportes'],
+    ]);
   });
 
-  it('las trece hojas estan en el centro, con su id y su ruta intactos', () => {
-    const transito = MODULOS.find((m) => m.id === 'transito');
-    expect(transito).toBeDefined();
-    if (!transito) return;
+  it.each(Object.entries(HOJAS_DEL_CENTRO))(
+    'las hojas de %s estan en el centro, con su id y su ruta intactos',
+    (moduloId, esperadas) => {
+      const modulo = MODULOS.find((m) => m.id === moduloId);
+      expect(modulo, `el modulo ${moduloId} existe`).toBeDefined();
+      if (!modulo) return;
 
-    const hojas = hojasDelCentro(transito);
-    expect(hojas.map((h) => h.id)).toEqual(HOJAS_DEL_CENTRO_DE_TRANSITO);
-    // Cada hoja conserva su ruta: el centro no las absorbe, las envuelve.
-    for (const hoja of hojas) {
-      expect(opcionPorRuta('transito', hoja.ranura)?.id, hoja.id).toBe(hoja.id);
-    }
-  });
+      const hojas = hojasDelCentro(modulo);
+      expect(hojas.map((h) => h.id)).toEqual(esperadas);
+      // Cada hoja conserva su ruta: el centro no las absorbe, las envuelve.
+      for (const hoja of hojas) {
+        expect(opcionPorRuta(moduloId, hoja.ranura)?.id, hoja.id).toBe(hoja.id);
+      }
+    },
+  );
 
-  it('el bloque plegado es el que dice el modulo, y solo ese', () => {
-    const transito = MODULOS.find((m) => m.id === 'transito');
-    if (!transito) return;
-    const plegados = bloquesDe(transito)
-      .filter((b) => b.plegado)
-      .map((b) => b.label);
-    expect(plegados).toEqual(['Reportes']);
-  });
+  it.each(Object.keys(HOJAS_DEL_CENTRO))(
+    'en %s el bloque plegado es el que dice el modulo, y solo ese',
+    (moduloId) => {
+      const modulo = MODULOS.find((m) => m.id === moduloId);
+      if (!modulo) return;
+      const plegados = bloquesDe(modulo)
+        .filter((b) => b.plegado)
+        .map((b) => b.label);
+      expect(plegados).toEqual(['Reportes']);
+    },
+  );
 
   it('un modulo sin centro no tiene hojas que plegar', () => {
     const consultas = MODULOS.find((m) => m.id === 'consultas');

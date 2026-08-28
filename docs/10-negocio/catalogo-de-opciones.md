@@ -7,8 +7,18 @@ declara en el prototipo de interfaz y el contexto acotado que la sirve.
 cuando cambie el catálogo del prototipo; no editarlo a mano.
 
 Leyenda de bloque: `Registro` = registro y mantenimiento · `Procesos` · `Consultas` ·
-`Documentos` = documentos y reportes. Es la clasificación que usa la navegación de la
-interfaz, y la calcula el título de la pantalla.
+`Documentos` = documentos y reportes. Es la **taxonomía del manual**, y la calcula el
+título de la pantalla ([FRO-03 §4](../60-frontend/mapa-de-pantallas.md)).
+
+> **No es la clasificación que agrupa la navegación de la interfaz.** Desde
+> [`ADR-0014`](../30-arquitectura/adr/ADR-0014-navegacion-centrada-en-la-atencion.md) §4 el
+> menú agrupa **por tarea**, con los grupos que declara módulo a módulo la tabla del
+> portador (`frontend/scripts/grupos-por-tarea.mjs`); los cuatro bloques quedan ahí como
+> respaldo de un módulo que la tabla no cubra. Las dos clasificaciones conviven sin
+> estorbarse porque **nada funcional depende de esta columna**: el backend siembra los
+> accesos leyendo de cada fila solo el `id` y el nombre de la opción
+> (`CatalogoDeOpciones`), y el identificador de la opción sigue siendo la clave del
+> permiso, agrupe quien agrupe.
 
 El `endpoint` es el que **declara el prototipo**: dice qué operación pide la pantalla, no
 si el backend la sirve ni si además se puede escribir en ella. Cuando lo publicado se

@@ -52,17 +52,18 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M15 6.6v13.2"
     ],
     "bloques": [
-      "Registro y mantenimiento",
-      "Procesos",
+      "Fichas del predio",
+      "Territorio",
+      "Tablas de valuación",
       "Consultas",
-      "Documentos y reportes"
+      "Documentos"
     ],
     "opciones": [
       {
         "id": "ficha_urbana",
         "label": "Ficha urbana individual",
         "ranura": "ficha-urbana",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Fichas del predio",
         "title": "Ficha catastral urbana individual",
         "resumen": "Ficha del predio urbano. El código de referencia catastral se compone de sector, manzana, lote, edificación, entrada, piso y unidad; su cambio obliga a recalcular el autovalúo."
       },
@@ -70,7 +71,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ficha_economica",
         "label": "Ficha económica",
         "ranura": "ficha-economica",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Fichas del predio",
         "title": "Ficha catastral económica",
         "resumen": "Actividad económica que se desarrolla en la unidad catastral, usada para verificar licencias y determinar el uso real del predio."
       },
@@ -78,7 +79,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ficha_bienes",
         "label": "Bienes comunes",
         "ranura": "ficha-bienes",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Fichas del predio",
         "title": "Ficha de bienes comunes",
         "resumen": "Áreas comunes de una edificación en régimen de propiedad exclusiva y común, cuyo valor se distribuye entre las unidades según su porcentaje de participación."
       },
@@ -86,7 +87,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ficha_rural",
         "label": "Ficha rural",
         "ranura": "ficha-rural",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Fichas del predio",
         "title": "Ficha catastral rural",
         "resumen": "Predio rústico valorizado por hectárea según el arancel rural, el tipo de tierra y la disponibilidad de riego."
       },
@@ -102,7 +103,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "actualizacion_catastro",
         "label": "Actualización del catastro",
         "ranura": "actualizacion-catastro",
-        "bloque": "Procesos",
+        "bloque": "Fichas del predio",
         "title": "Actualización del catastro",
         "resumen": "Actualiza construcciones y otras instalaciones de una ficha ya registrada. El sistema conserva cada versión declarada y verificada por piso, con su MEP, ECS, ECC y estado de conservación."
       },
@@ -110,7 +111,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ficha_contribuyente_reporte",
         "label": "Reporte de ficha del contribuyente",
         "ranura": "ficha-contribuyente-reporte",
-        "bloque": "Documentos y reportes",
+        "bloque": "Documentos",
         "title": "Reporte de ficha del contribuyente",
         "resumen": "Ficha impresa del contribuyente: identificación, domicilio fiscal, documentos, contactos y unidades afectas."
       },
@@ -118,7 +119,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "calles",
         "label": "Vías y calles",
         "ranura": "calles",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Territorio",
         "title": "Mantenimiento de vías y calles",
         "resumen": "Nomenclatura vial que alimenta el domicilio fiscal y la ubicación del predio. Cada vía guarda su tipo, sector y arancel unitario por tramo."
       },
@@ -126,7 +127,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "sectores",
         "label": "Sectores y manzanas",
         "ranura": "sectores",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Territorio",
         "title": "Sectores, manzanas y lotes",
         "resumen": "Estructura territorial sobre la que se arma el código de referencia catastral y se agrupan los padrones por zona."
       },
@@ -134,7 +135,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "aranceles",
         "label": "Aranceles",
         "ranura": "aranceles",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Tablas de valuación",
         "title": "Aranceles de terreno",
         "resumen": "Valor oficial del metro cuadrado de terreno por vía y tramo, publicado anualmente. Es el multiplicador del área de terreno en el autovalúo."
       },
@@ -142,7 +143,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "valores_unitarios",
         "label": "Valores unitarios",
         "ranura": "valores-unitarios",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Tablas de valuación",
         "title": "Valores unitarios de edificación",
         "resumen": "Tabla oficial por categoría constructiva. El sistema suma las siete partidas declaradas en la ficha y les aplica la depreciación correspondiente."
       },
@@ -150,7 +151,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "depreciacion",
         "label": "Depreciación",
         "ranura": "depreciacion",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Tablas de valuación",
         "title": "Tabla de depreciación",
         "resumen": "Porcentaje que se descuenta del valor de edificación según antigüedad, material predominante (MEP) y estado de conservación (ECS)."
       }
@@ -303,16 +304,17 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M9.6 13.2l2 2 3.4-4"
     ],
     "bloques": [
-      "Registro y mantenimiento",
-      "Consultas",
-      "Documentos y reportes"
+      "Campaña",
+      "Fiscalización",
+      "Resultados",
+      "Documentos"
     ],
     "opciones": [
       {
         "id": "fisc_programa",
         "label": "Programación",
         "ranura": "fisc-programa",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Campaña",
         "title": "Programación de fiscalización",
         "resumen": "Selección de la muestra a inspeccionar por sector y criterio de riesgo, con el fiscalizador asignado y el plazo del programa."
       },
@@ -320,7 +322,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "fisc_predial",
         "label": "Fiscalización predial",
         "ranura": "fisc-predial",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Fiscalización",
         "title": "Fiscalización predial — acta de inspección",
         "resumen": "Formulario de campo optimizado para tablet. Contrasta lo verificado con lo declarado y determina si corresponde emitir resolución de determinación."
       },
@@ -328,7 +330,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "fisc_vehicular",
         "label": "Fiscalización vehicular",
         "ranura": "fisc-vehicular",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Fiscalización",
         "title": "Fiscalización vehicular",
         "resumen": "Cruce del padrón vehicular con la información registral y de SUNAT para detectar vehículos afectos no declarados o con valor subvaluado."
       },
@@ -336,7 +338,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "fisc_resultados",
         "label": "Resultados",
         "ranura": "fisc-resultados",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Resultados",
         "title": "Resultados y determinaciones",
         "resumen": "Diferencias detectadas, deuda omitida por ejercicio y estado del valor emitido a partir de cada acta."
       },
@@ -344,7 +346,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "fisc_omisos",
         "label": "Omisos y subvaluadores",
         "ranura": "fisc-omisos",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Campaña",
         "title": "Omisos y subvaluadores",
         "resumen": "Contribuyentes con predio en catastro pero sin declaración en rentas, y declaraciones cuyo autovalúo está por debajo del valor catastral verificado."
       },
@@ -352,7 +354,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "fisc_estado_cuenta",
         "label": "Estado de cuenta de fiscalización",
         "ranura": "fisc-estado-cuenta",
-        "bloque": "Consultas",
+        "bloque": "Resultados",
         "title": "Estado de cuenta de fiscalización",
         "resumen": "Consulta las deudas originadas en un proceso fiscalizador: diferencias de impuesto predial, arbitrios y patrimonio vehicular con sus multas tributarias."
       },
@@ -360,7 +362,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "fisc_historico",
         "label": "Histórico de fiscalización predial",
         "ranura": "fisc-historico",
-        "bloque": "Consultas",
+        "bloque": "Resultados",
         "title": "Histórico de fiscalización predial",
         "resumen": "Versiones de un proceso fiscalizador: qué característica cambió, quién la modificó y en qué momento. Cada liquidación conserva su estado y su versión."
       },
@@ -368,7 +370,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "resolucion_determinacion_fisc",
         "label": "Resolución de determinación",
         "ranura": "resolucion-determinacion-fisc",
-        "bloque": "Documentos y reportes",
+        "bloque": "Documentos",
         "title": "Resolución de determinación de fiscalización",
         "resumen": "Valor emitido al cierre de un procedimiento de fiscalización: determina la diferencia de tributo por ejercicio y la multa tributaria que corresponde."
       }
@@ -587,17 +589,19 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M12 17.1h.02"
     ],
     "bloques": [
-      "Registro y mantenimiento",
-      "Procesos",
-      "Consultas",
-      "Documentos y reportes"
+      "Infracciones",
+      "Notificaciones",
+      "Cobranza",
+      "Catálogos",
+      "Reportes"
     ],
+    "centroDeReportes": "Reportes",
     "opciones": [
       {
         "id": "adm_notificacion",
         "label": "Notificación administrativa",
         "ranura": "adm-notificacion",
-        "bloque": "Procesos",
+        "bloque": "Notificaciones",
         "title": "Notificación administrativa",
         "resumen": "Registro previo de la notificación emitida en la vivienda o el negocio inspeccionado. Es el paso anterior a la generación de la multa administrativa."
       },
@@ -605,7 +609,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "infracciones_adm",
         "label": "Infracción administrativa",
         "ranura": "infracciones-adm",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Infracciones",
         "title": "Infracción administrativa",
         "resumen": "Procedimiento sancionador municipal: notificación preventiva, acta de constatación y resolución de infracción y sanción con multa y medida complementaria."
       },
@@ -613,7 +617,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "codigos_cuis",
         "label": "Cuadro CUIS",
         "ranura": "codigos-cuis",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Catálogos",
         "title": "Cuadro único de infracciones y sanciones (CUIS)",
         "resumen": "Catálogo aprobado por ordenanza con el porcentaje de UIT y la medida complementaria de cada infracción administrativa."
       },
@@ -621,7 +625,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "adm_codigos_reporte",
         "label": "Reporte de códigos",
         "ranura": "adm-codigos-reporte",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Reporte de códigos de infracción administrativa",
         "resumen": "Relación impresa del cuadro único de infracciones y sanciones vigente, con la base de cálculo y la sanción no pecuniaria de cada código."
       },
@@ -629,7 +633,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "adm_valores",
         "label": "Generación de valores",
         "ranura": "adm-valores",
-        "bloque": "Procesos",
+        "bloque": "Cobranza",
         "title": "Generación de valores administrativa",
         "resumen": "Selecciona un conjunto de papeletas administrativas con deuda según un criterio y genera masivamente un valor por papeleta para su impresión y notificación posterior."
       },
@@ -637,7 +641,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "adm_estado_cuenta",
         "label": "Estado de cuenta de papeleta",
         "ranura": "adm-estado-cuenta",
-        "bloque": "Consultas",
+        "bloque": "Infracciones",
         "title": "Estado de cuenta de papeleta administrativa",
         "resumen": "Deuda de una papeleta administrativa con su insoluto, reajuste, interés y gastos, y el importe con beneficio vigente."
       },
@@ -645,7 +649,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "adm_resolucion_gerencia",
         "label": "Resolución de gerencia",
         "ranura": "adm-resolucion-gerencia",
-        "bloque": "Documentos y reportes",
+        "bloque": "Cobranza",
         "title": "Resolución de gerencia",
         "resumen": "Resolución que resuelve el procedimiento sancionador y determina la multa administrativa exigible."
       },
@@ -653,7 +657,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "adm_notificacion_resolucion",
         "label": "Notificación de resolución",
         "ranura": "adm-notificacion-resolucion",
-        "bloque": "Documentos y reportes",
+        "bloque": "Notificaciones",
         "title": "Notificación de resolución de gerencia",
         "resumen": "Cédula de notificación de la resolución de gerencia, con el acuse de recibo y los datos del notificador y testigos."
       },
@@ -661,7 +665,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "adm_reportes",
         "label": "Reportes administrativos",
         "ranura": "adm-reportes",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Reportes de infracción administrativa",
         "resumen": "Emisor de los reportes del módulo de papeletas administrativas. El tipo de reporte habilita los criterios y el destino puede ser pantalla, impresora o Excel."
       },
@@ -669,7 +673,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "adm_padron_notificaciones",
         "label": "Padrón de notificaciones",
         "ranura": "adm-padron-notificaciones",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Padrón de notificaciones",
         "resumen": "Relación de las notificaciones emitidas por el sistema y el estado de la deuda cuando ya existe papeleta."
       },
@@ -677,7 +681,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "adm_notificaciones_vencidas",
         "label": "Notificaciones vencidas",
         "ranura": "adm-notificaciones-vencidas",
-        "bloque": "Procesos",
+        "bloque": "Notificaciones",
         "title": "Notificaciones vencidas",
         "resumen": "Notificaciones cuyo plazo de subsanación venció sin acreditarse el cumplimiento; habilitan la generación de la papeleta administrativa."
       },
@@ -685,7 +689,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "adm_notificaciones_contribuyente",
         "label": "Notificaciones por contribuyente",
         "ranura": "adm-notificaciones-contribuyente",
-        "bloque": "Procesos",
+        "bloque": "Notificaciones",
         "title": "Notificaciones por contribuyente",
         "resumen": "Papeletas administrativas agrupadas por año y mes de cometida la infracción, con el estado de la multa y los datos de su pago."
       },
@@ -693,7 +697,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "adm_resumen_recaudacion",
         "label": "Resumen de recaudación",
         "ranura": "adm-resumen-recaudacion",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resumen de recaudación de papeletas",
         "resumen": "Recaudación por multas administrativas por año y mes, diferenciando cobranza ordinaria, coactiva y por convenio."
       }
@@ -709,16 +713,17 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M17.4 10.6v2.8"
     ],
     "bloques": [
-      "Registro y mantenimiento",
-      "Procesos",
-      "Consultas"
+      "Cobro en caja",
+      "Convenios",
+      "Recibos",
+      "Cierre y control"
     ],
     "opciones": [
       {
         "id": "caja_tributaria",
         "label": "Caja tributaria",
         "ranura": "caja-tributaria",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Cobro en caja",
         "title": "Caja tributaria",
         "resumen": "Cobranza en ventanilla. Se elige la forma de pago, se filtra la deuda del contribuyente, se aplica el beneficio vigente y se emite el recibo."
       },
@@ -726,7 +731,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "caja_tasas",
         "label": "Caja de tasas",
         "ranura": "caja-tasas",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Cobro en caja",
         "title": "Caja de tasas y derechos administrativos",
         "resumen": "Cobro de conceptos del TUPA que no forman parte de la cuenta corriente: constancias, copias, certificados y derechos de trámite."
       },
@@ -734,7 +739,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "fraccionamiento",
         "label": "Fraccionamiento",
         "ranura": "fraccionamiento",
-        "bloque": "Procesos",
+        "bloque": "Convenios",
         "title": "Fraccionamiento tributario",
         "resumen": "Acogimiento de la deuda a pago fraccionado. El sistema simula el cronograma antes de generar el convenio; dos cuotas consecutivas impagas producen la pérdida del beneficio."
       },
@@ -742,7 +747,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "consulta_convenios",
         "label": "Convenios",
         "ranura": "consulta-convenios",
-        "bloque": "Consultas",
+        "bloque": "Convenios",
         "title": "Consulta de convenios",
         "resumen": "Seguimiento de los convenios suscritos, con las cuotas pagadas, las vencidas y los que están por quebrarse."
       },
@@ -750,7 +755,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "duplicado_recibo",
         "label": "Duplicado de recibo",
         "ranura": "duplicado-recibo",
-        "bloque": "Procesos",
+        "bloque": "Recibos",
         "title": "Duplicado de recibo",
         "resumen": "Reimpresión de un recibo ya emitido. El duplicado sale marcado como tal y queda registrado en la bitácora con el usuario que lo generó."
       },
@@ -758,7 +763,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "anulacion_recibo",
         "label": "Anulación de recibo",
         "ranura": "anulacion-recibo",
-        "bloque": "Procesos",
+        "bloque": "Recibos",
         "title": "Anulación de recibo",
         "resumen": "Deja sin efecto un recibo y devuelve la deuda a la cuenta corriente. Requiere autorización del responsable de tesorería y solo procede mientras la caja del turno siga abierta."
       },
@@ -766,7 +771,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "anulacion_convenio",
         "label": "Anulación de convenio",
         "ranura": "anulacion-convenio",
-        "bloque": "Procesos",
+        "bloque": "Convenios",
         "title": "Anulación de convenio",
         "resumen": "Anula, reforma o quiebra un convenio de fraccionamiento. La deuda acogida retorna a su estado original y el sistema conserva el motivo y el responsable de la anulación."
       },
@@ -774,7 +779,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "cierre_caja",
         "label": "Cierre de caja",
         "ranura": "cierre-caja",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Cierre y control",
         "title": "Cierre y arqueo de caja",
         "resumen": "Arqueo del turno: recaudación por medio de pago, recibos emitidos y anulados, y diferencia entre lo declarado y lo registrado por el sistema."
       },
@@ -782,7 +787,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "avance_recaudacion",
         "label": "Avance de recaudación",
         "ranura": "avance-recaudacion",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Cierre y control",
         "title": "Avance de recaudación",
         "resumen": "Comparación de lo emitido contra lo recaudado por tributo y periodo, base del seguimiento de la meta anual."
       },
@@ -790,7 +795,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "recaudacion_area",
         "label": "Recaudación por área",
         "ranura": "recaudacion-area",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Cierre y control",
         "title": "Recaudación por área",
         "resumen": "Recaudación desagregada por partida presupuestal y unidad orgánica generadora, para el reporte mensual a la gerencia de administración."
       }
@@ -804,15 +809,16 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M15.8 15.8 20.6 20.6"
     ],
     "bloques": [
-      "Consultas",
-      "Documentos y reportes"
+      "Del contribuyente",
+      "Del padrón",
+      "Documentos"
     ],
     "opciones": [
       {
         "id": "cuenta_corriente",
         "label": "Cuenta corriente",
         "ranura": "cuenta-corriente",
-        "bloque": "Consultas",
+        "bloque": "Del contribuyente",
         "title": "Estado de cuenta corriente",
         "resumen": "Deuda y pagos del contribuyente por ejercicio y tributo, con la fase en la que se encuentra cada obligación."
       },
@@ -820,7 +826,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "consulta_deuda",
         "label": "Deuda",
         "ranura": "consulta-deuda",
-        "bloque": "Consultas",
+        "bloque": "Del contribuyente",
         "title": "Consulta de deuda",
         "resumen": "Deuda exigible a una fecha de corte, con el interés moratorio calculado al día y el desglose por fase de cobranza."
       },
@@ -828,7 +834,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "consulta_unificada",
         "label": "Unificada predial-arbitrios",
         "ranura": "consulta-unificada",
-        "bloque": "Consultas",
+        "bloque": "Del padrón",
         "title": "Consulta unificada predial-arbitrios",
         "resumen": "Vista única del contribuyente: impuesto anual por ejercicio, impuesto por predio y, en pestañas, deudas, pagos, altas y bajas, movimientos del predio, fraccionamientos y valores emitidos."
       },
@@ -836,7 +842,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "consulta_resumen_predial",
         "label": "Resumen predial-arbitrios",
         "ranura": "consulta-resumen-predial",
-        "bloque": "Documentos y reportes",
+        "bloque": "Documentos",
         "title": "Consulta resumen predial-arbitrios",
         "resumen": "Resumen por predio: impuesto predial de cada ejercicio con su valúo afecto y el saldo de deuda, más el valúo de arbitrios y los movimientos del predio."
       },
@@ -844,7 +850,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "consulta_altas_bajas",
         "label": "Altas y bajas",
         "ranura": "consulta-altas-bajas",
-        "bloque": "Consultas",
+        "bloque": "Del padrón",
         "title": "Consulta de altas y bajas",
         "resumen": "Movimientos de alta y baja de deuda de un contribuyente, automáticos o manuales, con el documento que los aprueba y el detalle de las deudas afectadas."
       },
@@ -852,7 +858,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "consulta_deudas_beneficio",
         "label": "Deudas con beneficio",
         "ranura": "consulta-deudas-beneficio",
-        "bloque": "Consultas",
+        "bloque": "Del contribuyente",
         "title": "Consulta de deudas con beneficio",
         "resumen": "Simula el acogimiento de la deuda a un beneficio vigente: muestra la deuda total, la deuda acogida y la deuda con beneficio, con la tasa aplicada y el ahorro resultante."
       },
@@ -860,7 +866,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "consulta_pagos",
         "label": "Pagos",
         "ranura": "consulta-pagos",
-        "bloque": "Consultas",
+        "bloque": "Del contribuyente",
         "title": "Consulta de pagos",
         "resumen": "Historial de pagos con el recibo, la caja y el concepto imputado."
       },
@@ -868,7 +874,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "consulta_predios",
         "label": "Predios",
         "ranura": "consulta-predios",
-        "bloque": "Consultas",
+        "bloque": "Del padrón",
         "title": "Consulta de predios",
         "resumen": "Búsqueda de predios por titular, ubicación o código, con el autovalúo vigente y la deuda asociada a cada unidad."
       },
@@ -876,7 +882,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "consulta_vehiculos",
         "label": "Vehículos",
         "ranura": "consulta-vehiculos",
-        "bloque": "Consultas",
+        "bloque": "Del padrón",
         "title": "Consulta de vehículos",
         "resumen": "Padrón vehicular consultable por placa, motor o titular, con los ejercicios afectos y la deuda vigente."
       },
@@ -884,7 +890,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "consulta_valores",
         "label": "Valores",
         "ranura": "consulta-valores",
-        "bloque": "Consultas",
+        "bloque": "Del padrón",
         "title": "Consulta de valores emitidos",
         "resumen": "Órdenes de pago, resoluciones de determinación y de multa emitidas a un contribuyente, con su estado de notificación y firmeza."
       },
@@ -892,7 +898,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "constancia",
         "label": "Constancia de no adeudo",
         "ranura": "constancia",
-        "bloque": "Documentos y reportes",
+        "bloque": "Documentos",
         "title": "Constancia de no adeudo",
         "resumen": "Vista previa del documento que se entrega al contribuyente. Se imprime con el mismo formato en papel membretado."
       }
@@ -973,17 +979,18 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M8.4 20h7.2"
     ],
     "bloques": [
-      "Registro y mantenimiento",
-      "Procesos",
+      "Expedientes",
+      "Procedimiento",
+      "Cobro y costas",
       "Consultas",
-      "Documentos y reportes"
+      "Documentos"
     ],
     "opciones": [
       {
         "id": "coactiva_expedientes",
         "label": "Expedientes coactivos",
         "ranura": "coactiva-expedientes",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Expedientes",
         "title": "Expedientes coactivos",
         "resumen": "Cobranza coactiva de valores firmes: resolución de ejecución, medidas cautelares, costas y gastos, y causales de suspensión."
       },
@@ -991,7 +998,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "importacion_valores",
         "label": "Importación de valores",
         "ranura": "importacion-valores",
-        "bloque": "Procesos",
+        "bloque": "Expedientes",
         "title": "Importación de valores a coactiva",
         "resumen": "Ingresa a coactiva un valor ya generado en el módulo de valores y le asigna número de expediente coactivo, auxiliar y ejecutor para su tratamiento posterior."
       },
@@ -999,7 +1006,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "proceso_coactivo",
         "label": "Proceso coactivo",
         "ranura": "proceso-coactivo",
-        "bloque": "Procesos",
+        "bloque": "Procedimiento",
         "title": "Proceso coactivo",
         "resumen": "Seguimiento del expediente coactivo: datos generales, actuaciones del proceso y detalle de los valores que lo integran, con la deuda proyectada a la fecha."
       },
@@ -1007,7 +1014,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "rec_impresion",
         "label": "Impresión de REC",
         "ranura": "rec-impresion",
-        "bloque": "Documentos y reportes",
+        "bloque": "Documentos",
         "title": "Impresión de resolución de ejecución coactiva",
         "resumen": "Genera e imprime la REC de los expedientes pendientes de pago, con la deuda proyectada al día elegido. Permite imprimir la carátula y la REC 2."
       },
@@ -1015,7 +1022,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "expediente_historial",
         "label": "Historial del expediente",
         "ranura": "expediente-historial",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Expedientes",
         "title": "Gestionar historial del expediente",
         "resumen": "Cambia el estado del expediente coactivo y conserva el historial de estados con su documento de respaldo, motivo y observaciones."
       },
@@ -1023,7 +1030,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "cambiar_direccion_ref",
         "label": "Cambiar dirección referencial",
         "ranura": "cambiar-direccion-ref",
-        "bloque": "Procesos",
+        "bloque": "Procedimiento",
         "title": "Cambiar dirección referencial",
         "resumen": "Reemplaza la dirección referencial del expediente coactivo, que es la que se usa para notificar al obligado cuando difiere del domicilio fiscal."
       },
@@ -1031,7 +1038,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "costas_procesales",
         "label": "Liquidación de costas",
         "ranura": "costas-procesales",
-        "bloque": "Procesos",
+        "bloque": "Cobro y costas",
         "title": "Liquidación de costas procesales",
         "resumen": "Liquida las costas y gastos del procedimiento coactivo por expediente, según el arancel de costas aprobado."
       },
@@ -1039,7 +1046,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "fraccionamiento_coactivo",
         "label": "Fraccionamiento coactivo",
         "ranura": "fraccionamiento-coactivo",
-        "bloque": "Procesos",
+        "bloque": "Cobro y costas",
         "title": "Fraccionamiento coactivo",
         "resumen": "Convenio tributario coactivo. Se inicia con un pago inicial y sobre el saldo se elabora el cronograma de cuotas, con el beneficio aplicable a la deuda acogida."
       },
@@ -1047,7 +1054,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "actos_coactivos",
         "label": "Actos coactivos",
         "ranura": "actos-coactivos",
-        "bloque": "Procesos",
+        "bloque": "Procedimiento",
         "title": "Registro de actos coactivos",
         "resumen": "Registra y emite los documentos de las medidas coactivas adoptadas: embargos, retenciones y demás actos, con su archivo digital adjunto."
       },
@@ -1055,7 +1062,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "notificaciones_coactivas",
         "label": "Notificaciones coactivas",
         "ranura": "notificaciones-coactivas",
-        "bloque": "Procesos",
+        "bloque": "Procedimiento",
         "title": "Emisión de notificaciones coactivas",
         "resumen": "Registra y emite las notificaciones de las resoluciones de ejecución coactiva. Admite una o varias notificaciones por expediente según el tratamiento del caso."
       },
@@ -1086,15 +1093,17 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M9.6 20v-5.4h4.8V20"
     ],
     "bloques": [
-      "Registro y mantenimiento",
-      "Documentos y reportes"
+      "Licencias y autorizaciones",
+      "Catálogos",
+      "Reportes"
     ],
+    "centroDeReportes": "Reportes",
     "opciones": [
       {
         "id": "anuncios",
         "label": "Anuncio y propaganda",
         "ranura": "anuncios",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Licencias y autorizaciones",
         "title": "Anuncio y propaganda",
         "resumen": "Autorización para instalar elementos publicitarios. La tasa resulta del área del anuncio, el número de lados y su clase."
       },
@@ -1102,7 +1111,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "anuncios_reportes",
         "label": "Reportes de anuncios",
         "ranura": "anuncios-reportes",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Reportes de anuncio y propaganda",
         "resumen": "Emite el padrón de autorizaciones de anuncio y propaganda por contribuyente, dirección, estado o intervalo de fechas."
       },
@@ -1110,7 +1119,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "licencia_funcionamiento",
         "label": "Licencia de funcionamiento",
         "ranura": "licencia-funcionamiento",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Licencias y autorizaciones",
         "title": "Licencia de funcionamiento",
         "resumen": "Registro y seguimiento de licencias comerciales, con giros CIIU, zonificación, aforo, inspección técnica de seguridad y arbitrios del establecimiento."
       },
@@ -1118,7 +1127,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "licencia_padron",
         "label": "Padrón de licencias",
         "ranura": "licencia-padron",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Padrón de licencias de funcionamiento",
         "resumen": "Padrón de licencias municipales con agrupación por año y subagrupación por giro, dirección o contribuyente. El orden y los filtros se definen antes de emitir."
       },
@@ -1126,7 +1135,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "licencia_resumen_anual",
         "label": "Resumen de licencias por año",
         "ranura": "licencia-resumen-anual",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resumen de licencias por año",
         "resumen": "Cantidades de licencias emitidas, canceladas y duplicadas por año, con la recaudación por derecho de trámite."
       },
@@ -1134,7 +1143,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "licencia_resolucion_cancelacion",
         "label": "Res. de cancelación",
         "ranura": "licencia-resolucion-cancelacion",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resolución de cancelación de licencia",
         "resumen": "Resolución que deja sin efecto la licencia de funcionamiento, por solicitud del titular o por cierre del establecimiento."
       },
@@ -1142,7 +1151,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "licencia_resolucion_duplicado",
         "label": "Res. de duplicado",
         "ranura": "licencia-resolucion-duplicado",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resolución de duplicado de licencia",
         "resumen": "Resolución que autoriza la emisión de un duplicado de la licencia de funcionamiento, con el número de duplicado que corresponde."
       },
@@ -1150,7 +1159,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "fue_edificacion",
         "label": "FUE — edificación",
         "ranura": "fue-edificacion",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Licencias y autorizaciones",
         "title": "Formulario único de edificación (FUE)",
         "resumen": "Licencia de obra bajo la Ley 29090. La modalidad de aprobación determina si basta la verificación administrativa o se requiere comisión técnica."
       },
@@ -1158,7 +1167,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "edificacion_reporte",
         "label": "Reporte de licencias de edificación",
         "ranura": "edificacion-reporte",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Reporte general de licencias de edificación",
         "resumen": "Relación de licencias de edificación por modalidad, con el área a construir, el valor de obra declarado y el estado del expediente."
       },
@@ -1166,7 +1175,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ciiu",
         "label": "Catálogo CIIU",
         "ranura": "ciiu",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Catálogos",
         "title": "Catálogo CIIU de giros",
         "resumen": "Clasificación industrial internacional uniforme. Determina la compatibilidad del giro con la zonificación y el nivel de riesgo de la ITSE."
       },
@@ -1174,7 +1183,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "certificados",
         "label": "Certificados",
         "ranura": "certificados",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Certificados de numeración y zonificación",
         "resumen": "Emisión de los certificados que acreditan el número municipal asignado y los parámetros urbanísticos del predio."
       }
