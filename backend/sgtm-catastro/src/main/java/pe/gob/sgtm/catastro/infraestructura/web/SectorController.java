@@ -100,6 +100,11 @@ public class SectorController {
         this.reloj = reloj;
     }
 
+    /**
+     * El catalogo de sectores, con <b>los conteos de cada uno</b>: manzanas, predios activos y
+     * lotes (#290). Los cuenta la base sobre la pagina ya limitada; que significa exactamente cada
+     * cifra esta en {@link SectorResource}.
+     */
     @GetMapping
     public RespuestaPaginada<SectorResource> listar(ParametrosDePaginacion paginacion) {
         return RespuestaPaginada.de(

@@ -1,0 +1,33 @@
+# Predios y fichas de DEMOSTRACION — predios INVENTADOS. Ninguno existe.
+# Solo se cargan contra una municipalidad con municipalidad.es_demostracion = true:
+# CargarFichasDeDemostracion se niega a correr contra cualquier otra.
+#
+# Se carga EL ULTIMO: cada fila nombra su sector, su manzana, su via y su contribuyente
+# por codigo, y la fila que nombre algo que no existe se rechaza. Antes van vias.csv,
+# sectores.csv, manzanas.csv y contribuyentes.csv.
+#
+# LAS PRIMERAS COLUMNAS SON LOS TRAMOS del codigo de referencia catastral, en el orden
+# que declara la composicion vigente del dominio (ComposicionCatastral.DEL_MANUAL,
+# plantilla DDPPddSSMMMLLLEEeeppUUU del manual). El codigo NO se escribe entero en
+# ninguna columna: lo compone CodigoReferenciaCatastral.componer, que rellena cada tramo
+# con ceros a la izquierda. D-10 SIGUE ABIERTA —el manual da 23 posiciones y el
+# prototipo de interfaz 21—; si se cierra en las 21, cambia el numero de columnas de
+# tramo de este archivo y nada mas: ni el importador ni estas filas escriben en ningun
+# sitio cuantos digitos ocupa un tramo.
+#
+# Ubigeo de Catacaos: departamento 20 (Piura), provincia 01 (Piura), distrito 04.
+#
+# NINGUNA CIFRA NORMATIVA. El area de terreno es una medida del predio, no un valor
+# unitario ni un arancel: esos no se siembran (D-02a, D-13), y sus pantallas tienen que
+# seguir diciendo «sin conjunto sellado».
+departamento,provincia,distrito,sector,manzana,lote,edificacion,entrada,piso,unidad,tipoPredio,direccion,codigoVia,numeroMunicipal,tipoFicha,areaTerreno,uso,denominacion,vigenciaDesde,origen,documentoOrigen,codigoContribuyente,condicionTitular,porcentaje,documentoTitular
+20,01,04,01,001,001,00,00,00,000,URBANO,Calle Comercio 245,V-0003,245,UNICA,180.50,Casa habitacion,,2026-01-01,DECLARACION_JURADA,DJ-DEMO-0001,C-000001,PROPIETARIO_UNICO,,DJ-DEMO-0001
+20,01,04,01,001,002,00,00,00,000,URBANO,Calle Comercio 251,V-0003,251,UNICA,142.00,Casa habitacion,,2026-01-01,DECLARACION_JURADA,DJ-DEMO-0002,C-000002,PROPIETARIO_UNICO,,DJ-DEMO-0002
+20,01,04,01,002,001,00,00,00,000,URBANO,Calle San Francisco 118,V-0004,118,UNICA,96.75,Casa habitacion,,2026-01-01,DECLARACION_JURADA,DJ-DEMO-0003,C-000003,PROPIETARIO_UNICO,,DJ-DEMO-0003
+20,01,04,01,002,002,00,00,00,000,URBANO,Avenida Cayetano Heredia 402,V-0001,402,ECONOMICA,320.00,Taller de ceramica,Taller Narihuala,2026-01-01,DECLARACION_JURADA,DJ-DEMO-0004,C-000006,PROPIETARIO_UNICO,,DJ-DEMO-0004
+20,01,04,02,001,001,00,00,00,000,URBANO,Calle Junin 77,V-0005,77,UNICA,210.30,Casa habitacion,,2026-01-01,FISCALIZACION,ACTA-DEMO-0005,C-000004,COPROPIETARIO,50.00,ACTA-DEMO-0005
+20,01,04,02,002,001,00,00,00,000,URBANO,Calle Piura 310,V-0006,310,UNICA,88.40,Casa habitacion,,2026-01-01,FISCALIZACION,ACTA-DEMO-0006,C-000005,POSEEDOR,100.00,ACTA-DEMO-0006
+20,01,04,02,003,001,01,01,03,201,URBANO,Pasaje Los Ceramistas 15 Dpto 201,V-0013,15,BIENES_COMUNES,64.20,Departamento,Edificio Los Ceramistas,2026-01-01,DECLARACION_JURADA,DJ-DEMO-0007,C-000007,PROPIETARIO_UNICO,,DJ-DEMO-0007
+20,01,04,03,001,001,00,00,00,000,URBANO,Avenida Progreso 890,V-0002,890,ECONOMICA,455.00,Deposito y patio de maniobras,Patio La Legua,2026-01-01,DECLARACION_JURADA,DJ-DEMO-0008,C-000007,PROPIETARIO_UNICO,,DJ-DEMO-0008
+20,01,04,04,001,001,00,00,00,000,RUSTICO,Carretera Catacaos - La Legua km 4,V-0015,,RURAL,12500.00,Cultivo bajo riego,Fundo Simbila Chico,2026-01-01,MIGRACION,MIG-DEMO-0009,C-000008,SUCESION,100.00,MIG-DEMO-0009
+20,01,04,04,002,001,00,00,00,000,RUSTICO,Carretera Catacaos - La Legua km 6,V-0015,,RURAL,8300.00,Cultivo bajo riego,Fundo Simbila Grande,2026-01-01,MIGRACION,MIG-DEMO-0010,C-000001,CONYUGE,50.00,MIG-DEMO-0010

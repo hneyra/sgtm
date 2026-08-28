@@ -1,4 +1,4 @@
-package pe.gob.sgtm.catastro.aplicacion;
+package pe.gob.sgtm.carga;
 
 import java.util.List;
 
@@ -42,7 +42,7 @@ public record InformeDeImportacion(int totalFilas, int nuevas, List<FilaRechazad
          * nunca lo sea aqui: los objetos de valor de este sistema siempre explican por que
          * rechazan. Decirlo con un texto de reserva cuesta menos que discutirlo.
          */
-        static FilaRechazada de(int fila, RuntimeException causaDeValidacion) {
+        public static FilaRechazada de(int fila, RuntimeException causaDeValidacion) {
             String mensaje = causaDeValidacion.getMessage();
             return new FilaRechazada(fila, mensaje == null ? "La fila no es valida" : mensaje);
         }

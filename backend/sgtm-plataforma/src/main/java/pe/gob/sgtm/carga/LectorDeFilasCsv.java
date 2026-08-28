@@ -1,4 +1,4 @@
-package pe.gob.sgtm.catastro.aplicacion;
+package pe.gob.sgtm.carga;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -19,34 +19,51 @@ import java.util.List;
  * campo con un salto de linea dentro de las comillas. Cada linea fisica del archivo es una fila; si
  * un dia hace falta mas, este es el sitio para reemplazarlo por una libreria de verdad.
  *
- * <p>La primera linea es el encabezado y se descarta sin leerla como fila. Las lineas en blanco se
- * saltan y no cuentan como fila de datos, pero <b>si</b> cuentan para la numeracion: el numero de
- * fila que se reporta es siempre el numero de linea real del archivo, para que quien lo abra en un
- * editor de hojas de calculo encuentre la fila exacta.
+ * <p>La primera linea util es el encabezado y se descarta sin leerla como fila. Las lineas en
+ * blanco y las que empiezan por {@code #} se saltan y no cuentan como fila de datos, pero <b>si</b>
+ * cuentan para la numeracion: el numero de fila que se reporta es siempre el numero de linea real
+ * del archivo, para que quien lo abra en un editor de hojas de calculo encuentre la fila exacta.
+ *
+ * <p><b>Por que hay comentarios en un CSV.</b> Un archivo de carga versionado en el repositorio
+ * tiene que poder decir de donde salio, que parte es estructura real y que parte es inventada, y
+ * que decision abierta lo condiciona —D-10 en el codigo de referencia catastral—. Escrito en un
+ * README aparte, ese aviso se separa del archivo la primera vez que alguien lo copia a su maquina
+ * para cargarlo. La hoja de calculo que lo abra mostrara una columna de mas en esas lineas; el
+ * importador no las vera.
  */
-final class LectorDeFilasCsv {
+public final class LectorDeFilasCsv {
 
     private LectorDeFilasCsv() {}
 
     /**
      * Una fila de datos, con su numero de linea en el archivo (1-based, contando el encabezado).
      */
-    record FilaCsv(int numeroDeLinea, List<String> campos) {}
+    public record FilaCsv(int numeroDeLinea, List<String> campos) {}
 
-    static List<FilaCsv> leer(Reader archivo) throws IOException {
+    public static List<FilaCsv> leer(Reader archivo) throws IOException {
         List<FilaCsv> filas = new ArrayList<>();
         try (BufferedReader lector = new BufferedReader(archivo)) {
-            int numeroDeLinea = 1;
-            lector.readLine(); // el encabezado: se descarta sin analizar
+            int numeroDeLinea = 0;
+            boolean encabezadoVisto = false;
             String linea;
             while ((linea = lector.readLine()) != null) {
                 numeroDeLinea++;
-                if (!linea.isBlank()) {
-                    filas.add(new FilaCsv(numeroDeLinea, dividir(linea)));
+                if (esIgnorable(linea)) {
+                    continue;
                 }
+                if (!encabezadoVisto) {
+                    encabezadoVisto = true; // el encabezado: se descarta sin analizar
+                    continue;
+                }
+                filas.add(new FilaCsv(numeroDeLinea, dividir(linea)));
             }
         }
         return filas;
+    }
+
+    /** Una linea en blanco o un comentario: ni encabezado ni fila, pero si numero de linea. */
+    private static boolean esIgnorable(String linea) {
+        return linea.isBlank() || linea.stripLeading().startsWith("#");
     }
 
     /** Separa por comas, respetando un campo entre comillas dobles con {@code ""} como escape. */

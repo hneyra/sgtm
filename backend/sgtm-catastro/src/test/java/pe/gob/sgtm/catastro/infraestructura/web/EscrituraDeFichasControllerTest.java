@@ -1,6 +1,7 @@
 package pe.gob.sgtm.catastro.infraestructura.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
@@ -40,11 +41,16 @@ import pe.gob.sgtm.catastro.aplicacion.ActualizarFichaCatastral;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDeFichas;
 import pe.gob.sgtm.catastro.aplicacion.InscribirFicha;
 import pe.gob.sgtm.catastro.aplicacion.RegistrarPredio;
+import pe.gob.sgtm.catastro.dominio.ActividadEconomica;
+import pe.gob.sgtm.catastro.dominio.BienComun;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.CategoriasConstructivas;
 import pe.gob.sgtm.catastro.dominio.Construccion;
+import pe.gob.sgtm.catastro.dominio.DetalleDeBienesComunes;
 import pe.gob.sgtm.catastro.dominio.DetalleDeLaFicha;
+import pe.gob.sgtm.catastro.dominio.DetalleEconomico;
 import pe.gob.sgtm.catastro.dominio.DetalleRural;
+import pe.gob.sgtm.catastro.dominio.EstadoDeConservacion;
 import pe.gob.sgtm.catastro.dominio.EstadoPredio;
 import pe.gob.sgtm.catastro.dominio.FichaCatastral;
 import pe.gob.sgtm.catastro.dominio.FichaCatastralRepository;
@@ -52,11 +58,13 @@ import pe.gob.sgtm.catastro.dominio.FichaEncontrada;
 import pe.gob.sgtm.catastro.dominio.FiltroDeFichas;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
+import pe.gob.sgtm.catastro.dominio.MaterialEstructural;
 import pe.gob.sgtm.catastro.dominio.OrigenDeLaFicha;
 import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.Riego;
 import pe.gob.sgtm.catastro.dominio.Sector;
+import pe.gob.sgtm.catastro.dominio.SectorConConteos;
 import pe.gob.sgtm.catastro.dominio.TierraRural;
 import pe.gob.sgtm.catastro.dominio.TipoFicha;
 import pe.gob.sgtm.catastro.dominio.TipoPredio;
@@ -71,8 +79,10 @@ import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
+import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Medida;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.dominio.Porcentaje;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
 import pe.gob.sgtm.web.ManejadorDeErrores;
 import tools.jackson.databind.json.JsonMapper;
@@ -994,6 +1004,252 @@ class EscrituraDeFichasControllerTest {
                 .orElseThrow();
     }
 
+    // ── La lectura: lo que el recurso publica ──────────────────────────
+
+    /**
+     * Lo que la ficha guarda y el recurso publica (#290).
+     *
+     * <p>Todo lo que se afirma aqui estaba ya en el dominio y en la base —se escribia al inscribir
+     * la ficha y se copiaba al versionar— y no salia por HTTP: la pantalla que lo declaraba no
+     * podia volver a verlo. Cada prueba siembra el dato y comprueba que llega al JSON; si un campo
+     * deja de publicarse, la suya se pone roja diciendo cual.
+     */
+    @Nested
+    @DisplayName("Lectura (GET): la ficha publica lo que guarda")
+    class Lectura {
+
+        @Test
+        @DisplayName("la cabecera lleva frontis, condicion de propiedad y tipo de edificacion")
+        void laCabeceraLlevaSusTresCampos() throws Exception {
+            fichas.sembrar(fichaCompleta(predios.idDe(PREDIO_SIN_FICHA)));
+
+            MvcResult resultado =
+                    mvc.perform(get("/api/v1/catastro/fichas/urbana/" + PREDIO_SIN_FICHA))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+            assertThat(resultado.getResponse().getContentAsString())
+                    .as("el frontis sale con su unidad: son metros lineales, no cuadrados")
+                    .contains("\"frontis\":\"12.50 ML\"")
+                    .contains("\"condicionPropiedad\":\"PROPIETARIO UNICO\"")
+                    .contains("\"tipoEdificacion\":\"CASA HABITACION\"");
+        }
+
+        @Test
+        @DisplayName(
+                "las obras complementarias salen enteras: que es, cuanto, unidad, ano y estado")
+        void lasObrasComplementariasSalenEnteras() throws Exception {
+            fichas.sembrar(fichaCompleta(predios.idDe(PREDIO_SIN_FICHA)));
+
+            MvcResult resultado =
+                    mvc.perform(get("/api/v1/catastro/fichas/urbana/" + PREDIO_SIN_FICHA))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getContentAsString())
+                    .as(
+                            "sin la lista, el cerco que el tecnico midio en campo se guardaba y no"
+                                    + " se podia volver a mirar")
+                    .contains("\"instalaciones\"")
+                    .contains("\"descripcion\":\"Cerco perimetrico\"")
+                    .contains("\"unidad\":\"ML\"")
+                    .contains("\"cantidad\":\"30.00 ML\"")
+                    .contains("\"anioConstruccion\":2019")
+                    .contains("\"estadoConservacion\":\"BUENO\"");
+        }
+
+        @Test
+        @DisplayName("cada construccion lleva su porcentaje construido, con su signo")
+        void cadaConstruccionLlevaSuPorcentaje() throws Exception {
+            fichas.sembrar(fichaCompleta(predios.idDe(PREDIO_SIN_FICHA)));
+
+            MvcResult resultado =
+                    mvc.perform(get("/api/v1/catastro/fichas/urbana/" + PREDIO_SIN_FICHA))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getContentAsString())
+                    .as("un piso construido a medias no es un piso completo, y la ficha lo sabia")
+                    .contains("\"porcentajeConstruido\":\"60.00 %\"");
+        }
+
+        @Test
+        @DisplayName("la actividad lleva la fecha del anuncio y desde cuando se declara")
+        void laActividadLlevaSusFechas() throws Exception {
+            fichas.sembrar(fichaEconomica(predios.idDe(PREDIO_SIN_FICHA)));
+
+            MvcResult resultado =
+                    mvc.perform(get("/api/v1/catastro/fichas/economica/" + PREDIO_SIN_FICHA))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getContentAsString())
+                    .as("una fiscalizacion sin fecha no se sostiene (regla 9)")
+                    .contains("\"anuncioNumero\":\"AN-77\"")
+                    .contains("\"anuncioFecha\":\"2025-03-10\"")
+                    .contains("\"vigenciaDesde\":\"2025-01-02\"");
+        }
+
+        @Test
+        @DisplayName("el bien comun lleva su ano de construccion, que es lo que lo deprecia")
+        void elBienComunLlevaSuAnio() throws Exception {
+            fichas.sembrar(fichaDeBienesComunes(predios.idDe(PREDIO_SIN_FICHA)));
+
+            MvcResult resultado =
+                    mvc.perform(get("/api/v1/catastro/fichas/bienes-comunes/" + PREDIO_SIN_FICHA))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getContentAsString())
+                    .contains("\"descripcion\":\"Escalera comun\"")
+                    .contains("\"anioConstruccion\":2008");
+        }
+
+        @Test
+        @DisplayName("el grupo de tierra lleva la superficie comun que le toca, en hectareas")
+        void elGrupoDeTierraLlevaSuAreaComun() throws Exception {
+            fichas.sembrar(fichaRuralConAreaComun(predios.idDe(PREDIO_SIN_FICHA)));
+
+            MvcResult resultado =
+                    mvc.perform(get("/api/v1/catastro/fichas/rural/" + PREDIO_SIN_FICHA))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getContentAsString())
+                    .as("con su unidad: leer hectareas como metros calcularia diez mil veces menos")
+                    .contains("\"hectareas\":\"4.0000 HA\"")
+                    .contains("\"hectareasComunes\":\"0.5000 HA\"");
+        }
+
+        @Test
+        @DisplayName("y con todo eso publicado, sigue sin salir un solo importe (regla 5)")
+        void sigueSinSalirNingunImporte() throws Exception {
+            fichas.sembrar(fichaCompleta(predios.idDe(PREDIO_SIN_FICHA)));
+
+            MvcResult resultado =
+                    mvc.perform(get("/api/v1/catastro/fichas/urbana/" + PREDIO_SIN_FICHA))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getContentAsString())
+                    .as(
+                            "el valor de una obra complementaria sale de un valor unitario, el 5 %, la"
+                                    + " depreciacion y un factor sin fuente (D-11): nada de eso se"
+                                    + " publica")
+                    .doesNotContain("\"valor")
+                    .doesNotContain("arancel")
+                    .doesNotContain("autovaluo")
+                    .doesNotContain("S/");
+        }
+    }
+
+    /** Una ficha urbana con todo lo que la cabecera, la construccion y la obra pueden llevar. */
+    private static FichaCatastral fichaCompleta(long predioId) {
+        return new FichaCatastral(
+                null,
+                predioId,
+                TipoFicha.UNICA,
+                1,
+                AreaM2.de("200.00"),
+                "CASA HABITACION",
+                Medida.enMetrosLineales("12.50"),
+                "PROPIETARIO UNICO",
+                "CASA HABITACION",
+                "Casa de los Rojas",
+                ALTA,
+                null,
+                OrigenDeLaFicha.DECLARACION_JURADA,
+                "DJ 900-2026",
+                Observacion.de("Alta de la ficha con todos sus campos declarados"),
+                List.of(
+                        new Construccion(
+                                null,
+                                null,
+                                "1",
+                                AreaM2.de("90.00"),
+                                new Ejercicio(2015),
+                                MaterialEstructural.LADRILLO,
+                                EstadoDeConservacion.BUENO,
+                                CategoriasConstructivas.todas('C'),
+                                Porcentaje.de("60.00"))),
+                List.of(
+                        new OtraInstalacion(
+                                null,
+                                null,
+                                "Cerco perimetrico",
+                                Medida.de("30.00", "ML"),
+                                new Ejercicio(2019),
+                                EstadoDeConservacion.BUENO)),
+                null);
+    }
+
+    /** Una ficha economica cuya actividad declara anuncio con fecha y desde cuando rige. */
+    private static FichaCatastral fichaEconomica(long predioId) {
+        return FichaCatastral.primera(
+                        predioId,
+                        TipoFicha.ECONOMICA,
+                        AreaM2.de("120.00"),
+                        "COMERCIO",
+                        ALTA,
+                        OrigenDeLaFicha.DECLARACION_JURADA,
+                        "DJ 901-2026",
+                        Observacion.de("Alta de la ficha economica del local"))
+                .conDetalle(
+                        DetalleEconomico.de(
+                                new ActividadEconomica(
+                                        null,
+                                        null,
+                                        "ROJAS DIAZ, ANA",
+                                        "Bodega Ana",
+                                        "4711",
+                                        AreaM2.de("40.00"),
+                                        "LIC-55",
+                                        LocalDate.of(2025, 2, 1),
+                                        "AN-77",
+                                        LocalDate.of(2025, 3, 10),
+                                        LocalDate.of(2025, 1, 2))));
+    }
+
+    /** Una ficha de bienes comunes cuyo bien declara de que ano es. */
+    private static FichaCatastral fichaDeBienesComunes(long predioId) {
+        return FichaCatastral.primera(
+                        predioId,
+                        TipoFicha.BIENES_COMUNES,
+                        AreaM2.de("600.00"),
+                        "EDIFICIO MULTIFAMILIAR",
+                        ALTA,
+                        OrigenDeLaFicha.DECLARACION_JURADA,
+                        "DJ 902-2026",
+                        Observacion.de("Alta de la ficha de bienes comunes del edificio"))
+                .conDetalle(
+                        DetalleDeBienesComunes.de(
+                                new BienComun(
+                                        null,
+                                        null,
+                                        "Escalera comun",
+                                        AreaM2.de("35.00"),
+                                        MaterialEstructural.CONCRETO,
+                                        EstadoDeConservacion.BUENO,
+                                        new Ejercicio(2008))));
+    }
+
+    /** Una ficha rural cuyo grupo de tierra lleva ademas su parte de las areas comunes. */
+    private static FichaCatastral fichaRuralConAreaComun(long predioId) {
+        return FichaCatastral.primera(
+                        predioId,
+                        TipoFicha.RURAL,
+                        AreaM2.de("40000.00"),
+                        "AGRICOLA",
+                        ALTA,
+                        OrigenDeLaFicha.DECLARACION_JURADA,
+                        "DJ 903-2026",
+                        Observacion.de("Alta de la ficha rural con area comun declarada"))
+                .conDetalle(
+                        DetalleRural.de(
+                                new TierraRural(
+                                        null,
+                                        null,
+                                        "CULTIVO_TRANSITORIO",
+                                        "A2",
+                                        Riego.BAJO_RIEGO,
+                                        TierraRural.enHectareas("4.0000"),
+                                        TierraRural.enHectareas("0.5000"))));
+    }
+
     private static String altaConTitular(String codigoContribuyente) {
         return """
                {"codRefCatastral":"25010100100100101010001",
@@ -1200,7 +1456,7 @@ class EscrituraDeFichasControllerTest {
         // ---------- Lo que estos controladores no tocan ----------
 
         @Override
-        public Pagina<Sector> sectores(Paginacion paginacion) {
+        public Pagina<SectorConConteos> sectores(Paginacion paginacion) {
             throw new UnsupportedOperationException("La escritura de fichas no lista sectores");
         }
 
