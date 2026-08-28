@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
@@ -13,6 +14,7 @@ import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
+import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.licencias.dominio.CriterioDeLicencias;
 import pe.gob.sgtm.licencias.dominio.DuplicadoDeLicencia;
 import pe.gob.sgtm.licencias.dominio.DuplicadoDeLicenciaRepository;
@@ -21,6 +23,8 @@ import pe.gob.sgtm.licencias.dominio.LicenciaDeFuncionamiento;
 import pe.gob.sgtm.licencias.dominio.LicenciaRepository;
 import pe.gob.sgtm.licencias.dominio.MovimientoDeLicencia;
 import pe.gob.sgtm.licencias.dominio.MovimientoDeLicenciaRepository;
+import pe.gob.sgtm.licencias.dominio.ResumenDelPadronDeLicencias;
+import pe.gob.sgtm.licencias.dominio.TipoDeLicencia;
 
 /**
  * La grilla y la ficha de la opcion {@code licencia_funcionamiento} (#44, RF-110).
@@ -161,13 +165,110 @@ public class ConsultaDeLicencias {
         for (ResumenDeContribuyente resumen : contribuyentes.buscar(buscado, TITULARES_MAXIMOS)) {
             encontrados.add(resumen.id());
         }
-        return new CriterioDeLicencias(
-                criterio.numero(),
-                criterio.expediente(),
-                criterio.nombreComercial(),
-                criterio.direccion(),
-                encontrados);
+        return criterio.conTitulares(encontrados);
     }
+
+    /**
+     * El padron de la opcion {@code licencia_padron}: la misma consulta con su resumen (#54,
+     * RF-115).
+     *
+     * <p>Tres cosas lo distinguen de {@link #buscar}, y las tres son el criterio de aceptacion 1 de
+     * #54:
+     *
+     * <ol>
+     *   <li><b>La fecha de corte entra como argumento</b> y no sale del reloj. El estado de cada
+     *       licencia depende del dia, asi que reimprimir el padron de marzo con su misma fecha
+     *       tiene que dar el mismo papel. Resolverlo con {@code LocalDate.now()} haria que el
+     *       padron de marzo cambiara cada vez que se pide.
+     *   <li><b>El filtro por estado se aplica en el motor</b>, con la misma expresion que usa el
+     *       resumen. Filtrarlo en memoria despues de paginar daria una pagina corta y un resumen
+     *       que no cuadra con ella.
+     *   <li><b>El resumen cuenta TODAS las licencias del criterio</b>, no las de la pagina. Contar
+     *       la pagina daria una cifra que parece un total y no lo es —el defecto que #25 destapo en
+     *       la consulta unificada y que #51 volvio a cazar en el padron de anuncios—.
+     * </ol>
+     */
+    @Transactional(readOnly = true)
+    public Padron padron(
+            CriterioDeLicencias criterio,
+            @Nullable String nombreDelTitular,
+            @Nullable EstadoDeLicencia estado,
+            LocalDate aLaFecha,
+            Paginacion paginacion) {
+
+        Objects.requireNonNull(
+                aLaFecha, "El padron dice de cuando es: la fecha entra como argumento (regla 9)");
+
+        CriterioDeLicencias conTitulares = conTitularesResueltos(criterio, nombreDelTitular);
+        if (conTitulares.sinTitularPosible()) {
+            return new Padron(
+                    Pagina.vacia(paginacion), ResumenDelPadronDeLicencias.vacio(), aLaFecha);
+        }
+
+        Pagina<LicenciaDeFuncionamiento> pagina =
+                licencias.padron(conTitulares, estado, aLaFecha, paginacion);
+        ResumenDelPadronDeLicencias resumen = licencias.resumen(conTitulares, estado, aLaFecha);
+
+        if (pagina.estaVacia()) {
+            return new Padron(Pagina.vacia(paginacion), resumen, aLaFecha);
+        }
+
+        Set<Long> ids = new HashSet<>();
+        Set<Long> titulares = new HashSet<>();
+        for (LicenciaDeFuncionamiento licencia : pagina.contenido()) {
+            ids.add(licencia.identificador());
+            titulares.add(licencia.contribuyenteId());
+        }
+        Map<Long, List<MovimientoDeLicencia>> historiales = movimientos.deLicencias(ids);
+        Map<Long, ResumenDeContribuyente> padron = contribuyentes.porIds(titulares);
+
+        return new Padron(
+                pagina.mapear(
+                        licencia ->
+                                new LicenciaEnConsulta(
+                                        licencia,
+                                        EstadoDeLicencia.derivarDe(
+                                                historiales.getOrDefault(
+                                                        licencia.identificador(), List.of()),
+                                                licencia.vigenciaHasta(),
+                                                aLaFecha),
+                                        aLaFecha,
+                                        padron.get(licencia.contribuyenteId()),
+                                        List.of(),
+                                        List.of())),
+                resumen,
+                aLaFecha);
+    }
+
+    /**
+     * Los conteos de un año para el resumen anual (#54, RF-115).
+     *
+     * <p>Vive aqui —y no en {@code ResumenAnualDeLicencias}— por una razon concreta: <b>es la unica
+     * lectura del resumen que necesita transaccion</b>. Los otros dos colaboradores del resumen
+     * —los parametros sellados y la recaudacion de la caja— traen la suya, y si el resumen abriera
+     * una que las envolviera a todas, el primer año sin conjunto sellado la marcaria
+     * <i>rollback-only</i> y se llevaria por delante los años que si se podian calcular. Es el
+     * mismo reparto que #25 documenta al reves: alli el problema era que los puertos ajenos
+     * disimulaban la falta de transaccion del anfitrion; aqui es que el anfitrion no debe tener
+     * ninguna.
+     */
+    @Transactional(readOnly = true)
+    public LicenciaRepository.ConteosDelAno conteosDelAno(
+            Ejercicio ejercicio, @Nullable TipoDeLicencia tipo, LocalDate alCierre) {
+        return licencias.conteosDelAno(ejercicio, tipo, alCierre);
+    }
+
+    /**
+     * El padron de licencias con su resumen.
+     *
+     * @param pagina las filas pedidas
+     * @param resumen lo que TODAS las licencias del criterio suman, no solo las de esta pagina
+     * @param aLaFecha el dia de corte del padron (regla 9, RNF-075)
+     */
+    public record Padron(
+            Pagina<LicenciaEnConsulta> pagina,
+            ResumenDelPadronDeLicencias resumen,
+            LocalDate aLaFecha) {}
 
     /**
      * Una licencia tal como la pantalla la pinta.

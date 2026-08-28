@@ -9,10 +9,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.tesoreria.CobrosDeTasas;
+import pe.gob.sgtm.tesoreria.RecaudacionDeTasa;
 import pe.gob.sgtm.tesoreria.TasaCobrada;
+import pe.gob.sgtm.tesoreria.dominio.CriterioDeRecaudacion;
 import pe.gob.sgtm.tesoreria.dominio.LineaDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.MovimientoDeReciboRepository;
 import pe.gob.sgtm.tesoreria.dominio.NumeroDeRecibo;
+import pe.gob.sgtm.tesoreria.dominio.RecaudacionDeTributo;
+import pe.gob.sgtm.tesoreria.dominio.RecaudacionRepository;
 import pe.gob.sgtm.tesoreria.dominio.Recibo;
 import pe.gob.sgtm.tesoreria.dominio.ReciboRepository;
 
@@ -38,11 +42,15 @@ public class CobrosDeTasasTesoreria implements CobrosDeTasas {
 
     private final ReciboRepository recibos;
     private final MovimientoDeReciboRepository movimientos;
+    private final RecaudacionRepository recaudacion;
 
     public CobrosDeTasasTesoreria(
-            ReciboRepository recibos, MovimientoDeReciboRepository movimientos) {
+            ReciboRepository recibos,
+            MovimientoDeReciboRepository movimientos,
+            RecaudacionRepository recaudacion) {
         this.recibos = recibos;
         this.movimientos = movimientos;
+        this.recaudacion = recaudacion;
     }
 
     @Override
@@ -82,6 +90,31 @@ public class CobrosDeTasasTesoreria implements CobrosDeTasas {
                             LocalDate.ofInstant(recibo.emitidoEn(), ZoneOffset.UTC)));
         }
         return Optional.empty();
+    }
+
+    /**
+     * Lo recaudado por ese concepto en el rango, reutilizando el agregado de #36.
+     *
+     * <p>El criterio filtra por {@code tributo}, que en una linea de caja de tasas <b>es</b> el
+     * codigo del TUPA (ver {@link CobrarTasa}). Puede devolver varias filas si algun dia el mismo
+     * codigo apareciera con distinta caja: se suman todas, que es lo que «lo recaudado por ese
+     * concepto» significa.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public RecaudacionDeTasa recaudado(String codigoDeTasa, LocalDate desde, LocalDate hasta) {
+        Objects.requireNonNull(codigoDeTasa, "Falta el concepto del TUPA que se quiere sumar");
+        String concepto = codigoDeTasa.strip().toUpperCase(Locale.ROOT);
+
+        Dinero cobrado = Dinero.CERO;
+        Dinero anulado = Dinero.CERO;
+        for (RecaudacionDeTributo fila :
+                recaudacion.porTributo(
+                        new CriterioDeRecaudacion(desde, hasta, concepto, null, null, null))) {
+            cobrado = cobrado.mas(fila.cobrado());
+            anulado = anulado.mas(fila.anulado());
+        }
+        return new RecaudacionDeTasa(concepto, cobrado, anulado, desde, hasta);
     }
 
     /**

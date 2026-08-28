@@ -1673,6 +1673,57 @@ public final class DatosDePrueba {
                 "INSERT INTO anuncio_correlativo (municipalidad_id, ejercicio, ultimo)"
                         + " VALUES (?, 2026, 1)",
                 muni);
+        // V51 (#54): el certificado de numeracion y zonificacion, con su papel, su vigencia
+        // copiada y el derecho que su recibo cobro. Se siembra para que la prueba de aislamiento
+        // tenga filas de certificados que aislar; sin ella la tabla estaria vacia y la comprobacion
+        // de RLS pasaria sin comparar nada.
+        //
+        // El importe del derecho NO es una cifra normativa sembrada: es lo que un recibo cobro
+        // aquel dia, igual que `anuncio_movimiento.tasa`.
+        long documentoDelCertificado =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'CERTIFICADO', ?, 2026, ?,"
+                                + "         CAST(? AS jsonb), 'PDF', repeat('e', 64), ?,"
+                                + "         'siembra', 'certificado de prueba') RETURNING id",
+                        muni,
+                        "CERTIFICADO-2026-" + sufijo,
+                        "CN-" + sufijo,
+                        MODELO_DE_DOCUMENTO,
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO certificado (municipalidad_id, numero, tipo, predio_id,"
+                        + " contribuyente_id, codigo_predial, direccion, expediente,"
+                        + " fecha_emision, vigencia_hasta, recibo_id, derecho, derecho_a,"
+                        + " documento_id, documento_numero, zonificacion, altura_maxima,"
+                        + " clave_idempotencia, usuario_registro, fecha_registro, observacion)"
+                        + " SELECT ?, ?, 'ZONIFICACION_VIAS', p.id, ?, p.codigo_ref_catastral,"
+                        + "        p.direccion, ?, ?, ?, ?, 35.00, ?, ?, ?, 'RDM', '3 pisos', ?,"
+                        + "        'prueba', ?, 'certificado de prueba'"
+                        + "   FROM predio p WHERE p.municipalidad_id = ? AND p.id = ?",
+                muni,
+                "CN-" + sufijo,
+                titular,
+                "EXPC-" + sufijo,
+                VIGENCIA,
+                VIGENCIA.plusYears(3),
+                reciboId,
+                VIGENCIA,
+                documentoDelCertificado,
+                "CERTIFICADO-2026-" + sufijo,
+                "idem-certificado-" + sufijo,
+                VIGENCIA,
+                muni,
+                predioId);
+        ejecutar(
+                app,
+                "INSERT INTO certificado_correlativo (municipalidad_id, tipo, ejercicio, ultimo)"
+                        + " VALUES (?, 'ZONIFICACION_VIAS', 2026, 1)",
+                muni);
     }
 
     // ------------------------------------------------------------------

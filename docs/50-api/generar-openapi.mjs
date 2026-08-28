@@ -515,6 +515,43 @@ const OPERACIONES_ADICIONALES = {
         ' revés, el padrón diría que se desmontó un anuncio que sigue autorizado.',
     },
   ],
+  // `certificados` declara «POST /api/v1/licencias/certificados» como su
+  // endpoint —la emisión—; su grilla «Certificados emitidos» y su acción
+  // «Imprimir certificado» necesitan verbo propio (#54, RF-115, RF-132).
+  //
+  // Mismo reparto que `costas_procesales` (#42): hacer que el POST devolviera
+  // también la grilla convertiría una consulta en una escritura, y una pantalla
+  // que lista al abrirse consumiría un correlativo cada vez.
+  //
+  // No hay PUT ni PATCH: `certificado` no admite UPDATE desde V51. Uno
+  // equivocado se sustituye emitiendo otro, y los dos quedan.
+  certificados: [
+    {
+      operationId: 'certificados_listado',
+      metodo: 'get',
+      titulo: 'Certificados emitidos',
+      descripcion:
+        'La grilla «Certificados emitidos» de la pantalla `certificados`, que declara el POST' +
+        ' —la emisión— como su endpoint y necesita un verbo aparte para listar. Hacer que el POST' +
+        ' devolviera también la grilla convertiría una consulta en una escritura, y una pantalla' +
+        ' que lista al abrirse consumiría un correlativo cada vez. El estado de cada fila' +
+        ' —VIGENTE o CADUCADO— se deriva a la fecha de hoy y viaja con ella (RNF-075).',
+    },
+    {
+      operationId: 'imprimir_certificado',
+      metodo: 'post',
+      ruta: '/api/v1/licencias/certificados/{numero}/impresion',
+      titulo: 'Impresión de un certificado emitido',
+      descripcion:
+        'Vuelve a sacar un certificado ya emitido, con su número original y en el formato que se' +
+        ' pida —PDF, hoja de cálculo o texto enriquecido (RF-132)—. El contenido sale de los' +
+        ' datos guardados el día de la emisión, no de lo que hoy digan el padrón o el TUPA, y el' +
+        ' backend comprueba el SHA-256 antes de entregarlo: si dibujar esos datos ya no da los' +
+        ' mismos bytes, la reimpresión falla en lugar de entregar un papel distinto al original' +
+        ' con el mismo número. Escribe —cuenta la reimpresión y deja su traza—, así que el cuerpo' +
+        ' lleva la observación del usuario, obligatoria (RNF-052).',
+    },
+  ],
   // `fue_edificacion` declara «GET /api/v1/licencias/edificacion» como su
   // endpoint —la grilla del Formulario Único de Edificaciones—; el FUE se
   // presenta, se completa POR PARTES y sólo entonces se emite (#48, RF-113), y

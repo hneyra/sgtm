@@ -2,6 +2,7 @@ package pe.gob.sgtm.licencias.infraestructura;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import pe.gob.sgtm.licencias.dominio.PlantillaDeNumeroDeCertificado;
 import pe.gob.sgtm.licencias.dominio.PlantillaDeNumeroDeEdificacion;
 import pe.gob.sgtm.licencias.dominio.PlantillaDeNumeroDeLicencia;
 
@@ -37,5 +38,20 @@ class ConfiguracionDeLicencias {
     @Bean
     PlantillaDeNumeroDeEdificacion plantillaDeNumeroDeEdificacion() {
         return PlantillaDeNumeroDeEdificacion.POR_OMISION;
+    }
+
+    /**
+     * Y la del certificado (#54).
+     *
+     * <p>Tercer bean y tercer tipo, por lo mismo que el segundo: las tres numeraciones son
+     * independientes —una obra, un establecimiento y un certificado de zonificacion no comparten
+     * correlativo— y con el mismo tipo Spring tendria tres candidatos y elegiria mal.
+     *
+     * <p>La marcha blanca es la prueba de este cableado: sin el bean, la aplicacion real no arranca
+     * —las pruebas no lo notan, porque instancian el caso de uso a mano—.
+     */
+    @Bean
+    PlantillaDeNumeroDeCertificado plantillaDeNumeroDeCertificado() {
+        return PlantillaDeNumeroDeCertificado.POR_OMISION;
     }
 }

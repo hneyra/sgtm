@@ -238,6 +238,15 @@ class ContratoDeApiTest {
                     "GET /infracciones/administrativas/reportes/padron-notificaciones",
                     "GET /infracciones/administrativas/reportes/resumen-recaudacion",
                     "POST /infracciones/administrativas/reportes",
+                    // #54 — RF-115 y RF-132: los padrones de licencias y los certificados de
+                    // numeracion y zonificacion. Las dos ultimas son adiciones al contrato: la
+                    // pantalla `certificados` declara UN endpoint —el POST que emite— y su grilla
+                    // y su accion «Imprimir certificado» necesitan verbo propio.
+                    "POST /licencias/funcionamiento/reportes/padron",
+                    "GET /licencias/funcionamiento/reportes/resumen-anual",
+                    "GET /licencias/certificados",
+                    "POST /licencias/certificados",
+                    "POST /licencias/certificados/{numero}/impresion",
                     // #56 — RF-130: el panel de recaudacion, la pantalla de inicio. Ya
                     // estaba declarada en el contrato desde que se derivo del prototipo;
                     // lo que este issue hace es publicarla. No tiene modelo propio: agrega
