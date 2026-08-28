@@ -11,15 +11,16 @@
 | Verificó | HNA, 2026-08-28 |
 | Estado | VERIFICADO |
 
-> **Por qué este archivo vuelve a `TRANSCRITO`.** El 2026-08-25 HNA verificó el archivo tal como
-> estaba entonces, cuando el anexo de la R.M. N.° 008-2026-EF/15 **no se había podido leer** y la
-> sección 1.2 solo describía su estructura por analogía con el ejercicio anterior. El 2026-08-28 se
-> leyeron los tres PDF oficiales —los dos del anexo y el de la propia resolución— y se añadió lo que
-> se vio en ellos (§1.2, §1.3 y §1.4, y la reescritura de §3). **Esa adición no la ha verificado
-> nadie todavía**, y el corpus no admite que
-> quien transcribe se verifique a sí mismo (ADR-0007): el estado baja a `TRANSCRITO` y `Verificó`
-> vuelve a `—` hasta que una segunda persona vuelva a la fuente y re-firme. La verificación de HNA
-> del 2026-08-25 sigue en el historial de git, sobre el contenido que entonces tenía el archivo.
+> **Historial de la verificación.** Este archivo se verificó dos veces, y la primera no cubría lo
+> que hoy contiene. El 2026-08-25 HNA verificó el archivo tal como estaba entonces, cuando el
+> anexo de la R.M. N.° 008-2026-EF/15 **no se había podido leer** y la sección 1.2 solo describía
+> su estructura por analogía con el ejercicio anterior. El 2026-08-28 se leyeron los tres PDF
+> oficiales —los dos del anexo y el de la propia resolución— y se añadió lo que se vio en ellos
+> (§1.2, §1.3 y §1.4, y la reescritura de §3); como el corpus no admite que quien transcribe se
+> verifique a sí mismo (ADR-0007), el estado bajó ese día a `TRANSCRITO` con `Verificó` en `—`.
+> **Ese mismo 2026-08-28 HNA volvió a la fuente y re-firmó sobre el contenido ampliado**, que es
+> la verificación que la cabecera registra; las dos quedan en el historial de git, cada una sobre
+> el contenido que el archivo tenía al firmarse.
 
 ## 1. La tabla tal como está en la norma
 
