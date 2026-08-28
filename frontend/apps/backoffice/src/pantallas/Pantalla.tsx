@@ -504,7 +504,18 @@ function Bloques({
      secciones y fuera de su rejilla (FRO-03 §5), asi que sin entrada propia el
      indice empieza por la segunda cosa de la pagina. En «Cálculo individual del
      impuesto predial» eso dejaba fuera el paso 1 del calculo —los predios que
-     integran la base—, que es de donde sale todo lo demas. */
+     integran la base—, que es de donde sale todo lo demas.
+
+     **`composicion.indice !== undefined` si se alcanza hoy** (#342, nit 2): no
+     es una condicion muerta a la espera de una segunda pantalla. `predial_individual`
+     declara `{ indice: true, indiceConLaTabla: true }`
+     (`rentas/composicion.ts`) y su catalogo si trae `tabla`, asi que las tres
+     condiciones de `indexaLaTabla` son ciertas para ella, y
+     `memoria-del-predial.test.tsx` («los predios van antes que la base…») ya
+     lo ejercita: comprueba que «Predios que integran la base imponible» entra
+     como **la primera** entrada del indice, con su propia ancla y su propio
+     boton «Ir a…». No hace falta una prueba nueva; esta nota deja dicho por
+     que no hacia falta que la buscara una revision. */
   const indexaLaTabla =
     composicion.indice !== undefined &&
     composicion.indiceConLaTabla === true &&

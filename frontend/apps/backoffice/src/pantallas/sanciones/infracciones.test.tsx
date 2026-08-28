@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { permisosDelClaim, puedeVer } from '@sgtm/sesion';
-import { cifrasDeLaTabla, cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
+import { OPCIONES_CONECTADAS } from '../conexiones';
+import { SIN_DATO, leerPaginado } from '../seguridad/listado';
 import { montarEnRuta } from '../../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada, primariaDeLaPantalla } from '../../pruebas/acciones';
 
@@ -14,9 +15,11 @@ import { motivoDeLaPrimaria, primariaApagada, primariaDeLaPantalla } from '../..
  * procedimiento**, no un documento que se emite despues. Una interfaz que
  * permita levantar el acta sin ella invita a un vicio de nulidad.
  *
- * Ninguno de sus trece endpoints existe. Lo que se comprueba es lo que ya se
- * puede: que los reportes **reusan** el bloque de #77 en vez de copiarlo, que
- * ninguna cifra de sancion se recompone, que toda escritura pide observacion, y
+ * De sus dieciocho endpoints solo `adm_estado_cuenta` existe (#47), conectada
+ * desde #363 —ver `pantallas/sanciones/index.ts`—. Lo que se comprueba es lo
+ * que ya se puede: que los reportes **reusan** el bloque de #77 en vez de
+ * copiarlo, que `adm_estado_cuenta` lee `PapeletaResource` tal cual y no lo
+ * que el proxy simulaba antes de #363, que toda escritura pide observacion, y
  * que quien no tiene el modulo no lo ve.
  */
 
@@ -64,23 +67,60 @@ describe('los reportes reusan el bloque de #77, no una copia', () => {
   );
 });
 
-describe('ninguna cifra de sancion se recompone', () => {
-  it('el estado de cuenta ensena lo que sirvio la API, tal cual', async () => {
+describe('adm_estado_cuenta lee PapeletaResource, conectada desde #363', () => {
+  it('es la unica leida por una Conexion propia', () => {
+    expect(OPCIONES_CONECTADAS).toContain('adm_estado_cuenta');
+    // El resto del modulo sigue sin conectar: ningun otro endpoint tiene
+    // `Controller` (#47).
+    expect(OPCIONES_CONECTADAS).not.toContain('infracciones_adm');
+    expect(OPCIONES_CONECTADAS).not.toContain('adm_valores');
+  });
+
+  it('la fila es la papeleta que publica el recurso, y lo que no publica sale vacio', async () => {
     montarEnRuta('/infracciones-administrativas/adm-estado-cuenta');
     await dibujada('table');
-    // Una fila con datos, no la tabla vacia con su esqueleto (#76, #77).
-    await waitFor(() => expect(cifrasEnPantalla().length).toBeGreaterThan(0));
 
-    const servidas = cifrasServidas('adm_estado_cuenta');
-    // El importe de la sancion sale del CUIS y de la UIT vigente el dia de la
-    // infraccion. Recomponerlo al mostrar haria que la pantalla dejara de decir
-    // lo que dice el documento notificado (RNF-083).
-    for (const cifra of cifrasEnPantalla()) expect(servidas).toContain(cifra);
-    // Y en la otra direccion: cada cifra de la respuesta sigue estando en la
-    // pantalla. Sin esto, una transformacion que cambie el formato se escapa
-    // —deja de parecer dinero y se cae del filtro—.
-    for (const cifra of cifrasDeLaTabla('adm_estado_cuenta'))
-      expect(cifrasEnPantalla()).toContain(cifra);
+    // «Concepto», «Cuota» y «Vencimiento» dibujan un desglose de cuotas que
+    // `PapeletaResource` no tiene —es una fila por papeleta, sin descripcion ni
+    // fecha de vencimiento propias (ver `pantallas/sanciones/index.ts`)—, y
+    // «Interés S/», «Gastos S/» y «Total S/» dependen de tesoreria, que
+    // `EstadoDeCuentaAdministrativoController` documenta que todavia no publica
+    // su calculo. Ninguno de los cinco se inventa.
+    const tabla = await screen.findByRole('table');
+    const filas = within(tabla).getAllByRole('row').slice(1);
+    expect(filas).toHaveLength(1);
+    const celdas = within(filas[0] as HTMLElement).getAllByRole('cell');
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      SIN_DATO,
+      SIN_DATO,
+      SIN_DATO,
+      // Insoluto: «lo que corresponde pagar, sin beneficio» (importeAPagar),
+      // sin separador de miles — asi lo sirve el backend de verdad, y no como
+      // lo escribia el catalogo del prototipo («2,675.00»).
+      // La tabla agrupa los millares al dibujar (#342): el dato viaja intacto.
+      '2 675.00',
+      SIN_DATO,
+      SIN_DATO,
+      SIN_DATO,
+    ]);
+  });
+
+  it('una respuesta que no es un listado paginado se para en voz alta, no una tabla vacia', () => {
+    // La forma que el proxy servia antes de #363 —`DatosDePantalla`, con
+    // `tabla.filas` y sin `contenido`— es exactamente la que tiene que fallar
+    // aqui, y no dibujarse como una tabla vacia en silencio (issue #363).
+    expect(() =>
+      leerPaginado(
+        { fechaCalculo: '2026-08-13', tabla: { filas: [] } },
+        'el estado de cuenta de la papeleta administrativa',
+      ),
+    ).toThrow(/no trae un listado paginado/);
+    expect(
+      leerPaginado(
+        { contenido: [], totalElementos: 0 },
+        'el estado de cuenta de la papeleta administrativa',
+      ).contenido,
+    ).toEqual([]);
   });
 });
 
