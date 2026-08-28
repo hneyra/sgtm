@@ -182,7 +182,27 @@ class ContratoDeApiTest {
                     "POST /transito/resoluciones/{numero}/notificacion",
                     "GET /transito/papeletas/{numero}/actos",
                     "POST /infracciones/administrativas/resoluciones",
-                    "POST /infracciones/administrativas/resoluciones/{id}/notificacion");
+                    "POST /infracciones/administrativas/resoluciones/{id}/notificacion",
+                    // #53 — RF-066, RF-068, RF-073 y RF-074: la generacion masiva de valores por
+                    // papeletas, la constancia libre de infracciones, los tres padrones, los dos
+                    // records y los cinco resumenes. Ninguna es una adicion al contrato: las
+                    // quince ya estaban declaradas desde que el contrato se derivo del prototipo,
+                    // y lo que este issue hace es publicarlas.
+                    "POST /transito/valores/generacion-masiva",
+                    "POST /infracciones/administrativas/valores/generacion-masiva",
+                    "POST /transito/constancias-libres",
+                    "GET /transito/reportes/padron",
+                    "GET /transito/reportes/padron-coactiva",
+                    "GET /transito/reportes/padron-constancias",
+                    "GET /transito/reportes/record-conductor",
+                    "GET /transito/reportes/record-vehicular",
+                    "GET /transito/reportes/resumen-recaudacion",
+                    "GET /transito/reportes/resumen-papeletas",
+                    "GET /transito/reportes/resumen-por-codigo",
+                    "GET /transito/reportes/resumen-por-placa",
+                    "GET /infracciones/administrativas/reportes/padron-notificaciones",
+                    "GET /infracciones/administrativas/reportes/resumen-recaudacion",
+                    "POST /infracciones/administrativas/reportes");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

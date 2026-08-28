@@ -108,6 +108,25 @@ public interface AsientoRepository {
      */
     Optional<Long> contribuyentePorCodigo(String codigo);
 
+    /**
+     * Lo cobrado de esos tributos entre las dos fechas, agrupado por tributo, ejercicio, mes y fase
+     * (#53, RF-073).
+     *
+     * <p>Los mismos dos filtros que {@link #abonadoPorDocumento}, y por el mismo motivo: solo los
+     * {@code ABONO} —el cargo con que la cobranza cristaliza el devengo no es dinero que entro— y
+     * solo los que <b>nadie ha reversado</b>, porque un recibo anulado conserva sus asientos.
+     * Ademas, solo los cuatro conceptos con los que una cobranza imputa el pago —insoluto,
+     * reajuste, interes y gasto—: los otros abonos mueven deuda, no la cobran.
+     *
+     * <p>La agregacion la hace el motor. Traer los asientos para sumarlos en Java significaria
+     * traer todos los pagos del periodo para escribir doce cifras.
+     *
+     * @return una linea por grupo con movimiento; vacia si no se cobro nada o si {@code tributos}
+     *     lo esta
+     */
+    List<RecaudacionAgregada> recaudadoPorTributo(
+            Collection<String> tributos, java.time.LocalDate desde, java.time.LocalDate hasta);
+
     /** Todos los asientos de un contribuyente, para reconstruir sus saldos de una vez (#23). */
     List<Asiento> deContribuyente(long contribuyenteId);
 

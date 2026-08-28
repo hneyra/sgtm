@@ -15,9 +15,12 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 import pe.gob.sgtm.sanciones.dominio.CriterioDeNotificacion;
+import pe.gob.sgtm.sanciones.dominio.CriterioDelPadronDeNotificaciones;
 import pe.gob.sgtm.sanciones.dominio.EstadoDeNotificacion;
+import pe.gob.sgtm.sanciones.dominio.EstadoDePapeleta;
 import pe.gob.sgtm.sanciones.dominio.NotificacionAdministrativa;
 import pe.gob.sgtm.sanciones.dominio.NotificacionAdministrativaRepository;
+import pe.gob.sgtm.sanciones.dominio.NotificacionDelPadron;
 
 /**
  * La notificación administrativa previa (#47) contra PostgreSQL. Ninguna consulta filtra por {@code
@@ -123,6 +126,77 @@ public class NotificacionAdministrativaRepositoryJdbc extends RepositorioJdbc
                 paginacion,
                 ORDEN,
                 NotificacionAdministrativaRepositoryJdbc::mapear);
+    }
+
+    /**
+     * El padrón de notificaciones emitidas, con la papeleta que las siguió (#53, {@code
+     * adm_padron_notificaciones}).
+     *
+     * <p>{@code LEFT JOIN} y no {@code JOIN}: la mitad del padrón son notificaciones a las que
+     * todavía no les siguió papeleta, y con el {@code JOIN} desaparecerían justo las que hay que
+     * vigilar. A lo sumo cruza una, porque {@code papeleta.notificacion_previa_id} es la clave de
+     * una papeleta a una notificación.
+     */
+    @Override
+    public Pagina<NotificacionDelPadron> buscarPadron(
+            CriterioDelPadronDeNotificaciones criterio, Paginacion paginacion) {
+
+        List<String> condiciones = new ArrayList<>();
+        Map<String, Object> parametros = new HashMap<>();
+
+        condiciones.add("n.fecha >= :desde");
+        parametros.put("desde", criterio.desde());
+        condiciones.add("n.fecha <= :hasta");
+        parametros.put("hasta", criterio.hasta());
+
+        if (criterio.numero() != null) {
+            condiciones.add("n.numero = :numero");
+            parametros.put("numero", criterio.numero());
+        }
+        if (criterio.estado() != null) {
+            condiciones.add("n.estado = :estado");
+            parametros.put("estado", criterio.estado().name());
+        }
+        if (criterio.conPapeleta() != null) {
+            condiciones.add(criterio.conPapeleta() ? "pp.id IS NOT NULL" : "pp.id IS NULL");
+        }
+
+        String desde = DESDE + " LEFT JOIN papeleta pp ON pp.notificacion_previa_id = n.id";
+        String donde = " WHERE " + String.join(" AND ", condiciones);
+        String columnas =
+                "n.id AS id, n.numero AS numero, n.fecha AS fecha, n.direccion AS direccion,"
+                        + " n.motivo AS motivo, n.plazo_dias AS plazo_dias, n.estado AS estado,"
+                        + " pp.numero AS papeleta_numero, pp.estado AS papeleta_estado,"
+                        + " pp.importe_a_pagar AS papeleta_importe";
+
+        return paginar(
+                "SELECT " + columnas + desde + donde,
+                "SELECT count(*)" + desde + donde,
+                parametros,
+                paginacion,
+                ORDEN,
+                NotificacionAdministrativaRepositoryJdbc::mapearFilaDelPadron);
+    }
+
+    private static NotificacionDelPadron mapearFilaDelPadron(ResultSet fila, int numeroDeFila)
+            throws SQLException {
+        short plazoDiasValor = fila.getShort("plazo_dias");
+        Short plazoDias = fila.wasNull() ? null : plazoDiasValor;
+        String papeletaNumero = fila.getString("papeleta_numero");
+        String papeletaEstado = fila.getString("papeleta_estado");
+        java.math.BigDecimal importe = fila.getBigDecimal("papeleta_importe");
+
+        return new NotificacionDelPadron(
+                fila.getLong("id"),
+                fila.getString("numero"),
+                fila.getDate("fecha").toLocalDate(),
+                fila.getString("direccion"),
+                fila.getString("motivo"),
+                plazoDias,
+                EstadoDeNotificacion.valueOf(fila.getString("estado")),
+                papeletaNumero,
+                papeletaEstado == null ? null : EstadoDePapeleta.valueOf(papeletaEstado),
+                importe == null ? null : new pe.gob.sgtm.dominio.Dinero(importe));
     }
 
     @Override

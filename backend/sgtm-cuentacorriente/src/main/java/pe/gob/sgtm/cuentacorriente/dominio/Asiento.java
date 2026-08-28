@@ -194,6 +194,55 @@ public record Asiento(
                 null);
     }
 
+    /**
+     * Un asiento nuevo que nace <b>con</b> su motivo.
+     *
+     * <p>Existe porque {@link #nuevo} no sirve para los conceptos que {@link Concepto#exigeMotivo}
+     * marca —{@code ANULACION}, {@code CONDONACION}, {@code AJUSTE}—: el constructor los rechaza
+     * antes de que {@code RegistrarAsiento} llegue a poner la observacion, y el asiento no se puede
+     * construir. Se descubrio ejecutando, en la primera prueba que caso la generacion masiva de #53
+     * con el {@code MovimientoDeFase} de verdad: hasta entonces todas las pruebas que movian una
+     * obligacion a fase VALOR lo hacian con un doble, y el defecto llevaba desde #37 sin aparecer.
+     *
+     * <p>El motivo que se pase aqui es provisional: {@code RegistrarAsiento#asentar} lo sustituye
+     * por el texto de la {@link pe.gob.sgtm.dominio.Observacion} del usuario (regla 10). Lo que
+     * este metodo permite es <b>construir</b> el asiento, no decidir con que queda auditado.
+     */
+    public static Asiento nuevoConMotivo(
+            Ejercicio ejercicio,
+            long contribuyenteId,
+            String tributo,
+            Concepto concepto,
+            TipoAsiento tipo,
+            Fase fase,
+            @Nullable Integer periodo,
+            @Nullable Long predioId,
+            @Nullable Long vehiculoId,
+            @Nullable String referenciaExterna,
+            Dinero monto,
+            LocalDate fechaValor,
+            String documentoOrigen,
+            String motivo) {
+        return new Asiento(
+                null,
+                ejercicio,
+                contribuyenteId,
+                tributo,
+                concepto,
+                tipo,
+                fase,
+                periodo,
+                predioId,
+                vehiculoId,
+                referenciaExterna,
+                monto,
+                fechaValor,
+                documentoOrigen,
+                null,
+                null,
+                motivo);
+    }
+
     public boolean esNuevo() {
         return id == null;
     }

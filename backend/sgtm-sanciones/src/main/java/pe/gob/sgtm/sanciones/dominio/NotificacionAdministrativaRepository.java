@@ -21,6 +21,16 @@ public interface NotificacionAdministrativaRepository {
             CriterioDeNotificacion criterio, Paginacion paginacion);
 
     /**
+     * El padrón de notificaciones emitidas en un intervalo, con la papeleta que las siguió cuando
+     * la hay ({@code adm_padron_notificaciones}, #53).
+     *
+     * <p>Devuelve {@link NotificacionDelPadron} y no {@link NotificacionAdministrativa}: las tres
+     * columnas de la papeleta salen del {@code LEFT JOIN}, no de esta tabla.
+     */
+    Pagina<NotificacionDelPadron> buscarPadron(
+            CriterioDelPadronDeNotificaciones criterio, Paginacion paginacion);
+
+    /**
      * Cierra la notificación por subsanación. Quien llama ya decidió que corresponde —dentro del
      * plazo (#47 AC2)—; este método solo guarda la transición.
      */

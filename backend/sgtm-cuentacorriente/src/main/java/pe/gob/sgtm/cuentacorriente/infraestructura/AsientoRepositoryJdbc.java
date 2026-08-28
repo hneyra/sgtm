@@ -21,6 +21,7 @@ import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeConsulta;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDePagos;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
+import pe.gob.sgtm.cuentacorriente.dominio.RecaudacionAgregada;
 import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
 import pe.gob.sgtm.cuentacorriente.dominio.TipoAsiento;
 import pe.gob.sgtm.dominio.Dinero;
@@ -304,6 +305,81 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                         })
                 .list();
         return Map.copyOf(abonado);
+    }
+
+    /**
+     * Los conceptos con los que una cobranza imputa lo que entro por ventanilla.
+     *
+     * <p>Son <b>exactamente</b> las cuatro partes que {@code RegistroDeAbonos#abonarPagoIntegro}
+     * abona, en ese orden. Los demas abonos del libro mueven deuda pero no son dinero: {@code
+     * AJUSTE} cambia una obligacion de fase, {@code CONDONACION} y {@code ANULACION} la dan de
+     * baja, {@code FRACCIONAMIENTO} la acoge a un convenio. Contarlos inflaria la recaudacion con
+     * bajas de deuda, que es la peor manera de equivocarse en esta cifra: hacia arriba y sin que
+     * nadie lo note.
+     *
+     * <p><b>{@code PAGO} no esta en la lista</b>, aunque el {@code CHECK} de V2 lo admita: ningun
+     * camino de cobranza lo usa. Ponerlo «por si acaso» seria contar un concepto que nadie escribe,
+     * y el dia que alguien lo escribiera nadie sabria si esa cifra tenia que estar aqui.
+     */
+    private static final String CONCEPTOS_DE_COBRANZA =
+            "('INSOLUTO', 'REAJUSTE', 'INTERES', 'GASTO')";
+
+    /**
+     * Lo cobrado de esos tributos entre dos fechas, agregado en el motor (#53, RF-073, RF-074).
+     *
+     * <p>Los tres filtros dicen lo mismo que su contrato: {@code tipo = 'ABONO'} —el cargo con que
+     * la cobranza cristaliza el devengo no es dinero que entro—, los cuatro {@link
+     * #CONCEPTOS_DE_COBRANZA} —los otros abonos mueven deuda, no la cobran— y que <b>nadie lo haya
+     * reversado</b>, porque un recibo anulado conserva sus asientos (V2) y sumarlos daria por
+     * recaudado un recibo que ya no vale.
+     *
+     * <p>El mes sale de {@code fecha_valor} y el ejercicio de la columna homonima: son cosas
+     * distintas y las dos ciertas. Un recibo de marzo de 2026 que cobra deuda de 2025 cae en el mes
+     * 3 del ejercicio 2025.
+     */
+    @Override
+    public List<RecaudacionAgregada> recaudadoPorTributo(
+            java.util.Collection<String> tributos,
+            java.time.LocalDate desde,
+            java.time.LocalDate hasta) {
+        if (tributos.isEmpty()) {
+            return List.of();
+        }
+        return jdbc().sql(
+                        "SELECT a.tributo, a.ejercicio,"
+                                + "       CAST(extract(month FROM a.fecha_valor) AS integer) AS mes,"
+                                + "       a.fase, sum(a.monto) AS recaudado, count(*) AS abonos"
+                                + DESDE
+                                + " WHERE a.tributo IN (:tributos)"
+                                + "   AND a.tipo = 'ABONO'"
+                                + "   AND a.concepto IN "
+                                + CONCEPTOS_DE_COBRANZA
+                                + "   AND a.fecha_valor >= :desde"
+                                + "   AND a.fecha_valor <= :hasta"
+                                + "   AND NOT EXISTS ("
+                                + "         SELECT 1 FROM cuenta_corriente_asiento r"
+                                + "          WHERE r.municipalidad_id = a.municipalidad_id"
+                                + "            AND r.asiento_reversado_id = a.id)"
+                                + " GROUP BY a.tributo, a.ejercicio,"
+                                + "          extract(month FROM a.fecha_valor), a.fase"
+                                + " ORDER BY a.tributo, a.ejercicio,"
+                                + "          extract(month FROM a.fecha_valor), a.fase")
+                .param("tributos", List.copyOf(tributos))
+                .param("desde", desde)
+                .param("hasta", hasta)
+                .query(AsientoRepositoryJdbc::mapearRecaudacion)
+                .list();
+    }
+
+    private static RecaudacionAgregada mapearRecaudacion(ResultSet fila, int numeroDeFila)
+            throws SQLException {
+        return new RecaudacionAgregada(
+                fila.getString("tributo"),
+                new Ejercicio(fila.getInt("ejercicio")),
+                fila.getInt("mes"),
+                Fase.valueOf(fila.getString("fase")),
+                new Dinero(fila.getBigDecimal("recaudado")),
+                fila.getLong("abonos"));
     }
 
     @Override

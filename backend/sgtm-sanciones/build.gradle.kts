@@ -30,6 +30,14 @@ dependencies {
     implementation(project(":sgtm-parametros"))
     implementation(project(":sgtm-tesoreria"))
 
+    // Con #53, una mas: valores.EmisionDeValoresDeMultas. Es lo que hace posible el
+    // primer criterio de aceptacion del issue -«la generacion masiva reutiliza la
+    // numeracion de #37; no inventa un correlativo propio»- sin abrir el modulo:
+    // `sanciones` pide «emiteme la resolucion de multa de esta obligacion» y recibe
+    // el numero ya puesto por valor_correlativo (V26). La dependencia va en este
+    // sentido y nunca al reves: `valores` no sabe que existe una papeleta.
+    implementation(project(":sgtm-valores"))
+
     // La prueba del repositorio corre contra PostgreSQL de verdad: provisiona la
     // base como un ambiente real y se conecta como sgtm_app, no como el
     // superusuario que entrega Testcontainers (CAL-01 §3.2).
