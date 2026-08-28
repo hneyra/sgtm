@@ -70,8 +70,28 @@ export interface RejillaDeLaFicha {
    * situaciones son distintas y ninguna admite la fecha de otra (regla 9).
    */
   readonly aLaFechaDeCorte?: true;
-  /** Que falta en esta rejilla y donde esta. Se dibuja bajo la tabla. */
+  /**
+   * Que falta en esta rejilla y donde esta. Se dibuja bajo la tabla.
+   *
+   * **Es del back-office**: nombra la opcion hermana del catalogo a la que hay
+   * que ir por el dato que aqui no cabe, y a esa opcion se llega desde el shell.
+   */
   readonly nota?: string;
+  /**
+   * Lo mismo, **dicho para quien no tiene el shell**.
+   *
+   * El ciudadano lee la misma rejilla en `apps/portal`, donde no hay navegacion,
+   * ni catalogo, ni permiso que le abra «Consulta de convenios»: la nota del
+   * back-office le mandaba a cuatro sitios a los que no puede ir, y una pantalla
+   * no le dice a su lector cosas que para el no son verdad. Lo que falta sigue
+   * dicho —callarlo dejaria la impresion de que la cifra que no esta no existe—,
+   * pero la salida que se ofrece es la suya: la municipalidad.
+   *
+   * Sin esto no se dibuja ninguna nota en el portal. **La del back-office no se
+   * reutiliza nunca**, y eso lo comprueba `portal.test.tsx`: una nota que nombre
+   * una opcion entre comillas, dibujada ahi, pone la prueba en rojo.
+   */
+  readonly notaDelCiudadano?: string;
 }
 
 /** Un importe con su fecha, o el guion. Nunca el importe sin la fecha (regla 9). */
@@ -133,6 +153,8 @@ export const REJILLAS_DE_LA_UNIFICADA: readonly RejillaDeLaFicha[] = [
     // «Cuota» y «Fase» son columnas de `consulta_deuda` y `ObligacionDeLaFicha`
     // no las publica: la unificada consolida por tributo y ejercicio.
     nota: 'La cuota y la fase de cada obligación se ven en «Consulta de deuda».',
+    notaDelCiudadano:
+      'Cada línea junta lo que debes de ese tributo y ese año. El detalle por cuota no se muestra aquí: pregúntalo en la municipalidad.',
   },
   {
     titulo: 'Pagos Realizados',
@@ -168,6 +190,8 @@ export const REJILLAS_DE_LA_UNIFICADA: readonly RejillaDeLaFicha[] = [
     // La lista de altas y bajas del manual **no tiene columna de importe**, y
     // esta no se la inventa: lo que movio cada asiento se lee en el libro.
     nota: 'El importe de cada movimiento se ve en «Estado de cuenta corriente».',
+    notaDelCiudadano:
+      'El importe de cada movimiento no se muestra aquí: pregúntalo en la municipalidad.',
   },
   {
     titulo: 'Fraccionamientos',
@@ -192,6 +216,8 @@ export const REJILLAS_DE_LA_UNIFICADA: readonly RejillaDeLaFicha[] = [
     // la de suscripcion—. Dos cifras de dias distintos bajo una sola banda es
     // exactamente lo que el recurso separa en dos `ImporteActualizado`.
     nota: 'La deuda acogida va a la fecha de corte del convenio: se ve en «Consulta de convenios».',
+    notaDelCiudadano:
+      'La deuda acogida a cada convenio va a la fecha de corte del convenio, que no es la de esta consulta, y por eso no se muestra aquí: pregúntala en la municipalidad.',
   },
   {
     titulo: 'Valores',
@@ -212,6 +238,8 @@ export const REJILLAS_DE_LA_UNIFICADA: readonly RejillaDeLaFicha[] = [
     // consulta y que ninguna columna del catalogo nombra. Sin sitio donde poner
     // esa fecha, la cifra no se dibuja.
     nota: 'El importe de cada valor está congelado a la fecha de su emisión: se ve, con ella, en «Consulta de valores emitidos».',
+    notaDelCiudadano:
+      'El importe de cada valor quedó fijado el día en que se emitió, y esa fecha no aparece aquí: pregúntalo en la municipalidad.',
   },
   {
     titulo: 'Declaraciones presentadas',

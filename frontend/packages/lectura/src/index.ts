@@ -19,7 +19,12 @@
 export { SIN_DATO, esObjeto, importeDe, leerObjeto, leerPaginado, texto } from './contrato';
 export type { ImporteConFecha } from './contrato';
 
-export { documentoDe, identidadPorCodigo, identidadesQueCoinciden } from './identidad';
+export {
+  LOS_TRES_FILTROS_DEL_PADRON,
+  documentoDe,
+  identidadPorCodigo,
+  identidadesQueCoinciden,
+} from './identidad';
 export type { ClaveDelPadron, Identidad } from './identidad';
 
 export {

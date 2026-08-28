@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Aviso, Boton, Esqueleto, FechaDeCalculo, Insignia } from '@sgtm/design-system';
-import { ProblemaDeApi, pedirOperacion } from '@sgtm/api-client';
+import { ProblemaDeApi, solicitar } from '@sgtm/api-client';
 import type { Celda } from '@sgtm/api-client';
 import {
   ESTADO_DE_LA_CONSULTA,
@@ -20,6 +20,7 @@ import {
 } from '@sgtm/lectura';
 import type { Identidad, RejillaDeLaFicha } from '@sgtm/lectura';
 import { DOCUMENTOS, documentoPorId, filtroDe, loQueFalta } from './consulta';
+import { LECTURAS } from './lecturas';
 
 /**
  * **La vista del contribuyente, en un teléfono y en solo lectura** (#298,
@@ -73,11 +74,14 @@ export function Portal() {
   const falta = loQueFalta(documento, escrito);
 
   const identidad = useConsultaDeIdentidad(preguntado);
-  const codigo = identidad.data?.identidad?.codigo ?? '';
+  const codigo = codigoParaConsultar(identidad.data?.identidad);
   const unificada = useConsultaUnificada(codigo);
 
   return (
-    <div className="sgtm-portal-app">
+    /* `<main>`, no un `div`: es la unica region de contenido de la aplicacion, y
+       sin el punto de referencia quien navega con lector de pantalla no tiene a
+       donde saltar —ni forma de saber donde acaba la cabecera—. */
+    <main className="sgtm-portal-app">
       <header className="sgtm-portal-app__cabecera">
         <p className="sgtm-portal-app__eyebrow">Portal del contribuyente</p>
         <h1 className="sgtm-portal-app__titular">Consulta tu deuda</h1>
@@ -128,8 +132,17 @@ export function Portal() {
         </div>
         {/* `submit`, no el `button` por omision del componente: la caja se
             envia con Intro desde el campo, que es como se rellena un formulario
-            de una linea en un telefono (RNF-082). */}
-        <Boton type="submit" variante="primario" disabled={falta !== ''}>
+            de una linea en un telefono (RNF-082). Y deshabilitada **con su
+            motivo a la mano**: `aria-describedby` apunta a la misma ayuda que el
+            campo, que es donde dice lo que falta. Un boton apagado sin motivo
+            programatico obliga a adivinar por que no se puede pulsar, y ahi el
+            que no ve la pantalla se queda sin la frase (patron de #332). */}
+        <Boton
+          type="submit"
+          variante="primario"
+          disabled={falta !== ''}
+          aria-describedby={`${identificador}-ayuda`}
+        >
           Consultar
         </Boton>
       </form>
@@ -153,9 +166,21 @@ export function Portal() {
           consultar por su número: acércate a la municipalidad con tu código de contribuyente.
         </p>
       </footer>
-    </div>
+    </main>
   );
 }
+
+/**
+ * El codigo con el que se pregunta por la deuda, **o nada**.
+ *
+ * `Identidad.codigo` sale de `texto()`, que devuelve el guion cuando el padron
+ * no manda el dato: comparar contra la cadena vacia dejaba pasar ese guion y la
+ * consulta salia como `?contribuyente=—`, una peticion por un contribuyente que
+ * no existe, con su espera y su respuesta vacia. Sin codigo no hay a quien
+ * preguntarle la deuda, y no se pregunta.
+ */
+const codigoParaConsultar = (persona: Identidad | undefined): string =>
+  persona === undefined || persona.codigo === SIN_DATO ? '' : persona.codigo;
 
 /* ── Las dos lecturas ──────────────────────────────────────────────────── */
 
@@ -180,11 +205,10 @@ function useConsultaDeIdentidad(preguntado: Preguntado | undefined) {
     retry: 1,
     queryFn: async ({ signal }) => {
       const documento = documentoPorId(preguntado?.documento ?? '');
-      const cuerpo = await pedirOperacion(
-        'contribuyentes',
-        filtroDe(documento, preguntado?.valor ?? ''),
-        signal,
-      );
+      const cuerpo = await solicitar<unknown>(LECTURAS.contribuyentes, {
+        consulta: filtroDe(documento, preguntado?.valor ?? ''),
+        senal: signal,
+      });
       /* **Se comprueba que la fila sea la que se pidio**, no se toma la que
          venga: el proxy de datos no filtra y devuelve el padron entero
          (ADR-0010), asi que sin esto el portal ensenaria la deuda de la primera
@@ -205,7 +229,10 @@ function useConsultaUnificada(codigo: string) {
     enabled: codigo !== '',
     retry: 1,
     queryFn: async ({ signal }) => {
-      const cuerpo = await pedirOperacion('consulta_unificada', { contribuyente: codigo }, signal);
+      const cuerpo = await solicitar<unknown>(LECTURAS.consulta_unificada, {
+        consulta: { contribuyente: codigo },
+        senal: signal,
+      });
       return leerObjeto(cuerpo, 'la consulta unificada');
     },
   });
@@ -307,7 +334,9 @@ function Identificacion({ persona }: { readonly persona: Identidad }) {
       <dl>
         <div>
           <dt>Código</dt>
-          <dd>{persona.codigo === '' ? SIN_DATO : persona.codigo}</dd>
+          {/* Ya viene del guion cuando falta: lo pone `texto()` al leer la fila
+              (`@sgtm/lectura`), y aqui no se vuelve a decidir. */}
+          <dd>{persona.codigo}</dd>
         </div>
         <div>
           <dt>Documento</dt>
@@ -349,7 +378,14 @@ function Resumen({ unificada }: { readonly unificada: ConsultaUnificada }) {
       <dl>
         {RESUMEN_DE_SALDOS.map((cifra) => (
           <div key={cifra.clave} data-fuerte={cifra.clave === 'total' ? '1' : '0'}>
-            <dt>{cifra.label}</dt>
+            {/* **La unidad, igual que en las filas.** El importe llega como texto
+                del backend —«279.03»— y sin moneda al lado no dice si son soles.
+                En las rejillas la trae su columna del catalogo («Total S/»); el
+                catalogo del resumen no la escribe, asi que se pone aqui **al
+                dibujar**: el rotulo del catalogo se conserva letra a letra
+                (RNF-080) y la unidad se le anade, que es lo que hace la pestana
+                hermana. */}
+            <dt>{cifra.label} S/</dt>
             <dd>
               {unificada.isFetching ? (
                 <Esqueleto alto={18} ancho="7ch" />
@@ -408,7 +444,15 @@ function Seccion({
           ))}
         </dl>
       ))}
-      {rejilla.nota !== undefined && <p className="sgtm-portal-app__nota">{rejilla.nota}</p>}
+      {/* **La nota del ciudadano, nunca la del back-office.** La de arriba
+          termina en «se ve en «Consulta de convenios»» y las suyas: cuatro
+          destinos que desde aqui no existen —no hay navegacion, ni catalogo, ni
+          permiso que los abra—, asi que a este lector no le serian verdad. Lo
+          que falta se sigue diciendo; la salida que se le ofrece es la
+          municipalidad. Ver `RejillaDeLaFicha.notaDelCiudadano`. */}
+      {rejilla.notaDelCiudadano !== undefined && (
+        <p className="sgtm-portal-app__nota">{rejilla.notaDelCiudadano}</p>
+      )}
       {/* La banda solo donde **todas** sus cifras comparten fecha. Donde cada
           fila trae la suya —los pagos, los movimientos— la fecha ya está en su
           par, y una banda encima diría que se recalcularon hoy (regla 9). */}

@@ -3,6 +3,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { OPERACIONES } from '@sgtm/api-client';
+import type { IdDeOperacion } from '@sgtm/api-client';
+import { LECTURAS } from '../apps/portal/src/lecturas';
 import { MODULOS, OPCIONES, opcionPorId } from '../apps/backoffice/src/catalogo';
 
 /**
@@ -17,17 +19,27 @@ import { MODULOS, OPCIONES, opcionPorId } from '../apps/backoffice/src/catalogo'
  *      `import` desde el back-office —o del catalogo, o del shell— para que los
  *      ~11,5 KB de doce modulos vuelvan al paquete. El presupuesto de
  *      `comprobar-compilaciones` lo veria; esto lo dice antes, y nombra el
- *      archivo.
+ *      archivo. **Y se vigila tambien en los dos paquetes que el portal
+ *      consume** —`@sgtm/lectura` y `@sgtm/sesion`—: la puerta de atras es la
+ *      misma y ahi no la ve nadie, porque el presupuesto solo mide el total.
  *   2. **De aqui no se escribe.** Ni `useMutation`, ni `useEscritura`, ni un
  *      envio: no hay sesion del ciudadano con que atribuir una escritura
  *      (ADR-0009 §1 y §2), y toda escritura del sistema exige ademas la
  *      observacion de quien la hace (regla 10, RNF-052). La regla de ESLint
  *      prohibe `useMutation` en todo el frontend; aqui la prohibicion es mas
  *      ancha, porque el portal no puede escribir **de ninguna manera**.
- *   3. **Solo pregunta a operaciones de lectura**, y se comprueba contra el
- *      contrato: cada `pedirOperacion('x')` del portal tiene que ser un `GET` en
- *      `OPERACIONES`. Un dia alguien pedira aqui algo que el contrato declara
- *      `POST` y el unico aviso seria el 405 del servidor.
+ *   3. **Solo pregunta las dos rutas que declara, y las dos son lecturas del
+ *      contrato.** El portal no usa `pedirOperacion`: eso arrastraria al paquete
+ *      del ciudadano el mapa de las 169 operaciones —84 de escritura—, que es el
+ *      inventario completo de la API en la aplicacion destinada a ser publica.
+ *      Declara `LECTURAS` y llama con `solicitar()`, y la comprobacion contra el
+ *      contrato se hace **aqui**: cada entrada tiene que cuadrar con
+ *      `OPERACIONES[id].ruta` y su metodo tiene que ser `GET`.
+ *   3.b **Y los nombres de la lectura compartida se definen una sola vez.**
+ *      `esObjeto`, `texto`, `leerPaginado` y compania viven en
+ *      `@sgtm/lectura` porque dos copias del mismo lector acaban leyendo campos
+ *      distintos —y una de las dos, el importe sin su fecha—. Una segunda
+ *      definicion exportada, en cualquier sitio, se pone roja.
  *
  * Y una cuarta, que es la otra mitad de la decision: **la opcion `portal` de las
  * 134 sigue en el catalogo**. `apps/portal` no la sustituye ni la borra; es la
@@ -38,8 +50,24 @@ import { MODULOS, OPCIONES, opcionPorId } from '../apps/backoffice/src/catalogo'
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const PORTAL = join(AQUI, '../apps/portal/src');
 
-/** Todos los `.ts`/`.tsx` del portal, con su ruta relativa y su contenido. */
-function fuentesDelPortal(): readonly { readonly archivo: string; readonly codigo: string }[] {
+/**
+ * Lo que el ciudadano descarga **no es solo `apps/portal`**: son sus fuentes y
+ * las de los dos paquetes que consume.
+ *
+ * Se vigilan los tres con el mismo escaneo porque la puerta es la misma: un
+ * `import` del catalogo metido en `@sgtm/lectura` devuelve los doce modulos al
+ * paquete del portal exactamente igual que si se hubiera escrito aqui, y ahi no
+ * lo mira nadie. Hoy solo lo cazaria el presupuesto, y por 11 KB de suerte: dice
+ * que el total subio, no que un paquete compartido se trajo el back-office.
+ */
+const ESCANEADOS = [
+  { que: 'apps/portal', raiz: PORTAL },
+  { que: 'packages/lectura', raiz: join(AQUI, '../packages/lectura/src') },
+  { que: 'packages/sesion', raiz: join(AQUI, '../packages/sesion/src') },
+];
+
+/** Todos los `.ts`/`.tsx` de una carpeta, con su ruta relativa y su contenido. */
+function fuentesDe(raiz: string, que: string) {
   const encontrados: { archivo: string; codigo: string }[] = [];
   const recorrer = (carpeta: string, prefijo: string): void => {
     for (const entrada of readdirSync(carpeta)) {
@@ -47,15 +75,20 @@ function fuentesDelPortal(): readonly { readonly archivo: string; readonly codig
       if (statSync(camino).isDirectory()) {
         recorrer(camino, `${prefijo}${entrada}/`);
       } else if (/\.tsx?$/.test(entrada)) {
-        encontrados.push({ archivo: `${prefijo}${entrada}`, codigo: readFileSync(camino, 'utf8') });
+        encontrados.push({
+          archivo: `${que}/${prefijo}${entrada}`,
+          codigo: readFileSync(camino, 'utf8'),
+        });
       }
     }
   };
-  recorrer(PORTAL, '');
+  recorrer(raiz, '');
   return encontrados;
 }
 
-const FUENTES = fuentesDelPortal();
+const FUENTES = fuentesDe(PORTAL, 'apps/portal');
+/** Las del portal **y las de los paquetes que descarga con el**. */
+const TODO_LO_QUE_VIAJA = ESCANEADOS.flatMap(({ que, raiz }) => fuentesDe(raiz, que));
 
 /**
  * El codigo **sin sus comentarios**.
@@ -78,20 +111,35 @@ const sinComentarios = (codigo: string): string =>
     .join('\n');
 
 /** Los `.test.tsx` montan la aplicacion: lo que se vigila es lo que se publica. */
-const DE_PRODUCCION = FUENTES.filter(({ archivo }) => !archivo.includes('.test.')).map(
-  ({ archivo, codigo }) => ({ archivo, codigo: sinComentarios(codigo) }),
-);
+const deProduccion = (fuentes: readonly { archivo: string; codigo: string }[]) =>
+  fuentes
+    .filter(({ archivo }) => !archivo.includes('.test.'))
+    .map(({ archivo, codigo }) => ({ archivo, codigo: sinComentarios(codigo) }));
+
+const DE_PRODUCCION = deProduccion(FUENTES);
+const TODO_DE_PRODUCCION = deProduccion(TODO_LO_QUE_VIAJA);
 
 describe('el portal no arrastra el back-office', () => {
   it('encuentra los archivos que dice escanear', () => {
     // Sin esto, un `PORTAL` mal apuntado dejaria las tres pruebas de abajo
     // recorriendo una lista vacia: en verde, y sin comprobar nada.
     expect(DE_PRODUCCION.length).toBeGreaterThan(3);
+    // Y los paquetes que viajan con el: los tres, no solo el primero.
+    for (const { que } of ESCANEADOS) {
+      expect(
+        TODO_DE_PRODUCCION.some(({ archivo }) => archivo.startsWith(`${que}/`)),
+        `no se escaneo ningun archivo de ${que}`,
+      ).toBe(true);
+    }
   });
 
   it('no importa nada de apps/backoffice, ni el catalogo, ni el shell', () => {
-    const culpables = DE_PRODUCCION.filter(({ codigo }) =>
-      /from\s+'[^']*(backoffice|\/catalogo|\/app\/Shell|pantallas\/)/.test(codigo),
+    /* **Ni el portal, ni los paquetes que descarga con el.** Ningun archivo de
+       `packages/` puede importar de `apps/`: eso es el back-office entrando por
+       la puerta de atras, y hasta hoy solo lo habria dicho el presupuesto —«el
+       total subio»— y por 11 KB de suerte. */
+    const culpables = TODO_DE_PRODUCCION.filter(({ codigo }) =>
+      /from\s+'[^']*(backoffice|\.\.\/apps\/|\/catalogo|\/app\/Shell|pantallas\/)/.test(codigo),
     ).map(({ archivo }) => archivo);
 
     expect(culpables).toEqual([]);
@@ -132,29 +180,113 @@ describe('del portal no se escribe', () => {
   });
 
   it('todo lo que pide es un GET del contrato', () => {
-    const pedidas = new Set<string>();
-    for (const { codigo } of DE_PRODUCCION) {
-      for (const [, operacion] of codigo.matchAll(/pedirOperacion\(\s*'([^']+)'/g)) {
-        if (operacion !== undefined) pedidas.add(operacion);
+    const pedidas = Object.keys(LECTURAS);
+
+    /* **El metodo primero, y la lista despues.** El orden es la prueba: si una
+       de las dos se cambiara por una operacion de escritura, con los `toContain`
+       delante la prueba caeria en «falta contribuyentes» —«la lista cambio»— y
+       nunca en lo que esta prueba existe para decir. Comprobado: la version
+       anterior fallaba sin nombrar el metodo. Y la ruta se compara letra a
+       letra, que es la mitad que el tipo no puede sostener: las claves son ids
+       del contrato por `satisfies`, pero la ruta de cada una es un texto escrito
+       a mano en `apps/portal/src/lecturas.ts`. */
+    expect(pedidas.length).toBeGreaterThan(0);
+    for (const operacion of pedidas) {
+      const descriptor = OPERACIONES[operacion as IdDeOperacion];
+      expect(descriptor, `«${operacion}» no es una operacion del contrato`).toBeDefined();
+      expect(descriptor.metodo, `«${operacion}» no es una lectura`).toBe('GET');
+      expect(descriptor.ruta, `la ruta de «${operacion}» no es la del contrato`).toBe(
+        LECTURAS[operacion as keyof typeof LECTURAS],
+      );
+    }
+
+    /* Y que siga preguntando las dos que compone: un portal que no consulta nada
+       pasaria sin esfuerzo el bucle de arriba. */
+    expect(pedidas).toContain('contribuyentes');
+    expect(pedidas).toContain('consulta_unificada');
+  });
+
+  it('y no lleva dentro el mapa de las 169 operaciones', () => {
+    /* `pedirOperacion` resuelve la ruta leyendo `OPERACIONES`, asi que basta una
+       llamada para que el inventario completo de la API —84 rutas de escritura
+       entre ellas— viaje en el paquete de la aplicacion destinada a ser publica
+       (~3 KB comprimidos, y el mapa de donde esta cada cosa). Se pide con
+       `solicitar()` y la tabla de dos entradas de `lecturas.ts`. */
+    const prohibidos = /\b(pedirOperacion|enviarOperacion|descargarOperacion|OPERACIONES)\b/;
+    const culpables = DE_PRODUCCION.filter(({ codigo }) => prohibidos.test(codigo)).map(
+      ({ archivo }) => archivo,
+    );
+
+    expect(culpables).toEqual([]);
+  });
+
+  it('ninguna peticion sale por una ruta que la tabla no declare', () => {
+    /* La otra mitad: sin esto, `solicitar('/coactiva/prescripcion', …)` escrito a
+       mano en cualquier archivo del portal pasaria las dos pruebas de arriba
+       —la tabla seguiria teniendo dos entradas de lectura— y saldria igual. */
+    const fuera: string[] = [];
+    for (const { archivo, codigo } of DE_PRODUCCION) {
+      for (const [, argumento] of codigo.matchAll(/solicitar(?:<[^>]*>)?\(\s*([^,)\s]+)/g)) {
+        if (!/^LECTURAS\.\w+$/.test(argumento ?? '')) fuera.push(`${archivo}: ${argumento}`);
       }
     }
 
-    /* Que pregunte algo, para empezar —un portal que no consulta nada pasaria
-       sin esfuerzo la comprobacion de abajo—, y **que siga preguntando las dos
-       que compone**. Lo que no se fija es la lista exacta: con `toEqual` sobre
-       el conjunto entero, cualquier operacion nueva se caia por «la lista
-       cambio» y nunca por lo que esta prueba existe para decir —que la nueva
-       escribe—. Se comprobo: cambiando una de las dos por un `POST` del
-       contrato, la rigida fallaba sin nombrar el metodo. */
-    expect(pedidas.size).toBeGreaterThan(0);
-    expect([...pedidas]).toContain('contribuyentes');
-    expect([...pedidas]).toContain('consulta_unificada');
+    expect(fuera).toEqual([]);
+  });
+});
 
-    for (const operacion of pedidas) {
-      const descriptor = OPERACIONES[operacion as keyof typeof OPERACIONES];
-      expect(descriptor, `«${operacion}» no es una operacion del contrato`).toBeDefined();
-      expect(descriptor.metodo, `«${operacion}» no es una lectura`).toBe('GET');
+/**
+ * **Los nombres de la lectura compartida se definen una sola vez.**
+ *
+ * Salieron de una pantalla del back-office al separarse el portal (#298) y viven
+ * en `@sgtm/lectura` por un motivo que se paga cuando se olvida: `esObjeto` son
+ * tres condiciones de las que la de `!Array.isArray` es justo la que se cae, y
+ * `importeDe` es lo que impide que un importe se dibuje sin su fecha (regla 9).
+ * Una segunda definicion no rompe nada el dia que se escribe: rompe el dia que
+ * una de las dos se corrige.
+ *
+ * Se vigila **lo exportado**, no cualquier `const texto`: hay media docena de
+ * ayudantes locales con ese nombre y otra semantica —de `Celda`, de
+ * `ValorDeCampo`, de un error— que son de su pantalla y no viajan a ningun
+ * sitio. Lo que no puede haber es un segundo `texto` **publicado**, que es el
+ * que otro archivo importaria creyendo que es este.
+ */
+describe('la lectura del contrato se escribe una vez', () => {
+  const RESERVADOS = [
+    'esObjeto',
+    'texto',
+    'leerPaginado',
+    'leerObjeto',
+    'importeDe',
+    'identidadPorCodigo',
+    'seccionDeLaFicha',
+  ];
+
+  it('nadie fuera de packages/lectura exporta una definicion con esos nombres', () => {
+    const patron = new RegExp(
+      `export\\s+(?:async\\s+)?(?:const|function|let)\\s+(${RESERVADOS.join('|')})\\b`,
+      'g',
+    );
+    const culpables: string[] = [];
+    for (const carpeta of ['apps', 'packages']) {
+      for (const { archivo, codigo } of deProduccion(
+        fuentesDe(join(AQUI, '..', carpeta), carpeta),
+      )) {
+        if (archivo.startsWith('packages/lectura/')) continue;
+        for (const [, nombre] of codigo.matchAll(patron)) culpables.push(`${archivo}: ${nombre}`);
+      }
     }
+
+    // Reexportar si —`export { texto } from '@sgtm/lectura'` es la misma
+    // definicion, no otra—; definir de nuevo, no.
+    expect(culpables).toEqual([]);
+  });
+
+  it('y los siete estan de verdad en packages/lectura', () => {
+    // Sin esto, una lista de nombres que ya nadie define pasaria en verde para
+    // siempre: la prohibicion se cumpliria por vacia.
+    const publicado = readFileSync(join(AQUI, '../packages/lectura/src/index.ts'), 'utf8');
+    for (const nombre of RESERVADOS) expect(publicado).toContain(nombre);
   });
 });
 

@@ -80,18 +80,24 @@ const PRESUPUESTO = {
    * navegacion de los doce modulos —los ~11,5 KB de 134 opciones con sus iconos
    * y resumenes que el ciudadano se descargaba para no usarlos nunca—.
    *
-   * **85,1 KB medidos el 2026-08-28**, contra los 152 que costaba entrar por el
-   * shell: se fija en 88, que son tres kilobytes de margen. Corto **a
+   * **80,9 KB medidos el 2026-08-28**, contra los 147,4 que costaba entrar por
+   * el shell: se fija en 84, que son tres kilobytes de margen. Corto **a
    * proposito**: el portal es una pantalla, no doce modulos, y no tiene por que
    * crecer. Un presupuesto holgado aqui devolveria en seis meses lo que la
    * separacion acaba de quitar. Subirlo es una decision que se explica en el PR,
    * como el de arriba.
    *
-   * De los 85, unos 60 son React y el cliente de consultas; lo propio del portal
+   * Los 4,2 KB que bajaron de 85,1 a 80,9 son el mapa de las 169 operaciones del
+   * contrato: el portal pedia con `pedirOperacion`, que lo lee para resolver la
+   * ruta, y con el viajaban las 84 rutas de escritura del sistema en la
+   * aplicacion destinada a ser publica. Ahora declara sus dos rutas
+   * (`apps/portal/src/lecturas.ts`) y pide con `solicitar()`.
+   *
+   * De los 81, unos 60 son React y el cliente de consultas; lo propio del portal
    * —su pantalla, los adaptadores de `@sgtm/lectura` y la puerta de sesion— no
-   * llega a 25. Bajar de ahi es cambiar de biblioteca, no de pantalla.
+   * llega a 21. Bajar de ahi es cambiar de biblioteca, no de pantalla.
    */
-  portal: 88,
+  portal: 84,
 };
 
 /* ── El paquete no conoce el dominio ─────────────────────────────────────── */

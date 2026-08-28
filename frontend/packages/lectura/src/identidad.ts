@@ -1,3 +1,4 @@
+import type { ParametrosDe } from '@sgtm/api-client';
 import { SIN_DATO, esObjeto, leerPaginado, texto } from './contrato';
 
 /**
@@ -62,8 +63,33 @@ export function identidadPorCodigo(cuerpo: unknown, codigo: string): Identidad |
  * `ContribuyenteResource` publica **`numeroDocumento`**, no `dNI` ni `rUC`: esos
  * dos son nombres de **filtro** y el recurso los devuelve juntos en un solo
  * campo con su `tipoDocumento` al lado.
+ *
+ * **Sale del contrato, no de aqui.** Escrito como tres literales sueltos, esto
+ * decia por su cuenta como se llaman los filtros de `GET /rentas/contribuyentes`
+ * y podia quedarse diciendolo cuando el contrato dejara de llamarlos asi: la
+ * peticion saldria con un parametro que el backend ya no declara —que no viaja,
+ * porque `solicitar` solo manda lo que se le da— y el padron contestaria **el
+ * padron entero**, del que este modulo se quedaria con la fila que coincidiera.
+ * Atado con `Extract`, el nombre renombrado en `sgtm-v1.yaml` no compila.
  */
-export type ClaveDelPadron = 'codigo' | 'dNI' | 'rUC';
+export type ClaveDelPadron = Extract<
+  keyof ParametrosDe<'contribuyentes'>,
+  'codigo' | 'dNI' | 'rUC'
+>;
+
+/**
+ * La guarda de vuelta: **los tres siguen publicados**.
+ *
+ * `Extract` se queda con lo que exista en las dos partes, asi que por si solo
+ * degrada en silencio —si el contrato dejara de publicar `rUC`, `ClaveDelPadron`
+ * pasaria a ser dos claves y todo seguiria compilando, con la caja del RUC
+ * mandando un filtro que nadie lee—. Esta constante obliga a la comparacion en
+ * la otra direccion: es `true` mientras los tres esten, y no compila en cuanto
+ * falte uno.
+ */
+export const LOS_TRES_FILTROS_DEL_PADRON: 'codigo' | 'dNI' | 'rUC' extends ClaveDelPadron
+  ? true
+  : never = true;
 
 const CAMPO_DE: Readonly<Record<ClaveDelPadron, string>> = {
   codigo: 'codigo',

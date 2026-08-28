@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -25,7 +25,10 @@ import { DOCUMENTOS, filtroDe, loQueFalta } from './consulta';
  * 5. «no figura» y «hay mas de uno» son dos frases distintas, y ninguna es «no
  *    existe»;
  * 6. sin sesion no se ofrece una puerta que no existe: se dice que el acceso del
- *    ciudadano todavia no esta.
+ *    ciudadano todavia no esta —y **con proveedor de identidad configurado**, que
+ *    es el unico estado en el que esa rama se ejecuta de verdad—;
+ * 7. lo que la pantalla dice le es verdad **a su lector**: aqui no hay catalogo
+ *    ni navegacion, asi que no se le manda a opciones del back-office.
  */
 
 /** La primera persona del padron del prototipo, la misma con la que se prueba la ficha. */
@@ -59,6 +62,42 @@ function montar() {
   );
 }
 
+/**
+ * Se pone **encima del proxy ya instalado**: apunta lo que sale y, si se le da un
+ * `responder`, contesta por su cuenta.
+ *
+ * Hace falta para las tres cosas que el proxy no puede dar: que el proveedor de
+ * identidad rechace el canje, que el padron devuelva la misma persona dos veces
+ * y que devuelva una fila sin codigo.
+ */
+function interceptar(responder?: (url: URL) => Response | undefined) {
+  const pedidas: string[] = [];
+  const anterior = globalThis.fetch;
+  globalThis.fetch = async (entrada: RequestInfo | URL, opciones?: RequestInit) => {
+    const url = new URL(
+      typeof entrada === 'string' ? entrada : entrada instanceof URL ? entrada.href : entrada.url,
+      globalThis.location.origin,
+    );
+    pedidas.push(`${url.pathname}${url.search}`);
+    return responder?.(url) ?? anterior(entrada, opciones);
+  };
+  return { pedidas, restaurar: () => (globalThis.fetch = anterior) };
+}
+
+/** El cuerpo paginado del padron, con las filas que se le den. */
+const padronCon = (...filas: readonly Readonly<Record<string, unknown>>[]): Response =>
+  new Response(
+    JSON.stringify({
+      contenido: filas,
+      pagina: 0,
+      tamano: filas.length,
+      totalElementos: filas.length,
+      totalPaginas: 1,
+      hayMas: false,
+    }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  );
+
 /** Consulta por DNI, como lo haria el ciudadano: elige, teclea y pulsa. */
 async function consultar(documento: string, numero: string) {
   const usuario = userEvent.setup();
@@ -79,6 +118,17 @@ describe('el portal se abre sin nada del back-office', () => {
     // back-office es la que aqui no existe (ADR-0016 §3).
     expect(screen.queryByRole('navigation')).toBeNull();
     expect(screen.queryByRole('tablist')).toBeNull();
+  });
+
+  it('lo suyo esta dentro de un `main`', () => {
+    montar();
+
+    // El unico punto de referencia de la aplicacion: sin el, quien navega con
+    // lector de pantalla no tiene a donde saltar desde la cabecera.
+    const principal = screen.getByRole('main');
+    expect(
+      within(principal).getByRole('heading', { level: 1, name: /Consulta tu deuda/ }),
+    ).toBeInTheDocument();
   });
 
   it('dice, antes de que nadie teclee, que de aqui no sale ningun pago', () => {
@@ -105,6 +155,50 @@ describe('el portal se abre sin nada del back-office', () => {
       screen.getByRole('heading', { level: 1, name: /Consulta tu deuda/ }),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Iniciar sesión' })).toBeNull();
+  });
+});
+
+/**
+ * **La rama anonima, con proveedor de identidad y sin sesion** (ADR-0016 §3).
+ *
+ * La prueba de arriba corre en estado «sin proveedor» —que es como se trabaja
+ * contra el proxy— y ahi la puerta **deja pasar por diseno**: comprueba que el
+ * portal usa la puerta compartida, y no puede comprobar lo que la puerta hace
+ * cuando no hay sesion. Se midio: dibujando `{anonima}{children}` en
+ * `PuertaDeSesion` —o sea, la pantalla del ciudadano **junto** al aviso— las
+ * quince pruebas de este archivo seguian en verde.
+ *
+ * Con las tres `VITE_SGTM_OIDC_*` puestas la sesion arranca «entrando», pide
+ * token al proveedor, el proveedor lo rechaza y queda «anonima». Lo que entonces
+ * tiene que verse es el aviso **y nada mas**: ni el titulo, ni la caja, ni el
+ * boton. Y ni una peticion a la API: la pantalla que las hace no llego a
+ * montarse.
+ */
+describe('sin sesion no se ve el portal, se ve por que no se ve', () => {
+  it('con proveedor configurado y el canje rechazado, solo el aviso', async () => {
+    vi.stubEnv('VITE_SGTM_OIDC_CLIENTE', 'sgtm-portal');
+    vi.stubEnv('VITE_SGTM_OIDC_AUTORIZACION', '/oidc/auth');
+    vi.stubEnv('VITE_SGTM_OIDC_TOKEN', '/oidc/token');
+    const espia = interceptar((url) =>
+      url.pathname === '/oidc/token' ? new Response('{}', { status: 400 }) : undefined,
+    );
+
+    try {
+      render(<App />);
+
+      expect(await screen.findByText('Todavía no hay acceso del ciudadano')).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+      expect(screen.queryByLabelText('Número de documento')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Consultar' })).toBeNull();
+      // Y no se ofrece la puerta del back-office: el `redirect_uri` es la raiz
+      // del origen y devolveria al ciudadano a la ventanilla.
+      expect(screen.queryByRole('button', { name: 'Iniciar sesión' })).toBeNull();
+      // Ninguna lectura del padron sale de una pantalla que no se monto.
+      expect(espia.pedidas.filter((ruta) => ruta.startsWith('/api/'))).toEqual([]);
+    } finally {
+      espia.restaurar();
+      vi.unstubAllEnvs();
+    }
   });
 });
 
@@ -157,7 +251,10 @@ describe('lo que se ve al consultar', () => {
     const resumen = await screen.findByRole('heading', { name: 'Lo que debes' });
     const caja = resumen.parentElement as HTMLElement;
     for (const cifra of RESUMEN_DE_SALDOS) {
-      expect(within(caja).getByText(cifra.label)).toBeInTheDocument();
+      /* Con su unidad: el rotulo es el del catalogo —letra a letra, RNF-080— y
+         el «S/» se le anade al dibujar, como ya hacen las columnas de las
+         rejillas. Sin el, «279.03» no dice en que moneda esta. */
+      expect(within(caja).getByText(`${cifra.label} S/`)).toBeInTheDocument();
     }
     // La fecha es la de la respuesta, no la del reloj del navegador (regla 9).
     expect(within(caja).getByText(/Cifras actualizadas al/)).toBeInTheDocument();
@@ -207,7 +304,7 @@ describe('ninguna cifra sin su fecha (regla 9, RNF-075)', () => {
     const resumen = (await screen.findByRole('heading', { name: 'Lo que debes' }))
       .parentElement as HTMLElement;
     const total = within(resumen)
-      .getByText('Total')
+      .getByText('Total S/')
       .parentElement?.querySelector('dd')?.textContent;
     /* La cifra que publica `consulta_unificada`, tal cual y sin recomponer: la
        interfaz no suma ni completa el total a partir de las partes (RNF-083).
@@ -234,5 +331,111 @@ describe('lo que no se encuentra no se dice como «no existe»', () => {
     montar();
 
     expect(screen.queryByRole('region', { name: 'Resultado de la consulta' })).toBeNull();
+  });
+
+  it('un numero que corresponde a dos personas manda a ventanilla, y no elige', async () => {
+    /* La otra rama de `identidadesQueCoinciden`: **ninguna, una y varias son
+       tres respuestas**, y con varias no se elige aqui. El padron del prototipo
+       no tiene dos filas con el mismo DNI, asi que se le hace devolver la misma
+       persona dos veces —que es lo que un padron con un duplicado real haria—. */
+    const espia = interceptar((url) =>
+      url.pathname === '/api/v1/rentas/contribuyentes'
+        ? padronCon(
+            {
+              codigo: CODIGO,
+              nombreRazonSocial: NOMBRE,
+              tipoDocumento: 'DNI',
+              numeroDocumento: DNI,
+            },
+            {
+              codigo: '00000099999',
+              nombreRazonSocial: 'OTRA PERSONA',
+              tipoDocumento: 'DNI',
+              numeroDocumento: DNI,
+            },
+          )
+        : undefined,
+    );
+
+    try {
+      montar();
+      await consultar('DNI', DNI);
+
+      /* Dos veces: el aviso que se ve y el anuncio en voz alta del `role=status`
+         —quien consulta con lector de pantalla no ve el aviso—. */
+      expect(
+        await screen.findAllByText('Ese documento corresponde a más de un registro'),
+      ).toHaveLength(2);
+      expect(screen.getByText(/Acércate a la municipalidad con tu documento/)).toBeInTheDocument();
+      // Ni se elige una, ni se compone la deuda de ninguna de las dos.
+      expect(screen.queryByRole('heading', { name: NOMBRE })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Lo que debes' })).toBeNull();
+      expect(espia.pedidas.filter((ruta) => ruta.startsWith('/api/v1/consultas/'))).toEqual([]);
+    } finally {
+      espia.restaurar();
+    }
+  });
+
+  it('una fila sin codigo no se convierte en una consulta por el guion', async () => {
+    /* `texto()` devuelve «—» cuando el dato falta, asi que comparar el codigo
+       con la cadena vacia dejaba pasar el guion y salia
+       `GET /consultas/unificada?contribuyente=—`: una espera y una respuesta
+       vacia por un contribuyente que no existe. */
+    const espia = interceptar((url) =>
+      url.pathname === '/api/v1/rentas/contribuyentes'
+        ? padronCon({ nombreRazonSocial: NOMBRE, tipoDocumento: 'DNI', numeroDocumento: DNI })
+        : undefined,
+    );
+
+    try {
+      montar();
+      await consultar('DNI', DNI);
+
+      await waitFor(() =>
+        expect(screen.getByRole('heading', { name: NOMBRE })).toBeInTheDocument(),
+      );
+      expect(espia.pedidas.filter((ruta) => ruta.startsWith('/api/v1/consultas/'))).toEqual([]);
+      expect(espia.pedidas.some((ruta) => ruta.includes('%E2%80%94'))).toBe(false);
+    } finally {
+      espia.restaurar();
+    }
+  });
+});
+
+/**
+ * **Lo que se dice aqui le es verdad a quien lo lee** (#298).
+ *
+ * Las notas de las rejillas las escribio la ficha 360° del back-office, y ahi
+ * terminan nombrando la opcion hermana a la que ir: «se ven en «Consulta de
+ * deuda»». Desde el portal esas cuatro opciones no existen —no hay navegacion,
+ * ni catalogo, ni permiso que las abra—, asi que mandar ahi al ciudadano es
+ * mandarlo a un sitio al que no puede ir. Lo que falta se sigue diciendo, con la
+ * salida que si es suya.
+ */
+describe('al ciudadano no se le manda a opciones que no puede abrir', () => {
+  it('ninguna nota nombra una opcion del catalogo', async () => {
+    montar();
+    await consultar('DNI', DNI);
+    await screen.findByRole('heading', { name: 'Deudas Pendientes' });
+
+    // Sobre la pantalla entera, no sobre la lista de rejillas: la nota podria
+    // llegar por cualquier otro sitio y contaria igual.
+    const escrito = document.body.textContent ?? '';
+    expect(escrito).not.toMatch(/se ven? en «/);
+    for (const rejilla of REJILLAS_DE_LA_UNIFICADA) {
+      if (rejilla.nota !== undefined) expect(escrito).not.toContain(rejilla.nota);
+    }
+  });
+
+  it('pero lo que falta se sigue diciendo, y donde preguntarlo', async () => {
+    montar();
+    await consultar('DNI', DNI);
+    await screen.findByRole('heading', { name: 'Deudas Pendientes' });
+
+    const conNota = REJILLAS_DE_LA_UNIFICADA.filter((r) => r.notaDelCiudadano !== undefined);
+    expect(conNota.length).toBe(4);
+    for (const rejilla of conNota) {
+      expect(screen.getByText(rejilla.notaDelCiudadano as string)).toBeInTheDocument();
+    }
   });
 });

@@ -54,7 +54,7 @@ export function Portal({ pasos }: PortalProps) {
         </div>
       </section>
       {/* La aplicacion que descarga el ciudadano, para poder verla como la ve
-          el (#298). Es un `<a>` y no un `Link`: `/portal/` es OTRA aplicacion
+          el ciudadano (#298). Es un `<a>` y no un `Link`: `/portal/` es OTRA aplicacion
           del mismo origen —su propio paquete, su propio `index.html`—, y una
           navegacion del enrutador no saldria de esta. */}
       <p className="sgtm-portal__vistaprevia">

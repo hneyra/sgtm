@@ -48,6 +48,9 @@ test('el portal se consulta entero en un viewport de 360 px', async ({ page }) =
   await page.goto(PORTAL);
 
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  // El punto de referencia de la pagina, en el navegador de verdad: sin `main`
+  // no hay a donde saltar desde la cabecera.
+  await expect(page.getByRole('main')).toBeVisible();
   // Lo que la pantalla dice antes de que nadie teclee: de aqui no sale un pago.
   await expect(page.getByText('Aquí solo se consulta')).toBeVisible();
   expect(await cabeEnLaPantalla(page)).toBe(true);
