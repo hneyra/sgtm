@@ -34,7 +34,10 @@
 | Ámbito | nacional |
 | Vigencia | 2004–, sin modificación conocida a la fecha de esta transcripción |
 
-**No se carga con este archivo.** La carga depende de D-13.
+**Se carga desde `publicacion/parametros-2026.csv`**, el derivado publicable de este
+archivo, con `infra/carga-de-datos/publicar-parametros.sh` (#188, #247 §4). Las dos firmas
+de la cabecera de arriba son las que llegan a `usuario_carga` y `usuario_aprueba`: la doble
+verificación de ADR-0007 ocurrió aquí, y la herramienta la transporta.
 
 ## 3. Qué no cabe hoy
 
