@@ -7,9 +7,17 @@
 | Publicada | 2004-11-15, El Peruano |
 | Ejercicios que rige | 2004– |
 | Filas de NEG-02 §2 | 15 |
-| Transcribió | JNA, 2026-08-24 |
-| Verificó | HNA, 2026-08-25 |
-| Estado | VERIFICADO |
+| Transcribió | JNA, 2026-08-24; arts. 21 a 29 cotejados contra el texto literal del TUO (D.S. 156-2004-EF, PDF de la edición con concordancias) y resolución de la reserva de las ONG: Agent, 2026-08-28 |
+| Verificó | — |
+| Estado | TRANSCRITO |
+
+> **Por qué este archivo vuelve a `TRANSCRITO`.** HNA lo verificó el 2026-08-25 cuando sus tablas
+> se sostenían en fuentes que citan la norma de forma consistente, no en el texto oficial. El
+> 2026-08-28 llegó el PDF del TUO y el cotejo literal **confirmó las dos tablas palabra por
+> palabra** y resolvió la reserva de las ONG (abajo); como esa adición no la ha verificado nadie y
+> el corpus no admite que quien transcribe se verifique a sí mismo (ADR-0007), el estado baja
+> hasta la segunda firma. El PDF del TUO está pendiente de archivar en S3 por el dueño del
+> repositorio (README de la rama `gob-docs`).
 
 ## 1. La tabla tal como está en la norma
 
@@ -25,17 +33,20 @@
 | Tramo inafecto | 25 | No está afecto al impuesto el tramo comprendido por las primeras 10 UIT del valor del inmueble, calculado conforme al artículo 24 |
 | Plazo de pago | 26 | Hasta el último día hábil del mes calendario siguiente a la fecha en que se produzca la transferencia |
 
-> Texto del artículo 25 (tasa y tramo inafecto), como lo citan de forma consistente las fuentes
-> consultadas: «La tasa del impuesto es de 3%, siendo de cargo exclusivo del comprador, sin admitir
-> pacto en contrario. No está afecto al Impuesto de Alcabala, el tramo comprendido por las primeras
-> 10 UIT del valor del inmueble, calculado conforme a lo dispuesto en el artículo precedente.» El
-> tramo inafecto se calcula, por tanto, **sobre el valor de transferencia ya determinado según el
-> artículo 24** (que no puede ser menor al autoavalúo ajustado por IPM), no sobre el autoavalúo
-> directamente.
+> Texto del artículo 25 (tasa y tramo inafecto): «La tasa del impuesto es de 3%, siendo de cargo
+> exclusivo del comprador, sin admitir pacto en contrario. No está afecto al Impuesto de Alcabala,
+> el tramo comprendido por las primeras 10 UIT del valor del inmueble, calculado conforme a lo
+> dispuesto en el artículo precedente.» Lo citaban así, de forma consistente, las fuentes
+> consultadas al transcribir, y **el 2026-08-28 se leyó idéntico en el texto literal del TUO** (el
+> PDF anota que la modificación es de la Ley 27963, del 17-05-2003). El tramo inafecto se calcula,
+> por tanto, **sobre el valor de transferencia ya determinado según el artículo 24** (que no puede
+> ser menor al autovalúo ajustado por IPM — el TUO imprime «valor de autovalúo del predio», con esa
+> grafía), no sobre el autovalúo directamente.
 
 **Transferencias no afectas al impuesto (artículo 27).** Confirmado de forma consistente en varias
 fuentes (texto de la norma vía El Peruano, y las páginas de orientación tributaria de SAT-Lima y
-SAT-Trujillo):
+SAT-Trujillo), y el 2026-08-28 **leído literal en el PDF del TUO: los siete literales a) a g),
+palabra por palabra los de esta tabla**, sin anotación de modificatoria alguna sobre el artículo:
 
 | Transferencia no afecta |
 |---|
@@ -47,8 +58,9 @@ SAT-Trujillo):
 | Las producidas por la división y partición de la masa hereditaria, de gananciales o de condóminos originarios |
 | Las de alícuotas entre herederos o de condóminos originarios |
 
-**Inafectaciones por tipo de adquirente (artículo 28).** Confirmado con las mismas fuentes: están
-inafectas las adquisiciones de propiedad inmobiliaria que efectúen:
+**Inafectaciones por tipo de adquirente (artículo 28).** Confirmado con las mismas fuentes, y el
+2026-08-28 **leído literal en el PDF del TUO: los cinco literales a) a e), palabra por palabra los
+de esta tabla**: están inafectas las adquisiciones de propiedad inmobiliaria que efectúen:
 
 | Adquirente inafecto |
 |---|
@@ -58,16 +70,16 @@ inafectas las adquisiciones de propiedad inmobiliaria que efectúen:
 | El Cuerpo General de Bomberos Voluntarios del Perú |
 | Universidades y centros educativos, conforme a la Constitución |
 
-> **Sobre las ONG:** el encargo de esta ficha pedía confirmar si la lista del artículo 27/28 incluye
-> a las ONG con inscripción vigente. Se buscó explícitamente ese literal en el texto consolidado
-> (El Peruano) y en las páginas de orientación de SAT-Lima, SAT-Trujillo y un despacho tributario
-> (Grupo Aurora); **ninguna de las cuatro fuentes lo menciona**. La lista de adquirentes inafectos
-> del artículo 28 que confirman todas ellas tiene exactamente los cinco literales de la tabla de
-> arriba. `‹NO CONFIRMADO EN FUENTE OFICIAL: una inafectación de alcabala a favor de ONG con
-> inscripción vigente. Se intentó vía El Peruano (texto consolidado) y páginas de orientación de SAT
-> municipales, sin encontrarla; si existe, puede estar en una norma distinta al TUO LTM (p. ej. un
-> beneficio para donaciones bajo la Ley del Impuesto a la Renta, que es otro tributo) y no en el
-> artículo 27/28 de este TUO — no se incluye aquí para no mezclar tributos.›`
+> **Sobre las ONG — resuelto el 2026-08-28 contra el texto oficial.** El encargo de esta ficha
+> pedía confirmar si la lista del artículo 27/28 incluye a las ONG con inscripción vigente. Se
+> buscó primero en el texto consolidado (El Peruano) y en las páginas de orientación de SAT-Lima,
+> SAT-Trujillo y un despacho tributario (Grupo Aurora), sin encontrar tal literal, y quedó como
+> `‹NO CONFIRMADO EN FUENTE OFICIAL›` porque ninguna de esas lecturas era el texto legal. Ahora sí
+> lo es: **leído completo el capítulo del TUO en su PDF oficial, ni el artículo 27 (siete
+> literales) ni el artículo 28 (cinco literales) traen inafectación alguna a favor de ONG**, y el
+> PDF no anota modificatoria sobre ninguno de los dos artículos. Si un beneficio así existe, está
+> en una norma distinta al TUO LTM (p. ej. un tratamiento de donaciones bajo la Ley del Impuesto a
+> la Renta, que es otro tributo) y no se incluye aquí para no mezclar tributos.
 
 ## 2. Cómo entra al sistema
 

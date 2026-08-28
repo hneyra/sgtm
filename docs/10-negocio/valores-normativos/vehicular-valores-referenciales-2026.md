@@ -7,9 +7,9 @@
 | Publicada | 2004-11-15, El Peruano (TUO LTM); 2026-01-15, El Peruano (R.M. N.° 008-2026-EF/15) |
 | Ejercicios que rige | 2004– (alícuota y años de afectación, TUO LTM); 2026 (tabla de valores referenciales, propia de ese ejercicio) |
 | Filas de NEG-02 §2 | 16 |
-| Transcribió | JNA, 2026-08-24; adición del anexo leído en la fuente (§1.2 y §1.3): Agent, 2026-08-28; parte resolutiva de la R.M. leída completa (§1.4): Agent, 2026-08-28 |
-| Verificó | HNA, 2026-08-28 |
-| Estado | VERIFICADO |
+| Transcribió | JNA, 2026-08-24; adición del anexo leído en la fuente (§1.2 y §1.3): Agent, 2026-08-28; parte resolutiva de la R.M. leída completa (§1.4): Agent, 2026-08-28; arts. 30 a 37 cotejados contra el texto literal del TUO (D.S. 156-2004-EF, PDF de la edición con concordancias), con la corrección del D. Leg. 1520 y el art. 37 literal (§1.1 y §1.1.1): Agent, 2026-08-28 |
+| Verificó | — |
+| Estado | TRANSCRITO |
 
 > **Historial de la verificación.** Este archivo se verificó dos veces, y la primera no cubría lo
 > que hoy contiene. El 2026-08-25 HNA verificó el archivo tal como estaba entonces, cuando el
@@ -18,9 +18,13 @@
 > oficiales —los dos del anexo y el de la propia resolución— y se añadió lo que se vio en ellos
 > (§1.2, §1.3 y §1.4, y la reescritura de §3); como el corpus no admite que quien transcribe se
 > verifique a sí mismo (ADR-0007), el estado bajó ese día a `TRANSCRITO` con `Verificó` en `—`.
-> **Ese mismo 2026-08-28 HNA volvió a la fuente y re-firmó sobre el contenido ampliado**, que es
-> la verificación que la cabecera registra; las dos quedan en el historial de git, cada una sobre
-> el contenido que el archivo tenía al firmarse.
+> **Ese mismo 2026-08-28 HNA volvió a la fuente y re-firmó sobre el contenido ampliado**; las dos
+> verificaciones quedan en el historial de git, cada una sobre el contenido que el archivo tenía
+> al firmarse. **Y ese mismo día el archivo volvió a bajar una tercera vez**: llegó el PDF del TUO
+> de la Ley de Tributación Municipal y el cotejo de los arts. 30 a 37 contra su texto literal
+> corrigió la tabla de §1.1 —que describía el texto anterior al D. Leg. 1520— y cerró el
+> `‹NO CONFIRMADO›` del art. 37. Esa adición espera su segunda firma; el PDF del TUO está
+> pendiente de archivar en S3 por el dueño del repositorio (README de la rama `gob-docs`).
 
 ## 1. La tabla tal como está en la norma
 
@@ -30,23 +34,80 @@
 
 | Elemento | Artículo | Contenido |
 |---|---|---|
-| Hecho gravado | 30 | Grava la propiedad de los vehículos, automóviles, camionetas, station wagons, camiones, buses y ómnibuses, con una antigüedad no mayor de tres (3) años |
+| Hecho gravado | 30 | Grava la propiedad de los vehículos, automóviles, camionetas, station wagons, camiones, buses, **ómnibuses y remolcadores o tracto camiones**, con una antigüedad no mayor de tres (3) años; el plazo se computa desde la primera inscripción en el Registro de Propiedad Vehicular (texto vigente por el D. Leg. 1520; ver §1.1.1) |
+| Administración | 30-A | Corresponde a las **Municipalidades Provinciales**, en cuya jurisdicción tenga su domicilio el propietario del vehículo; el rendimiento constituye renta de la Municipalidad Provincial (incluido por la Ley 27616) |
 | Contribuyentes | 31 | Las personas naturales o jurídicas propietarias de los vehículos afectos, al 1 de enero de cada año. Cuando se efectúe una transferencia, el adquirente asume la condición de contribuyente a partir del 1 de enero del año siguiente |
 | Base imponible | 32 | El valor original de adquisición, importación o de ingreso al patrimonio, el que en ningún caso será menor a la tabla referencial que anualmente debe aprobar el Ministerio de Economía y Finanzas, la que considera un valor de ajuste por antigüedad |
-| Tasa | 33 | 1% de la base imponible. El monto a pagar no puede ser inferior al 1.5% de la UIT vigente al 1 de enero del ejercicio al que corresponda el impuesto |
-| Declaración jurada | 34 | Anual, hasta el último día hábil de febrero; también se exige al producirse una transferencia de dominio o cuando el vehículo ingresa al registro |
+| Tasa | 33 | 1% de la base imponible. El monto a pagar no puede ser inferior al 1.5% de la UIT vigente al 1 de enero del ejercicio al que corresponda el impuesto. **Segundo párrafo (D. Leg. 1520)**: vehículos objeto de robo, hurto o siniestro que disminuya el valor afecto en 50 % o más → tasa **0 %** desde el ejercicio siguiente y mientras dure la condición (§1.1.1) |
+| Declaración jurada | 34 | Tres supuestos: a) anual, el último día hábil de febrero, salvo prórroga municipal; b) en cualquier transferencia de dominio, hasta el último día hábil del mes siguiente; c) cuando la administración lo determine para la generalidad de contribuyentes. **La actualización de valores por la municipalidad sustituye la DJ anual** si el contribuyente no la objeta en el plazo del pago al contado (§1.1.1) |
 | Plazos de pago | 35 | Al contado, hasta el último día hábil de febrero; o en forma fraccionada, hasta en 4 cuotas trimestrales (febrero, mayo, agosto, noviembre), reajustadas en las cuotas 2ª a 4ª por la variación del IPM |
-| Artículo 36 | 36 | Derogado |
-| Inafectaciones | 37 | `‹NO CONFIRMADO EN FUENTE OFICIAL, LITERAL EXACTO: se confirmó que el artículo 37 inafecta al Gobierno Central, gobiernos regionales y locales, entidades religiosas, el Cuerpo General de Bomberos Voluntarios del Perú, universidades y centros educativos, y vehículos de transporte público autorizado, pero solo mediante una fuente que parafrasea el artículo, no con el texto legal literal artículo por inciso; no se transcribe como cita textual para no atribuir a la norma una redacción no verificada palabra por palabra›` |
+| Artículo 36 | 36 | Derogado (por la Única Disposición Complementaria Derogatoria del D. Leg. 1520) |
+| Inafectaciones | 37 | **Siete literales, a) a g), transcritos completos en §1.1.1** — dos más de los que la paráfrasis de la versión anterior de esta ficha recogía: los Gobiernos extranjeros y organismos internacionales (b), y los vehículos de personas jurídicas fuera de su activo fijo (f, con la excepción de la reserva de propiedad que le puso el D. Leg. 1520) |
 
-> Nota sobre el "año de afectación": el artículo 30 formula el hecho gravado como vehículos "con
-> una antigüedad no mayor de tres (3) años". Las páginas de orientación de las administraciones
-> tributarias (SAT de Trujillo, Escuela SAT) describen la aplicación operativa de esa regla como
-> "afecto durante tres años, contados a partir del año siguiente a aquel en que se realizó la
-> primera inscripción en el Registro de Propiedad Vehicular" — es la lectura administrativa del
-> artículo 30, consistente entre las fuentes consultadas, y coherente con el diseño del artículo 32
-> (que exige una tabla de valores con "ajuste por antigüedad" que en la práctica cubre más de tres
-> años de fabricación, para poder valorizar vehículos con inscripción tardía al registro).
+> **La versión anterior de esta tabla describía el texto de antes del 2021, y estaba `VERIFICADO`.**
+> Se transcribió de fuentes que parafrasean la norma, y ninguna reflejaba el D. Leg. 1520
+> (31-12-2021): el hecho gravado del art. 30 ya incluye **remolcadores o tracto camiones** —que es
+> exactamente la categoría `REMOLCADORES` que el anexo de la R.M. 008-2026 publica con 176
+> líneas—, el art. 33 tiene su segundo párrafo de tasa 0 %, y el art. 36 lo derogó ese mismo
+> decreto. El cotejo contra el texto literal del TUO (leído el 2026-08-28 en el PDF de la edición
+> con concordancias) es lo que lo destapó.
+
+> Nota sobre el "año de afectación": la versión anterior de esta ficha atribuía a «lectura
+> administrativa» (SAT de Trujillo, Escuela SAT) que los tres años se cuenten desde la primera
+> inscripción registral. **Leído el literal, eso está en la propia norma**: el art. 30 dice «Dicho
+> plazo se computa a partir de la primera inscripción en el Registro de Propiedad Vehicular» —ya
+> lo decía el texto de la Ley 27616 («se computará») y lo conserva el del D. Leg. 1520—. Sigue
+> siendo coherente con el diseño del artículo 32 (la tabla cubre más de tres años de fabricación
+> para poder valorizar vehículos con inscripción tardía al registro).
+
+#### 1.1.1 Los textos literales leídos en el TUO (D.S. N.° 156-2004-EF, edición con concordancias)
+
+**Artículo 30, texto vigente** (el PDF lo imprime como modificatoria del D. Leg. 1520 sobre el
+texto de la Ley 27616):
+
+> «Artículo 30.- El Impuesto al Patrimonio Vehicular, de periodicidad anual, grava la propiedad de
+> los vehículos, automóviles, camionetas, station wagons, camiones, buses, ómnibuses y
+> remolcadores o tracto camiones, con una antigüedad no mayor de tres (3) años. Dicho plazo se
+> computa a partir de la primera inscripción en el Registro de Propiedad Vehicular.»
+
+**Artículo 33, segundo párrafo** (incorporado por el art. 4 del D. Leg. 1520):
+
+> «En el caso de vehículos que hubiesen sido objeto de robo, hurto o siniestro que disminuya el
+> valor afecto en 50% o más, la tasa aplicable es de 0% a partir del ejercicio siguiente de
+> producidos tales hechos y mientras mantengan dicha condición.»
+
+**Artículo 34, último párrafo** (incluido por el art. 13 del D. Leg. 952):
+
+> «La actualización de los valores de los vehículos por las Municipalidades, sustituye la
+> obligación contemplada por el inciso a) del presente artículo, y se entenderá como válida en
+> caso que el contribuyente no la objete dentro del plazo establecido para el pago al contado del
+> impuesto.»
+
+*Observación del transcriptor, no cita de la norma*: este párrafo es el mecanismo de la emisión
+mecanizada del vehicular —el mismo que el art. 14 del TUO da al predial— y es el contexto
+normativo donde vive el campo `% actualización` que D-11 sigue rastreando en el SRTM: la norma da
+el mecanismo de actualización de valores, no un porcentaje.
+
+**Artículo 37, completo y literal** (con las anotaciones de modificatoria tal como el PDF las
+imprime):
+
+> «Artículo 37.- Se encuentran inafectos al pago del impuesto, la propiedad vehicular de las
+> siguientes entidades:
+> a) El Gobierno Central, las Regiones y las Municipalidades.
+> b) Los Gobiernos extranjeros y organismos internacionales.
+> c) Entidades religiosas.
+> d) Cuerpo General de Bomberos Voluntarios del Perú.
+> e) Universidades y centros educativos, conforme a la Constitución.
+> f) Los vehículos de propiedad de las personas jurídicas que no formen parte de su activo fijo.(*)
+> (*) Literal modificado por el Artículo 3 del Decreto Legislativo N° 1520, publicado el 31
+> diciembre 2021, cuyo texto es el siguiente:
+> "f) Los vehículos de propiedad de las personas jurídicas que no formen parte de su activo fijo;
+> excepto cuando estos hayan sido transferidos con reserva de propiedad."
+> (22) g) Los vehículos nuevos de pasajeros con antigüedad no mayor de tres (3) años de propiedad
+> de las personas jurídicas o naturales, debidamente autorizados por la autoridad competente para
+> prestar servicio de transporte público masivo. La inafectación permanecerá vigente por el tiempo
+> de duración de la autorización correspondiente.
+> (22) Inciso incluido por el Artículo 1 de la Ley Nº 27616, publicada el 29 de diciembre de 2001.»
 
 ### 1.2 Tabla de valores referenciales de vehículos, ejercicio 2026 (R.M. N.° 008-2026-EF/15)
 
