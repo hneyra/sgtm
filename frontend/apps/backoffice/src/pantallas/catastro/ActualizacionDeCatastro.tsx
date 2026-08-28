@@ -216,6 +216,10 @@ function CampoDeclarado({
       tipo={tipo}
       valor={escritura.borrador[campo] ?? ''}
       bloqueado={!escritura.campos.has(campo)}
+      // Los `sel` de esta pantalla escriben: sin la opcion vacia delante, uno
+      // sin valor se dibujaria mostrando la primera y el borrador seguiria
+      // vacio. Los desplegables de busqueda del catalogo no la llevan.
+      {...(tipo === 'sel' ? { eleccionObligatoria: true } : {})}
       {...(ph === undefined ? {} : { ph })}
       {...(ayuda === undefined ? {} : { ayuda })}
       {...(opciones === undefined ? {} : { opciones })}

@@ -34,6 +34,9 @@ let peticiones: Peticion[] = [];
 /** El código del prototipo, ya inscrito: 21 dígitos, sector «01». */
 const YA_INSCRITO = '200601010150010101001';
 
+/** Uno que **no** está en el juego de datos, con un sector que sí está («02»). */
+const LIBRE = '200601020010200101003';
+
 beforeEach(() => {
   instalarProxyDeDatos({ latencia: false });
   peticiones = [];
@@ -140,6 +143,70 @@ describe('el paso del código comprueba antes de dejar seguir llenando', () => {
     expect(aviso).toHaveTextContent(/a nombre de/);
     const enlace = within(aviso).getByRole('link', { name: 'Ver esa ficha' });
     expect(enlace).toHaveAttribute('href', `/catastro/ficha-urbana/${YA_INSCRITO}`);
+  });
+
+  it('y **no** avisa de un código que no está inscrito: la coincidencia es exacta', async () => {
+    const usuario = userEvent.setup();
+    await abrirElAsistente(usuario);
+    await usuario.type(screen.getByLabelText('Dirección'), 'AV. JOSÉ DE LAMA 1245');
+    await continuar(usuario);
+
+    // Primero el que sí está, para que el aviso llegue a existir: sin esto, «no
+    // hay aviso» podría ser «todavía no se ha preguntado».
+    await componer(usuario, YA_INSCRITO);
+    const aviso = await screen.findByRole('alert');
+    // Y rotula **el código hallado**, no el tecleado: son el mismo mientras el
+    // filtro exacto funcione, y por eso hay que rotular el hallado —el backend
+    // resuelve por prefijo y el proxy ni siquiera filtra, así que un fallo del
+    // filtro avisaría de un duplicado que no existe con el código de otra ficha—.
+    expect(aviso).toHaveTextContent('20-06-01-01-015-001-01-01-00-1');
+
+    // Y ahora uno libre. El proxy de datos **no filtra**: devuelve el juego
+    // entero para cualquier código, así que sin la coincidencia exacta todo
+    // código de 8 dígitos o más avisaría de estar ya inscrito.
+    await componer(usuario, LIBRE);
+
+    // Se espera a que la comprobación del código libre **haya contestado**: sin
+    // esto, «no hay aviso» se cumpliría en el hueco entre lanzar la consulta y
+    // recibirla, y la prueba pasaría diga lo que diga el filtro. Mientras está
+    // en vuelo el asistente lo dice, así que dejar de decirlo es haber
+    // contestado.
+    const porElLibre = () => peticiones.filter((p) => p.url.includes(`codRefCatastral=${LIBRE}`));
+    await waitFor(() => expect(porElLibre().length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(screen.queryByText('Comprobando si ya está inscrita…')).not.toBeInTheDocument(),
+    );
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('si la comprobación falla, lo dice: callar se lee «no hay duplicado»', async () => {
+    const usuario = userEvent.setup();
+    // La consulta de fichas responde 500 **solo ella**: el resto del asistente
+    // —sectores, vías— sigue contestando, para que lo que se mide sea el aviso
+    // y no una pantalla rota entera.
+    const proxy = globalThis.fetch;
+    globalThis.fetch = (entrada, opciones) => {
+      const url = typeof entrada === 'string' ? entrada : String(entrada);
+      if (url.includes('/api/v1/catastro/fichas?')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ title: 'Error interno', status: 500, detail: 'Algo se rompió.' }),
+            { status: 500, headers: { 'content-type': 'application/problem+json' } },
+          ),
+        );
+      }
+      return proxy(entrada, opciones);
+    };
+
+    await abrirElAsistente(usuario);
+    await usuario.type(screen.getByLabelText('Dirección'), 'AV. JOSÉ DE LAMA 1245');
+    await continuar(usuario);
+    await componer(usuario, LIBRE);
+
+    // Sin esto la pantalla quedaba **idéntica** a la de un código libre: la
+    // consulta fallaba, `data` era `undefined` y el paso 2 no dibujaba nada.
+    expect(await screen.findByText('No se pudo comprobar si ya está inscrita')).toBeInTheDocument();
   });
 
   it('dice cuando el sector del código no está en el catálogo', async () => {
@@ -399,6 +466,55 @@ describe('el asistente se puede operar y abandonar con el teclado', () => {
       }
       if (paso < 4) await continuar(usuario);
     }
+  });
+
+  it('con el borrador escrito, Esc no descarta a la primera: lo confirma diciendo qué se pierde', async () => {
+    const usuario = userEvent.setup();
+    await abrirElAsistente(usuario);
+    await usuario.type(screen.getByLabelText('Dirección'), 'AV. JOSÉ DE LAMA 1245');
+
+    await usuario.keyboard('{Escape}');
+
+    // Cuatro pasos de captura no se tiran por una tecla. Y se dice **qué pasa**,
+    // no «¿estás seguro?»: es el trato que `BarraDeAcciones` le da a lo
+    // irreversible (FRO-04 §5).
+    expect(screen.getByText('Vas a descartar la ficha que estás llenando')).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Alta de ficha catastral urbana' }),
+    ).toBeInTheDocument();
+
+    // Y se puede volver a lo escrito, que sigue ahí.
+    await usuario.click(screen.getByRole('button', { name: 'Seguir llenando' }));
+    expect(screen.getByLabelText('Dirección')).toHaveValue('AV. JOSÉ DE LAMA 1245');
+
+    // Confirmando sí sale.
+    await usuario.keyboard('{Escape}');
+    await usuario.click(screen.getByRole('button', { name: 'Descartar el borrador' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('region', { name: 'Alta de ficha catastral urbana' }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(altas()).toHaveLength(0);
+  });
+
+  it('Esc dentro de un desplegable cierra el desplegable, no el asistente', async () => {
+    const usuario = userEvent.setup();
+    await abrirElAsistente(usuario);
+
+    // El `preventDefault()` de Esc era incondicional, así que abrir la lista de
+    // sectores y arrepentirse cerraba el asistente entero: la tecla es la misma,
+    // el gesto no.
+    screen.getByLabelText('Sector').focus();
+    await usuario.keyboard('{Escape}');
+
+    expect(
+      screen.getByRole('region', { name: 'Alta de ficha catastral urbana' }),
+    ).toBeInTheDocument();
+    // Y sin confirmación tampoco: no se pidió salir.
+    expect(
+      screen.queryByText('Vas a descartar la ficha que estás llenando'),
+    ).not.toBeInTheDocument();
   });
 
   it('Esc cierra el asistente y devuelve el foco a la acción que lo abrió', async () => {

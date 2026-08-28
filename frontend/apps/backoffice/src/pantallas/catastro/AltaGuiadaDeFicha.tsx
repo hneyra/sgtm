@@ -99,6 +99,8 @@ export function AltaGuiadaDeFicha({
   // guardar el borrador se vacía —lo que ya está en el servidor no se queda en
   // memoria—, y sin él la pantalla de éxito no podría enlazar a la ficha creada.
   const [inscrita, fijarInscrita] = useState<string | null>(null);
+  // Se pidió salir y hay algo escrito: la confirmación está en pantalla.
+  const [porDescartar, fijarPorDescartar] = useState(false);
   const codigoEnCurso = useRef('');
 
   const escritura = useEscritura(
@@ -123,7 +125,15 @@ export function AltaGuiadaDeFicha({
   codigoEnCurso.current = codigo;
 
   useLoElegidoEnElCodigo(escritura, codigo);
-  useSalidaConEsc(onCerrar);
+  // **Salir del asistente descarta los cuatro pasos**, y nada se ha guardado
+  // todavía: si hay algo escrito, se confirma diciendo qué se pierde. Con el
+  // borrador vacío no hay nada que confirmar y salir es salir —preguntar ahí
+  // sería el «¿estás seguro?» que FRO-04 §5 no quiere—.
+  const pedirSalida = (): void => {
+    if (hayBorrador(escritura)) fijarPorDescartar(true);
+    else onCerrar();
+  };
+  useSalidaConEsc(pedirSalida);
 
   const rotulo = useRef<HTMLHeadingElement>(null);
   // **El foco viaja con el paso.** Al avanzar, el botón que se pulsó se
@@ -174,11 +184,27 @@ export function AltaGuiadaDeFicha({
           </p>
         )}
 
+        {/* Descartar cuatro pasos de captura no se hace sin decirlo. Se dice
+            **qué pasa**, no «¿estás seguro?»: es el mismo trato que
+            `BarraDeAcciones` le da a lo irreversible (FRO-04 §5). */}
+        {porDescartar && (
+          <Aviso
+            tipo="error"
+            titulo="Vas a descartar la ficha que estás llenando"
+            detalle="Nada se ha guardado todavía: el asistente inscribe en el paso 4 y no antes. Al salir se pierden la ubicación, el código y los pisos capturados, y hay que volver a empezar."
+          >
+            <Boton onClick={() => fijarPorDescartar(false)}>Seguir llenando</Boton>
+            <Boton variante="primario" onClick={onCerrar}>
+              Descartar el borrador
+            </Boton>
+          </Aviso>
+        )}
+
         <div className="sgtm-asistente__acciones">
           {/* «Cancelar» en los cuatro pasos: salir de un formulario de cuatro
               pantallas no puede exigir retroceder hasta el primero. */}
           <div className="sgtm-asistente__izquierda">
-            <Boton onClick={onCerrar}>Cancelar</Boton>
+            <Boton onClick={pedirSalida}>Cancelar</Boton>
             {paso > 0 && <Boton onClick={() => fijarPaso(paso - 1)}>Volver</Boton>}
           </div>
           {esElUltimo ? (
@@ -370,6 +396,10 @@ function PasoDelCodigo({
         <p className="sgtm-asistente__nota">Comprobando si ya está inscrita…</p>
       )}
 
+      {/* Y si la comprobación falló, se dice: sin este aviso, un 403 o un 500
+          dibujaban la misma pantalla que un código libre. */}
+      {duplicado.error !== undefined && <ErrorDeLaComprobacion />}
+
       {duplicado.ficha !== undefined && <AvisoDeDuplicado ficha={duplicado.ficha} />}
     </>
   );
@@ -402,6 +432,26 @@ function AvisoDeDuplicado({ ficha }: { readonly ficha: FichaYaInscrita }) {
         Ver esa ficha
       </Link>
     </div>
+  );
+}
+
+/**
+ * No se pudo preguntar. **No es lo mismo que no haber duplicado.**
+ *
+ * Se dibuja donde se dibujaría el duplicado —en el paso 2 y otra vez en el
+ * cierre—, y con el mismo tono que el error del catálogo territorial: las dos
+ * son comprobaciones de lectura que, si fallan, dejan seguir con menos
+ * información de la que la pantalla promete. Callar aquí se lee «no hay
+ * duplicado», y eso es lo que autoriza a llenar cuarenta campos de un código
+ * que puede estar tomado.
+ */
+function ErrorDeLaComprobacion() {
+  return (
+    <Aviso
+      tipo="error"
+      titulo="No se pudo comprobar si ya está inscrita"
+      detalle="La consulta de fichas no respondió, así que el sistema no sabe si este código ya está tomado. Vuelve a intentarlo antes de inscribir: dos primeras versiones con el mismo código son un conflicto, no un alta."
+    />
   );
 }
 
@@ -463,7 +513,9 @@ function PasoDeCierre({
         </dl>
       </section>
 
-      {/* El duplicado, otra vez y aquí: es el momento en el que se decide. */}
+      {/* El duplicado, otra vez y aquí: es el momento en el que se decide. Y si
+          no se pudo comprobar, también: es lo que hay que saber antes de pulsar. */}
+      {duplicado.error !== undefined && <ErrorDeLaComprobacion />}
       {duplicado.ficha !== undefined && <AvisoDeDuplicado ficha={duplicado.ficha} />}
 
       {/* El titular es **opcional a propósito**: en un levantamiento catastral se
@@ -479,6 +531,16 @@ function PasoDeCierre({
         onCambio={fijarBuscado}
       />
       {padron.buscando && <p className="sgtm-asistente__nota">Buscando en el padrón…</p>}
+      {/* Una lista vacía y una búsqueda que falló se ven igual si no se dice:
+          la primera significa «ese contribuyente no existe» y la segunda no
+          significa nada todavía. */}
+      {padron.error !== undefined && (
+        <Aviso
+          tipo="error"
+          titulo="No se pudo buscar en el padrón"
+          detalle="El padrón de contribuyentes no respondió. Que no salga nadie aquí no quiere decir que el contribuyente no exista: vuelve a intentarlo, o teclea su código si lo tienes."
+        />
+      )}
       {padron.encontrados.length > 0 && (
         <ul className="sgtm-asistente__resultados">
           {padron.encontrados.map((contribuyente) => (
@@ -505,6 +567,9 @@ function PasoDeCierre({
       <Campo
         etiqueta="Condición"
         tipo="sel"
+        // Escribe: sin la vacia delante ensenaria «PROPIETARIO_UNICO» elegido
+        // por nadie, y el bloque de titular viajaria sin condicion.
+        eleccionObligatoria
         opciones={CONDICIONES}
         valor={titular['condicion'] ?? ''}
         onCambio={(valor) => fijarTitular('condicion', valor)}
@@ -620,6 +685,20 @@ function ErrorDelAlta({ error }: { readonly error: unknown }) {
 }
 
 /* ── Lo que hace falta en cada paso ────────────────────────────────────── */
+
+/**
+ * ¿Hay algo escrito que se perdería al salir?
+ *
+ * Mira las tres cosas que el asistente guarda en memoria y ninguna otra: los
+ * campos del borrador, las filas de sus dos tablas —los pisos y el titular— y
+ * la observación. Un espacio no es haber escrito, igual que no lo es para la
+ * lista blanca del envío.
+ */
+function hayBorrador(escritura: Escritura): boolean {
+  if (escritura.observacion.trim() !== '') return true;
+  if (Object.values(escritura.borrador).some((valor) => valor.trim() !== '')) return true;
+  return escritura.filasDe(CONSTRUCCIONES).length > 0 || escritura.filasDe(TITULAR).length > 0;
+}
 
 /** Por qué todavía no se puede continuar desde este paso, o `undefined`. */
 function faltaDelPaso(paso: number, escritura: Escritura): string | undefined {
@@ -777,16 +856,27 @@ function useLoElegidoEnElCodigo(escritura: Escritura, codigo: string): void {
   }, [codigo, cola]);
 }
 
-/** Esc cierra el asistente, oído en `document`: el foco puede estar en cualquier campo. */
-function useSalidaConEsc(onCerrar: () => void): void {
-  const cerrar = useRef(onCerrar);
-  cerrar.current = onCerrar;
+/**
+ * Esc pide salir, oído en `document`: el foco puede estar en cualquier campo.
+ *
+ * **Menos cuando el foco está en un `select`.** Ahí Esc ya significa otra cosa
+ * —cerrar el desplegable abierto— y el navegador la resuelve él; capturarla
+ * incondicionalmente hacía que mirar la lista de tipos de vía y arrepentirse
+ * cerrara el asistente entero. La tecla es la misma, el gesto no.
+ *
+ * Lo que hace no es cerrar: es **pedir** salir. Si hay borrador escrito, quien
+ * decide es el usuario en la confirmación, no la tecla.
+ */
+function useSalidaConEsc(onSalir: () => void): void {
+  const salir = useRef(onSalir);
+  salir.current = onSalir;
 
   useEffect(() => {
     const alPulsar = (evento: KeyboardEvent): void => {
       if (evento.key !== 'Escape') return;
+      if (evento.target instanceof HTMLElement && evento.target.tagName === 'SELECT') return;
       evento.preventDefault();
-      cerrar.current();
+      salir.current();
     };
     document.addEventListener('keydown', alPulsar);
     return () => document.removeEventListener('keydown', alPulsar);
@@ -857,6 +947,16 @@ interface PosibleDuplicado {
   readonly comprobable: boolean;
   readonly buscando: boolean;
   readonly ficha?: FichaYaInscrita;
+  /**
+   * La comprobación **falló**, que no es lo mismo que no haber duplicado.
+   *
+   * Sin esto, un 403 o un 500 dejaban la consulta sin datos y el paso 2 no
+   * dibujaba nada: exactamente la misma pantalla que cuando el código está
+   * libre. Callar ante un error se lee «no hay», y aquí «no hay» es lo que
+   * autoriza a seguir llenando cuarenta campos de un código ya tomado. Se dice,
+   * igual que lo dice el catálogo territorial.
+   */
+  readonly error?: unknown;
 }
 
 /**
@@ -893,15 +993,24 @@ function usePosibleDuplicado(codigo: string): PosibleDuplicado {
   const encontrada = (consulta.data?.contenido ?? [])
     .filter(esObjeto)
     .find((fila) => fila['codRefCatastral'] === digitos);
+  // **Se rotula el código hallado, no el tecleado.** Son el mismo mientras la
+  // coincidencia exacta se decida aquí, y por eso mismo hay que rotular el
+  // hallado: el backend resuelve por prefijo y el proxy de datos ni siquiera
+  // filtra —devuelve el juego entero para cualquier código—, así que un fallo
+  // de este filtro avisaría de un duplicado que no existe. Con `digitos` el
+  // aviso repetiría lo que se acaba de escribir y el falso positivo sería
+  // indistinguible del acierto.
+  const hallado = encontrada?.['codRefCatastral'];
 
   return {
     comprobable: true,
     buscando: consulta.isFetching,
+    ...(consulta.error === null ? {} : { error: consulta.error }),
     ...(encontrada === undefined
       ? {}
       : {
           ficha: {
-            codigo: digitos,
+            codigo: typeof hallado === 'string' ? hallado : digitos,
             titular:
               typeof encontrada['titular'] === 'string' && encontrada['titular'] !== ''
                 ? encontrada['titular']
@@ -923,6 +1032,8 @@ const MINIMO_PARA_BUSCAR = UBIGEO + largoDelTramo('sector');
 interface Padron {
   readonly buscando: boolean;
   readonly encontrados: readonly { readonly codigo: string; readonly nombre: string }[];
+  /** La búsqueda falló. Sin decirlo, «no salió nadie» y «no se pudo preguntar» se ven igual. */
+  readonly error?: unknown;
 }
 
 /** El padrón de contribuyentes (`contribuyentes`, #11): lectura, y del backend. */
@@ -940,6 +1051,7 @@ function usePadron(buscado: string): Padron {
   if (texto.length < MINIMO_DEL_PADRON) return { buscando: false, encontrados: [] };
   return {
     buscando: consulta.isFetching,
+    ...(consulta.error === null ? {} : { error: consulta.error }),
     encontrados: (consulta.data?.contenido ?? [])
       .filter(esObjeto)
       .map((fila) => ({
@@ -1003,6 +1115,11 @@ function CampoDelAlta({
       // Lo que la opción no declaró no se puede escribir: la lista blanca vale
       // igual dentro del asistente que en cualquier otro formulario.
       bloqueado={!escritura.campos.has(campo)}
+      // Los `sel` del asistente escriben, los tres: sin la opcion vacia delante
+      // se dibujarian mostrando la primera del catalogo mientras el borrador
+      // sigue vacio. Un desplegable de busqueda no la lleva —«Todos» es su
+      // posicion de partida—, y por eso la pide quien escribe.
+      {...(tipo === 'sel' ? { eleccionObligatoria: true } : {})}
       {...(ph === undefined ? {} : { ph })}
       {...(ayuda === undefined ? {} : { ayuda })}
       {...(opciones === undefined ? {} : { opciones })}

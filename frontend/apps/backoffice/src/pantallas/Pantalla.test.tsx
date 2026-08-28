@@ -140,6 +140,22 @@ describe('las pestanas', () => {
   });
 });
 
+describe('un desplegable de busqueda empieza donde el prototipo lo pone', () => {
+  it('«Todas» sigue siendo su primera opcion, sin ninguna vacia delante', async () => {
+    montarEnRuta('/transito/papeletas');
+
+    // Los `sel` de **escritura** llevan una opcion vacia delante para no ensenar
+    // una eleccion que nadie hizo (`eleccionObligatoria`). Los de **busqueda**
+    // no: 78 filtros del catalogo traen «Todos»/«Todas» como primera opcion, y
+    // esa **es** su posicion de partida —anteponerles una vacia los deja los 78
+    // en blanco, y «Todas» pasaria a viajar como si fuera un valor de filtro—.
+    const busqueda = await screen.findByRole('region', { name: 'Búsqueda' });
+    const estado = within(busqueda).getByLabelText('Estado') as HTMLSelectElement;
+    expect(estado.value).toBe('Todas');
+    expect(estado.options[0]?.value).toBe('Todas');
+  });
+});
+
 describe('cuando la API falla', () => {
   it('se muestra el mensaje del backend, no uno inventado', async () => {
     // El proxy responde 404 a lo que no esta en el contrato; se fuerza pidiendo

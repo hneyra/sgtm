@@ -5,6 +5,7 @@ import { parametrosDeBusqueda } from '../busqueda';
 import {
   SIN_DATO,
   datosDe,
+  esObjeto,
   estado,
   leerLista,
   leerPaginado,
@@ -343,12 +344,10 @@ const sectores = definirConexion({
     );
     return datosDe({
       ...tabla,
-      detalles: paginado.contenido
-        .filter(
-          (sector): sector is Readonly<Record<string, unknown>> =>
-            typeof sector === 'object' && sector !== null && !Array.isArray(sector),
-        )
-        .map(detalleDelSector),
+      // `esObjeto` del listado compartido y no una copia local: el predicado
+      // son tres condiciones y la de `!Array.isArray` es justo la que se olvida
+      // al copiarlo.
+      detalles: paginado.contenido.filter(esObjeto).map(detalleDelSector),
     });
   },
 });
@@ -456,12 +455,7 @@ const aranceles = definirConexion({
 });
 
 const listaDe = (valor: unknown): readonly Readonly<Record<string, unknown>>[] =>
-  Array.isArray(valor)
-    ? valor.filter(
-        (dato): dato is Readonly<Record<string, unknown>> =>
-          typeof dato === 'object' && dato !== null && !Array.isArray(dato),
-      )
-    : [];
+  Array.isArray(valor) ? valor.filter(esObjeto) : [];
 
 const cadena = (valor: unknown): string | undefined =>
   typeof valor === 'string' && valor !== '' ? valor : undefined;

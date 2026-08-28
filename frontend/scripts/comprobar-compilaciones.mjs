@@ -210,6 +210,18 @@ function compilar(conProxy) {
  * Falla ruidosamente si no encuentra ninguno: si el formato de `index.html`
  * cambiara, esta funcion devolveria un conjunto vacio, el arranque saldria 0 KB
  * y el presupuesto pasaria siempre —una comprobacion que se salta a si misma—.
+ *
+ * **Queda un hueco estrecho, y esta dicho a proposito.** Lo que se mide es lo
+ * que `index.html` enumera, y ahi solo entran la entrada y sus importaciones
+ * *estaticas*. Un `import()` de nivel superior lanzado sin esperarlo —un
+ * `void import('./loQueSea')` en el modulo de entrada— lo pide el navegador
+ * nada mas arrancar y **no aparece en ningun `modulepreload`**: dejaria de
+ * contar como arranque sin dejar de costarlo. No se cierra automaticamente
+ * porque distinguir esa forma de un `import()` legitimo tras una pulsacion
+ * exige analizar el codigo, no leer el HTML. Lo que si lo delata es la lista de
+ * diferidos que este mismo guion imprime: un trozo que aparezca ahi y que la
+ * primera pantalla necesite se ve en el diff del tamano de los diferidos, no en
+ * el del arranque.
  */
 function primeraPantalla(salida) {
   const html = readFileSync(join(salida, 'index.html'), 'utf8');

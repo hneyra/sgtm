@@ -168,6 +168,12 @@ function CampoDeAlta({
       // se aplica aqui y otra vez al enviar, y las dos barreras protegen de
       // cosas distintas.
       bloqueado={!escritura.campos.has(campo)}
+      // Todo `sel` de este formulario **escribe**, y un `sel` de escritura sin
+      // valor no puede ensenar la primera opcion como si alguien la hubiera
+      // elegido: el borrador seguiria vacio y el 422 hablaria de un campo que
+      // la pantalla ensena lleno. En un filtro del catalogo es al reves —«Todos»
+      // es su posicion de partida—, y por eso lo pide quien escribe.
+      {...(tipo === 'sel' ? { eleccionObligatoria: true } : {})}
       {...(ph === undefined ? {} : { ph })}
       {...(opciones === undefined ? {} : { opciones })}
       {...(escritura.errorPorCampo[campo] === undefined

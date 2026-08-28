@@ -54,6 +54,24 @@ export interface CampoProps {
    * enlazada con `aria-describedby`, igual que el error.
    */
   readonly ayuda?: string;
+  /**
+   * Este `sel` **exige una eleccion**: mientras no la haya, se antepone una
+   * opcion vacia y es la que se ve.
+   *
+   * Es opt-in, y por omision no se antepone nada, porque las dos familias de
+   * `sel` del catalogo quieren cosas opuestas. Un `sel` de **escritura** —el
+   * tipo de una via, la condicion de un titular— sin la vacia se dibuja
+   * mostrando la primera opcion y no manda nada: la pantalla ensena una
+   * eleccion que nadie hizo y el 422 llega despues. Un `sel` de **busqueda**
+   * trae «Todos»/«Todas» como primera opcion, y esa **es** su posicion de
+   * partida: anteponerle una vacia deja 78 filtros del catalogo en blanco y
+   * convierte «Todos» en un literal que viajaria como valor de filtro.
+   *
+   * Por eso lo declara quien sabe cual de las dos es: el formulario que
+   * escribe. `Filtros` no lo pasa, y por eso sus desplegables se dibujan como
+   * el prototipo los dibuja.
+   */
+  readonly eleccionObligatoria?: boolean;
   readonly onCambio?: (valor: string) => void;
 }
 
@@ -72,6 +90,7 @@ export function Campo({
   bloqueado = false,
   error,
   ayuda,
+  eleccionObligatoria = false,
   onCambio,
 }: CampoProps) {
   const id = useId();
@@ -116,12 +135,15 @@ export function Campo({
       // esta en su lista se dibuja mostrando la primera opcion, y entonces la
       // pantalla ensena una eleccion que nadie hizo.
       const declaradas = opciones ?? [];
-      // **Un `select` sin valor no ensena una eleccion que nadie hizo.** Un
-      // `<select value="">` cuyas opciones no incluyen la cadena vacia se dibuja
-      // mostrando la primera —«AVENIDA»— y no manda nada: el formulario dice una
-      // cosa y el cuerpo dice otra, y el 422 llega despues. Con la opcion vacia
-      // delante, lo que se ve es lo que hay: nada elegido todavia.
-      const conVacia = declaradas.includes('') ? declaradas : ['', ...declaradas];
+      // **Un `select` de escritura sin valor no ensena una eleccion que nadie
+      // hizo.** Un `<select value="">` cuyas opciones no incluyen la cadena
+      // vacia se dibuja mostrando la primera —«AVENIDA»— y no manda nada: el
+      // formulario dice una cosa y el cuerpo dice otra, y el 422 llega despues.
+      // Con la opcion vacia delante, lo que se ve es lo que hay: nada elegido
+      // todavia. Solo para quien lo pide (`eleccionObligatoria`): un filtro del
+      // catalogo empieza en «Todos» a proposito —ver el javadoc de la prop—.
+      const conVacia =
+        eleccionObligatoria && !declaradas.includes('') ? ['', ...declaradas] : declaradas;
       const todas =
         valor === '' ? conVacia : declaradas.includes(valor) ? declaradas : [valor, ...declaradas];
       return (

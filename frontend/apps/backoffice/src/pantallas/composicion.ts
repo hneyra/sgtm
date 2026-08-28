@@ -156,9 +156,15 @@ const COMPOSICIONES: Readonly<Record<string, ComposicionDeOpcion>> = {
 
 const NINGUNA: ComposicionDeOpcion = {};
 
-/** Lo que compone esta opcion; vacio —y por tanto nada— si no declara nada. */
+/**
+ * Lo que compone esta opcion; vacio —y por tanto nada— si no declara nada.
+ *
+ * `Object.hasOwn` y no la indexacion cruda: esta resuelve por la cadena de prototipos, asi
+ * que una opcion llamada `constructor` o `toString` devolveria una «composicion» que no
+ * declaro nadie. Es la misma barrera que `escrituras.ts` y `escritura.ts`.
+ */
 export const composicionDe = (opcion: string): ComposicionDeOpcion =>
-  COMPOSICIONES[opcion] ?? NINGUNA;
+  (Object.hasOwn(COMPOSICIONES, opcion) ? COMPOSICIONES[opcion] : undefined) ?? NINGUNA;
 
 /**
  * Cada alta declarada, con la accion del catalogo que la abre.
@@ -176,6 +182,15 @@ export const ALTAS_DECLARADAS: readonly { readonly opcion: string; readonly acci
     ...(composicion.altas ?? []).map((alta) => ({ opcion, accion: alta.accion })),
   ]);
 
-/** El control propio de un campo de busqueda, si esa opcion declara uno. */
-export const widgetDeFiltro = (opcion: string, campo: string): WidgetDeFiltro | undefined =>
-  COMPOSICIONES[opcion]?.widgetsDeFiltro?.[campo];
+/**
+ * El control propio de un campo de busqueda, si esa opcion declara uno.
+ *
+ * Los dos niveles se resuelven con `Object.hasOwn`, por lo mismo que
+ * `composicionDe`: un campo llamado `constructor` daria un «widget» heredado del prototipo
+ * de `Object`, y el bloque de busqueda intentaria dibujarlo.
+ */
+export const widgetDeFiltro = (opcion: string, campo: string): WidgetDeFiltro | undefined => {
+  const widgets = composicionDe(opcion).widgetsDeFiltro;
+  if (widgets === undefined || !Object.hasOwn(widgets, campo)) return undefined;
+  return widgets[campo];
+};

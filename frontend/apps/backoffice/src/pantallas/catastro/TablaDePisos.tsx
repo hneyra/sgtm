@@ -96,7 +96,12 @@ export function TablaDePisos({
   return (
     <section className="sgtm-tarjeta">
       <div className="sgtm-tarjeta__cabecera">
-        <h2 className="sgtm-tarjeta__titulo">{titulo}</h2>
+        {/* `h3` y no `h2`: dentro del asistente esta tarjeta cuelga del rotulo
+            del paso, que ya es el `h2`. Dos `h2` hermanos dicen que son dos
+            secciones del mismo nivel, y quien navega por encabezados se
+            encuentra la tabla de pisos al mismo nivel que el paso que la
+            contiene. */}
+        <h3 className="sgtm-tarjeta__titulo">{titulo}</h3>
         <span className="sgtm-tarjeta__conteo">
           {cargando ? '…' : `${filas.length} ${filas.length === 1 ? 'piso' : 'pisos'}`}
         </span>

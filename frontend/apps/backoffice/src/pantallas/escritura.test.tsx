@@ -290,6 +290,43 @@ describe('lo que la opcion no declara no entra en el estado, no solo no viaja', 
     expect(cuerpo).not.toHaveProperty('noDeclarada');
   });
 
+  it('un campo o una columna que se llame como algo de `Object.prototype` tampoco', async () => {
+    laApiResponde(201);
+    const { result } = escrituraDePrueba();
+
+    // `constructor` y `toString` **no** estan declarados, pero la indexacion
+    // cruda —`campos[campo]`, `columnas[columna]`— los resuelve por la cadena de
+    // prototipos y devuelve una funcion: un «declarado» que no declaro nadie.
+    // Con eso, la columna se quedaba en la fila y al enviar `declarado.campo`
+    // era `undefined`, asi que el cuerpo salia con una clave literal
+    // «undefined». La lista blanca decia que si a lo unico que tenia que
+    // negar sin pensarlo.
+    act(() => result.current.fijarCampo('constructor', 'x'));
+    act(() => result.current.fijarCampo('toString', 'y'));
+    act(() =>
+      result.current.fijarFilas('construcciones', [
+        { piso: '01', constructor: 'x', toString: 'y' },
+      ]),
+    );
+
+    // `Object.hasOwn` y no `toHaveProperty`: **todo** objeto tiene `constructor`
+    // por herencia, asi que `toHaveProperty` estaria en verde diga lo que diga
+    // el borrador.
+    expect(Object.hasOwn(result.current.borrador, 'constructor')).toBe(false);
+    expect(Object.hasOwn(result.current.borrador, 'toString')).toBe(false);
+    expect(result.current.filasDe('construcciones')).toEqual([{ piso: '01' }]);
+
+    act(() => result.current.fijarObservacion('Alta de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}');
+    expect(cuerpo.construcciones).toEqual([{ piso: '01' }]);
+    // Ni la clave heredada, ni la que produce leerla: `cuerpo[declarado.campo]`
+    // con `declarado.campo` indefinido escribe la cadena «undefined».
+    expect(cuerpo).not.toHaveProperty('undefined');
+  });
+
   it('una columna de mas no se queda en la fila', () => {
     const { result } = escrituraDePrueba();
 

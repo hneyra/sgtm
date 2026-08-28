@@ -292,6 +292,14 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
    *   ausente en un alta es una lista vacia, que es exactamente lo correcto.
    * - `economico`, `bienesComunes`, `rural`: son el detalle de los **otros tres** tipos de
    *   ficha, y mandar el de otro tipo es 422, no un campo ignorado.
+   * - `ubigeo`: `PeticionDeAlta` lo acepta, pero **el ubigeo ya va dentro del codigo de
+   *   referencia catastral** —son sus seis primeros digitos, y el asistente los compone ahi
+   *   (`TRAMOS_DEL_CODIGO`)—. Capturarlo aparte daria dos sitios donde escribir el mismo dato
+   *   y ninguna forma de decidir cual manda cuando no coincidan.
+   * - `tipoPredio`: estaba declarado y **ninguna pantalla lo captura**. Vale el mismo criterio
+   *   que esta tabla de pisos enuncia para `anioConstruccion`: una columna declarada que nadie
+   *   escribe no es una prevision, es una lista blanca que dice mas de lo que la interfaz
+   *   puede hacer.
    *
    * El area construida de un piso **nunca** viaja como numero: es una medida decimal y
    * convertirla perderia centimetros (regla 1 aplicada a las medidas).
@@ -299,7 +307,6 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   registrar_ficha_urbana: {
     campos: {
       codRefCatastral: { campo: 'codRefCatastral' },
-      tipoPredio: { campo: 'tipoPredio' },
       direccion: { campo: 'direccion' },
       codigoDeVia: { campo: 'codigoDeVia' },
       numeroMunicipal: { campo: 'numeroMunicipal' },
@@ -335,7 +342,16 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   },
 };
 
-export const escrituraDe = (opcion: string): EscrituraDeclarada | undefined => ESCRITURAS[opcion];
+/**
+ * Lo que declara esa opcion, o nada.
+ *
+ * `Object.hasOwn` y no `ESCRITURAS[opcion]`: la indexacion resuelve por la cadena de
+ * prototipos, asi que una opcion llamada `constructor` o `toString` devolveria un
+ * «declarado» que no declaro nadie —y con el, una lista blanca que no es una lista blanca—.
+ * Es la misma barrera que ya aplica `soloDeclarados` un paso mas abajo.
+ */
+export const escrituraDe = (opcion: string): EscrituraDeclarada | undefined =>
+  Object.hasOwn(ESCRITURAS, opcion) ? ESCRITURAS[opcion] : undefined;
 
 /** Las opciones que declaran escritura. La prueba de la lista blanca las mira. */
 export const OPCIONES_QUE_ESCRIBEN = Object.keys(ESCRITURAS);
