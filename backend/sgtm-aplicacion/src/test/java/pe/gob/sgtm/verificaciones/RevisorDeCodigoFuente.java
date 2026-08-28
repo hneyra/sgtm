@@ -290,7 +290,8 @@ public final class RevisorDeCodigoFuente {
                     "edificacion_requisito",
                     "edificacion_movimiento",
                     "edificacion_vigencia",
-                    // Y la autorizacion de anuncio con su historial, con #51. Undecima vez seguida y
+                    // Y la autorizacion de anuncio con su historial, con #51. Undecima vez seguida
+                    // y
                     // por el mismo camino: V45 le retira a `anuncio` la columna de estado que V4 le
                     // habia puesto -decia VIGENTE para siempre- y le revoca el UPDATE. El estado se
                     // deriva de `anuncio_movimiento`, que solo se agrega.
