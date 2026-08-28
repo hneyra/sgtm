@@ -50,6 +50,17 @@ public interface ParametrosRepository {
 
     List<ParametroTributario> parametrosDe(long conjuntoId);
 
+    /**
+     * Los parametros publicados que responden a esa llave.
+     *
+     * <p>Devuelve una <b>lista</b> y no un {@code Optional} a proposito: {@code
+     * parametro_tributario} no tiene ninguna restriccion de unicidad sobre (tipo, clave,
+     * vigencia_desde) —V1 no la puso—, asi que dos filas homonimas son posibles. Resolverlas aqui
+     * quedandose con «la primera» meteria en un conjunto sellado un valor que nadie eligio, y no
+     * habria ningun sintoma. Quien llama decide, y lo que decide es rechazar.
+     */
+    List<ParametroTributario> publicados(LlaveDeParametro llave);
+
     /** Solo lectura: la aplicacion no publica valores normativos. */
     Pagina<ParametroTributario> parametros(Paginacion paginacion);
 }

@@ -46,8 +46,10 @@ tres grupos tienen responsables y bloqueos distintos:
 - **D-02a** son normas nacionales publicadas. **Cerrada el 2026-08-25** ([#200](https://github.com/hneyra/sgtm/issues/200)):
   los 14 archivos de [`valores-normativos/`](../10-negocio/valores-normativos/) están `VERIFICADO`,
   con segunda firma distinta cada uno. Cerrar la firma no habilita todavía escribir una regla con
-  cifra real: la carga a la base sigue esperando D-13 (para las tres tablas de valuación) y un
-  mecanismo que invoque `AdministrarParametros.abrirVersion` contra un ambiente real, y casi toda
+  cifra real: la carga a la base sigue esperando D-13 (para las tres tablas de valuación)
+  —el mecanismo que invoca `AdministrarParametros.abrirVersion` contra un ambiente real ya existe
+  desde [#247](https://github.com/hneyra/sgtm/issues/247) §2: el proceso batch
+  `AbrirConjuntoDeParametros` y su guion `infra/carga-de-datos/abrir-conjunto-parametros.sh`—, y casi toda
   regla del predial sigue esperando además D-03c y D-11 (H-12, [GOB-03](plan-de-desbloqueo-D-02.md) §0.6).
 - **D-02b** exige la ordenanza del piloto *y* su ratificación provincial. No se puede empezar.
 - **D-02c** está en medio.

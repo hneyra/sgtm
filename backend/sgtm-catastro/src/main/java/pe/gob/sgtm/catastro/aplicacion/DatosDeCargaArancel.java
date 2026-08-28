@@ -14,7 +14,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * @param municipalidadId identificador ya existente de la municipalidad cuyo arancel se carga
  * @param conjuntoId el conjunto de parametros, ya abierto y sin sellar, contra el que cuelga este
- *     arancel
+ *     arancel; lo imprime {@code AbrirConjuntoDeParametros} (#247 §2)
  * @param archivo ruta al CSV {@code viaCodigo,tramo,valorM2,documentoFuente} de un ejercicio, que
  *     produce {@code importar_arancel_via_gpkg.py}
  * @param usuarioDelProceso con que nombre firma la auditoria lo que hace este proceso
@@ -35,8 +35,8 @@ public record DatosDeCargaArancel(
         }
         if (conjuntoId < 1) {
             throw new IllegalArgumentException(
-                    "Falta sgtm.carga-arancel.conjunto-id, o no es un identificador valido. Se abre"
-                            + " con AdministrarParametros.abrirVersion antes de correr esta carga");
+                    "Falta sgtm.carga-arancel.conjunto-id, o no es un identificador valido. Lo abre"
+                            + " AbrirConjuntoDeParametros antes de correr esta carga");
         }
         archivo = exigir(archivo, "sgtm.carga-arancel.archivo");
         usuarioDelProceso =
