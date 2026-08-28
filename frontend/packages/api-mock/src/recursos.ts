@@ -613,9 +613,20 @@ const aranceles = (): readonly Readonly<Record<string, unknown>>[] =>
     documentoFuente: 'Resolución de Alcaldía 0142-2026-MPS',
   }));
 
+/**
+ * Las fichas de la consulta transversal (`FichaEncontradaResource`, #20).
+ *
+ * `areaConstruida` **se sirve**, y no es un adorno: el recurso la publica ya
+ * sumada desde el servidor (#290) y es lo que la interfaz tiene prohibido
+ * componer (RNF-083). Sin ella en el proxy, la unica columna que ejercita esa
+ * prohibicion salia con «—» en todas las filas y ninguna prueba podia distinguir
+ * «la pinta tal cual» de «la suma en el cliente». El prototipo la trae en la
+ * columna 6 —«Área const. m²»—, que es la que la destructuracion no llegaba a
+ * leer.
+ */
 const fichas = (): Paginado =>
   unaPagina(
-    filasDe('consulta_fichas').map(([codigo, , titular, uso, areaTerreno], i) => ({
+    filasDe('consulta_fichas').map(([codigo, , titular, uso, areaTerreno, areaConstruida], i) => ({
       id: i + 1,
       predioId: i + 1,
       codRefCatastral: codigo,
@@ -625,6 +636,7 @@ const fichas = (): Paginado =>
       tipo: 'UNICA',
       version: 1,
       areaTerreno,
+      areaConstruida,
       uso,
       vigenciaDesde: '2026-01-01',
       titular,

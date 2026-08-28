@@ -269,10 +269,19 @@ const consulta_fichas = definirConexion({
   // URL directamente, sin pasar por ningun formulario.
   parametros: (contexto) => {
     const parametros = deLaBusqueda('consulta_fichas')(contexto);
-    const codigo = parametros['codRefCatastral'];
-    if (codigo === undefined) return parametros;
-    const digitos = normalizarCodigoCatastral(codigo);
     const normalizados: Record<string, string> = { ...parametros };
+    // **`conciliadaConRentas` no viaja nunca** (ADR-0015 §2). El contrato lo
+    // declara y `ConsultaController` lo rechaza con 422 con cualquier valor,
+    // «Todas» incluida: la lectura que lo responderia vive en rentas y no
+    // existe. Su desplegable ya se dibuja bloqueado (`catastro/composicion.ts`),
+    // asi que desde la pantalla no puede entrar en la URL; esto cubre el otro
+    // camino, que es real —el montaje lee la URL directamente— y el mas caro: un
+    // enlace compartido con el filtro puesto deja la consulta de fichas en 422
+    // antes de que nadie toque nada.
+    delete normalizados['conciliadaConRentas'];
+    const codigo = parametros['codRefCatastral'];
+    if (codigo === undefined) return normalizados;
+    const digitos = normalizarCodigoCatastral(codigo);
     // Un valor sin ningun digito no es un codigo: no viaja como filtro vacio.
     if (digitos === '') delete normalizados['codRefCatastral'];
     else normalizados['codRefCatastral'] = digitos;
@@ -285,14 +294,55 @@ const consulta_fichas = definirConexion({
         paginado,
         (fila): readonly Celda[] => [
           { texto: texto(fila['codRefCatastral']) },
-          // El codigo predial de rentas y el area construida no los publica
-          // `FichaEncontradaResource`: el primero lo tiene contribuyentes, y la
-          // segunda hay que sumarla por piso —y la interfaz no suma (RNF-083)—.
-          { texto: SIN_DATO },
+          // **El «Cod. Predial Rentas» es el mismo codigo de referencia
+          // catastral** (ADR-0015 §Contexto): no hay dos padrones de predios ni
+          // dos codigos. `sgtm-rentas` los trata como sinonimos por escrito
+          // —`CriterioDeArbitrio` documenta `codigoPredial` como «el código de
+          // referencia catastral del predio» y su repositorio lo traduce a
+          // `p.codigo_ref_catastral`—, asi que la columna del prototipo se
+          // rellena con el mismo valor de la primera.
+          //
+          // Y se rellena **sin troquelar**, identico: pintarlo con otro formato
+          // fabricaria la apariencia de un segundo codigo distinto, que es justo
+          // la ilusion de los dos padrones que el ADR desmonta. Que las dos
+          // columnas coincidan es el dato; el aviso de la pantalla lo dice con
+          // todas sus letras.
+          //
+          // (El comentario anterior decia que este codigo «lo tiene
+          // contribuyentes». Es falso: no existe ningun codigo predial de rentas
+          // aparte del catastral. El unico que puede no coincidir es el
+          // **heredado** del sistema anterior, y emparejarlo es migracion —D-04,
+          // ADR-0015 §5—, no una columna de la operacion diaria.)
+          { texto: texto(fila['codRefCatastral']) },
+          // El titular sale como **nombre y nada mas**, y por eso la fila no
+          // enlaza a su ficha de contribuyente (#322): `FichaEncontradaResource`
+          // publica `titular`, no el codigo del contribuyente, y un enlace
+          // armado por nombre abre al homonimo o a nadie. Para que enlace, el
+          // recurso tiene que publicar ese codigo.
           { texto: texto(fila['titular']) },
           { texto: texto(fila['uso']) },
           { texto: texto(fila['areaTerreno']) },
-          { texto: SIN_DATO },
+          // El area construida **si** la publica el recurso, y viene ya sumada
+          // desde el servidor (#290): la interfaz la pinta, no la suma
+          // (RNF-083). Nula —un terreno sin construir— sale con «—» y no con un
+          // cero, que seria un area declarada.
+          { texto: texto(fila['areaConstruida']) },
+          // «Conciliada» es un **derivado, no un estado guardado, y lleva su
+          // ejercicio** (ADR-0015 §1): un predio esta conciliado a un ejercicio
+          // cuando existe una declaracion jurada de ese ejercicio sobre **el
+          // predio** —`declaracion_jurada.predio_id`, de V2— en estado
+          // PRESENTADA u OBSERVADA. El predicado va por `predio_id` y no por
+          // `ficha_catastral_id`: esa columna es *nullable* por diseno —«nulo si
+          // el predio no tiene ficha registrada todavia»— y nula en toda fila
+          // anterior a V19, asi que derivar de ella marcaria «no conciliado» a
+          // quien si declaro. Es el falso omiso, y aqui costaria acusar de
+          // omiso a un padron entero.
+          //
+          // Hoy **ninguna lectura lo publica**, y catastro no puede publicarlo
+          // sin depender de rentas —el ciclo que `verificarArquitectura`
+          // rechaza—: la lectura compuesta le toca a `sgtm-rentas` (§2). Hasta
+          // entonces «—», que es la verdad; un «No» inventado acusaria de omiso
+          // a quien quiza no lo es.
           { texto: SIN_DATO },
         ],
         'fichas',

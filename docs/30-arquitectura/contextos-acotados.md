@@ -149,7 +149,14 @@ Transversal: todos dependen de él y él de ninguno.
 2. **`cuentacorriente` no conoce a nadie.** Recibe asientos; no sabe si vienen de un predial, de
    una papeleta o de una licencia. Si tuviera que saberlo, el modelo estaría mal.
 3. **`parametros` es de solo lectura** para todos los demás.
-4. **Nadie escribe en `catastro` salvo `catastro` y la transferencia de `fiscalizacion`.**
+4. **Nadie escribe en `catastro` salvo `catastro` y la transferencia de `rentas`**, y esa
+   escritura va por el puerto público `GestorDeTitularidad` del paquete raíz de catastro.
+   *Decía «la transferencia de `fiscalizacion`», y no es donde vive:* `RegistrarTransferencia`
+   está en `sgtm-rentas/…/aplicacion/`, e inyecta `pe.gob.sgtm.catastro.GestorDeTitularidad`
+   —cuyo javadoc nombra la arista `catastro ──► rentas`— para cerrar una titularidad y abrir
+   otra. `fiscalizacion` **no escribe en catastro**: su única importación del contexto es
+   `LectorDeFichas`, que lee, y por eso `fisc_predial` avisa de que trabaja sobre una copia y el
+   padrón no cambia hasta que alguien transfiere.
 5. **Ningún método público de un contexto recibe `municipalidadId`.** Sale del token.
    Lo verifica ArchUnit.
 6. Lo compartido entre contextos —`MunicipalidadId`, `Ejercicio`, `Dinero`, `TenantContext`— vive
