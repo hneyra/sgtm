@@ -311,6 +311,35 @@ const OPERACIONES_ADICIONALES = {
         ' sus predios, así que cambiarlo desalinearía el de todos ellos.',
     },
   ],
+  // `consulta_fichas` declara «GET /catastro/fichas» como su endpoint —la
+  // grilla, que sirve catastro—; la MISMA grilla con la columna «Conciliada»
+  // no la puede servir catastro (#344, ADR-0015 §2): el estado de conciliación
+  // se deriva de `declaracion_jurada`, que es de rentas, y depender de rentas
+  // cerraría un ciclo entre módulos que `verificarArquitectura` rechaza. La
+  // sirve rentas, en esta ruta, y la de catastro redirige aquí con 307 la
+  // petición que trae el filtro: ignorarlo devolvería el listado sin filtrar,
+  // que es un resultado plausible y equivocado.
+  //
+  // Los parámetros de esta operación están escritos a mano en el YAML, como los
+  // de `certificados_listado` (#312): son los cinco filtros de la pantalla más
+  // `conciliadaConRentas`, `ejercicio`, `fecha` y la paginación.
+  consulta_fichas: [
+    {
+      operationId: 'consulta_fichas_conciliacion',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/fichas/conciliacion',
+      titulo: 'Consulta de fichas con su conciliación con rentas',
+      descripcion:
+        'La misma grilla de `consulta_fichas` con la columna «Conciliada» y el filtro' +
+        ' `conciliadaConRentas`. Un predio está conciliado a un ejercicio cuando existe una' +
+        ' declaración jurada de ese ejercicio, con su mismo `predio_id`, en estado PRESENTADA u' +
+        ' OBSERVADA (ADR-0015 §1). La sirve `rentas` y no `catastro`, pero el acceso que exige es' +
+        ' el de la pantalla, `consulta_fichas`. De la declaración jurada no viaja nada: solo el' +
+        ' derivado y el ejercicio al que responde (regla 9). `conciliadaConRentas=No` —la lista de' +
+        ' los predios que no generan deuda predial— exige además privilegio de lectura sobre' +
+        ' `fisc_omisos` y deja fila en la bitácora con operación ACCESO.',
+    },
+  ],
   // Las cuatro pantallas de ficha declaran «GET /catastro/fichas/…/{codigo}»
   // como su endpoint —la lectura de la ficha de un predio—; darla de alta
   // necesita su propio verbo, y sin parámetro de ruta: el predio todavía no

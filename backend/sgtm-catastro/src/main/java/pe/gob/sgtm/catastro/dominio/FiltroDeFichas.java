@@ -23,10 +23,11 @@ import org.jspecify.annotations.Nullable;
  * ventanilla mas a menudo que bien—.
  *
  * <p><b>Lo que no esta y por que.</b> El contrato declara tambien {@code conciliadaConRentas}, que
- * compara el catastro con la declaracion jurada del padron de rentas. Ese contexto todavia no
- * existe, y responderlo leyendo su tabla desde aqui seria el acoplamiento que ARQ-01 §4 evita, con
- * el agravante de ser invisible para Spring Modulith. Queda para cuando {@code rentas} publique su
- * lado.
+ * compara el catastro con la declaracion jurada del padron de rentas. Responderlo leyendo su tabla
+ * desde aqui seria el acoplamiento que ARQ-01 §4 evita, con el agravante de ser invisible para
+ * Spring Modulith, asi que <b>sigue sin estar en este filtro</b>: desde #344 lo sirve {@code
+ * rentas}, que compone las dos mitades por sus APIs publicas (ADR-0015 §2), y {@code
+ * ConsultaController} redirige alli la peticion que lo trae.
  */
 public record FiltroDeFichas(
         @Nullable String codRefCatastral,

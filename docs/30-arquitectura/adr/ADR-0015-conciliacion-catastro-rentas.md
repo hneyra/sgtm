@@ -176,11 +176,26 @@ ciclo que `verificarArquitectura` rechaza.
   dominio dice la consecuencia («un predio sin declaración jurada no genera deuda predial») y
   cómo se hace hoy ese acto; la insignia, cuando llegue el dato, lleva texto y nunca solo color
   (FRO-02 §2.1). La franja de actos honestos ya cubre «Conciliar seleccionadas», y el filtro
-  `conciliadaConRentas` se dibuja **bloqueado**: vivo garantiza el 422, con cualquier valor.
-- **Backend, pendiente** ([#344](https://github.com/hneyra/sgtm/issues/344)): la lectura
-  compuesta en `sgtm-rentas` —paginado de fichas con `conciliadoA(ejercicio)` derivado de
-  `declaracion_jurada.predio_id` sobre los estados de §1, el filtro, y la frontera de datos y
-  permiso de §2—, y retirar el 422 de `ConsultaController` redirigiendo la consulta o
-  documentando la operación nueva en `sgtm-v1.yaml`. Ninguna migración.
-- **El contrato compartido no se toca hasta que el backend publique**: declarar la ruta sin
-  servidor pondría en rojo la prueba de las dos direcciones, a propósito.
+  `conciliadaConRentas` se dibuja **bloqueado**: cuando se escribió, vivo garantizaba el 422 con
+  cualquier valor. **Sigue bloqueado tras #344** —la interfaz aún llama a `/catastro/fichas` y
+  borra el parámetro antes de enviarlo—, y desbloquearlo es cablear la pantalla contra la ruta
+  nueva: la mitad frontend de este ADR, que va en su propio issue.
+- **Backend, hecho** ([#344](https://github.com/hneyra/sgtm/issues/344)): la lectura compuesta
+  vive en `sgtm-rentas` —`ConsultaDeConciliacion`, con el paginado de fichas que le pide a
+  catastro por el puerto público `FichasDelPadron` y el `conciliadoA(ejercicio)` derivado de
+  `declaracion_jurada.predio_id` sobre los estados de §1—, la publica
+  `GET /api/v1/catastro/fichas/conciliacion` con el acceso `consulta_fichas`, y el filtro «No»
+  va detrás de `fisc_omisos` con su fila de `ACCESO` en la bitácora. **Ninguna migración**: no
+  había columna que añadir porque no hay estado que guardar.
+
+  El 422 de `ConsultaController` **se retiró redirigiendo**: la petición que trae
+  `conciliadaConRentas` se responde con `307` y la consulta entera hacia la ruta nueva. Es la
+  opción que conserva lo que el 422 defendía —no contestar con un listado sin filtrar, que sería
+  plausible y equivocado— y además contesta. Que el destino sea un subcamino del mismo recurso,
+  `/catastro/fichas/conciliacion`, es lo que evita que catastro nombre una ruta de otro módulo:
+  quién la sirve es un detalle de dónde vive el código.
+- **El contrato compartido documenta las dos rutas**, y solo desde que las dos existen: declarar
+  una ruta sin servidor pondría en rojo la prueba de las dos direcciones, a propósito.
+- **El titular sigue sin enlazar**, y ahora está sostenido por los tipos: `FichaDelPadron` —la
+  proyección que cruza la frontera— lleva el **nombre** del titular y no su identificador, así
+  que la decisión de §2.4 no se puede tomar «de paso» al escribir un controlador.

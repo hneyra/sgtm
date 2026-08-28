@@ -251,7 +251,14 @@ class ContratoDeApiTest {
                     // estaba declarada en el contrato desde que se derivo del prototipo;
                     // lo que este issue hace es publicarla. No tiene modelo propio: agrega
                     // lo que cuentacorriente y tesoreria publican.
-                    "GET /indicadores/recaudacion");
+                    "GET /indicadores/recaudacion",
+                    // #344 — ADR-0015: la conciliacion catastro-rentas. Es una adicion al
+                    // contrato: `consulta_fichas` declara «GET /catastro/fichas» —la grilla, que
+                    // sirve catastro— y la misma grilla CON la columna «Conciliada» no la puede
+                    // servir catastro, porque el derivado sale de `declaracion_jurada` y
+                    // dependerlo cerraria el ciclo de modulos. La sirve rentas, en esta ruta, y
+                    // la de catastro redirige alli la peticion que trae el filtro.
+                    "GET /catastro/fichas/conciliacion");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

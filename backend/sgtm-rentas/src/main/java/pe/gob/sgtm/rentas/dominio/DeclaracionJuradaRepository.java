@@ -51,6 +51,31 @@ public interface DeclaracionJuradaRepository {
     java.util.List<DeclaracionJurada> vigentesDePredios(
             java.util.Collection<Long> predioIds, Ejercicio ejercicio);
 
+    /**
+     * Cuales de esos predios estan <b>conciliados</b> con el padron de rentas en ese ejercicio
+     * (ADR-0015 §1, #344).
+     *
+     * <p>El predicado, entero: un predio esta conciliado a un ejercicio cuando existe una
+     * declaracion jurada de ese ejercicio, con {@code predio_id} igual al del predio, en estado
+     * {@code PRESENTADA} u {@code OBSERVADA} ({@link EstadoDeDeclaracion#nombresDeLasVigentes()}).
+     *
+     * <p><b>Por {@code predio_id}, nunca por {@code ficha_catastral_id}.</b> La segunda columna
+     * (V19) es <i>nullable</i> por diseño —«nulo si el predio no tiene ficha registrada todavia, o
+     * si el tipo no es predial»—, su clave foranea va {@code NOT VALID} y toda fila anterior a V19
+     * la tiene nula: derivar de ella produce <b>falsos omisos</b>, o sea acusar de omiso a quien
+     * declaro. {@code ficha_catastral_id} contesta otra pregunta —«que version declaro»—, que es
+     * detalle de la declaracion y no predicado de pertenencia al padron afecto.
+     *
+     * <p>Devuelve <b>identificadores de predio</b> y no declaraciones: quien pregunta por la
+     * conciliacion no tiene por que recibir el numero de la DJ, su tipo, sus importes ni quien la
+     * presento (ADR-0015 §2.2). Y devuelve un conjunto, asi que un predio con dos declaraciones
+     * vigentes —o una sustituida y su rectificatoria— aparece <b>una vez</b>, no dos.
+     *
+     * <p>Los predios sin declaracion no aparecen en el conjunto devuelto.
+     */
+    java.util.Set<Long> prediosConDeclaracionVigente(
+            java.util.Collection<Long> predioIds, Ejercicio ejercicio);
+
     /** Inserta la declaracion y devuelve la fila guardada, con su {@code id} y su usuario. */
     DeclaracionJurada insertar(DeclaracionJurada declaracion);
 

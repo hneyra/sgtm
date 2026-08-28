@@ -108,14 +108,40 @@ public class DeclaracionJuradaRepositoryJdbc extends RepositorioJdbc
                                 + "   AND d.estado = ANY(:estados)")
                 .param("ejercicio", ejercicio.valor())
                 .param("predios", predioIds.toArray(Long[]::new))
-                .param(
-                        "estados",
-                        new String[] {
-                            EstadoDeDeclaracion.PRESENTADA.name(),
-                            EstadoDeDeclaracion.OBSERVADA.name()
-                        })
+                .param("estados", EstadoDeDeclaracion.nombresDeLasVigentes())
                 .query(DeclaracionJuradaRepositoryJdbc::mapear)
                 .list();
+    }
+
+    /**
+     * Los predios conciliados de un lote, para la lectura compuesta de ADR-0015 (#344).
+     *
+     * <p>Es la misma pregunta que {@link #vigentesDePredios} y va por el mismo indice —{@code
+     * dj_ejercicio_predio_ix}, V39— pero devuelve <b>solo el identificador del predio</b>: quien
+     * pinta la columna «Conciliada» no necesita la declaracion, y traerla entera pondria el numero
+     * de la DJ y su contribuyente al alcance de una respuesta de catastro (ADR-0015 §2.2).
+     *
+     * <p>{@code DISTINCT} porque un predio puede tener mas de una fila vigente en el mismo
+     * ejercicio y la respuesta es un si o un no, no un recuento.
+     */
+    @Override
+    public java.util.Set<Long> prediosConDeclaracionVigente(
+            java.util.Collection<Long> predioIds, Ejercicio ejercicio) {
+        if (predioIds.isEmpty()) {
+            return java.util.Set.of();
+        }
+        return new java.util.LinkedHashSet<>(
+                jdbc().sql(
+                                "SELECT DISTINCT d.predio_id"
+                                        + DESDE
+                                        + " WHERE d.ejercicio = :ejercicio"
+                                        + "   AND d.predio_id = ANY(:predios)"
+                                        + "   AND d.estado = ANY(:estados)")
+                        .param("ejercicio", ejercicio.valor())
+                        .param("predios", predioIds.toArray(Long[]::new))
+                        .param("estados", EstadoDeDeclaracion.nombresDeLasVigentes())
+                        .query(Long.class)
+                        .list());
     }
 
     @Override

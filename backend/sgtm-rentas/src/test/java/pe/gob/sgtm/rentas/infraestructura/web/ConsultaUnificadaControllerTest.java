@@ -428,6 +428,14 @@ class ConsultaUnificadaControllerTest {
             throw new UnsupportedOperationException("esta prueba no cruza el padron");
         }
 
+        @Override
+        public java.util.Set<Long> prediosConDeclaracionVigente(
+                java.util.Collection<Long> predioIds, Ejercicio ejercicio) {
+            // La conciliacion (#344) se prueba en ConciliacionCatastroRentasJdbcTest, contra la
+            // base: aqui tampoco hay padron que cruzar.
+            throw new UnsupportedOperationException("esta prueba no cruza el padron");
+        }
+
         private @Nullable Paginacion ultima;
 
         @Override

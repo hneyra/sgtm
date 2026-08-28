@@ -838,7 +838,23 @@ public final class ReglasDeArquitectura {
                         // Reconstruye saldo_proyectado desde el libro (#23). Es un cache
                         // derivado: no modifica ningun dato, lo recalcula. El libro no se toca.
                         PAQUETE_RAIZ
-                                + ".cuentacorriente.aplicacion.ReconstruirSaldo.deContribuyente(long)");
+                                + ".cuentacorriente.aplicacion.ReconstruirSaldo.deContribuyente(long)",
+                        // La lista de predios SIN declaracion jurada (ADR-0015 §2.3, #344). Es
+                        // una CONSULTA: no modifica ningun dato. Lo unico que escribe es su
+                        // propia fila de ACCESO en la bitacora, y esa observacion no la puede
+                        // escribir el usuario porque nadie escribe un motivo para mirar una
+                        // grilla: la compone el sistema y dice que se consulto y de que
+                        // ejercicio. Es transaccional de escritura por eso y solo por eso —la
+                        // fila tiene que caer dentro de la misma transaccion que la lectura—, y
+                        // sus dos hermanas, `todas` y `conciliadas`, siguen siendo readOnly.
+                        PAQUETE_RAIZ
+                                + ".rentas.aplicacion.ConsultaDeConciliacion.noConciliadas("
+                                + PAQUETE_RAIZ
+                                + ".catastro.BusquedaDeFichas, "
+                                + PAQUETE_RAIZ
+                                + ".dominio.Ejercicio, java.time.LocalDate, "
+                                + PAQUETE_RAIZ
+                                + ".compartido.Paginacion)");
 
         ConObservacionEnLasEscrituras() {
             super("exigir una Observacion en todo metodo transaccional de escritura");

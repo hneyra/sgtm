@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas treinta y cuatro operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas treinta y cinco operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -108,8 +108,15 @@ describe('las operaciones generadas son las del contrato', () => {
     //     lista al abrirse consumiría un correlativo cada vez. No hay PUT:
     //     `certificado` no admite UPDATE desde V51, y uno equivocado se
     //     sustituye emitiendo otro.
+    //   - `consulta_fichas_conciliacion` (#344, ADR-0015): la misma grilla de
+    //     `consulta_fichas` con la columna «Conciliada» y el filtro
+    //     `conciliadaConRentas`. No cabe en la operacion de la pantalla porque
+    //     el derivado sale de `declaracion_jurada` —que es de rentas— y
+    //     catastro no puede depender de rentas: la sirve rentas, en su propia
+    //     ruta, y la de catastro redirige alli con 307 la peticion que trae el
+    //     filtro.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(168);
+    expect(Object.keys(OPERACIONES)).toHaveLength(169);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {
