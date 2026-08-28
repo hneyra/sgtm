@@ -125,6 +125,6 @@ Conviene que esté escrito antes, y no descubrirlo el día de la demostración:
 
 - [#58 — Hoja de ruta del backend](https://github.com/hneyra/sgtm/issues/58), de la que esto es un recorte.
 - [#116 — Plan de desbloqueo de D-02](https://github.com/hneyra/sgtm/issues/116), paquetes E-3, E-5 y E-6.
-- [GOB-02 — Decisiones abiertas](decisiones-abiertas.md): D-02a, D-03c, D-06, D-11, D-12.
+- [GOB-02 — Decisiones abiertas](decisiones-abiertas.md): D-06 y D-11 (D-02a, D-03c y D-12 ya se cerraron).
 - [ARQ-03 — Estrategia multi-tenant](../30-arquitectura/estrategia-multitenant.md) §4, que es por qué la aplicación no migra.
 - [ADR-0003 — Monolito modular](../30-arquitectura/adr/ADR-0003-monolito-modular.md): un artefacto, dos perfiles.

@@ -195,16 +195,15 @@ apartarse, se anota en el diff. Nunca `numeric(15,2)` suelto donde hay dominio.
 
 ### No implementar todavía
 
-**Ninguna regla de cálculo.** Lo que falta no es la estructura: son **los valores normativos**
-—tramos, alícuotas, UIT, deducciones, plazos, tablas de valores unitarios, aranceles y
-depreciación—, marcados `‹VERIFICAR›` en NEG-05 §6 y en
-[`docs/10-negocio/marco-normativo.md`](docs/10-negocio/marco-normativo.md).
-
-Un tramo equivocado produce deuda mal calculada en todo un padrón, con devoluciones masivas y
-nulidad de valores. **No implementar reglas de cálculo hasta cerrar D-02a.** Tampoco los cuatro
-factores que NEG-05 §0.1 marca sin fuente identificada —deducción de Amazonía, `% actualización`,
-incremento del 5 %, factor de oficialización—: multiplican importes, y un valor inventado escala
-el error.
+**Ninguna regla de cálculo.** Ya no por los valores ni por el redondeo: D-02a está firmada
+(2026-08-25), el mecanismo de carga existe (#188) y el redondeo quedó decidido (ADR-0018). Un
+tramo equivocado sigue produciendo deuda mal calculada en todo un padrón, con devoluciones
+masivas y nulidad de valores, y lo que sigue impidiendo las reglas es: **D-11** —los cuatro
+factores que NEG-05 §0.1 marca sin fuente identificada: deducción de Amazonía, `% actualización`,
+incremento del 5 %, factor de oficialización; multiplican importes, y un valor inventado escala
+el error, así que las reglas que los llevan no se implementan **ni estructuralmente**—; dos
+cuadros que aún no pueden cargarse (GOB-03, H-14 y H-15); y que ningún conjunto del ejercicio
+está sellado con cifras reales.
 
 **Ningún componente del design system antes de la pantalla que lo use.** Los que hay salieron
 todos del renderizador; el prototipo ya fija las medidas exactas, y un componente escrito antes de
@@ -227,12 +226,10 @@ Registro completo en [`docs/00-gobierno/decisiones-abiertas.md`](docs/00-gobiern
 
 | # | Decisión | Bloquea |
 |---|---|---|
-| D-01 | Municipalidad piloto y validador funcional | La primera iteración de negocio |
-| D-02a | Valores normativos **de norma nacional** (UIT, tramos, alícuotas, valores unitarios, depreciación). Se buscan y se firman; **no dependen de D-01** | El predial, el vehicular y la alcabala |
+| D-01 | Municipalidad piloto (**Catacaos**, ya elegida) y validador funcional, que sigue sin nombrarse | La primera iteración de negocio |
 | D-02b | Valores **de ordenanza local** con su ratificación provincial | Arbitrios y sanciones |
-| D-03c | **Los puntos donde se redondea.** No es una decisión: es ingeniería inversa contra el SRTM del MEF, que redondea en pasos intermedios | La primera regla de cálculo |
 | D-11 | Origen y valor de los cuatro factores que M02 revela sin fuente | `RT-002`, `RT-005`, `RT-011` |
-| D-04 | Migración desde la base SQL Server existente | Implantación |
+| D-04 | Migración desde la base SQL Server existente. **Quien migre debe considerar D-03c**: reproducir determinaciones del SRTM exige la campaña de observación de sus puntos de redondeo (ADR-0018) | Implantación |
 | D-05 | Régimen de firma digital de valores y resoluciones | La capa de documentos |
 
 ## Comandos

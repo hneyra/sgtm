@@ -135,7 +135,7 @@ Las restricciones viajan con la columna, para que no dependan de que alguien las
 
 | Dominio | Tipo | Restricción |
 |---|---|---|
-| `dinero` | `numeric(15,2)` | Escala y redondeo **provisionales**: D-03 |
+| `dinero` | `numeric(15,2)` | Escala ratificada y redondeo `HALF_UP` ([ADR-0018](../30-arquitectura/adr/ADR-0018-el-redondeo-decidido.md)); el del cierre de caja sigue abierto (D-03d) |
 | `monto_calc` | `numeric(18,6)` | Cálculos intermedios, antes de redondear |
 | `alicuota` | `numeric(7,4)` | 0 ≤ v ≤ 100 |
 | `porcentaje` | `numeric(7,4)` | 0 < v ≤ 100 |
