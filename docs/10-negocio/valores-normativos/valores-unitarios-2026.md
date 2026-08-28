@@ -144,8 +144,11 @@ que ningún método mecánico distingue por sí solo es un valor correcto en la 
 las categorías H e I —con sus puntos suspensivos, su `0.00` y su cifra— son exactamente el sitio
 donde una tabla se lee mal.
 
-**El PDF no se copia al repositorio**; queda pendiente de archivar en S3 por el dueño del
-repositorio, como los de `vehicular-valores-referenciales-2026.md`.
+**El PDF no se copia al repositorio**; el dueño del repositorio lo archivó en S3 el 2026-08-28
+(huellas y registro completo en [`fuentes/README.md`](fuentes/README.md)):
+
+- `s3://sgtm-fuentes-normativas/fuentes-normativas/valores-unitarios/200105/2026-08-28T23-43-45Z__i-2-f-costa-2025.pdf`
+- y la parte resolutiva: `s3://sgtm-fuentes-normativas/fuentes-normativas/valores-unitarios/200105/2026-08-28T23-44-05Z__rm-277-2025-vivienda-valores-arancelarios-2026-escudo.pdf`
 
 `‹NO CONFIRMADO EN FUENTE OFICIAL: que el PDF leído se distribuya junto con la parte resolutiva de
 la RM 277-2025-VIVIENDA —el archivo se titula «ANEXO I.2» y no repite el número de la Resolución
