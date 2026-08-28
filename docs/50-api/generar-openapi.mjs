@@ -296,7 +296,8 @@ const DEL_BACKEND = {
     },
   ],
   // La constancia no dibuja filtros: es un formulario. Pero acredita **a una
-  // fecha**, y sin el contribuyente no hay a quien acreditar.
+  // fecha**, y sin el contribuyente no hay a quien acreditar. Y sale en papel:
+  // `ConstanciaController` responde el documento con `formato` (#72, RNF-081).
   constancia: [
     {
       nombre: 'codContribuyente',
@@ -304,6 +305,7 @@ const DEL_BACKEND = {
       descripcion: 'Filtro «Cod. Contribuyente» de la pantalla',
     },
     { nombre: 'fecha', ejemplo: '', descripcion: 'Fecha de corte; sin ella, la de hoy' },
+    FORMATO_DE_REPORTE,
   ],
   // Las once pantallas que salen en papel (#53, RF-132).
   ...Object.fromEntries(
@@ -339,6 +341,12 @@ const DEL_BACKEND = {
  * pantalla que todavia no la tiene.
  */
 const DESCRIPCIONES = {
+  // Cuenta corriente (#72)
+  constancia: bloque(`
+    Vista previa del documento que se entrega al contribuyente. Se imprime con el mismo
+    formato en papel membretado. Con \`?formato=PDF|XLS|RTF\` sale como documento (RF-132,
+    RNF-081).
+  `),
   // Transito (#53)
   transito_valores: bloque(`
     Registra el criterio de una generación masiva de valores por papeletas de tránsito, por

@@ -849,7 +849,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/consultas/constancias/no-adeudo',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['codContribuyente', 'fecha'],
+    parametrosDeConsulta: ['codContribuyente', 'fecha', 'formato'],
   },
   /** Búsqueda y mantenimiento de valores — `GET /valores` */
   valores_busqueda: {
@@ -2111,6 +2111,7 @@ export interface ParametrosPorOperacion {
   readonly constancia: {
     readonly codContribuyente?: string;
     readonly fecha?: string;
+    readonly formato?: string;
   };
   /** `GET /valores` */
   readonly valores_busqueda: {
