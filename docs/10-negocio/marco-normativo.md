@@ -112,9 +112,18 @@ otros dos **bloqueaban un issue sin tener línea en este mapa**. Aquí están:
 |---|---|---|---|---|
 | 28 | Interés del convenio de fraccionamiento y número máximo de cuotas | Ordenanza municipal que aprueba el reglamento de fraccionamiento, en el marco del TUO del Código Tributario art. 36 | D-02b | #191 |
 | 29 | Derecho de trámite del TUPA para la licencia de edificación | Ordenanza que aprueba el TUPA, con su ratificación cuando corresponde | D-02b | #197 |
+| 30 | Plazo de reclamación de los valores y exigibilidad coactiva municipal (RD, RM y OP) | TUO del Código Tributario arts. 78, 136 y 137, y TUO de la Ley 26979 art. 25 (con los arts. 29 y 31.2) | D-02a | #192 |
+| 31 | Inicio del cómputo de la prescripción, como desfase por tributo | TUO del Código Tributario art. 44, y TUO LTM art. 34 (la DJ anual del vehicular) | D-02a | #192 |
 
 **Son 29 filas, no 27.** El número creció porque el mapa se construyó desde los issues hacia la
 norma y no al revés: un issue bloqueado sin fila era un dato que nadie iba a buscar.
+
+**Y son 31 desde el punto 2 de #192.** Las filas 30 y 31 son datos que las filas 21 y 22 daban por
+englobados y que el sistema pide con clave propia —el plazo de reclamación que separa una RD/RM
+notificada de una deuda exigible coactivamente, y el desfase por tributo con el que el art. 44
+computa—; el verificador del corpus exige un archivo dueño por fila, y estos dos viven en
+`valores-plazos-de-reclamacion.md` y `prescripcion-inicio-del-computo.md`, no en el archivo de
+las filas 21 y 22.
 
 ### 2.8 Los issues que esperan, y por qué
 
@@ -128,7 +137,7 @@ o una fila nombra un issue que no la lleva, `verificar-mapa-normativo.mjs` lo se
 | #189 arbitrios — las cifras | D-02b | 11, 12, 13, 14 |
 | #190 vehicular, alcabala y espectáculos — las cifras | D-02a | 1, 15, 16, 17 |
 | #191 fraccionamiento — las cifras | D-02b | 28 |
-| #192 prescripción y plazos — las cifras | D-02a | 21, 22 |
+| #192 prescripción y plazos — las cifras | D-02a | 21, 22, 30, 31 |
 | #193 arancel de costas procesales — las cifras | D-02c | 23 |
 | #194 impuesto fiscalizado — las cifras | D-02a | 7, 9 |
 | #195 cálculo de la papeleta de tránsito — las cifras | D-02a, D-02c | 1, 24, 26 |

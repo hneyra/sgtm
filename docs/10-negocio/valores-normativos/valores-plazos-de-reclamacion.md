@@ -6,11 +6,14 @@
 | Artículo | 78, 136 y 137 (TUO del Código Tributario) — 25, 29 y 31.2 (TUO de la Ley 26979) |
 | Publicada | 2013-06-22 (D.S. 133-2013-EF); 2008-12-06 (D.S. 018-2008-JUS) — las dos en El Peruano |
 | Ejercicios que rige | 2013– (TUO del Código Tributario, con sus modificaciones posteriores: el numeral 3 del art. 78 lo modificó el D. Leg. 1421, vigente desde el 2018-09-14); 1998– (Ley 26979, con el TUO del 2008) |
-| Fuente consultada | `textoCompleto-TUO-CT.pdf` (SUNAT, edición con modificaciones hasta el D. Leg. 1540) y `DS-018-2008-JUS.pdf`, descargados por el dueño del repositorio el 2026-08-28 — huellas y destino S3 en el README de la rama `gob-docs` |
-| Filas de NEG-02 §2 | 22 |
+| Filas de NEG-02 §2 | 30 |
 | Transcribió | Agent, 2026-08-28 |
 | Verificó | HNA, 2026-08-28 |
 | Estado | VERIFICADO |
+
+**Fuente consultada:** `textoCompleto-TUO-CT.pdf` (SUNAT, edición con modificaciones incorporadas
+hasta el D. Leg. 1540) y `DS-018-2008-JUS.pdf`, descargados por el dueño del repositorio el
+2026-08-28 — huellas y destino S3 en el README de la rama `gob-docs`.
 
 ## 1. La tabla tal como está en la norma
 

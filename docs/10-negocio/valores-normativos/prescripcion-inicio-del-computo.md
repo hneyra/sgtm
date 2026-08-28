@@ -6,11 +6,15 @@
 | Artículo | 44 (TUO del Código Tributario) — 34 (TUO de la Ley de Tributación Municipal) |
 | Publicada | 2013-06-22 (D.S. 133-2013-EF); 2004-11-15 (D.S. 156-2004-EF) — las dos en El Peruano |
 | Ejercicios que rige | 2013– (art. 44, con el numeral 7 vigente desde el 2012 por el D. Leg. 1113); 2004– (art. 34 del TUO LTM) |
-| Fuente consultada | `textoCompleto-TUO-CT.pdf` (SUNAT), descargado por el dueño del repositorio el 2026-08-28 — huella y destino S3 en el README de la rama `gob-docs`; el art. 34, del PDF del TUO LTM de `muniate.gob.pe` alcanzado por HNA el 2026-08-28, pendiente de archivar en `gob-docs/ds-156-2004-ef/` |
-| Filas de NEG-02 §2 | 21 |
+| Filas de NEG-02 §2 | 31 |
 | Transcribió | Agent, 2026-08-28 |
 | Verificó | HNA, 2026-08-28 |
 | Estado | VERIFICADO |
+
+**Fuente consultada:** `textoCompleto-TUO-CT.pdf` (SUNAT), descargado por el dueño del repositorio
+el 2026-08-28 — huella y destino S3 en el README de la rama `gob-docs`; el art. 34, del PDF del
+TUO LTM de `muniate.gob.pe` alcanzado por HNA el 2026-08-28, pendiente de archivar en
+`gob-docs/ds-156-2004-ef/`.
 
 ## 1. La tabla tal como está en la norma
 
