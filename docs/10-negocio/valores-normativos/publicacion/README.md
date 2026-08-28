@@ -77,11 +77,28 @@ día hábil de febrero»— y deja sin decidir dónde vive el cálculo de ese d�
 resuelta sería inventarla, y una fecha de vencimiento inventada es un plazo mal contado en todo un
 padrón.
 
-Los tres cuadros de valuación —`valores-unitarios-2026.md`, `depreciacion.md`,
-`vehicular-valores-referenciales-2026.md`— no entran por otra razón: no van a
-`parametro_tributario` sino a `valor_unitario_edificacion`, `depreciacion` y
-`valor_referencial_vehiculo`, y el ámbito de esas tres tablas es **D-13**, abierta. Esta herramienta
-no las toca.
+## Los cuadros van por el otro archivo
+
+Los tres cuadros de valuación no entran en `parametros-2026.csv`, y no es porque falte decidir nada:
+van a otras tablas —`valor_unitario_edificacion`, `depreciacion` y `valor_referencial_vehiculo`— y
+tienen miles de filas, así que su entrada es
+[`cuadros-2026.csv`](cuadros-2026.csv), el **manifiesto de ediciones**, que lee `PublicarCuadros`.
+D-13 se cerró el 2026-08-28 ([ADR-0017](../../../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md)):
+las tres son catálogos nacionales.
+
+Un manifiesto no lleva ninguna cifra. Cada fila declara **una edición** —la resolución entera, con su
+documento fuente y las dos firmas del corpus— y nombra el archivo de filas con su `sha256`, que
+[`verificar-cuadros.mjs`](../../verificar-cuadros.mjs) comprueba en cada PR y `PublicarCuadros`
+recalcula antes de publicar una sola fila.
+
+| Cuadro | Estado |
+|---|---|
+| `vehicular-valores-referenciales-2026.md` | **Publicable hoy.** Su anexo es `fuentes/tvr-2026/tvr-2026.csv`, extraído mecánicamente y con su huella firmada; entran 54 111 filas |
+| `valores-unitarios-2026.md` | **No.** Sus 9×7 cifras siguen `‹NO CONFIRMADO EN FUENTE OFICIAL›` contra el Anexo I.2 de la RM, y sólo está la región Costa de las cuatro (GOB-03, H-14) |
+| `depreciacion.md` | **No.** El Anexo I publica **cuatro** tablas, una por uso de la edificación, y `depreciacion` no tiene columna de uso: cargarlas hoy dejaría que la unicidad se quedara con una y descartara tres en silencio (GOB-03, H-15) |
+
+`PublicarCuadros` rechaza los dos últimos **nombrando el motivo**, en vez de publicar un cuadro
+incompleto que nadie distinguiría de uno completo.
 
 El resto de archivos `VERIFICADO` —`alcabala.md`, `aranceles-2026.md`, `espectaculos.md`,
 `multa-tributaria.md`, `prescripcion-y-plazos.md`, `transito-tabla-de-infracciones.md`,

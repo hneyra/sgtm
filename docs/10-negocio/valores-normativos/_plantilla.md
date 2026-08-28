@@ -32,7 +32,7 @@ en UIT, aquí va en UIT; si numera las categorías con letras, aquí van con let
 | Ámbito | ‹nacional / de la municipalidad› |
 | Vigencia | ‹desde qué ejercicio, y hasta cuál› |
 
-**No se carga con este archivo.** La carga depende de D-13.
+**No se carga con este archivo.** Se carga con el derivado de [`publicacion/`](publicacion/), que es lo que `PublicarParametros` lee (#188); este archivo es su fuente, no su entrada. D-13 se cerró el 2026-08-28 y ya no bloquea nada.
 
 ## 3. Qué no cabe hoy
 

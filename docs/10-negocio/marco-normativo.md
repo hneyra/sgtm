@@ -175,7 +175,8 @@ Así, recalcular 2027 en 2037 usa los parámetros de 2027 y da el mismo resultad
 > `docs/10-negocio/valores-normativos/` con su norma, su artículo, su fecha de publicación y **dos
 > firmas distintas** —quien transcribe y quien verifica—. La doble verificación de `ADR-0007`
 > empieza en el documento, antes de existir como fila. Y **cargar** las tres tablas de dato
-> nacional espera a **D-13** (§2.3, hallazgo H-5).
+> nacional se carga con `municipalidad_id` nulo desde que **D-13** se cerró el 2026-08-28
+> ([ADR-0017](../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md); §2.3, H-5).
 
 ## 4. Verificación del mapa
 

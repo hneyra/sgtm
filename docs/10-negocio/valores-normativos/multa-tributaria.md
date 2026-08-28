@@ -91,7 +91,7 @@ cifras exactas de la Tabla II) de **persona jurídica** (100% de la UIT, es deci
 | Ámbito | nacional |
 | Vigencia | 2016-12-11– (cifras hoy vigentes de las Tablas, tras el Decreto Legislativo 1263) |
 
-**No se carga con este archivo.** La carga depende de D-13.
+**No se carga con este archivo.** Se carga con el derivado de [`publicacion/`](publicacion/), que es lo que `PublicarParametros` lee (#188); este archivo es su fuente, no su entrada. D-13 se cerró el 2026-08-28 y ya no bloquea nada.
 
 ## 3. Qué no cabe hoy
 

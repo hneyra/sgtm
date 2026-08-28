@@ -16,9 +16,11 @@ empieza en el documento, **antes de que el dato exista como fila**. Un `INSERT` 
 transcribió, quién lo verificó ni de qué página de El Peruano salió; un archivo sí, y queda en el
 historial de git con su revisión.
 
-Por eso **este directorio no carga nada**. Cargar es un paso posterior y depende de **D-13** —el
-ámbito de las tres tablas de dato nacional, hallazgo H-5—. La comprobación lo vigila: si aparece un
-`INSERT` de valores normativos en una migración, se pone roja.
+Por eso **este directorio no carga nada**. Cargar es un paso posterior y de otro actor: el proceso
+batch de publicación, con la credencial de `rol_carga_parametros` y el derivado de
+[`publicacion/`](publicacion/) delante (#188,
+[ADR-0017](../../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md)). La comprobación lo
+vigila: si aparece un `INSERT` de valores normativos en una migración, se pone roja.
 
 ## La cabecera obligatoria
 
@@ -50,9 +52,12 @@ reclamó otro archivo, pone esto en rojo.
    encabezado raro. Si la norma pone el porcentaje en una columna que se llama `%`, aquí se llama
    `%`. Lo que se transcribe es la norma, no la interpretación de la norma.
 2. **Cómo entra al sistema.** El `tipo` y la `clave` de `parametro_tributario`, o la tabla
-   específica. Es lo que convierte el documento en carga, cuando D-13 lo permita.
-3. **Qué no cabe hoy.** Donde se anota lo que el esquema todavía no puede guardar —el sitio de
-   H-4, la dimensión «año de construcción» del cuadro de valores unitarios—. Una sección vacía se
+   específica. Es lo que convierte el documento en la fila del derivado de [`publicacion/`](publicacion/)
+   que el proceso batch publica.
+3. **Qué no cabe hoy.** Donde se anota lo que el esquema todavía no puede guardar. Sigue habiendo
+   dos casos vivos, y los dos salieron de intentar la carga: a `depreciacion` le falta el **uso de
+   la edificación** —el Anexo I publica cuatro tablas— y al cuadro de valores unitarios le falta
+   confirmar sus cifras contra el Anexo I.2 real (GOB-03, H-14 y H-15). Una sección vacía se
    escribe «Nada», no se borra: que esté vacía es información.
 
 ## El libro mayor
@@ -73,4 +78,5 @@ Copiar `_plantilla.md`, rellenarlo entero y correr la comprobación. Los archivo
 `_` no se escanean: la plantilla y las muestras viven ahí a propósito.
 
 Y **una cifra no se carga en la base porque el archivo exista**. El archivo cierra la búsqueda; la
-carga espera a D-13.
+carga es otro acto, con otra credencial, y su entrada es el derivado de
+[`publicacion/`](publicacion/), no este archivo.

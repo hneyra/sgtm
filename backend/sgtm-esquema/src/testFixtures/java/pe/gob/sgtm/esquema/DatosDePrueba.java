@@ -56,7 +56,18 @@ public final class DatosDePrueba {
         }
     }
 
-    /** Catalogo nacional: lo carga su propio rol, no la aplicacion. */
+    /**
+     * Catalogo nacional: lo carga su propio rol, no la aplicacion.
+     *
+     * <p>Desde D-13 (ADR-0017, V55) aqui entran tambien las tres tablas de valuacion —el cuadro de
+     * valores unitarios, la depreciacion y los valores referenciales del MEF—, que dejaron de ser
+     * municipales. Se siembran <b>una sola vez para las dos municipalidades</b>, que es exactamente
+     * lo que la decision afirma: una copia nacional no puede divergir de si misma. Y se siembran
+     * como {@code rol_carga_parametros}, porque {@code sgtm_app} ya no tiene {@code INSERT} sobre
+     * ellas.
+     *
+     * @return el identificador del parametro de relleno que las tablas de tenant componen
+     */
     public static long crearParametroNacional(BaseDeDatosDePrueba base) throws SQLException {
         try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS)) {
             long id =
@@ -69,9 +80,49 @@ public final class DatosDePrueba {
                                     + "         'fixture de la prueba de aislamiento', 'prueba')"
                                     + " RETURNING id",
                             VIGENCIA);
+            sembrarValuacionNacional(carga);
             carga.commit();
             return id;
         }
+    }
+
+    /**
+     * La cabecera de una edicion nacional y una fila de cada uno de los tres cuadros. La cabecera
+     * es un {@code parametro_tributario} mas: es lo que un conjunto municipal compone por {@code
+     * conjunto_parametro_detalle} para congelar que edicion uso.
+     */
+    private static void sembrarValuacionNacional(Connection carga) throws SQLException {
+        long edicion =
+                insertar(
+                        carga,
+                        "INSERT INTO parametro_tributario"
+                                + " (municipalidad_id, tipo, clave, valor_texto, vigencia_desde,"
+                                + "  documento_fuente, usuario_carga, usuario_aprueba)"
+                                + " VALUES (NULL, 'PRUEBA_EDICION', 'valuacion', 'edicion de"
+                                + " prueba', ?, 'fixture de la prueba de aislamiento', 'prueba',"
+                                + " 'otra persona')"
+                                + " RETURNING id",
+                        VIGENCIA);
+        ejecutar(
+                carga,
+                "INSERT INTO valor_unitario_edificacion (publicacion_id, partida, categoria,"
+                        + " anio_construccion_desde, valor_m2, documento_fuente)"
+                        + " VALUES (?, 'MUROS', 'C', 2000, 1.000000, 'fixture de la prueba')",
+                edicion);
+        ejecutar(
+                carga,
+                "INSERT INTO depreciacion (publicacion_id, material, estado_conservacion,"
+                        + " antiguedad_hasta, porcentaje, documento_fuente)"
+                        + " VALUES (?, 'CONCRETO', 'BUENO', 10, 1.0000, 'fixture de la prueba')",
+                edicion);
+        ejecutar(
+                carga,
+                "INSERT INTO valor_referencial_vehiculo (publicacion_id, ejercicio, categoria,"
+                        + " marca, modelo, anio_fabricacion, valor, documento_fuente)"
+                        + " VALUES (?, ?, 'A1', 'MARCA', 'MODELO', 2020, 1000.00,"
+                        + "         'fixture de la prueba')",
+                edicion,
+                EJERCICIO);
     }
 
     /**
@@ -378,21 +429,9 @@ public final class DatosDePrueba {
                 muni,
                 conjuntoId,
                 viaId);
-        ejecutar(
-                app,
-                "INSERT INTO valor_unitario_edificacion (municipalidad_id, conjunto_id, partida,"
-                        + " categoria, anio_construccion_desde, valor_m2, documento_fuente)"
-                        + " VALUES (?, ?, 'MUROS', 'C', 2000, 1.000000, 'fixture de la prueba')",
-                muni,
-                conjuntoId);
-        ejecutar(
-                app,
-                "INSERT INTO depreciacion (municipalidad_id, conjunto_id, material,"
-                        + " estado_conservacion, antiguedad_hasta, porcentaje, documento_fuente)"
-                        + " VALUES (?, ?, 'CONCRETO', 'BUENO', 10, 1.0000,"
-                        + "         'fixture de la prueba')",
-                muni,
-                conjuntoId);
+        // valor_unitario_edificacion y depreciacion ya no se siembran aqui: desde D-13 (V55) son
+        // nacionales, las carga rol_carga_parametros y viven en crearParametroNacional. El arancel
+        // si se queda: se carga y se corrige por municipalidad.
         return predioId;
     }
 
@@ -425,19 +464,9 @@ public final class DatosDePrueba {
                         muni,
                         "ABC-" + numeroDePlaca(sufijo),
                         titular);
-        // El valor referencial cuelga del conjunto y no del ejercicio (V16): un
-        // ejercicio puede tener varias versiones selladas, y resolver por
-        // ejercicio devolveria la vigente hoy en vez de la que se uso al
-        // determinar.
-        ejecutar(
-                app,
-                "INSERT INTO valor_referencial_vehiculo (municipalidad_id, conjunto_id, ejercicio,"
-                        + " marca, modelo, anio_fabricacion, valor, documento_fuente)"
-                        + " VALUES (?, ?, ?, 'MARCA', 'MODELO', 2020, ?, 'fixture de la prueba')",
-                muni,
-                conjuntoId,
-                EJERCICIO,
-                MIL);
+        // valor_referencial_vehiculo tampoco se siembra aqui desde D-13 (V55): la tabla del MEF es
+        // nacional y se carga una vez para todas, en crearParametroNacional. Que edicion uso una
+        // determinacion lo dice su conjunto, componiendola por conjunto_parametro_detalle.
         ejecutar(
                 app,
                 "INSERT INTO declaracion_jurada (municipalidad_id, numero, ejercicio,"

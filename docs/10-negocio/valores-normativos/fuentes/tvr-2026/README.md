@@ -69,7 +69,17 @@ coincide con el de la tabla.
 
 ## Lo que este directorio no es
 
-**No es la carga.** `valor_referencial_vehiculo` espera la decisión D-13 y la herramienta de
-publicación con doble firma (ADR-0007); este CSV es la fuente verificable de esa carga futura, no
-la carga. Y no sustituye la re-verificación humana del archivo del corpus, que sigue en
-`TRANSCRITO`.
+**No es la carga, pero ya es su entrada.** D-13 se cerró el 2026-08-28
+([ADR-0017](../../../../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md)):
+`valor_referencial_vehiculo` es un catálogo nacional y `PublicarCuadros` lo publica desde
+[`../../publicacion/cuadros-2026.csv`](../../publicacion/cuadros-2026.csv), que declara la edición
+con sus dos firmas (ADR-0007) y nombra este archivo con el sha256 de arriba. Ese sha256 se recalcula
+antes de publicar una sola fila: un byte distinto no entra.
+
+Las 18 043 líneas entran como **54 111 filas** —una por año de fabricación—, y los 18 rechazos son
+seis líneas que este anexo **repite idénticas**. Cargarlo de verdad encontró además dos defectos del
+esquema, corregidos en `V55`: faltaba la columna `categoria` —el anexo publica «OTROS MODELOS» en
+cada categoría, con valor distinto, y sin ella se perdían 1 890 filas en silencio— y `modelo` era
+`varchar(60)` cuando el modelo más largo del anexo tiene 67 caracteres (GOB-03, H-16).
+
+Esto no sustituye la re-verificación humana del archivo del corpus, que la firmó HNA el 2026-08-28.

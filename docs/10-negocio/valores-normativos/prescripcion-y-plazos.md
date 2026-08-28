@@ -93,7 +93,7 @@ acaecimiento del acto interruptorio:
 | Ámbito | nacional |
 | Vigencia | 2013– (Código Tributario, TUO vigente); 1998– (Ley 26979) |
 
-**No se carga con este archivo.** La carga depende de D-13.
+**No se carga con este archivo.** Se carga con el derivado de [`publicacion/`](publicacion/), que es lo que `PublicarParametros` lee (#188); este archivo es su fuente, no su entrada. D-13 se cerró el 2026-08-28 y ya no bloquea nada.
 
 ## 3. Qué no cabe hoy
 
@@ -105,4 +105,4 @@ hecho queda en su propia fila, ligado a la declaración que lo evaluó.
 
 Lo que sigue sin cargarse son las **cifras**: el plazo de prescripción (4, 6 o 10 años según la
 causal), el de notificación y el de inicio de la cobranza coactiva. Están `VERIFICADO` en la
-tabla de §1, pero la carga depende de D-13 y la sigue #192.
+tabla de §1, y la carga la sigue #192.

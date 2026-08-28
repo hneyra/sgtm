@@ -22,7 +22,6 @@ sale de esta tabla y entra como ADR o como cambio en el documento que correspond
 | **D-11** | **Origen y valor de los cuatro factores sin fuente** que reveló el manual M02 del MEF (`../srtm` NEG-05 §0.1): deducción de Amazonía, `% actualización`, incremento del 5 % sobre el valor unitario **antes** de depreciar, y factor de oficialización de obras complementarias. Los cuatro multiplican o restan sobre importes | Rentas del piloto + asesoría legal | `RT-002`, `RT-005` y `RT-011`; se suma a D-02a | Abierta |
 | **D-12** | **Qué pasa con el autovalúo cuya titularidad no llega a 100 %.** El esquema ya admite titularidad parcial —valida «no excede 100», como el SRTM del MEF—; falta decidir si la porción sin titular identificado se determina a alguien o simplemente no se cobra | Rentas + asesoría legal | La base imponible del predial (`RT-011`) | Abierta |
 | **D-14** | **La regla de imputación de un pago parcial**: qué parte de la deuda extingue —insoluto, reajuste, interés o gasto, y en qué orden entre obligaciones—. Es normativa (TUO del Código Tributario, art. 31), no una decisión de diseño: hay que transcribirla y firmarla, no elegirla. **#33 la declinó** para `A_CUENTA` y **#35 la vuelve a declinar** para `CUOTA_CONVENIO`, con la consecuencia que hace segura la omisión: mientras la caja rechace los dos tipos, ningún pago parcial entra, y por eso el quiebre de un convenio nunca tiene que repartir nada —devuelve lo pendiente entero, que es exactamente lo acogido— | Rentas + asesoría legal | `TipoDePago.A_CUENTA` y `TipoDePago.CUOTA_CONVENIO`; con ellos, el cobro de cuotas del convenio y su seguimiento real | Abierta — no bloquea el ciclo de vida del convenio, que está completo y probado sin ella |
-| **D-13** | **Ámbito de las tres tablas de dato nacional — dos argumentos en tensión real, ninguno descartable a la ligera.** `valor_unitario_edificacion`, `depreciacion` y `valor_referencial_vehiculo` llevan hoy `municipalidad_id NOT NULL`, y desde H-5 (GOB-03) cuelgan además de `conjunto_id` (V17 #141, V18 #17): cada municipalidad posee su propia copia dentro de su propio conjunto sellado. (a) ARQ-09 §2.1 clasifica valores unitarios y tabla vehicular como **Nacional → `municipalidad_id` nulo, cargado una vez para todas** —como ya hace `parametro_tributario`—, y cargar el cuadro del MEF una vez por municipalidad admite que dos tenants tengan copias divergentes del mismo cuadro (H-5). (b) Pero `LectorDeParametros` —la abstracción que ya construyeron V17/V18, y que **no** se rediseña sin más— defiende explícitamente el modelo actual en su propio javadoc: nombra `valor_referencial_vehiculo` junto a `arancel` como «datos normativos que no caben en `ParametrosSellados`... esa tabla cuelga del conjunto, no del ejercicio», agrupándolo con `arancel`, que sí es correctamente municipal. No es deriva accidental: es una simplificación deliberada y ya escrita, en tensión real con §2.1. Intentar «plegar en `parametro_tributario`» (2026-08-25) exige además construir desde cero la conexión de `rol_carga_parametros` —no existe para ninguna tabla, ni siquiera UIT— y retirar código probado de #17 (`TablasDeValuacion.cargarValorUnitario`/`cargarDepreciacion`, 5 pruebas verdes). Se paró ahí a propósito: revisar ARQ-09 §2.1 contra el javadoc de `LectorDeParametros` con más calma antes de tocar el esquema | Arquitectura | La **carga** de lo que E-3 (#200) transcriba, no su transcripción | Abierta — no bloquea empezar E-3 |
 
 ## Por qué D-02 bloquea de verdad
 
@@ -46,11 +45,14 @@ tres grupos tienen responsables y bloqueos distintos:
 - **D-02a** son normas nacionales publicadas. **Cerrada el 2026-08-25** ([#200](https://github.com/hneyra/sgtm/issues/200)):
   los 14 archivos de [`valores-normativos/`](../10-negocio/valores-normativos/) están `VERIFICADO`,
   con segunda firma distinta cada uno. Cerrar la firma no habilita todavía escribir una regla con
-  cifra real: la carga a la base sigue esperando D-13 (para las tres tablas de valuación)
-  —el mecanismo que invoca `AdministrarParametros.abrirVersion` contra un ambiente real ya existe
-  desde [#247](https://github.com/hneyra/sgtm/issues/247) §2: el proceso batch
-  `AbrirConjuntoDeParametros` y su guion `infra/carga-de-datos/abrir-conjunto-parametros.sh`—, y casi toda
-  regla del predial sigue esperando además D-03c y D-11 (H-12, [GOB-03](plan-de-desbloqueo-D-02.md) §0.6).
+  cifra real. **La carga a la base ya no espera a nada**: D-13 se cerró el 2026-08-28
+  ([ADR-0017](../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md)) y las tres tablas
+  de valuación son catálogos nacionales; el mecanismo completo existe —`PublicarParametros` (#188)
+  publica los once valores sueltos, `PublicarCuadros` publica un cuadro entero desde el manifiesto
+  del corpus, y `AbrirConjuntoDeParametros` (#247 §2) abre, compone y sella—. Lo que sí sigue
+  esperando es **usar** esas cifras: casi toda regla del predial depende además de D-03c y D-11
+  (H-12, [GOB-03](plan-de-desbloqueo-D-02.md) §0.6), y dos de los tres cuadros no se pueden cargar
+  todavía porque a sus tablas les falta una dimensión que la norma sí tiene (GOB-03, H-14 y H-15).
 - **D-02b** exige la ordenanza del piloto *y* su ratificación provincial. No se puede empezar.
 - **D-02c** está en medio.
 

@@ -105,7 +105,13 @@ fuente independiente.
 | Ámbito | nacional |
 | Vigencia | 2026 |
 
-**No se carga con este archivo.** La carga depende de D-13.
+**No se carga todavía, y ya no por D-13** —cerrada el 2026-08-28 con este cuadro clasificado como
+nacional ([ADR-0017](../../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md))—. Lo
+que falta es de este archivo: sus 9×7 cifras siguen marcadas `‹NO CONFIRMADO EN FUENTE OFICIAL›`
+contra el Anexo I.2 de la RM (§1, «Procedencia exacta»), y aquí sólo está la región **Costa** de
+las cuatro que publica la resolución (§3). Lo segundo ya no pide columna nueva: con ADR-0017 cada
+región es una **edición** distinta, y el conjunto de una municipalidad compone la suya. Lo primero
+sí bloquea: `PublicarCuadros` rechaza este cuadro nombrando el motivo (GOB-03, H-14).
 
 ## 3. Qué no cabe hoy
 

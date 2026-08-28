@@ -289,37 +289,62 @@ class RegistrarDeterminacionVehicularTest {
     private static void sellarConValorReferencialYAlicuota(
             Ejercicio ejercicio, String marca, String modelo, BigDecimal alicuota)
             throws SQLException {
+        // valor_referencial_vehiculo dejo de ser tabla de negocio de esta municipalidad: desde V55
+        // (D-13, ADR-0017) es un catalogo NACIONAL y solo lo escribe rol_carga_parametros, sin
+        // contexto de tenant porque el dato no es de nadie en particular. Lo que el conjunto guarda
+        // es que EDICION uso, componiendola como un parametro mas.
+        //
+        // Por eso la edicion se publica ANTES de sellar: componer sobre un conjunto ya sellado lo
+        // rechaza detalle_de_conjunto_sellado_inmutable (V9).
+        long edicion = publicarEdicionDelCuadro(ejercicio, marca, modelo);
+
         ConjuntoDeParametros conjunto =
                 administrarParametros.abrirVersion(ejercicio, Observacion.de("Conjunto de prueba"));
         administrarParametros.agregarParametro(
                 conjunto.id(),
                 parametroDeAlicuota(alicuota),
                 Observacion.de("Alicuota vehicular ficticia"));
-        ConjuntoDeParametros sellado =
-                administrarParametros.sellar(conjunto.id(), Observacion.de("Sellado de prueba"));
+        administrarParametros.agregarParametro(
+                conjunto.id(), edicion, Observacion.de("Cuadro vehicular ficticio"));
+        administrarParametros.sellar(conjunto.id(), Observacion.de("Sellado de prueba"));
+    }
 
-        // valor_referencial_vehiculo es tabla de negocio comun (V7 §1): la carga la hace
-        // sgtm_app, no rol_carga_parametros —esa distincion es solo para parametro_tributario
-        // (SoD-1)—. Necesita el contexto de tenant fijado para que la politica RLS deje pasar
-        // el INSERT.
-        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
-            ContextoDeTenant.fijar(app, municipalidad);
+    /** La edicion nacional del cuadro vehicular: una cabecera y su unica fila ficticia. */
+    private static long publicarEdicionDelCuadro(Ejercicio ejercicio, String marca, String modelo)
+            throws SQLException {
+        try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS)) {
+            long edicion;
             try (PreparedStatement sentencia =
-                    app.prepareStatement(
-                            "INSERT INTO valor_referencial_vehiculo (municipalidad_id,"
-                                    + " ejercicio, conjunto_id, marca, modelo,"
-                                    + " anio_fabricacion, valor, documento_fuente)"
-                                    + " VALUES (?, ?, ?, ?, ?, ?, 10000.00, 'ficticio de"
-                                    + " prueba')")) {
-                sentencia.setLong(1, municipalidad);
-                sentencia.setInt(2, ejercicio.valor());
-                sentencia.setLong(3, sellado.id());
-                sentencia.setString(4, marca);
-                sentencia.setString(5, modelo);
-                sentencia.setInt(6, FABRICACION.valor());
-                sentencia.executeUpdate();
-                app.commit();
+                    carga.prepareStatement(
+                            "INSERT INTO parametro_tributario (municipalidad_id, tipo, clave,"
+                                    + " valor_texto, vigencia_desde, documento_fuente, usuario_carga,"
+                                    + " usuario_aprueba) VALUES (NULL, 'TABLA_DE_LA_PRUEBA', ?,"
+                                    + " 'ficticio de prueba', ?, 'ficticio de prueba, no representa"
+                                    + " ninguna norma', 'carga', 'aprueba') RETURNING id")) {
+                sentencia.setString(1, marca + "/" + modelo + "/" + ejercicio.valor());
+                sentencia.setDate(
+                        2, java.sql.Date.valueOf(java.time.LocalDate.of(ejercicio.valor(), 1, 1)));
+                try (ResultSet fila = sentencia.executeQuery()) {
+                    fila.next();
+                    edicion = fila.getLong(1);
+                }
             }
+            try (PreparedStatement sentencia =
+                    carga.prepareStatement(
+                            "INSERT INTO valor_referencial_vehiculo (publicacion_id, ejercicio,"
+                                    + " categoria, marca, modelo, anio_fabricacion, valor,"
+                                    + " documento_fuente)"
+                                    + " VALUES (?, ?, 'M1', ?, ?, ?, 10000.00, 'ficticio de"
+                                    + " prueba')")) {
+                sentencia.setLong(1, edicion);
+                sentencia.setInt(2, ejercicio.valor());
+                sentencia.setString(3, marca);
+                sentencia.setString(4, modelo);
+                sentencia.setInt(5, FABRICACION.valor());
+                sentencia.executeUpdate();
+            }
+            carga.commit();
+            return edicion;
         }
     }
 

@@ -48,9 +48,21 @@ class AislamientoMultiTenantTest {
      * <p>{@code respaldo} entra aqui porque una copia de seguridad es del cluster entero, no de una
      * municipalidad. La aplicacion solo la lee (V8): quien hace la copia es el proceso de
      * despliegue.
+     *
+     * <p>Las tres tablas de valuacion entran por D-13, cerrada el 2026-08-28 (ADR-0017, V55): el
+     * cuadro de valores unitarios, la tabla de depreciacion y la tabla de valores referenciales del
+     * MEF son de norma nacional, se cargan una vez para todas y llevan {@code municipalidad_id}
+     * nulo (ARQ-09 §2.1). {@code arancel} <b>no</b> esta aqui, y no es un olvido: se carga y se
+     * corrige por municipalidad, y sigue siendo tabla de tenant.
      */
     private static final Set<String> TABLAS_DE_CATALOGO =
-            Set.of("municipalidad", "parametro_tributario", "respaldo");
+            Set.of(
+                    "municipalidad",
+                    "parametro_tributario",
+                    "respaldo",
+                    "valor_unitario_edificacion",
+                    "depreciacion",
+                    "valor_referencial_vehiculo");
 
     private static BaseDeDatosDePrueba base;
     private static long municipalidadA;
