@@ -216,6 +216,30 @@ const TEXTOS: { estado: string; selector: string; sobre: string }[] = [
     sobre: '--bg-card',
   },
   { estado: 'inicio · código de la fila', selector: '.sgtm-atencion__codigo', sobre: '--bg-card' },
+  /* Los seis de la ficha 360° (#297). Los tres primeros van sobre la tarjeta de
+     la cabecera; los tres del panel, sobre la pagina —la linea de fuente y los
+     enlaces de salida no estan dentro de ninguna tarjeta—. Lo que cuentan no se
+     puede comunicar de otra forma:
+
+       el rotulo    de que es cada dato de la identidad: sin el, el codigo y el
+                    documento son dos numeros seguidos
+       la nota      **por que** falta algo —el nombre, el total consolidado— y a
+                    quien pedirselo. Es lo unico que separa «no tienes permiso»
+                    de «esta persona no debe nada»
+       la fuente    de que opcion salio lo que se esta viendo (ADR-0014 §1)
+       la accion    a donde se sigue con el contexto puesto, y su nota
+
+     El enlace de la accion **ademas no se distingue solo por color**: lleva
+     subrayado en reposo, porque el acento contra el texto vecino da 1,92:1 y eso
+     es un enlace invisible para quien no distingue ese color (WCAG 1.4.1). */
+  { estado: 'ficha · rótulo', selector: '.sgtm-ficha__eyebrow', sobre: '--bg-card' },
+  { estado: 'ficha · rótulo del dato', selector: '.sgtm-ficha__dato dt', sobre: '--bg-card' },
+  // La nota sale en la cabecera y bajo el resumen de saldos, que no lleva
+  // relleno propio: se mide sobre la pagina, que es el fondo mas exigente.
+  { estado: 'ficha · nota', selector: '.sgtm-ficha__nota', sobre: '--bg' },
+  { estado: 'ficha · fuente del panel', selector: '.sgtm-ficha__fuente', sobre: '--bg' },
+  { estado: 'ficha · acción de salida', selector: '.sgtm-ficha__accion', sobre: '--bg' },
+  { estado: 'ficha · nota de la acción', selector: '.sgtm-ficha__accion-nota', sobre: '--bg' },
 ];
 
 describe('los cuatro estados se leen: 4,5:1 sobre su fondo', () => {
@@ -261,6 +285,27 @@ describe('la vuelta al inicio se ve que se puede pulsar', () => {
     // Y con algo que se vea: un bloque vacio cumpliria la letra y nada mas.
     const bloque = APLICACION.slice(desde, APLICACION.indexOf('}', desde));
     expect(bloque).toMatch(/(background|outline):/);
+  });
+});
+
+/**
+ * **Un enlace no se distingue solo por color** (WCAG 1.4.1, FRO-02 §2.1).
+ *
+ * Las acciones de la ficha 360° iban sin subrayar y con el acento como unica
+ * diferencia frente al texto que tienen al lado: 1,92:1 entre los dos colores,
+ * o sea nada para quien no distingue ese color. El subrayado en reposo es la
+ * marca que no depende de la vista del color, y se comprueba leyendo la hoja
+ * porque es una regla de estilo —jsdom no resuelve el `:hover`, asi que una
+ * prueba de componente no podria verlo—.
+ */
+describe('lo que es un enlace se ve que lo es sin mirar el color', () => {
+  const APLICACION = HOJAS[1] ?? '';
+
+  it('la acción de la ficha lleva subrayado en reposo', () => {
+    const desde = APLICACION.indexOf('.sgtm-ficha__accion {');
+    expect(desde, '«.sgtm-ficha__accion» no existe en la hoja').toBeGreaterThanOrEqual(0);
+    const bloque = APLICACION.slice(desde, APLICACION.indexOf('}', desde));
+    expect(bloque).toMatch(/text-decoration:\s*underline/);
   });
 });
 

@@ -365,9 +365,15 @@ describe('Intro abre el destino, y no elige por nadie', () => {
     await screen.findByText(/1 resultado/);
     await usuario.type(caja, '{Enter}');
 
-    // El destino es el padron con el codigo puesto: la cabecera-resumen de #330
-    // se dibuja sola. (Cuando exista la ficha 360° de #297, sera esa.)
-    expect(await screen.findByRole('heading', { name: 'Contribuyentes' })).toBeInTheDocument();
+    /* **El destino es la ficha 360°** (#297, ADR-0016 §2), y ya no el padron con
+       el codigo puesto: `/atencion/:codigo`, la misma persona con su deuda
+       consolidada y sus predios, vehiculos, papeletas y coactiva compuestos
+       pestaña a pestaña. Lo que se ve es su nombre, no el titulo de una opcion
+       del catalogo —la ficha no es una de las 134—. */
+    expect(
+      await screen.findByRole('heading', { name: 'CASTILLO PASCUALA, MARÍA ELENA' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Contribuyentes' })).not.toBeInTheDocument();
   });
 
   it('dentro del rebote **no abre nada**: lo que hay en pantalla es de la pregunta anterior', async () => {
@@ -509,10 +515,34 @@ describe('las atenciones recientes', () => {
     expect(anotada).toBeDefined();
     expect(nombre).toContain(anotada?.nombre ?? '');
 
+    // Y lleva a su ficha 360°, no al padron (#297, ADR-0016 §2).
+    expect(await screen.findByRole('heading', { name: anotada?.nombre ?? '' })).toBeInTheDocument();
+
     // Y al volver al inicio, ahi esta.
     montarEnRuta('/');
     const recientes = await screen.findByRole('region', { name: 'Atenciones recientes' });
     expect(within(recientes).getByText(anotada?.nombre ?? '')).toBeInTheDocument();
+  });
+
+  it('volver a atender a alguien reciente abre **su ficha**, no el padron', async () => {
+    // El otro camino que abre a una persona: la lista de recientes. Los dos
+    // destinos tienen que ser el mismo, y hasta #297 los dos eran el padron con
+    // el codigo en el filtro.
+    const usuario = userEvent.setup();
+    anotarAtencion({
+      codigo: '00000025673',
+      nombre: 'SUC. RUFINA MEDINA MEDINA',
+      documento: 'DNI 03593174',
+    });
+    entraCon(SOLO_PERSONAS);
+    montarEnRuta('/');
+
+    const recientes = await screen.findByRole('region', { name: 'Atenciones recientes' });
+    await usuario.click(within(recientes).getAllByRole('button')[0] as HTMLElement);
+
+    expect(
+      await screen.findByRole('heading', { name: 'SUC. RUFINA MEDINA MEDINA' }),
+    ).toBeInTheDocument();
   });
 
   it('**no llegan al almacenamiento del navegador** (FRO-01 §5, y ver `atenciones.ts`)', async () => {

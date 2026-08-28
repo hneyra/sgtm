@@ -46,12 +46,18 @@ import {
  * dias es otra (regla 9, RNF-075). Se lee asi y no como dos campos sueltos
  * porque asi es como el backend impide que se separen.
  */
-interface ImporteConFecha {
+export interface ImporteConFecha {
   readonly importe: string;
   readonly actualizadoA: Fecha;
 }
 
-function importeDe(valor: unknown): ImporteConFecha | undefined {
+/**
+ * Se exporta por lo mismo que {@link obligacionDeDeuda}: **la ficha 360° lee las
+ * seis rejillas de la misma respuesta** (#297, ADR-0016 §2), y todas sus cifras
+ * viajan con esta forma. Dos lecturas del mismo par acabarían leyendo campos
+ * distintos —y una de las dos, el importe sin su fecha—; se lee una vez.
+ */
+export function importeDe(valor: unknown): ImporteConFecha | undefined {
   if (!esObjeto(valor)) return undefined;
   const importe = valor['importe'];
   const actualizadoA = valor['actualizadoA'];

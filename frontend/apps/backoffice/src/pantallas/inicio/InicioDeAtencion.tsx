@@ -582,16 +582,24 @@ function franjaDe(
    que impide mandar a nadie a una pantalla que le va a contestar 403. */
 
 /**
- * La persona, al padron con su codigo puesto: la cabecera-resumen de #330 se
- * dibuja sola con un solo resultado.
+ * **La persona, a su ficha 360°** (#297, ADR-0016 §2).
  *
- * **Cuando exista la ficha 360° (#297) esta ruta apuntara ahi**, que es lo que
- * ADR-0016 §2 decide: la misma persona, con sus predios, sus vehiculos, sus
- * papeletas y su deuda compuestos pestaña a pestaña. Es el unico destino de los
- * tres que va a cambiar.
+ * Hasta que la ficha existio, esta ruta llevaba al padron con el codigo puesto
+ * —`contribuyentes?codigo=`—, que dibujaba la cabecera-resumen de #330 y nada
+ * mas: el nombre, el documento y nueve pestañas de campos vacios. La pregunta
+ * que trae a alguien al mostrador no la contesta esa pantalla.
+ *
+ * Ahora lleva a `/atencion/:codigo`, que es la misma persona con su deuda
+ * consolidada a fecha en la cabecera y sus predios, vehiculos, papeletas y
+ * expediente coactivo compuestos pestaña a pestaña, **cada uno con el permiso de
+ * su opcion**. Era el unico destino de los tres del abanico que tenia que
+ * cambiar: el del vehiculo y el del predio siguen llevando a su padron, porque
+ * la ficha es de una persona y esos dos no la identifican.
+ *
+ * La ficha **no es una opcion del catalogo** —ver `App.tsx`—, asi que su ruta se
+ * escribe aqui y no sale de `opcionPorId`.
  */
-const rutaDePersona = (codigo: string): string =>
-  `${opcionPorId('contribuyentes')?.ruta ?? '/'}?codigo=${encodeURIComponent(codigo)}`;
+const rutaDePersona = (codigo: string): string => `/atencion/${encodeURIComponent(codigo)}`;
 
 async function buscarPersonas(
   pregunta: PreguntaDeAtencion,
