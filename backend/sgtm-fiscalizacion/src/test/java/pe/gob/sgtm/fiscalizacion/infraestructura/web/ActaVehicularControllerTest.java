@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
+import pe.gob.sgtm.catastro.LectorDeFichas;
 import pe.gob.sgtm.fiscalizacion.aplicacion.RegistrarActaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacionRepository;
@@ -64,6 +65,13 @@ class ActaVehicularControllerTest {
                         }
 
                         @Override
+                        public Optional<ActaFiscalizacion> findById(long id) {
+                            return guardadas.stream()
+                                    .filter(acta -> acta.id() != null && acta.id() == id)
+                                    .findFirst();
+                        }
+
+                        @Override
                         public int siguienteVersion(long programaId, long contribuyenteId) {
                             return 1;
                         }
@@ -90,7 +98,17 @@ class ActaVehicularControllerTest {
                                     : Optional.empty();
                         }
                     },
-                    (predioId, fecha) -> Optional.empty(),
+                    new LectorDeFichas() {
+                        @Override
+                        public Optional<Long> fichaVigenteEn(long predioId, LocalDate fecha) {
+                            return Optional.empty();
+                        }
+
+                        @Override
+                        public Optional<pe.gob.sgtm.dominio.AreaM2> areaDeLaVersion(long fichaId) {
+                            return Optional.empty();
+                        }
+                    },
                     (RegistroDeAuditoria registro) -> {});
 
     private final MockMvc mvc =

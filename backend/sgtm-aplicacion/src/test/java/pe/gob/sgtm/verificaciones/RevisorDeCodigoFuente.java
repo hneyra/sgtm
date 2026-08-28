@@ -98,6 +98,15 @@ public final class RevisorDeCodigoFuente {
                     "internamiento_movimiento",
                     "ficha_catastral",
                     "acta_fiscalizacion",
+                    // Con #49: la liquidacion de fiscalizacion, su contraste linea a linea y
+                    // su historial. Borrar una liquidacion seria borrar la constancia de que
+                    // se determino de oficio una diferencia -y de cuanto se le dijo al
+                    // contribuyente que debia-, que no esta en ningun otro sitio; borrar una
+                    // linea dejaria la liquidacion afirmando un total que su detalle ya no
+                    // sostiene.
+                    "liquidacion_fiscalizacion",
+                    "liquidacion_detalle",
+                    "liquidacion_movimiento",
                     "auditoria");
 
     /**
@@ -224,7 +233,22 @@ public final class RevisorDeCodigoFuente {
                     "descargo",
                     "resolucion_gerencia",
                     "internamiento",
-                    "internamiento_movimiento");
+                    "internamiento_movimiento",
+                    // Y la liquidacion de fiscalizacion, con #49. Novena vez seguida por el
+                    // mismo camino, y aqui aplicado desde el principio: V39 nace SIN columna
+                    // de estado y sin conceder UPDATE, en vez de retirarlos despues. Una
+                    // liquidacion se NOTIFICA al contribuyente, que se lleva el papel;
+                    // corregirla en la base deja al papel y al sistema diciendo cosas
+                    // distintas, y quien tenga el papel gana la discusion. Se reliquida -otra
+                    // version que la referencia- o se anula con un movimiento.
+                    //
+                    // El detalle entra por lo mismo que `recibo_detalle`: es el desglose
+                    // congelado que explica la cifra notificada. Y el movimiento, por lo mismo
+                    // que `recibo_movimiento` (#34): si la cabecera ya no se puede tocar, la
+                    // tentacion siguiente es corregir la fila que dice en que estado esta.
+                    "liquidacion_fiscalizacion",
+                    "liquidacion_detalle",
+                    "liquidacion_movimiento");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =

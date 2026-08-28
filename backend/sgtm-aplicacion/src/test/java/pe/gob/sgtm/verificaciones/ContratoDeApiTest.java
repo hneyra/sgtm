@@ -120,6 +120,17 @@ class ContratoDeApiTest {
                     "POST /fiscalizacion/programas",
                     "POST /fiscalizacion/predial/actas",
                     "POST /fiscalizacion/vehicular",
+                    // #49: la liquidacion, su reliquidacion y su estado, mas las cuatro
+                    // consultas del modulo. Las tres primeras son rutas que la pantalla no
+                    // declara —una pantalla declara UN endpoint— y entran por
+                    // OPERACIONES_ADICIONALES del generador del contrato.
+                    "POST /fiscalizacion/liquidaciones",
+                    "POST /fiscalizacion/liquidaciones/{numero}/reliquidaciones",
+                    "PATCH /fiscalizacion/liquidaciones/{numero}/estados",
+                    "GET /fiscalizacion/resultados",
+                    "GET /fiscalizacion/omisos",
+                    "GET /fiscalizacion/estado-cuenta",
+                    "GET /fiscalizacion/predial/historico",
                     "GET /transito/papeletas",
                     "GET /transito/papeletas/busqueda",
                     "PATCH /transito/papeletas/{numero}/codigo",

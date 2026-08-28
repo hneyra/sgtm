@@ -1242,18 +1242,59 @@ public final class DatosDePrueba {
                         muni,
                         "PF-" + sufijo,
                         VIGENCIA);
+        long actaId =
+                insertar(
+                        app,
+                        "INSERT INTO acta_fiscalizacion (municipalidad_id, programa_id, version,"
+                                + " contribuyente_id, predio_id, fecha_visita, fiscalizador,"
+                                + " hallazgo, observacion, usuario_registro)"
+                                + " VALUES (?, ?, 1, ?, ?, ?, 'fiscalizador', 'CONFORME',"
+                                + "         'acta de prueba', 'prueba') RETURNING id",
+                        muni,
+                        programaId,
+                        titular,
+                        predioId,
+                        VIGENCIA);
+
+        // La liquidacion del acta (#49): cabecera, contraste y apertura. Sin importes —son D-02a,
+        // #198—, con el conjunto SELLADO del ejercicio copiado en la linea.
+        long liquidacionId =
+                insertar(
+                        app,
+                        "INSERT INTO liquidacion_fiscalizacion (municipalidad_id, numero,"
+                                + " ejercicio, correlativo, acta_id, version, ejercicio_desde,"
+                                + " ejercicio_hasta, tipo_fiscalizacion, motivo_determinante,"
+                                + " fecha, usuario_registro, fecha_registro, observacion)"
+                                + " VALUES (?, ?, 2026, 1, ?, 1, 2026, 2026, 'CIERTA',"
+                                + "         'motivo de prueba', ?, 'prueba', now(),"
+                                + "         'liquidacion de prueba') RETURNING id",
+                        muni,
+                        "LIQ-" + sufijo,
+                        actaId,
+                        VIGENCIA);
         ejecutar(
                 app,
-                "INSERT INTO acta_fiscalizacion (municipalidad_id, programa_id, version,"
-                        + " contribuyente_id, predio_id, fecha_visita, fiscalizador, hallazgo,"
-                        + " observacion, usuario_registro)"
-                        + " VALUES (?, ?, 1, ?, ?, ?, 'fiscalizador', 'CONFORME',"
-                        + "         'acta de prueba', 'prueba')",
+                "INSERT INTO liquidacion_detalle (municipalidad_id, liquidacion_id, ejercicio,"
+                        + " conjunto_id, predio_id, condicion, area_declarada, area_hallada)"
+                        + " VALUES (?, ?, 2026, ?, ?, 'CONFORME', 120.00, 120.00)",
                 muni,
-                programaId,
-                titular,
-                predioId,
+                liquidacionId,
+                conjuntoId,
+                predioId);
+        ejecutar(
+                app,
+                "INSERT INTO liquidacion_movimiento (municipalidad_id, liquidacion_id, tipo,"
+                        + " estado, fecha, motivo, usuario_registro, fecha_registro, observacion)"
+                        + " VALUES (?, ?, 'APERTURA', 'ABIERTA', ?, 'emitida', 'prueba', now(),"
+                        + "         'apertura de prueba')",
+                muni,
+                liquidacionId,
                 VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO liquidacion_correlativo (municipalidad_id, ejercicio, ultimo)"
+                        + " VALUES (?, 2026, 1)",
+                muni);
 
         if (notificacionId <= 0) {
             throw new IllegalStateException("No se sembro la notificacion administrativa");

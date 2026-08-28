@@ -383,6 +383,47 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que edita o borra una liquidacion de fiscalizacion")
+    void elEscanerDetectaLaMuestraQueEditaUnaLiquidacion() throws IOException {
+        // #49: las tres tablas de la liquidacion entran en TABLAS_PROTEGIDAS y en
+        // TABLAS_INMUTABLES. Una liquidacion se NOTIFICA, y el contribuyente se lleva el papel.
+        // La forma en que el defecto aparece de verdad no es en la cabecera -eso se ve venir-
+        // sino en el detalle: reescribir la linea del contraste en vez de reliquidar, con lo
+        // que la version corregida y la original pasan a ser la misma fila.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnaLiquidacion.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los tres UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(4);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(
+                        f ->
+                                assertThat(f)
+                                        .containsIgnoringCase(
+                                                "update liquidacion_fiscalizacion set"))
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update liquidacion_detalle set"))
+                .anySatisfy(
+                        f ->
+                                assertThat(f)
+                                        .containsIgnoringCase("update liquidacion_movimiento set"))
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("delete from liquidacion_detalle"));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra que edita una licencia o borra su duplicado")
     void elEscanerDetectaLaMuestraQueEditaUnaLicencia() throws IOException {
         // #44: licencia_funcionamiento, licencia_duplicado y licencia_movimiento entran en

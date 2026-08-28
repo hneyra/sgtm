@@ -2031,6 +2031,79 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/liquidaciones":
+    post:
+      operationId: liquidar_fiscalizacion
+      summary: "Liquidación de un acta de fiscalización"
+      description: "Emite la liquidación de un acta: el contraste hallado/declarado, una línea por unidad y ejercicio del periodo fiscalizado. Cada línea fija el conjunto de parámetros SELLADO de su ejercicio, de modo que cambiar los parámetros de hoy no altera una liquidación ya emitida. Sin importes: los liquidados y las multas esperan a D-02a (#198). El cuerpo lleva la observación del usuario, obligatoria (RNF-052)."
+      tags: ["Fiscalización"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/liquidaciones/{numero}/reliquidaciones":
+    post:
+      operationId: reliquidar_fiscalizacion
+      summary: "Reliquidación"
+      description: "Corrige una liquidación emitiendo OTRA versión que la referencia. La anterior no cambia ni una columna, las dos quedan, y la respuesta explica qué cambió entre ellas. Las líneas heredan el conjunto sellado de la versión anterior: una reliquidación corrige el contraste, no el marco normativo."
+      tags: ["Fiscalización"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/liquidaciones/{numero}/estados":
+    patch:
+      operationId: estado_de_liquidacion
+      summary: "Estado de una liquidación de fiscalización"
+      description: "Mueve la liquidación de estado conservando el historial. No actualiza ninguna fila: agrega un movimiento, y el estado se DERIVA de él. Una liquidación anulada no vuelve: corregirla es reliquidar."
+      tags: ["Fiscalización"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/fiscalizacion/resoluciones/{numero}":
     get:
       operationId: resolucion_determinacion_fisc

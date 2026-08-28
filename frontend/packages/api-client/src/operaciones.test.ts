@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas veinte operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas veintitres operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -74,8 +74,15 @@ describe('las operaciones generadas son las del contrato', () => {
     //     de notificacion en el manual; transito no, y sin ella la
     //     sancionadora no se puede dictar nunca, porque su plazo se cuenta
     //     desde que la ordinaria surte efecto.
+    //   - `liquidar_fiscalizacion` / `reliquidar_fiscalizacion` (#49): la
+    //     pantalla `fisc_resultados` declara «GET /fiscalizacion/resultados»
+    //     —la grilla— y emitir la liquidacion de un acta y corregirla con otra
+    //     version necesitan sus propios verbos.
+    //   - `estado_de_liquidacion` (#49): mover la liquidacion por sus estados
+    //     desde `fisc_historico`, que declara solo su GET. No actualiza
+    //     ninguna fila: agrega un movimiento y el estado se deriva.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(154);
+    expect(Object.keys(OPERACIONES)).toHaveLength(157);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {
