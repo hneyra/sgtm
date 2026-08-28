@@ -116,14 +116,85 @@ ciclo que `verificarArquitectura` rechaza.
       existe en `auditoria_operacion_check` (V5) y la pantalla `auditoria` ya lo muestra—.
       `Sí` y «Todas» no lo necesitan: dicen quién está dentro, no quién falta.
 
-   4. **Publicar `titularId` o el código de contribuyente en una respuesta de catastro sería
-      una decisión aparte, y hoy no está tomada.** Aparece como tentación por un motivo
-      legítimo —`FichaEncontradaResource` publica el nombre del titular y no su código, así
-      que la fila de la consulta no puede enlazar a su ficha de contribuyente (#322)—, y la
-      solución cómoda es añadir el código a esa respuesta «de paso», dentro de este trabajo.
-      No se hace así: convierte una consulta de catastro en un extractor de identificadores
-      del padrón de contribuyentes para todo el que pueda listar fichas, que son muchos más.
-      Si se decide, se decide con su propio issue, diciendo qué permiso lo cubre.
+   4. **El código del contribuyente se resuelve al clic, nunca en un listado**
+      ([#366](https://github.com/hneyra/sgtm/issues/366)). Este punto decía que publicar el
+      `titularId` o el código en una respuesta de catastro era «una decisión aparte, y hoy no
+      está tomada». Ya está tomada, y es la opción (b) del issue.
+
+      El hueco es real y legítimo: `FichaEncontradaResource` publica el **nombre** del titular
+      y no su código, así que la fila de la consulta no puede enlazar con su ficha de
+      contribuyente (#322) y el operador salta al padrón a buscar por nombre, con la homonimia
+      que eso invita. Lo que no se hace es taparlo añadiendo el código a la grilla: eso
+      convertiría «quien puede listar fichas» —cualquiera que opere catastro— en «quien puede
+      cosechar la correlación predio→persona de toda la municipalidad», paginada y ordenable.
+      El dato agregado es más sensible que cada dato suelto, que es la misma línea de §2.3.
+
+      **La decisión, entera:**
+
+      > El código del contribuyente titular se obtiene de una operación **puntual** —un predio
+      > cada vez—, `GET /api/v1/catastro/predios/{predioId}/titulares`, detrás del privilegio
+      > de **lectura sobre `contribuyentes`** —el acceso del padrón— y con **fila de `ACCESO`
+      > en la bitácora por resolución, en la misma transacción que la lectura**. El listado no
+      > cambia ni un byte.
+
+      Tres cosas que esa frase decide, y conviene que se lean separadas:
+
+      1. **El permiso es el del padrón, y aquí el acceso no sigue a la pantalla.** Es la
+         excepción deliberada al criterio de §2.1: allí el acceso sigue a la opción del
+         catálogo que se está mirando —`consulta_fichas`, aunque la sirva rentas— porque lo
+         que se devuelve es catastro. Aquí lo que se devuelve **no es catastro**: es el
+         identificador de una persona en el padrón, con su propio acceso. Exigir el de la
+         pantalla dejaría el cruce al alcance de todo el que pueda listar fichas, que es
+         exactamente lo que este punto evita.
+
+         El acceso se llama **`contribuyentes`** —la opción «Contribuyentes» del módulo
+         Registro (NEG-03)—, no `consulta_contribuyentes`, que es como lo nombró el issue:
+         esa opción no existe entre las 134, y un acceso inventado no lo tiene nadie, así que
+         el endpoint respondería 403 a todo el mundo y parecería bien cerrado.
+
+      2. **La respuesta es la lista de cuotas vigentes, no «el» titular.** La titularidad
+         tiene cuotas: dos cónyuges al 50 %, una sucesión, un condominio. Y **lleva su
+         fecha**: no existe «el titular», existe el titular vigente a una fecha (regla 9,
+         RNF-075), así que `vigenteA` entra como parámetro —hoy por omisión— y **sale siempre
+         en la respuesta**. Resolver «el último» en vez del vigente es el defecto que la ficha
+         del contribuyente (#24) ya pagó con los domicilios.
+
+      3. **Vive en `rentas`, y no donde el issue lo pedía.** El issue proponía alojarlo en
+         `contribuyentes` —«el contribuyente titular del predio X»— resolviendo la titularidad
+         por un puerto público de catastro. **No se puede:** `catastro` ya depende de
+         `contribuyentes` desde que la grilla resuelve el nombre de sus titulares, y
+         `contribuyentes` no depende de nadie (ARQ-01 §2, §3.1); la dependencia inversa cierra
+         un ciclo que Gradle y `verificarArquitectura` rechazan. Y alojarlo en `catastro` —que
+         sí podría— publicaría el código del contribuyente en una respuesta de catastro, que
+         es justo la frontera que este punto separa. `rentas` es el único que ve los dos sin
+         cerrar nada, por el mismo motivo por el que aloja `ConsultaPrediosController` y
+         `ConsultaDeConciliacion`. La **ruta**, en cambio, sí es la de la pantalla desde la que
+         se hace clic: quién la sirve es un detalle de dónde vive el código (§2.2).
+
+         La mitad de catastro es un puerto nuevo y mínimo, `TitularesDelPredio` →
+         `TitularDelPredio` (identificador del titular, condición y porcentaje). Que ahí viaje
+         un `contribuyenteId` no contradice a `FichaDelPadron`: `PredioDelPadron` ya lo hacía
+         para la detección de omisos (#49). Lo que no cruza es la frontera **HTTP** de un
+         listado.
+
+      **Lo que queda prohibido, y esta decisión no abre:**
+
+      - **El identificador del contribuyente no aparece en ningún listado de catastro.**
+        `FichaDelPadron` sigue llevando el nombre y no el código, y su prueba de frontera no se
+        toca. Si mañana hace falta, vuelve a pasar por aquí.
+      - **No hay forma de pedir varios predios en una petición.** Un endpoint que acepte una
+        lista de identificadores es otra vez el extractor masivo, con un viaje en lugar de
+        muchos.
+      - **Del padrón no viaja nada más que el código y el nombre**: ni el identificador
+        interno, ni el documento —con el código se llega a la persona exacta sin compararla por
+        DNI, que es el problema que esto resuelve—. Y de la titularidad, ni sus fechas ni el
+        documento que la sustenta.
+      - **La resolución que no devuelve nada también deja rastro.** Quien va probando
+        identificadores de predio para levantar el mapa del padrón deja su nombre en cada
+        intento, y los que vuelven vacíos son precisamente los que un auditor querría contar.
+        Por lo mismo, un predio sin titular y un predio de otra municipalidad se responden
+        igual —200 con lista vacía—: contestar distinto convertiría la lectura en un detector
+        de predios ajenos.
 
 3. **El acto que concilia es registrar la declaración jurada, y desde #365 el sistema lo publica.**
    Conciliar no es escribir un código en la ficha —el código ya lo tiene— sino incorporar el
@@ -208,6 +279,19 @@ ciclo que `verificarArquitectura` rechaza.
   quién la sirve es un detalle de dónde vive el código.
 - **El contrato compartido documenta las dos rutas**, y solo desde que las dos existen: declarar
   una ruta sin servidor pondría en rojo la prueba de las dos direcciones, a propósito.
-- **El titular sigue sin enlazar**, y ahora está sostenido por los tipos: `FichaDelPadron` —la
-  proyección que cruza la frontera— lleva el **nombre** del titular y no su identificador, así
-  que la decisión de §2.4 no se puede tomar «de paso» al escribir un controlador.
+- **El titular enlaza desde [#366](https://github.com/hneyra/sgtm/issues/366), y por la puerta
+  que §2.4 decide.** El listado sigue sin él —`FichaDelPadron`, la proyección que cruza la
+  frontera, lleva el **nombre** del titular y no su identificador, y su prueba de frontera no
+  se tocó—; lo que hay es una resolución puntual,
+  `GET /api/v1/catastro/predios/{predioId}/titulares`, que la sirve `rentas`
+  —`ConsultaDeTitulares`, componiendo el puerto nuevo `catastro.TitularesDelPredio` con
+  `contribuyentes.DirectorioDeContribuyentes`—, exige lectura sobre `contribuyentes` y escribe
+  su fila de `ACCESO` sobre `titularidad` en la misma transacción que la lectura. Devuelve
+  **las cuotas vigentes a una fecha**, que la respuesta dice siempre. **Ninguna migración**: no
+  hay dato nuevo que guardar, solo uno que se deja preguntar con permiso y con rastro.
+
+  Y el intento de alojarlo donde el issue lo pedía dejó un hallazgo que conviene no volver a
+  descubrir: **`contribuyentes` no puede depender de `catastro`**. Es la base del grafo de
+  ARQ-01 §2 —todos lo referencian y él a nadie— y `catastro` ya depende de él para resolver el
+  nombre de sus titulares, así que «el endpoint natural es de contribuyentes» era, en el código
+  real, un ciclo de módulos.

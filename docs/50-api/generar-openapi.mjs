@@ -296,7 +296,8 @@ const DEL_BACKEND = {
     },
   ],
   // La constancia no dibuja filtros: es un formulario. Pero acredita **a una
-  // fecha**, y sin el contribuyente no hay a quien acreditar.
+  // fecha**, y sin el contribuyente no hay a quien acreditar. Y sale en papel:
+  // `ConstanciaController` responde el documento con `formato` (#72, RNF-081).
   constancia: [
     {
       nombre: 'codContribuyente',
@@ -304,6 +305,7 @@ const DEL_BACKEND = {
       descripcion: 'Filtro «Cod. Contribuyente» de la pantalla',
     },
     { nombre: 'fecha', ejemplo: '', descripcion: 'Fecha de corte; sin ella, la de hoy' },
+    FORMATO_DE_REPORTE,
   ],
   // Las once pantallas que salen en papel (#53, RF-132).
   ...Object.fromEntries(
@@ -339,6 +341,12 @@ const DEL_BACKEND = {
  * pantalla que todavia no la tiene.
  */
 const DESCRIPCIONES = {
+  // Cuenta corriente (#72)
+  constancia: bloque(`
+    Vista previa del documento que se entrega al contribuyente. Se imprime con el mismo
+    formato en papel membretado. Con \`?formato=PDF|XLS|RTF\` sale como documento (RF-132,
+    RNF-081).
+  `),
   // Transito (#53)
   transito_valores: bloque(`
     Registra el criterio de una generación masiva de valores por papeletas de tránsito, por
@@ -793,6 +801,50 @@ const OPERACIONES_ADICIONALES = {
           nombre: 'ano',
           ejemplo: '2026',
           descripcion: 'Ejercicio de la declaración que se anula, como en el GET de la ruta',
+        },
+      ],
+    },
+  ],
+  // `contribuyentes` declara «GET /rentas/contribuyentes» como su endpoint —el
+  // padrón—; resolver quién es el titular de UN predio, con su código, necesita
+  // ruta propia (#366, ADR-0015 §2.4). Cuelga de esta pantalla y no de
+  // `consulta_fichas` porque el permiso que exige es el del padrón: lo que se
+  // pide no es catastro, es el identificador de una persona.
+  //
+  // La ruta, en cambio, sí es la de la pantalla desde la que se hace clic. Y la
+  // sirve `rentas`, que es el único módulo que ve `catastro` y `contribuyentes`
+  // a la vez sin cerrar un ciclo —`catastro` ya depende del padrón—; quién la
+  // sirve es un detalle de dónde vive el código.
+  contribuyentes: [
+    {
+      operationId: 'titulares_del_predio',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/predios/{predioId}/titulares',
+      titulo: 'Titulares del predio, con su código de contribuyente',
+      descripcion:
+        'Quién es titular de un predio a una fecha, con el código con el que se entra a su ficha' +
+        ' de contribuyente. Es la resolución que la fila de `consulta_fichas` necesita para poder' +
+        ' enlazar con la persona: la grilla publica el nombre del titular y no su identificador,' +
+        ' y añadirlo allí convertiría «quien puede listar fichas» en «quien puede cosechar la' +
+        ' correlación predio→persona de toda la municipalidad» (ADR-0015 §2.4). Por eso se' +
+        ' resuelve **al clic, de un predio cada vez**: exige privilegio de lectura sobre' +
+        ' `contribuyentes` —el permiso del padrón, no el de la pantalla desde la que se hace' +
+        ' clic— y cada resolución deja fila en la bitácora con operación ACCESO, la devuelva o no' +
+        ' algún titular. Devuelve la **lista** de cuotas vigentes, no «el» titular: un predio' +
+        ' puede tener varios —dos cónyuges, una sucesión, un condominio—, cada uno con su' +
+        ' porcentaje. La respuesta dice siempre a qué fecha contesta (regla 9, RNF-075). Del' +
+        ' padrón no viaja nada más: ni el identificador interno del contribuyente, ni su' +
+        ' documento; y de la titularidad, ni sus fechas ni el documento que la sustenta.',
+      descripcionesDeRuta: {
+        predioId: 'El predio, por el `predioId` que publica cada fila de la consulta de fichas',
+      },
+      parametros: [
+        {
+          nombre: 'vigenteA',
+          ejemplo: '2026-08-28',
+          descripcion:
+            'Fecha a la que se resuelve la titularidad; si falta, hoy. La titularidad de marzo no' +
+            ' es la de setiembre, y la respuesta dice siempre a cuál contesta (regla 9)',
         },
       ],
     },

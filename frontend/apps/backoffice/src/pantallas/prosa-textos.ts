@@ -194,6 +194,26 @@ export const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
    * Y dice donde si esta lo que la tercera pestaña promete: el historico
    * versionado de la ficha, que ya se publica en la consulta de fichas.
    */
+  /**
+   * **Simular no es acoger, y las campanas son dato** (#72, D-02b, D-02c).
+   *
+   * Dos cosas que la pantalla no puede decir por si sola y que hay que decir:
+   *
+   *   que esto no cobra   lo que se ve es una hipotesis. Acogerse de verdad
+   *                       mueve deuda del libro con su motivo, y eso lo hara
+   *                       quien tenga la ordenanza firmada
+   *   de donde salen      las campanas y su descuento los publica el conjunto
+   *   las campanas        de parametros sellado de **esta** municipalidad. El
+   *                       desplegable dibuja las cuatro del manual de Sullana;
+   *                       elegir una que aqui no este cargada devuelve un error
+   *                       que dice **cual** falta, y eso es lo correcto: un
+   *                       porcentaje inventado no cobra de mas, perdona de mas
+   */
+  consulta_deudas_beneficio: {
+    titulo: 'Esto simula el acogimiento: no rebaja ninguna deuda',
+    detalle:
+      'Las cifras de abajo dicen qué quedaría por pagar si esta deuda se acogiera hoy; la deuda registrada no cambia. Qué campañas existen y cuánto descuenta cada una lo determina la ordenanza cargada en el sistema, no esta pantalla: mientras no haya ninguna publicada, «Deuda con beneficio», «Tasa aplicada» y «Beneficio» salen con «—», que no es cero, y elegir una campaña del desplegable avisa de cuál falta por cargar.',
+  },
   consulta_resumen_predial: {
     titulo: 'Lo que este resumen publica hoy, y lo que no',
     detalle:
@@ -236,6 +256,20 @@ export const OPCIONES_CON_AVISO = Object.keys(AVISOS);
  */
 export const PIES: Readonly<Record<string, string | null>> = {
   consulta_fichas: null,
+
+  /**
+   * **`consulta_deudas_beneficio`: suprimido** (#72).
+   *
+   * Su pie del prototipo es «Deuda total 1,848.66 · acogida 797.77 · con
+   * beneficio 250.15»: **tres cifras congeladas de la captura del manual**, que
+   * se pintan bajo la tabla sea quien sea el contribuyente que se consulte. Las
+   * tres las publica ya el servidor —con su fecha de corte— en «Resultado del
+   * acogimiento», y ahi cambian con la persona; abajo no cambiaban nunca.
+   *
+   * Un pie asi es peor que un hueco: no es una cifra que falte, es una cifra que
+   * **afirma**, y quien la lee no tiene forma de saber que no es la suya.
+   */
+  consulta_deudas_beneficio: null,
 };
 
 /** Las opciones cuyo pie de tabla corrige la prosa. La comprobacion de coherencia las mira. */

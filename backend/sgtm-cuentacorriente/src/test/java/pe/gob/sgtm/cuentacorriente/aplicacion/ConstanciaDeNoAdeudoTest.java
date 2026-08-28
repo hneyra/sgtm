@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -14,6 +15,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.junit.jupiter.api.AfterAll;
@@ -23,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
@@ -39,6 +42,13 @@ import pe.gob.sgtm.cuentacorriente.dominio.PoliticaDeMora;
 import pe.gob.sgtm.cuentacorriente.dominio.TipoAsiento;
 import pe.gob.sgtm.cuentacorriente.infraestructura.AsientoRepositoryJdbc;
 import pe.gob.sgtm.cuentacorriente.infraestructura.SaldoRepositoryJdbc;
+import pe.gob.sgtm.cuentacorriente.infraestructura.web.ConstanciaController;
+import pe.gob.sgtm.cuentacorriente.infraestructura.web.ConstanciaResource;
+import pe.gob.sgtm.documentos.GeneradorDeDocumentos;
+import pe.gob.sgtm.documentos.RegimenDeLaInstalacion;
+import pe.gob.sgtm.documentos.RenderizadorPdf;
+import pe.gob.sgtm.documentos.RenderizadorRtf;
+import pe.gob.sgtm.documentos.RenderizadorXls;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.MunicipalidadId;
@@ -210,6 +220,71 @@ class ConstanciaDeNoAdeudoTest {
                         excepcion ->
                                 assertThat(((ProblemaDeNegocio) excepcion).codigo())
                                         .isEqualTo(CodigoDeError.NO_ENCONTRADO));
+    }
+
+    @Test
+    @DisplayName("sin «formato» el JSON no cambia; con el, el documento trae la misma cifra (#72)")
+    void elMismoContenidoEnJsonYEnElArchivo() {
+        String codigo = crearContribuyenteConCodigo("K-0006", "80500006");
+        long titular = idDe(codigo);
+        cargar(titular, "PREDIAL", 2026, 0, Dinero.de("340.50"), Fase.ORDINARIA);
+
+        ConstanciaController controlador =
+                new ConstanciaController(
+                        consulta,
+                        new GeneradorDeDocumentos(
+                                List.of(
+                                        new RenderizadorPdf(),
+                                        new RenderizadorXls(),
+                                        new RenderizadorRtf()),
+                                RegimenDeLaInstalacion.REAL));
+
+        ConstanciaResource json = controlador.constancia(codigo, "2026-06-01");
+        assertThat(json.seNiega()).isTrue();
+        assertThat(json.obligaciones())
+                .singleElement()
+                .satisfies(
+                        fila ->
+                                assertThat(fila.deuda().total().importe())
+                                        .isEqualTo(Dinero.de("340.50")));
+
+        // El XLS es SpreadsheetML, o sea XML: la celda se puede leer tal cual, sin
+        // biblioteca y sin interpretar nada.
+        ResponseEntity<byte[]> archivo = controlador.documento(codigo, "2026-06-01", "XLS");
+        assertThat(archivo.getStatusCode().value()).isEqualTo(200);
+        assertThat(archivo.getHeaders().getContentType())
+                .isNotNull()
+                .satisfies(
+                        tipo -> assertThat(tipo.toString()).isEqualTo("application/vnd.ms-excel"));
+        assertThat(new String(Objects.requireNonNull(archivo.getBody()), StandardCharsets.UTF_8))
+                .as("la cifra del papel es la fila del libro, no una cifra recompuesta")
+                .contains("340.50")
+                .contains("Pendiente")
+                .contains("SE NIEGA");
+    }
+
+    @Test
+    @DisplayName("un formato que no existe se rechaza nombrando los tres: 422")
+    void elFormatoInventadoSeRechaza() {
+        String codigo = crearContribuyenteConCodigo("K-0007", "80500007");
+
+        ConstanciaController controlador =
+                new ConstanciaController(
+                        consulta,
+                        new GeneradorDeDocumentos(
+                                List.of(
+                                        new RenderizadorPdf(),
+                                        new RenderizadorXls(),
+                                        new RenderizadorRtf()),
+                                RegimenDeLaInstalacion.REAL));
+
+        assertThatThrownBy(() -> controlador.documento(codigo, "2026-06-01", "DOCX"))
+                .isInstanceOf(ProblemaDeNegocio.class)
+                .satisfies(
+                        excepcion ->
+                                assertThat(((ProblemaDeNegocio) excepcion).codigo())
+                                        .isEqualTo(CodigoDeError.VALIDACION))
+                .hasMessageContaining("PDF, XLS y RTF");
     }
 
     // ------------------------------------------------------------------
