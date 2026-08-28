@@ -108,8 +108,9 @@ export function pedirOperacion<O extends IdDeOperacion>(
 /**
  * Descarga una operacion de lectura como archivo, no como JSON.
  *
- * Existe para el unico caso de hoy: el reporte de la ficha del contribuyente
- * (#71), que el backend sirve en PDF, XLS y RTF segun el parametro `formato`
+ * Existe para los dos casos de hoy: el reporte de la ficha del contribuyente
+ * (#71) y la constancia de no adeudo (#72), que el backend sirve en PDF, XLS y
+ * RTF segun el parametro `formato`
  * que el contrato ya declara. El resto de operaciones de lectura sigue por
  * `pedirOperacion`; esta es la puerta lateral para cuando la respuesta no es
  * JSON.

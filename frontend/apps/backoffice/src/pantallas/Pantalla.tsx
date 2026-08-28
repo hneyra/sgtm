@@ -45,6 +45,7 @@ import { Portal } from './bloques/Portal';
 import { FechaDeCalculo } from './bloques/FechaDeCalculo';
 import { Reporte } from './bloques/Reporte';
 import { useDescargaDeArchivo } from './useDescargaDeArchivo';
+import type { DescargaDeArchivo } from './useDescargaDeArchivo';
 import { ActualizacionDeCatastro } from './catastro/ActualizacionDeCatastro';
 import { ValoresUnitarios } from './catastro/ValoresUnitarios';
 import { Depreciacion } from './catastro/Depreciacion';
@@ -377,6 +378,16 @@ function Bloques({
   // sigan con su boton deshabilitado de siempre.
   const descargaDeFicha = useDescargaDeArchivo('ficha_contribuyente_reporte', {
     codigo: codigo ?? '',
+  });
+  /* La segunda, y la que cierra RNF-081 de #72: la constancia de no adeudo.
+     Es el papel que el contribuyente se lleva, asi que se exporta a los tres
+     formatos por el mismo camino, y **con la misma fecha de corte** que la hoja
+     que se esta mirando: descargar «la constancia» sin su fecha bajaria la de
+     hoy, que puede decir otra cosa que la que hay en pantalla (regla 9). */
+  const fechaDeCorte = busquedaActiva.filtros['fecha'];
+  const descargaDeConstancia = useDescargaDeArchivo('constancia', {
+    codContribuyente: codigo ?? '',
+    ...(fechaDeCorte === undefined || fechaDeCorte === '' ? {} : { fecha: fechaDeCorte }),
   });
   // Lo que esta opcion compone **alrededor** de los bloques comunes: cabecera
   // -resumen, indice de secciones, control propio de un filtro y el acto que
@@ -853,9 +864,7 @@ function Bloques({
           estructura={estructura.reporte}
           datos={datos?.reporte}
           cargando={cargando}
-          {...(estructura.id === 'ficha_contribuyente_reporte'
-            ? { descargas: descargaDeFicha }
-            : {})}
+          {...descargasDelReporte(estructura.id, descargaDeFicha, descargaDeConstancia)}
         />
       )}
 
@@ -912,6 +921,33 @@ function Bloques({
       )}
     </>
   );
+}
+
+/**
+ * Cual de las dos descargas le toca a esta hoja de reporte, si le toca alguna.
+ *
+ * **Dos de trece, y las otras once siguen con su boton apagado.** Un reporte se
+ * exporta desde aqui cuando su backend sirve los tres formatos (`?formato=`):
+ * la ficha del contribuyente (#71) y la constancia de no adeudo (#72, RNF-081).
+ * Los once restantes emitirian un documento numerado y firmado, y el regimen de
+ * firma es la decision D-05, abierta: ofrecerles el boton seria prometer un
+ * papel que nadie puede firmar.
+ *
+ * Se escribe como una tabla y no como dos `if` encadenados porque el tercero ya
+ * no cabria en la linea de la que salio: el `estructura.id === '…' ? … : {}`
+ * anidado es exactamente la forma que hace falta romper antes del tercer caso.
+ */
+function descargasDelReporte(
+  opcion: string,
+  ficha: DescargaDeArchivo,
+  constancia: DescargaDeArchivo,
+): { readonly descargas?: DescargaDeArchivo } {
+  const descargas: Readonly<Record<string, DescargaDeArchivo>> = {
+    ficha_contribuyente_reporte: ficha,
+    constancia,
+  };
+  const elegida = descargas[opcion];
+  return elegida === undefined ? {} : { descargas: elegida };
 }
 
 /**
