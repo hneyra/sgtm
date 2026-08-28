@@ -1,6 +1,7 @@
 import type { DatosDePantalla, IdDeOperacion, ParametrosDe, RespuestaDe } from '@sgtm/api-client';
 import { pedirOperacion } from '@sgtm/api-client';
 import { CONEXIONES_DE_CATASTRO } from './catastro';
+import { CONEXIONES_DE_COACTIVA } from './coactiva';
 import { CONEXIONES_DE_CONSULTAS } from './consultas';
 import { CONEXIONES_DE_RENTAS } from './rentas';
 import { CONEXIONES_DE_VALORES } from './valores';
@@ -176,6 +177,7 @@ const CONEXIONES: Readonly<Record<string, Conexion>> = {
   ...CONEXIONES_DE_CONSULTAS,
   ...CONEXIONES_DE_RENTAS,
   ...CONEXIONES_DE_VALORES,
+  ...CONEXIONES_DE_COACTIVA,
 };
 
 export const conexionDe = (opcion: string): Conexion | undefined => CONEXIONES[opcion];
