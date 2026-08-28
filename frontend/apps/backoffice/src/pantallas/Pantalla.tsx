@@ -158,6 +158,14 @@ function PantallaDelModulo({
 
 type Estructura = EstructuraDePantalla;
 
+/**
+ * El ancla de la tabla, para el indice de secciones.
+ *
+ * No lleva la pestana dentro, a diferencia de las secciones: la tabla es una
+ * sola por pantalla y se dibuja fuera de las pestañas.
+ */
+const ANCLA_DE_LA_TABLA = 'sgtm-tabla-de-la-pantalla';
+
 /** Las pantallas cuyo recurso trae version y vigencia. Hoy, las cuatro fichas. */
 const VERSIONADAS: ReadonlySet<string> = new Set([
   'ficha_urbana',
@@ -441,6 +449,9 @@ function Bloques({
     operacion === undefined ? {} : parametrosDeBusqueda(operacion, codigo, busqueda),
     {
       campos: declarada?.campos ?? {},
+      // Lo que la pantalla guarda y no manda nunca: no esta en `campos`, asi
+      // que no hay traduccion que lo saque al cuerpo.
+      ...(declarada?.presentacion === undefined ? {} : { presentacion: declarada.presentacion }),
       tablas: declarada?.tablas ?? {},
       /* Lo que exige la opcion, **precedido de lo que exige la pagina**. La
          opcion mira el cuerpo —`escrituras.ts` no sabe que es una pagina—; que
@@ -479,6 +490,15 @@ function Bloques({
   // declarar secciones con el mismo rotulo, y dos anclas iguales en la misma
   // pagina llevan siempre a la primera.
   const anclaDe = (indice: number): string => `sgtm-seccion-${pestana}-${indice}`;
+  /* La tabla, cuando la pantalla lleva indice: se dibuja **encima** de las
+     secciones y fuera de su rejilla (FRO-03 §5), asi que sin entrada propia el
+     indice empieza por la segunda cosa de la pagina. En «Cálculo individual del
+     impuesto predial» eso dejaba fuera el paso 1 del calculo —los predios que
+     integran la base—, que es de donde sale todo lo demas. */
+  const indexaLaTabla =
+    composicion.indice !== undefined &&
+    composicion.indiceConLaTabla === true &&
+    estructura.tabla !== undefined;
   const conIndice = (formulario: React.JSX.Element): React.JSX.Element =>
     composicion.indice !== undefined ? (
       <div className="sgtm-conindice">
@@ -486,6 +506,10 @@ function Bloques({
           secciones={secciones}
           anclaDe={anclaDe}
           haciaLasAcciones={(estructura.acciones ?? []).length > 0}
+          {...(indexaLaTabla && estructura.tabla !== undefined
+            ? // El rotulo es el del catalogo, no uno redactado aqui (RNF-080).
+              { previa: { rotulo: estructura.tabla.title, ancla: ANCLA_DE_LA_TABLA } }
+            : {})}
         />
         <div className="sgtm-conindice__panel">{formulario}</div>
       </div>
@@ -730,6 +754,7 @@ function Bloques({
           estructura={estructura.tabla}
           datos={datos?.tabla}
           cargando={cargando}
+          {...(indexaLaTabla ? { ancla: ANCLA_DE_LA_TABLA } : {})}
           hayFiltros={Object.keys(busquedaActiva.filtros).length > 0}
           {...(busquedaActiva.orden === undefined ? {} : { orden: busquedaActiva.orden })}
           sentido={busquedaActiva.sentido}
@@ -810,6 +835,10 @@ function Bloques({
             escribibles={escritura.campos}
             borrador={escritura.borrador}
             onCampo={escritura.fijarCampo}
+            /* El privilegio del acto, para lo que no basta con «esta clave esta
+               declarada»: hoy, el control que busca contra el padron antes de
+               escribir (`ResolutorProps.bloqueado`). */
+            puedeActuar={puedeActuarAqui}
             errorPorCampo={escritura.errorPorCampo}
             onAlternar={(clave, cerrada) =>
               fijarCerradas((previas) => ({ ...previas, [clave]: cerrada }))

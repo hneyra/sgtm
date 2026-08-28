@@ -2185,6 +2185,11 @@
   gap: 18px;
 }
 
+/* La lista de candidatos, **compartida a proposito** por el asistente de
+   catastro (#320) y el resolutor de la unidad de `alta_deuda` (#331): es la
+   misma lista con el mismo gesto —se teclea, se elige uno—, y dos hojas para lo
+   mismo se separan a la primera correccion. Si algun dia dejan de ser la misma
+   cosa, se separan aqui y en las dos plantillas a la vez. */
 .sgtm-asistente__resultados {
   list-style: none;
   margin: 0;
@@ -2194,6 +2199,17 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
+}
+
+/* **El foco se ve dentro de la lista.** El `outline` global va con
+   `outline-offset: 2px`, es decir **fuera** del boton, y esta lista recorta lo
+   que sobresale (`overflow: hidden`): del recuadro del foco solo quedaba una
+   raya, y encima sobre la fila de arriba —el borde inferior del candidato
+   anterior—. Quien recorre la lista con teclado no veia cual iba a elegir, y
+   Enter asienta la deuda sobre un predio. Con el desplazamiento hacia dentro,
+   el recuadro cae en el propio boton y no se recorta (FRO-04 §7, RNF-082). */
+.sgtm-asistente__resultados button:focus-visible {
+  outline-offset: -2px;
 }
 
 .sgtm-asistente__resultados button {
@@ -2257,11 +2273,43 @@
    Ocupa la fila entera de la rejilla de la seccion: lleva dos controles, su
    estado y una lista de candidatos, y en media columna la lista sale ilegible.
    Ningun color nuevo — los tokens son los mismos que usan los demas bloques. */
+/* Ocupa la fila entera de la rejilla porque lleva dentro **dos** controles y su
+   lista de candidatos; lo que no puede es romper la rejilla de cuatro columnas
+   que tiene alrededor, y por eso los dos controles van en fila —cada uno en su
+   sitio— en vez de apilados a lo ancho de la pantalla. */
 .sgtm-resolutor {
   grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.sgtm-resolutor__controles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px 16px;
+  align-items: start;
+}
+
+/* La unidad resuelta no es de quien paga: advertencia, no error (revision de
+   #331). Lleva el par de la insignia de atencion —los tokens que
+   `contraste.test.ts` ya mide—, y no un color nuevo (FRO-02 §2.1). */
+.sgtm-resolutor__cruce {
+  margin: 2px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px;
+  border: 1px solid var(--warn-fg);
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 12.5px;
+}
+
+.sgtm-resolutor__cruce-titulo {
+  color: var(--warn-fg);
+  font-weight: 600;
 }
 
 .sgtm-resolutor--resuelto {

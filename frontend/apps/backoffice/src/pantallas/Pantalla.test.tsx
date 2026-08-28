@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { montarEnRuta } from '../pruebas/montar';
+import { elBloque } from '../pruebas/nodos';
 
 /**
  * El renderizador compone una pantalla a partir del catalogo y de la respuesta
@@ -105,7 +106,7 @@ describe('las secciones colapsables', () => {
        botones que casaban y no podia decidir. Lo que aqui se comprueba sigue
        siendo el colapso, que es el de las 134. */
     await screen.findByRole('navigation', { name: 'Secciones de la pantalla' });
-    const formulario = within(document.querySelector('.sgtm-formulario') as HTMLElement);
+    const formulario = within(elBloque('.sgtm-formulario', 'el formulario'));
 
     const opcional = formulario.getByRole('button', { name: /Beneficios aplicados/ });
     expect(opcional).toHaveAttribute('aria-expanded', 'false');

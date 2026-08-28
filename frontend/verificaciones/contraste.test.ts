@@ -141,6 +141,39 @@ const TEXTOS: { estado: string; selector: string; sobre: string }[] = [
   // Y el rotulo de cada dato de la cabecera-resumen, que estaba en `--ink-4`:
   // 3,13:1. Sin el rotulo, el valor de al lado no se sabe de que es.
   { estado: 'resumen · rótulo del dato', selector: '.sgtm-resumen__dato dt', sobre: '--bg-card' },
+  /* Los del campo que resuelve la unidad del alta de deuda (#331). Los cuatro
+     primeros van sobre `--bg-elev`, que es el relleno de la tarjeta de la
+     unidad resuelta; la nota de la busqueda, sobre la tarjeta de la seccion.
+     Lo que cuentan no se puede comunicar de otra forma:
+
+       el codigo    **cual** unidad quedo resuelta, que es lo que decide sobre
+                    que obligacion se asienta el alta
+       el detalle   de quien es y donde esta, que es como se comprueba
+       la nota      si se busco, si no habia, o cuantas hay y que estan
+                    recortadas
+       el cruce     que la unidad resuelta es de otro titular */
+  { estado: 'resolutor · rótulo', selector: '.sgtm-resolutor__eyebrow', sobre: '--bg-elev' },
+  {
+    estado: 'resolutor · código resuelto',
+    selector: '.sgtm-resolutor__codigo',
+    sobre: '--bg-elev',
+  },
+  { estado: 'resolutor · detalle', selector: '.sgtm-resolutor__detalle', sobre: '--bg-elev' },
+  {
+    estado: 'resolutor · nota de la búsqueda',
+    selector: '.sgtm-resolutor__nota',
+    sobre: '--bg-card',
+  },
+  {
+    estado: 'resolutor · cruce de titular',
+    selector: '.sgtm-resolutor__cruce',
+    sobre: '--warn-bg',
+  },
+  {
+    estado: 'resolutor · cruce de titular, título',
+    selector: '.sgtm-resolutor__cruce-titulo',
+    sobre: '--warn-bg',
+  },
 ];
 
 describe('los cuatro estados se leen: 4,5:1 sobre su fondo', () => {

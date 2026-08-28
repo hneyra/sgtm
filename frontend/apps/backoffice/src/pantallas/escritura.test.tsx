@@ -74,6 +74,24 @@ const observacion = async (): Promise<HTMLElement> =>
     'Observación',
   );
 
+/**
+ * Elige el concepto del alta de deuda, que desde la revision de #331 **hay que
+ * elegir**.
+ *
+ * Antes no hacia falta y esa era justamente la mitad del defecto: el
+ * desplegable se dibujaba mostrando «IMPUESTO PREDIAL» sin que nadie lo tocara
+ * —un `sel` sin opcion vacia se pinta con su primera opcion—, el borrador
+ * estaba vacio y el cuerpo salia **sin `tributo`**. Estas pruebas usan «Alta de
+ * deuda» como la pantalla que escribe, no como el caso de negocio: eligen el
+ * predial, que no cuelga de ninguna unidad, y lo demas se comprueba igual.
+ */
+const elConcepto = async (
+  usuario: ReturnType<typeof userEvent.setup>,
+  concepto = 'IMPUESTO PREDIAL',
+): Promise<void> => {
+  await usuario.selectOptions(await screen.findByLabelText('Concepto / tributo'), concepto);
+};
+
 describe('sin observacion no se guarda', () => {
   it('abrir una pantalla que escribe no escribe nada', async () => {
     laApiResponde(201);
@@ -99,6 +117,7 @@ describe('sin observacion no se guarda', () => {
       // para que el motivo que lleva al lado se pueda leer (#332).
       primariaApagada(accion);
 
+      if (ruta === ALTA) await elConcepto(usuario);
       await usuario.type(await observacion(), 'Corrección solicitada por el contribuyente.');
       primariaEncendida(accion);
 
@@ -113,12 +132,16 @@ describe('sin observacion no se guarda', () => {
     laApiResponde(201);
     montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'Emisión anual 2026.');
     await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
 
     await waitFor(() => expect(peticiones).toHaveLength(1));
     expect(peticiones[0]?.metodo).toBe('POST');
+    // El concepto elegido y la observacion, **y nada mas**: los otros doce
+    // campos del formulario siguen sin tocarse, y lo que no se toca no viaja.
     expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).toEqual({
+      tributo: 'PREDIAL',
       observacion: 'Emisión anual 2026.',
     });
   });
@@ -134,6 +157,7 @@ describe('idempotencia: una clave por intento', () => {
     });
     montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'Emisión anual 2026.');
     await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
     await waitFor(() => expect(peticiones).toHaveLength(1));
@@ -156,6 +180,7 @@ describe('idempotencia: una clave por intento', () => {
     });
     montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'Emisión anual.');
     await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
     await waitFor(() => expect(peticiones).toHaveLength(1));
@@ -239,6 +264,7 @@ describe('una escritura no se reintenta sola', () => {
     // `retry: false`, esta prueba no diria nada.
     montarEnRuta(ALTA, crearClienteDeConsultas());
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'Emisión anual.');
     await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
 
@@ -252,6 +278,7 @@ describe('una escritura no se reintenta sola', () => {
     laApiResponde(201);
     montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'Emisión anual.');
     const accion = await screen.findByRole('button', { name: 'Dar de alta' });
     await usuario.dblClick(accion);
@@ -274,6 +301,7 @@ describe('los errores se cuentan donde toca', () => {
     });
     montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'x');
     await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
 
@@ -293,6 +321,7 @@ describe('los errores se cuentan donde toca', () => {
     });
     montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'Emisión anual.');
     await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
 
@@ -585,6 +614,7 @@ describe('un importe con formato de pantalla, y un guion, no viajan', () => {
     laApiResponde(201);
     montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await screen.findByLabelText('Insoluto (S/)'), '1,842.60');
     await usuario.type(await screen.findByLabelText('Reajuste (S/)'), '10.00');
     await usuario.type(await observacion(), 'Determinación de fiscalización.');

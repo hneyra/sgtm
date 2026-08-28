@@ -162,7 +162,18 @@ describe('ningun acto del modulo promete lo que no puede', () => {
     montada.unmount();
   });
 
-  it('la observacion sola habilita el alta, porque el alta si declara sus campos', async () => {
+  /**
+   * **El concepto y la observacion habilitan el alta**, porque el alta si
+   * declara sus campos.
+   *
+   * Era «la observacion sola», y esa era la mitad de un defecto: el desplegable
+   * de concepto se dibujaba mostrando «IMPUESTO PREDIAL» sin que nadie lo
+   * tocara —un `sel` de escritura sin opcion vacia se pinta con su primera
+   * opcion—, el borrador estaba vacio, `faltaEnElAlta` no veia nada, y el `POST`
+   * salia con `{codContribuyente, observacion}`: **sin `tributo`**. Con eso, la
+   * deuda no se asienta sobre ninguna obligacion identificable.
+   */
+  it('el concepto y la observacion habilitan el alta, porque el alta si declara sus campos', async () => {
     const usuario = userEvent.setup();
     const montada = montarEnRuta('/rentas-registro/alta-deuda');
 
@@ -171,6 +182,14 @@ describe('ningun acto del modulo promete lo que no puede', () => {
     primariaApagada(primaria);
 
     await usuario.type(within(caja).getByLabelText('Observación'), 'Motivo del acto.');
+    // Con la observacion escrita **sigue apagada**: falta el concepto.
+    primariaApagada(primaria);
+    expect(motivoDeLaPrimaria()).toMatch(/Falta el concepto/);
+
+    await usuario.selectOptions(
+      await screen.findByLabelText('Concepto / tributo'),
+      'IMPUESTO PREDIAL',
+    );
     await waitFor(() => primariaEncendida(primaria));
 
     montada.unmount();

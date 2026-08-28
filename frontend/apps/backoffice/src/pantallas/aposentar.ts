@@ -30,5 +30,13 @@ export function useValorAposentado<T>(valor: T, milisegundos = ESPERA): T {
   return aposentado;
 }
 
-/** Lo que se espera antes de preguntar. Suficiente para escribir el siguiente dígito. */
-export const ESPERA = 300;
+/**
+ * Lo que se espera antes de preguntar. Suficiente para escribir el siguiente
+ * dígito.
+ *
+ * No se exporta: nadie de fuera la usaba, y una constante exportada que nadie
+ * importa invita a que alguien la lea como «el `debounce` de la aplicación» —lo
+ * que el javadoc de arriba dice que esto no es—. Quien necesite otra espera la
+ * pasa por argumento.
+ */
+const ESPERA = 300;

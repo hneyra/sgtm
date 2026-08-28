@@ -77,10 +77,25 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * `escrituras.ts` acaba de declarar: sin ellos, `fijarCampo` los descartaria
    * en silencio y la busqueda seria un adorno. `Formulario` lo comprueba antes
    * de dibujarlo y lo bloquea si faltan.
+   *
+   * Y las otras dos declaraciones son las que dicen **que mas toca y que
+   * mira**, sin abrir el componente (revision de #331):
+   *
+   *   `memoria`   el rotulo de la unidad elegida. Se guarda en el borrador
+   *               —`escrituras.ts` lo declara en `presentacion`— para que
+   *               plegar la seccion no lo pierda, y **no viaja**
+   *   `contexto`  lo que lee del formulario para poder decir si la unidad
+   *               resuelta es de otro titular. Es de solo lectura: `onCampo`
+   *               solo acepta lo que este resolutor declara llenar
    */
   alta_deuda: {
     resolutores: {
-      unidadPredioPlaca: { campos: ['predioId', 'vehiculoId'], Control: ResolutorDeUnidad },
+      unidadPredioPlaca: {
+        campos: ['predioId', 'vehiculoId'],
+        memoria: ['unidadResuelta'],
+        contexto: ['codContribuyente', 'nombre'],
+        Control: ResolutorDeUnidad,
+      },
     },
   },
   /**
@@ -94,8 +109,14 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * en ese orden. Lo que faltaba no era mover nada: era que el orden se viera y
    * se pudiera recorrer, y que la pantalla dijera de quien es la base.
    *
-   *   `indice: true`  lista las tres secciones y lleva a cada una desplazando,
-   *                   con su salida hacia las acciones
+   *   `indice: true`  lista las secciones y lleva a cada una desplazando, con
+   *                   su salida hacia las acciones
+   *   `indiceConLaTabla`  y **la tabla de predios entra tambien**, la primera,
+   *                   porque es el paso 1 del calculo. Sin ella el indice
+   *                   empezaba en la escala: la tabla se dibuja encima de las
+   *                   secciones y fuera de la rejilla del indice (FRO-03 §5),
+   *                   asi que el unico paso desde el que se entiende el resto
+   *                   era el unico al que el indice no llevaba
    *   el aviso        dice que la base es **por contribuyente** y que la escala
    *                   y su conjunto sellado los pone el servidor
    *                   (`prosa-textos.ts`, fuera del trozo de arranque)
@@ -111,7 +132,7 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * `'en-vez-de-pestanas'` tampoco: esta pantalla no tiene pestanas que
    * sustituir. Con `true`, `seccionesDe` devuelve sus tres secciones tal cual.
    */
-  predial_individual: { indice: true },
+  predial_individual: { indice: true, indiceConLaTabla: true },
   baja_deuda: {
     seleccion: {
       tabla: 'cuotas',

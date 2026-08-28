@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { montarEnRuta } from '../../pruebas/montar';
+import { elBloque } from '../../pruebas/nodos';
 import { todasLasPantallas } from '../../catalogo';
 
 /**
@@ -80,19 +81,41 @@ describe('la memoria de calculo se lee en el orden del calculo', () => {
     expect(columnas).toContain('% prop.');
     expect(columnas).toContain('Valuo Afecto S/');
 
-    // 2, 3 y 4: las secciones del manual, **en su orden y sin renombrar**
-    // (RNF-080). La base del conjunto y la escala viven en la primera; las
-    // cuotas, en la última.
+    /* 2, 3 y 4: las secciones del manual, **en su orden y sin renombrar**
+       (RNF-080). La base del conjunto y la escala viven en la primera; las
+       cuotas, en la última.
+
+       Y **el paso 1 está en el índice**, el primero. Estaba fuera: la tabla se
+       dibuja encima de las secciones y fuera de la rejilla del índice (FRO-03
+       §5), así que el índice empezaba en la escala y al único paso desde el que
+       se entiende el resto no llevaba nada. El rótulo es el del catálogo, no
+       uno redactado aquí. */
     const indice = screen.getByRole('navigation', { name: 'Secciones de la pantalla' });
     const entradas = within(indice)
       .getAllByRole('button')
       .map((boton) => boton.textContent);
     expect(entradas).toEqual([
+      'Predios que integran la base imponible',
       'Escala progresiva acumulativa',
       'Beneficios aplicados',
       'Emisión y cuotas',
       'Ir a las acciones',
     ]);
+
+    // Y esa entrada lleva a la tarjeta de la tabla, no a ningún sitio: un
+    // `id` que no existe deja la entrada muda y nada lo delata.
+    const aLaTabla = within(indice).getByRole('button', {
+      name: 'Ir a Predios que integran la base imponible',
+    });
+    const ancla = document.getElementById('sgtm-tabla-de-la-pantalla');
+    expect(ancla).not.toBeNull();
+    expect(ancla).toContainElement(
+      screen.getByRole('heading', { name: 'Predios que integran la base imponible' }),
+    );
+    // Enfocable por el índice y **fuera del recorrido del tabulador**
+    // (FRO-04 §7), igual que las secciones del formulario.
+    expect(ancla).toHaveAttribute('tabindex', '-1');
+    expect(aLaTabla).toBeInTheDocument();
 
     // Y el orden de los bloques en la página: aviso, predios, memoria, acciones.
     const memoria = laMemoria();
@@ -114,7 +137,7 @@ describe('la memoria de calculo se lee en el orden del calculo', () => {
   it('la escala se rotula con el manual y sus importes salen del servidor, no de aqui', async () => {
     montarEnRuta(PREDIAL);
     await screen.findByRole('navigation', { name: 'Secciones de la pantalla' });
-    const formulario = within(document.querySelector('.sgtm-formulario') as HTMLElement);
+    const formulario = within(elBloque('.sgtm-formulario', 'el formulario'));
 
     for (const rotulo of [
       'UIT vigente 2026 (S/)',

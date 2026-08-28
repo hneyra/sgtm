@@ -44,6 +44,13 @@ export interface FormularioProps {
   /** Lo tecleado y todavia sin enviar. Solo tiene claves de `escribibles`. */
   readonly borrador?: Readonly<Record<string, string>>;
   readonly onCampo?: (campo: string, valor: string) => void;
+  /**
+   * Quien mira **tiene el privilegio que el acto de la pantalla exige**.
+   *
+   * Hoy solo lo consulta el resolutor: sin el, buscaba contra el padron para un
+   * perfil que no puede registrar nada. Ver `ResolutorProps.bloqueado`.
+   */
+  readonly puedeActuar?: boolean;
   /** Mensaje por campo que devolvio el backend (`ProblemaDeApi.errores`). */
   readonly errorPorCampo?: Readonly<Record<string, string>>;
   /**
@@ -57,6 +64,25 @@ export interface FormularioProps {
 /** Sin `onCampo` no hay donde escribir; el resolutor se dibuja inerte igualmente. */
 const NADA = (): void => {};
 
+/**
+ * `onCampo` **acotado a los campos que ese control declaro**.
+ *
+ * Es una linea y cierra un agujero que no se ve (revision de #331): el
+ * resolutor recibia el `fijarCampo` de la pantalla entera, y ese acepta
+ * cualquier clave que la opcion declare. Un control que llenara
+ * `codContribuyente` —o `insolutoS`— lo conseguia sin que nada lo dijera, y el
+ * cuerpo salia con un campo que el operador no escribio. `CampoResolutor.campos`
+ * existe justamente para declarar que llena; aqui se hace valer.
+ *
+ * Se exporta para poder probarla sin montar nada: es la comprobacion entera.
+ */
+export const soloSusCampos =
+  (onCampo: (campo: string, valor: string) => void, suyos: readonly string[]) =>
+  (campo: string, valor: string): void => {
+    if (!suyos.includes(campo)) return;
+    onCampo(campo, valor);
+  };
+
 export function Formulario({
   opcion,
   secciones,
@@ -68,6 +94,7 @@ export function Formulario({
   escribibles,
   borrador = {},
   onCampo,
+  puedeActuar = true,
   errorPorCampo = {},
   anclaDe,
 }: FormularioProps) {
@@ -108,20 +135,33 @@ export function Formulario({
                      ocuparia el campo. */
                   const resolutor = resolutorDeCampo(opcion, campo.clave);
                   if (resolutor !== undefined) {
-                    // Resuelve **solo si esta pantalla puede mandar los campos
-                    // que llena**: sin declararlos, `fijarCampo` los descartaria
-                    // en silencio y la busqueda seria un adorno.
-                    const puede = resolutor.campos.every(
-                      (llena) => escribibles?.has(llena) ?? false,
-                    );
+                    // Lo que ese control puede escribir: lo que llena y lo que
+                    // guarda para enseñarlo. Ni una clave mas (`soloSusCampos`).
+                    const suyos = [...resolutor.campos, ...(resolutor.memoria ?? [])];
+                    /* Resuelve **solo si esta pantalla puede mandar los campos
+                       que llena y quien mira puede actuar**: sin declararlos,
+                       `fijarCampo` los descartaria en silencio y la busqueda
+                       seria un adorno; sin el privilegio del acto, la busqueda
+                       acaba en un 403 despues de haberla hecho (ADR-0013). */
+                    const puede =
+                      puedeActuar && suyos.every((llena) => escribibles?.has(llena) ?? false);
                     return (
                       <Suspense key={campo.clave} fallback={<Esqueleto alto={72} />}>
                         <resolutor.Control
                           etiqueta={campo.label}
                           resuelto={Object.fromEntries(
-                            resolutor.campos.map((llena) => [llena, borrador[llena] ?? '']),
+                            suyos.map((llena) => [llena, borrador[llena] ?? '']),
                           )}
-                          onCampo={onCampo ?? NADA}
+                          contexto={Object.fromEntries(
+                            (resolutor.contexto ?? []).map((lee) => {
+                              // El borrador manda sobre lo que sirvio la API,
+                              // igual que en un campo escribible: lo que se
+                              // acaba de teclear es mas nuevo.
+                              const valor = borrador[lee] ?? valores[lee];
+                              return [lee, typeof valor === 'string' ? valor : ''];
+                            }),
+                          )}
+                          onCampo={soloSusCampos(onCampo ?? NADA, suyos)}
                           bloqueado={!puede}
                         />
                       </Suspense>
@@ -146,6 +186,18 @@ export function Formulario({
                       ancho={campo.ancho}
                       cargando={cargando}
                       bloqueado={!escribible}
+                      /* **Un `sel` de escritura no enseña una elección que
+                         nadie hizo** (revision de #331). Un `<select value="">`
+                         cuyas opciones no incluyen la cadena vacia se dibuja
+                         mostrando la primera y no manda nada: en «Alta de
+                         deuda» eso se veia como «IMPUESTO PREDIAL» elegido, con
+                         el borrador vacio y el cuerpo saliendo **sin
+                         `tributo`**. Solo a los **escribibles**: un `sel` de
+                         solo lectura pinta lo que sirvio el servidor, y uno no
+                         declarado no manda nada de todas formas. Los filtros no
+                         pasan por aqui —`Filtros` no lo pasa, y su primera
+                         opcion es «Todos» a proposito—. */
+                      {...(escribible && campo.t === 'sel' ? { eleccionObligatoria: true } : {})}
                       {...(error === undefined ? {} : { error })}
                       {...(escribible && onCampo
                         ? { onCambio: (nuevo: string) => onCampo(campo.clave, nuevo) }

@@ -105,14 +105,34 @@ export interface ResolutorProps {
    * por su cuenta.
    */
   readonly resuelto: Readonly<Record<string, string>>;
+  /**
+   * Lo que la pantalla sabe de los campos que este resolutor declara leer
+   * (`CampoResolutor.contexto`), con el borrador por delante de lo que sirvio la
+   * API.
+   *
+   * Es de **solo lectura**: el resolutor no puede escribir ahi —`onCampo` no lo
+   * dejaria—, y existe para poder decir algo sobre lo resuelto en relacion con
+   * el registro que se esta dando de alta.
+   */
+  readonly contexto: Readonly<Record<string, string>>;
   /** Fija —o vacia— uno de los campos que este resolutor llena. */
   readonly onCampo: (campo: string, valor: string) => void;
   /**
    * La opcion no puede escribir esos campos: el control se dibuja, no resuelve.
    *
-   * Ocurre cuando el perfil no tiene el privilegio del acto, o cuando la opcion
-   * no declara los campos en `escrituras.ts` — y entonces `fijarCampo` los
-   * ignoraria en silencio, que es peor que no ofrecer la busqueda.
+   * Tres motivos, y hasta la revision de #331 solo se comprobaba el segundo:
+   *
+   * - el perfil **no tiene el privilegio del acto** sobre esta opcion. Esto no
+   *   se miraba, y el docblock decia que si: `useEscritura` recibe los campos
+   *   declarados haya o no permiso —lo que apaga la escritura es que la
+   *   `operacion` llegue `undefined`—, asi que `escribibles` los tenia igual y
+   *   el resolutor buscaba contra el padron para un perfil que no puede
+   *   registrar nada. No es la barrera —el servidor contesta 403 igual
+   *   (ADR-0013)—: es no hacer trabajar a nadie para acabar en un rechazo;
+   * - la opcion **no declara los campos** en `escrituras.ts`, y entonces
+   *   `fijarCampo` los ignoraria en silencio, que es peor que no ofrecer la
+   *   busqueda;
+   * - no hay `onCampo`: la pantalla no escribe.
    */
   readonly bloqueado: boolean;
 }
@@ -128,6 +148,21 @@ export interface CampoResolutor {
    * resolutor de unidad llena `predioId` y `vehiculoId` y ninguna otra cosa.
    */
   readonly campos: readonly string[];
+  /**
+   * Claves del borrador que el control usa **solo para presentacion**, y que la
+   * opcion declara en `EscrituraDeclarada.presentacion`: no viajan.
+   *
+   * Se declaran aparte de `campos` porque no son lo mismo y la diferencia es la
+   * que importa: `campos` son las claves que acaban en el cuerpo, y estas son
+   * las que no pueden acabar ahi. `Formulario` las junta para decidir que puede
+   * escribir el control y que le pasa en `resuelto`.
+   */
+  readonly memoria?: readonly string[];
+  /**
+   * Claves del formulario que el control **lee** para poder decir algo sobre lo
+   * que resolvio: llegan por `ResolutorProps.contexto` y no se pueden escribir.
+   */
+  readonly contexto?: readonly string[];
   /**
    * `ComponentType` y no una funcion suelta, por lo mismo que
    * {@link AltaEnPanel.Formulario}: el control busca contra el backend y trae
@@ -270,6 +305,23 @@ export interface ComposicionDeOpcion {
    *                           mismas secciones del manual, en su orden
    */
   readonly indice?: true | 'en-vez-de-pestanas';
+  /**
+   * La **tabla** de la pantalla entra en el indice, como su primera entrada.
+   *
+   * La tabla se dibuja encima de las secciones y fuera de la rejilla del indice
+   * (FRO-03 §5), asi que sin esto el indice de una pantalla con tabla empieza
+   * por la segunda cosa de la pagina. En «Cálculo individual del impuesto
+   * predial» eso dejaba fuera el **paso 1** del calculo —los predios que
+   * integran la base, de donde sale todo lo demas— y el indice arrancaba en la
+   * escala (#333, revision).
+   *
+   * **Es opt-in y no automatico**, y el motivo salio de ejecutarlo: hacerlo para
+   * toda pantalla con indice y tabla deja en «Ficha urbana» dos entradas
+   * llamadas «Ubicación del predio catastral» —el catalogo rotula igual su tabla
+   * y una de sus secciones—, y dos entradas con el mismo nombre en el mismo
+   * indice llevan siempre a la primera. Quien declare esto mira su catalogo.
+   */
+  readonly indiceConLaTabla?: true;
   readonly acto?: ActoDeOtraPantalla;
   /** Altas que esta pantalla abre en un panel lateral. */
   readonly altas?: readonly AltaEnPanel[];

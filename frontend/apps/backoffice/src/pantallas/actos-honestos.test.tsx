@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { escribe } from '@sgtm/api-client';
 import { todasLasPantallas } from '../catalogo';
@@ -201,11 +202,64 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
     montada.unmount();
   });
 
-  it('una opcion declarada no lleva franja de impedimento: lleva la de su formulario', async () => {
+  /**
+   * **Con impedimento, los secundarios no llevan el `title` de RNF-052**
+   * (revision de #331).
+   *
+   * Ese texto —«la operación se conecta junto con su campo de observación»— era
+   * cierto cuando la unica causa posible era esa, y dejo de serlo cuando la
+   * franja aprendio a decir tres cosas distintas: en «Cálculo individual del
+   * impuesto predial» afirmaba que falta la observacion, y lo que falta es la
+   * capa web del calculo. **Y ademas no llegaba a nadie**: esos botones se
+   * dibujan `disabled`, y un `title` sobre un boton deshabilitado no existe ni
+   * para el teclado —no se puede enfocar— ni para el lector de pantalla
+   * (FRO-04 §6). Lo que hay que leer ya esta pintado en la franja.
+   */
+  it.each([
+    { caso: 'sin-determinacion', ruta: '/rentas-registro/predial-individual' },
+    { caso: 'sin-backend', ruta: '/rentas-registro/contribuyentes' },
+    { caso: 'sin-declaracion', ruta: '/rentas-registro/transferencia-predio' },
+  ])('$caso: los secundarios no repiten un motivo que ya no es cierto', async ({ ruta }) => {
+    const montada = montarEnRuta(ruta);
+    await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+    const botones = [...document.querySelectorAll<HTMLButtonElement>('.sgtm-acciones .sgtm-boton')];
+    expect(botones.length).toBeGreaterThan(0);
+    for (const boton of botones) {
+      expect(boton.getAttribute('title'), `«${boton.textContent}» lleva un title`).toBeNull();
+    }
+    // Y lo que si se lee sigue estando, pintado y en una region viva.
+    expect(motivoDeLaPrimaria()).toMatch(/\S/);
+
+    montada.unmount();
+  });
+
+  /** Sin impedimento, el `title` de RNF-052 se queda donde si dice la verdad. */
+  it('sin impedimento, el secundario sigue explicando que la operacion no esta', async () => {
     montarEnRuta('/rentas-registro/alta-deuda');
     await screen.findByRole('region', { name: 'Observación del usuario' });
 
-    // Lo que la apaga es la observacion que falta (regla 10), no el sistema.
+    const secundario = screen.getByRole('button', { name: 'Validar' });
+    expect(secundario).toHaveAttribute(
+      'title',
+      'La operación se conecta junto con su campo de observación (RNF-052)',
+    );
+  });
+
+  it('una opcion declarada no lleva franja de impedimento: lleva la de su formulario', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/rentas-registro/alta-deuda');
+    await screen.findByRole('region', { name: 'Observación del usuario' });
+
+    /* Lo que la apaga es **lo que su formulario exige** (`escrituras.ts`), no el
+       sistema: primero el concepto —desde la revision de #331 hay que elegirlo,
+       porque sin el el cuerpo saldria sin `tributo`— y despues la observacion
+       (regla 10). Las dos son de la opcion; ninguna es un impedimento del acto. */
+    expect(motivoDeLaPrimaria()).toMatch(/Falta el concepto/);
+    await usuario.selectOptions(
+      await screen.findByLabelText('Concepto / tributo'),
+      'IMPUESTO PREDIAL',
+    );
     expect(motivoDeLaPrimaria()).toMatch(/Falta la observación/);
     expect(motivoDeLaPrimaria()).not.toMatch(/avísale a sistemas/);
     expect(document.getElementById('sgtm-motivo-de-la-accion')).not.toHaveAttribute('data-causa');
