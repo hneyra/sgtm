@@ -7,6 +7,7 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import pe.gob.sgtm.dominio.Plazo;
 
 /**
  * #39 — El computo de la prescripcion, <b>sin base y sin reloj</b> (arts. 43 a 46 del TUO del

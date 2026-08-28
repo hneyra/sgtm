@@ -1,4 +1,4 @@
-package pe.gob.sgtm.valores.dominio;
+package pe.gob.sgtm.dominio;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -18,6 +18,9 @@ import java.util.Set;
  * no es un valor por omision disfrazado: es la afirmacion, explicita, de que para ese ejercicio no
  * se declaro ningun feriado —y si esa afirmacion es falsa, el plazo sale corto y la constancia de
  * con que calendario se calculo esta en el conjunto sellado que la fila guarda—.
+ *
+ * <p>En el dominio compartido desde #41: lo usan el plazo de reclamacion de un valor (#39) y el de
+ * los siete dias de la REC-1 (#41), que se cuentan con el mismo calendario.
  */
 public record CalendarioHabil(Set<LocalDate> feriados) {
 

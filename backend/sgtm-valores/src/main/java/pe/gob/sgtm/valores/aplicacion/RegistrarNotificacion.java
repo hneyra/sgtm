@@ -9,14 +9,14 @@ import pe.gob.sgtm.auditoria.Auditoria;
 import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
+import pe.gob.sgtm.dominio.Exigibilidad;
+import pe.gob.sgtm.dominio.ModalidadDeNotificacion;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.dominio.Plazo;
+import pe.gob.sgtm.dominio.ResultadoDeNotificacion;
 import pe.gob.sgtm.valores.dominio.EstadoDeValor;
-import pe.gob.sgtm.valores.dominio.Exigibilidad;
-import pe.gob.sgtm.valores.dominio.ModalidadDeNotificacion;
 import pe.gob.sgtm.valores.dominio.Notificacion;
 import pe.gob.sgtm.valores.dominio.NotificacionRepository;
-import pe.gob.sgtm.valores.dominio.Plazo;
-import pe.gob.sgtm.valores.dominio.ResultadoDeNotificacion;
 import pe.gob.sgtm.valores.dominio.Valor;
 import pe.gob.sgtm.valores.dominio.ValorRepository;
 

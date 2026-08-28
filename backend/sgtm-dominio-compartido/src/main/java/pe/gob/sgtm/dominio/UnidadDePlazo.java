@@ -1,4 +1,4 @@
-package pe.gob.sgtm.valores.dominio;
+package pe.gob.sgtm.dominio;
 
 /**
  * En que se cuenta un plazo.
@@ -6,6 +6,8 @@ package pe.gob.sgtm.valores.dominio;
  * <p>La unidad no es un detalle de formato: veinte dias habiles y veinte dias calendario se separan
  * por un fin de semana largo, y de esa diferencia depende si un expediente coactivo nacio antes de
  * tiempo. Por eso {@link Plazo} no admite una cantidad sin su unidad.
+ *
+ * <p>En el dominio compartido desde #41, con {@link Plazo}.
  */
 public enum UnidadDePlazo {
 

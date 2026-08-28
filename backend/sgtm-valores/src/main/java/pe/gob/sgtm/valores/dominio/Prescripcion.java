@@ -6,6 +6,7 @@ import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.dominio.Plazo;
 
 /**
  * La declaracion de prescripcion de la accion de cobro (V28, #39, RF-094).
