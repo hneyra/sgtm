@@ -89,7 +89,8 @@ public record ActoDeLicenciaResource(
     public record DocumentoResource(
             String numero, String formato, String resumen, int bytes, int reimpresiones) {
 
-        static DocumentoResource de(EmitirDocumento.Emision emision) {
+        /** Publico desde #54: el acto de certificado publica el mismo bloque de papel. */
+        public static DocumentoResource de(EmitirDocumento.Emision emision) {
             return new DocumentoResource(
                     emision.registro().numero(),
                     emision.registro().formato().name(),

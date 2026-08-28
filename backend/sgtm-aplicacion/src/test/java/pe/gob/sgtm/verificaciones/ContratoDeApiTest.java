@@ -210,7 +210,16 @@ class ContratoDeApiTest {
                     "POST /autorizaciones/anuncios/{id}/renovacion",
                     "POST /autorizaciones/anuncios/{id}/cese",
                     "POST /autorizaciones/anuncios/{id}/retiro",
-                    "POST /autorizaciones/anuncios/reportes");
+                    "POST /autorizaciones/anuncios/reportes",
+                    // #54 — RF-115 y RF-132: los padrones de licencias y los certificados de
+                    // numeracion y zonificacion. Las dos ultimas son adiciones al contrato: la
+                    // pantalla `certificados` declara UN endpoint —el POST que emite— y su grilla
+                    // y su accion «Imprimir certificado» necesitan verbo propio.
+                    "POST /licencias/funcionamiento/reportes/padron",
+                    "GET /licencias/funcionamiento/reportes/resumen-anual",
+                    "GET /licencias/certificados",
+                    "POST /licencias/certificados",
+                    "POST /licencias/certificados/{numero}/impresion");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

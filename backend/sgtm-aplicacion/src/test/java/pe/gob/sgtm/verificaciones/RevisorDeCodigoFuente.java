@@ -129,6 +129,12 @@ public final class RevisorDeCodigoFuente {
                     "liquidacion_fiscalizacion",
                     "liquidacion_detalle",
                     "liquidacion_movimiento",
+                    // Con #54: el certificado de numeracion y zonificacion. Borrarlo seria borrar
+                    // la constancia de que la municipalidad certifico un numero municipal o unos
+                    // parametros urbanisticos -y el administrado tiene el papel en la mano, o lo
+                    // presento ante un notario-. Uno equivocado no se borra: se sustituye emitiendo
+                    // otro, con su numero y su derecho de tramite, y los dos quedan (regla 4).
+                    "certificado",
                     "auditoria");
 
     /**
@@ -302,7 +308,24 @@ public final class RevisorDeCodigoFuente {
                     // veces. Poder editarla en el sitio seria poder devengar de nuevo el mismo
                     // ejercicio cambiando una letra.
                     "anuncio",
-                    "anuncio_movimiento");
+                    "anuncio_movimiento",
+                    // Y el certificado de numeracion y zonificacion, con #54. Duodecima vez, y
+                    // aqui aplicado desde el principio como en V39: V51 crea `certificado` SIN
+                    // conceder UPDATE ni DELETE, en vez de retirarlos despues.
+                    //
+                    // El motivo es el de siempre y aqui es literal: el certificado se ENTREGA al
+                    // administrado, que lo presenta ante un notario, un banco o el Ministerio de
+                    // Vivienda. Corregirlo en la base deja al papel y al sistema diciendo cosas
+                    // distintas, y quien tiene el papel gana la discusion. Uno equivocado se
+                    // sustituye emitiendo otro —con su numero y su derecho de tramite—, y los dos
+                    // quedan.
+                    //
+                    // Tiene ademas un motivo propio: `vigencia_hasta` es una fecha COPIADA del
+                    // parametro sellado que regia el dia de la emision. Poder moverla en el sitio
+                    // seria poder alargar un certificado ya entregado sin que nada lo delate, y
+                    // esa fecha es la que decide si una obra se autoriza con los parametros de hoy
+                    // o con los de hace diez anios.
+                    "certificado");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =
@@ -399,14 +422,25 @@ public final class RevisorDeCodigoFuente {
      * <p>{@code TARIFA} va con ella porque es como se escribe la misma cifra cuando a alguien le
      * parece que «tasa» suena a tributo: {@code TARIFA_POR_M2 = ...} es exactamente el mismo dato.
      *
-     * <p>Ojo con el {@code \b}: no caza {@code TIPO_TASA = "TASA_ANUNCIO"} —el identificador no
-     * <b>empieza</b> por la palabra— ni ningun {@code tasa_id = 1} de un SQL, porque el patron es
-     * sensible a mayusculas y esta pensado para nombres de constante.
+     * <p>Con #54 entra {@code VIGENCIA}. Un certificado de numeracion o de zonificacion vale
+     * <b>tantos meses</b>, y cuantos lo fija el TUPA de cada municipalidad (D-02b). Es la cuarta
+     * vez que aparece el mismo hueco: {@code VIGENCIA_DEL_CERTIFICADO = 36} no empieza por ninguna
+     * de las quince palabras anteriores —ni por {@code PLAZO}, que es lo que mas se le parece— y
+     * pasaba sin ruido. Su consecuencia es propia y peor que la de una tarifa: un certificado con
+     * una vigencia inventada no cobra de mas, <b>autoriza de mas</b>. Uno que caduca demasiado
+     * tarde deja construir en 2035 con los parametros urbanisticos de 2026, y eso no se descubre
+     * hasta que la obra esta levantada.
+     *
+     * <p>Ojo con el {@code \b}: no caza {@code TIPO_TASA = "TASA_ANUNCIO"} ni {@code TIPO_VIGENCIA
+     * = "VIGENCIA_CERTIFICADO"} —el identificador no <b>empieza</b> por la palabra en el primer
+     * caso, y en el segundo el valor no lleva ninguna cifra— ni ningun {@code tasa_id = 1} de un
+     * SQL, porque el patron es sensible a mayusculas y esta pensado para nombres de constante.
      */
     private static final Pattern CONSTANTE_NORMATIVA =
             Pattern.compile(
                     "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
-                            + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA|TASA|TARIFA)"
+                            + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA|TASA|TARIFA"
+                            + "|VIGENCIA)"
                             + "\\w*\\s*=\\s*[^;\\n]*[0-9]");
 
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");

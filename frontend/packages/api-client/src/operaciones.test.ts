@@ -95,8 +95,16 @@ describe('las operaciones generadas son las del contrato', () => {
     //     anuncios» como su endpoint —la grilla—, y `anuncio` no admite UPDATE
     //     desde V45: renovar, cesar y retirar son ACTOS que producen una fila
     //     nueva, no ediciones del formulario, asi que cada uno lleva su verbo.
+    //   - `certificados_listado` / `imprimir_certificado` (#54): la pantalla
+    //     `certificados` declara «POST /licencias/certificados» —la emisión—
+    //     como su endpoint, y su grilla y su acción «Imprimir certificado»
+    //     necesitan verbo propio. Hacer que el POST devolviera también la
+    //     grilla convertiría una consulta en una escritura, y una pantalla que
+    //     lista al abrirse consumiría un correlativo cada vez. No hay PUT:
+    //     `certificado` no admite UPDATE desde V51, y uno equivocado se
+    //     sustituye emitiendo otro.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(165);
+    expect(Object.keys(OPERACIONES)).toHaveLength(167);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {
