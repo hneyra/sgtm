@@ -8,11 +8,13 @@ import java.util.Optional;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.valores.dominio.CriterioDeConsultaDeValores;
 import pe.gob.sgtm.valores.dominio.CriterioDeValor;
 import pe.gob.sgtm.valores.dominio.EstadoDeValor;
 import pe.gob.sgtm.valores.dominio.TipoValor;
 import pe.gob.sgtm.valores.dominio.Valor;
 import pe.gob.sgtm.valores.dominio.ValorDetalle;
+import pe.gob.sgtm.valores.dominio.ValorEnConsulta;
 import pe.gob.sgtm.valores.dominio.ValorRepository;
 
 /**
@@ -88,6 +90,50 @@ public final class ValoresEnMemoria implements ValorRepository {
     public Pagina<Valor> buscar(CriterioDeValor criterio, Paginacion paginacion) {
         List<Valor> todos = new ArrayList<>(porId.values());
         return Pagina.de(todos, paginacion, todos.size());
+    }
+
+    /**
+     * La grilla de {@code consulta_valores}, sin cruzar notificaciones ni pases: este doble no los
+     * tiene.
+     *
+     * <p>Lo que devuelve, por tanto, es la situacion de un valor <b>que nadie ha notificado</b>. Es
+     * bastante para las pruebas del transporte —que la fila salga con su fecha, que el filtro por
+     * codigo inexistente devuelva vacio—, y deliberadamente insuficiente para lo demas: que el
+     * filtro por situacion coincida con la columna que se pinta solo lo puede decir la base, y lo
+     * dice {@code NotificacionYPaseJdbcTest}.
+     */
+    @Override
+    public Pagina<ValorEnConsulta> consultar(
+            CriterioDeConsultaDeValores criterio, Paginacion paginacion) {
+        List<ValorEnConsulta> filas = new ArrayList<>();
+        for (Valor valor : porId.values()) {
+            if (criterio.contribuyenteId() != null
+                    && valor.contribuyenteId() != criterio.contribuyenteId()) {
+                continue;
+            }
+            if (criterio.numero() != null && !valor.numero().equals(criterio.numero())) {
+                continue;
+            }
+            if (criterio.tipo() != null && valor.tipo() != criterio.tipo()) {
+                continue;
+            }
+            List<ValorDetalle> detalle = detalleDe(valor.id() == null ? 0 : valor.id());
+            ValorEnConsulta fila =
+                    new ValorEnConsulta(
+                            valor,
+                            detalle.isEmpty() ? null : detalle.get(0).tributo(),
+                            detalle.isEmpty() ? null : detalle.get(0).ejercicio().valor(),
+                            detalle.isEmpty() ? null : detalle.get(0).ejercicio().valor(),
+                            null,
+                            null,
+                            false,
+                            criterio.fecha());
+            if (criterio.situacion() != null && fila.situacion() != criterio.situacion()) {
+                continue;
+            }
+            filas.add(fila);
+        }
+        return Pagina.de(filas, paginacion, filas.size());
     }
 
     @Override

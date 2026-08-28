@@ -24,12 +24,14 @@ import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.valores.dominio.CriterioDeConsultaDeValores;
 import pe.gob.sgtm.valores.dominio.CriterioDeValor;
 import pe.gob.sgtm.valores.dominio.EstadoDeValor;
 import pe.gob.sgtm.valores.dominio.SelectorDeObligacion;
 import pe.gob.sgtm.valores.dominio.TipoValor;
 import pe.gob.sgtm.valores.dominio.Valor;
 import pe.gob.sgtm.valores.dominio.ValorDetalle;
+import pe.gob.sgtm.valores.dominio.ValorEnConsulta;
 import pe.gob.sgtm.valores.dominio.ValorRepository;
 
 /**
@@ -299,6 +301,13 @@ class RegistrarValorTest {
         @Override
         public Pagina<Valor> buscar(CriterioDeValor criterio, Paginacion paginacion) {
             return Pagina.de(guardados, paginacion, guardados.size());
+        }
+
+        /** {@code consulta_valores} no pasa por este caso de uso. */
+        @Override
+        public Pagina<ValorEnConsulta> consultar(
+                CriterioDeConsultaDeValores criterio, Paginacion paginacion) {
+            throw new UnsupportedOperationException("Este doble no sirve la grilla de consulta");
         }
 
         @Override

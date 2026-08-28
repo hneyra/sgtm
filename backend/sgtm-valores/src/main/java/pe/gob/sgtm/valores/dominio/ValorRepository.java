@@ -50,6 +50,21 @@ public interface ValorRepository {
     Pagina<Valor> buscar(CriterioDeValor criterio, Paginacion paginacion);
 
     /**
+     * La grilla de {@code consulta_valores} (RF-041, #25): la cabecera de cada valor con lo que la
+     * pantalla muestra y la cabecera no guarda.
+     *
+     * <p>Va aparte de {@link #buscar} porque no consulta lo mismo. {@link #buscar} lee {@code
+     * valor} y nada mas; esto cruza ademas {@code valor_detalle} —que tributo y que ejercicios
+     * formaliza—, {@code notificacion} —cuando surtio efecto— y {@code valor_movimiento} —si ya hay
+     * pase—, y filtra por {@link SituacionDelValor}, que no es ninguna columna.
+     *
+     * <p><b>El filtro por situacion se resuelve en SQL, no despues de paginar.</b> Filtrar en Java
+     * las veinte filas que la base devolvio daria un total equivocado —«1 de 47» sobre 47 sin
+     * filtrar— y paginas con menos de veinte lineas sin motivo visible.
+     */
+    Pagina<ValorEnConsulta> consultar(CriterioDeConsultaDeValores criterio, Paginacion paginacion);
+
+    /**
      * Los valores del contribuyente que formalizan ese tributo y ese ejercicio, y que todavia se
      * pueden cobrar.
      *
