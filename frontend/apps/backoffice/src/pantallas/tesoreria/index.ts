@@ -1,229 +1,67 @@
-import type { Celda, DatosDePantalla, Total } from '@sgtm/api-client';
+import type { Celda, DatosDePantalla } from '@sgtm/api-client';
 import type { Fecha } from '@sgtm/dominio';
 import { importeDe } from '@sgtm/lectura';
 import { definirConexion } from '../conexiones';
-import type { Conexion } from '../conexiones';
+import type { Conexion, ContextoDePantalla } from '../conexiones';
 import { parametrosDeBusqueda } from '../busqueda';
-import { SIN_DATO, datosDe, esObjeto, hoy, leerObjeto, leerPaginado, tablaDe, texto } from '../seguridad/listado';
 import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
+import { SIN_DATO, datosDe, esObjeto, hoy, leerObjeto, leerPaginado, tablaDe, texto } from '../seguridad/listado';
 
 /**
- * Tesorería, conectada hasta donde llega el backend: **cinco opciones de diez** (#74, esta
- * pasada).
+ * Tesorería, conectado hasta donde llega el backend (#33, #34, #35, #36, #74).
  *
- * Cuatro son `GET` con `Controller` desde antes de esta conexión —`ConvenioController` (#35),
- * `ReciboController` (#34) y `RecaudacionController` (#36)—, y hasta aquí salían por el camino
- * común: el proxy servía `RESPUESTAS[pantalla]` sin envolver, con la forma que comparten las 134.
- * Desde que `packages/api-mock/src/recursos.ts` empezó a hablar con la forma real del `Resource`
- * de cada una, esa forma dejó de coincidir con la que el camino común espera —`tabla.filas`, no
- * `contenido` ni un objeto suelto— y sin esta conexión la tabla se dibuja vacía, en silencio,
- * exactamente el defecto que #363 ya documentó para tránsito y coactiva.
+ * Backend servido para **las diez** opciones (#33–#36), y de ahí no se sigue que las diez
+ * lean o escriban ya de verdad: cuatro se conectan sin más —`consulta_convenios`,
+ * `duplicado_recibo`, `avance_recaudacion`, `recaudacion_area`— y `caja_tributaria` conecta
+ * su grilla de deuda, aunque su acto siga sin poder guardarse. Las otras cinco
+ * —`caja_tasas`, `fraccionamiento`, `cierre_caja`, `anulacion_convenio`— se quedan fuera con
+ * su motivo anotado, y `anulacion_recibo` se declara en `escrituras.ts` porque su cuerpo es
+ * campos planos y no necesita conexión propia (no tiene ningún `GET` que leer: se abre por la
+ * URL, con el número impreso del recibo).
  *
- * La quinta, `caja_tributaria`, es distinta: su operación (`POST /tesoreria/caja/cobranza`) no
- * se pide al abrir —una pantalla no puede lanzar un cobro—, así que lo que se lee no es la suya:
- * es `consulta_deuda`, exactamente el mismo mecanismo que ya usa `baja_deuda` (#332,
- * `pantallas/rentas/index.ts`). Su bloque de búsqueda sale de `filtrosPropios`
- * (`pantallas/tesoreria/composicion.ts`): el catálogo de esta opción no declara `filtros`.
+ * ── Por qué la caja no puede cobrar todavía, aunque el backend ya cobre ──────
  *
- * `caja_tasas`, `fraccionamiento`, `anulacion_recibo`, `anulacion_convenio` y `cierre_caja`
- * siguen sin conectar: las cinco son `POST` y ninguna tiene todavía una lectura propia que
- * alimentarla (`tesoreria.test.tsx`).
+ * `CajaController.cobranza` y `.tasas` exigen `formaDePago` en el cuerpo —EFECTIVO, CHEQUE,
+ * DEPOSITO, TARJETA o TRANSFERENCIA, el medio con que entra el dinero— y **ninguna sección de
+ * ninguna de las dos pantallas dibuja un campo para él**. Lo que el prototipo llama «Forma de
+ * pago» en `caja_tributaria` es, en el backend, `tipoDePago` —NORMAL TRIBUTARIO, A CUENTA,
+ * PRECONVENIO…—, un campo distinto y opcional (por omisión, NORMAL). Es el mismo tipo de
+ * hallazgo que `rentas/index.ts` documenta para `alcabala`/`transferencia_predio`: el dato no
+ * es inventable desde aquí, y las dos formas de salir —añadir el campo al prototipo, o que el
+ * backend deje de exigirlo— son decisiones de diseño que no caben en este issue. Se anota en
+ * `pantallas/actos.ts` (`ACTOS_SIN_CAMPO`), que es lo que hace que la primaria diga **qué**
+ * falta en vez de fingir un cobro que el servidor rechazaría con 422.
+ *
+ * `fraccionamiento` tiene el mismo problema con otra forma: `PeticionDeFraccionamiento` exige
+ * al menos una obligación marcada, y el catálogo de esta pantalla no declara ninguna tabla de
+ * deuda que elegir —la única `tabla` que dibuja, «Detalle cuotas», es el cronograma de
+ * **salida** de la simulación, no una grilla de entrada—. También va a `ACTOS_SIN_CAMPO`.
+ *
+ * `cierre_caja` y el «Quebrar» de `anulacion_convenio` no tienen el mismo defecto —sus campos
+ * sí están dibujados— sino uno de mecanismo: `PeticionDeCierre.declarado` es un mapa por forma
+ * de pago (`{"EFECTIVO": "120.00", ...}`) y `PeticionDeCierreDeConvenio` necesita un
+ * discriminador (`accion`) que ninguna sección teclea —lo decide qué botón se pulsa, y
+ * `BarraDeAcciones` solo conecta el último—. `CampoDelCuerpo`/`TablaDelCuerpo` no saben
+ * construir ninguna de las dos formas todavía; ampliarlos es un cambio de `pantallas/escritura.ts`
+ * que le sirve a más de una pantalla y no cabe en el alcance de este issue. Se quedan con la
+ * causa genérica `sin-declaracion`, que sigue siendo cierta: la pantalla no manda esos campos.
  */
 
-/* ── Consulta de convenios ────────────────────────────────────────────────── */
+/** El registro que abre un recibo o un convenio: su número impreso. Sin él no hay petición. */
+const registro = ({ ruta }: ContextoDePantalla): string => ruta['codigo'] ?? '';
 
 /**
- * Convenios de fraccionamiento, listado (`ConvenioResource.FilaResource`, RF-084, #35).
+ * Caja tributaria (RF-080, #33): **solo su grilla de deuda**, no su cobro.
  *
- * Las columnas del catálogo ya llevan el nombre del campo real —`nroConvenio`, `contribuyente`,
- * `fecha`, `deudaAcogidaS`, `cuotas`, `pagadas`, `vencidas`, `saldoS`, `estado`—: no hay ninguna
- * que reescribir, solo que leer con su tipo.
- */
-const consulta_convenios = definirConexion({
-  operacion: 'consulta_convenios',
-  parametros: ({ busqueda }) => parametrosDeBusqueda('consulta_convenios', undefined, busqueda),
-  leer: (cuerpo) => leerPaginado(cuerpo, 'los convenios de fraccionamiento'),
-  adaptar: (paginado): DatosDePantalla =>
-    datosDe(
-      tablaDe(
-        paginado,
-        (convenio): readonly Celda[] => [
-          { texto: texto(convenio['nroConvenio']) },
-          { texto: texto(convenio['contribuyente']) },
-          { texto: texto(convenio['fecha']) },
-          { texto: texto(convenio['deudaAcogidaS']) },
-          { texto: texto(convenio['cuotas']) },
-          { texto: texto(convenio['pagadas']) },
-          { texto: texto(convenio['vencidas']) },
-          { texto: texto(convenio['saldoS']) },
-          { texto: texto(convenio['estado']) },
-        ],
-        'convenios',
-      ),
-    ),
-});
-
-/* ── Duplicado de recibo ──────────────────────────────────────────────────── */
-
-/**
- * El duplicado de un recibo (`DuplicadoResource`, RF-082, #34).
+ * `caja_tributaria` es un `POST` —`/tesoreria/caja/cobranza`—, y una operación que escribe no
+ * se pide al abrir la pantalla (#332): igual que `baja_deuda`, la tabla «Deudas del
+ * contribuyente» se lee de `GET /consultas/deuda`, que es exactamente la misma deuda que la
+ * caja cobraría. Cobrar sigue apagado —`ACTOS_SIN_CAMPO.caja_tributaria`—, pero quien atiende
+ * ya ve la deuda real del contribuyente en vez de la fila fija del prototipo.
  *
- * `GET /tesoreria/recibos/{nro}/duplicado` pide el número **en la ruta**, y esta pantalla no
- * tiene parámetro de ruta: el catálogo lo pide como filtro, «Nro. de recibo» (`nroDeRecibo`).
- * `parametros` hace la traducción — sin ella el filtro se tecleaba y no viajaba, igual que le
- * pasaba a `unidadPredioPlaca` de `alta_deuda` antes de #331.
- *
- * `ReciboResource` no publica el nombre del contribuyente en ningún sitio de este endpoint: la
- * columna «Contribuyente» del prototipo sale con {@link SIN_DATO} (RNF-083), igual que
- * `papeletas` deja sin dato la columna que su recurso no tiene.
- */
-const duplicado_recibo = definirConexion({
-  operacion: 'duplicado_recibo',
-  parametros: ({ busqueda }) => ({
-    ...parametrosDeBusqueda('duplicado_recibo', undefined, busqueda),
-    // El número va en la ruta del contrato (`{nro}`), y el catálogo lo pide como
-    // filtro, «Nro. de recibo»: sin esta traducción se tecleaba y no viajaba.
-    nro: (busqueda.get('nroDeRecibo') ?? '').trim(),
-  }),
-  leer: (cuerpo) => leerObjeto(cuerpo, 'el duplicado del recibo'),
-  exige: [
-    {
-      parametro: 'nroDeRecibo',
-      titulo: 'Escribe el número de recibo',
-      detalle:
-        'El duplicado se pide por el número impreso en el papel, serie-correlativo: «001-0000123». Escríbelo arriba y pulsa «Buscar».',
-    },
-  ],
-  adaptar: (duplicado): DatosDePantalla => {
-    const recibo = esObjeto(duplicado['recibo']) ? duplicado['recibo'] : {};
-    const total = importeDe(recibo['total']);
-    const emitidoEn = texto(recibo['emitidoEn']);
-    const [fecha, resto = ''] = emitidoEn === SIN_DATO ? [SIN_DATO] : emitidoEn.split('T');
-    const hora = resto.slice(0, 5) || SIN_DATO;
-    const lineas = Array.isArray(recibo['lineas']) ? recibo['lineas'] : [];
-    const conceptos = lineas
-      .filter(esObjeto)
-      .map((linea) => texto(linea['tributo']))
-      .filter((valor) => valor !== SIN_DATO);
-    const fila: readonly Celda[] = [
-      { texto: texto(recibo['numero']) },
-      { texto: fecha ?? SIN_DATO },
-      { texto: hora },
-      // El recurso no publica el nombre del contribuyente (arriba, en el docblock).
-      { texto: SIN_DATO },
-      { texto: conceptos.length > 0 ? conceptos.join(', ') : SIN_DATO },
-      { texto: total?.importe ?? SIN_DATO },
-      { texto: texto(duplicado['duplicados']) },
-      { texto: texto(duplicado['estado']) },
-    ];
-    return {
-      fechaCalculo: total?.actualizadoA ?? hoy(),
-      tabla: { filas: [fila], conteo: '1 recibo' },
-    };
-  },
-});
-
-/* ── Avance de recaudación y recaudación por área ─────────────────────────── */
-
-/**
- * Cuánto hay en cada total: los tres importes que `RecaudacionResource.Avance` publica de
- * verdad, con su fecha (regla 9). El resto de la fila del prototipo — «Emitido», «Saldo»,
- * «% avance», «Meta», «% de meta» — no tiene con qué llenarse: la meta no tiene tabla y lo
- * emitido son cargos del libro, que este contexto no lee (javadoc de `RecaudacionResource`).
- * Inventar un número ahí mostraría un avance que nadie calculó.
- */
-function totalesDeRecaudacion(objeto: Readonly<Record<string, unknown>>): Total[] {
-  const cobrado = importeDe(objeto['cobrado']);
-  const anulado = importeDe(objeto['anulado']);
-  const neto = importeDe(objeto['neto']);
-  return [
-    { label: 'Cobrado', value: cobrado?.importe ?? SIN_DATO },
-    { label: 'Anulado', value: anulado?.importe ?? SIN_DATO },
-    { label: 'Neto', value: neto?.importe ?? SIN_DATO },
-  ];
-}
-
-function fechaDe(objeto: Readonly<Record<string, unknown>>): Fecha {
-  const aLaFecha = objeto['aLaFecha'];
-  return (typeof aLaFecha === 'string' && aLaFecha !== '' ? aLaFecha : hoy()) as Fecha;
-}
-
-const avance_recaudacion = definirConexion({
-  operacion: 'avance_recaudacion',
-  parametros: ({ busqueda }) => parametrosDeBusqueda('avance_recaudacion', undefined, busqueda),
-  leer: (cuerpo) => leerObjeto(cuerpo, 'el avance de recaudación'),
-  adaptar: (avance): DatosDePantalla => {
-    const filas = Array.isArray(avance['filas']) ? avance['filas'].filter(esObjeto) : [];
-    return {
-      fechaCalculo: fechaDe(avance),
-      tabla: {
-        filas: filas.map((fila): readonly Celda[] => {
-          const cobrado = importeDe(fila['cobrado']);
-          return [
-            { texto: texto(fila['tributo']) },
-            // Emitido, Saldo, % avance, Meta y % de meta: sin dato (arriba).
-            { texto: SIN_DATO },
-            { texto: cobrado?.importe ?? SIN_DATO },
-            { texto: SIN_DATO },
-            { texto: SIN_DATO },
-            { texto: SIN_DATO },
-            { texto: SIN_DATO },
-          ];
-        }),
-        conteo: `${filas.length} tributos`,
-      },
-      totales: totalesDeRecaudacion(avance),
-    };
-  },
-});
-
-const recaudacion_area = definirConexion({
-  operacion: 'recaudacion_area',
-  parametros: ({ busqueda }) => parametrosDeBusqueda('recaudacion_area', undefined, busqueda),
-  leer: (cuerpo) => leerObjeto(cuerpo, 'la recaudación por área'),
-  adaptar: (distribucion): DatosDePantalla => {
-    const filas = Array.isArray(distribucion['filas'])
-      ? distribucion['filas'].filter(esObjeto)
-      : [];
-    return {
-      fechaCalculo: fechaDe(distribucion),
-      tabla: {
-        filas: filas.map((fila): readonly Celda[] => {
-          const cobrado = importeDe(fila['cobrado']);
-          return [
-            { texto: texto(fila['partida']) },
-            { texto: texto(fila['tributo']) },
-            { texto: cobrado?.importe ?? SIN_DATO },
-          ];
-        }),
-        conteo: `${filas.length} partidas`,
-      },
-      totales: [
-        ...totalesDeRecaudacion(distribucion),
-        {
-          label: 'Sin partida',
-          value: importeDe(distribucion['netoSinPartida'])?.importe ?? SIN_DATO,
-        },
-      ],
-    };
-  },
-});
-
-/* ── Caja tributaria: la deuda del contribuyente que se va a cobrar ──────── */
-
-/**
- * La deuda del contribuyente, para elegir qué cobrar (RF-041, RF-093, #332, #74).
- *
- * Misma lectura que `baja_deuda`: `GET /consultas/deuda`, con el mismo `sinPermiso` —quien
- * tenga «Caja tributaria» y no lectura de «Consulta de deuda» recibe el 403 de la segunda
- * opción, y hay que decir cuál falta— y el mismo `exige`, adaptado a esta pantalla: aquí no
- * hay «Buscar un contribuyente para verla», hay «cárgala antes de cobrar».
- *
- * A diferencia de `baja_deuda`, esta tabla **no elige filas** (`composicion.ts` no le declara
- * `seleccion`): «Cargar deudas» las trae todas a la vista, y lo que se cobra lo decide el
- * formulario de arriba —forma de pago, beneficio— cobrando la deuda entera. La primera
- * columna sale vacía igual, porque es la que dibuja el catálogo (`campo`), sin inventarle
- * una casilla que esta pantalla no tiene declarada.
+ * La primera celda («Unidad») sale en blanco, igual que en `baja_deuda`: `ObligacionConDeudaResource`
+ * publica el identificador interno del predio o del vehículo, no su código catastral ni su
+ * placa, y enseñar un identificador interno bajo ese rótulo sería enseñar otra cosa.
  */
 const caja_tributaria = definirConexion({
   operacion: 'consulta_deuda',
@@ -232,15 +70,15 @@ const caja_tributaria = definirConexion({
   exige: [
     {
       parametro: 'codContribuyente',
-      titulo: 'Escribe el código del contribuyente',
+      titulo: 'Busca un contribuyente para ver su deuda',
       detalle:
-        'La caja cobra la deuda de un contribuyente a la vez: escribe su código arriba y pulsa «Buscar» para cargarla.',
+        'La caja cobra sobre la cuenta corriente de un contribuyente: escribe su código arriba y pulsa «Buscar». Hasta entonces no hay ninguna deuda que elegir.',
     },
   ],
   sinPermiso: {
     titulo: 'Falta el permiso de lectura de «Consulta de deuda»',
     detalle:
-      'Para cargar la deuda hace falta lectura de «Consulta de deuda»: la tabla de aquí es la deuda del contribuyente, y esa la publica esa otra opción. Pídesela al administrador del sistema de tu municipalidad.',
+      'Para ver la deuda hace falta lectura de «Consulta de deuda»: la tabla de aquí es la deuda del contribuyente, y esa la publica esa otra opción. Pídesela al administrador del sistema de tu municipalidad.',
   },
   adaptar: (paginado): DatosDePantalla => ({
     fechaCalculo: fechaDeCorteDe(paginado.contenido),
@@ -262,16 +100,189 @@ const caja_tributaria = definirConexion({
           { texto: leida.total },
         ];
       },
-      'cuotas',
+      'deudas',
     ),
   }),
 });
 
-/** Las opciones de Tesorería conectadas. Crece cuando crezca su backend. */
+/**
+ * Consulta de convenios (RF-084, #35): el seguimiento de los suscritos, paginado tal cual lo
+ * publica `ConvenioController.listar`.
+ *
+ * `fechaCorte`, `saldoALaFecha`, `motivo`, `cronograma`, `deudaOriginal` y `movimientos` —el
+ * detalle que el controlador solo carga cuando `nroDeConvenio` apunta a uno— no tienen columna
+ * en esta grilla (`ConvenioResource.FilaResource`, comentado: «una página de veinte no puede
+ * costar veinte lecturas de detalle»): el catálogo dibuja la fila corta, y aquí se lee la fila
+ * corta.
+ */
+const consulta_convenios = definirConexion({
+  operacion: 'consulta_convenios',
+  parametros: ({ busqueda }) => parametrosDeBusqueda('consulta_convenios', undefined, busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'los convenios'),
+  adaptar: (paginado) =>
+    datosDe(
+      tablaDe(
+        paginado,
+        (convenio): readonly Celda[] => [
+          { texto: texto(convenio['nroConvenio']) },
+          { texto: texto(convenio['contribuyente']) },
+          { texto: texto(convenio['fecha']) },
+          { texto: texto(convenio['deudaAcogidaS']) },
+          { texto: texto(convenio['cuotas']) },
+          { texto: texto(convenio['pagadas']) },
+          { texto: texto(convenio['vencidas']) },
+          { texto: texto(convenio['saldoS']) },
+          { texto: texto(convenio['estado']) },
+        ],
+        'convenios',
+      ),
+    ),
+});
+
+/**
+ * Duplicado de recibo (RF-082, #34): **un** recibo, no un padrón de resultados.
+ *
+ * `GET /tesoreria/recibos/{nro}/duplicado` trae un solo `DuplicadoResource`, mientras que el
+ * prototipo dibuja «Recibos localizados» como si fuera una búsqueda por contribuyente, fecha o
+ * caja —el mismo desajuste que #175 ya encontró en `consulta_deuda`, y que `declaracion_jurada`
+ * resuelve igual—: no hay ningún `GET /tesoreria/recibos` que liste, así que se dibuja como una
+ * tabla de **una fila**.
+ *
+ * Los cuatro filtros del prototipo (`nroDeRecibo`, `codContribuyente`, `fecha`, `caja`) no
+ * abren este recibo: `ReciboController.vistaPrevia` solo lee `{nro}` de la ruta —el contrato
+ * declara los otros cuatro como parámetro de consulta porque el generador los deriva del
+ * catálogo (#312), no porque el controlador los use—. El registro que abre esta pantalla es la
+ * URL, `/tesoreria/duplicado-recibo/{nro}`, igual que una ficha catastral se abre por su código
+ * y no por el filtro de texto libre que hay al lado.
+ *
+ * «Contribuyente» sale con `SIN_DATO`: `ReciboResource` no publica ni el código ni el nombre de
+ * quien pagó —solo `cajero`—, y cruzarlo con `contribuyentes` no es cosa de este endpoint.
+ * «Concepto» solo se enseña cuando el recibo tiene **una** línea: con varias, una sola celda no
+ * puede decir de cuál se habla sin inventar un resumen (RNF-083).
+ *
+ * Solo `nro` viaja: los otros cuatro parámetros de consulta que declara el contrato no los lee
+ * `ReciboController.vistaPrevia`, y mandarlos sería mandar un filtro que el backend ignora.
+ */
+const duplicado_recibo = definirConexion({
+  operacion: 'duplicado_recibo',
+  parametros: (contexto) => ({ nro: registro(contexto) }),
+  leer: (cuerpo) => leerObjeto(cuerpo, 'el duplicado del recibo'),
+  adaptar: (duplicado): DatosDePantalla => {
+    const recibo = esObjeto(duplicado['recibo']) ? duplicado['recibo'] : undefined;
+    const total = importeDe(recibo?.['total']);
+    const lineas = Array.isArray(recibo?.['lineas']) ? recibo['lineas'] : [];
+    const unaLinea = lineas.length === 1 && esObjeto(lineas[0]) ? lineas[0] : undefined;
+    const emitidoEn = typeof recibo?.['emitidoEn'] === 'string' ? recibo['emitidoEn'] : '';
+    const [fechaEmision = '', horaConResto = ''] = emitidoEn.split('T');
+
+    return {
+      fechaCalculo: total?.actualizadoA ?? hoy(),
+      tabla: {
+        filas: [
+          [
+            { texto: texto(recibo?.['numero']) },
+            { texto: fechaEmision === '' ? SIN_DATO : fechaEmision },
+            { texto: horaConResto === '' ? SIN_DATO : horaConResto.slice(0, 5) },
+            { texto: SIN_DATO },
+            { texto: unaLinea === undefined ? SIN_DATO : texto(unaLinea['tributo']) },
+            { texto: total?.importe ?? SIN_DATO },
+            { texto: texto(duplicado['duplicados']) },
+            { texto: texto(duplicado['estado']) },
+          ],
+        ],
+        conteo: '1 recibo',
+      },
+    };
+  },
+});
+
+/**
+ * Avance de recaudación (RF-088, #36): un agregado, no un padrón.
+ *
+ * `GET /tesoreria/recaudacion/avance` no está paginado —`RecaudacionController` lo dice sin
+ * rodeos: paginar un agregado dejaría al cliente con una página de sumas y sin el total, que es
+ * la cifra que el reporte existe para dar—, así que se lee con `leerObjeto` y no con
+ * `leerPaginado`: forzarlo por el paginado fallaría pensando que la forma está mal, cuando la
+ * forma real es esta.
+ *
+ * Cuatro de las siete columnas del catálogo no tienen de dónde salir, y las cuatro por el mismo
+ * motivo: «Emitido S/» son cargos del libro que este contexto no lee, «Meta S/» no tiene tabla
+ * (D-02b), y «% avance»/«% de meta» son cocientes sobre las dos anteriores —componerlos aquí
+ * sería inventar un porcentaje que nadie firmó (RNF-083)—. Salen con `SIN_DATO`.
+ */
+const avance_recaudacion = definirConexion({
+  operacion: 'avance_recaudacion',
+  parametros: ({ busqueda }) => parametrosDeBusqueda('avance_recaudacion', undefined, busqueda),
+  leer: (cuerpo) => leerObjeto(cuerpo, 'el avance de recaudación'),
+  adaptar: (avance): DatosDePantalla => {
+    const filas = Array.isArray(avance['filas']) ? avance['filas'].filter(esObjeto) : [];
+    const cobrado = importeDe(avance['cobrado']);
+    const aLaFecha = texto(avance['aLaFecha']);
+
+    return {
+      fechaCalculo: aLaFecha === SIN_DATO ? hoy() : (aLaFecha as Fecha),
+      tabla: {
+        filas: filas.map(
+          (fila): readonly Celda[] => [
+            { texto: texto(fila['tributo']) },
+            { texto: SIN_DATO },
+            { texto: importeDe(fila['cobrado'])?.importe ?? SIN_DATO },
+            { texto: SIN_DATO },
+            { texto: SIN_DATO },
+            { texto: SIN_DATO },
+            { texto: SIN_DATO },
+          ],
+        ),
+        conteo: `${filas.length} tributos`,
+      },
+      totales: [
+        { label: 'Emitido', value: SIN_DATO },
+        { label: 'Recaudado', value: cobrado?.importe ?? SIN_DATO },
+        { label: 'Saldo por cobrar', value: SIN_DATO },
+        { label: 'Avance', value: SIN_DATO },
+      ],
+    };
+  },
+});
+
+/**
+ * Recaudación por área (RF-089, #36): tampoco paginada, por el mismo motivo que el avance.
+ *
+ * «Descripción» se lee de `areaNombre`: `FilaDePartida` no publica ninguna descripción de la
+ * partida presupuestal, y el nombre del área generadora es el único texto explicativo que el
+ * recurso trae. En las filas de «lo tributario» —sin área ni partida, documentadas en
+ * `RecaudacionResource.FilaDePartida` como el `netoSinPartida`— las tres columnas salen con
+ * `SIN_DATO`: un «VARIOS» inventado se copiaría a un reporte presupuestal sin que nadie lo note.
+ */
+const recaudacion_area = definirConexion({
+  operacion: 'recaudacion_area',
+  parametros: ({ busqueda }) => parametrosDeBusqueda('recaudacion_area', undefined, busqueda),
+  leer: (cuerpo) => leerObjeto(cuerpo, 'la recaudación por área'),
+  adaptar: (distribucion): DatosDePantalla => {
+    const filas = Array.isArray(distribucion['filas']) ? distribucion['filas'].filter(esObjeto) : [];
+    const aLaFecha = texto(distribucion['aLaFecha']);
+
+    return {
+      fechaCalculo: aLaFecha === SIN_DATO ? hoy() : (aLaFecha as Fecha),
+      tabla: {
+        filas: filas.map(
+          (fila): readonly Celda[] => [
+            { texto: texto(fila['partida']) },
+            { texto: texto(fila['areaNombre']) },
+            { texto: importeDe(fila['neto'])?.importe ?? SIN_DATO },
+          ],
+        ),
+        conteo: `${filas.length} partidas`,
+      },
+    };
+  },
+});
+
+/** Las opciones de Tesorería ya conectadas. Crece cuando crezca lo que la pantalla puede leer. */
 export const CONEXIONES_DE_TESORERIA: Readonly<Record<string, Conexion>> = {
+  caja_tributaria,
   consulta_convenios,
   duplicado_recibo,
   avance_recaudacion,
   recaudacion_area,
-  caja_tributaria,
 };

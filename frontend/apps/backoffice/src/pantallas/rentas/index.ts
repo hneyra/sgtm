@@ -15,69 +15,91 @@ import {
 import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
 
 /**
- * Rentas · Registro, conectado hasta donde llega el backend: **seis opciones de quince**.
+ * Rentas · Registro, conectado hasta donde llega el backend: **ocho opciones de quince**.
  *
- * `contribuyentes` (#11), `vehiculos` (#26), `declaracion_jurada` (#28), `beneficios` (#27) y
- * `alta_deuda` (#24, escritura en `escrituras.ts`) ya estaban. Se suma `arbitrios` (#31): lectura,
- * con el mismo hueco de forma que ya tenia `declaracion_jurada` — `GET /rentas/arbitrios` trae un
- * padron de **cuotas mensuales** (una fila por servicio y mes), y el catalogo dibuja
- * «Determinacion por servicio» como si cada fila fuera un servicio con su tasa mensual y su total
- * anual ya sumado. No se recompone: `anualS`, `criterioDeDistribucion`, `frecuencia` y `condicion`
- * no estan en `ArbitrioResource`, y sumar doce cuotas para inventar el anual es exactamente lo que
- * RNF-083 prohibe — se dejan en `SIN_DATO`.
+ * `contribuyentes` (#11), `vehiculos` (#26), `declaracion_jurada` (#28), `beneficios` (#27),
+ * `arbitrios` (#31), `alta_deuda` (#24) y `baja_deuda` (#332) ya estaban. Se suman
+ * `transferencia_predio` y `transferencia_vehiculo` (#73): las dos escrituras que el backend
+ * servia y a las que solo les faltaba un campo que ninguna pantalla del manual dibuja.
  *
- * ── El campo que resuelve, y a quien le falta todavia (#331) ────────────────
+ * ── El campo que resuelve, y el que ademas anade (#331, #73) ────────────────
  *
  * `escrituras.ts` no tenia forma de expresar «esto se busca antes de mandarse», y eso bloqueaba
- * cinco opciones. Ya no bloquea a `alta_deuda`: el opt-in `resolutores` de `composicion.ts` y
+ * cinco opciones. `alta_deuda` lo resolvio primero: el opt-in `resolutores` de `composicion.ts` y
  * `ResolutorDeUnidad` resuelven su «Unidad (predio / placa)» contra `consulta_fichas` y
  * `vehiculos`, que son las dos lecturas que **si publican** el identificador interno
  * —`FichaEncontradaResource.predioId` y `VehiculoResource.id`—.
  *
- * Las otras cuatro **no se cablean aqui**, y la frontera es distinta en cada una. En ninguna
- * falta el mecanismo: en dos falta la lectura que resuelva el identificador, y en las otras dos
- * —las transferencias— falta **un campo en la pantalla**, que no es lo mismo y no se arregla
- * declarando nada. Ninguna de las cuatro se finge en el proxy (ADR-0010 §4): se anotan.
+ * Las dos transferencias necesitaban algo mas, y por eso el mecanismo crecio: no solo resolver
+ * un identificador, tambien **anadir un campo que el catalogo no dibuja en absoluto**.
+ * `TransferenciaPredioController` y `TransferenciaVehiculoController` exigen
+ * **`valorTransferencia`** —`dineroDe` lo pasa por `exigir`, y `Transferencia` lo declara
+ * obligatorio— y ninguna de las dos pantallas del manual tiene un campo para el; el prototipo lo
+ * dibuja en **otra**, «Impuesto de alcabala» (`valorDeTransferenciaS`), que es justo la que el
+ * backend **no** lee para esto. La salida no fue editar el catalogo —`rentas-registro.generado.ts`
+ * no se toca a mano— ni inventar el importe con un cero: `pantallas/rentas/ResolutorDeTransferencia.tsx`
+ * declara dos controles que **sustituyen** a un campo existente y **anaden** el que falta, con su
+ * propia etiqueta —nunca la del campo al que sustituyen, RNF-080—.
  *
- * - `transferencia_predio` y `transferencia_vehiculo` **no se paran donde se creia** (#73). Lo
- *   que decia aqui —«resolubles hoy, quedan fuera por alcance»— era cierto de los
- *   identificadores y no del acto: `consulta_fichas` resuelve el `predioId`, la placa la teclea
- *   quien atiende y **los dos contribuyentes no hay que resolverlos**, porque los controladores
- *   reciben `codTransferente`/`codAdquiriente` como **codigos** y los resuelven ellos contra
- *   `contribuyente.codigo_contribuyente`. Lo que las para es otra cosa, y esta un nivel mas
- *   abajo: los dos controladores exigen **`valorTransferencia`** —`dineroDe` lo pasa por
- *   `exigir`, y `Transferencia` lo declara obligatorio— y **ninguna de las dos pantallas del
- *   manual dibuja un campo para el**. El prototipo lo dibuja en **otra**: «Impuesto de
- *   alcabala», `valorDeTransferenciaS`, que es justo la que el backend **no** lee
- *   —`RegistrarAlcabala` lo toma de `transferencia.valorTransferencia()`, y de su peticion solo
- *   lee `transferenciaId` y `autoavaluoAjustado`—. Conectarlas hoy seria rellenar catorce
- *   campos, confirmar un acto irreversible y recibir «Falta el campo 'valorTransferencia'»; y
- *   rellenarlo con un cero seria peor, porque ese importe es la **base imponible** de la
- *   alcabala (art. 24 de la LTM, `docs/10-negocio/valores-normativos/alcabala.md`). Se anota y
- *   se dice en la pantalla: `ACTOS_SIN_CAMPO` de `pantallas/actos.ts` — la franja de la primaria
- *   nombra el dato que falta en vez de decir «la pantalla aún no manda estos campos», que ahi
- *   invita a la correccion equivocada.
+ * - En «Transferencia de predio», el control sustituye a «Código predial»: resuelve `predioId`
+ *   contra `consulta_fichas` —la misma lectura de `alta_deuda`, sin la mitad «por placa», que
+ *   aqui no tiene sentido— y, junto a el, pide el valor. Los dos son el mismo gesto: fijar el
+ *   objeto del acto y su valor.
+ * - En «Transferencia de vehiculo» no hay ningun identificador que resolver: `placa` viaja tal
+ *   cual —`TransferenciaVehiculoController` la resuelve el mismo contra el padron— y **sin
+ *   `codTransferente`**, porque el transferente es quien figura hoy como titular y el
+ *   controlador lo lee de ahi. El control se cuelga de «Transferente — documento», un campo que
+ *   **hoy no llega a ningun sitio** —ninguna de las dos peticiones del controlador lo acepta para
+ *   un vehiculo—, y lo sigue dibujando exactamente igual que antes de declararse: no escribible,
+ *   porque no lo era.
  *
- *   Y hay un segundo desajuste, menor y del mismo tipo: las dos pantallas rotulan «Transferente
- *   — documento» y «Adquirente — documento», y lo que el backend resuelve es el **codigo del
- *   contribuyente**, no su DNI ni su RUC (el prototipo escribe ahi «44218937», que es un DNI).
- *   Eso si tiene solucion desde aqui —un resolutor contra `contribuyentes`, que publica el
- *   codigo y el documento—, y se hara junto con el campo que falta: un control que resuelve para
- *   un acto que no se puede registrar es trabajo que acaba en un rechazo.
+ * `ACTOS_SIN_CAMPO` de `pantallas/actos.ts` queda **vacia**, y no se borra: es el mecanismo que
+ * demostro que un acto puede necesitar un dato que ninguna pantalla del manual dibuja, y es
+ * exactamente lo que le pasa hoy a `alcabala` y a `espectaculos` (ver abajo) — solo que sus
+ * primarias del catalogo son «Imprimir liquidación», que `DE_SALIDA` reconoce **antes** de llegar
+ * a esa lista, asi que hoy se leen como pantallas de consulta y la franja no se ve.
  *
- *   **El historico de las transferencias tampoco se puede dibujar todavia** (criterio de #73):
- *   `TransferenciaRepository.historicoDePredio` existe en el dominio y **ningun controlador lo
- *   publica**, asi que no hay `GET` que devuelva quien transfirio, cuando y con que sustento. No
- *   se compone de otra lectura: se anota (ADR-0010 §4).
- * - `alcabala` pide `transferenciaId`, el identificador interno de una `Transferencia` **ya
- *   registrada**. Ninguna operacion del contrato lista transferencias: `POST /rentas/transferencias/predio`
- *   la crea y no hay ningun `GET` que la devuelva. **Ese identificador no es resoluble con las
- *   lecturas publicadas**, y ahi se para: la unica salida honesta es que el backend publique la
- *   consulta de transferencias, no que la interfaz adivine un numero.
- * - `espectaculos` pide `organizadorId`. Igual: no hay ningun `GET` de organizadores en el
- *   contrato. Y su segundo argumento, `ingresoDeclarado`, el catalogo lo marca `"ro"`
- *   (`recaudacionDeclaradaS`) esperando que el servidor lo componga de aforo por precio, cosa que
- *   `EspectaculoController` no hace.
+ * `codTransferente`/`codAdquiriente` no se resuelven contra `contribuyentes`: los dos
+ * controladores los reciben como **codigos**, no como identificadores internos, y el codigo es
+ * exactamente lo que se teclea en «Transferente/Adquirente — documento». El rotulo del prototipo
+ * dice «documento» y lo que viaja es un codigo (el ejemplo del prototipo, «44218937», parece un
+ * DNI); no se corrige aqui —el catalogo no se edita— y queda anotado en la escritura declarada.
+ *
+ * **El historico de las transferencias tampoco se puede dibujar todavia**:
+ * `TransferenciaRepository.historicoDePredio` existe en el dominio y **ningun controlador lo
+ * publica**, asi que no hay `GET` que devuelva quien transfirio, cuando y con que sustento. No se
+ * compone de otra lectura: se anota (ADR-0010 §4) y no se dibuja ninguna tabla de historico.
+ *
+ * ── `alcabala` y `espectaculos`: el mismo hueco, sin salida honesta todavia ─
+ *
+ * Las dos tienen ya su backend (#32) y las dos tienen el mismo tipo de bloqueo que las
+ * transferencias tenian —un dato que el acto exige y que ninguna pantalla puede escribir—, pero
+ * en ninguna de las dos hay un campo al que colgar un resolutor: son bloqueos dobles.
+ *
+ * - `alcabala` pide `transferenciaId` (el identificador interno de una `Transferencia` **ya
+ *   registrada**) y `autoavaluoAjustado`. El primero **no es resoluble**: ninguna operacion del
+ *   contrato lista transferencias —`POST /rentas/transferencias/predio` la crea y no hay ningun
+ *   `GET` que la devuelva—, asi que no hay lectura contra la que resolver, ni campo del prototipo
+ *   que lo pida (su unico campo de texto libre, «Nº de expediente», no es ese identificador). El
+ *   segundo **si tiene el campo mas cercano** —`autovaluoAjustadoS`— pero el catalogo lo dibuja
+ *   `"ro"` (solo lectura, `Campo.tsx` lo bloquea siempre, sin importar lo que declare
+ *   `escrituras.ts`), mientras que `AlcabalaController` lo pide como **dato de entrada**: su
+ *   propio javadoc dice que «quien complete esta pantalla lo trae ya calculado», porque el ajuste
+ *   por el IPM no esta resuelto todavia (D-11). El campo que si es de texto libre en esta
+ *   pantalla, `valorDeTransferenciaS`, es el que el backend **no** lee.
+ * - `espectaculos` pide `organizadorId` —resoluble, en principio: `ContribuyenteResource` publica
+ *   `id`, y «Organizador» es un campo de texto que podria colgar un resolutor contra
+ *   `contribuyentes`— e `ingresoDeclarado`, que **no lo es**: el catalogo dibuja
+ *   `recaudacionDeclaradaS` `"ro"`, esperando que el servidor lo componga de aforo por precio, y
+ *   `EspectaculoController.registrar` lo pide como argumento obligatorio, sin componerlo. Resolver
+ *   solo `organizadorId` no desbloquea nada —el acto sigue sin poder registrarse sin el ingreso—,
+ *   asi que no se construye el resolutor mientras el otro campo siga cerrado.
+ *
+ *   En las dos, y a diferencia de las transferencias, el campo mas cercano que el catalogo dibuja
+ *   ya esta **ocupado por otro dato** (`"ro"`, o el valor que el backend no lee): no hay un campo
+ *   «vacio de significado» al que anadirle uno nuevo sin volver a mentir sobre lo que muestra. Se
+ *   anota y no se puentea (ADR-0010 §4); conectarlas sigue siendo rellenar un formulario, confirmar
+ *   un acto irreversible y recibir un 422 por un campo que no se puede escribir.
  *
  * ── Lo que sigue fuera, y por que ───────────────────────────────────────────
  *
@@ -91,11 +113,11 @@ import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
  *   parametros de **consulta**. Los filtros de una pantalla viajan por la URL, nunca por el
  *   cuerpo, asi que hoy la peticion saldria con los tres en la URL y el controlador los leeria
  *   nulos: calcularia sobre el padron entero, o fallaria. Ademas su catalogo no tiene `secciones`,
- *   asi que no hay formulario al que declararle campos. Conectarlo es corregir el contrato o el
- *   controlador —una sola verdad—, y esa correccion no cabe en un issue de interfaz: puentearla
- *   desde aqui dejaria dos contratos vivos y el proximo que lea el YAML creeria el equivocado.
- *   `minimoImponible` es, ademas, un valor normativo (D-02a).
- * - `baja_deuda` ya esta conectada (#332): su tabla se lee de `consulta_deuda`. Ver mas abajo.
+ *   asi que no hay formulario al que declararle campos —los tres datos que necesita son
+ *   `filtros`, y un filtro nunca viaja por el cuerpo (`bloques/Filtros.tsx`)—. Conectarlo es
+ *   corregir el contrato o el controlador —una sola verdad—, y esa correccion no cabe en un issue
+ *   de interfaz: puentearla desde aqui dejaria dos contratos vivos y el proximo que lea el YAML
+ *   creeria el equivocado. `minimoImponible` es, ademas, un valor normativo (D-02a).
  *
  * ── (#333b) El contrato que la capa web de la determinacion tendra que publicar ─
  *

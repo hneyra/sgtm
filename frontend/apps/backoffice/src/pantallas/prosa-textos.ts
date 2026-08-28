@@ -341,6 +341,22 @@ export const NOTAS: Readonly<Record<string, string>> = {
 
   notificacion_valores:
     'La hora y la dirección de la diligencia no se guardan todavía: el backend solo pide la fecha (sin hora) y, si no se indica una dirección, usa el domicilio fiscal vigente a esa fecha.',
+
+  transferencia_predio:
+    'El valor de la transferencia se pide junto al código predial, no en un campo del manual: es la base sobre la que se liquida la alcabala. El «Nº de expediente» y la «Notaría» no viajan —el backend no tiene ningún campo para ellos—, y «Genera alcabala» tampoco: es una casilla, y el acto se registra sin marcarla.',
+
+  transferencia_vehiculo:
+    'El valor de la transferencia se pide junto a «Transferente — documento», que no llega a ningún sitio: el sistema resuelve al transferente por quien figura hoy como titular del vehículo. El «Nº de expediente» no viaja —el backend no tiene ningún campo para él—.',
+  valores_individual:
+    'El valor formaliza una sola obligación: un tributo, un periodo. El número, la fecha de emisión, la base legal y los importes los calcula el servidor al emitir —no se pueden previsualizar antes— y la unidad (predio o placa) no viaja todavía: sin ella, el valor se emite sobre la obligación de ese tributo y ese ejercicio que no cuelga de una unidad concreta.',
+
+  valores_masivo:
+    'Esta corrida solo admite selección por código de contribuyente, uno por línea: la importación de una hoja de cálculo todavía no tiene control en el sistema. El sector, el monto mínimo de emisión y las dos exclusiones del catálogo no viajan —el servidor no los admite todavía—, y esta pantalla registra el criterio de la corrida: la generación de los valores corre aparte, y se revisa después en «Búsqueda y mantenimiento de valores».',
+
+  prescripcion:
+    'El plazo, el inicio y el nuevo inicio del cómputo, el resultado y el monto a extinguir los calcula el servidor a partir del conjunto sellado y de la deuda del contribuyente: no se escriben aquí. Esta pantalla solo declara una interrupción (art. 45); la suspensión (art. 46) todavía no tiene campo.',
+  anulacion_recibo:
+    'El «Detalle» de esta pantalla es la misma observación que pide el sistema, así que no viaja aparte: se escribe abajo, donde ya se pide. La anulación siempre devuelve la deuda a la cuenta corriente —no es una casilla que se pueda destildar— y el número de recibo se toma del que abrió esta pantalla, no del campo «Nro. de recibo».',
 };
 
 /** Las opciones cuya escritura lleva nota. La comprobacion de coherencia las mira. */

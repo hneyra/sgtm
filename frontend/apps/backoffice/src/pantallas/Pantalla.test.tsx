@@ -63,8 +63,16 @@ describe('los bloques del descriptor', () => {
     // `t: 'ro'` se dibuja como `<output>`, que si es texto real —a diferencia
     // de un `<input>`, cuyo valor no encuentra `getByText`—. Con registro en
     // la ruta: sin el, la operacion no se pide (`useDatosDePantalla`).
+    //
+    // `proceso_coactivo` esta conectado desde #76: «Año» es `ro` en el
+    // catalogo y publica `ExpedienteResource.ejercicio`, tal como lo lee
+    // `pantallas/coactiva/index.ts` — «2022» no esta en la ruta ni en el
+    // catalogo, asi que solo puede venir de la respuesta. `expAnterior`
+    // —«701.08T1» en el prototipo sin conectar— dejo de valer para esta
+    // prueba: `ExpedienteResource` no publica un expediente anterior, y esta
+    // pantalla ya no inventa uno (ver el javadoc de la conexion).
     montarEnRuta('/coactiva/proceso-coactivo/0000001201');
-    await waitFor(() => expect(screen.getAllByText('701.08T1').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('2022').length).toBeGreaterThan(0));
   });
 
   it('la barra de acciones deja la ultima como primaria', async () => {

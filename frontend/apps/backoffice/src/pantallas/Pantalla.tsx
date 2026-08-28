@@ -53,6 +53,10 @@ import { Totales } from './bloques/Totales';
 import { PermisosMatrix } from './seguridad/PermisosMatrix';
 import { MiembrosDeGrupo } from './seguridad/MiembrosDeGrupo';
 import { Respaldos } from './seguridad/Respaldos';
+import { GeneracionIndividualDeValores } from './valores/GeneracionIndividualDeValores';
+import { GeneracionMasivaDeValores } from './valores/GeneracionMasivaDeValores';
+import { PrescripcionDeLaDeuda } from './valores/PrescripcionDeLaDeuda';
+import { PaseACoactiva } from './valores/PaseACoactiva';
 
 /**
  * **El renderizador.** Una sola pantalla para las 134 del manual.
@@ -230,6 +234,17 @@ const VERSIONADAS: ReadonlySet<string> = new Set([
  *                            adaptador de los que ya existen, y las dos
  *                            siguen bloqueadas por D-02a en su contenido,
  *                            no en su forma.
+ *   valores_individual,      (#75) sus cuerpos llevan arreglos —una
+ *   valores_masivo,          obligacion, una lista de contribuyentes, un
+ *   prescripcion             hecho de interrupcion— que `CampoDelCuerpo`
+ *                            no declara suelto, o piden partir un campo
+ *                            del catalogo en dos (`prescripcion`). Ver el
+ *                            docblock de `pantallas/valores/index.ts`.
+ *   pase_coactiva            (#75) el catalogo dibuja sus acciones sin la
+ *                            que escribe al final, y el renderizador
+ *                            comun siempre trata la ultima como la
+ *                            primaria: conectada tal cual, pasaria un
+ *                            valor a coactiva sin confirmacion.
  *
  * Viven en su propio componente en vez de forzar al renderizador comun a
  * saber de listas, de booleanos o de un verbo que miente.
@@ -243,6 +258,10 @@ const COMPONENTES_PROPIOS: Readonly<
   actualizacion_catastro: ActualizacionDeCatastro,
   valores_unitarios: ValoresUnitarios,
   depreciacion: Depreciacion,
+  valores_individual: GeneracionIndividualDeValores,
+  valores_masivo: GeneracionMasivaDeValores,
+  prescripcion: PrescripcionDeLaDeuda,
+  pase_coactiva: PaseACoactiva,
 };
 
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
