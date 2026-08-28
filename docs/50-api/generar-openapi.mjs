@@ -339,6 +339,41 @@ const OPERACIONES_ADICIONALES = {
         ' no los declara.',
     },
   ],
+  // `licencia_funcionamiento` declara «GET /licencias/funcionamiento» como su
+  // endpoint —la grilla—; emitir la licencia necesita su propio verbo (#44,
+  // RF-110). No hay PUT ni PATCH: una licencia es un acto administrativo que el
+  // titular cuelga en su establecimiento, y no se corrige —`licencia_funcionamiento`
+  // ni siquiera admite UPDATE desde V37—. Lo que le pasa son las otras dos
+  // opciones, que ya tienen su ruta: `/cancelacion` y `/duplicado`.
+  licencia_funcionamiento: [
+    {
+      operationId: 'emitir_licencia',
+      metodo: 'post',
+      titulo: 'Emisión de licencia de funcionamiento',
+      descripcion:
+        'Emite una licencia de funcionamiento con sus giros CIIU y su papel (RF-110). El cuerpo' +
+        ' lleva el titular, el establecimiento, los giros con su actividad principal, el' +
+        ' número del recibo de caja de tasas del derecho de trámite y la observación del' +
+        ' usuario, obligatoria (RNF-052). Sin un recibo válido —de caja de tasas, no anulado,' +
+        ' del titular y por el concepto del TUPA que corresponde— no se emite. El número de la' +
+        ' licencia lo pone el sistema desde su correlativo: no viene en el cuerpo.',
+    },
+  ],
+  // `ciiu` declara «GET /licencias/ciiu» como su endpoint —el catálogo—; RF-112
+  // exige que sea extensible por el usuario, y extenderlo necesita su verbo.
+  ciiu: [
+    {
+      operationId: 'registrar_ciiu',
+      metodo: 'post',
+      titulo: 'Alta de giro CIIU',
+      descripcion:
+        'Agrega un giro al catálogo CIIU de la municipalidad (RF-112). El cuerpo lleva el' +
+        ' código, la descripción, la sección, el nivel de riesgo de la ITSE si ya está' +
+        ' clasificado, la zonificación compatible y la observación del usuario, obligatoria' +
+        ' (RNF-052). El giro nace activo y marcado como extensión local: la clasificación' +
+        ' oficial se carga por otro camino.',
+    },
+  ],
 };
 
 /* ── Recoger las operaciones ──────────────────────────────────────────── */

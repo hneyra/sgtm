@@ -31,6 +31,13 @@ public final class DatosDePrueba {
     private static final BigDecimal CIEN = new BigDecimal("100.00");
     private static final BigDecimal MIL = new BigDecimal("1000.00");
 
+    /**
+     * El modelo minimo que {@code documento_emitido.datos} admite: un {@code ModeloDeDocumento}.
+     */
+    private static final String MODELO_DE_DOCUMENTO =
+            "{\"titulo\":\"Documento de prueba\",\"subtitulo\":null,\"aLaFecha\":\"2026-01-01\","
+                    + "\"cabecera\":[],\"tablas\":[],\"pie\":[],\"duplicado\":null}";
+
     private DatosDePrueba() {}
 
     /** El alta de una municipalidad es una operacion de implantacion: la hace el owner. */
@@ -1119,29 +1126,68 @@ public final class DatosDePrueba {
     private static void sembrarLicencias(
             Connection app, long muni, String sufijo, long titular, long predioId, long reciboId)
             throws SQLException {
+        // V37 (#44) le puso a `ciiu` su traza —quien lo agrego, por que y cuando— y a la
+        // licencia y su duplicado el documento que los materializa. La siembra los rellena: son
+        // columnas NOT NULL, y una siembra que las esquivara dejaria la prueba de aislamiento sin
+        // filas de licencias que aislar.
         long ciiuId =
                 insertar(
                         app,
-                        "INSERT INTO ciiu (municipalidad_id, codigo, descripcion)"
-                                + " VALUES (?, ?, 'Actividad de prueba') RETURNING id",
+                        "INSERT INTO ciiu (municipalidad_id, codigo, descripcion, seccion,"
+                                + " riesgo_itse, requiere_sectorial, usuario_registro,"
+                                + " observacion, fecha_registro)"
+                                + " VALUES (?, ?, 'Actividad de prueba', 'G', 'BAJO', false,"
+                                + "         'prueba', 'giro de prueba', ?) RETURNING id",
                         muni,
-                        "4711-" + sufijo);
+                        "4711-" + sufijo,
+                        VIGENCIA);
+        long documentoDeLaLicencia =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'LICENCIA_FUNCIONAMIENTO', ?, 2026, ?,"
+                                + "         CAST(? AS jsonb), 'PDF', repeat('c', 64), ?,"
+                                + "         'siembra', 'licencia de prueba') RETURNING id",
+                        muni,
+                        "LICENCIA_FUNCIONAMIENTO-2026-" + sufijo,
+                        "LF-" + sufijo,
+                        MODELO_DE_DOCUMENTO,
+                        VIGENCIA);
+        long documentoDelDuplicado =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'RES_DUPLICADO_LICENCIA', ?, 2026, ?,"
+                                + "         CAST(? AS jsonb), 'PDF', repeat('d', 64), ?,"
+                                + "         'siembra', 'resolucion de duplicado') RETURNING id",
+                        muni,
+                        "RES_DUPLICADO_LICENCIA-2026-" + sufijo,
+                        "LF-" + sufijo,
+                        MODELO_DE_DOCUMENTO,
+                        VIGENCIA);
         long licenciaId =
                 insertar(
                         app,
                         "INSERT INTO licencia_funcionamiento (municipalidad_id, numero,"
                                 + " contribuyente_id, predio_id, nombre_comercial, direccion,"
                                 + " area_solicitada, tipo_licencia, fecha_emision, recibo_id,"
-                                + " usuario_registro, observacion)"
+                                + " documento_id, fecha_registro, usuario_registro, observacion)"
                                 + " VALUES (?, ?, ?, ?, 'Bodega de prueba', 'Jr. Union', 40.00,"
-                                + "         'DEFINITIVA', ?, ?, 'prueba', 'licencia de prueba')"
+                                + "         'DEFINITIVA', ?, ?, ?, ?, 'prueba',"
+                                + "         'licencia de prueba')"
                                 + " RETURNING id",
                         muni,
                         "LF-" + sufijo,
                         titular,
                         predioId,
                         VIGENCIA,
-                        reciboId);
+                        reciboId,
+                        documentoDeLaLicencia,
+                        VIGENCIA);
         ejecutar(
                 app,
                 "INSERT INTO licencia_giro (municipalidad_id, licencia_id, ciiu_id, principal)"
@@ -1152,12 +1198,34 @@ public final class DatosDePrueba {
         ejecutar(
                 app,
                 "INSERT INTO licencia_duplicado (municipalidad_id, licencia_id, numero, fecha,"
-                        + " motivo, recibo_id)"
-                        + " VALUES (?, ?, 1, ?, 'deterioro del original', ?)",
+                        + " motivo, recibo_id, documento_id, reimpresion, usuario_registro,"
+                        + " fecha_registro, observacion)"
+                        + " VALUES (?, ?, 1, ?, 'deterioro del original', ?, ?, 1, 'prueba', ?,"
+                        + "         'duplicado de prueba')",
                 muni,
                 licenciaId,
                 VIGENCIA,
-                reciboId);
+                reciboId,
+                documentoDelDuplicado,
+                VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO licencia_movimiento (municipalidad_id, licencia_id, tipo, fecha,"
+                        + " documento_id, documento_numero, usuario_registro, fecha_registro,"
+                        + " observacion)"
+                        + " VALUES (?, ?, 'EMISION', ?, ?, ?, 'prueba', ?,"
+                        + "         'emision de prueba')",
+                muni,
+                licenciaId,
+                VIGENCIA,
+                documentoDeLaLicencia,
+                "LICENCIA_FUNCIONAMIENTO-2026-" + sufijo,
+                VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO licencia_correlativo (municipalidad_id, ejercicio, ultimo)"
+                        + " VALUES (?, 2026, 1)",
+                muni);
         ejecutar(
                 app,
                 "INSERT INTO licencia_edificacion (municipalidad_id, numero, contribuyente_id,"

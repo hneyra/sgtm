@@ -69,6 +69,15 @@ public final class RevisorDeCodigoFuente {
                     "expediente_valor",
                     "expediente_movimiento",
                     "acto_coactivo",
+                    // Con #44: la licencia de funcionamiento, sus duplicados y su historial.
+                    // Borrar una licencia seria borrar la unica constancia de que el
+                    // establecimiento estuvo autorizado —y con ella el sustento de los arbitrios
+                    // que se le cobraron—; borrar un duplicado o un movimiento seria borrar el
+                    // acto que la reimprimio o la dejo sin efecto, que no esta en ninguna otra
+                    // parte. Una licencia se cancela con su resolucion (regla 4, AC de #44).
+                    "licencia_funcionamiento",
+                    "licencia_duplicado",
+                    "licencia_movimiento",
                     "ficha_catastral",
                     "acta_fiscalizacion",
                     "auditoria");
@@ -153,7 +162,21 @@ public final class RevisorDeCodigoFuente {
                     // sistema diciendo cosas distintas, y quien tenga el papel gana la discusion.
                     // Un acto equivocado se deja sin efecto con otro acto -un levantamiento, una
                     // suspension-, y los dos quedan.
-                    "acto_coactivo");
+                    "acto_coactivo",
+                    // Y la licencia de funcionamiento con sus duplicados y su historial, con #44.
+                    // Septima vez seguida y por el mismo camino: V37 le retira a
+                    // `licencia_funcionamiento` las columnas de estado que V4 le habia puesto
+                    // -decian VIGENTE para siempre- y le revoca el UPDATE junto con el de
+                    // `licencia_duplicado`. El estado se deriva de `licencia_movimiento`, que solo
+                    // se agrega.
+                    //
+                    // Aqui el REVOKE SI se pudo, al reves que con `cierre_caja` (V32 §1.bis), y no
+                    // por casualidad: el ordinal del siguiente duplicado se serializa con
+                    // `licencia_duplicado_uq` y no con un `SELECT ... FOR UPDATE` sobre la
+                    // licencia, precisamente para que el privilegio se pudiera retirar.
+                    "licencia_funcionamiento",
+                    "licencia_duplicado",
+                    "licencia_movimiento");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =
