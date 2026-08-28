@@ -8,8 +8,9 @@
  *
  * Los cuatro bloques tecnicos de FRO-03 §4 clasifican por tipo de pantalla, no
  * por la tarea del usuario. Aqui la agrupacion se declara modulo a modulo: cada
- * grupo nombra el objeto de trabajo y lista sus opciones por id, **en el orden
- * en que la barra lateral las muestra**. Los modulos que no estan en la tabla
+ * grupo nombra el objeto de trabajo y lista sus opciones por id. **El orden de
+ * los grupos es el que la barra lateral dibuja**; el orden de los ids dentro de
+ * un grupo es documental —la barra conserva el del prototipo—. Los modulos que no estan en la tabla
  * conservan `bloqueDe` hasta que se disene su agrupacion; tras la fase 1c
  * (#302–#308) el unico que queda asi es Inicio, con sus dos opciones. El
  * respaldo no sobra por eso: es lo que clasifica un modulo nuevo el dia que se
@@ -35,9 +36,10 @@
  *
  * Un modulo pliega en centro el grupo cuyas hojas **solo se emiten**: si el
  * grupo mezclara operaciones con hojas, plegarlo esconderia trabajo detras de
- * una entrada que dice «Reportes». Por eso Catastro, Fiscalizacion, Tesoreria,
- * Consultas y Coactiva no plegan ninguno: sus documentos son uno o dos, y una
- * entrada que abre un carril de dos hojas es mas navegacion, no menos.
+ * una entrada que dice «Reportes». Por eso Catastro, Fiscalizacion, Consultas
+ * y Coactiva no plegan ninguno —sus documentos son uno o dos, y una entrada que
+ * abre un carril de dos hojas es mas navegacion, no menos— y Tesoreria ni
+ * siquiera tiene grupo de documentos que plegar.
  *
  * Los nombres de las OPCIONES no se reescriben (RNF-080): cambia solo su grupo.
  */

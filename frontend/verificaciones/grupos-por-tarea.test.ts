@@ -152,8 +152,9 @@ describe('un grupo se pliega en centro de reportes marcandolo en la tabla', () =
 
   it('un modulo tabulado sin ningun grupo marcado no pliega nada', () => {
     expect(centroDeReportesDe('seguridad', GRUPOS_POR_TAREA)).toBeNull();
-    // Tesoreria y Consultas tambien tienen su grupo de documentos, y a
-    // proposito **sin** marcar: dos hojas no son un centro.
+    // Consultas tiene su grupo de documentos a proposito **sin** marcar
+    // —dos hojas no son un centro— y Tesoreria ni siquiera tiene documentos:
+    // ninguno de los dos puede plegar nada.
     expect(centroDeReportesDe('tesoreria', GRUPOS_POR_TAREA)).toBeNull();
     expect(centroDeReportesDe('consultas', GRUPOS_POR_TAREA)).toBeNull();
   });

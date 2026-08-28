@@ -51,78 +51,153 @@ const BLOQUES_TECNICOS = new Set([
  * es un archivo generado editado a mano o regenerado desde una tabla cambiada
  * sin querer.
  */
-const GRUPOS_POR_TAREA_ESPERADOS: Readonly<Record<string, readonly (readonly [string, number])[]>> =
-  {
-    transito: [
-      ['Papeletas', 5],
-      ['Vehículos', 1],
-      ['Cobranza', 3],
-      ['Catálogos', 1],
-      // Las 13 hojas, plegadas en el centro de reportes (ADR-0014 §5).
-      ['Reportes', 13],
+const GRUPOS_POR_TAREA_ESPERADOS: Readonly<
+  Record<string, readonly (readonly [string, readonly string[]])[]>
+> = {
+  transito: [
+    [
+      'Papeletas',
+      [
+        'papeletas',
+        'transito_busqueda',
+        'transito_cambio_numero',
+        'transito_descargos',
+        'transito_estado_cuenta',
+      ],
     ],
-    'rentas-registro': [
-      ['Padrones', 3],
-      ['Determinación', 4],
-      ['Movimientos', 4],
-      ['Tributos y beneficios', 4],
+    ['Vehículos', ['internamiento']],
+    ['Cobranza', ['transito_documentos', 'transito_padron_coactiva', 'transito_valores']],
+    ['Catálogos', ['codigos_transito']],
+    [
+      'Reportes',
+      [
+        'transito_constancia_libre',
+        'transito_padron',
+        'transito_padron_constancias',
+        'transito_papeleta_reporte',
+        'transito_record_conductor',
+        'transito_record_vehicular',
+        'transito_reportes',
+        'transito_resumen_codigo',
+        'transito_resumen_papeletas',
+        'transito_resumen_placa',
+        'transito_resumen_recaudacion',
+        'transito_rg_ordinaria',
+        'transito_rg_sancionadora',
+      ],
+    ], // plegado en centro de reportes (ADR-0014 §5)
+  ],
+  'rentas-registro': [
+    ['Padrones', ['contribuyentes', 'predios_rentas', 'vehiculos']],
+    [
+      'Determinación',
+      ['declaracion_jurada', 'predial_individual', 'predial_masivo', 'vehicular_calculo'],
     ],
-    valores: [
-      ['Emisión', 2],
-      ['Gestión del valor', 4],
+    ['Movimientos', ['alta_deuda', 'baja_deuda', 'transferencia_predio', 'transferencia_vehiculo']],
+    ['Tributos y beneficios', ['alcabala', 'arbitrios', 'beneficios', 'espectaculos']],
+  ],
+  valores: [
+    ['Emisión', ['valores_individual', 'valores_masivo']],
+    [
+      'Gestión del valor',
+      ['notificacion_valores', 'pase_coactiva', 'prescripcion', 'valores_busqueda'],
     ],
-    seguridad: [
-      ['Cuentas y accesos', 5],
-      ['Catálogo', 2],
-      ['Sesión', 2],
-      ['Operación', 2],
+  ],
+  seguridad: [
+    ['Cuentas y accesos', ['accesos', 'grupos', 'miembros', 'permisos', 'usuarios']],
+    ['Catálogo', ['modulos', 'parametros']],
+    ['Sesión', ['cambiar_anio', 'cambiar_clave']],
+    ['Operación', ['auditoria', 'respaldo']],
+  ],
+  catastro: [
+    [
+      'Fichas del predio',
+      ['actualizacion_catastro', 'ficha_bienes', 'ficha_economica', 'ficha_rural', 'ficha_urbana'],
     ],
-    catastro: [
-      ['Fichas del predio', 5],
-      ['Territorio', 2],
-      ['Tablas de valuación', 3],
-      ['Consultas', 1],
-      ['Documentos', 1],
+    ['Territorio', ['calles', 'sectores']],
+    ['Tablas de valuación', ['aranceles', 'depreciacion', 'valores_unitarios']],
+    ['Consultas', ['consulta_fichas']],
+    ['Documentos', ['ficha_contribuyente_reporte']],
+  ],
+  fiscalizacion: [
+    ['Campaña', ['fisc_omisos', 'fisc_programa']],
+    ['Fiscalización', ['fisc_predial', 'fisc_vehicular']],
+    ['Resultados', ['fisc_estado_cuenta', 'fisc_historico', 'fisc_resultados']],
+    ['Documentos', ['resolucion_determinacion_fisc']],
+  ],
+  'infracciones-administrativas': [
+    ['Infracciones', ['adm_estado_cuenta', 'infracciones_adm']],
+    [
+      'Notificaciones',
+      [
+        'adm_notificacion',
+        'adm_notificacion_resolucion',
+        'adm_notificaciones_contribuyente',
+        'adm_notificaciones_vencidas',
+      ],
     ],
-    fiscalizacion: [
-      ['Campaña', 2],
-      ['Fiscalización', 2],
-      ['Resultados', 3],
-      ['Documentos', 1],
+    ['Cobranza', ['adm_resolucion_gerencia', 'adm_valores']],
+    ['Catálogos', ['codigos_cuis']],
+    [
+      'Reportes',
+      [
+        'adm_codigos_reporte',
+        'adm_padron_notificaciones',
+        'adm_reportes',
+        'adm_resumen_recaudacion',
+      ],
+    ], // plegado en centro de reportes (ADR-0014 §5)
+  ],
+  tesoreria: [
+    ['Cobro en caja', ['caja_tasas', 'caja_tributaria']],
+    ['Convenios', ['anulacion_convenio', 'consulta_convenios', 'fraccionamiento']],
+    ['Recibos', ['anulacion_recibo', 'duplicado_recibo']],
+    ['Cierre y control', ['avance_recaudacion', 'cierre_caja', 'recaudacion_area']],
+  ],
+  consultas: [
+    [
+      'Del contribuyente',
+      ['consulta_deuda', 'consulta_deudas_beneficio', 'consulta_pagos', 'cuenta_corriente'],
     ],
-    'infracciones-administrativas': [
-      ['Infracciones', 2],
-      ['Notificaciones', 4],
-      ['Cobranza', 2],
-      ['Catálogos', 1],
-      // Las cuatro hojas, plegadas en el centro de reportes (ADR-0014 §5).
-      ['Reportes', 4],
+    [
+      'Del padrón',
+      [
+        'consulta_altas_bajas',
+        'consulta_predios',
+        'consulta_unificada',
+        'consulta_valores',
+        'consulta_vehiculos',
+      ],
     ],
-    tesoreria: [
-      ['Cobro en caja', 2],
-      ['Convenios', 3],
-      ['Recibos', 2],
-      ['Cierre y control', 3],
+    ['Documentos', ['constancia', 'consulta_resumen_predial']],
+  ],
+  coactiva: [
+    ['Expedientes', ['coactiva_expedientes', 'expediente_historial', 'importacion_valores']],
+    [
+      'Procedimiento',
+      ['actos_coactivos', 'cambiar_direccion_ref', 'notificaciones_coactivas', 'proceso_coactivo'],
     ],
-    consultas: [
-      ['Del contribuyente', 4],
-      ['Del padrón', 5],
-      ['Documentos', 2],
-    ],
-    coactiva: [
-      ['Expedientes', 3],
-      ['Procedimiento', 4],
-      ['Cobro y costas', 2],
-      ['Consultas', 2],
-      ['Documentos', 1],
-    ],
-    'autorizaciones-y-licencias': [
-      ['Licencias y autorizaciones', 3],
-      ['Catálogos', 1],
-      // Las siete hojas, plegadas en el centro de reportes (ADR-0014 §5).
-      ['Reportes', 7],
-    ],
-  };
+    ['Cobro y costas', ['costas_procesales', 'fraccionamiento_coactivo']],
+    ['Consultas', ['coactiva_consulta_deudas', 'coactiva_deudas_beneficio']],
+    ['Documentos', ['rec_impresion']],
+  ],
+  'autorizaciones-y-licencias': [
+    ['Licencias y autorizaciones', ['anuncios', 'fue_edificacion', 'licencia_funcionamiento']],
+    ['Catálogos', ['ciiu']],
+    [
+      'Reportes',
+      [
+        'anuncios_reportes',
+        'certificados',
+        'edificacion_reporte',
+        'licencia_padron',
+        'licencia_resolucion_cancelacion',
+        'licencia_resolucion_duplicado',
+        'licencia_resumen_anual',
+      ],
+    ], // plegado en centro de reportes (ADR-0014 §5)
+  ],
+};
 
 describe('el catalogo trae el manual entero', () => {
   it('son doce modulos y 134 opciones', () => {
@@ -189,8 +264,10 @@ describe('la clasificacion en bloques viene precalculada', () => {
 
   it('todo modulo con grupos por tarea asigna cada opcion exactamente una vez', () => {
     // ADR-0014 §4: ni huerfanas ni duplicadas, y los grupos en el orden y con
-    // el reparto disenados. Se compara contra la tabla completa —no contra una
-    // suma— para que una opcion movida de grupo tambien se vea.
+    // el reparto disenados. Se comparan los IDS de cada grupo —no sus
+    // conteos— para que una opcion movida entre dos grupos del mismo tamano
+    // tambien se vea; ordenados, porque el orden dentro del grupo lo pone el
+    // prototipo y aqui es documental.
     for (const [moduloId, esperados] of Object.entries(GRUPOS_POR_TAREA_ESPERADOS)) {
       const modulo = MODULOS.find((m) => m.id === moduloId);
       expect(modulo, `el modulo ${moduloId} existe`).toBeDefined();
@@ -198,9 +275,9 @@ describe('la clasificacion en bloques viene precalculada', () => {
 
       const bloques = bloquesDe(modulo);
       expect(
-        bloques.map((b) => [b.label, b.opciones.length]),
+        bloques.map((b) => [b.label, [...b.opciones.map((o) => o.id)].sort()]),
         `grupos de ${moduloId}`,
-      ).toEqual(esperados);
+      ).toEqual(esperados.map(([nombre, ids]) => [nombre, [...ids].sort()]));
 
       // Exactamente una vez: los grupos no comparten opcion y entre todos
       // cubren el modulo entero.
