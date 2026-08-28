@@ -32,7 +32,13 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(impedimentoDelActo('baja_deuda')).toBeUndefined();
 
     // Sin declarar y con verbo de escritura: falta trabajo del sistema.
-    expect(impedimentoDelActo('transferencia_predio')?.causa).toBe('sin-declaracion');
+    expect(impedimentoDelActo('predial_masivo')?.causa).toBe('sin-declaracion');
+    /* Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
+       no tiene donde escribir** (#73): `sin-declaracion` diria que basta con
+       declarar sus campos, y en las dos transferencias eso no arregla nada
+       —falta `valorTransferencia`, que no esta en el formulario del manual—.
+       Ver `rentas/transferencias.test.tsx`. */
+    expect(impedimentoDelActo('transferencia_predio')?.causa).toBe('sin-campo');
     // Sin declarar y con verbo de lectura: no hay a donde guardar.
     expect(impedimentoDelActo('contribuyentes')?.causa).toBe('sin-backend');
     /* Y sin declarar, con verbo de escritura, pero con una primaria que **pide
@@ -46,15 +52,16 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     );
   });
 
-  it('las tres causas hablan de la ventanilla, y la tecnica se queda en el `data-`', () => {
+  it('las cuatro causas hablan de la ventanilla, y la tecnica se queda en el `data-`', () => {
     const sinBackend = impedimentoDelActo('contribuyentes')?.detalle ?? '';
     const sinDeclaracion = impedimentoDelActo('predial_masivo')?.detalle ?? '';
     const sinDeterminacion =
       impedimentoDelActo('predial_individual', ['Buscar', 'Calcular'])?.detalle ?? '';
+    const sinCampo = impedimentoDelActo('transferencia_predio')?.detalle ?? '';
 
-    // Los tres dicen **por donde se sale**: el acto existe fuera del sistema, y
+    // Los cuatro dicen **por donde se sale**: el acto existe fuera del sistema, y
     // quedarse en «no se puede» deja el mostrador parado.
-    for (const texto of [sinBackend, sinDeclaracion, sinDeterminacion]) {
+    for (const texto of [sinBackend, sinDeclaracion, sinDeterminacion, sinCampo]) {
       expect(texto).toMatch(/Registra el acto por el procedimiento actual/);
       expect(texto).toMatch(/avísale a sistemas/);
       // Y **ninguno habla de desarrollador**: quien atiende no sabe qué es «el
@@ -64,7 +71,10 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     }
     // No son el mismo texto con otro nombre: si lo fueran, distinguir las causas
     // no serviria de nada.
-    expect(new Set([sinBackend, sinDeclaracion, sinDeterminacion]).size).toBe(3);
+    expect(new Set([sinBackend, sinDeclaracion, sinDeterminacion, sinCampo]).size).toBe(4);
+    // Y la cuarta nombra **el dato que falta**, que es lo que la separa de la
+    // segunda: en `sin-declaracion` lo que falta es una lista blanca (#73).
+    expect(sinCampo).toMatch(/valor de la transferencia/);
     // Y la que se suma dice **lo que esa pantalla hace**: no calcula, muestra lo
     // que el servidor determine, y mientras tanto los importes salen con «—».
     expect(sinDeterminacion).toMatch(/Aquí no se calcula nada/);
@@ -80,6 +90,7 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       'sin-backend': 0,
       'sin-declaracion': 0,
       'sin-determinacion': 0,
+      'sin-campo': 0,
     };
 
     for (const [opcion, estructura] of Object.entries(pantallas)) {
@@ -120,9 +131,12 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       salida: 50,
       'sin-backend': 41,
       // Una se muda de casilla al sumarse la tercera causa (#333): «Cálculo
-      // individual del impuesto predial», cuya primaria es «Calcular».
-      'sin-declaracion': 36,
+      // individual del impuesto predial», cuya primaria es «Calcular». Y **dos
+      // mas al sumarse la cuarta** (#73): las dos transferencias, a las que no
+      // les falta una lista blanca sino un campo en la pantalla.
+      'sin-declaracion': 34,
       'sin-determinacion': 1,
+      'sin-campo': 2,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);
@@ -193,8 +207,16 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
     },
     {
       caso: 'operacion que escribe y opcion sin declarar',
-      ruta: '/rentas-registro/transferencia-predio',
+      ruta: '/rentas-registro/predial-masivo',
       causa: 'sin-declaracion',
+    },
+    // La cuarta causa tiene su propia bateria en `rentas/transferencias.test.tsx`;
+    // aqui entra por lo que comparte con las otras tres: franja, `role="status"`
+    // y `data-causa`.
+    {
+      caso: 'operacion que escribe y pantalla sin el campo que el acto exige',
+      ruta: '/rentas-registro/transferencia-predio',
+      causa: 'sin-campo',
     },
   ])('$caso: la accion se queda apagada y la franja lo explica', async ({ ruta, causa }) => {
     const montada = montarEnRuta(ruta);
@@ -229,7 +251,8 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
   it.each([
     { caso: 'sin-determinacion', ruta: '/rentas-registro/predial-individual' },
     { caso: 'sin-backend', ruta: '/rentas-registro/contribuyentes' },
-    { caso: 'sin-declaracion', ruta: '/rentas-registro/transferencia-predio' },
+    { caso: 'sin-declaracion', ruta: '/rentas-registro/predial-masivo' },
+    { caso: 'sin-campo', ruta: '/rentas-registro/transferencia-predio' },
   ])('$caso: los secundarios no repiten un motivo que ya no es cierto', async ({ ruta }) => {
     const montada = montarEnRuta(ruta);
     await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
