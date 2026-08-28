@@ -48,6 +48,11 @@ import pe.gob.sgtm.dominio.Observacion;
  * @param notificacionPreviaId la notificación que la origina, si hubo una: el manual permite una
  *     papeleta administrativa sin notificación previa, y forzar el enlace inventaría un requisito
  *     (#47 AC1)
+ * @param obligadoId el contribuyente contra el que se asentó el cargo de la multa. <b>No se
+ *     deduce</b> de {@code infractorId}, {@code propietarioId} ni {@code contribuyenteId}: el
+ *     manual permite cobrarle al propietario aunque condujera otro. Hasta #50 este dato entraba en
+ *     {@code RegistrarPapeleta} y no se guardaba, y sin él nada puede encontrar después la
+ *     obligación que un descargo fundado tiene que dar de baja (V41 §1)
  * @param baseImponible la UIT del ejercicio de la infracción, tal como se aplicó en el acta
  * @param porcentajeInfraccion el porcentaje que fija el código de infracción
  * @param importeInfraccion base por porcentaje, ya calculado en el acta
@@ -75,6 +80,7 @@ public record Papeleta(
         @Nullable Long contribuyenteId,
         @Nullable Long predioId,
         @Nullable Long notificacionPreviaId,
+        long obligadoId,
         Dinero baseImponible,
         Alicuota porcentajeInfraccion,
         Dinero importeInfraccion,
@@ -141,6 +147,11 @@ public record Papeleta(
                         "La licencia de conducir excede " + LICENCIA_MAXIMA + " caracteres");
             }
         }
+        if (obligadoId <= 0) {
+            throw new IllegalArgumentException(
+                    "La papeleta dice a quien se le cobra la multa: sin el obligado no se puede"
+                            + " asentar el cargo ni encontrarlo despues para darlo de baja (V41 §1)");
+        }
         Objects.requireNonNull(baseImponible, "La papeleta necesita su base imponible");
         Objects.requireNonNull(
                 porcentajeInfraccion, "La papeleta necesita el porcentaje de la infraccion");
@@ -164,6 +175,7 @@ public record Papeleta(
             @Nullable String licenciaConducir,
             @Nullable Long infractorId,
             @Nullable Long propietarioId,
+            long obligadoId,
             Dinero baseImponible,
             Alicuota porcentajeInfraccion,
             Dinero importeInfraccion,
@@ -187,6 +199,7 @@ public record Papeleta(
                 null,
                 null,
                 null,
+                obligadoId,
                 baseImponible,
                 porcentajeInfraccion,
                 importeInfraccion,
@@ -211,6 +224,7 @@ public record Papeleta(
             @Nullable Long contribuyenteId,
             @Nullable Long predioId,
             @Nullable Long notificacionPreviaId,
+            long obligadoId,
             Dinero baseImponible,
             Alicuota porcentajeInfraccion,
             Dinero importeInfraccion,
@@ -234,6 +248,7 @@ public record Papeleta(
                 contribuyenteId,
                 predioId,
                 notificacionPreviaId,
+                obligadoId,
                 baseImponible,
                 porcentajeInfraccion,
                 importeInfraccion,
@@ -247,6 +262,11 @@ public record Papeleta(
 
     public boolean esNueva() {
         return id == null;
+    }
+
+    /** El identificador, exigiendo que ya se haya guardado. */
+    public long identificador() {
+        return Objects.requireNonNull(id, "La papeleta todavia no se ha guardado");
     }
 
     /**
@@ -272,6 +292,7 @@ public record Papeleta(
                 contribuyenteId,
                 predioId,
                 notificacionPreviaId,
+                obligadoId,
                 baseImponible,
                 porcentajeInfraccion,
                 importeInfraccion,

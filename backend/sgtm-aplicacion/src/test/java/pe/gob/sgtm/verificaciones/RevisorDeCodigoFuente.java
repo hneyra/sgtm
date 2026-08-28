@@ -86,6 +86,16 @@ public final class RevisorDeCodigoFuente {
                     "licencia_funcionamiento",
                     "licencia_duplicado",
                     "licencia_movimiento",
+                    // Con #50: el escrito que el administrado presento, la resolucion que la
+                    // gerencia dicto sobre su multa, y el paso del vehiculo por el deposito.
+                    // Borrar un descargo seria borrar la constancia de que alguien recurrio -y con
+                    // ella el computo del plazo-; borrar una resolucion, la del acto que ordeno la
+                    // cobranza o dejo la multa sin efecto; borrar un internamiento, la de que un
+                    // vehiculo estuvo retenido y devengo custodia.
+                    "descargo",
+                    "resolucion_gerencia",
+                    "internamiento",
+                    "internamiento_movimiento",
                     "ficha_catastral",
                     "acta_fiscalizacion",
                     "auditoria");
@@ -198,7 +208,23 @@ public final class RevisorDeCodigoFuente {
                     // licencia, precisamente para que el privilegio se pudiera retirar.
                     "licencia_funcionamiento",
                     "licencia_duplicado",
-                    "licencia_movimiento");
+                    "licencia_movimiento",
+                    // Y con #50, la octava vez y por el mismo camino. V41 le retira a `descargo`
+                    // las columnas de resultado que V4 le habia puesto -el fallo dentro del
+                    // escrito que otro presento- y a `internamiento` la `fecha_salida`, y les
+                    // revoca el UPDATE. `resolucion_gerencia` e `internamiento_movimiento` nacen
+                    // sin el.
+                    //
+                    // La resolucion es el caso claro: se NOTIFICA al administrado, que se lleva el
+                    // papel. Corregirla en la base deja al papel notificado y al sistema diciendo
+                    // cosas distintas, y quien tenga el papel gana la discusion. Una equivocada se
+                    // deja sin efecto con otra, y las dos quedan. El internamiento es el otro: su
+                    // salida es un acto con su acta, no una fecha que se rellena encima del
+                    // ingreso.
+                    "descargo",
+                    "resolucion_gerencia",
+                    "internamiento",
+                    "internamiento_movimiento");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =

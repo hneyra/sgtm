@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas catorce operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas veinte operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -66,8 +66,16 @@ describe('las operaciones generadas son las del contrato', () => {
     //     pantallas (`licencia_funcionamiento`, `ciiu`) declaran el GET de la
     //     grilla y el catalogo como su endpoint, y escribir necesita verbo
     //     propio bajo la misma opcion.
+    //   - `registrar_internamiento` / `liberar_internamiento` (#50): las dos
+    //     acciones de la pantalla `internamiento`, que declara «GET
+    //     /transito/internamientos» —la grilla del deposito—.
+    //   - `notificar_resolucion_transito` (#50): notificar la resolucion de
+    //     gerencia de transito. Infracciones administrativas tiene su pantalla
+    //     de notificacion en el manual; transito no, y sin ella la
+    //     sancionadora no se puede dictar nunca, porque su plazo se cuenta
+    //     desde que la ordinaria surte efecto.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(151);
+    expect(Object.keys(OPERACIONES)).toHaveLength(154);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

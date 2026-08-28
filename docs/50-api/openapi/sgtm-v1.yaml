@@ -2329,6 +2329,62 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: registrar_internamiento
+      summary: "Registro de ingreso al depósito"
+      description: >-
+        Interna un vehículo en el depósito municipal y emite su acta (#50, RF-064). La
+        pantalla «Internamiento vehicular» declara «GET /transito/internamientos» como su
+        endpoint —la grilla— y su acción «Registrar ingreso» necesita un verbo aparte. El
+        cuerpo lleva la placa, el depósito, el concepto del TUPA con que se cobrará la
+        custodia y la observación del usuario, obligatoria (RNF-052).
+      tags: ["Tránsito"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/internamientos/{placa}/liberacion":
+    post:
+      operationId: liberar_internamiento
+      summary: "Liberación del vehículo internado"
+      description: >-
+        Entrega el vehículo a quien lo retira y emite el acta de liberación (#50, RF-064).
+        Exige el recibo con que se pagó la custodia: el backend lo acredita contra
+        `tesoreria` por su API pública, y sin esa acreditación el vehículo no sale. La
+        casilla «Custodia cancelada» de la pantalla no basta —la marca quien entrega el
+        vehículo—.
+      tags: ["Tránsito"]
+      parameters:
+        - name: placa
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/transito/papeletas/{numero}/actos":
     get:
       operationId: transito_documentos
@@ -2688,6 +2744,39 @@ paths:
       summary: "Resolución de gerencia sancionadora"
       description: "Segunda resolución, emitida luego de la ordinaria. Tiene carácter sancionador y se deriva a la Dirección General de Transportes."
       tags: ["Tránsito"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/resoluciones/{numero}/notificacion":
+    post:
+      operationId: notificar_resolucion_transito
+      summary: "Notificación de resolución de gerencia de tránsito"
+      description: >-
+        Cédula de notificación de la resolución ordinaria o sancionadora de tránsito, con
+        su acuse (#50, RF-074). **Es de donde sale el derecho a la sancionadora**: la
+        diligencia que surte efecto sobre la ordinaria fija, con el plazo parametrizado del
+        conjunto sellado, el día desde el que se puede sancionar. Infracciones
+        administrativas tiene la suya
+        (`/infracciones/administrativas/resoluciones/{id}/notificacion`); tránsito no la
+        tenía, y sin ella la sancionadora no se puede dictar nunca.
+      tags: ["Tránsito"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
       requestBody:
         required: true
         content:
