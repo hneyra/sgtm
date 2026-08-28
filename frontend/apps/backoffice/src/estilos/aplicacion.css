@@ -508,6 +508,17 @@
   min-width: 0;
 }
 
+/* Presente para tecnologias de asistencia, fuera de la vista: el patron
+   estandar de recorte, que el proyecto no tenia hasta ahora. */
+.sgtm-codigo__regla {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .sgtm-codigo__tramos {
   display: flex;
   flex-wrap: wrap;
@@ -580,6 +591,10 @@
 }
 
 .sgtm-indice__entrada {
+  /* Sin esto, el fondo es el ButtonFace del navegador, que no conoce el tema
+     oscuro: 1,35:1 medido sobre --ink-2. El reset de base.css no cubre botones. */
+  background: transparent;
+  border: 0;
   padding: 7px 10px;
   border-radius: 7px;
   font-size: 12.5px;

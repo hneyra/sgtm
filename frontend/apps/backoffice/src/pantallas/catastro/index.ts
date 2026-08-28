@@ -14,6 +14,7 @@ import {
 } from '../seguridad/listado';
 import { campo, leerFicha } from './fichas';
 import type { Ficha } from './fichas';
+import { normalizarCodigoCatastral } from './codigo';
 
 /**
  * Catastro, conectado hasta donde llega el backend: **diez opciones de doce**.
@@ -260,7 +261,22 @@ const ficha_rural = definirConexion({
  */
 const consulta_fichas = definirConexion({
   operacion: 'consulta_fichas',
-  parametros: deLaBusqueda('consulta_fichas'),
+  // El codigo puede llegar troquelado —`20-06-…`— en un enlace compartido: el
+  // propio formato que `formatearCodigoCatastral` produce. Al backend viajan
+  // los digitos, porque el prefijo por rango no encuentra un valor con guiones.
+  // Se normaliza aqui y no solo en el widget: la peticion del montaje lee la
+  // URL directamente, sin pasar por ningun formulario.
+  parametros: (contexto) => {
+    const parametros = deLaBusqueda('consulta_fichas')(contexto);
+    const codigo = parametros['codRefCatastral'];
+    if (codigo === undefined) return parametros;
+    const digitos = normalizarCodigoCatastral(codigo);
+    const normalizados: Record<string, string> = { ...parametros };
+    // Un valor sin ningun digito no es un codigo: no viaja como filtro vacio.
+    if (digitos === '') delete normalizados['codRefCatastral'];
+    else normalizados['codRefCatastral'] = digitos;
+    return normalizados;
+  },
   leer: (cuerpo) => leerPaginado(cuerpo, 'las fichas'),
   adaptar: (paginado) =>
     datosDe(

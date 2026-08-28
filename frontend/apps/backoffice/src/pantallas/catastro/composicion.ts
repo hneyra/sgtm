@@ -1,5 +1,6 @@
 import type { ComposicionDeOpcion } from '../composicion';
 import { CodigoCatastral } from './CodigoCatastral';
+import { normalizarCodigoCatastral } from './codigo';
 import { ResumenDeFicha } from './ResumenDeFicha';
 
 /**
@@ -39,7 +40,7 @@ const FICHA: ComposicionDeOpcion = { resumen: ResumenDeFicha, indice: true };
  * algo que no es cierto, y ademas impediria escribirlos.
  */
 const CODIGO = (clave: string): ComposicionDeOpcion['widgetsDeFiltro'] => ({
-  [clave]: CodigoCatastral,
+  [clave]: { Control: CodigoCatastral, normalizar: normalizarCodigoCatastral },
 });
 
 export const COMPOSICION_DE_CATASTRO: Readonly<Record<string, ComposicionDeOpcion>> = {

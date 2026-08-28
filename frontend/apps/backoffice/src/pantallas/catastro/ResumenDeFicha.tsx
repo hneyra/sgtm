@@ -2,7 +2,7 @@ import { Esqueleto, Insignia } from '@sgtm/design-system';
 import { formatearFecha } from '@sgtm/dominio';
 import type { ResumenDePantallaProps } from '../composicion';
 import { SIN_DATO } from '../seguridad/listado';
-import { formatearCodigoCatastral } from './CodigoCatastral';
+import { formatearCodigoCatastral } from './codigo';
 
 /**
  * La cabecera-resumen de una ficha catastral (#319).

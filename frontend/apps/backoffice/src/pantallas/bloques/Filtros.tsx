@@ -37,7 +37,20 @@ export interface FiltrosProps {
 }
 
 export function Filtros({ opcion, campos, buscado, cargando, onBuscar }: FiltrosProps) {
-  const [borrador, fijarBorrador] = useState<Readonly<Record<string, string>>>(buscado);
+  const [borrador, fijarBorrador] = useState<Readonly<Record<string, string>>>(() => {
+    // El valor que llega de la URL pasa por el mismo embudo que el widget
+    // aplica al teclear: lo que se ve y lo que se manda tienen que ser el
+    // mismo valor, tambien cuando el codigo entro por un enlace compartido.
+    const normalizados: Record<string, string> = { ...buscado };
+    for (const campo of campos) {
+      const propio = widgetDeFiltro(opcion, campo.clave);
+      const valor = normalizados[campo.clave];
+      if (propio !== undefined && valor !== undefined) {
+        normalizados[campo.clave] = propio.normalizar(valor);
+      }
+    }
+    return normalizados;
+  });
 
   return (
     <section className="sgtm-tarjeta sgtm-filtros" aria-label="Búsqueda">
@@ -57,11 +70,11 @@ export function Filtros({ opcion, campos, buscado, cargando, onBuscar }: Filtros
         {campos.map((campo) => {
           const cambiar = (valor: string): void =>
             fijarBorrador((previos) => ({ ...previos, [campo.clave]: valor }));
-          const Propio = widgetDeFiltro(opcion, campo.clave);
+          const propio = widgetDeFiltro(opcion, campo.clave);
           // El control propio recibe lo mismo que el `Campo` al que sustituye
           // —rotulo, valor y cambio— y **compone el mismo valor de cadena**: lo
           // que acaba en la URL y en la peticion es identico al de antes.
-          return Propio === undefined ? (
+          return propio === undefined ? (
             <Campo
               key={campo.clave}
               etiqueta={campo.label}
@@ -72,7 +85,7 @@ export function Filtros({ opcion, campos, buscado, cargando, onBuscar }: Filtros
               onCambio={cambiar}
             />
           ) : (
-            <Propio
+            <propio.Control
               key={campo.clave}
               etiqueta={campo.label}
               valor={borrador[campo.clave] ?? ''}

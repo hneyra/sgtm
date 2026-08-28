@@ -45,7 +45,16 @@ export interface WidgetDeFiltroProps {
   readonly onCambio: (valor: string) => void;
 }
 
-export type WidgetDeFiltro = (props: WidgetDeFiltroProps) => ReactElement;
+export interface WidgetDeFiltro {
+  readonly Control: (props: WidgetDeFiltroProps) => ReactElement;
+  /**
+   * Lo que el control haria con un valor que llega de fuera (la URL de un
+   * enlace compartido): el mismo embudo que aplica al teclear. Sin esto, la
+   * pantalla ensenaria un codigo bien repartido y «Buscar» mandaria el crudo
+   * —guiones incluidos—, que el backend no resuelve por prefijo.
+   */
+  readonly normalizar: (valor: string) => string;
+}
 
 /** A donde lleva el acto de una pantalla que no lo tiene en su propia barra. */
 export interface ActoDeOtraPantalla {

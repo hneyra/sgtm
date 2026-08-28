@@ -10,7 +10,7 @@ import {
   TRAMOS_DEL_CODIGO,
   formatearCodigoCatastral,
   repartirEnTramos,
-} from './CodigoCatastral';
+} from './codigo';
 
 /**
  * El codigo de referencia catastral se compone, no se teclea (#318, RF-005).
@@ -34,10 +34,20 @@ const JAVA = resolve(
 
 /** Los `new Tramo("nombre", n)` de `DEL_MANUAL`, en el orden en que estan. */
 function tramosDelBackend(): readonly { readonly nombre: string; readonly longitud: number }[] {
-  const fuente = readFileSync(JAVA, 'utf8');
+  let fuente: string;
+  try {
+    fuente = readFileSync(JAVA, 'utf8');
+  } catch {
+    throw new Error(
+      'No se encuentra ComposicionCatastral.java: esta prueba necesita backend/ en el disco, ' +
+        'porque los tramos del componente se verifican contra la clase del dominio.',
+    );
+  }
   const desde = fuente.indexOf('DEL_MANUAL');
   if (desde < 0) throw new Error('ComposicionCatastral ya no declara DEL_MANUAL.');
-  const bloque = fuente.slice(desde, fuente.indexOf('public ComposicionCatastral {', desde));
+  const hasta = fuente.indexOf('public ComposicionCatastral {', desde);
+  if (hasta < 0) throw new Error('ComposicionCatastral ya no tiene su constructor compacto.');
+  const bloque = fuente.slice(desde, hasta);
   return [...bloque.matchAll(/new Tramo\("([a-z]+)",\s*(\d+)\)/g)].map((encontrado) => ({
     nombre: encontrado[1] ?? '',
     longitud: Number(encontrado[2]),
@@ -202,5 +212,35 @@ describe('la consulta de fichas compone el codigo en sus tramos', () => {
     // un trozo de la URL: `includes` daria por bueno un codigo relleno de ceros
     // a la derecha, que es otro predio.
     await waitFor(() => expect(codRefCatastralPedido()).toEqual(['200601010150010101001']));
+  });
+
+  it('un valor con guiones que llega de la URL se manda sin guiones', async () => {
+    // El enlace compartido puede traer el formato troquelado que el propio
+    // componente produce al formatear. Lo que se ve y lo que se manda tienen
+    // que ser el mismo valor: sin normalizar, la pantalla ensena el codigo
+    // bien repartido y la peticion del montaje —que lee la URL directamente,
+    // sin pasar por el formulario— manda el crudo, que el prefijo por rango
+    // del backend no encuentra.
+    montarEnRuta('/catastro/consulta-fichas?codRefCatastral=20-06-01-01-015-001-01-01-01-001');
+    await screen.findByText('200601010150010101001');
+
+    expect(tramo('Depto.').value).toBe('20');
+    await waitFor(() => expect(codRefCatastralPedido()).toEqual(['20060101015001010101001']));
+  });
+
+  it('un tramo lleno no admite un digito mas: el codigo no se corre en silencio', async () => {
+    // Sin maxLength, un tercer digito en un tramo de dos se insertaba y corria
+    // todo el codigo a la derecha sin que la caja enfocada cambiara: el
+    // operador quedaba mirando otro predio sin saberlo.
+    const usuario = userEvent.setup();
+    montarEnRuta('/catastro/consulta-fichas');
+    await screen.findByText('200601010150010101001');
+
+    await usuario.click(tramo('Depto.'));
+    await usuario.paste('20060101015001010100123');
+    await usuario.click(tramo('Depto.'));
+    await usuario.keyboard('9');
+    expect(tramo('Depto.').value).toBe('20');
+    expect(tramo('Unidad').value).toBe('123');
   });
 });
