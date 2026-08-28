@@ -8,8 +8,8 @@
 | Ejercicios que rige | 2004– (alícuota y años de afectación, TUO LTM); 2026 (tabla de valores referenciales, propia de ese ejercicio) |
 | Filas de NEG-02 §2 | 16 |
 | Transcribió | JNA, 2026-08-24; adición del anexo leído en la fuente (§1.2 y §1.3): Agent, 2026-08-28; parte resolutiva de la R.M. leída completa (§1.4): Agent, 2026-08-28; arts. 30 a 37 cotejados contra el texto literal del TUO (D.S. 156-2004-EF, PDF de la edición con concordancias), con la corrección del D. Leg. 1520 y el art. 37 literal (§1.1 y §1.1.1): Agent, 2026-08-28 |
-| Verificó | — |
-| Estado | TRANSCRITO |
+| Verificó | HNA, 2026-08-28 |
+| Estado | VERIFICADO |
 
 > **Historial de la verificación.** Este archivo se verificó dos veces, y la primera no cubría lo
 > que hoy contiene. El 2026-08-25 HNA verificó el archivo tal como estaba entonces, cuando el
@@ -23,8 +23,10 @@
 > al firmarse. **Y ese mismo día el archivo volvió a bajar una tercera vez**: llegó el PDF del TUO
 > de la Ley de Tributación Municipal y el cotejo de los arts. 30 a 37 contra su texto literal
 > corrigió la tabla de §1.1 —que describía el texto anterior al D. Leg. 1520— y cerró el
-> `‹NO CONFIRMADO›` del art. 37. Esa adición espera su segunda firma; el PDF del TUO está
-> pendiente de archivar en S3 por el dueño del repositorio (README de la rama `gob-docs`).
+> `‹NO CONFIRMADO›` del art. 37. **Esa adición la re-verificó HNA ese mismo día**, y esa es la
+> firma que la cabecera registra; las tres verificaciones quedan en el historial de git, cada una
+> sobre el contenido que el archivo tenía al firmarse. El PDF del TUO sigue pendiente de archivar
+> en S3 por el dueño del repositorio (README de la rama `gob-docs`).
 
 ## 1. La tabla tal como está en la norma
 

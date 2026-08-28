@@ -8,16 +8,18 @@
 | Ejercicios que rige | 2004– |
 | Filas de NEG-02 §2 | 15 |
 | Transcribió | JNA, 2026-08-24; arts. 21 a 29 cotejados contra el texto literal del TUO (D.S. 156-2004-EF, PDF de la edición con concordancias) y resolución de la reserva de las ONG: Agent, 2026-08-28 |
-| Verificó | — |
-| Estado | TRANSCRITO |
+| Verificó | HNA, 2026-08-28 |
+| Estado | VERIFICADO |
 
-> **Por qué este archivo vuelve a `TRANSCRITO`.** HNA lo verificó el 2026-08-25 cuando sus tablas
-> se sostenían en fuentes que citan la norma de forma consistente, no en el texto oficial. El
+> **Historial de la verificación.** HNA verificó este archivo el 2026-08-25, cuando sus tablas se
+> sostenían en fuentes que citan la norma de forma consistente, no en el texto oficial. El
 > 2026-08-28 llegó el PDF del TUO y el cotejo literal **confirmó las dos tablas palabra por
-> palabra** y resolvió la reserva de las ONG (abajo); como esa adición no la ha verificado nadie y
-> el corpus no admite que quien transcribe se verifique a sí mismo (ADR-0007), el estado baja
-> hasta la segunda firma. El PDF del TUO está pendiente de archivar en S3 por el dueño del
-> repositorio (README de la rama `gob-docs`).
+> palabra** y resolvió la reserva de las ONG (abajo); como esa adición no la había verificado
+> nadie y el corpus no admite que quien transcribe se verifique a sí mismo (ADR-0007), el estado
+> bajó a `TRANSCRITO` — y **ese mismo día HNA re-verificó sobre el contenido ampliado**, que es la
+> firma de la cabecera. Las dos verificaciones quedan en el historial de git, cada una sobre el
+> contenido que el archivo tenía al firmarse. El PDF del TUO sigue pendiente de archivar en S3 por
+> el dueño del repositorio (README de la rama `gob-docs`).
 
 ## 1. La tabla tal como está en la norma
 
