@@ -258,7 +258,14 @@ class ContratoDeApiTest {
                     // servir catastro, porque el derivado sale de `declaracion_jurada` y
                     // dependerlo cerraria el ciclo de modulos. La sirve rentas, en esta ruta, y
                     // la de catastro redirige alli la peticion que trae el filtro.
-                    "GET /catastro/fichas/conciliacion");
+                    "GET /catastro/fichas/conciliacion",
+                    // #366 — ADR-0015 §2.4: el titular del predio, resuelto al clic. La grilla
+                    // sigue publicando el nombre y no el identificador; quien quiera el codigo
+                    // del contribuyente lo pide aqui, de un predio cada vez, con el permiso del
+                    // padron y dejando fila de ACCESO. La sirve rentas por lo mismo que la
+                    // conciliacion: es el unico modulo que ve catastro y contribuyentes a la vez
+                    // sin cerrar un ciclo.
+                    "GET /catastro/predios/{predioId}/titulares");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

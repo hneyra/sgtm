@@ -693,6 +693,50 @@ const OPERACIONES_ADICIONALES = {
       paginacion: true,
     },
   ],
+  // `contribuyentes` declara «GET /rentas/contribuyentes» como su endpoint —el
+  // padrón—; resolver quién es el titular de UN predio, con su código, necesita
+  // ruta propia (#366, ADR-0015 §2.4). Cuelga de esta pantalla y no de
+  // `consulta_fichas` porque el permiso que exige es el del padrón: lo que se
+  // pide no es catastro, es el identificador de una persona.
+  //
+  // La ruta, en cambio, sí es la de la pantalla desde la que se hace clic. Y la
+  // sirve `rentas`, que es el único módulo que ve `catastro` y `contribuyentes`
+  // a la vez sin cerrar un ciclo —`catastro` ya depende del padrón—; quién la
+  // sirve es un detalle de dónde vive el código.
+  contribuyentes: [
+    {
+      operationId: 'titulares_del_predio',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/predios/{predioId}/titulares',
+      titulo: 'Titulares del predio, con su código de contribuyente',
+      descripcion:
+        'Quién es titular de un predio a una fecha, con el código con el que se entra a su ficha' +
+        ' de contribuyente. Es la resolución que la fila de `consulta_fichas` necesita para poder' +
+        ' enlazar con la persona: la grilla publica el nombre del titular y no su identificador,' +
+        ' y añadirlo allí convertiría «quien puede listar fichas» en «quien puede cosechar la' +
+        ' correlación predio→persona de toda la municipalidad» (ADR-0015 §2.4). Por eso se' +
+        ' resuelve **al clic, de un predio cada vez**: exige privilegio de lectura sobre' +
+        ' `contribuyentes` —el permiso del padrón, no el de la pantalla desde la que se hace' +
+        ' clic— y cada resolución deja fila en la bitácora con operación ACCESO, la devuelva o no' +
+        ' algún titular. Devuelve la **lista** de cuotas vigentes, no «el» titular: un predio' +
+        ' puede tener varios —dos cónyuges, una sucesión, un condominio—, cada uno con su' +
+        ' porcentaje. La respuesta dice siempre a qué fecha contesta (regla 9, RNF-075). Del' +
+        ' padrón no viaja nada más: ni el identificador interno del contribuyente, ni su' +
+        ' documento; y de la titularidad, ni sus fechas ni el documento que la sustenta.',
+      descripcionesDeRuta: {
+        predioId: 'El predio, por el `predioId` que publica cada fila de la consulta de fichas',
+      },
+      parametros: [
+        {
+          nombre: 'vigenteA',
+          ejemplo: '2026-08-28',
+          descripcion:
+            'Fecha a la que se resuelve la titularidad; si falta, hoy. La titularidad de marzo no' +
+            ' es la de setiembre, y la respuesta dice siempre a cuál contesta (regla 9)',
+        },
+      ],
+    },
+  ],
   // Las cuatro pantallas de ficha declaran «GET /catastro/fichas/…/{codigo}»
   // como su endpoint —la lectura de la ficha de un predio—; darla de alta
   // necesita su propio verbo, y sin parámetro de ruta: el predio todavía no

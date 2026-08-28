@@ -1200,6 +1200,34 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/predios/{predioId}/titulares":
+    get:
+      operationId: titulares_del_predio
+      summary: "Titulares del predio, con su código de contribuyente"
+      description: "Quién es titular de un predio a una fecha, con el código con el que se entra a su ficha de contribuyente. Es la resolución que la fila de `consulta_fichas` necesita para poder enlazar con la persona: la grilla publica el nombre del titular y no su identificador, y añadirlo allí convertiría «quien puede listar fichas» en «quien puede cosechar la correlación predio→persona de toda la municipalidad» (ADR-0015 §2.4). Por eso se resuelve **al clic, de un predio cada vez**: exige privilegio de lectura sobre `contribuyentes` —el permiso del padrón, no el de la pantalla desde la que se hace clic— y cada resolución deja fila en la bitácora con operación ACCESO, la devuelva o no algún titular. Devuelve la **lista** de cuotas vigentes, no «el» titular: un predio puede tener varios —dos cónyuges, una sucesión, un condominio—, cada uno con su porcentaje. La respuesta dice siempre a qué fecha contesta (regla 9, RNF-075). Del padrón no viaja nada más: ni el identificador interno del contribuyente, ni su documento; y de la titularidad, ni sus fechas ni el documento que la sustenta."
+      tags: ["Rentas · Registro"]
+      parameters:
+        - name: predioId
+          in: path
+          required: true
+          description: "El predio, por el `predioId` que publica cada fila de la consulta de fichas"
+          schema: { type: string }
+        - name: vigenteA
+          in: query
+          required: false
+          description: "Fecha a la que se resuelve la titularidad; si falta, hoy. La titularidad de marzo no es la de setiembre, y la respuesta dice siempre a cuál contesta (regla 9)"
+          schema: { type: string }
+          example: "2026-08-28"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/rentas/predios":
     get:
       operationId: predios_rentas
