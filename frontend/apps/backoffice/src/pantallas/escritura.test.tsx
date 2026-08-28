@@ -75,21 +75,26 @@ const observacion = async (): Promise<HTMLElement> =>
   );
 
 /**
- * Elige el concepto del alta de deuda, que desde la revision de #331 **hay que
- * elegir**.
+ * Elige el concepto del alta de deuda, y desde #342 (nit 3) tambien su año y
+ * su documento: los tres **hay que llenarlos**, con la misma dureza.
  *
- * Antes no hacia falta y esa era justamente la mitad del defecto: el
- * desplegable se dibujaba mostrando «IMPUESTO PREDIAL» sin que nadie lo tocara
- * —un `sel` sin opcion vacia se pinta con su primera opcion—, el borrador
- * estaba vacio y el cuerpo salia **sin `tributo`**. Estas pruebas usan «Alta de
- * deuda» como la pantalla que escribe, no como el caso de negocio: eligen el
- * predial, que no cuelga de ninguna unidad, y lo demas se comprueba igual.
+ * Antes solo hacia falta el concepto y esa era justamente la mitad del
+ * defecto de #331: el desplegable se dibujaba mostrando «IMPUESTO PREDIAL» sin
+ * que nadie lo tocara —un `sel` sin opcion vacia se pinta con su primera
+ * opcion—, el borrador estaba vacio y el cuerpo salia **sin `tributo`**. El
+ * año tenia el mismo hueco (`escrituras.ts`, `faltaEnElAlta`): un desplegable
+ * que tambien lleva `eleccionObligatoria` y al que nada obligaba a elegir.
+ * Estas pruebas usan «Alta de deuda» como la pantalla que escribe, no como el
+ * caso de negocio: eligen el predial, que no cuelga de ninguna unidad, y lo
+ * demas se comprueba igual.
  */
 const elConcepto = async (
   usuario: ReturnType<typeof userEvent.setup>,
   concepto = 'IMPUESTO PREDIAL',
 ): Promise<void> => {
   await usuario.selectOptions(await screen.findByLabelText('Concepto / tributo'), concepto);
+  await usuario.selectOptions(await screen.findByLabelText('Año'), '2026');
+  await usuario.type(screen.getByLabelText('Nº del documento'), 'RD-2026-000123');
 };
 
 describe('sin observacion no se guarda', () => {
@@ -138,10 +143,13 @@ describe('sin observacion no se guarda', () => {
 
     await waitFor(() => expect(peticiones).toHaveLength(1));
     expect(peticiones[0]?.metodo).toBe('POST');
-    // El concepto elegido y la observacion, **y nada mas**: los otros doce
-    // campos del formulario siguen sin tocarse, y lo que no se toca no viaja.
+    // El concepto, el año, el documento y la observacion —los cuatro que
+    // `elConcepto` llena (#342, nit 3)— **y nada mas**: los otros diez campos
+    // del formulario siguen sin tocarse, y lo que no se toca no viaja.
     expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).toEqual({
       tributo: 'PREDIAL',
+      ano: '2026',
+      documentoOrigen: 'RD-2026-000123',
       observacion: 'Emisión anual 2026.',
     });
   });
@@ -510,6 +518,84 @@ describe('un entero que no lo es no viaja, en vez de viajar a medias', () => {
  * irreversible; ahora no salen, y la opcion que los declara lo dice ademas en su
  * `exigir`.
  */
+/**
+ * **`TablaDelCuerpo.columnaUnica`**: un arreglo de valores sueltos, no de
+ * objetos (#75, `valores_masivo`). El cuarto caso de una tabla —despues de la
+ * simple, `plana` y `unica`—: `contribuyentes` de `IniciarCorridaMasiva` es
+ * `List<String>`, un codigo por elemento, y sin esto la unica forma de
+ * mandarlo era `cuerpo`, la salida de emergencia, perdiendo la lista blanca
+ * por columna.
+ */
+describe('una tabla de columna unica manda un arreglo de valores, no de objetos', () => {
+  const CON_COLUMNA_UNICA: OpcionesDeEscritura = {
+    tablas: {
+      contribuyentes: {
+        campo: 'contribuyentes',
+        columnaUnica: 'codigo',
+        columnas: { codigo: { campo: 'codigo' } },
+      },
+    },
+  };
+
+  const conColumnaUnica = () => {
+    const cliente = clienteDePruebas();
+    return renderHook(() => useEscritura('registrar_ficha_urbana', {}, CON_COLUMNA_UNICA), {
+      wrapper: ({ children }: { readonly children: ReactNode }) => (
+        <QueryClientProvider client={cliente}>{children}</QueryClientProvider>
+      ),
+    });
+  };
+
+  it('cada fila aporta un valor, no un objeto con una sola clave', async () => {
+    laApiResponde(201);
+    const { result } = conColumnaUnica();
+
+    act(() =>
+      result.current.fijarFilas('contribuyentes', [
+        { codigo: '00000003541' },
+        { codigo: '00000006550' },
+      ]),
+    );
+    act(() => result.current.fijarObservacion('Corrida de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo['contribuyentes']).toEqual(['00000003541', '00000006550']);
+  });
+
+  it('una fila cuya columna llega vacía no manda un hueco en el arreglo', async () => {
+    laApiResponde(201);
+    const { result } = conColumnaUnica();
+
+    act(() =>
+      result.current.fijarFilas('contribuyentes', [
+        { codigo: '00000003541' },
+        { codigo: '' },
+        { codigo: '00000006550' },
+      ]),
+    );
+    act(() => result.current.fijarObservacion('Corrida de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo['contribuyentes']).toEqual(['00000003541', '00000006550']);
+  });
+
+  it('sin ninguna fila, el arreglo viaja vacío: es lo mismo que dice el backend sin selección', async () => {
+    laApiResponde(201);
+    const { result } = conColumnaUnica();
+
+    act(() => result.current.fijarObservacion('Corrida de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo['contribuyentes']).toEqual([]);
+  });
+});
+
 describe('un importe con formato de pantalla, y un guion, no viajan', () => {
   const CON_IMPORTE: OpcionesDeEscritura = {
     campos: {

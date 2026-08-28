@@ -44,3 +44,6 @@ despliegue/compose.override.yml
 # derivado en texto (CSV) y el README con las URIs y sus sha256.
 docs/10-negocio/valores-normativos/fuentes/**/*.pdf
 docs/10-negocio/valores-normativos/fuentes/**/*.gpkg
+
+# Worktrees temporales de agentes (harness de Claude Code)
+.claude/worktrees/

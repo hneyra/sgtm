@@ -116,8 +116,23 @@ export function IndiceDeSecciones({
 
   return (
     <nav className="sgtm-indice" aria-label="Secciones de la pantalla" data-no-imprimible="1">
+      {/* **La tabla no es una sección** (#342, nit 4): en «Cálculo individual
+          del impuesto predial» `previa` la antepone —es el paso 1 del cálculo,
+          «Predios que integran la base imponible»—, y contarla como sección
+          decía «4 secciones» donde hay tres y una tabla. El propio docblock de
+          `previa` la llama «el bloque»; se usa esa palabra, honesta con las dos
+          formas de entrada, en vez de inventarle a la tabla un rótulo que no
+          es el suyo. Sin `previa` el indice solo lista secciones de verdad, y
+          la palabra no cambia. */}
       <p className="sgtm-indice__eyebrow">
-        {entradas.length} {entradas.length === 1 ? 'sección' : 'secciones'}
+        {entradas.length}{' '}
+        {previa === undefined
+          ? entradas.length === 1
+            ? 'sección'
+            : 'secciones'
+          : entradas.length === 1
+            ? 'bloque'
+            : 'bloques'}
       </p>
       {entradas.map((entrada, indice) => (
         <button
