@@ -17,6 +17,7 @@ import pe.gob.sgtm.dominio.ValorNormativo;
 import pe.gob.sgtm.dominio.Vigencia;
 import pe.gob.sgtm.parametros.dominio.ConjuntoDeParametros;
 import pe.gob.sgtm.parametros.dominio.EstadoDelConjunto;
+import pe.gob.sgtm.parametros.dominio.LlaveDeParametro;
 import pe.gob.sgtm.parametros.dominio.ParametroTributario;
 import pe.gob.sgtm.parametros.dominio.ParametrosRepository;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
@@ -169,6 +170,26 @@ public class ParametrosRepositoryJdbc extends RepositorioJdbc implements Paramet
                                 + " WHERE d.conjunto_id = :conjunto"
                                 + " ORDER BY p.tipo, p.clave")
                 .param("conjunto", conjuntoId)
+                .query(ParametrosRepositoryJdbc::mapearParametro)
+                .list();
+    }
+
+    @Override
+    public List<ParametroTributario> publicados(LlaveDeParametro llave) {
+        // IS NOT DISTINCT FROM y no `=`: la clave admite nulo —un tipo con un solo valor, como la
+        // UIT— y `clave = NULL` no devuelve ninguna fila ni falla, que es la peor de las dos
+        // respuestas posibles.
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS_PARAMETRO
+                                + " FROM parametro_tributario"
+                                + " WHERE tipo = :tipo"
+                                + "   AND clave IS NOT DISTINCT FROM :clave"
+                                + "   AND vigencia_desde = :desde"
+                                + " ORDER BY id")
+                .param("tipo", llave.tipo())
+                .param("clave", llave.clave())
+                .param("desde", java.sql.Date.valueOf(llave.vigenciaDesde()))
                 .query(ParametrosRepositoryJdbc::mapearParametro)
                 .list();
     }

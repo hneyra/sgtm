@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.auditoria.Auditoria;
@@ -15,6 +16,7 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.parametros.dominio.ConjuntoDeParametros;
+import pe.gob.sgtm.parametros.dominio.LlaveDeParametro;
 import pe.gob.sgtm.parametros.dominio.ParametroTributario;
 import pe.gob.sgtm.parametros.dominio.ParametrosRepository;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -99,6 +101,51 @@ public class AdministrarParametros {
                                         + ",\"ejercicio\":"
                                         + conjunto.ejercicio().valor()
                                         + "}"));
+    }
+
+    /**
+     * Agrega al conjunto el parametro publicado que responde a esa llave, nombrandolo por lo que es
+     * y no por su identificador.
+     *
+     * <p>Es lo que hace posible componer un conjunto desde un archivo de operacion que valga igual
+     * en {@code stg} y en {@code prod} (ver {@link LlaveDeParametro}). La resolucion y el alta van
+     * en la <b>misma</b> transaccion: entre leer el identificador y usarlo cabe otra escritura, y
+     * lo que se estaria incorporando ya no seria lo que se leyo.
+     *
+     * @throws ProblemaDeNegocio si no hay ningun parametro publicado con esa llave, o si hay mas de
+     *     uno: elegir en silencio uno de dos homonimos sellaria un valor que nadie escogio
+     */
+    @Transactional
+    public ParametroTributario agregarParametroPublicado(
+            long conjuntoId, LlaveDeParametro llave, Observacion observacion) {
+        List<ParametroTributario> encontrados = repositorio.publicados(llave);
+        if (encontrados.isEmpty()) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.NO_ENCONTRADO,
+                    "No hay ningun parametro publicado con la llave "
+                            + llave
+                            + ". Publicarlo es trabajo de rol_carga_parametros, antes de componer"
+                            + " el conjunto (REQ-03)");
+        }
+        if (encontrados.size() > 1) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.CONFLICTO,
+                    "Hay "
+                            + encontrados.size()
+                            + " parametros publicados con la llave "
+                            + llave
+                            + ": quedarse con uno seria sellar un valor que nadie eligio");
+        }
+
+        ParametroTributario parametro = encontrados.get(0);
+        // Llamada a un metodo propio: no pasa por el proxy, pero la transaccion de este metodo ya
+        // esta abierta y es la que se quiere. Lo que importa aqui es que las dos operaciones sean
+        // una sola, no que haya dos anotaciones.
+        agregarParametro(
+                conjuntoId,
+                Objects.requireNonNull(parametro.id(), "Un parametro leido de la base tiene id"),
+                observacion);
+        return parametro;
     }
 
     /**
