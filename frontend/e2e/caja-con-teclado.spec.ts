@@ -137,7 +137,59 @@ test('la caja dice por que todavia no puede cobrar, en vez de prometerlo', async
   await expect(cobrar).toHaveAttribute('aria-disabled', 'true');
 
   // Y el motivo se **ve**, en la lengua del mostrador y con la salida puesta.
+  // Desde #74 nombra el dato exacto que falta —el medio de pago, no la lista
+  // blanca—: `caja_tributaria` esta en `ACTOS_SIN_CAMPO`, no en «sin-declaracion».
+  await expect(page.getByText(/el medio de pago/i)).toBeVisible();
   await expect(page.getByText(/Registra el acto por el procedimiento actual/i)).toBeVisible();
   // Sin escritura declarada no hay ni caja de observacion: no hay a donde escribir.
   await expect(page.getByRole('textbox', { name: 'Observación' })).toHaveCount(0);
+});
+
+/**
+ * **Anular un recibo, sin tocar el raton** (#34, #74, RNF-082).
+ *
+ * Es el primer acto de tesoreria que llega hasta el final: caja tributaria y
+ * caja de tasas siguen sin poder cobrar —les falta el medio de pago en el
+ * cuerpo, y ninguna pantalla del prototipo dibuja ese campo (`ACTOS_SIN_CAMPO`)—,
+ * asi que el camino completo de ventanilla se recorre aqui, sobre el acto que
+ * si declara su cuerpo entero: se abre por el numero impreso del recibo —igual
+ * que una ficha catastral se abre por su codigo—, se elige el motivo y quien
+ * autoriza con el teclado, y la anulacion **se confirma**: no se deshace
+ * (regla 4, RNF-051).
+ */
+test('anular un recibo: identificar, elegir, confirmar, sin raton', async ({ page }) => {
+  await page.goto('/tesoreria/anulacion-recibo/001-0000123');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(/Anulación de recibo/i);
+
+  // El motivo se elige con el teclado: un `select` se opera con las flechas.
+  const motivo = page.getByLabel('Motivo');
+  await motivo.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(motivo).not.toHaveValue('');
+
+  const autorizadoPor = page.getByLabel('Autorizado por');
+  await autorizadoPor.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(autorizadoPor).not.toHaveValue('');
+
+  const memorando = page.getByLabel('Nº de memorando');
+  await memorando.focus();
+  await page.keyboard.type('MEMO-2026-014');
+
+  const observacion = page.getByRole('textbox', { name: 'Observación' });
+  await observacion.focus();
+  await page.keyboard.type('Pago duplicado, verificado con el contribuyente.');
+
+  // La primaria es irreversible: no manda hasta confirmar (regla 4).
+  const anular = page.getByRole('button', { name: 'Anular recibo', exact: true });
+  await expect(anular).toBeEnabled();
+  await anular.focus();
+  await page.keyboard.press('Enter');
+
+  await expect(page.getByText(/no se deshace/i)).toBeVisible();
+  const confirmar = page.getByRole('button', { name: /^Confirmar/i });
+  await confirmar.focus();
+  await page.keyboard.press('Enter');
+
+  await expect(page.getByText(/Guardado, con tu observación/)).toBeVisible();
 });

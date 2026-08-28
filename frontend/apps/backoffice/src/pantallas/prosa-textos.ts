@@ -355,6 +355,8 @@ export const NOTAS: Readonly<Record<string, string>> = {
 
   prescripcion:
     'El plazo, el inicio y el nuevo inicio del cómputo, el resultado y el monto a extinguir los calcula el servidor a partir del conjunto sellado y de la deuda del contribuyente: no se escriben aquí. Esta pantalla solo declara una interrupción (art. 45); la suspensión (art. 46) todavía no tiene campo.',
+  anulacion_recibo:
+    'El «Detalle» de esta pantalla es la misma observación que pide el sistema, así que no viaja aparte: se escribe abajo, donde ya se pide. La anulación siempre devuelve la deuda a la cuenta corriente —no es una casilla que se pueda destildar— y el número de recibo se toma del que abrió esta pantalla, no del campo «Nro. de recibo».',
 };
 
 /** Las opciones cuya escritura lleva nota. La comprobacion de coherencia las mira. */

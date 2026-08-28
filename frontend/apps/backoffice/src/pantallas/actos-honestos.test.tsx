@@ -160,28 +160,22 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
        o cuando una opcion declara su escritura, que son exactamente los dos
        cambios sobre los que hay que llamar la atencion. */
     expect(porCausa).toEqual({
-      // Cuatro se mudan a esta casilla al conectarse las cuatro opciones de
-      // Valores que le faltaban a #75 (`valores_individual`, `valores_masivo`,
-      // `prescripcion`, `pase_coactiva`): las cuatro declaran su escritura en
-      // `escrituras.ts` desde ahi.
-      declarada: 10,
-      // Y una se va de aqui: `pase_coactiva` no tenia impedimento porque su
-      // primaria del catalogo («Imprimir») pasaba el filtro de salida, aunque
-      // la pantalla de verdad escribe con otra accion («Derivar a coactiva»,
-      // en su propio componente). Contarla como declarada es lo honesto.
+      // Trece declaran: las seis de antes, `anulacion_recibo` (#74), las dos
+      // transferencias (#73, que salen de `sin-campo` al ganar su resolutor) y
+      // las cuatro de Valores (#75) — y `pase_coactiva` llega desde `salida`,
+      // porque su primaria del catalogo («Imprimir») pasaba el filtro aunque
+      // la pantalla de verdad escribe con «Derivar a coactiva».
+      declarada: 13,
       salida: 49,
       'sin-backend': 41,
-      // Una se muda de casilla al sumarse la tercera causa (#333): «Cálculo
-      // individual del impuesto predial», cuya primaria es «Calcular». Dos mas
-      // al sumarse la cuarta (#73): las dos transferencias, a las que no les
-      // falta una lista blanca sino un campo en la pantalla. Y tres se van a
-      // «declarada» con #75: `valores_individual`, `valores_masivo` y
-      // `prescripcion`.
-      'sin-declaracion': 31,
+      // Tres se van a `declarada` con #75, una con #74; y tres se mudan a
+      // `sin-campo` con #74: `caja_tributaria` y `caja_tasas` —les falta el
+      // medio de pago, un campo distinto de «Forma de pago»— y
+      // `fraccionamiento` —le falta la grilla de deuda a acoger—.
+      'sin-declaracion': 27,
       'sin-determinacion': 1,
-      // Vacia hoy: `ACTOS_SIN_CAMPO` no tiene ninguna opcion viva. El mecanismo
-      // se prueba con una muestra, no aqui (ver el describe de arriba).
-      'sin-campo': 0,
+      // Las tres de tesoreria (#74); las dos transferencias ya no estan (#73).
+      'sin-campo': 3,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);
@@ -192,8 +186,17 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(impedimentoDelActo('cuenta_corriente', ['Exportar', 'Registrar pago'])?.causa).toBe(
       'sin-backend',
     );
-    // Escribe en el contrato y no ha declarado su cuerpo.
-    expect(impedimentoDelActo('caja_tributaria', ['Cobrar'])?.causa).toBe('sin-declaracion');
+    // Escribe en el contrato y no ha declarado su cuerpo: `cierre_caja` (#36,
+    // #74) — el `declarado` que exige `PeticionDeCierre` es un mapa por forma
+    // de pago, y `CampoDelCuerpo`/`TablaDelCuerpo` no saben construirlo todavía.
+    expect(impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja'])?.causa).toBe(
+      'sin-declaracion',
+    );
+    // Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
+    // no tiene donde escribir** (#33, #74): a `caja_tributaria` le falta el
+    // medio de pago —EFECTIVO/CHEQUE/DEPOSITO/TARJETA/TRANSFERENCIA—, un campo
+    // distinto de «Forma de pago» (que en el backend es `tipoDePago`).
+    expect(impedimentoDelActo('caja_tributaria', ['Cobrar'])?.causa).toBe('sin-campo');
     // Y declarada: sin impedimento ninguno.
     expect(impedimentoDelActo('notificacion_valores', ['Registrar notificación'])).toBeUndefined();
     /* «Conciliar seleccionadas» de la consulta de fichas (#322, ADR-0015 §3):
