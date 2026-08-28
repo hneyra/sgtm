@@ -1,9 +1,12 @@
 package pe.gob.sgtm.parametros;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.ValorNormativo;
@@ -57,6 +60,40 @@ public final class ParametrosSellados {
 
     public Optional<String> texto(String tipo, @Nullable String clave) {
         return Optional.ofNullable(textos.get(llave(tipo, clave)));
+    }
+
+    /**
+     * Las claves que el conjunto publica bajo ese tipo, en orden alfabetico.
+     *
+     * <p>Existe porque hay familias de parametros cuyo <b>catalogo es el propio dato</b>: cuantas
+     * campanas de beneficio hay y como se llaman no lo sabe el codigo —lo dice la ordenanza, D-02b
+     * (#72)—, asi que la unica forma honesta de listarlas es preguntarselo al conjunto sellado. Un
+     * {@code enum} con «AMNISTIA ORDENANZA 018-2026» dentro seria el nombre de la ordenanza de una
+     * municipalidad concreta compilado en un producto multi-municipal.
+     *
+     * <p>Mira <b>las dos mitades</b>, la numerica y la textual: una fila puede llevar solo una, y
+     * quien enumera necesita ver la clave para poder decir que la otra falta. Es lo que permite
+     * rechazar media campana en vez de ignorarla, igual que {@link PoliticasDeRedondeoSelladas}
+     * rechaza media politica.
+     *
+     * <p>El parametro <b>sin</b> clave —el tipo con un solo valor, que es la forma de la UIT— no
+     * sale aqui: su llave es el tipo a secas y no hay ninguna clave que devolver.
+     */
+    public SortedSet<String> clavesDe(String tipo) {
+        Objects.requireNonNull(tipo, "Enumerar las claves de un tipo exige el tipo");
+        String prefijo = tipo + ":";
+        SortedSet<String> claves = new TreeSet<>();
+        for (String llave : numeros.keySet()) {
+            if (llave.startsWith(prefijo)) {
+                claves.add(llave.substring(prefijo.length()));
+            }
+        }
+        for (String llave : textos.keySet()) {
+            if (llave.startsWith(prefijo)) {
+                claves.add(llave.substring(prefijo.length()));
+            }
+        }
+        return Collections.unmodifiableSortedSet(claves);
     }
 
     /**
