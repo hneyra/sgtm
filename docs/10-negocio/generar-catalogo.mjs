@@ -57,6 +57,33 @@ const CONTEXTO = {
   'Seguridad': 'seguridad',
 };
 
+/* Lo que el backend ya publica de un modulo, cuando no se deduce de la tabla.
+
+   El `endpoint` de cada fila sale del prototipo de interfaz: dice que la
+   pantalla existe y que operacion declara, no si el backend la sirve ni si
+   ademas se puede escribir en ella. Cuando lo publicado se aparta de lo que el
+   prototipo declara —una pantalla de mantenimiento cuyo endpoint es un GET, un
+   PUT que cubre mas tipos de los que su ruta sugiere—, la nota lo dice bajo el
+   titulo del modulo. Sin nota, no se emite nada. */
+const NOTAS = {
+  'Catastro': [
+    '**Lo que el backend ya publica (#290).** `calles` y `sectores` dan de alta y editan, y la',
+    'baja es lógica: no se borra ninguna fila (RNF-051). `sectores` además da de alta manzanas, y',
+    'solo eso —el código de una manzana es un tramo del código catastral de sus predios, así que',
+    'cambiarlo los desalinearía a todos—. Las cuatro fichas se inscriben, y el alta',
+    '**crea el predio en el mismo acto** si todavía no existe —`ficha_catastral.predio_id` es',
+    '`NOT NULL`—, con su titularidad inicial si ya se conoce. `actualizacion_catastro` versiona',
+    '**los cuatro tipos de ficha**, no solo el urbano, aunque su endpoint declare la ruta del',
+    'urbano. Toda escritura exige la observación del usuario (RNF-052) y deja auditoría.',
+    '',
+    '`aranceles`, `valores_unitarios` y `depreciacion` siguen **de solo lectura**, y no por olvido:',
+    'el arancel se carga por lote contra un conjunto de parámetros que alguien abre y sella',
+    '(`AdministrarParametros.abrirVersion` + `ImportarArancel`), no fila a fila desde una pantalla;',
+    'y las otras dos esperan **D-13** —el ámbito del dato de norma nacional— antes de que se decida',
+    'quién las escribe.',
+  ],
+};
+
 /** Donde lo describe el manual. */
 const CAPITULO = {
   'Inicio': '—',
@@ -86,6 +113,10 @@ lineas.push('Leyenda de bloque: `Registro` = registro y mantenimiento · `Proces
 lineas.push('`Documentos` = documentos y reportes. Es la clasificación que usa la navegación de la');
 lineas.push('interfaz, y la calcula el título de la pantalla.');
 lineas.push('');
+lineas.push('El `endpoint` es el que **declara el prototipo**: dice qué operación pide la pantalla, no');
+lineas.push('si el backend la sirve ni si además se puede escribir en ella. Cuando lo publicado se');
+lineas.push('aparta de eso, el módulo lleva una **nota** bajo su título.');
+lineas.push('');
 lineas.push('| Módulo | Manual | Contexto | Opciones |');
 lineas.push('|---|---|---|---|');
 for (const grupo of NAV) {
@@ -99,6 +130,10 @@ for (const grupo of NAV) {
   lineas.push('');
   lineas.push(`Manual: ${CAPITULO[grupo.label]} · contexto acotado: \`${CONTEXTO[grupo.label]}\``);
   lineas.push('');
+  if (NOTAS[grupo.label]) {
+    lineas.push(...NOTAS[grupo.label]);
+    lineas.push('');
+  }
   lineas.push('| id | Opción | Bloque | Endpoint |');
   lineas.push('|---|---|---|---|');
   for (const [id, etiqueta] of grupo.items) {
