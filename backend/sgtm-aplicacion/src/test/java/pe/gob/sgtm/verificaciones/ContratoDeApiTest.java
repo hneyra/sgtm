@@ -99,6 +99,10 @@ class ContratoDeApiTest {
                     "GET /consultas/valores",
                     "GET /consultas/resumen-predial",
                     "GET /consultas/unificada",
+                    // #72: la ultima opcion de Consultas. Simula el acogimiento de la deuda a una
+                    // campana de beneficio; las campanas y lo que descuentan son dato del conjunto
+                    // sellado (D-02b, D-02c), no un enum.
+                    "GET /consultas/deudas-con-beneficio",
                     "POST /rentas/deuda/altas",
                     "POST /rentas/deuda/bajas",
                     "GET /seguridad/modulos",
