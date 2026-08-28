@@ -7,7 +7,10 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
 import org.jspecify.annotations.Nullable;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,7 +24,9 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.documentos.EmitirDocumento;
 import pe.gob.sgtm.documentos.FormatoDeDocumento;
+import pe.gob.sgtm.documentos.GeneradorDeDocumentos;
 import pe.gob.sgtm.dominio.AreaM2;
+import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.licencias.aplicacion.CancelarLicencia;
 import pe.gob.sgtm.licencias.aplicacion.ComprobacionDelDerecho;
@@ -29,8 +34,11 @@ import pe.gob.sgtm.licencias.aplicacion.ConsultaDeLicencias;
 import pe.gob.sgtm.licencias.aplicacion.DerechosDeTramiteParametrizados;
 import pe.gob.sgtm.licencias.aplicacion.DuplicarLicencia;
 import pe.gob.sgtm.licencias.aplicacion.EmitirLicenciaDeFuncionamiento;
+import pe.gob.sgtm.licencias.aplicacion.ModeloDeLosReportesDeLicencias;
+import pe.gob.sgtm.licencias.aplicacion.ResumenAnualDeLicencias;
 import pe.gob.sgtm.licencias.dominio.CriterioDeLicencias;
 import pe.gob.sgtm.licencias.dominio.DuplicadoDeLicenciaRepository;
+import pe.gob.sgtm.licencias.dominio.EstadoDeLicencia;
 import pe.gob.sgtm.licencias.dominio.LicenciaRepository;
 import pe.gob.sgtm.licencias.dominio.MovimientoDeLicenciaRepository;
 import pe.gob.sgtm.licencias.dominio.TipoDeLicencia;
@@ -75,12 +83,19 @@ public class LicenciaController {
 
     static final String ACCESO_DUPLICADO = "licencia_resolucion_duplicado";
 
+    /** Y las dos que #54 conecta: el padron y el resumen anual. */
+    static final String ACCESO_PADRON = "licencia_padron";
+
+    static final String ACCESO_RESUMEN = "licencia_resumen_anual";
+
     private static final String ORDEN_POR_OMISION = "numero";
 
     private final ConsultaDeLicencias consulta;
     private final EmitirLicenciaDeFuncionamiento emitir;
     private final CancelarLicencia cancelar;
     private final DuplicarLicencia duplicar;
+    private final ResumenAnualDeLicencias resumen;
+    private final GeneradorDeDocumentos documentos;
     private final Clock reloj;
 
     public LicenciaController(
@@ -88,11 +103,15 @@ public class LicenciaController {
             EmitirLicenciaDeFuncionamiento emitir,
             CancelarLicencia cancelar,
             DuplicarLicencia duplicar,
+            ResumenAnualDeLicencias resumen,
+            GeneradorDeDocumentos documentos,
             Clock reloj) {
         this.consulta = consulta;
         this.emitir = emitir;
         this.cancelar = cancelar;
         this.duplicar = duplicar;
+        this.resumen = resumen;
+        this.documentos = documentos;
         this.reloj = reloj;
     }
 
@@ -132,7 +151,16 @@ public class LicenciaController {
         }
 
         CriterioDeLicencias criterio =
-                new CriterioDeLicencias(null, nExpediente, denominacionComercial, direccion, null);
+                new CriterioDeLicencias(
+                        null,
+                        nExpediente,
+                        denominacionComercial,
+                        direccion,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null);
 
         return RespuestaPaginada.de(
                 consulta.buscar(
@@ -269,6 +297,205 @@ public class LicenciaController {
         }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(ActoDeLicenciaResource.de(duplicado));
+    }
+
+    /**
+     * El padron de licencias, con su fecha de corte y su resumen (RF-115).
+     *
+     * <p><b>La fecha de corte entra en el cuerpo</b> y no sale del reloj (AC 1 de #54, regla 9): el
+     * estado de cada fila depende del dia, asi que reimprimir el padron de marzo con su misma fecha
+     * tiene que dar el mismo papel. Solo cuando la peticion no la trae se usa la de hoy, y entonces
+     * la respuesta la dice.
+     */
+    @PostMapping("/funcionamiento/reportes/padron")
+    @RequiereAcceso(acceso = ACCESO_PADRON, privilegio = Privilegio.IMPRESION)
+    public ResponseEntity<PadronDeLicenciasResource> padron(
+            @RequestBody PeticionDeReporteDeLicencias peticion) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(PadronDeLicenciasResource.de(componerPadron(peticion)));
+    }
+
+    /**
+     * El mismo padron como documento: hoja de calculo, texto enriquecido o PDF (RF-132).
+     *
+     * <p>Es la misma ruta y el mismo cuerpo, con {@code ?formato=}. Mismo reparto que {@code
+     * ReporteController} hace con la ficha del contribuyente: publicar una ruta aparte para el
+     * documento la dejaria sin ninguna pantalla que la llame, porque el prototipo declara una sola
+     * por opcion.
+     */
+    @PostMapping(value = "/funcionamiento/reportes/padron", params = "formato")
+    @RequiereAcceso(acceso = ACCESO_PADRON, privilegio = Privilegio.IMPRESION)
+    public ResponseEntity<byte[]> padronComoDocumento(
+            @RequestBody PeticionDeReporteDeLicencias peticion, @RequestParam String formato) {
+
+        FormatoDeDocumento elegido = formatoDe(formato);
+        return archivo(
+                documentos.generar(
+                        ModeloDeLosReportesDeLicencias.delPadron(componerPadron(peticion)),
+                        elegido),
+                elegido,
+                "padron-licencias");
+    }
+
+    /** El resumen de licencias por año, con la recaudacion por derecho de tramite (RF-115). */
+    @GetMapping("/funcionamiento/reportes/resumen-anual")
+    @RequiereAcceso(acceso = ACCESO_RESUMEN, privilegio = Privilegio.IMPRESION)
+    public ResumenAnualResource resumenAnual(
+            @RequestParam(required = false) @Nullable String desdeElAno,
+            @RequestParam(required = false) @Nullable String hastaElAno,
+            @RequestParam(required = false) @Nullable String tipoDeLicencia,
+            @RequestParam(required = false) @Nullable String aLaFecha) {
+        return ResumenAnualResource.de(
+                componerResumen(desdeElAno, hastaElAno, tipoDeLicencia, aLaFecha));
+    }
+
+    /** El mismo resumen como documento (RF-132). */
+    @GetMapping(value = "/funcionamiento/reportes/resumen-anual", params = "formato")
+    @RequiereAcceso(acceso = ACCESO_RESUMEN, privilegio = Privilegio.IMPRESION)
+    public ResponseEntity<byte[]> resumenAnualComoDocumento(
+            @RequestParam(required = false) @Nullable String desdeElAno,
+            @RequestParam(required = false) @Nullable String hastaElAno,
+            @RequestParam(required = false) @Nullable String tipoDeLicencia,
+            @RequestParam(required = false) @Nullable String aLaFecha,
+            @RequestParam String formato) {
+
+        FormatoDeDocumento elegido = formatoDe(formato);
+        return archivo(
+                documentos.generar(
+                        ModeloDeLosReportesDeLicencias.delResumen(
+                                componerResumen(desdeElAno, hastaElAno, tipoDeLicencia, aLaFecha)),
+                        elegido),
+                elegido,
+                "resumen-licencias");
+    }
+
+    // ------------------------------------------------------------------
+
+    private ConsultaDeLicencias.Padron componerPadron(PeticionDeReporteDeLicencias peticion) {
+        LocalDate corte = fechaOhoy(peticion.aLaFecha(), "aLaFecha");
+
+        CriterioDeLicencias criterio;
+        try {
+            criterio =
+                    new CriterioDeLicencias(
+                            numeroDeLicencia(peticion),
+                            null,
+                            null,
+                            vacioAnulo(peticion.direccion()),
+                            tipoOpcional(peticion.tipoLic()),
+                            vacioAnulo(peticion.ciiu()),
+                            fechaOpcional(peticion.fecLicDesde(), "fecLicDesde"),
+                            fechaOpcional(peticion.fecLicHasta(), "fecLicHasta"),
+                            null);
+        } catch (IllegalArgumentException intervalo) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(intervalo));
+        }
+
+        ParametrosDePaginacion paginacion =
+                new ParametrosDePaginacion(peticion.pagina(), peticion.tamano(), null, null);
+
+        return consulta.padron(
+                criterio,
+                peticion.nombreDelContribuyente(),
+                estadoOpcional(peticion.estado()),
+                corte,
+                paginacion.aPaginacion(ORDEN_POR_OMISION));
+    }
+
+    private ResumenAnualDeLicencias.Resumen componerResumen(
+            @Nullable String desdeElAno,
+            @Nullable String hastaElAno,
+            @Nullable String tipoDeLicencia,
+            @Nullable String aLaFecha) {
+
+        LocalDate corte = fechaOhoy(aLaFecha, "aLaFecha");
+        Ejercicio hasta = ejercicioOpcional(hastaElAno, "hastaElAno", Ejercicio.de(corte));
+        Ejercicio desde = ejercicioOpcional(desdeElAno, "desdeElAno", hasta);
+
+        try {
+            return resumen.entre(desde, hasta, tipoOpcional(tipoDeLicencia), corte);
+        } catch (ResumenAnualDeLicencias.IntervaloInvalido invalido) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
+        }
+    }
+
+    /**
+     * Las dos mitades del numero de licencia que la pantalla teclea, unidas.
+     *
+     * <p>{@code licencia_funcionamiento} guarda el numero entero, con el formato que compone {@code
+     * PlantillaDeNumeroDeLicencia}. Partirlo en la base obligaria a decidir donde esta la frontera,
+     * y esa decision es D-09.
+     */
+    private static @Nullable String numeroDeLicencia(PeticionDeReporteDeLicencias peticion) {
+        String serie =
+                vacioAnulo(peticion.nLicenciaSerie()) == null ? "" : peticion.nLicenciaSerie();
+        String numero =
+                vacioAnulo(peticion.nLicenciaNumero()) == null ? "" : peticion.nLicenciaNumero();
+        String unido =
+                (serie == null ? "" : serie.strip())
+                        + (numero == null || numero.isBlank() ? "" : "-" + numero.strip());
+        return unido.isBlank() ? null : unido;
+    }
+
+    private static @Nullable EstadoDeLicencia estadoOpcional(@Nullable String estado) {
+        String texto = estado == null ? "" : estado.strip();
+        // «TODAS» es la opcion del desplegable que significa «sin filtro», y llega como texto igual
+        // que las otras cuatro. Traducirla a null aqui es lo que evita un quinto estado
+        // inexistente.
+        if (texto.isEmpty() || "TODAS".equalsIgnoreCase(texto)) {
+            return null;
+        }
+        try {
+            return EstadoDeLicencia.valueOf(texto.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException noExiste) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "El estado va entre VIGENTE, VENCIDA, CANCELADA y TODAS: '" + estado + "'");
+        }
+    }
+
+    private static @Nullable TipoDeLicencia tipoOpcional(@Nullable String tipo) {
+        String texto = tipo == null ? "" : tipo.strip();
+        if (texto.isEmpty() || "(TODOS)".equalsIgnoreCase(texto)) {
+            return null;
+        }
+        try {
+            return TipoDeLicencia.porNombre(texto);
+        } catch (IllegalArgumentException noExiste) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "El tipo de licencia va entre DEFINITIVA, TEMPORAL y CESIONARIA: '"
+                            + tipo
+                            + "'");
+        }
+    }
+
+    private static Ejercicio ejercicioOpcional(
+            @Nullable String ano, String campo, Ejercicio porOmision) {
+        String texto = ano == null ? "" : ano.strip();
+        if (texto.isEmpty()) {
+            return porOmision;
+        }
+        try {
+            return new Ejercicio(Integer.parseInt(texto));
+        } catch (IllegalArgumentException invalido) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "El campo '" + campo + "' es un año de cuatro cifras: '" + ano + "'");
+        }
+    }
+
+    private static ResponseEntity<byte[]> archivo(
+            byte[] contenido, FormatoDeDocumento formato, String base) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(formato.tipoDeMedio()))
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment()
+                                .filename(formato.nombreDeArchivo(base))
+                                .build()
+                                .toString())
+                .body(contenido);
     }
 
     // ------------------------------------------------------------------

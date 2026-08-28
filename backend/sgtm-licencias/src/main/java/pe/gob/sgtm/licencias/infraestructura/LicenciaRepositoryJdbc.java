@@ -26,9 +26,11 @@ import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.licencias.dominio.CriterioDeLicencias;
+import pe.gob.sgtm.licencias.dominio.EstadoDeLicencia;
 import pe.gob.sgtm.licencias.dominio.GiroDeLaLicencia;
 import pe.gob.sgtm.licencias.dominio.LicenciaDeFuncionamiento;
 import pe.gob.sgtm.licencias.dominio.LicenciaRepository;
+import pe.gob.sgtm.licencias.dominio.ResumenDelPadronDeLicencias;
 import pe.gob.sgtm.licencias.dominio.TipoDeLicencia;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RangoDePrefijo;
@@ -65,6 +67,28 @@ public class LicenciaRepositoryJdbc extends RepositorioJdbc implements LicenciaR
                     + " area_solicitada, tipo_licencia, zonificacion, aforo, fecha_emision,"
                     + " vigencia_hasta, recibo_id, documento_id, expediente, fecha_expediente,"
                     + " usuario_registro, fecha_registro, observacion";
+
+    /** Las mismas columnas con el alias {@code l}, que la consulta del padron necesita. */
+    private static final String COLUMNAS_CALIFICADAS = "l." + COLUMNAS.replace(", ", ", l.");
+
+    /**
+     * «Esta cancelada a la fecha de corte», en SQL.
+     *
+     * <p>Es la traduccion literal de la primera mitad de {@link EstadoDeLicencia#derivarDe}: existe
+     * un movimiento de cancelacion con fecha <b>anterior o igual</b> a la de corte. La fecha entra
+     * como parametro {@code :aLaFecha} y no como {@code current_date}: el padron de marzo tiene que
+     * decir lo que decia en marzo, y con {@code current_date} cambiaria cada vez que se pide (AC 1
+     * de #54, regla 9).
+     */
+    private static final String CANCELADA =
+            "EXISTS (SELECT 1 FROM licencia_movimiento m"
+                    + "  WHERE m.municipalidad_id = l.municipalidad_id"
+                    + "    AND m.licencia_id = l.id AND m.tipo = 'CANCELACION'"
+                    + "    AND m.fecha <= :aLaFecha)";
+
+    /** «Su plazo ya paso a la fecha de corte», en SQL. Una licencia sin plazo nunca vence. */
+    private static final String VENCIDA =
+            "(l.vigencia_hasta IS NOT NULL AND l.vigencia_hasta < :aLaFecha)";
 
     private static final OrdenSeguro ORDEN =
             OrdenSeguro.sobre(
@@ -191,46 +215,162 @@ public class LicenciaRepositoryJdbc extends RepositorioJdbc implements LicenciaR
     @Override
     public Pagina<LicenciaDeFuncionamiento> buscar(
             CriterioDeLicencias criterio, Paginacion paginacion) {
+        return consultar(criterio, null, null, paginacion);
+    }
+
+    @Override
+    public Pagina<LicenciaDeFuncionamiento> padron(
+            CriterioDeLicencias criterio,
+            @Nullable EstadoDeLicencia estado,
+            LocalDate aLaFecha,
+            Paginacion paginacion) {
+        return consultar(criterio, estado, aLaFecha, paginacion);
+    }
+
+    @Override
+    public ResumenDelPadronDeLicencias resumen(
+            CriterioDeLicencias criterio, @Nullable EstadoDeLicencia estado, LocalDate aLaFecha) {
 
         StringBuilder donde = new StringBuilder(" WHERE 1 = 1");
         Map<String, Object> parametros = new HashMap<>();
+        condiciones(criterio, donde, parametros);
+        parametros.put("aLaFecha", aLaFecha);
+        estadoEnSql(estado, donde);
 
-        if (criterio.numero() != null) {
-            donde.append(" AND numero = :numero");
-            parametros.put("numero", criterio.numero());
+        // Los tres conteos salen de la MISMA consulta y de la MISMA expresion que filtra la
+        // pagina. Contarlos por separado —tres consultas, o peor, contando la pagina devuelta—
+        // daria un reparto que puede no sumar el total, y `ResumenDelPadronDeLicencias` lo
+        // rechaza en su constructor precisamente para que eso no pase inadvertido.
+        return Objects.requireNonNull(
+                jdbc().sql(
+                                "SELECT count(*) AS total,"
+                                        + " count(*) FILTER (WHERE "
+                                        + CANCELADA
+                                        + ") AS canceladas,"
+                                        + " count(*) FILTER (WHERE NOT "
+                                        + CANCELADA
+                                        + " AND "
+                                        + VENCIDA
+                                        + ") AS vencidas,"
+                                        + " count(*) FILTER (WHERE NOT "
+                                        + CANCELADA
+                                        + " AND NOT "
+                                        + VENCIDA
+                                        + ") AS vigentes"
+                                        + " FROM licencia_funcionamiento l"
+                                        + donde)
+                        .params(parametros)
+                        .query(
+                                (ResultSet fila, int numeroDeFila) ->
+                                        new ResumenDelPadronDeLicencias(
+                                                fila.getLong("total"),
+                                                fila.getLong("vigentes"),
+                                                fila.getLong("vencidas"),
+                                                fila.getLong("canceladas")))
+                        .single());
+    }
+
+    @Override
+    public ConteosDelAno conteosDelAno(
+            Ejercicio ejercicio, @Nullable TipoDeLicencia tipo, LocalDate alCierre) {
+
+        LocalDate inicio = LocalDate.of(ejercicio.valor(), 1, 1);
+        LocalDate fin = LocalDate.of(ejercicio.valor(), 12, 31);
+
+        StringBuilder porTipo = new StringBuilder();
+        Map<String, Object> parametros = new HashMap<>();
+        parametros.put("inicio", inicio);
+        parametros.put("fin", fin);
+        parametros.put("aLaFecha", alCierre);
+        if (tipo != null) {
+            porTipo.append(" AND l.tipo_licencia = :tipo");
+            parametros.put("tipo", tipo.name());
         }
-        if (criterio.expediente() != null) {
-            donde.append(" AND expediente = :expediente");
-            parametros.put("expediente", criterio.expediente());
-        }
-        if (criterio.nombreComercial() != null) {
-            RangoDePrefijo.condicion(
-                    donde,
-                    parametros,
-                    "nombre_comercial",
-                    criterio.nombreComercial().toUpperCase(Locale.ROOT),
-                    "comercial");
-        }
-        if (criterio.direccion() != null) {
-            RangoDePrefijo.condicion(
-                    donde,
-                    parametros,
-                    "direccion",
-                    criterio.direccion().toUpperCase(Locale.ROOT),
-                    "dir");
-        }
-        Set<Long> titulares = criterio.contribuyentes();
-        if (titulares != null) {
-            // Vacio no llega aqui: `ConsultaDeLicencias` devuelve la pagina vacia antes, porque un
-            // `IN ()` no es SQL valido y un filtro ignorado devolveria el padron entero.
-            donde.append(" AND contribuyente_id IN (:titulares)");
-            parametros.put("titulares", titulares);
+
+        // Una consulta con los cuatro conteos. Las canceladas y los duplicados NO se cuentan
+        // sobre las licencias del año sino sobre los ACTOS del año: una licencia de 2024 que se
+        // cancela en 2026 es una cancelacion de 2026, y contarla en 2024 haria que la columna
+        // «Canceladas» de un año ya impreso cambiara con el tiempo.
+        long[] conteos =
+                Objects.requireNonNull(
+                        jdbc().sql(
+                                        "SELECT"
+                                                + " (SELECT count(*) FROM licencia_funcionamiento l"
+                                                + "   WHERE l.fecha_emision BETWEEN :inicio AND :fin"
+                                                + porTipo
+                                                + " ) AS emitidas,"
+                                                + " (SELECT count(*) FROM licencia_movimiento m"
+                                                + "    JOIN licencia_funcionamiento l"
+                                                + "      ON l.municipalidad_id = m.municipalidad_id"
+                                                + "     AND l.id = m.licencia_id"
+                                                + "   WHERE m.tipo = 'CANCELACION'"
+                                                + "     AND m.fecha BETWEEN :inicio AND :fin"
+                                                + porTipo
+                                                + " ) AS canceladas,"
+                                                + " (SELECT count(*) FROM licencia_duplicado d"
+                                                + "    JOIN licencia_funcionamiento l"
+                                                + "      ON l.municipalidad_id = d.municipalidad_id"
+                                                + "     AND l.id = d.licencia_id"
+                                                + "   WHERE d.fecha BETWEEN :inicio AND :fin"
+                                                + porTipo
+                                                + " ) AS duplicados,"
+                                                + " (SELECT count(*) FROM licencia_funcionamiento l"
+                                                + "   WHERE l.fecha_emision BETWEEN :inicio AND :fin"
+                                                + porTipo
+                                                + "     AND NOT "
+                                                + CANCELADA
+                                                + "     AND NOT "
+                                                + VENCIDA
+                                                + " ) AS vigentes")
+                                .params(parametros)
+                                .query(
+                                        (ResultSet fila, int numeroDeFila) ->
+                                                new long[] {
+                                                    fila.getLong("emitidas"),
+                                                    fila.getLong("canceladas"),
+                                                    fila.getLong("duplicados"),
+                                                    fila.getLong("vigentes")
+                                                })
+                                .single());
+
+        Map<String, Object> deLosRecibos = new HashMap<>(parametros);
+        deLosRecibos.remove("aLaFecha");
+        Set<Long> recibos =
+                new java.util.LinkedHashSet<>(
+                        jdbc().sql(
+                                        "SELECT l.recibo_id FROM licencia_funcionamiento l"
+                                                + " WHERE l.fecha_emision BETWEEN :inicio AND :fin"
+                                                + porTipo)
+                                .params(deLosRecibos)
+                                .query(Long.class)
+                                .list());
+
+        return new ConteosDelAno(conteos[0], conteos[1], conteos[2], conteos[3], recibos);
+    }
+
+    // ------------------------------------------------------------------
+
+    private Pagina<LicenciaDeFuncionamiento> consultar(
+            CriterioDeLicencias criterio,
+            @Nullable EstadoDeLicencia estado,
+            @Nullable LocalDate aLaFecha,
+            Paginacion paginacion) {
+
+        StringBuilder donde = new StringBuilder(" WHERE 1 = 1");
+        Map<String, Object> parametros = new HashMap<>();
+        condiciones(criterio, donde, parametros);
+        if (aLaFecha != null) {
+            parametros.put("aLaFecha", aLaFecha);
+            estadoEnSql(estado, donde);
         }
 
         Pagina<Fila> pagina =
                 paginar(
-                        "SELECT " + COLUMNAS + " FROM licencia_funcionamiento" + donde,
-                        "SELECT count(*) FROM licencia_funcionamiento" + donde,
+                        "SELECT "
+                                + COLUMNAS_CALIFICADAS
+                                + " FROM licencia_funcionamiento l"
+                                + donde,
+                        "SELECT count(*) FROM licencia_funcionamiento l" + donde,
                         parametros,
                         paginacion,
                         ORDEN,
@@ -245,6 +385,85 @@ public class LicenciaRepositoryJdbc extends RepositorioJdbc implements LicenciaR
         }
         Map<Long, List<GiroDeLaLicencia>> giros = girosDe(ids);
         return pagina.mapear(fila -> fila.con(giros.getOrDefault(fila.id(), List.of())));
+    }
+
+    /** Los filtros del criterio, comunes a la grilla y al padron. */
+    private static void condiciones(
+            CriterioDeLicencias criterio, StringBuilder donde, Map<String, Object> parametros) {
+
+        if (criterio.numero() != null) {
+            donde.append(" AND l.numero = :numero");
+            parametros.put("numero", criterio.numero());
+        }
+        if (criterio.expediente() != null) {
+            donde.append(" AND l.expediente = :expediente");
+            parametros.put("expediente", criterio.expediente());
+        }
+        if (criterio.nombreComercial() != null) {
+            RangoDePrefijo.condicion(
+                    donde,
+                    parametros,
+                    "l.nombre_comercial",
+                    criterio.nombreComercial().toUpperCase(Locale.ROOT),
+                    "comercial");
+        }
+        if (criterio.direccion() != null) {
+            RangoDePrefijo.condicion(
+                    donde,
+                    parametros,
+                    "l.direccion",
+                    criterio.direccion().toUpperCase(Locale.ROOT),
+                    "dir");
+        }
+        if (criterio.tipo() != null) {
+            donde.append(" AND l.tipo_licencia = :tipoLicencia");
+            parametros.put("tipoLicencia", criterio.tipo().name());
+        }
+        if (criterio.ciiu() != null) {
+            // El filtro por giro es un EXISTS y no un JOIN: una licencia con tres giros saldria
+            // tres veces en la pagina, y el conteo del resumen diria tres donde hay una.
+            donde.append(
+                    " AND EXISTS (SELECT 1 FROM licencia_giro g"
+                            + "   JOIN ciiu c ON c.municipalidad_id = g.municipalidad_id"
+                            + "              AND c.id = g.ciiu_id"
+                            + "  WHERE g.municipalidad_id = l.municipalidad_id"
+                            + "    AND g.licencia_id = l.id AND c.codigo = :ciiu)");
+            parametros.put("ciiu", criterio.ciiu().toUpperCase(Locale.ROOT));
+        }
+        if (criterio.desde() != null) {
+            donde.append(" AND l.fecha_emision >= :desdeEmision");
+            parametros.put("desdeEmision", criterio.desde());
+        }
+        if (criterio.hasta() != null) {
+            donde.append(" AND l.fecha_emision <= :hastaEmision");
+            parametros.put("hastaEmision", criterio.hasta());
+        }
+        Set<Long> titulares = criterio.contribuyentes();
+        if (titulares != null) {
+            // Vacio no llega aqui: `ConsultaDeLicencias` devuelve la pagina vacia antes, porque un
+            // `IN ()` no es SQL valido y un filtro ignorado devolveria el padron entero.
+            donde.append(" AND l.contribuyente_id IN (:titulares)");
+            parametros.put("titulares", titulares);
+        }
+    }
+
+    /**
+     * El filtro por estado, derivado en el motor con la misma expresion que el resumen.
+     *
+     * <p>El orden es el de {@link EstadoDeLicencia#derivarDe}: la cancelacion gana sobre el
+     * vencimiento. Escribirlo dos veces —una aqui y otra en Java— es lo que haria que un dia
+     * discreparan; por eso las dos constantes son las mismas para el filtro y para el agregado.
+     */
+    private static void estadoEnSql(@Nullable EstadoDeLicencia estado, StringBuilder donde) {
+        if (estado == null) {
+            return;
+        }
+        donde.append(
+                switch (estado) {
+                    case CANCELADA -> " AND " + CANCELADA;
+                    case VENCIDA -> " AND NOT " + CANCELADA + " AND " + VENCIDA;
+                    case VIGENTE -> " AND NOT " + CANCELADA + " AND NOT " + VENCIDA;
+                });
     }
 
     private Optional<LicenciaDeFuncionamiento> porId(long id) {
