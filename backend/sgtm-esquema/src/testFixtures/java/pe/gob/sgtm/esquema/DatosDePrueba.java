@@ -555,6 +555,18 @@ public final class DatosDePrueba {
     // Tesoreria
     // ------------------------------------------------------------------
 
+    /**
+     * La serie de la caja sembrada, {@code varchar(5)} y unica por municipalidad (V29).
+     *
+     * <p>Se deriva del sufijo del tenant en lugar de ser un {@code '001'} fijo: la unicidad es por
+     * municipalidad, asi que un literal serviria igual, pero sembrar dos cajas en un mismo tenant
+     * -que es lo que hara la prueba de la caja- chocaria, y el fallo apareceria como un choque de
+     * clave unica en el fixture en lugar de como lo que es.
+     */
+    private static String serieDePrueba(String sufijo) {
+        return String.format("%03d", Math.abs(sufijo.hashCode() % 1000));
+    }
+
     private static long sembrarTesoreria(Connection app, long muni, String sufijo, long titular)
             throws SQLException {
         long areaId =
@@ -575,42 +587,63 @@ public final class DatosDePrueba {
                 areaId,
                 CIEN,
                 VIGENCIA);
+        // La serie es de la caja y es unica en la municipalidad (V29): se deriva del
+        // sufijo del tenant para que sembrar dos municipalidades no la repita dentro
+        // de ninguna de las dos.
         long cajaId =
                 insertar(
                         app,
-                        "INSERT INTO caja (municipalidad_id, codigo, nombre, area_id)"
-                                + " VALUES (?, ?, 'Caja C-3', ?) RETURNING id",
+                        "INSERT INTO caja (municipalidad_id, codigo, nombre, area_id, serie)"
+                                + " VALUES (?, ?, 'Caja C-3', ?, ?) RETURNING id",
                         muni,
                         "C-" + sufijo,
-                        areaId);
+                        areaId,
+                        serieDePrueba(sufijo));
+        // El contador de la serie, que la cobranza incrementa con un UPSERT (V29).
+        ejecutar(
+                app,
+                "INSERT INTO recibo_correlativo (municipalidad_id, serie, ultimo)"
+                        + " VALUES (?, ?, 1)",
+                muni,
+                serieDePrueba(sufijo));
+        long turnoId =
+                insertar(
+                        app,
+                        "INSERT INTO cierre_caja (municipalidad_id, caja_id, cajero, fecha,"
+                                + " total_efectivo, cantidad_recibos, fecha_apertura,"
+                                + " usuario_apertura, observacion)"
+                                + " VALUES (?, ?, 'prueba', ?, ?, 1, ?, 'prueba',"
+                                + "         'turno sembrado por el fixture') RETURNING id",
+                        muni,
+                        cajaId,
+                        VIGENCIA,
+                        CIEN,
+                        java.sql.Timestamp.valueOf(VIGENCIA.atStartOfDay()));
         long reciboId =
                 insertar(
                         app,
                         "INSERT INTO recibo (municipalidad_id, serie, numero, caja_id, cajero,"
-                                + " contribuyente_id, forma_pago, total)"
-                                + " VALUES (?, '001', 1, ?, 'prueba', ?, 'EFECTIVO', ?)"
+                                + " contribuyente_id, forma_pago, total, turno_id, actualizado_a,"
+                                + " usuario_registro, observacion)"
+                                + " VALUES (?, ?, 1, ?, 'prueba', ?, 'EFECTIVO', ?, ?, ?,"
+                                + "         'prueba', 'recibo sembrado por el fixture')"
                                 + " RETURNING id",
                         muni,
+                        serieDePrueba(sufijo),
                         cajaId,
                         titular,
-                        CIEN);
+                        CIEN,
+                        turnoId,
+                        VIGENCIA);
         ejecutar(
                 app,
                 "INSERT INTO recibo_detalle (municipalidad_id, recibo_id, tributo, concepto,"
-                        + " ejercicio, periodo, monto)"
-                        + " VALUES (?, ?, 'PREDIAL', 'INSOLUTO', ?, 1, ?)",
+                        + " ejercicio, periodo, monto, insoluto)"
+                        + " VALUES (?, ?, 'PREDIAL', 'INSOLUTO', ?, 1, ?, ?)",
                 muni,
                 reciboId,
                 EJERCICIO,
-                CIEN);
-        ejecutar(
-                app,
-                "INSERT INTO cierre_caja (municipalidad_id, caja_id, cajero, fecha, total_efectivo,"
-                        + " cantidad_recibos)"
-                        + " VALUES (?, ?, 'prueba', ?, ?, 1)",
-                muni,
-                cajaId,
-                VIGENCIA,
+                CIEN,
                 CIEN);
 
         long convenioId =

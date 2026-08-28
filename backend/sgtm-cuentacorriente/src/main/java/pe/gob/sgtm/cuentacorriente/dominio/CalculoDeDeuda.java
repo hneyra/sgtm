@@ -70,6 +70,40 @@ public final class CalculoDeDeuda {
     }
 
     /**
+     * Lo que el libro <b>ya tiene asentado</b> a esa fecha: las mismas cuatro partes, neteadas,
+     * pero <b>sin</b> agregar el reajuste ni el interes que todavia no se asentaron.
+     *
+     * <p>Existe por la cobranza (#33). {@link #deudaActualizadaA} devuelve lo que hay que cobrar, y
+     * ahi dentro va una parte que <b>no esta en el libro</b> —«el interes se calcula, no se
+     * asienta»—. Cuando el dinero entra por ventanilla eso deja de ser una proyeccion y pasa a ser
+     * un hecho: hay que asentar el cargo de lo devengado antes de abonar el pago, o el abono del
+     * interes dejaria {@code netear(INTERES)} en negativo para siempre y la obligacion quedaria con
+     * deuda negativa.
+     *
+     * <p>La diferencia entre las dos funciones es exactamente lo que hay que cristalizar. Que sean
+     * dos metodos de la misma clase pura, sobre los mismos asientos, es lo que garantiza que se
+     * netee igual en los dos: calcular una en el dominio y la otra en un {@code SUM} de SQL seria
+     * volver a tener dos definiciones de lo mismo.
+     *
+     * @param asientos los de <b>una</b> obligacion
+     * @param fecha la fecha de corte; ningun asiento posterior entra
+     */
+    public DeudaActualizada asentadoA(List<Asiento> asientos, LocalDate fecha) {
+        Objects.requireNonNull(asientos, "La lista de asientos es vacia, no nula");
+        Objects.requireNonNull(fecha, "La fecha de corte entra como argumento (regla 6, RNF-075)");
+
+        List<Asiento> hastaElCorte =
+                asientos.stream().filter(a -> !a.fechaValor().isAfter(fecha)).toList();
+
+        return new DeudaActualizada(
+                fecha,
+                netear(hastaElCorte, Concepto.INSOLUTO),
+                netear(hastaElCorte, Concepto.REAJUSTE),
+                netear(hastaElCorte, Concepto.INTERES),
+                netear(hastaElCorte, Concepto.GASTO));
+    }
+
+    /**
      * Cargos suman, abonos restan: el mismo signo que fija {@link TipoAsiento} en todo el libro.
      */
     private static Dinero netear(List<Asiento> asientos, Concepto concepto) {

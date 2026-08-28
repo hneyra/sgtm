@@ -10,7 +10,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.compartido.Pagina;
@@ -18,6 +17,7 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.CalculoDeDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeObligacion;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.ConstanciaDeNoAdeudo;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeuda;
@@ -27,7 +27,6 @@ import pe.gob.sgtm.cuentacorriente.dominio.Fase;
 import pe.gob.sgtm.cuentacorriente.dominio.ObligacionConDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.SaldoProyectado;
 import pe.gob.sgtm.cuentacorriente.dominio.SaldoRepository;
-import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
@@ -196,7 +195,7 @@ public class ConsultarDeuda {
         Map<ClaveDeObligacion, List<Asiento>> agrupados = new LinkedHashMap<>();
         for (Asiento asiento : repositorio.deContribuyente(contribuyenteId)) {
             agrupados
-                    .computeIfAbsent(ClaveDeObligacion.deAsiento(asiento), k -> new ArrayList<>())
+                    .computeIfAbsent(ClaveDeObligacion.de(asiento), k -> new ArrayList<>())
                     .add(asiento);
         }
 
@@ -301,29 +300,5 @@ public class ConsultarDeuda {
                         .thenComparing(ClaveDeObligacion::tributo)
                         .thenComparing(g -> g.predioId() == null ? 0L : g.predioId())
                         .thenComparing(g -> g.vehiculoId() == null ? 0L : g.vehiculoId()));
-    }
-
-    /**
-     * Identifica una obligacion para el listado por contribuyente: como {@link ClaveDeSaldo}, pero
-     * sin el periodo —es justo lo que este listado agrega dentro de una fila—.
-     */
-    private record ClaveDeObligacion(
-            String tributo,
-            Ejercicio ejercicio,
-            @Nullable Long predioId,
-            @Nullable Long vehiculoId) {
-
-        static ClaveDeObligacion de(ClaveDeSaldo clave) {
-            return new ClaveDeObligacion(
-                    clave.tributo(), clave.ejercicio(), clave.predioId(), clave.vehiculoId());
-        }
-
-        static ClaveDeObligacion deAsiento(Asiento asiento) {
-            return new ClaveDeObligacion(
-                    asiento.tributo(),
-                    asiento.ejercicio(),
-                    asiento.predioId(),
-                    asiento.vehiculoId());
-        }
     }
 }

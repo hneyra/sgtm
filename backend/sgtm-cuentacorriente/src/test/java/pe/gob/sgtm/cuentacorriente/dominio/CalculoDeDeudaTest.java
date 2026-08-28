@@ -192,6 +192,52 @@ class CalculoDeDeudaTest {
 
     // ------------------------------------------------------------------
 
+    @Test
+    @DisplayName(
+            "asentadoA no agrega el devengo: es lo que la cobranza tiene que cristalizar (#33)")
+    void loAsentadoNoLlevaElDevengo() {
+        List<Asiento> asientos =
+                List.of(cargo(Concepto.INSOLUTO, Dinero.de(1000), LocalDate.of(2026, 3, 1)));
+
+        // Una politica que SI acumula: el interes de deudaActualizadaA no esta en el libro.
+        CalculoDeDeuda calculo =
+                new CalculoDeDeuda(new PoliticaDeMoraDeApoyo(Dinero.de(30), Dinero.de(70)));
+        LocalDate corte = LocalDate.of(2026, 6, 1);
+
+        DeudaActualizada cobrable = calculo.deudaActualizadaA(asientos, corte, REDONDEO);
+        DeudaActualizada asentado = calculo.asentadoA(asientos, corte);
+
+        assertThat(cobrable.interes())
+                .as("lo que hay que cobrar incluye el interes devengado")
+                .isEqualTo(Dinero.de(70));
+        assertThat(asentado.interes())
+                .as("pero en el libro no hay ni un asiento de interes: se calcula, no se asienta")
+                .isEqualTo(Dinero.CERO);
+        assertThat(asentado.insoluto())
+                .as("el insoluto si esta asentado, y es el mismo en las dos")
+                .isEqualTo(cobrable.insoluto());
+        assertThat(cobrable.interes().menos(asentado.interes()))
+                .as(
+                        "la diferencia es exactamente el cargo que #33 asienta antes de abonar; sin"
+                                + " el, netear(INTERES) quedaria en negativo para siempre")
+                .isEqualTo(Dinero.de(70));
+    }
+
+    @Test
+    @DisplayName("asentadoA respeta la fecha de corte igual que deudaActualizadaA")
+    void loAsentadoRespetaElCorte() {
+        List<Asiento> asientos =
+                List.of(
+                        cargo(Concepto.INSOLUTO, Dinero.de(1000), LocalDate.of(2026, 3, 1)),
+                        cargo(Concepto.INSOLUTO, Dinero.de(500), LocalDate.of(2026, 9, 1)));
+
+        CalculoDeDeuda calculo = new CalculoDeDeuda(new SinAcumulacionDePrueba());
+
+        assertThat(calculo.asentadoA(asientos, LocalDate.of(2026, 6, 1)).insoluto())
+                .as("el cargo de setiembre no entra en un corte de junio")
+                .isEqualTo(Dinero.de(1000));
+    }
+
     private static Asiento cargo(Concepto concepto, Dinero monto, LocalDate fechaValor) {
         return asiento(concepto, TipoAsiento.CARGO, monto, fechaValor);
     }
