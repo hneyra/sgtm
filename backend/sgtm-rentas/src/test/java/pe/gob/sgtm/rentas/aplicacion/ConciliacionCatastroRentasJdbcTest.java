@@ -50,6 +50,7 @@ import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeConciliacion.FichaConciliada;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJurada;
+import pe.gob.sgtm.rentas.dominio.EstadoDeDeclaracion;
 import pe.gob.sgtm.rentas.dominio.TipoDeDeclaracion;
 import pe.gob.sgtm.rentas.infraestructura.DeclaracionJuradaRepositoryJdbc;
 
@@ -313,7 +314,7 @@ class ConciliacionCatastroRentasJdbcTest {
             String codigo = nuevoCodigo();
             long predio = crearPredioConFicha(municipalidadA, codigo);
             long dj = declarar(municipalidadA, predio, E2026, numeroDeDj("DJ-SUS"));
-            transaccion.execute(estado -> declaraciones.marcarSustituida(dj));
+            transaccion.execute(estado -> declaraciones.marcar(dj, EstadoDeDeclaracion.SUSTITUIDA));
 
             assertThat(unica(buscar(codigo, E2026)).conciliada()).isFalse();
         }
@@ -643,7 +644,7 @@ class ConciliacionCatastroRentasJdbcTest {
                                     LocalDate.of(original.ejercicio().valor(), 5, 20),
                                     original.fechaLimite(),
                                     Observacion.de("Rectificatoria del predio declarado")));
-                    return declaraciones.marcarSustituida(declaracionId);
+                    return declaraciones.marcar(declaracionId, EstadoDeDeclaracion.SUSTITUIDA);
                 });
     }
 

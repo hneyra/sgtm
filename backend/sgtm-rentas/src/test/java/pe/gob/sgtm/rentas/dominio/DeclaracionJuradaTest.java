@@ -250,6 +250,79 @@ class DeclaracionJuradaTest {
                 .hasMessageContaining("Sin observacion");
     }
 
+    @Test
+    @DisplayName("observar una presentada la deja OBSERVADA, y observarla otra vez no es un acto")
+    void observarUnaPresentada() {
+        DeclaracionJurada guardada = guardada();
+
+        DeclaracionJurada observada = guardada.observada();
+
+        assertThat(observada.estado()).isEqualTo(EstadoDeDeclaracion.OBSERVADA);
+        assertThat(observada.numero())
+                .as("regla 4: observar no toca ninguna otra columna")
+                .isEqualTo(guardada.numero());
+        assertThatThrownBy(observada::observada)
+                .isInstanceOf(DeclaracionJurada.TransicionIlegal.class);
+    }
+
+    @Test
+    @DisplayName("una OBSERVADA se anula y se rectifica; una ANULADA no hace ninguna de las dos")
+    void losCaminosDeLaObservada() {
+        DeclaracionJurada observada = guardada().observada();
+
+        assertThat(observada.anulada().estado()).isEqualTo(EstadoDeDeclaracion.ANULADA);
+        assertThat(observada.sustituida().estado()).isEqualTo(EstadoDeDeclaracion.SUSTITUIDA);
+
+        DeclaracionJurada anulada = guardada().anulada();
+        assertThatThrownBy(anulada::observada)
+                .isInstanceOf(DeclaracionJurada.TransicionIlegal.class);
+        assertThatThrownBy(anulada::anulada).isInstanceOf(DeclaracionJurada.TransicionIlegal.class);
+        assertThatThrownBy(anulada::sustituida)
+                .isInstanceOf(DeclaracionJurada.TransicionIlegal.class);
+    }
+
+    @Test
+    @DisplayName("solo se rectifica una declaracion en pie: la anulada y la sustituida no")
+    void soloSeRectificaUnaEnPie() {
+        for (DeclaracionJurada terminal :
+                java.util.List.of(guardada().anulada(), guardada().sustituida())) {
+            assertThatThrownBy(
+                            () ->
+                                    terminal.rectificadaPor(
+                                            "DJ-2",
+                                            5L,
+                                            null,
+                                            null,
+                                            LocalDate.of(2026, 4, 1),
+                                            LIMITE,
+                                            OBSERVACION))
+                    .as(
+                            "rectificar una anulada la reviviria; rectificar una sustituida dejaria"
+                                    + " dos rectificatorias vivas sobre la misma DJ")
+                    .isInstanceOf(DeclaracionJurada.TransicionIlegal.class);
+        }
+    }
+
+    /** Como sale del repositorio: con identificador, que es lo que exigen las transiciones. */
+    private static DeclaracionJurada guardada() {
+        DeclaracionJurada sinGuardar = nueva(LocalDate.of(2026, 2, 1), LIMITE);
+        return new DeclaracionJurada(
+                7L,
+                sinGuardar.numero(),
+                sinGuardar.ejercicio(),
+                sinGuardar.contribuyenteId(),
+                sinGuardar.tipo(),
+                sinGuardar.predioId(),
+                sinGuardar.vehiculoId(),
+                sinGuardar.fichaCatastralId(),
+                sinGuardar.fechaPresentacion(),
+                sinGuardar.fechaLimite(),
+                sinGuardar.estado(),
+                sinGuardar.djRectificaId(),
+                "prueba",
+                sinGuardar.observacion());
+    }
+
     private static DeclaracionJurada nueva(LocalDate presentacion, LocalDate limite) {
         return DeclaracionJurada.nueva(
                 "DJ-1",

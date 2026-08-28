@@ -693,6 +693,110 @@ const OPERACIONES_ADICIONALES = {
       paginacion: true,
     },
   ],
+  // `declaracion_jurada` declara «GET /rentas/declaraciones/{djNro}» como su
+  // endpoint —consultar la DJ ya presentada—, y hasta #365 eso era todo lo que
+  // el sistema publicaba: el acto que la registra existía en el backend y
+  // ningún controlador lo exponía, así que presentar una declaración se seguía
+  // haciendo por el procedimiento actual, fuera del sistema (ADR-0015 §3).
+  //
+  // Los cuatro verbos son actos de trámite sobre un documento, no ediciones:
+  // `declaracion_jurada` no admite UPDATE desde V54 salvo sobre su `estado`.
+  // Ninguno recibe el número de la DJ en el cuerpo: lo pone el sistema, con el
+  // correlativo de `dj_correlativo` y la plantilla parametrizada de D-09.
+  declaracion_jurada: [
+    {
+      operationId: 'presentar_declaracion_jurada',
+      metodo: 'post',
+      ruta: '/api/v1/rentas/declaraciones',
+      titulo: 'Presentación de la declaración jurada',
+      descripcion: bloque(`
+        Presenta una declaración jurada nueva —HR, PU, PR o VEHICULAR— y es **el acto que
+        concilia** (ADR-0015 §3): a partir de él el predio pertenece al padrón afecto del
+        ejercicio, y la columna «Conciliada» de
+        \`/catastro/fichas/conciliacion\` lo dice. El cuerpo lleva el ejercicio, el código de
+        contribuyente, el tipo, el predio o el vehículo según el tipo, la fecha de presentación
+        y la observación del usuario, obligatoria (RNF-052).
+
+        Lo que **no** viaja en el cuerpo, porque lo resuelve el servidor: el **número** —lo pone
+        el sistema, con correlativo propio y plantilla parametrizada mientras D-09 siga
+        abierta—, la **versión de ficha catastral** vigente a la fecha de presentación, y
+        \`fueraDePlazo\`, que sale de comparar esa fecha con el plazo del conjunto sellado. Un
+        ejercicio sellado sin ese parámetro responde 422 **nombrando la llave**
+        \`PLAZO:DECLARACION_JURADA\`: inventar un plazo clasificaría mal cada declaración que se
+        registre (regla 5).
+
+        Ningún importe. Presentar fuera de plazo genera multa tributaria según el manual, pero
+        esa multa es D-02c: aquí queda el hecho y nada que multiplique dinero.
+      `),
+    },
+    {
+      operationId: 'rectificar_declaracion_jurada',
+      metodo: 'post',
+      ruta: '/api/v1/rentas/declaraciones/{djNro}/rectificacion',
+      titulo: 'Rectificatoria de la declaración jurada',
+      descripcion: bloque(`
+        Crea la versión nueva de una declaración ya presentada y deja la anterior SUSTITUIDA sin
+        tocarle una columna (regla 4): las dos filas quedan en la base y la nueva referencia a la
+        que sustituye. **Puede cambiar de predio**, y la conciliación lo contempla — el predio
+        que se declaró por error deja de conciliar por esa cadena y el que la rectificatoria
+        declara pasa a hacerlo, sin que ninguno cuente dos veces.
+
+        Solo se rectifica una declaración en pie: sobre una ANULADA o una ya SUSTITUIDA responde
+        409. El número de la rectificatoria lo pone el sistema, como el de cualquier otra.
+      `),
+      parametros: [
+        {
+          nombre: 'ano',
+          ejemplo: '2026',
+          descripcion: 'Ejercicio de la declaración que se rectifica, como en el GET de la ruta',
+        },
+      ],
+    },
+    {
+      operationId: 'observar_declaracion_jurada',
+      metodo: 'post',
+      ruta: '/api/v1/rentas/declaraciones/{djNro}/observacion',
+      titulo: 'Observación de la declaración jurada',
+      descripcion: bloque(`
+        La administración objeta el contenido de una declaración presentada. El cuerpo lleva
+        **solo** la observación del usuario (RNF-052): el efecto lo decide el verbo.
+
+        **Observarla no la retira**: el predio sigue conciliando (ADR-0015 §1), porque la
+        administración objetó el contenido de una declaración que existe y fue presentada, y
+        negarle la conciliación diría «este predio no genera deuda predial» de uno que sí la
+        genera. Lo que la observación abre es el camino de la rectificatoria.
+      `),
+      parametros: [
+        {
+          nombre: 'ano',
+          ejemplo: '2026',
+          descripcion: 'Ejercicio de la declaración que se observa, como en el GET de la ruta',
+        },
+      ],
+    },
+    {
+      operationId: 'anular_declaracion_jurada',
+      metodo: 'post',
+      ruta: '/api/v1/rentas/declaraciones/{djNro}/anulacion',
+      titulo: 'Anulación de la declaración jurada',
+      descripcion: bloque(`
+        La administración anula una declaración. El cuerpo lleva **solo** la observación del
+        usuario (RNF-052).
+
+        Al revés que observarla, anularla **sí** la retira: deja de sustentar nada y el predio
+        deja de conciliar por ella. Y es terminal — una anulada no revive: si el contribuyente
+        declara otra vez, se presenta otra declaración, con su número. Un acto sobre una
+        declaración anulada o ya sustituida responde 409.
+      `),
+      parametros: [
+        {
+          nombre: 'ano',
+          ejemplo: '2026',
+          descripcion: 'Ejercicio de la declaración que se anula, como en el GET de la ruta',
+        },
+      ],
+    },
+  ],
   // Las cuatro pantallas de ficha declaran «GET /catastro/fichas/…/{codigo}»
   // como su endpoint —la lectura de la ficha de un predio—; darla de alta
   // necesita su propio verbo, y sin parámetro de ruta: el predio todavía no

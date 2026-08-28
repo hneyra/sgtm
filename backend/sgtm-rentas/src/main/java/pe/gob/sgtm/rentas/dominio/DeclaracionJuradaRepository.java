@@ -8,9 +8,11 @@ import pe.gob.sgtm.dominio.Ejercicio;
 /**
  * Las declaraciones juradas. Ningun metodo recibe la municipalidad (regla 2).
  *
- * <p><b>No hay {@code eliminar}.</b> {@link #insertar} es el unico punto de alta; {@link
- * #marcarSustituida} es el unico {@code UPDATE}, y toca solo {@code estado} —nunca el numero, la
- * fecha ni el tipo—. Una rectificatoria es otra fila, nunca una edicion (regla 4).
+ * <p><b>No hay {@code eliminar}.</b> {@link #insertar} es el unico punto de alta; {@link #marcar}
+ * es el unico {@code UPDATE}, y toca solo {@code estado} —nunca el numero, la fecha ni el tipo—.
+ * Una rectificatoria es otra fila, nunca una edicion (regla 4). Desde V54 eso no depende de que
+ * esta clase se acuerde: {@code sgtm_app} tiene el privilegio de {@code UPDATE} sobre la columna
+ * {@code estado} y sobre ninguna otra.
  */
 public interface DeclaracionJuradaRepository {
 
@@ -76,9 +78,34 @@ public interface DeclaracionJuradaRepository {
     java.util.Set<Long> prediosConDeclaracionVigente(
             java.util.Collection<Long> predioIds, Ejercicio ejercicio);
 
+    /**
+     * El siguiente correlativo del ejercicio, ya reservado (#365).
+     *
+     * <p>Se lee y se incrementa en <b>una</b> sentencia, nunca con {@code SELECT} y despues {@code
+     * UPDATE}: diez peticiones simultaneas leerian las diez el mismo numero. La atomicidad es la
+     * fuente de la no-repeticion; {@code dj_numero_uq} (V54) es la red que la respalda.
+     *
+     * <p>La primera peticion de un ejercicio arranca <b>por encima del mayor numero historico de
+     * ese año</b>: el correlativo no se siembra en la migracion porque el migrador no tiene
+     * contexto de tenant y {@code declaracion_jurada} tiene RLS con {@code FORCE} (DAT-01 §0,
+     * cuarto hallazgo).
+     *
+     * <p>Devuelve el correlativo <b>desnudo</b>. Componer el numero es cosa de {@link
+     * PlantillaDeNumeroDeDeclaracion}, para que el dia que D-09 cambie el formato el correlativo
+     * siga siendo el mismo.
+     */
+    long siguienteCorrelativo(Ejercicio ejercicio);
+
     /** Inserta la declaracion y devuelve la fila guardada, con su {@code id} y su usuario. */
     DeclaracionJurada insertar(DeclaracionJurada declaracion);
 
-    /** Dobla la fila a {@code SUSTITUIDA}: el unico {@code UPDATE}, y solo toca el estado. */
-    DeclaracionJurada marcarSustituida(long id);
+    /**
+     * Dobla la fila al estado indicado: el unico {@code UPDATE}, y solo toca {@code estado}.
+     *
+     * <p>Quien llama ya paso por la maquina de estados del dominio —{@code sustituida()}, {@code
+     * observada()}, {@code anulada()}—, que es quien decide si el acto es legal. Este metodo
+     * escribe; no juzga. El disparador de V54 es el que juzga cuando dos peticiones simultaneas
+     * leyeron las dos el mismo estado anterior.
+     */
+    DeclaracionJurada marcar(long id, EstadoDeDeclaracion nuevo);
 }

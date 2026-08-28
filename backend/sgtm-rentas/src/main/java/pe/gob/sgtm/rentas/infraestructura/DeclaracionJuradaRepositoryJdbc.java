@@ -21,9 +21,10 @@ import pe.gob.sgtm.rentas.dominio.TipoDeDeclaracion;
 /**
  * Las declaraciones juradas contra PostgreSQL (#28).
  *
- * <p>{@link #marcarSustituida} es el unico {@code UPDATE}, y toca solo {@code estado}: es lo que
- * garantiza en la base lo que {@link DeclaracionJurada#rectificadaPor} ya garantiza en el dominio
- * —una rectificatoria sustituye sin editar—.
+ * <p>{@link #marcar} es el unico {@code UPDATE}, y toca solo {@code estado}: es lo que garantiza en
+ * la base lo que {@link DeclaracionJurada#rectificadaPor} ya garantiza en el dominio —una
+ * rectificatoria sustituye sin editar—. Desde V54 eso ya no depende de que esta clase se acuerde:
+ * {@code sgtm_app} tiene {@code UPDATE} sobre la columna {@code estado} y sobre ninguna otra.
  */
 @Repository
 public class DeclaracionJuradaRepositoryJdbc extends RepositorioJdbc
@@ -197,8 +198,53 @@ public class DeclaracionJuradaRepositoryJdbc extends RepositorioJdbc
                 declaracion.observacion());
     }
 
+    /**
+     * El siguiente correlativo del ejercicio, en <b>una</b> sentencia (#365).
+     *
+     * <p>Mismo UPSERT que {@code licencia_correlativo} (V37) y {@code certificado_correlativo}
+     * (V51), con una diferencia propia: <b>la fila se crea arrancando por encima del mayor numero
+     * historico del ejercicio</b>, y no en 1.
+     *
+     * <p>Ese arranque no se pudo sembrar en la migracion, y el motivo vale anotarlo: {@code
+     * declaracion_jurada} tiene RLS con {@code FORCE} y el migrador corre como {@code sgtm_owner}
+     * <b>sin</b> contexto de tenant, asi que un {@code SELECT} sobre ella durante la migracion
+     * falla con «unrecognized configuration parameter» (DAT-01 §0, cuarto hallazgo). Aqui si hay
+     * contexto: la subconsulta ve las declaraciones de esta municipalidad y de ninguna otra.
+     *
+     * <p>La subconsulta solo se evalua la <b>primera</b> vez de cada ejercicio: a partir de ahi
+     * gana la rama del conflicto, que se limita a incrementar. Y si dos peticiones la evaluan a la
+     * vez, una inserta y la otra choca e incrementa lo insertado: los dos correlativos salen
+     * distintos.
+     *
+     * <p>El {@code substring} lee la <b>ultima corrida de digitos</b> del numero, que es donde vive
+     * el correlativo tanto si el historico se escribio {@code 000418} como si se escribio {@code
+     * DJ-2026-000418}. Se limita a quince digitos para no desbordar {@code bigint} con una columna
+     * que admite veinte caracteres.
+     */
     @Override
-    public DeclaracionJurada marcarSustituida(long id) {
+    public long siguienteCorrelativo(Ejercicio ejercicio) {
+        Long ultimo =
+                jdbc().sql(
+                                "INSERT INTO dj_correlativo (municipalidad_id, ejercicio, ultimo)"
+                                        + " VALUES ("
+                                        + MUNICIPALIDAD_ACTUAL
+                                        + ", :ejercicio,"
+                                        + "   (SELECT coalesce(max(coalesce(nullif(substring("
+                                        + "        d.numero from '([0-9]{1,15})$'), '')::bigint,"
+                                        + "        0)), 0) + 1"
+                                        + "      FROM declaracion_jurada d"
+                                        + "     WHERE d.ejercicio = :ejercicio))"
+                                        + " ON CONFLICT (municipalidad_id, ejercicio)"
+                                        + " DO UPDATE SET ultimo = dj_correlativo.ultimo + 1"
+                                        + " RETURNING ultimo")
+                        .param("ejercicio", ejercicio.valor())
+                        .query(Long.class)
+                        .single();
+        return java.util.Objects.requireNonNull(ultimo);
+    }
+
+    @Override
+    public DeclaracionJurada marcar(long id, EstadoDeDeclaracion nuevo) {
         DeclaracionJurada anterior =
                 findById(id)
                         .orElseThrow(
@@ -209,8 +255,22 @@ public class DeclaracionJuradaRepositoryJdbc extends RepositorioJdbc
                                                         + id
                                                         + " en esta municipalidad"));
 
+        // La transicion se calcula ANTES de escribir: si es ilegal, no se escribe nada. La
+        // comprobacion la hace el dominio, que es donde vive la maquina de estados.
+        DeclaracionJurada doblada =
+                switch (nuevo) {
+                    case SUSTITUIDA -> anterior.sustituida();
+                    case OBSERVADA -> anterior.observada();
+                    case ANULADA -> anterior.anulada();
+                    case PRESENTADA ->
+                            throw new IllegalArgumentException(
+                                    "Una declaracion jurada no vuelve a PRESENTADA: nace asi y"
+                                            + " solo sale de ese estado (#365)");
+                };
+
         int filas =
-                jdbc().sql("UPDATE declaracion_jurada SET estado = 'SUSTITUIDA' WHERE id = :id")
+                jdbc().sql("UPDATE declaracion_jurada SET estado = :estado WHERE id = :id")
+                        .param("estado", nuevo.name())
                         .param("id", id)
                         .update();
         if (filas == 0) {
@@ -219,7 +279,7 @@ public class DeclaracionJuradaRepositoryJdbc extends RepositorioJdbc
                             + id
                             + " en esta municipalidad");
         }
-        return anterior.sustituida();
+        return doblada;
     }
 
     private static DeclaracionJurada mapear(ResultSet fila, int numeroDeFila) throws SQLException {

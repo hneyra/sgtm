@@ -147,6 +147,14 @@ public record DeclaracionJurada(
             LocalDate fechaLimite,
             Observacion observacion) {
         Long idPropio = Objects.requireNonNull(id, "Solo se rectifica una DJ que ya esta guardada");
+        // Solo se rectifica una declaracion en pie (#365). Una anulada no revive rectificandola, y
+        // una sustituida ya tiene quien la sustituya: rectificarla otra vez dejaria dos
+        // rectificatorias vivas sobre la misma DJ. La comprobacion va aqui y no en el caso de uso
+        // porque es una propiedad de la declaracion: cualquier camino que la rectifique pasa por
+        // este metodo.
+        if (!estado.esVigente()) {
+            throw new TransicionIlegal(this.numero, estado, EstadoDeDeclaracion.SUSTITUIDA);
+        }
         return new DeclaracionJurada(
                 null,
                 numero,
@@ -168,9 +176,51 @@ public record DeclaracionJurada(
      * Esta misma DJ, marcada como sustituida por una rectificatoria. Sus demas datos no cambian.
      */
     public DeclaracionJurada sustituida() {
-        if (estado == EstadoDeDeclaracion.SUSTITUIDA) {
-            throw new IllegalStateException(
-                    "La declaracion jurada " + numero + " ya esta sustituida");
+        return conEstado(EstadoDeDeclaracion.SUSTITUIDA);
+    }
+
+    /**
+     * Esta misma DJ, objetada por la administracion (#365).
+     *
+     * <p><b>Observarla no la retira.</b> Sigue conciliando el predio (ADR-0015 §1): la
+     * administracion objeto el <b>contenido</b> de una declaracion que existe y fue presentada, y
+     * negarle la conciliacion diria «este predio no genera deuda predial» de uno que si la genera.
+     * Lo que la observacion abre es el camino de la rectificatoria.
+     */
+    public DeclaracionJurada observada() {
+        return conEstado(EstadoDeDeclaracion.OBSERVADA);
+    }
+
+    /**
+     * Esta misma DJ, anulada (#365).
+     *
+     * <p>Al reves que observarla, anularla si la retira: deja de sustentar nada y el predio deja de
+     * conciliar por ella. Es terminal —{@link #anulada()} sobre una anulada no compila un estado
+     * nuevo, lanza— y esa es la respuesta a «¿una anulada revive?»: no. Si el contribuyente declara
+     * otra vez, se presenta otra declaracion, con su numero.
+     */
+    public DeclaracionJurada anulada() {
+        return conEstado(EstadoDeDeclaracion.ANULADA);
+    }
+
+    /**
+     * La maquina de estados, en un solo sitio.
+     *
+     * <p>Sale de un estado <b>vigente</b> —{@code PRESENTADA} u {@code OBSERVADA}— y nunca de uno
+     * terminal, y nunca al mismo en que ya esta. Escrita aqui y no en el caso de uso porque es una
+     * propiedad de la declaracion, no del tramite: cualquier acto que se agregue manana pasa por
+     * esta puerta sin tener que acordarse.
+     *
+     * <p>La misma regla la sostiene V54 en la base, con {@code declaracion_jurada_estado_terminal}.
+     * Este metodo produce el mensaje que se lee en ventanilla; el disparador es lo unico que ven
+     * dos peticiones simultaneas.
+     */
+    private DeclaracionJurada conEstado(EstadoDeDeclaracion nuevo) {
+        if (estado == nuevo) {
+            throw new TransicionIlegal(numero, estado, nuevo);
+        }
+        if (estado.esTerminal()) {
+            throw new TransicionIlegal(numero, estado, nuevo);
         }
         return new DeclaracionJurada(
                 id,
@@ -183,9 +233,24 @@ public record DeclaracionJurada(
                 fichaCatastralId,
                 fechaPresentacion,
                 fechaLimite,
-                EstadoDeDeclaracion.SUSTITUIDA,
+                nuevo,
                 djRectificaId,
                 usuarioRegistro,
                 observacion);
+    }
+
+    /** El estado en que esta la declaracion no admite el acto que se pide (#365). */
+    public static final class TransicionIlegal extends IllegalStateException {
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        TransicionIlegal(String numero, EstadoDeDeclaracion desde, EstadoDeDeclaracion hasta) {
+            super(
+                    "La declaracion jurada "
+                            + numero
+                            + " esta "
+                            + desde
+                            + " y no puede pasar a "
+                            + hasta);
+        }
     }
 }

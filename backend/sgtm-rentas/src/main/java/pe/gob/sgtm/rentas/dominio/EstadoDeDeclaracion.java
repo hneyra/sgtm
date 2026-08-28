@@ -32,4 +32,27 @@ public enum EstadoDeDeclaracion {
     public static String[] nombresDeLasVigentes() {
         return new String[] {PRESENTADA.name(), OBSERVADA.name()};
     }
+
+    /**
+     * Si la declaracion sigue en pie, con el mismo criterio que {@link #nombresDeLasVigentes()}.
+     *
+     * <p>Es el predicado en su forma de objeto, para que el caso de uso y la consulta no puedan
+     * discrepar: {@code prediosConDeclaracionVigente} filtra con el arreglo, y {@code
+     * RegistrarDeclaracionJurada} decide con este metodo si un acto es legal (#365).
+     */
+    public boolean esVigente() {
+        return this == PRESENTADA || this == OBSERVADA;
+    }
+
+    /**
+     * Los dos estados finales: una anulada no revive y una sustituida ya tiene quien la sustituya
+     * (#365).
+     *
+     * <p>Lo mismo lo dice el disparador {@code declaracion_jurada_estado_terminal} de V54, y estar
+     * en los dos sitios no es duplicacion: aqui produce un mensaje que el usuario entiende, y alli
+     * es lo unico que ven dos peticiones simultaneas que leyeron las dos el mismo estado anterior.
+     */
+    public boolean esTerminal() {
+        return this == SUSTITUIDA || this == ANULADA;
+    }
 }
