@@ -15,9 +15,11 @@ import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.cuentacorriente.AbonoAsentado;
 import pe.gob.sgtm.cuentacorriente.RegistroDeAbonos;
 import pe.gob.sgtm.cuentacorriente.SeleccionDeObligacion;
+import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.tesoreria.dominio.FormaDePago;
 import pe.gob.sgtm.tesoreria.dominio.LineaDeRecibo;
+import pe.gob.sgtm.tesoreria.dominio.NumeroDeConvenio;
 import pe.gob.sgtm.tesoreria.dominio.NumeroDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.Recibo;
 import pe.gob.sgtm.tesoreria.dominio.ReciboRepository;
@@ -70,9 +72,16 @@ public class CobrarDeuda {
     /** El concepto con el que se rotula una linea de cobranza en {@code recibo_detalle}. */
     private static final String CONCEPTO_PAGO = "PAGO";
 
+    /** El concepto con el que se rotula la linea de una cuota inicial de convenio (#35). */
+    private static final String CONCEPTO_CUOTA_INICIAL = "CUOTA INICIAL";
+
+    /** El tributo con el que se rotula esa misma linea. */
+    private static final String TRIBUTO_CONVENIO = "CONVENIO";
+
     private final AbrirCaja abrirCaja;
     private final RegistroDeAbonos abonos;
     private final ReciboRepository recibos;
+    private final FormalizarConvenio formalizar;
     private final Auditoria auditoria;
     private final Clock reloj;
 
@@ -80,11 +89,13 @@ public class CobrarDeuda {
             AbrirCaja abrirCaja,
             RegistroDeAbonos abonos,
             ReciboRepository recibos,
+            FormalizarConvenio formalizar,
             Auditoria auditoria,
             Clock reloj) {
         this.abrirCaja = abrirCaja;
         this.abonos = abonos;
         this.recibos = recibos;
+        this.formalizar = formalizar;
         this.auditoria = auditoria;
         this.reloj = reloj;
     }
@@ -107,6 +118,9 @@ public class CobrarDeuda {
         Objects.requireNonNull(peticion, "No se cobra sin peticion");
         Objects.requireNonNull(observacion, "Sin observacion no se guarda (regla 10, RNF-052)");
 
+        if (peticion.tipoDePago() == TipoDePago.PRECONVENIO) {
+            return cobrarLaCuotaInicial(peticion, observacion);
+        }
         if (peticion.tipoDePago() != TipoDePago.NORMAL) {
             throw new TipoDePagoNoImplementado(peticion.tipoDePago());
         }
@@ -169,6 +183,113 @@ public class CobrarDeuda {
         Recibo emitido = recibos.emitir(recibo, clave);
         auditar(emitido, observacion);
         return emitido;
+    }
+
+    /**
+     * Cobra la cuota inicial de un preconvenio y lo formaliza (#35, RF-084).
+     *
+     * <p><b>En la misma transaccion que el resto</b>, y ahi esta el punto. O el recibo y el
+     * acogimiento de la deuda a fase de convenio caen juntos, o no cae ninguno: un recibo de
+     * inicial sin acogimiento deja al contribuyente con un papel que dice que su convenio existe y
+     * a la municipalidad con la deuda todavia en cobranza ordinaria; un acogimiento sin recibo saca
+     * la deuda de la cobranza sin que haya entrado un sol.
+     *
+     * <p><b>Este recibo no abona en el libro</b>, y no es un olvido. Cuanto de la deuda acogida
+     * extingue la cuota inicial es una <b>regla de imputacion</b> —art. 31 del Codigo Tributario—
+     * que no esta transcrita ni firmada; lo que la inicial hace es <b>formalizar</b>, y su efecto
+     * sobre el libro es el acogimiento entero a fase de convenio. Mientras {@link
+     * TipoDePago#CUOTA_CONVENIO} siga rechazado, ninguna cuota se puede cobrar y la cuenta cierra:
+     * lo que el quiebre devuelve es lo acogido, sin repartir nada.
+     *
+     * <p>El desglose del recibo va integro en {@code insoluto}, como el de una tasa: la cuota
+     * inicial es un compromiso del convenio, no un tramo de deuda con su reajuste y su interes
+     * moratorio. Los que tenia la deuda acogida siguen congelados en {@code convenio_deuda}.
+     */
+    private Recibo cobrarLaCuotaInicial(Cobranza peticion, Observacion observacion) {
+        NumeroDeConvenio convenio =
+                NumeroDeConvenio.de(
+                        Objects.requireNonNull(
+                                peticion.numeroDeConvenio(),
+                                "Un cobro de cuota inicial dice de que convenio es"));
+
+        AbrirCaja.Abierta abierta =
+                abrirCaja.enLaCaja(
+                        peticion.codigoDeCaja(),
+                        peticion.cajero(),
+                        peticion.fechaDePago(),
+                        observacion);
+
+        String clave = peticion.claveDeIdempotencia();
+        if (clave != null) {
+            Optional<Recibo> yaEmitido = recibos.porClaveDeIdempotencia(clave);
+            if (yaEmitido.isPresent()) {
+                return yaEmitido.get();
+            }
+        }
+
+        NumeroDeRecibo numero = recibos.siguienteNumero(abierta.caja());
+
+        // El recibo se emite ANTES de formalizar porque la formalizacion lo nombra:
+        // convenio_movimiento_formalizacion_ck exige el recibo_id en la propia base, de
+        // modo que no hay forma de dejar un convenio en vigor sin el papel que lo cobro.
+        Dinero inicial = cuotaInicialDe(convenio);
+        TurnoDeCaja turno = abierta.turno();
+        Recibo recibo =
+                new Recibo(
+                        null,
+                        numero,
+                        Objects.requireNonNull(abierta.caja().id()),
+                        turno.idGuardado(),
+                        peticion.cajero(),
+                        peticion.contribuyenteId(),
+                        reloj.instant(),
+                        peticion.formaDePago(),
+                        TipoDePago.PRECONVENIO,
+                        peticion.campaniaBeneficio(),
+                        peticion.fechaDePago(),
+                        observacion,
+                        List.of(
+                                new LineaDeRecibo(
+                                        TRIBUTO_CONVENIO,
+                                        CONCEPTO_CUOTA_INICIAL,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        convenio.impreso(),
+                                        null,
+                                        null,
+                                        inicial,
+                                        Dinero.CERO,
+                                        Dinero.CERO,
+                                        Dinero.CERO)));
+
+        Recibo emitido = recibos.emitir(recibo, clave);
+        formalizar.formalizar(
+                convenio,
+                Objects.requireNonNull(emitido.id(), "Un recibo emitido trae su identificador"),
+                inicial,
+                peticion.fechaDePago(),
+                observacion);
+        auditar(emitido, observacion);
+        return emitido;
+    }
+
+    /**
+     * La cuota inicial que el cronograma congelo.
+     *
+     * <p>Se lee del convenio y no llega en la peticion: si el importe viajara desde la ventanilla,
+     * un cliente podria formalizar un convenio de diez mil soles pagando uno. {@code
+     * FormalizarConvenio} lo vuelve a comprobar contra el cronograma, y esa segunda comprobacion no
+     * sobra —es la que sigue valiendo si algun dia se llama a formalizar desde otro sitio—.
+     */
+    private Dinero cuotaInicialDe(NumeroDeConvenio numero) {
+        Dinero inicial = formalizar.cuotaInicialDe(numero);
+        if (!inicial.esPositivo()) {
+            throw new SinCuotaInicialQueCobrar(numero);
+        }
+        return inicial;
     }
 
     // ------------------------------------------------------------------
@@ -241,6 +362,8 @@ public class CobrarDeuda {
      * @param campaniaBeneficio la campana declarada, si la hubo; <b>solo constancia</b> (D-02b)
      * @param fechaDePago la fecha a la que se relee la deuda; entra como argumento (regla 6)
      * @param claveDeIdempotencia la cabecera {@code idempotency-key}, si vino
+     * @param numeroDeConvenio el convenio cuya cuota inicial se cobra; <b>solo</b> con {@link
+     *     TipoDePago#PRECONVENIO}, y obligatorio en ese caso
      */
     public record Cobranza(
             String codigoDeCaja,
@@ -251,7 +374,8 @@ public class CobrarDeuda {
             TipoDePago tipoDePago,
             @Nullable String campaniaBeneficio,
             LocalDate fechaDePago,
-            @Nullable String claveDeIdempotencia) {
+            @Nullable String claveDeIdempotencia,
+            @Nullable String numeroDeConvenio) {
 
         public Cobranza {
             Objects.requireNonNull(codigoDeCaja, "La cobranza es de una caja");
@@ -261,10 +385,29 @@ public class CobrarDeuda {
             Objects.requireNonNull(tipoDePago, "Hay que decir que clase de cobranza es");
             Objects.requireNonNull(fechaDePago, "La fecha de pago entra como argumento (regla 6)");
             obligaciones = List.copyOf(obligaciones);
-            if (obligaciones.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "Hay que marcar al menos una deuda: un recibo sin lineas no documenta"
-                                + " nada");
+            // El cobro de una cuota inicial no marca deudas: las marco el preconvenio, y
+            // estan congeladas en convenio_deuda con su fase de origen. Admitir las dos
+            // cosas a la vez dejaria dos definiciones de que se esta cobrando.
+            if (tipoDePago == TipoDePago.PRECONVENIO) {
+                Objects.requireNonNull(
+                        numeroDeConvenio,
+                        "Un cobro de cuota inicial dice de que convenio es (#35, RF-084)");
+                if (!obligaciones.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "La cuota inicial no marca deudas: la deuda que se acoge la fijo el"
+                                    + " preconvenio, y volver a marcarla aqui dejaria dos"
+                                    + " definiciones de que se esta cobrando");
+                }
+            } else {
+                if (numeroDeConvenio != null) {
+                    throw new IllegalArgumentException(
+                            "Solo el cobro de una cuota inicial nombra un convenio: " + tipoDePago);
+                }
+                if (obligaciones.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "Hay que marcar al menos una deuda: un recibo sin lineas no documenta"
+                                    + " nada");
+                }
             }
             // La grilla marca con casillas, asi que una obligacion repetida solo puede venir
             // de un cliente mal escrito -o de uno que lo intenta-. Cobrarla dos veces en el
@@ -298,18 +441,42 @@ public class CobrarDeuda {
         }
     }
 
-    /** Una modalidad de cobro que #33 no escribe. Ver {@link TipoDePago}. */
+    /**
+     * Una modalidad de cobro que todavia no se escribe. Ver {@link TipoDePago}.
+     *
+     * <p>Quedan {@code A_CUENTA} y {@code CUOTA_CONVENIO}, y las dos por el mismo motivo: son pagos
+     * <b>parciales</b>, y decidir que parte de la deuda extingue un pago parcial es una regla de
+     * imputacion normativa (art. 31 del Codigo Tributario) que no esta transcrita ni firmada. #35
+     * lo deja anotado en {@link TipoDePago}, con la consecuencia que hace la decision segura:
+     * mientras esto siga rechazando {@code CUOTA_CONVENIO}, ninguna cuota se cobra y el quiebre
+     * nunca tiene que repartir un pago parcial.
+     */
     public static final class TipoDePagoNoImplementado extends RuntimeException {
 
         @java.io.Serial private static final long serialVersionUID = 1L;
 
         TipoDePagoNoImplementado(TipoDePago tipo) {
             super(
-                    "Caja tributaria cobra hoy la modalidad NORMAL: "
+                    "Caja tributaria cobra hoy NORMAL y PRECONVENIO: "
                             + tipo
-                            + " exige una regla de imputacion o el fraccionamiento, y aceptarla"
-                            + " como si fuera normal dejaria el recibo diciendo una cosa y el"
-                            + " libro otra");
+                            + " es un pago parcial y exige una regla de imputacion —que parte de"
+                            + " la deuda extingue— que no esta firmada. Aceptarla como si fuera"
+                            + " normal dejaria el recibo diciendo una cosa y el libro otra");
+        }
+    }
+
+    /** El convenio no tiene cuota inicial que cobrar: se pacto al 0 %. */
+    public static final class SinCuotaInicialQueCobrar extends RuntimeException {
+
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        SinCuotaInicialQueCobrar(NumeroDeConvenio numero) {
+            super(
+                    "El convenio "
+                            + numero.impreso()
+                            + " se pacto sin cuota inicial: no hay nada que cobrar en caja, y un"
+                            + " recibo por cero no documenta nada. Un convenio al 0 % de inicial"
+                            + " necesita otro acto que lo formalice, y ese acto no existe todavia");
         }
     }
 }

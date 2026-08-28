@@ -30,6 +30,7 @@ import pe.gob.sgtm.tesoreria.dobles.ContribuyentesDeMentira;
 import pe.gob.sgtm.tesoreria.dobles.LibroDeMentira;
 import pe.gob.sgtm.tesoreria.dobles.MovimientosEnMemoria;
 import pe.gob.sgtm.tesoreria.dobles.RecibosEnMemoria;
+import pe.gob.sgtm.tesoreria.dobles.SinConvenios;
 import pe.gob.sgtm.tesoreria.dobles.TasasEnMemoria;
 import pe.gob.sgtm.tesoreria.dobles.TurnosEnMemoria;
 import pe.gob.sgtm.tesoreria.dominio.Caja;
@@ -347,7 +348,12 @@ class AnularYDuplicarTest {
                 new AbrirCaja(cajas, turnos, (RegistroDeAuditoria registro) -> {}, relojDe(HOY));
         CobrarDeuda cobrar =
                 new CobrarDeuda(
-                        abrir, libro, recibos, (RegistroDeAuditoria registro) -> {}, relojDe(HOY));
+                        abrir,
+                        libro,
+                        recibos,
+                        SinConvenios.formalizador(relojDe(HOY)),
+                        (RegistroDeAuditoria registro) -> {},
+                        relojDe(HOY));
         return cobrar.cobrar(
                 new CobrarDeuda.Cobranza(
                         "C-01",
@@ -358,6 +364,7 @@ class AnularYDuplicarTest {
                         TipoDePago.NORMAL,
                         null,
                         HOY,
+                        null,
                         null),
                 Observacion.de("Cobranza en ventanilla, prueba de #34"));
     }

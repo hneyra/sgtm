@@ -63,6 +63,7 @@ import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.tesoreria.aplicacion.AbrirCaja;
 import pe.gob.sgtm.tesoreria.aplicacion.CobrarDeuda;
 import pe.gob.sgtm.tesoreria.aplicacion.CobrarTasa;
+import pe.gob.sgtm.tesoreria.dobles.SinConvenios;
 import pe.gob.sgtm.tesoreria.dominio.Caja;
 import pe.gob.sgtm.tesoreria.dominio.FormaDePago;
 import pe.gob.sgtm.tesoreria.dominio.LineaDeTasaPedida;
@@ -166,7 +167,15 @@ class CajaJdbcTest {
                 envolver(
                         new AbrirCaja(
                                 cajas, new TurnoDeCajaRepositoryJdbc(jdbc), auditoria, RELOJ));
-        cobrarDeuda = envolver(new CobrarDeuda(abrirCaja, abonos, recibos, auditoria, RELOJ));
+        cobrarDeuda =
+                envolver(
+                        new CobrarDeuda(
+                                abrirCaja,
+                                abonos,
+                                recibos,
+                                SinConvenios.formalizador(RELOJ),
+                                auditoria,
+                                RELOJ));
         cobrarTasa = envolver(new CobrarTasa(abrirCaja, tasas, recibos, auditoria, RELOJ));
 
         areaId = crearArea(municipalidad, "A-01");
@@ -238,6 +247,7 @@ class CajaJdbcTest {
                                                     RELOJ)),
                                     abonos,
                                     new ReciboQueRevientaAlEmitir(recibos),
+                                    SinConvenios.formalizador(RELOJ),
                                     new AuditoriaJdbc(jdbc, RELOJ),
                                     RELOJ));
 
@@ -756,7 +766,8 @@ class CajaJdbcTest {
                 TipoDePago.NORMAL,
                 null,
                 PAGO,
-                clave);
+                clave,
+                null);
     }
 
     private static Observacion porQue() {

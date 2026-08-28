@@ -24,6 +24,9 @@ import org.jspecify.annotations.Nullable;
  * @param beneficioAplicable la campana declarada; solo constancia (D-02b)
  * @param fechaDePago la fecha a la que se relee la deuda, en ISO; si falta, hoy
  * @param obligaciones las deudas marcadas en la grilla
+ * @param numeroDeConvenio el convenio cuya cuota inicial se cobra; <b>solo</b> con {@code
+ *     tipoDePago = PRECONVENIO}, y obligatorio en ese caso (#35, RF-084). El importe sigue sin
+ *     entrar: lo dice el cronograma congelado del convenio
  * @param observacion por que se cobra (regla 10)
  */
 public record PeticionDeCobranza(
@@ -35,6 +38,7 @@ public record PeticionDeCobranza(
         @Nullable String beneficioAplicable,
         @Nullable String fechaDePago,
         @Nullable List<PeticionDeObligacion> obligaciones,
+        @Nullable String numeroDeConvenio,
         @Nullable String observacion) {
 
     /**

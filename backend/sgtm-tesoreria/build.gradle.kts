@@ -20,6 +20,9 @@ dependencies {
     implementation(project(":sgtm-cuentacorriente"))
     // Resolver el codigo de contribuyente que llega por HTTP a su identificador (#15).
     implementation(project(":sgtm-contribuyentes"))
+    // El interes de fraccionamiento, el maximo de cuotas y la politica de redondeo de
+    // la cuota salen del conjunto sellado, nunca del codigo (#35, regla 5, D-02b).
+    implementation(project(":sgtm-parametros"))
 
     // Las pruebas de repositorio y de atomicidad corren contra PostgreSQL de verdad:
     // provisionan la base como un ambiente real y se conectan como sgtm_app, no como
