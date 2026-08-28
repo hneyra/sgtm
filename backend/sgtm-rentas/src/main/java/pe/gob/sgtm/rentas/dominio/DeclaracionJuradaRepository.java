@@ -1,6 +1,8 @@
 package pe.gob.sgtm.rentas.dominio;
 
 import java.util.Optional;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
 
 /**
@@ -16,6 +18,21 @@ public interface DeclaracionJuradaRepository {
 
     /** Por numero y ejercicio, que es como la busca quien atiende (contrato de {@code djNro}). */
     Optional<DeclaracionJurada> porNumero(String numero, Ejercicio ejercicio);
+
+    /**
+     * Las declaraciones presentadas por un contribuyente, de la mas reciente a la mas antigua,
+     * paginadas (#25, RF-046).
+     *
+     * <p>Existe para la pestaña de declaraciones juradas de la consulta unificada, que es la unica
+     * pantalla que pregunta «que ha declarado esta persona» en vez de «que dice la declaracion
+     * numero tal». Se apoya en {@code dj_contribuyente_ix} (V2), que ya indexa exactamente esta
+     * pregunta.
+     *
+     * <p>Trae <b>todas</b>, incluidas las {@code SUSTITUIDA}s por una rectificatoria: una
+     * declaracion sustituida no desaparece del expediente, y esconderla dejaria sin explicar por
+     * que la vigente dice lo que dice. Cada fila lleva su estado.
+     */
+    Pagina<DeclaracionJurada> deContribuyente(long contribuyenteId, Paginacion paginacion);
 
     /** Inserta la declaracion y devuelve la fila guardada, con su {@code id} y su usuario. */
     DeclaracionJurada insertar(DeclaracionJurada declaracion);
