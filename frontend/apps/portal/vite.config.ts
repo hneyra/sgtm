@@ -5,14 +5,19 @@ import { defineConfig } from 'vite';
 const raiz = (ruta: string) => fileURLToPath(new URL(ruta, import.meta.url));
 
 /**
- * El backend real todavia no sirve ni un endpoint (ver `backend/README.md`),
- * pero la aplicacion habla HTTP contra `/api/v1` desde el primer dia: cuando
- * Spring Boot exponga las operaciones basta con apuntar SGTM_API ahi, sin
- * cambiar una linea del codigo de la aplicacion.
+ * El portal del contribuyente, **fuera del shell del back-office** (#298,
+ * ADR-0016 §3).
+ *
+ * Se sirve en `/portal/` del **mismo origen** que el back-office, y eso no es
+ * comodidad: es lo que hace que `/api/v1` siga siendo del propio origen —sin
+ * CORS que configurar ni un segundo origen que autorizar en Keycloak— y que la
+ * separacion sea de paquete, no de despliegue. `nginx.conf` sirve este `dist`
+ * bajo esa ruta.
  */
 const API = process.env['SGTM_API'] ?? 'http://localhost:8080';
 
 export default defineConfig({
+  base: '/portal/',
   plugins: [react()],
   resolve: {
     // El orden importa: la hoja de estilos se resuelve antes que el paquete.
@@ -33,7 +38,8 @@ export default defineConfig({
     ],
   },
   server: {
-    port: 5173,
+    // Otro puerto que el back-office (5173): los dos se levantan a la vez.
+    port: 5174,
     proxy: { '/api': { target: API, changeOrigin: true } },
   },
 });

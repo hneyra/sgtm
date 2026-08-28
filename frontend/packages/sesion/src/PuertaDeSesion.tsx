@@ -14,7 +14,23 @@ import { useSesion } from './ProveedorDeSesion';
  * El aviso de expiracion se pinta **encima**, como hermano: tampoco desmonta
  * nada.
  */
-export function PuertaDeSesion({ children }: { readonly children: ReactNode }) {
+export interface PuertaDeSesionProps {
+  readonly children: ReactNode;
+  /**
+   * Que se ve sin sesion, cuando lo de siempre —el boton de entrar— no sirve.
+   *
+   * Lo pasa **el portal** (#298, ADR-0016 §3): su `redirect_uri` es la raiz del
+   * origen (`sesion.ts`), asi que el boton mandaria al ciudadano a Keycloak para
+   * devolverlo al back-office, no al portal. Y el acceso propio del ciudadano no
+   * existe todavia —no hay realm que lo autentique—, de modo que ahi lo honesto
+   * es decirlo, no ofrecer una puerta que lleva a otro sitio.
+   *
+   * Sin esto se dibuja el boton de siempre, que es lo que el back-office necesita.
+   */
+  readonly anonima?: ReactNode;
+}
+
+export function PuertaDeSesion({ children, anonima }: PuertaDeSesionProps) {
   const sesion = useSesion();
 
   if (sesion.estado === 'entrando') {
@@ -26,6 +42,7 @@ export function PuertaDeSesion({ children }: { readonly children: ReactNode }) {
   }
 
   if (sesion.estado === 'anonima') {
+    if (anonima !== undefined) return <div className="sgtm-puerta">{anonima}</div>;
     return (
       <div className="sgtm-puerta">
         <Aviso

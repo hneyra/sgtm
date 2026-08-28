@@ -1,4 +1,4 @@
-import { alOlvidarLaSesion } from '../../app/sesion/olvidos';
+import { alOlvidarLaSesion } from '@sgtm/sesion';
 
 /**
  * **Las ultimas personas atendidas, en memoria y no en el navegador** (#296).
@@ -41,7 +41,7 @@ import { alOlvidarLaSesion } from '../../app/sesion/olvidos';
  * municipalidad**, que no recarga nunca —por eso `ProveedorDeSesion` vacia ahi
  * la cache a mano—. Sin olvidarla, el operador siguiente veria a quien atendio
  * el anterior, y en la otra municipalidad, a gente de la primera. Por eso esta
- * lista se apunta al registro de olvidos de la sesion (`app/sesion/olvidos.ts`).
+ * lista se apunta al registro de olvidos de la sesion (`@sgtm/sesion`).
  *
  * ── Que se guarda ──────────────────────────────────────────────────────────
  *

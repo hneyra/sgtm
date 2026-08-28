@@ -3,6 +3,7 @@ import type { Fecha } from '@sgtm/dominio';
 import { definirConexion } from '../conexiones';
 import type { Conexion } from '../conexiones';
 import { parametrosDeBusqueda } from '../busqueda';
+import { importeDe } from '@sgtm/lectura';
 import {
   SIN_DATO,
   esObjeto,
@@ -40,30 +41,16 @@ import {
  */
 
 /**
- * Un importe con su fecha, tal como lo publica `ImporteActualizado`.
+ * **`importeDe` vive ahora en `@sgtm/lectura`** (#298), y se reexporta desde aqui
+ * para las pantallas que ya lo importaban.
  *
- * Los dos juntos o ninguno: una cifra sin fecha es una cifra que dentro de tres
- * dias es otra (regla 9, RNF-075). Se lee asi y no como dos campos sueltos
- * porque asi es como el backend impide que se separen.
+ * Se movio al separarse `apps/portal`: el portal del contribuyente dibuja las
+ * mismas cifras que la ficha 360° y a la misma fecha de calculo (ADR-0016 §3), y
+ * dos lecturas del mismo par acabarian leyendo campos distintos —y una de las
+ * dos, el importe sin su fecha—. Se lee una vez, en un solo sitio.
  */
-export interface ImporteConFecha {
-  readonly importe: string;
-  readonly actualizadoA: Fecha;
-}
-
-/**
- * Se exporta por lo mismo que {@link obligacionDeDeuda}: **la ficha 360° lee las
- * seis rejillas de la misma respuesta** (#297, ADR-0016 §2), y todas sus cifras
- * viajan con esta forma. Dos lecturas del mismo par acabarían leyendo campos
- * distintos —y una de las dos, el importe sin su fecha—; se lee una vez.
- */
-export function importeDe(valor: unknown): ImporteConFecha | undefined {
-  if (!esObjeto(valor)) return undefined;
-  const importe = valor['importe'];
-  const actualizadoA = valor['actualizadoA'];
-  if (typeof importe !== 'string' || typeof actualizadoA !== 'string') return undefined;
-  return { importe, actualizadoA: actualizadoA as Fecha };
-}
+export { importeDe } from '@sgtm/lectura';
+export type { ImporteConFecha } from '@sgtm/lectura';
 
 /**
  * Si un importe es cero, por texto: `Number()`/`parseFloat()` sobre un importe

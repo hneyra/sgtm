@@ -24,6 +24,10 @@ const OPCIONES = (raiz: string): ts.CompilerOptions => ({
   paths: {
     '@sgtm/dominio': ['packages/dominio/src/index.ts'],
     '@sgtm/api-client': ['packages/api-client/src/index.ts'],
+    // Los adaptadores leen el cuerpo con `@sgtm/lectura` desde #298: sin este
+    // camino, compilar uno se queja de que el modulo no existe y la prueba
+    // dejaria de medir lo que dice medir.
+    '@sgtm/lectura': ['packages/lectura/src/index.ts'],
   },
 });
 

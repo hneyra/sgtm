@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { rutaDeModulo } from '../catalogo';
 import { usePreferencias } from './preferencias';
-import { useSesion } from './sesion/ProveedorDeSesion';
+import { useSesion } from '@sgtm/sesion';
 import { useCatalogoVisible } from './sesion/useCatalogoVisible';
 import { MenuDeCabecera } from './MenuDeCabecera';
 

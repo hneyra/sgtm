@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
-import { permisosDelClaim, puedeVer } from '../../app/sesion/permisos';
+import { permisosDelClaim, puedeVer } from '@sgtm/sesion';
 import { montarEnRuta } from '../../pruebas/montar';
 
 /**

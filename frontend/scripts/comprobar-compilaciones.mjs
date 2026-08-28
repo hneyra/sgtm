@@ -24,7 +24,20 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 const raiz = fileURLToPath(new URL('..', import.meta.url));
-const salida = join(raiz, 'apps/backoffice/dist');
+
+/**
+ * Las **dos** aplicaciones, cada una con su paquete (#298, ADR-0016 §3).
+ *
+ * Antes habia una, y «el portal» se media como `arranque del back-office + el
+ * trozo de Inicio`: era la mejor aproximacion posible mientras el ciudadano
+ * entraba por el shell. Con `apps/portal` separado eso dejo de ser una
+ * aproximacion y paso a ser una cifra falsa —medir el paquete que el ciudadano
+ * YA NO descarga—, asi que ahora se mide el paquete propio de cada una.
+ */
+const APLICACIONES = [
+  { nombre: 'backoffice', salida: join(raiz, 'apps/backoffice/dist') },
+  { nombre: 'portal', salida: join(raiz, 'apps/portal/dist') },
+];
 
 /**
  * Dos huellas: una del juego de datos y otra del **codigo** del proxy.
@@ -44,11 +57,11 @@ const HUELLAS = [
  * se agregan de dos en dos. Subir un numero tiene que costar una linea de este
  * archivo y una frase en el PR que diga por que.
  *
- * `arranque` y `portal` se subieron a 150 / 152 KB el 2026-08-27: quedan doce
- * modulos por conectar al backend y el arranque lleva dentro el camino de la
- * sesion —token, renovacion y ahora la matriz de permisos (ADR-0013)—. El
- * margen es para eso, no para que crezca sin mirar: el mayor trozo por modulo
- * sigue apretado en 11 KB.
+ * `arranque` se subio a 150 KB el 2026-08-27: quedan doce modulos por conectar
+ * al backend y el arranque lleva dentro el camino de la sesion —token,
+ * renovacion y ahora la matriz de permisos (ADR-0013)—. El margen es para eso,
+ * no para que crezca sin mirar: el mayor trozo por modulo sigue apretado en
+ * 11 KB.
  *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
@@ -59,20 +72,26 @@ const PRESUPUESTO = {
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**
-   * Lo que le cuesta al **ciudadano** abrir el portal (#81).
+   * Lo que le cuesta al **ciudadano** abrir el portal (#81, #298).
    *
    * Es el unico flujo del sistema que no usa alguien de la municipalidad: se
-   * entra desde un telefono, una vez al ano, con la red que haya. Su ruta es el
-   * arranque mas el trozo de «Inicio», y **hoy el arranque lleva dentro el
-   * catalogo de navegacion de los doce modulos** —134 opciones con sus iconos y
-   * resumenes— que el ciudadano no va a usar.
+   * entra desde un telefono, una vez al ano, con la red que haya. Y desde #298
+   * es **su propio paquete**: `apps/portal` no lleva el shell ni el catalogo de
+   * navegacion de los doce modulos —los ~11,5 KB de 134 opciones con sus iconos
+   * y resumenes que el ciudadano se descargaba para no usarlos nunca—.
    *
-   * El presupuesto sigue a `arranque` (mas el trozo de «Inicio», ~1 KB): si no,
-   * `portal` pasaria a ser el limite que muerde primero y `arranque` no serviria
-   * de nada. La conversacion sobre bajar los dos queda abierta con su numero
-   * delante.
+   * **85,1 KB medidos el 2026-08-28**, contra los 152 que costaba entrar por el
+   * shell: se fija en 88, que son tres kilobytes de margen. Corto **a
+   * proposito**: el portal es una pantalla, no doce modulos, y no tiene por que
+   * crecer. Un presupuesto holgado aqui devolveria en seis meses lo que la
+   * separacion acaba de quitar. Subirlo es una decision que se explica en el PR,
+   * como el de arriba.
+   *
+   * De los 85, unos 60 son React y el cliente de consultas; lo propio del portal
+   * —su pantalla, los adaptadores de `@sgtm/lectura` y la puerta de sesion— no
+   * llega a 25. Bajar de ahi es cambiar de biblioteca, no de pantalla.
    */
-  portal: 152,
+  portal: 88,
 };
 
 /* ── El paquete no conoce el dominio ─────────────────────────────────────── */
@@ -155,7 +174,7 @@ if (absolutas.length > 0) {
 const comprimido = (contenido) => gzipSync(contenido).length / 1024;
 
 function compilar(conProxy) {
-  rmSync(salida, { recursive: true, force: true });
+  for (const app of APLICACIONES) rmSync(app.salida, { recursive: true, force: true });
   execFileSync('yarn', ['build'], {
     cwd: raiz,
     stdio: 'pipe',
@@ -165,6 +184,21 @@ function compilar(conProxy) {
     env: { ...process.env, ...IDENTIDAD, VITE_SGTM_PROXY_DE_DATOS: conProxy ? 'true' : 'false' },
   });
 
+  const medidas = {};
+  for (const app of APLICACIONES) medidas[app.nombre] = medir(app.salida);
+  return {
+    ...medidas,
+    // Lo que se busca dentro del paquete —el juego de datos, el proxy, el
+    // dominio— se busca en las DOS aplicaciones: el portal instala el mismo
+    // proxy detras de la misma bandera, y una fuga por ahi contaria igual.
+    bytes: APLICACIONES.reduce((suma, app) => suma + medidas[app.nombre].bytes, 0),
+    trae: new Set(APLICACIONES.flatMap((app) => [...medidas[app.nombre].trae])),
+    dominios: new Set(APLICACIONES.flatMap((app) => [...medidas[app.nombre].dominios])),
+  };
+}
+
+/** Lo que pesa el paquete de UNA aplicacion, repartido en arranque, modulos y diferidos. */
+function medir(salida) {
   const activos = join(salida, 'assets');
   let bytes = 0;
   let arranque = 0;
@@ -225,12 +259,18 @@ function compilar(conProxy) {
  */
 function primeraPantalla(salida) {
   const html = readFileSync(join(salida, 'index.html'), 'utf8');
+  /* La ruta base es del paquete, no de esta comprobacion: el back-office se
+     sirve en `/` y el portal en `/portal/` (#298), asi que lo que se busca es
+     «.../assets/<archivo>» y no una raiz concreta. Con la raiz fija dentro, el
+     portal no habria enumerado NINGUN activo y su arranque habria salido 0 KB
+     —el presupuesto pasaria siempre—; lo unico que lo evita es que
+     `primeraPantalla` se pare cuando el conjunto sale vacio. */
   const activos = new Set(
-    [...html.matchAll(/(?:src|href)="\/assets\/([^"]+)"/g)].map(([, archivo]) => archivo),
+    [...html.matchAll(/(?:src|href)="[^"]*\/assets\/([^"]+)"/g)].map(([, archivo]) => archivo),
   );
   if (activos.size === 0) {
     console.error(
-      '\n\u2717 index.html no enumera ningun activo: la medida del arranque no vale.\n',
+      `\n\u2717 ${salida}/index.html no enumera ningun activo: la medida del arranque no vale.\n`,
     );
     process.exit(1);
   }
@@ -285,12 +325,12 @@ console.log(`El paquete no conoce su dominio: ninguno de ${DOMINIOS.join(', ')} 
 /* ── Presupuesto ─────────────────────────────────────────────────────────── */
 
 const excedidos = [];
-if (sin.arranque > PRESUPUESTO.arranque) {
+if (sin.backoffice.arranque > PRESUPUESTO.arranque) {
   excedidos.push(
-    `el arranque ocupa ${sin.arranque.toFixed(1)} KB comprimidos y el presupuesto son ${PRESUPUESTO.arranque}`,
+    `el arranque ocupa ${sin.backoffice.arranque.toFixed(1)} KB comprimidos y el presupuesto son ${PRESUPUESTO.arranque}`,
   );
 }
-for (const modulo of sin.modulos) {
+for (const modulo of sin.backoffice.modulos) {
   if (modulo.kb > PRESUPUESTO.modulo) {
     excedidos.push(
       `«${modulo.archivo}» ocupa ${modulo.kb.toFixed(1)} KB comprimidos y el presupuesto por modulo son ${PRESUPUESTO.modulo}`,
@@ -300,21 +340,29 @@ for (const modulo of sin.modulos) {
 
 /* ── Lo que le cuesta al ciudadano abrir el portal ───────────────────────── */
 
-const trozoDeInicio = sin.modulos.find((modulo) => modulo.archivo.includes('inicio.generado'));
-const portal = sin.arranque + (trozoDeInicio?.kb ?? 0);
-console.log(
-  `Portal: ${portal.toFixed(1)} KB comprimidos de ${PRESUPUESTO.portal} ` +
-    `(arranque ${sin.arranque.toFixed(1)} + Inicio ${(trozoDeInicio?.kb ?? 0).toFixed(1)}).`,
-);
+/* Su paquete propio, no el del back-office (#298). Si `apps/portal` volviera a
+   arrastrar el catalogo de navegacion —basta una importacion del catalogo en
+   cualquiera de sus archivos— esta cifra lo dice el mismo dia. */
+const portal = sin.portal.arranque;
+console.log(`Portal: ${portal.toFixed(1)} KB comprimidos de ${PRESUPUESTO.portal}.`);
 if (portal > PRESUPUESTO.portal) {
   excedidos.push(
     `abrir el portal cuesta ${portal.toFixed(1)} KB comprimidos y el presupuesto son ${PRESUPUESTO.portal}`,
   );
 }
 
-if (sin.modulos.length !== 12) {
+/* Y el portal no tiene modulos: son del back-office. Un trozo `.generado-` en
+   su paquete quiere decir que el catalogo se le colo dentro. */
+if (sin.portal.modulos.length > 0) {
   console.error(
-    `\n✗ Deberia haber un trozo por modulo —doce— y hay ${sin.modulos.length}. Si el catalogo dejo de partirse, abrir una opcion de Catastro descarga tambien Transito.\n`,
+    `\n✗ El paquete del portal lleva ${sin.portal.modulos.length} trozo(s) del catalogo de navegacion, y el ciudadano no navega modulos (ADR-0016 §3): ${sin.portal.modulos.map((m) => m.archivo).join(', ')}.\n`,
+  );
+  process.exit(1);
+}
+
+if (sin.backoffice.modulos.length !== 12) {
+  console.error(
+    `\n✗ Deberia haber un trozo por modulo —doce— y hay ${sin.backoffice.modulos.length}. Si el catalogo dejo de partirse, abrir una opcion de Catastro descarga tambien Transito.\n`,
   );
   process.exit(1);
 }
@@ -327,9 +375,9 @@ if (excedidos.length > 0) {
   process.exit(1);
 }
 
-const mayor = sin.modulos.reduce((a, b) => (a.kb > b.kb ? a : b));
+const mayor = sin.backoffice.modulos.reduce((a, b) => (a.kb > b.kb ? a : b));
 console.log(
-  `Arranque: ${sin.arranque.toFixed(1)} KB comprimidos de ${PRESUPUESTO.arranque}. ` +
+  `Arranque: ${sin.backoffice.arranque.toFixed(1)} KB comprimidos de ${PRESUPUESTO.arranque}. ` +
     `Doce trozos por modulo, el mayor ${mayor.kb.toFixed(1)} KB de ${PRESUPUESTO.modulo}.`,
 );
 
@@ -337,10 +385,12 @@ console.log(
  * formularios que solo baja quien pulsa la accion que los abre. No tienen
  * presupuesto propio —no cuestan nada a quien no los usa— pero callarlos
  * dejaria la impresion de que el arranque bajo porque el codigo desaparecio. */
-if (sin.diferidos.length > 0) {
-  const total = sin.diferidos.reduce((suma, trozo) => suma + trozo.kb, 0);
+for (const app of APLICACIONES) {
+  const diferidos = sin[app.nombre].diferidos;
+  if (diferidos.length === 0) continue;
+  const total = diferidos.reduce((suma, trozo) => suma + trozo.kb, 0);
   console.log(
-    `Fuera del arranque, a peticion: ${total.toFixed(1)} KB en ${sin.diferidos.length} trozos ` +
-      `(${sin.diferidos.map((t) => t.archivo.replace(/-[^-]+\.js$/, '')).join(', ')}).`,
+    `[${app.nombre}] Fuera del arranque, a peticion: ${total.toFixed(1)} KB en ${diferidos.length} trozos ` +
+      `(${diferidos.map((t) => t.archivo.replace(/-[^-]+\.js$/, '')).join(', ')}).`,
   );
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Aviso, Boton, Campo } from '@sgtm/design-system';
+import { Aviso, Boton, Campo, FechaDeCalculo } from '@sgtm/design-system';
 import { pedirOperacion } from '@sgtm/api-client';
 import type { EstructuraDePantalla } from '../../catalogo';
 import { useCatalogoVisible } from '../../app/sesion/useCatalogoVisible';
@@ -9,7 +9,6 @@ import { useEscritura } from '../escritura';
 import type { Escritura } from '../escritura';
 import { escrituraDe } from '../escrituras';
 import { BarraDeAcciones } from '../bloques/BarraDeAcciones';
-import { FechaDeCalculo } from '../bloques/FechaDeCalculo';
 import { SIN_PERMISO, textoDeError } from '../estados';
 import { hoy } from '../seguridad/listado';
 import { leerFicha } from './fichas';

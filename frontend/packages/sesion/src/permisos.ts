@@ -1,5 +1,3 @@
-import type { ModuloDelCatalogo, OpcionDelCatalogo } from '../../catalogo';
-
 /**
  * Los permisos del manual, vistos desde la interfaz (REQ-03, ADR-0005).
  *
@@ -109,25 +107,13 @@ export function puedeRegistrar(permisos: PermisosEfectivos, opcion: string): boo
   return privilegiosDe(permisos, opcion).includes('registro');
 }
 
-/** El catalogo que este usuario puede ver. Un modulo sin opciones visibles no aparece. */
-export function catalogoVisible(
-  modulos: readonly ModuloDelCatalogo[],
-  permisos: PermisosEfectivos,
-): readonly ModuloDelCatalogo[] {
-  if (permisos.sinProveedor) return modulos;
-
-  const visibles: ModuloDelCatalogo[] = [];
-  for (const modulo of modulos) {
-    const opciones = modulo.opciones.filter((opcion: OpcionDelCatalogo) =>
-      puedeVer(permisos, opcion.id),
-    );
-    if (opciones.length === 0) continue;
-    visibles.push({
-      ...modulo,
-      opciones,
-      // Un bloque cuyas opciones se fueron todas tampoco se dibuja.
-      bloques: modulo.bloques.filter((bloque) => opciones.some((o) => o.bloque === bloque)),
-    });
-  }
-  return visibles;
-}
+/*
+ * **`catalogoVisible` no esta aqui, y es deliberado** (#298).
+ *
+ * Aplicar estos permisos al catalogo de navegacion es del back-office: es quien
+ * tiene catalogo. El portal del contribuyente no navega modulos (ADR-0016 §3),
+ * asi que esa funcion vive junto a su unico usuario, en
+ * `apps/backoffice/src/app/sesion/useCatalogoVisible.ts`. Traerla aqui obligaria
+ * ademas a que este paquete conociera los tipos del catalogo del back-office, que
+ * es la dependencia que la separacion existe para no tener.
+ */

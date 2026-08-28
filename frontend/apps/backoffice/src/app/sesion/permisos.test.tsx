@@ -3,7 +3,8 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { MODULOS, OPCIONES } from '../../catalogo';
-import { catalogoVisible, permisosDelClaim, puedeEscribir, puedeVer } from './permisos';
+import { permisosDelClaim, puedeEscribir, puedeVer } from '@sgtm/sesion';
+import { catalogoVisible } from './useCatalogoVisible';
 import { montarEnRuta } from '../../pruebas/montar';
 import {
   CAJERO,

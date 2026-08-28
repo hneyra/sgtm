@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Aviso, Boton, Esqueleto } from '@sgtm/design-system';
+import { Aviso, Boton, Esqueleto, FechaDeCalculo } from '@sgtm/design-system';
 import { descriptorDe, escribe } from '@sgtm/api-client';
 import type { ValorDeCampo } from '@sgtm/api-client';
 import {
@@ -42,7 +42,6 @@ import { Filtros } from './bloques/Filtros';
 import { Formulario } from './bloques/Formulario';
 import { Indicadores } from './bloques/Indicadores';
 import { Portal } from './bloques/Portal';
-import { FechaDeCalculo } from './bloques/FechaDeCalculo';
 import { Reporte } from './bloques/Reporte';
 import { useDescargaDeArchivo } from './useDescargaDeArchivo';
 import { ActualizacionDeCatastro } from './catastro/ActualizacionDeCatastro';
