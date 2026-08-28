@@ -38,8 +38,10 @@ describe('una opcion conectada y una sin conectar conviven', () => {
     expect(await screen.findByText('Recaudado 2026')).toBeInTheDocument();
     conectada.unmount();
 
-    const sinConectar = montarEnRuta('/transito/papeletas', cliente);
-    expect(await screen.findAllByText('MPS-2026-041182')).not.toHaveLength(0);
+    // `papeletas` se conecto en #363: la muestra de «sin conectar» pasa a
+    // `codigos_transito`, del mismo modulo, que todavia sigue el camino comun.
+    const sinConectar = montarEnRuta('/transito/codigos-transito', cliente);
+    expect(await screen.findAllByText('M-02')).not.toHaveLength(0);
     sinConectar.unmount();
 
     // Las dos piden por HTTP la ruta que declara el contrato, asi que la URL no
@@ -50,18 +52,23 @@ describe('una opcion conectada y una sin conectar conviven', () => {
       .getAll()
       .map((consulta) => consulta.queryKey);
     expect(claves).toContainEqual(['operacion', 'inicio', {}]);
-    expect(claves).toContainEqual(['pantalla', 'papeletas', {}]);
+    expect(claves).toContainEqual(['pantalla', 'codigos_transito', {}]);
 
     expect(alaOperacion('/api/v1/indicadores/recaudacion')).toHaveLength(1);
-    expect(alaOperacion('/api/v1/transito/papeletas')).toHaveLength(1);
+    expect(alaOperacion('/api/v1/transito/codigos')).toHaveLength(1);
   });
 
   it('el registro dice cuales estan conectadas, y son pocas todavia', () => {
     expect(OPCIONES_CONECTADAS).toContain('inicio');
     expect(OPCIONES_CONECTADAS).toContain('calles');
     expect(OPCIONES_CONECTADAS).toContain('aranceles');
-    // Transito no tiene ninguna opcion conectada todavia.
-    expect(OPCIONES_CONECTADAS).not.toContain('papeletas');
+    // Las tres pestañas de la ficha 360° que #363 conecto: ver
+    // `pantallas/transito`, `pantallas/sanciones` y `pantallas/coactiva`.
+    expect(OPCIONES_CONECTADAS).toContain('papeletas');
+    expect(OPCIONES_CONECTADAS).toContain('adm_estado_cuenta');
+    expect(OPCIONES_CONECTADAS).toContain('coactiva_expedientes');
+    // El resto de Transito sigue sin conectar.
+    expect(OPCIONES_CONECTADAS).not.toContain('codigos_transito');
   });
 });
 

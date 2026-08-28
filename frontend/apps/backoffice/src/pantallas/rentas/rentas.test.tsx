@@ -198,8 +198,8 @@ describe('ningun acto del modulo promete lo que no puede', () => {
   });
 
   /**
-   * **El concepto y la observacion habilitan el alta**, porque el alta si
-   * declara sus campos.
+   * **El concepto, el año, el documento y la observacion habilitan el alta**,
+   * porque el alta si declara sus campos.
    *
    * Era «la observacion sola», y esa era la mitad de un defecto: el desplegable
    * de concepto se dibujaba mostrando «IMPUESTO PREDIAL» sin que nadie lo
@@ -207,8 +207,14 @@ describe('ningun acto del modulo promete lo que no puede', () => {
    * opcion—, el borrador estaba vacio, `faltaEnElAlta` no veia nada, y el `POST`
    * salia con `{codContribuyente, observacion}`: **sin `tributo`**. Con eso, la
    * deuda no se asienta sobre ninguna obligacion identificable.
+   *
+   * **El año y el documento se sumaron en #342 (nit 3)**: `ano` tambien lleva
+   * `eleccionObligatoria` —la opcion vacia antepuesta—, y sin esta rama la
+   * primaria se habilitaba con el año sin elegir: `entero(peticion.ano(), "ano")`
+   * de `MovimientosDeDeudaController` responde 422 «Falta el campo 'ano'», un
+   * viaje de ida y vuelta que la pantalla ya podia evitar.
    */
-  it('el concepto y la observacion habilitan el alta, porque el alta si declara sus campos', async () => {
+  it('el concepto, el año, el documento y la observacion habilitan el alta', async () => {
     const usuario = userEvent.setup();
     const montada = montarEnRuta('/rentas-registro/alta-deuda');
 
@@ -225,6 +231,16 @@ describe('ningun acto del modulo promete lo que no puede', () => {
       await screen.findByLabelText('Concepto / tributo'),
       'IMPUESTO PREDIAL',
     );
+    // Con el concepto elegido **sigue apagada**: falta el año (#342, nit 3).
+    primariaApagada(primaria);
+    expect(motivoDeLaPrimaria()).toMatch(/Falta el año/);
+
+    await usuario.selectOptions(await screen.findByLabelText('Año'), '2026');
+    // Y con el año, **sigue apagada**: falta el documento que sustenta el alta.
+    primariaApagada(primaria);
+    expect(motivoDeLaPrimaria()).toMatch(/Falta el número del documento/);
+
+    await usuario.type(screen.getByLabelText('Nº del documento'), 'RD-2026-000123');
     await waitFor(() => primariaEncendida(primaria));
 
     montada.unmount();
@@ -511,6 +527,9 @@ describe('alta_deuda manda solo lo que su lista blanca declara', () => {
       screen.getByLabelText('Concepto / tributo'),
       'MULTA ADMINISTRATIVA',
     );
+    // Año y documento, con la misma dureza que el concepto (#342, nit 3).
+    await usuario.selectOptions(screen.getByLabelText('Año'), '2026');
+    await usuario.type(screen.getByLabelText('Nº del documento'), 'RG-2026-0088');
     await usuario.type(
       within(await screen.findByRole('region', { name: 'Observación del usuario' })).getByLabelText(
         'Observación',

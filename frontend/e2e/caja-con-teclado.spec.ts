@@ -18,6 +18,14 @@ test('de la paleta de comandos al acto, solo con el teclado', async ({ page }) =
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
+  /* El encabezado ya esta pintado, pero el arranque no ha terminado: la sesion
+     y el catalogo visible siguen resolviendo su primera peticion (#342, nit 1).
+     Con cache de Vite fria esa ronda tarda mas, y el atajo puede llegar antes
+     de que el oyente de `keydown` de `Shell` este activo. `networkidle` es la
+     senal de que esa ronda de arranque ya asento: no repara el sintoma con un
+     reintento, espera a la causa. */
+  await page.waitForLoadState('networkidle');
+
   // La paleta de comandos es el camino rapido de quien atiende: Ctrl K.
   await page.keyboard.press('Control+k');
   await expect(page.getByRole('dialog')).toBeVisible();
@@ -35,6 +43,19 @@ test('de la paleta de comandos al acto, solo con el teclado', async ({ page }) =
   await concepto.focus();
   await page.keyboard.press('ArrowDown');
   await expect(concepto).toHaveValue('IMPUESTO PREDIAL');
+
+  /* **El año, con la misma dureza que el concepto** (#342, nit 3): el mismo
+     `select` sin opcion vacia mostrada, la misma flecha para elegirla. */
+  const ano = page.getByLabel('Año', { exact: true });
+  await expect(ano).toHaveValue('');
+  await ano.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(ano).not.toHaveValue('');
+
+  // Y el documento que sustenta el alta, un texto que se teclea.
+  const documento = page.getByLabel('Nº del documento');
+  await documento.focus();
+  await page.keyboard.type('RD-2026-000123');
 
   // La observacion es la condicion de guardado (regla 10, RNF-052), y se llega
   // a ella tabulando.
@@ -81,6 +102,17 @@ test('sin observación, ni con el teclado se consigue registrar', async ({ page 
   const concepto = page.getByLabel('Concepto / tributo');
   await concepto.focus();
   await page.keyboard.press('ArrowDown');
+  // Con el concepto elegido, lo que falta ahora es el año (#342, nit 3).
+  await expect(franja).toHaveText(/Falta el año/);
+
+  const ano = page.getByLabel('Año', { exact: true });
+  await ano.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(franja).toHaveText(/Falta el número del documento/);
+
+  const documento = page.getByLabel('Nº del documento');
+  await documento.focus();
+  await page.keyboard.type('RD-2026-000123');
   await expect(franja).toHaveText(/Falta la observación/);
 
   // Pulsar no guarda nada: enfocable no es pulsable.

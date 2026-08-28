@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react';
 import { Aviso, Boton, Esqueleto, Insignia, TONO_DE_INSIGNIA } from '@sgtm/design-system';
+import { agruparMiles } from '@sgtm/dominio';
 import type { DatosDeTabla, DetalleDeFila } from '@sgtm/api-client';
 import type { EstructuraDeTabla } from '../../catalogo';
 import { Paginacion } from './Paginacion';
@@ -12,9 +13,11 @@ import { SIN_DATO } from '../seguridad/listado';
  * Bloque de tabla (FRO-03 §5, bloque 5).
  *
  * Las columnas las declara el catalogo; las filas llegan de la API. Los indices
- * de `num` alinean a la derecha y usan monoespaciada, la primera columna va en
- * peso 500 y una celda con tono se pinta como insignia —con su texto dentro,
- * nunca solo color—.
+ * de `num` alinean a la derecha, usan monoespaciada y llevan el separador de
+ * millares de `agruparMiles` (#342, nit 6) —solo al dibujar: `celda.texto` es
+ * el texto que mando el backend y nadie lo toca antes de mandarlo de vuelta—,
+ * la primera columna va en peso 500 y una celda con tono se pinta como
+ * insignia —con su texto dentro, nunca solo color—.
  *
  * Dos cosas que la tabla **no** hace, y las dos por el mismo motivo: no ordena
  * ni pagina en el cliente. Lo que tiene delante es una pagina de un padron que
@@ -290,6 +293,14 @@ export function TablaDePantalla({
                                 <Insignia tono={TONO_DE_INSIGNIA[celda.tono]}>
                                   {celda.texto}
                                 </Insignia>
+                              ) : numericas.has(c) ? (
+                                // Separador de millares **al dibujar**, nunca al
+                                // viajar (#342, nit 6): `celda.texto` sigue siendo
+                                // lo que mando el backend, y lo unico que cambia
+                                // es lo que ve quien lee la tabla. `agruparMiles`
+                                // no antepone «S/» porque una columna `num` no
+                                // siempre es dinero (ver su doc en `@sgtm/dominio`).
+                                agruparMiles(celda.texto)
                               ) : (
                                 celda.texto
                               )}
