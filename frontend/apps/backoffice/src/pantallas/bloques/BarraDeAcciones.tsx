@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Aviso, Boton, Campo } from '@sgtm/design-system';
 import { esIrreversible } from '../escritura';
 import type { Escritura } from '../escritura';
@@ -32,9 +33,23 @@ export interface BarraDeAccionesProps {
    * «47 valores». Es lo que convierte la confirmacion en informacion.
    */
   readonly alcance?: string;
+  /**
+   * El acto de la pantalla, cuando vive **en otra opcion**.
+   *
+   * Una ficha catastral es de lectura —`GET`—, y su acto es actualizarla, que es
+   * otra pantalla con su propio permiso y su propia escritura. Sin esto, las
+   * cinco acciones que dibuja el prototipo se quedan las cinco apagadas y el
+   * camino de «estoy viendo esta ficha» a «voy a corregirla» no existe: hay que
+   * volver al menu y buscar el predio otra vez.
+   *
+   * Cuando lo hay, **ninguna accion del catalogo se dibuja como primaria**: la
+   * primaria es este enlace. Las del prototipo que aun no tienen acto —«Nuevo»,
+   * «Deshacer»— se quedan como estaban, apagadas y visibles.
+   */
+  readonly enlace?: { readonly etiqueta: string; readonly ruta: string };
 }
 
-export function BarraDeAcciones({ acciones, escritura, alcance }: BarraDeAccionesProps) {
+export function BarraDeAcciones({ acciones, escritura, alcance, enlace }: BarraDeAccionesProps) {
   const [porConfirmar, fijarPorConfirmar] = useState<string | null>(null);
   const escribe = escritura?.operacion !== undefined;
 
@@ -91,7 +106,10 @@ export function BarraDeAcciones({ acciones, escritura, alcance }: BarraDeAccione
 
       <div className="sgtm-acciones" data-no-imprimible="1">
         {acciones.map((accion, i) => {
-          const esPrimaria = i === acciones.length - 1;
+          // «La ultima es la primaria» (FRO-03 §5), salvo cuando el acto de la
+          // pantalla es el enlace: dos botones primarios en la misma barra
+          // dirian que hay dos actos, y uno de los dos esta apagado.
+          const esPrimaria = enlace === undefined && i === acciones.length - 1;
           const habilitada = esPrimaria && escribe && (escritura?.puedeEnviar ?? false);
           return (
             <Boton
@@ -111,6 +129,11 @@ export function BarraDeAcciones({ acciones, escritura, alcance }: BarraDeAccione
             </Boton>
           );
         })}
+        {enlace !== undefined && (
+          <Link className="sgtm-boton sgtm-boton--primario" to={enlace.ruta}>
+            {enlace.etiqueta}
+          </Link>
+        )}
       </div>
     </>
   );

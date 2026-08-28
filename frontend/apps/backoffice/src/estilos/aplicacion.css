@@ -436,6 +436,182 @@
   white-space: nowrap;
 }
 
+/* ── Cabecera-resumen de la ficha (#319) ────────────────────────────────
+   Cual ficha, de quien, de que uso y de cuando, antes de las once pestanas.
+   Va por encima del versionado: el bloque de versionado cuenta la historia,
+   este dice de que registro es la que se esta leyendo. */
+.sgtm-resumen {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.sgtm-resumen__identidad {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+}
+
+.sgtm-resumen__codigo {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
+.sgtm-resumen__vigencia {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.sgtm-resumen__datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.sgtm-resumen__dato dt {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-4);
+}
+
+.sgtm-resumen__dato dd {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* ── El codigo catastral, tramo a tramo (#318) ──────────────────────────
+   Cada tramo con su nombre encima: la posicion equivocada se ve mientras se
+   escribe, no cuando dos predios colisionan. */
+.sgtm-codigo {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.sgtm-codigo__tramos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.sgtm-codigo__tramo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sgtm-codigo__nombre {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-4);
+}
+
+.sgtm-codigo__caja {
+  width: auto;
+  padding: 8px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  text-align: center;
+}
+
+/* ── Indice de secciones (#319) ─────────────────────────────────────────
+   Desplaza, no recarga: no toca la ruta ni la busqueda. Con `flex`, como el
+   centro de reportes, para que al imprimir —el indice lleva
+   `data-no-imprimible`— el formulario recupere el ancho entero solo. */
+.sgtm-conindice {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.sgtm-conindice__panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.sgtm-indice {
+  flex: 0 0 196px;
+  position: sticky;
+  top: 78px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.sgtm-indice__eyebrow {
+  margin: 2px 0 6px;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-4);
+}
+
+.sgtm-indice__entrada {
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-align: left;
+  color: var(--ink-2);
+}
+
+.sgtm-indice__entrada:hover {
+  background: var(--accent-soft);
+}
+
+.sgtm-indice__entrada[data-activa='1'] {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+/* En pantalla estrecha el indice pasa a ser una tira arriba: 196 px de menos
+   sobre 360 no dejarian sitio a los campos. */
+@media (max-width: 900px) {
+  .sgtm-conindice {
+    flex-direction: column;
+  }
+
+  .sgtm-indice {
+    position: static;
+    flex: 0 0 auto;
+    align-self: stretch;
+  }
+}
+
 /* ── Versionado de la ficha ─────────────────────────────────────────────
    Va arriba del formulario porque contesta la primera pregunta de quien abre
    una ficha: cual de todas estoy viendo. Sin eso, el area de la pantalla es

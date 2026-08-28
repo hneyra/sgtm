@@ -67,12 +67,17 @@ describe('los bloques del descriptor', () => {
   });
 
   it('la barra de acciones deja la ultima como primaria', async () => {
-    montarEnRuta('/catastro/ficha-urbana/200601010150010101001');
-    // El catalogo declara «Nuevo · Modificar · Deshacer · Imprimir · Guardar»,
-    // y la ultima es la primaria (FRO-03 §5).
-    const primaria = await screen.findByRole('button', { name: 'Guardar' });
+    // Sobre la ficha rural y ya no sobre la urbana: desde #319 el acto de la
+    // urbana vive en «Actualización del catastro», y entonces la primaria de su
+    // barra es ese enlace y ninguna de las suyas —lo comprueba
+    // `catastro/ficha-compuesta.test.tsx`—. La rural no declara acto, asi que
+    // sigue siendo el ejemplo de la regla de FRO-03 §5.
+    montarEnRuta('/catastro/ficha-rural/11024-0418');
+    // El catalogo declara «Calcular · Guardar · Imprimir ficha rural», y la
+    // ultima es la primaria.
+    const primaria = await screen.findByRole('button', { name: 'Imprimir ficha rural' });
     expect(primaria).toHaveClass('sgtm-boton--primario');
-    expect(screen.getByRole('button', { name: 'Nuevo' })).toHaveClass('sgtm-boton--secundario');
+    expect(screen.getByRole('button', { name: 'Calcular' })).toHaveClass('sgtm-boton--secundario');
   });
 
   it('el reporte se puede imprimir y su hoja lleva las dos firmas', async () => {

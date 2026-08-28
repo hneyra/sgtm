@@ -369,6 +369,15 @@ const listaDe = (valor: unknown): readonly Readonly<Record<string, unknown>>[] =
 const cadena = (valor: unknown): string | undefined =>
   typeof valor === 'string' && valor !== '' ? valor : undefined;
 
+/**
+ * Lo que este modulo compone alrededor de los bloques vive en
+ * `catastro/composicion.ts` y **no se reexporta aqui**, a proposito: este
+ * archivo son operaciones y adaptadores —datos—, y aquel son componentes. Quien
+ * importa las conexiones no tiene por que arrastrarse React detras, y hay una
+ * verificacion que lo nota: `adaptador-conserva-la-fecha.test.ts` compila el
+ * adaptador de verdad con un `tsc` sin `--jsx`.
+ */
+
 /** Las opciones de catastro ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_CATASTRO: Readonly<Record<string, Conexion>> = {
   calles,

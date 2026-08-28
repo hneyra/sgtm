@@ -355,6 +355,65 @@ voz alta cuando el contribuyente pregunta por qué le subió el recibo. Va enter
 Y la ficha responde **a una fecha**: `?fecha=2022-01-01` devuelve la que regía entonces, que es
 exactamente la pregunta de una reclamación.
 
+### El código de referencia catastral se compone, no se teclea
+
+Son **veintitrés dígitos en diez tramos** —`DDPPddSSMMMLLLEEeeppUUU`, el ubigeo delante del
+sector—, y tecleados de corrido un dígito de más o de menos no se ve al escribirlo: se ve cuando
+dos predios colisionan o cuando un padrón entero deja de cuadrar con el catastro. Repartido en
+tramos con su nombre, la posición equivocada se ve mientras se escribe (RF-005).
+
+**Los tramos no se copian: se leen.** Salen de `ComposicionCatastral.DEL_MANUAL`, en el backend, y
+`codigo-catastral.test.tsx` abre ese archivo Java y exige que las dos listas coincidan tramo a
+tramo. Es la misma precaución que tomó la clase al recibir su composición en vez de cablearla:
+**D-10 sigue abierta** —el manual da 23 posiciones y los ejemplos del prototipo traen 21—, y el día
+que se cierre se cambia un sitio, no dos.
+
+Lo que **no** cambia: el componente compone **un solo valor de cadena**, sin rellenar con ceros y
+sin separadores. Lo que viaja al filtro, a la URL y a la petición es exactamente lo que viajaba con
+la caja de texto, y unos tramos finales en blanco son una búsqueda por prefijo —que el backend
+resuelve por rango, nunca con `LIKE`, por RLS—. Pegar el código entero lo reparte, un tramo lleno
+salta al siguiente, y copiar desde cualquier tramo copia el código completo.
+
+**El mecanismo es acotado y opt-in por opción y campo.** `pantallas/composicion.ts` es un registro
+por opción —como `avisos.ts` y `escrituras.ts`—, y `Filtros` le pregunta si ese campo tiene control
+propio; sin declaración dibuja su `Campo` de texto de siempre. El renderizador no se bifurca y las
+otras 133 pantallas no se enteran. Está declarado donde el campo **es** el código catastral: la
+consulta de fichas y las fichas urbana y económica. `codEdificacion` es el código sin el tramo de
+unidad y `codUnidadCatastralUc` (`11024-0418`) no es un código catastral: troquelarlos diría de
+ellos algo que no es cierto, y además impediría escribirlos.
+
+### La ficha se abre por arriba: resumen, índice y acto
+
+Una ficha catastral son hasta once pestañas de campos. Tres cosas se componen **alrededor** de los
+bloques comunes, declaradas en el mismo registro por opción:
+
+| Qué                  | Qué resuelve                                                                      |
+| -------------------- | --------------------------------------------------------------------------------- |
+| **Cabecera-resumen** | Cuál ficha, de quién, de qué uso y **de cuándo**, antes de bajar al versionado    |
+| **Índice**           | Las secciones declaradas, en una columna que **desplaza**: no recarga ni refiltra |
+| **Acto**             | «Actualizar catastro», con el predio ya puesto en la ruta                         |
+
+La cabecera **no pide nada nuevo**: el código sale de la ruta, el uso y el área de terreno de los
+campos que ya compone el adaptador, y la vigencia del mismo `versionado` que dibuja el histórico. Y
+lo que el recurso no publica sale con «—»: `FichaResource` no trae titular —lo tiene
+contribuyentes— y no trae el área construida total, que es la **suma** de los pisos, y la interfaz
+no suma (RNF-083).
+
+El índice lista **exactamente** lo que dibuja `Formulario` —las secciones de la pestaña abierta— y
+usa sus mismas anclas: un índice calculado aparte enseñaría entradas que no llevan a ningún sitio en
+cuanto una pantalla cambiara de pestañas. Va marcado `data-no-imprimible`.
+
+El acto importa porque **una ficha es de lectura**: sus cinco acciones del prototipo estaban las
+cinco apagadas, y de «estoy viendo esta ficha» a «voy a corregirla» había que volver al menú y
+buscar el predio otra vez. Ahora la primaria es un enlace a «Actualización del catastro» con el
+código en la ruta, y las que siguen sin acto —«Nuevo», «Deshacer»— se quedan como estaban: apagadas
+y visibles, hasta que #320 traiga el alta guiada. Solo lo declaran las dos fichas que se abren
+**por el código catastral**: mandarle a esa pantalla un código de edificación o una unidad rural
+sería ofrecer un botón que lleva a un 404.
+
+**Las cuatro fichas no entran en `actos-inalcanzables.test.ts` y nunca entraron**: esa lista mira
+las pantallas con verbo de escritura, y las fichas son `GET`. La lista queda igual.
+
 **Las conexiones no crecen por delante del backend.** Hoy son doce operaciones, las mismas que
 enumera `IMPLEMENTADAS` en el `ContratoDeApiTest`. Conectar una opción cuyo endpoint no existe
 obligaría a inventarse su respuesta en el proxy, que es lo que [ADR-0010](../docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md)
@@ -687,6 +746,16 @@ dice en la misma frase en que excluye el token.
 | Sin código no se pide ninguna ficha         | Quitando la guarda de la ruta y el `enabled`                            | Roja                          |
 | El arancel rural no se compone              | Poniéndole una cifra                                                    | Roja                          |
 | El desplegable no esconde lo servido        | Volviendo a dibujar solo las opciones del prototipo                     | Roja                          |
+| Los tramos son los de la clase Java         | Quitándole a la lista los tres del ubigeo, como decía el resumen        | Rojas, siete                  |
+| Pegar el código entero lo reparte           | Dejando en el tramo solo los dígitos que le caben                       | Rojas, tres                   |
+| Un tramo lleno salta al siguiente           | Quitando el salto de foco y el retroceso al tramo anterior              | Roja                          |
+| Lo compuesto viaja idéntico                 | Rellenando con ceros a la derecha hasta las 23 posiciones               | Rojas, dos                    |
+| El widget es del campo, no del bloque       | Dejando de consultar el registro: todo vuelve a la caja de texto        | Rojas, cinco                  |
+| El índice es opt-in por opción              | Dándoselo también a la consulta de fichas                               | Roja                          |
+| Y sus entradas llevan a su ancla            | Quitando el `anclaDe` del formulario                                    | Roja                          |
+| La cabecera enseña la vigencia servida      | Quitándole la versión que trae la respuesta                             | Roja                          |
+| Y no compone lo que el recurso no publica   | Rellenando titular y área construida con lo del prototipo               | Roja                          |
+| El acto de la ficha es alcanzable           | Quitando el enlace de la barra de acciones                              | Roja                          |
 | Ninguna cifra sin su fecha (las once)       | Quitando el bloque de fecha de cálculo                                  | Rojas, trece                  |
 | El saldo no se compone                      | Restando en la interfaz en vez de dejarlo vacío                         | Rojas, dos                    |
 | `@sgtm/dominio` no suma                     | Añadiéndole una función de sumar importes                               | Roja                          |

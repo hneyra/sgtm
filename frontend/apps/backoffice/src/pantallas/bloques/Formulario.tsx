@@ -31,6 +31,12 @@ export interface FormularioProps {
   readonly onCampo?: (campo: string, valor: string) => void;
   /** Mensaje por campo que devolvio el backend (`ProblemaDeApi.errores`). */
   readonly errorPorCampo?: Readonly<Record<string, string>>;
+  /**
+   * El `id` con que cada seccion queda anclada, si la opcion declara indice
+   * (`composicion.ts`). Sin el, las secciones se dibujan como siempre: un ancla
+   * en las 134 pantallas seria un atributo que nadie usa.
+   */
+  readonly anclaDe?: (indice: number) => string;
 }
 
 export function Formulario({
@@ -44,6 +50,7 @@ export function Formulario({
   borrador = {},
   onCampo,
   errorPorCampo = {},
+  anclaDe,
 }: FormularioProps) {
   return (
     <div className="sgtm-formulario">
@@ -51,7 +58,16 @@ export function Formulario({
         const clave = `${i}|${pestana}`;
         const cerrada = cerradas[clave] ?? arrancaCerrada(seccion);
         return (
-          <section key={clave} className="sgtm-tarjeta">
+          <section
+            key={clave}
+            className="sgtm-tarjeta"
+            {...(anclaDe === undefined
+              ? {}
+              : // `tabIndex` negativo, no positivo (FRO-04 §7): la seccion no entra
+                // en el recorrido del tabulador, pero el indice puede llevarle el
+                // foco al saltar a ella.
+                { id: anclaDe(i), tabIndex: -1 })}
+          >
             <button
               type="button"
               className="sgtm-seccion__cabecera"

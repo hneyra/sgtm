@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Aviso, Boton, Campo, Esqueleto } from '@sgtm/design-system';
 import { pedirOperacion } from '@sgtm/api-client';
@@ -11,6 +11,7 @@ import { FechaDeCalculo } from '../bloques/FechaDeCalculo';
 import { SIN_PERMISO, textoDeError } from '../estados';
 import { hoy } from '../seguridad/listado';
 import { leerFicha } from './fichas';
+import { CodigoCatastral } from './CodigoCatastral';
 
 /**
  * Actualización del catastro: `PUT /catastro/fichas/{codigo}/actualizacion` (#71).
@@ -91,8 +92,10 @@ export function ActualizacionDeCatastro({
     return (
       <Aviso
         titulo="Elige un predio para actualizar su catastro"
-        detalle="Esta pantalla abre un predio por su código de referencia catastral. Búscalo en «Consulta de fichas» o pega el enlace: el código va en la dirección, así que se puede compartir."
-      />
+        detalle="Esta pantalla abre un predio por su código de referencia catastral. Compónlo abajo tramo a tramo, búscalo en «Consulta de fichas» o pega el enlace: el código va en la dirección, así que se puede compartir."
+      >
+        <AbrirPorCodigo />
+      </Aviso>
     );
   }
 
@@ -253,6 +256,32 @@ export function ActualizacionDeCatastro({
       )}
 
       <BarraDeAcciones acciones={['Guardar']} escritura={escritura} />
+    </>
+  );
+}
+
+/**
+ * Componer el codigo del predio que se va a actualizar, y abrirlo (#318).
+ *
+ * Esta pantalla abre por ruta y su busqueda del prototipo no se dibuja —tiene
+ * componente propio, no bloques—, asi que sin esto la unica forma de llegar es
+ * pegar una URL. El codigo se compone en sus tramos, y abrir es **navegar**: el
+ * registro abierto vive en la ruta, y el enlace que queda se puede compartir.
+ */
+function AbrirPorCodigo() {
+  const navegar = useNavigate();
+  const [codigo, fijarCodigo] = useState('');
+
+  return (
+    <>
+      <CodigoCatastral etiqueta="Cod. Ref. Catastral" valor={codigo} onCambio={fijarCodigo} />
+      <Boton
+        variante="primario"
+        disabled={codigo === ''}
+        onClick={() => navegar(`/catastro/actualizacion-catastro/${encodeURIComponent(codigo)}`)}
+      >
+        Abrir predio
+      </Boton>
     </>
   );
 }
