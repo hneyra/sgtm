@@ -8,8 +8,8 @@
 
    La decision de diseno que protege es la (a) de #188: **la doble firma de ADR-0007
    ya ocurrio en el corpus**. Quien transcribio y quien verifico estan en la cabecera
-   del archivo del corpus, y las dos ultimas columnas del CSV las copian para que
-   viajen a `usuario_carga` y `usuario_aprueba`. Publicar una cifra que no este en un
+   del archivo del corpus, y las columnas `transcribio` y `verifico` del CSV las
+   copian para que viajen a `usuario_carga` y `usuario_aprueba`. Publicar una cifra que no este en un
    archivo VERIFICADO, o firmarla con un nombre que la cabecera no dice, seria meter
    un valor normativo por la puerta de atras: sin la lectura de la norma, y sin las
    dos personas que ADR-0007 exige. Por eso esto corre en cada PR.
@@ -30,6 +30,26 @@
         convenciones decimales que el corpus usa: «4 600,00» del decreto de la UIT y
         «0.2%» del TUO;
      6. la fila esta bien formada: tipo, fechas y un valor de los dos.
+
+   Y tres mas desde #192, por la columna `valor_maquina`. Existe porque la regla 4 y
+   lo que el codigo puede leer no caben en una sola columna: la norma dice «cuatro (4)
+   anios» y `Plazo.de` solo acepta «4 ANIOS», sin ninguna lectura tolerante.
+   `valor_texto` sigue siendo la transcripcion verbatim —la regla 4 queda intacta— y
+   `valor_maquina` es lo que se publica en su lugar cuando la fila la trae:
+
+     7. una fila de tipo `PLAZO` trae `valor_maquina`, y con la forma que `Plazo.de`
+        acepta: un entero, un espacio y una unidad de `UnidadDePlazo`. Sin esto se
+        publicaria un texto que revienta en el primer uso —en produccion, al contar un
+        plazo— en vez de aqui;
+     8. el entero de `valor_maquina` es el mismo `valor_numerico` de la fila, que la
+        regla 5 ya busco en la norma. Es lo que ata la forma de maquina a la cifra
+        verificada, en vez de dejarla como un segundo sitio donde escribir un numero;
+     9. la unidad de `valor_maquina` corresponde a las palabras del texto verbatim
+        —`ANIOS` con «anios», `DIAS_HABILES` con «dias habiles»—. Veinte dias habiles y
+        veinte calendario no son lo mismo, y de esa diferencia depende si un expediente
+        coactivo nacio antes de tiempo. Las unidades no se copian aqui: se leen del
+        enumerado `UnidadDePlazo`, y una unidad suya sin palabras declaradas pone esto
+        rojo antes de que nadie la use.
 
    Y un libro mayor al final: que archivos del corpus estan VERIFICADO y no publican
    ninguna fila. No es un fallo —hay valores verificados que no se pueden publicar
@@ -59,7 +79,28 @@ const COLUMNAS = [
   'archivo_del_corpus',
   'transcribio',
   'verifico',
+  // La ultima, y al final a proposito: los tres consumidores del archivo
+  // —esta comprobacion, `FilaPublicable` del proceso batch y las tres columnas que
+  // `ImportarParametrosDelConjunto` lee— lo analizan por POSICION, no por cabecera.
+  'valor_maquina',
 ];
+
+/** El tipo cuyo valor el codigo lee como `Plazo`, y por eso exige forma de maquina. */
+const TIPO_PLAZO = 'PLAZO';
+
+/**
+ * Con que palabras escribe la norma cada unidad de plazo.
+ *
+ * Las llaves NO se inventan aqui: se comprueban contra `UnidadDePlazo`, y una unidad
+ * del enumerado que no aparezca en este mapa —o al reves— es un fallo. Asi la unidad
+ * nueva del dia que el enumerado crezca no puede publicarse sin decir con que palabras
+ * la escribe la norma que la respalda.
+ */
+const PALABRAS_DE_LA_UNIDAD = new Map([
+  ['ANIOS', ['año', 'años']],
+  ['DIAS_HABILES', ['día hábil', 'días hábiles']],
+  ['DIAS_CALENDARIO', ['día calendario', 'días calendario']],
+]);
 
 const problemas = [];
 const señalar = (mensaje) => problemas.push(mensaje);
@@ -171,6 +212,53 @@ function cifrasDe(texto) {
     for (const n of interpretaciones(token)) encontradas.add(n);
   }
   return encontradas;
+}
+
+/* --------------------------------------------------- forma de maquina ----- */
+
+const UNIDAD_DE_PLAZO = fileURLToPath(
+  new URL(
+    'backend/sgtm-dominio-compartido/src/main/java/pe/gob/sgtm/dominio/UnidadDePlazo.java',
+    raiz,
+  ),
+);
+
+/** Las unidades que el enumerado declara HOY, leidas de el en vez de copiadas aqui. */
+function unidadesDePlazo() {
+  if (!existsSync(UNIDAD_DE_PLAZO)) {
+    señalar(
+      `No se pudo leer ${UNIDAD_DE_PLAZO}. Las unidades de plazo no se copian en esta` +
+        ' comprobacion: se leen del enumerado, para que no puedan decir una cosa aqui y otra' +
+        ' al contarse el plazo.',
+    );
+    return new Set();
+  }
+  const fuente = readFileSync(UNIDAD_DE_PLAZO, 'utf8');
+  const cuerpo = fuente.slice(fuente.indexOf('enum UnidadDePlazo'));
+  return new Set(
+    (cuerpo.match(/^\s+[A-Z][A-Z0-9_]*\s*[,;]?\s*$/gm) ?? []).map((linea) =>
+      linea.trim().replace(/[,;]$/, ''),
+    ),
+  );
+}
+
+const UNIDADES = unidadesDePlazo();
+for (const unidad of UNIDADES) {
+  if (!PALABRAS_DE_LA_UNIDAD.has(unidad)) {
+    señalar(
+      `UnidadDePlazo declara «${unidad}» y esta comprobacion no sabe con que palabras la` +
+        ' escribe la norma. Una unidad sin palabras declaradas se publicaria sin que nadie' +
+        ' pudiera comprobar que el texto verbatim habla de ella.',
+    );
+  }
+}
+for (const unidad of PALABRAS_DE_LA_UNIDAD.keys()) {
+  if (UNIDADES.size > 0 && !UNIDADES.has(unidad)) {
+    señalar(
+      `Esta comprobacion conoce la unidad «${unidad}» y UnidadDePlazo ya no la declara:` +
+        ' publicarla dejaria un parametro que el codigo no puede leer.',
+    );
+  }
 }
 
 /* -------------------------------------------------------- comprobacion ---- */
@@ -323,6 +411,64 @@ for (const { linea, campos } of filas) {
               ? `su propio valor de texto «${fila.valor_texto}»`
               : `«${fila.archivo_del_corpus}»`) +
             '. Una cifra que no esta en la norma es una cifra inventada, y multiplica un padron.',
+        );
+      }
+    }
+  }
+
+  // 7. La forma que el codigo consume, cuando la letra de la norma no lo es.
+  const maquina = fila.valor_maquina;
+  const partes = maquina === '' ? [] : maquina.trim().split(/\s+/);
+  const unidad = partes.length === 2 ? partes[1].toUpperCase() : null;
+  const enForma =
+    partes.length === 2 &&
+    /^\d+$/.test(partes[0]) &&
+    unidad !== null &&
+    PALABRAS_DE_LA_UNIDAD.has(unidad);
+
+  if (maquina !== '' && !enForma) {
+    señalar(
+      `${quien}: «${maquina}» no es la forma que Plazo.de acepta —un entero, un espacio y una` +
+        ` unidad de ${[...PALABRAS_DE_LA_UNIDAD.keys()].join(', ')}—. Esa lectura no es` +
+        ' tolerante a proposito: un parametro interpretado «lo mejor posible» produce un plazo' +
+        ' plausible y equivocado, que es el modo de falla que nadie detecta.',
+    );
+  } else if (fila.tipo === TIPO_PLAZO && maquina === '') {
+    señalar(
+      `${quien}: es de tipo ${TIPO_PLAZO} y no trae valor_maquina, asi que se publicaria el` +
+        ` texto de la norma («${fila.valor_texto}»), que es lo unico que Plazo.de NO puede leer.` +
+        ' Sin esta columna el fallo saldria en el primer uso, contando un plazo en produccion,' +
+        ' y no aqui.',
+    );
+  }
+
+  if (enForma) {
+    // 8. La cifra de la forma de maquina es la que la regla 5 busco en la norma.
+    if (fila.valor_numerico === '' || Number(fila.valor_numerico) !== Number(partes[0])) {
+      señalar(
+        `${quien}: valor_maquina «${maquina}» publica ${partes[0]} y la fila declara` +
+          ` valor_numerico «${fila.valor_numerico}». La forma de maquina no es un segundo sitio` +
+          ' donde escribir un numero: es la misma cifra verificada, escrita como el codigo la lee.',
+      );
+    }
+
+    // 9. Y su unidad es de la que hablan las palabras del texto verbatim.
+    const texto = fila.valor_texto.toLowerCase();
+    const suyas = PALABRAS_DE_LA_UNIDAD.get(unidad) ?? [];
+    if (!suyas.some((palabra) => texto.includes(palabra))) {
+      señalar(
+        `${quien}: valor_maquina dice «${unidad}» y el texto verbatim no dice ` +
+          suyas.map((palabra) => `«${palabra}»`).join(' ni ') +
+          `: «${fila.valor_texto}». Veinte dias habiles y veinte calendario no son lo mismo, y de` +
+          ' esa diferencia depende si un expediente coactivo nacio antes de tiempo.',
+      );
+    }
+    for (const [otra, palabras] of PALABRAS_DE_LA_UNIDAD) {
+      if (otra !== unidad && palabras.some((palabra) => texto.includes(palabra))) {
+        señalar(
+          `${quien}: valor_maquina dice «${unidad}» y el texto verbatim habla de «${otra}»` +
+            `: «${fila.valor_texto}». Con las dos unidades en juego, lo que se publica ya no se` +
+            ' puede comprobar contra la norma.',
         );
       }
     }

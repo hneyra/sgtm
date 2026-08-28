@@ -88,12 +88,41 @@ acaecimiento del acto interruptorio:
 
 | Qué | Dónde |
 |---|---|
-| Tipo | `parametro_tributario` (tipo `PRESCRIPCION_PLAZO`, `NOTIFICACION_PLAZO`, `COACTIVA_PLAZO`) |
-| Clave | `PRESCRIPCION_PLAZO` + causal (determinación / cobro / sanción / compensación-devolución); `COACTIVA_PLAZO` + `INICIO` |
-| Ámbito | nacional |
-| Vigencia | 2013– (Código Tributario, TUO vigente); 1998– (Ley 26979) |
+| Tabla | `parametro_tributario`, con ámbito **nacional** (sin municipalidad) |
+| Tipo | `PLAZO`, el mismo bajo el que ya viven los demás plazos del sistema |
+| Claves del art. 43 | `PRESCRIPCION-DECLARACION_PRESENTADA`, `PRESCRIPCION-SIN_DECLARACION`, `PRESCRIPCION-AGENTE_RETENCION` |
+| Clave del art. 14 (Ley 26979) | `REC1_CUMPLIMIENTO` |
+| Valor | `valor_numerico` lleva la cifra; lo que se publica como texto es la **forma máquina** —`4 ANIOS`, `7 DIAS_HABILES`—, que es la única que `Plazo.de` acepta |
+| Vigencia | 2013-06-22 para las tres del TUO del Código Tributario; 2004-01-10 para la de la REC-1 |
 
-**No se carga con este archivo.** La carga depende de D-13.
+**Las claves no son una convención de este archivo: son las que el código construye.**
+`PlazosParametrizados` (`sgtm-valores`) pide `PLAZO:PRESCRIPCION-` seguido del nombre de la causal
+—`CausalDePrescripcion`, que tiene exactamente esos tres valores— y `PlazosCoactivosParametrizados`
+(`sgtm-coactiva`) pide `PLAZO:REC1_CUMPLIMIENTO`. Publicar una de ellas con otro nombre no rompe
+nada visible: el parámetro queda cargado y la operación sigue fallando con `PlazoSinParametrizar`,
+que es el síntoma de «no está cargado». Por eso hay una prueba en cada uno de esos dos módulos que
+lee **este** derivado y comprueba que la clave que publica es la que su clase lee.
+
+**Se carga desde [`publicacion/parametros-2026.csv`](publicacion/parametros-2026.csv)**, el
+derivado publicable de este archivo, con `infra/carga-de-datos/publicar-parametros.sh` (#188,
+#247 §4, #192). Las dos firmas de la cabecera de arriba son las que llegan a `usuario_carga` y
+`usuario_aprueba`: la doble verificación de ADR-0007 ocurrió aquí, y la herramienta la transporta.
+
+**No depende de D-13**, y antes se decía que sí: D-13 es el ámbito de las tres tablas de valuación
+—valores unitarios, depreciación y valores referenciales de vehículos—, que no son parámetros y no
+entran por esta herramienta. Estas cuatro filas van a `parametro_tributario`, como la UIT y los
+tramos del predial.
+
+**Lo que todavía no entra, y por qué:**
+
+| Familia | Clave que el código pide | Por qué falta |
+|---|---|---|
+| Plazo para reclamar un valor | `NOTIFICACION_VALOR-<tipo de valor>` | Sale de los arts. 137 y 78 del TUO del Código Tributario, y **§1 no los transcribe**: este archivo transcribió los arts. 43 a 46, 104 y 106. Publicarlo hoy sería teclear una cifra de memoria |
+| Inicio del cómputo de la prescripción | `PRESCRIPCION_INICIO-<tributo>` | Es el art. 44, citado en la cabecera y **sin tabla en §1**. El artículo ata el inicio al vencimiento del plazo de la declaración respectiva, que no es el mismo para todos los tributos |
+| Compensación y devolución (art. 43, cuarto plazo) | — | Está transcrito y verificado en §1, y **ningún código lo consume**: `CausalDePrescripcion` no tiene esa causal porque el sistema no tramita solicitudes de devolución. Publicarlo sería una fila que nadie lee, y una fila que nadie lee no se puede comprobar contra su uso |
+
+Las dos primeras se cierran transcribiendo esos artículos en un archivo del corpus y añadiendo sus
+filas al derivado: es escribir la transcripción y firmarla, no construir nada.
 
 ## 3. Qué no cabe hoy
 
@@ -103,6 +132,13 @@ fecha —o su intervalo, si es una suspensión—. Ya no hace falta reconstruir 
 «se interrumpió por pago parcial» frente a «se interrumpió por solicitud de fraccionamiento»: cada
 hecho queda en su propia fila, ligado a la declaración que lo evaluó.
 
-Lo que sigue sin cargarse son las **cifras**: el plazo de prescripción (4, 6 o 10 años según la
-causal), el de notificación y el de inicio de la cobranza coactiva. Están `VERIFICADO` en la
-tabla de §1, pero la carga depende de D-13 y la sigue #192.
+**Resuelto por #192.** Los tres plazos del art. 43, uno por causal, y el del art. 14 de la Ley
+26979 ya se publican con el derivado, y se leen del conjunto sellado vigente a la fecha del hecho.
+Las cifras están donde tienen que estar —en §1, que es la transcripción— y el derivado las copia
+letra por letra; este resumen no las repite, para que nadie pueda tomarlas de aquí.
+
+Lo que sigue sin cargarse son las dos transcripciones que §2 nombra como pendientes: el plazo de
+reclamación de un valor (arts. 137 y 78) y el inicio del cómputo de la prescripción (art. 44). Las
+dos son cifras normativas que este archivo **no** transcribió, y hasta que alguien las lea de la
+norma y las firme, `PlazosParametrizados` seguirá fallando al pedirlas —nombrando la llave que
+falta, que es lo correcto: un plazo inventado produce expedientes coactivos nulos—.
