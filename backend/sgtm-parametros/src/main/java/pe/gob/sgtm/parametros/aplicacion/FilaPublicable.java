@@ -19,16 +19,34 @@ import pe.gob.sgtm.parametros.dominio.ParametroTributario;
  * dos listas que puedan separarse el dia que alguien anada una fila a una y se olvide de la otra.
  * Las columnas de la cuarta en adelante las ignora el importador.
  *
- * <p>Las dos ultimas columnas son la <b>doble firma de ADR-0007, ya ocurrida en el corpus</b>: se
- * copian de la cabecera del archivo de {@code docs/10-negocio/valores-normativos/} y viajan a
- * {@code usuario_carga} y {@code usuario_aprueba}. Quien corre el proceso no firma; transporta lo
- * que se firmo al leer la norma. Que sean distintas lo exige la base ({@code
- * parametro_doble_verificacion_ck}, RNF-092) y lo comprueba antes, en cada PR, {@code
- * docs/10-negocio/verificar-publicacion.mjs}.
+ * <p>Las columnas {@code transcribio} y {@code verifico} son la <b>doble firma de ADR-0007, ya
+ * ocurrida en el corpus</b>: se copian de la cabecera del archivo de {@code
+ * docs/10-negocio/valores-normativos/} y viajan a {@code usuario_carga} y {@code usuario_aprueba}.
+ * Quien corre el proceso no firma; transporta lo que se firmo al leer la norma. Que sean distintas
+ * lo exige la base ({@code parametro_doble_verificacion_ck}, RNF-092) y lo comprueba antes, en cada
+ * PR, {@code docs/10-negocio/verificar-publicacion.mjs}.
+ *
+ * <h2>La undecima columna: {@code valor_maquina} (#192)</h2>
+ *
+ * <p>Hay valores cuya forma en la norma <b>no es</b> la forma que el codigo consume. El art. 43 del
+ * TUO del Codigo Tributario dice «cuatro (4) anios» y {@link pe.gob.sgtm.dominio.Plazo#de(String)}
+ * solo acepta «4 ANIOS», porque rechaza a proposito toda lectura tolerante —un plazo interpretado
+ * «lo mejor posible» es plausible y equivocado, que es el modo de falla que nadie detecta—. Las dos
+ * exigencias no caben en una columna: {@code valor_texto} es la transcripcion verbatim, que {@code
+ * verificar-publicacion.mjs} compara letra por letra contra el corpus, y {@code valor_maquina} es
+ * lo que se publica en su lugar cuando la fila la trae.
+ *
+ * <p><b>Es opcional, y aqui no se exige.</b> Una fila sin ella publica su texto verbatim, como
+ * siempre. Quien exige la forma de maquina a las filas de tipo {@code PLAZO} es {@code
+ * verificar-publicacion.mjs}, en cada PR y antes de montar el archivo en el Job —igual que la doble
+ * firma la sostiene la restriccion de la base y no el {@code if} de aqui abajo—. Exigirla tambien
+ * aqui obligaria a este proceso, que publica cualquier tipo de parametro, a conocer la forma que
+ * espera un consumidor concreto; y lo que pasa si nadie la exige esta probado: {@code
+ * PublicarParametrosTest} publica el verbatim tal cual y demuestra que {@code Plazo.de} lo rechaza.
  *
  * <p><b>La comprobacion de que las dos firmas son distintas que hay aqui abajo no es la que
- * muerde</b>, y conviene decirlo: quitandola, las once pruebas de {@code PublicarParametrosTest}
- * siguen en verde —se probo—, porque la fila llega a la base y {@code
+ * muerde</b>, y conviene decirlo: quitandola, las once pruebas que {@code PublicarParametrosTest}
+ * tenia entonces siguen en verde —se probo—, porque la fila llega a la base y {@code
  * parametro_doble_verificacion_ck} la rechaza con {@code 23514}, y el proceso la informa igual. Lo
  * unico que aporta es que el informe diga cual fila y por que sin gastar un viaje a PostgreSQL. La
  * regla la sostiene la restriccion, como debe ser.
@@ -36,6 +54,9 @@ import pe.gob.sgtm.parametros.dominio.ParametroTributario;
 record FilaPublicable(ParametroTributario parametro, String transcribio, String verifico) {
 
     static final int COLUMNAS = 10;
+
+    /** La undecima, opcional: la forma que el codigo consume cuando no es la de la norma (#192). */
+    static final int VALOR_MAQUINA = 10;
 
     LlaveDeParametro llave() {
         return new LlaveDeParametro(
@@ -60,7 +81,7 @@ record FilaPublicable(ParametroTributario parametro, String transcribio, String 
                             + COLUMNAS
                             + ": tipo, clave, vigenciaDesde, vigenciaHasta, valorNumerico,"
                             + " valorTexto, documentoFuente, archivoDelCorpus, transcribio,"
-                            + " verifico");
+                            + " verifico; y, opcional, valorMaquina");
         }
         String tipo = campos.get(0);
         if (tipo.isBlank()) {
@@ -89,11 +110,24 @@ record FilaPublicable(ParametroTributario parametro, String transcribio, String 
                         tipo,
                         vacioComoNulo(campos.get(1)),
                         numero(campos.get(4)),
-                        vacioComoNulo(campos.get(5)),
+                        vacioComoNulo(loQuePublicaComoTexto(campos)),
                         new Vigencia(desde, hasta),
                         campos.get(6)),
                 transcribio,
                 verifico);
+    }
+
+    /**
+     * Lo que va a {@code parametro_tributario.valor_texto}: la forma de maquina si la fila la trae,
+     * y si no el texto verbatim (#192).
+     *
+     * <p>El verbatim no se pierde —vive en el archivo del corpus, que es la fuente, y en el propio
+     * CSV, que es donde se compara contra el— pero no es lo que se publica: lo que se publica es lo
+     * que el codigo tiene que poder leer sin interpretarlo.
+     */
+    private static String loQuePublicaComoTexto(List<String> campos) {
+        String maquina = campos.size() > VALOR_MAQUINA ? campos.get(VALOR_MAQUINA) : "";
+        return maquina.isBlank() ? campos.get(5) : maquina;
     }
 
     private static @Nullable String vacioComoNulo(String campo) {

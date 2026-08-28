@@ -45,7 +45,7 @@ public interface PublicacionDeParametros {
      * restriccion de unicidad sobre {@code (tipo, clave, vigencia_desde)} —V1 no la puso, y
      * quitarsela hoy retiraria la guarda de homonimos que {@code
      * AdministrarParametros.agregarParametroPublicado} verifica—, asi que una segunda corrida del
-     * mismo archivo insertaria las once filas otra vez y dejaria el conjunto <b>sin poder
+     * mismo archivo insertaria todas sus filas otra vez y dejaria el conjunto <b>sin poder
      * componerse</b>: cada llave tendria dos candidatos y ninguno elegible.
      */
     List<ParametroTributario> publicados(LlaveDeParametro llave);
