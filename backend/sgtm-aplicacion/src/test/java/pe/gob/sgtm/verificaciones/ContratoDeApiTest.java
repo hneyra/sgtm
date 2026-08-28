@@ -237,7 +237,12 @@ class ContratoDeApiTest {
                     "GET /transito/reportes/resumen-por-placa",
                     "GET /infracciones/administrativas/reportes/padron-notificaciones",
                     "GET /infracciones/administrativas/reportes/resumen-recaudacion",
-                    "POST /infracciones/administrativas/reportes");
+                    "POST /infracciones/administrativas/reportes",
+                    // #56 — RF-130: el panel de recaudacion, la pantalla de inicio. Ya
+                    // estaba declarada en el contrato desde que se derivo del prototipo;
+                    // lo que este issue hace es publicarla. No tiene modelo propio: agrega
+                    // lo que cuentacorriente y tesoreria publican.
+                    "GET /indicadores/recaudacion");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

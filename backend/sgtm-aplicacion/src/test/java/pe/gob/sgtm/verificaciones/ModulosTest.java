@@ -44,7 +44,13 @@ class ModulosTest {
                         "seguridad",
                         "cuentacorriente",
                         "rentas",
-                        "sanciones");
+                        "sanciones",
+                        // #56: el panel de recaudacion. No es un contexto acotado —ARQ-01 §3
+                        // fija doce— pero si es un modulo para Modulith, y eso es lo que
+                        // hace comprobable el AC 3: si el panel tocara un tipo interno de
+                        // cuentacorriente o de tesoreria, verify() lo nombraria.
+                        "indicadores",
+                        "tesoreria");
     }
 
     @Test

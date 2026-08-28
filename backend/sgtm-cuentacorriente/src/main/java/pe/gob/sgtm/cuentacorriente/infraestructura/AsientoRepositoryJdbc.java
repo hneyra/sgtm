@@ -14,6 +14,7 @@ import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
+import pe.gob.sgtm.cuentacorriente.dominio.CargoAgregado;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeAltasBajas;
@@ -345,29 +346,94 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
         if (tributos.isEmpty()) {
             return List.of();
         }
-        return jdbc().sql(
-                        "SELECT a.tributo, a.ejercicio,"
-                                + "       CAST(extract(month FROM a.fecha_valor) AS integer) AS mes,"
-                                + "       a.fase, sum(a.monto) AS recaudado, count(*) AS abonos"
-                                + DESDE
-                                + " WHERE a.tributo IN (:tributos)"
-                                + "   AND a.tipo = 'ABONO'"
-                                + "   AND a.concepto IN "
-                                + CONCEPTOS_DE_COBRANZA
-                                + "   AND a.fecha_valor >= :desde"
-                                + "   AND a.fecha_valor <= :hasta"
-                                + "   AND NOT EXISTS ("
-                                + "         SELECT 1 FROM cuenta_corriente_asiento r"
-                                + "          WHERE r.municipalidad_id = a.municipalidad_id"
-                                + "            AND r.asiento_reversado_id = a.id)"
-                                + " GROUP BY a.tributo, a.ejercicio,"
-                                + "          extract(month FROM a.fecha_valor), a.fase"
-                                + " ORDER BY a.tributo, a.ejercicio,"
-                                + "          extract(month FROM a.fecha_valor), a.fase")
+        return jdbc().sql(recaudacion(" AND a.tributo IN (:tributos)"))
                 .param("tributos", List.copyOf(tributos))
                 .param("desde", desde)
                 .param("hasta", hasta)
                 .query(AsientoRepositoryJdbc::mapearRecaudacion)
+                .list();
+    }
+
+    /**
+     * Lo cobrado de todos los tributos entre dos fechas (#56, RF-130).
+     *
+     * <p>Exactamente la misma consulta sin el filtro de tributo, y comparte su texto: si fueran dos
+     * cadenas separadas, un cambio en el criterio de reversion se aplicaria a una y no a la otra, y
+     * el panel de inicio diria una cifra distinta de la del resumen del area sin que nada fallara.
+     */
+    @Override
+    public List<RecaudacionAgregada> recaudadoDeTodos(
+            java.time.LocalDate desde, java.time.LocalDate hasta) {
+        return jdbc().sql(recaudacion(""))
+                .param("desde", desde)
+                .param("hasta", hasta)
+                .query(AsientoRepositoryJdbc::mapearRecaudacion)
+                .list();
+    }
+
+    /** La consulta de recaudacion, con o sin el filtro de tributo. */
+    private static String recaudacion(String filtroDeTributo) {
+        return "SELECT a.tributo, a.ejercicio,"
+                + "       CAST(extract(month FROM a.fecha_valor) AS integer) AS mes,"
+                + "       a.fase, sum(a.monto) AS recaudado, count(*) AS abonos"
+                + DESDE
+                + " WHERE a.tipo = 'ABONO'"
+                + filtroDeTributo
+                + "   AND a.concepto IN "
+                + CONCEPTOS_DE_COBRANZA
+                + "   AND a.fecha_valor >= :desde"
+                + "   AND a.fecha_valor <= :hasta"
+                + "   AND NOT EXISTS ("
+                + "         SELECT 1 FROM cuenta_corriente_asiento r"
+                + "          WHERE r.municipalidad_id = a.municipalidad_id"
+                + "            AND r.asiento_reversado_id = a.id)"
+                + " GROUP BY a.tributo, a.ejercicio,"
+                + "          extract(month FROM a.fecha_valor), a.fase"
+                + " ORDER BY a.tributo, a.ejercicio,"
+                + "          extract(month FROM a.fecha_valor), a.fase";
+    }
+
+    /**
+     * Lo cargado en un ejercicio, agrupado por tributo (#56, RF-130).
+     *
+     * <p>El reverso exacto de {@link #recaudadoPorTributo}: {@code CARGO} en vez de {@code ABONO} y
+     * solo {@code INSOLUTO}, que es el tributo puesto a cobrar. El mismo {@code NOT EXISTS} de
+     * reversion, para que numerador y denominador del avance se puedan dividir sin advertencias.
+     *
+     * <p><b>Y una tercera condicion, que solo se ve ejecutando</b>: {@code asiento_reversado_id IS
+     * NULL}. Reversar un abono produce un {@code CARGO} del mismo concepto —lo hace {@code
+     * Asiento#reversionDe}—, asi que un recibo anulado de 120 deja en el libro un cargo de 120 que
+     * <b>no es deuda nueva</b>: es la deuda de siempre, que vuelve a estar viva. Sin este filtro,
+     * un tributo con 400 determinados y un recibo anulado de 120 se publicaba como 520 cargados, o
+     * sea una emision inflada por cada anulacion del ejercicio. La proyeccion del saldo no tiene
+     * ese defecto porque netea cargos contra abonos; este agregado solo mira un lado, y por eso
+     * necesita decirlo.
+     *
+     * <p>El filtro por {@code ejercicio} es ademas la <b>clave de particion</b> del libro (V2), asi
+     * que esta consulta toca una sola particion aunque haya diez anos de asientos.
+     */
+    @Override
+    public List<CargoAgregado> cargadoPorTributo(Ejercicio ejercicio) {
+        return jdbc().sql(
+                        "SELECT a.tributo, sum(a.monto) AS cargado, count(*) AS cargos"
+                                + DESDE
+                                + " WHERE a.ejercicio = :ejercicio"
+                                + "   AND a.tipo = 'CARGO'"
+                                + "   AND a.concepto = 'INSOLUTO'"
+                                + "   AND a.asiento_reversado_id IS NULL"
+                                + "   AND NOT EXISTS ("
+                                + "         SELECT 1 FROM cuenta_corriente_asiento r"
+                                + "          WHERE r.municipalidad_id = a.municipalidad_id"
+                                + "            AND r.asiento_reversado_id = a.id)"
+                                + " GROUP BY a.tributo"
+                                + " ORDER BY a.tributo")
+                .param("ejercicio", ejercicio.valor())
+                .query(
+                        (fila, numeroDeFila) ->
+                                new CargoAgregado(
+                                        fila.getString("tributo"),
+                                        new Dinero(fila.getBigDecimal("cargado")),
+                                        fila.getLong("cargos")))
                 .list();
     }
 

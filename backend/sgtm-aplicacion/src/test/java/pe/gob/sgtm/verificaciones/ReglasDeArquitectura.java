@@ -370,6 +370,42 @@ public final class ReglasDeArquitectura {
                                     + " camino de escritura meteria lo hallado en el padron sin"
                                     + " resolucion que lo justifique (ARQ-01 §3.5, RF-054)");
 
+    /**
+     * El panel de recaudacion no habla con ninguna base de datos (#56, AC 3 y AC 4).
+     *
+     * <p>{@code indicadores} no es un contexto acotado: no tiene tablas, no determina y no asienta.
+     * Lo unico que hace es <b>agregar</b> lo que {@code cuentacorriente} y {@code tesoreria} ya
+     * publican. Spring Modulith ya impide que toque un tipo interno de otro modulo; lo que esta
+     * regla añade es lo otro: que no pueda saltarselos <b>por debajo</b>, escribiendo su propio
+     * {@code JdbcClient} contra {@code cuenta_corriente_asiento}.
+     *
+     * <p>No es una preocupacion teorica, y el defecto tiene una forma muy concreta: el panel
+     * necesita cifras de varios modulos, y la ruta corta —«total, es solo un SELECT de lectura»—
+     * produce una consulta que duplica el criterio de reversion del libro sin saberlo. El dia que
+     * ese criterio cambie, la pantalla de inicio dira una cifra y el resumen del area dira otra,
+     * las dos plausibles, y nadie sabra cual esta mal.
+     *
+     * <p>Y hay una segunda consecuencia, que es el AC 4: un {@code SELECT} escrito aqui seria un
+     * {@code SELECT} sin agregar —quien escribe un panel no escribe {@code GROUP BY}, escribe un
+     * bucle—, o sea la cartera de un padron entero recorrida en cada carga de la pantalla que todo
+     * el mundo abre al entrar.
+     */
+    public static final ArchRule EL_PANEL_NO_HABLA_CON_LA_BASE =
+            noClasses()
+                    .that()
+                    .resideInAPackage("..indicadores..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAnyPackage(
+                            "java.sql..",
+                            "javax.sql..",
+                            "org.springframework.jdbc..",
+                            "org.springframework.r2dbc..")
+                    .because(
+                            "el panel agrega lo que otros publican; una consulta propia duplicaria"
+                                    + " el criterio del libro y recorreria el padron en cada carga"
+                                    + " de la pantalla de inicio (#56, AC 3 y AC 4)");
+
     public static List<ArchRule> todas() {
         return List.of(
                 EL_DOMINIO_NO_CONOCE_FRAMEWORKS,
@@ -385,7 +421,8 @@ public final class ReglasDeArquitectura {
                 TODO_ENDPOINT_DECLARA_SU_ACCESO,
                 TODO_COMPONENTE_DECLARA_QUE_CONSTRUCTOR_INYECTAR,
                 TODA_SIEMBRA_CORRE_SOLO_EN_EL_PERFIL_BATCH,
-                SOLO_LA_TRANSFERENCIA_ESCRIBE_FUERA_DE_FISCALIZACION);
+                SOLO_LA_TRANSFERENCIA_ESCRIBE_FUERA_DE_FISCALIZACION,
+                EL_PANEL_NO_HABLA_CON_LA_BASE);
     }
 
     /** Clases del sistema, sin las de prueba ni las de fixtures. */
