@@ -142,7 +142,14 @@ Transversal: todos dependen de él y él de ninguno.
 
 ## 5. Estado actual
 
-Los doce módulos Gradle existen; **todos vacíos**, con solo su `package-info.java`. Es
-deliberado: la estructura fija los límites antes de que haya código que los cruce. La primera
-funcionalidad de negocio está bloqueada por D-01 y D-02
-([GOB-02](../00-gobierno/decisiones-abiertas.md)).
+Los doce módulos Gradle existen, y la estructura se escribió antes que el código para fijar los
+límites antes de que hubiera algo que los cruzara. Hoy **nueve tienen código** —`catastro`,
+`contribuyentes`, `cuentacorriente`, `fiscalizacion`, `parametros`, `rentas`, `sanciones`,
+`seguridad` y `valores`—; `coactiva`, `licencias` y `tesoreria` siguen con solo su
+`package-info.java`.
+
+El de más recorrido es `catastro`: desde [#290](https://github.com/hneyra/sgtm/issues/290)
+publica también la **escritura** —vías y sectores, el alta de manzanas, el alta de las cuatro
+fichas y su actualización versionada—, con observación obligatoria y auditoría. Lo que sigue sin
+implementarse es el **cálculo**: ninguna regla tributaria se escribe contra cifras inventadas
+mientras D-03c y D-11 no cierren ([GOB-02](../00-gobierno/decisiones-abiertas.md)).

@@ -7,21 +7,25 @@ Derivados del manual de usuario. Cada requisito indica las opciones del menú qu
 `‹bloqueado por D-02›`; puede diseñarse y probarse con parámetros de ejemplo, pero no
 implementarse contra cifras inventadas.
 
+Un requisito cuya **escritura** ya publica el backend lo dice al final, con el issue que la
+trajo: `‹escritura publicada #290›`. El marcador dice que la operación existe y con qué límites,
+no que la pantalla cubra ya todas las secciones que el manual dibuja.
+
 ---
 
 ## Catastro — `catastro`
 
 | # | Requisito | Opciones |
 |---|---|---|
-| RF-001 | Registrar y actualizar la **ficha catastral única** de un predio urbano: datos generales, ubicación, características de titularidad, propietarios, características de la construcción por piso, otras instalaciones, inquilinos, arbitrios, observaciones, información complementaria, servicios, documentos, licencia de funcionamiento e imágenes | `ficha_urbana` |
-| RF-002 | Registrar la **ficha catastral económica** (conductor, domicilio fiscal, autorización municipal de funcionamiento, autorización de anuncio, información complementaria) | `ficha_economica` |
-| RF-003 | Registrar la **ficha de bienes comunes** de una edificación | `ficha_bienes` |
-| RF-004 | Registrar la **ficha rural**: datos generales, descripción del condominio, propietarios, tipos de tierra y predios colindantes | `ficha_rural` |
+| RF-001 | Registrar y actualizar la **ficha catastral única** de un predio urbano: datos generales, ubicación, características de titularidad, propietarios, características de la construcción por piso, otras instalaciones, inquilinos, arbitrios, observaciones, información complementaria, servicios, documentos, licencia de funcionamiento e imágenes ‹escritura publicada #290: el alta crea el predio en el mismo acto› | `ficha_urbana` |
+| RF-002 | Registrar la **ficha catastral económica** (conductor, domicilio fiscal, autorización municipal de funcionamiento, autorización de anuncio, información complementaria) ‹escritura publicada #290› | `ficha_economica` |
+| RF-003 | Registrar la **ficha de bienes comunes** de una edificación ‹escritura publicada #290› | `ficha_bienes` |
+| RF-004 | Registrar la **ficha rural**: datos generales, descripción del condominio, propietarios, tipos de tierra y predios colindantes ‹escritura publicada #290› | `ficha_rural` |
 | RF-005 | Identificar cada predio por **código de referencia catastral** con la estructura `DDPPddSSMMMLLLEEeeppUUU` y validar su composición | todas las fichas |
 | RF-006 | Consultar fichas por código, contribuyente, dirección, sector o uso | `consulta_fichas` |
-| RF-007 | **Versionar** toda modificación de ficha: copiar la ficha vigente, crear la versión nueva y registrar autor, fecha, hora y observación. Nunca sobrescribir | `actualizacion_catastro` |
-| RF-008 | Mantener los catálogos catastrales: vías y calles, sectores y manzanas | `calles`, `sectores` |
-| RF-009 | Mantener las tablas de valuación por ejercicio: aranceles, valores unitarios de edificación y depreciación | `aranceles`, `valores_unitarios`, `depreciacion` |
+| RF-007 | **Versionar** toda modificación de ficha: copiar la ficha vigente, crear la versión nueva y registrar autor, fecha, hora y observación. Nunca sobrescribir ‹escritura publicada #290: los cuatro tipos de ficha, cada uno bajo la ruta con que se lee› | `actualizacion_catastro` |
+| RF-008 | Mantener los catálogos catastrales: vías y calles, sectores y manzanas ‹escritura publicada #290: la vía y el sector se dan de alta y se editan —la baja es lógica—; la manzana **solo se da de alta**, porque su código es un tramo del código catastral de sus predios› | `calles`, `sectores` |
+| RF-009 | Mantener las tablas de valuación por ejercicio: aranceles, valores unitarios de edificación y depreciación ‹de solo lectura por HTTP: el arancel se carga por lote contra un conjunto de parámetros antes de sellarlo; los valores unitarios y la depreciación esperan D-13› | `aranceles`, `valores_unitarios`, `depreciacion` |
 | RF-010 | Emitir la **ficha del contribuyente** con sus datos generales | `ficha_contribuyente_reporte` |
 
 ## Contribuyentes — `contribuyentes`
