@@ -632,6 +632,135 @@ class ConsultaDeFichasTest {
             assertThat(consulta.historial(predio, TipoFicha.UNICA))
                     .as("ni el historico, que es la via por la que se escaparia el detalle")
                     .isEmpty();
+            assertThat(
+                            consulta.resumenPredial(FiltroDeFichas.ninguno(), HOY, unaPagina())
+                                    .contenido())
+                    .as("ni el listado del resumen predial, que es la misma consulta con otra fila")
+                    .isEmpty();
+        }
+    }
+
+    /**
+     * El listado base de {@code consulta_resumen_predial} (RF-046, #25).
+     *
+     * <p>Es la misma consulta que la grilla de fichas, y por eso lo que se prueba aqui es solo lo
+     * que la diferencia: el filtro por uso —que es la extension que esta pantalla trajo— y el
+     * codigo del titular, que la otra no publica.
+     */
+    @Nested
+    @DisplayName("El resumen predial")
+    class ResumenPredial {
+
+        /** Tramo propio de codigos, para que las asserciones no dependan de las otras pruebas. */
+        private static final String TRAMO = "27010100100100101110";
+
+        @Test
+        @DisplayName("el filtro por uso acota, y no depende de las tildes ni de las mayusculas")
+        void elFiltroPorUsoAcota() throws SQLException {
+            long casa = crearPredio(TRAMO + "001", "AV. USO 100", null, "20");
+            long comercio = crearPredio(TRAMO + "002", "AV. USO 200", null, "21");
+            long terreno = crearPredio(TRAMO + "003", "AV. USO 300", null, "22");
+            registrar(casa, "100.00", "CASA HABITACION");
+            registrar(comercio, "200.00", "COMERCIO");
+            registrar(terreno, "300.00", "TERRENO SIN CONSTRUIR");
+
+            assertThat(codigosDe(porUso(TRAMO, "COMERCIO"))).containsExactly(TRAMO + "002");
+            assertThat(codigosDe(porUso(TRAMO, "CASA HABITACIÓN")))
+                    .as(
+                            "el desplegable de la pantalla manda la tilde y el padron guarda el uso"
+                                    + " tal como lo escribio quien registro la ficha: comparar tal"
+                                    + " cual devolveria cero filas sobre un padron que si las"
+                                    + " tiene, que parece un padron vacio")
+                    .containsExactly(TRAMO + "001");
+            assertThat(codigosDe(porUso(TRAMO, "casa habitacion")))
+                    .as("ni de las mayusculas")
+                    .containsExactly(TRAMO + "001");
+        }
+
+        @Test
+        @DisplayName("un uso que nadie declaro devuelve la pagina vacia, no el padron entero")
+        void unUsoInexistenteDevuelveVacio() throws SQLException {
+            long predio = crearPredio("27010100100100101111001", "AV. USO 400", null, "23");
+            registrar(predio, "100.00", "CASA HABITACION");
+
+            assertThat(porUso("2701010010010010111100", "INDUSTRIA").contenido())
+                    .as(
+                            "ignorar el filtro devolveria todos los predios, y quien lo mira creeria"
+                                    + " estar viendo solo los industriales")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("la fila trae el codigo del titular, no solo su nombre")
+        void laFilaTraeElCodigoDelTitular() throws SQLException {
+            long predio = crearPredio("27010100100100101112001", "AV. TITULAR 300", null, "24");
+            long titular = crearContribuyente("C-000801", "40300801", "VILELA CRUZ, MARIA");
+            titular(predio, titular, "100.0000");
+            registrar(predio, "120.00", "CASA HABITACION");
+            padron.registrar(titular, "C-000801", "VILELA CRUZ, MARIA");
+
+            var fila =
+                    consulta.resumenPredial(porCodigo("27010100100100101112001"), HOY, unaPagina())
+                            .contenido()
+                            .get(0);
+
+            assertThat(fila.codigoTitular())
+                    .as(
+                            "la columna «Cod. Propietario» de la pantalla, que la grilla de fichas"
+                                    + " no publica")
+                    .isEqualTo("C-000801");
+            assertThat(fila.ficha().titular()).isEqualTo("VILELA CRUZ, MARIA");
+        }
+
+        @Test
+        @DisplayName("un predio sin titular vigente sale igual, sin codigo ni nombre")
+        void unPredioSinTitularSaleIgual() throws SQLException {
+            long predio = crearPredio("27010100100100101113001", "AV. SIN TITULAR 200", null, "25");
+            registrar(predio, "90.00", "TERRENO SIN CONSTRUIR");
+
+            var fila =
+                    consulta.resumenPredial(porCodigo("27010100100100101113001"), HOY, unaPagina())
+                            .contenido()
+                            .get(0);
+
+            assertThat(fila.codigoTitular())
+                    .as(
+                            "es justo el predio que catastro tiene que revisar; ocultarlo no lo"
+                                    + " arregla")
+                    .isNull();
+            assertThat(fila.ficha().titular()).isNull();
+        }
+
+        @Test
+        @DisplayName("resuelve toda la pagina con UNA consulta al padron")
+        void resuelveLaPaginaConUnaConsulta() throws SQLException {
+            for (int i = 1; i <= 3; i++) {
+                long predio =
+                        crearPredio("2701010010010010111400" + i, "AV. PAGINA " + i, null, "2" + i);
+                long contribuyente =
+                        crearContribuyente("C-00090" + i, "4030090" + i, "PAGINA " + i);
+                titular(predio, contribuyente, "100.0000");
+                registrar(predio, "100.00", "CASA HABITACION");
+                padron.registrar(contribuyente, "C-00090" + i, "PAGINA " + i);
+            }
+            padron.limpiar();
+
+            Pagina<ConsultaDeFichas.PredioDelResumen> pagina =
+                    consulta.resumenPredial(porCodigo("270101001001001011140"), HOY, unaPagina());
+
+            assertThat(pagina.contenido()).hasSize(3);
+            assertThat(padron.llamadasAPorIds())
+                    .as("una por pagina, no una por fila: con veinte filas serian veinte consultas")
+                    .isEqualTo(1);
+        }
+
+        private Pagina<ConsultaDeFichas.PredioDelResumen> porUso(String prefijo, String uso) {
+            return consulta.resumenPredial(
+                    new FiltroDeFichas(prefijo, null, null, null, null, uso), HOY, unaPagina());
+        }
+
+        private List<String> codigosDe(Pagina<ConsultaDeFichas.PredioDelResumen> pagina) {
+            return pagina.contenido().stream().map(fila -> fila.ficha().codigo().valor()).toList();
         }
     }
 

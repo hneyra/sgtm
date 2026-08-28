@@ -1,11 +1,14 @@
 package pe.gob.sgtm.valores.infraestructura;
 
+import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.auditoria.Origen;
@@ -17,11 +20,14 @@ import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
+import pe.gob.sgtm.valores.dominio.CriterioDeConsultaDeValores;
 import pe.gob.sgtm.valores.dominio.CriterioDeValor;
 import pe.gob.sgtm.valores.dominio.EstadoDeValor;
+import pe.gob.sgtm.valores.dominio.SituacionDelValor;
 import pe.gob.sgtm.valores.dominio.TipoValor;
 import pe.gob.sgtm.valores.dominio.Valor;
 import pe.gob.sgtm.valores.dominio.ValorDetalle;
+import pe.gob.sgtm.valores.dominio.ValorEnConsulta;
 import pe.gob.sgtm.valores.dominio.ValorRepository;
 
 /**
@@ -49,6 +55,56 @@ public class ValorRepositoryJdbc extends RepositorioJdbc implements ValorReposit
 
     private static final OrdenSeguro ORDEN =
             OrdenSeguro.sobre("numero", "ejercicio", "fecha_emision", "monto_total");
+
+    /**
+     * La PRIMERA diligencia que surtio efecto, por intento.
+     *
+     * <p>La primera y no la ultima: si despues de notificar se volviera a diligenciar por cualquier
+     * motivo, el plazo ya habria empezado a correr con aquella. Es el mismo criterio que {@code
+     * NotificacionRepositoryJdbc#queSurtioEfecto}, y esta escrito dos veces a proposito —una
+     * subconsulta correlacionada no se puede reutilizar como metodo— con el mismo {@code ORDER BY
+     * n.intento LIMIT 1}: si divergieran, la grilla diria una fecha y el expediente otra.
+     */
+    private static final String DILIGENCIA_QUE_SURTIO_EFECTO =
+            " FROM notificacion n"
+                    + " WHERE n.objeto = 'VALOR' AND n.objeto_id = v.id"
+                    + "   AND n.exigible_desde IS NOT NULL"
+                    + " ORDER BY n.intento LIMIT 1)";
+
+    private static final String NOTIFICADO_EL =
+            "(SELECT n.fecha_notificacion" + DILIGENCIA_QUE_SURTIO_EFECTO;
+
+    private static final String EXIGIBLE_DESDE =
+            "(SELECT n.exigible_desde" + DILIGENCIA_QUE_SURTIO_EFECTO;
+
+    private static final String EN_COACTIVA =
+            "EXISTS (SELECT 1 FROM valor_movimiento m"
+                    + " WHERE m.valor_id = v.id AND m.tipo = 'PCO')";
+
+    /**
+     * Los tributos del detalle, agregados por la base (RNF-083).
+     *
+     * <p>{@code DISTINCT} porque un valor puede tener varias filas del mismo tributo —una por
+     * predio— y la columna «Tributo» de la pantalla es una sola. Con {@code ORDER BY} para que dos
+     * consultas iguales devuelvan el mismo texto: sin el, PostgreSQL no promete ningun orden y el
+     * mismo valor podria salir «PREDIAL / ARBITRIOS» una vez y «ARBITRIOS / PREDIAL» la siguiente.
+     */
+    private static final String TRIBUTOS_DEL_DETALLE =
+            "(SELECT string_agg(DISTINCT d.tributo, ' / ' ORDER BY d.tributo)"
+                    + " FROM valor_detalle d WHERE d.valor_id = v.id)";
+
+    private static final String EJERCICIO_DESDE =
+            "(SELECT min(d.ejercicio) FROM valor_detalle d WHERE d.valor_id = v.id)";
+
+    private static final String EJERCICIO_HASTA =
+            "(SELECT max(d.ejercicio) FROM valor_detalle d WHERE d.valor_id = v.id)";
+
+    /** Lo que ya no describe una cobranza en curso; ver {@link SituacionDelValor#de}. */
+    private static final String NO_TERMINAL = "v.estado NOT IN ('PAGADO', 'ANULADO', 'PRESCRITO')";
+
+    /** Ni terminal ni en coactiva: el tramo donde la fecha decide. */
+    private static final String EN_CURSO =
+            NO_TERMINAL + " AND v.estado <> 'COACTIVA' AND NOT " + EN_COACTIVA;
 
     public ValorRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
@@ -226,6 +282,98 @@ public class ValorRepositoryJdbc extends RepositorioJdbc implements ValorReposit
     }
 
     @Override
+    public Pagina<ValorEnConsulta> consultar(
+            CriterioDeConsultaDeValores criterio, Paginacion paginacion) {
+
+        Map<String, Object> parametros = new LinkedHashMap<>();
+        StringBuilder condiciones = new StringBuilder("1 = 1");
+
+        if (criterio.numero() != null) {
+            condiciones.append(" AND v.numero = :numero");
+            parametros.put("numero", criterio.numero());
+        }
+        if (criterio.contribuyenteId() != null) {
+            condiciones.append(" AND v.contribuyente_id = :contribuyenteId");
+            parametros.put("contribuyenteId", criterio.contribuyenteId());
+        }
+        if (criterio.tipo() != null) {
+            condiciones.append(" AND v.tipo = :tipo");
+            parametros.put("tipo", criterio.tipo().codigo());
+        }
+        if (criterio.ejercicio() != null) {
+            condiciones.append(" AND v.ejercicio = :ejercicio");
+            parametros.put("ejercicio", criterio.ejercicio());
+        }
+        if (criterio.situacion() != null) {
+            condiciones.append(" AND ").append(condicionDe(criterio.situacion()));
+            parametros.put("fechaSituacion", criterio.fecha());
+        }
+
+        String desde = " FROM valor v WHERE " + condiciones;
+        String seleccion =
+                "SELECT "
+                        + COLUMNAS_VALOR_CON_PREFIJO
+                        + ", "
+                        + TRIBUTOS_DEL_DETALLE
+                        + " AS tributos, "
+                        + EJERCICIO_DESDE
+                        + " AS ejercicio_desde, "
+                        + EJERCICIO_HASTA
+                        + " AS ejercicio_hasta, "
+                        + NOTIFICADO_EL
+                        + " AS notificado_el, "
+                        + EXIGIBLE_DESDE
+                        + " AS exigible_desde, "
+                        + EN_COACTIVA
+                        + " AS en_coactiva"
+                        + desde;
+
+        return paginar(
+                seleccion,
+                "SELECT count(*)" + desde,
+                parametros,
+                paginacion,
+                ORDEN,
+                (fila, numeroDeFila) -> mapearEnConsulta(fila, criterio.fecha()));
+    }
+
+    /**
+     * La condicion SQL de cada situacion, espejo exacto de {@link SituacionDelValor#de}.
+     *
+     * <p>Que sean dos escrituras de la misma regla —una en Java para pintar la fila, otra en SQL
+     * para filtrarla— es el riesgo de este metodo, y por eso el orden de las ramas es el mismo:
+     * primero lo terminal, despues coactiva, y solo entonces la fecha. Si divergieran, la pantalla
+     * mostraria filas cuya columna «Estado» no coincide con el filtro que las trajo, que es
+     * exactamente el sintoma que nadie asocia a su causa. {@code ConsultaDeValoresTest} compara las
+     * dos: por cada situacion, filtra por ella y comprueba que toda fila devuelta la tiene.
+     */
+    private static String condicionDe(SituacionDelValor situacion) {
+        return switch (situacion) {
+            case PAGADO -> "v.estado = 'PAGADO'";
+            case ANULADO -> "v.estado = 'ANULADO'";
+            case PRESCRITO -> "v.estado = 'PRESCRITO'";
+            case COACTIVA -> NO_TERMINAL + " AND (v.estado = 'COACTIVA' OR " + EN_COACTIVA + ")";
+            case EXIGIBLE -> EN_CURSO + " AND " + EXIGIBLE_DESDE + " <= :fechaSituacion";
+            case NOTIFICADO ->
+                    EN_CURSO
+                            + " AND v.estado = 'NOTIFICADO'"
+                            + " AND ("
+                            + EXIGIBLE_DESDE
+                            + " IS NULL OR "
+                            + EXIGIBLE_DESDE
+                            + " > :fechaSituacion)";
+            case EMITIDO ->
+                    EN_CURSO
+                            + " AND v.estado = 'EMITIDO'"
+                            + " AND ("
+                            + EXIGIBLE_DESDE
+                            + " IS NULL OR "
+                            + EXIGIBLE_DESDE
+                            + " > :fechaSituacion)";
+        };
+    }
+
+    @Override
     public List<Valor> cobrablesDe(long contribuyenteId, String tributo, Ejercicio ejercicio) {
         // El tributo y el ejercicio viven en el detalle congelado, no en la cabecera: un valor
         // puede formalizar varias obligaciones. DISTINCT porque un mismo valor puede tener mas de
@@ -304,6 +452,30 @@ public class ValorRepositoryJdbc extends RepositorioJdbc implements ValorReposit
                 fila.getDate("fecha_emision").toLocalDate(),
                 fila.getString("usuario_registro"),
                 Observacion.de(fila.getString("observacion")));
+    }
+
+    private ValorEnConsulta mapearEnConsulta(ResultSet fila, LocalDate situacionA)
+            throws SQLException {
+        int desde = fila.getInt("ejercicio_desde");
+        Integer ejercicioDesde = fila.wasNull() ? null : desde;
+        int hasta = fila.getInt("ejercicio_hasta");
+        Integer ejercicioHasta = fila.wasNull() ? null : hasta;
+
+        return new ValorEnConsulta(
+                mapearValor(fila, 0),
+                fila.getString("tributos"),
+                ejercicioDesde,
+                ejercicioHasta,
+                fechaOpcional(fila, "notificado_el"),
+                fechaOpcional(fila, "exigible_desde"),
+                fila.getBoolean("en_coactiva"),
+                situacionA);
+    }
+
+    private static @Nullable LocalDate fechaOpcional(ResultSet fila, String columna)
+            throws SQLException {
+        Date fecha = fila.getDate(columna);
+        return fecha == null ? null : fecha.toLocalDate();
     }
 
     private ValorDetalle mapearDetalle(ResultSet fila, int numeroDeFila) throws SQLException {

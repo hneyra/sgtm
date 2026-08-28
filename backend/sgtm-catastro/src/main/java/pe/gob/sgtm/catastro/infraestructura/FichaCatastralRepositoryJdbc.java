@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -88,6 +89,22 @@ public class FichaCatastralRepositoryJdbc extends RepositorioJdbc
      */
     private static final OrdenSeguro ORDEN_CONSULTA =
             OrdenSeguro.sobre("cod_ref_catastral", "direccion", "uso", "vigencia_desde", "id");
+
+    /**
+     * El uso de la ficha con las tildes plegadas, para poder compararlo con lo que manda la
+     * pantalla.
+     *
+     * <p>{@code translate} y no la extension {@code unaccent}: esta ultima habria que instalarla en
+     * cada base, y para doce vocales no compensa depender de una extension. Solo se pliegan las
+     * vocales acentuadas y la dieresis; la {@code ñ} se queda como esta, porque plegarla haria que
+     * «AÑO» y «ANO» fueran la misma palabra.
+     */
+    private static final String USO_SIN_TILDES = "translate(f.uso, 'ÁÉÍÓÚÜáéíóúü', 'AEIOUUaeiouu')";
+
+    /** Las mismas doce vocales, del lado de Java. */
+    private static final String CON_TILDES = "ÁÉÍÓÚÜáéíóúü";
+
+    private static final String SIN_TILDES = "AEIOUUaeiouu";
 
     /**
      * La grilla y el titular en una sola pasada por la base.
@@ -345,6 +362,20 @@ public class FichaCatastralRepositoryJdbc extends RepositorioJdbc
             condiciones.add("f.tipo = :tipo");
             parametros.put("tipo", filtro.tipo().name());
         }
+        if (filtro.uso() != null) {
+            // Por igualdad, plegando mayusculas y tildes en los dos lados.
+            //
+            // `uso` es texto libre de 60 caracteres: no hay catalogo cerrado en el dominio, y lo
+            // escribe quien registra la ficha. El desplegable de la pantalla, en cambio, manda
+            // «CASA HABITACIÓN» con tilde. Comparar tal cual devolveria cero filas sobre un padron
+            // que si las tiene, que es la peor respuesta posible: parece un padron vacio.
+            //
+            // Sin indice a proposito: el uso tiene un punado de valores distintos, asi que un
+            // btree sobre el no lo elegiria el planificador ni aunque existiera. La condicion
+            // selectiva de esta consulta sigue siendo la vigencia (ficha_vigencia_ix, V14).
+            condiciones.add("upper(" + USO_SIN_TILDES + ") = :uso");
+            parametros.put("uso", sinTildes(filtro.uso()).toUpperCase(Locale.ROOT));
+        }
         if (filtro.porContribuyente().isPresent()) {
             if (titulares.isEmpty()) {
                 // El usuario escribio un nombre y el padron no encontro a nadie. Devolver la
@@ -378,6 +409,23 @@ public class FichaCatastralRepositoryJdbc extends RepositorioJdbc
 
         // La suma va aparte y despues del LIMIT. El porque, en AREA_CONSTRUIDA_DE_LAS_FICHAS.
         return conAreaConstruida(pagina);
+    }
+
+    /**
+     * Las mismas doce vocales que {@link #USO_SIN_TILDES}, plegadas en Java.
+     *
+     * <p>Escrito a mano y no con {@code Normalizer}: la descomposicion NFD pliega mucho mas —la
+     * {@code ñ} incluida—, y entonces los dos lados de la comparacion dejarian de hacer lo mismo.
+     * Que sean dos listas identicas es el punto: si divergen, el filtro deja de encontrar.
+     */
+    private static String sinTildes(String texto) {
+        StringBuilder resultado = new StringBuilder(texto.length());
+        for (int i = 0; i < texto.length(); i++) {
+            char caracter = texto.charAt(i);
+            int posicion = CON_TILDES.indexOf(caracter);
+            resultado.append(posicion < 0 ? caracter : SIN_TILDES.charAt(posicion));
+        }
+        return resultado.toString();
     }
 
     /** Pone en cada fila de la pagina el area construida de su version, sumada por la base. */

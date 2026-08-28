@@ -4,12 +4,19 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Los filtros de la consulta transversal de fichas (RF-006).
+ * Los filtros de la consulta transversal de fichas (RF-006) y del resumen predial (RF-046).
  *
- * <p>Son exactamente los que declara la pantalla en el contrato: codigo de referencia catastral,
- * titular, manzana y lote. No hay aqui un «buscar cualquier cosa»: cada filtro apunta a una
- * columna, y una consulta que acepta texto libre acaba haciendo {@code LIKE '%…%'} sobre todo el
- * padron.
+ * <p>Son exactamente los que declaran las pantallas en el contrato: codigo de referencia catastral,
+ * titular, manzana, lote, tipo de ficha y uso. No hay aqui un «buscar cualquier cosa»: cada filtro
+ * apunta a una columna, y una consulta que acepta texto libre acaba haciendo {@code LIKE '%…%'}
+ * sobre todo el padron.
+ *
+ * <p><b>{@code uso} lo trajo {@code consulta_resumen_predial} (#25).</b> Encaja sin violentar nada
+ * —{@code ficha_catastral.uso} es una columna, y el desplegable de la pantalla ofrece una lista
+ * cerrada—, asi que se anade en vez de inventarle una consulta propia a esa pantalla. Lo que
+ * <b>no</b> se anade es el filtro «Palabra» que la misma pantalla declara: eso es exactamente el
+ * texto libre que el parrafo anterior descarta, y {@code ResumenPredialController} lo rechaza con
+ * 422 en lugar de traducirlo a un {@code LIKE} sobre el padron entero.
  *
  * <p>{@code contribuyente} es distinto de los otros tres: no es una columna de catastro. Se
  * resuelve preguntandole al padron, y por aproximacion —el nombre llega mal escrito desde
@@ -26,17 +33,29 @@ public record FiltroDeFichas(
         @Nullable String contribuyente,
         @Nullable String manzana,
         @Nullable String lote,
-        @Nullable TipoFicha tipo) {
+        @Nullable TipoFicha tipo,
+        @Nullable String uso) {
 
     public FiltroDeFichas {
         codRefCatastral = limpio(codRefCatastral);
         contribuyente = limpio(contribuyente);
         manzana = limpio(manzana);
         lote = limpio(lote);
+        uso = limpio(uso);
+    }
+
+    /** Los cinco filtros de {@code consulta_fichas}, que no declara «Uso». */
+    public FiltroDeFichas(
+            @Nullable String codRefCatastral,
+            @Nullable String contribuyente,
+            @Nullable String manzana,
+            @Nullable String lote,
+            @Nullable TipoFicha tipo) {
+        this(codRefCatastral, contribuyente, manzana, lote, tipo, null);
     }
 
     public static FiltroDeFichas ninguno() {
-        return new FiltroDeFichas(null, null, null, null, null);
+        return new FiltroDeFichas(null, null, null, null, null, null);
     }
 
     public Optional<String> porContribuyente() {
@@ -49,7 +68,8 @@ public record FiltroDeFichas(
                 && contribuyente == null
                 && manzana == null
                 && lote == null
-                && tipo == null;
+                && tipo == null
+                && uso == null;
     }
 
     private static @Nullable String limpio(@Nullable String valor) {

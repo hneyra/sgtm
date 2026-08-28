@@ -30,12 +30,14 @@ import pe.gob.sgtm.documentos.RenderizadorXls;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.valores.dominio.CriterioDeConsultaDeValores;
 import pe.gob.sgtm.valores.dominio.CriterioDeValor;
 import pe.gob.sgtm.valores.dominio.EstadoDeItemMasivo;
 import pe.gob.sgtm.valores.dominio.EstadoDeValor;
 import pe.gob.sgtm.valores.dominio.TipoValor;
 import pe.gob.sgtm.valores.dominio.Valor;
 import pe.gob.sgtm.valores.dominio.ValorDetalle;
+import pe.gob.sgtm.valores.dominio.ValorEnConsulta;
 import pe.gob.sgtm.valores.dominio.ValorMasivo;
 import pe.gob.sgtm.valores.dominio.ValorMasivoItem;
 import pe.gob.sgtm.valores.dominio.ValorMasivoRepository;
@@ -181,6 +183,13 @@ class ImprimirCorridaMasivaTest {
         @Override
         public Pagina<Valor> buscar(CriterioDeValor criterio, Paginacion paginacion) {
             throw new UnsupportedOperationException();
+        }
+
+        /** {@code consulta_valores} no pasa por este caso de uso. */
+        @Override
+        public Pagina<ValorEnConsulta> consultar(
+                CriterioDeConsultaDeValores criterio, Paginacion paginacion) {
+            throw new UnsupportedOperationException("Este doble no sirve la grilla de consulta");
         }
 
         @Override

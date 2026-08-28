@@ -96,6 +96,8 @@ class ContratoDeApiTest {
                     "GET /consultas/vehiculos",
                     "GET /consultas/pagos",
                     "GET /consultas/predios",
+                    "GET /consultas/valores",
+                    "GET /consultas/resumen-predial",
                     "POST /rentas/deuda/altas",
                     "POST /rentas/deuda/bajas",
                     "GET /seguridad/modulos",

@@ -29,6 +29,8 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
@@ -36,9 +38,11 @@ import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
+import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.valores.dominio.CausalDePrescripcion;
 import pe.gob.sgtm.valores.dominio.ComputoDeEjercicio;
+import pe.gob.sgtm.valores.dominio.CriterioDeConsultaDeValores;
 import pe.gob.sgtm.valores.dominio.EstadoDeValor;
 import pe.gob.sgtm.valores.dominio.HechoDelComputo;
 import pe.gob.sgtm.valores.dominio.ModalidadDeNotificacion;
@@ -48,10 +52,12 @@ import pe.gob.sgtm.valores.dominio.Plazo;
 import pe.gob.sgtm.valores.dominio.Prescripcion;
 import pe.gob.sgtm.valores.dominio.ResultadoDeLaSolicitud;
 import pe.gob.sgtm.valores.dominio.ResultadoDeNotificacion;
+import pe.gob.sgtm.valores.dominio.SituacionDelValor;
 import pe.gob.sgtm.valores.dominio.TipoDeMovimiento;
 import pe.gob.sgtm.valores.dominio.TipoValor;
 import pe.gob.sgtm.valores.dominio.Valor;
 import pe.gob.sgtm.valores.dominio.ValorDetalle;
+import pe.gob.sgtm.valores.dominio.ValorEnConsulta;
 
 /**
  * #39 — Notificacion, pase a coactiva y prescripcion contra PostgreSQL de verdad (V28), conectado
@@ -454,6 +460,250 @@ class NotificacionYPaseJdbcTest {
         }
     }
 
+    /**
+     * La grilla de {@code consulta_valores} (RF-041, #25), contra la base.
+     *
+     * <p>Lo que solo se puede verificar aqui: que la columna «Estado» que se pinta y el filtro que
+     * trae la fila digan lo mismo. Son <b>dos escrituras de la misma regla</b> —{@code
+     * SituacionDelValor#de} en Java, {@code condicionDe} en SQL—, y si divergen la pantalla muestra
+     * filas cuyo estado no coincide con el filtro que las trajo. Ningun doble puede detectarlo,
+     * porque en un doble solo hay una de las dos.
+     */
+    @Nested
+    @DisplayName("La grilla de consulta_valores")
+    class LaGrillaDeConsultaValores {
+
+        /** Despues de {@code EXIGIBLE} (5 de mayo): el plazo ya vencio. */
+        private static final LocalDate DESPUES_DEL_PLAZO = LocalDate.of(2026, 5, 20);
+
+        /** Antes de {@code EXIGIBLE}: el plazo todavia corre. */
+        private static final LocalDate DENTRO_DEL_PLAZO = LocalDate.of(2026, 4, 10);
+
+        @Test
+        @DisplayName("la fila trae el tributo y los ejercicios del detalle, agregados por la base")
+        void laFilaTraeElDetalleAgregado() {
+            Valor valor = emitir("CV-0001", "OP-2026-CV0001");
+
+            ValorEnConsulta fila = unaFila(valor.numero(), DESPUES_DEL_PLAZO);
+
+            assertThat(fila.tributos()).isEqualTo("PREDIAL");
+            assertThat(fila.ejercicioDesde()).isEqualTo(2026);
+            assertThat(fila.periodo())
+                    .as("un solo ejercicio se pinta como el ano, no como «2026 — 2026»")
+                    .isEqualTo("2026");
+        }
+
+        @Test
+        @DisplayName("sin notificar, la situacion es EMITIDO y no hay fechas que mostrar")
+        void sinNotificarEsEmitido() {
+            Valor valor = emitir("CV-0002", "OP-2026-CV0002");
+
+            ValorEnConsulta fila = unaFila(valor.numero(), DESPUES_DEL_PLAZO);
+
+            assertThat(fila.situacion()).isEqualTo(SituacionDelValor.EMITIDO);
+            assertThat(fila.notificadoEl()).isNull();
+            assertThat(fila.exigibleDesde())
+                    .as("la pantalla pinta un guion, que no es una fecha")
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("notificado: la misma fila es NOTIFICADO dentro del plazo y EXIGIBLE despues")
+        void laMismaFilaCambiaConLaFecha() {
+            Valor valor = emitir("CV-0003", "OP-2026-CV0003");
+            notificarConAcuse(valor, "OP-2026-CV0003/1");
+            enTransaccion(() -> valores.cambiarEstado(valor.id(), EstadoDeValor.NOTIFICADO));
+
+            ValorEnConsulta dentro = unaFila(valor.numero(), DENTRO_DEL_PLAZO);
+            ValorEnConsulta despues = unaFila(valor.numero(), DESPUES_DEL_PLAZO);
+
+            assertThat(dentro.situacion()).isEqualTo(SituacionDelValor.NOTIFICADO);
+            assertThat(despues.situacion())
+                    .as(
+                            "ninguna fila cambio entre las dos consultas: lo que cambio es el dia"
+                                    + " desde el que se mira (regla 9)")
+                    .isEqualTo(SituacionDelValor.EXIGIBLE);
+            assertThat(despues.notificadoEl()).isEqualTo(DILIGENCIA);
+            assertThat(despues.exigibleDesde()).isEqualTo(EXIGIBLE);
+        }
+
+        @Test
+        @DisplayName("la diligencia que cuenta es la primera que surtio efecto, no la ultima")
+        void laDiligenciaQueCuentaEsLaPrimera() {
+            Valor valor = emitir("CV-0004", "OP-2026-CV0004");
+            enTransaccion(
+                    () -> notificaciones.insertar(noHallada(valor.id(), "OP-2026-CV0004/1", 1)));
+            enTransaccion(
+                    () -> notificaciones.insertar(notificada(valor.id(), "OP-2026-CV0004/2", 2)));
+            enTransaccion(
+                    () -> notificaciones.insertar(notificada(valor.id(), "OP-2026-CV0004/3", 3)));
+
+            ValorEnConsulta fila = unaFila(valor.numero(), DESPUES_DEL_PLAZO);
+
+            assertThat(fila.exigibleDesde())
+                    .as(
+                            "el intento 1 no surtio efecto y no aporta fecha; entre el 2 y el 3, el"
+                                    + " plazo empezo con el 2")
+                    .isEqualTo(EXIGIBLE);
+        }
+
+        @Test
+        @DisplayName(
+                "con el pase registrado, la situacion es COACTIVA aunque el plazo hubiera"
+                        + " vencido")
+        void conPaseEsCoactiva() {
+            Valor valor = emitir("CV-0005", "OP-2026-CV0005");
+            Notificacion diligencia = notificarConAcuse(valor, "OP-2026-CV0005/1");
+            enTransaccion(() -> movimientos.registrarPase(pase(valor.id(), diligencia.id())));
+
+            ValorEnConsulta fila = unaFila(valor.numero(), DESPUES_DEL_PLAZO);
+
+            assertThat(fila.enCoactiva()).isTrue();
+            assertThat(fila.situacion())
+                    .as(
+                            "la pantalla distingue lo que se puede cobrar de lo que ya se esta cobrando")
+                    .isEqualTo(SituacionDelValor.COACTIVA);
+        }
+
+        @Test
+        @DisplayName("el filtro por situacion trae exactamente las filas que la pintan igual")
+        void elFiltroCoincideConLaColumna() {
+            Valor emitido = emitir("CV-0011", "OP-2026-CV0011");
+            Valor notificado = emitir("CV-0012", "OP-2026-CV0012");
+            notificarConAcuse(notificado, "OP-2026-CV0012/1");
+            enTransaccion(() -> valores.cambiarEstado(notificado.id(), EstadoDeValor.NOTIFICADO));
+            Valor enCoactiva = emitir("CV-0013", "OP-2026-CV0013");
+            Notificacion suya = notificarConAcuse(enCoactiva, "OP-2026-CV0013/1");
+            enTransaccion(() -> movimientos.registrarPase(pase(enCoactiva.id(), suya.id())));
+            Valor anulado = emitir("CV-0014", "OP-2026-CV0014");
+            enTransaccion(() -> valores.cambiarEstado(anulado.id(), EstadoDeValor.ANULADO));
+
+            for (SituacionDelValor situacion : SituacionDelValor.values()) {
+                List<ValorEnConsulta> filas = filtrar(situacion, DESPUES_DEL_PLAZO);
+                assertThat(filas)
+                        .as(
+                                "la condicion SQL y SituacionDelValor#de son dos escrituras de la"
+                                        + " misma regla: si divergen, la fila muestra un estado que"
+                                        + " no es el del filtro que la trajo — situacion "
+                                        + situacion)
+                        .allSatisfy(fila -> assertThat(fila.situacion()).isEqualTo(situacion));
+            }
+
+            assertThat(numerosDe(filtrar(SituacionDelValor.EXIGIBLE, DESPUES_DEL_PLAZO)))
+                    .contains(notificado.numero())
+                    .doesNotContain(emitido.numero(), enCoactiva.numero(), anulado.numero());
+            assertThat(numerosDe(filtrar(SituacionDelValor.NOTIFICADO, DENTRO_DEL_PLAZO)))
+                    .as("dentro del plazo el mismo valor cae en el otro cajon")
+                    .contains(notificado.numero());
+            assertThat(numerosDe(filtrar(SituacionDelValor.COACTIVA, DESPUES_DEL_PLAZO)))
+                    .contains(enCoactiva.numero());
+            assertThat(numerosDe(filtrar(SituacionDelValor.ANULADO, DESPUES_DEL_PLAZO)))
+                    .contains(anulado.numero());
+        }
+
+        @Test
+        @DisplayName("el filtro por situacion se aplica en SQL: el total no cuenta lo que descarta")
+        void elFiltroSeAplicaEnSql() {
+            Valor emitido = emitir("CV-0021", "OP-2026-CV0021");
+            Valor anulado = emitirPara(emitido.contribuyenteId(), "OP-2026-CV0022");
+            enTransaccion(() -> valores.cambiarEstado(anulado.id(), EstadoDeValor.ANULADO));
+
+            Pagina<ValorEnConsulta> soloAnulados =
+                    enTransaccion(
+                            () ->
+                                    valores.consultar(
+                                            new CriterioDeConsultaDeValores(
+                                                    null,
+                                                    anulado.contribuyenteId(),
+                                                    null,
+                                                    null,
+                                                    SituacionDelValor.ANULADO,
+                                                    DESPUES_DEL_PLAZO),
+                                            unaPagina()));
+
+            assertThat(soloAnulados.totalElementos())
+                    .as(
+                            "filtrar en Java las filas que la base ya devolvio daria un total sin"
+                                    + " filtrar —«1 de 47» sobre 47— y paginas incompletas")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName(
+                "filtrar por numero y por tipo acota; ordenar por una columna no declarada es"
+                        + " 422")
+        void filtrarPorNumeroYTipo() {
+            Valor valor = emitir("CV-0031", "OP-2026-CV0031");
+
+            assertThat(
+                            numerosDe(
+                                    enTransaccion(
+                                                    () ->
+                                                            valores.consultar(
+                                                                    new CriterioDeConsultaDeValores(
+                                                                            valor.numero(),
+                                                                            null,
+                                                                            TipoValor.ORDEN_DE_PAGO,
+                                                                            2026,
+                                                                            null,
+                                                                            DESPUES_DEL_PLAZO),
+                                                                    unaPagina()))
+                                            .contenido()))
+                    .containsExactly(valor.numero());
+
+            assertThatThrownBy(
+                            () ->
+                                    enTransaccion(
+                                            () ->
+                                                    valores.consultar(
+                                                            CriterioDeConsultaDeValores.a(
+                                                                    DESPUES_DEL_PLAZO),
+                                                            new Paginacion(
+                                                                    0,
+                                                                    20,
+                                                                    "observacion",
+                                                                    Paginacion.Direccion
+                                                                            .ASCENDENTE))))
+                    .as("el nombre de columna no se puede parametrizar en un ORDER BY")
+                    .isInstanceOf(OrdenSeguro.OrdenNoAdmitido.class);
+        }
+
+        // --------------------------------------------------------------
+
+        private ValorEnConsulta unaFila(String numero, LocalDate fecha) {
+            return enTransaccion(
+                            () ->
+                                    valores.consultar(
+                                            new CriterioDeConsultaDeValores(
+                                                    numero, null, null, null, null, fecha),
+                                            unaPagina()))
+                    .contenido()
+                    .get(0);
+        }
+
+        private List<ValorEnConsulta> filtrar(SituacionDelValor situacion, LocalDate fecha) {
+            return enTransaccion(
+                            () ->
+                                    valores.consultar(
+                                            new CriterioDeConsultaDeValores(
+                                                    null, null, null, null, situacion, fecha),
+                                            unaPagina()))
+                    .contenido();
+        }
+
+        private List<String> numerosDe(List<ValorEnConsulta> filas) {
+            return filas.stream().map(fila -> fila.valor().numero()).toList();
+        }
+
+        private Notificacion notificarConAcuse(Valor valor, String numero) {
+            return enTransaccion(() -> notificaciones.insertar(notificada(valor.id(), numero, 1)));
+        }
+
+        private Paginacion unaPagina() {
+            return new Paginacion(0, 200, "numero", Paginacion.Direccion.ASCENDENTE);
+        }
+    }
+
     // ------------------------------------------------------------------
     //  Utilidades
     // ------------------------------------------------------------------
@@ -474,7 +724,12 @@ class NotificacionYPaseJdbcTest {
     }
 
     private static Valor emitir(String codigoContribuyente, String numero) {
-        long contribuyente = crearContribuyente(codigoContribuyente, dniDe(codigoContribuyente));
+        return emitirPara(
+                crearContribuyente(codigoContribuyente, dniDe(codigoContribuyente)), numero);
+    }
+
+    /** El mismo valor, para un contribuyente que ya existe: dos valores del mismo titular. */
+    private static Valor emitirPara(long contribuyente, String numero) {
         return enTransaccion(
                 () ->
                         valores.insertar(

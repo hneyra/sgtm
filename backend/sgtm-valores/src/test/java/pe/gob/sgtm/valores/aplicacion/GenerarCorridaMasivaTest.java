@@ -265,6 +265,14 @@ class GenerarCorridaMasivaTest {
             return pe.gob.sgtm.compartido.Pagina.de(guardados, paginacion, guardados.size());
         }
 
+        /** {@code consulta_valores} no pasa por este caso de uso. */
+        @Override
+        public pe.gob.sgtm.compartido.Pagina<pe.gob.sgtm.valores.dominio.ValorEnConsulta> consultar(
+                pe.gob.sgtm.valores.dominio.CriterioDeConsultaDeValores criterio,
+                pe.gob.sgtm.compartido.Paginacion paginacion) {
+            throw new UnsupportedOperationException("Este doble no sirve la grilla de consulta");
+        }
+
         @Override
         public long siguienteCorrelativo(TipoValor tipo, Ejercicio ejercicio) {
             return guardados.stream().filter(v -> v.tipo() == tipo).count() + 1;
