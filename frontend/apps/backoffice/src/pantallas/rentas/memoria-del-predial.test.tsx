@@ -102,6 +102,13 @@ describe('la memoria de calculo se lee en el orden del calculo', () => {
       'Ir a las acciones',
     ]);
 
+    /* **El rótulo no cuenta la tabla como sección** (#342, nit 4): con las
+       tres secciones del manual más la tabla son cuatro entradas, y decir «4
+       secciones» acusaría a la tabla de serlo. Se dice «bloques» —la misma
+       palabra que ya usa el docblock de `previa`— solo cuando hay tabla; sin
+       ella (cualquier otra pantalla con índice) sigue diciendo «secciones». */
+    expect(indice.querySelector('.sgtm-indice__eyebrow')?.textContent).toBe('4 bloques');
+
     // Y esa entrada lleva a la tarjeta de la tabla, no a ningún sitio: un
     // `id` que no existe deja la entrada muda y nada lo delata.
     const aLaTabla = within(indice).getByRole('button', {

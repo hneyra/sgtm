@@ -30,7 +30,7 @@ UIT,,2022-01-01,2022-12-31,4600.00,,D.S. N.° 398-2021-EF,uit.md,JNA,Agent,
 UIT,,2023-01-01,2023-12-31,4950.00,,D.S. N.° 309-2022-EF,uit.md,JNA,Agent,
 UIT,,2024-01-01,2024-12-31,5150.00,,D.S. N.° 309-2023-EF,uit.md,JNA,Agent,
 UIT,,2025-01-01,2025-12-31,5350.00,,D.S. N.° 260-2024-EF,uit.md,JNA,Agent,
-UIT,,2026-01-01,2026-12-31,5500.00,,D.S. N.° 999-2025-EF,uit.md,JNA,Agent,
+UIT,,2026-01-01,2026-12-31,5500.00,,D.S. N.° 301-2025-EF,uit.md,JNA,Agent,
 TRAMO_PREDIAL,1,2004-11-15,,0.2,Hasta 15 UIT; 0.2%,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13",predial-tramos-y-alicuotas.md,JNA,HNA,
 TRAMO_PREDIAL,2,2004-11-15,,0.6,Más de 15 UIT y hasta 60 UIT; 0.6%,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13",predial-tramos-y-alicuotas.md,JNA,HNA,
 TRAMO_PREDIAL,3,2004-11-15,,1.0,Más de 60 UIT; 1.0%,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13",predial-tramos-y-alicuotas.md,JNA,HNA,
@@ -40,4 +40,4 @@ PREDIAL_MINIMO,,2004-11-15,,0.6,0.6% de la UIT vigente al 1 de enero del año al
 PLAZO,PRESCRIPCION-DECLARACION_PRESENTADA,2013-06-22,,4,"prescribe a los cuatro (4) años; deudor que presentó la declaración respectiva","TUO del Código Tributario, aprobado por D.S. N.º 133-2013-EF",prescripcion-y-plazos.md,JNA,HNA,4 ANIOS
 PLAZO,PRESCRIPCION-SIN_DECLARACION,2013-06-22,,6,seis (6) años para quienes no hayan presentado la declaración respectiva,"TUO del Código Tributario, aprobado por D.S. N.º 133-2013-EF",prescripcion-y-plazos.md,JNA,HNA,6 ANIOS
 PLAZO,PRESCRIPCION-AGENTE_RETENCION,2013-06-22,,10,prescriben a los diez (10) años cuando el Agente de retención o percepción,"TUO del Código Tributario, aprobado por D.S. N.º 133-2013-EF",prescripcion-y-plazos.md,JNA,HNA,10 ANIOS
-PLAZO,REC1_CUMPLIMIENTO,2004-01-10,,7,dentro del plazo de siete (7) días hábiles de notificado,"Ley N.º 26979, Ley de Procedimiento de Ejecución Coactiva",prescripcion-y-plazos.md,JNA,HNA,7 DIAS_HABILES
+PLAZO,REC1_CUMPLIMIENTO,2004-01-10,,7,dentro del plazo de siete (7) días hábiles de notificado,"Ley N.º 26979, Ley de Procedimiento de Ejecución Coactiva",prescripcion-y-plazos.md,JNA,HNA,7 DIAS_CALENDARIO

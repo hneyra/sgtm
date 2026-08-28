@@ -14,7 +14,7 @@
 #      VERIFICADO del corpus que su fila nombra, y que las dos firmas que van a
 #      `usuario_carga` y `usuario_aprueba` sean las que ese archivo declara. Es lo
 #      único desde lo que `PublicarParametros` escribe en `parametro_tributario`;
-#      y como hoy está en verde, corre además contra sus nueve muestras;
+#      y como hoy está en verde, corre además contra sus doce muestras;
 #   4. el **contrato de la API** (#312) — que `sgtm-v1.yaml` sea todavía lo que su
 #      generador produce. Es el gemelo de «el catálogo generado cuadra con el
 #      prototipo» del flujo de frontend, y existe porque el contrato dejó de
@@ -38,6 +38,10 @@ on:
       # La comprobación de valores normativos LEE las migraciones, para que una
       # cifra cargada por SQL no se escape del filtro de rutas.
       - 'backend/sgtm-esquema/src/main/resources/db/migration/**'
+      # Y la del derivado LEE `UnidadDePlazo` (#192): las unidades de plazo no se
+      # copian en el verificador, se leen del enumerado, así que una unidad nueva
+      # sin esta ruta cambiaría sin que corriese quien la mira.
+      - 'backend/sgtm-dominio-compartido/src/main/java/pe/gob/sgtm/dominio/UnidadDePlazo.java'
       # El contrato y el prototipo del que se deriva: son las DOS entradas del
       # generador de OpenAPI, y tocar cualquiera de ellas sin la otra es
       # exactamente lo que la comprobación tiene que ver.
