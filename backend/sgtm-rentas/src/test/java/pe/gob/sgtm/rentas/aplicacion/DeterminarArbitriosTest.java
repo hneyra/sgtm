@@ -258,6 +258,12 @@ class DeterminarArbitriosTest {
             return List.of();
         }
 
+        /** #42: esta prueba mira los beneficios del predio, no los del contribuyente. */
+        @Override
+        public List<Beneficio> vigentesDelContribuyente(long contribuyenteId, LocalDate fecha) {
+            return List.of();
+        }
+
         @Override
         public List<Beneficio> vigentesDelPredio(long predioId, String tributo, LocalDate fecha) {
             if (!inafectados.getOrDefault(predioId, Set.of()).contains(tributo)) {
@@ -309,6 +315,21 @@ class DeterminarArbitriosTest {
                 String documentoOrigen,
                 Observacion observacion) {
             generados.add(monto);
+        }
+
+        /** #42: este doble no liquida costas; el metodo existe para cumplir el puerto. */
+        @Override
+        public void generarGastoDelProcedimiento(
+                Ejercicio ejercicio,
+                long contribuyenteId,
+                String tributo,
+                String referenciaExterna,
+                Dinero monto,
+                LocalDate fechaValor,
+                String documentoOrigen,
+                Observacion observacion) {
+            throw new UnsupportedOperationException(
+                    "Las costas del procedimiento coactivo no pasan por esta prueba (#42)");
         }
     }
 

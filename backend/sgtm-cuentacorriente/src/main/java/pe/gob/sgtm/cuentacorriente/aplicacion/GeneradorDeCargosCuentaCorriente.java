@@ -58,4 +58,39 @@ public class GeneradorDeCargosCuentaCorriente implements GeneradorDeCargos {
                         documentoOrigen);
         registrar.asentar(asiento, observacion);
     }
+
+    /**
+     * La costa del procedimiento: {@code GASTO} en fase {@code COACTIVA}, sin periodo y sin unidad
+     * (#42).
+     *
+     * <p>Los dos valores que la distinguen —el concepto y la fase— se fijan aqui y no llegan por la
+     * firma: son tipos de {@code .dominio} y no cruzan el limite del modulo (ARQ-01 §4).
+     */
+    @Override
+    public void generarGastoDelProcedimiento(
+            Ejercicio ejercicio,
+            long contribuyenteId,
+            String tributo,
+            String referenciaExterna,
+            Dinero monto,
+            LocalDate fechaValor,
+            String documentoOrigen,
+            Observacion observacion) {
+        Asiento asiento =
+                Asiento.nuevo(
+                        ejercicio,
+                        contribuyenteId,
+                        tributo,
+                        Concepto.GASTO,
+                        TipoAsiento.CARGO,
+                        Fase.COACTIVA,
+                        null,
+                        null,
+                        null,
+                        referenciaExterna,
+                        monto,
+                        fechaValor,
+                        documentoOrigen);
+        registrar.asentar(asiento, observacion);
+    }
 }
