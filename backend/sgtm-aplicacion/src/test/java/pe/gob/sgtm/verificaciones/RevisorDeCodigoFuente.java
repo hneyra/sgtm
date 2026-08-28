@@ -86,6 +86,31 @@ public final class RevisorDeCodigoFuente {
                     "licencia_funcionamiento",
                     "licencia_duplicado",
                     "licencia_movimiento",
+                    // Con #48: el FUE de edificacion, sus cinco secciones, sus movimientos y sus
+                    // vigencias. Borrar un expediente seria borrar la unica constancia de que una
+                    // obra estuvo autorizada —y con ella el sustento del derecho de tramite que se
+                    // cobro—; borrar una version de seccion seria borrar lo que el administrado
+                    // declaro antes de corregirlo, que es justo lo que explica una observacion del
+                    // evaluador; y borrar una vigencia dejaria una licencia sin plazo o con el
+                    // plazo de la revalidacion como si fuera el original (AC 4).
+                    "licencia_edificacion",
+                    "edificacion_terreno",
+                    "edificacion_proyecto",
+                    "edificacion_estructura",
+                    "edificacion_profesional",
+                    "edificacion_requisito",
+                    "edificacion_movimiento",
+                    "edificacion_vigencia",
+                    // Con #50: el escrito que el administrado presento, la resolucion que la
+                    // gerencia dicto sobre su multa, y el paso del vehiculo por el deposito.
+                    // Borrar un descargo seria borrar la constancia de que alguien recurrio -y con
+                    // ella el computo del plazo-; borrar una resolucion, la del acto que ordeno la
+                    // cobranza o dejo la multa sin efecto; borrar un internamiento, la de que un
+                    // vehiculo estuvo retenido y devengo custodia.
+                    "descargo",
+                    "resolucion_gerencia",
+                    "internamiento",
+                    "internamiento_movimiento",
                     // Con #51: la autorizacion de anuncio y su historial. Borrar un anuncio seria
                     // borrar la unica explicacion de un cargo que YA ESTA EN EL LIBRO -registrar la
                     // autorizacion genera la deuda por su tasa-, y borrar un movimiento seria
@@ -95,6 +120,15 @@ public final class RevisorDeCodigoFuente {
                     "anuncio_movimiento",
                     "ficha_catastral",
                     "acta_fiscalizacion",
+                    // Con #49: la liquidacion de fiscalizacion, su contraste linea a linea y
+                    // su historial. Borrar una liquidacion seria borrar la constancia de que
+                    // se determino de oficio una diferencia -y de cuanto se le dijo al
+                    // contribuyente que debia-, que no esta en ningun otro sitio; borrar una
+                    // linea dejaria la liquidacion afirmando un total que su detalle ya no
+                    // sostiene.
+                    "liquidacion_fiscalizacion",
+                    "liquidacion_detalle",
+                    "liquidacion_movimiento",
                     "auditoria");
 
     /**
@@ -206,7 +240,57 @@ public final class RevisorDeCodigoFuente {
                     "licencia_funcionamiento",
                     "licencia_duplicado",
                     "licencia_movimiento",
-                    // Y la autorizacion de anuncio con su historial, con #51. Octava vez seguida y
+                    // Y con #50, la octava vez y por el mismo camino. V41 le retira a `descargo`
+                    // las columnas de resultado que V4 le habia puesto -el fallo dentro del
+                    // escrito que otro presento- y a `internamiento` la `fecha_salida`, y les
+                    // revoca el UPDATE. `resolucion_gerencia` e `internamiento_movimiento` nacen
+                    // sin el.
+                    //
+                    // La resolucion es el caso claro: se NOTIFICA al administrado, que se lleva el
+                    // papel. Corregirla en la base deja al papel notificado y al sistema diciendo
+                    // cosas distintas, y quien tenga el papel gana la discusion. Una equivocada se
+                    // deja sin efecto con otra, y las dos quedan. El internamiento es el otro: su
+                    // salida es un acto con su acta, no una fecha que se rellena encima del
+                    // ingreso.
+                    "descargo",
+                    "resolucion_gerencia",
+                    "internamiento",
+                    "internamiento_movimiento",
+                    // Y la liquidacion de fiscalizacion, con #49. Novena vez seguida por el
+                    // mismo camino, y aqui aplicado desde el principio: V39 nace SIN columna
+                    // de estado y sin conceder UPDATE, en vez de retirarlos despues. Una
+                    // liquidacion se NOTIFICA al contribuyente, que se lleva el papel;
+                    // corregirla en la base deja al papel y al sistema diciendo cosas
+                    // distintas, y quien tenga el papel gana la discusion. Se reliquida -otra
+                    // version que la referencia- o se anula con un movimiento.
+                    //
+                    // El detalle entra por lo mismo que `recibo_detalle`: es el desglose
+                    // congelado que explica la cifra notificada. Y el movimiento, por lo mismo
+                    // que `recibo_movimiento` (#34): si la cabecera ya no se puede tocar, la
+                    // tentacion siguiente es corregir la fila que dice en que estado esta.
+                    "liquidacion_fiscalizacion",
+                    "liquidacion_detalle",
+                    "liquidacion_movimiento",
+                    // Y el FUE de edificacion con sus secciones, sus movimientos y sus vigencias,
+                    // con #48. Decima vez seguida por el mismo camino: V43 le retira a
+                    // `licencia_edificacion` las columnas de estado y de valor de obra que V4 le
+                    // habia puesto, y le revoca el UPDATE; las cinco tablas de seccion no lo
+                    // reciben nunca, porque se VERSIONAN.
+                    //
+                    // Aqui hay ademas un motivo propio y es el que mas pesa: `valor_obra` era una
+                    // columna. Corregirla en el sitio dejaria el papel que el administrado exhibe
+                    // en la obra y la base diciendo cifras distintas, y esa cifra es la base del
+                    // derecho de tramite que se le cobro. Se retiro entera: la valorizacion se
+                    // calcula contra el cuadro de #17 y no se guarda (AC 2).
+                    "licencia_edificacion",
+                    "edificacion_terreno",
+                    "edificacion_proyecto",
+                    "edificacion_estructura",
+                    "edificacion_profesional",
+                    "edificacion_requisito",
+                    "edificacion_movimiento",
+                    "edificacion_vigencia",
+                    // Y la autorizacion de anuncio con su historial, con #51. Undecima vez seguida y
                     // por el mismo camino: V45 le retira a `anuncio` la columna de estado que V4 le
                     // habia puesto -decia VIGENTE para siempre- y le revoca el UPDATE. El estado se
                     // deriva de `anuncio_movimiento`, que solo se agrega.

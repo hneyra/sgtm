@@ -25,4 +25,20 @@ public interface LectorDeFichas {
      * 2030 tiene que seguir enlazada a la ficha que regia en 2024, no a la actual.
      */
     Optional<Long> fichaVigenteEn(long predioId, LocalDate fecha);
+
+    /**
+     * El area de terreno de <b>esa version</b> de ficha, por su identificador (#49, RF-055).
+     *
+     * <p>No «el area del predio»: la de la version concreta que otro contexto guardo. Es lo que
+     * permite comparar lo que el contribuyente declaro —su declaracion jurada referencia la ficha
+     * que la sustentaba, desde #28— contra lo que el catastro tiene inscrito hoy, que es
+     * exactamente la subvaluacion por ampliacion no declarada.
+     *
+     * <p>Devuelve el area y no la ficha entera por lo mismo que {@link #fichaVigenteEn} devuelve el
+     * identificador: quien compara superficies no necesita las construcciones ni las instalaciones,
+     * y traerlas obligaria a este modulo a exponer {@code FichaCatastral} completa.
+     *
+     * <p>Vacio si esa version no existe o es de otra municipalidad.
+     */
+    Optional<pe.gob.sgtm.dominio.AreaM2> areaDeLaVersion(long fichaId);
 }

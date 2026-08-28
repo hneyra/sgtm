@@ -15,6 +15,21 @@ dependencies {
     // importa el paquete raiz, que es su API publica: GeneradorDeCargos.
     implementation(project(":sgtm-cuentacorriente"))
 
+    // Con #50, tres APIs publicas mas. Nunca sus tablas: Spring Modulith verifica
+    // que no se cruce el limite (ARQ-01 §4).
+    //
+    //  - contribuyentes.DirectorioDeContribuyentes: el nombre y el domicilio del
+    //    obligado que la resolucion de gerencia imprime y notifica.
+    //  - parametros.LectorDeParametros: de ahi salen el plazo del descargo y el
+    //    que la resolucion ordinaria concede. Que esten en una norma es
+    //    exactamente lo que los hace dato (regla 5), igual que #39 y #41.
+    //  - tesoreria.CobrosDeTasas: la comprobacion de que la custodia esta pagada
+    //    antes de soltar un vehiculo del deposito. La casilla que el prototipo
+    //    dibuja la marca quien entrega el vehiculo; el recibo lo dice la caja.
+    implementation(project(":sgtm-contribuyentes"))
+    implementation(project(":sgtm-parametros"))
+    implementation(project(":sgtm-tesoreria"))
+
     // La prueba del repositorio corre contra PostgreSQL de verdad: provisiona la
     // base como un ambiente real y se conecta como sgtm_app, no como el
     // superusuario que entrega Testcontainers (CAL-01 §3.2).

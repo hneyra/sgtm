@@ -34,6 +34,23 @@ public interface DeclaracionJuradaRepository {
      */
     Pagina<DeclaracionJurada> deContribuyente(long contribuyenteId, Paginacion paginacion);
 
+    /**
+     * Las declaraciones <b>vigentes</b> de esos predios en ese ejercicio, para {@link
+     * pe.gob.sgtm.rentas.DeclaracionesDelEjercicio} (#49, RF-055).
+     *
+     * <p>Vigente es {@code PRESENTADA} u {@code OBSERVADA}: una {@code SUSTITUIDA} por una
+     * rectificatoria no es lo que el contribuyente declara hoy, y compararla contra lo hallado
+     * acusaria de subvaluacion a quien ya corrigio. Una {@code ANULADA} tampoco cuenta.
+     *
+     * <p>Por lote y no una por una: la deteccion de omisos recorre paginas del padron, y preguntar
+     * predio a predio seria una consulta por fila. Se apoya en {@code dj_ejercicio_predio_ix}
+     * (V39), que indexa exactamente esta pregunta.
+     *
+     * <p>Los predios sin declaracion no aparecen en la lista devuelta.
+     */
+    java.util.List<DeclaracionJurada> vigentesDePredios(
+            java.util.Collection<Long> predioIds, Ejercicio ejercicio);
+
     /** Inserta la declaracion y devuelve la fila guardada, con su {@code id} y su usuario. */
     DeclaracionJurada insertar(DeclaracionJurada declaracion);
 

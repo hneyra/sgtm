@@ -77,6 +77,45 @@ public class ActaFiscalizacionRepositoryJdbc extends RepositorioJdbc
                 acta.observacion());
     }
 
+    private static final String COLUMNAS =
+            "id, programa_id, version, contribuyente_id, predio_id, vehiculo_id, ficha_id,"
+                    + " fecha_visita, fiscalizador, hallazgo, area_hallada, detalle, estado,"
+                    + " observacion";
+
+    @Override
+    public java.util.Optional<ActaFiscalizacion> findById(long id) {
+        return jdbc().sql("SELECT " + COLUMNAS + DESDE + " WHERE id = :id")
+                .param("id", id)
+                .query(ActaFiscalizacionRepositoryJdbc::mapear)
+                .optional();
+    }
+
+    private static ActaFiscalizacion mapear(java.sql.ResultSet fila, int numeroDeFila)
+            throws java.sql.SQLException {
+        java.math.BigDecimal area = fila.getBigDecimal("area_hallada");
+        String hallazgo = fila.getString("hallazgo");
+        Object fichaId = fila.getObject("ficha_id");
+        Object predioId = fila.getObject("predio_id");
+        Object vehiculoId = fila.getObject("vehiculo_id");
+        return new ActaFiscalizacion(
+                fila.getLong("id"),
+                fila.getLong("programa_id"),
+                fila.getInt("version"),
+                fila.getLong("contribuyente_id"),
+                predioId == null ? null : fila.getLong("predio_id"),
+                vehiculoId == null ? null : fila.getLong("vehiculo_id"),
+                fichaId == null ? null : fila.getLong("ficha_id"),
+                fila.getDate("fecha_visita").toLocalDate(),
+                fila.getString("fiscalizador"),
+                hallazgo == null
+                        ? null
+                        : pe.gob.sgtm.fiscalizacion.dominio.Hallazgo.valueOf(hallazgo),
+                area == null ? null : new pe.gob.sgtm.dominio.AreaM2(area),
+                fila.getString("detalle"),
+                pe.gob.sgtm.fiscalizacion.dominio.EstadoDeActa.valueOf(fila.getString("estado")),
+                pe.gob.sgtm.dominio.Observacion.de(fila.getString("observacion")));
+    }
+
     @Override
     public int siguienteVersion(long programaId, long contribuyenteId) {
         Integer maxima =

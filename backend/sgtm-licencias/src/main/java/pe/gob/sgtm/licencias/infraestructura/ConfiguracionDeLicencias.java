@@ -2,6 +2,7 @@ package pe.gob.sgtm.licencias.infraestructura;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import pe.gob.sgtm.licencias.dominio.PlantillaDeNumeroDeEdificacion;
 import pe.gob.sgtm.licencias.dominio.PlantillaDeNumeroDeLicencia;
 
 /**
@@ -22,5 +23,19 @@ class ConfiguracionDeLicencias {
     @Bean
     PlantillaDeNumeroDeLicencia plantillaDeNumeroDeLicencia() {
         return PlantillaDeNumeroDeLicencia.POR_OMISION;
+    }
+
+    /**
+     * Y la de la licencia de <b>edificacion</b> (#48).
+     *
+     * <p>Es un bean aparte y de un tipo aparte a proposito: las dos numeraciones son independientes
+     * —una obra y un establecimiento no comparten correlativo— y con el mismo tipo Spring tendria
+     * dos candidatos y elegiria mal. Es ademas el defecto que la marcha blanca de #44 caza: sin el
+     * bean, la aplicacion real no arranca y las pruebas no lo notan, porque instancian el caso de
+     * uso a mano.
+     */
+    @Bean
+    PlantillaDeNumeroDeEdificacion plantillaDeNumeroDeEdificacion() {
+        return PlantillaDeNumeroDeEdificacion.POR_OMISION;
     }
 }

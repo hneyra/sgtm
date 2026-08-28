@@ -93,6 +93,17 @@ class NotificacionesPorContribuyenteControllerTest {
         }
 
         @Override
+        public Optional<Papeleta> porNumero(
+                pe.gob.sgtm.sanciones.dominio.Familia familia, String numero) {
+            return porNumero(numero);
+        }
+
+        @Override
+        public Optional<Papeleta> porId(long id) {
+            return Optional.empty();
+        }
+
+        @Override
         public Pagina<Papeleta> buscar(CriterioDePapeleta criterio, Paginacion paginacion) {
             this.ultimoCriterio = criterio;
             Papeleta papeleta =
@@ -105,6 +116,7 @@ class NotificacionesPorContribuyenteControllerTest {
                             10L,
                             null,
                             null,
+                            1L,
                             Dinero.de("5500"),
                             Alicuota.de("8"),
                             Dinero.de("440"),

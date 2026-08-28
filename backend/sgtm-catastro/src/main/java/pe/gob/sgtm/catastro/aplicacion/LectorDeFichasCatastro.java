@@ -23,4 +23,10 @@ public class LectorDeFichasCatastro implements LectorDeFichas {
     public Optional<Long> fichaVigenteEn(long predioId, LocalDate fecha) {
         return repositorio.vigenteA(predioId, TipoFicha.UNICA, fecha).map(ficha -> ficha.id());
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<pe.gob.sgtm.dominio.AreaM2> areaDeLaVersion(long fichaId) {
+        return repositorio.porId(fichaId).map(ficha -> ficha.areaTerreno());
+    }
 }
