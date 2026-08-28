@@ -347,6 +347,14 @@ export const NOTAS: Readonly<Record<string, string>> = {
 
   transferencia_vehiculo:
     'El valor de la transferencia se pide junto a «Transferente — documento», que no llega a ningún sitio: el sistema resuelve al transferente por quien figura hoy como titular del vehículo. El «Nº de expediente» no viaja —el backend no tiene ningún campo para él—.',
+  valores_individual:
+    'El valor formaliza una sola obligación: un tributo, un periodo. El número, la fecha de emisión, la base legal y los importes los calcula el servidor al emitir —no se pueden previsualizar antes— y la unidad (predio o placa) no viaja todavía: sin ella, el valor se emite sobre la obligación de ese tributo y ese ejercicio que no cuelga de una unidad concreta.',
+
+  valores_masivo:
+    'Esta corrida solo admite selección por código de contribuyente, uno por línea: la importación de una hoja de cálculo todavía no tiene control en el sistema. El sector, el monto mínimo de emisión y las dos exclusiones del catálogo no viajan —el servidor no los admite todavía—, y esta pantalla registra el criterio de la corrida: la generación de los valores corre aparte, y se revisa después en «Búsqueda y mantenimiento de valores».',
+
+  prescripcion:
+    'El plazo, el inicio y el nuevo inicio del cómputo, el resultado y el monto a extinguir los calcula el servidor a partir del conjunto sellado y de la deuda del contribuyente: no se escriben aquí. Esta pantalla solo declara una interrupción (art. 45); la suspensión (art. 46) todavía no tiene campo.',
 };
 
 /** Las opciones cuya escritura lleva nota. La comprobacion de coherencia las mira. */

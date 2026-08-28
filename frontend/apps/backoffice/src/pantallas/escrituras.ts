@@ -159,6 +159,128 @@ const resultadoDeNotificacionDe = (texto: string): string | undefined =>
   RESULTADO_DE_NOTIFICACION_DEL_BACKEND[texto];
 
 /**
+ * «Tipo de valor» del catalogo → `TipoValor.codigo()` (OP, RD, RM). Tres traducciones
+ * distintas y no una sola porque cada pantalla dibuja su propio vocabulario para lo mismo:
+ * `valores_busqueda` lo abrevia («RES. DETERMINACIÓN»), `valores_individual` lo escribe
+ * entero y `valores_masivo` no ofrece «RESOLUCIÓN DE MULTA» —una multa no se emite en
+ * bloque, se emite una a una tras una fiscalizacion—. Fusionar las tres en una tabla
+ * comun dejaria que una pantalla mandara un tipo que su propio desplegable no ofrece.
+ */
+const TIPO_DE_VALOR_INDIVIDUAL: Readonly<Record<string, string>> = {
+  'ORDEN DE PAGO': 'OP',
+  'RESOLUCIÓN DE DETERMINACIÓN': 'RD',
+  'RESOLUCIÓN DE MULTA': 'RM',
+};
+
+const tipoDeValorIndividualDe = (texto: string): string | undefined =>
+  TIPO_DE_VALOR_INDIVIDUAL[texto];
+
+const TIPO_DE_VALOR_MASIVO: Readonly<Record<string, string>> = {
+  'ORDEN DE PAGO': 'OP',
+  'RESOLUCIÓN DE DETERMINACIÓN': 'RD',
+};
+
+const tipoDeValorMasivoDe = (texto: string): string | undefined => TIPO_DE_VALOR_MASIVO[texto];
+
+/**
+ * «Tributo» del catalogo de `valores_individual`/`valores_masivo`/`prescripcion` →
+ * el codigo que `ConsultaDeDeudaPublica`/el libro reconocen.
+ *
+ * **No es `TRIBUTO_DEL_BACKEND`** (la de `alta_deuda`, mas arriba): esa traduce
+ * «ARBITRIOS MUNICIPALES»/«MULTA ADMINISTRATIVA», y estas tres pantallas dibujan
+ * «ARBITRIOS»/«MULTA» a secas —el mismo desplegable del manual, escrito distinto en
+ * cada pantalla del prototipo—. Los **codigos de destino son los mismos**
+ * (`SelectorDeObligacion.tributo()` se compara con `equalsIgnoreCase` contra lo que
+ * publica el libro, igual que en `alta_deuda`), asi que fusionar las llaves de origen
+ * en una sola tabla dejaria una de las dos pantallas sin su propia etiqueta.
+ */
+const TRIBUTO_DE_VALORES: Readonly<Record<string, string>> = {
+  'IMPUESTO PREDIAL': 'PREDIAL',
+  ARBITRIOS: 'ARBITRIO',
+  'PATRIMONIO VEHICULAR': 'VEHICULAR',
+  ALCABALA: 'ALCABALA',
+  MULTA: 'MULTA_ADMINISTRATIVA',
+};
+
+const tributoDeValoresDe = (texto: string): string | undefined => TRIBUTO_DE_VALORES[texto];
+
+/**
+ * La obligacion que formaliza `valores_individual` (`POST /valores`, #37, #75).
+ *
+ * `PeticionDeValor.obligaciones` es un arreglo, y el catalogo dibuja un formulario
+ * plano de una sola obligacion —un tributo, un periodo—: la pantalla
+ * (`GeneracionIndividualDeValores.tsx`) sincroniza esos dos campos en una tabla de,
+ * como mucho, una fila cada vez que cambian; no hay boton para anadir una segunda.
+ *
+ * `predioId`/`vehiculoId` no se declaran: son el identificador interno del predio o
+ * el vehiculo, y esta pantalla no tiene todavia un resolutor que los traduzca desde
+ * el codigo catastral o la placa (el que #331 le dio a `alta_deuda` es de esa
+ * pantalla, con su propio componente). Sin ellos, el selector cae sobre la
+ * obligacion del tributo/ejercicio que no cuelga de un predio o vehiculo concreto;
+ * el backend contesta `ObligacionSinDeuda` en vez de adivinar cual.
+ */
+const OBLIGACION_UNICA: TablaDelCuerpo = {
+  campo: 'obligaciones',
+  columnas: {
+    tributo: { campo: 'tributo', valor: tributoDeValoresDe },
+    periodo: { campo: 'ejercicio', entero: true },
+  },
+};
+
+/**
+ * El criterio de una corrida de `valores_masivo` (`POST /valores/masivo`, #38, #75).
+ *
+ * `IniciarCorridaMasiva` exige **exactamente uno** de `contribuyentes` (una lista de
+ * codigos) o `archivoCsv` (una hoja importada en base64): esta pantalla conecta solo
+ * el primero —«seleccion individual», en el vocabulario del javadoc de
+ * `PeticionDeValorMasivo`—, tecleado uno por linea. La importacion de hoja de
+ * calculo no tiene todavia ningun control en el catalogo ni en el prototipo —ni
+ * `type="file"` en ninguna pantalla del sistema— y anadir uno seria un componente
+ * escrito antes de que ninguna otra pantalla lo pida.
+ *
+ * `columnaUnica`: el backend declara `List<String>`, no una lista de objetos.
+ */
+const CONTRIBUYENTES_DE_LA_CORRIDA: TablaDelCuerpo = {
+  campo: 'contribuyentes',
+  columnaUnica: 'codigo',
+  columnas: { codigo: { campo: 'codigo' } },
+};
+
+/**
+ * La causal del art. 43 del TUO del Codigo Tributario que sustenta la prescripcion
+ * (`prescripcion`, `PeticionDePrescripcion.plazoAplicable`, #39, #75). Los tres
+ * plazos —4, 6 y 10 anios— **no viajan**: son la cifra normativa que vive en el
+ * parametro sellado (regla 5); lo que este desplegable manda es la causal, y el
+ * backend deriva el plazo de ella.
+ */
+const CAUSAL_DE_PRESCRIPCION: Readonly<Record<string, string>> = {
+  '4 AÑOS — DECLARACIÓN PRESENTADA': 'DECLARACION_PRESENTADA',
+  '6 AÑOS — NO PRESENTÓ DECLARACIÓN': 'SIN_DECLARACION',
+  '10 AÑOS — AGENTE DE RETENCIÓN': 'AGENTE_RETENCION',
+};
+
+const causalDePrescripcionDe = (texto: string): string | undefined => CAUSAL_DE_PRESCRIPCION[texto];
+
+/**
+ * El hecho que interrumpe el computo de la prescripcion (art. 45 del TUO), tal como
+ * lo elige el unico desplegable que el catalogo dibuja —«Acto de interrupcion»—.
+ *
+ * Es una tabla de, como mucho, una fila: `PrescripcionDeLaDeuda.tsx` la sincroniza
+ * con «NINGUNO» vaciandola. `clase` viaja fija en `INTERRUPCION` —el catalogo no
+ * dibuja ninguna suspension (art. 46), y esta pantalla no inventa la que no esta—.
+ * `fechaHasta` no se declara por el mismo motivo: una interrupcion no tiene fin, se
+ * cuenta de nuevo desde el dia siguiente (`ClaseDeHecho`).
+ */
+const HECHO_DE_INTERRUPCION: TablaDelCuerpo = {
+  campo: 'hechos',
+  columnas: {
+    clase: { campo: 'clase' },
+    causal: { campo: 'causal' },
+    fechaDesde: { campo: 'fechaDesde' },
+  },
+};
+
+/**
  * La tabla de pisos, que el alta de una ficha y su actualizacion declaran igual.
  *
  * Es la misma que `DeclaracionDeFicha.ConstruccionDeclarada` acepta en los dos verbos, y se
@@ -837,9 +959,110 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
     nota: true,
   },
 
-  // `pase_coactiva` no esta aqui a proposito, aunque `PeticionDeMovimiento` (#39) es un cuerpo
-  // tan plano como el de `notificacion_valores`: ver `pantallas/valores/index.ts` para por que
-  // conectarla hoy la haria menos segura, no mas.
+  /**
+   * Generacion individual de valores (`POST /valores`, #37, #75). Ver `OBLIGACION_UNICA`,
+   * `TIPO_DE_VALOR_INDIVIDUAL` y `TRIBUTO_DE_VALORES` mas arriba.
+   *
+   * `nroDeValor`, `fechaDeEmision`, `baseLegal` y toda la seccion «Importes» del catalogo
+   * son «ro»: el correlativo lo numera `ValorRepository.siguienteCorrelativo`, la fecha es
+   * la de hoy —`RegistrarValor.emitir` no acepta otra desde esta ruta— y `baseLegal` la
+   * deriva `TipoValor.baseLegal()` del tipo. El desglose (insoluto, reajuste, interes,
+   * gastos, total) es lo que la emision **congela**: no existe hasta que se emite, y
+   * `ValorDetalle` lo trae en la respuesta —esta pantalla no lo previsualiza, porque no hay
+   * ningun `GET` que calcule sin emitir—.
+   */
+  valores_individual: {
+    campos: {
+      tipoDeValor: { campo: 'tipo', valor: tipoDeValorIndividualDe },
+      codContribuyente: { campo: 'codContribuyente' },
+    },
+    tablas: { obligaciones: OBLIGACION_UNICA },
+    nota: true,
+  },
+
+  /**
+   * Generacion masiva de valores (`POST /valores/masivo`, #38, #75). Ver
+   * `CONTRIBUYENTES_DE_LA_CORRIDA`, `TIPO_DE_VALOR_MASIVO` y `TRIBUTO_DE_VALORES` mas
+   * arriba.
+   *
+   * `sector`, `montoMinimoDeEmisionS`, `excluyeContribuyentesConConvenio` y
+   * `excluyeDeudaReclamada` **no viajan**: `PeticionDeValorMasivo` no tiene ningun campo
+   * para ellos —`IniciarCorridaMasiva` filtra por tributo y ejercicio, no por sector ni
+   * por un monto minimo, y no excluye nada todavia—. Mandarlos seria fingir un filtro que
+   * el backend ignora en silencio.
+   *
+   * `fechaDeEmision` del catalogo se declara como `fechaCriterio`: es la fecha a la que se
+   * evalua la deuda disponible de cada candidato, congelada al registrar el criterio
+   * (`RegistrarValor.emitir(..., fecha)`), no la fecha en la que efectivamente corre la
+   * etapa «generacion» —que es un proceso aparte, en el perfil batch—.
+   */
+  valores_masivo: {
+    campos: {
+      tipoDeValor: { campo: 'tipo', valor: tipoDeValorMasivoDe },
+      ejercicioDesde: { campo: 'ejercicioDesde', entero: true },
+      ejercicioHasta: { campo: 'ejercicioHasta', entero: true },
+      tributo: { campo: 'tributo', valor: tributoDeValoresDe },
+      fechaDeEmision: { campo: 'fechaCriterio' },
+    },
+    tablas: { contribuyentes: CONTRIBUYENTES_DE_LA_CORRIDA },
+    nota: true,
+  },
+
+  /**
+   * Prescripcion de la deuda (`POST /coactiva/prescripcion`, #39, #75). Ver
+   * `CAUSAL_DE_PRESCRIPCION`, `HECHO_DE_INTERRUPCION` y `TRIBUTO_DE_VALORES` mas arriba.
+   *
+   * `ejerciciosSolicitados` del catalogo —un solo campo de texto libre, «2021 — 2026»— no
+   * se declara: `PeticionDePrescripcion` pide `ejercicioDesde`/`ejercicioHasta` como dos
+   * enteros separados, y partir un texto libre en dos numeros no es una traduccion de
+   * `CampoDelCuerpo.valor` —esa devuelve una cadena, no dos campos—.
+   * `PrescripcionDeLaDeuda.tsx` dibuja dos selectores de ejercicio en su lugar, y cada uno
+   * escribe el campo declarado que le toca.
+   *
+   * `inicioDelComputo`, `nuevoInicioDelComputo`, `fechaDePrescripcion`, `resultado` y
+   * `montoAExtinguirS` son «ro»: el computo, el veredicto y el monto los deriva el
+   * servidor del conjunto sellado y de la deuda del contribuyente; dejar que viajaran
+   * seria dejar que el cliente declarara prescrita una deuda que no lo esta.
+   */
+  prescripcion: {
+    campos: {
+      codContribuyente: { campo: 'codContribuyente' },
+      tributo: { campo: 'tributo', valor: tributoDeValoresDe },
+      ejercicioDesde: { campo: 'ejercicioDesde', entero: true },
+      ejercicioHasta: { campo: 'ejercicioHasta', entero: true },
+      fechaDePresentacion: { campo: 'fechaDePresentacion' },
+      plazoAplicable: { campo: 'plazoAplicable', valor: causalDePrescripcionDe },
+      nDeResolucion: { campo: 'nDeResolucion' },
+    },
+    tablas: { hechos: HECHO_DE_INTERRUPCION },
+    nota: true,
+  },
+
+  /**
+   * Pase de un valor a coactiva (`POST /valores/{numero}/movimientos`, #39, #75).
+   *
+   * `PeticionDeMovimiento` es un cuerpo tan plano como el de `notificacion_valores`, pero
+   * el catalogo dibuja las acciones de esta pantalla como `["Nuevo", "Modificar",
+   * "Generar", "Inactivar", "Imprimir"]` —la ultima es «Imprimir», que ni escribe de
+   * verdad ni es irreversible—, asi que el renderizador generico (que trata **la ultima**
+   * accion como la primaria que escribe) dejaria pasar un valor a coactiva sin ninguna
+   * confirmacion. Por eso vive en su propio componente (`PaseACoactiva.tsx`, en
+   * `COMPONENTES_PROPIOS` de `Pantalla.tsx`) con su propia barra de una sola accion —
+   * «Derivar a coactiva», la unica que escribe, siempre la primaria—, no en el
+   * renderizador generico.
+   *
+   * `tipoDeMovimiento` **no lo elige quien atiende**: `ValoresController.mover` rechaza
+   * cualquier valor que no sea `PCO` («#39 registra el pase (PCO). ACO/RCO son la
+   * respuesta de coactiva, y la escribe el modulo coactiva» — eso es #40, cuando exista
+   * el expediente que responde—), asi que la pantalla lo fija sola: no hay un desplegable
+   * pidiendo una eleccion que solo tiene una respuesta correcta.
+   */
+  pase_coactiva: {
+    campos: {
+      tipoDeMovimiento: { campo: 'tipoDeMovimiento' },
+      fechaDelMovimiento: { campo: 'fechaDelMovimiento' },
+    },
+  },
 
   /* ── Catastro: el territorio y la ficha (#320, #321) ─────────────────── */
 
