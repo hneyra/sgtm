@@ -410,6 +410,23 @@ const OPERACIONES_ADICIONALES = {
         ' líneas heredan el conjunto sellado de la versión anterior: una reliquidación corrige el' +
         ' contraste, no el marco normativo.',
     },
+    // Y transferir el resultado al padrón (#52, RF-054), que es la acción de la
+    // misma pantalla y la frontera delicada del sistema: el único camino por el
+    // que un dato de fiscalización pasa a ser el dato oficial.
+    {
+      operationId: 'transferir_a_rentas',
+      metodo: 'post',
+      ruta: '/api/v1/fiscalizacion/transferencias',
+      titulo: 'Transferencia a rentas del resultado fiscalizado',
+      descripcion:
+        'Inscribe lo hallado en el padrón como versión NUEVA de la ficha catastral —con origen' +
+        ' FISCALIZACION, el documento que la sustenta y la observación del usuario—, asienta los' +
+        ' cargos de la diferencia en la cuenta corriente y emite la resolución de determinación.' +
+        ' Los tres pasos van en una transacción: ficha nueva, asientos y resolución, o nada. La' +
+        ' versión anterior queda intacta, así que el padrón anterior se reconstruye pidiendo la' +
+        ' ficha vigente a una fecha anterior. Sin sustento documental no se transfiere, y' +
+        ' transferir dos veces la misma liquidación se rechaza.',
+    },
   ],
   // «Histórico de fiscalización predial» declara su GET; mover la liquidación
   // por sus estados —ABIERTA, EN PROCESO, LIQUIDADA, NOTIFICADA, ANULADA, que

@@ -17,6 +17,7 @@ import pe.gob.sgtm.catastro.dominio.FichaCatastralRepository;
 import pe.gob.sgtm.catastro.dominio.OrigenDeLaFicha;
 import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
 import pe.gob.sgtm.catastro.dominio.TipoFicha;
+import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.dominio.Observacion;
 
 /**
@@ -95,6 +96,82 @@ public class ActualizarFichaCatastral {
             @Nullable List<OtraInstalacion> instalaciones,
             @Nullable DetalleDeLaFicha detalle,
             Observacion observacion) {
+        return versionar(
+                predioId,
+                tipo,
+                desde,
+                origen,
+                documentoOrigen,
+                construcciones,
+                instalaciones,
+                detalle,
+                null,
+                null,
+                observacion);
+    }
+
+    /**
+     * La version que corrige la <b>estructura inscrita</b>: ademas del detalle, el area del terreno
+     * y el uso.
+     *
+     * <p>Existe desde #52 y la usa un solo llamador: {@link
+     * pe.gob.sgtm.catastro.TransferenciaDeFiscalizacion}, el puerto por el que {@code
+     * fiscalizacion} escribe en el padron. Es lo que RF-054 llama «lo hallado sobrescribe lo
+     * declarado», con la salvedad de que aqui nada se sobrescribe: se versiona.
+     *
+     * <p><b>Es un metodo aparte y no dos parametros mas en {@link #actualizar}</b>, y conviene
+     * saber por que. Hasta #52 <b>ninguna</b> ruta cambiaba el area ni el uso de una ficha: la
+     * pantalla de actualizacion del catastro versiona construcciones, instalaciones y detalle, y
+     * {@code siguienteVersion} copia el area y el uso tal cual. Anadirselos a la firma comun habria
+     * abierto esa puerta para todos los llamadores presentes y futuros; asi la puerta tiene un
+     * nombre, un usuario y una regla de arquitectura que la vigila.
+     *
+     * <p>{@code areaTerreno} y {@code uso} nulos significan «lo mismo que tenia», igual que las
+     * listas.
+     */
+    @Transactional
+    public FichaCatastral actualizarEstructura(
+            long predioId,
+            TipoFicha tipo,
+            LocalDate desde,
+            OrigenDeLaFicha origen,
+            String documentoOrigen,
+            @Nullable AreaM2 areaTerreno,
+            @Nullable String uso,
+            Observacion observacion) {
+        return versionar(
+                predioId,
+                tipo,
+                desde,
+                origen,
+                documentoOrigen,
+                null,
+                null,
+                null,
+                areaTerreno,
+                uso,
+                observacion);
+    }
+
+    /**
+     * Copiar, cerrar y abrir: el unico sitio donde una ficha se versiona.
+     *
+     * <p>No es {@code @Transactional} porque los dos metodos publicos que lo llaman ya lo son, y
+     * una llamada interna no pasaria por el proxy de Spring de todas formas. Que sean dos firmas y
+     * un solo cuerpo es lo que impide que un dia diverjan en el orden de cerrar y abrir.
+     */
+    private FichaCatastral versionar(
+            long predioId,
+            TipoFicha tipo,
+            LocalDate desde,
+            OrigenDeLaFicha origen,
+            String documentoOrigen,
+            @Nullable List<Construccion> construcciones,
+            @Nullable List<OtraInstalacion> instalaciones,
+            @Nullable DetalleDeLaFicha detalle,
+            @Nullable AreaM2 areaTerreno,
+            @Nullable String uso,
+            Observacion observacion) {
 
         FichaCatastral vigente =
                 repositorio
@@ -111,6 +188,12 @@ public class ActualizarFichaCatastral {
         }
         if (detalle != null) {
             siguiente = siguiente.conDetalle(detalle);
+        }
+        if (areaTerreno != null) {
+            siguiente = siguiente.conArea(areaTerreno);
+        }
+        if (uso != null) {
+            siguiente = siguiente.conUso(uso);
         }
 
         // Cerrar antes de abrir, y no al reves: ficha_vigente_uq es un indice unico parcial,

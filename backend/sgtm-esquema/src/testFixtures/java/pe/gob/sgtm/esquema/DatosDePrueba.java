@@ -1296,6 +1296,69 @@ public final class DatosDePrueba {
                         + " VALUES (?, 2026, 1)",
                 muni);
 
+        // La transferencia a rentas de esa liquidacion (#52, V49). Se siembra COMO OCURRE de
+        // verdad, y no con dos filas cualesquiera: se cierra la version vigente de la ficha
+        // unica, se abre la siguiente con `origen = FISCALIZACION`, y la resolucion apunta a las
+        // dos. Sembrarla de otro modo dejaria la fila cumpliendo sus CHECK y describiendo un
+        // padron imposible —dos versiones abiertas del mismo predio, o una transferencia predial
+        // sin ficha nueva—, y la prueba de aislamiento estaria aislando datos que no existen.
+        long fichaAnterior =
+                insertar(
+                        app,
+                        "UPDATE ficha_catastral SET vigencia_hasta = ?"
+                                + " WHERE predio_id = ? AND tipo = 'UNICA'"
+                                + "   AND vigencia_hasta IS NULL RETURNING id",
+                        VIGENCIA,
+                        predioId);
+        long fichaNueva =
+                insertar(
+                        app,
+                        "INSERT INTO ficha_catastral (municipalidad_id, predio_id, tipo, version,"
+                                + " area_terreno, uso, vigencia_desde, origen, documento_origen,"
+                                + " observacion, usuario_registro)"
+                                + " VALUES (?, ?, 'UNICA', 2, 300.00, 'CASA_HABITACION', ?,"
+                                + "         'FISCALIZACION', ?, 'version por fiscalizacion de"
+                                + " prueba', 'prueba') RETURNING id",
+                        muni,
+                        predioId,
+                        VIGENCIA,
+                        "LIQ-" + sufijo);
+        long documentoDeLaDeterminacion =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'RDF', ?, 2026, ?, CAST(? AS jsonb), 'PDF',"
+                                + "         repeat('f', 64), ?, 'siembra',"
+                                + "         'resolucion de determinacion de prueba') RETURNING id",
+                        muni,
+                        "RDF-2026-" + sufijo,
+                        "LIQ-" + sufijo,
+                        "{\"titulo\":\"Resolucion de determinacion\",\"subtitulo\":null,"
+                                + "\"aLaFecha\":\"2026-01-01\",\"cabecera\":[],\"tablas\":[],"
+                                + "\"pie\":[],\"duplicado\":null}",
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO resolucion_determinacion (municipalidad_id, numero, documento_id,"
+                        + " liquidacion_id, contribuyente_id, predio_id, ficha_anterior_id,"
+                        + " ficha_nueva_id, fecha, documento_sustento, sustento, base_legal,"
+                        + " usuario_registro, fecha_registro, observacion)"
+                        + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sustento de prueba',"
+                        + "         'Codigo Tributario, arts. 76 y 77', 'prueba', now(),"
+                        + "         'transferencia de prueba')",
+                muni,
+                "RDF-2026-" + sufijo,
+                documentoDeLaDeterminacion,
+                liquidacionId,
+                titular,
+                predioId,
+                fichaAnterior,
+                fichaNueva,
+                VIGENCIA,
+                "ACTA-" + sufijo);
+
         if (notificacionId <= 0) {
             throw new IllegalStateException("No se sembro la notificacion administrativa");
         }

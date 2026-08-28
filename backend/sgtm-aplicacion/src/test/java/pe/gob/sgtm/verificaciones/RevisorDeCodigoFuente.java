@@ -129,6 +129,11 @@ public final class RevisorDeCodigoFuente {
                     "liquidacion_fiscalizacion",
                     "liquidacion_detalle",
                     "liquidacion_movimiento",
+                    // Con #52: la transferencia a rentas y su resolucion de determinacion.
+                    // Borrarla seria borrar el unico acto que explica por que el padron cambio
+                    // -y con el, la version de ficha que se inscribio y el cargo que se le
+                    // asento a alguien-. Es la constancia de la frontera delicada del sistema.
+                    "resolucion_determinacion",
                     "auditoria");
 
     /**
@@ -302,7 +307,15 @@ public final class RevisorDeCodigoFuente {
                     // veces. Poder editarla en el sitio seria poder devengar de nuevo el mismo
                     // ejercicio cambiando una letra.
                     "anuncio",
-                    "anuncio_movimiento");
+                    "anuncio_movimiento",
+                    // Y la transferencia a rentas con su resolucion, con #52. Duodecima vez por el
+                    // mismo camino: V49 nace sin conceder UPDATE. Aqui el motivo es doble y el
+                    // segundo no lo tenia ninguna de las nueve anteriores: la resolucion se
+                    // NOTIFICA al contribuyente, que se lleva el papel, y ademas su cargo YA ESTA
+                    // en el libro y la version nueva de la ficha YA ESTA inscrita. Corregir la fila
+                    // dejaria al papel, al libro, al padron y a la base diciendo cuatro cosas
+                    // distintas, y la que se cobra en ventanilla es la del libro.
+                    "resolucion_determinacion");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =
@@ -402,12 +415,21 @@ public final class RevisorDeCodigoFuente {
      * <p>Ojo con el {@code \b}: no caza {@code TIPO_TASA = "TASA_ANUNCIO"} —el identificador no
      * <b>empieza</b> por la palabra— ni ningun {@code tasa_id = 1} de un SQL, porque el patron es
      * sensible a mayusculas y esta pensado para nombres de constante.
+     *
+     * <p>Con #52 entra {@code MULTA}, y es la tercera vez que el mismo hueco se abre por el mismo
+     * sitio. La transferencia a rentas asienta, junto al tributo omitido, la <b>multa tributaria
+     * del art. 176 del Codigo Tributario</b>, que se expresa como un porcentaje de la UIT y depende
+     * ademas del regimen de gradualidad; es D-02c, y hasta que cierre la liquidacion la deja en
+     * {@code null} (#198). Nada de la lista anterior caza {@code MULTA_DEL_ARTICULO_176 = new
+     * BigDecimal("0.50")}: no empieza por {@code UIT}, ni por {@code ALICUOTA}, ni por {@code
+     * TRAMO}. Y la consecuencia de compilarla no es cobrar de mas o de menos: es sancionar sin
+     * norma que lo sostenga, en todo el padron fiscalizado a la vez.
      */
     private static final Pattern CONSTANTE_NORMATIVA =
             Pattern.compile(
                     "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
-                            + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA|TASA|TARIFA)"
-                            + "\\w*\\s*=\\s*[^;\\n]*[0-9]");
+                            + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA|TASA|TARIFA"
+                            + "|MULTA)\\w*\\s*=\\s*[^;\\n]*[0-9]");
 
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
     private static final Pattern COMENTARIO_DE_BLOQUE = Pattern.compile("(?s)/\\*.*?\\*/");

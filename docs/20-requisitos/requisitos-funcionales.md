@@ -76,10 +76,10 @@ no que la pantalla cubra ya todas las secciones que el manual dibuja.
 | RF-051 | Registrar la ficha de fiscalización predial —homóloga de la ficha de rentas— y calcular el impuesto fiscalizado ‹bloqueado por D-02› | `fisc_predial` |
 | RF-052 | Registrar la fiscalización vehicular y calcular el impuesto fiscalizado ‹bloqueado por D-02› | `fisc_vehicular` |
 | RF-053 | **Liquidar** el resultado: consolidado de deudas y multas, con reliquidaciones | `fisc_resultados` |
-| RF-054 | **Transferir a rentas** lo fiscalizado: lo hallado sobrescribe lo declarado, dejando versión y sustento | `fisc_resultados` |
+| RF-054 | **Transferir a rentas** lo fiscalizado: lo hallado sobrescribe lo declarado, dejando versión y sustento ‹verificado en #52 contra PostgreSQL: la versión anterior queda intacta y cerrada, la nueva nace con `origen = FISCALIZACION`, y el padrón de antes se reconstruye pidiendo la ficha vigente a una fecha anterior. Con el último paso reventado no quedan ni la ficha nueva, ni los cargos, ni el papel› | `fisc_resultados` |
 | RF-055 | Identificar **omisos y subvaluadores** | `fisc_omisos` |
 | RF-056 | Consultar el estado de cuenta de fiscalización y el histórico de versiones de un proceso | `fisc_estado_cuenta`, `fisc_historico` |
-| RF-057 | Emitir la **resolución de determinación** de fiscalización | `resolucion_determinacion_fisc` |
+| RF-057 | Emitir la **resolución de determinación** de fiscalización ‹#52: es el acto que determina de oficio, con su documento y su numeración, no un `valor` de tipo RD —un valor formaliza deuda ya asentada, y esta resolución es la que la asienta—. Las cifras que D-02a bloquea salen como «—» y nunca como cero› | `resolucion_determinacion_fisc` |
 
 ## Sanciones — `sanciones`
 
