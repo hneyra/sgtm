@@ -18,7 +18,20 @@
    un padron de cientos de miles de filas ordena media tabla y miente, asi que
    los tres viajan al servidor.
 
+   **Este generador reproduce el contrato comprometido byte a byte** (#312). No lo
+   hizo durante quince issues: cada onda afino el YAML a mano —una respuesta 307,
+   un filtro que la pantalla no dibuja, una descripcion que el prototipo no puede
+   saber— y aplico al archivo solo el diff aditivo, de modo que regenerar en limpio
+   borraba 519 lineas y dos operaciones enteras. Lo afinado esta ahora aqui, en las
+   tablas de mas abajo: `DEL_BACKEND` para los parametros, `DESCRIPCIONES` para lo
+   que el prototipo no dice, `RESPUESTAS` para lo que el generador no sabria
+   inventar y `OPERACIONES_ADICIONALES` para los verbos sin pantalla propia.
+
+   El YAML sigue siendo la verdad: **lo que se mueve es el generador**. Si el
+   contrato y esta salida discrepan, lo que hay que corregir es lo de aqui.
+
    Uso: node docs/50-api/generar-openapi.mjs
+        node docs/50-api/generar-openapi.mjs --comprobar   no escribe; falla si no cuadra
 */
 
 import { createContext, runInContext } from 'node:vm';
@@ -64,6 +77,29 @@ function aClave(etiqueta) {
   return /^[0-9]/.test(camel) ? `c${camel}` : camel;
 }
 
+/* ── Textos largos ────────────────────────────────────────────────────────
+   Una descripcion de una linea va entre comillas; una de cinco, en bloque. El
+   YAML usa las dos y hay que devolver la misma, asi que el corte de linea es
+   parte del dato: se escribe aqui como se lee alli.
+
+   `bloque` es `>-` —el lector une las lineas con un espacio, o sea un parrafo—;
+   `literal` es `|` —el lector conserva los saltos, que es lo que hace falta
+   cuando el texto tiene dos parrafos—. */
+
+const bloque = (texto) => ({
+  lineas: texto.trim().split('\n').map((linea) => linea.trim()),
+  marca: '>-',
+});
+
+const literal = (texto) => ({
+  lineas: texto
+    .replace(/^\n/, '')
+    .replace(/\n[ ]*$/, '')
+    .split('\n')
+    .map((linea) => linea.trim()),
+  marca: '|',
+});
+
 /** Los filtros de una pantalla, con el nombre con el que viajan. */
 function filtrosDe(pantalla) {
   const usadas = new Set();
@@ -96,6 +132,29 @@ const PAGINACION = [
 ];
 
 /**
+ * Las pantallas que traen tabla pero **no** son GET y aun asi paginan.
+ *
+ * La paginacion se anade sola a las lecturas con tabla; `respaldo` trae tabla y
+ * su verbo es POST —lo fija el contrato del prototipo, no la pantalla—, pero
+ * `SesionController#respaldos` pagina igual que las lecturas: sin esto, la
+ * pantalla no podria pedir la pagina siguiente de un historico que solo crece.
+ */
+const PAGINAN_SIN_SER_GET = new Set(['respaldo']);
+
+/**
+ * El formato de salida de un reporte, que ninguna pantalla dibuja.
+ *
+ * Once pantallas de Transito e Infracciones administrativas responden JSON o
+ * documento segun este parametro (#53, RF-132). No sale del prototipo: la
+ * pantalla dibuja el boton «Imprimir» y no dice como viaja.
+ */
+const FORMATO_DE_REPORTE = {
+  nombre: 'formato',
+  ejemplo: '',
+  descripcion: 'PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)',
+};
+
+/**
  * Parametros que el backend tiene y la pantalla no dibuja.
  *
  * Misma regla que `PAGINACION`: cuando el backend ya existe, manda el backend.
@@ -104,9 +163,15 @@ const PAGINACION = [
  * todas las particiones, y con el volumen que alcanza esa tabla la diferencia
  * es entre una pantalla que responde y una que hay que cancelar.
  *
- * Esta lista es corta a proposito. Un parametro aqui es una divergencia entre
- * lo que la pantalla dibuja y lo que el servicio ofrece, y cada una se anota
- * con el controlador que la impone.
+ * Un parametro aqui es una divergencia entre lo que la pantalla dibuja y lo que
+ * el servicio ofrece, y cada una se anota con el controlador que la impone.
+ *
+ * Van delante de los filtros de la pantalla salvo que declaren `tras`, que los
+ * pone detras del parametro que nombran. Tres pantallas los intercalan: el
+ * «Año» y el «Tributo» de altas y bajas viven en la seccion «Filtros del
+ * detalle» y no en la barra de filtros; el `formato` y la `observacion` del
+ * duplicado se piden despues de haber elegido el recibo; y la fecha de corte de
+ * la consulta de vehiculos, despues del estado.
  */
 const DEL_BACKEND = {
   auditoria: [
@@ -116,12 +181,6 @@ const DEL_BACKEND = {
       descripcion: 'Ejercicio de trabajo. Obligatorio: es la clave de particion de la bitacora',
     },
   ],
-  // `respaldo` trae tabla pero su verbo es POST —lo fija el contrato del
-  // prototipo, no la pantalla—, y la paginacion solo se anade mas abajo
-  // cuando el metodo es GET. `SesionController#respaldos` sigue paginando
-  // igual que las lecturas: sin esto, la pantalla no podria pedir la pagina
-  // siguiente de un historico que solo crece.
-  respaldo: PAGINACION,
   // Las cuatro fichas responden **a una fecha**: sin ella, la que rige hoy; con
   // ella, la que regia entonces. Es lo que contesta «como estaba este predio
   // cuando se emitio el valor de 2027», que es la pregunta de una reclamacion.
@@ -169,15 +228,232 @@ const DEL_BACKEND = {
     {
       nombre: 'caja',
       ejemplo: 'C-01',
-      descripcion:
-        'Codigo de la ventanilla. Con `cajero`, responde ademas el arqueo en vivo de su turno',
+      descripcion: bloque(`
+        Codigo de la ventanilla. Junto con «cajero», la respuesta trae ademas el arqueo
+        EN VIVO de su turno: lo que la pantalla de cierre llama «Cuadrar», mirado antes
+        de firmar el acta (#36, RF-087). Del backend, no de la pantalla.
+      `),
     },
     {
       nombre: 'cajero',
       ejemplo: 'jperez',
-      descripcion: 'Cajero del turno. Solo tiene efecto junto con `caja`',
+      descripcion: bloque(`
+        Cajero del turno. Solo tiene efecto junto con «caja»; si ese cajero no abrio
+        turno ese dia, 404 —un arqueo en ceros haria pensar que abrio y no cobro—.
+      `),
     },
   ],
+  // El duplicado se pide sobre un recibo ya elegido, asi que sus dos parametros
+  // van detras de los filtros que lo eligen (#34, RF-132).
+  duplicado_recibo: [
+    {
+      nombre: 'formato',
+      ejemplo: '',
+      tras: 'caja',
+      esquema: '{ type: string, enum: [PDF, XLS, RTF] }',
+      descripcion: bloque(`
+        Sin el, la respuesta es el contenido del recibo en JSON: la vista previa, que
+        no emite nada. Con el, la respuesta es el duplicado como documento (#34,
+        RF-132).
+      `),
+    },
+    {
+      nombre: 'observacion',
+      ejemplo: '',
+      tras: 'formato',
+      descripcion: bloque(`
+        Por que se pide el duplicado. Obligatoria cuando se pide con «formato»: cada
+        reimpresion queda registrada con quien la genero, y eso es una escritura
+        (regla 10, RNF-052). Va en la consulta y no en el cuerpo porque el verbo de
+        esta operacion lo fija el prototipo, y un GET no lleva cuerpo.
+      `),
+    },
+  ],
+  // «Año» y «Tributo» los dibuja la pantalla, pero en la seccion «Filtros del
+  // detalle» y no en la barra de filtros, que es lo unico que el prototipo
+  // publica como `filters`. Por eso van aqui, y entre los dos que los rodean.
+  consulta_altas_bajas: [
+    {
+      nombre: 'ano',
+      ejemplo: '',
+      tras: 'codigoCont',
+      descripcion: 'Filtro «Año» de la pantalla, dentro de «Filtros del detalle»',
+    },
+    {
+      nombre: 'tributo',
+      ejemplo: '',
+      tras: 'ano',
+      descripcion: 'Filtro «Tributo» de la pantalla, dentro de «Filtros del detalle»',
+    },
+  ],
+  // La deuda de cada fila se actualiza a una fecha, y la fila la dice (regla 9).
+  consulta_vehiculos: [
+    {
+      nombre: 'fecha',
+      ejemplo: '',
+      tras: 'estado',
+      descripcion: 'Fecha de corte de la deuda de cada fila. Sin ella, hoy',
+    },
+  ],
+  // La constancia no dibuja filtros: es un formulario. Pero acredita **a una
+  // fecha**, y sin el contribuyente no hay a quien acreditar.
+  constancia: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      descripcion: 'Filtro «Cod. Contribuyente» de la pantalla',
+    },
+    { nombre: 'fecha', ejemplo: '', descripcion: 'Fecha de corte; sin ella, la de hoy' },
+  ],
+  // Las once pantallas que salen en papel (#53, RF-132).
+  ...Object.fromEntries(
+    [
+      'transito_record_conductor',
+      'transito_record_vehicular',
+      'transito_padron',
+      'transito_padron_coactiva',
+      'transito_padron_constancias',
+      'transito_resumen_recaudacion',
+      'transito_resumen_papeletas',
+      'transito_resumen_codigo',
+      'transito_resumen_placa',
+      'adm_padron_notificaciones',
+      'adm_resumen_recaudacion',
+    ].map((id) => [id, [FORMATO_DE_REPORTE]]),
+  ),
+};
+
+/**
+ * Lo que la pantalla dice de si misma, corregido por lo que el backend hace.
+ *
+ * El `desc` del prototipo describe **la pantalla**, y sirve mientras la
+ * operacion no existe. Cuando existe, hay cosas que solo se saben desde el
+ * codigo —que la generacion masiva no emite ningun valor sino que deja la
+ * corrida para el perfil batch, que lo recaudado se lee del libro y no sumando
+ * papeletas pagadas, que un filtro que este servicio no sirve responde 422 en
+ * vez de devolver el padron entero—, y esas son las que se leen en la consola
+ * de un cliente que integra contra el contrato.
+ *
+ * Cada entrada nombra el issue que la escribio. Una descripcion aqui es la
+ * pantalla explicada por su implementacion; una pantalla sin entrada es una
+ * pantalla que todavia no la tiene.
+ */
+const DESCRIPCIONES = {
+  // Transito (#53)
+  transito_valores: bloque(`
+    Registra el criterio de una generación masiva de valores por papeletas de tránsito, por
+    selección de números o por rango de fechas (#53, RF-066, RF-073). Devuelve la corrida y
+    sus candidatos; **no emite ningún valor**: la generación corre después, en el perfil
+    batch. El número de cada resolución de multa lo pone \`valor_correlativo\` (#37) y **no
+    entra por el cuerpo**.
+  `),
+  transito_record_conductor: bloque(`
+    Historial de infracciones de un conductor, por licencia de conducir o por documento del
+    infractor (#53, RF-068). Uno de los dos es obligatorio: sin filtro esto sería el padrón
+    entero con otro título. Con \`?formato=PDF|XLS|RTF\` sale como documento (RF-132).
+  `),
+  transito_record_vehicular: bloque(`
+    Historial de papeletas de un vehículo (#53, RF-068). La placa es obligatoria, por el mismo
+    motivo que la licencia en el record de conductor. Con \`?formato=PDF|XLS|RTF\` sale como
+    documento (RF-132).
+  `),
+  transito_constancia_libre: bloque(`
+    Emite el documento con el que la municipalidad acredita que un vehículo no registra
+    papeletas de tránsito pendientes (#53, RF-068). \`verificadaAl\` es el día al que se
+    acredita —no el de emisión— y viaja impreso en el papel (regla 9, RNF-075). Si a esa fecha
+    hay una sola papeleta pendiente responde **409** con los números que lo impiden. La
+    respuesta es el archivo, en el formato pedido.
+  `),
+  transito_padron: bloque(`
+    Padrón de papeletas de tránsito por intervalo de fechas de infracción y estado (#53,
+    RF-073). El importe de cada fila es el **del acta**, congelado al registrar la papeleta, y
+    viaja con su fecha. Con \`?formato=PDF|XLS|RTF\` sale como documento (RF-132).
+  `),
+  transito_padron_coactiva: bloque(`
+    Padrón de las papeletas que ya tienen su resolución de multa emitida (#53, RF-073). El
+    ejecutor y el estado del expediente **no** son columnas de la papeleta: viven en el
+    expediente coactivo y ese corte lo sirve \`GET /coactiva/expedientes\`; mandarlos aquí
+    responde 422 diciéndolo, en vez de devolver el padrón sin filtrar.
+  `),
+  transito_padron_constancias: bloque(`
+    Padrón de constancias libres de infracciones emitidas (#53, RF-068). Cada fila lleva su
+    \`verificadaAl\` junto a la fecha de emisión: son cosas distintas y la que acredita es la
+    primera.
+  `),
+  transito_resumen_recaudacion: bloque(`
+    Lo recaudado por papeletas de tránsito, según el **libro de cuenta corriente**: la suma
+    exacta de los abonos vivos, desglosada por ejercicio, mes y tipo de cobranza (#53,
+    RF-073). No se recompone sumando papeletas pagadas —esa cifra no cuenta los intereses
+    cobrados, cuenta entero un pago parcial y sigue contando un recibo anulado—. El filtro por
+    caja no se sirve aquí: la caja es de tesorería (\`GET /tesoreria/recaudacion/por-area\`).
+  `),
+  transito_resumen_papeletas: bloque(`
+    Cuántas papeletas hay y por cuánto, agrupadas por estado, código, iniciales de placa o mes
+    (#53, RF-073). Todos los importes son los **de las actas**, no lo cobrado: lo cobrado está
+    en \`transito_resumen_recaudacion\`. Cada línea trae las pendientes y las que están en
+    coactiva en columnas separadas, así que no hace falta pedir el resumen dos veces.
+  `),
+  transito_resumen_codigo: bloque(`
+    El mismo resumen agrupado por código de infracción, con su descripción (#53, RF-073).
+  `),
+  transito_resumen_placa: bloque(`
+    El mismo resumen agrupado por las dos letras iniciales de la placa (#53, RF-073). El
+    filtro por iniciales se resuelve como rango y no como \`LIKE\`: bajo RLS un \`LIKE 'AB%'\` no
+    llega nunca al índice.
+  `),
+  // Infracciones administrativas (#53)
+  adm_valores: bloque(`
+    Lo mismo que \`transito_valores\` para la familia administrativa, con su propio permiso
+    (#53, RF-066). Detrás es el mismo caso de uso con otra familia: quien puede emitir los
+    valores administrativos no tiene por qué poder emitir los de tránsito.
+  `),
+  adm_reportes: bloque(`
+    Emisor de los reportes del módulo de infracciones administrativas (#53, RF-074). El campo
+    \`reporte\` elige entre \`PADRON_NOTIFICACIONES\`, \`RESUMEN_PAPELETAS\` y
+    \`RESUMEN_RECAUDACION\`; con \`formato\` la respuesta es el documento en PDF, hoja de cálculo
+    o texto enriquecido (RF-132), y sin él, el JSON. No hay ninguna consulta nueva detrás:
+    llama a las mismas que los GET.
+  `),
+  adm_padron_notificaciones: bloque(`
+    Relación de notificaciones administrativas emitidas en un intervalo, con la papeleta que
+    las siguió cuando la hay (#53, RF-074). Las tres columnas de la papeleta —número, estado e
+    importe del acta— solo tienen valor cuando existe.
+  `),
+  adm_resumen_recaudacion: bloque(`
+    Lo recaudado por multas administrativas, según el libro (#53, RF-074). Mismo criterio que
+    el de tránsito: la suma exacta de los abonos vivos.
+  `),
+};
+
+/**
+ * Lo que un filtro de la pantalla hace de verdad, cuando no es lo que promete.
+ *
+ * El texto por omision de un filtro es «Filtro «X» de la pantalla», y describe
+ * el control, no el comportamiento. Cuando el servicio lo sirve a medias —o no
+ * lo sirve— hay que decirlo aqui: un filtro que el backend ignora en silencio es
+ * la clase de cosa por la que alguien confia en una lista que no filtro nada.
+ */
+const DESCRIPCIONES_DE_FILTRO = {
+  consulta_fichas: {
+    conciliadaConRentas:
+      'Filtro «Conciliada con rentas» de la pantalla. Esta ruta no lo resuelve —el estado de' +
+      ' conciliación se deriva de `declaracion_jurada`, que es de rentas, y catastro no puede' +
+      ' depender de rentas (ADR-0015 §2)—: la petición que lo trae se redirige con 307 a' +
+      ' `/catastro/fichas/conciliacion`, que es la misma grilla servida por rentas.',
+  },
+  consulta_altas_bajas: {
+    autoManual:
+      'Filtro «Auto / Manual» de la pantalla. El backend todavia no distingue un movimiento' +
+      ' automatico de uno manual y lo ignora',
+  },
+  consulta_vehiculos: {
+    estado:
+      'Filtro «Estado» de la pantalla. Solo «BAJA» filtra contra el padron; el resto —AFECTO,' +
+      ' INAFECTO, EXONERADO— es afectacion calculada y no se traduce todavia',
+  },
+  costas_procesales_listado: {
+    estado: 'Filtro «Estado» de la pantalla. Se derivan del libro: ACTIVA o CANCELADA',
+  },
 };
 
 /**
@@ -197,6 +473,22 @@ const DEL_BACKEND = {
  * `ruta` es opcional: sin ella, la operacion cuelga de la misma ruta que la
  * pantalla (el caso de `permisos`, dos verbos en una ruta); con ella, de otra
  * —`calles` lee en `/catastro/vias` y edita en `/catastro/vias/{codigo}`—.
+ *
+ * Lo demas es opcional y solo aparece donde el contrato lo pide:
+ *
+ * - `filtrosDeLaPantalla`, `parametros`, `paginacion`: una adicional no hereda
+ *   los filtros de la pantalla —no es la misma consulta—, pero las grillas que
+ *   solo existen porque la pantalla declaro su POST si son exactamente esa
+ *   consulta, y entonces lo dicen.
+ * - `descripcionesDeRuta`: que identifica el `{tramo}` del camino, cuando no se
+ *   deduce de su nombre.
+ * - `antes`: la adicional se escribe **antes** que la de la pantalla en la ruta
+ *   que comparten. Es el caso de las dos grillas que se leen al abrir una
+ *   pantalla cuyo verbo declarado emite: primero se mira, despues se emite.
+ * - `tras`: la adicional se escribe despues de la operacion de **otra** pantalla
+ *   y no de la suya. Dos grupos del contrato quedaron asi, y el orden de las
+ *   claves de un `paths` no significa nada en OpenAPI; lo que si significa es
+ *   que este archivo devuelva el contrato tal como esta comprometido (#312).
  */
 const OPERACIONES_ADICIONALES = {
   permisos: [
@@ -209,6 +501,25 @@ const OPERACIONES_ADICIONALES = {
         ' de guardarla (PUT de la misma ruta). No trae las 134 opciones del catalogo:' +
         ' solo las que el grupo ya tiene.',
     },
+    // Y la matriz del usuario en curso, que no es una opcion del catalogo y por
+    // eso no puede salir de ninguna pantalla (ADR-0013, #12). La interfaz
+    // aprende sus permisos de aqui y no del token: es lo unico que sabe lo que
+    // el backend concede de verdad.
+    {
+      operationId: 'permisos_de_la_sesion',
+      metodo: 'get',
+      ruta: '/api/v1/seguridad/sesion/permisos',
+      titulo: 'Permisos efectivos de la sesión',
+      descripcion: literal(`
+        La matriz de permisos del usuario en curso: por cada opción del catálogo
+        sobre la que tiene algún privilegio, la lista de privilegios. La interfaz
+        la usa para dibujar el menú y la paleta de comandos.
+
+        Autenticada, pero **no es una opción del catálogo**: leer los permisos
+        propios no revela nada que no se pueda enumerar probando cada endpoint
+        (REQ-03 §5). Un usuario sin ningún permiso recibe \`{}\`, no un 403.
+      `),
+    },
   ],
   // `internamiento` declara «GET /transito/internamientos» como su endpoint —la
   // grilla del deposito—; sus dos acciones, «Registrar ingreso» y «Liberar
@@ -217,22 +528,27 @@ const OPERACIONES_ADICIONALES = {
     {
       operationId: 'registrar_internamiento',
       metodo: 'post',
-      titulo: 'Registro de ingreso al deposito',
-      descripcion:
-        'Interna un vehiculo en el deposito municipal y emite su acta. El cuerpo lleva la' +
-        ' placa, el deposito, el concepto del TUPA con que se cobrara la custodia y la' +
-        ' observacion del usuario, obligatoria (RNF-052).',
+      titulo: 'Registro de ingreso al depósito',
+      descripcion: bloque(`
+        Interna un vehículo en el depósito municipal y emite su acta (#50, RF-064). La
+        pantalla «Internamiento vehicular» declara «GET /transito/internamientos» como su
+        endpoint —la grilla— y su acción «Registrar ingreso» necesita un verbo aparte. El
+        cuerpo lleva la placa, el depósito, el concepto del TUPA con que se cobrará la
+        custodia y la observación del usuario, obligatoria (RNF-052).
+      `),
     },
     {
       operationId: 'liberar_internamiento',
       metodo: 'post',
       ruta: '/api/v1/transito/internamientos/{placa}/liberacion',
-      titulo: 'Liberacion del vehiculo internado',
-      descripcion:
-        'Entrega el vehiculo a quien lo retira y emite el acta de liberacion. Exige el' +
-        ' recibo con que se pago la custodia: el backend lo acredita contra `tesoreria`' +
-        ' por su API publica, y sin esa acreditacion el vehiculo no sale. La casilla' +
-        ' «Custodia cancelada» de la pantalla no basta: la marca quien entrega el vehiculo.',
+      titulo: 'Liberación del vehículo internado',
+      descripcion: bloque(`
+        Entrega el vehículo a quien lo retira y emite el acta de liberación (#50, RF-064).
+        Exige el recibo con que se pagó la custodia: el backend lo acredita contra
+        \`tesoreria\` por su API pública, y sin esa acreditación el vehículo no sale. La
+        casilla «Custodia cancelada» de la pantalla no basta —la marca quien entrega el
+        vehículo—.
+      `),
     },
   ],
   // `transito_rg_ordinaria` declara «POST /transito/resoluciones/ordinaria»
@@ -245,12 +561,17 @@ const OPERACIONES_ADICIONALES = {
       operationId: 'notificar_resolucion_transito',
       metodo: 'post',
       ruta: '/api/v1/transito/resoluciones/{numero}/notificacion',
-      titulo: 'Notificacion de resolucion de gerencia de transito',
-      descripcion:
-        'Cedula de notificacion de la resolucion ordinaria o sancionadora de transito, con' +
-        ' su acuse. Es de donde sale el derecho a la sancionadora: la diligencia que surte' +
-        ' efecto sobre la ordinaria fija, con el plazo parametrizado del conjunto sellado,' +
-        ' el dia desde el que se puede sancionar.',
+      tras: 'transito_rg_sancionadora',
+      titulo: 'Notificación de resolución de gerencia de tránsito',
+      descripcion: bloque(`
+        Cédula de notificación de la resolución ordinaria o sancionadora de tránsito, con
+        su acuse (#50, RF-074). **Es de donde sale el derecho a la sancionadora**: la
+        diligencia que surte efecto sobre la ordinaria fija, con el plazo parametrizado del
+        conjunto sellado, el día desde el que se puede sancionar. Infracciones
+        administrativas tiene la suya
+        (\`/infracciones/administrativas/resoluciones/{id}/notificacion\`); tránsito no la
+        tenía, y sin ella la sancionadora no se puede dictar nunca.
+      `),
     },
   ],
   // `calles` declara «GET /catastro/vias» como su endpoint —la lectura del
@@ -320,9 +641,10 @@ const OPERACIONES_ADICIONALES = {
   // petición que trae el filtro: ignorarlo devolvería el listado sin filtrar,
   // que es un resultado plausible y equivocado.
   //
-  // Los parámetros de esta operación están escritos a mano en el YAML, como los
-  // de `certificados_listado` (#312): son los cinco filtros de la pantalla más
-  // `conciliadaConRentas`, `ejercicio`, `fecha` y la paginación.
+  // Sus parámetros **no** son los de la pantalla: `ConciliacionController` acepta
+  // además `tipo`, que la grilla de catastro no dibuja, y da a
+  // `conciliadaConRentas` un significado propio. Van declarados uno a uno, en el
+  // orden del controlador.
   consulta_fichas: [
     {
       operationId: 'consulta_fichas_conciliacion',
@@ -333,11 +655,42 @@ const OPERACIONES_ADICIONALES = {
         'La misma grilla de `consulta_fichas` con la columna «Conciliada» y el filtro' +
         ' `conciliadaConRentas`. Un predio está conciliado a un ejercicio cuando existe una' +
         ' declaración jurada de ese ejercicio, con su mismo `predio_id`, en estado PRESENTADA u' +
-        ' OBSERVADA (ADR-0015 §1). La sirve `rentas` y no `catastro`, pero el acceso que exige es' +
-        ' el de la pantalla, `consulta_fichas`. De la declaración jurada no viaja nada: solo el' +
-        ' derivado y el ejercicio al que responde (regla 9). `conciliadaConRentas=No` —la lista de' +
-        ' los predios que no generan deuda predial— exige además privilegio de lectura sobre' +
-        ' `fisc_omisos` y deja fila en la bitácora con operación ACCESO.',
+        ' OBSERVADA (ADR-0015 §1). La sirve `rentas` y no `catastro` —el derivado sale de la' +
+        ' declaración jurada y catastro no puede depender de rentas—, pero el acceso que exige es' +
+        ' el de la pantalla, `consulta_fichas`. De la declaración jurada no viaja nada: ni su' +
+        ' número, ni su tipo, ni sus importes, ni quién la presentó; solo el derivado y el' +
+        ' ejercicio al que responde (regla 9). `conciliadaConRentas=No` —la lista de los predios' +
+        ' que no generan deuda predial— exige además privilegio de lectura sobre `fisc_omisos` y' +
+        ' deja fila en la bitácora con operación ACCESO.',
+      parametros: [
+        { nombre: 'codRefCatastral', descripcion: 'Filtro «Cod. Ref. Catastral» de la pantalla' },
+        { nombre: 'contribuyente', descripcion: 'Filtro «Contribuyente» de la pantalla' },
+        { nombre: 'manzana', descripcion: 'Filtro «Manzana» de la pantalla' },
+        { nombre: 'lote', descripcion: 'Filtro «Lote» de la pantalla' },
+        { nombre: 'tipo', descripcion: 'UNICA | ECONOMICA | BIENES_COMUNES | RURAL' },
+        {
+          nombre: 'conciliadaConRentas',
+          ejemplo: 'Todas',
+          descripcion:
+            'Todas | Sí | No. «No» exige privilegio de lectura sobre `fisc_omisos` y queda' +
+            ' registrado en la bitácora (ADR-0015 §2.3).',
+        },
+        {
+          nombre: 'ejercicio',
+          ejemplo: '2026',
+          descripcion:
+            'A qué ejercicio responde la conciliación; si falta, el de la fecha de corte. La' +
+            ' respuesta lo dice siempre (regla 9, RNF-075)',
+        },
+        {
+          nombre: 'fecha',
+          ejemplo: '2026-08-28',
+          descripcion:
+            'Fecha de corte a la que se resuelven la versión de ficha y el titular vigentes; si' +
+            ' falta, hoy',
+        },
+      ],
+      paginacion: true,
     },
   ],
   // Las cuatro pantallas de ficha declaran «GET /catastro/fichas/…/{codigo}»
@@ -420,6 +773,7 @@ const OPERACIONES_ADICIONALES = {
       operationId: 'liquidar_fiscalizacion',
       metodo: 'post',
       ruta: '/api/v1/fiscalizacion/liquidaciones',
+      tras: 'fisc_historico',
       titulo: 'Liquidación de un acta de fiscalización',
       descripcion:
         'Emite la liquidación de un acta: el contraste hallado/declarado, una línea por unidad y' +
@@ -432,6 +786,7 @@ const OPERACIONES_ADICIONALES = {
       operationId: 'reliquidar_fiscalizacion',
       metodo: 'post',
       ruta: '/api/v1/fiscalizacion/liquidaciones/{numero}/reliquidaciones',
+      tras: 'fisc_historico',
       titulo: 'Reliquidación',
       descripcion:
         'Corrige una liquidación emitiendo OTRA versión que la referencia. La anterior no cambia' +
@@ -446,6 +801,7 @@ const OPERACIONES_ADICIONALES = {
       operationId: 'transferir_a_rentas',
       metodo: 'post',
       ruta: '/api/v1/fiscalizacion/transferencias',
+      tras: 'fisc_historico',
       titulo: 'Transferencia a rentas del resultado fiscalizado',
       descripcion:
         'Inscribe lo hallado en el padrón como versión NUEVA de la ficha catastral —con origen' +
@@ -558,6 +914,16 @@ const OPERACIONES_ADICIONALES = {
     {
       operationId: 'certificados_listado',
       metodo: 'get',
+      antes: true,
+      filtrosDeLaPantalla: true,
+      parametros: [
+        {
+          nombre: 'solicitante',
+          descripcion:
+            'Filtro por nombre del solicitante; se resuelve contra el padrón por aproximación',
+        },
+      ],
+      paginacion: true,
       titulo: 'Certificados emitidos',
       descripcion:
         'La grilla «Certificados emitidos» de la pantalla `certificados`, que declara el POST' +
@@ -570,6 +936,7 @@ const OPERACIONES_ADICIONALES = {
       operationId: 'imprimir_certificado',
       metodo: 'post',
       ruta: '/api/v1/licencias/certificados/{numero}/impresion',
+      descripcionesDeRuta: { numero: 'El número del certificado, tal como está impreso' },
       titulo: 'Impresión de un certificado emitido',
       descripcion:
         'Vuelve a sacar un certificado ya emitido, con su número original y en el formato que se' +
@@ -578,7 +945,27 @@ const OPERACIONES_ADICIONALES = {
         ' backend comprueba el SHA-256 antes de entregarlo: si dibujar esos datos ya no da los' +
         ' mismos bytes, la reimpresión falla en lugar de entregar un papel distinto al original' +
         ' con el mismo número. Escribe —cuenta la reimpresión y deja su traza—, así que el cuerpo' +
-        ' lleva la observación del usuario, obligatoria (RNF-052).',
+        ' lleva la observación del usuario, obligatoria (RNF-052). Es la acción «Imprimir' +
+        ' certificado» de la pantalla.',
+    },
+  ],
+  // `costas_procesales` declara «POST /coactiva/liquidaciones-costas» como su
+  // endpoint —liquidar—; su grilla «Liquidaciones encontradas» necesita verbo
+  // propio (#42). Mismo reparto que `certificados`: si el POST devolviera
+  // tambien la grilla, abrir la pantalla liquidaria costas.
+  costas_procesales: [
+    {
+      operationId: 'costas_procesales_listado',
+      metodo: 'get',
+      antes: true,
+      filtrosDeLaPantalla: true,
+      paginacion: true,
+      titulo: 'Liquidaciones de costas procesales encontradas',
+      descripcion:
+        'Grilla «Liquidaciones encontradas» de la pantalla de costas procesales, con el' +
+        ' pendiente y el estado de cada liquidacion a la fecha de consulta. Agregada por #42:' +
+        ' la opcion declaraba solo su accion principal y la pantalla tiene grilla propia con' +
+        ' estos mismos filtros.',
     },
   ],
   // `fue_edificacion` declara «GET /api/v1/licencias/edificacion» como su
@@ -611,6 +998,7 @@ const OPERACIONES_ADICIONALES = {
       operationId: 'completar_seccion_fue',
       metodo: 'post',
       ruta: '/api/v1/licencias/edificacion/{expediente}/secciones',
+      descripcionesDeRuta: { expediente: 'Numero de expediente del FUE' },
       titulo: 'Sección del FUE completada',
       descripcion:
         'Completa una sección del FUE: TERRENO, PROYECTO, VALORIZACION, PROFESIONALES o' +
@@ -623,6 +1011,7 @@ const OPERACIONES_ADICIONALES = {
       operationId: 'emitir_licencia_edificacion',
       metodo: 'post',
       ruta: '/api/v1/licencias/edificacion/{expediente}/licencia',
+      descripcionesDeRuta: { expediente: 'Numero de expediente del FUE' },
       titulo: 'Emisión de licencia de edificación',
       descripcion:
         'Otorga la licencia de edificación del expediente (RF-113). Sólo se emite cuando están las' +
@@ -635,6 +1024,7 @@ const OPERACIONES_ADICIONALES = {
       operationId: 'revalidar_licencia_edificacion',
       metodo: 'post',
       ruta: '/api/v1/licencias/edificacion/{expediente}/revalidacion',
+      descripcionesDeRuta: { expediente: 'Numero de expediente de la revalidacion' },
       titulo: 'Revalidación de licencia de edificación',
       descripcion:
         'Prorroga el plazo de la licencia que el expediente de revalidación nombra. NO sustituye la' +
@@ -659,7 +1049,93 @@ const OPERACIONES_ADICIONALES = {
   ],
 };
 
+/**
+ * Respuestas que el contrato describe y este generador no sabria inventar.
+ *
+ * Lo normal es una respuesta por omision —200 o 201 con un objeto— mas el 403 y
+ * el 422 que toda operacion comparte. Aqui estan las tres que no lo son, y las
+ * tres lo son por un motivo que se lee en la respuesta misma:
+ *
+ * - `consulta_fichas` **redirige** cuando le llega un filtro que esta ruta no
+ *   resuelve. El 307 es la diferencia entre mandar al cliente donde si se
+ *   resuelve y devolverle un listado sin filtrar, que es el resultado plausible
+ *   y equivocado (ADR-0015 §2, #344).
+ * - `imprimir_certificado` devuelve **el papel**, no un JSON (RF-132).
+ * - `permisos_de_la_sesion` es la unica cuya forma la interfaz consume entera:
+ *   el guardia dibuja el menu con ella, asi que el contrato la describe hasta el
+ *   enum de privilegios (ADR-0013). Y no tiene 422: no recibe cuerpo ni filtros,
+ *   de modo que no hay regla de negocio que pueda incumplir.
+ */
+const RESPUESTAS = {
+  consulta_fichas: {
+    extra: [
+      {
+        codigo: '307',
+        descripcion:
+          'La petición trae `conciliadaConRentas`: se redirige a' +
+          ' `/catastro/fichas/conciliacion` conservando la consulta entera. No se ignora el' +
+          ' filtro y no se responde sin él (ADR-0015 §2).',
+      },
+    ],
+  },
+  imprimir_certificado: {
+    principal: {
+      codigo: '200',
+      tipoDeContenido: 'application/octet-stream',
+      esquema: '{ type: string, format: binary }',
+    },
+  },
+  permisos_de_la_sesion: {
+    principal: {
+      codigo: '200',
+      descripcion: 'La matriz de permisos efectivos del usuario en curso',
+      esquema: sangrado(`
+        type: object
+        additionalProperties:
+          type: array
+          items:
+            type: string
+            enum: [ejecucion, lectura, registro, modificacion, eliminacion, impresion, especial]
+      `),
+      ejemplo: sangrado(`
+        modulos: [lectura, registro, modificacion, eliminacion, impresion, ejecucion, especial]
+        contribuyentes: [lectura]
+      `),
+    },
+    sinValidacion: true,
+  },
+};
+
+/** Un bloque YAML escrito con su sangria relativa, sin la del codigo que lo rodea. */
+function sangrado(texto) {
+  const lineas = texto
+    .replace(/^\n/, '')
+    .replace(/\n[ ]*$/, '')
+    .split('\n');
+  const margen = Math.min(
+    ...lineas.filter((linea) => linea.trim()).map((linea) => linea.match(/^ */)[0].length),
+  );
+  return lineas.map((linea) => linea.slice(margen));
+}
+
 /* ── Recoger las operaciones ──────────────────────────────────────────── */
+
+/**
+ * Las adicionales que no se escriben junto a su pantalla, sino tras otra.
+ *
+ * Se recogen antes del recorrido porque la pantalla que esperan puede venir
+ * despues en el menu.
+ */
+const ESPERAN = new Map();
+for (const grupo of NAV) {
+  for (const [id, etiqueta] of grupo.items) {
+    for (const extra of OPERACIONES_ADICIONALES[id] ?? []) {
+      if (!extra.tras) continue;
+      if (!ESPERAN.has(extra.tras)) ESPERAN.set(extra.tras, []);
+      ESPERAN.get(extra.tras).push({ id, etiqueta, modulo: grupo.label, extra });
+    }
+  }
+}
 
 const operaciones = [];
 for (const grupo of NAV) {
@@ -671,8 +1147,9 @@ for (const grupo of NAV) {
     const [ruta, consulta] = rutaCompleta.split('?');
 
     const parametrosDeRuta = [...ruta.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+    const delBackend = DEL_BACKEND[id] ?? [];
 
-    operaciones.push({
+    const deLaPantalla = {
       id,
       operationId: id,
       etiqueta,
@@ -680,47 +1157,91 @@ for (const grupo of NAV) {
       metodo: metodo.toLowerCase(),
       ruta,
       titulo: pantalla.title || etiqueta,
-      descripcion: pantalla.desc || '',
+      descripcion: DESCRIPCIONES[id] ?? pantalla.desc ?? '',
       // Parametros de ruta: {codigo}, {numero}, …
       parametrosDeRuta,
+      descripcionesDeRuta: {},
       // Parametros de consulta del ejemplo del prototipo, mas los filtros que
       // dibuja la pantalla y —si trae tabla— la paginacion y el orden.
-      parametrosDeConsulta: reunir(parametrosDeRuta, [
-        ...(DEL_BACKEND[id] ?? []),
-        ...(consulta
-          ? consulta.split('&').map((p) => {
-              const [nombre, ejemplo] = p.split('=');
-              return { nombre, ejemplo: (ejemplo || '').replace(/[{}]/g, '') };
-            })
-          : []),
-        ...filtrosDe(pantalla).map((filtro) => ({
-          nombre: filtro.nombre,
-          ejemplo: '',
-          descripcion: `Filtro «${filtro.etiqueta}» de la pantalla`,
-        })),
-        ...(pantalla.table && metodo.toLowerCase() === 'get' ? PAGINACION : []),
-      ]),
-    });
-
-    for (const extra of OPERACIONES_ADICIONALES[id] ?? []) {
-      // `ruta` conserva el prefijo /api/v1 igual que la de la pantalla; el
-      // serializador lo quita para todas por igual mas abajo.
-      const rutaExtra = extra.ruta ?? ruta;
-      const parametrosDeRutaExtra = [...rutaExtra.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
-      operaciones.push({
+      parametrosDeConsulta: conSuDescripcion(
         id,
-        operationId: extra.operationId,
-        etiqueta,
-        modulo: grupo.label,
-        metodo: extra.metodo,
-        ruta: rutaExtra,
-        titulo: extra.titulo,
-        descripcion: extra.descripcion,
-        parametrosDeRuta: parametrosDeRutaExtra,
-        parametrosDeConsulta: reunir(parametrosDeRutaExtra, []),
-      });
+        reunir(
+          parametrosDeRuta,
+          intercalar(
+            [
+              ...delBackend.filter((parametro) => !parametro.tras),
+              ...(consulta
+                ? consulta.split('&').map((p) => {
+                    const [nombre, ejemplo] = p.split('=');
+                    return { nombre, ejemplo: (ejemplo || '').replace(/[{}]/g, '') };
+                  })
+                : []),
+              ...filtrosDe(pantalla).map((filtro) => ({
+                nombre: filtro.nombre,
+                ejemplo: '',
+                descripcion: `Filtro «${filtro.etiqueta}» de la pantalla`,
+              })),
+              ...(pantalla.table && paginan(id, metodo) ? PAGINACION : []),
+            ],
+            delBackend.filter((parametro) => parametro.tras),
+          ),
+        ),
+      ),
+    };
+
+    const propias = (OPERACIONES_ADICIONALES[id] ?? []).filter((extra) => !extra.tras);
+    for (const extra of propias.filter((e) => e.antes)) {
+      operaciones.push(deLaAdicional({ id, etiqueta, modulo: grupo.label, extra }, pantalla, ruta));
+    }
+    operaciones.push(deLaPantalla);
+    for (const espera of ESPERAN.get(id) ?? []) {
+      const suya = PANTALLAS[espera.id];
+      const [, rutaSuya] = suya.endpoint.split(/\s+/);
+      operaciones.push(deLaAdicional(espera, suya, rutaSuya.split('?')[0]));
+    }
+    for (const extra of propias.filter((e) => !e.antes)) {
+      operaciones.push(deLaAdicional({ id, etiqueta, modulo: grupo.label, extra }, pantalla, ruta));
     }
   }
+}
+
+/** Una operacion adicional, con la pantalla de la que sale y la ruta de esa pantalla. */
+function deLaAdicional({ id, etiqueta, modulo, extra }, pantalla, ruta) {
+  // `ruta` conserva el prefijo /api/v1 igual que la de la pantalla; el
+  // serializador lo quita para todas por igual mas abajo.
+  const rutaExtra = extra.ruta ?? ruta;
+  const parametrosDeRuta = [...rutaExtra.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+  return {
+    id,
+    operationId: extra.operationId,
+    etiqueta,
+    modulo,
+    metodo: extra.metodo,
+    ruta: rutaExtra,
+    titulo: extra.titulo,
+    descripcion: extra.descripcion,
+    parametrosDeRuta,
+    descripcionesDeRuta: extra.descripcionesDeRuta ?? {},
+    parametrosDeConsulta: conSuDescripcion(
+      extra.operationId,
+      reunir(parametrosDeRuta, [
+        ...(extra.filtrosDeLaPantalla
+          ? filtrosDe(pantalla).map((filtro) => ({
+              nombre: filtro.nombre,
+              ejemplo: '',
+              descripcion: `Filtro «${filtro.etiqueta}» de la pantalla`,
+            }))
+          : []),
+        ...(extra.parametros ?? []).map((parametro) => ({ ejemplo: '', ...parametro })),
+        ...(extra.paginacion ? PAGINACION : []),
+      ]),
+    ),
+  };
+}
+
+/** Si la pantalla pagina: las lecturas con tabla, y las que el backend pagina sin serlo. */
+function paginan(id, metodo) {
+  return metodo.toLowerCase() === 'get' || PAGINAN_SIN_SER_GET.has(id);
 }
 
 /**
@@ -740,10 +1261,45 @@ function reunir(deLaRuta, parametros) {
   return [...porNombre.values()];
 }
 
+/** Los que declaran `tras`, detras del parametro que nombran. */
+function intercalar(parametros, intercalados) {
+  const lista = [...parametros];
+  for (const parametro of intercalados) {
+    const donde = lista.findIndex((p) => p.nombre === parametro.tras);
+    lista.splice(donde === -1 ? lista.length : donde + 1, 0, parametro);
+  }
+  return lista;
+}
+
+/** El texto por omision de un filtro, salvo donde el servicio hace otra cosa. */
+function conSuDescripcion(operationId, parametros) {
+  const propias = DESCRIPCIONES_DE_FILTRO[operationId] ?? {};
+  return parametros.map((parametro) =>
+    propias[parametro.nombre] ? { ...parametro, descripcion: propias[parametro.nombre] } : parametro,
+  );
+}
+
 /* ── Serializar a YAML, sin dependencias ──────────────────────────────── */
 
 const comillas = (texto) => `"${String(texto).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 const unaLinea = (texto) => String(texto).replace(/\s+/g, ' ').trim();
+
+/**
+ * `description:` de una linea o en bloque, segun lo que traiga el texto.
+ *
+ * Un texto suelto va entre comillas en una sola linea; uno construido con
+ * `bloque` o `literal` conserva el corte de linea que se escribio arriba,
+ * porque ese corte es el que esta en el contrato.
+ */
+function escribirDescripcion(lineas, sangria, valor) {
+  const margen = ' '.repeat(sangria);
+  if (typeof valor === 'string') {
+    lineas.push(`${margen}description: ${comillas(unaLinea(valor))}`);
+    return;
+  }
+  lineas.push(`${margen}description: ${valor.marca}`);
+  for (const linea of valor.lineas) lineas.push(linea === '' ? '' : `${margen}  ${linea}`);
+}
 
 const porRuta = new Map();
 for (const op of operaciones) {
@@ -794,9 +1350,7 @@ for (const [ruta, ops] of porRuta) {
     lineas.push(`    ${op.metodo}:`);
     lineas.push(`      operationId: ${op.operationId}`);
     lineas.push(`      summary: ${comillas(op.titulo)}`);
-    if (op.descripcion) {
-      lineas.push(`      description: ${comillas(unaLinea(op.descripcion))}`);
-    }
+    if (op.descripcion) escribirDescripcion(lineas, 6, op.descripcion);
     lineas.push(`      tags: [${comillas(op.modulo)}]`);
     if (op.parametrosDeRuta.length || op.parametrosDeConsulta.length) {
       lineas.push('      parameters:');
@@ -804,14 +1358,16 @@ for (const [ruta, ops] of porRuta) {
         lineas.push(`        - name: ${nombre}`);
         lineas.push('          in: path');
         lineas.push('          required: true');
+        const suya = op.descripcionesDeRuta[nombre];
+        if (suya) escribirDescripcion(lineas, 10, suya);
         lineas.push('          schema: { type: string }');
       }
       for (const p of op.parametrosDeConsulta) {
         lineas.push(`        - name: ${p.nombre}`);
         lineas.push('          in: query');
         lineas.push('          required: false');
-        if (p.descripcion) lineas.push(`          description: ${comillas(p.descripcion)}`);
-        lineas.push('          schema: { type: string }');
+        if (p.descripcion) escribirDescripcion(lineas, 10, p.descripcion);
+        lineas.push(`          schema: ${p.esquema ?? '{ type: string }'}`);
         if (p.ejemplo) lineas.push(`          example: ${comillas(p.ejemplo)}`);
       }
     }
@@ -822,16 +1378,37 @@ for (const [ruta, ops] of porRuta) {
       lineas.push('          application/json:');
       lineas.push('            schema: { type: object }');
     }
+    const respuestas = RESPUESTAS[op.operationId] ?? {};
+    const principal = respuestas.principal ?? {};
     lineas.push('      responses:');
-    lineas.push(`        ${op.metodo === 'post' ? '201' : '200'}:`);
-    lineas.push('          description: Operacion realizada');
+    lineas.push(`        ${principal.codigo ?? (op.metodo === 'post' ? '201' : '200')}:`);
+    lineas.push(
+      principal.descripcion
+        ? `          description: ${comillas(principal.descripcion)}`
+        : '          description: Operacion realizada',
+    );
     lineas.push('          content:');
-    lineas.push('            application/json:');
-    lineas.push('              schema: { type: object }');
+    lineas.push(`            ${principal.tipoDeContenido ?? 'application/json'}:`);
+    if (Array.isArray(principal.esquema)) {
+      lineas.push('              schema:');
+      for (const linea of principal.esquema) lineas.push(`                ${linea}`);
+    } else {
+      lineas.push(`              schema: ${principal.esquema ?? '{ type: object }'}`);
+    }
+    if (principal.ejemplo) {
+      lineas.push('              example:');
+      for (const linea of principal.ejemplo) lineas.push(`                ${linea}`);
+    }
+    for (const otra of respuestas.extra ?? []) {
+      lineas.push(`        ${comillas(otra.codigo)}:`);
+      escribirDescripcion(lineas, 10, otra.descripcion);
+    }
     lineas.push('        "403":');
     lineas.push('          $ref: "#/components/responses/SinMunicipalidad"');
-    lineas.push('        "422":');
-    lineas.push('          $ref: "#/components/responses/ErrorDeValidacion"');
+    if (!respuestas.sinValidacion) {
+      lineas.push('        "422":');
+      lineas.push('          $ref: "#/components/responses/ErrorDeValidacion"');
+    }
   }
 }
 
@@ -874,5 +1451,59 @@ lineas.push('        application/json:');
 lineas.push('          schema: { $ref: "#/components/schemas/Error" }');
 lineas.push('');
 
-writeFileSync(fileURLToPath(destino), lineas.join('\n'), 'utf8');
-console.log(`OpenAPI generado: ${operaciones.length} operaciones en ${porRuta.size} rutas`);
+/* ── Escribir, o comprobar que ya estaba escrito ──────────────────────── */
+
+/**
+ * `--comprobar` no escribe: regenera en memoria y exige que cuadre.
+ *
+ * Es el peldano que impide que la deriva de #312 se vuelva a abrir. Sin el, un
+ * YAML afinado a mano sigue pasando todas las pruebas —el contrato es valido,
+ * el backend lo cumple, el frontend genera sus tipos de el— y lo unico que se
+ * pierde es la capacidad de reproducirlo, que no la mide nadie hasta que
+ * alguien regenera y se lleva por delante quince issues de trabajo.
+ *
+ * Dice **que** linea no cuadra, no solo que algo no cuadra: la primera
+ * diferencia con su numero de linea y las dos versiones.
+ */
+const salida = lineas.join('\n');
+const archivo = fileURLToPath(destino);
+
+if (process.argv.includes('--comprobar')) {
+  let comprometido = null;
+  try {
+    comprometido = readFileSync(archivo, 'utf8');
+  } catch {
+    comprometido = null;
+  }
+  if (comprometido !== salida) {
+    const suyas = (comprometido ?? '').split('\n');
+    const nuestras = salida.split('\n');
+    const donde = nuestras.findIndex((linea, i) => linea !== suyas[i]);
+    const distintas = nuestras.filter((linea, i) => linea !== suyas[i]).length;
+    console.error(
+      [
+        '',
+        '✗ El contrato comprometido y lo que este generador produce no cuadran.',
+        '',
+        `  contrato:  ${archivo}`,
+        `  lineas:    ${suyas.length} comprometidas, ${nuestras.length} generadas` +
+          ` (${distintas} no cuadran)`,
+        `  primera divergencia, linea ${donde + 1}:`,
+        `    contrato: ${JSON.stringify(suyas[donde] ?? '(el archivo acaba aqui)')}`,
+        `    generado: ${JSON.stringify(nuestras[donde] ?? '(la salida acaba aqui)')}`,
+        '',
+        '  El YAML es la verdad y el generador tiene que devolverlo tal cual (#312).',
+        '  Si el cambio del YAML es el que querias, llevalo a este generador; si no,',
+        '  corre «node docs/50-api/generar-openapi.mjs» y anade el resultado.',
+        '',
+      ].join('\n'),
+    );
+    process.exit(1);
+  }
+  console.log(
+    `El contrato y el generador cuadran: ${operaciones.length} operaciones en ${porRuta.size} rutas`,
+  );
+} else {
+  writeFileSync(archivo, salida, 'utf8');
+  console.log(`OpenAPI generado: ${operaciones.length} operaciones en ${porRuta.size} rutas`);
+}
