@@ -101,20 +101,58 @@ class ConsultaControllerTest {
     }
 
     @Test
-    @DisplayName("un filtro que todavia no se sabe responder es 422, no un listado sin filtrar")
-    void elFiltroQueNoSeSabeResponderEs422() throws Exception {
+    @DisplayName("el filtro de conciliacion redirige a la ruta que si lo sabe responder (#344)")
+    void elFiltroDeConciliacionRedirige() throws Exception {
         MvcResult resultado =
-                mvc.perform(get("/api/v1/catastro/fichas").param("conciliadaConRentas", "SI"))
+                mvc.perform(get("/api/v1/catastro/fichas").param("conciliadaConRentas", "Sí"))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
                 .as(
-                        "aceptarlo y devolver el listado completo daria un resultado plausible y"
-                                + " equivocado: el usuario creeria estar viendo solo las conciliadas")
-                .isEqualTo(422);
+                        "hasta #344 esto era un 422 deliberado, porque la lectura compuesta no"
+                                + " existia. Ahora existe en rentas, y lo que no puede pasar es lo"
+                                + " de siempre: aceptar el filtro y devolver el listado completo,"
+                                + " que daria un resultado plausible y equivocado")
+                .isEqualTo(307);
+        assertThat(resultado.getResponse().getHeader("Location"))
+                .as("y el valor viaja codificado, no crudo, dentro de la cabecera")
+                .isEqualTo("/api/v1/catastro/fichas/conciliacion?conciliadaConRentas=S%C3%AD");
         assertThat(resultado.getResponse().getContentAsString())
-                .as("y el mensaje dice por que, no «parametro no soportado»")
-                .contains("declaracion jurada");
+                .as("y no devuelve ni una fila: quien contesta es la otra ruta")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("el redirigido conserva la peticion entera, no solo el filtro que lo provoco")
+    void elRedirigidoConservaLaPeticionEntera() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                get("/api/v1/catastro/fichas")
+                                        .param("codRefCatastral", "270101001")
+                                        .param("conciliadaConRentas", "No")
+                                        .param("pagina", "3")
+                                        .param("tamano", "50"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getHeader("Location"))
+                .as(
+                        "perder el filtro o la pagina por el camino devolveria otra grilla con"
+                                + " apariencia de la pedida, que es peor que no contestar")
+                .startsWith("/api/v1/catastro/fichas/conciliacion?")
+                .contains("codRefCatastral=270101001")
+                .contains("conciliadaConRentas=No")
+                .contains("pagina=3")
+                .contains("tamano=50");
+    }
+
+    @Test
+    @DisplayName("un valor en blanco no redirige: es no haber elegido nada")
+    void unValorEnBlancoNoRedirige() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/catastro/fichas").param("conciliadaConRentas", "  "))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
     }
 
     @Test

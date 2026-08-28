@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 168 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 169 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 168 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 169 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 168 operaciones del contrato, por su `operationId`.
+ * Las 169 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 168 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 169 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -122,6 +122,13 @@ export const OPERACIONES = {
     ruta: '/catastro/fichas',
     parametrosDeRuta: [],
     parametrosDeConsulta: ['codRefCatastral', 'contribuyente', 'manzana', 'lote', 'conciliadaConRentas', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+  },
+  /** Consulta de fichas con su conciliación con rentas — `GET /catastro/fichas/conciliacion` */
+  consulta_fichas_conciliacion: {
+    metodo: 'GET',
+    ruta: '/catastro/fichas/conciliacion',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: ['codRefCatastral', 'contribuyente', 'manzana', 'lote', 'tipo', 'conciliadaConRentas', 'ejercicio', 'fecha', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Actualización del catastro — `PUT /catastro/fichas/{codigo}/actualizacion` */
   actualizacion_catastro: {
@@ -1224,7 +1231,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 168 operaciones. */
+/** El `operationId` de una de las 169 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1305,6 +1312,21 @@ export interface ParametrosPorOperacion {
     readonly manzana?: string;
     readonly lote?: string;
     readonly conciliadaConRentas?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly ordenarPor?: string;
+    readonly direccion?: string;
+  };
+  /** `GET /catastro/fichas/conciliacion` */
+  readonly consulta_fichas_conciliacion: {
+    readonly codRefCatastral?: string;
+    readonly contribuyente?: string;
+    readonly manzana?: string;
+    readonly lote?: string;
+    readonly tipo?: string;
+    readonly conciliadaConRentas?: string;
+    readonly ejercicio?: string;
+    readonly fecha?: string;
     readonly pagina?: string;
     readonly tamano?: string;
     readonly ordenarPor?: string;
@@ -2456,6 +2478,7 @@ export interface CuerpoPorOperacion {
   readonly ficha_rural: undefined;
   readonly registrar_ficha_rural: CuerpoSinEsquema;
   readonly consulta_fichas: undefined;
+  readonly consulta_fichas_conciliacion: undefined;
   readonly actualizacion_catastro: CuerpoSinEsquema;
   readonly actualizar_ficha_economica: CuerpoSinEsquema;
   readonly actualizar_ficha_bienes: CuerpoSinEsquema;
@@ -2628,6 +2651,7 @@ export interface RespuestaPorOperacion {
   readonly ficha_rural: CuerpoSinEsquema;
   readonly registrar_ficha_rural: CuerpoSinEsquema;
   readonly consulta_fichas: CuerpoSinEsquema;
+  readonly consulta_fichas_conciliacion: CuerpoSinEsquema;
   readonly actualizacion_catastro: CuerpoSinEsquema;
   readonly actualizar_ficha_economica: CuerpoSinEsquema;
   readonly actualizar_ficha_bienes: CuerpoSinEsquema;

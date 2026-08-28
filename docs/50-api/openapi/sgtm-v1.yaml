@@ -465,8 +465,93 @@ paths:
         - name: conciliadaConRentas
           in: query
           required: false
-          description: "Filtro «Conciliada con rentas» de la pantalla"
+          description: "Filtro «Conciliada con rentas» de la pantalla. Esta ruta no lo resuelve —el estado de conciliación se deriva de `declaracion_jurada`, que es de rentas, y catastro no puede depender de rentas (ADR-0015 §2)—: la petición que lo trae se redirige con 307 a `/catastro/fichas/conciliacion`, que es la misma grilla servida por rentas."
           schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "307":
+          description: "La petición trae `conciliadaConRentas`: se redirige a `/catastro/fichas/conciliacion` conservando la consulta entera. No se ignora el filtro y no se responde sin él (ADR-0015 §2)."
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/conciliacion":
+    get:
+      operationId: consulta_fichas_conciliacion
+      summary: "Consulta de fichas con su conciliación con rentas"
+      description: "La misma grilla de `consulta_fichas` con la columna «Conciliada» y el filtro `conciliadaConRentas`. Un predio está conciliado a un ejercicio cuando existe una declaración jurada de ese ejercicio, con su mismo `predio_id`, en estado PRESENTADA u OBSERVADA (ADR-0015 §1). La sirve `rentas` y no `catastro` —el derivado sale de la declaración jurada y catastro no puede depender de rentas—, pero el acceso que exige es el de la pantalla, `consulta_fichas`. De la declaración jurada no viaja nada: ni su número, ni su tipo, ni sus importes, ni quién la presentó; solo el derivado y el ejercicio al que responde (regla 9). `conciliadaConRentas=No` —la lista de los predios que no generan deuda predial— exige además privilegio de lectura sobre `fisc_omisos` y deja fila en la bitácora con operación ACCESO."
+      tags: ["Catastro"]
+      parameters:
+        - name: codRefCatastral
+          in: query
+          required: false
+          description: "Filtro «Cod. Ref. Catastral» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: manzana
+          in: query
+          required: false
+          description: "Filtro «Manzana» de la pantalla"
+          schema: { type: string }
+        - name: lote
+          in: query
+          required: false
+          description: "Filtro «Lote» de la pantalla"
+          schema: { type: string }
+        - name: tipo
+          in: query
+          required: false
+          description: "UNICA | ECONOMICA | BIENES_COMUNES | RURAL"
+          schema: { type: string }
+        - name: conciliadaConRentas
+          in: query
+          required: false
+          description: "Todas | Sí | No. «No» exige privilegio de lectura sobre `fisc_omisos` y queda registrado en la bitácora (ADR-0015 §2.3)."
+          schema: { type: string }
+          example: "Todas"
+        - name: ejercicio
+          in: query
+          required: false
+          description: "A qué ejercicio responde la conciliación; si falta, el de la fecha de corte. La respuesta lo dice siempre (regla 9, RNF-075)"
+          schema: { type: string }
+          example: "2026"
+        - name: fecha
+          in: query
+          required: false
+          description: "Fecha de corte a la que se resuelven la versión de ficha y el titular vigentes; si falta, hoy"
+          schema: { type: string }
+          example: "2026-08-28"
         - name: pagina
           in: query
           required: false

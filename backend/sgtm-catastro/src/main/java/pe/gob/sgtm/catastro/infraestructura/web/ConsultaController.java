@@ -1,12 +1,18 @@
 package pe.gob.sgtm.catastro.infraestructura.web;
 
+import jakarta.servlet.http.HttpServletRequest;
+import java.net.URI;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.UriComponentsBuilder;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDeFichas;
@@ -22,10 +28,21 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * Consulta transversal de fichas: {@code GET /api/v1/catastro/fichas} (RF-006).
  *
  * <p>Los filtros son los que declara el contrato, que salio de la pantalla del prototipo. Uno de
- * ellos, {@code conciliadaConRentas}, no se acepta todavia: comparar el catastro con la declaracion
- * jurada exige el contexto {@code rentas}, que aun no existe. Se rechaza con 422 y con el motivo,
- * en vez de aceptarlo y devolver el listado sin filtrar: eso ultimo daria un resultado plausible y
- * equivocado, y nadie lo notaria.
+ * ellos, {@code conciliadaConRentas}, <b>lo sirve otra ruta</b>: el estado de conciliacion se
+ * deriva de {@code declaracion_jurada}, que es de {@code rentas}, y este contexto no puede mirarla
+ * —dependeria de rentas y {@code verificarArquitectura} rechaza el ciclo (ADR-0015 §2)—.
+ *
+ * <p>Hasta #344 eso se contestaba con un <b>422 deliberado</b>, porque la lectura compuesta no
+ * existia. Ahora existe, en {@code sgtm-rentas}, y este endpoint <b>redirige</b> a ella con 307
+ * conservando la peticion entera. No se ignora el filtro y no se responde sin el: devolver el
+ * listado completo daria un resultado plausible y equivocado —quien lo mira creeria estar viendo
+ * solo las conciliadas— y esa es la razon por la que el 422 se puso; el redirigir la conserva y
+ * ademas contesta.
+ *
+ * <p>La ruta de destino es un subcamino de este mismo recurso, {@code
+ * /catastro/fichas/conciliacion}, asi que aqui no aparece ninguna ruta de otro modulo: quien la
+ * sirve —rentas— es un detalle de donde vive el codigo, no del contrato (mismo criterio que {@code
+ * ConsultaPrediosController}, que sirve {@code consulta_predios} desde rentas).
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/catastro/fichas")
@@ -34,6 +51,11 @@ public class ConsultaController {
 
     /** Por codigo de referencia catastral, que es como se recorre un sector. */
     private static final String ORDEN_POR_OMISION = "codRefCatastral";
+
+    /**
+     * La misma grilla, con la columna «Conciliada» (ADR-0015 §2, #344). La sirve {@code rentas}.
+     */
+    static final String RUTA_DE_LA_CONCILIACION = Api.RAIZ + "/catastro/fichas/conciliacion";
 
     private final ConsultaDeFichas consulta;
     private final Clock reloj;
@@ -44,7 +66,7 @@ public class ConsultaController {
     }
 
     @GetMapping
-    public RespuestaPaginada<FichaEncontradaResource> consultar(
+    public ResponseEntity<RespuestaPaginada<FichaEncontradaResource>> consultar(
             @RequestParam(required = false) @Nullable String codRefCatastral,
             @RequestParam(required = false) @Nullable String contribuyente,
             @RequestParam(required = false) @Nullable String manzana,
@@ -52,23 +74,43 @@ public class ConsultaController {
             @RequestParam(required = false) @Nullable String tipo,
             @RequestParam(required = false) @Nullable String conciliadaConRentas,
             @RequestParam(required = false) @Nullable String fecha,
-            ParametrosDePaginacion paginacion) {
+            ParametrosDePaginacion paginacion,
+            HttpServletRequest peticion) {
 
         if (conciliadaConRentas != null && !conciliadaConRentas.isBlank()) {
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION,
-                    "La conciliacion con el padron de rentas todavia no se puede consultar:"
-                            + " compara el catastro con la declaracion jurada, y ese contexto aun"
-                            + " no publica su lado");
+            return ResponseEntity.status(HttpStatus.TEMPORARY_REDIRECT)
+                    .location(destinoDeLaConciliacion(peticion.getParameterMap()))
+                    .build();
         }
 
         FiltroDeFichas filtro =
                 new FiltroDeFichas(codRefCatastral, contribuyente, manzana, lote, tipoDe(tipo));
         LocalDate cuando = fecha == null || fecha.isBlank() ? LocalDate.now(reloj) : parsear(fecha);
 
-        return RespuestaPaginada.de(
-                consulta.buscar(filtro, cuando, paginacion.aPaginacion(ORDEN_POR_OMISION)),
-                FichaEncontradaResource::de);
+        return ResponseEntity.ok(
+                RespuestaPaginada.de(
+                        consulta.buscar(filtro, cuando, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                        FichaEncontradaResource::de));
+    }
+
+    /**
+     * El destino del 307, con la peticion entera.
+     *
+     * <p>Se reenvian <b>todos</b> los parametros recibidos y no solo los que este metodo declara:
+     * cualquier filtro que el contrato anada despues a la otra ruta se perderia por el camino sin
+     * que nada avise, que es la clase de defecto que este endpoint existe para no cometer.
+     *
+     * <p>Se reconstruyen en vez de reenviar la cadena de consulta tal cual, y por dos motivos:
+     * {@code UriComponentsBuilder} vuelve a codificar cada valor —asi nada que venga del cliente
+     * entra crudo en una cabecera {@code Location}— y el resultado es el mismo con un contenedor de
+     * verdad y con el de las pruebas, que no rellena la cadena original.
+     */
+    private static URI destinoDeLaConciliacion(Map<String, String[]> parametros) {
+        UriComponentsBuilder destino = UriComponentsBuilder.fromPath(RUTA_DE_LA_CONCILIACION);
+        for (Map.Entry<String, String[]> parametro : parametros.entrySet()) {
+            destino.queryParam(parametro.getKey(), (Object[]) parametro.getValue());
+        }
+        return URI.create(destino.build().encode().toUriString());
     }
 
     private static @Nullable TipoFicha tipoDe(@Nullable String tipo) {
