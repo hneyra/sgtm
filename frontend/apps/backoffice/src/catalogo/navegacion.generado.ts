@@ -3,7 +3,9 @@
  * Regenerar con: yarn portar-catalogo
  *
  * Los 12 modulos del manual y sus 134 opciones, con el bloque de cada una ya
- * clasificado (FRO-03 §4) para no correr expresiones regulares en cada render.
+ * clasificado en el build: grupos por tarea donde el modulo esta disenado
+ * (ADR-0014 §4) y los bloques de FRO-03 §4 en los demas. `centroDeReportes`
+ * nombra el bloque que el modulo pliega en su centro de reportes (ADR-0014 §5).
  *
  * Los nombres vienen del manual y no se reescriben (RNF-080).
  */
@@ -164,15 +166,17 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M9.5 16.5h3.5"
     ],
     "bloques": [
-      "Registro y mantenimiento",
-      "Procesos"
+      "Padrones",
+      "Determinación",
+      "Movimientos",
+      "Tributos y beneficios"
     ],
     "opciones": [
       {
         "id": "contribuyentes",
         "label": "Contribuyentes",
         "ranura": "contribuyentes",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Padrones",
         "title": "Contribuyentes",
         "resumen": "Padrón único del contribuyente. Su código enlaza predios, vehículos, licencias, papeletas y la cuenta corriente."
       },
@@ -180,7 +184,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "predios_rentas",
         "label": "Predios",
         "ranura": "predios-rentas",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Padrones",
         "title": "Predios del contribuyente",
         "resumen": "Padrón predial de rentas. Cada predio guarda su autovalúo, condición de propiedad y la fecha desde la que genera obligación."
       },
@@ -188,7 +192,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "predial_individual",
         "label": "Predial — individual",
         "ranura": "predial-individual",
-        "bloque": "Procesos",
+        "bloque": "Determinación",
         "title": "Cálculo individual del impuesto predial",
         "resumen": "Determina el impuesto de un contribuyente sobre el autovalúo acumulado de todos sus predios en el distrito, con la escala progresiva acumulativa y el mínimo imponible de 0.6 % de la UIT."
       },
@@ -196,7 +200,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "predial_masivo",
         "label": "Predial — masivo",
         "ranura": "predial-masivo",
-        "bloque": "Procesos",
+        "bloque": "Determinación",
         "title": "Cálculo masivo del impuesto predial",
         "resumen": "Proceso batch de emisión anual. Recalcula todo el padrón para el ejercicio seleccionado y deja constancia de los contribuyentes observados que quedan fuera de la emisión."
       },
@@ -204,7 +208,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "declaracion_jurada",
         "label": "Declaración jurada",
         "ranura": "declaracion-jurada",
-        "bloque": "Procesos",
+        "bloque": "Determinación",
         "title": "Declaración jurada — HR, PU y PR",
         "resumen": "Formularios de la declaración: hoja resumen (HR), predio urbano (PU) y predio rústico (PR). Se imprimen para la firma del contribuyente y quedan como sustento del cálculo."
       },
@@ -212,7 +216,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "arbitrios",
         "label": "Arbitrios",
         "ranura": "arbitrios",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Tributos y beneficios",
         "title": "Arbitrios municipales",
         "resumen": "Limpieza pública, parques y jardines y serenazgo. La tasa depende del uso del predio, la zona, la frecuencia del servicio y los metros de frontis declarados en la ficha."
       },
@@ -220,7 +224,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transferencia_predio",
         "label": "Transferencia de predio",
         "ranura": "transferencia-predio",
-        "bloque": "Procesos",
+        "bloque": "Movimientos",
         "title": "Transferencia de predio",
         "resumen": "Da de baja al transferente y de alta al adquirente desde la fecha del acto. La obligación del vendedor corre hasta el 31 de diciembre del año de la transferencia."
       },
@@ -228,7 +232,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "alcabala",
         "label": "Alcabala",
         "ranura": "alcabala",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Tributos y beneficios",
         "title": "Impuesto de alcabala",
         "resumen": "Grava la transferencia de propiedad con el 3 % sobre el exceso de las primeras 10 UIT, tomando como base el mayor valor entre el de transferencia y el autovalúo ajustado por el IPM."
       },
@@ -236,7 +240,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "vehiculos",
         "label": "Vehículos",
         "ranura": "vehiculos",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Padrones",
         "title": "Ficha de vehículo",
         "resumen": "Registro del vehículo. La afectación corre tres ejercicios desde el año siguiente a la primera inscripción registral."
       },
@@ -244,7 +248,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "vehicular_calculo",
         "label": "Cálculo vehicular",
         "ranura": "vehicular-calculo",
-        "bloque": "Procesos",
+        "bloque": "Determinación",
         "title": "Cálculo del impuesto vehicular",
         "resumen": "Aplica el 1 % sobre la base imponible con un mínimo del 1.5 % de la UIT, por los tres ejercicios en que el vehículo permanece afecto."
       },
@@ -252,7 +256,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transferencia_vehiculo",
         "label": "Transferencia de vehículo",
         "ranura": "transferencia-vehiculo",
-        "bloque": "Procesos",
+        "bloque": "Movimientos",
         "title": "Transferencia de vehículo",
         "resumen": "Registra el cambio de titular. El transferente responde por el impuesto hasta el 31 de diciembre del año en que se produce la venta."
       },
@@ -260,7 +264,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "espectaculos",
         "label": "Espectáculos públicos",
         "ranura": "espectaculos",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Tributos y beneficios",
         "title": "Espectáculos públicos no deportivos",
         "resumen": "Grava el monto que se abona por presenciar el espectáculo. La tasa depende del tipo de evento y el organizador actúa como agente perceptor."
       },
@@ -268,7 +272,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "beneficios",
         "label": "Beneficios",
         "ranura": "beneficios",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Tributos y beneficios",
         "title": "Beneficios y exoneraciones",
         "resumen": "Deducciones, inafectaciones y amnistías. La deducción de 50 UIT para pensionistas y adultos mayores exige predio único destinado a vivienda."
       },
@@ -276,7 +280,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "alta_deuda",
         "label": "Alta de deuda",
         "ranura": "alta-deuda",
-        "bloque": "Procesos",
+        "bloque": "Movimientos",
         "title": "Alta de deuda",
         "resumen": "Incorpora manualmente una obligación a la cuenta corriente cuando no proviene de la emisión masiva: determinaciones de fiscalización, multas o deuda migrada."
       },
@@ -284,7 +288,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "baja_deuda",
         "label": "Baja de deuda",
         "ranura": "baja-deuda",
-        "bloque": "Procesos",
+        "bloque": "Movimientos",
         "title": "Baja de deuda",
         "resumen": "Extingue deuda de la cuenta corriente por prescripción, resolución que la deja sin efecto, error material o compensación. Requiere resolución y queda en la bitácora de auditoría."
       }
@@ -380,17 +384,19 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M18.8 18.4a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0"
     ],
     "bloques": [
-      "Registro y mantenimiento",
-      "Procesos",
-      "Consultas",
-      "Documentos y reportes"
+      "Papeletas",
+      "Vehículos",
+      "Cobranza",
+      "Catálogos",
+      "Reportes"
     ],
+    "centroDeReportes": "Reportes",
     "opciones": [
       {
         "id": "papeletas",
         "label": "Papeletas",
         "ranura": "papeletas",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Papeletas",
         "title": "Papeletas de infracción de tránsito",
         "resumen": "Papeletas levantadas por el inspector municipal, con el código del Reglamento Nacional de Tránsito, la sanción en porcentaje de UIT y la medida preventiva aplicada."
       },
@@ -398,7 +404,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_busqueda",
         "label": "Búsqueda de infracciones",
         "ranura": "transito-busqueda",
-        "bloque": "Consultas",
+        "bloque": "Papeletas",
         "title": "Búsqueda de infracciones",
         "resumen": "Búsqueda avanzada de papeletas por número, placa, infractor, propietario, rango de fechas y estado de deuda. Muestra el estado de coactiva, el último pago y el usuario que registró la papeleta."
       },
@@ -406,7 +412,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "codigos_transito",
         "label": "Códigos de tránsito",
         "ranura": "codigos-transito",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Catálogos",
         "title": "Tabla de códigos de infracción de tránsito",
         "resumen": "Catálogo del Reglamento Nacional de Tránsito con la sanción, los puntos y la medida preventiva que el sistema aplica al registrar cada papeleta."
       },
@@ -414,7 +420,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_descargos",
         "label": "Descargos",
         "ranura": "transito-descargos",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Papeletas",
         "title": "Descargos y reclamos de papeletas",
         "resumen": "Escrito de descargo presentado dentro del plazo, su evaluación y la resolución que declara fundada o infundada la impugnación."
       },
@@ -422,7 +428,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "internamiento",
         "label": "Internamiento vehicular",
         "ranura": "internamiento",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Vehículos",
         "title": "Internamiento vehicular",
         "resumen": "Control de vehículos en el depósito municipal, con el cómputo diario de la tasa de custodia y los requisitos para la liberación."
       },
@@ -430,7 +436,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_documentos",
         "label": "Resoluciones y documentos",
         "ranura": "transito-documentos",
-        "bloque": "Documentos y reportes",
+        "bloque": "Cobranza",
         "title": "Emisión de resoluciones y otros documentos",
         "resumen": "Registra los documentos emitidos por papeleta y conserva la secuencia del trámite, incluido el archivo digital de cada acto administrativo."
       },
@@ -438,7 +444,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_valores",
         "label": "Generación de valores",
         "ranura": "transito-valores",
-        "bloque": "Procesos",
+        "bloque": "Cobranza",
         "title": "Generación de valores de tránsito",
         "resumen": "Genera masivamente los valores por papeletas de tránsito pendientes de pago. El criterio define el tipo de recaudo, la oficina y el vencimiento; las papeletas se agregan por selección o manualmente."
       },
@@ -446,7 +452,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_cambio_numero",
         "label": "Cambio de nº de papeleta",
         "ranura": "transito-cambio-numero",
-        "bloque": "Procesos",
+        "bloque": "Papeletas",
         "title": "Cambio de número de papeleta de tránsito",
         "resumen": "Corrige el número de papeleta o el número de placa registrados, cuando hubo error del operador al momento del registro."
       },
@@ -454,7 +460,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_reportes",
         "label": "Reportes de tránsito",
         "ranura": "transito-reportes",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Reportes de infracción de tránsito",
         "resumen": "Emisor de los reportes del módulo de tránsito. El tipo de reporte habilita los criterios que corresponden y el destino puede ser pantalla, impresora o Excel."
       },
@@ -462,7 +468,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_record_conductor",
         "label": "Record de conductor",
         "ranura": "transito-record-conductor",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Record de conductor",
         "resumen": "Historial de infracciones cometidas por un conductor y el estado de deuda de cada papeleta impuesta."
       },
@@ -470,7 +476,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_record_vehicular",
         "label": "Record vehicular",
         "ranura": "transito-record-vehicular",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Record vehicular",
         "resumen": "Historial de papeletas de infracción de tránsito de un solo vehículo, con el estado de pago de cada una."
       },
@@ -478,7 +484,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_constancia_libre",
         "label": "Constancia libre de infracciones",
         "ranura": "transito-constancia-libre",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Constancia libre de infracciones",
         "resumen": "Documento con el que la municipalidad acredita que un vehículo no registra papeletas de tránsito pendientes de pago."
       },
@@ -486,7 +492,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_padron",
         "label": "Padrón de papeletas",
         "ranura": "transito-padron",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Padrón de papeletas de tránsito",
         "resumen": "Listado de las papeletas registradas en un intervalo de fechas, filtrable por estado de deuda, infracción y placa."
       },
@@ -494,7 +500,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_estado_cuenta",
         "label": "Estado de cuenta de infracciones",
         "ranura": "transito-estado-cuenta",
-        "bloque": "Consultas",
+        "bloque": "Papeletas",
         "title": "Estado de cuenta de infracciones",
         "resumen": "Papeletas pendientes de pago de un conductor o de un vehículo, con importe, beneficio aplicable y situación de coactiva."
       },
@@ -502,7 +508,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_papeleta_reporte",
         "label": "Reporte de papeleta",
         "ranura": "transito-papeleta-reporte",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Reporte papeleta de infracción",
         "resumen": "Hoja informativa que resume la información relevante de una papeleta de infracción de tránsito."
       },
@@ -510,7 +516,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_rg_ordinaria",
         "label": "Res. de gerencia ordinaria",
         "ranura": "transito-rg-ordinaria",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resolución de gerencia ordinaria",
         "resumen": "Resolución que emite la municipalidad para la cobranza de la papeleta. De no cancelarse, el documento pasa al área de cobranza coactiva."
       },
@@ -518,7 +524,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_rg_sancionadora",
         "label": "Res. de gerencia sancionadora",
         "ranura": "transito-rg-sancionadora",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resolución de gerencia sancionadora",
         "resumen": "Segunda resolución, emitida luego de la ordinaria. Tiene carácter sancionador y se deriva a la Dirección General de Transportes."
       },
@@ -526,7 +532,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_padron_coactiva",
         "label": "Padrón enviadas a coactiva",
         "ranura": "transito-padron-coactiva",
-        "bloque": "Documentos y reportes",
+        "bloque": "Cobranza",
         "title": "Padrón de papeletas enviadas a coactiva",
         "resumen": "Control de las papeletas derivadas al área de cobranza coactiva por intervalo de fechas."
       },
@@ -534,7 +540,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_padron_constancias",
         "label": "Padrón de constancias",
         "ranura": "transito-padron-constancias",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Padrón de constancias libres de infracciones",
         "resumen": "Padrón general de constancias libres de infracciones emitidas por la unidad competente."
       },
@@ -542,7 +548,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_resumen_recaudacion",
         "label": "Resumen de recaudación",
         "ranura": "transito-resumen-recaudacion",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resumen de recaudación de tránsito",
         "resumen": "Recaudación por papeletas organizada por tipo de cobranza, año y mes."
       },
@@ -550,7 +556,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_resumen_papeletas",
         "label": "Resumen de papeletas",
         "ranura": "transito-resumen-papeletas",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resumen de papeletas pendientes y pagadas",
         "resumen": "Cantidades e importes de papeletas pendientes y pagadas, diferenciando cobranza ordinaria de cobranza coactiva."
       },
@@ -558,7 +564,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_resumen_codigo",
         "label": "Resumen por código",
         "ranura": "transito-resumen-codigo",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resumen de papeletas por código de infracción",
         "resumen": "Cantidades e importes de papeletas pendientes y pagadas de una infracción determinada."
       },
@@ -566,7 +572,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_resumen_placa",
         "label": "Resumen por iniciales de placa",
         "ranura": "transito-resumen-placa",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resumen de papeletas por iniciales de placa",
         "resumen": "Resumen de papeletas filtrado por las dos letras iniciales del número de placa del vehículo."
       }
@@ -902,15 +908,15 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M15.6 16.4a2.3 2.3 0 1 1-4.6 0 2.3 2.3 0 0 1 4.6 0"
     ],
     "bloques": [
-      "Procesos",
-      "Consultas"
+      "Emisión",
+      "Gestión del valor"
     ],
     "opciones": [
       {
         "id": "valores_individual",
         "label": "Valor individual",
         "ranura": "valores-individual",
-        "bloque": "Procesos",
+        "bloque": "Emisión",
         "title": "Generación individual de valores",
         "resumen": "Emisión de una orden de pago, resolución de determinación o resolución de multa para un contribuyente, con la base legal que la sustenta."
       },
@@ -918,7 +924,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "valores_masivo",
         "label": "Valores masivos",
         "ranura": "valores-masivo",
-        "bloque": "Procesos",
+        "bloque": "Emisión",
         "title": "Generación masiva de valores",
         "resumen": "Emite órdenes de pago en bloque para toda la deuda vencida que cumpla el filtro, respetando el monto mínimo de emisión fijado por ordenanza."
       },
@@ -926,7 +932,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "valores_busqueda",
         "label": "Mantenimiento de valores",
         "ranura": "valores-busqueda",
-        "bloque": "Consultas",
+        "bloque": "Gestión del valor",
         "title": "Búsqueda y mantenimiento de valores",
         "resumen": "Localiza un valor por número, contribuyente o periodo para consultarlo, anularlo o derivarlo a cobranza coactiva."
       },
@@ -934,7 +940,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "notificacion_valores",
         "label": "Notificación",
         "ranura": "notificacion-valores",
-        "bloque": "Procesos",
+        "bloque": "Gestión del valor",
         "title": "Notificación de valores",
         "resumen": "Registro del acto de notificación. La fecha de notificación determina el inicio del plazo de reclamación y, vencido este, la firmeza del valor."
       },
@@ -942,7 +948,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "prescripcion",
         "label": "Prescripción",
         "ranura": "prescripcion",
-        "bloque": "Procesos",
+        "bloque": "Gestión del valor",
         "title": "Prescripción de la deuda",
         "resumen": "Solicitud de prescripción de la acción de cobro, con el cómputo del plazo y los actos que lo interrumpen o suspenden."
       },
@@ -950,7 +956,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "pase_coactiva",
         "label": "Pase de valores a coactiva",
         "ranura": "pase-coactiva",
-        "bloque": "Procesos",
+        "bloque": "Gestión del valor",
         "title": "Pase de valores a coactiva",
         "resumen": "Registra el movimiento del valor hacia el área de cobranza coactiva: PCO — pase a coactivas, ACO — aceptado en coactivas o RCO — rechazado en coactivas."
       }
@@ -1182,16 +1188,17 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M9.4 12.1l1.9 1.9 3.5-3.6"
     ],
     "bloques": [
-      "Registro y mantenimiento",
-      "Procesos",
-      "Consultas"
+      "Cuentas y accesos",
+      "Catálogo",
+      "Sesión",
+      "Operación"
     ],
     "opciones": [
       {
         "id": "modulos",
         "label": "Módulos",
         "ranura": "modulos",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Catálogo",
         "title": "Módulos del sistema",
         "resumen": "Sistemas controlados por el módulo de seguridad integrada. Cada módulo agrupa sus grupos, accesos y permisos."
       },
@@ -1199,7 +1206,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "usuarios",
         "label": "Usuarios",
         "ranura": "usuarios",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Cuentas y accesos",
         "title": "Usuarios del sistema",
         "resumen": "Alta de usuarios con su unidad orgánica, la caja asignada y el grupo de acceso que define qué opciones del menú puede ejecutar."
       },
@@ -1207,7 +1214,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "grupos",
         "label": "Grupos",
         "ranura": "grupos",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Cuentas y accesos",
         "title": "Grupos de usuarios",
         "resumen": "Agrupación jerárquica de cuentas. El grupo concentra los accesos y todo usuario hereda los permisos del grupo al que pertenece."
       },
@@ -1215,7 +1222,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "accesos",
         "label": "Accesos y políticas",
         "ranura": "accesos",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Cuentas y accesos",
         "title": "Accesos y políticas",
         "resumen": "Opciones de menú y políticas del sistema controlado. La búsqueda admite filtrar por tipo y por parte del nombre del acceso."
       },
@@ -1223,7 +1230,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "miembros",
         "label": "Miembros",
         "ranura": "miembros",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Cuentas y accesos",
         "title": "Gestión de miembros",
         "resumen": "Afiliación de usuarios a uno o varios grupos, base de la posterior asignación de permisos a nivel de grupo. El árbol de la izquierda lista los grupos del módulo y sus usuarios."
       },
@@ -1231,7 +1238,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "permisos",
         "label": "Permisos",
         "ranura": "permisos",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Cuentas y accesos",
         "title": "Permisos y niveles de accesibilidad",
         "resumen": "Matriz de acceso por opción del menú. Cada acceso se otorga con siete niveles: total, ejecuta, consulta, ingresa, modifica, anula e imprime."
       },
@@ -1239,7 +1246,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "cambiar_anio",
         "label": "Cambiar el año",
         "ranura": "cambiar-anio",
-        "bloque": "Procesos",
+        "bloque": "Sesión",
         "title": "Cambiar el año de trabajo",
         "resumen": "Fija el ejercicio sobre el que operan todas las opciones del sistema. Los registros se graban contra el año seleccionado."
       },
@@ -1247,7 +1254,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "cambiar_clave",
         "label": "Cambiar contraseña",
         "ranura": "cambiar-clave",
-        "bloque": "Procesos",
+        "bloque": "Sesión",
         "title": "Cambiar contraseña",
         "resumen": "Cambio de la clave del usuario en sesión. La contraseña caduca cada 90 días y no puede repetir las tres últimas."
       },
@@ -1255,7 +1262,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "auditoria",
         "label": "Auditoría",
         "ranura": "auditoria",
-        "bloque": "Consultas",
+        "bloque": "Operación",
         "title": "Auditoría del sistema",
         "resumen": "Bitácora de operaciones sensibles: anulaciones, extornos, bajas de deuda, cambios de valor y accesos fallidos."
       },
@@ -1263,7 +1270,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "parametros",
         "label": "Parámetros",
         "ranura": "parametros",
-        "bloque": "Registro y mantenimiento",
+        "bloque": "Catálogo",
         "title": "Parámetros del sistema",
         "resumen": "Valores que gobiernan el cálculo tributario del ejercicio. Cambiarlos afecta a todas las liquidaciones posteriores."
       },
@@ -1271,7 +1278,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "respaldo",
         "label": "Copias de seguridad",
         "ranura": "respaldo",
-        "bloque": "Procesos",
+        "bloque": "Operación",
         "title": "Copias de seguridad",
         "resumen": "Respaldo de la base de datos. El manual exige una copia diaria al cierre de caja y una copia mensual fuera del servidor."
       }

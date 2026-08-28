@@ -4,8 +4,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Aviso, Boton, Esqueleto } from '@sgtm/design-system';
 import { descriptorDe, escribe } from '@sgtm/api-client';
 import type { ValorDeCampo } from '@sgtm/api-client';
-import { opcionPorRuta, pantallasDelModulo, seccionesDe } from '../catalogo';
+import { esHojaDelCentro, opcionPorRuta, pantallasDelModulo, seccionesDe } from '../catalogo';
 import type { EstructuraDePantalla } from '../catalogo';
+import { CentroDeReportes } from './CentroDeReportes';
 import {
   conOrden,
   conCambio,
@@ -84,7 +85,21 @@ export function Pantalla() {
 
   // La estructura de un modulo llega en su propio trozo: entrar en Catastro no
   // descarga Transito.
-  return <PantallaDelModulo key={opcion.id} moduloId={moduloId} opcion={opcion.id} />;
+  const pantalla = <PantallaDelModulo key={opcion.id} moduloId={moduloId} opcion={opcion.id} />;
+
+  // Una hoja de un modulo que pliega sus reportes se dibuja **igual**, dentro
+  // del centro (ADR-0014 §5). El centro es navegacion compuesta alrededor: no
+  // cambia como se dibuja la hoja ni de quien depende su permiso.
+  const modulo = catalogo.modulos.find((m) => m.id === moduloId);
+  if (modulo !== undefined && esHojaDelCentro(modulo, opcion)) {
+    return (
+      <CentroDeReportes modulo={modulo} activa={opcion.id}>
+        {pantalla}
+      </CentroDeReportes>
+    );
+  }
+
+  return pantalla;
 }
 
 function PantallaDelModulo({

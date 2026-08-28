@@ -6,6 +6,7 @@ import {
   OPCIONES,
   bloquesDe,
   buscarOpciones,
+  hojasDelCentro,
   opcionPorRuta,
   seccionesDe,
   todasLasPantallas,
@@ -31,12 +32,52 @@ beforeAll(async () => {
   PANTALLAS = await todasLasPantallas();
 });
 
-const BLOQUES_VALIDOS = new Set([
+const BLOQUES_TECNICOS = new Set([
   'Registro y mantenimiento',
   'Procesos',
   'Consultas',
   'Documentos y reportes',
 ]);
+
+/**
+ * Los grupos por tarea de los modulos ya disenados (ADR-0014 §4), en orden y
+ * con cuantas opciones lleva cada uno. Es la contraparte de la tabla
+ * `GRUPOS_POR_TAREA` del portador: si una regeneracion perdiera una opcion,
+ * la moviera de grupo o desordenara los grupos, aqui se pone rojo.
+ *
+ * **Esta copiada a mano a proposito, y no se «simplifica» derivandola de
+ * `modulo.bloques`**: derivarla la volveria tautologica —el generado se
+ * compararia consigo mismo— y dejaria de cazar lo unico que viene a cazar, que
+ * es un archivo generado editado a mano o regenerado desde una tabla cambiada
+ * sin querer.
+ */
+const GRUPOS_POR_TAREA_ESPERADOS: Readonly<Record<string, readonly (readonly [string, number])[]>> =
+  {
+    transito: [
+      ['Papeletas', 5],
+      ['Vehículos', 1],
+      ['Cobranza', 3],
+      ['Catálogos', 1],
+      // Las 13 hojas, plegadas en el centro de reportes (ADR-0014 §5).
+      ['Reportes', 13],
+    ],
+    'rentas-registro': [
+      ['Padrones', 3],
+      ['Determinación', 4],
+      ['Movimientos', 4],
+      ['Tributos y beneficios', 4],
+    ],
+    valores: [
+      ['Emisión', 2],
+      ['Gestión del valor', 4],
+    ],
+    seguridad: [
+      ['Cuentas y accesos', 5],
+      ['Catálogo', 2],
+      ['Sesión', 2],
+      ['Operación', 2],
+    ],
+  };
 
 describe('el catalogo trae el manual entero', () => {
   it('son doce modulos y 134 opciones', () => {
@@ -83,9 +124,13 @@ describe('el catalogo trae el manual entero', () => {
 });
 
 describe('la clasificacion en bloques viene precalculada', () => {
-  it('cada opcion cae en uno de los cuatro bloques de FRO-03 §4', () => {
-    for (const opcion of OPCIONES) {
-      expect(BLOQUES_VALIDOS.has(opcion.bloque), `${opcion.id}: ${opcion.bloque}`).toBe(true);
+  it('cada opcion cae en un grupo por tarea de su modulo o en un bloque de FRO-03 §4', () => {
+    for (const modulo of MODULOS) {
+      const grupos = GRUPOS_POR_TAREA_ESPERADOS[modulo.id];
+      const validos = grupos ? new Set(grupos.map(([label]) => label)) : BLOQUES_TECNICOS;
+      for (const opcion of modulo.opciones) {
+        expect(validos.has(opcion.bloque), `${opcion.id}: ${opcion.bloque}`).toBe(true);
+      }
     }
   });
 
@@ -97,9 +142,97 @@ describe('la clasificacion en bloques viene precalculada', () => {
     }
   });
 
-  it('una pantalla de reporte va a «Documentos y reportes»', () => {
+  it('todo modulo con grupos por tarea asigna cada opcion exactamente una vez', () => {
+    // ADR-0014 §4: ni huerfanas ni duplicadas, y los grupos en el orden y con
+    // el reparto disenados. Se compara contra la tabla completa —no contra una
+    // suma— para que una opcion movida de grupo tambien se vea.
+    for (const [moduloId, esperados] of Object.entries(GRUPOS_POR_TAREA_ESPERADOS)) {
+      const modulo = MODULOS.find((m) => m.id === moduloId);
+      expect(modulo, `el modulo ${moduloId} existe`).toBeDefined();
+      if (!modulo) continue;
+
+      const bloques = bloquesDe(modulo);
+      expect(
+        bloques.map((b) => [b.label, b.opciones.length]),
+        `grupos de ${moduloId}`,
+      ).toEqual(esperados);
+
+      // Exactamente una vez: los grupos no comparten opcion y entre todos
+      // cubren el modulo entero.
+      const asignadas = bloques.flatMap((b) => b.opciones.map((o) => o.id));
+      expect(new Set(asignadas).size, `sin duplicadas en ${moduloId}`).toBe(asignadas.length);
+      expect(asignadas.length, `sin huerfanas en ${moduloId}`).toBe(modulo.opciones.length);
+    }
+  });
+
+  it('una pantalla de reporte de un modulo sin grupos va a «Documentos y reportes»', () => {
     const constancia = OPCIONES.find((o) => o.id === 'constancia');
     expect(constancia?.bloque).toBe('Documentos y reportes');
+  });
+});
+
+/**
+ * Las trece hojas que Transito pliega en su centro de reportes (ADR-0014 §5),
+ * **en el orden del catalogo**. Copiadas a mano, por el mismo motivo que los
+ * grupos de arriba: derivarlas del generado las volveria tautologicas.
+ *
+ * Esta es la lista que se pone roja si una hoja se cae del mecanismo —porque se
+ * desmarco el grupo en la tabla, porque una hoja se movio a otro grupo, o
+ * porque el portador dejo de emitir la marca—. Ninguna de las tres rompe la
+ * compilacion: la opcion seguiria existiendo, con su ruta y su permiso, solo
+ * que fuera del centro y de vuelta compitiendo en el menu.
+ */
+const HOJAS_DEL_CENTRO_DE_TRANSITO: readonly string[] = [
+  'transito_reportes',
+  'transito_record_conductor',
+  'transito_record_vehicular',
+  'transito_constancia_libre',
+  'transito_padron',
+  'transito_papeleta_reporte',
+  'transito_rg_ordinaria',
+  'transito_rg_sancionadora',
+  'transito_padron_constancias',
+  'transito_resumen_recaudacion',
+  'transito_resumen_papeletas',
+  'transito_resumen_codigo',
+  'transito_resumen_placa',
+];
+
+describe('el centro de reportes se declara en el catalogo, no en el componente', () => {
+  it('Transito pliega su bloque «Reportes», y es el unico modulo que pliega alguno', () => {
+    const plegadores = MODULOS.filter((m) => m.centroDeReportes !== undefined).map((m) => [
+      m.id,
+      m.centroDeReportes,
+    ]);
+    expect(plegadores).toEqual([['transito', 'Reportes']]);
+  });
+
+  it('las trece hojas estan en el centro, con su id y su ruta intactos', () => {
+    const transito = MODULOS.find((m) => m.id === 'transito');
+    expect(transito).toBeDefined();
+    if (!transito) return;
+
+    const hojas = hojasDelCentro(transito);
+    expect(hojas.map((h) => h.id)).toEqual(HOJAS_DEL_CENTRO_DE_TRANSITO);
+    // Cada hoja conserva su ruta: el centro no las absorbe, las envuelve.
+    for (const hoja of hojas) {
+      expect(opcionPorRuta('transito', hoja.ranura)?.id, hoja.id).toBe(hoja.id);
+    }
+  });
+
+  it('el bloque plegado es el que dice el modulo, y solo ese', () => {
+    const transito = MODULOS.find((m) => m.id === 'transito');
+    if (!transito) return;
+    const plegados = bloquesDe(transito)
+      .filter((b) => b.plegado)
+      .map((b) => b.label);
+    expect(plegados).toEqual(['Reportes']);
+  });
+
+  it('un modulo sin centro no tiene hojas que plegar', () => {
+    const consultas = MODULOS.find((m) => m.id === 'consultas');
+    expect(consultas?.centroDeReportes).toBeUndefined();
+    expect(consultas && hojasDelCentro(consultas)).toEqual([]);
   });
 });
 

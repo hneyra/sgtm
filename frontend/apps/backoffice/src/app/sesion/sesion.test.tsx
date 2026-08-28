@@ -298,6 +298,12 @@ describe('cambiar de municipalidad vacia la cache antes de pedir', () => {
 
     await cliente.fetchQuery({ queryKey: ['pantalla', 'calles', {}], queryFn: () => 'filas' });
 
+    // La sesion recien abierta todavia esta pidiendo su matriz de permisos
+    // (ADR-0013); si esa peticion aterrizara dentro de la ventana instrumentada
+    // se colaria en `orden` sin tener nada que ver con el cambio. Se espera a
+    // que asiente antes de empezar a mirar.
+    await waitFor(() => expect(peticiones.some((u) => u.includes('/sesion/permisos'))).toBe(true));
+
     const orden: string[] = [];
     const vaciar = cliente.clear.bind(cliente);
     vi.spyOn(cliente, 'clear').mockImplementation(() => {
@@ -311,12 +317,17 @@ describe('cambiar de municipalidad vacia la cache antes de pedir', () => {
     }) as typeof fetch;
 
     await usuario.click(screen.getByRole('button', { name: 'Cambiar de municipalidad' }));
-    await waitFor(() => expect(orden.length).toBeGreaterThan(1));
+    const esIdentidad = (evento: string) => /^peticion https:\/\/identidad/.test(evento);
+    await waitFor(() => expect(orden.some(esIdentidad)).toBe(true));
 
-    // Primero se vacia y despues se pide: al reves, la respuesta de la
-    // municipalidad anterior seguiria ahi cuando se dibuje la primera pantalla.
-    expect(orden[0]).toBe('cache vaciada');
-    expect(orden[1]).toMatch(/^peticion https:\/\/identidad/);
+    // Primero se vacia y despues se pide el token nuevo: al reves, la
+    // respuesta de la municipalidad anterior seguiria ahi cuando se dibuje la
+    // primera pantalla. El orden es relativo —vaciado antes que identidad— y
+    // no absoluto, porque otra peticion en vuelo ajena al cambio puede caer en
+    // la ventana sin romper la invariante.
+    const indiceVaciado = orden.indexOf('cache vaciada');
+    expect(indiceVaciado).toBeGreaterThanOrEqual(0);
+    expect(orden.findIndex(esIdentidad)).toBeGreaterThan(indiceVaciado);
     expect(cliente.getQueryCache().getAll()).toHaveLength(0);
   });
 });

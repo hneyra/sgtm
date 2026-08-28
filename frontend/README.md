@@ -230,6 +230,37 @@ la infracción con los parámetros de ese día; recalcularlo al mostrar es el er
 módulo, y haría que la pantalla dejara de decir lo que dice el documento que se notificó. Hay una
 prueba que comprueba que cada cifra que se ve está **tal cual** en lo que sirvió la API.
 
+### …y trece hojas, una entrada del menú
+
+Que las trece compartan bloque no impedía que compitieran con las diez operaciones del módulo:
+Tránsito llegaba a la barra lateral con veintitrés entradas. Desde [ADR-0014](../docs/30-arquitectura/adr/ADR-0014-navegacion-centrada-en-la-atencion.md)
+§5 son **una**, «Reportes», que abre el **centro de reportes**: las hojas a la izquierda y, a la
+derecha, la pantalla de la elegida con sus criterios y su hoja. La barra queda en once.
+
+Lo que hace que esto no sea una regresión encubierta:
+
+- **Cada hoja conserva su id de opción, su ruta y su permiso.** `/transito/transito-record-conductor`
+  sigue cayendo en su hoja, ahora dentro del layout. El centro **no tiene ruta propia**: la entrada
+  del menú lleva a una hoja concreta —la primera que el usuario puede ver—, así que no hay una
+  opción nueva sin permiso que la cubra.
+- **El renderizador no se bifurca.** La hoja la dibuja `Pantalla` con los bloques de siempre;
+  `CentroDeReportes` es una envoltura de navegación. La evidencia sigue siendo la de arriba: el
+  `e2e` de A4 de la hoja de Tránsito pasa **sin tocar el spec**.
+- **El carril se filtra con `useCatalogoVisible`**, como el menú, el hub y la paleta: una lista que
+  enseñara lo que los permisos niegan sería una superficie de exploración nueva. Y va marcado
+  `data-no-imprimible`: lo que sale firmado es la hoja, no la lista de hojas.
+
+**El pliegue se declara en la tabla del portador, no en el componente.** Un grupo de
+`scripts/grupos-por-tarea.mjs` puede llevar `{ centro: true }`; el portador lo emite como
+`centroDeReportes` del módulo y la barra, el hub y el centro leen de ahí. El día que Infracciones
+administrativas o Consultas quieran el suyo es una marca en esa tabla y `yarn portar-catalogo`, no
+una lista de trece ids cableada en tres sitios.
+
+Y de paso salió una fuga que llevaba tiempo: **el nivel módulo de la barra lateral se dibujaba del
+catálogo entero**, no del visible. Entrar por URL a un módulo cuyas opciones no se tienen listaba
+las opciones igualmente (los nombres, no las pantallas). Ahora se resuelve contra
+`useCatalogoVisible`, que es lo que ADR-0014 daba por hecho.
+
 ### Una prueba que espera solo al título no comprueba nada
 
 El título de una pantalla lo da el catálogo de navegación y llega enseguida; **sus bloques llegan

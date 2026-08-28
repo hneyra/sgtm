@@ -1,10 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { MODULOS, OPCIONES } from '../../catalogo';
 import { catalogoVisible, permisosDelClaim, puedeEscribir, puedeVer } from './permisos';
 import { montarEnRuta } from '../../pruebas/montar';
+import {
+  CAJERO,
+  CONSULTA,
+  configurarProveedor,
+  entraCon,
+  entraSinPoderLeerPermisos,
+  limpiarSesion,
+} from '../../pruebas/sesion';
 
 /**
  * Visibilidad por rol (REQ-03).
@@ -15,69 +23,17 @@ import { montarEnRuta } from '../../pruebas/montar';
  * > estas pruebas no deben leerse como si lo hiciera.
  */
 
-/** Los permisos de un cajero, tal como los describe REQ-03 §3: caja, sin coactiva. */
-const CAJERO = {
-  caja_tributaria: ['ejecucion', 'lectura', 'registro'],
-  caja_tasas: ['ejecucion', 'lectura', 'registro'],
-  duplicado_recibo: ['ejecucion', 'lectura', 'impresion'],
-};
-
-/** El perfil de consulta: ve, y no toca nada. */
-const CONSULTA = {
-  calles: ['lectura'],
-  predial_masivo: ['lectura'],
-};
-
-const CONFIGURACION = {
-  VITE_SGTM_OIDC_CLIENTE: 'sgtm-backoffice',
-  VITE_SGTM_OIDC_AUTORIZACION: 'https://identidad.gob.pe/oauth2/authorize',
-  VITE_SGTM_OIDC_TOKEN: 'https://identidad.gob.pe/oauth2/token',
-};
-
-const base64url = (texto: string) =>
-  btoa(texto).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-const originalFetch = globalThis.fetch;
-
-/**
- * Entra un usuario con estos permisos.
- *
- * El token **no lleva los permisos** (ADR-0013): solo autentica. La matriz la pide la interfaz a
- * `GET /seguridad/sesion/permisos`, y aqui se responde con la del rol que la prueba describe.
- */
-function entraCon(permisos: Readonly<Record<string, readonly string[]>>): void {
-  const token = `${base64url('{"alg":"none"}')}.${base64url(
-    JSON.stringify({
-      name: 'María Quispe',
-      municipalidad_nombre: 'Municipalidad Provincial de Sullana',
-      exp: 2_000_000_000,
-    }),
-  )}.firma`;
-
-  const proxy = globalThis.fetch;
-  globalThis.fetch = ((entrada: RequestInfo | URL, opciones?: RequestInit) => {
-    const url = typeof entrada === 'string' ? entrada : String(entrada);
-    if (url.startsWith('https://identidad.gob.pe')) {
-      return Promise.resolve(
-        new Response(JSON.stringify({ access_token: token, expires_in: 300 }), { status: 200 }),
-      );
-    }
-    if (url.replace(/^.*\/api\/v1/, '') === '/seguridad/sesion/permisos') {
-      return Promise.resolve(new Response(JSON.stringify(permisos), { status: 200 }));
-    }
-    return proxy(entrada, opciones);
-  }) as typeof fetch;
-}
-
 beforeEach(() => {
-  for (const [clave, valor] of Object.entries(CONFIGURACION)) vi.stubEnv(clave, valor);
+  // El proveedor se configura suelto porque tambien lo necesitan las pruebas
+  // que no llaman a `entraCon`: sin el, la sesion queda «sin proveedor» y la
+  // autorizacion pasa a ser «se ve todo».
+  configurarProveedor();
   instalarProxyDeDatos({ latencia: false });
 });
 
 afterEach(() => {
-  vi.unstubAllEnvs();
+  limpiarSesion();
   desinstalarProxyDeDatos();
-  globalThis.fetch = originalFetch;
   localStorage.clear();
 });
 
@@ -146,12 +102,20 @@ describe('«Recientes» no resucita lo que ya no se puede ver', () => {
       'sgtm.recientes',
       JSON.stringify(['coactiva_expedientes', 'caja_tributaria']),
     );
+    const usuario = userEvent.setup();
     entraCon(CAJERO);
     montarEnRuta('/tesoreria/caja-tributaria');
 
-    const navegacion = await screen.findByRole('complementary');
+    // «Recientes» vive en el **nivel raiz** de la barra, y al abrir una opcion
+    // la barra esta en el nivel de su modulo: sin volver a la raiz, esta prueba
+    // miraba la lista de opciones de Tesoreria y no la de recientes, asi que
+    // pasaba sin ejercitar lo que dice ejercitar.
+    await usuario.click(await screen.findByRole('button', { name: /Todos los módulos/ }));
+    const navegacion = screen.getByRole('navigation', { name: 'Módulos del sistema' });
+
     // La que si puede ver sigue en «Recientes» —la lista se dibuja de verdad—,
     // y la que ya no puede, no resucita.
+    expect(await within(navegacion).findByText('Recientes')).toBeInTheDocument();
     expect(within(navegacion).getAllByText('Caja tributaria').length).toBeGreaterThan(0);
     expect(within(navegacion).queryByText('Expedientes coactivos')).not.toBeInTheDocument();
   });
@@ -159,22 +123,7 @@ describe('«Recientes» no resucita lo que ya no se puede ver', () => {
 
 describe('si no se pueden leer los permisos, no se ve nada', () => {
   it('el endpoint de permisos falla y ningun modulo se dibuja: negacion por omision', async () => {
-    const token = `${base64url('{"alg":"none"}')}.${base64url(
-      JSON.stringify({ name: 'María Quispe', exp: 2_000_000_000 }),
-    )}.firma`;
-    const proxy = globalThis.fetch;
-    globalThis.fetch = ((entrada: RequestInfo | URL, opciones?: RequestInit) => {
-      const url = typeof entrada === 'string' ? entrada : String(entrada);
-      if (url.startsWith('https://identidad.gob.pe')) {
-        return Promise.resolve(
-          new Response(JSON.stringify({ access_token: token, expires_in: 300 }), { status: 200 }),
-        );
-      }
-      if (url.replace(/^.*\/api\/v1/, '') === '/seguridad/sesion/permisos') {
-        return Promise.resolve(new Response('', { status: 500 }));
-      }
-      return proxy(entrada, opciones);
-    }) as typeof fetch;
+    entraSinPoderLeerPermisos();
 
     // Con la matriz vacia (negacion por omision), ningun modulo existe para la
     // interfaz: un menu vacio dice la verdad mejor que uno completo que falla en

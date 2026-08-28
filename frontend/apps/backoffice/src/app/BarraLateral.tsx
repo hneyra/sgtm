@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Icono, IconoDeModulo } from '@sgtm/design-system';
-import { bloquesDe, rutaDeModulo, rutaDeOpcion } from '../catalogo';
+import { bloquesDe, conteoDeOpciones, rutaDeModulo, rutaDeOpcion } from '../catalogo';
 import { useCatalogoVisible } from './sesion/useCatalogoVisible';
-import type { ModuloDelCatalogo } from '../catalogo';
+import type { BloqueDeNavegacion, ModuloDelCatalogo } from '../catalogo';
 import { usePreferencias } from './preferencias';
 
 /**
@@ -11,7 +11,8 @@ import { usePreferencias } from './preferencias';
  *
  * **Nivel raiz:** los recientes y los doce modulos.
  * **Nivel modulo:** vuelta a «Todos los modulos» y las opciones del modulo
- * abierto, repartidas en sus cuatro bloques colapsables.
+ * abierto, repartidas en sus bloques colapsables —salvo el que el modulo
+ * pliega en su centro de reportes (ADR-0014 §5), que es una entrada unica—.
  *
  * El colapso se guarda por clave `modulo|bloque` para que cada bloque conserve
  * su estado con independencia de los demas, como en el prototipo.
@@ -46,6 +47,20 @@ export function BarraLateral({
     .map((id) => catalogo.opciones.find((o) => o.id === id))
     .filter((o): o is NonNullable<typeof o> => o !== undefined);
 
+  /* El nivel modulo lista **el modulo que este usuario ve**, no el del catalogo
+     entero: la ruta se resuelve contra las 134 —es la que da el titulo de la
+     cabecera—, y dibujar sus opciones sin filtrar delataba las que sus permisos
+     niegan al entrar por la URL (REQ-03 §5). Si de este modulo no ve ninguna,
+     queda el encabezado sin opciones: la pantalla ya dice que no tiene permiso. */
+  const abierto =
+    modulo === null
+      ? null
+      : (catalogo.modulos.find((m) => m.id === modulo.id) ?? {
+          ...modulo,
+          bloques: [],
+          opciones: [],
+        });
+
   return (
     <aside className="sgtm-nav" data-abierta={abierta ? '1' : '0'}>
       <div className="sgtm-nav__cabecera">
@@ -68,7 +83,7 @@ export function BarraLateral({
         </button>
       </div>
 
-      {modulo === null ? (
+      {abierto === null ? (
         <nav className="sgtm-nav__lista" aria-label="Módulos del sistema">
           {visitados.length > 0 && (
             <>
@@ -106,23 +121,33 @@ export function BarraLateral({
               </span>
               <span className="sgtm-nav__modulo-texto">
                 <span className="sgtm-nav__modulo-etiqueta">{m.label}</span>
-                <span className="sgtm-nav__modulo-conteo">
-                  {m.opciones.length} {m.opciones.length === 1 ? 'opción' : 'opciones'}
-                </span>
+                <span className="sgtm-nav__modulo-conteo">{conteoDeOpciones(m)}</span>
               </span>
               <Icono nombre="chevronDerecha" tamano={14} />
             </button>
           ))}
         </nav>
       ) : (
-        <nav className="sgtm-nav__lista" aria-label={`Opciones de ${modulo.label}`}>
+        <nav className="sgtm-nav__lista" aria-label={`Opciones de ${abierto.label}`}>
           <button type="button" className="sgtm-nav__volver" onClick={onVolverARaiz}>
             <Icono nombre="chevronIzquierda" tamano={14} />
             Todos los módulos
           </button>
-          <p className="sgtm-nav__modulo-actual">{modulo.label}</p>
-          {bloquesDe(modulo).map((bloque) => {
-            const clave = `${modulo.id}|${bloque.label}`;
+          <p className="sgtm-nav__modulo-actual">{abierto.label}</p>
+          {bloquesDe(abierto).map((bloque) => {
+            // Las hojas plegadas no se listan: son una entrada que abre el
+            // centro de reportes (ADR-0014 §5).
+            if (bloque.plegado) {
+              return (
+                <EntradaDelCentro
+                  key={bloque.label}
+                  modulo={abierto}
+                  bloque={bloque}
+                  onNavegar={onNavegar}
+                />
+              );
+            }
+            const clave = `${abierto.id}|${bloque.label}`;
             const cerrado = cerrados[clave] === true;
             return (
               <div key={bloque.label}>
@@ -142,7 +167,7 @@ export function BarraLateral({
                   bloque.opciones.map((opcion) => (
                     <NavLink
                       key={opcion.id}
-                      to={rutaDeOpcion(modulo, opcion)}
+                      to={rutaDeOpcion(abierto, opcion)}
                       className="sgtm-nav__opcion"
                       onClick={onNavegar}
                     >
@@ -160,5 +185,49 @@ export function BarraLateral({
         </nav>
       )}
     </aside>
+  );
+}
+
+/**
+ * La entrada unica de un bloque plegado en centro de reportes (ADR-0014 §5).
+ *
+ * Navega a **una hoja concreta** —la primera que el usuario puede ver— y no a
+ * una ruta nueva: una ruta del centro seria una opcion mas, sin id en el
+ * catalogo y sin permiso propio, y esta decision no crea ninguna. El centro
+ * lista las demas.
+ *
+ * Se dibuja solo si queda alguna hoja visible: el modulo ya llega filtrado por
+ * `useCatalogoVisible`, asi que un usuario sin permiso sobre ninguna hoja no ve
+ * la entrada (REQ-03 §5).
+ */
+function EntradaDelCentro({
+  modulo,
+  bloque,
+  onNavegar,
+}: {
+  readonly modulo: ModuloDelCatalogo;
+  readonly bloque: BloqueDeNavegacion;
+  readonly onNavegar: () => void;
+}) {
+  const { pathname } = useLocation();
+  const primera = bloque.opciones[0];
+  if (primera === undefined) return null;
+
+  // Se esta en el centro si la ruta abierta es la de **alguna** de sus hojas.
+  // No se marca `aria-current="page"`: el enlace apunta a la primera hoja, que
+  // casi nunca es la abierta, y decir «esta es la pagina» seria mentir. La que
+  // si lo lleva es la hoja del carril del centro.
+  const dentro = bloque.opciones.some((hoja) => pathname === rutaDeOpcion(modulo, hoja));
+
+  return (
+    <Link
+      to={rutaDeOpcion(modulo, primera)}
+      className="sgtm-nav__opcion sgtm-nav__centro"
+      data-dentro={dentro ? '1' : '0'}
+      onClick={onNavegar}
+    >
+      <span className="sgtm-nav__opcion-etiqueta">{bloque.label}</span>
+      <span className="sgtm-nav__bloque-conteo">{bloque.opciones.length}</span>
+    </Link>
   );
 }

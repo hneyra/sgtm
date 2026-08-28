@@ -338,6 +338,19 @@
   white-space: nowrap;
 }
 
+/* La entrada unica del bloque plegado en centro de reportes (ADR-0014 §5): se
+   separa del bloque anterior como lo hace una cabecera de bloque, porque en la
+   lista ocupa su sitio. */
+.sgtm-nav__centro {
+  margin-top: 10px;
+}
+
+.sgtm-nav__centro[data-dentro='1'] {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
 /* —— Cabecera ————————————————————————————————————————————————— */
 
 .sgtm-cabecera {
@@ -452,7 +465,7 @@
 
 .sgtm-versionado__numero {
   font-weight: 600;
-  color: var(--ink-1);
+  color: var(--ink);
 }
 
 .sgtm-versionado__vigencia {
@@ -522,7 +535,7 @@
 .sgtm-cabecera__ejercicio strong {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--ink-1);
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -562,6 +575,151 @@
 .sgtm-cabecera__rol {
   font-size: 10px;
   color: var(--ink-3);
+}
+
+/* —— Lanzador de modulos y menu de la persona (ADR-0014 §2 y §3) ——
+   Dos desplegables anclados a su boton de la cabecera. El del lanzador se ve
+   tambien en movil; el de la persona vive en el bloque `derecha`. */
+
+.sgtm-lanzador,
+.sgtm-menu-persona {
+  position: relative;
+}
+
+.sgtm-lanzador__boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2);
+  background: var(--bg-card);
+  color: var(--ink-2);
+}
+
+.sgtm-lanzador__boton:hover {
+  border-color: var(--ink-4);
+}
+
+.sgtm-lanzador__boton[aria-expanded='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.sgtm-lanzador__panel,
+.sgtm-menu-persona__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 70;
+  padding: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-2);
+  animation: fadeIn 0.18s ease;
+}
+
+/* Dos columnas de 230 px: «Infracciones administrativas» y «Autorizaciones y
+   licencias» son los nombres del manual (RNF-080) y no se acortan, asi que el
+   panel se ensancha para que quepan en dos lineas en vez de recortarlas con un
+   «…». En movil sigue cinendose al viewport. */
+.sgtm-lanzador__panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 2px;
+  width: min(520px, calc(100vw - 24px));
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.sgtm-lanzador__modulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--r-2);
+  background: transparent;
+  text-align: left;
+  color: var(--ink);
+}
+
+/* La entrada activa es la que tiene el foco de verdad (foco itinerante del
+   patron APG): se resalta con `:focus`, no con un atributo que lo imitaba. */
+.sgtm-lanzador__modulo:hover,
+.sgtm-lanzador__modulo:focus {
+  background: var(--accent-soft);
+}
+
+.sgtm-lanzador__icono {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+}
+
+.sgtm-lanzador__texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+/* Dos lineas antes que un «…»: el nombre del modulo es el del manual y a media
+   palabra no identifica nada. */
+.sgtm-lanzador__etiqueta {
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.sgtm-lanzador__conteo {
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+/* El chip del usuario, cuando es boton, conserva su forma de chip **y su
+   color**: un `<button>` no hereda el color del texto, cae al negro del
+   navegador, y sobre la tarjeta del tema oscuro el nombre se vuelve ilegible. */
+.sgtm-menu-persona__boton {
+  text-align: left;
+  color: inherit;
+}
+
+.sgtm-menu-persona__boton:hover,
+.sgtm-menu-persona__boton[aria-expanded='true'] {
+  border-color: var(--ink-4);
+}
+
+.sgtm-menu-persona__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+
+.sgtm-menu-persona__entrada {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--r-2);
+  background: transparent;
+  text-align: left;
+  font-size: 12.5px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.sgtm-menu-persona__entrada:hover,
+.sgtm-menu-persona__entrada:focus {
+  background: var(--accent-soft);
 }
 
 /* —— Paleta de comandos ———————————————————————————————————————— */
@@ -657,6 +815,81 @@
   background: var(--bg-elev);
   font-size: 11px;
   color: var(--ink-3);
+}
+
+/* —— Centro de reportes (ADR-0014 §5) ————————————————————————————
+   El carril de hojas a la izquierda y la pantalla de la elegida a la derecha.
+   Con `flex` y no con `grid` de dos columnas a proposito: al imprimir, el
+   carril lleva `data-no-imprimible` y desaparece del flujo, y la hoja se queda
+   con el ancho entero sin necesitar una regla `@media print` que lo recoloque. */
+
+.sgtm-centro {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.sgtm-centro__carril {
+  flex: 0 0 216px;
+  position: sticky;
+  top: 78px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.sgtm-centro__eyebrow {
+  margin: 2px 0 6px;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-4);
+}
+
+.sgtm-centro__hoja {
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink-2);
+}
+
+.sgtm-centro__hoja:hover {
+  background: var(--accent-soft);
+}
+
+.sgtm-centro__hoja[data-abierta='1'] {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.sgtm-centro__panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* En pantalla estrecha el carril pasa a ser una tira arriba: 216 px de menos
+   sobre 360 px no dejarian sitio a la hoja. */
+@media (max-width: 900px) {
+  .sgtm-centro {
+    flex-direction: column;
+  }
+
+  .sgtm-centro__carril {
+    position: static;
+    flex: 0 0 auto;
+    align-self: stretch;
+  }
 }
 
 /* —— Hub de modulo ———————————————————————————————————————————— */

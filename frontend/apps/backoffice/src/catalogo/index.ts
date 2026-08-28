@@ -109,15 +109,52 @@ const normalizar = (texto: string): string =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
-/** Las opciones de un modulo repartidas en sus bloques, en el orden de FRO-03 §4. */
-export function bloquesDe(
-  modulo: ModuloDelCatalogo,
-): readonly { readonly label: string; readonly opciones: readonly OpcionDelCatalogo[] }[] {
+/**
+ * «12 opciones», o «1 opción». La misma fila la dibujan la barra lateral y el
+ * lanzador, y una de las dos pluralizando distinto seria un defecto tonto.
+ */
+export const conteoDeOpciones = (modulo: ModuloDelCatalogo): string =>
+  `${modulo.opciones.length} ${modulo.opciones.length === 1 ? 'opción' : 'opciones'}`;
+
+export interface BloqueDeNavegacion {
+  readonly label: string;
+  readonly opciones: readonly OpcionDelCatalogo[];
+  /**
+   * El bloque se pliega en el centro de reportes (ADR-0014 §5): el menu ensena
+   * una entrada unica en vez de sus opciones una a una.
+   */
+  readonly plegado: boolean;
+}
+
+/**
+ * Las opciones de un modulo repartidas en sus bloques, **en el orden que el
+ * propio modulo declara**: los grupos por tarea donde el modulo esta disenado
+ * (ADR-0014 §4) y los cuatro bloques tecnicos de FRO-03 §4 en los demas. El
+ * orden lo fija el portador del catalogo; aqui solo se reparte.
+ */
+export function bloquesDe(modulo: ModuloDelCatalogo): readonly BloqueDeNavegacion[] {
   return modulo.bloques.map((label) => ({
     label,
     opciones: modulo.opciones.filter((o) => o.bloque === label),
+    plegado: label === modulo.centroDeReportes,
   }));
 }
+
+/**
+ * Las hojas del centro de reportes de un modulo (ADR-0014 §5), en el orden del
+ * catalogo; vacio si el modulo no pliega ninguno.
+ *
+ * Se pasa el modulo **visible** —el que `useCatalogoVisible` filtro— y no la
+ * constante: el carril del centro esconde lo mismo que el menu (REQ-03 §5).
+ */
+export function hojasDelCentro(modulo: ModuloDelCatalogo): readonly OpcionDelCatalogo[] {
+  if (modulo.centroDeReportes === undefined) return [];
+  return modulo.opciones.filter((o) => o.bloque === modulo.centroDeReportes);
+}
+
+/** Si esta opcion es una de las hojas que su modulo pliega en el centro. */
+export const esHojaDelCentro = (modulo: ModuloDelCatalogo, opcion: OpcionDelCatalogo): boolean =>
+  modulo.centroDeReportes !== undefined && opcion.bloque === modulo.centroDeReportes;
 
 /**
  * Las secciones que toca mostrar: las de la pestana activa si la pantalla tiene

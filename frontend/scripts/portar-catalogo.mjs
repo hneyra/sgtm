@@ -26,6 +26,7 @@
 import { createContext, runInContext } from 'node:vm';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { asignacionPorTarea, centroDeReportesDe, nombresDeLosGrupos } from './grupos-por-tarea.mjs';
 
 const raiz = new URL('../../', import.meta.url);
 const origen = new URL('design/', raiz);
@@ -108,6 +109,11 @@ const ICONOS = {
    ejecucion: correr cuatro expresiones regulares por opcion en cada render
    es trabajo que el build puede hacer una vez. */
 const BLOQUES = ['Registro y mantenimiento', 'Procesos', 'Consultas', 'Documentos y reportes'];
+
+/* ── Grupos por tarea (ADR-0014 §4) ───────────────────────────────────────
+   La tabla y sus guardas viven en `grupos-por-tarea.mjs`, importable desde una
+   prueba: este guion no lo es —lee el prototipo y escribe archivos al
+   importarse—, y las guardas que lo protegen tienen que poder demostrarse. */
 
 function bloqueDe(pantalla, etiqueta) {
   const t = `${pantalla?.title ?? etiqueta}`.toLowerCase();
@@ -285,22 +291,36 @@ for (const grupo of NAV) {
 /* ── Navegacion ───────────────────────────────────────────────────────── */
 
 const modulos = NAV.map((grupo) => {
+  const moduloId = aRanura(grupo.label);
+  // Grupos por tarea si el modulo esta disenado (ADR-0014 §4); si no, los
+  // cuatro bloques tecnicos de FRO-03 §4.
+  const asignacion = asignacionPorTarea(moduloId, grupo.items);
   const opciones = grupo.items.map(([id, label]) => ({
     id,
     label,
     ranura: aRanura(id.replace(/_/g, '-')),
-    bloque: bloqueDe(PANTALLAS[id], label),
+    bloque: asignacion ? asignacion.get(id) : bloqueDe(PANTALLAS[id], label),
     // El titulo y el resumen viajan **siempre**: son el menu, el hub y lo que
     // busca la paleta de comandos. La estructura de la pantalla no: esa llega
     // cuando se entra en su modulo.
     title: PANTALLAS[id]?.title ?? label,
     resumen: PANTALLAS[id]?.desc ?? '',
   }));
+  // El grupo que se pliega en un centro de reportes, si la tabla lo marca
+  // (ADR-0014 §5). Viaja con la navegacion: lo necesitan la barra lateral, el
+  // hub y el propio centro, y ninguno de los tres deberia llevar la lista de
+  // hojas cableada.
+  const centro = asignacion ? centroDeReportesDe(moduloId) : null;
   return {
-    id: aRanura(grupo.label),
+    id: moduloId,
     label: grupo.label,
     icono: ICONOS[grupo.label] ?? ['M4.5 4.5h15v15h-15z'],
-    bloques: BLOQUES.filter((b) => opciones.some((o) => o.bloque === b)),
+    // El orden de los bloques es el de la tabla en un modulo tabulado, y el
+    // de FRO-03 §4 en los demas.
+    bloques: asignacion
+      ? nombresDeLosGrupos(moduloId)
+      : BLOQUES.filter((b) => opciones.some((o) => o.bloque === b)),
+    ...(centro === null ? {} : { centroDeReportes: centro }),
     opciones,
   };
 });
@@ -341,7 +361,7 @@ mkdirSync(fileURLToPath(simulada), { recursive: true });
 writeFileSync(
   fileURLToPath(new URL('navegacion.generado.ts', catalogo)),
   `${cabecera(
-    'Los 12 modulos del manual y sus 134 opciones, con el bloque de cada una ya\n * clasificado (FRO-03 §4) para no correr expresiones regulares en cada render.',
+    'Los 12 modulos del manual y sus 134 opciones, con el bloque de cada una ya\n * clasificado en el build: grupos por tarea donde el modulo esta disenado\n * (ADR-0014 §4) y los bloques de FRO-03 §4 en los demas. `centroDeReportes`\n * nombra el bloque que el modulo pliega en su centro de reportes (ADR-0014 §5).',
     'Los nombres vienen del manual y no se reescriben (RNF-080).',
   )}
 import type { ModuloDelCatalogo } from './tipos';
