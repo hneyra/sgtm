@@ -1456,14 +1456,41 @@ export interface ArchivoSimulado {
 }
 
 /**
- * El reporte de la ficha del contribuyente, cuando pide un archivo (`?formato=`).
+ * Las rutas cuyo backend sirve el documento con `?formato=`, y como se llama lo
+ * que devuelven.
+ *
+ * Dos, y las dos por el mismo motivo: son consultas que se miran, no emisiones
+ * que se numeren, asi que su backend las dibuja en los tres formatos de RF-132
+ * sin registrar nada. La ficha del contribuyente (#71) y la constancia de no
+ * adeudo (#72, RNF-081).
+ */
+const RUTAS_CON_ARCHIVO: ReadonlyArray<{
+  readonly ruta: RegExp;
+  readonly titulo: string;
+  readonly base: string;
+}> = [
+  {
+    ruta: /^\/catastro\/contribuyentes\/[^/]+\/ficha\.pdf$/,
+    titulo: 'Ficha del contribuyente',
+    base: 'ficha-simulada',
+  },
+  {
+    ruta: /^\/consultas\/constancias\/no-adeudo$/,
+    titulo: 'Constancia de no adeudo',
+    base: 'constancia-simulada',
+  },
+];
+
+/**
+ * Un reporte que sale como archivo, cuando la peticion lo pide (`?formato=`).
  *
  * A diferencia del resto de este archivo, aqui **si se inventa el contenido**:
  * no hay un `Resource` del prototipo del que copiarlo, porque un archivo
  * binario no es un dato de pantalla. Lo que se prueba con esto es el
  * mecanismo de descarga —la cabecera, el nombre, el tipo de medio—, no la
- * fidelidad del documento. Sin `formato`, la ruta sigue su camino de siempre
- * y responde JSON, como cualquier otra pantalla sin conectar.
+ * fidelidad del documento: quien la comprueba es el backend, que dibuja los
+ * tres formatos del mismo modelo y verifica que reimprimir da los mismos bytes.
+ * Sin `formato`, la ruta sigue su camino de siempre y responde JSON.
  */
 export function archivoDe(
   metodo: string,
@@ -1472,14 +1499,15 @@ export function archivoDe(
 ): ArchivoSimulado | null {
   if (metodo.toUpperCase() !== 'GET' || formato === null || formato === '') return null;
   const relativo = camino.replace(/^\/api\/v1/, '');
-  if (!/^\/catastro\/contribuyentes\/[^/]+\/ficha\.pdf$/.test(relativo)) return null;
+  const reporte = RUTAS_CON_ARCHIVO.find((candidata) => candidata.ruta.test(relativo));
+  if (reporte === undefined) return null;
 
   const tipoDeMedio = TIPOS_DE_MEDIO[formato.toUpperCase()];
   if (tipoDeMedio === undefined) return null;
 
   return {
-    cuerpo: `Ficha del contribuyente — documento simulado por el proxy de datos (formato ${formato.toUpperCase()})`,
+    cuerpo: `${reporte.titulo} — documento simulado por el proxy de datos (formato ${formato.toUpperCase()})`,
     tipoDeMedio,
-    nombreDeArchivo: `ficha-simulada.${formato.toLowerCase()}`,
+    nombreDeArchivo: `${reporte.base}.${formato.toLowerCase()}`,
   };
 }
