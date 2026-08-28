@@ -286,14 +286,19 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
     await screen.findByRole('region', { name: 'Observación del usuario' });
 
     /* Lo que la apaga es **lo que su formulario exige** (`escrituras.ts`), no el
-       sistema: primero el concepto —desde la revision de #331 hay que elegirlo,
-       porque sin el el cuerpo saldria sin `tributo`— y despues la observacion
-       (regla 10). Las dos son de la opcion; ninguna es un impedimento del acto. */
+       sistema: el concepto —desde la revision de #331 hay que elegirlo, porque
+       sin el el cuerpo saldria sin `tributo`—, el año y el documento —desde
+       #342, nit 3, con la misma dureza— y despues la observacion (regla 10).
+       Las cuatro son de la opcion; ninguna es un impedimento del acto. */
     expect(motivoDeLaPrimaria()).toMatch(/Falta el concepto/);
     await usuario.selectOptions(
       await screen.findByLabelText('Concepto / tributo'),
       'IMPUESTO PREDIAL',
     );
+    expect(motivoDeLaPrimaria()).toMatch(/Falta el año/);
+    await usuario.selectOptions(await screen.findByLabelText('Año'), '2026');
+    expect(motivoDeLaPrimaria()).toMatch(/Falta el número del documento/);
+    await usuario.type(screen.getByLabelText('Nº del documento'), 'RD-2026-000123');
     expect(motivoDeLaPrimaria()).toMatch(/Falta la observación/);
     expect(motivoDeLaPrimaria()).not.toMatch(/avísale a sistemas/);
     expect(document.getElementById('sgtm-motivo-de-la-accion')).not.toHaveAttribute('data-causa');

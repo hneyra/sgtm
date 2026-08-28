@@ -105,6 +105,10 @@ const TRIBUTO_DEL_BACKEND: Readonly<Record<string, string>> = {
   'ARBITRIOS MUNICIPALES': 'ARBITRIO',
   'PATRIMONIO VEHICULAR': 'VEHICULAR',
   ALCABALA: 'ALCABALA',
+  // `MULTA_ADMINISTRATIVA` mide exactamente 20 caracteres: cabe justo, sin
+  // sobrar uno, en el `tributo varchar(20)` de `cuenta_corriente_asiento`
+  // (V2__rentas_y_cuenta_corriente.sql). No es un defecto (#342, nit 5); es un
+  // borde a recordar si algun dia se agrega un codigo mas largo que este.
   'MULTA ADMINISTRATIVA': 'MULTA_ADMINISTRATIVA',
 };
 
@@ -395,6 +399,12 @@ const DONDE = 'Está en «Unidad (predio / placa)», dentro de «Deuda a dar de 
 /** Lo mismo, para el desplegable del concepto. */
 const DONDE_EL_CONCEPTO = 'Está en «Concepto / tributo», dentro de «Deuda a dar de alta».';
 
+/** Lo mismo, para el desplegable del año. */
+const DONDE_EL_ANO = 'Está en «Año», dentro de «Deuda a dar de alta».';
+
+/** Lo mismo, para el campo del documento que sustenta el alta. */
+const DONDE_EL_DOCUMENTO = 'Está en «Nº del documento», dentro de «Deuda a dar de alta».';
+
 /**
  * Que le falta al alta para poder registrarse, dicho para quien atiende (#331).
  *
@@ -418,8 +428,18 @@ const DONDE_EL_CONCEPTO = 'Está en «Concepto / tributo», dentro de «Deuda a 
  * lo que el backend contesta entonces es sobre un campo que la pantalla enseñaba
  * lleno. El desplegable ya no miente —`eleccionObligatoria` en `Formulario`— y
  * aqui no se deja pasar: elegir es un acto.
+ *
+ * `resolverUnidad` tiene por omision `unidadDelTributo` y solo una prueba lo
+ * cambia (#342, nit 2): con los cinco tributos que hoy manda el alta clasificados
+ * en `UNIDAD_DEL_TRIBUTO`, la rama `unidad === undefined` no la alcanza ningun
+ * dato real, y una guarda que nunca se ejerce no protege nada. Inyectar el
+ * resolutor deja simular «un tributo que la clasificacion todavia no cubre» sin
+ * tocar `UNIDAD_DEL_TRIBUTO` de produccion.
  */
-function faltaEnElAlta(borrador: Readonly<Record<string, string>>): string | undefined {
+export function faltaEnElAlta(
+  borrador: Readonly<Record<string, string>>,
+  resolverUnidad: (codigo: string) => ReturnType<typeof unidadDelTributo> = unidadDelTributo,
+): string | undefined {
   const dato = (clave: string): string => (borrador[clave] ?? '').trim();
 
   const concepto = dato('conceptoTributo');
@@ -436,7 +456,7 @@ function faltaEnElAlta(borrador: Readonly<Record<string, string>>): string | und
      codigo a `TRIBUTO_DEL_BACKEND` y se olvide aqui, la pantalla dejaria
      registrar el alta sin unidad —y sin decir nada— sobre un tributo que quiza
      cuelga de una. La lista blanca del cuerpo es cerrada; esta tambien. */
-  const unidad = unidadDelTributo(tributo);
+  const unidad = resolverUnidad(tributo);
   if (unidad === undefined) {
     return `El sistema todavía no sabe de qué unidad cuelga la deuda de «${concepto}» —si de un predio, de un vehículo o de ninguno—, y de eso depende a qué obligación se asienta. Avísale a sistemas antes de darla de alta.`;
   }
@@ -463,6 +483,29 @@ function faltaEnElAlta(borrador: Readonly<Record<string, string>>): string | und
   }
   // `'predio-opcional'` no tiene rama: ni se exige ni se rechaza. Ver
   // `UNIDAD_DEL_TRIBUTO`, y `RegistrarPapeleta.java:164-170`.
+
+  /* **El año se exige con la misma dureza que el concepto** (#342, nit 3):
+     `MovimientosDeDeudaController.entero` llama a su propio `exigir` sobre
+     `peticion.ano()` y responde 422 «Falta el campo 'ano'» si llega en blanco.
+     El desplegable de año tambien lleva `eleccionObligatoria` —la opcion vacia
+     va antepuesta—, asi que sin esta rama la primaria se habilita con el año
+     sin elegir y el primer intento de guardar se va y vuelve con un rechazo que
+     la pantalla ya sabia de sobra. */
+  const ano = dato('ano');
+  if (ano === '') {
+    return `Falta el año: elige el ejercicio al que corresponde la deuda. Sin él el alta no se puede asentar sobre ninguna obligación. ${DONDE_EL_ANO}`;
+  }
+
+  /* **Y el documento que sustenta el alta, menor pero igual de duro**: el mismo
+     controlador exige `peticion.documentoOrigen()` con `exigir`, sin el que
+     mande el desplegable de arriba —`documentoQueSustenta` no viaja, es
+     presentacion—. El campo de texto no lleva `eleccionObligatoria` porque no
+     es un `select`, y por eso puede quedar en blanco sin que nada lo marque. */
+  const documento = dato('nDelDocumento');
+  if (documento === '') {
+    return `Falta el número del documento que sustenta el alta: una resolución, un acta o la referencia de la migración. Sin él no queda con qué defender la deuda ante el contribuyente. ${DONDE_EL_DOCUMENTO}`;
+  }
+
   return undefined;
 }
 
