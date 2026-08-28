@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas catorce operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas veintitres operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -55,8 +55,34 @@ describe('las operaciones generadas son las del contrato', () => {
     //     versionado de los otros tres tipos. `actualizacion_catastro` es una
     //     sola opcion del manual y su endpoint ya publica el PUT de la urbana,
     //     asi que los otros tres necesitan verbo propio bajo la misma opcion.
+    //   - `costas_procesales_listado` (#42): la grilla «Liquidaciones
+    //     encontradas» de la pantalla `costas_procesales`, que declara «POST
+    //     /coactiva/liquidaciones-costas» como su endpoint —la liquidacion— y
+    //     necesita un verbo aparte para listar. Hacer que el POST devolviera
+    //     tambien la grilla convertiria una consulta en una escritura, y una
+    //     pantalla que lista al abrirse consumiria un correlativo cada vez.
+    //   - `emitir_licencia` / `registrar_ciiu` (#44): la emision de la
+    //     licencia de funcionamiento y el alta en el catalogo CIIU. Sus
+    //     pantallas (`licencia_funcionamiento`, `ciiu`) declaran el GET de la
+    //     grilla y el catalogo como su endpoint, y escribir necesita verbo
+    //     propio bajo la misma opcion.
+    //   - `registrar_internamiento` / `liberar_internamiento` (#50): las dos
+    //     acciones de la pantalla `internamiento`, que declara «GET
+    //     /transito/internamientos» —la grilla del deposito—.
+    //   - `notificar_resolucion_transito` (#50): notificar la resolucion de
+    //     gerencia de transito. Infracciones administrativas tiene su pantalla
+    //     de notificacion en el manual; transito no, y sin ella la
+    //     sancionadora no se puede dictar nunca, porque su plazo se cuenta
+    //     desde que la ordinaria surte efecto.
+    //   - `liquidar_fiscalizacion` / `reliquidar_fiscalizacion` (#49): la
+    //     pantalla `fisc_resultados` declara «GET /fiscalizacion/resultados»
+    //     —la grilla— y emitir la liquidacion de un acta y corregirla con otra
+    //     version necesitan sus propios verbos.
+    //   - `estado_de_liquidacion` (#49): mover la liquidacion por sus estados
+    //     desde `fisc_historico`, que declara solo su GET. No actualiza
+    //     ninguna fila: agrega un movimiento y el estado se deriva.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(148);
+    expect(Object.keys(OPERACIONES)).toHaveLength(157);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

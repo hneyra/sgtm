@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { montarEnRuta } from '../pruebas/montar';
+import { elBloque } from '../pruebas/nodos';
 
 /**
  * El renderizador compone una pantalla a partir del catalogo y de la respuesta
@@ -99,10 +100,18 @@ describe('las secciones colapsables', () => {
   it('«Opcional» arranca cerrada y el resto abiertas', async () => {
     montarEnRuta('/rentas-registro/predial-individual');
 
-    const opcional = await screen.findByRole('button', { name: /Beneficios aplicados/ });
+    /* Dentro del formulario, y no en la pantalla entera: desde #333 esta opcion
+       lleva indice, y el indice repite el rotulo de cada seccion en una entrada
+       que se llama «Ir a Beneficios aplicados». Con la busqueda global habia dos
+       botones que casaban y no podia decidir. Lo que aqui se comprueba sigue
+       siendo el colapso, que es el de las 134. */
+    await screen.findByRole('navigation', { name: 'Secciones de la pantalla' });
+    const formulario = within(elBloque('.sgtm-formulario', 'el formulario'));
+
+    const opcional = formulario.getByRole('button', { name: /Beneficios aplicados/ });
     expect(opcional).toHaveAttribute('aria-expanded', 'false');
 
-    const sinHint = screen.getByRole('button', { name: /Escala progresiva acumulativa/ });
+    const sinHint = formulario.getByRole('button', { name: /Escala progresiva acumulativa/ });
     expect(sinHint).toHaveAttribute('aria-expanded', 'true');
   });
 
@@ -114,9 +123,14 @@ describe('las secciones colapsables', () => {
 
   it('se abren y se cierran al pulsarlas', async () => {
     const usuario = userEvent.setup();
-    montarEnRuta('/rentas-registro/vehiculos/T2G-418');
+    // Sobre «Papeletas» y no sobre la ficha de vehiculo: desde #330 esa lleva
+    // indice, y el indice repite el rotulo de cada seccion como una entrada mas
+    // —dos botones con el mismo nombre, que es un problema de la busqueda de la
+    // prueba y no del dibujo—. Lo que aqui se comprueba es el colapso, que es
+    // igual en las 134.
+    montarEnRuta('/transito/papeletas');
 
-    const cabecera = await screen.findByRole('button', { name: /Identificación/ });
+    const cabecera = await screen.findByRole('button', { name: /Infractor y vehículo/ });
     expect(cabecera).toHaveAttribute('aria-expanded', 'true');
     await usuario.click(cabecera);
     expect(cabecera).toHaveAttribute('aria-expanded', 'false');
@@ -126,7 +140,10 @@ describe('las secciones colapsables', () => {
 describe('las pestanas', () => {
   it('cambiar de pestana cambia las secciones que se ven', async () => {
     const usuario = userEvent.setup();
-    montarEnRuta('/rentas-registro/vehiculos/T2G-418');
+    // «Papeletas» conserva sus cuatro pestanas: el indice que las sustituye es
+    // opt-in por opcion (#330), y las demas pantallas con pestanas del sistema
+    // se dibujan exactamente como se dibujaban. Esto es lo que lo comprueba.
+    montarEnRuta('/transito/papeletas');
 
     const pestanas = await screen.findAllByRole('tab');
     expect(pestanas[0]).toHaveAttribute('aria-selected', 'true');

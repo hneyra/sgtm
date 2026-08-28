@@ -17,13 +17,16 @@ import pe.gob.sgtm.coactiva.dominio.EstadoDelExpediente;
 import pe.gob.sgtm.coactiva.dominio.ExpedienteCoactivo;
 import pe.gob.sgtm.coactiva.dominio.ExpedienteEnConsulta;
 import pe.gob.sgtm.coactiva.dominio.ExpedienteRepository;
+import pe.gob.sgtm.coactiva.dominio.LiquidacionDeCostasRepository;
 import pe.gob.sgtm.coactiva.dominio.MovimientoDelExpediente;
 import pe.gob.sgtm.coactiva.dominio.MovimientoDelExpedienteRepository;
+import pe.gob.sgtm.coactiva.dominio.ObligacionDeCostas;
 import pe.gob.sgtm.coactiva.dominio.ValorDelExpediente;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
 import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
+import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.valores.ObligacionDelValor;
 import pe.gob.sgtm.valores.ValorParaCoactiva;
@@ -47,8 +50,11 @@ import pe.gob.sgtm.valores.ValoresEnCoactiva;
  * misma obligacion —una orden de pago y, mas tarde, una resolucion de determinacion sobre el mismo
  * predial de 2025—, y contarla dos veces duplicaria la deuda del procedimiento.
  *
- * <p><b>Las costas van a cero y con nombre.</b> Son #42, y su importe sale del arancel aprobado.
- * Aqui esta el sumando; el numero no se inventa (regla 5).
+ * <p><b>Las costas se preguntan igual que lo demas</b> (#42). Desde que un expediente tiene costas
+ * liquidadas, {@code costa_obligacion} dice en que obligaciones del libro viven —las suyas, no las
+ * del contribuyente entero— y su importe sale de la <b>misma</b> lectura del libro y a la
+ * <b>misma</b> fecha que las otras cuatro cifras. No hay ninguna columna de costas en el expediente
+ * y ningun importe recompuesto aqui: si la hubiera, la grilla y la ventanilla podrian discrepar.
  *
  * <p>Por {@code @Transactional(readOnly = true)}: sin transaccion no hay {@code SET LOCAL}, y sin
  * el la politica RLS falla en vez de devolver filas.
@@ -60,16 +66,19 @@ public class ConsultaDeExpedientes {
     private final MovimientoDelExpedienteRepository movimientos;
     private final ValoresEnCoactiva valores;
     private final ConsultaDeDeudaPublica deuda;
+    private final LiquidacionDeCostasRepository costas;
 
     public ConsultaDeExpedientes(
             ExpedienteRepository expedientes,
             MovimientoDelExpedienteRepository movimientos,
             ValoresEnCoactiva valores,
-            ConsultaDeDeudaPublica deuda) {
+            ConsultaDeDeudaPublica deuda,
+            LiquidacionDeCostasRepository costas) {
         this.expedientes = expedientes;
         this.movimientos = movimientos;
         this.valores = valores;
         this.deuda = deuda;
+        this.costas = costas;
     }
 
     /**
@@ -139,29 +148,37 @@ public class ConsultaDeExpedientes {
             Map<Long, List<ObligacionPublica>> obligacionesPorContribuyente,
             Map<Long, List<ValorParaCoactiva>> valoresPorContribuyente) {
 
+        long contribuyente = expediente.contribuyenteId();
+
         Set<Long> delExpediente = new HashSet<>();
         for (ValorDelExpediente valor : expedientes.valoresDe(expediente.identificador())) {
             delExpediente.add(valor.valorId());
         }
-        if (delExpediente.isEmpty()) {
-            return DeudaDelExpediente.ninguna(aLaFecha);
-        }
-
-        long contribuyente = expediente.contribuyenteId();
-        List<ValorParaCoactiva> susValores =
-                valoresPorContribuyente.computeIfAbsent(
-                        contribuyente, id -> valores.delContribuyente(id, aLaFecha));
 
         Set<ClaveDeObligacion> claves = new HashSet<>();
-        for (ValorParaCoactiva valor : susValores) {
-            if (!delExpediente.contains(valor.id())) {
-                continue;
-            }
-            for (ObligacionDelValor obligacion : valor.obligaciones()) {
-                claves.add(ClaveDeObligacion.de(obligacion));
+        if (!delExpediente.isEmpty()) {
+            List<ValorParaCoactiva> susValores =
+                    valoresPorContribuyente.computeIfAbsent(
+                            contribuyente, id -> valores.delContribuyente(id, aLaFecha));
+            for (ValorParaCoactiva valor : susValores) {
+                if (!delExpediente.contains(valor.id())) {
+                    continue;
+                }
+                for (ObligacionDelValor obligacion : valor.obligaciones()) {
+                    claves.add(ClaveDeObligacion.de(obligacion));
+                }
             }
         }
-        if (claves.isEmpty()) {
+
+        // Las obligaciones en las que viven las costas DE ESTE expediente (#42, V35). No las del
+        // contribuyente: `costa_obligacion` es lo que las distingue, porque la clave del libro no
+        // incluye el expediente.
+        Set<ClaveDeObligacion> deCostas = new HashSet<>();
+        for (ObligacionDeCostas obligacion : costas.obligacionesDe(expediente.identificador())) {
+            deCostas.add(ClaveDeObligacion.de(obligacion));
+        }
+
+        if (claves.isEmpty() && deCostas.isEmpty()) {
             return DeudaDelExpediente.ninguna(aLaFecha);
         }
 
@@ -170,10 +187,21 @@ public class ConsultaDeExpedientes {
                         contribuyente, id -> deuda.deTodoElContribuyente(id, aLaFecha));
 
         DeudaDelExpediente acumulada = DeudaDelExpediente.ninguna(aLaFecha);
+        Dinero delProcedimiento = Dinero.de("0.00");
         Set<ClaveDeObligacion> contadas = new HashSet<>();
         for (ObligacionPublica obligacion : obligaciones) {
             ClaveDeObligacion clave = ClaveDeObligacion.de(obligacion);
-            if (!claves.contains(clave) || !contadas.add(clave)) {
+            if (!contadas.add(clave)) {
+                continue;
+            }
+            if (deCostas.contains(clave)) {
+                // Las costas se cuentan aparte y ENTERAS -las cuatro partes de su obligacion-,
+                // porque el cargo se asento con concepto GASTO y no devenga insoluto ni interes.
+                // Contarlas ademas en `gasto` las sumaria dos veces al total.
+                delProcedimiento = delProcedimiento.mas(obligacion.total());
+                continue;
+            }
+            if (!claves.contains(clave)) {
                 continue;
             }
             acumulada =
@@ -183,7 +211,7 @@ public class ConsultaDeExpedientes {
                             obligacion.interes(),
                             obligacion.gasto());
         }
-        return acumulada;
+        return acumulada.conCostas(delProcedimiento);
     }
 
     /**
@@ -210,6 +238,18 @@ public class ConsultaDeExpedientes {
                     obligacion.ejercicio().valor(),
                     obligacion.predioId(),
                     obligacion.vehiculoId());
+        }
+
+        /**
+         * La clave de una obligacion de costas (#42): sin unidad, porque una costa no es de un
+         * predio ni de un vehiculo sino del procedimiento.
+         */
+        static ClaveDeObligacion de(ObligacionDeCostas obligacion) {
+            return new ClaveDeObligacion(
+                    obligacion.tributo().toUpperCase(java.util.Locale.ROOT),
+                    obligacion.ejercicio().valor(),
+                    null,
+                    null);
         }
     }
 

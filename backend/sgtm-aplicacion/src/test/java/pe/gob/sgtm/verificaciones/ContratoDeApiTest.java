@@ -163,7 +163,37 @@ class ContratoDeApiTest {
                     "POST /coactiva/rec/impresion",
                     "GET /coactiva/expedientes/{numero}/proceso",
                     "POST /coactiva/expedientes/{numero}/actos",
-                    "POST /coactiva/notificaciones");
+                    "POST /coactiva/notificaciones",
+                    // #42 — RF-104, RF-105 y RF-107: las costas como cargo del libro, el
+                    // fraccionamiento coactivo y las dos consultas de deuda.
+                    "POST /coactiva/liquidaciones-costas",
+                    "GET /coactiva/liquidaciones-costas",
+                    "POST /coactiva/convenios",
+                    "GET /coactiva/deudas",
+                    "GET /coactiva/deudas-en-beneficio",
+                    // #44 — RF-110..RF-113: la licencia de funcionamiento y su catalogo CIIU.
+                    "GET /licencias/funcionamiento",
+                    "POST /licencias/funcionamiento",
+                    "POST /licencias/funcionamiento/{id}/cancelacion",
+                    "POST /licencias/funcionamiento/{id}/duplicado",
+                    "GET /licencias/ciiu",
+                    "POST /licencias/ciiu",
+                    // #50 — descargos, internamiento y resoluciones de gerencia (RF-064, RF-065,
+                    // RF-074). Las tres ultimas son adiciones al contrato: la pantalla
+                    // `internamiento` declara solo su grilla y sus dos acciones necesitan verbo
+                    // propio, y transito no tenia ruta para notificar su resolucion de gerencia
+                    // -sin ella la sancionadora no se puede dictar nunca, porque su plazo se
+                    // cuenta desde que la ordinaria surte efecto-.
+                    "POST /transito/descargos",
+                    "GET /transito/internamientos",
+                    "POST /transito/internamientos",
+                    "POST /transito/internamientos/{placa}/liberacion",
+                    "POST /transito/resoluciones/ordinaria",
+                    "POST /transito/resoluciones/sancionadora",
+                    "POST /transito/resoluciones/{numero}/notificacion",
+                    "GET /transito/papeletas/{numero}/actos",
+                    "POST /infracciones/administrativas/resoluciones",
+                    "POST /infracciones/administrativas/resoluciones/{id}/notificacion");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

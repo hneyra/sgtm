@@ -110,9 +110,20 @@ export function tablaDe(
   paginado: Paginado<unknown>,
   fila: (registro: Readonly<Record<string, unknown>>) => readonly Celda[],
   que: string,
+  /**
+   * Los valores **crudos** de cada fila, para las tablas cuyas filas se eligen
+   * y viajan en el cuerpo de una escritura (`DatosDeTabla.valores`).
+   *
+   * Sin esto, lo unico que la seleccion podia llevarse era el texto dibujado
+   * —«1,842.60», «—», y ningun identificador de la unidad—, y ese texto es de
+   * presentacion: no es lo que el backend acepta (#332).
+   */
+  valores?: (registro: Readonly<Record<string, unknown>>) => Readonly<Record<string, string>>,
 ): DatosDeTabla {
+  const registros = paginado.contenido.filter(esObjeto);
   return {
-    filas: paginado.contenido.filter(esObjeto).map(fila),
+    filas: registros.map(fila),
+    ...(valores === undefined ? {} : { valores: registros.map(valores) }),
     conteo: `${paginado.totalElementos} ${que}`,
     paginacion: {
       pagina: paginado.pagina,

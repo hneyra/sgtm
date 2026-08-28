@@ -255,6 +255,7 @@ class NotificacionAdministrativaRepositoryJdbcTest {
                                             contribuyenteId,
                                             null,
                                             guardada.id(),
+                                            contribuyenteId,
                                             Dinero.de("4950"),
                                             Alicuota.de("8"),
                                             Dinero.de("396"),

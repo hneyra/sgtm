@@ -31,6 +31,13 @@ public final class DatosDePrueba {
     private static final BigDecimal CIEN = new BigDecimal("100.00");
     private static final BigDecimal MIL = new BigDecimal("1000.00");
 
+    /**
+     * El modelo minimo que {@code documento_emitido.datos} admite: un {@code ModeloDeDocumento}.
+     */
+    private static final String MODELO_DE_DOCUMENTO =
+            "{\"titulo\":\"Documento de prueba\",\"subtitulo\":null,\"aLaFecha\":\"2026-01-01\","
+                    + "\"cabecera\":[],\"tablas\":[],\"pie\":[],\"duplicado\":null}";
+
     private DatosDePrueba() {}
 
     /** El alta de una municipalidad es una operacion de implantacion: la hace el owner. */
@@ -974,27 +981,72 @@ public final class DatosDePrueba {
                                 + "\"aLaFecha\":\"2026-01-01\",\"cabecera\":[],\"tablas\":[],"
                                 + "\"pie\":[],\"duplicado\":null}",
                         VIGENCIA);
+        long actoDeLaRec =
+                insertar(
+                        app,
+                        "INSERT INTO acto_coactivo (municipalidad_id, expediente_id, tipo, numero,"
+                                + " fecha, descripcion, documento_id, usuario_registro,"
+                                + " fecha_registro, observacion)"
+                                + " VALUES (?, ?, 'REC1', ?, ?, 'Resolucion de ejecucion"
+                                + " coactiva', ?, 'prueba', now(), 'REC de prueba')"
+                                + " RETURNING id",
+                        muni,
+                        expedienteId,
+                        "REC1-2026-" + sufijo,
+                        VIGENCIA,
+                        documentoDeLaRec);
+        // La costa cuelga de una liquidacion y tarifa UN acto (V35, #42): antes colgaba del
+        // expediente y nada mas, y asi «la liquidacion 000123» no tenia sujeto.
         ejecutar(
                 app,
-                "INSERT INTO acto_coactivo (municipalidad_id, expediente_id, tipo, numero, fecha,"
-                        + " descripcion, documento_id, usuario_registro, fecha_registro,"
-                        + " observacion)"
-                        + " VALUES (?, ?, 'REC1', ?, ?, 'Resolucion de ejecucion coactiva', ?,"
-                        + "         'prueba', now(), 'REC de prueba')",
+                "INSERT INTO liquidacion_costas_correlativo (municipalidad_id, ejercicio, ultimo)"
+                        + " VALUES (?, ?, 1)",
                 muni,
-                expedienteId,
-                "REC1-2026-" + sufijo,
-                VIGENCIA,
-                documentoDeLaRec);
+                EJERCICIO);
+        long liquidacionId =
+                insertar(
+                        app,
+                        "INSERT INTO liquidacion_costas (municipalidad_id, numero, ejercicio,"
+                                + " correlativo, expediente_id, contribuyente_id, tributo, fecha,"
+                                + " conjunto_id, total, usuario_registro, fecha_registro,"
+                                + " observacion)"
+                                + " VALUES (?, ?, ?, 1, ?, ?, 'COSTAS PROCESALES', ?, ?, ?,"
+                                + "         'prueba', now(), 'liquidacion de prueba')"
+                                + " RETURNING id",
+                        muni,
+                        "LC-" + sufijo,
+                        EJERCICIO,
+                        expedienteId,
+                        titular,
+                        VIGENCIA,
+                        conjuntoId,
+                        CIEN);
         ejecutar(
                 app,
-                "INSERT INTO costa_procesal (municipalidad_id, expediente_id, concepto, monto,"
-                        + " fecha, arancel_fuente)"
-                        + " VALUES (?, ?, 'Notificacion', ?, ?, 'fixture de la prueba')",
+                "INSERT INTO costa_procesal (municipalidad_id, liquidacion_id, expediente_id,"
+                        + " acto_id, acto_tipo, concepto, tributo, monto, fecha, arancel_fuente,"
+                        + " arancel_conjunto_id)"
+                        + " VALUES (?, ?, ?, ?, 'REC1', 'Notificacion', 'COSTAS PROCESALES', ?, ?,"
+                        + "         'fixture de la prueba', ?)",
                 muni,
+                liquidacionId,
                 expedienteId,
+                actoDeLaRec,
                 CIEN,
-                VIGENCIA);
+                VIGENCIA,
+                conjuntoId);
+        // Y la obligacion de costas queda reclamada por este expediente (V35 §3): sin la fila, dos
+        // expedientes del mismo obligado compartirian obligacion sin que nada fallara.
+        ejecutar(
+                app,
+                "INSERT INTO costa_obligacion (municipalidad_id, contribuyente_id, tributo,"
+                        + " ejercicio, expediente_id)"
+                        + " VALUES (?, ?, 'COSTAS PROCESALES', ?, ?)"
+                        + " ON CONFLICT DO NOTHING",
+                muni,
+                titular,
+                EJERCICIO,
+                expedienteId);
         return valorId;
     }
 
@@ -1040,11 +1092,11 @@ public final class DatosDePrueba {
                         app,
                         "INSERT INTO papeleta (municipalidad_id, familia, numero,"
                                 + " codigo_infraccion_id, fecha_infraccion, lugar, placa, vehiculo_id,"
-                                + " infractor_id, propietario_id, base_imponible,"
+                                + " infractor_id, propietario_id, obligado_id, base_imponible,"
                                 + " porcentaje_infraccion, importe_infraccion, porcentaje_a_cobrar,"
                                 + " importe_a_pagar, usuario_registro, observacion)"
-                                + " VALUES (?, 'TRANSITO', ?, ?, ?, 'Av. Grau', ?, ?, ?, ?, ?, 8.0000,"
-                                + "         ?, 100.0000, ?, 'prueba', 'papeleta de prueba')"
+                                + " VALUES (?, 'TRANSITO', ?, ?, ?, 'Av. Grau', ?, ?, ?, ?, ?, ?,"
+                                + "         8.0000, ?, 100.0000, ?, 'prueba', 'papeleta de prueba')"
                                 + " RETURNING id",
                         muni,
                         "PT-" + sufijo,
@@ -1053,6 +1105,9 @@ public final class DatosDePrueba {
                         "ABC-" + numeroDePlaca(sufijo),
                         vehiculoId,
                         segundo,
+                        titular,
+                        // El obligado: a quien se le asienta el cargo de la multa (V41 §1). Aqui,
+                        // el propietario del vehiculo, que es el caso corriente.
                         titular,
                         MIL,
                         CIEN,
@@ -1066,25 +1121,117 @@ public final class DatosDePrueba {
                 papeletaId,
                 "PT-VIEJO-" + sufijo,
                 "PT-" + sufijo);
+        // El descargo lleva el dia hasta el que era admisible y el conjunto sellado del que salio
+        // ese plazo (V41 §2): releerlo daria otra fecha el dia que el plazo cambie (ARQ-09 §3).
         ejecutar(
                 app,
-                "INSERT INTO descargo (municipalidad_id, papeleta_id, fecha, sustento,"
-                        + " resultado, usuario_registro)"
-                        + " VALUES (?, ?, ?, 'sustento de prueba', 'EN_TRAMITE', 'prueba')",
+                "INSERT INTO descargo (municipalidad_id, papeleta_id, numero_expediente, fecha,"
+                        + " tipo_recurso, sustento, presentado_hasta, conjunto_id, en_plazo,"
+                        + " fecha_registro, usuario_registro, observacion)"
+                        + " VALUES (?, ?, ?, ?, 'DESCARGO', 'sustento de prueba', ?, ?, true,"
+                        + "         now(), 'prueba', 'descargo de prueba')",
                 muni,
                 papeletaId,
+                "EXP-DES-" + sufijo,
+                VIGENCIA,
+                VIGENCIA.plusDays(5),
+                conjuntoId);
+
+        // El acta de internamiento se materializa en un documento emitido, igual que la REC
+        // (V41 §7): sin la fila del documento el acta no se puede reimprimir.
+        long documentoDelActa =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'ACTA_INTERNAMIENTO', ?, 2026, ?, CAST(? AS jsonb),"
+                                + "         'PDF', repeat('c', 64), ?, 'siembra',"
+                                + "         'acta de prueba') RETURNING id",
+                        muni,
+                        "ACTA_INTERNAMIENTO-2026-" + sufijo,
+                        "ABC-" + numeroDePlaca(sufijo),
+                        "{\"titulo\":\"Acta de internamiento de vehiculo\",\"subtitulo\":null,"
+                                + "\"aLaFecha\":\"2026-01-01\",\"cabecera\":[],\"tablas\":[],"
+                                + "\"pie\":[],\"duplicado\":null}",
+                        VIGENCIA);
+        long internamientoId =
+                insertar(
+                        app,
+                        "INSERT INTO internamiento (municipalidad_id, papeleta_id, vehiculo_id,"
+                                + " placa, deposito, fecha_ingreso, acta, documento_id,"
+                                + " tasa_custodia, fecha_registro, usuario_registro, observacion)"
+                                + " VALUES (?, ?, ?, ?, 'Deposito municipal', ?, ?, ?, 'CUSTODIA',"
+                                + "         now(), 'prueba', 'internamiento de prueba')"
+                                + " RETURNING id",
+                        muni,
+                        papeletaId,
+                        vehiculoId,
+                        "ABC-" + numeroDePlaca(sufijo),
+                        OffsetDateTime.of(VIGENCIA.atStartOfDay(), ZoneOffset.UTC),
+                        "ACTA_INTERNAMIENTO-2026-" + sufijo,
+                        documentoDelActa);
+
+        // Lo que le pasa al vehiculo despues del ingreso es una fila aparte (V41 §5): el estado
+        // del internamiento se DERIVA de aqui, nunca de una columna que habria que actualizar.
+        long documentoDelAbandono =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'ACTA_ABANDONO', ?, 2026, ?, CAST(? AS jsonb),"
+                                + "         'PDF', repeat('d', 64), ?, 'siembra',"
+                                + "         'acta de prueba') RETURNING id",
+                        muni,
+                        "ACTA_ABANDONO-2026-" + sufijo,
+                        "ABC-" + numeroDePlaca(sufijo),
+                        "{\"titulo\":\"Declaracion de abandono\",\"subtitulo\":null,"
+                                + "\"aLaFecha\":\"2026-01-01\",\"cabecera\":[],\"tablas\":[],"
+                                + "\"pie\":[],\"duplicado\":null}",
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO internamiento_movimiento (municipalidad_id, internamiento_id, tipo,"
+                        + " fecha, acta, documento_id, dias_custodia, fecha_registro,"
+                        + " usuario_registro, observacion)"
+                        + " VALUES (?, ?, 'ABANDONO', ?, ?, ?, 30, now(), 'prueba',"
+                        + "         'abandono de prueba')",
+                muni,
+                internamientoId,
+                VIGENCIA,
+                "ACTA_ABANDONO-2026-" + sufijo,
+                documentoDelAbandono);
+
+        // La resolucion de gerencia se materializa en su documento, igual que la REC (V41 §7).
+        long documentoDeLaResolucion =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'RGO', ?, 2026, ?, CAST(? AS jsonb), 'PDF',"
+                                + "         repeat('e', 64), ?, 'siembra',"
+                                + "         'resolucion de prueba') RETURNING id",
+                        muni,
+                        "RGO-2026-" + sufijo,
+                        "PT-" + sufijo,
+                        "{\"titulo\":\"Resolucion de gerencia ordinaria\",\"subtitulo\":null,"
+                                + "\"aLaFecha\":\"2026-01-01\",\"cabecera\":[],\"tablas\":[],"
+                                + "\"pie\":[],\"duplicado\":null}",
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO resolucion_gerencia (municipalidad_id, papeleta_id, tipo, numero,"
+                        + " documento_id, fecha, sustento, fecha_registro, usuario_registro,"
+                        + " observacion)"
+                        + " VALUES (?, ?, 'ORDINARIA', ?, ?, ?, 'sustento de prueba', now(),"
+                        + "         'prueba', 'resolucion de prueba')",
+                muni,
+                papeletaId,
+                "RGO-2026-" + sufijo,
+                documentoDeLaResolucion,
                 VIGENCIA);
-        ejecutar(
-                app,
-                "INSERT INTO internamiento (municipalidad_id, papeleta_id, vehiculo_id, placa,"
-                        + " deposito, fecha_ingreso, observacion)"
-                        + " VALUES (?, ?, ?, ?, 'Deposito municipal', ?,"
-                        + "         'internamiento de prueba')",
-                muni,
-                papeletaId,
-                vehiculoId,
-                "ABC-" + numeroDePlaca(sufijo),
-                OffsetDateTime.of(VIGENCIA.atStartOfDay(), ZoneOffset.UTC));
 
         long programaId =
                 insertar(
@@ -1161,29 +1308,68 @@ public final class DatosDePrueba {
     private static void sembrarLicencias(
             Connection app, long muni, String sufijo, long titular, long predioId, long reciboId)
             throws SQLException {
+        // V37 (#44) le puso a `ciiu` su traza —quien lo agrego, por que y cuando— y a la
+        // licencia y su duplicado el documento que los materializa. La siembra los rellena: son
+        // columnas NOT NULL, y una siembra que las esquivara dejaria la prueba de aislamiento sin
+        // filas de licencias que aislar.
         long ciiuId =
                 insertar(
                         app,
-                        "INSERT INTO ciiu (municipalidad_id, codigo, descripcion)"
-                                + " VALUES (?, ?, 'Actividad de prueba') RETURNING id",
+                        "INSERT INTO ciiu (municipalidad_id, codigo, descripcion, seccion,"
+                                + " riesgo_itse, requiere_sectorial, usuario_registro,"
+                                + " observacion, fecha_registro)"
+                                + " VALUES (?, ?, 'Actividad de prueba', 'G', 'BAJO', false,"
+                                + "         'prueba', 'giro de prueba', ?) RETURNING id",
                         muni,
-                        "4711-" + sufijo);
+                        "4711-" + sufijo,
+                        VIGENCIA);
+        long documentoDeLaLicencia =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'LICENCIA_FUNCIONAMIENTO', ?, 2026, ?,"
+                                + "         CAST(? AS jsonb), 'PDF', repeat('c', 64), ?,"
+                                + "         'siembra', 'licencia de prueba') RETURNING id",
+                        muni,
+                        "LICENCIA_FUNCIONAMIENTO-2026-" + sufijo,
+                        "LF-" + sufijo,
+                        MODELO_DE_DOCUMENTO,
+                        VIGENCIA);
+        long documentoDelDuplicado =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'RES_DUPLICADO_LICENCIA', ?, 2026, ?,"
+                                + "         CAST(? AS jsonb), 'PDF', repeat('d', 64), ?,"
+                                + "         'siembra', 'resolucion de duplicado') RETURNING id",
+                        muni,
+                        "RES_DUPLICADO_LICENCIA-2026-" + sufijo,
+                        "LF-" + sufijo,
+                        MODELO_DE_DOCUMENTO,
+                        VIGENCIA);
         long licenciaId =
                 insertar(
                         app,
                         "INSERT INTO licencia_funcionamiento (municipalidad_id, numero,"
                                 + " contribuyente_id, predio_id, nombre_comercial, direccion,"
                                 + " area_solicitada, tipo_licencia, fecha_emision, recibo_id,"
-                                + " usuario_registro, observacion)"
+                                + " documento_id, fecha_registro, usuario_registro, observacion)"
                                 + " VALUES (?, ?, ?, ?, 'Bodega de prueba', 'Jr. Union', 40.00,"
-                                + "         'DEFINITIVA', ?, ?, 'prueba', 'licencia de prueba')"
+                                + "         'DEFINITIVA', ?, ?, ?, ?, 'prueba',"
+                                + "         'licencia de prueba')"
                                 + " RETURNING id",
                         muni,
                         "LF-" + sufijo,
                         titular,
                         predioId,
                         VIGENCIA,
-                        reciboId);
+                        reciboId,
+                        documentoDeLaLicencia,
+                        VIGENCIA);
         ejecutar(
                 app,
                 "INSERT INTO licencia_giro (municipalidad_id, licencia_id, ciiu_id, principal)"
@@ -1194,12 +1380,34 @@ public final class DatosDePrueba {
         ejecutar(
                 app,
                 "INSERT INTO licencia_duplicado (municipalidad_id, licencia_id, numero, fecha,"
-                        + " motivo, recibo_id)"
-                        + " VALUES (?, ?, 1, ?, 'deterioro del original', ?)",
+                        + " motivo, recibo_id, documento_id, reimpresion, usuario_registro,"
+                        + " fecha_registro, observacion)"
+                        + " VALUES (?, ?, 1, ?, 'deterioro del original', ?, ?, 1, 'prueba', ?,"
+                        + "         'duplicado de prueba')",
                 muni,
                 licenciaId,
                 VIGENCIA,
-                reciboId);
+                reciboId,
+                documentoDelDuplicado,
+                VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO licencia_movimiento (municipalidad_id, licencia_id, tipo, fecha,"
+                        + " documento_id, documento_numero, usuario_registro, fecha_registro,"
+                        + " observacion)"
+                        + " VALUES (?, ?, 'EMISION', ?, ?, ?, 'prueba', ?,"
+                        + "         'emision de prueba')",
+                muni,
+                licenciaId,
+                VIGENCIA,
+                documentoDeLaLicencia,
+                "LICENCIA_FUNCIONAMIENTO-2026-" + sufijo,
+                VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO licencia_correlativo (municipalidad_id, ejercicio, ultimo)"
+                        + " VALUES (?, 2026, 1)",
+                muni);
         ejecutar(
                 app,
                 "INSERT INTO licencia_edificacion (municipalidad_id, numero, contribuyente_id,"

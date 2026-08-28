@@ -1,0 +1,134 @@
+package pe.gob.sgtm.sanciones.infraestructura.web;
+
+import java.time.LocalDate;
+import org.jspecify.annotations.Nullable;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.sanciones.aplicacion.RegistrarDescargo;
+import pe.gob.sgtm.sanciones.dominio.Descargo;
+import pe.gob.sgtm.sanciones.dominio.Familia;
+import pe.gob.sgtm.sanciones.dominio.TipoDeRecurso;
+import pe.gob.sgtm.web.Api;
+import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
+
+/**
+ * Descargos y reclamos de papeletas: {@code POST /api/v1/transito/descargos} (#50, RF-064).
+ *
+ * <p>Sirve a las <b>dos familias</b> aunque la ruta diga «tránsito»: la pantalla que el manual da
+ * es la de tránsito, y el modelo de papeleta es uno solo (ARQ-01 §3.6). El cuerpo lleva la familia,
+ * y por omisión es tránsito —que es lo que la pantalla manda—.
+ *
+ * <p>Ningún {@code PUT} ni {@code PATCH}: un descargo es el escrito que alguien firmó y presentó,
+ * no el estado de un trámite. Resolverlo es dictar una resolución de gerencia, y {@code descargo}
+ * no admite {@code UPDATE} desde V41.
+ */
+@RestController
+@RequestMapping(Api.RAIZ + "/transito/descargos")
+@RequiereAcceso(acceso = "transito_descargos", privilegio = Privilegio.REGISTRO)
+public class DescargosController {
+
+    private final RegistrarDescargo servicio;
+
+    public DescargosController(RegistrarDescargo servicio) {
+        this.servicio = servicio;
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public DescargoResource registrar(@RequestBody PeticionDeDescargo peticion) {
+        Observacion observacion = PeticionesDeSanciones.observacionDe(peticion.observacion());
+        Familia familia =
+                peticion.familia() == null
+                        ? Familia.TRANSITO
+                        : PeticionesDeSanciones.enumeradoDe(
+                                Familia.class, peticion.familia(), "familia");
+
+        try {
+            RegistrarDescargo.Registrado registrado =
+                    servicio.registrar(
+                            familia,
+                            PeticionesDeSanciones.exigir(peticion.papeleta(), "papeleta"),
+                            new RegistrarDescargo.Peticion(
+                                    PeticionesDeSanciones.exigir(
+                                            peticion.nDeExpediente(), "nDeExpediente"),
+                                    PeticionesDeSanciones.fechaDe(
+                                            peticion.fechaDePresentacion(), "fechaDePresentacion"),
+                                    PeticionesDeSanciones.enumeradoDe(
+                                            TipoDeRecurso.class,
+                                            peticion.tipoDeRecurso(),
+                                            "tipoDeRecurso"),
+                                    PeticionesDeSanciones.exigir(
+                                            peticion.fundamento(), "fundamento")),
+                            observacion);
+            return DescargoResource.de(registrado);
+        } catch (RegistrarDescargo.PapeletaInexistente noExiste) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.NO_ENCONTRADO, PeticionesDeSanciones.mensajeDe(noExiste));
+        } catch (RegistrarDescargo.PapeletaSinNadaQueImpugnar | IllegalArgumentException invalido) {
+            throw PeticionesDeSanciones.invalido(invalido);
+        }
+    }
+
+    /**
+     * El cuerpo de un descargo. <b>Lista blanca</b>: lo que no está aquí no entra.
+     *
+     * @param observacion por qué se registra (regla 10, RNF-052)
+     * @param familia {@code TRANSITO} o {@code ADMINISTRATIVA}; por omisión, tránsito
+     * @param papeleta el número de la papeleta impugnada
+     * @param nDeExpediente el número con que entra por mesa de partes
+     * @param fechaDePresentacion el día en que se presentó
+     * @param tipoDeRecurso descargo, reconsideración, apelación o nulidad
+     * @param fundamento el fundamento del administrado
+     */
+    public record PeticionDeDescargo(
+            @Nullable String observacion,
+            @Nullable String familia,
+            @Nullable String papeleta,
+            @Nullable String nDeExpediente,
+            @Nullable String fechaDePresentacion,
+            @Nullable String tipoDeRecurso,
+            @Nullable String fundamento) {}
+
+    /**
+     * El descargo registrado.
+     *
+     * <p>{@code presentadoHasta} y {@code plazo} viajan juntos a propósito: la pantalla dibuja
+     * «Dentro del plazo (5 días hábiles)», y esa frase la compone el backend con el plazo
+     * <b>parametrizado</b>, nunca la interfaz con un número escrito a mano (regla 5).
+     */
+    public record DescargoResource(
+            long id,
+            String nDeExpediente,
+            String papeleta,
+            LocalDate fecha,
+            String tipoDeRecurso,
+            String fundamento,
+            LocalDate presentadoHasta,
+            boolean enPlazo,
+            String plazo,
+            String observacion) {
+
+        static DescargoResource de(RegistrarDescargo.Registrado registrado) {
+            Descargo descargo = registrado.descargo();
+            return new DescargoResource(
+                    descargo.identificador(),
+                    descargo.numeroExpediente(),
+                    registrado.papeleta().numero(),
+                    descargo.fecha(),
+                    descargo.tipoRecurso().name(),
+                    descargo.sustento(),
+                    descargo.presentadoHasta(),
+                    descargo.enPlazo(),
+                    registrado.plazo().toString(),
+                    descargo.observacion().texto());
+        }
+    }
+}

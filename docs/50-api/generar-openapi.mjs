@@ -210,6 +210,49 @@ const OPERACIONES_ADICIONALES = {
         ' solo las que el grupo ya tiene.',
     },
   ],
+  // `internamiento` declara «GET /transito/internamientos» como su endpoint —la
+  // grilla del deposito—; sus dos acciones, «Registrar ingreso» y «Liberar
+  // vehiculo», necesitan verbo propio (#50, RF-064).
+  internamiento: [
+    {
+      operationId: 'registrar_internamiento',
+      metodo: 'post',
+      titulo: 'Registro de ingreso al deposito',
+      descripcion:
+        'Interna un vehiculo en el deposito municipal y emite su acta. El cuerpo lleva la' +
+        ' placa, el deposito, el concepto del TUPA con que se cobrara la custodia y la' +
+        ' observacion del usuario, obligatoria (RNF-052).',
+    },
+    {
+      operationId: 'liberar_internamiento',
+      metodo: 'post',
+      ruta: '/api/v1/transito/internamientos/{placa}/liberacion',
+      titulo: 'Liberacion del vehiculo internado',
+      descripcion:
+        'Entrega el vehiculo a quien lo retira y emite el acta de liberacion. Exige el' +
+        ' recibo con que se pago la custodia: el backend lo acredita contra `tesoreria`' +
+        ' por su API publica, y sin esa acreditacion el vehiculo no sale. La casilla' +
+        ' «Custodia cancelada» de la pantalla no basta: la marca quien entrega el vehiculo.',
+    },
+  ],
+  // `transito_rg_ordinaria` declara «POST /transito/resoluciones/ordinaria»
+  // —dictarla—; notificarla necesita ruta propia. Infracciones administrativas
+  // SI tiene su pantalla de notificacion en el manual; transito no, y sin ella
+  // la sancionadora no se puede dictar nunca porque su plazo se cuenta desde
+  // que la ordinaria surte efecto (#50, RF-074).
+  transito_rg_ordinaria: [
+    {
+      operationId: 'notificar_resolucion_transito',
+      metodo: 'post',
+      ruta: '/api/v1/transito/resoluciones/{numero}/notificacion',
+      titulo: 'Notificacion de resolucion de gerencia de transito',
+      descripcion:
+        'Cedula de notificacion de la resolucion ordinaria o sancionadora de transito, con' +
+        ' su acuse. Es de donde sale el derecho a la sancionadora: la diligencia que surte' +
+        ' efecto sobre la ordinaria fija, con el plazo parametrizado del conjunto sellado,' +
+        ' el dia desde el que se puede sancionar.',
+    },
+  ],
   // `calles` declara «GET /catastro/vias» como su endpoint —la lectura del
   // catalogo vial—; el alta y la edicion que pide su pantalla de mantenimiento
   // (RF-008, #290) necesitan un verbo aparte.
@@ -381,6 +424,41 @@ const OPERACIONES_ADICIONALES = {
         'Mueve la liquidación de estado conservando el historial. No actualiza ninguna fila:' +
         ' agrega un movimiento, y el estado se DERIVA de él. Una liquidación anulada no vuelve:' +
         ' corregirla es reliquidar.',
+    },
+  ],
+  // `licencia_funcionamiento` declara «GET /licencias/funcionamiento» como su
+  // endpoint —la grilla—; emitir la licencia necesita su propio verbo (#44,
+  // RF-110). No hay PUT ni PATCH: una licencia es un acto administrativo que el
+  // titular cuelga en su establecimiento, y no se corrige —`licencia_funcionamiento`
+  // ni siquiera admite UPDATE desde V37—. Lo que le pasa son las otras dos
+  // opciones, que ya tienen su ruta: `/cancelacion` y `/duplicado`.
+  licencia_funcionamiento: [
+    {
+      operationId: 'emitir_licencia',
+      metodo: 'post',
+      titulo: 'Emisión de licencia de funcionamiento',
+      descripcion:
+        'Emite una licencia de funcionamiento con sus giros CIIU y su papel (RF-110). El cuerpo' +
+        ' lleva el titular, el establecimiento, los giros con su actividad principal, el' +
+        ' número del recibo de caja de tasas del derecho de trámite y la observación del' +
+        ' usuario, obligatoria (RNF-052). Sin un recibo válido —de caja de tasas, no anulado,' +
+        ' del titular y por el concepto del TUPA que corresponde— no se emite. El número de la' +
+        ' licencia lo pone el sistema desde su correlativo: no viene en el cuerpo.',
+    },
+  ],
+  // `ciiu` declara «GET /licencias/ciiu» como su endpoint —el catálogo—; RF-112
+  // exige que sea extensible por el usuario, y extenderlo necesita su verbo.
+  ciiu: [
+    {
+      operationId: 'registrar_ciiu',
+      metodo: 'post',
+      titulo: 'Alta de giro CIIU',
+      descripcion:
+        'Agrega un giro al catálogo CIIU de la municipalidad (RF-112). El cuerpo lleva el' +
+        ' código, la descripción, la sección, el nivel de riesgo de la ITSE si ya está' +
+        ' clasificado, la zonificación compatible y la observación del usuario, obligatoria' +
+        ' (RNF-052). El giro nace activo y marcado como extensión local: la clasificación' +
+        ' oficial se carga por otro camino.',
     },
   ],
 };

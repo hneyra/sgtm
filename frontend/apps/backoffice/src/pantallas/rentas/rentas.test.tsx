@@ -6,6 +6,12 @@ import { OPCIONES_CONECTADAS } from '../conexiones';
 import { permisosDelClaim, puedeEscribir, puedeVer } from '../../app/sesion/permisos';
 import { montarEnRuta } from '../../pruebas/montar';
 import { SIN_DATO } from '../seguridad/listado';
+import {
+  motivoDeLaPrimaria,
+  primariaApagada,
+  primariaDeLaPantalla,
+  primariaEncendida,
+} from '../../pruebas/acciones';
 
 /**
  * Rentas · Registro (#73): el modulo que mas escribe.
@@ -32,40 +38,159 @@ import { SIN_DATO } from '../seguridad/listado';
  * calcula (ver el doc de `rentas/index.ts`). Las demas esperan a su backend.
  */
 
-/** Las ocho opciones del modulo cuya operacion escribe, por su ranura. */
-const LAS_QUE_ESCRIBEN: readonly string[] = [
-  'predial-individual',
+/**
+ * Las siete opciones del modulo cuya operacion escribe y que **no declaran**
+ * todavia que campos suyos acepta el backend.
+ *
+ * Hasta #332 esta lista eran las nueve, y la prueba decia: sin observacion la
+ * primaria esta apagada, con observacion se habilita. Las dos mitades eran
+ * ciertas y la segunda era el defecto: lo que la observacion habilitaba en estas
+ * siete era mandar **solo la observacion** —catorce campos rellenos que no
+ * viajan, y un backend que rechaza o que no existe—. Ahora quedan apagadas y
+ * dicen por que, que es lo que #332 pedia; la observacion sigue siendo la
+ * condicion de guardado de `alta_deuda` y de `baja_deuda`, que si estan
+ * declaradas, y eso se comprueba abajo y en `pantallas/escritura.test.tsx`.
+ */
+const LAS_QUE_ESCRIBEN_SIN_DECLARAR: readonly string[] = [
   'predial-masivo',
   'transferencia-predio',
-  'alcabala',
   'vehicular-calculo',
   'transferencia-vehiculo',
-  'espectaculos',
-  'alta-deuda',
-  'baja-deuda',
 ];
+
+/**
+ * Y la que **no guarda campos: pide una determinacion** (#333).
+ *
+ * `predial-individual` estaba en la lista de arriba y su franja decia «la
+ * pantalla aún no manda estos campos» sobre una pantalla con 15 de sus 19
+ * campos en `"ro"`: ahi no hay ningun campo que mandar, y lo que falta no es una
+ * entrada en la lista blanca sino la capa web entera de la determinacion —el
+ * dominio calcula (`RT-001`…`RT-016`) y ningun controlador lo publica—. La
+ * primaria sigue apagada; lo que cambia es que la franja dice la verdad.
+ */
+const LA_QUE_DETERMINA = 'predial-individual';
+
+/**
+ * Y las dos cuya **primaria no es un acto**: «Imprimir liquidación» (#337).
+ *
+ * Escriben en el contrato y tampoco declaran, pero la ultima accion de su
+ * catalogo —que es la primaria (FRO-03 §5)— imprime. Contarle a quien atiende
+ * que «registre el acto por el procedimiento actual» debajo de un boton de
+ * imprimir es regañarle por algo que no estaba haciendo, y eso pasaba en 50 de
+ * las 134 pantallas. La primaria sigue apagada; lo que se quita es la franja.
+ */
+const LAS_DE_SALIDA: readonly string[] = ['alcabala', 'espectaculos'];
+
+/** Las dos que **si** declaran su lista blanca, y por tanto guardan de verdad. */
+const LAS_DECLARADAS: readonly string[] = ['alta-deuda', 'baja-deuda'];
 
 beforeEach(() => instalarProxyDeDatos({ latencia: false }));
 afterEach(() => desinstalarProxyDeDatos());
 
-describe('ninguna de las escrituras del modulo se envia sin observacion', () => {
-  it.each(LAS_QUE_ESCRIBEN)('%s no habilita su accion primaria sin ella', async (ranura) => {
-    const usuario = userEvent.setup();
+describe('ningun acto del modulo promete lo que no puede', () => {
+  it.each(LAS_QUE_ESCRIBEN_SIN_DECLARAR)(
+    '%s deja su primaria apagada, y la franja dice por que',
+    async (ranura) => {
+      const montada = montarEnRuta(`/rentas-registro/${ranura}`);
+      await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+      // **La ultima accion es la primaria**, como en el prototipo (FRO-03 §5).
+      // Apagada con `aria-disabled` y enfocable: es lo unico que hace que su
+      // franja se lea (ver `primariaApagada`).
+      primariaApagada();
+
+      // Sin declaracion no hay a donde escribir: tampoco hay caja de observacion.
+      expect(
+        screen.queryByRole('region', { name: 'Observación del usuario' }),
+      ).not.toBeInTheDocument();
+
+      // Su operacion **escribe** en el contrato: lo que falta es la declaracion,
+      // y eso lo dice el `data-causa` —la franja habla para la ventanilla—.
+      expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
+      expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
+        'data-causa',
+        'sin-declaracion',
+      );
+
+      montada.unmount();
+    },
+  );
+
+  it(`${LA_QUE_DETERMINA} no promete campos: dice que la determinación la hace el servidor`, async () => {
+    const montada = montarEnRuta(`/rentas-registro/${LA_QUE_DETERMINA}`);
+    await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+    primariaApagada();
+    expect(motivoDeLaPrimaria()).toMatch(/Aquí no se calcula nada/);
+    // Y **no** la frase de la causa anterior, que era la equivocada: aquí no se
+    // escribe nada que se pueda mandar.
+    expect(motivoDeLaPrimaria()).not.toMatch(/Lo que se escriba aquí/);
+    expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
+      'data-causa',
+      'sin-determinacion',
+    );
+
+    montada.unmount();
+  });
+
+  it.each(LAS_DE_SALIDA)(
+    '%s imprime: la primaria esta apagada y **sin** franja',
+    async (ranura) => {
+      const montada = montarEnRuta(`/rentas-registro/${ranura}`);
+      await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+      // Apagada con `disabled`, no con `aria-disabled`: no hay ningun motivo que
+      // leer al lado, asi que tampoco hace falta que reciba el foco.
+      expect(primariaDeLaPantalla()).toBeDisabled();
+      expect(motivoDeLaPrimaria()).toBeUndefined();
+      expect(document.getElementById('sgtm-motivo-de-la-accion')?.textContent).toBe('');
+
+      montada.unmount();
+    },
+  );
+
+  it.each(LAS_DECLARADAS)('%s si pide su observacion, y sin ella no guarda', async (ranura) => {
     const montada = montarEnRuta(`/rentas-registro/${ranura}`);
 
     const caja = await screen.findByRole('region', { name: 'Observación del usuario' });
-    // **La ultima accion es la primaria**, como en el prototipo (FRO-03 §5).
-    const acciones = document.querySelectorAll<HTMLButtonElement>('.sgtm-acciones .sgtm-boton');
-    const primaria = acciones[acciones.length - 1];
-    expect(primaria).toBeDefined();
-    if (!primaria) return;
+    expect(within(caja).getByLabelText('Observación')).toBeInTheDocument();
 
-    // Sin observacion, deshabilitada. No es un `placeholder` amable: es la
+    // Sin observacion, apagada. No es un `placeholder` amable: es la
     // condicion de guardado (regla 10, RNF-052).
-    expect(primaria.disabled).toBe(true);
+    primariaApagada();
+
+    montada.unmount();
+  });
+
+  /**
+   * **El concepto y la observacion habilitan el alta**, porque el alta si
+   * declara sus campos.
+   *
+   * Era «la observacion sola», y esa era la mitad de un defecto: el desplegable
+   * de concepto se dibujaba mostrando «IMPUESTO PREDIAL» sin que nadie lo
+   * tocara —un `sel` de escritura sin opcion vacia se pinta con su primera
+   * opcion—, el borrador estaba vacio, `faltaEnElAlta` no veia nada, y el `POST`
+   * salia con `{codContribuyente, observacion}`: **sin `tributo`**. Con eso, la
+   * deuda no se asienta sobre ninguna obligacion identificable.
+   */
+  it('el concepto y la observacion habilitan el alta, porque el alta si declara sus campos', async () => {
+    const usuario = userEvent.setup();
+    const montada = montarEnRuta('/rentas-registro/alta-deuda');
+
+    const caja = await screen.findByRole('region', { name: 'Observación del usuario' });
+    const primaria = await screen.findByRole('button', { name: 'Dar de alta' });
+    primariaApagada(primaria);
 
     await usuario.type(within(caja).getByLabelText('Observación'), 'Motivo del acto.');
-    await waitFor(() => expect(primaria.disabled).toBe(false));
+    // Con la observacion escrita **sigue apagada**: falta el concepto.
+    primariaApagada(primaria);
+    expect(motivoDeLaPrimaria()).toMatch(/Falta el concepto/);
+
+    await usuario.selectOptions(
+      await screen.findByLabelText('Concepto / tributo'),
+      'IMPUESTO PREDIAL',
+    );
+    await waitFor(() => primariaEncendida(primaria));
 
     montada.unmount();
   });
@@ -94,7 +219,7 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
     ]);
   });
 
-  it('las diez restantes siguen sin Conexion propia', () => {
+  it('las nueve restantes siguen sin Conexion propia', () => {
     for (const opcion of [
       'predios_rentas',
       'predial_individual',
@@ -105,7 +230,6 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
       'transferencia_vehiculo',
       'espectaculos',
       'alta_deuda',
-      'baja_deuda',
     ]) {
       expect(OPCIONES_CONECTADAS).not.toContain(opcion);
     }
@@ -115,6 +239,12 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
       'declaracion_jurada',
       'beneficios',
       'arbitrios',
+      // `baja_deuda` se suma en #332, y es la unica del sistema cuya conexion
+      // **lee otra operacion**: la suya es un `POST`, que no se pide al abrir la
+      // pantalla, y la deuda que se da de baja la publica `consulta_deuda` (#22).
+      // Sin eso, su tabla —y la columna de seleccion que el prototipo dibuja—
+      // se quedaban vacias para siempre.
+      'baja_deuda',
     ]) {
       expect(OPCIONES_CONECTADAS).toContain(opcion);
     }
@@ -263,8 +393,11 @@ describe('alta_deuda manda solo lo que su lista blanca declara', () => {
 
     await usuario.type(await screen.findByLabelText('Cod. Contribuyente'), '00000025673');
     await usuario.selectOptions(screen.getByLabelText('Concepto / tributo'), 'IMPUESTO PREDIAL');
-    // «Unidad (predio / placa)» se llena pero no viaja: ver escrituras.ts.
-    await usuario.type(screen.getByLabelText('Unidad (predio / placa)'), '01-02-03-04-05-06');
+    /* **La unidad se deja sin resolver, y para el predial esa es la unica forma
+       correcta**: se determina por contribuyente sobre el conjunto de sus
+       predios (NEG-05 §1), y el esquema lo hace imposible de otra forma
+       —`determinacion_predial_sin_predio_ck`—. Con una unidad resuelta, `exigir`
+       apaga la primaria y lo dice; eso se comprueba en `resolutor-de-unidad`. */
     await usuario.selectOptions(screen.getByLabelText('Año'), '2026');
     await usuario.type(screen.getByLabelText('Cuota desde'), '1');
     await usuario.type(screen.getByLabelText('Cuota hasta'), '4');
@@ -293,24 +426,66 @@ describe('alta_deuda manda solo lo que su lista blanca declara', () => {
     });
   });
 
-  it('un tributo sin codigo establecido no viaja, y la peticion falla en el backend', async () => {
+  /**
+   * **Un concepto sin codigo ya no manda una peticion muda** (#331).
+   *
+   * Antes viajaba el cuerpo **sin** `tributo` y el backend contestaba «Falta el
+   * campo 'tributo'», que es un mensaje sobre un campo que la pantalla si
+   * ensenaba lleno: quien atiende habia elegido «MULTA TRIBUTARIA» y no tenia
+   * como saber que el sistema no la sabe asentar. Ahora la primaria se queda
+   * apagada y lo dice antes de escribir nada mas.
+   *
+   * Quedan **dos** conceptos asi, no tres: «MULTA ADMINISTRATIVA» si tiene
+   * codigo en el libro —`RegistrarPapeleta` asienta `MULTA_ADMINISTRATIVA`—, y
+   * la traduccion que faltaba se corrige en `escrituras.ts`.
+   */
+  it.each(['MULTA TRIBUTARIA', 'DERECHOS ADMINISTRATIVOS'])(
+    '«%s» no tiene codigo en el libro: la primaria se apaga y lo dice, sin mandar nada',
+    async (concepto) => {
+      const usuario = userEvent.setup();
+      laApiResponde();
+      montarEnRuta('/rentas-registro/alta-deuda');
+
+      await usuario.type(await screen.findByLabelText('Cod. Contribuyente'), '00000025673');
+      await usuario.selectOptions(screen.getByLabelText('Concepto / tributo'), concepto);
+      await usuario.type(
+        within(
+          await screen.findByRole('region', { name: 'Observación del usuario' }),
+        ).getByLabelText('Observación'),
+        'Multa por declaración jurada omisa.',
+      );
+
+      const primaria = screen.getByRole('button', { name: 'Dar de alta' });
+      primariaApagada(primaria);
+      expect(motivoDeLaPrimaria()).toMatch(/no tiene todavía un código de tributo/);
+      expect(motivoDeLaPrimaria()).toContain(concepto);
+
+      await usuario.click(primaria);
+      expect(peticiones).toHaveLength(0);
+    },
+  );
+
+  /** Y la que si lo tiene desde #331 viaja con el codigo que el libro usa. */
+  it('«MULTA ADMINISTRATIVA» viaja como MULTA_ADMINISTRATIVA, que es lo que asienta el libro', async () => {
     const usuario = userEvent.setup();
     laApiResponde();
     montarEnRuta('/rentas-registro/alta-deuda');
 
     await usuario.type(await screen.findByLabelText('Cod. Contribuyente'), '00000025673');
-    // Ninguna de las tres tiene codigo de tributo establecido todavia.
-    await usuario.selectOptions(screen.getByLabelText('Concepto / tributo'), 'MULTA TRIBUTARIA');
+    await usuario.selectOptions(
+      screen.getByLabelText('Concepto / tributo'),
+      'MULTA ADMINISTRATIVA',
+    );
     await usuario.type(
       within(await screen.findByRole('region', { name: 'Observación del usuario' })).getByLabelText(
         'Observación',
       ),
-      'Multa por declaración jurada omisa.',
+      'Multa administrativa migrada del sistema anterior.',
     );
     await usuario.click(screen.getByRole('button', { name: 'Dar de alta' }));
 
     await waitFor(() => expect(peticiones).toHaveLength(1));
     const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
-    expect(cuerpo['tributo']).toBeUndefined();
+    expect(cuerpo['tributo']).toBe('MULTA_ADMINISTRATIVA');
   });
 });

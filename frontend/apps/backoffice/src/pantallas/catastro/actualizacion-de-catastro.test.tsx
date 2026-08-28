@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { montarEnRuta } from '../../pruebas/montar';
+import { primariaApagada, primariaEncendida } from '../../pruebas/acciones';
 
 /**
  * Actualización del catastro: guarda una lista de construcciones, no campos
@@ -178,7 +179,9 @@ describe('guardar manda exactamente la lista blanca del controlador', () => {
     await userEvent.type(screen.getByLabelText('Observación'), 'Se confirma la ficha.');
 
     const guardar = screen.getByRole('button', { name: 'Guardar' });
-    expect(guardar).toBeDisabled();
+    // Apagada con `aria-disabled` y enfocable: es lo que permite leer el motivo
+    // que lleva al lado (#332).
+    primariaApagada(guardar);
     expect(screen.getByText(/Todavía se están leyendo los pisos/)).toBeInTheDocument();
     await userEvent.click(guardar);
     expect(PUT()).toHaveLength(0);
@@ -186,7 +189,7 @@ describe('guardar manda exactamente la lista blanca del controlador', () => {
     // Y en cuanto llegan, se puede guardar con ellos dentro.
     soltar();
     await screen.findByText('02');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Guardar' })).toBeEnabled());
+    await waitFor(() => primariaEncendida(screen.getByRole('button', { name: 'Guardar' })));
   });
 
   it('sin documento de origen, guardar falla en voz alta y no manda nada', async () => {

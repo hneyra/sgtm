@@ -2402,6 +2402,62 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: registrar_internamiento
+      summary: "Registro de ingreso al depósito"
+      description: >-
+        Interna un vehículo en el depósito municipal y emite su acta (#50, RF-064). La
+        pantalla «Internamiento vehicular» declara «GET /transito/internamientos» como su
+        endpoint —la grilla— y su acción «Registrar ingreso» necesita un verbo aparte. El
+        cuerpo lleva la placa, el depósito, el concepto del TUPA con que se cobrará la
+        custodia y la observación del usuario, obligatoria (RNF-052).
+      tags: ["Tránsito"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/internamientos/{placa}/liberacion":
+    post:
+      operationId: liberar_internamiento
+      summary: "Liberación del vehículo internado"
+      description: >-
+        Entrega el vehículo a quien lo retira y emite el acta de liberación (#50, RF-064).
+        Exige el recibo con que se pagó la custodia: el backend lo acredita contra
+        `tesoreria` por su API pública, y sin esa acreditación el vehículo no sale. La
+        casilla «Custodia cancelada» de la pantalla no basta —la marca quien entrega el
+        vehículo—.
+      tags: ["Tránsito"]
+      parameters:
+        - name: placa
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/transito/papeletas/{numero}/actos":
     get:
       operationId: transito_documentos
@@ -2761,6 +2817,39 @@ paths:
       summary: "Resolución de gerencia sancionadora"
       description: "Segunda resolución, emitida luego de la ordinaria. Tiene carácter sancionador y se deriva a la Dirección General de Transportes."
       tags: ["Tránsito"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/resoluciones/{numero}/notificacion":
+    post:
+      operationId: notificar_resolucion_transito
+      summary: "Notificación de resolución de gerencia de tránsito"
+      description: >-
+        Cédula de notificación de la resolución ordinaria o sancionadora de tránsito, con
+        su acuse (#50, RF-074). **Es de donde sale el derecho a la sancionadora**: la
+        diligencia que surte efecto sobre la ordinaria fija, con el plazo parametrizado del
+        conjunto sellado, el día desde el que se puede sancionar. Infracciones
+        administrativas tiene la suya
+        (`/infracciones/administrativas/resoluciones/{id}/notificacion`); tránsito no la
+        tenía, y sin ella la sancionadora no se puede dictar nunca.
+      tags: ["Tránsito"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -5339,6 +5428,65 @@ paths:
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
   "/coactiva/liquidaciones-costas":
+    get:
+      operationId: costas_procesales_listado
+      summary: "Liquidaciones de costas procesales encontradas"
+      description: "Grilla «Liquidaciones encontradas» de la pantalla de costas procesales, con el pendiente y el estado de cada liquidacion a la fecha de consulta. Agregada por #42: la opcion declaraba solo su accion principal y la pantalla tiene grilla propia con estos mismos filtros."
+      tags: ["Coactiva"]
+      parameters:
+        - name: nroLiquidacion
+          in: query
+          required: false
+          description: "Filtro «Nro. Liquidación» de la pantalla"
+          schema: { type: string }
+        - name: nroExpedCoact
+          in: query
+          required: false
+          description: "Filtro «Nro. Exped. Coact.» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla. Se derivan del libro: ACTIVA o CANCELADA"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
     post:
       operationId: costas_procesales
       summary: "Liquidación de costas procesales"
@@ -5774,6 +5922,26 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: emitir_licencia
+      summary: "Emisión de licencia de funcionamiento"
+      description: "Emite una licencia de funcionamiento con sus giros CIIU y su papel (RF-110). El cuerpo lleva el titular, el establecimiento, los giros con su actividad principal, el número del recibo de caja de tasas del derecho de trámite y la observación del usuario, obligatoria (RNF-052). Sin un recibo válido —de caja de tasas, no anulado, del titular y por el concepto del TUPA que corresponde— no se emite. El número de la licencia lo pone el sistema desde su correlativo: no viene en el cuerpo."
+      tags: ["Autorizaciones y licencias"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/licencias/funcionamiento/reportes/padron":
     post:
       operationId: licencia_padron
@@ -6084,6 +6252,26 @@ paths:
           example: "ASCENDENTE"
       responses:
         200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: registrar_ciiu
+      summary: "Alta de giro CIIU"
+      description: "Agrega un giro al catálogo CIIU de la municipalidad (RF-112). El cuerpo lleva el código, la descripción, la sección, el nivel de riesgo de la ITSE si ya está clasificado, la zonificación compatible y la observación del usuario, obligatoria (RNF-052). El giro nace activo y marcado como extensión local: la clasificación oficial se carga por otro camino."
+      tags: ["Autorizaciones y licencias"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
           description: Operacion realizada
           content:
             application/json:

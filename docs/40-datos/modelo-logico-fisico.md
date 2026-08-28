@@ -123,6 +123,7 @@ una tabla vacía no hay ninguna. `VALIDATE CONSTRAINT` después chocaría con lo
 | `V26__valores_correlativo.sql` | Numeración correlativa de OP/RD/RM, por municipalidad, tipo y ejercicio (#37) |
 | `V27__valores_masivo.sql` | Criterio e items de una corrida de generación masiva de valores (#38) |
 | `V28__notificacion_prescripcion_y_pase_a_coactiva.sql` | Acuse de notificación, pase a coactiva (`valor_movimiento`) y declaración de prescripción con su cómputo por ejercicio y sus hechos interruptivos/suspensivos (#39). Le revoca el `UPDATE` que `V7` le daba a `notificacion` |
+| `V37__licencia_de_funcionamiento.sql` | La licencia de funcionamiento (#44): retira de `licencia_funcionamiento` las columnas de estado que decían `VIGENTE` para siempre y el `resolucion` de texto libre; exige el recibo y el documento emitido; agrega `licencia_movimiento` —de donde se deriva el estado— y `licencia_correlativo`; le pone al catálogo `ciiu` su sección, su riesgo de ITSE y su traza; y revoca el `UPDATE` sobre la licencia y sus duplicados |
 
 Los roles se crean **antes**, con `db/roles/crear-roles.sql`, que no es una migración: las
 políticas de `V6` los nombran, y un rol no puede crearse a sí mismo.
@@ -230,6 +231,23 @@ importe de la infracción, porcentaje realmente a cobrar, importe a pagar e impo
 Se guardan **todos** porque explicarle el cobro al contribuyente es parte del requisito, y
 recalcularlos meses después con otros parámetros daría otra cifra.
 
+Lo que `V4` **no** guardaba, y `V41` (#50) agrega, es **a quién se le cobra**: `papeleta.obligado_id`.
+`RegistrarPapeleta` (#46, #47) recibía el obligado por la firma, asentaba el cargo contra él y no lo
+guardaba en ninguna parte. La consecuencia no se ve hasta que un descargo se declara fundado: hay que
+dar de baja **esa misma** obligación del libro, y no hay forma de saber contra cuál se asentó —
+`infractor_id`, `propietario_id` y `contribuyente_id` son tres candidatos y ninguno es la respuesta,
+porque el manual permite cobrarle al propietario aunque condujera otro—. Es también el «Obligado» que
+la resolución de gerencia imprime.
+
+Y el escalado del manual, también con `V41`: `descargo` pierde `resultado`, `resolucion` y
+`fecha_resolucion` —el fallo escrito dentro del escrito que otro presentó—, que pasan a
+`resolucion_gerencia`; e `internamiento` pierde `fecha_salida`, porque liberar un vehículo es un acto
+con su acta, su recibo de custodia y quien lo retira, no una fecha rellenada encima del ingreso. Los
+dos estados —el del recurso y el del vehículo— se **derivan**, como el del recibo y el del turno.
+
+La **tarifa** de la custodia no está en `internamiento`: solo el **código** del concepto del TUPA. La
+tarifa vive en `tasa` con su vigencia (regla 5, ADR-0007), y copiarla la pondría en dos sitios.
+
 ### 4.6 Seguridad y auditoría
 
 El modelo del manual, completo: `modulo_sistema`, `acceso` (opción de menú o política), `grupo`,
@@ -259,6 +277,7 @@ en el esquema, no en una convención:
 
 - Sacar a un usuario de un grupo es `miembro.activo = false`, con `fecha_baja` y `usuario_baja`.
 - Quitar un giro de una licencia es `licencia_giro.activo = false`.
+- Cancelar una licencia de funcionamiento es **agregar** una fila a `licencia_movimiento` con su motivo y la resolución que la sustenta (`V37`, #44). Las columnas `estado`, `fecha_cancelacion` y `motivo_cancelacion` que `V4` había puesto en `licencia_funcionamiento` se **retiraron**, por lo mismo que las de `recibo` y las de `cierre_caja`: dirían `VIGENTE` para siempre. El estado se deriva de sus movimientos **y de la fecha a la que se pregunta** —una licencia temporal vence, y un padrón con fecha de corte de junio tiene que seguir diciendo lo que decía en junio—.
 - Anular un recibo es **agregar** una fila a `recibo_movimiento` con su motivo, su importe y su
   turno, por `CHECK` (`V30`, #34). Las columnas `estado`, `fecha_anulacion`, `usuario_anulacion` y
   `motivo_anulacion` que `V3` había puesto en `recibo` se **retiraron** ahí mismo: desde que `V29`
@@ -287,6 +306,21 @@ corregir la fila que dice si está anulado, y es la misma pérdida por otra puer
 Desde `V32` (#36), tampoco `cierre_turno` ni `cierre_turno_detalle`: un arqueo es un acto firmado
 contra el que se concilia el depósito, y si la cifra declarada se puede reescribir, el descuadre
 desaparece justo cuando alguien lo está buscando.
+
+Desde `V37` (#44), tampoco `licencia_funcionamiento` ni `licencia_duplicado`: la licencia es un acto
+administrativo que el titular **cuelga en la pared de su establecimiento**, y corregirla en la base
+deja al papel y al sistema diciendo cosas distintas. Aquí el `REVOKE` **sí se pudo**, al revés que
+con `cierre_caja`, y no por casualidad: el ordinal del siguiente duplicado se serializa con
+`licencia_duplicado_uq` y no con un `SELECT … FOR UPDATE` sobre la licencia, precisamente para que el
+privilegio se pudiera retirar. `ciiu` y `licencia_giro` **conservan** el `UPDATE`: el catálogo se
+corrige, y quitar un giro de una licencia es ponerle `activo = false`.
+
+Desde `V41` (#50), tampoco `descargo`, `resolucion_gerencia`, `internamiento` ni
+`internamiento_movimiento`. La resolución es el caso claro y ya conocido: **se notifica**, y el
+administrado se lleva el papel; corregirla en la base deja al papel notificado y al sistema diciendo
+cosas distintas, y quien tenga el papel gana la discusión. Una resolución equivocada se deja sin
+efecto con otra, y las dos quedan. El descargo es el escrito que otro firmó y presentó. Y el
+internamiento, la constancia de que un vehículo estuvo retenido y devengó custodia.
 
 ### El `REVOKE` que no se puede hacer: `cierre_caja`
 

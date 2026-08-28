@@ -553,19 +553,22 @@ class PadronVehicularTest {
                     app.prepareStatement(
                             "INSERT INTO papeleta (municipalidad_id, familia, numero,"
                                     + " codigo_infraccion_id, fecha_infraccion, lugar, placa,"
-                                    + " vehiculo_id, propietario_id, base_imponible,"
+                                    + " vehiculo_id, propietario_id, obligado_id, base_imponible,"
                                     + " porcentaje_infraccion, importe_infraccion,"
                                     + " porcentaje_a_cobrar, importe_a_pagar, usuario_registro,"
                                     + " observacion)"
                                     + " VALUES (?, 'TRANSITO', ?, ?, DATE '2026-03-04', 'Av. Grau',"
-                                    + "         ?, ?, ?, 1000.00, 8.0000, 100.00, 100.0000, 100.00,"
-                                    + "         'jperez', 'papeleta de la prueba') RETURNING id")) {
+                                    + "         ?, ?, ?, ?, 1000.00, 8.0000, 100.00, 100.0000,"
+                                    + "         100.00, 'jperez', 'papeleta de la prueba')"
+                                    + " RETURNING id")) {
                 sentencia.setLong(1, municipalidad);
                 sentencia.setString(2, "P-" + vehiculoId);
                 sentencia.setLong(3, codigo);
                 sentencia.setString(4, placa);
                 sentencia.setLong(5, vehiculoId);
                 sentencia.setLong(6, contribuyente);
+                // El obligado: a quien se le asiento el cargo de la multa (V41 §1).
+                sentencia.setLong(7, contribuyente);
                 try (ResultSet fila = sentencia.executeQuery()) {
                     fila.next();
                     long id = fila.getLong(1);

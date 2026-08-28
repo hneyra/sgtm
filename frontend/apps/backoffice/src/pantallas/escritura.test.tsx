@@ -5,6 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import { crearClienteDeConsultas } from '../app/App';
 import { clienteDePruebas, montarEnRuta } from '../pruebas/montar';
+import { primariaApagada, primariaEncendida } from '../pruebas/acciones';
 import { useEscritura } from './escritura';
 import type { OpcionesDeEscritura } from './escritura';
 
@@ -17,10 +18,22 @@ import type { OpcionesDeEscritura } from './escritura';
  * medias. Esto comprueba que ahora escribe, y que no puede hacerlo sin ella.
  */
 
-/** Una pantalla cuya operacion escribe: `POST /rentas/predial/calculo-masivo`. */
-const MASIVO = '/rentas-registro/predial-masivo';
-/** Su accion primaria emite, que no se deshace: `POST /rentas/vehicular/calculo`. */
-const CUPONERA = '/rentas-registro/vehicular-calculo';
+/**
+ * Una pantalla que escribe **y lo tiene declarado**: `POST /rentas/deuda/altas`.
+ *
+ * Era «Predial — masivo» hasta #332. Dejo de servir por lo mismo que #332
+ * arreglo: una opcion sin declarar en `escrituras.ts` mandaba solo su
+ * observacion —«guardaba» sin guardar nada—, y ahora su accion se queda apagada
+ * diciendo por que. Para probar el camino de escritura hace falta una pantalla
+ * que **pueda** recorrerlo entero; que las otras no puedan se comprueba en
+ * `actos-honestos.test.tsx`, que es donde toca.
+ */
+const ALTA = '/rentas-registro/alta-deuda';
+/**
+ * Su accion primaria notifica, y eso no se deshace —el acuse sostiene el plazo—:
+ * `POST /valores/{nro}/notificacion`, declarada en `escrituras.ts`.
+ */
+const CUPONERA = '/valores/notificacion-valores/OP-2026-004182';
 
 interface Peticion {
   readonly url: string;
@@ -61,19 +74,37 @@ const observacion = async (): Promise<HTMLElement> =>
     'Observación',
   );
 
+/**
+ * Elige el concepto del alta de deuda, que desde la revision de #331 **hay que
+ * elegir**.
+ *
+ * Antes no hacia falta y esa era justamente la mitad del defecto: el
+ * desplegable se dibujaba mostrando «IMPUESTO PREDIAL» sin que nadie lo tocara
+ * —un `sel` sin opcion vacia se pinta con su primera opcion—, el borrador
+ * estaba vacio y el cuerpo salia **sin `tributo`**. Estas pruebas usan «Alta de
+ * deuda» como la pantalla que escribe, no como el caso de negocio: eligen el
+ * predial, que no cuelga de ninguna unidad, y lo demas se comprueba igual.
+ */
+const elConcepto = async (
+  usuario: ReturnType<typeof userEvent.setup>,
+  concepto = 'IMPUESTO PREDIAL',
+): Promise<void> => {
+  await usuario.selectOptions(await screen.findByLabelText('Concepto / tributo'), concepto);
+};
+
 describe('sin observacion no se guarda', () => {
   it('abrir una pantalla que escribe no escribe nada', async () => {
     laApiResponde(201);
-    montarEnRuta(MASIVO);
+    montarEnRuta(ALTA);
 
     await screen.findByRole('heading', { level: 1 });
-    // Abrir «cálculo masivo» no puede lanzar un cálculo masivo.
+    // Abrir «alta de deuda» no puede dar de alta ninguna deuda.
     expect(peticiones).toEqual([]);
   });
 
   it.each([
-    { pantalla: 'cálculo masivo', ruta: MASIVO, primaria: 'Ejecutar proceso' },
-    { pantalla: 'cuponera vehicular', ruta: CUPONERA, primaria: 'Emitir cuponera' },
+    { pantalla: 'alta de deuda', ruta: ALTA, primaria: 'Dar de alta' },
+    { pantalla: 'notificación de valores', ruta: CUPONERA, primaria: 'Registrar notificación' },
   ])(
     '$pantalla: la accion primaria esta deshabilitada hasta que hay observacion',
     async ({ ruta, primaria }) => {
@@ -82,28 +113,35 @@ describe('sin observacion no se guarda', () => {
       montarEnRuta(ruta);
 
       const accion = await screen.findByRole('button', { name: primaria });
-      expect(accion).toBeDisabled();
+      // Apagada con `aria-disabled`, no con `disabled`: sigue siendo enfocable
+      // para que el motivo que lleva al lado se pueda leer (#332).
+      primariaApagada(accion);
 
+      if (ruta === ALTA) await elConcepto(usuario);
       await usuario.type(await observacion(), 'Corrección solicitada por el contribuyente.');
-      expect(accion).toBeEnabled();
+      primariaEncendida(accion);
 
-      // Y si se borra, vuelve a deshabilitarse: no es una puerta que se abre una vez.
+      // Y si se borra, vuelve a apagarse: no es una puerta que se abre una vez.
       await usuario.clear(await observacion());
-      expect(accion).toBeDisabled();
+      primariaApagada(accion);
     },
   );
 
   it('la observacion viaja en el cuerpo, que es donde la audita el backend', async () => {
     const usuario = userEvent.setup();
     laApiResponde(201);
-    montarEnRuta(MASIVO);
+    montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'Emisión anual 2026.');
-    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
 
     await waitFor(() => expect(peticiones).toHaveLength(1));
     expect(peticiones[0]?.metodo).toBe('POST');
+    // El concepto elegido y la observacion, **y nada mas**: los otros doce
+    // campos del formulario siguen sin tocarse, y lo que no se toca no viaja.
     expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).toEqual({
+      tributo: 'PREDIAL',
       observacion: 'Emisión anual 2026.',
     });
   });
@@ -117,13 +155,14 @@ describe('idempotencia: una clave por intento', () => {
       status: 503,
       detail: 'Vuelve a intentarlo.',
     });
-    montarEnRuta(MASIVO);
+    montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'Emisión anual 2026.');
-    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
     await waitFor(() => expect(peticiones).toHaveLength(1));
 
-    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
     await waitFor(() => expect(peticiones).toHaveLength(2));
 
     // Dos envios del mismo intento: para el servidor es **uno**. Regenerar la
@@ -139,19 +178,74 @@ describe('idempotencia: una clave por intento', () => {
       status: 503,
       detail: 'Vuelve a intentarlo.',
     });
-    montarEnRuta(MASIVO);
+    montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'Emisión anual.');
-    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
     await waitFor(() => expect(peticiones).toHaveLength(1));
 
     await usuario.type(await observacion(), ' Corregida.');
-    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
     await waitFor(() => expect(peticiones).toHaveLength(2));
 
     // Con la clave anterior, el servidor devolveria el resultado del intento que
     // se estaba corrigiendo, y la correccion se perderia.
     expect(peticiones[0]?.clave).not.toBe(peticiones[1]?.clave);
+  });
+});
+
+/**
+ * **Tras guardar, entra el siguiente** (RNF-082).
+ *
+ * Venia de `tesoreria.test.tsx`, sobre la caja de tasas. Se movio aqui en #332
+ * por un motivo y no por comodidad: `caja_tasas` no declara su escritura, asi
+ * que desde entonces su accion no guarda —ni debe—, y una propiedad del camino
+ * de escritura no se puede comprobar sobre una pantalla que no lo recorre. Lo
+ * que se comprueba es lo mismo, con la misma exigencia, sobre una que si lo
+ * recorre y que tambien tiene bloque de busqueda.
+ */
+describe('tras guardar, el foco vuelve a la busqueda', () => {
+  it('al primer campo escribible, sin tocar el raton', async () => {
+    const usuario = userEvent.setup();
+    laApiResponde(201);
+    montarEnRuta(CUPONERA);
+
+    await usuario.type(await observacion(), 'Diligencia del 13 de agosto.');
+    await usuario.click(await screen.findByRole('button', { name: 'Registrar notificación' }));
+    await usuario.click(await screen.findByRole('button', { name: /^Confirmar/ }));
+    await screen.findByText(/Guardado, con tu observación/);
+
+    // Si el foco se quedara en el boton, ese gesto se paga en cada acto, y en
+    // una ventanilla son cientos al dia.
+    const busqueda = screen.getByRole('region', { name: 'Búsqueda' });
+    const primero = busqueda.querySelector('input:not([readonly]):not([disabled])');
+    expect(primero).not.toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(primero));
+  });
+
+  it('y no se lo lleva despues: el usuario puede mover el foco donde quiera', async () => {
+    const usuario = userEvent.setup();
+    laApiResponde(201);
+    montarEnRuta(CUPONERA);
+
+    await usuario.type(await observacion(), 'Diligencia del 13 de agosto.');
+    await usuario.click(await screen.findByRole('button', { name: 'Registrar notificación' }));
+    await usuario.click(await screen.findByRole('button', { name: /^Confirmar/ }));
+    await screen.findByText(/Guardado, con tu observación/);
+    await waitFor(() => expect(document.activeElement?.tagName).toBe('INPUT'));
+
+    // Enfocar en cada render mientras «guardada» siga siendo cierto dejaria el
+    // foco clavado: se enfoca en el flanco, una vez.
+    const otro = screen.getAllByRole('button')[0];
+    expect(otro).toBeDefined();
+    otro?.focus();
+    expect(document.activeElement).toBe(otro);
+
+    // Y se provoca un render mas —escribir la observacion del siguiente acto—
+    // porque sin el, «una vez» y «en cada render» no se distinguen.
+    await usuario.type(await observacion(), 'Siguiente diligencia.');
+    expect(document.activeElement).toBe(await observacion());
   });
 });
 
@@ -168,10 +262,11 @@ describe('una escritura no se reintenta sola', () => {
     laApiResponde(500, { title: 'Error', status: 500, detail: 'No se pudo.' });
     // Con el cliente **de produccion**: con el de pruebas, que ya trae
     // `retry: false`, esta prueba no diria nada.
-    montarEnRuta(MASIVO, crearClienteDeConsultas());
+    montarEnRuta(ALTA, crearClienteDeConsultas());
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'Emisión anual.');
-    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
 
     await screen.findByText('No se pudo.');
     // Un reintento automatico de un cobro es un cobro doble (FRO-04 §5).
@@ -181,10 +276,11 @@ describe('una escritura no se reintenta sola', () => {
   it('pulsar dos veces rapido manda una vez', async () => {
     const usuario = userEvent.setup();
     laApiResponde(201);
-    montarEnRuta(MASIVO);
+    montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'Emisión anual.');
-    const accion = await screen.findByRole('button', { name: 'Ejecutar proceso' });
+    const accion = await screen.findByRole('button', { name: 'Dar de alta' });
     await usuario.dblClick(accion);
 
     await waitFor(() => expect(peticiones.length).toBeGreaterThan(0));
@@ -203,10 +299,11 @@ describe('los errores se cuentan donde toca', () => {
         { campo: 'observacion', mensaje: 'La observación debe explicar el motivo del cálculo.' },
       ],
     });
-    montarEnRuta(MASIVO);
+    montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'x');
-    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
 
     const mensaje = await screen.findByText('La observación debe explicar el motivo del cálculo.');
     expect(mensaje).toBeInTheDocument();
@@ -222,10 +319,11 @@ describe('los errores se cuentan donde toca', () => {
       status: 403,
       detail: 'El usuario no tiene el nivel de accesibilidad requerido.',
     });
-    montarEnRuta(MASIVO);
+    montarEnRuta(ALTA);
 
+    await elConcepto(usuario);
     await usuario.type(await observacion(), 'Emisión anual.');
-    await usuario.click(await screen.findByRole('button', { name: 'Ejecutar proceso' }));
+    await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
 
     expect(await screen.findByText('Sin permiso')).toBeInTheDocument();
     expect(
@@ -356,6 +454,192 @@ describe('idempotencia: una tabla que no cambia no empieza otro intento', () => 
   });
 });
 
+/**
+ * **Un entero es entero entero** (#332).
+ *
+ * `Number.parseInt('1 - 4')` devuelve 1, y eso no es una conversion: es una
+ * reinterpretacion silenciosa. En «Baja de deuda» la cuota de una fila puede ser
+ * un rango —asi escribe el manual las cuatro cuotas de un ano—, y mandar 1
+ * daria de baja una cuota dejando tres vivas sin que nada lo dijera. Lo que no
+ * es un entero no viaja, igual que un campo vacio; el backend ya sabe leer la
+ * cuota ausente como «anual».
+ */
+describe('un entero que no lo es no viaja, en vez de viajar a medias', () => {
+  const CON_ENTERO: OpcionesDeEscritura = {
+    campos: { cuota: { campo: 'cuota', entero: true } },
+  };
+
+  const conCuota = () => {
+    const cliente = clienteDePruebas();
+    return renderHook(() => useEscritura('registrar_ficha_urbana', {}, CON_ENTERO), {
+      wrapper: ({ children }: { readonly children: ReactNode }) => (
+        <QueryClientProvider client={cliente}>{children}</QueryClientProvider>
+      ),
+    });
+  };
+
+  it.each([
+    { escrito: '4', viaja: 4 },
+    { escrito: ' 4 ', viaja: 4 },
+    // Los tres que `parseInt` aceptaria quedandose con el prefijo.
+    { escrito: '1 - 4', viaja: undefined },
+    { escrito: '1-4', viaja: undefined },
+    { escrito: 'Anual', viaja: undefined },
+  ])('«$escrito» viaja como $viaja', async ({ escrito, viaja }) => {
+    laApiResponde(201);
+    const { result } = conCuota();
+
+    act(() => result.current.fijarCampo('cuota', escrito));
+    act(() => result.current.fijarObservacion('Baja de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo['cuota']).toBe(viaja);
+  });
+});
+
+/**
+ * **Lo que el backend no puede leer no sale**, y son dos casos hermanos (#332).
+ *
+ * Los dos aparecen por el mismo camino nuevo: una fila de tabla que se elige y
+ * viaja al cuerpo. Sus celdas son texto de presentacion, y ahi el importe lleva
+ * separador de miles —«1,842.60», que `new BigDecimal` **rechaza lanzando**— y
+ * lo que el backend no mando se dibuja con un guion —«—», que no es un valor de
+ * nada—. Cualquiera de los dos producia un 422 despues de confirmar un acto
+ * irreversible; ahora no salen, y la opcion que los declara lo dice ademas en su
+ * `exigir`.
+ */
+describe('un importe con formato de pantalla, y un guion, no viajan', () => {
+  const CON_IMPORTE: OpcionesDeEscritura = {
+    campos: {
+      insoluto: { campo: 'insoluto', importe: true },
+      documento: { campo: 'documento' },
+    },
+  };
+
+  const conImporte = () => {
+    const cliente = clienteDePruebas();
+    return renderHook(() => useEscritura('registrar_ficha_urbana', {}, CON_IMPORTE), {
+      wrapper: ({ children }: { readonly children: ReactNode }) => (
+        <QueryClientProvider client={cliente}>{children}</QueryClientProvider>
+      ),
+    });
+  };
+
+  it.each([
+    { escrito: '1842.60', viaja: '1842.60' },
+    { escrito: '0', viaja: '0' },
+    { escrito: '-84.12', viaja: '-84.12' },
+    // Lo que una celda de tabla lleva de verdad, y `new BigDecimal` no lee.
+    { escrito: '1,842.60', viaja: undefined },
+    { escrito: 'S/ 1842.60', viaja: undefined },
+    { escrito: '—', viaja: undefined },
+  ])('el importe «$escrito» viaja como $viaja', async ({ escrito, viaja }) => {
+    laApiResponde(201);
+    const { result } = conImporte();
+
+    act(() => result.current.fijarCampo('insoluto', escrito));
+    act(() => result.current.fijarObservacion('Baja de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo['insoluto']).toBe(viaja);
+  });
+
+  /**
+   * **Y la guarda vale igual en una columna de tabla**, que es de donde vino el
+   * problema (#337).
+   *
+   * Esta mitad no estaba probada por separado: en «Baja de deuda» la tapa
+   * `faltaEnLaCuota`, que apaga la accion antes de que nadie pueda enviar, asi
+   * que quitarle el `importe: true` a las dos columnas de la baja dejaba la
+   * bateria entera en verde. Son dos defensas distintas —una explica, la otra
+   * impide— y hay que poder perder una sin perder las dos: aqui se comprueba la
+   * que impide, sobre una tabla que **no** tiene la que explica.
+   */
+  it('una columna de importe con separador de miles no viaja, aunque nadie lo explique', async () => {
+    laApiResponde(201);
+    const cliente = clienteDePruebas();
+    const { result } = renderHook(
+      () =>
+        useEscritura(
+          'registrar_ficha_urbana',
+          {},
+          {
+            tablas: {
+              // `plana` como la de la baja: sus columnas se despliegan en el
+              // nivel superior del cuerpo.
+              cuotas: {
+                campo: 'cuotas',
+                plana: true,
+                columnas: {
+                  insolutoS: { campo: 'insoluto', importe: true },
+                  ano: { campo: 'ano' },
+                },
+              },
+            },
+          },
+        ),
+      {
+        wrapper: ({ children }: { readonly children: ReactNode }) => (
+          <QueryClientProvider client={cliente}>{children}</QueryClientProvider>
+        ),
+      },
+    );
+
+    // Lo que lleva de verdad una celda dibujada, si alguien la copia al cuerpo.
+    act(() => result.current.fijarFilas('cuotas', [{ insolutoS: '1,842.60', ano: '2026' }]));
+    act(() => result.current.fijarObservacion('Baja de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    // `new BigDecimal("1,842.60")` **lanza**: lo que el backend no puede leer no
+    // sale. Y el resto de la fila si viaja, para que la prueba no pase por no
+    // haber mandado nada.
+    expect(cuerpo).not.toHaveProperty('insoluto');
+    expect(cuerpo['ano']).toBe('2026');
+  });
+
+  /**
+   * **Y el alta lo declara igual que la baja** (#337): son los dos lados del
+   * mismo movimiento, y sus cuatro importes los teclea quien atiende —donde
+   * «1,842.60» no es un caso raro, es como se escribe—. Sin la guarda, el 422
+   * llega despues de pulsar «Dar de alta».
+   */
+  it('un importe tecleado con separador de miles no viaja en el alta de deuda', async () => {
+    const usuario = userEvent.setup();
+    laApiResponde(201);
+    montarEnRuta(ALTA);
+
+    await elConcepto(usuario);
+    await usuario.type(await screen.findByLabelText('Insoluto (S/)'), '1,842.60');
+    await usuario.type(await screen.findByLabelText('Reajuste (S/)'), '10.00');
+    await usuario.type(await observacion(), 'Determinación de fiscalización.');
+    await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo).not.toHaveProperty('insoluto');
+    // Y el que si es una cifra viaja: la guarda es por campo, no por formulario.
+    expect(cuerpo['reajuste']).toBe('10.00');
+  });
+
+  it('y el guion tampoco viaja en un campo de texto: no es un documento llamado «—»', async () => {
+    laApiResponde(201);
+    const { result } = conImporte();
+
+    act(() => result.current.fijarCampo('documento', '—'));
+    act(() => result.current.fijarObservacion('Baja de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).not.toHaveProperty('documento');
+  });
+});
+
 describe('lo que se escribe viaja sin los espacios de alrededor', () => {
   it('un campo de solo espacios no viaja, y uno con espacios viaja recortado', async () => {
     laApiResponde(201);
@@ -397,13 +681,13 @@ describe('el motivo por el que no se puede guardar se puede pintar', () => {
 });
 
 describe('lo irreversible se confirma diciendo que va a pasar', () => {
-  it('emitir no manda hasta confirmar, y la confirmacion dice que se emite', async () => {
+  it('notificar no manda hasta confirmar, y la confirmacion dice que va a pasar', async () => {
     const usuario = userEvent.setup();
     laApiResponde(201);
     montarEnRuta(CUPONERA);
 
-    await usuario.type(await observacion(), 'Emisión anual 2026.');
-    await usuario.click(await screen.findByRole('button', { name: 'Emitir cuponera' }));
+    await usuario.type(await observacion(), 'Diligencia del 13 de agosto.');
+    await usuario.click(await screen.findByRole('button', { name: 'Registrar notificación' }));
 
     // Todavia no se ha mandado nada.
     expect(peticiones).toEqual([]);
@@ -419,8 +703,8 @@ describe('lo irreversible se confirma diciendo que va a pasar', () => {
     laApiResponde(201);
     montarEnRuta(CUPONERA);
 
-    await usuario.type(await observacion(), 'Emisión anual 2026.');
-    await usuario.click(await screen.findByRole('button', { name: 'Emitir cuponera' }));
+    await usuario.type(await observacion(), 'Diligencia del 13 de agosto.');
+    await usuario.click(await screen.findByRole('button', { name: 'Registrar notificación' }));
     await usuario.click(screen.getByRole('button', { name: 'Cancelar' }));
 
     expect(peticiones).toEqual([]);

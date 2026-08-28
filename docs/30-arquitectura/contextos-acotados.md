@@ -122,6 +122,21 @@ Licencias de funcionamiento (con giros CIIU, duplicados, cancelación), licencia
 `cuentacorriente`**; no asienta por su cuenta.
 *Módulo Gradle:* `sgtm-licencias`.
 
+Desde [#44](https://github.com/hneyra/sgtm/issues/44) tiene código: la licencia de funcionamiento
+completa —emisión con sus giros, cancelación con su resolución, duplicado que conserva el número, y
+el catálogo CIIU extensible—. Consume **cuatro** APIs públicas y ninguna tabla ajena:
+`tesoreria.RecibosDeTramite` (comprobar que el derecho de trámite está pagado, RF-110),
+`contribuyentes.DirectorioDeContribuyentes`, `catastro.LectorDeFichasEconomicas` (la ficha económica
+del predio donde está el establecimiento, #19) y `parametros.LectorDeParametros`.
+
+**Todavía no depende de `cuentacorriente`, y es una decisión, no un olvido.** Emitir una licencia no
+genera deuda: el derecho de trámite se paga *antes*, en caja de tasas, y un derecho de trámite no es
+deuda tributaria —no se determina, no devenga interés y no prescribe—. Lo único que una licencia
+podría generar son los **arbitrios del establecimiento**, que los determina `rentas` con tablas de
+ordenanza bloqueadas por D-02b; cuando lleguen, entrarán por `cuentacorriente.GeneradorDeCargos`
+como todo cargo de otro contexto (§4, regla 2). Declarar la dependencia «por si acaso» sería abrir
+el límite sin usarlo.
+
 ### 3.12 `seguridad`
 Módulos, accesos y políticas, grupos, usuarios, miembros, permisos, sesiones y **auditoría**.
 Transversal: todos dependen de él y él de ninguno.

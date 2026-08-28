@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Aviso, Boton, Campo, Esqueleto } from '@sgtm/design-system';
 import { pedirOperacion } from '@sgtm/api-client';
 import { useCatalogoVisible } from '../../app/sesion/useCatalogoVisible';
+import { useValorAposentado } from '../aposentar';
 import { useEscritura } from '../escritura';
 import type { Escritura } from '../escritura';
 import { escrituraDe } from '../escrituras';
@@ -503,9 +504,9 @@ function PasoDeCierre({
         <div className="sgtm-tarjeta__cabecera">
           <h3 className="sgtm-tarjeta__titulo">Lo capturado</h3>
         </div>
-        <dl className="sgtm-resumen">
+        <dl className="sgtm-asistente__resumen">
           {resumenDe(escritura).map(({ rotulo, valor }) => (
-            <div key={rotulo} className="sgtm-resumen__par">
+            <div key={rotulo} className="sgtm-asistente__resumen-par">
               <dt>{rotulo}</dt>
               <dd>{valor}</dd>
             </div>
@@ -1065,28 +1066,6 @@ function usePadron(buscado: string): Padron {
 
 /** Con menos de esto, buscar en el padrón devuelve el padrón. */
 const MINIMO_DEL_PADRON = 3;
-
-/**
- * El valor, cuando la mano para.
- *
- * Las dos búsquedas en vivo del asistente —el duplicado y el padrón— entraban en
- * la clave de consulta con lo tecleado tal cual, así que cada tecla era una
- * consulta contra el padrón. Con esto entra **lo que quedó escrito**: teclear
- * «GARCIA» son seis pulsaciones y una consulta.
- */
-function useValorAposentado<T>(valor: T, milisegundos = ESPERA): T {
-  const [aposentado, fijar] = useState(valor);
-
-  useEffect(() => {
-    const temporizador = setTimeout(() => fijar(valor), milisegundos);
-    return () => clearTimeout(temporizador);
-  }, [valor, milisegundos]);
-
-  return aposentado;
-}
-
-/** Lo que se espera antes de preguntar. Suficiente para escribir el siguiente dígito. */
-const ESPERA = 300;
 
 /* ── Piezas menudas ────────────────────────────────────────────────────── */
 
