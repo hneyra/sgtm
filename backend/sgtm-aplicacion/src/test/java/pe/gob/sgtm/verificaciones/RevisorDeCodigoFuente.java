@@ -118,6 +118,14 @@ public final class RevisorDeCodigoFuente {
                     // que se pida dos veces. Un anuncio no se borra: se cesa (regla 4, AC de #51).
                     "anuncio",
                     "anuncio_movimiento",
+                    // Con #53: el criterio congelado de una generacion masiva de valores por
+                    // papeletas y la constancia libre de infracciones. Borrar una corrida seria
+                    // borrar la unica explicacion de por que salieron cuatro mil resoluciones de
+                    // multa el mismo dia -y con que fecha se evaluo la deuda de cada una-; borrar
+                    // una constancia, la del papel que la municipalidad entrego acreditando que un
+                    // vehiculo no debia nada.
+                    "papeleta_masivo",
+                    "constancia_libre",
                     "ficha_catastral",
                     "acta_fiscalizacion",
                     // Con #49: la liquidacion de fiscalizacion, su contraste linea a linea y
@@ -315,7 +323,27 @@ public final class RevisorDeCodigoFuente {
                     // en el libro y la version nueva de la ficha YA ESTA inscrita. Corregir la fila
                     // dejaria al papel, al libro, al padron y a la base diciendo cuatro cosas
                     // distintas, y la que se cobra en ventanilla es la del libro.
-                    "resolucion_determinacion");
+                    "resolucion_determinacion",
+                    // Y con #53, la decimotercera vez y por el mismo camino. V47 nace
+                    // `papeleta_masivo` y
+                    // `constancia_libre` sin UPDATE.
+                    //
+                    // La constancia es el caso claro: se ENTREGA al administrado, que se lleva el
+                    // papel. Corregirla en la base deja al papel y al sistema diciendo cosas
+                    // distintas, y quien tenga el papel gana la discusion. Una equivocada se deja
+                    // sin efecto con otra, y las dos quedan.
+                    //
+                    // El criterio de la corrida es el otro, y su motivo es propio: `fecha_criterio`
+                    // congela a que dia se evaluo la deuda y el plazo de cada candidato. Editarla
+                    // despues de generar dejaria la corrida diciendo que emitio con un criterio que
+                    // no es el que uso, y no habria manera de reconstruirlo.
+                    //
+                    // `papeleta_masivo_item` NO entra, y es deliberado: su estado es la marca de
+                    // progreso de un proceso interno -PENDIENTE a GENERADO, SIN_DEUDA o
+                    // NO_PROCEDE-, no un acto administrativo. Mismo reparto que V27 hizo entre
+                    // `valor_masivo` y `valor_masivo_item`.
+                    "papeleta_masivo",
+                    "constancia_libre");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =

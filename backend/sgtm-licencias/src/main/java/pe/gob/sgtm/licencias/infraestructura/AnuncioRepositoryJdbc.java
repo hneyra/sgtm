@@ -28,6 +28,7 @@ import pe.gob.sgtm.licencias.dominio.CriterioDeAnuncios;
 import pe.gob.sgtm.licencias.dominio.ResumenDelPadron;
 import pe.gob.sgtm.licencias.dominio.TipoDeAnuncio;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
+import pe.gob.sgtm.persistencia.RangoDePrefijo;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 
 /**

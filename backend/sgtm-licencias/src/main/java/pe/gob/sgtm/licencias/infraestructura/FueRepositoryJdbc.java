@@ -39,6 +39,7 @@ import pe.gob.sgtm.licencias.dominio.TipoDeObra;
 import pe.gob.sgtm.licencias.dominio.TipoDeProfesional;
 import pe.gob.sgtm.licencias.dominio.TipoDeTramiteDeEdificacion;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
+import pe.gob.sgtm.persistencia.RangoDePrefijo;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 
 /**

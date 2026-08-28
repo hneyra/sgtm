@@ -31,6 +31,7 @@ import pe.gob.sgtm.licencias.dominio.LicenciaDeFuncionamiento;
 import pe.gob.sgtm.licencias.dominio.LicenciaRepository;
 import pe.gob.sgtm.licencias.dominio.TipoDeLicencia;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
+import pe.gob.sgtm.persistencia.RangoDePrefijo;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 
 /**

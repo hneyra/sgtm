@@ -94,7 +94,8 @@ public final class DatosDePrueba {
                     sembrarRentas(app, muni, sufijo, titular, segundo, predioId, conjuntoId);
             long reciboId = sembrarTesoreria(app, muni, sufijo, titular, conjuntoId);
             long valorId = sembrarValoresYCoactiva(app, muni, sufijo, titular, conjuntoId);
-            sembrarSanciones(app, muni, sufijo, titular, segundo, vehiculoId, predioId, conjuntoId);
+            sembrarSanciones(
+                    app, muni, sufijo, titular, segundo, vehiculoId, predioId, conjuntoId, valorId);
             sembrarLicencias(app, muni, sufijo, titular, predioId, reciboId);
             sembrarSeguridad(app, muni, sufijo);
 
@@ -1062,7 +1063,8 @@ public final class DatosDePrueba {
             long segundo,
             long vehiculoId,
             long predioId,
-            long conjuntoId)
+            long conjuntoId,
+            long valorId)
             throws SQLException {
         long codigoId =
                 insertar(
@@ -1358,6 +1360,67 @@ public final class DatosDePrueba {
                 fichaNueva,
                 VIGENCIA,
                 "ACTA-" + sufijo);
+
+        // #53 — la corrida masiva de valores por papeletas, con su unico candidato ya resuelto,
+        // y la constancia libre de infracciones. Las tres tablas son de V47 y llevan
+        // `municipalidad_id NOT NULL`: sin filas, la prueba de aislamiento no tendria nada que
+        // aislar en ellas.
+        long corridaId =
+                insertar(
+                        app,
+                        "INSERT INTO papeleta_masivo (municipalidad_id, familia, desde, hasta,"
+                                + " fecha_criterio, origen, total_candidatos, usuario_registro,"
+                                + " fecha_registro, observacion)"
+                                + " VALUES (?, 'TRANSITO', ?, ?, ?, 'RANGO', 1, 'prueba', now(),"
+                                + "         'corrida de papeletas de prueba') RETURNING id",
+                        muni,
+                        VIGENCIA,
+                        VIGENCIA,
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO papeleta_masivo_item (municipalidad_id, corrida_id, papeleta_id,"
+                        + " estado, valor_id, valor_numero, fecha_procesado)"
+                        + " VALUES (?, ?, ?, 'GENERADO', ?, ?, now())",
+                muni,
+                corridaId,
+                papeletaId,
+                valorId,
+                "OP-" + sufijo);
+
+        long documentoDeLaConstancia =
+                insertar(
+                        app,
+                        "INSERT INTO documento_emitido (municipalidad_id, tipo, numero, ejercicio,"
+                                + " referencia, datos, formato, resumen, fecha_emision,"
+                                + " usuario_emision, observacion)"
+                                + " VALUES (?, 'CLI', ?, 2026, ?, CAST(? AS jsonb), 'PDF',"
+                                + "         repeat('a', 64), ?, 'siembra',"
+                                + "         'constancia de prueba') RETURNING id",
+                        muni,
+                        "CLI-2026-" + sufijo,
+                        "ABC-" + numeroDePlaca(sufijo),
+                        "{\"titulo\":\"Constancia libre de infracciones\",\"subtitulo\":null,"
+                                + "\"aLaFecha\":\"2026-01-01\",\"cabecera\":[],\"tablas\":[],"
+                                + "\"pie\":[],\"duplicado\":null}",
+                        VIGENCIA);
+        ejecutar(
+                app,
+                // Sin `vehiculo_id` y con otra placa: la constancia se emite para un vehiculo
+                // SIN papeleta pendiente, y el de esta siembra tiene una. Un vehiculo que no
+                // esta en el padron tambien puede pedirla, y por eso la columna es opcional.
+                "INSERT INTO constancia_libre (municipalidad_id, numero, documento_id, placa,"
+                        + " vehiculo_id, solicitante_id, verificada_al, fecha_emision,"
+                        + " usuario_registro, fecha_registro, observacion)"
+                        + " VALUES (?, ?, ?, ?, NULL, ?, ?, ?, 'prueba', now(),"
+                        + "         'constancia de prueba')",
+                muni,
+                "CLI-2026-" + sufijo,
+                documentoDeLaConstancia,
+                "XYZ-" + numeroDePlaca(sufijo),
+                segundo,
+                VIGENCIA,
+                VIGENCIA);
 
         if (notificacionId <= 0) {
             throw new IllegalStateException("No se sembro la notificacion administrativa");

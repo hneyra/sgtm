@@ -124,6 +124,7 @@ una tabla vacía no hay ninguna. `VALIDATE CONSTRAINT` después chocaría con lo
 | `V27__valores_masivo.sql` | Criterio e items de una corrida de generación masiva de valores (#38) |
 | `V28__notificacion_prescripcion_y_pase_a_coactiva.sql` | Acuse de notificación, pase a coactiva (`valor_movimiento`) y declaración de prescripción con su cómputo por ejercicio y sus hechos interruptivos/suspensivos (#39). Le revoca el `UPDATE` que `V7` le daba a `notificacion` |
 | `V37__licencia_de_funcionamiento.sql` | La licencia de funcionamiento (#44): retira de `licencia_funcionamiento` las columnas de estado que decían `VIGENTE` para siempre y el `resolucion` de texto libre; exige el recibo y el documento emitido; agrega `licencia_movimiento` —de donde se deriva el estado— y `licencia_correlativo`; le pone al catálogo `ciiu` su sección, su riesgo de ITSE y su traza; y revoca el `UPDATE` sobre la licencia y sus duplicados |
+| `V47__valores_masivos_de_papeletas_y_constancias.sql` | Los valores masivos de papeletas y los reportes de sanciones (#53): `papeleta_masivo` —el criterio congelado de una corrida, con la `fecha_criterio` a la que se evalúa la deuda de cada candidato— y `papeleta_masivo_item`, con `papeleta_valor_unico_uq`, el índice único **parcial** que garantiza un valor por papeleta en toda la vida del padrón; `constancia_libre`, con la fecha a la que se verificó que el vehículo no debía nada; y los índices de los padrones y resúmenes, incluido `papeleta_placa_prefijo_ix` con `text_pattern_ops`, porque el resumen por iniciales busca por rango y no con `LIKE`. **No hay ninguna tabla de correlativos**: el número de cada resolución de multa sale de `valor_correlativo` (`V26`) |
 
 Los roles se crean **antes**, con `db/roles/crear-roles.sql`, que no es una migración: las
 políticas de `V6` los nombran, y un rol no puede crearse a sí mismo.
@@ -321,6 +322,8 @@ administrado se lleva el papel; corregirla en la base deja al papel notificado y
 cosas distintas, y quien tenga el papel gana la discusión. Una resolución equivocada se deja sin
 efecto con otra, y las dos quedan. El descargo es el escrito que otro firmó y presentó. Y el
 internamiento, la constancia de que un vehículo estuvo retenido y devengó custodia.
+
+Desde `V47` (#53), tampoco `constancia_libre` ni `papeleta_masivo`. La constancia es otra vez el caso conocido: **se entrega al administrado**, y como lo que acredita es «al día tal no debía nada», cambiarle la fecha cambia lo que acredita. El criterio de la corrida tiene su propio motivo: `fecha_criterio` congela a qué día se evaluó la deuda y el plazo de cada candidato, y moverla después de generar dejaría la corrida diciendo que emitió con un criterio que no es el que usó. `papeleta_masivo_item` **sí** conserva el `UPDATE`, por lo mismo que `valor_masivo_item` desde `V27`: su estado es la marca de progreso de un proceso interno, no un acto administrativo.
 
 Desde `V49` (#52), tampoco `resolucion_determinacion` —la transferencia a rentas de un resultado de
 fiscalización y la resolución que la materializa—. Es la décima vez por el mismo camino y la única

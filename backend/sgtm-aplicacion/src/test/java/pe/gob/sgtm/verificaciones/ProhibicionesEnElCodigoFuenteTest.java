@@ -852,6 +852,40 @@ class ProhibicionesEnElCodigoFuenteTest {
                 .anySatisfy(f -> assertThat(f).contains("COSTAS_PORCENTAJE_SOBRE_LA_DEUDA"));
     }
 
+    @Test
+    @DisplayName("el escaner detecta la muestra que edita una constancia libre o su corrida")
+    void elEscanerDetectaLaMuestraQueEditaUnaConstanciaLibre() throws IOException {
+        // #53: papeleta_masivo y constancia_libre entran en TABLAS_INMUTABLES y en
+        // TABLAS_PROTEGIDAS. La constancia por lo de siempre -se entrega, y quien tiene el
+        // papel gana la discusion-; el criterio de la corrida por un motivo propio:
+        // `fecha_criterio` congela a que dia se evaluo la deuda de cada candidato, y moverla
+        // deja la corrida diciendo que emitio con un criterio que no es el que uso.
+        //
+        // `papeleta_masivo_item` NO esta en la lista, y por eso la muestra no lo toca: su
+        // estado es la marca de progreso de un proceso interno, no un acto administrativo.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnaConstanciaLibre.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los dos UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(3);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update constancia_libre set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update papeleta_masivo set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from papeleta_masivo"));
+    }
+
     private static List<Path> fuentesDeProduccion(Path raiz) throws IOException {
         try (Stream<Path> rutas = Files.walk(raiz)) {
             return rutas.filter(Files::isRegularFile)
