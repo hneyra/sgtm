@@ -1,6 +1,7 @@
 import type { ComponentType, ReactElement } from 'react';
 import type { DatosDePantalla } from '@sgtm/api-client';
 import { COMPOSICION_DE_CATASTRO } from './catastro/composicion';
+import { COMPOSICION_DE_CONSULTAS } from './consultas/composicion';
 import { COMPOSICION_DE_RENTAS } from './rentas/composicion';
 
 /**
@@ -372,6 +373,7 @@ export interface ComposicionDeOpcion {
 
 const COMPOSICIONES: Readonly<Record<string, ComposicionDeOpcion>> = {
   ...COMPOSICION_DE_CATASTRO,
+  ...COMPOSICION_DE_CONSULTAS,
   ...COMPOSICION_DE_RENTAS,
 };
 

@@ -162,6 +162,43 @@ export const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
     detalle:
       'Cada línea es una versión de lo que el proceso fiscalizador halló. El histórico de la ficha catastral es otro, y solo recoge lo que llegó a transferirse.',
   },
+  /**
+   * **La rejilla «Impuesto anual» sale vacia, y hay que decir por que** (#25, #72).
+   *
+   * Sus trece columnas son valuo afecto, valuo exonerado, valuo total, impuesto
+   * predial y los cuatro arbitrios, por ejercicio, y `ConsultaUnificadaResource`
+   * **no publica ninguna**. Sin esta linea, la tabla vacia dice «Todavía no hay
+   * impuesto anual» —el texto comun de una tabla sin filas—, que es exactamente
+   * la lectura equivocada: no es que este contribuyente no deba nada, es que esa
+   * cifra no existe todavia en ningun sitio.
+   *
+   * Y dice **de donde vendria**: por contribuyente y no por predio (NEG-05 §1),
+   * con tablas de valuo y ordenanzas de arbitrios que siguen sin firmar. Lo que
+   * si es de verdad es el resumen de saldos de arriba, que lo suma el servidor.
+   */
+  consulta_unificada: {
+    titulo: 'El resumen de saldos es real; la rejilla «Impuesto anual», todavía no',
+    detalle:
+      'Las cinco cifras del resumen las calcula el servidor a la fecha de corte que se indica. La rejilla de abajo sale vacía porque el sistema no publica ninguna de sus columnas: el valúo depende de las tablas de valores unitarios y depreciación, que aún no están firmadas, y los arbitrios por servicio de ordenanzas sin ratificar. Rellenarla repartiendo cifras entre ejercicios daría números que nadie podría sustentar en una reclamación.',
+  },
+  /**
+   * **Las dos pestañas de cifras del resumen predial, llenas de «—»** (#25, #72).
+   *
+   * Mismo criterio que el aviso de `contribuyentes` y el de `vehiculos`:
+   * explicar un hueco vale mas que esconderlo. Aqui el hueco tiene dos causas
+   * distintas y conviene separarlas, porque solo una se cierra firmando valores:
+   * el impuesto predial por predio **no existe** —la base es del contribuyente
+   * (NEG-05 §1)— y el valuo y los arbitrios existen pero dependen de tablas y
+   * ordenanzas sin cerrar (D-02a, D-02b).
+   *
+   * Y dice donde si esta lo que la tercera pestaña promete: el historico
+   * versionado de la ficha, que ya se publica en la consulta de fichas.
+   */
+  consulta_resumen_predial: {
+    titulo: 'Lo que este resumen publica hoy, y lo que no',
+    detalle:
+      'La tabla lista los predios con su ficha vigente: código catastral, propietario y dirección. Las pestañas de cifras salen con «—» por dos motivos distintos. El impuesto predial no se puede dar por predio: los tramos se aplican al conjunto de los predios del contribuyente, así que una cifra por predio sería un reparto inventado. El valúo y los arbitrios sí son del predio, pero dependen de tablas de valores unitarios y de ordenanzas que todavía no están cerradas. Los movimientos del predio se consultan en el histórico de su ficha catastral.',
+  },
 };
 
 /** Las opciones que llevan aviso permanente. La prueba de fiscalizacion las mira. */
@@ -230,6 +267,17 @@ export const OPCIONES_CON_PIE_PROPIO = Object.keys(PIES);
 export const MOTIVOS_DE_FILTRO: Readonly<Record<string, string>> = {
   'consulta_fichas.conciliadaConRentas':
     'El sistema todavía no publica si rentas reconoce un predio, así que no se puede filtrar por ello: por eso la columna «Conciliada» sale con «—» en todas las filas.',
+
+  /**
+   * **`consulta_resumen_predial.palabra`** (#25, #72): mismo hueco que el de
+   * arriba y misma cura. `ResumenPredialController` lo rechaza con 422 con
+   * cualquier valor, y su motivo es de diseño, no una falta que se vaya a
+   * corregir: no hay columna a la que apuntar, y responderlo obligaria a
+   * recorrer el padron entero con `LIKE '%…%'`. El motivo dice ademas por donde
+   * se sale, que es lo unico que quien busca necesita saber.
+   */
+  'consulta_resumen_predial.palabra':
+    'La búsqueda por palabra suelta no se puede resolver: no hay un campo al que apunte, y responderla obligaría a recorrer todo el padrón. Busca por «Cod. Catastral», «Cod. Contribuyente» o «Uso».',
 };
 
 /** Los filtros bloqueados que tienen texto. La comprobacion de coherencia los mira. */
