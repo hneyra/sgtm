@@ -48,6 +48,21 @@ final class CatastroEnMemoria
                 FichaCatastralRepository,
                 DirectorioDeContribuyentes {
 
+    @Override
+    public pe.gob.sgtm.compartido.Pagina<pe.gob.sgtm.catastro.PredioDelPadron> padron(
+            @org.jspecify.annotations.Nullable String sectorCodigo,
+            java.time.LocalDate aLaFecha,
+            pe.gob.sgtm.compartido.Paginacion paginacion) {
+        // El padron con su titular vigente (#49) solo lo recorre la deteccion de omisos, que se
+        // prueba contra PostgreSQL.
+        throw new UnsupportedOperationException("esta prueba no recorre el padron");
+    }
+
+    @Override
+    public java.util.Optional<FichaCatastral> porId(long fichaId) {
+        throw new UnsupportedOperationException("esta prueba no lee una version por id");
+    }
+
     private final Map<Long, Sector> sectores = new LinkedHashMap<>();
     private final Map<Long, Manzana> manzanas = new LinkedHashMap<>();
     private final Map<Long, Via> vias = new LinkedHashMap<>();

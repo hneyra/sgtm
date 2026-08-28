@@ -87,6 +87,22 @@ registra es el dato oficial.
 `catastro` y `rentas`, y va con sustento y versión.
 *Módulo Gradle:* `sgtm-fiscalizacion`.
 
+Desde [#52](https://github.com/hneyra/sgtm/issues/52) esa frontera existe y es **una regla, no una
+intención**: `TransferirARentas` versiona la ficha por `catastro.TransferenciaDeFiscalizacion` —el
+único puerto de escritura que `catastro` publica para este contexto, con **un** método—, asienta los
+cargos de la diferencia por `cuentacorriente.GeneradorDeCargos` y emite la resolución de
+determinación, los tres en una transacción. Que ninguna otra clase de `fiscalizacion` pueda hacerlo
+lo verifica `SOLO_LA_TRANSFERENCIA_ESCRIBE_FUERA_DE_FISCALIZACION`, con dos clases de muestra que la
+violan: una que usa el puerto sin ser la transferencia, y otra que cruza el límite con un tipo que
+nadie clasificó —esta segunda es la que sostiene a la primera, porque sin ella bastaría con publicar
+un puerto nuevo para rodearla—.
+
+**Y escribe en `catastro` y en el libro, no en `rentas`.** El nombre es el de RF-054 y el del manual.
+Lo que `rentas` guarda de un ejercicio es la **declaración jurada**, que es el acto del contribuyente
+y la administración no reescribe; lo que la sustituye es la determinación de oficio, cuya cifra
+espera a `D-02a`. Que `rentas` no tenga hoy puerto de escritura no es un olvido: es lo que la regla
+garantiza, y abrirlo costaría una línea visible en el diff.
+
 ### 3.6 `sanciones`
 Papeletas de tránsito y administrativas, catálogos de infracciones (tránsito y CUIS),
 notificaciones previas, descargos, internamiento y resoluciones de gerencia. Un solo modelo, dos
@@ -149,7 +165,16 @@ Transversal: todos dependen de él y él de ninguno.
 2. **`cuentacorriente` no conoce a nadie.** Recibe asientos; no sabe si vienen de un predial, de
    una papeleta o de una licencia. Si tuviera que saberlo, el modelo estaría mal.
 3. **`parametros` es de solo lectura** para todos los demás.
-4. **Nadie escribe en `catastro` salvo `catastro` y la transferencia de `fiscalizacion`.**
+4. **Nadie escribe en `catastro` salvo `catastro` y las dos transferencias.** La de `rentas`
+   va por el puerto público `GestorDeTitularidad` del paquete raíz de catastro
+   ([#29](https://github.com/hneyra/sgtm/issues/29)): `RegistrarTransferencia` vive en
+   `sgtm-rentas/…/aplicacion/` e inyecta ese puerto —cuyo javadoc nombra la arista
+   `catastro ──► rentas`— para cerrar una titularidad y abrir otra. Y la de `fiscalizacion`
+   ([#52](https://github.com/hneyra/sgtm/issues/52), §3.5) va por `TransferenciaDeFiscalizacion`:
+   es la única escritura del contexto hacia fuera, y está garantizada **mecánicamente** por una
+   regla de ArchUnit con sus dos muestras. Fuera de ese puerto, `fiscalizacion` solo lee
+   (`LectorDeFichas`), y por eso `fisc_predial` avisa de que trabaja sobre una copia y el padrón
+   no cambia hasta que alguien transfiere.
 5. **Ningún método público de un contexto recibe `municipalidadId`.** Sale del token.
    Lo verifica ArchUnit.
 6. Lo compartido entre contextos —`MunicipalidadId`, `Ejercicio`, `Dinero`, `TenantContext`— vive

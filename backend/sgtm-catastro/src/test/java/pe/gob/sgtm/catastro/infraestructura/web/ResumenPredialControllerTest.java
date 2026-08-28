@@ -219,6 +219,11 @@ class ResumenPredialControllerTest {
     /** Solo lo que el controlador llama, y ademas recuerda el filtro con que se le llamo. */
     private static final class RepositorioEnMemoria implements FichaCatastralRepository {
 
+        @Override
+        public java.util.Optional<pe.gob.sgtm.catastro.dominio.FichaCatastral> porId(long fichaId) {
+            throw new UnsupportedOperationException("esta prueba no lee una version por id");
+        }
+
         private static final FichaEncontrada UNA =
                 new FichaEncontrada(
                         1L,

@@ -120,6 +120,24 @@ class ContratoDeApiTest {
                     "POST /fiscalizacion/programas",
                     "POST /fiscalizacion/predial/actas",
                     "POST /fiscalizacion/vehicular",
+                    // #49: la liquidacion, su reliquidacion y su estado, mas las cuatro
+                    // consultas del modulo. Las tres primeras son rutas que la pantalla no
+                    // declara —una pantalla declara UN endpoint— y entran por
+                    // OPERACIONES_ADICIONALES del generador del contrato.
+                    "POST /fiscalizacion/liquidaciones",
+                    "POST /fiscalizacion/liquidaciones/{numero}/reliquidaciones",
+                    "PATCH /fiscalizacion/liquidaciones/{numero}/estados",
+                    "GET /fiscalizacion/resultados",
+                    "GET /fiscalizacion/omisos",
+                    "GET /fiscalizacion/estado-cuenta",
+                    "GET /fiscalizacion/predial/historico",
+                    // #52: la transferencia a rentas —la frontera delicada, RF-054— y la
+                    // resolucion de determinacion que la materializa (RF-057). La primera es una
+                    // ruta que la pantalla no declara —`fisc_resultados` declara su grilla— y
+                    // entra por OPERACIONES_ADICIONALES del generador; la segunda ya estaba en el
+                    // contrato desde el prototipo y no la servia nadie.
+                    "POST /fiscalizacion/transferencias",
+                    "GET /fiscalizacion/resoluciones/{numero}",
                     "GET /transito/papeletas",
                     "GET /transito/papeletas/busqueda",
                     "PATCH /transito/papeletas/{numero}/codigo",
@@ -183,6 +201,23 @@ class ContratoDeApiTest {
                     "GET /transito/papeletas/{numero}/actos",
                     "POST /infracciones/administrativas/resoluciones",
                     "POST /infracciones/administrativas/resoluciones/{id}/notificacion",
+                    // #48 — RF-113 y RF-115: el FUE completo, sus secciones por partes, la
+                    // emision de la licencia de edificacion, su revalidacion y el reporte.
+                    "GET /licencias/edificacion",
+                    "POST /licencias/edificacion",
+                    "POST /licencias/edificacion/{expediente}/secciones",
+                    "POST /licencias/edificacion/{expediente}/licencia",
+                    "POST /licencias/edificacion/{expediente}/revalidacion",
+                    "GET /licencias/edificacion/reportes/general",
+                    // #51 — RF-114: anuncios y propaganda, con la deuda por la tasa generada al
+                    // registrar. Los tres POST de acto son tramites, no ediciones: `anuncio` no
+                    // admite UPDATE desde V45.
+                    "GET /autorizaciones/anuncios",
+                    "POST /autorizaciones/anuncios",
+                    "POST /autorizaciones/anuncios/{id}/renovacion",
+                    "POST /autorizaciones/anuncios/{id}/cese",
+                    "POST /autorizaciones/anuncios/{id}/retiro",
+                    "POST /autorizaciones/anuncios/reportes",
                     // #53 — RF-066, RF-068, RF-073 y RF-074: la generacion masiva de valores por
                     // papeletas, la constancia libre de infracciones, los tres padrones, los dos
                     // records y los cinco resumenes. Ninguna es una adicion al contrato: las

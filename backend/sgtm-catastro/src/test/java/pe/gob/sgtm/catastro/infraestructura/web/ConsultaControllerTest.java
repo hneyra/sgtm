@@ -179,6 +179,11 @@ class ConsultaControllerTest {
     /** Solo lo que el controlador llama; el resto no se implementa porque no se usa. */
     private static final class RepositorioEnMemoria implements FichaCatastralRepository {
 
+        @Override
+        public java.util.Optional<pe.gob.sgtm.catastro.dominio.FichaCatastral> porId(long fichaId) {
+            throw new UnsupportedOperationException("esta prueba no lee una version por id");
+        }
+
         /** Con su area construida ya sumada por la base: es asi como llega la fila. */
         private static final FichaEncontrada UNA =
                 new FichaEncontrada(

@@ -109,6 +109,54 @@ export const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
     detalle:
       'Los tramos y las alícuotas se aplican al conjunto de los predios del contribuyente, ponderado cada uno por su porcentaje de propiedad: no se calcula predio por predio ni se suman después los impuestos. Esta pantalla no calcula nada —el valor de la UIT, los tramos, las alícuotas y las cuotas los determina el servidor con el conjunto de parámetros sellado del ejercicio—, así que lo que todavía no llega sale con «—», que no es cero.',
   },
+  /**
+   * **La conciliacion con rentas: la consecuencia, y el acto** (#322, ADR-0015).
+   *
+   * Es la columna mas cara del modulo y la mas invisible: un predio que rentas
+   * no reconoce **no genera deuda predial**, y eso no se lee en ningun sitio de
+   * la pantalla —«Conciliada» sale con «—» y la primaria promete una accion
+   * masiva que no existe—.
+   *
+   * Lo que el aviso dice, y lo dice porque el ADR lo decidio:
+   *
+   *   no hay dos codigos  «Cod. Predial Rentas» **es** el codigo de referencia
+   *                       catastral. `sgtm-rentas` los trata como sinonimos por
+   *                       escrito, y por eso las dos primeras columnas coinciden
+   *                       —que coincidan es el dato, no un fallo de la tabla—
+   *   por que «—»         «conciliada» no es un estado guardado: es un derivado
+   *                       —existe una declaracion jurada **del ejercicio** sobre
+   *                       el predio (`declaracion_jurada.predio_id`), en estado
+   *                       PRESENTADA u OBSERVADA— y **hoy ninguna lectura lo
+   *                       publica**. Un «No» inventado acusaria de omiso a un
+   *                       predio que quiza no lo es
+   *   por donde se sale   conciliar es **registrar la declaracion jurada**. No
+   *                       es escribir un codigo en la ficha: el codigo ya lo
+   *                       tiene
+   *
+   * **Y donde se registra, dicho con el estado real** (revision de #322). Este
+   * aviso decia que ese acto «tiene su propia opcion», y mandaba a buscar entre
+   * 134 pantallas una puerta que no existe: la opcion `declaracion_jurada` es
+   * hoy **solo `GET`** —el contrato declara `GET /rentas/declaraciones/{djNro}`
+   * y `DeclaracionJuradaController` publica ese unico metodo—, asi que consulta
+   * la declaracion ya presentada y no la registra. El caso de uso que si la
+   * registra existe en el backend y ningun controlador lo expone. Mientras siga
+   * asi, el acto se hace **por el procedimiento actual**, que es exactamente lo
+   * que dice la franja de «Conciliar seleccionadas» (causa `sin-backend`): las
+   * dos frases de la misma pantalla tienen que decir lo mismo.
+   *
+   * El sujeto es **rentas**, aqui y en la cabecera de la ficha
+   * (`ResumenDeFicha`): «el padron» en una y «rentas» en la otra se leen como
+   * dos cosas distintas, y quien atiende no tiene por que saber que no lo son.
+   *
+   * La referencia al ADR se queda **en este comentario**, que es donde tiene
+   * lector: en ventanilla, «ADR-0015» no es informacion, es ruido con forma de
+   * numero de expediente.
+   */
+  consulta_fichas: {
+    titulo: 'Un predio sin declaración jurada no genera deuda predial',
+    detalle:
+      'Conciliar un predio es registrar su declaración jurada: ese es el acto que lo incorpora al padrón afecto. Hoy ese registro se hace por el procedimiento actual, fuera del sistema —la opción «Declaración jurada» solo consulta las ya presentadas—. No hay dos códigos: el «Cod. Predial Rentas» es el mismo código de referencia catastral, y por eso las dos primeras columnas coinciden. La columna «Conciliada» dirá si rentas reconoce el predio cuando el sistema publique esa lectura; mientras tanto sale con «—», que no es un «no».',
+  },
   fisc_historico: {
     titulo: 'Versiones del proceso, no del padrón',
     detalle:
@@ -118,6 +166,74 @@ export const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
 
 /** Las opciones que llevan aviso permanente. La prueba de fiscalizacion las mira. */
 export const OPCIONES_CON_AVISO = Object.keys(AVISOS);
+
+/**
+ * ── El pie de la tabla ──────────────────────────────────────────────────
+ *
+ * **Lo que el prototipo escribio bajo una tabla, cuando el sistema ya no puede
+ * sostenerlo.**
+ *
+ * El pie sale del catalogo portado (`EstructuraDeTabla.note`) y el catalogo **no
+ * se edita a mano**: es un `.generado.ts` que `yarn portar-catalogo` reescribe.
+ * Asi que la correccion no puede vivir alli. Vive aqui, que es donde ya vive la
+ * prosa de las pantallas, y `TablaDePantalla` la consulta antes de pintar el pie
+ * del catalogo — misma forma que `AVISOS`, y **negacion por omision**: una opcion
+ * que no este en este mapa pinta su pie tal cual, como lo pintaba.
+ *
+ * Dos valores posibles, y la diferencia importa:
+ *
+ *   `null`    el pie **se suprime**. Lo que decia ya lo dice mejor otra cosa de
+ *             la misma pantalla, y repetirlo peor es lo unico que aporta
+ *   cadena    el pie **se reescribe**. Sigue habiendo algo que decir bajo la
+ *             tabla, pero no eso
+ *
+ * **`consulta_fichas`: suprimido** (#322, ADR-0015). Su pie del prototipo dice
+ * «Las fichas no conciliadas no generan deuda predial hasta que se les asigne
+ * código predial de rentas», y la segunda mitad **contradice al aviso permanente
+ * que esta en el mismo viewport**: no hay ningun codigo predial de rentas que
+ * asignar —es el mismo codigo de referencia catastral que el predio ya tiene—, y
+ * lo que falta no es un codigo sino la declaracion jurada. Dos frases opuestas a
+ * un palmo una de otra no dejan al lector con media verdad: le dejan sin saber
+ * cual de las dos creer. La primera mitad —que sin conciliar no hay deuda
+ * predial— es justo lo que el aviso ya dice, y con el acto correcto detras.
+ */
+export const PIES: Readonly<Record<string, string | null>> = {
+  consulta_fichas: null,
+};
+
+/** Las opciones cuyo pie de tabla corrige la prosa. La comprobacion de coherencia las mira. */
+export const OPCIONES_CON_PIE_PROPIO = Object.keys(PIES);
+
+/**
+ * ── El motivo de un filtro bloqueado ────────────────────────────────────
+ *
+ * Por que un filtro que la pantalla dibuja **no se puede usar**, bajo el propio
+ * control (`Campo.ayuda`, enlazada por `aria-describedby`).
+ *
+ * Se declara en `composicion.ts` —`filtrosBloqueados`, la lista de claves— y se
+ * redacta aqui, que es el mismo reparto de la nota de la escritura: la
+ * declaracion la necesita el renderizador y viaja en el arranque; su castellano
+ * no. `prosa.test.ts` exige que las dos listas digan lo mismo, porque los dos
+ * huecos que abre separarlas son mudos —un filtro bloqueado sin motivo se lee
+ * como una pantalla rota; un motivo sin filtro no lo ve nadie—.
+ *
+ * Se llavea por opcion y campo, y no por campo solo: la misma clave de filtro
+ * aparece en varias pantallas del catalogo, y lo que la bloquea en una no tiene
+ * por que bloquearla en otra.
+ *
+ * **`consulta_fichas.conciliadaConRentas`** (#322, ADR-0015 §2): el contrato lo
+ * declara y `ConsultaController` lo rechaza con 422 **con cualquier valor**,
+ * «Todas» incluida en cuanto se elige y viaja. El motivo dice la causa —nadie
+ * publica esa lectura todavia— y la enlaza con lo que se ve en la tabla, que es
+ * la columna llena de «—»: las dos cosas tienen el mismo origen.
+ */
+export const MOTIVOS_DE_FILTRO: Readonly<Record<string, string>> = {
+  'consulta_fichas.conciliadaConRentas':
+    'El sistema todavía no publica si rentas reconoce un predio, así que no se puede filtrar por ello: por eso la columna «Conciliada» sale con «—» en todas las filas.',
+};
+
+/** Los filtros bloqueados que tienen texto. La comprobacion de coherencia los mira. */
+export const FILTROS_CON_MOTIVO = Object.keys(MOTIVOS_DE_FILTRO);
 
 /**
  * ── La nota de la escritura ─────────────────────────────────────────────

@@ -382,6 +382,67 @@ const OPERACIONES_ADICIONALES = {
         ' no los declara.',
     },
   ],
+  // «Resultados y determinaciones» declara «GET /fiscalizacion/resultados» como
+  // su endpoint —la grilla—; emitir la liquidación de un acta y reliquidarla
+  // (RF-053, #49) necesitan sus propios verbos. Sin ellos la pantalla lista un
+  // resultado que nada puede producir.
+  fisc_resultados: [
+    {
+      operationId: 'liquidar_fiscalizacion',
+      metodo: 'post',
+      ruta: '/api/v1/fiscalizacion/liquidaciones',
+      titulo: 'Liquidación de un acta de fiscalización',
+      descripcion:
+        'Emite la liquidación de un acta: el contraste hallado/declarado, una línea por unidad y' +
+        ' ejercicio del periodo fiscalizado. Cada línea fija el conjunto de parámetros SELLADO de' +
+        ' su ejercicio, de modo que cambiar los parámetros de hoy no altera una liquidación ya' +
+        ' emitida. Sin importes: los liquidados y las multas esperan a D-02a (#198). El cuerpo' +
+        ' lleva la observación del usuario, obligatoria (RNF-052).',
+    },
+    {
+      operationId: 'reliquidar_fiscalizacion',
+      metodo: 'post',
+      ruta: '/api/v1/fiscalizacion/liquidaciones/{numero}/reliquidaciones',
+      titulo: 'Reliquidación',
+      descripcion:
+        'Corrige una liquidación emitiendo OTRA versión que la referencia. La anterior no cambia' +
+        ' ni una columna, las dos quedan, y la respuesta explica qué cambió entre ellas. Las' +
+        ' líneas heredan el conjunto sellado de la versión anterior: una reliquidación corrige el' +
+        ' contraste, no el marco normativo.',
+    },
+    // Y transferir el resultado al padrón (#52, RF-054), que es la acción de la
+    // misma pantalla y la frontera delicada del sistema: el único camino por el
+    // que un dato de fiscalización pasa a ser el dato oficial.
+    {
+      operationId: 'transferir_a_rentas',
+      metodo: 'post',
+      ruta: '/api/v1/fiscalizacion/transferencias',
+      titulo: 'Transferencia a rentas del resultado fiscalizado',
+      descripcion:
+        'Inscribe lo hallado en el padrón como versión NUEVA de la ficha catastral —con origen' +
+        ' FISCALIZACION, el documento que la sustenta y la observación del usuario—, asienta los' +
+        ' cargos de la diferencia en la cuenta corriente y emite la resolución de determinación.' +
+        ' Los tres pasos van en una transacción: ficha nueva, asientos y resolución, o nada. La' +
+        ' versión anterior queda intacta, así que el padrón anterior se reconstruye pidiendo la' +
+        ' ficha vigente a una fecha anterior. Sin sustento documental no se transfiere, y' +
+        ' transferir dos veces la misma liquidación se rechaza.',
+    },
+  ],
+  // «Histórico de fiscalización predial» declara su GET; mover la liquidación
+  // por sus estados —ABIERTA, EN PROCESO, LIQUIDADA, NOTIFICADA, ANULADA, que
+  // son los de su propio desplegable— necesita un verbo aparte (#49, RF-056).
+  fisc_historico: [
+    {
+      operationId: 'estado_de_liquidacion',
+      metodo: 'patch',
+      ruta: '/api/v1/fiscalizacion/liquidaciones/{numero}/estados',
+      titulo: 'Estado de una liquidación de fiscalización',
+      descripcion:
+        'Mueve la liquidación de estado conservando el historial. No actualiza ninguna fila:' +
+        ' agrega un movimiento, y el estado se DERIVA de él. Una liquidación anulada no vuelve:' +
+        ' corregirla es reliquidar.',
+    },
+  ],
   // `licencia_funcionamiento` declara «GET /licencias/funcionamiento» como su
   // endpoint —la grilla—; emitir la licencia necesita su propio verbo (#44,
   // RF-110). No hay PUT ni PATCH: una licencia es un acto administrativo que el
@@ -400,6 +461,119 @@ const OPERACIONES_ADICIONALES = {
         ' usuario, obligatoria (RNF-052). Sin un recibo válido —de caja de tasas, no anulado,' +
         ' del titular y por el concepto del TUPA que corresponde— no se emite. El número de la' +
         ' licencia lo pone el sistema desde su correlativo: no viene en el cuerpo.',
+    },
+  ],
+  // `anuncios` declara «GET /autorizaciones/anuncios» como su endpoint —la
+  // grilla—; registrar la autorización y los tres trámites que la pantalla
+  // enumera necesitan sus propios verbos (#51, RF-114). No hay PUT ni PATCH:
+  // `anuncio` no admite UPDATE desde V45, y renovar, cesar y retirar son ACTOS
+  // que producen una fila nueva de `anuncio_movimiento`, no ediciones del
+  // formulario.
+  anuncios: [
+    {
+      operationId: 'registrar_anuncio',
+      metodo: 'post',
+      titulo: 'Registro de autorización de anuncio',
+      descripcion:
+        'Registra una autorización de anuncio y GENERA SU DEUDA por la tasa (RF-114). El cuerpo' +
+        ' lleva el titular, el establecimiento asociado —opcional—, la clase y el tipo del' +
+        ' elemento, sus medidas, la ubicación, la vigencia y la observación del usuario,' +
+        ' obligatoria (RNF-052). El número de la autorización lo pone el sistema desde su' +
+        ' correlativo y la tasa sale del conjunto sellado: ninguno de los dos viene en el cuerpo.' +
+        ' La cabecera `Idempotency-Key` se lee: reenviar el mismo registro devuelve 200 con la' +
+        ' autorización de la primera vez y no genera un segundo cargo.',
+    },
+    {
+      operationId: 'renovar_anuncio',
+      metodo: 'post',
+      ruta: '/api/v1/autorizaciones/anuncios/{id}/renovacion',
+      titulo: 'Renovación de autorización de anuncio',
+      descripcion:
+        'Prorroga la autorización por otro ejercicio y devenga otra vez la tasa (RF-114). Un' +
+        ' anuncio cesado o retirado no se renueva, y una misma autorización no devenga dos veces' +
+        ' el mismo ejercicio. El `id` de la ruta es el número impreso de la autorización.',
+    },
+    {
+      operationId: 'cesar_anuncio',
+      metodo: 'post',
+      ruta: '/api/v1/autorizaciones/anuncios/{id}/cese',
+      titulo: 'Cese de autorización de anuncio',
+      descripcion:
+        'Deja sin efecto la autorización, con su motivo (RF-114). Detiene la deuda futura —un' +
+        ' anuncio cesado no se renueva— y NO toca la ya devengada: no borra ni reversa ningún' +
+        ' cargo (regla 4, RNF-051). El cuerpo lleva la fecha, el motivo y la observación del' +
+        ' usuario, obligatoria (RNF-052).',
+    },
+    {
+      operationId: 'retirar_anuncio',
+      metodo: 'post',
+      ruta: '/api/v1/autorizaciones/anuncios/{id}/retiro',
+      titulo: 'Retiro del elemento publicitario',
+      descripcion:
+        'Registra que el elemento se retiró de la calle, comprobado en campo (RF-114). Va después' +
+        ' del cese: primero la autorización deja de regir y después el soporte desaparece. Al' +
+        ' revés, el padrón diría que se desmontó un anuncio que sigue autorizado.',
+    },
+  ],
+  // `fue_edificacion` declara «GET /api/v1/licencias/edificacion» como su
+  // endpoint —la grilla del Formulario Único de Edificaciones—; el FUE se
+  // presenta, se completa POR PARTES y sólo entonces se emite (#48, RF-113), y
+  // cada uno de esos tres actos necesita su propio verbo.
+  //
+  // No hay PUT ni PATCH, y no es una omisión: las secciones del FUE se
+  // VERSIONAN —cada POST guarda la siguiente y la anterior queda entera— y la
+  // cabecera no admite UPDATE desde V43. Corregir un dato del expediente sin
+  // dejar el anterior borraría justo lo que explica una observación del
+  // evaluador.
+  //
+  // La AMPLIACIÓN no tiene verbo propio: es un FUE nuevo que nombra la licencia
+  // original, así que entra por el mismo POST de presentación (AC 3).
+  fue_edificacion: [
+    {
+      operationId: 'presentar_fue',
+      metodo: 'post',
+      titulo: 'Presentación del FUE',
+      descripcion:
+        'Da de alta el expediente del Formulario Único de Edificaciones (RF-113). El cuerpo lleva' +
+        ' el expediente, el solicitante, el tipo de trámite, la obra, la modalidad de aprobación,' +
+        ' el representante legal —opcional— y la observación del usuario, obligatoria (RNF-052).' +
+        ' Presentar NO otorga nada: no numera ninguna licencia ni comprueba ningún derecho de' +
+        ' trámite. Una ampliación o una revalidación nombran aquí la licencia original, y la' +
+        ' referencian sin sustituirla.',
+    },
+    {
+      operationId: 'completar_seccion_fue',
+      metodo: 'post',
+      ruta: '/api/v1/licencias/edificacion/{expediente}/secciones',
+      titulo: 'Sección del FUE completada',
+      descripcion:
+        'Completa una sección del FUE: TERRENO, PROYECTO, VALORIZACION, PROFESIONALES o' +
+        ' DOCUMENTOS. Se pueden completar en cualquier orden y en visitas distintas; completar una' +
+        ' que ya estaba guarda la versión siguiente y deja la anterior entera. La valorización va' +
+        ' por pisos y estructuras y NO admite importes: el valor por metro cuadrado sale del cuadro' +
+        ' de valores unitarios de edificación.',
+    },
+    {
+      operationId: 'emitir_licencia_edificacion',
+      metodo: 'post',
+      ruta: '/api/v1/licencias/edificacion/{expediente}/licencia',
+      titulo: 'Emisión de licencia de edificación',
+      descripcion:
+        'Otorga la licencia de edificación del expediente (RF-113). Sólo se emite cuando están las' +
+        ' cinco secciones obligatorias, y el error dice cuáles faltan. Sin un recibo válido de caja' +
+        ' de tasas —del titular, no anulado y por el concepto del TUPA que corresponde— no se' +
+        ' emite. El número de la licencia lo pone el sistema desde su correlativo; la vigencia' +
+        ' entra como dato del acto, porque el plazo es una cifra normativa y no se compila.',
+    },
+    {
+      operationId: 'revalidar_licencia_edificacion',
+      metodo: 'post',
+      ruta: '/api/v1/licencias/edificacion/{expediente}/revalidacion',
+      titulo: 'Revalidación de licencia de edificación',
+      descripcion:
+        'Prorroga el plazo de la licencia que el expediente de revalidación nombra. NO sustituye la' +
+        ' vigencia original: agrega el tramo siguiente, y la respuesta devuelve los dos con el acto' +
+        ' que concedió cada uno. Se cobra en caja de tasas antes, con su propio concepto del TUPA.',
     },
   ],
   // `ciiu` declara «GET /licencias/ciiu» como su endpoint —el catálogo—; RF-112

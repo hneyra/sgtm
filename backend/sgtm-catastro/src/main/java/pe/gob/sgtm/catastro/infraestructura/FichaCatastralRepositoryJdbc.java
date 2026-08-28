@@ -223,6 +223,15 @@ public class FichaCatastralRepositoryJdbc extends RepositorioJdbc
     }
 
     @Override
+    public Optional<FichaCatastral> porId(long fichaId) {
+        return jdbc().sql("SELECT " + COLUMNAS_FICHA + " FROM ficha_catastral" + " WHERE id = :id")
+                .param("id", fichaId)
+                .query(FichaCatastralRepositoryJdbc::mapearFicha)
+                .optional()
+                .map(this::conSusPartes);
+    }
+
+    @Override
     public FichaCatastral insertar(FichaCatastral ficha) {
         if (!ficha.esNueva()) {
             throw new IllegalArgumentException(

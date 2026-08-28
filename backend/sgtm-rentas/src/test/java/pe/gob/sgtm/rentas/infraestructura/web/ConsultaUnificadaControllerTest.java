@@ -421,6 +421,13 @@ class ConsultaUnificadaControllerTest {
 
     private static final class DeclaracionesDePrueba implements DeclaracionJuradaRepository {
 
+        @Override
+        public java.util.List<DeclaracionJurada> vigentesDePredios(
+                java.util.Collection<Long> predioIds, Ejercicio ejercicio) {
+            // El cruce de omisos (#49) se prueba en fiscalizacion; aqui no hay nada que devolver.
+            throw new UnsupportedOperationException("esta prueba no cruza el padron");
+        }
+
         private @Nullable Paginacion ultima;
 
         @Override

@@ -86,6 +86,21 @@ public final class RevisorDeCodigoFuente {
                     "licencia_funcionamiento",
                     "licencia_duplicado",
                     "licencia_movimiento",
+                    // Con #48: el FUE de edificacion, sus cinco secciones, sus movimientos y sus
+                    // vigencias. Borrar un expediente seria borrar la unica constancia de que una
+                    // obra estuvo autorizada —y con ella el sustento del derecho de tramite que se
+                    // cobro—; borrar una version de seccion seria borrar lo que el administrado
+                    // declaro antes de corregirlo, que es justo lo que explica una observacion del
+                    // evaluador; y borrar una vigencia dejaria una licencia sin plazo o con el
+                    // plazo de la revalidacion como si fuera el original (AC 4).
+                    "licencia_edificacion",
+                    "edificacion_terreno",
+                    "edificacion_proyecto",
+                    "edificacion_estructura",
+                    "edificacion_profesional",
+                    "edificacion_requisito",
+                    "edificacion_movimiento",
+                    "edificacion_vigencia",
                     // Con #50: el escrito que el administrado presento, la resolucion que la
                     // gerencia dicto sobre su multa, y el paso del vehiculo por el deposito.
                     // Borrar un descargo seria borrar la constancia de que alguien recurrio -y con
@@ -96,6 +111,13 @@ public final class RevisorDeCodigoFuente {
                     "resolucion_gerencia",
                     "internamiento",
                     "internamiento_movimiento",
+                    // Con #51: la autorizacion de anuncio y su historial. Borrar un anuncio seria
+                    // borrar la unica explicacion de un cargo que YA ESTA EN EL LIBRO -registrar la
+                    // autorizacion genera la deuda por su tasa-, y borrar un movimiento seria
+                    // ademas borrar la referencia con la que ese cargo entro, que es lo que impide
+                    // que se pida dos veces. Un anuncio no se borra: se cesa (regla 4, AC de #51).
+                    "anuncio",
+                    "anuncio_movimiento",
                     // Con #53: el criterio congelado de una generacion masiva de valores por
                     // papeletas y la constancia libre de infracciones. Borrar una corrida seria
                     // borrar la unica explicacion de por que salieron cuatro mil resoluciones de
@@ -106,6 +128,20 @@ public final class RevisorDeCodigoFuente {
                     "constancia_libre",
                     "ficha_catastral",
                     "acta_fiscalizacion",
+                    // Con #49: la liquidacion de fiscalizacion, su contraste linea a linea y
+                    // su historial. Borrar una liquidacion seria borrar la constancia de que
+                    // se determino de oficio una diferencia -y de cuanto se le dijo al
+                    // contribuyente que debia-, que no esta en ningun otro sitio; borrar una
+                    // linea dejaria la liquidacion afirmando un total que su detalle ya no
+                    // sostiene.
+                    "liquidacion_fiscalizacion",
+                    "liquidacion_detalle",
+                    "liquidacion_movimiento",
+                    // Con #52: la transferencia a rentas y su resolucion de determinacion.
+                    // Borrarla seria borrar el unico acto que explica por que el padron cambio
+                    // -y con el, la version de ficha que se inscribio y el cargo que se le
+                    // asento a alguien-. Es la constancia de la frontera delicada del sistema.
+                    "resolucion_determinacion",
                     "auditoria");
 
     /**
@@ -233,7 +269,63 @@ public final class RevisorDeCodigoFuente {
                     "resolucion_gerencia",
                     "internamiento",
                     "internamiento_movimiento",
-                    // Y con #53, la novena vez y por el mismo camino. V47 nace `papeleta_masivo` y
+                    // Y la liquidacion de fiscalizacion, con #49. Novena vez seguida por el
+                    // mismo camino, y aqui aplicado desde el principio: V39 nace SIN columna
+                    // de estado y sin conceder UPDATE, en vez de retirarlos despues. Una
+                    // liquidacion se NOTIFICA al contribuyente, que se lleva el papel;
+                    // corregirla en la base deja al papel y al sistema diciendo cosas
+                    // distintas, y quien tenga el papel gana la discusion. Se reliquida -otra
+                    // version que la referencia- o se anula con un movimiento.
+                    //
+                    // El detalle entra por lo mismo que `recibo_detalle`: es el desglose
+                    // congelado que explica la cifra notificada. Y el movimiento, por lo mismo
+                    // que `recibo_movimiento` (#34): si la cabecera ya no se puede tocar, la
+                    // tentacion siguiente es corregir la fila que dice en que estado esta.
+                    "liquidacion_fiscalizacion",
+                    "liquidacion_detalle",
+                    "liquidacion_movimiento",
+                    // Y el FUE de edificacion con sus secciones, sus movimientos y sus vigencias,
+                    // con #48. Decima vez seguida por el mismo camino: V43 le retira a
+                    // `licencia_edificacion` las columnas de estado y de valor de obra que V4 le
+                    // habia puesto, y le revoca el UPDATE; las cinco tablas de seccion no lo
+                    // reciben nunca, porque se VERSIONAN.
+                    //
+                    // Aqui hay ademas un motivo propio y es el que mas pesa: `valor_obra` era una
+                    // columna. Corregirla en el sitio dejaria el papel que el administrado exhibe
+                    // en la obra y la base diciendo cifras distintas, y esa cifra es la base del
+                    // derecho de tramite que se le cobro. Se retiro entera: la valorizacion se
+                    // calcula contra el cuadro de #17 y no se guarda (AC 2).
+                    "licencia_edificacion",
+                    "edificacion_terreno",
+                    "edificacion_proyecto",
+                    "edificacion_estructura",
+                    "edificacion_profesional",
+                    "edificacion_requisito",
+                    "edificacion_movimiento",
+                    "edificacion_vigencia",
+                    // Y la autorizacion de anuncio con su historial, con #51. Undecima vez seguida
+                    // y
+                    // por el mismo camino: V45 le retira a `anuncio` la columna de estado que V4 le
+                    // habia puesto -decia VIGENTE para siempre- y le revoca el UPDATE. El estado se
+                    // deriva de `anuncio_movimiento`, que solo se agrega.
+                    //
+                    // Aqui hay ademas un motivo que ninguna de las siete anteriores tenia: la fila
+                    // del movimiento lleva `referencia_cargo`, que es la MISMA cadena con la que la
+                    // tasa entro en el libro, y su indice unico es lo unico que impide cobrarla dos
+                    // veces. Poder editarla en el sitio seria poder devengar de nuevo el mismo
+                    // ejercicio cambiando una letra.
+                    "anuncio",
+                    "anuncio_movimiento",
+                    // Y la transferencia a rentas con su resolucion, con #52. Duodecima vez por el
+                    // mismo camino: V49 nace sin conceder UPDATE. Aqui el motivo es doble y el
+                    // segundo no lo tenia ninguna de las nueve anteriores: la resolucion se
+                    // NOTIFICA al contribuyente, que se lleva el papel, y ademas su cargo YA ESTA
+                    // en el libro y la version nueva de la ficha YA ESTA inscrita. Corregir la fila
+                    // dejaria al papel, al libro, al padron y a la base diciendo cuatro cosas
+                    // distintas, y la que se cobra en ventanilla es la del libro.
+                    "resolucion_determinacion",
+                    // Y con #53, la decimotercera vez y por el mismo camino. V47 nace
+                    // `papeleta_masivo` y
                     // `constancia_libre` sin UPDATE.
                     //
                     // La constancia es el caso claro: se ENTREGA al administrado, que se lleva el
@@ -337,11 +429,35 @@ public final class RevisorDeCodigoFuente {
      * «treinta y cinco soles por resolucion» es un detalle de implementacion. El arancel de costas
      * es de ordenanza local —D-02c, #193 esta bloqueado esperandolo— y compilarlo produce un cobro
      * sin sustento normativo en toda la cartera coactiva.
+     *
+     * <p>Con #51 entran {@code TASA} y {@code TARIFA}. La tasa por anuncios y propaganda la fija
+     * una ordenanza municipal ratificada por la provincia —D-02b, #199 esta bloqueado esperandola—
+     * y <b>ninguna palabra de la lista anterior la cazaba</b>: {@code TASA_PANEL = new
+     * BigDecimal("90.00")} pasaba sin ruido, igual que {@code INTERES_DE_FRACCIONAMIENTO} pasaba
+     * antes de #35 y {@code COSTA_DE_LA_REC2} antes de #42. Es la tercera vez que el mismo hueco
+     * aparece, y siempre del mismo modo: una familia de cifras nueva con un nombre nuevo.
+     *
+     * <p>{@code TARIFA} va con ella porque es como se escribe la misma cifra cuando a alguien le
+     * parece que «tasa» suena a tributo: {@code TARIFA_POR_M2 = ...} es exactamente el mismo dato.
+     *
+     * <p>Ojo con el {@code \b}: no caza {@code TIPO_TASA = "TASA_ANUNCIO"} —el identificador no
+     * <b>empieza</b> por la palabra— ni ningun {@code tasa_id = 1} de un SQL, porque el patron es
+     * sensible a mayusculas y esta pensado para nombres de constante.
+     *
+     * <p>Con #52 entra {@code MULTA}, y es la tercera vez que el mismo hueco se abre por el mismo
+     * sitio. La transferencia a rentas asienta, junto al tributo omitido, la <b>multa tributaria
+     * del art. 176 del Codigo Tributario</b>, que se expresa como un porcentaje de la UIT y depende
+     * ademas del regimen de gradualidad; es D-02c, y hasta que cierre la liquidacion la deja en
+     * {@code null} (#198). Nada de la lista anterior caza {@code MULTA_DEL_ARTICULO_176 = new
+     * BigDecimal("0.50")}: no empieza por {@code UIT}, ni por {@code ALICUOTA}, ni por {@code
+     * TRAMO}. Y la consecuencia de compilarla no es cobrar de mas o de menos: es sancionar sin
+     * norma que lo sostenga, en todo el padron fiscalizado a la vez.
      */
     private static final Pattern CONSTANTE_NORMATIVA =
             Pattern.compile(
                     "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
-                            + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA)\\w*\\s*=\\s*[^;\\n]*[0-9]");
+                            + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA|TASA|TARIFA"
+                            + "|MULTA)\\w*\\s*=\\s*[^;\\n]*[0-9]");
 
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
     private static final Pattern COMENTARIO_DE_BLOQUE = Pattern.compile("(?s)/\\*.*?\\*/");

@@ -383,6 +383,113 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que edita o borra una liquidacion de fiscalizacion")
+    void elEscanerDetectaLaMuestraQueEditaUnaLiquidacion() throws IOException {
+        // #49: las tres tablas de la liquidacion entran en TABLAS_PROTEGIDAS y en
+        // TABLAS_INMUTABLES. Una liquidacion se NOTIFICA, y el contribuyente se lleva el papel.
+        // La forma en que el defecto aparece de verdad no es en la cabecera -eso se ve venir-
+        // sino en el detalle: reescribir la linea del contraste en vez de reliquidar, con lo
+        // que la version corregida y la original pasan a ser la misma fila.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnaLiquidacion.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los tres UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(4);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(
+                        f ->
+                                assertThat(f)
+                                        .containsIgnoringCase(
+                                                "update liquidacion_fiscalizacion set"))
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update liquidacion_detalle set"))
+                .anySatisfy(
+                        f ->
+                                assertThat(f)
+                                        .containsIgnoringCase("update liquidacion_movimiento set"))
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("delete from liquidacion_detalle"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra que edita o borra una transferencia a rentas (#52)")
+    void elEscanerDetectaLaMuestraQueEditaUnaTransferencia() throws IOException {
+        // #52: `resolucion_determinacion` entra en las dos listas. Decima vez por el mismo
+        // camino, y con un motivo que las nueve anteriores no tenian: esta fila tiene TRES
+        // efectos colgando -el papel notificado, la version de ficha inscrita y el cargo del
+        // libro-, asi que editarla o borrarla no deja el sistema como estaba: deja sus efectos
+        // en pie y sin nada que los explique.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnaTransferencia.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("el UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(2);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(
+                        f ->
+                                assertThat(f)
+                                        .containsIgnoringCase(
+                                                "update resolucion_determinacion set"))
+                .anySatisfy(
+                        f ->
+                                assertThat(f)
+                                        .containsIgnoringCase(
+                                                "delete from resolucion_determinacion"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra con la multa tributaria compilada (regla 5, #52)")
+    void elEscanerDetectaLaMuestraDeMultaTributariaCompilada() throws IOException {
+        // #52 ensancha la lista de nombres de la regla 5 con MULTA, y es la tercera vez que el
+        // mismo hueco se abre por el mismo sitio: el `\b` del patron exige que el identificador
+        // EMPIECE por una palabra vigilada, y `MULTA_DEL_ARTICULO_176` no empieza por ninguna de
+        // las doce anteriores. Antes de esta linea, la muestra entera pasaba en VERDE.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeMultaTributariaCompilada.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las tres constantes, y ninguno de los comentarios que las explican")
+                .hasSize(3);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).contains("MULTA_DEL_ARTICULO_176"))
+                .anySatisfy(f -> assertThat(f).contains("MULTA_GRADUALIDAD_SUBSANACION_VOLUNTARIA"))
+                .anySatisfy(f -> assertThat(f).contains("MULTA_MINIMA_EN_SOLES"));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra que edita una licencia o borra su duplicado")
     void elEscanerDetectaLaMuestraQueEditaUnaLicencia() throws IOException {
         // #44: licencia_funcionamiento, licencia_duplicado y licencia_movimiento entran en
@@ -456,6 +563,122 @@ class ProhibicionesEnElCodigoFuenteTest {
                         f -> assertThat(f).containsIgnoringCase("update resolucion_gerencia set"))
                 .anySatisfy(f -> assertThat(f).containsIgnoringCase("update internamiento set"))
                 .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from descargo"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra que edita un FUE de edificacion")
+    void elEscanerDetectaLaMuestraQueEditaUnFue() throws IOException {
+        // #48: licencia_edificacion, sus cinco tablas de seccion, edificacion_movimiento y
+        // edificacion_vigencia entran en TABLAS_INMUTABLES. Decima vez por el mismo camino, y con
+        // un motivo propio que no tenian las anteriores: aqui la tentacion no es corregir un
+        // estado sino GUARDAR LA CIFRA -devolverle a la cabecera el `valor_obra` que V4 tenia-, y
+        // esa cifra ya vive en el cuadro de valores unitarios de #17. Duplicarla deja dos verdades
+        // sobre la base con que se cobro el derecho de tramite.
+        //
+        // Y con los rodeos cerrados: el estado, la seccion corregida en el sitio en vez de
+        // versionada, la vigencia original pisada al revalidar -que es justo lo que el AC 4
+        // prohibe- y la linea de valorizacion borrada con el papel ya en la obra.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/infraestructura/MuestraDeRepositorioQueEditaUnFue.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los cuatro UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(5);
+
+        List<String> fragmentos = hallazgos.stream().map(Hallazgo::fragmento).toList();
+        assertThat(fragmentos)
+                .filteredOn(
+                        f -> f.toLowerCase(java.util.Locale.ROOT).contains("licencia_edificacion"))
+                .as("el UPDATE del valor de obra y el del estado, los dos")
+                .hasSize(2);
+        assertThat(fragmentos)
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update edificacion_terreno set"))
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update edificacion_vigencia set"))
+                .anySatisfy(
+                        f ->
+                                assertThat(f)
+                                        .containsIgnoringCase(
+                                                "delete from edificacion_estructura"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra que edita un anuncio o borra su autorizacion")
+    void elEscanerDetectaLaMuestraQueEditaUnAnuncio() throws IOException {
+        // #51: `anuncio` y `anuncio_movimiento` entran en TABLAS_INMUTABLES, por lo mismo que la
+        // licencia en #44 y con un motivo mas que ninguna de las anteriores tenia: la fila
+        // del movimiento lleva `referencia_cargo`, que es la MISMA cadena con la que la tasa entro
+        // en el libro. Su indice unico es lo unico que impide devengarla dos veces, asi que poder
+        // editarla en el sitio seria poder cobrar dos veces el mismo ejercicio cambiando una letra.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnAnuncio.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los tres UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(4);
+
+        List<String> fragmentos = hallazgos.stream().map(Hallazgo::fragmento).toList();
+        assertThat(fragmentos)
+                .filteredOn(
+                        f -> f.toLowerCase(java.util.Locale.ROOT).contains("update anuncio set"))
+                .as("el UPDATE de la denominacion y el del estado, los dos")
+                .hasSize(2);
+        assertThat(fragmentos)
+                .as("y el que reescribiria la referencia con la que el cargo entro en el libro")
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update anuncio_movimiento set"));
+        assertThat(fragmentos)
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from anuncio"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra con la tasa de anuncios compilada (regla 5)")
+    void elEscanerDetectaLaMuestraDeTasaDeAnuncio() throws IOException {
+        // #51: la tasa por anuncios y propaganda es de ordenanza local (D-02b, #199 bloqueado).
+        // NINGUNA palabra de la lista anterior la cazaba -TASA_PANEL no empieza por UIT, TRAMO,
+        // ALICUOTA ni ninguna de las otras-, que es el mismo hueco que #35 destapo con
+        // INTERES_DE_FRACCIONAMIENTO y #42 con COSTA_DE_LA_REC2. Por eso entran TASA y TARIFA.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeTasaDeAnuncioCompilada.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las cuatro constantes, y ninguno de los comentarios que las explican")
+                .hasSize(4);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).contains("TASA_PANEL"))
+                .anySatisfy(f -> assertThat(f).contains("TARIFA_POR_M2_DE_ANUNCIO"))
+                .anySatisfy(f -> assertThat(f).contains("TASAS_POR_CLASE"))
+                .anySatisfy(f -> assertThat(f).contains("ARANCEL_DEL_ANUNCIO"));
     }
 
     @Test
