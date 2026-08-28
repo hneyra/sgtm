@@ -171,11 +171,15 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // Tres se van a `declarada` con #75, una con #74; y tres se mudan a
       // `sin-campo` con #74: `caja_tributaria` y `caja_tasas` —les falta el
       // medio de pago, un campo distinto de «Forma de pago»— y
-      // `fraccionamiento` —le falta la grilla de deuda a acoger—.
-      'sin-declaracion': 27,
+      // `fraccionamiento` —le falta la grilla de deuda a acoger—. Con #80 se
+      // van tres mas, a `sin-campo`: `fisc_programa`, `fisc_predial` y
+      // `fisc_vehicular` —a las tres les falta un identificador interno para
+      // el que ninguna seccion del catalogo dibuja un campo editable—.
+      'sin-declaracion': 24,
       'sin-determinacion': 1,
-      // Las tres de tesoreria (#74); las dos transferencias ya no estan (#73).
-      'sin-campo': 3,
+      // Las tres de tesoreria (#74) y las tres de fiscalizacion (#80); las dos
+      // transferencias ya no estan (#73).
+      'sin-campo': 6,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);
@@ -189,9 +193,9 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     // Escribe en el contrato y no ha declarado su cuerpo: `cierre_caja` (#36,
     // #74) — el `declarado` que exige `PeticionDeCierre` es un mapa por forma
     // de pago, y `CampoDelCuerpo`/`TablaDelCuerpo` no saben construirlo todavía.
-    expect(impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja'])?.causa).toBe(
-      'sin-declaracion',
-    );
+    expect(
+      impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja'])?.causa,
+    ).toBe('sin-declaracion');
     // Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
     // no tiene donde escribir** (#33, #74): a `caja_tributaria` le falta el
     // medio de pago —EFECTIVO/CHEQUE/DEPOSITO/TARJETA/TRANSFERENCIA—, un campo

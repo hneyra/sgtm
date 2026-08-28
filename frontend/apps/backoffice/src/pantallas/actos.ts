@@ -216,6 +216,31 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
       'Sin ellas el convenio no se puede registrar: el backend exige al menos una obligación marcada, y esta pantalla no dibuja ninguna tabla de deuda donde elegirla.',
     campos: ['obligaciones'],
   },
+
+  /**
+   * Las tres escrituras de fiscalizacion (#45, #80): a las tres les falta un
+   * dato para el que ninguna seccion del catalogo dibuja un campo editable.
+   * Ver el javadoc de `pantallas/fiscalizacion/index.ts` para el analisis
+   * completo, opcion por opcion.
+   */
+  fisc_programa: {
+    dato: 'el código y la descripción del programa',
+    porque:
+      'Sin ellos el programa no se puede registrar: el backend los exige, y la única sección de esta pantalla dibuja el número de programa de solo lectura y ningún campo de descripción — el catálogo capturó el resultado de generar un programa, no el formulario que lo crea.',
+    campos: ['codigo', 'descripcion'],
+  },
+  fisc_predial: {
+    dato: 'el programa, el contribuyente y el predio de la visita',
+    porque:
+      'Sin ellos el acta no se puede registrar: el backend exige los tres identificadores internos, y las columnas que se les parecen en esta pantalla son de solo lectura, a la espera de abrirse desde la fila de un programa generado que todavía no existe.',
+    campos: ['programaId', 'contribuyenteId', 'predioId'],
+  },
+  fisc_vehicular: {
+    dato: 'el programa, el contribuyente y el vehículo de la visita',
+    porque:
+      'Sin ellos el acta no se puede registrar: el backend exige los tres identificadores internos, y esta pantalla no dibuja ninguna sección de campos — su catálogo es un filtro y una grilla de vehículos observados, no el acta que el endpoint registra.',
+    campos: ['programaId', 'contribuyenteId', 'vehiculoId'],
+  },
 };
 
 /** Lo que declara esa opcion, o nada. `Object.hasOwn`, como el resto del camino. */
