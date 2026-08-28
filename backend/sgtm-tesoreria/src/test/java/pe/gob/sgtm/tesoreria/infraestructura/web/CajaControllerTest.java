@@ -25,6 +25,7 @@ import pe.gob.sgtm.tesoreria.dobles.CajasEnMemoria;
 import pe.gob.sgtm.tesoreria.dobles.ContribuyentesDeMentira;
 import pe.gob.sgtm.tesoreria.dobles.LibroDeMentira;
 import pe.gob.sgtm.tesoreria.dobles.RecibosEnMemoria;
+import pe.gob.sgtm.tesoreria.dobles.SinConvenios;
 import pe.gob.sgtm.tesoreria.dobles.TasasEnMemoria;
 import pe.gob.sgtm.tesoreria.dobles.TurnosEnMemoria;
 import pe.gob.sgtm.tesoreria.dominio.Caja;
@@ -67,6 +68,7 @@ class CajaControllerTest {
                                             abrirCaja,
                                             libro,
                                             recibos,
+                                            SinConvenios.formalizador(RELOJ),
                                             (RegistroDeAuditoria registro) -> {},
                                             RELOJ),
                                     new CobrarTasa(

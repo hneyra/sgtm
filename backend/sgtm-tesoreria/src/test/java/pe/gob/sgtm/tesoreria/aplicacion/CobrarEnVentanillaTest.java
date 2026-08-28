@@ -18,6 +18,7 @@ import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.tesoreria.dobles.CajasEnMemoria;
 import pe.gob.sgtm.tesoreria.dobles.LibroDeMentira;
 import pe.gob.sgtm.tesoreria.dobles.RecibosEnMemoria;
+import pe.gob.sgtm.tesoreria.dobles.SinConvenios;
 import pe.gob.sgtm.tesoreria.dobles.TasasEnMemoria;
 import pe.gob.sgtm.tesoreria.dobles.TurnosEnMemoria;
 import pe.gob.sgtm.tesoreria.dominio.Caja;
@@ -59,7 +60,13 @@ class CobrarEnVentanillaTest {
     private final AbrirCaja abrirCaja =
             new AbrirCaja(cajas, turnos, (RegistroDeAuditoria registro) -> {}, RELOJ);
     private final CobrarDeuda cobrarDeuda =
-            new CobrarDeuda(abrirCaja, libro, recibos, (RegistroDeAuditoria registro) -> {}, RELOJ);
+            new CobrarDeuda(
+                    abrirCaja,
+                    libro,
+                    recibos,
+                    SinConvenios.formalizador(RELOJ),
+                    (RegistroDeAuditoria registro) -> {},
+                    RELOJ);
     private final CobrarTasa cobrarTasa =
             new CobrarTasa(abrirCaja, tasas, recibos, (RegistroDeAuditoria registro) -> {}, RELOJ);
 
@@ -112,6 +119,7 @@ class CobrarEnVentanillaTest {
                                                     TipoDePago.NORMAL,
                                                     null,
                                                     PAGO,
+                                                    null,
                                                     null),
                                             porQue()))
                     .isInstanceOf(AbrirCaja.CajaDeBaja.class);
@@ -161,6 +169,7 @@ class CobrarEnVentanillaTest {
                                     TipoDePago.NORMAL,
                                     null,
                                     ayer,
+                                    null,
                                     null),
                             porQue());
 
@@ -215,6 +224,7 @@ class CobrarEnVentanillaTest {
                                     TipoDePago.NORMAL,
                                     "ORD. 012-2026-MPS — 100 % INTERESES",
                                     PAGO,
+                                    null,
                                     null),
                             porQue());
 
@@ -253,6 +263,7 @@ class CobrarEnVentanillaTest {
                                                     TipoDePago.A_CUENTA,
                                                     null,
                                                     PAGO,
+                                                    null,
                                                     null),
                                             porQue()))
                     .isInstanceOf(CobrarDeuda.TipoDePagoNoImplementado.class);
@@ -382,7 +393,8 @@ class CobrarEnVentanillaTest {
                 TipoDePago.NORMAL,
                 null,
                 PAGO,
-                clave);
+                clave,
+                null);
     }
 
     private static Observacion porQue() {

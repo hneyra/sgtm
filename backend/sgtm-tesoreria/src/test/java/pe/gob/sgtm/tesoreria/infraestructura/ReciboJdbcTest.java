@@ -76,6 +76,7 @@ import pe.gob.sgtm.tesoreria.aplicacion.AbrirCaja;
 import pe.gob.sgtm.tesoreria.aplicacion.AnularRecibo;
 import pe.gob.sgtm.tesoreria.aplicacion.CobrarDeuda;
 import pe.gob.sgtm.tesoreria.aplicacion.DuplicadoDeRecibo;
+import pe.gob.sgtm.tesoreria.dobles.SinConvenios;
 import pe.gob.sgtm.tesoreria.dominio.FormaDePago;
 import pe.gob.sgtm.tesoreria.dominio.MovimientoDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.MovimientoDeReciboRepository;
@@ -167,7 +168,15 @@ class ReciboJdbcTest {
                                 asientos, saldos, envolver(registrarAsiento), calculo, redondeo));
 
         AbrirCaja abrirCaja = envolver(new AbrirCaja(cajas, turnos, auditoria, RELOJ));
-        cobrarDeuda = envolver(new CobrarDeuda(abrirCaja, abonos, recibos, auditoria, RELOJ));
+        cobrarDeuda =
+                envolver(
+                        new CobrarDeuda(
+                                abrirCaja,
+                                abonos,
+                                recibos,
+                                SinConvenios.formalizador(RELOJ),
+                                auditoria,
+                                RELOJ));
 
         generador =
                 new GeneradorDeDocumentos(
@@ -601,6 +610,7 @@ class ReciboJdbcTest {
                         TipoDePago.NORMAL,
                         null,
                         PAGO,
+                        null,
                         null),
                 Observacion.de("Cobranza en ventanilla, prueba de #34"));
     }

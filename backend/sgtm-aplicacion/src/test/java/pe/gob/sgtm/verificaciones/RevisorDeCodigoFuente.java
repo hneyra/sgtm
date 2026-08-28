@@ -46,6 +46,13 @@ public final class RevisorDeCodigoFuente {
                     "prescripcion",
                     "papeleta",
                     "convenio",
+                    // Con #35: el cronograma congelado, la deuda que el convenio acogio -con la
+                    // fase a la que vuelve si se quiebra- y los actos sobre el. Borrar
+                    // convenio_deuda seria borrar la unica traza de que se fracciono, y con ella
+                    // la fase de origen: el quiebre no sabria a donde devolver la deuda.
+                    "convenio_cuota",
+                    "convenio_deuda",
+                    "convenio_movimiento",
                     "expediente_coactivo",
                     "acto_coactivo",
                     "ficha_catastral",
@@ -83,7 +90,18 @@ public final class RevisorDeCodigoFuente {
                     // Es ademas lo que impide la salida comoda que V29 dejo abierta: en vez de
                     // editar el recibo -que ya no se puede-, editar el movimiento que dice si
                     // esta anulado, que es lo mismo con un rodeo.
-                    "recibo_movimiento");
+                    "recibo_movimiento",
+                    // Y el convenio de fraccionamiento con su cronograma y sus actos, con #35.
+                    // Mismo caso que el recibo: el contribuyente firma el compromiso de pago y
+                    // se lo lleva. V31 les revoca el UPDATE y retira las columnas de estado que
+                    // V3 les habia puesto -decian VIGENTE para siempre-; el estado se deriva de
+                    // convenio_movimiento. La deuda acogida se congela igual que el desglose del
+                    // recibo, y un quiebre registrado por error se corrige con otro convenio, no
+                    // reescribiendo el acta.
+                    "convenio",
+                    "convenio_cuota",
+                    "convenio_deuda",
+                    "convenio_movimiento");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =
@@ -154,11 +172,19 @@ public final class RevisorDeCodigoFuente {
      * \b} es la que hace esto usable: solo caza identificadores que <b>empiezan</b> por esas
      * palabras, asi que {@code TIPO_PARAMETRO_PLAZO = "PLAZO"} —el nombre del tipo con el que se
      * LEE el parametro— no es un hallazgo, y {@code PLAZO_DE_RECLAMACION = 20} si.
+     *
+     * <p>Con #35, {@code INTERES_MORATORIO} <b>se ensancha a {@code INTERES}</b> y entra {@code
+     * CUOTAS}. El interes de un convenio de fraccionamiento no es el moratorio del art. 33 —es el
+     * de la ordenanza de fraccionamiento, D-02b— y con la lista anterior un {@code
+     * INTERES_DE_FRACCIONAMIENTO = new BigDecimal("0.01")} pasaba sin ruido: el {@code \b} exige
+     * que el identificador <b>empiece</b> por la palabra, y no empieza por {@code
+     * INTERES_MORATORIO}. {@code CUOTAS} cubre el maximo de cuotas, que es la otra cifra de esa
+     * misma ordenanza y cuya consecuencia es un convenio a plazo que nada respalda.
      */
     private static final Pattern CONSTANTE_NORMATIVA =
             Pattern.compile(
                     "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
-                            + "|INTERES_MORATORIO|REAJUSTE|PLAZO|PRESCRIPCION)\\w*\\s*=\\s*[^;\\n]*[0-9]");
+                            + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS)\\w*\\s*=\\s*[^;\\n]*[0-9]");
 
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
     private static final Pattern COMENTARIO_DE_BLOQUE = Pattern.compile("(?s)/\\*.*?\\*/");

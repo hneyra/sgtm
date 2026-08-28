@@ -23,8 +23,10 @@ import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.tesoreria.aplicacion.AbrirCaja;
 import pe.gob.sgtm.tesoreria.aplicacion.CobrarDeuda;
 import pe.gob.sgtm.tesoreria.aplicacion.CobrarTasa;
+import pe.gob.sgtm.tesoreria.aplicacion.FormalizarConvenio;
 import pe.gob.sgtm.tesoreria.dominio.FormaDePago;
 import pe.gob.sgtm.tesoreria.dominio.LineaDeTasaPedida;
+import pe.gob.sgtm.tesoreria.dominio.MovimientoDeConvenioRepository;
 import pe.gob.sgtm.tesoreria.dominio.Recibo;
 import pe.gob.sgtm.tesoreria.dominio.TipoDePago;
 import pe.gob.sgtm.web.Api;
@@ -64,7 +66,14 @@ public class CajaController {
         this.reloj = reloj;
     }
 
-    /** Caja tributaria: cobra la deuda marcada y emite el recibo (RF-080). */
+    /**
+     * Caja tributaria: cobra la deuda marcada y emite el recibo (RF-080).
+     *
+     * <p>Con {@code tipoDePago = PRECONVENIO} cobra en cambio la <b>cuota inicial</b> de un
+     * convenio de fraccionamiento y lo formaliza (#35, RF-084). Es la misma ruta y el mismo turno a
+     * proposito: el dinero entra por la misma ventanilla, la numeracion del recibo es la misma y la
+     * atomicidad —recibo mas acogimiento— sale gratis de estar dentro de la misma transaccion.
+     */
     @PostMapping("/cobranza")
     @RequiereAcceso(acceso = "caja_tributaria", privilegio = Privilegio.REGISTRO)
     public ResponseEntity<ReciboResource> cobranza(
@@ -87,7 +96,8 @@ public class CajaController {
                             tipoDePagoDe(peticion.tipoDePago()),
                             vacioAnulo(peticion.beneficioAplicable()),
                             fechaDePago,
-                            vacioAnulo(clave));
+                            vacioAnulo(clave),
+                            vacioAnulo(peticion.numeroDeConvenio()));
         } catch (IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
@@ -103,8 +113,18 @@ public class CajaController {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(cerrado));
         } catch (AbrirCaja.CajaInexistente noExiste) {
             throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(noExiste));
+        } catch (FormalizarConvenio.ConvenioInexistente noExisteConvenio) {
+            throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(noExisteConvenio));
+        } catch (FormalizarConvenio.ConvenioNoEsPreconvenio
+                | MovimientoDeConvenioRepository.ConvenioYaFormalizado yaEstaba) {
+            // 409: la peticion esta bien formada, lo que no admite la operacion es el
+            // estado del convenio. Formalizar dos veces acogeria su deuda dos veces.
+            throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(yaEstaba));
         } catch (AbrirCaja.CajaDeBaja
                 | CobrarDeuda.TipoDePagoNoImplementado
+                | CobrarDeuda.SinCuotaInicialQueCobrar
+                | FormalizarConvenio.LaInicialNoCuadra
+                | FormalizarConvenio.SinDeudaQueAcoger
                 | IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
@@ -167,12 +187,17 @@ public class CajaController {
                                                 + "'"));
     }
 
+    /**
+     * Las obligaciones marcadas.
+     *
+     * <p>Una lista vacia se deja pasar y la rechaza {@code CobrarDeuda.Cobranza}: el cobro de una
+     * cuota inicial de convenio no marca ninguna —las marco el preconvenio—, y decidirlo aqui
+     * obligaria a este metodo a conocer el tipo de pago para saber si vacio es un error.
+     */
     private static List<SeleccionDeObligacion> obligacionesDe(
             @Nullable List<PeticionDeCobranza.PeticionDeObligacion> marcadas) {
         if (marcadas == null || marcadas.isEmpty()) {
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION,
-                    "Hay que marcar al menos una deuda: un recibo sin lineas no documenta nada");
+            return List.of();
         }
         List<SeleccionDeObligacion> seleccion = new ArrayList<>(marcadas.size());
         for (PeticionDeCobranza.PeticionDeObligacion marcada : marcadas) {

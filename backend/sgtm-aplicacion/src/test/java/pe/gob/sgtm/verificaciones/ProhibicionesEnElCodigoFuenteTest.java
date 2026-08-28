@@ -353,6 +353,66 @@ class ProhibicionesEnElCodigoFuenteTest {
                 .anySatisfy(f -> assertThat(f).contains("PLAZO_INICIO_COMPUTO"));
     }
 
+    @Test
+    @DisplayName("el escaner detecta la muestra que edita un convenio, su cronograma o su acta")
+    void elEscanerDetectaLaMuestraQueEditaUnConvenio() throws IOException {
+        // #35: convenio, convenio_cuota, convenio_deuda y convenio_movimiento entran en
+        // TABLAS_INMUTABLES, por lo mismo que el recibo en #33 y #34. Y con el mismo
+        // rodeo cerrado: si el convenio ya no se puede tocar, la tentacion siguiente es
+        // corregir la fila que dice si esta quebrado.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnConvenio.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los tres UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(4);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update convenio set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update convenio_cuota set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from convenio_deuda"))
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update convenio_movimiento set"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra con las condiciones del convenio compiladas")
+    void elEscanerDetectaLaMuestraDeCondicionesDeConvenio() throws IOException {
+        // #35: el interes de fraccionamiento y el maximo de cuotas son cifras de ordenanza
+        // local (D-02b). La lista de nombres de la regla 5 tuvo que ensancharse -de
+        // INTERES_MORATORIO a INTERES- y ganar CUOTAS: sin eso,
+        // INTERES_DE_FRACCIONAMIENTO no empieza por ninguna palabra vigilada y pasa sin
+        // ruido, que es exactamente el modo en que esta regla deja de proteger.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeCondicionesDeConvenioCompiladas.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las dos constantes, y ninguno de los comentarios que las explican")
+                .hasSize(2);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).contains("INTERES_DE_FRACCIONAMIENTO"))
+                .anySatisfy(f -> assertThat(f).contains("CUOTAS_MAXIMAS"));
+    }
+
     private static List<Path> fuentesDeProduccion(Path raiz) throws IOException {
         try (Stream<Path> rutas = Files.walk(raiz)) {
             return rutas.filter(Files::isRegularFile)

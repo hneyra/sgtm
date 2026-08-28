@@ -85,7 +85,7 @@ public final class DatosDePrueba {
             long predioId = sembrarCatastro(app, muni, sufijo, titular, conjuntoId);
             long vehiculoId =
                     sembrarRentas(app, muni, sufijo, titular, segundo, predioId, conjuntoId);
-            long reciboId = sembrarTesoreria(app, muni, sufijo, titular);
+            long reciboId = sembrarTesoreria(app, muni, sufijo, titular, conjuntoId);
             long valorId = sembrarValoresYCoactiva(app, muni, sufijo, titular, conjuntoId);
             sembrarSanciones(app, muni, sufijo, titular, segundo, vehiculoId, predioId);
             sembrarLicencias(app, muni, sufijo, titular, predioId, reciboId);
@@ -567,7 +567,8 @@ public final class DatosDePrueba {
         return String.format("%03d", Math.abs(sufijo.hashCode() % 1000));
     }
 
-    private static long sembrarTesoreria(Connection app, long muni, String sufijo, long titular)
+    private static long sembrarTesoreria(
+            Connection app, long muni, String sufijo, long titular, long conjuntoId)
             throws SQLException {
         long areaId =
                 insertar(
@@ -663,28 +664,70 @@ public final class DatosDePrueba {
                 turnoId,
                 "0".repeat(64));
 
+        // Un convenio de fraccionamiento (V31, #35), con su correlativo, su cronograma, la
+        // deuda que acogio y su formalizacion. Su `recibo_inicial_id` ya no existe: el
+        // recibo que cobro la inicial viaja en el movimiento de FORMALIZACION, que es donde
+        // el hecho ocurre.
+        //
+        // Se siembra la FORMALIZACION y no un cierre a proposito: el cierre es unico por
+        // convenio y ademas es el que devuelve la deuda a su fase, asi que sembrarlo dejaria
+        // el fixture describiendo un convenio ya muerto.
+        ejecutar(
+                app,
+                "INSERT INTO convenio_correlativo (municipalidad_id, ejercicio, ultimo)"
+                        + " VALUES (?, ?, 1)",
+                muni,
+                EJERCICIO);
         long convenioId =
                 insertar(
                         app,
                         "INSERT INTO convenio (municipalidad_id, numero, contribuyente_id, tipo,"
-                                + " fecha, monto_total, cuota_inicial, numero_cuotas,"
-                                + " recibo_inicial_id)"
-                                + " VALUES (?, ?, ?, 'ORDINARIO', ?, ?, ?, 6, ?) RETURNING id",
+                                + " fecha, fecha_corte, conjunto_id, interes_mensual,"
+                                + " porcentaje_inicial, maximo_cuotas, monto_total, cuota_inicial,"
+                                + " numero_cuotas, usuario_registro, observacion, fecha_registro)"
+                                + " VALUES (?, ?, ?, 'ORDINARIO', ?, ?, ?, 1.0000, 10.0000, 12, ?,"
+                                + "         ?, 6, 'prueba', 'convenio sembrado por el fixture',"
+                                + "         now()) RETURNING id",
                         muni,
                         "CV-" + sufijo,
                         titular,
                         VIGENCIA,
+                        VIGENCIA,
+                        conjuntoId,
                         MIL,
-                        CIEN,
-                        reciboId);
+                        CIEN);
         ejecutar(
                 app,
                 "INSERT INTO convenio_cuota (municipalidad_id, convenio_id, numero, vencimiento,"
-                        + " monto) VALUES (?, ?, 1, ?, ?)",
+                        + " monto, capital) VALUES (?, ?, 1, ?, ?, ?)",
                 muni,
                 convenioId,
                 VIGENCIA.plusMonths(1),
+                CIEN,
                 CIEN);
+        ejecutar(
+                app,
+                "INSERT INTO convenio_deuda (municipalidad_id, convenio_id, tributo, ejercicio,"
+                        + " periodo, fase_origen, insoluto, monto, fecha_corte)"
+                        + " VALUES (?, ?, 'PREDIAL', ?, 1, 'ORDINARIA', ?, ?, ?)",
+                muni,
+                convenioId,
+                EJERCICIO,
+                MIL,
+                MIL,
+                VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO convenio_movimiento (municipalidad_id, convenio_id, tipo, fecha,"
+                        + " recibo_id, cuota, importe, asientos, usuario_registro, fecha_registro,"
+                        + " observacion)"
+                        + " VALUES (?, ?, 'FORMALIZACION', ?, ?, 0, ?, 2, 'prueba', now(),"
+                        + "         'formalizacion sembrada por el fixture')",
+                muni,
+                convenioId,
+                VIGENCIA,
+                reciboId,
+                MIL);
         return reciboId;
     }
 
