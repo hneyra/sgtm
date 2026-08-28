@@ -77,6 +77,51 @@ const GRUPOS_POR_TAREA_ESPERADOS: Readonly<Record<string, readonly (readonly [st
       ['Sesión', 2],
       ['Operación', 2],
     ],
+    catastro: [
+      ['Fichas del predio', 5],
+      ['Territorio', 2],
+      ['Tablas de valuación', 3],
+      ['Consultas', 1],
+      ['Documentos', 1],
+    ],
+    fiscalizacion: [
+      ['Campaña', 2],
+      ['Fiscalización', 2],
+      ['Resultados', 3],
+      ['Documentos', 1],
+    ],
+    'infracciones-administrativas': [
+      ['Infracciones', 2],
+      ['Notificaciones', 4],
+      ['Cobranza', 2],
+      ['Catálogos', 1],
+      // Las cuatro hojas, plegadas en el centro de reportes (ADR-0014 §5).
+      ['Reportes', 4],
+    ],
+    tesoreria: [
+      ['Cobro en caja', 2],
+      ['Convenios', 3],
+      ['Recibos', 2],
+      ['Cierre y control', 3],
+    ],
+    consultas: [
+      ['Del contribuyente', 4],
+      ['Del padrón', 5],
+      ['Documentos', 2],
+    ],
+    coactiva: [
+      ['Expedientes', 3],
+      ['Procedimiento', 4],
+      ['Cobro y costas', 2],
+      ['Consultas', 2],
+      ['Documentos', 1],
+    ],
+    'autorizaciones-y-licencias': [
+      ['Licencias y autorizaciones', 3],
+      ['Catálogos', 1],
+      // Las siete hojas, plegadas en el centro de reportes (ADR-0014 §5).
+      ['Reportes', 7],
+    ],
   };
 
 describe('el catalogo trae el manual entero', () => {
@@ -165,69 +210,109 @@ describe('la clasificacion en bloques viene precalculada', () => {
     }
   });
 
-  it('una pantalla de reporte de un modulo sin grupos va a «Documentos y reportes»', () => {
-    const constancia = OPCIONES.find((o) => o.id === 'constancia');
-    expect(constancia?.bloque).toBe('Documentos y reportes');
+  it('el modulo que no esta en la tabla conserva la clasificacion tecnica', () => {
+    // Tras la fase 1c (#302–#308) el unico sin grupos por tarea es Inicio: sus
+    // dos opciones —el panel y el portal— las clasifica `bloqueDe` por el
+    // titulo, y caen en «Consultas». Es lo que mantiene vivo el respaldo: si
+    // manana se anade un modulo, no nace sin bloques.
+    const sinTabla = MODULOS.filter((m) => GRUPOS_POR_TAREA_ESPERADOS[m.id] === undefined);
+    expect(sinTabla.map((m) => m.id)).toEqual(['inicio']);
+    for (const opcion of sinTabla.flatMap((m) => m.opciones)) {
+      expect(BLOQUES_TECNICOS.has(opcion.bloque), `${opcion.id}: ${opcion.bloque}`).toBe(true);
+    }
+    expect(OPCIONES.find((o) => o.id === 'portal')?.bloque).toBe('Consultas');
   });
 });
 
 /**
- * Las trece hojas que Transito pliega en su centro de reportes (ADR-0014 §5),
- * **en el orden del catalogo**. Copiadas a mano, por el mismo motivo que los
- * grupos de arriba: derivarlas del generado las volveria tautologicas.
+ * Las hojas que cada modulo pliega en su centro de reportes (ADR-0014 §5), **en
+ * el orden del catalogo**. Copiadas a mano, por el mismo motivo que los grupos
+ * de arriba: derivarlas del generado las volveria tautologicas.
  *
  * Esta es la lista que se pone roja si una hoja se cae del mecanismo —porque se
  * desmarco el grupo en la tabla, porque una hoja se movio a otro grupo, o
  * porque el portador dejo de emitir la marca—. Ninguna de las tres rompe la
  * compilacion: la opcion seguiria existiendo, con su ruta y su permiso, solo
  * que fuera del centro y de vuelta compitiendo en el menu.
+ *
+ * Son tres modulos, no uno: Transito estreno el mecanismo (#295) y la fase 1c
+ * (#304, #308) le sumo Infracciones administrativas y Autorizaciones y
+ * licencias sin tocar ni un componente. Que la lista se lea igual para los tres
+ * es lo que demuestra que el pliegue vive en la tabla.
  */
-const HOJAS_DEL_CENTRO_DE_TRANSITO: readonly string[] = [
-  'transito_reportes',
-  'transito_record_conductor',
-  'transito_record_vehicular',
-  'transito_constancia_libre',
-  'transito_padron',
-  'transito_papeleta_reporte',
-  'transito_rg_ordinaria',
-  'transito_rg_sancionadora',
-  'transito_padron_constancias',
-  'transito_resumen_recaudacion',
-  'transito_resumen_papeletas',
-  'transito_resumen_codigo',
-  'transito_resumen_placa',
-];
+const HOJAS_DEL_CENTRO: Readonly<Record<string, readonly string[]>> = {
+  transito: [
+    'transito_reportes',
+    'transito_record_conductor',
+    'transito_record_vehicular',
+    'transito_constancia_libre',
+    'transito_padron',
+    'transito_papeleta_reporte',
+    'transito_rg_ordinaria',
+    'transito_rg_sancionadora',
+    'transito_padron_constancias',
+    'transito_resumen_recaudacion',
+    'transito_resumen_papeletas',
+    'transito_resumen_codigo',
+    'transito_resumen_placa',
+  ],
+  'infracciones-administrativas': [
+    'adm_codigos_reporte',
+    'adm_reportes',
+    'adm_padron_notificaciones',
+    'adm_resumen_recaudacion',
+  ],
+  'autorizaciones-y-licencias': [
+    'anuncios_reportes',
+    'licencia_padron',
+    'licencia_resumen_anual',
+    'licencia_resolucion_cancelacion',
+    'licencia_resolucion_duplicado',
+    'edificacion_reporte',
+    'certificados',
+  ],
+};
 
 describe('el centro de reportes se declara en el catalogo, no en el componente', () => {
-  it('Transito pliega su bloque «Reportes», y es el unico modulo que pliega alguno', () => {
+  it('los tres que pliegan son estos tres, y el bloque plegado se llama «Reportes»', () => {
     const plegadores = MODULOS.filter((m) => m.centroDeReportes !== undefined).map((m) => [
       m.id,
       m.centroDeReportes,
     ]);
-    expect(plegadores).toEqual([['transito', 'Reportes']]);
+    expect(plegadores).toEqual([
+      ['transito', 'Reportes'],
+      ['infracciones-administrativas', 'Reportes'],
+      ['autorizaciones-y-licencias', 'Reportes'],
+    ]);
   });
 
-  it('las trece hojas estan en el centro, con su id y su ruta intactos', () => {
-    const transito = MODULOS.find((m) => m.id === 'transito');
-    expect(transito).toBeDefined();
-    if (!transito) return;
+  it.each(Object.entries(HOJAS_DEL_CENTRO))(
+    'las hojas de %s estan en el centro, con su id y su ruta intactos',
+    (moduloId, esperadas) => {
+      const modulo = MODULOS.find((m) => m.id === moduloId);
+      expect(modulo, `el modulo ${moduloId} existe`).toBeDefined();
+      if (!modulo) return;
 
-    const hojas = hojasDelCentro(transito);
-    expect(hojas.map((h) => h.id)).toEqual(HOJAS_DEL_CENTRO_DE_TRANSITO);
-    // Cada hoja conserva su ruta: el centro no las absorbe, las envuelve.
-    for (const hoja of hojas) {
-      expect(opcionPorRuta('transito', hoja.ranura)?.id, hoja.id).toBe(hoja.id);
-    }
-  });
+      const hojas = hojasDelCentro(modulo);
+      expect(hojas.map((h) => h.id)).toEqual(esperadas);
+      // Cada hoja conserva su ruta: el centro no las absorbe, las envuelve.
+      for (const hoja of hojas) {
+        expect(opcionPorRuta(moduloId, hoja.ranura)?.id, hoja.id).toBe(hoja.id);
+      }
+    },
+  );
 
-  it('el bloque plegado es el que dice el modulo, y solo ese', () => {
-    const transito = MODULOS.find((m) => m.id === 'transito');
-    if (!transito) return;
-    const plegados = bloquesDe(transito)
-      .filter((b) => b.plegado)
-      .map((b) => b.label);
-    expect(plegados).toEqual(['Reportes']);
-  });
+  it.each(Object.keys(HOJAS_DEL_CENTRO))(
+    'en %s el bloque plegado es el que dice el modulo, y solo ese',
+    (moduloId) => {
+      const modulo = MODULOS.find((m) => m.id === moduloId);
+      if (!modulo) return;
+      const plegados = bloquesDe(modulo)
+        .filter((b) => b.plegado)
+        .map((b) => b.label);
+      expect(plegados).toEqual(['Reportes']);
+    },
+  );
 
   it('un modulo sin centro no tiene hojas que plegar', () => {
     const consultas = MODULOS.find((m) => m.id === 'consultas');

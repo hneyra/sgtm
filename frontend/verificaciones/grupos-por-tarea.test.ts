@@ -33,7 +33,10 @@ const asignar = (moduloId: string, ids: readonly string[], tabla: TablaDeGrupos)
 
 describe('un modulo que no esta en la tabla conserva los bloques tecnicos', () => {
   it('devuelve null, y entonces manda `bloqueDe`', () => {
-    expect(asignar('catastro', ['calles'], GRUPOS_POR_TAREA)).toBeNull();
+    // Tras la fase 1c (#302–#308) el unico modulo sin grupos por tarea es
+    // Inicio. El respaldo sigue vivo igualmente: es lo que clasifica un modulo
+    // nuevo el dia que se anada, antes de que se disene su agrupacion.
+    expect(asignar('inicio', ['inicio', 'portal'], GRUPOS_POR_TAREA)).toBeNull();
   });
 });
 
@@ -135,18 +138,28 @@ describe('toda guarda de la tabla tiene una tabla que la viola', () => {
  * muerde.
  */
 describe('un grupo se pliega en centro de reportes marcandolo en la tabla', () => {
-  it('Transito pliega «Reportes», que es el grupo marcado', () => {
-    expect(centroDeReportesDe('transito', GRUPOS_POR_TAREA)).toBe('Reportes');
-    // Y sigue siendo un grupo como los demas: asigna sus opciones igual.
-    expect(nombresDeLosGrupos('transito')).toContain('Reportes');
-  });
+  // Transito estreno el mecanismo (#295); la fase 1c le sumo otros dos (#304,
+  // #308) sin escribir una linea de componente. Que los tres se lean por la
+  // misma funcion es la prueba de que el pliegue vive en la tabla.
+  it.each(['transito', 'infracciones-administrativas', 'autorizaciones-y-licencias'])(
+    '%s pliega «Reportes», que es el grupo marcado',
+    (moduloId) => {
+      expect(centroDeReportesDe(moduloId, GRUPOS_POR_TAREA)).toBe('Reportes');
+      // Y sigue siendo un grupo como los demas: asigna sus opciones igual.
+      expect(nombresDeLosGrupos(moduloId)).toContain('Reportes');
+    },
+  );
 
   it('un modulo tabulado sin ningun grupo marcado no pliega nada', () => {
     expect(centroDeReportesDe('seguridad', GRUPOS_POR_TAREA)).toBeNull();
+    // Tesoreria y Consultas tambien tienen su grupo de documentos, y a
+    // proposito **sin** marcar: dos hojas no son un centro.
+    expect(centroDeReportesDe('tesoreria', GRUPOS_POR_TAREA)).toBeNull();
+    expect(centroDeReportesDe('consultas', GRUPOS_POR_TAREA)).toBeNull();
   });
 
   it('un modulo que no esta en la tabla tampoco', () => {
-    expect(centroDeReportesDe('catastro', GRUPOS_POR_TAREA)).toBeNull();
+    expect(centroDeReportesDe('inicio', GRUPOS_POR_TAREA)).toBeNull();
   });
 
   it('dos grupos marcados en el mismo modulo se rechazan en el build', () => {
