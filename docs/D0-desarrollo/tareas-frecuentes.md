@@ -40,17 +40,27 @@ RLS añade esa condición a cada consulta.
 
 ## 2. Cambiar el contrato de la API
 
+**`sgtm-v1.yaml` tampoco se edita a mano**: sale de `docs/50-api/generar-openapi.mjs`, que lo deriva
+de los `endpoint` del prototipo. Lo que el prototipo no puede saber —un filtro que solo tiene el
+backend, una respuesta 307, la descripción que solo se conoce al implementar la operación— se
+declara en las tablas del generador, no en el archivo.
+
 ```bash
-# 1 · Editar docs/50-api/openapi/sgtm-v1.yaml
-# 2 · Regenerar los tipos de la interfaz
+# 1 · Editar docs/50-api/generar-openapi.mjs (la operación, sus parámetros, su descripción)
+# 2 · Regenerar el contrato
+node docs/50-api/generar-openapi.mjs
+# 3 · Regenerar los tipos de la interfaz
 cd frontend && yarn generar-operaciones
-# 3 · Comprobar que todo lo que usaba lo viejo se rompió a propósito
+# 4 · Comprobar que todo lo que usaba lo viejo se rompió a propósito
 yarn typecheck
 ```
 
 `packages/api-client/src/operaciones.generado.ts` **no se edita a mano**. `yarn verificar` corre
 `yarn comprobar-operaciones`, que regenera y compara: si el archivo y el contrato no cuadran, el
-build se pone rojo antes que el navegador.
+build se pone rojo antes que el navegador. Y del contrato hacia arriba hace lo mismo
+`node docs/50-api/generar-openapi.mjs --comprobar`, que corre en CI: durante quince issues el YAML
+se afinó a mano aplicándole solo el diff aditivo del generador, y regenerarlo en limpio llegó a
+borrar 519 líneas y dos operaciones enteras sin que nada se pusiera rojo (#312).
 
 Del otro lado, `ContratoDeApiTest` compara el contrato con las rutas que el backend publica, en las
 **dos** direcciones: una ruta sin contrato y un contrato sin ruta son los dos un fallo.

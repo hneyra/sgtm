@@ -1,6 +1,6 @@
 # Verificación de la documentación que se comprueba sola.
 #
-# Son dos, y las dos comprueban en las dos direcciones:
+# Son tres, y las tres comprueban en las dos direcciones:
 #
 #   1. el **mapa normativo** de NEG-02 §2 — qué norma fija cada dato que falta,
 #      qué parte de D-02 lo bloquea y qué issues lo esperan— contra el etiquetado
@@ -9,6 +9,12 @@
 #      norma, artículo, fecha de publicación y **dos firmas distintas**, que cierre
 #      filas del mapa que existen y que nadie más cierra, y que ninguna cifra haya
 #      acabado cargada en una migración: cargar depende de D-13, no de E-3.
+#   3. el **contrato de la API** (#312) — que `sgtm-v1.yaml` sea todavía lo que su
+#      generador produce. Es el gemelo de «el catálogo generado cuadra con el
+#      prototipo» del flujo de frontend, y existe porque el contrato dejó de
+#      poder reproducirse sin que nada se pusiera rojo: seguía siendo válido, el
+#      backend lo cumplía y el frontend generaba sus tipos de él, y aun así
+#      regenerarlo borraba 519 líneas y dos operaciones enteras.
 #
 # La segunda pasa en verde con el directorio vacío, y debe hacerlo: la barrera
 # llega antes que la transcripción. Por eso corre además contra sus muestras, que
@@ -26,6 +32,11 @@ on:
       # La comprobación de valores normativos LEE las migraciones, para que una
       # cifra cargada por SQL no se escape del filtro de rutas.
       - 'backend/sgtm-esquema/src/main/resources/db/migration/**'
+      # El contrato y el prototipo del que se deriva: son las DOS entradas del
+      # generador de OpenAPI, y tocar cualquiera de ellas sin la otra es
+      # exactamente lo que la comprobación tiene que ver.
+      - 'docs/50-api/**'
+      - 'design/sgtm-data-*.js'
   push:
     branches: [main]
     paths: *rutas
@@ -55,3 +66,11 @@ jobs:
 
       - name: Los valores normativos transcritos están en regla
         run: node docs/10-negocio/verificar-valores-normativos.mjs
+
+      # No escribe el archivo: lo regenera en memoria y exige que sea el mismo.
+      # Se comprobó que muerde, en las dos direcciones: retocando un `summary`
+      # del YAML a mano, borrando de él la operación `permisos_de_la_sesion`
+      # entera, y quitándole al generador la descripción de un parámetro de ruta.
+      # Las tres lo ponen rojo, con la línea y las dos versiones.
+      - name: El contrato de la API es el que su generador produce
+        run: node docs/50-api/generar-openapi.mjs --comprobar
