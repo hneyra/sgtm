@@ -55,7 +55,9 @@ tramos, ni alícuotas.** No falta hacerlo: no debe hacerse.
   base.
 
 Para cargar aranceles reales, cuando D-02a se cierre, está `cargar-arancel-vial.sh`, que
-exige un **conjunto de parámetros ya abierto** y no acepta cifras sueltas.
+exige un **conjunto de parámetros ya abierto** y no acepta cifras sueltas. Ese conjunto lo
+abre —y, con `--sellar`, lo congela— `abrir-conjunto-parametros.sh`, que imprime el
+`conjunto_id` que la carga del arancel espera (#247 §2).
 
 ## El código de referencia catastral se compone, no se copia
 

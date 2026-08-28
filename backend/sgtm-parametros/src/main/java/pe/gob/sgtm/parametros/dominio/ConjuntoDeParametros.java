@@ -13,9 +13,12 @@ import pe.gob.sgtm.dominio.Ejercicio;
  * Esa pregunta solo tiene respuesta si el juego entero se congela de una vez y queda identificado
  * (ADR-0007).
  *
- * <p>Puede haber varias versiones abiertas de un mismo ejercicio mientras se prepara, y <b>una sola
- * sellada</b>: con dos, ninguna consulta podria decir cual se aplico. Lo garantiza un indice unico
- * parcial de la base (V9), no la aplicacion.
+ * <p>Puede haber varias versiones de un mismo ejercicio, y <b>mas de una sellada</b>: un arancel
+ * corregido a mitad de ano crea una version nueva y la sella al lado de la anterior (ARQ-09 §3). V9
+ * lo habia prohibido con un indice unico parcial, razonando que «con dos, ninguna consulta podria
+ * decir cual se aplico»; V10 lo levanto porque quien lo dice no es una consulta por ejercicio sino
+ * la propia determinacion, que guarda su {@code conjunto_id}. Lo que sigue en pie es que lo sellado
+ * no se toca: los disparadores de V9 hacen inmutable el conjunto y su contenido.
  *
  * @param id nulo mientras no se ha guardado
  * @param version numero de version dentro del ejercicio; corregir un sellado crea la siguiente

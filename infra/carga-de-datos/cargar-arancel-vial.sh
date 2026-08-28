@@ -6,7 +6,7 @@
 # Pulumi. A diferencia del catalogo vial, esta carga cuelga de un conjunto de parametros
 # YA ABIERTO -este guion no lo abre ni lo sella: eso es AdministrarParametros.abrirVersion,
 # del modulo parametros (ver docs/10-negocio/valores-normativos/aranceles-2026.md S1.4)-.
-# El conjunto-id se obtiene de ese paso antes de correr esto.
+# El conjunto-id lo imprime abrir-conjunto-parametros.sh, que es el paso previo a este (#247).
 #
 #   uso: cargar-arancel-vial.sh --ambiente stg|prod --municipalidad-id N --conjunto-id N \
 #        --archivo arancel_2026.csv [--namespace sgtm-stg] [--observacion "..."]
@@ -35,8 +35,8 @@ done
 [ -n "$AMBIENTE" ] || { echo "Falta --ambiente (stg o prod)." >&2; exit 2; }
 [ -n "$MUNICIPALIDAD_ID" ] || { echo "Falta --municipalidad-id." >&2; exit 2; }
 [ -n "$CONJUNTO_ID" ] || {
-    echo "Falta --conjunto-id. Se abre antes con AdministrarParametros.abrirVersion" \
-        "(endpoint del modulo parametros), nunca aqui." >&2
+    echo "Falta --conjunto-id. Lo abre antes abrir-conjunto-parametros.sh" \
+        "--ejercicio AAAA, que imprime el numero; nunca este guion." >&2
     exit 2
 }
 [ -n "$ARCHIVO" ] || {

@@ -61,7 +61,10 @@
   overflow-y: auto;
 }
 
+/* Es un enlace: la vuelta al inicio que pregunta a quien se atiende (#296). */
 .sgtm-nav__cabecera {
+  color: inherit;
+  text-decoration: none;
   position: sticky;
   top: 0;
   z-index: 2;
@@ -71,6 +74,19 @@
   padding: 16px 16px 14px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-elev);
+}
+
+/* Y **se ve que es un enlace**: sin esto, la unica vuelta al inicio (#296) era
+   un bloque de marca que no reaccionaba a nada, asi que nadie lo pulsaba. El
+   anillo va por dentro porque la cabecera es `sticky` y llega a los dos bordes:
+   fuera se lo comeria el borde de la barra. */
+.sgtm-nav__cabecera:hover {
+  background: var(--accent-soft);
+}
+
+.sgtm-nav__cabecera:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .sgtm-nav__marca {
@@ -2383,4 +2399,226 @@
     flex-direction: row;
     flex-wrap: wrap;
   }
+}
+
+/* ── El inicio pregunta a quien se atiende (#296, ADR-0016 §1) ─────────────
+   La unica pantalla del sistema que no dibuja bloques del catalogo: es una
+   pregunta, sus respuestas repartidas por la lectura que las trajo, y las
+   ultimas personas atendidas. Las medidas son las del tablero de diseño
+   —caja de 720, rejilla de resultados de 960— sobre los tokens de siempre. */
+.sgtm-atencion {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  padding: 32px 0 8px;
+}
+
+.sgtm-atencion__pregunta {
+  width: min(720px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.sgtm-atencion__eyebrow {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.sgtm-atencion__titulo {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.sgtm-atencion__caja {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--bg-card);
+  color: var(--accent);
+}
+
+.sgtm-atencion__caja:focus-within {
+  border-color: var(--accent);
+}
+
+/* La etiqueta existe y no se ve: el titulo de arriba no es el nombre
+   accesible del control (FRO-04 §7). */
+.sgtm-atencion__etiqueta {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.sgtm-atencion__caja input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.sgtm-atencion__caja input:focus {
+  outline: none;
+}
+
+/* El texto de sugerencia se dice, no se insinua: el color por omision del
+   navegador daba 3,8:1 sobre la caja en tema oscuro, y ahi va la lista de lo
+   que se puede teclear. `--ink-3` es el mismo que usa el detalle de cada fila,
+   y se verifica en `contraste.test.ts`. */
+.sgtm-atencion__caja input::placeholder {
+  color: var(--ink-3);
+  opacity: 1;
+}
+
+.sgtm-atencion__ayuda {
+  margin: 0;
+  min-height: 18px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+/* La frase del camino de vuelta: fija, mas tenue que la region viva y debajo. */
+.sgtm-atencion__vuelta {
+  margin: 0;
+  font-size: 11.5px;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+.sgtm-atencion__resultados {
+  width: min(960px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sgtm-atencion__franja {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-card);
+  overflow: hidden;
+}
+
+.sgtm-atencion__fuente {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 11px 16px 9px;
+}
+
+/* Es un `h3`: la franja se nombra con su encabezado y no con un `aria-label`
+   que lo repita. De ahi el reinicio de margen y tamaño. */
+.sgtm-atencion__fuente-opcion {
+  margin: 0;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.sgtm-atencion__fuente-modulo {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.sgtm-atencion__franja ul,
+.sgtm-atencion__recientes ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sgtm-atencion__recientes {
+  width: min(960px, 100%);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-card);
+  overflow: hidden;
+}
+
+.sgtm-atencion__recientes .sgtm-atencion__eyebrow {
+  align-self: flex-start;
+  padding: 12px 16px 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+}
+
+.sgtm-atencion__fila {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sgtm-atencion__fila:hover {
+  background: var(--accent-soft);
+}
+
+/* Dentro y no fuera: la fila llega hasta el borde de la tarjeta, y un anillo
+   por fuera se comeria el borde de la fila de arriba (lo mismo que la lista
+   de candidatos del resolutor). */
+.sgtm-atencion__fila:focus-visible {
+  outline-offset: -2px;
+}
+
+.sgtm-atencion__quien {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sgtm-atencion__nombre {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.sgtm-atencion__detalle {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.sgtm-atencion__codigo {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.sgtm-atencion__franja .sgtm-aviso {
+  margin: 0 16px 14px;
 }

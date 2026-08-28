@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
-import { OPCION_INICIAL } from '../catalogo';
+import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import { HubDeModulo } from '../pantallas/HubDeModulo';
 import { Pantalla } from '../pantallas/Pantalla';
+import { Inicio } from '../pantallas/inicio/Inicio';
 import { ProveedorDeEjercicio } from './ejercicio';
 import { ProveedorDePreferencias } from './preferencias';
 import { ProveedorDeSesion } from './sesion/ProveedorDeSesion';
@@ -16,6 +16,19 @@ import { Shell } from './Shell';
  * abre el hub, `/:modulo/:opcion` la pantalla y `/:modulo/:opcion/:codigo` la
  * pantalla con un registro abierto. No hay 134 declaraciones de ruta porque no
  * hay 134 componentes: hay un renderizador y un catalogo.
+ *
+ * **Y `/` es la pregunta, no un desvio** (#296, ADR-0016 §1). Hasta ahora
+ * redirigia al panel de recaudacion, que es la primera opcion del catalogo; el
+ * panel **sigue siendo esa opcion y se sigue abriendo por su ruta** —del
+ * lanzador, de la paleta o del menu—, lo que deja de ser es la portada. Quien
+ * entra a trabajar no viene a mirar el avance del ejercicio: viene a atender a
+ * alguien.
+ *
+ * El inicio **no es una opcion mas**, y por eso vive en una ruta y no en el
+ * catalogo: no publica ninguna lectura propia ni tiene un permiso que conceder
+ * —consulta las tres que ya existen, cada una con el suyo—. Es el mismo criterio
+ * con el que ADR-0014 §5 se nego a inventar una ruta para el centro de
+ * reportes: «una opcion mas, sin id en el catalogo y sin permiso propio».
  */
 export function crearClienteDeConsultas(): QueryClient {
   return new QueryClient({
@@ -47,7 +60,7 @@ export function App() {
               <Router>
                 <Routes>
                   <Route element={<Shell />}>
-                    <Route path="/" element={<Navigate to={OPCION_INICIAL.ruta} replace />} />
+                    <Route path="/" element={<Inicio />} />
                     <Route path="/:moduloId" element={<HubDeModulo />} />
                     <Route path="/:moduloId/:ranura" element={<Pantalla />} />
                     {/* El registro abierto va en la ruta, no en el estado: pegar el
