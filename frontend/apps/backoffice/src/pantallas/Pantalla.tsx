@@ -55,6 +55,10 @@ import { Totales } from './bloques/Totales';
 import { PermisosMatrix } from './seguridad/PermisosMatrix';
 import { MiembrosDeGrupo } from './seguridad/MiembrosDeGrupo';
 import { Respaldos } from './seguridad/Respaldos';
+import { GeneracionIndividualDeValores } from './valores/GeneracionIndividualDeValores';
+import { GeneracionMasivaDeValores } from './valores/GeneracionMasivaDeValores';
+import { PrescripcionDeLaDeuda } from './valores/PrescripcionDeLaDeuda';
+import { PaseACoactiva } from './valores/PaseACoactiva';
 
 /**
  * **El renderizador.** Una sola pantalla para las 134 del manual.
@@ -212,6 +216,17 @@ const VERSIONADAS: ReadonlySet<string> = new Set([
  *                            adaptador de los que ya existen, y las dos
  *                            siguen bloqueadas por D-02a en su contenido,
  *                            no en su forma.
+ *   valores_individual,      (#75) sus cuerpos llevan arreglos —una
+ *   valores_masivo,          obligacion, una lista de contribuyentes, un
+ *   prescripcion             hecho de interrupcion— que `CampoDelCuerpo`
+ *                            no declara suelto, o piden partir un campo
+ *                            del catalogo en dos (`prescripcion`). Ver el
+ *                            docblock de `pantallas/valores/index.ts`.
+ *   pase_coactiva            (#75) el catalogo dibuja sus acciones sin la
+ *                            que escribe al final, y el renderizador
+ *                            comun siempre trata la ultima como la
+ *                            primaria: conectada tal cual, pasaria un
+ *                            valor a coactiva sin confirmacion.
  *
  * Viven en su propio componente en vez de forzar al renderizador comun a
  * saber de listas, de booleanos o de un verbo que miente.
@@ -225,6 +240,10 @@ const COMPONENTES_PROPIOS: Readonly<
   actualizacion_catastro: ActualizacionDeCatastro,
   valores_unitarios: ValoresUnitarios,
   depreciacion: Depreciacion,
+  valores_individual: GeneracionIndividualDeValores,
+  valores_masivo: GeneracionMasivaDeValores,
+  prescripcion: PrescripcionDeLaDeuda,
+  pase_coactiva: PaseACoactiva,
 };
 
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
@@ -504,7 +523,18 @@ function Bloques({
      secciones y fuera de su rejilla (FRO-03 §5), asi que sin entrada propia el
      indice empieza por la segunda cosa de la pagina. En «Cálculo individual del
      impuesto predial» eso dejaba fuera el paso 1 del calculo —los predios que
-     integran la base—, que es de donde sale todo lo demas. */
+     integran la base—, que es de donde sale todo lo demas.
+
+     **`composicion.indice !== undefined` si se alcanza hoy** (#342, nit 2): no
+     es una condicion muerta a la espera de una segunda pantalla. `predial_individual`
+     declara `{ indice: true, indiceConLaTabla: true }`
+     (`rentas/composicion.ts`) y su catalogo si trae `tabla`, asi que las tres
+     condiciones de `indexaLaTabla` son ciertas para ella, y
+     `memoria-del-predial.test.tsx` («los predios van antes que la base…») ya
+     lo ejercita: comprueba que «Predios que integran la base imponible» entra
+     como **la primera** entrada del indice, con su propia ancla y su propio
+     boton «Ir a…». No hace falta una prueba nueva; esta nota deja dicho por
+     que no hacia falta que la buscara una revision. */
   const indexaLaTabla =
     composicion.indice !== undefined &&
     composicion.indiceConLaTabla === true &&

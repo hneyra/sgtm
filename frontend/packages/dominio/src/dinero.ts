@@ -47,6 +47,46 @@ export function formatearImporte(valor: Importe): string {
   return `${negativo ? '-' : ''}${SIMBOLO} ${entero},${decimal}`;
 }
 
+/**
+ * Un texto puramente numerico: signo opcional, parte entera **sin ceros a la
+ * izquierda** —salvo el propio «0»—, punto decimal opcional.
+ *
+ * La parte entera es la mitad que importa: un codigo catastral o un numero de
+ * documento tambien son «solo digitos», y `00001182` con un cero a la
+ * izquierda no es una cantidad de mil ciento ochenta y dos de nada — es un
+ * identificador que la tiene por convencion. Agruparle los millares le
+ * cambiaria el texto que lo identifica.
+ */
+const NUMERO_SIMPLE = /^(-?)(0|[1-9]\d*)(\.\d+)?$/;
+
+/**
+ * Inserta el separador de millares en la parte entera de un texto numerico, y
+ * nada mas (#342, nit 6).
+ *
+ * **No es `formatearImporte`**: no antepone «S/», no fuerza dos decimales y no
+ * cambia el punto decimal por una coma. Una celda numerica de una tabla no
+ * siempre es dinero —«Área exclusiva m²» y «% participación» comparten columna
+ * `num` con «Valor asignado S/» en mas de un catalogo (`catastro.generado.ts`,
+ * seccion de unidades)— y el catalogo portado no dice cual es cual. Anteponer
+ * un simbolo de moneda a un area seria mentir sobre que es esa cifra; agrupar
+ * sus millares no miente sobre nada, y a un area de cinco cifras la hace igual
+ * de mas facil de leer que a un importe.
+ *
+ * Trabaja sobre texto y nunca convierte a `number` (regla 1, RNF-055): igual
+ * que `formatearImporte`, una cifra grande no pierde precision por pasar por
+ * aqui. Un texto que no es un numero simple —vacio, el guion de «sin dato»
+ * («—»), un codigo con ceros a la izquierda, un porcentaje con «%»— se
+ * devuelve tal cual: esta funcion formatea lo que ya es un numero, no decide
+ * que lo es.
+ */
+export function agruparMiles(texto: string): string {
+  const encontrado = NUMERO_SIMPLE.exec(texto.trim());
+  if (encontrado === null) return texto;
+  const [, signo = '', entero = '', decimal = ''] = encontrado;
+  const agrupado = entero.replace(/\B(?=(\d{3})+(?!\d))/g, SEPARADOR_MILLARES);
+  return `${signo}${agrupado}${decimal}`;
+}
+
 /** `"2026-08-13"` → `"13/08/2026"`. Si no reconoce el formato, devuelve el valor sin tocar. */
 export function formatearFecha(fecha: Fecha): string {
   const [anio, mes, dia] = fecha.split('T')[0]?.split('-') ?? [];

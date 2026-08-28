@@ -3,16 +3,21 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { permisosDelClaim, puedeVer } from '@sgtm/sesion';
+import { OPCIONES_CONECTADAS } from '../conexiones';
+import { SIN_DATO, leerPaginado } from '../seguridad/listado';
 import { montarEnRuta } from '../../pruebas/montar';
 
 /**
  * Coactiva (#76): el procedimiento con mas consecuencias juridicas del sistema.
  *
- * Ninguno de sus doce endpoints existe todavia. Lo que se comprueba aqui son
+ * De sus doce endpoints solo `coactiva_expedientes` existe (#40), conectada
+ * desde #363 —ver `pantallas/coactiva/index.ts`—. Lo que se comprueba aqui son
  * las tres propiedades que no dependen del servidor y que, si se rompen, hacen
  * que la pantalla **contradiga el modelo**: que ningun acto ya registrado se
  * pueda editar ni quitar, que un plazo vencido se vea sin depender del color, y
- * que quien no puede emitir un REC no lo vea.
+ * que quien no puede emitir un REC no lo vea; y, para `coactiva_expedientes`,
+ * que lee `ExpedienteResource` tal cual y no lo que el proxy simulaba antes de
+ * #363.
  */
 
 /** Las doce opciones del modulo, por su ranura. */
@@ -105,6 +110,61 @@ describe('un plazo vencido se ve sin depender del color', () => {
     const insignias = await within(tabla).findAllByText(/./, { selector: '.sgtm-insignia' });
     expect(insignias.length).toBeGreaterThan(0);
     expect(insignias.every((i) => (i.textContent ?? '').trim() !== '')).toBe(true);
+  });
+});
+
+describe('coactiva_expedientes lee ExpedienteResource, conectada desde #363', () => {
+  it('es la unica leida por una Conexion propia', () => {
+    expect(OPCIONES_CONECTADAS).toContain('coactiva_expedientes');
+    // El resto del modulo sigue sin conectar: ningun otro endpoint tiene
+    // `Controller` publicado como este (#40).
+    // #76 conecto despues las otras tres lecturas del modulo; lo que sigue
+    // sin conectar son las escrituras, bloqueadas por el orden de acciones
+    // del catalogo (ver el javadoc de `pantallas/coactiva/index.ts`).
+    expect(OPCIONES_CONECTADAS).toContain('proceso_coactivo');
+    expect(OPCIONES_CONECTADAS).not.toContain('actos_coactivos');
+  });
+
+  it('la fila es el expediente que publica el recurso, y «Medida cautelar» sale vacia', async () => {
+    montarEnRuta('/coactiva/coactiva-expedientes');
+
+    const fila = (await screen.findByText('EC-2026-00412')).closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      'EC-2026-00412',
+      // «Contribuyente» es `codContribuyente`: el codigo del obligado, no un
+      // nombre —el prototipo dibuja el nombre en esta columna, y el recurso
+      // real publica el codigo (ver `pantallas/coactiva/index.ts`)—.
+      'C-COACT-0001',
+      '3',
+      // Sin separador de miles: asi lo sirve `ExpedienteResource` de verdad,
+      // no como lo escribia el catalogo del prototipo («9,412.15»).
+      // La tabla agrupa los millares al dibujar (#342): el dato viaja intacto.
+      '9 412.15',
+      '941.20',
+      // «Medida cautelar»: el recurso no publica una descripcion de la medida
+      // trabada, solo el estado del expediente (ultima columna).
+      SIN_DATO,
+      'MEDIDA CAUTELAR',
+    ]);
+  });
+
+  it('una respuesta que no es un listado paginado se para en voz alta, no una tabla vacia', () => {
+    // La misma comprobacion que demuestra `leerPaginado` en todo el frontend
+    // (ver `pantallas/seguridad/seguridad.test.tsx`): la forma que el proxy
+    // servia antes de #363 —`DatosDePantalla`, con `tabla.filas` y sin
+    // `contenido`— es exactamente la que tiene que fallar, y no dibujarse
+    // como una tabla vacia en silencio (issue #363).
+    expect(() =>
+      leerPaginado(
+        { fechaCalculo: '2026-08-13', tabla: { filas: [] } },
+        'los expedientes coactivos',
+      ),
+    ).toThrow(/no trae un listado paginado/);
+    expect(
+      leerPaginado({ contenido: [], totalElementos: 0 }, 'los expedientes coactivos').contenido,
+    ).toEqual([]);
   });
 });
 

@@ -57,18 +57,21 @@ const HUELLAS = [
  * se agregan de dos en dos. Subir un numero tiene que costar una linea de este
  * archivo y una frase en el PR que diga por que.
  *
- * `arranque` se subio a 150 KB el 2026-08-27: quedan doce modulos por conectar
- * al backend y el arranque lleva dentro el camino de la sesion —token,
- * renovacion y ahora la matriz de permisos (ADR-0013)—. El margen es para eso,
- * no para que crezca sin mirar: el mayor trozo por modulo sigue apretado en
- * 11 KB.
+ * `arranque` se subio a 150 KB el 2026-08-27 —quedaban doce modulos por
+ * conectar— y a 156 el 2026-08-28, al conectarse tesoreria, valores, coactiva
+ * y el resto de rentas (#73–#76): sus escrituras declaradas y sus conexiones
+ * son parte del arranque por diseno —`conexiones.ts` y `escrituras.ts` son
+ * quienes deciden que puede hacer cada pantalla, y eso se decide antes de
+ * dibujarla—. Lo medido al subirlo: 152,7. El margen es para los cuatro
+ * modulos de la onda 4, no para crecer sin mirar: el mayor trozo por modulo
+ * sigue apretado en 11 KB.
  *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */
 const PRESUPUESTO = {
   /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
-  arranque: 150,
+  arranque: 156,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**

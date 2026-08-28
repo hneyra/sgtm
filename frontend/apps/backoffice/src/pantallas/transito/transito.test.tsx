@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
-import { cifrasDeLaTabla, cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
+import { OPCIONES_CONECTADAS } from '../conexiones';
+import { SIN_DATO, leerPaginado } from '../seguridad/listado';
 import { montarEnRuta } from '../../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
 
@@ -15,9 +16,12 @@ import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
  * puede depender de cual de las trece se toco por ultima vez (RNF-081,
  * RNF-084).
  *
- * Ninguno de sus endpoints existe todavia. Lo que se comprueba es lo que la
- * interfaz ya tiene que garantizar: que las hojas son la misma hoja, que la
- * interfaz no se imprime, y que **ninguna cifra de la papeleta se recompone**.
+ * De sus veintitres endpoints solo `papeletas` existe (#46), conectada desde
+ * #363 —ver `pantallas/transito/index.ts`—. Lo que se comprueba aqui es lo
+ * que la interfaz ya tiene que garantizar en las demas: que las hojas son la
+ * misma hoja y que la interfaz no se imprime; y para `papeletas`, ya
+ * conectada, que lee `PapeletaResource` tal cual y no lo que el proxy
+ * simulaba antes de #363.
  */
 
 /** Las seis pantallas del modulo que son hoja de reporte. */
@@ -70,26 +74,76 @@ describe('las trece hojas son la misma hoja', () => {
   });
 });
 
-describe('la papeleta muestra su desglose guardado, no uno recalculado', () => {
-  it('cada cifra que se ve esta tal cual en lo que sirvio la API', async () => {
+describe('papeletas lee PapeletaResource, conectada desde #363', () => {
+  it('es la unica leida por una Conexion propia', () => {
+    expect(OPCIONES_CONECTADAS).toContain('papeletas');
+    // Las demas del modulo siguen sin conectar: ninguna tiene `Controller`
+    // salvo `papeletas` (#46).
+    expect(OPCIONES_CONECTADAS).not.toContain('transito_busqueda');
+    expect(OPCIONES_CONECTADAS).not.toContain('codigos_transito');
+  });
+
+  it('cada fila es una papeleta, y lo que PapeletaResource no publica sale vacio', async () => {
     montarEnRuta('/transito/papeletas');
     // Se espera a una **fila con datos**, no a que exista la tabla: la tabla
     // existe desde el catalogo, con su esqueleto, y esperar a ella dejaria la
     // comprobacion mirando celdas vacias (#76).
-    await screen.findAllByText('MPS-2026-041182');
+    const fila = (await screen.findByText('MPS-2026-041182')).closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      'MPS-2026-041182',
+      // La fecha de infraccion, tal como la publica el recurso (LocalDate ISO),
+      // no el «02/08/2026» del catalogo del prototipo.
+      '2026-08-02',
+      'T2G-418',
+      // Infractor, Codigo y Gravedad: PapeletaResource no los publica (ver
+      // pantallas/transito/index.ts).
+      SIN_DATO,
+      SIN_DATO,
+      SIN_DATO,
+      // El importe se determino el dia de la infraccion con los parametros de
+      // ese dia (`importeAPagar`, «tal cual del acta fisica»): no se recalcula
+      // ni se reformatea con separador de miles, que es como lo sirve el
+      // backend de verdad.
+      '535.00',
+      // El estado es el nombre literal de EstadoDePapeleta, no la etiqueta del
+      // prototipo: «Pendiente» no es ningun valor del enum (ver el mock).
+      'IMPUESTA',
+    ]);
+  });
 
-    const servidas = cifrasServidas('papeletas');
-    const enPantalla = cifrasEnPantalla();
+  it('el «Estado» nunca es una etiqueta que EstadoDePapeleta no reconoce', async () => {
+    montarEnRuta('/transito/papeletas');
 
-    expect(enPantalla.length).toBeGreaterThan(0);
-    // El importe se determino el dia de la infraccion con los parametros de ese
-    // dia. Recalcularlo al mostrar es el error clasico de este modulo: la
-    // papeleta dejaria de decir lo que dice el documento que se notifico.
-    for (const cifra of enPantalla) expect(servidas).toContain(cifra);
-    // Y en la otra direccion: cada cifra de la respuesta sigue estando en la
-    // pantalla. Sin esto, una transformacion que cambie el formato se escapa
-    // —deja de parecer dinero y se cae del filtro—.
-    for (const cifra of cifrasDeLaTabla('papeletas')) expect(cifrasEnPantalla()).toContain(cifra);
+    const tabla = await screen.findByRole('table');
+    const dentroDeLaTabla = within(tabla);
+
+    // Las cuatro filas del mock, con su estado ya en el vocabulario del
+    // backend: «Pendiente» y «Con descargo» —que no son valores del enum—
+    // colapsan en `IMPUESTA`/`RESUELTA`.
+    for (const invalido of ['Pendiente', 'Con descargo', 'Pagada', 'Coactiva']) {
+      expect(dentroDeLaTabla.queryByText(invalido)).not.toBeInTheDocument();
+    }
+    expect(dentroDeLaTabla.getByText('IMPUESTA')).toBeInTheDocument();
+    expect(dentroDeLaTabla.getByText('RESUELTA')).toBeInTheDocument();
+    expect(dentroDeLaTabla.getByText('PAGADA')).toBeInTheDocument();
+    expect(dentroDeLaTabla.getByText('COACTIVA')).toBeInTheDocument();
+  });
+
+  it('una respuesta que no es un listado paginado se para en voz alta, no una tabla vacia', () => {
+    // La forma que el proxy servia antes de #363 —`DatosDePantalla`, con
+    // `tabla.filas` y sin `contenido`— es exactamente la que tiene que fallar
+    // aqui, y no dibujarse como una tabla vacia en silencio (issue #363).
+    expect(() =>
+      leerPaginado(
+        { fechaCalculo: '2026-08-13', tabla: { filas: [] } },
+        'las papeletas de tránsito',
+      ),
+    ).toThrow(/no trae un listado paginado/);
+    expect(
+      leerPaginado({ contenido: [], totalElementos: 0 }, 'las papeletas de tránsito').contenido,
+    ).toEqual([]);
   });
 });
 

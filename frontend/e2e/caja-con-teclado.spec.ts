@@ -18,6 +18,14 @@ test('de la paleta de comandos al acto, solo con el teclado', async ({ page }) =
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
+  /* El encabezado ya esta pintado, pero el arranque no ha terminado: la sesion
+     y el catalogo visible siguen resolviendo su primera peticion (#342, nit 1).
+     Con cache de Vite fria esa ronda tarda mas, y el atajo puede llegar antes
+     de que el oyente de `keydown` de `Shell` este activo. `networkidle` es la
+     senal de que esa ronda de arranque ya asento: no repara el sintoma con un
+     reintento, espera a la causa. */
+  await page.waitForLoadState('networkidle');
+
   // La paleta de comandos es el camino rapido de quien atiende: Ctrl K.
   await page.keyboard.press('Control+k');
   await expect(page.getByRole('dialog')).toBeVisible();
@@ -35,6 +43,19 @@ test('de la paleta de comandos al acto, solo con el teclado', async ({ page }) =
   await concepto.focus();
   await page.keyboard.press('ArrowDown');
   await expect(concepto).toHaveValue('IMPUESTO PREDIAL');
+
+  /* **El año, con la misma dureza que el concepto** (#342, nit 3): el mismo
+     `select` sin opcion vacia mostrada, la misma flecha para elegirla. */
+  const ano = page.getByLabel('Año', { exact: true });
+  await expect(ano).toHaveValue('');
+  await ano.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(ano).not.toHaveValue('');
+
+  // Y el documento que sustenta el alta, un texto que se teclea.
+  const documento = page.getByLabel('Nº del documento');
+  await documento.focus();
+  await page.keyboard.type('RD-2026-000123');
 
   // La observacion es la condicion de guardado (regla 10, RNF-052), y se llega
   // a ella tabulando.
@@ -81,6 +102,17 @@ test('sin observación, ni con el teclado se consigue registrar', async ({ page 
   const concepto = page.getByLabel('Concepto / tributo');
   await concepto.focus();
   await page.keyboard.press('ArrowDown');
+  // Con el concepto elegido, lo que falta ahora es el año (#342, nit 3).
+  await expect(franja).toHaveText(/Falta el año/);
+
+  const ano = page.getByLabel('Año', { exact: true });
+  await ano.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(franja).toHaveText(/Falta el número del documento/);
+
+  const documento = page.getByLabel('Nº del documento');
+  await documento.focus();
+  await page.keyboard.type('RD-2026-000123');
   await expect(franja).toHaveText(/Falta la observación/);
 
   // Pulsar no guarda nada: enfocable no es pulsable.
@@ -105,7 +137,59 @@ test('la caja dice por que todavia no puede cobrar, en vez de prometerlo', async
   await expect(cobrar).toHaveAttribute('aria-disabled', 'true');
 
   // Y el motivo se **ve**, en la lengua del mostrador y con la salida puesta.
+  // Desde #74 nombra el dato exacto que falta —el medio de pago, no la lista
+  // blanca—: `caja_tributaria` esta en `ACTOS_SIN_CAMPO`, no en «sin-declaracion».
+  await expect(page.getByText(/el medio de pago/i)).toBeVisible();
   await expect(page.getByText(/Registra el acto por el procedimiento actual/i)).toBeVisible();
   // Sin escritura declarada no hay ni caja de observacion: no hay a donde escribir.
   await expect(page.getByRole('textbox', { name: 'Observación' })).toHaveCount(0);
+});
+
+/**
+ * **Anular un recibo, sin tocar el raton** (#34, #74, RNF-082).
+ *
+ * Es el primer acto de tesoreria que llega hasta el final: caja tributaria y
+ * caja de tasas siguen sin poder cobrar —les falta el medio de pago en el
+ * cuerpo, y ninguna pantalla del prototipo dibuja ese campo (`ACTOS_SIN_CAMPO`)—,
+ * asi que el camino completo de ventanilla se recorre aqui, sobre el acto que
+ * si declara su cuerpo entero: se abre por el numero impreso del recibo —igual
+ * que una ficha catastral se abre por su codigo—, se elige el motivo y quien
+ * autoriza con el teclado, y la anulacion **se confirma**: no se deshace
+ * (regla 4, RNF-051).
+ */
+test('anular un recibo: identificar, elegir, confirmar, sin raton', async ({ page }) => {
+  await page.goto('/tesoreria/anulacion-recibo/001-0000123');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(/Anulación de recibo/i);
+
+  // El motivo se elige con el teclado: un `select` se opera con las flechas.
+  const motivo = page.getByLabel('Motivo');
+  await motivo.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(motivo).not.toHaveValue('');
+
+  const autorizadoPor = page.getByLabel('Autorizado por');
+  await autorizadoPor.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(autorizadoPor).not.toHaveValue('');
+
+  const memorando = page.getByLabel('Nº de memorando');
+  await memorando.focus();
+  await page.keyboard.type('MEMO-2026-014');
+
+  const observacion = page.getByRole('textbox', { name: 'Observación' });
+  await observacion.focus();
+  await page.keyboard.type('Pago duplicado, verificado con el contribuyente.');
+
+  // La primaria es irreversible: no manda hasta confirmar (regla 4).
+  const anular = page.getByRole('button', { name: 'Anular recibo', exact: true });
+  await expect(anular).toBeEnabled();
+  await anular.focus();
+  await page.keyboard.press('Enter');
+
+  await expect(page.getByText(/no se deshace/i)).toBeVisible();
+  const confirmar = page.getByRole('button', { name: /^Confirmar/i });
+  await confirmar.focus();
+  await page.keyboard.press('Enter');
+
+  await expect(page.getByText(/Guardado, con tu observación/)).toBeVisible();
 });
