@@ -7,7 +7,7 @@
 | Publicada | 2004-11-15, El Peruano (TUO LTM); 2026-01-15, El Peruano (R.M. N.° 008-2026-EF/15) |
 | Ejercicios que rige | 2004– (alícuota y años de afectación, TUO LTM); 2026 (tabla de valores referenciales, propia de ese ejercicio) |
 | Filas de NEG-02 §2 | 16 |
-| Transcribió | JNA, 2026-08-24; adición del anexo leído en la fuente (§1.2 y §1.3): Agent, 2026-08-28; parte resolutiva de la R.M. leída completa (§1.4): Agent, 2026-08-28 |
+| Transcribió | JNA, 2026-08-24; adición del anexo leído en la fuente (§1.2 y §1.3): Agent, 2026-08-28; parte resolutiva de la R.M. leída completa (§1.4): Agent, 2026-08-28; tabla fila por fila, extraída mecánicamente de los PDF archivados ([`fuentes/tvr-2026/`](fuentes/tvr-2026/README.md)): Agent, 2026-08-28 |
 | Verificó | — |
 | Estado | TRANSCRITO |
 
@@ -93,15 +93,20 @@ El encabezado de las tres columnas de valor dice, en ese orden y descendente, `2
 (2023 a 2025), que hasta ahora este archivo solo daba por probable a partir de la R.M. del ejercicio
 anterior.
 
-Las secciones de categoría que aparecen en lo extraído son: `A1`, `A2`, `A3`, `A4` (así, por
-código, sin el nombre desarrollado), `BUSES Y OMNIBUSES` y `CAMIONES`.
+Las secciones de categoría del anexo completo son **ocho**, en este orden: `A1`, `A2`, `A3`, `A4`
+(así, por código, sin el nombre desarrollado), `BUSES Y OMNIBUSES`, `CAMIONES`, `CAMIONETAS` y
+`REMOLCADORES`. (Las primeras lecturas, truncadas, solo habían llegado hasta `CAMIONES`; la
+extracción mecánica de los PDF archivados —§1.2.5— recorrió las 169 páginas.) No existe ninguna
+sección rotulada «STATION WAGONS»: los station wagons que el TUO LTM art. 30 nombra van dentro de
+las categorías por código, como modelos.
 
 #### 1.2.3 Cinco filas verbatim, como muestra de forma
 
 **Estas cinco filas no son la carga de la tabla: son la muestra de su forma.** Se reproducen tal
 cual, una por cada sección de la que se retuvo una fila completa, para que quien vuelva a la fuente
-pueda reconocer el formato y comprobar que se está leyendo el mismo documento. El anexo tiene miles
-de filas más, y ninguna de ellas está en este archivo (§1.2.5 y §3).
+pueda reconocer el formato y comprobar que se está leyendo el mismo documento. Las 18 043 filas del
+anexo están, extraídas mecánicamente, en [`fuentes/tvr-2026/tvr-2026.csv`](fuentes/tvr-2026/README.md)
+(§1.2.5); las cinco de arriba aparecen ahí idénticas.
 
 | Categoría | Marca | Modelo publicado para el 2025 | Modelo publicado para el 2026 | 2025 | 2024 | 2023 |
 |---|---|---|---|---|---|---|
@@ -131,15 +136,23 @@ norma (art. 2.2, transcrito en §1.4.2) se aplica al valor **derivado por factor
 fabricación anteriores a 2023, no dice nada de cómo se construyeron los valores directos del anexo.
 Que estos también sean múltiplos de 10 es un hecho del documento, no una regla transcrita.
 
-#### 1.2.5 Lo que sigue sin confirmarse de la tabla 2026
+#### 1.2.5 La tabla, fila por fila: extraída mecánicamente de los PDF archivados
 
-`‹NO CONFIRMADO EN FUENTE OFICIAL: el contenido fila por fila del anexo (categoría × marca × modelo
-× año de fabricación × valor en soles). El PDF sí se leyó el 2026-08-28, pero la extracción de texto
-del anexo principal quedó TRUNCADA a unos 658 000 caracteres: llegaron unas 8 525 filas, la sección
-CAMIONES solo hasta la marca IVECO —el texto se corta a media fila, en «CABINATTO 70C14 GNC 148,880
-133,990 119,100»— y no apareció ninguna sección de remolcadores o tracto camiones. De la parte no
-extraída no se afirma nada. Y de la parte sí extraída tampoco se transcribe fila por fila: son más
-de ocho mil cifras normativas, y reteclearlas a mano no sería una transcripción confiable (ver §3).›`
+El contenido fila por fila del anexo **ya no está pendiente**. El 2026-08-28, más tarde el mismo
+día, el dueño del repositorio subió los tres PDF oficiales al propio repositorio, y de sus bytes
+exactos se extrajo la tabla completa con una herramienta mecánica — nunca retecleada:
+[`fuentes/tvr-2026/`](fuentes/tvr-2026/README.md) guarda los tres PDF con su sha256, el extractor
+(`extraer_tvr.py`) y el derivado `tvr-2026.csv` con las **18 043 filas** de las 169 páginas
+(A1: 309 · A2: 1 723 · A3: 3 223 · A4: 1 483 · BUSES Y OMNIBUSES: 690 · CAMIONES: 2 527 ·
+CAMIONETAS: 7 912 · REMOLCADORES: 176).
+
+Cómo se demostró, en corto (el detalle, en el README de la carpeta): dos métodos independientes por
+fila que deben coincidir; tres filas con celdas físicamente solapadas rescatadas por orden del
+stream del PDF y verificadas además contra la página renderizada; todos los valores múltiplos de 10
+y decrecientes 2025 ≥ 2024 ≥ 2023; y muestras de tres páginas comparadas visualmente contra el PDF.
+
+La extracción es mecánica y reproducible, pero sigue siendo parte de esta transcripción: la
+re-verificación de una segunda persona (cabecera) la cubre también a ella.
 
 Los factores de depreciación por antigüedad, el método que los aplica y el texto del redondeo **ya
 no están pendientes**: no estaban en el anexo sino en la parte resolutiva de la propia R.M. (arts.
@@ -149,7 +162,7 @@ Lo que se sabe de la estructura, con la procedencia de cada línea:
 
 | Elemento de la tabla | Contenido | ¿Visto en el anexo 2026? |
 |---|---|---|
-| Categorías de vehículo cubiertas | Automóviles, camionetas, station wagons, camiones, buses, ómnibus y remolcadores o tracto camiones | Parcialmente. En el anexo 2026 se vieron las secciones `A1`, `A2`, `A3`, `A4`, `BUSES Y OMNIBUSES` y `CAMIONES`. La de remolcadores o tracto camiones **no** apareció en lo extraído; que la norma la define consta en §1.3.2, y en la R.M. del ejercicio anterior |
+| Categorías de vehículo cubiertas | Las ocho secciones del anexo: `A1`, `A2`, `A3`, `A4`, `BUSES Y OMNIBUSES`, `CAMIONES`, `CAMIONETAS` y `REMOLCADORES` | Sí, las ocho, en la extracción mecánica de las 169 páginas (§1.2.5). Ninguna sección propia de station wagons: van dentro de las categorías por código |
 | Variables que fijan el valor | Categoría, marca, modelo y año de fabricación | Sí, §1.2.2 |
 | Método para años de fabricación recientes | La tabla trae un valor directo en soles para los vehículos de fabricación de los tres años más recientes al ejercicio | Sí: para el ejercicio 2026 son los años de fabricación 2023, 2024 y 2025, en columnas rotuladas `2025 2024 2023` (§1.2.2) |
 | Método para años de fabricación anteriores | El valor se calcula multiplicando **el valor señalado para el año 2025** en el anexo por el factor del año de fabricación (0,7 para 2022 … 0,1 para 2016 y anteriores) | Sí: art. 2.1 de la R.M., transcrito verbatim en §1.4.2. Ojo: la norma dice «el valor del vehículo señalado para el año 2025», no «el del año base» ni «el del año más antiguo» |
@@ -324,31 +337,17 @@ usa el anexo; no se transcribe de fuentes secundarias›`.
 
 ## 3. Qué no cabe hoy
 
-- **La tabla de valores referenciales del anexo 2026 sigue sin estar transcrita fila por fila en
-  este archivo.** Lo que cambió el 2026-08-28 es que ya no es cierto que "no se pudo leer el
-  documento": los tres PDF oficiales se leyeron (procedencia en §1.2), y de ahí salen la
-  estructura confirmada de §1.2.2, las cinco filas de muestra de §1.2.3, la continuación completa
-  de §1.3 y la parte resolutiva completa de §1.4 —con los factores por antigüedad y el redondeo,
-  que eran el hueco que impedía valorizar un vehículo fabricado antes de 2023—. Lo que falta es
-  otra cosa, y son dos cosas distintas:
-  1. **La extracción del anexo principal quedó truncada** a unos 658 000 caracteres: llegaron unas
-     8 525 filas, la sección `CAMIONES` solo hasta la marca IVECO —corte a media fila en «CABINATTO
-     70C14 GNC 148,880 133,990 119,100»— y no llegó ninguna sección de remolcadores o tracto
-     camiones. La copia del anexo que acompaña al PDF de la resolución (§1.4) se trunca aún antes,
-     en `CAMIONES`/HYUNDAI. De la cola no extraída no se afirma nada.
-  2. **La carga fila por fila a `valor_referencial_vehiculo` no se hace retecleando.** Son más de
-     ocho mil cifras normativas; transcribirlas a mano —o, peor, reproducirlas de memoria a partir
-     de una lectura— no es una transcripción confiable, y un valor referencial equivocado se
-     convierte en base imponible equivocada de un padrón entero. Esa carga exige el PDF con sus
-     bytes exactos y una herramienta **mecánica** de extracción de tablas, con la salida comparada
-     contra la fuente; y de todos modos espera a **D-13**, como todo lo de este directorio.
+- **La tabla fila por fila ya está transcrita —mecánicamente— en
+  [`fuentes/tvr-2026/`](fuentes/tvr-2026/README.md)** (§1.2.5): los tres PDF con sus bytes exactos,
+  el extractor y el CSV de 18 043 filas. Lo que queda de ella no es transcribir sino **cargar**:
+  `valor_referencial_vehiculo` espera la decisión **D-13** y la herramienta de publicación con
+  doble firma (ADR-0007), como todo lo de este directorio.
 - La regla de depreciación por antigüedad **ya no está pendiente**: para el ejercicio 2026 no vive
   en el anexo sino en el artículo 2 de la propia resolución, transcrito literal en §1.4.2 — con la
   corrección de que el factor multiplica el valor del **año 2025**, no «el del año base» como este
   archivo conjeturaba a partir del ejercicio anterior.
-- El tipo de cambio de §1.3.1 sí está completo, pero **no basta por sí solo**: convierte a soles el
-  valor de adquisición en moneda extranjera, y ese valor se contrasta luego contra la tabla, que es
-  lo que falta.
+- El tipo de cambio de §1.3.1 convierte a soles el valor de adquisición en moneda extranjera; el
+  contraste de ese valor contra la tabla es una regla de cálculo, no un valor por transcribir.
 - El artículo 32 exige que la base imponible no sea menor a la tabla referencial, pero no impide que
   el valor de adquisición real sea mayor; ese contraste (valor de adquisición vs. tabla) es una
   regla de cálculo, no un valor por transcribir.
@@ -356,6 +355,8 @@ usa el anexo; no se transcribe de fuentes secundarias›`.
   pero no en su texto literal por inciso — ver la nota en la sección 1.1. Si el sistema necesita
   cargar cada inafectación como una fila de catálogo (como en `alcabala.md`), falta antes verificar
   el texto exacto del artículo 37 contra una fuente primaria.
-- Las entradas genéricas de §1.3.4 («OTROS MODELOS…») son filas de la tabla como cualquier otra,
-  pero su valor en soles está en la parte no extraída: `valor_referencial_vehiculo` tendrá que poder
-  representarlas como modelo, sin confundirlas con un modelo real.
+- Las entradas genéricas de §1.3.4 («OTROS MODELOS…») son filas de la tabla como cualquier otra, y
+  están en el CSV con su valor: `valor_referencial_vehiculo` tendrá que poder representarlas como
+  modelo, sin confundirlas con un modelo real. Y hay filas con `modelo_2025` **vacío** —modelos
+  publicados por primera vez para el 2026, p. ej. toda la marca UD en `REMOLCADORES`—: la columna
+  vacía es dato, no defecto.
