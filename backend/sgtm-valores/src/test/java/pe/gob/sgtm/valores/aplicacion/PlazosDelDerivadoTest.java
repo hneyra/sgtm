@@ -16,6 +16,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import pe.gob.sgtm.carga.LectorDeFilasCsv;
 import pe.gob.sgtm.carga.LectorDeFilasCsv.FilaCsv;
 import pe.gob.sgtm.dominio.Ejercicio;
@@ -24,6 +25,7 @@ import pe.gob.sgtm.parametros.IdentificadorDeConjunto;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.valores.dominio.CausalDePrescripcion;
+import pe.gob.sgtm.valores.dominio.TipoValor;
 
 /**
  * Que las claves con las que el derivado publica los plazos son <b>exactamente</b> las que esta
@@ -89,6 +91,45 @@ class PlazosDelDerivadoTest {
                                 + " lo que la otra demuestra es que el derivado lo trae")
                 .isInstanceOf(PlazosParametrizados.PlazoSinParametrizar.class)
                 .hasMessageContaining("PLAZO:PRESCRIPCION-SIN_DECLARACION");
+    }
+
+    @ParameterizedTest
+    @EnumSource(TipoValor.class)
+    @DisplayName(
+            "cada tipo de valor encuentra su plazo de reclamacion, con la clave que el derivado"
+                    + " publica")
+    void cadaTipoDeValorEncuentraSuPlazoDeReclamacion(TipoValor tipo) throws IOException {
+        Map<String, String> publicados = plazosDelDerivado();
+        PlazosParametrizados plazos = new PlazosParametrizados(new DelDerivado(publicados));
+
+        Plazo leido = plazos.aLaFechaDe(UN_DIA).paraNotificar(tipo);
+
+        assertThat(leido.toString())
+                .as(
+                        "PLAZO:NOTIFICACION_VALOR-%s es la llave que esta clase lee; si el derivado"
+                                + " la publica con otra, el plazo esta cargado y la operacion falla"
+                                + " igual",
+                        tipo.codigo())
+                .isEqualTo(publicados.get("NOTIFICACION_VALOR-" + tipo.codigo()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"PREDIAL", "VEHICULAR"})
+    @DisplayName(
+            "el inicio del computo de cada tributo declarado, con la clave que el derivado publica")
+    void elInicioDelComputoDeCadaTributoDeclarado(String tributo) throws IOException {
+        Map<String, String> publicados = plazosDelDerivado();
+        PlazosParametrizados plazos = new PlazosParametrizados(new DelDerivado(publicados));
+
+        Plazo leido = plazos.aLaFechaDe(UN_DIA).inicioDelComputo(tributo);
+
+        assertThat(leido.toString())
+                .as(
+                        "PLAZO:PRESCRIPCION_INICIO-%s es la llave que esta clase lee; arbitrios no"
+                                + " esta aqui a proposito: su numeral del art. 44 es una decision"
+                                + " abierta y el derivado no lo publica",
+                        tributo)
+                .isEqualTo(publicados.get("PRESCRIPCION_INICIO-" + tributo));
     }
 
     @Test

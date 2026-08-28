@@ -113,16 +113,21 @@ derivado publicable de este archivo, con `infra/carga-de-datos/publicar-parametr
 entran por esta herramienta. Estas cuatro filas van a `parametro_tributario`, como la UIT y los
 tramos del predial.
 
-**Lo que todavía no entra, y por qué:**
+**Las dos familias que aquí faltaban ya tienen su archivo.** El plazo para reclamar un valor
+(`NOTIFICACION_VALOR-<tipo de valor>`, arts. 78, 136 y 137 del TUO del Código Tributario y arts.
+25, 29 y 31.2 del TUO de la Ley 26979) está transcrito y publicado desde
+[`valores-plazos-de-reclamacion.md`](valores-plazos-de-reclamacion.md); el inicio del cómputo
+(`PRESCRIPCION_INICIO-<tributo>`, art. 44) desde
+[`prescripcion-inicio-del-computo.md`](prescripcion-inicio-del-computo.md), que además transcribe
+el artículo específico de los siete días para lo tributario municipal (art. 29 del TUO de la Ley
+26979 — la cifra es la misma del art. 14 y esta fila no cambia).
+
+**Lo que sigue sin entrar, y por qué:**
 
 | Familia | Clave que el código pide | Por qué falta |
 |---|---|---|
-| Plazo para reclamar un valor | `NOTIFICACION_VALOR-<tipo de valor>` | Sale de los arts. 137 y 78 del TUO del Código Tributario, y **§1 no los transcribe**: este archivo transcribió los arts. 43 a 46, 104 y 106. Publicarlo hoy sería teclear una cifra de memoria |
-| Inicio del cómputo de la prescripción | `PRESCRIPCION_INICIO-<tributo>` | Es el art. 44, citado en la cabecera y **sin tabla en §1**. El artículo ata el inicio al vencimiento del plazo de la declaración respectiva, que no es el mismo para todos los tributos |
 | Compensación y devolución (art. 43, cuarto plazo) | — | Está transcrito y verificado en §1, y **ningún código lo consume**: `CausalDePrescripcion` no tiene esa causal porque el sistema no tramita solicitudes de devolución. Publicarlo sería una fila que nadie lee, y una fila que nadie lee no se puede comprobar contra su uso |
-
-Las dos primeras se cierran transcribiendo esos artículos en un archivo del corpus y añadiendo sus
-filas al derivado: es escribir la transcripción y firmarla, no construir nada.
+| Inicio del cómputo para arbitrios | `PRESCRIPCION_INICIO-ARBITRIOS` | No tienen declaración jurada del contribuyente, así que el numeral 1 del art. 44 no les aplica; elegir entre el 2 y el 3 es una decisión doctrinaria que `prescripcion-inicio-del-computo.md` §2 deja abierta a propósito |
 
 ## 3. Qué no cabe hoy
 

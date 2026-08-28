@@ -66,3 +66,12 @@ dependencies {
     testImplementation("org.springframework:spring-test")
     testRuntimeOnly(libs.postgresql)
 }
+
+// Las pruebas del derivado publicable leen el CSV del repositorio (#192). Sin declararlo
+// como entrada, editar el CSV deja a `test` en UP-TO-DATE y una rotura del derivado pasa
+// en verde rancio en local; en CI corre fresco y muerde, pero el sintoma local mentiria.
+tasks.test {
+    inputs
+        .file(rootProject.file("../docs/10-negocio/valores-normativos/publicacion/parametros-2026.csv"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
