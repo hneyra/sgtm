@@ -61,6 +61,13 @@ public final class RevisorDeCodigoFuente {
                     "cierre_turno",
                     "cierre_turno_detalle",
                     "expediente_coactivo",
+                    // Con #40: los valores que el expediente agrupa y su historial. Borrar una
+                    // fila de expediente_valor seria borrar la unica traza de que ese valor entro
+                    // en cobranza coactiva -y con ella el motivo por el que su deuda dejo de
+                    // cobrarse por la via ordinaria-; borrar un movimiento seria borrar el estado
+                    // del procedimiento, que no esta en ninguna otra parte.
+                    "expediente_valor",
+                    "expediente_movimiento",
                     "acto_coactivo",
                     "ficha_catastral",
                     "acta_fiscalizacion",
@@ -125,7 +132,21 @@ public final class RevisorDeCodigoFuente {
                     // cobrar. Ver V32 §1.bis.
                     "cierre_caja",
                     "cierre_turno",
-                    "cierre_turno_detalle");
+                    "cierre_turno_detalle",
+                    // Y el expediente coactivo con sus valores y su historial, con #40. Cuarta vez
+                    // seguida y por el mismo camino: V33 le retira a `expediente_coactivo` las
+                    // columnas de estado que V3 le habia puesto -decian ABIERTO para siempre- y le
+                    // revoca el UPDATE junto con el de `expediente_valor`. El estado se deriva de
+                    // `expediente_movimiento`, que solo se agrega.
+                    //
+                    // Aqui el REVOKE SI se pudo, al reves que con `cierre_caja` (V32 §1.bis):
+                    // ninguna fila del expediente necesita `FOR UPDATE`, porque lo que se
+                    // serializa es el correlativo y eso lo hace su propia tabla con un UPDATE
+                    // atomico. Si algun dia hiciera falta bloquear el expediente, esta lista
+                    // pasaria a ser lo unico que lo protege, como pasa con la caja.
+                    "expediente_coactivo",
+                    "expediente_valor",
+                    "expediente_movimiento");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =

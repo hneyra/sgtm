@@ -23,6 +23,20 @@ public interface MovimientoDeValorRepository {
      */
     MovimientoDeValor registrarPase(MovimientoDeValor movimiento);
 
+    /**
+     * Registra la respuesta de coactiva al pase: {@link TipoDeMovimiento#ACO} o {@link
+     * TipoDeMovimiento#RCO} (#40).
+     *
+     * <p><b>No es idempotente, y no puede serlo:</b> el indice unico de V28 es <b>parcial</b> sobre
+     * {@code tipo = 'PCO'} a proposito. Un valor tiene un solo pase, pero puede ser rechazado,
+     * vuelto a pasar y aceptado despues, y cada uno de esos actos es una fila. Quien llama decide
+     * si repetirlo tiene sentido; lo que no puede es editar el anterior.
+     *
+     * @throws IllegalArgumentException si el movimiento es un {@code PCO}: ese va por {@link
+     *     #registrarPase}, que es el que la base serializa
+     */
+    MovimientoDeValor registrarRespuesta(MovimientoDeValor movimiento);
+
     /** El pase a coactiva de este valor, si ya se dio. */
     Optional<MovimientoDeValor> paseDe(long valorId);
 
