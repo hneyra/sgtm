@@ -45,9 +45,15 @@ describe('las papeletas del mock solo publican campos de PapeletaResource', () =
     expect(paginado).not.toBeNull();
     expect(paginado?.contenido.length).toBeGreaterThan(0);
     for (const fila of paginado?.contenido ?? []) {
-      for (const clave of Object.keys(fila)) {
+      // En las DOS direcciones: ninguna clave sobra Y las veinte estan todas.
+      // La primera version solo miraba lo que sobraba, asi que quitarle un
+      // campo al mock —`predioId`— dejaba las pruebas en verde (adversaria
+      // de #379).
+      const claves = Object.keys(fila);
+      for (const clave of claves) {
         expect(CAMPOS_DE_PAPELETA_RESOURCE.has(clave)).toBe(true);
       }
+      expect(new Set(claves).size).toBe(CAMPOS_DE_PAPELETA_RESOURCE.size);
     }
   });
 });

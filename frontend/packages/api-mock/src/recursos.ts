@@ -1720,7 +1720,10 @@ function recaudacionPorArea(): Readonly<Record<string, unknown>> {
       // `FilaDePartida.areaNombre` es el unico texto explicativo que el
       // recurso trae para esta fila (javadoc del backend): se llena con la
       // «Descripción» del prototipo, que es la partida en prosa.
-      areaNombre: descripcion || null,
+      // Nulo a proposito: el backend documenta que `areaNombre` sale nulo en lo
+      // tributario, y un nombre inventado —reusar la descripcion de la partida—
+      // se copia a un reporte presupuestal sin que nadie lo note.
+      areaNombre: null,
       partida: partida && partida !== '—' ? partida : null,
       tributo: descripcion || 'SIN PARTIDA',
       cobrado: importe(monto),
