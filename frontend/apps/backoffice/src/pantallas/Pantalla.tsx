@@ -26,6 +26,8 @@ import { useEjercicio } from '../app/ejercicio';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
 import { composicionDe } from './composicion';
+import type { ComposicionDeOpcion } from './composicion';
+import { PanelLateral } from './bloques/PanelLateral';
 import { useDatosDeOperacion } from './useDatosDeOperacion';
 import { useDatosDePantalla } from './useDatosDePantalla';
 import { BarraDeAcciones } from './bloques/BarraDeAcciones';
@@ -255,6 +257,10 @@ function Bloques({
 }) {
   const [pestana, fijarPestana] = useState(0);
   const [cerradas, fijarCerradas] = useState<Readonly<Record<string, boolean>>>({});
+  // El alta abierta en panel, si hay alguna: cual, y de que fila cuelga. Una
+  // sola a la vez —dos paneles encima del otro no se pueden operar—.
+  const [altaAbierta, fijarAltaAbierta] = useState<AltaAbierta | null>(null);
+  const [flujoAbierto, fijarFlujoAbierto] = useState(false);
   const [busqueda, fijarBusqueda] = useSearchParams();
   const navegar = useNavigate();
   const catalogo = useCatalogoVisible();
@@ -270,6 +276,9 @@ function Bloques({
   // Los niveles de accesibilidad apagan **acciones**, no solo opciones: ver una
   // ficha sin poder modificarla es un perfil de consulta, no un error.
   const puedeEscribirAqui = catalogo.puedeEscribir(estructura.id);
+  // Dar de alta exige `registro`, no cualquier escritura: es lo que exigen los
+  // `POST` del backend. **Sin el, el panel no existe** —no se dibuja apagado—.
+  const puedeRegistrarAqui = catalogo.puedeRegistrar(estructura.id);
   // Que campos puede mandar esta opcion, y si lo que guarda es global a la
   // sesion. Sin declaracion, el formulario no se escribe y solo viaja la
   // observacion: negacion por omision, como la autorizacion del manual.
@@ -288,6 +297,7 @@ function Bloques({
     operacion === undefined ? {} : parametrosDeBusqueda(operacion, codigo, busqueda),
     {
       campos: declarada?.campos ?? {},
+      tablas: declarada?.tablas ?? {},
       ...(declarada?.cambiaElEjercicio === true ? { alGuardar: trabajo.adoptar } : {}),
     },
   );
@@ -325,6 +335,16 @@ function Bloques({
     ) : (
       formulario
     );
+  // Abrir un alta: el flujo guiado sustituye a la pantalla, el panel se pone al
+  // lado. Las dos cosas se piden por el rotulo de la accion del catalogo.
+  const abrirAlta = (accion: string): void => {
+    if (composicion.flujo?.accion === accion) {
+      fijarFlujoAbierto(true);
+      return;
+    }
+    const indice = (composicion.altas ?? []).findIndex((alta) => alta.accion === accion);
+    if (indice >= 0) fijarAltaAbierta({ indice });
+  };
   // Tras cobrar, el foco vuelve al campo de identificacion: entra el siguiente
   // contribuyente y hay que poder teclear su documento sin buscar donde.
   const refDeBusqueda = useFocoTrasGuardar(escritura.enviada);
@@ -343,6 +363,14 @@ function Bloques({
   // el sin permiso: no hay datos que ensenar.
   if (estado === 'no-disponible') {
     return <Aviso titulo={NO_DISPONIBLE.titulo} detalle={NO_DISPONIBLE.detalle} />;
+  }
+
+  // El alta guiada **sustituye a los bloques** mientras dura: son cuatro pasos
+  // que validan contra el territorio, y no caben al lado de la pantalla que se
+  // estaba mirando (#320). Solo con privilegio de registro, como el panel.
+  if (flujoAbierto && composicion.flujo !== undefined && puedeRegistrarAqui) {
+    const Asistente = composicion.flujo.Asistente;
+    return <Asistente onCerrar={() => fijarFlujoAbierto(false)} />;
   }
 
   if (estado === 'error') {
@@ -458,6 +486,14 @@ function Bloques({
               }),
             )
           }
+          {...(composicion.altaDeFila !== undefined && puedeRegistrarAqui
+            ? {
+                altaDeFila: {
+                  etiqueta: composicion.altaDeFila.accion,
+                  onAbrir: (clave: string) => fijarAltaAbierta({ deFila: true, contexto: clave }),
+                },
+              }
+            : {})}
         />
       )}
 
@@ -529,6 +565,11 @@ function Bloques({
         <BarraDeAcciones
           acciones={estructura.acciones}
           escritura={escritura}
+          /* Las acciones que el prototipo dibuja y que ahora abren un alta.
+             **Solo con privilegio de registro**: sin el se quedan como estaban,
+             dibujadas y apagadas, y no aparece un formulario que el servidor va
+             a rechazar con 403. */
+          {...(puedeRegistrarAqui ? { altas: altasDeLaBarra(composicion, abrirAlta) } : {})}
           // Sobre cuantos actua: lo cuenta el backend —«47 valores»— y aqui solo
           // se traslada. Contar las filas dibujadas diria «20», que es cuantas
           // caben en la pagina, no cuantas se van a emitir.
@@ -545,7 +586,75 @@ function Bloques({
             : {})}
         />
       )}
+
+      {altaAbierta !== null && puedeRegistrarAqui && (
+        <PanelDeAlta
+          composicion={composicion}
+          abierta={altaAbierta}
+          onCerrar={() => fijarAltaAbierta(null)}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * Las acciones del catalogo que abren algo, con que abren.
+ *
+ * Se indexa por el rotulo de la accion porque es lo que el usuario lee y lo que
+ * el catalogo dibuja —el mismo criterio que `esIrreversible`—, y porque asi el
+ * alta **es** el boton que ya existia en vez de uno nuevo al lado.
+ */
+function altasDeLaBarra(
+  composicion: ComposicionDeOpcion,
+  abrir: (accion: string) => void,
+): Readonly<Record<string, () => void>> {
+  const acciones: Record<string, () => void> = {};
+  if (composicion.flujo !== undefined) {
+    acciones[composicion.flujo.accion] = () => abrir(composicion.flujo?.accion ?? '');
+  }
+  for (const alta of composicion.altas ?? []) acciones[alta.accion] = () => abrir(alta.accion);
+  return acciones;
+}
+
+/** Cual de las altas de la opcion esta abierta, y de que fila cuelga. */
+type AltaAbierta =
+  | { readonly indice: number; readonly deFila?: false; readonly contexto?: undefined }
+  | { readonly deFila: true; readonly contexto: string; readonly indice?: undefined };
+
+/**
+ * El panel de la alta abierta.
+ *
+ * Vive en su propio componente y no en linea porque el formulario de dentro
+ * llama a `useEscritura`, y un hook no se llama a veces: montarlo solo cuando el
+ * panel esta abierto es lo que evita que la escritura exista mientras nadie la
+ * pidio.
+ */
+function PanelDeAlta({
+  composicion,
+  abierta,
+  onCerrar,
+}: {
+  readonly composicion: ComposicionDeOpcion;
+  readonly abierta: AltaAbierta;
+  readonly onCerrar: () => void;
+}) {
+  const alta =
+    abierta.deFila === true ? composicion.altaDeFila : composicion.altas?.[abierta.indice];
+  if (alta === undefined) return null;
+  const Formulario = alta.Formulario;
+
+  return (
+    <PanelLateral
+      titulo={alta.titulo}
+      {...(alta.descripcion === undefined ? {} : { descripcion: alta.descripcion })}
+      onCerrar={onCerrar}
+    >
+      <Formulario
+        {...(abierta.contexto === undefined ? {} : { contexto: abierta.contexto })}
+        onCerrar={onCerrar}
+      />
+    </PanelLateral>
   );
 }
 

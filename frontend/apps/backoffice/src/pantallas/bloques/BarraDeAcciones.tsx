@@ -47,11 +47,34 @@ export interface BarraDeAccionesProps {
    * «Deshacer»— se quedan como estaban, apagadas y visibles.
    */
   readonly enlace?: { readonly etiqueta: string; readonly ruta: string };
+  /**
+   * Las acciones del catalogo que **abren un alta**, por su rotulo.
+   *
+   * No es un boton mas: es el que el prototipo ya dibuja y hasta ahora estaba
+   * muerto —«Nuevo sector» en el catalogo territorial—. Anadir otro al lado
+   * dejaria dos con el mismo texto, uno vivo y uno apagado, y quien atiende no
+   * tendria como distinguirlos.
+   *
+   * Se pasa **solo si quien mira puede registrar**: sin ese privilegio la accion
+   * se queda como estaba, dibujada y apagada, y no aparece un formulario que el
+   * servidor va a rechazar con 403.
+   */
+  readonly altas?: Readonly<Record<string, () => void>>;
 }
 
-export function BarraDeAcciones({ acciones, escritura, alcance, enlace }: BarraDeAccionesProps) {
+export function BarraDeAcciones({
+  acciones,
+  escritura,
+  alcance,
+  enlace,
+  altas,
+}: BarraDeAccionesProps) {
   const [porConfirmar, fijarPorConfirmar] = useState<string | null>(null);
   const escribe = escritura?.operacion !== undefined;
+  // Si el acto de la pantalla es abrir un alta, la ultima accion deja de ser la
+  // primaria: si no, quedarian dos botones primarios y uno de ellos apagado.
+  const altaEsElActo =
+    enlace === undefined && !escribe && acciones.some((accion) => altas?.[accion] !== undefined);
 
   return (
     <>
@@ -106,10 +129,26 @@ export function BarraDeAcciones({ acciones, escritura, alcance, enlace }: BarraD
 
       <div className="sgtm-acciones" data-no-imprimible="1">
         {acciones.map((accion, i) => {
+          // Una accion que abre un alta **es** el acto de esta pantalla cuando no
+          // hay otro: si la pantalla no escribe (es de lectura) y no lleva a otra
+          // opcion, la primaria es esta. Con enlace o con escritura propia se
+          // queda de secundaria: dos primarias dirian que hay dos actos.
+          const abrirAlta = altas?.[accion];
+          if (abrirAlta !== undefined) {
+            return (
+              <Boton
+                key={accion}
+                variante={altaEsElActo ? 'primario' : 'secundario'}
+                onClick={abrirAlta}
+              >
+                {accion}
+              </Boton>
+            );
+          }
           // «La ultima es la primaria» (FRO-03 §5), salvo cuando el acto de la
           // pantalla es el enlace: dos botones primarios en la misma barra
           // dirian que hay dos actos, y uno de los dos esta apagado.
-          const esPrimaria = enlace === undefined && i === acciones.length - 1;
+          const esPrimaria = !altaEsElActo && enlace === undefined && i === acciones.length - 1;
           const habilitada = esPrimaria && escribe && (escritura?.puedeEnviar ?? false);
           return (
             <Boton

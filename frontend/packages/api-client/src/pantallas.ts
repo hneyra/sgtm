@@ -71,6 +71,18 @@ export interface FilaDePanel {
 
 export interface DatosDeTabla {
   readonly filas: readonly (readonly Celda[])[];
+  /**
+   * Lo que **cuelga** de cada fila, para las tablas cuyas filas se despliegan.
+   *
+   * Va en paralelo a `filas` —`detalles[i]` es el de `filas[i]`— y es opcional
+   * entera: una tabla sin esto se dibuja exactamente como se dibujaba. La usa
+   * el catalogo territorial, donde de un sector cuelgan sus manzanas (#321).
+   *
+   * **No lleva ninguna cifra que la interfaz haya compuesto** (RNF-083): lo
+   * que se ve aqui es lo que el servidor mando, y lo que el servidor no mande
+   * se dice que falta.
+   */
+  readonly detalles?: readonly DetalleDeFila[];
   /** Texto del conteo tal como lo redacta el backend: «3 vías registradas». */
   readonly conteo?: string;
   /**
@@ -82,6 +94,30 @@ export interface DatosDeTabla {
    * respuesta no la traiga, no hay paginador que dibujar.
    */
   readonly paginacion?: Paginacion;
+}
+
+/**
+ * Lo que cuelga de una fila desplegable: sus piezas, y con que clave se abre.
+ *
+ * `nota` es la mitad honesta de la estructura: cuando el servidor **todavia no
+ * publica** lo que cuelga —hoy, las manzanas de un sector: hay `POST` para
+ * darlas de alta y ningun `GET` que las liste—, la fila se despliega igual y
+ * dice que falta. Un desplegable vacio sin explicacion se lee como «este sector
+ * no tiene manzanas», que seria falso.
+ */
+export interface DetalleDeFila {
+  /** El registro de la fila, como lo identifica el backend: el codigo del sector. */
+  readonly clave: string;
+  readonly titulo: string;
+  readonly items: readonly ItemDeDetalle[];
+  readonly nota?: string;
+}
+
+/** Una pieza de lo que cuelga de una fila: su rotulo y, si el servidor lo cuenta, su conteo. */
+export interface ItemDeDetalle {
+  readonly texto: string;
+  /** Conteo o dato secundario, **tal como llego**: aqui no se suma nada. */
+  readonly nota?: string;
 }
 
 export interface Paginacion {

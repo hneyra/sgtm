@@ -105,6 +105,23 @@ el campo de observación, que el envío se deshabilita mientras esté vacío, y 
 error del backend por observación faltante nunca debería llegar a verse. Si se ve, es un defecto
 del formulario.
 
+**El camino de escritura es uno solo —`useEscritura`— y lo que puede mandar cada opción está
+declarado campo a campo** en `pantallas/escrituras.ts`. Lo que no está declarado no viaja y ni
+siquiera se puede escribir en el formulario: es lo que impide que una contraseña acabe en el
+estado de React cuando el backend no la pide. Desde #320 la declaración cubre tres formas:
+
+| Forma | Qué declara | Ejemplo |
+|---|---|---|
+| `campos` | Un campo plano, con su nombre en el cuerpo | `documentoOrigen` |
+| `tablas` | Una **lista de filas**, con su lista blanca por columna | los pisos de una ficha |
+| `tablas` + `unica` | Un **bloque** que el backend declara como objeto, no lista | el `titular` de un alta |
+
+La tabla existe porque media docena de formularios del manual son una tabla, y sin ella cada uno
+tenía que armar su cuerpo entero a mano con `cuerpo` —la salida de emergencia—, y entonces la
+lista blanca deja de decir qué puede escribir esa pantalla. `exigir` completa el cuadro: lo que
+además de la observación hace falta para poder guardar, dicho como el motivo por el que todavía no
+se puede, en vez de dejar pulsar y contestar con un 422 a algo que la pantalla ya sabía.
+
 ## 7. Accesibilidad
 
 | Regla | Verificación |

@@ -94,6 +94,21 @@ export function puedeEscribir(permisos: PermisosEfectivos, opcion: string): bool
   return privilegios.includes('registro') || privilegios.includes('modificacion');
 }
 
+/**
+ * Se puede **dar de alta** solo con `registro`.
+ *
+ * Es mas estricto que {@link puedeEscribir} a proposito, y no por simetria: el
+ * backend exige `REGISTRO` en los tres `POST` del catalogo territorial y en el
+ * alta de una ficha (`SectorController`, `ViaController`, `FichaController`).
+ * Un perfil que solo corrige lo que ya existe —`modificacion`— puede editar una
+ * via y no puede crear un sector, y ofrecerle el panel de alta seria ofrecerle
+ * un formulario que el servidor va a rechazar con 403 despues de rellenarlo.
+ */
+export function puedeRegistrar(permisos: PermisosEfectivos, opcion: string): boolean {
+  if (permisos.sinProveedor) return true;
+  return privilegiosDe(permisos, opcion).includes('registro');
+}
+
 /** El catalogo que este usuario puede ver. Un modulo sin opciones visibles no aparece. */
 export function catalogoVisible(
   modulos: readonly ModuloDelCatalogo[],

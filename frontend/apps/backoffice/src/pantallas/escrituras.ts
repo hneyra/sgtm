@@ -1,4 +1,4 @@
-import type { CampoDelCuerpo } from './escritura';
+import type { CampoDelCuerpo, TablaDelCuerpo } from './escritura';
 
 /**
  * Que puede escribir cada opcion, declarado una a una.
@@ -12,10 +12,18 @@ import type { CampoDelCuerpo } from './escritura';
  * Dos nombres por campo porque son dos vocabularios: la clave del catalogo sale
  * del prototipo (`cambiarAlAno`, de «Cambiar al año») y el nombre del cuerpo lo
  * declara el backend (`ejercicio`). Ninguno cede; la traduccion vive aqui.
+ *
+ * **La clave es el id de la operacion**, que para las 134 opciones del manual es
+ * tambien el id de la opcion del catalogo (`catalogo.test.ts` lo exige). Las
+ * escrituras que **no** tienen pantalla propia —el alta de un sector, de una via
+ * o de una ficha, que se abren desde la pantalla de su catalogo (#320, #321)—
+ * entran por su `operationId`, y por eso no colisionan con ninguna opcion.
  */
 export interface EscrituraDeclarada {
   /** Clave del catalogo → como viaja en el cuerpo. Lo que no este aqui no viaja. */
   readonly campos: Readonly<Record<string, CampoDelCuerpo>>;
+  /** Las tablas del formulario, con su propia lista blanca por columna. */
+  readonly tablas?: Readonly<Record<string, TablaDelCuerpo>>;
   /** Lo guardado cambia el ejercicio de trabajo de la sesion, no solo esta pantalla. */
   readonly cambiaElEjercicio?: boolean;
   /** Aviso que la pantalla muestra antes del formulario, si hace falta explicar algo. */
@@ -78,6 +86,56 @@ const RESULTADO_DE_NOTIFICACION_DEL_BACKEND: Readonly<Record<string, string>> = 
 
 const resultadoDeNotificacionDe = (texto: string): string | undefined =>
   RESULTADO_DE_NOTIFICACION_DEL_BACKEND[texto];
+
+/**
+ * La tabla de pisos, que el alta de una ficha y su actualizacion declaran igual.
+ *
+ * Es la misma que `DeclaracionDeFicha.ConstruccionDeclarada` acepta en los dos verbos, y se
+ * escribe una vez por la misma razon que el backend la escribio una vez: dos copias acaban
+ * aceptando cosas distintas.
+ *
+ * **Ni un importe** (regla 5, D-02a): piso, area, año, material, estado y las siete
+ * categorias de una letra. Cuanto vale cada categoria es un valor unitario, y eso vive en
+ * datos versionados, no en un formulario.
+ */
+const CONSTRUCCIONES: TablaDelCuerpo = {
+  campo: 'construcciones',
+  columnas: {
+    piso: { campo: 'piso' },
+    areaConstruida: { campo: 'areaConstruida' },
+    anioConstruccion: { campo: 'anioConstruccion', entero: true },
+    material: { campo: 'material' },
+    estadoConservacion: { campo: 'estadoConservacion' },
+    categoriaMuros: { campo: 'categoriaMuros' },
+    categoriaTechos: { campo: 'categoriaTechos' },
+    categoriaPisos: { campo: 'categoriaPisos' },
+    categoriaPuertas: { campo: 'categoriaPuertas' },
+    categoriaRevestimientos: { campo: 'categoriaRevestimientos' },
+    categoriaBanios: { campo: 'categoriaBanios' },
+    categoriaInstalaciones: { campo: 'categoriaInstalaciones' },
+  },
+};
+
+/**
+ * El titular inicial del predio: un bloque, no una lista (`unica`).
+ *
+ * Es **opcional en el backend a proposito**: en un levantamiento catastral se ficha el
+ * predio antes de identificar a su propietario, y exigirlo obligaria al tecnico a
+ * inventarse uno (DAT-01 §4.2). Por eso el asistente deja cerrar el alta sin titular, y por
+ * eso el bloque no viaja si no se escribio ninguno.
+ */
+const TITULAR: TablaDelCuerpo = {
+  campo: 'titular',
+  unica: true,
+  columnas: {
+    codigoContribuyente: { campo: 'codigoContribuyente' },
+    condicion: { campo: 'condicion' },
+    // El porcentaje de propiedad es un porcentaje, no un importe: viaja como texto, igual
+    // que el resto de las medidas. La interfaz no lo compone ni lo reparte (RNF-083).
+    porcentaje: { campo: 'porcentaje' },
+    documentoOrigen: { campo: 'documentoOrigen' },
+  },
+};
 
 const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   /**
@@ -175,6 +233,104 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   // `pase_coactiva` no esta aqui a proposito, aunque `PeticionDeMovimiento` (#39) es un cuerpo
   // tan plano como el de `notificacion_valores`: ver `pantallas/valores/index.ts` para por que
   // conectarla hoy la haria menos segura, no mas.
+
+  /* ── Catastro: el territorio y la ficha (#320, #321) ─────────────────── */
+
+  /**
+   * Alta de sector (`POST /catastro/sectores`, #299).
+   *
+   * Tres campos, que son los tres que `SectorController.PeticionDeSector` admite de un
+   * alta. `activo` **no se declara**: un sector nace activo y el controlador ignora el del
+   * cuerpo —darlo de alta ya retirado seria un alta y una baja en un solo acto—; para
+   * retirarlo esta el `PUT`, que ademas exige el privilegio de eliminacion.
+   */
+  registrar_sector: {
+    campos: {
+      codigo: { campo: 'codigo' },
+      nombre: { campo: 'nombre' },
+      zona: { campo: 'zona' },
+    },
+  },
+
+  /**
+   * Alta de manzana (`POST /catastro/sectores/{codigo}/manzanas`, #299).
+   *
+   * Un solo campo: el sector va en la ruta —por su codigo, que es lo que se teclea— y
+   * `PeticionDeManzana` no lleva nada mas. No hay `PUT`: el codigo de una manzana es un
+   * tramo del codigo catastral de sus predios, asi que cambiarlo los desalinearia todos.
+   */
+  registrar_manzana: {
+    campos: { codigo: { campo: 'codigo' } },
+  },
+
+  /**
+   * Alta de via (`POST /catastro/vias`, #291).
+   *
+   * `sector`, `zonaDeArancel` y las cuadras que dibuja el prototipo no viajan porque
+   * `PeticionDeVia` no las acepta —`ViaResource` tampoco las publica— y `activa` tampoco:
+   * una via nace activa, igual que un sector.
+   */
+  registrar_via: {
+    campos: {
+      codigo: { campo: 'codigo' },
+      tipo: { campo: 'tipo' },
+      nombre: { campo: 'nombre' },
+      ubigeo: { campo: 'ubigeo' },
+    },
+  },
+
+  /**
+   * Alta de ficha urbana (`POST /catastro/fichas/urbana`, #300).
+   *
+   * Es la lista blanca de `FichaController.PeticionDeAlta` **hasta donde el alta guiada
+   * llega**: el predio, la primera version de la ficha y su titular. Lo que no esta:
+   *
+   * - `instalaciones` (cercos, piscinas): el asistente no las captura todavia, y una lista
+   *   ausente en un alta es una lista vacia, que es exactamente lo correcto.
+   * - `economico`, `bienesComunes`, `rural`: son el detalle de los **otros tres** tipos de
+   *   ficha, y mandar el de otro tipo es 422, no un campo ignorado.
+   *
+   * `anioConstruccion` de un piso viaja como entero porque el backend lo declara `Integer`;
+   * el area construida, **nunca**: es una medida decimal y convertirla perderia centimetros
+   * (regla 1 aplicada a las medidas).
+   */
+  registrar_ficha_urbana: {
+    campos: {
+      codRefCatastral: { campo: 'codRefCatastral' },
+      tipoPredio: { campo: 'tipoPredio' },
+      direccion: { campo: 'direccion' },
+      codigoDeVia: { campo: 'codigoDeVia' },
+      numeroMunicipal: { campo: 'numeroMunicipal' },
+      codigoDeSector: { campo: 'codigoDeSector' },
+      codigoDeManzana: { campo: 'codigoDeManzana' },
+      lote: { campo: 'lote' },
+      areaTerreno: { campo: 'areaTerreno' },
+      uso: { campo: 'uso' },
+      denominacion: { campo: 'denominacion' },
+      vigenciaDesde: { campo: 'vigenciaDesde' },
+      origen: { campo: 'origen' },
+      documentoOrigen: { campo: 'documentoOrigen' },
+    },
+    tablas: { construcciones: CONSTRUCCIONES, titular: TITULAR },
+  },
+
+  /**
+   * Actualizacion del catastro (`PUT /catastro/fichas/{codigo}/actualizacion`, #71).
+   *
+   * Estaba armando su cuerpo a mano —la salida de emergencia de `useEscritura`— porque el
+   * camino declarado solo llevaba campos planos. Con la tabla declarada ya no hace falta, y
+   * eso importa por una razon concreta: **la lista blanca vuelve a decir que puede escribir
+   * esta pantalla**, y la columna que el prototipo dibuja y el controlador no acepta (mes,
+   * año, MEP, ECS, ECC, UCA) queda fuera por declaracion y no por acordarse.
+   */
+  actualizacion_catastro: {
+    campos: {
+      origen: { campo: 'origen' },
+      documentoOrigen: { campo: 'documentoOrigen' },
+      vigenciaDesde: { campo: 'vigenciaDesde' },
+    },
+    tablas: { construcciones: CONSTRUCCIONES },
+  },
 };
 
 export const escrituraDe = (opcion: string): EscrituraDeclarada | undefined => ESCRITURAS[opcion];

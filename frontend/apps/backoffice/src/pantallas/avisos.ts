@@ -37,6 +37,25 @@ const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
     detalle:
       'Estas diferencias son las que el proceso determinó. Mientras no se transfieran, la deuda del contribuyente y su declaración siguen siendo las que había antes.',
   },
+  /**
+   * Los conteos del catalogo territorial no cuadran con el padron, y **esta
+   * bien** (#309, #321).
+   *
+   * `SectorConConteos` lo dice sin rodeos: un predio con el sector sin asignar
+   * no cuenta en ninguno —no se reparte y no se imputa al sector de su manzana—,
+   * asi que sumar los predios de todos los sectores puede dar menos que el
+   * padron. Sin esta linea, quien cuadra cifras lee la diferencia como un error
+   * de la tabla; con ella la lee como lo que es: predios sin ubicacion
+   * territorial asignada, que es justo lo que catastro tiene que revisar.
+   *
+   * Y los lotes cuentan pares (manzana, lote) distintos: tres departamentos de
+   * un mismo lote son tres predios y **un** lote.
+   */
+  sectores: {
+    titulo: 'Los conteos son del catastro, no del padrón',
+    detalle:
+      'Un predio sin sector asignado no cuenta en ninguno de estos sectores: no se reparte ni se imputa al sector de su manzana, así que la suma de «Predios inscritos» puede ser menor que el padrón. Es información —hay predios sin ubicación territorial—, no un descuadre. «Lotes» cuenta lotes distintos: tres departamentos de un mismo lote son tres predios y un lote.',
+  },
   fisc_historico: {
     titulo: 'Versiones del proceso, no del padrón',
     detalle:

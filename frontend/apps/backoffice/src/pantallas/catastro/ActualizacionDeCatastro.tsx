@@ -1,38 +1,43 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Aviso, Boton, Campo, Esqueleto } from '@sgtm/design-system';
+import { Aviso, Boton, Campo } from '@sgtm/design-system';
 import { pedirOperacion } from '@sgtm/api-client';
 import type { EstructuraDePantalla } from '../../catalogo';
 import { useCatalogoVisible } from '../../app/sesion/useCatalogoVisible';
 import { useEscritura } from '../escritura';
+import type { Escritura } from '../escritura';
+import { escrituraDe } from '../escrituras';
 import { BarraDeAcciones } from '../bloques/BarraDeAcciones';
 import { FechaDeCalculo } from '../bloques/FechaDeCalculo';
 import { SIN_PERMISO, textoDeError } from '../estados';
 import { hoy } from '../seguridad/listado';
 import { leerFicha } from './fichas';
 import { CodigoCatastral } from './CodigoCatastral';
+import { CONSTRUCCIONES, TablaDePisos, filaDeConstruccionLeida } from './TablaDePisos';
 
 /**
  * Actualización del catastro: `PUT /catastro/fichas/{codigo}/actualizacion` (#71).
  *
- * **El cuerpo no cabe en campos planos.** El backend recibe una lista de
- * construcciones —piso, área y siete categorías de una letra—, y
- * `CampoDelCuerpo` solo sabe de texto y enteros. Vive en su propio componente
- * por lo mismo que `PermisosMatrix` y `MiembrosDeGrupo`.
+ * **El cuerpo no cabe en campos planos**: el backend recibe una lista de
+ * construcciones —piso, área y siete categorías de una letra—. Antes esa lista
+ * la armaba esta pantalla a mano con `cuerpo`, la salida de emergencia de
+ * `useEscritura`, porque el camino declarado solo llevaba campos sueltos. Ya no:
+ * la tabla está declarada en `pantallas/escrituras.ts` con su lista blanca **por
+ * columna** (#320), y con ella la lista blanca vuelve a decir qué puede escribir
+ * esta pantalla en vez de fiarse de lo que este archivo recuerde armar.
  *
- * **Guardar reemplaza la lista entera de pisos, no solo el que cambia**: es
- * lo que dice `ActualizacionController` (`construcciones: null` significa
- * «lo mismo que tenía»; una lista significa esa lista, completa). Por eso la
- * pantalla carga primero los pisos de la versión vigente —de la misma
- * lectura que ya usa `ficha_urbana`— y dejar de declarar uno aquí es
- * borrarlo de la ficha, no «no tocarlo».
+ * **Guardar reemplaza la lista entera de pisos, no solo el que cambia**: es lo
+ * que dice `ActualizacionController` (`construcciones: null` significa «lo mismo
+ * que tenía»; una lista significa esa lista, completa). Por eso la pantalla
+ * carga primero los pisos de la versión vigente —de la misma lectura que ya usa
+ * `ficha_urbana`— y dejar de declarar uno aquí es borrarlo de la ficha, no «no
+ * tocarlo».
  *
  * Lo que el prototipo dibuja y esta pantalla **no manda**, porque
- * `ActualizacionController.PeticionDeActualizacion` no lo acepta: mes, año,
- * MEP, ECS, ECC, UCA y la pestaña entera de «Otras instalaciones». Un campo
- * que el backend no pide no entra por aquí (lista blanca, regla del
- * catálogo).
+ * `ActualizacionController.PeticionDeActualizacion` no lo acepta: mes, año, MEP,
+ * ECS, ECC, UCA y la pestaña entera de «Otras instalaciones». Un campo que el
+ * backend no pide no entra por aquí.
  */
 export function ActualizacionDeCatastro({
   estructura,
@@ -42,6 +47,7 @@ export function ActualizacionDeCatastro({
   const { codigo } = useParams();
   const catalogo = useCatalogoVisible();
   const puedeEscribirAqui = catalogo.puedeEscribir(estructura.id);
+  const declarada = escrituraDe(estructura.id);
 
   const actual = useQuery({
     queryKey: ['ficha-urbana-para-actualizar', codigo],
@@ -52,37 +58,30 @@ export function ActualizacionDeCatastro({
     enabled: codigo !== undefined && codigo !== '',
   });
 
-  const [filas, fijarFilas] = useState<readonly FilaConstruccion[] | null>(null);
-  const [origen, fijarOrigen] = useState('DECLARACION_JURADA');
-  const [documentoOrigen, fijarDocumentoOrigen] = useState('');
-  const [vigenciaDesde, fijarVigenciaDesde] = useState('');
-  const [borrador, fijarBorrador] = useState<FilaConstruccion>(FILA_VACIA);
-  const [errorDeFila, fijarErrorDeFila] = useState<string | undefined>(undefined);
-
-  // Se siembra una sola vez, con los pisos de la version vigente: guardar
-  // sin haberlos visto los borraria de la ficha sin que nadie lo pidiera.
-  if (filas === null && actual.data !== undefined) {
-    fijarFilas(actual.data.construcciones.map(filaDeConstruccionLeida));
-  }
-  const filasActuales = filas ?? [];
+  const [sembrada, fijarSembrada] = useState(false);
 
   const escritura = useEscritura(
     puedeEscribirAqui ? 'actualizacion_catastro' : undefined,
     codigo === undefined ? {} : { codigo },
     {
-      cuerpo: () => {
-        if (documentoOrigen.trim() === '') {
-          throw new Error('Falta el documento de origen (acta, resolución o declaración jurada).');
-        }
-        return {
-          documentoOrigen: documentoOrigen.trim(),
-          origen,
-          ...(vigenciaDesde.trim() === '' ? {} : { vigenciaDesde: vigenciaDesde.trim() }),
-          construcciones: filasActuales.map(nivelDe),
-        };
-      },
+      campos: declarada?.campos ?? {},
+      tablas: declarada?.tablas ?? {},
+      exigir: (borrador) =>
+        (borrador['documentoOrigen'] ?? '').trim() === ''
+          ? 'Falta el documento de origen (acta, resolución o declaración jurada).'
+          : undefined,
     },
   );
+
+  // Se siembra una sola vez, con los pisos de la versión vigente: guardar sin
+  // haberlos visto los borraría de la ficha sin que nadie lo pidiera. El origen
+  // por omisión entra igual, porque el backend lo exige y el prototipo lo pinta
+  // con un valor elegido.
+  if (!sembrada && actual.data !== undefined) {
+    fijarSembrada(true);
+    escritura.fijarFilas(CONSTRUCCIONES, actual.data.construcciones.map(filaDeConstruccionLeida));
+    escritura.fijarCampo('origen', ORIGEN_POR_OMISION);
+  }
 
   if (!catalogo.puedeVer(estructura.id)) {
     return <Aviso tipo="sin-permiso" titulo={SIN_PERMISO.titulo} detalle={SIN_PERMISO.detalle} />;
@@ -120,138 +119,36 @@ export function ActualizacionDeCatastro({
         detalle="La versión nueva lleva exactamente los pisos que estén en la tabla de abajo. Se cargaron los de la versión vigente: si quitas uno, la ficha nueva no lo tendrá."
       />
 
-      <section className="sgtm-tarjeta">
-        <div className="sgtm-tarjeta__cabecera">
-          <h2 className="sgtm-tarjeta__titulo">Pisos declarados en la nueva versión</h2>
-          <span className="sgtm-tarjeta__conteo">
-            {cargando ? '…' : `${filasActuales.length} pisos`}
-          </span>
-        </div>
-
-        {cargando ? (
-          <Esqueleto alto={120} />
-        ) : (
-          <div className="sgtm-tabla__marco">
-            <table className="sgtm-tabla">
-              <thead>
-                <tr>
-                  <th>Piso</th>
-                  <th className="sgtm-tabla--numerica">Área construida (m²)</th>
-                  {CATEGORIAS.map(({ etiqueta }) => (
-                    <th key={etiqueta}>{etiqueta}</th>
-                  ))}
-                  <th aria-label="Acciones de la fila" />
-                </tr>
-              </thead>
-              <tbody>
-                {filasActuales.length === 0 && (
-                  <tr>
-                    <td colSpan={CATEGORIAS.length + 3}>
-                      Ningún piso declarado. La ficha quedaría sin construcciones si guardas así.
-                    </td>
-                  </tr>
-                )}
-                {filasActuales.map((fila, indice) => (
-                  <tr key={indice}>
-                    <td>{fila.piso}</td>
-                    <td className="sgtm-tabla--numerica">{fila.areaConstruida}</td>
-                    {CATEGORIAS.map(({ clave, etiqueta }) => (
-                      <td key={etiqueta}>{fila[clave]}</td>
-                    ))}
-                    <td>
-                      {puedeEscribirAqui && (
-                        <Boton
-                          variante="fantasma"
-                          onClick={() =>
-                            fijarFilas(filasActuales.filter((_fila, i) => i !== indice))
-                          }
-                        >
-                          Quitar
-                        </Boton>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {puedeEscribirAqui && (
-          <>
-            <div className="sgtm-tarjeta__acciones">
-              <Campo
-                etiqueta="Nº Piso"
-                tipo="text"
-                valor={borrador.piso}
-                onCambio={(valor) => fijarBorrador({ ...borrador, piso: valor })}
-              />
-              <Campo
-                etiqueta="Área construida (m²)"
-                tipo="text"
-                valor={borrador.areaConstruida}
-                onCambio={(valor) => fijarBorrador({ ...borrador, areaConstruida: valor })}
-              />
-              {CATEGORIAS.map(({ clave, etiqueta }) => (
-                <Campo
-                  key={clave}
-                  etiqueta={etiqueta}
-                  tipo="text"
-                  ph="A–I"
-                  valor={borrador[clave]}
-                  onCambio={(valor) =>
-                    fijarBorrador({ ...borrador, [clave]: valor.toUpperCase().slice(0, 1) })
-                  }
-                />
-              ))}
-            </div>
-            {errorDeFila !== undefined && (
-              <Aviso tipo="error" titulo="No se puede agregar este piso" detalle={errorDeFila} />
-            )}
-            <Boton
-              onClick={() => {
-                const error = errorDeLaFila(borrador);
-                if (error) {
-                  fijarErrorDeFila(error);
-                  return;
-                }
-                fijarErrorDeFila(undefined);
-                fijarFilas([...filasActuales, borrador]);
-                fijarBorrador(FILA_VACIA);
-              }}
-            >
-              Agregar piso
-            </Boton>
-          </>
-        )}
-      </section>
+      <TablaDePisos escritura={escritura} cargando={cargando} />
 
       {puedeEscribirAqui && (
         <section className="sgtm-tarjeta">
           <div className="sgtm-tarjeta__cabecera">
             <h2 className="sgtm-tarjeta__titulo">De dónde sale esta versión</h2>
           </div>
-          <Campo
+          <CampoDeclarado
+            escritura={escritura}
+            campo="origen"
             etiqueta="Origen"
             tipo="sel"
             opciones={ORIGENES}
-            valor={origen}
-            onCambio={fijarOrigen}
           />
-          <Campo
+          <CampoDeclarado
+            escritura={escritura}
+            campo="documentoOrigen"
             etiqueta="Documento de origen"
-            tipo="text"
             ph="Acta de inspección, resolución o declaración jurada"
-            valor={documentoOrigen}
-            onCambio={fijarDocumentoOrigen}
           />
-          <Campo
+          <CampoDeclarado
+            escritura={escritura}
+            campo="vigenciaDesde"
             etiqueta="Vigente desde"
             tipo="date"
             ph="Sin fecha, rige desde hoy"
-            valor={vigenciaDesde}
-            onCambio={fijarVigenciaDesde}
           />
+          {escritura.falta !== undefined && (
+            <p className="sgtm-asistente__falta">{escritura.falta}</p>
+          )}
         </section>
       )}
 
@@ -286,94 +183,38 @@ function AbrirPorCodigo() {
   );
 }
 
-interface FilaConstruccion {
-  readonly piso: string;
-  readonly areaConstruida: string;
-  readonly categoriaMuros: string;
-  readonly categoriaTechos: string;
-  readonly categoriaPisos: string;
-  readonly categoriaPuertas: string;
-  readonly categoriaRevestimientos: string;
-  readonly categoriaBanios: string;
-  readonly categoriaInstalaciones: string;
+function CampoDeclarado({
+  escritura,
+  campo,
+  etiqueta,
+  tipo = 'text',
+  ph,
+  opciones,
+}: {
+  readonly escritura: Escritura;
+  readonly campo: string;
+  readonly etiqueta: string;
+  readonly tipo?: 'text' | 'sel' | 'date';
+  readonly ph?: string;
+  readonly opciones?: readonly string[];
+}) {
+  return (
+    <Campo
+      etiqueta={etiqueta}
+      tipo={tipo}
+      valor={escritura.borrador[campo] ?? ''}
+      bloqueado={!escritura.campos.has(campo)}
+      {...(ph === undefined ? {} : { ph })}
+      {...(opciones === undefined ? {} : { opciones })}
+      {...(escritura.errorPorCampo[campo] === undefined
+        ? {}
+        : { error: escritura.errorPorCampo[campo] })}
+      onCambio={(valor) => escritura.fijarCampo(campo, valor)}
+    />
+  );
 }
-
-const FILA_VACIA: FilaConstruccion = {
-  piso: '',
-  areaConstruida: '',
-  categoriaMuros: '',
-  categoriaTechos: '',
-  categoriaPisos: '',
-  categoriaPuertas: '',
-  categoriaRevestimientos: '',
-  categoriaBanios: '',
-  categoriaInstalaciones: '',
-};
 
 const ORIGENES = ['DECLARACION_JURADA', 'FISCALIZACION', 'RESOLUCION', 'MIGRACION'];
 
-const CATEGORIAS: ReadonlyArray<{
-  readonly clave: Exclude<keyof FilaConstruccion, 'piso' | 'areaConstruida'>;
-  readonly etiqueta: string;
-}> = [
-  { clave: 'categoriaMuros', etiqueta: 'Muros' },
-  { clave: 'categoriaTechos', etiqueta: 'Techos' },
-  { clave: 'categoriaPisos', etiqueta: 'Pisos' },
-  { clave: 'categoriaPuertas', etiqueta: 'Puertas' },
-  { clave: 'categoriaRevestimientos', etiqueta: 'Revest.' },
-  { clave: 'categoriaBanios', etiqueta: 'Baños' },
-  { clave: 'categoriaInstalaciones', etiqueta: 'Instalaciones' },
-];
-
-/** Una letra de A a I, o vacío: ninguna categoría es tan valida como declarar las siete. */
-const LETRA_VALIDA = /^[A-I]?$/;
-
-function errorDeLaFila(fila: FilaConstruccion): string | undefined {
-  if (fila.piso.trim() === '') return 'Falta el número de piso.';
-  if (fila.areaConstruida.trim() === '' || Number.isNaN(Number(fila.areaConstruida))) {
-    return 'El área construida tiene que ser un número.';
-  }
-  for (const { clave, etiqueta } of CATEGORIAS) {
-    if (!LETRA_VALIDA.test(fila[clave])) {
-      return `La categoría de ${etiqueta.toLowerCase()} va de A a I.`;
-    }
-  }
-  return undefined;
-}
-
-function nivelDe(fila: FilaConstruccion): Readonly<Record<string, string>> {
-  const nivel: Record<string, string> = { piso: fila.piso, areaConstruida: fila.areaConstruida };
-  for (const { clave } of CATEGORIAS) {
-    if (fila[clave] !== '') nivel[clave] = fila[clave];
-  }
-  return nivel;
-}
-
-/**
- * Del recurso de `ficha_urbana`: las categorías llegan como texto —`[BCCBCBB]`
- * en el backend, `C B C C B C B` en el juego de datos del prototipo— y aquí
- * se separan por letra, admitiendo las dos formas.
- */
-function filaDeConstruccionLeida(construccion: {
-  readonly piso: string;
-  readonly areaConstruida: string;
-  readonly categorias: string;
-}): FilaConstruccion {
-  const limpio = construccion.categorias.replace(/[[\]]/g, '').trim();
-  const letras = limpio === '' ? [] : limpio.includes(' ') ? limpio.split(/\s+/) : [...limpio];
-  const letra = (indice: number): string => {
-    const caracter = letras[indice];
-    return caracter === undefined || caracter === '-' ? '' : caracter;
-  };
-  return {
-    piso: construccion.piso,
-    areaConstruida: construccion.areaConstruida,
-    categoriaMuros: letra(0),
-    categoriaTechos: letra(1),
-    categoriaPisos: letra(2),
-    categoriaPuertas: letra(3),
-    categoriaRevestimientos: letra(4),
-    categoriaBanios: letra(5),
-    categoriaInstalaciones: letra(6),
-  };
-}
+/** El que el prototipo trae elegido: la mayoría de las actualizaciones vienen de una DJ. */
+const ORIGEN_POR_OMISION = 'DECLARACION_JURADA';

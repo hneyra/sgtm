@@ -2,6 +2,8 @@ import type { ComposicionDeOpcion } from '../composicion';
 import { CodigoCatastral } from './CodigoCatastral';
 import { normalizarCodigoCatastral } from './codigo';
 import { ResumenDeFicha } from './ResumenDeFicha';
+import { AltaDeManzana, AltaDeSector, AltaDeVia } from './altas';
+import { AltaGuiadaDeFicha } from './AltaGuiadaDeFicha';
 
 /**
  * Lo que Catastro compone alrededor de los bloques comunes (#318, #319).
@@ -49,6 +51,44 @@ export const COMPOSICION_DE_CATASTRO: Readonly<Record<string, ComposicionDeOpcio
     ...FICHA,
     widgetsDeFiltro: CODIGO('codigoDeRefCatastral'),
     acto: ACTO_DE_ACTUALIZAR,
+    // El «Nuevo» que el prototipo dibuja, con algo detras: el alta guiada de
+    // cuatro pasos (#320). Va en la ficha urbana y no en las otras tres porque
+    // es la unica que se abre por el codigo de referencia catastral, que es
+    // exactamente lo que el paso 2 compone y comprueba.
+    flujo: { accion: 'Nuevo', titulo: 'Nueva ficha urbana', Asistente: AltaGuiadaDeFicha },
+  },
+  // El catalogo vial: hasta hoy su «Nuevo» estaba dibujado y muerto (#321).
+  calles: {
+    altas: [
+      {
+        accion: 'Nuevo',
+        titulo: 'Nueva vía',
+        descripcion:
+          'La nomenclatura vial alimenta el domicilio fiscal y la ubicación del predio. Su tipo sale del catálogo: con texto libre, la misma calle entra tres veces.',
+        Formulario: AltaDeVia,
+      },
+    ],
+  },
+  // Los sectores, con sus manzanas colgando de la fila. El alta de una manzana
+  // cuelga del sector porque es como se identifica: la 001 del sector 01 y la
+  // 001 del 02 son manzanas distintas, y elegir el sector aparte se prestaria a
+  // darla de alta en el que no era.
+  sectores: {
+    altas: [
+      {
+        accion: 'Nuevo sector',
+        titulo: 'Nuevo sector',
+        descripcion:
+          'El código de un sector es un tramo del código catastral de todos sus predios, así que después no se cambia: la edición no lo toca y la baja es lógica.',
+        Formulario: AltaDeSector,
+      },
+    ],
+    altaDeFila: {
+      accion: '+ Añadir manzana',
+      titulo: 'Nueva manzana del sector',
+      descripcion: 'La manzana se da de alta dentro del sector que se desplegó.',
+      Formulario: AltaDeManzana,
+    },
   },
   ficha_economica: {
     ...FICHA,

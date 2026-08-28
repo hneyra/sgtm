@@ -1,5 +1,6 @@
+import { Fragment, useId, useState } from 'react';
 import { Aviso, Boton, Esqueleto, Insignia, TONO_DE_INSIGNIA } from '@sgtm/design-system';
-import type { DatosDeTabla } from '@sgtm/api-client';
+import type { DatosDeTabla, DetalleDeFila } from '@sgtm/api-client';
 import type { EstructuraDeTabla } from '../../catalogo';
 import { Paginacion } from './Paginacion';
 import type { Sentido } from '../busqueda';
@@ -35,6 +36,17 @@ export interface TablaDePantallaProps {
   readonly onPagina?: (pagina: number) => void;
   /** Hay filtros aplicados: cambia lo que significa que no haya filas. */
   readonly hayFiltros?: boolean;
+  /**
+   * El alta que cuelga de una fila desplegada, cuando quien mira puede darla.
+   *
+   * Solo se dibuja si la respuesta trae `detalles`: sin desplegable no hay
+   * donde poner el boton, y ponerlo en la fila plegada obligaria a elegir un
+   * sector a ciegas.
+   */
+  readonly altaDeFila?: {
+    readonly etiqueta: string;
+    readonly onAbrir: (clave: string) => void;
+  };
 }
 
 const ARIA_SENTIDO = { ASCENDENTE: 'ascending', DESCENDENTE: 'descending' } as const;
@@ -48,10 +60,18 @@ export function TablaDePantalla({
   onOrdenar,
   onPagina,
   hayFiltros = false,
+  altaDeFila,
 }: TablaDePantallaProps) {
   const numericas = new Set(estructura.num ?? []);
   const filas = datos?.filas ?? [];
   const vacia = !cargando && filas.length === 0;
+  const detalles = datos?.detalles;
+  // Se despliegan de una en una y por indice de fila: la clave del detalle no
+  // sirve —dos paginas distintas pueden traer la misma— y abrir varias a la vez
+  // convierte la tabla en una lista que ya no se puede recorrer con la vista.
+  const [desplegada, fijarDesplegada] = useState<number | null>(null);
+  const idBase = useId();
+  const columnas = estructura.cols.length + (detalles === undefined ? 0 : 1);
 
   return (
     <section className="sgtm-tarjeta">
@@ -75,6 +95,7 @@ export function TablaDePantalla({
           <table className="sgtm-tabla">
             <thead>
               <tr>
+                {detalles !== undefined && <th className="sgtm-tabla__desplegar" />}
                 {estructura.cols.map((columna, i) => {
                   const clave = estructura.claves[i];
                   const ordenable = onOrdenar !== undefined && clave !== undefined;
@@ -109,6 +130,7 @@ export function TablaDePantalla({
               {cargando
                 ? [0, 1, 2, 3, 4].map((n) => (
                     <tr key={n}>
+                      {detalles !== undefined && <td className="sgtm-tabla__desplegar" />}
                       {estructura.cols.map((columna) => (
                         <td key={columna}>
                           <Esqueleto alto={12} />
@@ -116,24 +138,57 @@ export function TablaDePantalla({
                       ))}
                     </tr>
                   ))
-                : filas.map((fila, f) => (
-                    // Las filas del catalogo no traen identificador propio; el
-                    // indice es estable porque la lista no se reordena en cliente.
-                    <tr key={f}>
-                      {fila.map((celda, c) => (
-                        <td
-                          key={estructura.cols[c] ?? c}
-                          className={numericas.has(c) ? 'sgtm-tabla--numerica' : undefined}
-                        >
-                          {celda.tono ? (
-                            <Insignia tono={TONO_DE_INSIGNIA[celda.tono]}>{celda.texto}</Insignia>
-                          ) : (
-                            celda.texto
+                : filas.map((fila, f) => {
+                    const detalle = detalles?.[f];
+                    const abierta = desplegada === f;
+                    const idDelDetalle = `${idBase}-detalle-${f}`;
+                    return (
+                      // Las filas del catalogo no traen identificador propio; el
+                      // indice es estable porque la lista no se reordena en cliente.
+                      <Fragment key={f}>
+                        <tr>
+                          {detalles !== undefined && (
+                            <td className="sgtm-tabla__desplegar">
+                              {detalle !== undefined && (
+                                <button
+                                  type="button"
+                                  aria-expanded={abierta}
+                                  aria-controls={idDelDetalle}
+                                  onClick={() => fijarDesplegada(abierta ? null : f)}
+                                >
+                                  <span aria-hidden="true">{abierta ? '▾' : '▸'}</span>
+                                  <span className="sgtm-portal__oculto">
+                                    {abierta ? 'Plegar' : 'Desplegar'} {detalle.titulo}
+                                  </span>
+                                </button>
+                              )}
+                            </td>
                           )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
+                          {fila.map((celda, c) => (
+                            <td
+                              key={estructura.cols[c] ?? c}
+                              className={numericas.has(c) ? 'sgtm-tabla--numerica' : undefined}
+                            >
+                              {celda.tono ? (
+                                <Insignia tono={TONO_DE_INSIGNIA[celda.tono]}>
+                                  {celda.texto}
+                                </Insignia>
+                              ) : (
+                                celda.texto
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                        {detalle !== undefined && abierta && (
+                          <tr id={idDelDetalle} className="sgtm-tabla__fila-detalle">
+                            <td colSpan={columnas}>
+                              <Detalle detalle={detalle} altaDeFila={altaDeFila} />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
             </tbody>
           </table>
         </div>
@@ -141,6 +196,46 @@ export function TablaDePantalla({
       {datos?.paginacion && onPagina && <Paginacion datos={datos.paginacion} onPagina={onPagina} />}
       {estructura.note && <p className="sgtm-tarjeta__pie">{estructura.note}</p>}
     </section>
+  );
+}
+
+/**
+ * Lo que cuelga de una fila desplegada.
+ *
+ * Las piezas se dibujan como fichas con su conteo **tal como llego** (RNF-083):
+ * ni se suman, ni se completan, ni se deducen. Cuando el servidor todavia no
+ * publica lo que cuelga, se dice —`nota`— en vez de ensenar un desplegable vacio
+ * que se leeria como «aqui no hay nada».
+ */
+function Detalle({
+  detalle,
+  altaDeFila,
+}: {
+  readonly detalle: DetalleDeFila;
+  readonly altaDeFila?: TablaDePantallaProps['altaDeFila'];
+}) {
+  return (
+    <div className="sgtm-detalle">
+      <div className="sgtm-detalle__cabecera">
+        <span className="sgtm-detalle__titulo">{detalle.titulo}</span>
+        {altaDeFila !== undefined && (
+          <Boton variante="fantasma" onClick={() => altaDeFila.onAbrir(detalle.clave)}>
+            {altaDeFila.etiqueta}
+          </Boton>
+        )}
+      </div>
+      {detalle.items.length > 0 && (
+        <ul className="sgtm-detalle__fichas">
+          {detalle.items.map((item) => (
+            <li key={item.texto} className="sgtm-detalle__ficha">
+              <span className="sgtm-detalle__codigo">{item.texto}</span>
+              {item.nota !== undefined && <span className="sgtm-detalle__conteo">{item.nota}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {detalle.nota !== undefined && <p className="sgtm-detalle__nota">{detalle.nota}</p>}
+    </div>
   );
 }
 
