@@ -31,9 +31,13 @@ import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.catastro.dominio.CondicionDeTitularidad;
+import pe.gob.sgtm.catastro.dominio.EstadoPredio;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
+import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.Sector;
+import pe.gob.sgtm.catastro.dominio.SectorConConteos;
+import pe.gob.sgtm.catastro.dominio.TipoPredio;
 import pe.gob.sgtm.catastro.dominio.Titularidad;
 import pe.gob.sgtm.catastro.infraestructura.CatastroRepositoryJdbc;
 import pe.gob.sgtm.compartido.Pagina;
@@ -230,12 +234,145 @@ class RegistrarPredioTest {
             transaccion.execute(
                     estado -> repositorio.guardar(Sector.nuevo("S-90", "Sector del listado")));
 
-            Pagina<Sector> pagina =
+            Pagina<SectorConConteos> pagina =
                     transaccion.execute(
                             estado -> repositorio.sectores(Paginacion.de(0, 20, "codigo")));
 
             assertThat(pagina).isNotNull();
             assertThat(pagina.contenido()).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("cada sector del listado trae sus conteos: manzanas, predios activos y lotes")
+        void elListadoTraeLosConteosDeCadaSector() {
+            Sector sector = sectorNuevo("S-70", "Sector que se cuenta");
+            sectorNuevo("S-71", "Sector recien creado, sin nada dentro");
+            long manzanaA = manzanaNueva(sector, "001");
+            long manzanaB = manzanaNueva(sector, "002");
+
+            // Dos unidades del MISMO lote —dos departamentos—, una de otro lote de la misma
+            // manzana, y una del lote 01 de la manzana B: cuatro predios en tres lotes.
+            predioUbicado("20010100100100101020001", "AV. CONTADA 100", sector, manzanaA, "01");
+            predioUbicado(
+                    "20010100100100101020002", "AV. CONTADA 100 DPTO 2", sector, manzanaA, "01");
+            predioUbicado("20010100100100101020003", "AV. CONTADA 200", sector, manzanaA, "02");
+            predioUbicado("20010100100100101020004", "AV. CONTADA 300", sector, manzanaB, "01");
+            // Sin sector: no cuenta en ninguno.
+            registrar.registrar(
+                    Predio.urbano(
+                            CodigoReferenciaCatastral.de("20010100100100101020005"),
+                            "AV. SIN UBICAR 400"),
+                    Observacion.de("Predio todavia sin sector asignado"));
+
+            SectorConConteos contado = delListado("S-70");
+            SectorConConteos vacio = delListado("S-71");
+
+            assertThat(contado.manzanas()).isEqualTo(2);
+            assertThat(contado.predios())
+                    .as(
+                            "el predio sin sector no se reparte ni se imputa: la suma de los sectores"
+                                    + " puede ser menor que el padron, y eso es informacion")
+                    .isEqualTo(4);
+            assertThat(contado.lotes())
+                    .as(
+                            "dos departamentos del lote 01 son DOS predios y UN lote; contar predios"
+                                    + " donde se pide lotes inflaria el sector")
+                    .isEqualTo(3);
+
+            assertThat(vacio.manzanas()).isZero();
+            assertThat(vacio.predios())
+                    .as("el sector sin nada cuenta cero, no nulo: la pantalla pinta un 0")
+                    .isZero();
+            assertThat(vacio.lotes()).isZero();
+        }
+
+        @Test
+        @DisplayName("un predio dado de baja deja de contar en su sector, y su lote con el")
+        void elPredioDadoDeBajaDejaDeContar() {
+            Sector sector = sectorNuevo("S-72", "Sector con una baja");
+            long manzana = manzanaNueva(sector, "001");
+            predioUbicado("20010100100100101020011", "AV. QUE SIGUE 100", sector, manzana, "01");
+            Predio demolido =
+                    predioUbicado(
+                            "20010100100100101020012", "AV. DEMOLIDA 200", sector, manzana, "02");
+
+            SectorConConteos antes = delListado("S-72");
+            registrar.darDeBaja(demolido, Observacion.de("Se demolio y se unifico con el vecino"));
+            SectorConConteos despues = delListado("S-72");
+
+            assertThat(antes.predios()).isEqualTo(2);
+            assertThat(antes.lotes()).isEqualTo(2);
+            assertThat(despues.predios())
+                    .as(
+                            "el predio dado de baja sigue en la base —aparece en determinaciones ya"
+                                    + " emitidas—, pero el sector ya no lo tiene")
+                    .isEqualTo(1);
+            assertThat(despues.lotes())
+                    .as("y su lote se va con el: nadie ocupa ya ese lote")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("los conteos son de esta municipalidad: desde la vecina, el sector no existe")
+        void losConteosNoCruzanDeMunicipalidad() {
+            Sector sector = sectorNuevo("S-73", "Sector con predios propios");
+            long manzana = manzanaNueva(sector, "001");
+            predioUbicado("20010100100100101020021", "AV. PROPIA 100", sector, manzana, "01");
+
+            assertThat(delListado("S-73").predios()).isEqualTo(1);
+
+            TenantContext.limpiar();
+            TenantContext.fijar(new MunicipalidadId(otraMunicipalidad));
+
+            Pagina<SectorConConteos> desdeLaVecina =
+                    transaccion.execute(
+                            estado -> repositorio.sectores(Paginacion.de(0, 50, "codigo")));
+            assertThat(desdeLaVecina.contenido())
+                    .as("los conteos los hace la base bajo RLS, con el contexto que tenga puesto")
+                    .noneMatch(fila -> "S-73".equals(fila.sector().codigo()));
+        }
+
+        /** El sector, tal como sale del listado que publica el endpoint. */
+        private SectorConConteos delListado(String codigo) {
+            Pagina<SectorConConteos> pagina =
+                    transaccion.execute(
+                            estado -> repositorio.sectores(Paginacion.de(0, 50, "codigo")));
+            return pagina.contenido().stream()
+                    .filter(fila -> fila.sector().codigo().equals(codigo))
+                    .findFirst()
+                    .orElseThrow(
+                            () ->
+                                    new AssertionError(
+                                            "El sector " + codigo + " no salio en el listado"));
+        }
+
+        private Sector sectorNuevo(String codigo, String nombre) {
+            return transaccion.execute(estado -> repositorio.guardar(Sector.nuevo(codigo, nombre)));
+        }
+
+        private long manzanaNueva(Sector sector, String codigo) {
+            Manzana guardada =
+                    transaccion.execute(
+                            estado -> repositorio.guardar(Manzana.nueva(sector.id(), codigo)));
+            return java.util.Objects.requireNonNull(guardada.id());
+        }
+
+        private Predio predioUbicado(
+                String codigo, String direccion, Sector sector, long manzanaId, String lote) {
+            return registrar.registrar(
+                    new Predio(
+                            null,
+                            CodigoReferenciaCatastral.de(codigo),
+                            TipoPredio.URBANO,
+                            null,
+                            null,
+                            direccion,
+                            sector.id(),
+                            manzanaId,
+                            lote,
+                            null,
+                            EstadoPredio.ACTIVO),
+                    Observacion.de("Alta del predio para contar el sector"));
         }
 
         @Test

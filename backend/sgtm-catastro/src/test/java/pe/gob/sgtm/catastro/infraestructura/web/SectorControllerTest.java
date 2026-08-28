@@ -12,6 +12,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
@@ -38,6 +39,7 @@ import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.Sector;
+import pe.gob.sgtm.catastro.dominio.SectorConConteos;
 import pe.gob.sgtm.catastro.dominio.Titularidad;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
@@ -131,6 +133,72 @@ class SectorControllerTest {
                 .contains("\"codigo\":\"SC-1\"")
                 .contains("\"nombre\":\"Sector Centro\"")
                 .contains("\"zona\":\"Zona A\"");
+    }
+
+    @Test
+    @DisplayName("cada fila del listado lleva sus conteos: manzanas, predios y lotes")
+    void cadaFilaLlevaSusConteos() throws Exception {
+        MvcResult resultado = mvc.perform(get("/api/v1/catastro/sectores")).andReturn();
+
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("los cuenta la base sobre la pagina; la pantalla los pinta, no los calcula")
+                .contains("\"manzanas\":2")
+                .contains("\"predios\":7")
+                .contains("\"lotes\":5");
+    }
+
+    @Test
+    @DisplayName("lotes y predios son cifras distintas: tres unidades de un lote son un lote")
+    void lotesYPrediosSonDistintos() throws Exception {
+        MvcResult resultado = mvc.perform(get("/api/v1/catastro/sectores")).andReturn();
+        String cuerpo = resultado.getResponse().getContentAsString();
+
+        assertThat(cuerpo)
+                .as(
+                        "SC-1 tiene 7 predios activos en 5 lotes: si el recurso publicara el mismo"
+                                + " numero en los dos campos, nadie notaria que se conto una sola cosa")
+                .contains("\"predios\":7")
+                .contains("\"lotes\":5");
+        assertThat(cuerpo)
+                .as("y el sector del que no se conto nada sale en cero, no ausente")
+                .contains("\"manzanas\":0");
+    }
+
+    @Test
+    @DisplayName("el alta y la edicion NO cuentan nada: los tres conteos salen nulos")
+    void laEscrituraNoCuenta() throws Exception {
+        MvcResult alta =
+                mvc.perform(
+                                post("/api/v1/catastro/sectores")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"codigo":"SC-12","nombre":"Sector Recien Nacido",
+                                                 "observacion":"Alta por ordenanza 2026-08"}
+                                                """))
+                        .andReturn();
+        MvcResult edicion =
+                mvc.perform(
+                                put("/api/v1/catastro/sectores/SC-1")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"nombre":"Sector Centro Historico",
+                                                 "observacion":"Correccion de nomenclatura"}
+                                                """))
+                        .andReturn();
+
+        assertThat(alta.getResponse().getContentAsString())
+                .contains("\"manzanas\":null")
+                .contains("\"predios\":null")
+                .contains("\"lotes\":null");
+        assertThat(edicion.getResponse().getContentAsString())
+                .as(
+                        "un 0 en un PUT sobre un sector con cuarenta manzanas seria falso: nulo dice"
+                                + " «no se conto», que es lo que paso")
+                .contains("\"manzanas\":null")
+                .contains("\"predios\":null")
+                .contains("\"lotes\":null");
     }
 
     @Test
@@ -668,11 +736,30 @@ class SectorControllerTest {
         private long siguienteSector = 4L;
         private long siguienteManzana = 2L;
 
+        /**
+         * Lo que la base contaria para cada sector: manzanas, predios activos y lotes.
+         *
+         * <p>Es un dato fijo porque aqui se prueba el <b>transporte</b>. Que los conteos sean los
+         * correctos —y sobre todo que el predio dado de baja no entre— lo verifica {@code
+         * RegistrarPredioTest} contra PostgreSQL, que es el unico sitio donde se puede.
+         */
+        private static final Map<String, long[]> CONTEOS =
+                Map.of("SC-1", new long[] {2, 7, 5}, "SC-2", new long[] {1, 3, 3});
+
         @Override
-        public Pagina<Sector> sectores(Paginacion paginacion) {
+        public Pagina<SectorConConteos> sectores(Paginacion paginacion) {
             this.ultima = paginacion;
             OrdenSeguro.sobre("codigo", "nombre", "zona", "id").clausula(paginacion);
-            return Pagina.de(sectores, paginacion, sectores.size());
+            List<SectorConConteos> conSusConteos =
+                    sectores.stream().map(RepositorioEnMemoria::contado).toList();
+            return Pagina.de(conSusConteos, paginacion, sectores.size());
+        }
+
+        private static SectorConConteos contado(Sector sector) {
+            long[] conteos = CONTEOS.get(sector.codigo());
+            return conteos == null
+                    ? SectorConConteos.sinContar(sector)
+                    : new SectorConConteos(sector, conteos[0], conteos[1], conteos[2]);
         }
 
         @Override

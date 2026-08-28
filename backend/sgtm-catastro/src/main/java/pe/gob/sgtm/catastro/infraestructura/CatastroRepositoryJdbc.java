@@ -17,6 +17,7 @@ import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.Sector;
+import pe.gob.sgtm.catastro.dominio.SectorConConteos;
 import pe.gob.sgtm.catastro.dominio.TipoPredio;
 import pe.gob.sgtm.catastro.dominio.Titularidad;
 import pe.gob.sgtm.compartido.Pagina;
@@ -56,6 +57,51 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
     private static final OrdenSeguro ORDEN_SECTOR =
             OrdenSeguro.sobre("codigo", "nombre", "zona", "id");
 
+    /**
+     * Los tres conteos de cada sector <b>de la pagina</b> (#290), en una sola consulta.
+     *
+     * <h2>Por que se cuenta aparte y no dentro del listado</h2>
+     *
+     * <p>Porque asi se cuenta <b>despues</b> del {@code LIMIT}. Escrito como subconsulta en la
+     * lista de campos del listado, o como {@code LATERAL} de su {@code FROM}, la agregacion entra
+     * en el plan por debajo del orden y el limite: PostgreSQL la evaluaria para <b>todos</b> los
+     * sectores que cumplen el filtro y despues tiraria todos menos veinte. Aqui la entrada es la
+     * lista de identificadores que la pagina ya trajo, asi que el trabajo esta acotado por el
+     * tamano de pagina y no por el del padron.
+     *
+     * <p>Cada {@code LATERAL} es una agregacion sin {@code GROUP BY}, asi que devuelve <b>siempre
+     * una fila</b> —cero cuando no hay nada que contar— y ningun conteo sale nulo. Los dos usan
+     * {@code predio_sector_ix (municipalidad_id, sector_id, manzana_id)} y el indice de la clave
+     * ajena del sector en {@code manzana}.
+     *
+     * <p>El estado entra por parametro y no como literal para que la unica definicion de «predio
+     * activo» siga siendo {@link EstadoPredio}.
+     *
+     * <p>{@code count(DISTINCT (manzana_id, lote))} cuenta pares, no lotes sueltos: el lote «01» de
+     * la manzana A y el «01» de la manzana B son dos. El {@code FILTER} deja fuera al predio sin
+     * lote, que no es un lote vacio sino un predio del que todavia no se sabe en cual esta.
+     */
+    private static final String CONTEOS_DEL_SECTOR =
+            """
+            SELECT s.id AS sector_id,
+                   mz.manzanas,
+                   pd.predios,
+                   pd.lotes
+              FROM sector s
+              LEFT JOIN LATERAL (
+                       SELECT count(*) AS manzanas
+                         FROM manzana m
+                        WHERE m.sector_id = s.id) mz ON true
+              LEFT JOIN LATERAL (
+                       SELECT count(*) AS predios,
+                              count(DISTINCT (p.manzana_id, p.lote))
+                                  FILTER (WHERE p.lote IS NOT NULL) AS lotes
+                         FROM predio p
+                        WHERE p.sector_id = s.id
+                          AND p.estado = :activo) pd ON true
+             WHERE s.id IN (:sectores)
+            """;
+
     private static final OrdenSeguro ORDEN_PREDIO =
             OrdenSeguro.sobre("codigo_ref_catastral", "direccion", "tipo", "id");
 
@@ -70,14 +116,58 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
     // ---------- Sectores y manzanas ----------
 
     @Override
-    public Pagina<Sector> sectores(Paginacion paginacion) {
-        return paginar(
-                "SELECT " + COLUMNAS_SECTOR + " FROM sector",
-                "SELECT count(*) FROM sector",
-                Map.of(),
-                paginacion,
-                ORDEN_SECTOR,
-                CatastroRepositoryJdbc::mapearSector);
+    public Pagina<SectorConConteos> sectores(Paginacion paginacion) {
+        Pagina<Sector> pagina =
+                paginar(
+                        "SELECT " + COLUMNAS_SECTOR + " FROM sector",
+                        "SELECT count(*) FROM sector",
+                        Map.of(),
+                        paginacion,
+                        ORDEN_SECTOR,
+                        CatastroRepositoryJdbc::mapearSector);
+
+        List<Long> ids =
+                pagina.contenido().stream().map(Sector::id).filter(Objects::nonNull).toList();
+        if (ids.isEmpty()) {
+            return pagina.mapear(SectorConConteos::sinContar);
+        }
+
+        Map<Long, Conteos> conteos = conteosDe(ids);
+        return pagina.mapear(
+                sector -> {
+                    Long id = sector.id();
+                    Conteos suyos = id == null ? Conteos.NINGUNO : conteos.get(id);
+                    Conteos ciertos = suyos == null ? Conteos.NINGUNO : suyos;
+                    return new SectorConConteos(
+                            sector, ciertos.manzanas(), ciertos.predios(), ciertos.lotes());
+                });
+    }
+
+    /**
+     * Cuenta lo que cuelga de los sectores <b>ya paginados</b>. Ver {@link #CONTEOS_DEL_SECTOR}.
+     */
+    private Map<Long, Conteos> conteosDe(List<Long> sectorIds) {
+        return jdbc()
+                .sql(CONTEOS_DEL_SECTOR)
+                .param("sectores", sectorIds)
+                .param("activo", EstadoPredio.ACTIVO.name())
+                .query(
+                        (fila, numeroDeFila) ->
+                                Map.entry(
+                                        fila.getLong("sector_id"),
+                                        new Conteos(
+                                                fila.getLong("manzanas"),
+                                                fila.getLong("predios"),
+                                                fila.getLong("lotes"))))
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /** Lo contado para un sector. Se queda aqui: fuera del repositorio viaja como proyeccion. */
+    private record Conteos(long manzanas, long predios, long lotes) {
+
+        /** El sector del que no se conto nada, o del que no colgaba nada. */
+        static final Conteos NINGUNO = new Conteos(0, 0, 0);
     }
 
     @Override

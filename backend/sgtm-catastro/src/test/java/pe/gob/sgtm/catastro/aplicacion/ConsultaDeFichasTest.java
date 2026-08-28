@@ -33,6 +33,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.catastro.dominio.CategoriasConstructivas;
+import pe.gob.sgtm.catastro.dominio.Construccion;
 import pe.gob.sgtm.catastro.dominio.FichaCatastral;
 import pe.gob.sgtm.catastro.dominio.FichaEncontrada;
 import pe.gob.sgtm.catastro.dominio.FiltroDeFichas;
@@ -255,6 +257,130 @@ class ConsultaDeFichasTest {
                     .isEqualTo(2);
             assertThat(buscar(new FiltroDeFichas(null, null, "MZ-A", "07", null)).totalElementos())
                     .isEqualTo(1);
+        }
+    }
+
+    @Nested
+    @DisplayName("El area construida de la grilla (RNF-083)")
+    class AreaConstruida {
+
+        @Test
+        @DisplayName("viene SUMADA del servidor: la interfaz no suma")
+        void vieneSumadaDelServidor() throws SQLException {
+            long predio = crearPredio("27010100100100101080001", "AV. SUMADA 100", null, "20");
+            registrarCon(predio, "200.00", "CASA HABITACION", "90.00", "30.50");
+
+            Pagina<FichaEncontrada> pagina = buscar(porCodigo("27010100100100101080001"));
+
+            assertThat(pagina.contenido()).hasSize(1);
+            assertThat(pagina.contenido().get(0).areaConstruida())
+                    .as(
+                            "sin la suma en el servidor, cada pantalla la escribiria por su cuenta y"
+                                    + " dos podrian mostrar dos totales distintos del mismo predio")
+                    .isEqualTo(AreaM2.de("120.50"));
+        }
+
+        @Test
+        @DisplayName("una ficha con tres construcciones sale UNA vez, con el total")
+        void unaFichaConTresConstruccionesSaleUnaVez() throws SQLException {
+            long predio =
+                    crearPredio("27010100100100101080002", "AV. DE TRES PISOS 200", null, "21");
+            registrarCon(predio, "300.00", "CASA HABITACION", "100.00", "80.00", "20.00");
+
+            Pagina<FichaEncontrada> pagina = buscar(porCodigo("27010100100100101080002"));
+
+            assertThat(pagina.contenido())
+                    .as(
+                            "sumar con un JOIN a construccion dentro de la grilla multiplicaria la"
+                                    + " fila por cada piso: tres predios donde hay uno")
+                    .hasSize(1);
+            assertThat(pagina.totalElementos()).isEqualTo(1);
+            assertThat(pagina.contenido().get(0).areaConstruida()).isEqualTo(AreaM2.de("200.00"));
+        }
+
+        @Test
+        @DisplayName("un terreno sin construir sale con area construida NULA, no cero")
+        void unTerrenoSinConstruirSaleNulo() throws SQLException {
+            long predio =
+                    crearPredio("27010100100100101080003", "AV. SIN CONSTRUIR 300", null, "22");
+            registrar(predio, "150.00", "TERRENO SIN CONSTRUIR");
+
+            Pagina<FichaEncontrada> pagina = buscar(porCodigo("27010100100100101080003"));
+
+            assertThat(pagina.contenido().get(0).areaConstruida())
+                    .as(
+                            "cero seria un area declarada; «no declara ninguna» y «declaro cero» son"
+                                    + " cosas distintas, y la segunda es un error de captura que hay"
+                                    + " que poder ver")
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName(
+                "suma las construcciones de la version VIGENTE A LA FECHA, no las de la ultima")
+        void sumaLasDeLaVersionVigenteALaFecha() throws SQLException {
+            long predio = crearPredio("27010100100100101080004", "AV. AMPLIADA 400", null, "23");
+            registrarCon(predio, "300.00", "CASA HABITACION", "100.00");
+            fichas.actualizar(
+                    predio,
+                    TipoFicha.UNICA,
+                    CAMBIO,
+                    OrigenDeLaFicha.FISCALIZACION,
+                    "Acta 800-2026",
+                    List.of(
+                            Construccion.en(
+                                    "1", AreaM2.de("100.00"), CategoriasConstructivas.todas('C')),
+                            Construccion.en(
+                                    "2", AreaM2.de("70.00"), CategoriasConstructivas.todas('C'))),
+                    null,
+                    null,
+                    Observacion.de("Ampliacion de un segundo piso detectada en campo"));
+
+            Pagina<FichaEncontrada> enMarzo =
+                    consulta.buscar(
+                            porCodigo("27010100100100101080004"),
+                            LocalDate.of(2026, 3, 15),
+                            unaPagina());
+            Pagina<FichaEncontrada> hoy = buscar(porCodigo("27010100100100101080004"));
+
+            assertThat(enMarzo.contenido().get(0).areaConstruida())
+                    .as(
+                            "en marzo el segundo piso no existia; sumar «las construcciones del"
+                                    + " predio» daria 170 y una determinacion de marzo no se podria"
+                                    + " explicar")
+                    .isEqualTo(AreaM2.de("100.00"));
+            assertThat(hoy.contenido().get(0).areaConstruida()).isEqualTo(AreaM2.de("170.00"));
+        }
+
+        @Test
+        @DisplayName("cada fila de la pagina lleva la suya, y la que no tiene se queda nula")
+        void cadaFilaLlevaLaSuya() throws SQLException {
+            long conObra = crearPredio("27010100100100101081001", "AV. MIXTA 100", null, "24");
+            long sinObra = crearPredio("27010100100100101081002", "AV. MIXTA 200", null, "25");
+            registrarCon(conObra, "200.00", "CASA HABITACION", "45.00");
+            registrar(sinObra, "200.00", "TERRENO SIN CONSTRUIR");
+
+            Pagina<FichaEncontrada> pagina = buscar(porCodigo("2701010010010010108100"));
+
+            assertThat(pagina.totalElementos()).isEqualTo(2);
+            assertThat(pagina.contenido())
+                    .as("una sola consulta de suma para la pagina, y cada fila con lo suyo")
+                    .extracting(FichaEncontrada::areaConstruida)
+                    .containsExactlyInAnyOrder(AreaM2.de("45.00"), null);
+        }
+
+        @Test
+        @DisplayName("no cruza de municipalidad: con el contexto de B no hay area que sumar")
+        void noCruzaDeMunicipalidad() throws SQLException {
+            long predio = crearPredio("27010100100100101082001", "AV. AISLADA 500", null, "26");
+            registrarCon(predio, "200.00", "CASA HABITACION", "55.00");
+
+            TenantContext.limpiar();
+            TenantContext.fijar(new MunicipalidadId(otraMunicipalidad));
+
+            assertThat(buscar(porCodigo("27010100100100101082001")).contenido())
+                    .as("la suma corre bajo la misma politica RLS que la grilla")
+                    .isEmpty();
         }
     }
 
@@ -579,6 +705,31 @@ class ConsultaDeFichasTest {
 
     private static Pagina<FichaEncontrada> buscar(FiltroDeFichas filtro) {
         return consulta.buscar(filtro, HOY, unaPagina());
+    }
+
+    /** La misma alta, con las construcciones que la version declara —una por piso—. */
+    private static void registrarCon(
+            long predioId, String area, String uso, String... construidas) {
+        List<Construccion> construcciones = new java.util.ArrayList<>();
+        for (int piso = 0; piso < construidas.length; piso++) {
+            construcciones.add(
+                    Construccion.en(
+                            String.valueOf(piso + 1),
+                            AreaM2.de(construidas[piso]),
+                            CategoriasConstructivas.todas('C')));
+        }
+        fichas.registrarPrimera(
+                FichaCatastral.primera(
+                                predioId,
+                                TipoFicha.UNICA,
+                                new AreaM2(new BigDecimal(area)),
+                                uso,
+                                ALTA,
+                                OrigenDeLaFicha.DECLARACION_JURADA,
+                                "Declaracion jurada 700-2026",
+                                Observacion.de("Version inicial de la ficha del predio"))
+                        .con(construcciones),
+                Observacion.de("Alta de la ficha por declaracion jurada"));
     }
 
     private static void registrar(long predioId, String area, String uso) {

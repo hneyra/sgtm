@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.Sector;
+import pe.gob.sgtm.catastro.dominio.SectorConConteos;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 
@@ -30,8 +31,15 @@ public class ConsultaDeSectores {
         this.repositorio = repositorio;
     }
 
+    /**
+     * El catalogo con los conteos de cada sector: manzanas, predios activos y lotes (#290).
+     *
+     * <p>Los cuenta la base, en la misma transaccion y sobre la pagina ya limitada. Contarlos aqui
+     * —pidiendo las manzanas y los predios de cada sector para llamar a {@code size()}— serian dos
+     * consultas por fila y un padron entero en memoria para pintar veinte numeros.
+     */
     @Transactional(readOnly = true)
-    public Pagina<Sector> listar(Paginacion paginacion) {
+    public Pagina<SectorConConteos> listar(Paginacion paginacion) {
         return repositorio.sectores(paginacion);
     }
 

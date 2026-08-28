@@ -70,9 +70,34 @@ class ConsultaControllerTest {
         assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
         assertThat(resultado.getResponse().getContentAsString())
                 .contains("\"contenido\"")
-                .contains("\"totalElementos\":1")
+                .contains("\"totalElementos\":2")
                 .contains("\"codRefCatastral\":\"27010100100100101010001\"")
                 .contains("\"version\":1");
+    }
+
+    @Test
+    @DisplayName("el area construida viaja SUMADA, con su unidad: la interfaz no suma (RNF-083)")
+    void elAreaConstruidaViajaSumada() throws Exception {
+        MvcResult resultado = mvc.perform(get("/api/v1/catastro/fichas")).andReturn();
+
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "si la fila no la publicara, la pantalla tendria que pedir cada ficha con sus"
+                                + " construcciones y sumarlas: veinte peticiones por pagina y una suma"
+                                + " distinta en cada pantalla que la necesite")
+                .contains("\"areaConstruida\":\"210.50 m2\"");
+    }
+
+    @Test
+    @DisplayName("un terreno sin construir sale con area construida nula, que no es cero")
+    void unTerrenoSinConstruirSaleNulo() throws Exception {
+        MvcResult resultado = mvc.perform(get("/api/v1/catastro/fichas")).andReturn();
+
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "un 0 seria un area declarada; la pantalla pinta un guion, y un guion no es"
+                                + " un cero")
+                .contains("\"areaConstruida\":null");
     }
 
     @Test
@@ -154,6 +179,7 @@ class ConsultaControllerTest {
     /** Solo lo que el controlador llama; el resto no se implementa porque no se usa. */
     private static final class RepositorioEnMemoria implements FichaCatastralRepository {
 
+        /** Con su area construida ya sumada por la base: es asi como llega la fila. */
         private static final FichaEncontrada UNA =
                 new FichaEncontrada(
                         1L,
@@ -165,7 +191,26 @@ class ConsultaControllerTest {
                         TipoFicha.UNICA,
                         1,
                         AreaM2.de("120.00"),
+                        AreaM2.de("210.50"),
                         "CASA HABITACION",
+                        LocalDate.of(2026, 1, 1),
+                        null,
+                        null);
+
+        /** Un terreno sin construir: la version no declara construcciones y no hay suma. */
+        private static final FichaEncontrada SIN_CONSTRUIR =
+                new FichaEncontrada(
+                        2L,
+                        11L,
+                        CodigoReferenciaCatastral.de("27010100100100101010002"),
+                        "AV. GRAU 200",
+                        "MZ-A",
+                        "02",
+                        TipoFicha.UNICA,
+                        1,
+                        AreaM2.de("300.00"),
+                        null,
+                        "TERRENO SIN CONSTRUIR",
                         LocalDate.of(2026, 1, 1),
                         null,
                         null);
@@ -176,7 +221,7 @@ class ConsultaControllerTest {
                 List<Long> titulares,
                 LocalDate fecha,
                 Paginacion paginacion) {
-            return Pagina.de(List.of(UNA), paginacion, 1);
+            return Pagina.de(List.of(UNA, SIN_CONSTRUIR), paginacion, 2);
         }
 
         @Override

@@ -115,6 +115,31 @@ public class FichaCatastralRepositoryJdbc extends RepositorioJdbc
                     + " categoria_puertas, categoria_revestim, categoria_banios,"
                     + " categoria_instalac, porcentaje_construido";
 
+    /**
+     * El area construida de <b>las fichas de la pagina</b>, sumada por la base (RNF-083, #290).
+     *
+     * <h2>Por que es otra consulta y no una columna mas del listado</h2>
+     *
+     * <p>Porque asi se suma <b>despues</b> del {@code LIMIT}. Como subconsulta en la lista de
+     * campos, o como {@code LATERAL} del {@code FROM} de la grilla, la agregacion queda por debajo
+     * del orden y el limite en el plan: se sumaria para todas las fichas que cumplen el filtro —el
+     * padron entero cuando no hay filtro— para despues tirar todas menos las veinte que se ven. Y
+     * ademas cambiaria el plan de la grilla, que la prueba de volumen de {@code
+     * ConsultaDeFichasTest} fija con {@code EXPLAIN}; aqui ese plan no se toca.
+     *
+     * <p>Tampoco se traen las construcciones para sumarlas arriba: una pagina de veinte fichas de
+     * cuatro pisos son ochenta filas viajando para producir veinte numeros, y la suma acabaria
+     * escrita en Java, donde cada pantalla puede hacerla distinta.
+     *
+     * <p>La ficha sin construcciones <b>no aparece</b> en el resultado, y por eso su area sale nula
+     * y no cero: ver {@link FichaEncontrada}.
+     */
+    private static final String AREA_CONSTRUIDA_DE_LAS_FICHAS =
+            "SELECT ficha_id, sum(area_construida) AS area_construida"
+                    + "  FROM construccion"
+                    + " WHERE ficha_id IN (:fichas)"
+                    + " GROUP BY ficha_id";
+
     private static final String COLUMNAS_INSTALACION =
             "id, ficha_id, descripcion, unidad_medida, cantidad, anio_construccion,"
                     + " estado_conservacion";
@@ -333,22 +358,52 @@ public class FichaCatastralRepositoryJdbc extends RepositorioJdbc
 
         String donde = " WHERE " + String.join(" AND ", condiciones);
 
-        return paginar(
-                // El alias no es cosmetico: OrdenSeguro deriva el campo que acepta el cliente del
-                // nombre de la columna, y con codigo_ref_catastral aceptaria «codigoRefCatastral»
-                // mientras el recurso publica «codRefCatastral». Dos nombres para el mismo campo
-                // es una pantalla que ordena y recibe un 422.
-                "SELECT f.id, f.predio_id, p.codigo_ref_catastral AS cod_ref_catastral,"
-                        + " p.direccion, m.codigo AS manzana,"
-                        + " p.lote, f.tipo, f.version, f.area_terreno, f.uso, f.vigencia_desde,"
-                        + " tit.contribuyente_id"
-                        + DESDE_LA_GRILLA
-                        + donde,
-                "SELECT count(*)" + DESDE_LA_GRILLA + donde,
-                parametros,
-                paginacion,
-                ORDEN_CONSULTA,
-                FichaCatastralRepositoryJdbc::mapearEncontrada);
+        // El alias no es cosmetico: OrdenSeguro deriva el campo que acepta el cliente del
+        // nombre de la columna, y con codigo_ref_catastral aceptaria «codigoRefCatastral»
+        // mientras el recurso publica «codRefCatastral». Dos nombres para el mismo campo
+        // es una pantalla que ordena y recibe un 422.
+        Pagina<FichaEncontrada> pagina =
+                paginar(
+                        "SELECT f.id, f.predio_id, p.codigo_ref_catastral AS cod_ref_catastral,"
+                                + " p.direccion, m.codigo AS manzana,"
+                                + " p.lote, f.tipo, f.version, f.area_terreno, f.uso,"
+                                + " f.vigencia_desde, tit.contribuyente_id"
+                                + DESDE_LA_GRILLA
+                                + donde,
+                        "SELECT count(*)" + DESDE_LA_GRILLA + donde,
+                        parametros,
+                        paginacion,
+                        ORDEN_CONSULTA,
+                        FichaCatastralRepositoryJdbc::mapearEncontrada);
+
+        // La suma va aparte y despues del LIMIT. El porque, en AREA_CONSTRUIDA_DE_LAS_FICHAS.
+        return conAreaConstruida(pagina);
+    }
+
+    /** Pone en cada fila de la pagina el area construida de su version, sumada por la base. */
+    private Pagina<FichaEncontrada> conAreaConstruida(Pagina<FichaEncontrada> pagina) {
+        if (pagina.estaVacia()) {
+            return pagina;
+        }
+        List<Long> fichas =
+                pagina.contenido().stream().map(FichaEncontrada::fichaId).distinct().toList();
+
+        Map<Long, AreaM2> areas =
+                jdbc()
+                        .sql(AREA_CONSTRUIDA_DE_LAS_FICHAS)
+                        .param("fichas", fichas)
+                        .query(
+                                (fila, numeroDeFila) ->
+                                        Map.entry(
+                                                fila.getLong("ficha_id"),
+                                                new AreaM2(fila.getBigDecimal("area_construida"))))
+                        .stream()
+                        .collect(
+                                java.util.stream.Collectors.toMap(
+                                        Map.Entry::getKey, Map.Entry::getValue));
+
+        // La ficha que no esta en el mapa no declara construcciones: sale nula, que no es cero.
+        return pagina.mapear(fila -> fila.conAreaConstruida(areas.get(fila.fichaId())));
     }
 
     /**
@@ -426,6 +481,8 @@ public class FichaCatastralRepositoryJdbc extends RepositorioJdbc
                 TipoFicha.valueOf(fila.getString("tipo")),
                 fila.getInt("version"),
                 new AreaM2(fila.getBigDecimal("area_terreno")),
+                // La suma llega despues, en conAreaConstruida: aqui no hay con que calcularla.
+                null,
                 fila.getString("uso"),
                 fila.getDate("vigencia_desde").toLocalDate(),
                 sinTitular ? null : titular,

@@ -11,6 +11,15 @@ import pe.gob.sgtm.catastro.dominio.FichaEncontrada;
  *
  * <p>{@code titular} nulo significa que el predio no tiene titular vigente a la fecha consultada.
  * Sale asi, y sale en la lista: es el predio que catastro tiene que revisar.
+ *
+ * <p><b>{@code areaConstruida} viaja sumada desde el servidor</b> (RNF-083, #290): es el total de
+ * las construcciones de <b>esta</b> version —la vigente a la fecha consultada—, no de todas las que
+ * el predio tuvo. La interfaz la pinta, no la calcula: una suma hecha en el cliente se reescribe en
+ * cada pantalla que la necesita y acaba dando dos totales distintos del mismo predio.
+ *
+ * <p>Nulo cuando la version no declara ninguna construccion —un terreno sin construir—, y no cero:
+ * el cero seria un area declarada, y confundir «no hay» con «declaro cero» esconde un error de
+ * captura. La pantalla pinta un guion, que no es un cero.
  */
 public record FichaEncontradaResource(
         long id,
@@ -22,6 +31,7 @@ public record FichaEncontradaResource(
         String tipo,
         int version,
         String areaTerreno,
+        @Nullable String areaConstruida,
         String uso,
         String vigenciaDesde,
         @Nullable String titular) {
@@ -37,6 +47,7 @@ public record FichaEncontradaResource(
                 fila.tipo().name(),
                 fila.version(),
                 fila.areaTerreno().toString(),
+                fila.areaConstruida() == null ? null : fila.areaConstruida().toString(),
                 fila.uso(),
                 fila.vigenciaDesde().toString(),
                 fila.titular());
