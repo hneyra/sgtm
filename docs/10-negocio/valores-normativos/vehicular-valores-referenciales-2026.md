@@ -66,6 +66,19 @@ leyeron en esta sesión. Lo de §1.2.1 a §1.2.4, todo §1.3 y todo §1.4 sale d
 una fuente secundaria ni de la analogía con el ejercicio anterior. Lo que **no** se llegó a ver —y
 por qué— está en la nota de §1.2.5 y en §3.
 
+**Dónde quedan los PDF.** Ese mismo 2026-08-28 los tres se archivaron en S3 con
+`scripts/valores-normativos/archivar_fuente_normativa.sh` (`--tipo vehicular --ubigeo 200105`,
+con historial y el sha256 verificado tras la subida), igual que el gpkg de aranceles en
+`aranceles-2026.md` §1.4. **No se versionan en git.** Sus URIs, huellas y el CSV derivado del
+anexo están en
+[`fuentes/tvr-2026/README.md`](fuentes/tvr-2026/README.md):
+
+| PDF | Archivado en S3 |
+|---|---|
+| `7623157-anexo-tvr-ipv-2026.pdf` | `s3://sgtm-fuentes-normativas/fuentes-normativas/vehicular/200105/2026-08-28T17-33-56Z__7623157-anexo-tvr-ipv-2026.pdf` |
+| `7623157-continuacion-anexo-tvr-2026.pdf` | `s3://sgtm-fuentes-normativas/fuentes-normativas/vehicular/200105/2026-08-28T17-33-59Z__7623157-continuacion-anexo-tvr-2026.pdf` |
+| `7623157-rm-n-008-2026-ef-15.pdf` | `s3://sgtm-fuentes-normativas/fuentes-normativas/vehicular/200105/2026-08-28T17-34-02Z__7623157-rm-n-008-2026-ef-15.pdf` |
+
 #### 1.2.1 Cómo se identifica el documento leído
 
 | Dato | Tal como aparece en el PDF |

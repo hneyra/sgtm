@@ -37,3 +37,10 @@ despliegue/.env
 # Ver docs/D0-desarrollo/entorno-local.md §2.
 despliegue/compose.override.yaml
 despliegue/compose.override.yml
+
+# Fuentes normativas binarias (PDF de El Peruano, gpkg del MEF, planos): su copia
+# durable es S3 (bucket sgtm-fuentes-normativas), archivada con
+# scripts/valores-normativos/archivar_fuente_normativa.sh. En el repo solo va lo
+# derivado en texto (CSV) y el README con las URIs y sus sha256.
+docs/10-negocio/valores-normativos/fuentes/**/*.pdf
+docs/10-negocio/valores-normativos/fuentes/**/*.gpkg
