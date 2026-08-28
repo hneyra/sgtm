@@ -140,7 +140,10 @@ class ContratoDeApiTest {
                     "POST /tesoreria/recibos/{nro}/anulacion",
                     "POST /tesoreria/fraccionamientos",
                     "GET /tesoreria/convenios",
-                    "POST /tesoreria/convenios/{numero}/anulacion");
+                    "POST /tesoreria/convenios/{numero}/anulacion",
+                    "POST /tesoreria/caja/cierre",
+                    "GET /tesoreria/recaudacion/avance",
+                    "GET /tesoreria/recaudacion/por-area");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

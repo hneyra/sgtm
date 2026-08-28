@@ -308,6 +308,44 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que edita un cierre de caja o su turno")
+    void elEscanerDetectaLaMuestraQueEditaUnCierre() throws IOException {
+        // #36: cierre_turno, cierre_turno_detalle y cierre_caja entran en TABLAS_INMUTABLES.
+        // El defecto aparece aqui con una forma muy concreta: corregir la cifra que el
+        // cajero declaro cuando se da cuenta de que conto mal, que es exactamente cuando
+        // el descuadre importa. Y el rodeo, igual que en #34: si el acta no se puede
+        // tocar, tocar el turno para volver a ponerlo en ABIERTO.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/MuestraDeRepositorioQueEditaUnCierre.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as(
+                        "los tres UPDATE y los dos DELETE, y ninguno de los comentarios que los"
+                                + " explican")
+                .hasSize(5);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update cierre_turno set"))
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update cierre_turno_detalle set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update cierre_caja set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from cierre_turno"))
+                .anySatisfy(
+                        f ->
+                                assertThat(f)
+                                        .containsIgnoringCase("delete from cierre_turno_detalle"));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra con valores tributarios compilados (regla 5)")
     void elEscanerDetectaLaMuestraDeValoresCompilados() throws IOException {
         Path muestra =

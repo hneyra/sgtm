@@ -53,6 +53,13 @@ public final class RevisorDeCodigoFuente {
                     "convenio_cuota",
                     "convenio_deuda",
                     "convenio_movimiento",
+                    // Con #36: el arqueo de un turno de caja y su desglose por medio de pago.
+                    // Borrar un cierre seria borrar la constancia de cuanto se recaudo un dia y
+                    // de cuanto declaro haber contado el cajero -que no esta en ningun otro
+                    // sitio-, y con ella la unica cifra contra la que se puede conciliar el
+                    // deposito.
+                    "cierre_turno",
+                    "cierre_turno_detalle",
                     "expediente_coactivo",
                     "acto_coactivo",
                     "ficha_catastral",
@@ -101,7 +108,24 @@ public final class RevisorDeCodigoFuente {
                     "convenio",
                     "convenio_cuota",
                     "convenio_deuda",
-                    "convenio_movimiento");
+                    "convenio_movimiento",
+                    // Y el turno de caja con su cierre, con #36. Tercera vez seguida y por el
+                    // mismo camino: V32 le retira a `cierre_caja` las columnas de cierre que V3
+                    // le habia puesto -decian ABIERTO para siempre-, y el arqueo pasa a
+                    // `cierre_turno`, que solo se agrega. Un cierre no se modifica ni se borra:
+                    // se reversa con otro registro que lo deja sin efecto y reabre el turno
+                    // (regla 4). Editar el acta dejaria el papel firmado por el cajero y la base
+                    // diciendo cosas distintas.
+                    //
+                    // `cierre_caja` es EL CASO ESPECIAL de esta lista, y conviene saberlo:
+                    // conserva el privilegio de UPDATE, y aqui esta el unico sitio que lo
+                    // protege. No es un descuido de V32: `SELECT ... FOR UPDATE` exige el
+                    // privilegio de UPDATE en PostgreSQL, y esa fila es el punto donde se
+                    // serializa la ventanilla desde V29. Revocarlo dejaria la caja sin poder
+                    // cobrar. Ver V32 §1.bis.
+                    "cierre_caja",
+                    "cierre_turno",
+                    "cierre_turno_detalle");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =

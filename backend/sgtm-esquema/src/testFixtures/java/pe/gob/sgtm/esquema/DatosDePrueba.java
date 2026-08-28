@@ -610,15 +610,17 @@ public final class DatosDePrueba {
         long turnoId =
                 insertar(
                         app,
+                        // V32 le retiro a `cierre_caja` las columnas de cierre que V3 le habia
+                        // puesto —`estado`, los dos totales, el contador y quien cerro—: decian
+                        // ABIERTO para siempre, porque el turno no se actualiza. El cierre y su
+                        // reversion viven ahora en `cierre_turno`, y el estado se deriva de ahi.
                         "INSERT INTO cierre_caja (municipalidad_id, caja_id, cajero, fecha,"
-                                + " total_efectivo, cantidad_recibos, fecha_apertura,"
-                                + " usuario_apertura, observacion)"
-                                + " VALUES (?, ?, 'prueba', ?, ?, 1, ?, 'prueba',"
+                                + " fecha_apertura, usuario_apertura, observacion)"
+                                + " VALUES (?, ?, 'prueba', ?, ?, 'prueba',"
                                 + "         'turno sembrado por el fixture') RETURNING id",
                         muni,
                         cajaId,
                         VIGENCIA,
-                        CIEN,
                         java.sql.Timestamp.valueOf(VIGENCIA.atStartOfDay()));
         long reciboId =
                 insertar(
@@ -663,6 +665,50 @@ public final class DatosDePrueba {
                 cajaId,
                 turnoId,
                 "0".repeat(64));
+
+        // El cierre del turno y su reversion (V32, #36). Se siembran los DOS a proposito:
+        // un cierre solo dejaria el turno cerrado, y el fixture describe una caja viva
+        // —CajaJdbcTest y las pruebas del cierre cobran contra ella—. Con la reversion, el
+        // turno vuelve a estar abierto, que es exactamente lo que #36 decidio que significa
+        // reversar un cierre: el arqueo anterior queda intacto y el turno reabre.
+        long cierreId =
+                insertar(
+                        app,
+                        "INSERT INTO cierre_turno (municipalidad_id, turno_id, tipo, secuencia,"
+                                + " fecha, fecha_registro, total_cobrado, total_anulado, neto,"
+                                + " total_declarado, diferencia, recibos_emitidos,"
+                                + " recibos_anulados, usuario_registro, observacion)"
+                                + " VALUES (?, ?, 'CIERRE', 1, ?, ?, ?, 0, ?, ?, 0, 1, 0,"
+                                + "         'prueba', 'cierre sembrado por el fixture')"
+                                + " RETURNING id",
+                        muni,
+                        turnoId,
+                        VIGENCIA,
+                        java.sql.Timestamp.valueOf(VIGENCIA.atStartOfDay()),
+                        CIEN,
+                        CIEN,
+                        CIEN);
+        ejecutar(
+                app,
+                "INSERT INTO cierre_turno_detalle (municipalidad_id, cierre_id, forma_pago,"
+                        + " cobrado, anulado, neto, declarado)"
+                        + " VALUES (?, ?, 'EFECTIVO', ?, 0, ?, ?)",
+                muni,
+                cierreId,
+                CIEN,
+                CIEN,
+                CIEN);
+        ejecutar(
+                app,
+                "INSERT INTO cierre_turno (municipalidad_id, turno_id, tipo, secuencia, fecha,"
+                        + " fecha_registro, revierte_a_id, motivo, usuario_registro, observacion)"
+                        + " VALUES (?, ?, 'REVERSION', 2, ?, ?, ?, 'el fixture deja la caja"
+                        + "  abierta', 'prueba', 'reversion sembrada por el fixture')",
+                muni,
+                turnoId,
+                VIGENCIA,
+                java.sql.Timestamp.valueOf(VIGENCIA.atStartOfDay()),
+                cierreId);
 
         // Un convenio de fraccionamiento (V31, #35), con su correlativo, su cronograma, la
         // deuda que acogio y su formalizacion. Su `recibo_inicial_id` ya no existe: el

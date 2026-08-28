@@ -3995,6 +3995,23 @@ paths:
       description: "Comparación de lo emitido contra lo recaudado por tributo y periodo, base del seguimiento de la meta anual."
       tags: ["Tesorería"]
       parameters:
+        - name: caja
+          in: query
+          required: false
+          description: >-
+            Codigo de la ventanilla. Junto con «cajero», la respuesta trae ademas el arqueo
+            EN VIVO de su turno: lo que la pantalla de cierre llama «Cuadrar», mirado antes
+            de firmar el acta (#36, RF-087). Del backend, no de la pantalla.
+          schema: { type: string }
+          example: "C-01"
+        - name: cajero
+          in: query
+          required: false
+          description: >-
+            Cajero del turno. Solo tiene efecto junto con «caja»; si ese cajero no abrio
+            turno ese dia, 404 —un arqueo en ceros haria pensar que abrio y no cobro—.
+          schema: { type: string }
+          example: "jperez"
         - name: ejercicio
           in: query
           required: false

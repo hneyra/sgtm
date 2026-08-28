@@ -44,6 +44,29 @@ public record NumeroDeRecibo(String serie, long numero) {
         return String.format(Locale.ROOT, FORMATO, serie, numero);
     }
 
+    /**
+     * Como se marcan en el libro los asientos que su cobranza escribio (#33).
+     *
+     * <p>Vive aqui por lo mismo que {@link #impreso}: es la unica cosa que relaciona un asiento con
+     * la caja que lo origino, y dos formas distintas de componerlo en dos sitios harian que la
+     * anulacion (#34) no encontrara lo que reversar o que el cierre (#36) no cuadrara, sin que nada
+     * lo delatara.
+     */
+    public String documentoDeLaCobranza() {
+        return "RECIBO " + impreso();
+    }
+
+    /**
+     * Y como se marcan los de su reversion: <b>distinto del anterior a proposito</b>.
+     *
+     * <p>Con el mismo texto, una segunda anulacion encontraria los asientos de la primera y
+     * reversaria la reversion, volviendo a dejar la deuda pagada. {@code
+     * RegistroDeAbonos#reversarAbonos} rechaza que coincidan.
+     */
+    public String documentoDeLaAnulacion() {
+        return "ANULACION " + impreso();
+    }
+
     @Override
     public String toString() {
         return impreso();

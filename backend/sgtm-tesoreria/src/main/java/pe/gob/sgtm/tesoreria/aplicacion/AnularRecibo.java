@@ -196,20 +196,21 @@ public class AnularRecibo {
                 observacion);
     }
 
-    /** Como {@code CobrarDeuda} marca los asientos de una cobranza. */
+    /**
+     * Como {@code CobrarDeuda} marca los asientos de una cobranza, y como se marcan los de su
+     * reversion.
+     *
+     * <p>Los dos textos los compone {@link NumeroDeRecibo} desde #36: el cierre de caja tiene que
+     * componer los mismos para cuadrar contra el libro, y dos definiciones del mismo texto en dos
+     * capas es como el arqueo acabaria sin encontrar los asientos que busca.
+     */
     static String documentoDeLaCobranza(NumeroDeRecibo numero) {
-        return "RECIBO " + numero.impreso();
+        return numero.documentoDeLaCobranza();
     }
 
-    /**
-     * Y como se marcan los de su reversion: distinto del anterior a proposito.
-     *
-     * <p>Con el mismo texto, una segunda anulacion encontraria los asientos de la primera y
-     * reversaria la reversion, volviendo a dejar la deuda pagada. {@code
-     * RegistroDeAbonos#reversarAbonos} rechaza que coincidan.
-     */
+    /** Ver {@link #documentoDeLaCobranza}. */
     static String documentoDeLaAnulacion(NumeroDeRecibo numero) {
-        return "ANULACION " + numero.impreso();
+        return numero.documentoDeLaAnulacion();
     }
 
     /** Sin datos personales: esto acaba en la columna JSON de la auditoria. */

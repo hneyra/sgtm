@@ -132,7 +132,15 @@ public class AbrirCaja {
         }
     }
 
-    /** El turno de ese cajero ya se cerro: su arqueo esta firmado. */
+    /**
+     * El turno de ese cajero ya se cerro: su arqueo esta firmado.
+     *
+     * <p><b>El mensaje cambio en #36</b>, y el cambio es la correccion de algo que #33 prometia sin
+     * poder cumplir. Decia «hay que abrir otro turno, no reabrir este»: no existe tal cosa. {@code
+     * cierre_uq} (V3) hace unico el turno por (caja, cajero, fecha), asi que un segundo turno del
+     * mismo cajero en el mismo dia y la misma caja es una fila que la base rechaza. La unica salida
+     * real es <b>reversar el cierre</b>, que es lo que lo reabre (V32, regla 4).
+     */
     public static final class TurnoCerrado extends RuntimeException {
 
         @java.io.Serial private static final long serialVersionUID = 1L;
@@ -146,7 +154,9 @@ public class AbrirCaja {
                             + " del "
                             + fecha
                             + " ya se cerro: su arqueo esta firmado y ese dinero no estaria en el."
-                            + " Hay que abrir otro turno, no reabrir este");
+                            + " Para volver a cobrar hoy hay que reversar ese cierre -eso reabre el"
+                            + " turno-, porque un cajero tiene un solo turno al dia por"
+                            + " ventanilla");
         }
     }
 }
