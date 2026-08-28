@@ -723,6 +723,16 @@ class SectorControllerTest {
      */
     private static final class RepositorioEnMemoria implements CatastroRepository {
 
+        @Override
+        public pe.gob.sgtm.compartido.Pagina<pe.gob.sgtm.catastro.PredioDelPadron> padron(
+                @org.jspecify.annotations.Nullable String sectorCodigo,
+                java.time.LocalDate aLaFecha,
+                pe.gob.sgtm.compartido.Paginacion paginacion) {
+            // El padron con su titular vigente (#49) solo lo recorre la deteccion de omisos, que
+            // se prueba contra PostgreSQL: aqui no hay nada que devolver.
+            throw new UnsupportedOperationException("esta prueba no recorre el padron");
+        }
+
         private final List<Sector> sectores =
                 new ArrayList<>(
                         List.of(

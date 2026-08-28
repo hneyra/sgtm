@@ -234,7 +234,7 @@ export function BarraDeAcciones({
                 {...(apagadaConMotivo
                   ? { 'aria-disabled': true, 'aria-describedby': MOTIVO }
                   : { disabled: !habilitada })}
-                title={tituloDe(accion, esPrimaria, escribe, escritura)}
+                {...tituloDe(accion, esPrimaria, escribe, escritura)}
                 onClick={() => {
                   if (apagadaConMotivo) return;
                   if (!escritura) return;
@@ -262,19 +262,37 @@ export function BarraDeAcciones({
     </>
   );
 
+  /**
+   * El `title` de un boton, **cuando decir algo ahi es cierto y sirve**.
+   *
+   * Devuelve las props y no la cadena para poder no ponerlo: `title={undefined}`
+   * y no poner `title` se dibujan igual, pero lo segundo se lee en el codigo
+   * como lo que es.
+   *
+   * **Con impedimento no lleva ninguno** (revision de #331). El texto de
+   * RNF-052 —«la operación se conecta junto con su campo de observación»— era
+   * cierto cuando la unica causa posible era esa, y dejo de serlo cuando la
+   * franja aprendio a decir tres cosas distintas (`actos.ts`): en una pantalla
+   * `sin-determinacion` afirmaba que falta la observacion, y lo que falta es la
+   * capa web del calculo. Y **ademas no llega a nadie**: esos secundarios se
+   * dibujan `disabled`, y un `title` sobre un boton deshabilitado no existe ni
+   * para el teclado —no se puede enfocar— ni para el lector de pantalla
+   * (FRO-04 §6). Lo que hay que leer ya esta pintado en la franja de arriba.
+   */
   function tituloDe(
     accion: string,
     esPrimaria: boolean,
     escribe: boolean,
     escritura?: Escritura,
-  ): string | undefined {
+  ): { readonly title?: string } {
+    if (impedimento !== undefined) return {};
     if (!esPrimaria || !escribe) {
-      return 'La operación se conecta junto con su campo de observación (RNF-052)';
+      return { title: 'La operación se conecta junto con su campo de observación (RNF-052)' };
     }
     if (escritura?.puedeEnviar === false && escritura.observacion.trim() === '') {
-      return `Escribe la observación para poder ${accion.toLowerCase()}`;
+      return { title: `Escribe la observación para poder ${accion.toLowerCase()}` };
     }
-    return undefined;
+    return {};
   }
 }
 

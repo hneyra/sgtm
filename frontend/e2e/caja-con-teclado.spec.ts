@@ -26,6 +26,16 @@ test('de la paleta de comandos al acto, solo con el teclado', async ({ page }) =
 
   await expect(page.getByRole('heading', { level: 1 })).toContainText(/Alta de deuda/i);
 
+  /* **El concepto se elige, y con el teclado.** El desplegable arranca vacio a
+     proposito (revision de #331): antes se dibujaba mostrando «IMPUESTO
+     PREDIAL» sin que nadie lo tocara y el cuerpo salia sin `tributo`. Se baja
+     una posicion con la flecha, que es como se opera un `select` sin raton. */
+  const concepto = page.getByLabel('Concepto / tributo');
+  await expect(concepto).toHaveValue('');
+  await concepto.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(concepto).toHaveValue('IMPUESTO PREDIAL');
+
   // La observacion es la condicion de guardado (regla 10, RNF-052), y se llega
   // a ella tabulando.
   const observacion = page.getByRole('textbox', { name: 'Observación' });
@@ -64,9 +74,17 @@ test('sin observación, ni con el teclado se consigue registrar', async ({ page 
   await guardar.focus();
   await expect(guardar).toBeFocused();
   const franja = page.locator('#sgtm-motivo-de-la-accion');
+  // Lo primero que falta es el concepto: sin el, el cuerpo saldria sin
+  // `tributo` y la deuda no señalaria a ninguna obligacion (revision de #331).
+  await expect(franja).toHaveText(/Falta el concepto/);
+
+  const concepto = page.getByLabel('Concepto / tributo');
+  await concepto.focus();
+  await page.keyboard.press('ArrowDown');
   await expect(franja).toHaveText(/Falta la observación/);
 
   // Pulsar no guarda nada: enfocable no es pulsable.
+  await guardar.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByText(/Guardado, con tu observación/)).toHaveCount(0);
 

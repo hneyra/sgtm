@@ -26,39 +26,72 @@ import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
  * no estan en `ArbitrioResource`, y sumar doce cuotas para inventar el anual es exactamente lo que
  * RNF-083 prohibe — se dejan en `SIN_DATO`.
  *
- * Quedan fuera de este PR, deliberadamente:
+ * ── El campo que resuelve, y a quien le falta todavia (#331) ────────────────
+ *
+ * `escrituras.ts` no tenia forma de expresar «esto se busca antes de mandarse», y eso bloqueaba
+ * cinco opciones. Ya no bloquea a `alta_deuda`: el opt-in `resolutores` de `composicion.ts` y
+ * `ResolutorDeUnidad` resuelven su «Unidad (predio / placa)» contra `consulta_fichas` y
+ * `vehiculos`, que son las dos lecturas que **si publican** el identificador interno
+ * —`FichaEncontradaResource.predioId` y `VehiculoResource.id`—.
+ *
+ * Las otras cuatro **no se cablean aqui**, y la frontera es distinta en cada una. Lo que falta no
+ * es el mecanismo: es la lectura que resuelva (ADR-0010 §4 — se anota, no se finge en el proxy).
+ *
+ * - `transferencia_predio` pide `predioId`. Es **resoluble hoy** con el mismo `consulta_fichas`,
+ *   y queda fuera por alcance, no por falta de lectura: su formulario pide ademas el codigo
+ *   exacto del transferente y del adquirente, que es otra resolucion —contra `contribuyentes`,
+ *   que tambien existe— y otro control.
+ * - `transferencia_vehiculo` pide el vehiculo y los dos contribuyentes. Misma situacion:
+ *   `vehiculos` resuelve el primero por placa.
+ * - `alcabala` pide `transferenciaId`, el identificador interno de una `Transferencia` **ya
+ *   registrada**. Ninguna operacion del contrato lista transferencias: `POST /rentas/transferencias/predio`
+ *   la crea y no hay ningun `GET` que la devuelva. **Ese identificador no es resoluble con las
+ *   lecturas publicadas**, y ahi se para: la unica salida honesta es que el backend publique la
+ *   consulta de transferencias, no que la interfaz adivine un numero.
+ * - `espectaculos` pide `organizadorId`. Igual: no hay ningun `GET` de organizadores en el
+ *   contrato. Y su segundo argumento, `ingresoDeclarado`, el catalogo lo marca `"ro"`
+ *   (`recaudacionDeclaradaS`) esperando que el servidor lo componga de aforo por precio, cosa que
+ *   `EspectaculoController` no hace.
+ *
+ * ── Lo que sigue fuera, y por que ───────────────────────────────────────────
  *
  * - `predios_rentas`, `predial_individual`, `predial_masivo`: el backend no publica todavia
  *   ningun `Controller` para `Determinacion` — #30 dejo la regla de negocio y su prueba, no la
- *   capa web.
- * - `alcabala`, `vehicular_calculo`, `espectaculos`: #32 (este mismo `onda:2`) resolvio la parte
- *   **estructural** de D-02 para los tres —sus controladores calculan de verdad, sin ningun
- *   literal tributario—, pero ninguno se puede conectar todavia y **no es por D-02**:
- *     - `alcabala` pide `transferenciaId` (identificador interno de una `Transferencia` ya
- *       registrada) y `autoavaluoAjustado` como los dos argumentos que decide quien llama; el
- *       catalogo no dibuja ningun campo escribible para el primero, y marca el segundo `"ro"`
- *       (`autovaluoAjustadoS`) esperando que el servidor calcule el ajuste por IPM — que D-11 dice
- *       explicitamente que no se calcula aqui.
- *     - `vehicular_calculo` pide `placa`/`codContribuyente`/`ejercicio` en el **cuerpo** de la
- *       peticion (`VehicularController`), pero `sgtm-v1.yaml` los declara como parametros de
- *       **consulta** de una pantalla que solo tiene `filtros` —sin `secciones`, asi que
- *       `escrituras.ts` no tiene formulario al que declararle campos—, y los filtros viajan por la
- *       URL, nunca por el cuerpo. Conectarlo de verdad es corregir el contrato o el controlador,
- *       no una entrada en la lista blanca.
- *     - `espectaculos` pide `organizadorId` (identificador interno) e `ingresoDeclarado`; el
- *       catalogo solo ofrece `organizador2`/`rUC` (texto) para lo primero y marca
- *       `recaudacionDeclaradaS` `"ro"` para lo segundo, esperando que el servidor la componga de
- *       aforo por precio — cosa que el controlador no hace.
- *   Los tres necesitan resolver un codigo contra un identificador interno antes de poder enviar,
- *   igual que ya le falta a `transferencia_predio`/`transferencia_vehiculo` (ver abajo).
- * - `transferencia_predio`, `transferencia_vehiculo`: el backend pide un identificador interno
- *   (`predioId`) y el codigo exacto de contribuyente, y el prototipo solo pide un codigo
- *   catastral y un numero de documento — hace falta una busqueda que resuelva uno contra el
- *   otro antes de poder enviar, y `escrituras.ts` no tiene forma de expresar eso (ver #73).
- * - `baja_deuda`: a diferencia de `alta_deuda`, su pantalla es buscar-y-seleccionar-varias-filas
- *   sobre una tabla de deuda existente, no un formulario plano — cada fila seleccionada es su
- *   propio `POST` a `/rentas/deuda/bajas`, y eso es una pieza de interfaz que no existe todavia,
- *   no una entrada mas en la lista blanca.
+ *   capa web. Ver abajo el contrato que esa capa tendria que publicar (#333).
+ * - `vehicular_calculo`: **el contrato y el controlador no dicen lo mismo, y eso se anota, no se
+ *   puentea** (#333c). `VehicularController.PeticionDeCalculoVehicular` lee `placa`,
+ *   `codContribuyente`, `vehiculoId`, `ejercicio`, `minimoImponible` y `simulacion` del **cuerpo**
+ *   de la peticion; `sgtm-v1.yaml` declara `placa`, `codContribuyente` y `ejercicio` como
+ *   parametros de **consulta**. Los filtros de una pantalla viajan por la URL, nunca por el
+ *   cuerpo, asi que hoy la peticion saldria con los tres en la URL y el controlador los leeria
+ *   nulos: calcularia sobre el padron entero, o fallaria. Ademas su catalogo no tiene `secciones`,
+ *   asi que no hay formulario al que declararle campos. Conectarlo es corregir el contrato o el
+ *   controlador —una sola verdad—, y esa correccion no cabe en un issue de interfaz: puentearla
+ *   desde aqui dejaria dos contratos vivos y el proximo que lea el YAML creeria el equivocado.
+ *   `minimoImponible` es, ademas, un valor normativo (D-02a).
+ * - `baja_deuda` ya esta conectada (#332): su tabla se lee de `consulta_deuda`. Ver mas abajo.
+ *
+ * ── (#333b) El contrato que la capa web de la determinacion tendra que publicar ─
+ *
+ * Se anota **como anotacion y no como forma en el proxy**: fingir aqui la derivacion haria que la
+ * pantalla se construyera contra una invencion, que es lo que ADR-0010 prohibe. Lo que
+ * `predial_individual` necesita, en el orden en que se lee, y todo por **contribuyente y
+ * ejercicio**:
+ *
+ *   1. los predios que integran la base: por cada uno, su codigo, ubicacion, uso, `%` de
+ *      propiedad y su autovaluo. Es `determinacion_predio_detalle` (V20), que ya existe como
+ *      tabla y no tiene recurso;
+ *   2. la base imponible **del conjunto**, ponderada por el `%` de propiedad de cada predio
+ *      (`RT011BaseImponibleDelContribuyente`), con el valuo total, el exonerado y el afecto;
+ *   3. los tramos aplicados: para cada uno, su limite en UIT, su alicuota y el importe que
+ *      aporta, **con el identificador del conjunto de parametros sellado** que se uso —«2026 v1»,
+ *      `determinacion.conjunto_id`—, porque una cifra sin su version no se puede recalcular;
+ *   4. las cuotas con sus vencimientos, y el derecho de emision;
+ *   5. la fecha a la que todo eso esta calculado (regla 9, RNF-075).
+ *
+ * Ninguna de las cinco se compone en la interfaz. La 2 y la 3 son literalmente las que RNF-083
+ * prohibe recomponer aqui: sumar los autovaluos de la tabla para «adelantar» la base daria una
+ * cifra parecida y sin el `%` de propiedad, y el error seria invisible.
  */
 
 /** El registro que abre la ficha o la declaracion. Sin el no hay peticion. */

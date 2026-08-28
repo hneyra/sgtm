@@ -10,6 +10,20 @@ public interface PapeletaRepository {
 
     Optional<Papeleta> porNumero(String numero);
 
+    /**
+     * La papeleta de esa familia con ese número (#50).
+     *
+     * <p>{@link #porNumero(String)} resuelve solo tránsito, que es lo que {@code
+     * CambiarNumeroDePapeleta} necesita (RF-067, la corrección del número solo existe ahí). Las
+     * resoluciones de gerencia y los descargos alcanzan a las dos familias, y {@code
+     * papeleta_numero_uq} es {@code (municipalidad, familia, numero)}: sin la familia, dos
+     * papeletas distintas pueden compartir número y la consulta devolvería la que el motor
+     * entregara primero.
+     */
+    Optional<Papeleta> porNumero(Familia familia, String numero);
+
+    Optional<Papeleta> porId(long id);
+
     Pagina<Papeleta> buscar(CriterioDePapeleta criterio, Paginacion paginacion);
 
     /**

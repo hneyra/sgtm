@@ -37,7 +37,8 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
             "p.id, p.familia, p.numero, p.codigo_infraccion_id, p.fecha_infraccion,"
                     + " p.hora_infraccion, p.lugar, p.placa, p.vehiculo_id, p.licencia_conducir,"
                     + " p.infractor_id, p.propietario_id, p.contribuyente_id, p.predio_id,"
-                    + " p.notificacion_previa_id, p.base_imponible, p.porcentaje_infraccion,"
+                    + " p.notificacion_previa_id, p.obligado_id, p.base_imponible,"
+                    + " p.porcentaje_infraccion,"
                     + " p.importe_infraccion, p.porcentaje_a_cobrar, p.importe_a_pagar,"
                     + " p.importe_con_beneficio, p.estado, p.usuario_registro, p.observacion";
 
@@ -68,6 +69,7 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
         campos.put("contribuyenteId", papeleta.contribuyenteId());
         campos.put("predioId", papeleta.predioId());
         campos.put("notificacionPreviaId", papeleta.notificacionPreviaId());
+        campos.put("obligadoId", papeleta.obligadoId());
         campos.put("baseImponible", papeleta.baseImponible().valor());
         campos.put("porcentajeInfraccion", papeleta.porcentajeInfraccion().valor());
         campos.put("importeInfraccion", papeleta.importeInfraccion().valor());
@@ -90,7 +92,7 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
                                         + "  fecha_infraccion, hora_infraccion, lugar, placa,"
                                         + "  vehiculo_id, licencia_conducir, infractor_id,"
                                         + "  propietario_id, contribuyente_id, predio_id,"
-                                        + "  notificacion_previa_id, base_imponible,"
+                                        + "  notificacion_previa_id, obligado_id, base_imponible,"
                                         + "  porcentaje_infraccion, importe_infraccion,"
                                         + "  porcentaje_a_cobrar, importe_a_pagar,"
                                         + "  importe_con_beneficio, estado, usuario_registro,"
@@ -101,7 +103,7 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
                                         + "  :fechaInfraccion, :horaInfraccion, :lugar, :placa,"
                                         + "  :vehiculoId, :licenciaConducir, :infractorId,"
                                         + "  :propietarioId, :contribuyenteId, :predioId,"
-                                        + "  :notificacionPreviaId, :baseImponible,"
+                                        + "  :notificacionPreviaId, :obligadoId, :baseImponible,"
                                         + "  :porcentajeInfraccion, :importeInfraccion,"
                                         + "  :porcentajeACobrar, :importeAPagar,"
                                         + "  :importeConBeneficio, :estado, :usuario, :observacion)"
@@ -121,6 +123,27 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
                                 + DESDE
                                 + " WHERE p.familia = 'TRANSITO' AND p.numero = :numero")
                 .param("numero", numero.strip().toUpperCase(java.util.Locale.ROOT))
+                .query(PapeletaRepositoryJdbc::mapear)
+                .optional();
+    }
+
+    @Override
+    public Optional<Papeleta> porNumero(Familia familia, String numero) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS
+                                + DESDE
+                                + " WHERE p.familia = :familia AND p.numero = :numero")
+                .param("familia", familia.name())
+                .param("numero", numero.strip().toUpperCase(java.util.Locale.ROOT))
+                .query(PapeletaRepositoryJdbc::mapear)
+                .optional();
+    }
+
+    @Override
+    public Optional<Papeleta> porId(long id) {
+        return jdbc().sql("SELECT " + COLUMNAS + DESDE + " WHERE p.id = :id")
+                .param("id", id)
                 .query(PapeletaRepositoryJdbc::mapear)
                 .optional();
     }
@@ -246,6 +269,7 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
                 papeleta.contribuyenteId(),
                 papeleta.predioId(),
                 papeleta.notificacionPreviaId(),
+                papeleta.obligadoId(),
                 papeleta.baseImponible(),
                 papeleta.porcentajeInfraccion(),
                 papeleta.importeInfraccion(),
@@ -284,6 +308,7 @@ public class PapeletaRepositoryJdbc extends RepositorioJdbc implements PapeletaR
                 contribuyenteId,
                 predioId,
                 notificacionPreviaId,
+                fila.getLong("obligado_id"),
                 new Dinero(fila.getBigDecimal("base_imponible")),
                 new Alicuota(fila.getBigDecimal("porcentaje_infraccion")),
                 new Dinero(fila.getBigDecimal("importe_infraccion")),

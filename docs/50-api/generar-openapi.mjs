@@ -210,6 +210,49 @@ const OPERACIONES_ADICIONALES = {
         ' solo las que el grupo ya tiene.',
     },
   ],
+  // `internamiento` declara «GET /transito/internamientos» como su endpoint —la
+  // grilla del deposito—; sus dos acciones, «Registrar ingreso» y «Liberar
+  // vehiculo», necesitan verbo propio (#50, RF-064).
+  internamiento: [
+    {
+      operationId: 'registrar_internamiento',
+      metodo: 'post',
+      titulo: 'Registro de ingreso al deposito',
+      descripcion:
+        'Interna un vehiculo en el deposito municipal y emite su acta. El cuerpo lleva la' +
+        ' placa, el deposito, el concepto del TUPA con que se cobrara la custodia y la' +
+        ' observacion del usuario, obligatoria (RNF-052).',
+    },
+    {
+      operationId: 'liberar_internamiento',
+      metodo: 'post',
+      ruta: '/api/v1/transito/internamientos/{placa}/liberacion',
+      titulo: 'Liberacion del vehiculo internado',
+      descripcion:
+        'Entrega el vehiculo a quien lo retira y emite el acta de liberacion. Exige el' +
+        ' recibo con que se pago la custodia: el backend lo acredita contra `tesoreria`' +
+        ' por su API publica, y sin esa acreditacion el vehiculo no sale. La casilla' +
+        ' «Custodia cancelada» de la pantalla no basta: la marca quien entrega el vehiculo.',
+    },
+  ],
+  // `transito_rg_ordinaria` declara «POST /transito/resoluciones/ordinaria»
+  // —dictarla—; notificarla necesita ruta propia. Infracciones administrativas
+  // SI tiene su pantalla de notificacion en el manual; transito no, y sin ella
+  // la sancionadora no se puede dictar nunca porque su plazo se cuenta desde
+  // que la ordinaria surte efecto (#50, RF-074).
+  transito_rg_ordinaria: [
+    {
+      operationId: 'notificar_resolucion_transito',
+      metodo: 'post',
+      ruta: '/api/v1/transito/resoluciones/{numero}/notificacion',
+      titulo: 'Notificacion de resolucion de gerencia de transito',
+      descripcion:
+        'Cedula de notificacion de la resolucion ordinaria o sancionadora de transito, con' +
+        ' su acuse. Es de donde sale el derecho a la sancionadora: la diligencia que surte' +
+        ' efecto sobre la ordinaria fija, con el plazo parametrizado del conjunto sellado,' +
+        ' el dia desde el que se puede sancionar.',
+    },
+  ],
   // `calles` declara «GET /catastro/vias» como su endpoint —la lectura del
   // catalogo vial—; el alta y la edicion que pide su pantalla de mantenimiento
   // (RF-008, #290) necesitan un verbo aparte.
@@ -337,6 +380,50 @@ const OPERACIONES_ADICIONALES = {
         'Crea la versión siguiente de la ficha rural y cierra la anterior. Los grupos de tierra' +
         ' van en hectáreas —el arancel rural se publica por hectárea— y se copian si el cuerpo' +
         ' no los declara.',
+    },
+  ],
+  // «Resultados y determinaciones» declara «GET /fiscalizacion/resultados» como
+  // su endpoint —la grilla—; emitir la liquidación de un acta y reliquidarla
+  // (RF-053, #49) necesitan sus propios verbos. Sin ellos la pantalla lista un
+  // resultado que nada puede producir.
+  fisc_resultados: [
+    {
+      operationId: 'liquidar_fiscalizacion',
+      metodo: 'post',
+      ruta: '/api/v1/fiscalizacion/liquidaciones',
+      titulo: 'Liquidación de un acta de fiscalización',
+      descripcion:
+        'Emite la liquidación de un acta: el contraste hallado/declarado, una línea por unidad y' +
+        ' ejercicio del periodo fiscalizado. Cada línea fija el conjunto de parámetros SELLADO de' +
+        ' su ejercicio, de modo que cambiar los parámetros de hoy no altera una liquidación ya' +
+        ' emitida. Sin importes: los liquidados y las multas esperan a D-02a (#198). El cuerpo' +
+        ' lleva la observación del usuario, obligatoria (RNF-052).',
+    },
+    {
+      operationId: 'reliquidar_fiscalizacion',
+      metodo: 'post',
+      ruta: '/api/v1/fiscalizacion/liquidaciones/{numero}/reliquidaciones',
+      titulo: 'Reliquidación',
+      descripcion:
+        'Corrige una liquidación emitiendo OTRA versión que la referencia. La anterior no cambia' +
+        ' ni una columna, las dos quedan, y la respuesta explica qué cambió entre ellas. Las' +
+        ' líneas heredan el conjunto sellado de la versión anterior: una reliquidación corrige el' +
+        ' contraste, no el marco normativo.',
+    },
+  ],
+  // «Histórico de fiscalización predial» declara su GET; mover la liquidación
+  // por sus estados —ABIERTA, EN PROCESO, LIQUIDADA, NOTIFICADA, ANULADA, que
+  // son los de su propio desplegable— necesita un verbo aparte (#49, RF-056).
+  fisc_historico: [
+    {
+      operationId: 'estado_de_liquidacion',
+      metodo: 'patch',
+      ruta: '/api/v1/fiscalizacion/liquidaciones/{numero}/estados',
+      titulo: 'Estado de una liquidación de fiscalización',
+      descripcion:
+        'Mueve la liquidación de estado conservando el historial. No actualiza ninguna fila:' +
+        ' agrega un movimiento, y el estado se DERIVA de él. Una liquidación anulada no vuelve:' +
+        ' corregirla es reliquidar.',
     },
   ],
   // `licencia_funcionamiento` declara «GET /licencias/funcionamiento» como su

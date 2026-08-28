@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 155 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 161 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 155 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 161 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 155 operaciones del contrato, por su `operationId`.
+ * Las 161 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 155 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 161 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -382,6 +382,27 @@ export const OPERACIONES = {
     parametrosDeRuta: [],
     parametrosDeConsulta: ['nLiquidacion', 'codCont', 'nNotificacion', 'contribuyente', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
+  /** Liquidación de un acta de fiscalización — `POST /fiscalizacion/liquidaciones` */
+  liquidar_fiscalizacion: {
+    metodo: 'POST',
+    ruta: '/fiscalizacion/liquidaciones',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
+  /** Reliquidación — `POST /fiscalizacion/liquidaciones/{numero}/reliquidaciones` */
+  reliquidar_fiscalizacion: {
+    metodo: 'POST',
+    ruta: '/fiscalizacion/liquidaciones/{numero}/reliquidaciones',
+    parametrosDeRuta: ['numero'],
+    parametrosDeConsulta: [],
+  },
+  /** Estado de una liquidación de fiscalización — `PATCH /fiscalizacion/liquidaciones/{numero}/estados` */
+  estado_de_liquidacion: {
+    metodo: 'PATCH',
+    ruta: '/fiscalizacion/liquidaciones/{numero}/estados',
+    parametrosDeRuta: ['numero'],
+    parametrosDeConsulta: [],
+  },
   /** Resolución de determinación de fiscalización — `GET /fiscalizacion/resoluciones/{numero}` */
   resolucion_determinacion_fisc: {
     metodo: 'GET',
@@ -423,6 +444,20 @@ export const OPERACIONES = {
     ruta: '/transito/internamientos',
     parametrosDeRuta: [],
     parametrosDeConsulta: ['placa', 'deposito', 'estado', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+  },
+  /** Registro de ingreso al depósito — `POST /transito/internamientos` */
+  registrar_internamiento: {
+    metodo: 'POST',
+    ruta: '/transito/internamientos',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
+  /** Liberación del vehículo internado — `POST /transito/internamientos/{placa}/liberacion` */
+  liberar_internamiento: {
+    metodo: 'POST',
+    ruta: '/transito/internamientos/{placa}/liberacion',
+    parametrosDeRuta: ['placa'],
+    parametrosDeConsulta: [],
   },
   /** Emisión de resoluciones y otros documentos — `GET /transito/papeletas/{numero}/actos` */
   transito_documentos: {
@@ -506,6 +541,13 @@ export const OPERACIONES = {
     metodo: 'POST',
     ruta: '/transito/resoluciones/sancionadora',
     parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
+  /** Notificación de resolución de gerencia de tránsito — `POST /transito/resoluciones/{numero}/notificacion` */
+  notificar_resolucion_transito: {
+    metodo: 'POST',
+    ruta: '/transito/resoluciones/{numero}/notificacion',
+    parametrosDeRuta: ['numero'],
     parametrosDeConsulta: [],
   },
   /** Padrón de papeletas enviadas a coactiva — `GET /transito/reportes/padron-coactiva` */
@@ -1133,7 +1175,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 155 operaciones. */
+/** El `operationId` de una de las 161 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1476,6 +1518,16 @@ export interface ParametrosPorOperacion {
     readonly ordenarPor?: string;
     readonly direccion?: string;
   };
+  /** `POST /fiscalizacion/liquidaciones` */
+  readonly liquidar_fiscalizacion: Readonly<Record<string, never>>;
+  /** `POST /fiscalizacion/liquidaciones/{numero}/reliquidaciones` */
+  readonly reliquidar_fiscalizacion: {
+    readonly numero: string;
+  };
+  /** `PATCH /fiscalizacion/liquidaciones/{numero}/estados` */
+  readonly estado_de_liquidacion: {
+    readonly numero: string;
+  };
   /** `GET /fiscalizacion/resoluciones/{numero}` */
   readonly resolucion_determinacion_fisc: {
     readonly numero: string;
@@ -1529,6 +1581,12 @@ export interface ParametrosPorOperacion {
     readonly tamano?: string;
     readonly ordenarPor?: string;
     readonly direccion?: string;
+  };
+  /** `POST /transito/internamientos` */
+  readonly registrar_internamiento: Readonly<Record<string, never>>;
+  /** `POST /transito/internamientos/{placa}/liberacion` */
+  readonly liberar_internamiento: {
+    readonly placa: string;
   };
   /** `GET /transito/papeletas/{numero}/actos` */
   readonly transito_documentos: {
@@ -1588,6 +1646,10 @@ export interface ParametrosPorOperacion {
   readonly transito_rg_ordinaria: Readonly<Record<string, never>>;
   /** `POST /transito/resoluciones/sancionadora` */
   readonly transito_rg_sancionadora: Readonly<Record<string, never>>;
+  /** `POST /transito/resoluciones/{numero}/notificacion` */
+  readonly notificar_resolucion_transito: {
+    readonly numero: string;
+  };
   /** `GET /transito/reportes/padron-coactiva` */
   readonly transito_padron_coactiva: {
     readonly desde?: string;
@@ -2338,12 +2400,17 @@ export interface CuerpoPorOperacion {
   readonly fisc_omisos: undefined;
   readonly fisc_estado_cuenta: undefined;
   readonly fisc_historico: undefined;
+  readonly liquidar_fiscalizacion: CuerpoSinEsquema;
+  readonly reliquidar_fiscalizacion: CuerpoSinEsquema;
+  readonly estado_de_liquidacion: CuerpoSinEsquema;
   readonly resolucion_determinacion_fisc: undefined;
   readonly papeletas: undefined;
   readonly transito_busqueda: undefined;
   readonly codigos_transito: undefined;
   readonly transito_descargos: CuerpoSinEsquema;
   readonly internamiento: undefined;
+  readonly registrar_internamiento: CuerpoSinEsquema;
+  readonly liberar_internamiento: CuerpoSinEsquema;
   readonly transito_documentos: undefined;
   readonly transito_valores: CuerpoSinEsquema;
   readonly transito_cambio_numero: CuerpoSinEsquema;
@@ -2356,6 +2423,7 @@ export interface CuerpoPorOperacion {
   readonly transito_papeleta_reporte: undefined;
   readonly transito_rg_ordinaria: CuerpoSinEsquema;
   readonly transito_rg_sancionadora: CuerpoSinEsquema;
+  readonly notificar_resolucion_transito: CuerpoSinEsquema;
   readonly transito_padron_coactiva: undefined;
   readonly transito_padron_constancias: undefined;
   readonly transito_resumen_recaudacion: undefined;
@@ -2497,12 +2565,17 @@ export interface RespuestaPorOperacion {
   readonly fisc_omisos: CuerpoSinEsquema;
   readonly fisc_estado_cuenta: CuerpoSinEsquema;
   readonly fisc_historico: CuerpoSinEsquema;
+  readonly liquidar_fiscalizacion: CuerpoSinEsquema;
+  readonly reliquidar_fiscalizacion: CuerpoSinEsquema;
+  readonly estado_de_liquidacion: CuerpoSinEsquema;
   readonly resolucion_determinacion_fisc: CuerpoSinEsquema;
   readonly papeletas: CuerpoSinEsquema;
   readonly transito_busqueda: CuerpoSinEsquema;
   readonly codigos_transito: CuerpoSinEsquema;
   readonly transito_descargos: CuerpoSinEsquema;
   readonly internamiento: CuerpoSinEsquema;
+  readonly registrar_internamiento: CuerpoSinEsquema;
+  readonly liberar_internamiento: CuerpoSinEsquema;
   readonly transito_documentos: CuerpoSinEsquema;
   readonly transito_valores: CuerpoSinEsquema;
   readonly transito_cambio_numero: CuerpoSinEsquema;
@@ -2515,6 +2588,7 @@ export interface RespuestaPorOperacion {
   readonly transito_papeleta_reporte: CuerpoSinEsquema;
   readonly transito_rg_ordinaria: CuerpoSinEsquema;
   readonly transito_rg_sancionadora: CuerpoSinEsquema;
+  readonly notificar_resolucion_transito: CuerpoSinEsquema;
   readonly transito_padron_coactiva: CuerpoSinEsquema;
   readonly transito_padron_constancias: CuerpoSinEsquema;
   readonly transito_resumen_recaudacion: CuerpoSinEsquema;

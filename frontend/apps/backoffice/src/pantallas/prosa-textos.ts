@@ -90,6 +90,25 @@ export const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
     detalle:
       'El recurso publica el registro: placa, año, marca, modelo, categoría, motor y serie. El titular llega como identificador interno —sin nombre—, y la base imponible, el impuesto y el estado de afectación dependen de la tabla referencial del MEF, que es un valor normativo todavía sin cerrar. Todo eso sale con «—».',
   },
+  /**
+   * **La base del predial es por contribuyente, no por predio** (#333).
+   *
+   * Es el no-negociable de CLAUDE.md y de NEG-05 §1, y el esquema lo hace
+   * imposible de otra forma —`determinacion_predial_sin_predio_ck` de `V20`—. La
+   * pantalla lo enseña sin decirlo: la tabla de arriba lista predios, cada uno
+   * con su valuo, y la seccion de abajo aplica tramos. Quien lee eso de arriba
+   * abajo concluye lo que parece —un impuesto por predio, sumado despues—, que
+   * es el error sistematico a la baja que NEG-05 nombra.
+   *
+   * Y dice **de donde salen las cifras que no estan**: las pone el servidor, con
+   * el conjunto de parametros sellado del ejercicio, y esta pantalla no calcula
+   * nada (D-02a). Los huecos salen con «—», que no es cero.
+   */
+  predial_individual: {
+    titulo: 'La base es del contribuyente, no de cada predio',
+    detalle:
+      'Los tramos y las alícuotas se aplican al conjunto de los predios del contribuyente, ponderado cada uno por su porcentaje de propiedad: no se calcula predio por predio ni se suman después los impuestos. Esta pantalla no calcula nada —el valor de la UIT, los tramos, las alícuotas y las cuotas los determina el servidor con el conjunto de parámetros sellado del ejercicio—, así que lo que todavía no llega sale con «—», que no es cero.',
+  },
   fisc_historico: {
     titulo: 'Versiones del proceso, no del padrón',
     detalle:
@@ -117,7 +136,7 @@ export const NOTAS: Readonly<Record<string, string>> = {
     'La contraseña no se escribe aquí y el sistema no la recibe: el cambio lo hace el proveedor de identidad. Al aceptar, queda registrado quién lo pidió y por qué, y se continúa allí.',
 
   alta_deuda:
-    'Solo se admiten los tributos con código establecido: predial, arbitrios, vehicular y alcabala. La unidad (predio o placa) y el rango de cuotas todavía no se resuelven aquí: el alta queda a nivel de contribuyente y con una sola cuota.',
+    'Solo se admiten los tributos con código en el libro: predial, arbitrios, vehicular, alcabala y multa administrativa. La unidad se busca por código catastral o por placa y lo que se guarda es el registro encontrado, no lo tecleado; los arbitrios, la alcabala y el vehicular la exigen, y el predial no la admite —se determina por contribuyente, sobre el conjunto de sus predios—. El rango de cuotas todavía no viaja: el alta registra una sola cuota.',
 
   baja_deuda:
     'La baja registra una obligación por acto: se elige su cuota en la tabla y se repite para las demás. La causal no tiene campo propio en el backend —va en la observación, que es donde queda auditada— y el total a extinguir lo calcula el servidor: aquí no se suma ninguna columna. Una fila cuya cuota agrupa varias («1 - 4») no se puede dar de baja todavía: el backend registra una cuota o el año completo, y no hay forma de decirle «de la 1 a la 4».',

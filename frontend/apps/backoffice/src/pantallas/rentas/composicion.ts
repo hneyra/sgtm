@@ -19,6 +19,16 @@ const ResumenDeVehiculo = lazy(async () => ({
 const ResumenDeDeclaracion = lazy(async () => ({
   default: (await import('./ResumenDeDeclaracion')).ResumenDeDeclaracion,
 }));
+/**
+ * El campo que resuelve la unidad del alta de deuda (#331), tambien perezoso.
+ *
+ * Trae dentro dos busquedas contra el backend y su prosa; en el trozo comun
+ * seria codigo que 133 de las 134 pantallas no usan nunca. `Formulario` lo
+ * dibuja dentro de un `Suspense`, igual que `Pantalla` hace con las cabeceras.
+ */
+const ResolutorDeUnidad = lazy(async () => ({
+  default: (await import('./ResolutorDeUnidad')).ResolutorDeUnidad,
+}));
 
 /**
  * Lo que Rentas · Registro compone alrededor de los bloques comunes (#330, #332).
@@ -38,6 +48,14 @@ const ResumenDeDeclaracion = lazy(async () => ({
  *    vacia desde el prototipo, y esa columna es la obligacion que se da de baja.
  *    Lo elegido viaja por la tabla `cuotas` que `escrituras.ts` declara, con su
  *    lista blanca por columna.
+ *
+ * 3. **El alta de deuda resuelve su unidad** (#331). «Unidad (predio / placa)»
+ *    se tecleaba y no viajaba: el backend pide `predioId`/`vehiculoId`, que son
+ *    identificadores internos. El resolutor busca en las dos lecturas que ya los
+ *    publican —`consulta_fichas` y `vehiculos`— y fija el registro elegido.
+ *
+ * 4. **El calculo individual del predial se lee en el orden del calculo** (#333).
+ *    Un indice, y ni una seccion renombrada ni reagrupada: ver abajo.
  */
 
 /** Cabecera-resumen mas indice que **sustituye** a las pestanas de la ficha. */
@@ -52,6 +70,69 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * es un indice, es un titulo repetido con un clic de por medio.
    */
   declaracion_jurada: { resumen: ResumenDeDeclaracion },
+  /**
+   * El alta de deuda, con su campo que resuelve (#331).
+   *
+   * `campos` declara **lo que este resolutor llena**, y son los dos que
+   * `escrituras.ts` acaba de declarar: sin ellos, `fijarCampo` los descartaria
+   * en silencio y la busqueda seria un adorno. `Formulario` lo comprueba antes
+   * de dibujarlo y lo bloquea si faltan.
+   *
+   * Y las otras dos declaraciones son las que dicen **que mas toca y que
+   * mira**, sin abrir el componente (revision de #331):
+   *
+   *   `memoria`   el rotulo de la unidad elegida. Se guarda en el borrador
+   *               —`escrituras.ts` lo declara en `presentacion`— para que
+   *               plegar la seccion no lo pierda, y **no viaja**
+   *   `contexto`  lo que lee del formulario para poder decir si la unidad
+   *               resuelta es de otro titular. Es de solo lectura: `onCampo`
+   *               solo acepta lo que este resolutor declara llenar
+   */
+  alta_deuda: {
+    resolutores: {
+      unidadPredioPlaca: {
+        campos: ['predioId', 'vehiculoId'],
+        memoria: ['unidadResuelta'],
+        contexto: ['codContribuyente', 'nombre'],
+        Control: ResolutorDeUnidad,
+      },
+    },
+  },
+  /**
+   * El calculo individual del predial, leido **en el orden del calculo** (#333).
+   *
+   * El mecanismo es el mas pequeno que lo logra, y se eligio despues de mirar
+   * los otros dos: el orden que el issue pide —los predios del contribuyente,
+   * la base del conjunto, la escala del ejercicio y las cuotas— **ya es el
+   * orden en que el renderizador dibuja esta pantalla**, porque la tabla va
+   * antes que las secciones (FRO-03 §5) y las tres secciones del manual estan
+   * en ese orden. Lo que faltaba no era mover nada: era que el orden se viera y
+   * se pudiera recorrer, y que la pantalla dijera de quien es la base.
+   *
+   *   `indice: true`  lista las secciones y lleva a cada una desplazando, con
+   *                   su salida hacia las acciones
+   *   `indiceConLaTabla`  y **la tabla de predios entra tambien**, la primera,
+   *                   porque es el paso 1 del calculo. Sin ella el indice
+   *                   empezaba en la escala: la tabla se dibuja encima de las
+   *                   secciones y fuera de la rejilla del indice (FRO-03 §5),
+   *                   asi que el unico paso desde el que se entiende el resto
+   *                   era el unico al que el indice no llevaba
+   *   el aviso        dice que la base es **por contribuyente** y que la escala
+   *                   y su conjunto sellado los pone el servidor
+   *                   (`prosa-textos.ts`, fuera del trozo de arranque)
+   *
+   * Lo que **no** se hizo, y por que: una cabecera-resumen propia habria pedido
+   * ademas ensanchar `hayQueResumir` —esta pantalla no abre ningun registro por
+   * la ruta, y su contribuyente es un filtro que no se llama `codigo`— para
+   * dibujar un bloque en el que **todas** las cifras serian «—», porque
+   * `predial_individual` es un `POST` y no se pide al abrir. Un bloque nuevo que
+   * no dice nada que el aviso no diga, a cambio de tocar una funcion que usan
+   * las cuatro fichas catastrales y las tres de rentas.
+   *
+   * `'en-vez-de-pestanas'` tampoco: esta pantalla no tiene pestanas que
+   * sustituir. Con `true`, `seccionesDe` devuelve sus tres secciones tal cual.
+   */
+  predial_individual: { indice: true, indiceConLaTabla: true },
   baja_deuda: {
     seleccion: {
       tabla: 'cuotas',
