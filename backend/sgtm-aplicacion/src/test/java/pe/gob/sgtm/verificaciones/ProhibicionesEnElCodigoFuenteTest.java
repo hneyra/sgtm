@@ -488,6 +488,71 @@ class ProhibicionesEnElCodigoFuenteTest {
                 .anySatisfy(f -> assertThat(f).contains("CUOTAS_MAXIMAS"));
     }
 
+    @Test
+    @DisplayName("el escaner detecta la muestra que edita una liquidacion de costas")
+    void elEscanerDetectaLaMuestraQueEditaUnaLiquidacionDeCostas() throws IOException {
+        // #42: liquidacion_costas, costa_procesal y costa_obligacion entran en TABLAS_INMUTABLES.
+        // Aqui el motivo es literal: el importe de la liquidacion YA ESTA en el libro como cargo
+        // de concepto GASTO. Corregir la fila deja el cargo diciendo una cifra y la liquidacion
+        // otra, y la que se cobra en ventanilla es la del libro.
+        //
+        // Y con los rodeos cerrados: corregir la linea en vez de la cabecera, borrarla, y -el
+        // propio de #42- mudar `costa_obligacion` a otro expediente, que traslada un cobro de un
+        // procedimiento a otro sin dejar rastro.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnaLiquidacionDeCostas.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los tres UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(4);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update liquidacion_costas set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update costa_procesal set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from costa_procesal"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update costa_obligacion set"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra con el arancel de costas compilado (regla 5)")
+    void elEscanerDetectaLaMuestraDeArancelDeCostas() throws IOException {
+        // #42: el arancel de costas es de ordenanza local (D-02c, #193 bloqueado). ARANCEL ya
+        // estaba en la lista de nombres y caza ARANCEL_COSTA_REC1; lo que NO cazaba, y por eso
+        // COSTA entra ahora, es COSTA_DE_LA_REC2 -que es como se escribe cuando a alguien le
+        // parece que treinta y cinco soles por resolucion son un detalle de implementacion-.
+        // Es el mismo hueco que #35 destapo con INTERES_DE_FRACCIONAMIENTO.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeArancelDeCostasCompilado.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las tres constantes, y ninguno de los comentarios que las explican")
+                .hasSize(3);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).contains("ARANCEL_COSTA_REC1"))
+                .anySatisfy(f -> assertThat(f).contains("COSTA_DE_LA_REC2"))
+                .anySatisfy(f -> assertThat(f).contains("COSTAS_PORCENTAJE_SOBRE_LA_DEUDA"));
+    }
+
     private static List<Path> fuentesDeProduccion(Path raiz) throws IOException {
         try (Stream<Path> rutas = Files.walk(raiz)) {
             return rutas.filter(Files::isRegularFile)

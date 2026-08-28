@@ -24,6 +24,7 @@ import pe.gob.sgtm.coactiva.aplicacion.CambiarEstadoDelExpediente;
 import pe.gob.sgtm.coactiva.aplicacion.ConsultaDeExpedientes;
 import pe.gob.sgtm.coactiva.aplicacion.ImportarValoresACoactiva;
 import pe.gob.sgtm.coactiva.dobles.ContribuyentesDeMentira;
+import pe.gob.sgtm.coactiva.dobles.CostasEnMemoria;
 import pe.gob.sgtm.coactiva.dobles.ExpedientesEnMemoria;
 import pe.gob.sgtm.coactiva.dobles.LibroDeMentira;
 import pe.gob.sgtm.coactiva.dobles.MovimientosDelExpedienteEnMemoria;
@@ -80,7 +81,8 @@ class ExpedienteControllerTest {
                     .con(new ResumenDeContribuyente(7L, "C-0007", "TITULAR, PRUEBA", "DNI 1234"));
 
     private final ConsultaDeExpedientes consulta =
-            new ConsultaDeExpedientes(expedientes, movimientos, valores, libro);
+            new ConsultaDeExpedientes(
+                    expedientes, movimientos, valores, libro, new CostasEnMemoria());
 
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(

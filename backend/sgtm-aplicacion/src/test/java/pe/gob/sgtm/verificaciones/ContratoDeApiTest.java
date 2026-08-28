@@ -152,7 +152,14 @@ class ContratoDeApiTest {
                     "POST /coactiva/rec/impresion",
                     "GET /coactiva/expedientes/{numero}/proceso",
                     "POST /coactiva/expedientes/{numero}/actos",
-                    "POST /coactiva/notificaciones");
+                    "POST /coactiva/notificaciones",
+                    // #42 — RF-104, RF-105 y RF-107: las costas como cargo del libro, el
+                    // fraccionamiento coactivo y las dos consultas de deuda.
+                    "POST /coactiva/liquidaciones-costas",
+                    "GET /coactiva/liquidaciones-costas",
+                    "POST /coactiva/convenios",
+                    "GET /coactiva/deudas",
+                    "GET /coactiva/deudas-en-beneficio");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

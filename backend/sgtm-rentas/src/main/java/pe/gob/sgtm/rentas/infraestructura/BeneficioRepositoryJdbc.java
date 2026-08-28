@@ -119,6 +119,22 @@ public class BeneficioRepositoryJdbc extends RepositorioJdbc implements Benefici
     }
 
     @Override
+    public List<Beneficio> vigentesDelContribuyente(long contribuyenteId, LocalDate fecha) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS
+                                + DESDE
+                                + " WHERE b.contribuyente_id = :contribuyente"
+                                + "   AND b.vigencia_desde <= :fecha"
+                                + "   AND (b.vigencia_hasta IS NULL OR b.vigencia_hasta >= :fecha)"
+                                + " ORDER BY b.tributo, b.tipo, b.id")
+                .param("contribuyente", contribuyenteId)
+                .param("fecha", fecha)
+                .query(BeneficioRepositoryJdbc::mapear)
+                .list();
+    }
+
+    @Override
     public Beneficio insertar(Beneficio beneficio) {
         Long id =
                 jdbc().sql(

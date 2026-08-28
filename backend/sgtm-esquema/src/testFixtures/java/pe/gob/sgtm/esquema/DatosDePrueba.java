@@ -974,27 +974,72 @@ public final class DatosDePrueba {
                                 + "\"aLaFecha\":\"2026-01-01\",\"cabecera\":[],\"tablas\":[],"
                                 + "\"pie\":[],\"duplicado\":null}",
                         VIGENCIA);
+        long actoDeLaRec =
+                insertar(
+                        app,
+                        "INSERT INTO acto_coactivo (municipalidad_id, expediente_id, tipo, numero,"
+                                + " fecha, descripcion, documento_id, usuario_registro,"
+                                + " fecha_registro, observacion)"
+                                + " VALUES (?, ?, 'REC1', ?, ?, 'Resolucion de ejecucion"
+                                + " coactiva', ?, 'prueba', now(), 'REC de prueba')"
+                                + " RETURNING id",
+                        muni,
+                        expedienteId,
+                        "REC1-2026-" + sufijo,
+                        VIGENCIA,
+                        documentoDeLaRec);
+        // La costa cuelga de una liquidacion y tarifa UN acto (V35, #42): antes colgaba del
+        // expediente y nada mas, y asi «la liquidacion 000123» no tenia sujeto.
         ejecutar(
                 app,
-                "INSERT INTO acto_coactivo (municipalidad_id, expediente_id, tipo, numero, fecha,"
-                        + " descripcion, documento_id, usuario_registro, fecha_registro,"
-                        + " observacion)"
-                        + " VALUES (?, ?, 'REC1', ?, ?, 'Resolucion de ejecucion coactiva', ?,"
-                        + "         'prueba', now(), 'REC de prueba')",
+                "INSERT INTO liquidacion_costas_correlativo (municipalidad_id, ejercicio, ultimo)"
+                        + " VALUES (?, ?, 1)",
                 muni,
-                expedienteId,
-                "REC1-2026-" + sufijo,
-                VIGENCIA,
-                documentoDeLaRec);
+                EJERCICIO);
+        long liquidacionId =
+                insertar(
+                        app,
+                        "INSERT INTO liquidacion_costas (municipalidad_id, numero, ejercicio,"
+                                + " correlativo, expediente_id, contribuyente_id, tributo, fecha,"
+                                + " conjunto_id, total, usuario_registro, fecha_registro,"
+                                + " observacion)"
+                                + " VALUES (?, ?, ?, 1, ?, ?, 'COSTAS PROCESALES', ?, ?, ?,"
+                                + "         'prueba', now(), 'liquidacion de prueba')"
+                                + " RETURNING id",
+                        muni,
+                        "LC-" + sufijo,
+                        EJERCICIO,
+                        expedienteId,
+                        titular,
+                        VIGENCIA,
+                        conjuntoId,
+                        CIEN);
         ejecutar(
                 app,
-                "INSERT INTO costa_procesal (municipalidad_id, expediente_id, concepto, monto,"
-                        + " fecha, arancel_fuente)"
-                        + " VALUES (?, ?, 'Notificacion', ?, ?, 'fixture de la prueba')",
+                "INSERT INTO costa_procesal (municipalidad_id, liquidacion_id, expediente_id,"
+                        + " acto_id, acto_tipo, concepto, tributo, monto, fecha, arancel_fuente,"
+                        + " arancel_conjunto_id)"
+                        + " VALUES (?, ?, ?, ?, 'REC1', 'Notificacion', 'COSTAS PROCESALES', ?, ?,"
+                        + "         'fixture de la prueba', ?)",
                 muni,
+                liquidacionId,
                 expedienteId,
+                actoDeLaRec,
                 CIEN,
-                VIGENCIA);
+                VIGENCIA,
+                conjuntoId);
+        // Y la obligacion de costas queda reclamada por este expediente (V35 §3): sin la fila, dos
+        // expedientes del mismo obligado compartirian obligacion sin que nada fallara.
+        ejecutar(
+                app,
+                "INSERT INTO costa_obligacion (municipalidad_id, contribuyente_id, tributo,"
+                        + " ejercicio, expediente_id)"
+                        + " VALUES (?, ?, 'COSTAS PROCESALES', ?, ?)"
+                        + " ON CONFLICT DO NOTHING",
+                muni,
+                titular,
+                EJERCICIO,
+                expedienteId);
         return valorId;
     }
 

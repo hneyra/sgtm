@@ -308,6 +308,21 @@ class RegistrarPapeletaTest {
                     new CargoGenerado(
                             contribuyenteId, predioId, vehiculoId, referenciaExterna, monto));
         }
+
+        /** #42: este doble no liquida costas; el metodo existe para cumplir el puerto. */
+        @Override
+        public void generarGastoDelProcedimiento(
+                Ejercicio ejercicio,
+                long contribuyenteId,
+                String tributo,
+                String referenciaExterna,
+                Dinero monto,
+                LocalDate fechaValor,
+                String documentoOrigen,
+                Observacion observacion) {
+            throw new UnsupportedOperationException(
+                    "Las costas del procedimiento coactivo no pasan por esta prueba (#42)");
+        }
     }
 
     private record CargoGenerado(
