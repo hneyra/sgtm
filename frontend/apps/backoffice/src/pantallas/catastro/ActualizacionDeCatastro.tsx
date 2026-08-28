@@ -156,9 +156,10 @@ export function ActualizacionDeCatastro({
             // propia mascara. La indicacion va debajo del campo o no existe.
             ayuda="Sin fecha, rige desde hoy."
           />
-          {escritura.falta !== undefined && (
-            <p className="sgtm-asistente__falta">{escritura.falta}</p>
-          )}
+          {/* El motivo por el que todavia no se puede guardar ya no se pinta
+              aqui: lo pinta `BarraDeAcciones`, junto a la accion que apaga y
+              referenciado desde ella con `aria-describedby` (#332). Tenerlo en
+              los dos sitios lo decia dos veces. */}
         </section>
       )}
 

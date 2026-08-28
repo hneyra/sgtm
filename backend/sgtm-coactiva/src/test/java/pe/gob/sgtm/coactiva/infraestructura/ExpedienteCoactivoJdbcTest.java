@@ -141,6 +141,7 @@ class ExpedienteCoactivoJdbcTest {
     private static NotificacionRepositoryJdbc notificaciones;
     private static MovimientoDeValorRepositoryJdbc movimientosDeValor;
     private static ExpedienteRepositoryJdbc expedientes;
+    private static LiquidacionDeCostasRepositoryJdbc costas;
     private static MovimientoDelExpedienteRepositoryJdbc movimientos;
     private static RegistrarAsiento registrarAsiento;
 
@@ -169,6 +170,7 @@ class ExpedienteCoactivoJdbcTest {
         notificaciones = new NotificacionRepositoryJdbc(jdbc);
         movimientosDeValor = new MovimientoDeValorRepositoryJdbc(jdbc);
         expedientes = new ExpedienteRepositoryJdbc(jdbc);
+        costas = new LiquidacionDeCostasRepositoryJdbc(jdbc);
         movimientos = new MovimientoDelExpedienteRepositoryJdbc(jdbc);
 
         Auditoria auditoria = new AuditoriaJdbc(jdbc, RELOJ);
@@ -198,7 +200,9 @@ class ExpedienteCoactivoJdbcTest {
                 envolver(
                         new CambiarDireccionReferencial(
                                 expedientes, movimientos, auditoria, RELOJ));
-        consulta = envolver(new ConsultaDeExpedientes(expedientes, movimientos, puerto, deuda));
+        consulta =
+                envolver(
+                        new ConsultaDeExpedientes(expedientes, movimientos, puerto, deuda, costas));
     }
 
     @AfterAll

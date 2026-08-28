@@ -1,6 +1,7 @@
 import type { ComponentType, ReactElement } from 'react';
 import type { DatosDePantalla } from '@sgtm/api-client';
 import { COMPOSICION_DE_CATASTRO } from './catastro/composicion';
+import { COMPOSICION_DE_RENTAS } from './rentas/composicion';
 
 /**
  * Lo que una opcion compone **alrededor** de los diez bloques comunes.
@@ -12,7 +13,7 @@ import { COMPOSICION_DE_CATASTRO } from './catastro/composicion';
  * dentro de `Pantalla`, que es como se bifurca un renderizador que da servicio a
  * 134 pantallas.
  *
- * Siete opt-in, y ninguno cambia el dibujo de las otras opciones:
+ * Ocho opt-in, y ninguno cambia el dibujo de las otras opciones:
  *
  *   widgetsDeFiltro  un campo de busqueda con control propio, por clave de
  *                    campo. Sin declaracion, `Filtros` dibuja su `Campo` de
@@ -20,7 +21,7 @@ import { COMPOSICION_DE_CATASTRO } from './catastro/composicion';
  *   resumen          una cabecera-resumen encima de los datos, compuesta con lo
  *                    que el adaptador **ya trae**: no pide nada nuevo
  *   indice           la pantalla lleva indice de secciones que **desplaza**, no
- *                    recarga
+ *                    recarga; con `'en-vez-de-pestanas'`, ademas las sustituye
  *   acto             el acto de la pantalla vive en otra opcion, y la accion
  *                    primaria lleva alli con el registro abierto puesto en la
  *                    ruta. Es para lo que ninguna accion del prototipo alcanza
@@ -29,9 +30,11 @@ import { COMPOSICION_DE_CATASTRO } from './catastro/composicion';
  *   altaDeFila       lo mismo, pero colgando de una fila desplegada: recibe la
  *                    clave de esa fila
  *   flujo            un alta guiada que sustituye a los bloques mientras dura
+ *   seleccion        la tabla elige filas, y las elegidas viajan en el cuerpo
+ *                    por la tabla que `escrituras.ts` declara
  *
- * Las cuatro fichas catastrales y el catalogo territorial son, hoy, los unicos
- * que declaran algo.
+ * Las cuatro fichas catastrales, el catalogo territorial y las tres fichas de
+ * rentas son, hoy, los unicos que declaran algo.
  */
 
 /** Lo que recibe una cabecera-resumen: el registro abierto y la respuesta. */
@@ -42,7 +45,19 @@ export interface ResumenDePantallaProps {
   readonly cargando: boolean;
 }
 
-export type ComponenteDeResumen = (props: ResumenDePantallaProps) => ReactElement;
+/**
+ * `ComponentType` y no una funcion suelta, por lo mismo que
+ * {@link AltaEnPanel.Formulario}: una cabecera-resumen puede llegar en el trozo
+ * de su modulo (`lazy`) en vez de viajar en el arranque comun. `Pantalla` la
+ * dibuja dentro de un `Suspense`, asi que las dos formas conviven —la de
+ * catastro es directa; las de rentas, perezosas—.
+ *
+ * Devuelve `ReactElement | null` porque **la cabecera decide si tiene algo que
+ * resumir**: sin registro abierto no hay nada que decir, y eso lo sabe ella y no
+ * el renderizador —en catastro el registro es el parametro de la ruta; en el
+ * padron de contribuyentes es el filtro de la busqueda—.
+ */
+export type ComponenteDeResumen = ComponentType<ResumenDePantallaProps>;
 
 /** Lo que recibe un control propio de un campo de busqueda. */
 export interface WidgetDeFiltroProps {
@@ -133,10 +148,66 @@ export interface ActoDeOtraPantalla {
   readonly rutaDe: (codigo: string) => string;
 }
 
+/**
+ * La tabla de la pantalla **elige filas**, y lo elegido viaja en el cuerpo.
+ *
+ * Existe porque cuatro pantallas del manual dibujan una primera columna vacia
+ * —«Deuda seleccionable para baja», «Conceptos a cobrar»— que en el prototipo no
+ * es nada y en el sistema de escritorio era una casilla. Sin este opt-in, la
+ * unica forma de dar de baja una cuota concreta seria teclear a mano su ano, su
+ * cuota y su tributo en un formulario, al lado de la tabla que ya los muestra.
+ *
+ * **La interfaz no totaliza lo elegido** (RNF-083): la banda dice cuantas filas
+ * hay elegidas y quien pone el importe es el servidor. Mientras la operacion que
+ * lo previsualiza no exista, la banda lo dice —no ensena un cero, ni suma las
+ * columnas que tiene delante—.
+ */
+export interface SeleccionDeFilas {
+  /**
+   * La tabla del cuerpo, tal como la declara `escrituras.ts`. Si la opcion no
+   * la declara, **lo elegido no viaja**: la lista blanca sigue mandando.
+   */
+  readonly tabla: string;
+  /** Como se nombra una fila en la banda: «cuota» / «cuotas». Del manual, no inventado. */
+  readonly una: string;
+  readonly varias: string;
+  /**
+   * El genero de lo que se elige, para que la banda concuerde: «1 cuota
+   * elegida», «2 recibos elegidos».
+   *
+   * Se declara y no se deduce porque del castellano no se deduce: la banda
+   * escribia «elegida» a mano, y la primera opcion que eligiera valores o
+   * recibos —que son los otros dos que el manual dibuja con columna de
+   * casilla— habria dicho «2 valores elegidas». Es un campo obligatorio a
+   * proposito: quien anada una seleccion tiene que decidirlo, no heredarlo.
+   */
+  readonly genero: 'femenino' | 'masculino';
+  /**
+   * Lo que cada fila elegida aporta al cuerpo **ademas de sus columnas**.
+   *
+   * Hoy, el codigo de contribuyente: la baja lo necesita —es de quien es la
+   * cuenta corriente— y la tabla no lo publica como columna, porque la pantalla
+   * entera es de un contribuyente y va en el filtro. Lo que devuelva pasa por la
+   * misma lista blanca por columna que el resto de la fila.
+   */
+  readonly contexto?: (busqueda: URLSearchParams) => Readonly<Record<string, string>>;
+}
+
 export interface ComposicionDeOpcion {
   readonly widgetsDeFiltro?: Readonly<Record<string, WidgetDeFiltro>>;
   readonly resumen?: ComponenteDeResumen;
-  readonly indice?: boolean;
+  /**
+   * Indice de secciones que **desplaza**, no recarga.
+   *
+   *   `true`                  indexa las secciones de la pestana activa, y la
+   *                           barra de pestanas se queda donde estaba (las once
+   *                           de la ficha urbana)
+   *   `'en-vez-de-pestanas'`  las pestanas **desaparecen**: sus secciones se
+   *                           apilan en una pagina y el indice las recorre
+   *                           (#330). Nada se renombra ni se reagrupa: son las
+   *                           mismas secciones del manual, en su orden
+   */
+  readonly indice?: true | 'en-vez-de-pestanas';
   readonly acto?: ActoDeOtraPantalla;
   /** Altas que esta pantalla abre en un panel lateral. */
   readonly altas?: readonly AltaEnPanel[];
@@ -148,10 +219,13 @@ export interface ComposicionDeOpcion {
   readonly altaDeFila?: AltaEnPanel;
   /** El alta guiada de esta pantalla, cuando no cabe en un panel. */
   readonly flujo?: FlujoGuiado;
+  /** La tabla de esta pantalla elige filas, y lo elegido viaja en el cuerpo. */
+  readonly seleccion?: SeleccionDeFilas;
 }
 
 const COMPOSICIONES: Readonly<Record<string, ComposicionDeOpcion>> = {
   ...COMPOSICION_DE_CATASTRO,
+  ...COMPOSICION_DE_RENTAS,
 };
 
 const NINGUNA: ComposicionDeOpcion = {};
@@ -165,6 +239,32 @@ const NINGUNA: ComposicionDeOpcion = {};
  */
 export const composicionDe = (opcion: string): ComposicionDeOpcion =>
   (Object.hasOwn(COMPOSICIONES, opcion) ? COMPOSICIONES[opcion] : undefined) ?? NINGUNA;
+
+/**
+ * Si hay **algo** que resumir, preguntado antes de pedir el trozo de la cabecera.
+ *
+ * Las cabeceras-resumen llegan en su propio `lazy` para no viajar en el
+ * arranque, pero el `Suspense` que las envuelve se montaba siempre que la opcion
+ * declarara una: el navegador bajaba el trozo para que la cabecera devolviera
+ * `null`, y el padron sin nadie abierto es el caso normal de esa pantalla.
+ *
+ * Las tres condiciones son las que las cabeceras usan por dentro, y por eso la
+ * pregunta se puede hacer fuera: un registro abierto por la ruta —las fichas—, o
+ * por el filtro —el padron de contribuyentes, cuyo contrato declara el codigo
+ * como filtro y no como parametro de ruta—, o **una respuesta de una sola fila**,
+ * que es «este es el contribuyente que buscabas» (#330, #332). Quien decide que
+ * ensena sigue siendo la cabecera; esto solo evita pedirla cuando ninguna de las
+ * tres se cumple.
+ */
+export function hayQueResumir(
+  codigo: string | undefined,
+  busqueda: URLSearchParams,
+  filas: number,
+): boolean {
+  if (codigo !== undefined && codigo !== '') return true;
+  if ((busqueda.get('codigo') ?? '') !== '') return true;
+  return filas === 1;
+}
 
 /**
  * Cada alta declarada, con la accion del catalogo que la abre.

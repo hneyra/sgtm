@@ -12,6 +12,7 @@ import {
   tablaDe,
   texto,
 } from '../seguridad/listado';
+import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
 
 /**
  * Rentas · Registro, conectado hasta donde llega el backend: **seis opciones de quince**.
@@ -272,6 +273,148 @@ const arbitrios = definirConexion({
     ),
 });
 
+/**
+ * La deuda que se puede dar de baja (RF-044, #332).
+ *
+ * **Es la unica conexion del sistema cuya operacion no se llama como su opcion**, y esa
+ * excepcion tiene un motivo concreto: la operacion de `baja_deuda` es un `POST`, y una
+ * operacion que escribe no se pide al abrir la pantalla —abrir «Baja de deuda» no puede dar
+ * de baja nada—. Su tabla se quedaba por tanto vacia para siempre, y la columna de seleccion
+ * que el prototipo dibuja no tenia sobre que actuar.
+ *
+ * Lo que se lee es `GET /consultas/deuda`, que es **exactamente** lo que la pantalla necesita:
+ * las obligaciones pendientes de un contribuyente, con su desglose calculado por el backend a
+ * una fecha de corte (#22, #175). No es un dato inventado ni un cruce de dos respuestas: es la
+ * misma deuda, publicada por la unica operacion que la publica.
+ *
+ * **Depende de un permiso que no es el suyo, y hay que decirlo** (#332): quien tenga «Baja de
+ * deuda» y no tenga **lectura sobre «Consulta de deuda»** recibe un 403 al abrir la pantalla.
+ * No es un caso raro: son dos opciones distintas del catalogo, con dos permisos distintos, y el
+ * manual las reparte en dos modulos. Sin nombrarlo, el sintoma es una tabla vacia y muda —«no
+ * hay deuda»—, que es exactamente lo contrario de lo que pasa. Por eso esta conexion declara su
+ * propio `sinPermiso`: el aviso dice **cual** permiso falta, no «no tienes permiso».
+ *
+ * Lo que no viaja, y por que:
+ *
+ * - `ano` y `tributo` (los otros dos filtros de la pantalla): `consulta_deuda` no los declara
+ *   como parametros, y `parametrosDeBusqueda` no manda lo que el contrato no declara
+ *   (ADR-0010). Se quedan en la URL hasta que el backend decida su semantica.
+ * - `Unidad` (el predio o la placa de la fila): `ObligacionDeDeudaResource` publica el
+ *   identificador interno, no el codigo catastral ni la placa. Ensenar un identificador
+ *   interno en la columna que dice «Unidad» seria ensenar otra cosa con ese rotulo.
+ *
+ * Pero **el identificador si viaja**, y por `valores` en vez de por una columna: `ClaveDeSaldo`
+ * lo compara con igualdad exacta —(contribuyente, tributo, ejercicio, periodo, predioId,
+ * vehiculoId)—, asi que una baja sin el no senala a la obligacion que se eligio, sino a la que
+ * ese contribuyente tenga **sin unidad**. Es la diferencia entre extinguir la cuota que se marco
+ * y extinguir otra. Los importes van por el mismo camino y por un motivo hermano: la celda dice
+ * «1,842.60» y `new BigDecimal` con la coma dentro lanza.
+ *
+ * La primera celda va vacia a proposito: es la columna de la casilla, y la dibuja
+ * `TablaDePantalla` cuando la opcion declara seleccion (`rentas/composicion.ts`).
+ */
+const baja_deuda = definirConexion({
+  operacion: 'consulta_deuda',
+  /* **La deuda se lee a la fecha del acto, no a la de hoy** (regla 9, y #337).
+     `fechaValor` de la baja es la fecha de la resolucion, y el backend valida
+     `deudaActualizadaA(fechaValor)` contra el insoluto y el interes que se
+     mandan (`RegistrarMovimientoDeDeuda`). Con la tabla leida a hoy —que es lo
+     que pasaba, porque la pantalla no mandaba fecha de corte— y una resolucion
+     anterior —que es lo normal: primero se resuelve y despues se registra—, el
+     interes que viaja es **mayor** que el que el backend calcula a esa fecha, y
+     la baja vuelve como 422 despues de confirmar un acto irreversible.
+     Mandando la fecha, lo que se ve y lo que se manda son de la misma fecha. */
+  parametros: ({ busqueda, borrador }) => {
+    const fechaDeCorte = (borrador['fechaDeResolucion'] ?? '').trim();
+    return {
+      ...parametrosDeBusqueda('consulta_deuda', undefined, busqueda),
+      // Solo cuando esta escrita entera: el campo se teclea, y una fecha a
+      // medias («2026-0») es un 400 por cada pulsacion.
+      ...(FECHA_ISO.test(fechaDeCorte) ? { fechaDeCorte } : {}),
+    };
+  },
+  leer: (cuerpo) => leerPaginado(cuerpo, 'la deuda del contribuyente'),
+  /* Sin contribuyente no hay deuda que leer: `codContribuyente` es
+     `@RequestParam` obligatorio de `GET /consultas/deuda`, asi que abrir la
+     pantalla sin buscar a nadie es un 400 contra el backend real —el proxy lo
+     tapa porque contesta igual—. Lo que hay que decir ahi no es el 400. */
+  exige: [
+    {
+      parametro: 'codContribuyente',
+      titulo: 'Busca un contribuyente para ver su deuda',
+      detalle:
+        'La baja se registra sobre la cuenta corriente de un contribuyente: escribe su código arriba y pulsa «Buscar». Hasta entonces no hay ninguna cuota que elegir.',
+    },
+  ],
+  sinPermiso: {
+    titulo: 'Falta el permiso de lectura de «Consulta de deuda»',
+    detalle:
+      'Para elegir las cuotas hace falta lectura de «Consulta de deuda»: la tabla de aquí es la deuda del contribuyente, y esa la publica esa otra opción. Pídesela al administrador del sistema de tu municipalidad.',
+  },
+  adaptar: (paginado): DatosDePantalla => ({
+    // Toda cifra con su fecha de calculo (regla 9, RNF-075): la de corte con que
+    // el backend actualizo el interes, no la del reloj del navegador.
+    fechaCalculo: fechaDeCorteDe(paginado.contenido),
+    tabla: tablaDe(
+      paginado,
+      (obligacion): readonly Celda[] => {
+        const leida = obligacionDeDeuda(obligacion);
+        return [
+          { texto: '' },
+          { texto: leida.ejercicio },
+          { texto: SIN_DATO },
+          { texto: leida.cuota },
+          { texto: leida.tributo },
+          { texto: leida.insoluto },
+          { texto: leida.interes },
+          // El total lo calcula el backend. Sumar insoluto e interes aqui daria
+          // una cifra parecida y equivocada: falta el reajuste y faltan los
+          // gastos (RNF-083).
+          { texto: leida.total },
+        ];
+      },
+      'cuotas',
+      // Lo que identifica la obligacion, **leido del cuerpo y no de la celda**.
+      // Las claves son las de las columnas del catalogo, salvo `predioId` y
+      // `vehiculoId`, que ninguna columna dibuja: son el identificador interno
+      // que `ClaveDeSaldo` compara, y ensenarlo bajo «Unidad» seria ensenar otra
+      // cosa con ese rotulo.
+      (obligacion) => {
+        const leida = obligacionDeDeuda(obligacion);
+        return {
+          ano: leida.ejercicio,
+          cuota: leida.cuota,
+          tributo: leida.tributo,
+          insolutoS: leida.insoluto,
+          interesS: leida.interes,
+          predioId: identificador(obligacion['predioId']),
+          vehiculoId: identificador(obligacion['vehiculoId']),
+          /* Y la fase, que tampoco dibuja ninguna columna. Sin ella la baja
+             resuelve a `ORDINARIA` y `SaldoRepositoryJdbc.proyectar` hace
+             `DO UPDATE SET fase = EXCLUDED.fase`: una baja parcial sobre deuda
+             en COACTIVA o en CONVENIO la devolvia a la fase ordinaria sin que
+             nada lo dijera. */
+          fase: leida.fase,
+        };
+      },
+    ),
+  }),
+});
+
+/**
+ * `predioId`/`vehiculoId` como texto, o vacio si no lo trae.
+ *
+ * Vacio y no `SIN_DATO`: esto no se dibuja en ninguna parte, y un campo vacio es
+ * lo que la lista blanca ya sabe no mandar. Una obligacion que no cuelga de
+ * ninguna unidad —la de un contribuyente, sin predio ni vehiculo— es un caso
+ * legitimo del libro, y su clave lleva los dos identificadores nulos.
+ */
+const identificador = (valor: unknown): string =>
+  typeof valor === 'number' ? String(valor) : typeof valor === 'string' ? valor : '';
+
+/** Una fecha entera, como la escribe un `input[type=date]` y como la lee `LocalDate`. */
+const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Las opciones de Rentas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_RENTAS: Readonly<Record<string, Conexion>> = {
   contribuyentes,
@@ -279,4 +422,5 @@ export const CONEXIONES_DE_RENTAS: Readonly<Record<string, Conexion>> = {
   declaracion_jurada,
   beneficios,
   arbitrios,
+  baja_deuda,
 };

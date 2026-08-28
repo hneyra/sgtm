@@ -5266,6 +5266,65 @@ paths:
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
   "/coactiva/liquidaciones-costas":
+    get:
+      operationId: costas_procesales_listado
+      summary: "Liquidaciones de costas procesales encontradas"
+      description: "Grilla «Liquidaciones encontradas» de la pantalla de costas procesales, con el pendiente y el estado de cada liquidacion a la fecha de consulta. Agregada por #42: la opcion declaraba solo su accion principal y la pantalla tiene grilla propia con estos mismos filtros."
+      tags: ["Coactiva"]
+      parameters:
+        - name: nroLiquidacion
+          in: query
+          required: false
+          description: "Filtro «Nro. Liquidación» de la pantalla"
+          schema: { type: string }
+        - name: nroExpedCoact
+          in: query
+          required: false
+          description: "Filtro «Nro. Exped. Coact.» de la pantalla"
+          schema: { type: string }
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Filtro «Estado» de la pantalla. Se derivan del libro: ACTIVA o CANCELADA"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
     post:
       operationId: costas_procesales
       summary: "Liquidación de costas procesales"

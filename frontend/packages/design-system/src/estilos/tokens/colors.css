@@ -4,6 +4,13 @@
    Base tokens first, then semantic aliases.
    ============================================================ */
 :root {
+  /* El tema del documento, para que el navegador pinte lo que no pintamos
+     nosotros: las casillas, los desplegables y las barras de desplazamiento
+     nativas. Sin esto, en tema oscuro salian con el cromo claro del sistema
+     —una casilla blanca sobre papel casi negro— porque el navegador no tiene
+     forma de deducir el tema de una hoja de estilos. */
+  color-scheme: light;
+
   /* —— Paper / surfaces —— */
   --bg: #f6f4ef;          /* page — warm cream "paper" */
   --bg-elev: #fbfaf6;     /* slightly raised fill (toolbars, inputs) */
@@ -24,6 +31,10 @@
   --accent-2: #2a4d7a;    /* hover / lighter navy */
   --accent-soft: #e7ecf3; /* tint fill behind accent text */
   --accent-ink: #0e1f33;  /* darkest navy for text on soft tint */
+  /* Lo que se lee **encima** del acento: el rotulo del boton primario, las
+     iniciales de la marca, el texto del portal. Era `#fff` escrito a mano en
+     cuatro sitios, y eso ata el acento a ser oscuro para siempre. */
+  --accent-contraste: #ffffff;
 
   /* —— Accent alternates (offered as brand variants) —— */
   --accent-tierra: #7C2D12;   /* terracotta / earth */
@@ -56,6 +67,7 @@
 
 /* —— Dark mode (warm, low-glare reading) —— */
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg: #0f0e0c;
   --bg-elev: #16140f;
   --bg-card: #1c1914;
@@ -71,6 +83,18 @@
      iniciales del avatar. Navy aclarado, 10,76:1, verificado en
      contraste.test.ts. */
   --accent-ink: #cfe0f5;
+  /* El acento **tambien** se aclara, y no es cosmetica. `#1F3A5F` sobre la
+     tarjeta oscura da 1,53:1, y por ahi pasan las dos cosas que no llevan texto
+     y no se pueden comunicar de otra forma: el `outline` del foco visible
+     (`base.css`, RNF-082 — la caja se opera con teclado) y el `accent-color` de
+     las casillas con que se elige una cuota. Un foco que no se ve deja sin
+     operar el teclado entero. 8,16:1 sobre la tarjeta, verificado en
+     contraste.test.ts. */
+  --accent: #8ab4e8;
+  --accent-2: #a9c9f0;
+  /* Y si el acento es claro, lo que va encima tiene que ser oscuro: el mismo
+     `#fff` de antes sobre este acento daria 1,98:1 en el boton primario. */
+  --accent-contraste: #10202f;
   /* Terracota aclarada: 7,2:1 sobre la tarjeta oscura. */
   --error-texto: #d98f6b;
 }

@@ -29,6 +29,7 @@ import pe.gob.sgtm.coactiva.aplicacion.RegistrarActoCoactivo;
 import pe.gob.sgtm.coactiva.aplicacion.ReimprimirActoCoactivo;
 import pe.gob.sgtm.coactiva.dobles.ActosEnMemoria;
 import pe.gob.sgtm.coactiva.dobles.ContribuyentesDeMentira;
+import pe.gob.sgtm.coactiva.dobles.CostasEnMemoria;
 import pe.gob.sgtm.coactiva.dobles.DiligenciasEnMemoria;
 import pe.gob.sgtm.coactiva.dobles.DocumentosEnMemoria;
 import pe.gob.sgtm.coactiva.dobles.ExpedientesEnMemoria;
@@ -109,10 +110,12 @@ class ActoCoactivoControllerTest {
                     .con(new ResumenDeContribuyente(7L, "C-0007", "TITULAR, PRUEBA", "DNI 1234"));
 
     private final ConsultaDeExpedientes consulta =
-            new ConsultaDeExpedientes(expedientes, movimientos, valores, libro);
+            new ConsultaDeExpedientes(
+                    expedientes, movimientos, valores, libro, new CostasEnMemoria());
 
     private final ConsultaDeExpedientes consultaSinDeuda =
-            new ConsultaDeExpedientes(expedientes, movimientos, valores, libroPagado);
+            new ConsultaDeExpedientes(
+                    expedientes, movimientos, valores, libroPagado, new CostasEnMemoria());
 
     private final EmitirDocumento documentos =
             new EmitirDocumento(

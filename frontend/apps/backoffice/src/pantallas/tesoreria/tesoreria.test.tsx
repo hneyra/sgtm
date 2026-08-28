@@ -1,31 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { OPCIONES_CONECTADAS } from '../conexiones';
 import { permisosDelClaim, puedeVer } from '../../app/sesion/permisos';
 import { montarEnRuta } from '../../pruebas/montar';
+import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
 
 /**
  * Tesoreria (#74): **donde el sistema se usa a diario y donde un clic de mas se
  * paga cien veces al dia** (FRO-03 §6).
  *
- * Ninguno de sus diez endpoints existe todavia, asi que no hay nada que
- * conectar. Lo que si se puede —y es lo que mas vale de este modulo— es
- * comprobar las propiedades de la caja que no dependen del servidor: que tras
- * cobrar se pueda seguir cobrando sin buscar donde, que pulsar dos veces cobre
- * una, y que un reintento no sea un segundo cobro.
+ * Ninguna de sus diez opciones esta conectada, y ninguna declara todavia su
+ * escritura: lo que la interfaz tiene que hacer bien aqui es **decirlo**, en vez
+ * de ofrecer un cobro que no cobra (#332).
  */
 
-/**
- * La caja de tasas: `POST /tesoreria/caja/tasas`.
- *
- * Se usa esta y no la caja tributaria porque **es la que tiene bloque de
- * busqueda**: su campo de identificacion —`codContribuyente`— es un filtro, y
- * ahi es donde el foco tiene que volver. En la caja tributaria ese campo vive
- * dentro de una seccion del formulario y hoy no es escribible —la opcion no
- * declara ningun campo (#64)—, asi que no hay donde poner el foco hasta que
- * #33 diga que acepta su cuerpo. Las dos cobran igual y comparten renderizador.
- */
+/** La caja de tasas: `POST /tesoreria/caja/tasas`. */
 const CAJA = '/tesoreria/caja-tasas';
 
 interface Peticion {
@@ -53,112 +43,58 @@ afterEach(() => {
   globalThis.fetch = original;
 });
 
-const observacion = async (): Promise<HTMLElement> =>
-  within(await screen.findByRole('region', { name: 'Observación del usuario' })).getByLabelText(
-    'Observación',
-  );
-
-const cobrar = async (): Promise<HTMLElement> => {
-  const acciones = document.querySelectorAll<HTMLButtonElement>('.sgtm-acciones .sgtm-boton');
-  const primaria = acciones[acciones.length - 1];
-  expect(primaria).toBeDefined();
-  return primaria as HTMLElement;
-};
-
 /**
- * Cobra: pulsa la accion primaria y, si lo que hace no se deshace, **confirma**.
+ * **Lo que cambio en #332, y por que estas cuatro pruebas ya no viven aqui.**
  *
- * «Cobrar y emitir recibo» emite, y lo que emite no se deshace: la barra pide
- * confirmacion diciendo que va a pasar (regla 4, #64). Ese paso es parte del
- * camino real del cajero, asi que la prueba lo recorre en vez de saltarselo.
+ * Hasta #332 esta caja «cobraba»: `caja_tasas` no declara nada en
+ * `escrituras.ts`, y una opcion sin declarar mandaba **solo su observacion**. Un
+ * cobro cuyo cuerpo no lleva ni el concepto ni la cantidad no es un cobro: es
+ * una peticion que el backend rechaza —y que hasta que existio `CajaController`
+ * no rechazaba nadie—. Sobre eso se probaban el foco, la doble pulsacion y la
+ * idempotencia, que son propiedades del camino de escritura y no de la caja.
+ *
+ * Ahora la primaria de la caja se queda apagada **diciendo por que** (abajo), y
+ * esas cuatro propiedades se comprueban donde vive el camino de escritura, sobre
+ * una pantalla que si puede recorrerlo entero: `pantallas/escritura.test.tsx`
+ * —foco tras guardar, doble pulsacion, clave por intento— y
+ * `pantallas/actos-honestos.test.tsx`. Ninguna comprobacion se pierde; cambia de
+ * sitio, que es donde tenia que estar.
+ *
+ * Se recupera aqui el dia que `caja_tasas` declare su cuerpo contra
+ * `PeticionDeCobroDeTasas` —que ya existe (#33)—: sus `conceptos` son una tabla
+ * de las que `escrituras.ts` ya sabe declarar, y su seleccion de filas es el
+ * mismo opt-in que estrena «Baja de deuda».
  */
-async function cobrarDeVerdad(usuario: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await usuario.click(await cobrar());
-  const confirmar = screen.queryByRole('button', { name: /^Confirmar/ });
-  if (confirmar) await usuario.click(confirmar);
-}
-
-describe('tras cobrar, entra el siguiente contribuyente', () => {
-  it('el foco vuelve al primer campo de la busqueda, sin tocar el raton', async () => {
+describe('la caja dice lo que todavia no puede hacer', () => {
+  it('la primaria no se habilita, y la franja explica que falta declarar su cuerpo', async () => {
     const usuario = userEvent.setup();
     montarEnRuta(CAJA);
+    // El titulo llega con la navegacion; los bloques, con el trozo del modulo.
+    await screen.findByRole('button', { name: /Cobrar/ });
 
-    await usuario.type(await observacion(), 'Cobro en ventanilla, caja 3.');
-    await cobrarDeVerdad(usuario);
-    await screen.findByText(/Guardado, con tu observación/);
+    // Sin escritura declarada no hay ni caja de observacion: no hay a donde
+    // escribir, y pedir una observacion para nada seria pedirla para nada.
+    expect(
+      screen.queryByRole('region', { name: 'Observación del usuario' }),
+    ).not.toBeInTheDocument();
 
-    // El primer campo escribible de la busqueda es donde se teclea el documento
-    // del siguiente. Si el foco se quedara en el boton, ese gesto se paga en
-    // cada cobro, y en una caja son cientos al dia (RNF-082).
-    const busqueda = screen.getByRole('region', { name: 'Búsqueda' });
-    const primero = busqueda.querySelector('input:not([readonly]):not([disabled])');
-    expect(primero).not.toBeNull();
-    await waitFor(() => expect(document.activeElement).toBe(primero));
-  });
+    // Apagada con `aria-disabled` y enfocable, para que su franja se lea.
+    primariaApagada();
 
-  it('y no se lo lleva despues: el usuario puede mover el foco donde quiera', async () => {
-    const usuario = userEvent.setup();
-    montarEnRuta(CAJA);
+    // Y lo dice **en la lengua del mostrador**, con la salida puesta: el acto se
+    // registra por el procedimiento de siempre. Que lo que falta es la
+    // declaracion de sus campos —y no el backend— lo lleva el `data-causa`, que
+    // no se pinta: es para quien recibe el aviso, no para quien atiende.
+    expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
+    expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
+      'data-causa',
+      'sin-declaracion',
+    );
 
-    await usuario.type(await observacion(), 'Cobro en ventanilla, caja 3.');
-    await cobrarDeVerdad(usuario);
-    await screen.findByText(/Guardado, con tu observación/);
-    await waitFor(() => expect(document.activeElement?.tagName).toBe('INPUT'));
-
-    // Enfocar en cada render mientras «guardada» siga siendo cierto dejaria el
-    // foco clavado: se enfoca en el flanco, una vez.
-    const otro = screen.getAllByRole('button')[0];
-    expect(otro).toBeDefined();
-    otro?.focus();
-    expect(document.activeElement).toBe(otro);
-
-    // Y se provoca un render mas —escribir la observacion del siguiente cobro—
-    // porque sin el, «una vez» y «en cada render» no se distinguen: si el foco
-    // se recolocara en cada dibujo, este texto no llegaria a escribirse donde
-    // el cajero lo esta escribiendo.
-    await usuario.type(await observacion(), 'Siguiente cobro.');
-    expect(document.activeElement).toBe(await observacion());
-  });
-});
-
-describe('cobrar dos veces no es cobrar dos veces', () => {
-  it('pulsar dos veces rapido produce **una** peticion', async () => {
-    const usuario = userEvent.setup();
-    montarEnRuta(CAJA);
-
-    await usuario.type(await observacion(), 'Cobro en ventanilla.');
-    // Dos pulsaciones sobre la accion: la confirmacion aparece una vez, y al
-    // confirmarla sale **una** peticion.
-    await usuario.dblClick(await cobrar());
-    const confirmar = screen.queryByRole('button', { name: /^Confirmar/ });
-    if (confirmar) await usuario.dblClick(confirmar);
-
-    await waitFor(() => expect(peticiones.length).toBeGreaterThan(0));
-    expect(peticiones).toHaveLength(1);
-  });
-
-  it('un reintento tras un fallo reusa la clave; corregir la observacion empieza otro intento', async () => {
-    const usuario = userEvent.setup();
-    laCajaResponde(503);
-    montarEnRuta(CAJA);
-
-    await usuario.type(await observacion(), 'Cobro en ventanilla.');
-    await cobrarDeVerdad(usuario);
-    await waitFor(() => expect(peticiones).toHaveLength(1));
-
-    // Mismo intento: para el servidor es **uno**. Regenerar la clave aqui
-    // convertiria un reintento de red en un segundo cobro.
-    await cobrarDeVerdad(usuario);
-    await waitFor(() => expect(peticiones).toHaveLength(2));
-    expect(peticiones[0]?.clave).toBe(peticiones[1]?.clave);
-    expect(peticiones[0]?.clave).toBeTruthy();
-
-    // Corregir lo que se manda es otro intento, y lleva otra clave: con la
-    // anterior, el servidor devolveria el resultado del intento que se corrige.
-    await usuario.type(await observacion(), ' Corregido.');
-    await cobrarDeVerdad(usuario);
-    await waitFor(() => expect(peticiones).toHaveLength(3));
-    expect(peticiones[2]?.clave).not.toBe(peticiones[0]?.clave);
+    // Y no hay forma de mandar nada: enfocable no es pulsable —el `onClick` se
+    // guarda solo cuando la primaria esta apagada con `aria-disabled`—.
+    await usuario.click(screen.getByRole('button', { name: /Cobrar/ }));
+    expect(peticiones).toEqual([]);
   });
 });
 

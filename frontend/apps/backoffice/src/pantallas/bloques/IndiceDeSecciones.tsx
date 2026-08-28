@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { SeccionDePantalla } from '../../catalogo';
+import { ID_DE_LAS_ACCIONES } from './BarraDeAcciones';
 
 /**
  * Indice de las secciones de la pantalla. **Desplaza, no recarga** (#319).
@@ -22,9 +23,23 @@ export interface IndiceDeSeccionesProps {
   readonly secciones: readonly SeccionDePantalla[];
   /** El `id` del ancla de cada seccion; el mismo que pone `Formulario`. */
   readonly anclaDe: (indice: number) => string;
+  /**
+   * La pantalla tiene barra de acciones al final, asi que el indice ofrece la
+   * salida hacia ella.
+   *
+   * Sin esto, quien navega con teclado sale del indice y entra en 55 controles
+   * apilados —las secciones del padron de contribuyentes— sin ninguna forma de
+   * saltar al acto que vino a hacer: hay que tabular por todos. El indice es
+   * justamente el sitio donde esa salida se busca.
+   */
+  readonly haciaLasAcciones?: boolean;
 }
 
-export function IndiceDeSecciones({ secciones, anclaDe }: IndiceDeSeccionesProps) {
+export function IndiceDeSecciones({
+  secciones,
+  anclaDe,
+  haciaLasAcciones = false,
+}: IndiceDeSeccionesProps) {
   const [activa, fijarActiva] = useState(0);
 
   /* Cambiar de pestana cambia las secciones: la activa vuelve a la primera, que
@@ -34,6 +49,43 @@ export function IndiceDeSecciones({ secciones, anclaDe }: IndiceDeSeccionesProps
      que se acaba de pulsar. */
   const rotulos = secciones.map((seccion) => seccion.label).join('|');
   useEffect(() => fijarActiva(0), [rotulos]);
+
+  const anclas = secciones.map((_, indice) => anclaDe(indice));
+  const anclasEnUnaLinea = anclas.join('|');
+
+  /* **`aria-current` dice cual se esta viendo, no cual se pulso.**
+     Se marcaba en el `onClick` y ahi se quedaba: rodando la pagina con la rueda
+     o con AvPag —que es como se lee una ficha— el indice seguia senalando la
+     seccion de hace diez minutos, y para un lector de pantalla eso no es una
+     imprecision de dibujo: es una afirmacion falsa sobre donde esta el usuario.
+     Un `IntersectionObserver` mira las anclas de verdad y la mas alta de las
+     visibles es la que rige. Los margenes recortan la ventana a su franja
+     central: sin ellos, cualquier seccion asomando por el borde inferior se
+     declararia la actual.
+
+     El clic sigue marcando ademas, y no sobra: el desplazamiento es suave y el
+     observador tarda en confirmarlo; sin la marca inmediata la entrada pulsada
+     parpadea. */
+  useEffect(() => {
+    if (typeof IntersectionObserver !== 'function') return undefined;
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        const visibles = entradas
+          .filter((entrada) => entrada.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        const primera = visibles[0];
+        if (primera === undefined) return;
+        const indice = anclasEnUnaLinea.split('|').indexOf(primera.target.id);
+        if (indice >= 0) fijarActiva(indice);
+      },
+      { rootMargin: '-15% 0px -70% 0px', threshold: 0 },
+    );
+    for (const ancla of anclasEnUnaLinea.split('|')) {
+      const nodo = document.getElementById(ancla);
+      if (nodo !== null) observador.observe(nodo);
+    }
+    return () => observador.disconnect();
+  }, [anclasEnUnaLinea]);
 
   if (secciones.length === 0) return null;
 
@@ -47,6 +99,14 @@ export function IndiceDeSecciones({ secciones, anclaDe }: IndiceDeSeccionesProps
           key={`${indice}|${seccion.label}`}
           type="button"
           className="sgtm-indice__entrada"
+          /* **El nombre accesible dice que hace, no solo a que se refiere.**
+             La cabecera de cada seccion es tambien un boton —la que la pliega—,
+             y se llama exactamente igual: quien navega por lista de controles
+             veia «Identificación» dos veces, sin nada que los distinga, y uno
+             lleva a la seccion y el otro la esconde. El rotulo visible no
+             cambia: es el de la seccion, que es lo que hay que leer en el
+             indice. */
+          aria-label={`Ir a ${seccion.label}`}
           data-activa={indice === activa ? '1' : '0'}
           aria-current={indice === activa ? 'true' : undefined}
           onClick={() => {
@@ -64,6 +124,21 @@ export function IndiceDeSecciones({ secciones, anclaDe }: IndiceDeSeccionesProps
           {seccion.label}
         </button>
       ))}
+      {haciaLasAcciones && (
+        <button
+          type="button"
+          className="sgtm-indice__entrada sgtm-indice__salida"
+          onClick={() => {
+            const acciones = document.getElementById(ID_DE_LAS_ACCIONES);
+            acciones?.scrollIntoView?.({ behavior: 'smooth', block: 'end' });
+            // El foco va al primer control de la barra y no al contenedor: el
+            // contenedor no es enfocable, y lo que se vino a hacer es pulsar.
+            acciones?.querySelector<HTMLElement>('button:not([disabled]), a')?.focus?.();
+          }}
+        >
+          Ir a las acciones
+        </button>
+      )}
     </nav>
   );
 }

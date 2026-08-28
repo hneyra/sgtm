@@ -64,8 +64,24 @@ export const usePreferencias = (): ContextoDePreferencias => useContext(Contexto
  */
 export function variablesDe(preferencias: Preferencias): Record<string, string> {
   return {
-    '--accent': ACENTOS[preferencias.acento],
-    '--accent-2': ACENTOS_HOVER[preferencias.acento],
+    /* **El acento por omision no se escribe aqui**, y esa ausencia es la
+       correccion. Escribirlo en linea sobre el shell tapaba el valor que la hoja
+       de tokens define para cada tema, y en el oscuro ese valor existe por un
+       motivo concreto: el navy del tema claro da 1,53:1 sobre la tarjeta oscura,
+       y por el acento pasan el `outline` del foco visible —la caja se opera con
+       teclado (RNF-082)— y el `accent-color` de las casillas. Escribiendo
+       siempre el mismo hex, el tema oscuro no podia corregirlo nunca.
+
+       El acento del tema lo decide la hoja; solo un acento **elegido a mano**
+       lo sustituye, y entonces manda en los dos temas porque es lo que se
+       pidio. Hoy no hay ninguna pantalla que lo elija, asi que en la practica
+       manda siempre la hoja. */
+    ...(preferencias.acento === PREFERENCIAS_POR_OMISION.acento
+      ? {}
+      : {
+          '--accent': ACENTOS[preferencias.acento],
+          '--accent-2': ACENTOS_HOVER[preferencias.acento],
+        }),
     '--nav-alto': `${PADDING_DE_NAVEGACION[preferencias.densidad]}px`,
   };
 }

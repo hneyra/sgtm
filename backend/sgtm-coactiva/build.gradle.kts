@@ -37,6 +37,19 @@ dependencies {
     // de reclamacion de un valor.
     implementation(project(":sgtm-parametros"))
 
+    // Y las dos que #42 agrega, las dos por API publica y ninguna por sus tablas:
+    //
+    //  - tesoreria.FraccionamientoCoactivo: el convenio coactivo NO se reimplementa
+    //    aqui. Es el mismo mecanismo de #35 -misma deuda acogible releida del libro,
+    //    mismas condiciones del conjunto sellado, mismo quiebre que devuelve a la
+    //    fase de ORIGEN-, invocado por su puerto. Lo que coactiva agrega son sus dos
+    //    guardas: expediente vivo y deuda que venga de la fase coactiva.
+    //  - rentas.BeneficiosDelContribuyente: que beneficio tiene REGISTRADO el
+    //    obligado, para la consulta de deudas en beneficio (RF-107). Solo el
+    //    registro: el efecto sobre el importe es D-02b (#191) y no se calcula.
+    implementation(project(":sgtm-tesoreria"))
+    implementation(project(":sgtm-rentas"))
+
     // Las pruebas de repositorio y del ciclo completo corren contra PostgreSQL de
     // verdad, conectadas como sgtm_app y no como el superusuario que entrega
     // Testcontainers (CAL-01 §3.2). Contra un doble no se puede demostrar ni el

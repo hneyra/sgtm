@@ -32,6 +32,15 @@ public interface BeneficioRepository {
      */
     List<Beneficio> vigentesDelPredio(long predioId, String tributo, LocalDate fecha);
 
+    /**
+     * Los beneficios del contribuyente que <b>rigen</b> a esa fecha, de cualquier tipo y tributo.
+     *
+     * <p>«Vigentes a la fecha», no «los ultimos» (regla 9): un beneficio cesado en marzo no rige en
+     * abril, y resolver «el ultimo» haria que una consulta de enero mostrara el que se dio de alta
+     * en junio. Es lo que {@code BeneficiosDelContribuyente} publica para otros contextos (#42).
+     */
+    List<Beneficio> vigentesDelContribuyente(long contribuyenteId, LocalDate fecha);
+
     Beneficio insertar(Beneficio beneficio);
 
     /** Guarda el cese: la unica escritura que admite un beneficio ya guardado. */

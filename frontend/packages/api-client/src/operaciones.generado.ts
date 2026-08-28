@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 150 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 151 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 150 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 151 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 150 operaciones del contrato, por su `operationId`.
+ * Las 151 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 150 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 151 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -872,6 +872,13 @@ export const OPERACIONES = {
     parametrosDeRuta: ['numero'],
     parametrosDeConsulta: [],
   },
+  /** Liquidaciones de costas procesales encontradas — `GET /coactiva/liquidaciones-costas` */
+  costas_procesales_listado: {
+    metodo: 'GET',
+    ruta: '/coactiva/liquidaciones-costas',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: ['nroLiquidacion', 'nroExpedCoact', 'contribuyente', 'estado', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+  },
   /** Liquidación de costas procesales — `POST /coactiva/liquidaciones-costas` */
   costas_procesales: {
     metodo: 'POST',
@@ -1098,7 +1105,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 150 operaciones. */
+/** El `operationId` de una de las 151 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1999,6 +2006,17 @@ export interface ParametrosPorOperacion {
   readonly cambiar_direccion_ref: {
     readonly numero: string;
   };
+  /** `GET /coactiva/liquidaciones-costas` */
+  readonly costas_procesales_listado: {
+    readonly nroLiquidacion?: string;
+    readonly nroExpedCoact?: string;
+    readonly contribuyente?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly ordenarPor?: string;
+    readonly direccion?: string;
+  };
   /** `POST /coactiva/liquidaciones-costas` */
   readonly costas_procesales: {
     readonly nroLiquidacion?: string;
@@ -2348,6 +2366,7 @@ export interface CuerpoPorOperacion {
   readonly rec_impresion: CuerpoSinEsquema;
   readonly expediente_historial: CuerpoSinEsquema;
   readonly cambiar_direccion_ref: CuerpoSinEsquema;
+  readonly costas_procesales_listado: undefined;
   readonly costas_procesales: CuerpoSinEsquema;
   readonly fraccionamiento_coactivo: CuerpoSinEsquema;
   readonly actos_coactivos: CuerpoSinEsquema;
@@ -2502,6 +2521,7 @@ export interface RespuestaPorOperacion {
   readonly rec_impresion: CuerpoSinEsquema;
   readonly expediente_historial: CuerpoSinEsquema;
   readonly cambiar_direccion_ref: CuerpoSinEsquema;
+  readonly costas_procesales_listado: CuerpoSinEsquema;
   readonly costas_procesales: CuerpoSinEsquema;
   readonly fraccionamiento_coactivo: CuerpoSinEsquema;
   readonly actos_coactivos: CuerpoSinEsquema;

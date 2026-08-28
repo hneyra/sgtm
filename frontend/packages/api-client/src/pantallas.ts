@@ -72,6 +72,23 @@ export interface FilaDePanel {
 export interface DatosDeTabla {
   readonly filas: readonly (readonly Celda[])[];
   /**
+   * Los valores **crudos** de cada fila: lo que el adaptador leyo del cuerpo,
+   * antes de darle formato para dibujarlo.
+   *
+   * Va en paralelo a `filas` —`valores[i]` es el de `filas[i]`— y es opcional
+   * entera: una tabla sin esto se dibuja exactamente como se dibujaba.
+   *
+   * **Existe porque una celda es texto de presentacion, no un dato.** La tabla
+   * de «Baja de deuda» escribe «1,184.00» —con separador de miles— y
+   * `new BigDecimal("1,184.00")` del backend lanza; escribe «—» donde no hay
+   * dato, y «—» no es un importe; y no dibuja en ninguna columna el
+   * `predioId`/`vehiculoId` que identifica la obligacion, porque un
+   * identificador interno bajo el rotulo «Unidad» seria ensenar otra cosa. Lo
+   * que viaja en el cuerpo de una escritura sale de aqui, no del texto que se
+   * pinto (#332).
+   */
+  readonly valores?: readonly Readonly<Record<string, string>>[];
+  /**
    * Lo que **cuelga** de cada fila, para las tablas cuyas filas se despliegan.
    *
    * Va en paralelo a `filas` —`detalles[i]` es el de `filas[i]`— y es opcional
