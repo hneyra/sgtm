@@ -47,6 +47,22 @@ export interface ContextoDePantalla {
   readonly ejercicio: number;
 }
 
+/**
+ * Que decir cuando la lectura de esta pantalla responde 403.
+ *
+ * Existe porque hay opciones cuya lectura **no es la suya**: «Baja de deuda»
+ * escribe con su permiso y lee la deuda por `consulta_deuda`, que es otra opcion
+ * del catalogo con otro permiso. Quien tenga una y no la otra recibe el 403 de
+ * la segunda, y el aviso generico —«no tienes permiso para esta opción»— le
+ * miente: si tiene permiso para esta, lo que le falta es el de la que alimenta
+ * su tabla. Sin declararlo, el sintoma es una pantalla que dice que no y un
+ * administrador dando el permiso equivocado.
+ */
+export interface AvisoDeSinPermiso {
+  readonly titulo: string;
+  readonly detalle: string;
+}
+
 /** Una conexion ya montada, sin los tipos de su operacion: es lo que guarda el registro. */
 export interface Conexion {
   readonly operacion: IdDeOperacion;
@@ -56,6 +72,8 @@ export interface Conexion {
     parametros: Readonly<Record<string, string>>,
     senal?: AbortSignal,
   ) => Promise<DatosDePantalla>;
+  /** Ver {@link AvisoDeSinPermiso}. Sin esto, el aviso generico de la pantalla. */
+  readonly sinPermiso?: AvisoDeSinPermiso;
 }
 
 export interface DefinicionDeConexion<O extends IdDeOperacion, R> {
@@ -63,6 +81,7 @@ export interface DefinicionDeConexion<O extends IdDeOperacion, R> {
   readonly parametros: (contexto: ContextoDePantalla) => ParametrosDe<O>;
   readonly leer: (cuerpo: RespuestaDe<O>, parametros: ParametrosDe<O>) => R;
   readonly adaptar: (recurso: R) => DatosDePantalla;
+  readonly sinPermiso?: AvisoDeSinPermiso;
 }
 
 /**
@@ -77,6 +96,7 @@ export function definirConexion<O extends IdDeOperacion, R>(
 ): Conexion {
   return {
     operacion: definicion.operacion,
+    ...(definicion.sinPermiso === undefined ? {} : { sinPermiso: definicion.sinPermiso }),
     parametros: (contexto) => sinVacios(definicion.parametros(contexto)),
     cargar: async (parametros, senal) => {
       const tipados = parametros as ParametrosDe<O>;

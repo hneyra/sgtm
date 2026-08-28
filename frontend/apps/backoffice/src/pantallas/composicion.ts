@@ -172,6 +172,17 @@ export interface SeleccionDeFilas {
   readonly una: string;
   readonly varias: string;
   /**
+   * El genero de lo que se elige, para que la banda concuerde: «1 cuota
+   * elegida», «2 recibos elegidos».
+   *
+   * Se declara y no se deduce porque del castellano no se deduce: la banda
+   * escribia «elegida» a mano, y la primera opcion que eligiera valores o
+   * recibos —que son los otros dos que el manual dibuja con columna de
+   * casilla— habria dicho «2 valores elegidas». Es un campo obligatorio a
+   * proposito: quien anada una seleccion tiene que decidirlo, no heredarlo.
+   */
+  readonly genero: 'femenino' | 'masculino';
+  /**
    * Lo que cada fila elegida aporta al cuerpo **ademas de sus columnas**.
    *
    * Hoy, el codigo de contribuyente: la baja lo necesita —es de quien es la
@@ -228,6 +239,32 @@ const NINGUNA: ComposicionDeOpcion = {};
  */
 export const composicionDe = (opcion: string): ComposicionDeOpcion =>
   (Object.hasOwn(COMPOSICIONES, opcion) ? COMPOSICIONES[opcion] : undefined) ?? NINGUNA;
+
+/**
+ * Si hay **algo** que resumir, preguntado antes de pedir el trozo de la cabecera.
+ *
+ * Las cabeceras-resumen llegan en su propio `lazy` para no viajar en el
+ * arranque, pero el `Suspense` que las envuelve se montaba siempre que la opcion
+ * declarara una: el navegador bajaba el trozo para que la cabecera devolviera
+ * `null`, y el padron sin nadie abierto es el caso normal de esa pantalla.
+ *
+ * Las tres condiciones son las que las cabeceras usan por dentro, y por eso la
+ * pregunta se puede hacer fuera: un registro abierto por la ruta —las fichas—, o
+ * por el filtro —el padron de contribuyentes, cuyo contrato declara el codigo
+ * como filtro y no como parametro de ruta—, o **una respuesta de una sola fila**,
+ * que es «este es el contribuyente que buscabas» (#330, #332). Quien decide que
+ * ensena sigue siendo la cabecera; esto solo evita pedirla cuando ninguna de las
+ * tres se cumple.
+ */
+export function hayQueResumir(
+  codigo: string | undefined,
+  busqueda: URLSearchParams,
+  filas: number,
+): boolean {
+  if (codigo !== undefined && codigo !== '') return true;
+  if ((busqueda.get('codigo') ?? '') !== '') return true;
+  return filas === 1;
+}
 
 /**
  * Cada alta declarada, con la accion del catalogo que la abre.

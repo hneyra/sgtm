@@ -5,6 +5,7 @@ import type { EstructuraDeTabla } from '../../catalogo';
 import { Paginacion } from './Paginacion';
 import type { Sentido } from '../busqueda';
 import { vacioDe } from '../estados';
+import { SIN_DATO } from '../seguridad/listado';
 
 /**
  * Bloque de tabla (FRO-03 §5, bloque 5).
@@ -56,12 +57,23 @@ export interface TablaDePantallaProps {
    * de seleccion, una viva y una muerta, no se distinguen—.
    */
   readonly seleccion?: {
-    /** Los indices de fila elegidos, de la pagina que se esta viendo. */
-    readonly elegidas: ReadonlySet<number>;
+    /**
+     * Las **claves** de las filas elegidas, no sus indices.
+     *
+     * Un indice no identifica una fila: identifica un sitio. Volver atras con el
+     * navegador restauraba la busqueda anterior y dejaba marcado «el 3», que en
+     * la pagina de vuelta es otra cuota —y de otro contribuyente— sin que nada
+     * lo dijera (#332). La clave la compone quien tiene la respuesta.
+     */
+    readonly elegidas: ReadonlySet<string>;
+    /** La clave de la fila que ocupa esa posicion en la pagina que se ve. */
+    readonly claveDe: (indice: number) => string;
     readonly onAlternar: (indice: number) => void;
     /** Como nombrar una fila: «cuota» / «cuotas». Del manual, no inventado. */
     readonly una: string;
     readonly varias: string;
+    /** Para que el participio de la banda concuerde. Ver `SeleccionDeFilas.genero`. */
+    readonly genero: 'femenino' | 'masculino';
   };
 }
 
@@ -111,6 +123,7 @@ export function TablaDePantalla({
           elegidas={seleccion.elegidas.size}
           una={seleccion.una}
           varias={seleccion.varias}
+          genero={seleccion.genero}
         />
       )}
       {vacia ? (
@@ -214,7 +227,7 @@ export function TablaDePantalla({
                             >
                               {seleccion !== undefined && c === 0 ? (
                                 <Casilla
-                                  elegida={seleccion.elegidas.has(f)}
+                                  elegida={seleccion.elegidas.has(seleccion.claveDe(f))}
                                   onAlternar={() => seleccion.onAlternar(f)}
                                   // La etiqueta accesible nombra **la fila**, no
                                   // «fila 3»: quien la oye tiene que saber que
@@ -268,21 +281,33 @@ export function TablaDePantalla({
  * (RNF-083), y el total de una baja no es la suma de lo que se ve —el interes
  * corre hasta la fecha del acto—. Quien lo calcula es el servidor; mientras no
  * publique la previsualizacion, la banda lo dice en vez de ensenar un numero.
+ *
+ * **La region viva es el recuento, no la banda entera.** Con `role="status"` en
+ * el parrafo, marcar una casilla hacia releer las veintidos palabras de la
+ * explicacion —que no ha cambiado—, y quien navega con lector de pantalla
+ * marcando seis cuotas se las oye seis veces. La explicacion se queda fuera: se
+ * lee cuando se llega a ella.
  */
 function BandaDeSeleccion({
   elegidas,
   una,
   varias,
+  genero,
 }: {
   readonly elegidas: number;
   readonly una: string;
   readonly varias: string;
+  readonly genero: 'femenino' | 'masculino';
 }) {
+  const participio = genero === 'femenino' ? 'elegida' : 'elegido';
   return (
-    <p className="sgtm-seleccion" role="status">
-      <strong>
-        {elegidas} {elegidas === 1 ? una : varias} {elegidas === 1 ? 'elegida' : 'elegidas'}
-      </strong>
+    <p className="sgtm-seleccion">
+      <span role="status">
+        <strong>
+          {elegidas} {elegidas === 1 ? una : varias}{' '}
+          {elegidas === 1 ? participio : `${participio}s`}
+        </strong>
+      </span>
       <span>
         {' '}
         · el total lo calcula el servidor, y la previsualización todavía no está disponible: aquí no
@@ -310,12 +335,21 @@ function Casilla({
   );
 }
 
-/** «Elegir la cuota 2016 · 1-4 · IMPUESTO PREDIAL»: lo que se marca, dicho con sus datos. */
+/**
+ * «Elegir la cuota 2016 · 1-4 · IMPUESTO PREDIAL»: lo que se marca, dicho con sus datos.
+ *
+ * **Se filtra tambien el guion**, y no es cosmetica: `SIN_DATO` es lo que la
+ * interfaz dibuja donde el backend no mando dato, y en la tabla de la baja la
+ * columna «Unidad» sale siempre asi. Contandolo como si fuera un dato, las tres
+ * primeras celdas con contenido eran «2026 · — · 1 - 4» y **el tributo se
+ * quedaba fuera** del nombre accesible: quien elige de oido no oia lo unico que
+ * separa la cuota del predial de la de arbitrios, en un acto que no se deshace.
+ */
 function etiquetaDeFila(fila: readonly { readonly texto: string }[], una: string): string {
   const datos = fila
     .slice(1)
     .map((celda) => celda.texto)
-    .filter((texto) => texto !== '')
+    .filter((texto) => texto !== '' && texto !== SIN_DATO)
     .slice(0, 3);
   return `Elegir la ${una} ${datos.join(' · ')}`.trimEnd();
 }

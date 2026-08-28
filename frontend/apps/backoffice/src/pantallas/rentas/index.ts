@@ -287,6 +287,13 @@ const arbitrios = definirConexion({
  * una fecha de corte (#22, #175). No es un dato inventado ni un cruce de dos respuestas: es la
  * misma deuda, publicada por la unica operacion que la publica.
  *
+ * **Depende de un permiso que no es el suyo, y hay que decirlo** (#332): quien tenga «Baja de
+ * deuda» y no tenga **lectura sobre «Consulta de deuda»** recibe un 403 al abrir la pantalla.
+ * No es un caso raro: son dos opciones distintas del catalogo, con dos permisos distintos, y el
+ * manual las reparte en dos modulos. Sin nombrarlo, el sintoma es una tabla vacia y muda —«no
+ * hay deuda»—, que es exactamente lo contrario de lo que pasa. Por eso esta conexion declara su
+ * propio `sinPermiso`: el aviso dice **cual** permiso falta, no «no tienes permiso».
+ *
  * Lo que no viaja, y por que:
  *
  * - `ano` y `tributo` (los otros dos filtros de la pantalla): `consulta_deuda` no los declara
@@ -296,6 +303,13 @@ const arbitrios = definirConexion({
  *   identificador interno, no el codigo catastral ni la placa. Ensenar un identificador
  *   interno en la columna que dice «Unidad» seria ensenar otra cosa con ese rotulo.
  *
+ * Pero **el identificador si viaja**, y por `valores` en vez de por una columna: `ClaveDeSaldo`
+ * lo compara con igualdad exacta —(contribuyente, tributo, ejercicio, periodo, predioId,
+ * vehiculoId)—, asi que una baja sin el no senala a la obligacion que se eligio, sino a la que
+ * ese contribuyente tenga **sin unidad**. Es la diferencia entre extinguir la cuota que se marco
+ * y extinguir otra. Los importes van por el mismo camino y por un motivo hermano: la celda dice
+ * «1,842.60» y `new BigDecimal` con la coma dentro lanza.
+ *
  * La primera celda va vacia a proposito: es la columna de la casilla, y la dibuja
  * `TablaDePantalla` cuando la opcion declara seleccion (`rentas/composicion.ts`).
  */
@@ -303,6 +317,11 @@ const baja_deuda = definirConexion({
   operacion: 'consulta_deuda',
   parametros: ({ busqueda }) => parametrosDeBusqueda('consulta_deuda', undefined, busqueda),
   leer: (cuerpo) => leerPaginado(cuerpo, 'la deuda del contribuyente'),
+  sinPermiso: {
+    titulo: 'Falta el permiso de lectura de «Consulta de deuda»',
+    detalle:
+      'Para elegir las cuotas hace falta lectura de «Consulta de deuda»: la tabla de aquí es la deuda del contribuyente, y esa la publica esa otra opción. Pídesela al administrador del sistema de tu municipalidad.',
+  },
   adaptar: (paginado): DatosDePantalla => ({
     // Toda cifra con su fecha de calculo (regla 9, RNF-075): la de corte con que
     // el backend actualizo el interes, no la del reloj del navegador.
@@ -326,9 +345,37 @@ const baja_deuda = definirConexion({
         ];
       },
       'cuotas',
+      // Lo que identifica la obligacion, **leido del cuerpo y no de la celda**.
+      // Las claves son las de las columnas del catalogo, salvo `predioId` y
+      // `vehiculoId`, que ninguna columna dibuja: son el identificador interno
+      // que `ClaveDeSaldo` compara, y ensenarlo bajo «Unidad» seria ensenar otra
+      // cosa con ese rotulo.
+      (obligacion) => {
+        const leida = obligacionDeDeuda(obligacion);
+        return {
+          ano: leida.ejercicio,
+          cuota: leida.cuota,
+          tributo: leida.tributo,
+          insolutoS: leida.insoluto,
+          interesS: leida.interes,
+          predioId: identificador(obligacion['predioId']),
+          vehiculoId: identificador(obligacion['vehiculoId']),
+        };
+      },
     ),
   }),
 });
+
+/**
+ * `predioId`/`vehiculoId` como texto, o vacio si no lo trae.
+ *
+ * Vacio y no `SIN_DATO`: esto no se dibuja en ninguna parte, y un campo vacio es
+ * lo que la lista blanca ya sabe no mandar. Una obligacion que no cuelga de
+ * ninguna unidad —la de un contribuyente, sin predio ni vehiculo— es un caso
+ * legitimo del libro, y su clave lleva los dos identificadores nulos.
+ */
+const identificador = (valor: unknown): string =>
+  typeof valor === 'number' ? String(valor) : typeof valor === 'string' ? valor : '';
 
 /** Las opciones de Rentas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_RENTAS: Readonly<Record<string, Conexion>> = {

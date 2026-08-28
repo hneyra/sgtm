@@ -22,6 +22,28 @@ export function primariaDeLaPantalla(): HTMLButtonElement {
   return primaria as HTMLButtonElement;
 }
 
+/**
+ * La primaria **apagada con su motivo al lado**, que desde #332 se apaga con
+ * `aria-disabled` y no con `disabled`.
+ *
+ * La diferencia no es de estilo: un boton `disabled` no puede recibir el foco, y
+ * su `aria-describedby` —la franja que dice por que no se puede guardar— no lo
+ * lee nadie. Con `aria-disabled` el boton sigue en el recorrido del teclado, el
+ * lector anuncia «no disponible» **y** lee la descripcion, y el `onClick` se
+ * guarda solo. Por eso la comprobacion exige las dos mitades: apagada, y
+ * enfocable.
+ */
+export function primariaApagada(boton: HTMLElement = primariaDeLaPantalla()): void {
+  expect(boton).toHaveAttribute('aria-disabled', 'true');
+  expect(boton).not.toBeDisabled();
+}
+
+/** Y encendida es no llevar ninguna de las dos marcas. */
+export function primariaEncendida(boton: HTMLElement = primariaDeLaPantalla()): void {
+  expect(boton).not.toHaveAttribute('aria-disabled');
+  expect(boton).toBeEnabled();
+}
+
 /** El texto de la franja que explica la primaria, o `undefined` si no la referencia. */
 export function motivoDeLaPrimaria(): string | undefined {
   const referencia = primariaDeLaPantalla().getAttribute('aria-describedby');

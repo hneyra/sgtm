@@ -26,13 +26,13 @@ import { NO_DISPONIBLE, SIN_PERMISO, estadoDePantalla, textoDeError } from './es
 import { useCatalogoVisible } from '../app/sesion/useCatalogoVisible';
 import { useEscritura } from './escritura';
 import { useFocoEnLaAccion, useFocoTrasGuardar } from './foco';
-import { avisoDe } from './avisos';
+import { avisoDe, cargarProsa, notaDe } from './prosa';
 import { escrituraDe } from './escrituras';
 import { impedimentoDelActo } from './actos';
 import { useEjercicio } from '../app/ejercicio';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
-import { composicionDe } from './composicion';
+import { composicionDe, hayQueResumir } from './composicion';
 import type { ComposicionDeOpcion } from './composicion';
 import { PanelLateral } from './bloques/PanelLateral';
 import { useDatosDeOperacion } from './useDatosDeOperacion';
@@ -125,7 +125,16 @@ function PantallaDelModulo({
      abierta —cambia cuando cambia la aplicacion, y entonces cambia su hash—. */
   const catalogo = useQuery({
     queryKey: ['catalogo', moduloId],
-    queryFn: () => pantallasDelModulo(moduloId),
+    /* Con el trozo del modulo viaja **la prosa fija de las pantallas** —el aviso
+       permanente y la nota de la escritura—, que es prosa que 127 de las 134 no
+       usan y estaba en el arranque. Aqui no cuesta nada: esta consulta ya
+       bloquea el dibujo, asi que la advertencia sigue estando cuando la pantalla
+       aparece. Diferirla a un `Suspense` propio la haria llegar tarde, y una
+       advertencia que llega tarde es peor que no tenerla (`prosa.ts`). */
+    queryFn: async () => {
+      const [pantallas] = await Promise.all([pantallasDelModulo(moduloId), cargarProsa()]);
+      return pantallas;
+    },
     staleTime: Infinity,
     gcTime: Infinity,
   });
@@ -248,6 +257,7 @@ function ContenidoConectado({
       estructura={estructura}
       consulta={consulta}
       {...(falta === undefined ? {} : { faltaRegistro: falta })}
+      {...(conexion.sinPermiso === undefined ? {} : { sinPermiso: conexion.sinPermiso })}
     />
   );
 }
@@ -256,11 +266,17 @@ function Bloques({
   estructura,
   consulta,
   faltaRegistro,
+  sinPermiso,
 }: {
   readonly estructura: Estructura;
   readonly consulta: ReturnType<typeof useDatosDePantalla>;
   /** Nombre del parametro que la pantalla necesita y todavia no tiene. */
   readonly faltaRegistro?: string;
+  /**
+   * Que decir si la **lectura** de esta pantalla responde 403, cuando esa
+   * lectura no es la de esta opcion. Ver `Conexion.sinPermiso`.
+   */
+  readonly sinPermiso?: { readonly titulo: string; readonly detalle: string };
 }) {
   const [pestana, fijarPestana] = useState(0);
   const [cerradas, fijarCerradas] = useState<Readonly<Record<string, boolean>>>({});
@@ -268,11 +284,15 @@ function Bloques({
   // sola a la vez —dos paneles encima del otro no se pueden operar—.
   const [altaAbierta, fijarAltaAbierta] = useState<AltaAbierta | null>(null);
   const [flujoAbierto, fijarFlujoAbierto] = useState(false);
-  // Que filas de la tabla estan elegidas, cuando la opcion declara seleccion
-  // (#332). Se guardan los **indices de la pagina que se esta viendo**, y por
-  // eso buscar o cambiar de pagina los vacia: el indice 3 de la pagina nueva es
-  // otra cuota, y dejarlo marcado daria de baja la que no era.
-  const [elegidas, fijarElegidas] = useState<ReadonlySet<number>>(new Set());
+  /* Que filas de la tabla estan elegidas, cuando la opcion declara seleccion
+     (#332). Se guardan **las claves de las filas**, no sus indices.
+
+     Un indice no identifica una fila: identifica un sitio. Con indices, volver
+     atras con el navegador —que restaura la busqueda anterior sin pasar por
+     «Buscar»— dejaba marcada «la 3», y la 3 de la pagina de vuelta es otra
+     cuota, de otro contribuyente y por otro importe. La baja se mandaba con el
+     `codContribuyente` de la busqueda anterior sin que nada lo dijera. */
+  const [elegidas, fijarElegidas] = useState<ReadonlySet<string>>(new Set());
   const [busqueda, fijarBusqueda] = useSearchParams();
   const navegar = useNavigate();
   const catalogo = useCatalogoVisible();
@@ -291,11 +311,23 @@ function Bloques({
   // Dar de alta exige `registro`, no cualquier escritura: es lo que exigen los
   // `POST` del backend. **Sin el, el panel no existe** —no se dibuja apagado—.
   const puedeRegistrarAqui = catalogo.puedeRegistrar(estructura.id);
+  /* Y la accion de la pantalla se mide **contra el verbo de su operacion**, no
+     contra «escribir» a secas: un `POST` del catalogo es siempre un alta, y el
+     backend le exige `REGISTRO` —lo hace `MovimientosDeDeudaController` en sus
+     dos rutas, y lo hacen los `POST` de sector, via y ficha—. Con
+     `puedeEscribir`, un perfil de `modificacion` sin `registro` veia la primaria
+     de «Baja de deuda» habilitada, elegia su cuota, escribia la observacion,
+     confirmaba un acto irreversible y recibia un 403. Es el mismo criterio que
+     `puedeRegistrar` ya aplicaba a los paneles de alta, aplicado a la barra. */
+  const exigeRegistro = operacion !== undefined && descriptorDe(operacion).metodo === 'POST';
+  const puedeActuarAqui = exigeRegistro ? puedeRegistrarAqui : puedeEscribirAqui;
   // Que campos puede mandar esta opcion, y si lo que guarda es global a la
   // sesion. Sin declaracion, el formulario no se escribe y solo viaja la
   // observacion: negacion por omision, como la autorizacion del manual.
   const declarada = escrituraDe(estructura.id);
   const aviso = avisoDe(estructura.id);
+  // Lo que esta pantalla **no** manda, si su escritura lo declara.
+  const nota = declarada?.nota === true ? notaDe(estructura.id) : undefined;
   const trabajo = useEjercicio();
   // La unica pantalla que descarga un archivo en vez de dibujar JSON (#71). El
   // hook se llama siempre —no se puede llamar a un hook a veces— y se pasa al
@@ -304,23 +336,81 @@ function Bloques({
   const descargaDeFicha = useDescargaDeArchivo('ficha_contribuyente_reporte', {
     codigo: codigo ?? '',
   });
+  // Lo que esta opcion compone **alrededor** de los bloques comunes: cabecera
+  // -resumen, indice de secciones, control propio de un filtro y el acto que
+  // vive en otra pantalla. Vacio para 130 de las 134, y entonces no cambia nada.
+  const composicion = composicionDe(estructura.id);
+  /* Una opcion que **compone su propio acto** no tiene impedimento que contar:
+     el alta se abre en un panel, el flujo guiado sustituye la pantalla o la
+     primaria es el enlace a la opcion que si escribe. En «Calles» y «Sectores»
+     eso se veia sin disimulo: la franja decia «el backend no publica ninguna
+     escritura» al lado de un «Nuevo» que abre un formulario y da de alta de
+     verdad. Y ademas quedaba huerfana —sin primaria que la referencie, nadie la
+     lee—, que es la definicion de ruido. */
+  const componeSuActo =
+    composicion.altas !== undefined ||
+    composicion.altaDeFila !== undefined ||
+    composicion.flujo !== undefined ||
+    composicion.acto !== undefined;
   // Por que la primaria no puede guardar todavia, cuando no puede (#332). Se
-  // pregunta **solo con permiso de escritura**: sin el, lo que apaga la accion
-  // es el permiso, y decir «el backend no lo publica» seria contestar otra cosa.
-  const impedimento = puedeEscribirAqui ? impedimentoDelActo(estructura.id) : undefined;
+  // pregunta **solo con el privilegio que el acto exige**: sin el, lo que apaga
+  // la accion es el permiso, y contar que la pantalla no guarda seria contestar
+  // otra cosa —y sugerir un aviso a sistemas por algo que arregla el
+  // administrador de la municipalidad—.
+  const impedimento =
+    puedeActuarAqui && !componeSuActo ? impedimentoDelActo(estructura.id) : undefined;
+  const datos = consulta.data;
+
+  /* ── La seleccion de filas, y por que no vive en un efecto ───────────────
+     Lo elegido se traslada al cuerpo **en el mismo gesto que lo elige**, no en
+     un `useEffect` que mire el estado: `fijarFilas` cambia el estado de la
+     escritura, asi que un efecto que dependiera de ella volveria a dispararse
+     con cada render y no pararia nunca. */
+  const seleccionable = composicion.seleccion;
+  const filasDeLaTabla = datos?.tabla?.filas ?? [];
+  const valoresDeLaTabla = datos?.tabla?.valores;
+  const clavesDeLaTabla = estructura.tabla?.claves ?? [];
+
+  /**
+   * Como se identifica una fila de la pagina que se esta viendo.
+   *
+   * Del **contenido**, no de la posicion: dos respuestas con las mismas filas
+   * dan las mismas claves, y una fila que ya no esta deja de tener la suya. Es
+   * lo que permite decir «lo que elegiste ya no esta aqui» en vez de mandar la
+   * fila que ocupe ahora ese sitio.
+   */
+  const claveDeFila = (indice: number): string =>
+    JSON.stringify(
+      valoresDeLaTabla?.[indice] ?? (filasDeLaTabla[indice] ?? []).map((celda) => celda.texto),
+    );
+  const clavesDeLaPagina = filasDeLaTabla.map((_, indice) => claveDeFila(indice));
+  /* Lo elegido que ya no esta en la pagina que se ve. Con la seleccion por
+     clave no puede senalar a otra fila —eso ya no pasa—, pero si puede senalar
+     a ninguna: la respuesta cambio debajo (otro ejercicio, un refresco tras
+     guardar) y lo que se marco ya no existe. Entonces no se manda nada, y se
+     dice; enviar «lo primero que haya» seria dar de baja lo que no era. */
+  const eleccionPerdida =
+    seleccionable !== undefined && [...elegidas].some((c) => !clavesDeLaPagina.includes(c))
+      ? 'Lo que estaba elegido ya no está en esta página: la deuda se volvió a cargar. Vuelve a elegir la cuota.'
+      : undefined;
+
   const escritura = useEscritura(
     // Una opcion **sin declarar** no escribe: mandaba solo su observacion, que
     // para un cobro o una transferencia no es guardar nada —y el backend lo
     // rechazaba despues de que alguien rellenara la pantalla entera—. Ahora la
     // accion se queda apagada y la franja de arriba dice por que (#332).
-    operacion !== undefined && escribe(operacion) && puedeEscribirAqui && declarada !== undefined
+    operacion !== undefined && escribe(operacion) && puedeActuarAqui && declarada !== undefined
       ? operacion
       : undefined,
     operacion === undefined ? {} : parametrosDeBusqueda(operacion, codigo, busqueda),
     {
       campos: declarada?.campos ?? {},
       tablas: declarada?.tablas ?? {},
-      ...(declarada?.exigir === undefined ? {} : { exigir: declarada.exigir }),
+      /* Lo que exige la opcion, **precedido de lo que exige la pagina**. La
+         opcion mira el cuerpo —`escrituras.ts` no sabe que es una pagina—; que
+         la fila capturada siga estando delante solo lo puede comprobar quien
+         tiene la respuesta, y es aqui. */
+      exigir: (borrador, filas) => eleccionPerdida ?? declarada?.exigir?.(borrador, filas),
       ...(declarada?.cambiaElEjercicio === true ? { alGuardar: trabajo.adoptar } : {}),
     },
   );
@@ -333,17 +423,14 @@ function Bloques({
   // escribe se quedaba con todos sus campos en esqueleto y deshabilitados para
   // siempre, porque su consulta nunca deja de estar pendiente.
   const cargando = pide && consulta.isPending && faltaRegistro === undefined;
-  const datos = consulta.data;
   const valores: Readonly<Record<string, ValorDeCampo>> = datos?.campos ?? {};
   // Las cuatro fichas: su backend versiona y nunca sobrescribe (#18). Se sabe
   // aqui y no por el catalogo porque es una propiedad de la operacion, no del
   // dibujo —el prototipo no tiene forma de expresarla—.
   const esVersionada = VERSIONADAS.has(estructura.id);
-  // Lo que esta opcion compone **alrededor** de los bloques comunes: cabecera
-  // -resumen, indice de secciones, control propio de un filtro y el acto que
-  // vive en otra pantalla. Vacio para 130 de las 134, y entonces no cambia nada.
-  const composicion = composicionDe(estructura.id);
   const Resumen = composicion.resumen;
+  // Si hay algo que resumir, antes de pedir el trozo perezoso. Ver `hayQueResumir`.
+  const hayAlgoQueResumir = hayQueResumir(codigo, busqueda, filasDeLaTabla.length);
   // Cuando el indice **sustituye** a las pestanas (#330), las secciones de todas
   // ellas se apilan en una sola pagina y la barra de pestanas deja de dibujarse:
   // era navegacion, y el indice hace la misma navegacion desplazando. Las otras
@@ -359,7 +446,11 @@ function Bloques({
   const conIndice = (formulario: React.JSX.Element): React.JSX.Element =>
     composicion.indice !== undefined ? (
       <div className="sgtm-conindice">
-        <IndiceDeSecciones secciones={secciones} anclaDe={anclaDe} />
+        <IndiceDeSecciones
+          secciones={secciones}
+          anclaDe={anclaDe}
+          haciaLasAcciones={(estructura.acciones ?? []).length > 0}
+        />
         <div className="sgtm-conindice__panel">{formulario}</div>
       </div>
     ) : (
@@ -375,15 +466,6 @@ function Bloques({
     const indice = (composicion.altas ?? []).findIndex((alta) => alta.accion === accion);
     if (indice >= 0) fijarAltaAbierta({ indice });
   };
-  /* ── La seleccion de filas, y por que no vive en un efecto ───────────────
-     Lo elegido se traslada al cuerpo **en el mismo gesto que lo elige**, no en
-     un `useEffect` que mire el estado: `fijarFilas` cambia el estado de la
-     escritura, asi que un efecto que dependiera de ella volveria a dispararse
-     con cada render y no pararia nunca. */
-  const seleccionable = composicion.seleccion;
-  const filasDeLaTabla = datos?.tabla?.filas ?? [];
-  const clavesDeLaTabla = estructura.tabla?.claves ?? [];
-
   const limpiarSeleccion = (): void => {
     fijarElegidas(new Set());
     if (seleccionable !== undefined) escritura.fijarFilas(seleccionable.tabla, []);
@@ -391,26 +473,32 @@ function Bloques({
 
   const alternarEleccion = (indice: number): void => {
     if (seleccionable === undefined) return;
+    const clave = claveDeFila(indice);
     const siguientes = new Set(elegidas);
-    if (siguientes.has(indice)) siguientes.delete(indice);
-    else siguientes.add(indice);
+    if (siguientes.has(clave)) siguientes.delete(clave);
+    else siguientes.add(clave);
     fijarElegidas(siguientes);
-    // La fila que viaja son **sus columnas del catalogo**, con su clave, mas lo
-    // que la seleccion aporte del contexto. De ahi en adelante manda la lista
-    // blanca por columna de `escrituras.ts`: lo que no este declarado no entra
-    // ni en el estado de React.
+    /* La fila que viaja son **sus columnas del catalogo**, con su clave, mas lo
+       que la seleccion aporte del contexto y —encima de todo— los valores
+       crudos de la respuesta. De ahi en adelante manda la lista blanca por
+       columna de `escrituras.ts`: lo que no este declarado no entra ni en el
+       estado de React.
+
+       El orden importa: **los crudos ganan**. La celda es texto de
+       presentacion —«1,842.60», «—»— y lo que el backend acepta es lo que
+       venia en el cuerpo; ademas, los crudos traen lo que ninguna columna
+       dibuja, que es el identificador de la unidad (#332). */
     const contexto = seleccionable.contexto?.(busqueda) ?? {};
-    const filas = [...siguientes]
-      .sort((a, b) => a - b)
-      .map((fila) => {
-        const celdas = filasDeLaTabla[fila] ?? [];
-        const elegida: Record<string, string> = { ...contexto };
-        clavesDeLaTabla.forEach((clave, columna) => {
-          const celda = celdas[columna];
-          if (celda !== undefined) elegida[clave] = celda.texto;
-        });
-        return elegida;
+    const filas = clavesDeLaPagina.flatMap((claveDeLaPagina, fila) => {
+      if (!siguientes.has(claveDeLaPagina)) return [];
+      const celdas = filasDeLaTabla[fila] ?? [];
+      const elegida: Record<string, string> = { ...contexto };
+      clavesDeLaTabla.forEach((nombre, columna) => {
+        const celda = celdas[columna];
+        if (celda !== undefined) elegida[nombre] = celda.texto;
       });
+      return [{ ...elegida, ...(valoresDeLaTabla?.[fila] ?? {}) }];
+    });
     escritura.fijarFilas(seleccionable.tabla, filas);
   };
 
@@ -421,6 +509,26 @@ function Bloques({
       fijarElegidas((previas) => (previas.size === 0 ? previas : new Set()));
     }
   }, [escritura.enviada]);
+
+  /* **Cambiar lo que se esta mirando vacia lo elegido**, y «lo que se esta
+     mirando» es la busqueda entera mas el ejercicio de trabajo.
+     Los tres caminos que ya lo vaciaban —buscar, ordenar, paginar— pasan por
+     sus manejadores; el que faltaba no pasa por ninguno: **el boton Atras del
+     navegador**, que restaura la busqueda anterior sin pulsar nada. Con la
+     seleccion viva de la busqueda de antes, lo que se mandaba era la cuota
+     marcada con el `codContribuyente` del filtro restaurado. La dependencia es
+     el texto de la busqueda y no el objeto: `useSearchParams` devuelve uno nuevo
+     en cada dibujo.
+
+     `escritura.fijarFilas` no entra en las dependencias a proposito: cambia de
+     identidad en cada render, y con el dentro el efecto correria siempre y
+     borraria lo que se acaba de marcar. */
+  const busquedaMirada = busqueda.toString();
+  useEffect(() => {
+    fijarElegidas((previas) => (previas.size === 0 ? previas : new Set()));
+    if (seleccionable !== undefined) escritura.fijarFilas(seleccionable.tabla, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busquedaMirada, trabajo.ejercicio, seleccionable?.tabla]);
 
   // Tras cobrar, el foco vuelve al campo de identificacion: entra el siguiente
   // contribuyente y hay que poder teclear su documento sin buscar donde.
@@ -435,7 +543,11 @@ function Bloques({
   // **Ninguno de los dos dibuja la estructura**: entrar sin permiso no puede
   // filtrar ni el titulo ni los campos de lo que hay detras (REQ-03 §5).
   if (estado === 'sin-permiso') {
-    return <Aviso tipo="sin-permiso" titulo={SIN_PERMISO.titulo} detalle={SIN_PERMISO.detalle} />;
+    // Y si la lectura de esta pantalla **no es la de esta opcion**, se dice cual
+    // falta: «Baja de deuda» lee `consulta_deuda`, y quien tenga una y no la
+    // otra recibia un «no tienes permiso» que le manda a pedir el que ya tiene.
+    const texto = sinPermiso ?? SIN_PERMISO;
+    return <Aviso tipo="sin-permiso" titulo={texto.titulo} detalle={texto.detalle} />;
   }
 
   // La operacion esta en el contrato pero el backend todavia no la sirve (404).
@@ -485,9 +597,7 @@ function Bloques({
       {/* Lo que esta pantalla **no** manda, dicho antes de que alguien lo
           teclee. Sale de la escritura declarada, no del catalogo: es una
           propiedad de la operacion, no del dibujo. */}
-      {declarada?.nota !== undefined && (
-        <Aviso titulo="Cómo funciona esta pantalla" detalle={declarada.nota} />
-      )}
+      {nota !== undefined && <Aviso titulo="Cómo funciona esta pantalla" detalle={nota} />}
 
       {/* Y lo que hay que saber **de lo que se esta mirando**: que es una copia
           de trabajo y el padron todavia no la recoge (#80). */}
@@ -505,7 +615,7 @@ function Bloques({
           registro es el parametro de la ruta y en el padron de contribuyentes es
           el filtro de la busqueda (#330), y sin registro devuelve `null`.
           El `Suspense` es para las que llegan en el trozo de su modulo. */}
-      {Resumen !== undefined && (
+      {Resumen !== undefined && hayAlgoQueResumir && (
         <Suspense fallback={<Esqueleto alto={92} />}>
           <Resumen
             {...(codigo === undefined ? {} : { codigo })}
@@ -594,9 +704,11 @@ function Bloques({
             : {
                 seleccion: {
                   elegidas,
+                  claveDe: claveDeFila,
                   onAlternar: alternarEleccion,
                   una: seleccionable.una,
                   varias: seleccionable.varias,
+                  genero: seleccionable.genero,
                 },
               })}
           {...(composicion.altaDeFila !== undefined && puedeRegistrarAqui
@@ -697,8 +809,10 @@ function Bloques({
               ? {}
               : { alcance: datos.tabla.conteo })}
           /* Y por que la primaria no puede guardar todavia, cuando no puede
-             (#332): se pinta junto a ella en vez de dejarla apagada y muda. */
-          {...(impedimento === undefined ? {} : { impedimento: impedimento.detalle })}
+             (#332): se pinta junto a ella en vez de dejarla apagada y muda. Van
+             las dos mitades —lo que lee quien atiende y la causa tecnica, que
+             solo viaja en un `data-`—. */
+          {...(impedimento === undefined ? {} : { impedimento })}
           /* El acto de esta pantalla, cuando vive en otra opcion y hay un
              registro abierto que llevarse. Sin registro no hay a donde ir. */
           {...(composicion.acto !== undefined && codigo !== undefined && codigo !== ''

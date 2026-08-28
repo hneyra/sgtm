@@ -57,6 +57,7 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
       tabla: 'cuotas',
       una: 'cuota',
       varias: 'cuotas',
+      genero: 'femenino',
       // El contribuyente no es una columna de la tabla —la pantalla entera es de
       // uno solo, y su codigo esta en el filtro—, pero el backend lo necesita:
       // la baja se registra contra su cuenta corriente. Entra en la fila como

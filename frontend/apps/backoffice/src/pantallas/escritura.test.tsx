@@ -5,6 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import { crearClienteDeConsultas } from '../app/App';
 import { clienteDePruebas, montarEnRuta } from '../pruebas/montar';
+import { primariaApagada, primariaEncendida } from '../pruebas/acciones';
 import { useEscritura } from './escritura';
 import type { OpcionesDeEscritura } from './escritura';
 
@@ -94,14 +95,16 @@ describe('sin observacion no se guarda', () => {
       montarEnRuta(ruta);
 
       const accion = await screen.findByRole('button', { name: primaria });
-      expect(accion).toBeDisabled();
+      // Apagada con `aria-disabled`, no con `disabled`: sigue siendo enfocable
+      // para que el motivo que lleva al lado se pueda leer (#332).
+      primariaApagada(accion);
 
       await usuario.type(await observacion(), 'Corrección solicitada por el contribuyente.');
-      expect(accion).toBeEnabled();
+      primariaEncendida(accion);
 
-      // Y si se borra, vuelve a deshabilitarse: no es una puerta que se abre una vez.
+      // Y si se borra, vuelve a apagarse: no es una puerta que se abre una vez.
       await usuario.clear(await observacion());
-      expect(accion).toBeDisabled();
+      primariaApagada(accion);
     },
   );
 
@@ -464,6 +467,68 @@ describe('un entero que no lo es no viaja, en vez de viajar a medias', () => {
     await waitFor(() => expect(peticiones).toHaveLength(1));
     const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
     expect(cuerpo['cuota']).toBe(viaja);
+  });
+});
+
+/**
+ * **Lo que el backend no puede leer no sale**, y son dos casos hermanos (#332).
+ *
+ * Los dos aparecen por el mismo camino nuevo: una fila de tabla que se elige y
+ * viaja al cuerpo. Sus celdas son texto de presentacion, y ahi el importe lleva
+ * separador de miles —«1,842.60», que `new BigDecimal` **rechaza lanzando**— y
+ * lo que el backend no mando se dibuja con un guion —«—», que no es un valor de
+ * nada—. Cualquiera de los dos producia un 422 despues de confirmar un acto
+ * irreversible; ahora no salen, y la opcion que los declara lo dice ademas en su
+ * `exigir`.
+ */
+describe('un importe con formato de pantalla, y un guion, no viajan', () => {
+  const CON_IMPORTE: OpcionesDeEscritura = {
+    campos: {
+      insoluto: { campo: 'insoluto', importe: true },
+      documento: { campo: 'documento' },
+    },
+  };
+
+  const conImporte = () => {
+    const cliente = clienteDePruebas();
+    return renderHook(() => useEscritura('registrar_ficha_urbana', {}, CON_IMPORTE), {
+      wrapper: ({ children }: { readonly children: ReactNode }) => (
+        <QueryClientProvider client={cliente}>{children}</QueryClientProvider>
+      ),
+    });
+  };
+
+  it.each([
+    { escrito: '1842.60', viaja: '1842.60' },
+    { escrito: '0', viaja: '0' },
+    { escrito: '-84.12', viaja: '-84.12' },
+    // Lo que una celda de tabla lleva de verdad, y `new BigDecimal` no lee.
+    { escrito: '1,842.60', viaja: undefined },
+    { escrito: 'S/ 1842.60', viaja: undefined },
+    { escrito: '—', viaja: undefined },
+  ])('el importe «$escrito» viaja como $viaja', async ({ escrito, viaja }) => {
+    laApiResponde(201);
+    const { result } = conImporte();
+
+    act(() => result.current.fijarCampo('insoluto', escrito));
+    act(() => result.current.fijarObservacion('Baja de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo['insoluto']).toBe(viaja);
+  });
+
+  it('y el guion tampoco viaja en un campo de texto: no es un documento llamado «—»', async () => {
+    laApiResponde(201);
+    const { result } = conImporte();
+
+    act(() => result.current.fijarCampo('documento', '—'));
+    act(() => result.current.fijarObservacion('Baja de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).not.toHaveProperty('documento');
   });
 });
 

@@ -31,20 +31,36 @@ import { escrituraDe } from './escrituras';
 export type CausaDelImpedimento = 'sin-backend' | 'sin-declaracion';
 
 export interface ImpedimentoDelActo {
+  /**
+   * La causa **tecnica**, para quien mantiene el sistema. No se pinta: viaja en
+   * un `data-causa` del elemento que lleva el texto.
+   *
+   * Las dos cosas viven separadas porque tienen dos lectores. Quien atiende en
+   * ventanilla no sabe —ni tiene por que— que es «el backend», ni que hay campos
+   * «declarados»: leyendo eso, lo unico que puede concluir es que la pantalla
+   * esta rota y que la culpa es suya. Quien recibe el aviso en sistemas si
+   * necesita saber cual de las dos cosas falta, y la lee del `data-`.
+   */
   readonly causa: CausaDelImpedimento;
   /**
    * Lo que se **pinta** junto a la accion, nunca en un `title`: un `title` sobre
    * un boton `disabled` no existe ni para el teclado —no se puede enfocar— ni
    * para el lector de pantalla (FRO-04 §6).
+   *
+   * **Y dice por donde se sale.** Un mensaje que solo cuenta lo que no se puede
+   * hacer deja al mostrador parado; el acto del manual existe fuera del sistema
+   * —hay un procedimiento en papel— y lo que hay que decir es que se siga por
+   * ahi y que alguien lo sepa.
    */
   readonly detalle: string;
 }
 
-const SIN_BACKEND =
-  'Esta acción todavía no puede guardar: el backend no publica ninguna escritura para esta pantalla. Lo que hay aquí es de consulta hasta que exista.';
+const SALIDA =
+  'Registra el acto por el procedimiento actual y avísale a sistemas: esta pantalla todavía no guarda.';
 
-const SIN_DECLARACION =
-  'Esta acción todavía no puede guardar: los campos de esta pantalla aún no están declarados para escribir. Se declaran uno a uno contra lo que el backend acepta, y hasta entonces no se manda nada.';
+const SIN_BACKEND = `Aquí todavía no se puede guardar nada: lo que hay es de consulta. ${SALIDA}`;
+
+const SIN_DECLARACION = `Lo que se escriba aquí todavía no se guarda: la pantalla aún no manda estos campos. ${SALIDA}`;
 
 /**
  * Por que la accion primaria de esta opcion no puede guardar todavia, o nada si

@@ -104,9 +104,36 @@ export interface CampoDelCuerpo {
   readonly campo: string;
   /** El backend lo declara entero, no cadena. Nunca para importes. */
   readonly entero?: boolean;
+  /**
+   * El backend lo lee como importe: viaja **solo** si es una cadena decimal
+   * simple (`-?\d+(\.\d+)?`).
+   *
+   * No convierte nada —un importe es texto de punta a punta (regla 1,
+   * RNF-055)—: lo unico que hace es no dejar salir lo que el backend no puede
+   * leer. Un `new BigDecimal("1,842.60")` **lanza**, y el separador de miles es
+   * exactamente lo que una celda de tabla lleva cuando alguien la copia al
+   * cuerpo (#332). Rechazarlo aqui convierte un 422 tardio —despues de que la
+   * baja se confirmara— en un campo que no viaja, y la opcion que lo declara lo
+   * dice ademas en su `exigir`.
+   */
+  readonly importe?: boolean;
   /** Traduce el texto del formulario al que espera el backend. Ver el javadoc de arriba. */
   readonly valor?: (texto: string) => string | undefined;
 }
+
+/**
+ * Lo que la interfaz dibuja donde el backend no mando dato: `SIN_DATO` de
+ * `pantallas/seguridad/listado.ts`.
+ *
+ * Se repite aqui como constante local, y no se importa, por una razon: este
+ * archivo es el camino de escritura y no puede depender de como dibuja un
+ * adaptador. Lo que importa es la propiedad —**un guion no es un valor**—, y esa
+ * vale aunque el dia de manana el guion se escriba de otra forma.
+ */
+const GUION = '—';
+
+/** Una cadena decimal simple, que es lo unico que `new BigDecimal` acepta. */
+const IMPORTE = /^-?\d+(\.\d+)?$/;
 
 /**
  * Un campo del cuerpo que **no es plano: es una tabla**.
@@ -250,8 +277,16 @@ export function useEscritura(
   // Lo que ademas de la observacion falta para poder guardar. Se pregunta en
   // cada render porque es un cierre sobre el estado de quien lo declara.
   const falta = exigir?.(borrador, filas);
-  // Y el motivo completo, con la observacion incluida: es el que se pinta.
-  const motivo = falta ?? (observacion.trim() === '' ? FALTA_LA_OBSERVACION : undefined);
+  /* Y el motivo completo, con la observacion incluida: es el que se pinta.
+     **Sin operacion no hay motivo**, y esa condicion faltaba: una pantalla sin
+     sitio a donde escribir devolvia «falta la observación» —y la franja lo
+     pintaba— al lado de una pantalla que ni siquiera dibuja la caja de
+     observacion. Lo que le pasa a esa pantalla no es que falte un texto: es que
+     no hay escritura, y eso lo cuenta el impedimento del acto, no esto. */
+  const motivo =
+    operacion === undefined
+      ? undefined
+      : (falta ?? (observacion.trim() === '' ? FALTA_LA_OBSERVACION : undefined));
 
   // Este es el unico sitio del frontend donde se escribe, y es el que exige la
   // observacion: la regla de ESLint protege a todos los demas de saltarsela.
@@ -373,6 +408,15 @@ function soloDeclarados(
     // blanca, llegaba al backend y volvia como 422 por un campo «lleno».
     const limpio = valor.trim();
     if (limpio === '') continue;
+    // **Un guion no es un valor.** Es lo que la interfaz dibuja donde el backend
+    // no mando dato, y una fila elegida en una tabla lo lleva en sus celdas
+    // vacias. Mandarlo convierte «no llego» en un dato: el backend lo leeria
+    // como un documento llamado «—», o lo rechazaria como importe (#332).
+    if (limpio === GUION) continue;
+    if (declarado.importe === true && !IMPORTE.test(limpio)) {
+      // Ver `CampoDelCuerpo.importe`: lo que el backend no puede leer no sale.
+      continue;
+    }
     if (declarado.valor !== undefined) {
       // Un valor que la traduccion no reconoce no viaja: ver el javadoc de `CampoDelCuerpo`.
       const traducido = declarado.valor(limpio);

@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { montarEnRuta } from '../../pruebas/montar';
 import { cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
-import { avisoDe } from '../avisos';
+import { AVISOS } from '../prosa-textos';
+import { hayQueResumir } from '../composicion';
 import { SIN_DATO } from '../seguridad/listado';
 
 /**
@@ -26,8 +27,47 @@ const PADRON = `/rentas-registro/contribuyentes?codigo=${CONTRIBUYENTE}`;
 const VEHICULO = '/rentas-registro/vehiculos/T2G-418';
 const DECLARACION = '/rentas-registro/declaracion-jurada/000418?ano=2026';
 
+const fetchOriginal = globalThis.fetch;
+
 beforeEach(() => instalarProxyDeDatos({ latencia: false }));
-afterEach(() => desinstalarProxyDeDatos());
+afterEach(() => {
+  desinstalarProxyDeDatos();
+  globalThis.fetch = fetchOriginal;
+});
+
+/** El padron responde **una** fila: la busqueda por documento o por nombre que acierta. */
+function unSoloContribuyente(): void {
+  const proxy = globalThis.fetch;
+  globalThis.fetch = (entrada, opciones) => {
+    const url = typeof entrada === 'string' ? entrada : String(entrada);
+    if (!url.includes('/rentas/contribuyentes')) return proxy(entrada, opciones);
+    const contenido = [
+      {
+        id: 1,
+        codigo: CONTRIBUYENTE,
+        tipoDocumento: 'DNI',
+        numeroDocumento: '03593174',
+        tipoPersona: 'NATURAL',
+        nombreRazonSocial: 'SUC. RUFINA MEDINA MEDINA',
+        condicionEspecial: null,
+        activo: true,
+      },
+    ];
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          contenido,
+          pagina: 0,
+          tamano: 1,
+          totalElementos: 1,
+          totalPaginas: 1,
+          hayMas: false,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+  };
+}
 
 describe('la cabecera-resumen dice a quien se tiene delante', () => {
   it('compone codigo, nombre, documento y estado con la fila que ya llego', async () => {
@@ -63,6 +103,91 @@ describe('la cabecera-resumen dice a quien se tiene delante', () => {
     expect(linea.textContent).not.toMatch(/0[.,]00|S\/\s*0/);
     // Y el guion va explicado, que es lo que lo distingue de un hueco.
     expect(linea.textContent).toMatch(/no la publica todavía/);
+    /* Y **ahi se acaba**. La linea llevaba ademas «Es la deuda actualizada a una
+       fecha, no un saldo guardado: hasta que exista, un guion — nunca un cero»,
+       que es la justificacion de diseno: le explica a quien construye el sistema
+       por que se decidio asi. Al mostrador no le sirve —ya sabe que el dato no
+       esta— y ocupa el sitio de lo que si le sirve. La justificacion vive en el
+       comentario de `LineaDeDeuda`, que es donde tiene lector. */
+    expect(linea.textContent).not.toMatch(/saldo guardado|nunca un cero/);
+    expect((linea.textContent ?? '').length).toBeLessThan(70);
+  });
+
+  /**
+   * **Con un solo resultado, ese es** (#332).
+   *
+   * En ventanilla no se busca por codigo municipal: el contribuyente llega con
+   * su DNI en la mano. La cabecera solo aparecia con `?codigo=`, asi que la
+   * busqueda que de verdad se hace —por documento o por nombre— encontraba a la
+   * persona, la ensenaba en una fila de ocho columnas y no resumia nada.
+   */
+  it('una búsqueda con un único resultado abre la cabecera aunque no haya código', async () => {
+    // El proxy no filtra —y lo dice—, asi que el unico resultado lo sirve la
+    // prueba: lo que se comprueba es la cabecera, no el filtrado del servidor.
+    unSoloContribuyente();
+    montarEnRuta(`/rentas-registro/contribuyentes?nombre=${encodeURIComponent('MEDINA')}`);
+    await waitFor(() => expect(document.querySelectorAll('tbody tr').length).toBe(1));
+
+    const resumen = await screen.findByRole('region', { name: 'Resumen del contribuyente' });
+    // El codigo lo pone la fila: es el que se estaba buscando sin saberlo.
+    expect(within(resumen).getByText(CONTRIBUYENTE)).toBeInTheDocument();
+  });
+
+  /**
+   * Y con varios **no**: elegir por su cuenta cual de los cinco «GARCIA» es
+   * seria decidir por quien atiende.
+   */
+  it('con varios resultados no se resume ninguno', async () => {
+    montarEnRuta('/rentas-registro/contribuyentes');
+    await waitFor(() => expect(document.querySelectorAll('tbody tr').length).toBeGreaterThan(1));
+    expect(
+      screen.queryByRole('region', { name: 'Resumen del contribuyente' }),
+    ).not.toBeInTheDocument();
+  });
+
+  /**
+   * Y **ni siquiera se pide el trozo** cuando no hay nada que resumir (#332).
+   *
+   * Las tres cabeceras de rentas llegan en su propio `lazy` para no viajar en el
+   * arranque, pero el `Suspense` que las envuelve se montaba siempre que la
+   * opcion declarara una: el navegador bajaba el trozo para dibujar `null`, y el
+   * padron sin nadie abierto es el caso normal de esa pantalla. Se ve en el
+   * hueco de carga —el `Esqueleto` de 92 px del `fallback`—, que es lo unico que
+   * ese `Suspense` deja en el DOM antes de resolver.
+   */
+  it.each([
+    { caso: 'el padrón sin nadie abierto', codigo: undefined, url: '', filas: 4, resume: false },
+    { caso: 'la ficha abierta por su ruta', codigo: '00028314', url: '', filas: 0, resume: true },
+    {
+      caso: 'el registro en el filtro',
+      codigo: undefined,
+      url: 'codigo=00028314',
+      filas: 4,
+      resume: true,
+    },
+    {
+      caso: 'una búsqueda con un solo resultado',
+      codigo: undefined,
+      url: 'nombre=MEDINA',
+      filas: 1,
+      resume: true,
+    },
+    {
+      caso: 'una búsqueda con varios',
+      codigo: undefined,
+      url: 'nombre=GARCIA',
+      filas: 5,
+      resume: false,
+    },
+    {
+      caso: 'una búsqueda sin resultados',
+      codigo: undefined,
+      url: 'nombre=ZZZ',
+      filas: 0,
+      resume: false,
+    },
+  ])('$caso → $resume', ({ codigo, url, filas, resume }) => {
+    expect(hayQueResumir(codigo, new URLSearchParams(url), filas)).toBe(resume);
   });
 
   it('la ficha de vehiculo resume lo que `VehiculoResource` publica, y el resto con «—»', async () => {
@@ -116,7 +241,9 @@ describe('el indice sustituye a las pestanas, y solo donde se declara', () => {
     expect(entradas).toContain('Domicilio fiscal');
     // Y de la novena.
     expect(entradas).toContain('Unidades afectas del contribuyente');
-    expect(entradas.length).toBe(12);
+    // Doce secciones mas la salida hacia la barra de acciones (#332).
+    expect(entradas.length).toBe(13);
+    expect(entradas[entradas.length - 1]).toBe('Ir a las acciones');
   });
 
   it('la ficha de vehiculo hace lo mismo con sus seis', async () => {
@@ -135,6 +262,7 @@ describe('el indice sustituye a las pestanas, y solo donde se declara', () => {
       'Impuesto al patrimonio vehicular',
       'Inafectación y exoneración',
       'Notas',
+      'Ir a las acciones',
     ]);
   });
 
@@ -165,8 +293,8 @@ describe('el indice sustituye a las pestanas, y solo donde se declara', () => {
 
 describe('el aviso de dominio explica los «—» antes de que alguien los lea mal', () => {
   it('el padron y la ficha de vehiculo lo declaran, y dice de quien depende el hueco', async () => {
-    expect(avisoDe('contribuyentes')?.detalle).toMatch(/salen con «—»/);
-    expect(avisoDe('vehiculos')?.detalle).toMatch(/tabla referencial del MEF/);
+    expect(AVISOS['contribuyentes']?.detalle).toMatch(/salen con «—»/);
+    expect(AVISOS['vehiculos']?.detalle).toMatch(/tabla referencial del MEF/);
 
     montarEnRuta(PADRON);
     expect(await screen.findByText(/Lo que el padrón publica hoy/)).toBeInTheDocument();

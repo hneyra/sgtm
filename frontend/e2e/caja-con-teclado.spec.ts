@@ -42,14 +42,52 @@ test('de la paleta de comandos al acto, solo con el teclado', async ({ page }) =
   await expect(page.getByText(/Guardado, con tu observación/)).toBeVisible();
 });
 
+/**
+ * **Sin observacion, el teclado no consigue registrar el acto** (regla 10,
+ * RNF-052).
+ *
+ * Es el camino que #332 dejo sin recorrer: era de la caja, y la caja ya no
+ * escribe. Se recupera sobre «Alta de deuda», que es la que escribe hoy, y con
+ * la semantica nueva —la primaria apagada es **enfocable**, para que el motivo
+ * que lleva al lado se pueda leer—: eso hace el camino mas exigente, no menos,
+ * porque ahora se puede llegar al boton con el teclado y pulsarlo, y aun asi no
+ * tiene que pasar nada.
+ */
+test('sin observación, ni con el teclado se consigue registrar', async ({ page }) => {
+  await page.goto('/rentas-registro/alta-deuda');
+
+  const guardar = page.getByRole('button', { name: 'Dar de alta', exact: true });
+  await expect(guardar).toHaveAttribute('aria-disabled', 'true');
+
+  // Y el motivo se **ve**, y se puede llegar a el: el boton recibe el foco y su
+  // `aria-describedby` apunta a la franja, que existe y no esta vacia.
+  await guardar.focus();
+  await expect(guardar).toBeFocused();
+  const franja = page.locator('#sgtm-motivo-de-la-accion');
+  await expect(franja).toHaveText(/Falta la observación/);
+
+  // Pulsar no guarda nada: enfocable no es pulsable.
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(/Guardado, con tu observación/)).toHaveCount(0);
+
+  // Y con la observacion escrita, el mismo Enter si registra.
+  const observacion = page.getByRole('textbox', { name: 'Observación' });
+  await observacion.focus();
+  await page.keyboard.type('Determinación de fiscalización.');
+  await guardar.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(/Guardado, con tu observación/)).toBeVisible();
+});
+
 test('la caja dice por que todavia no puede cobrar, en vez de prometerlo', async ({ page }) => {
   await page.goto('/tesoreria/caja-tributaria');
   const cobrar = page.getByRole('button', { name: /Cobrar/i }).last();
-  await expect(cobrar).toBeDisabled();
+  // Apagada con `aria-disabled`, no con `disabled`: es lo que la deja enfocable
+  // para que su motivo se lea (FRO-04 §6).
+  await expect(cobrar).toHaveAttribute('aria-disabled', 'true');
 
-  // Y el motivo se **ve**: un `title` sobre un boton `disabled` no existe ni
-  // para el teclado ni para el lector de pantalla (FRO-04 §6).
-  await expect(page.getByText(/todavía no puede guardar/i)).toBeVisible();
+  // Y el motivo se **ve**, en la lengua del mostrador y con la salida puesta.
+  await expect(page.getByText(/Registra el acto por el procedimiento actual/i)).toBeVisible();
   // Sin escritura declarada no hay ni caja de observacion: no hay a donde escribir.
   await expect(page.getByRole('textbox', { name: 'Observación' })).toHaveCount(0);
 });

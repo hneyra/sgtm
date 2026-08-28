@@ -8,6 +8,7 @@ import type { Escritura } from '../escritura';
 import { OPCIONES_CONECTADAS } from '../conexiones';
 import { SIN_DATO } from '../seguridad/listado';
 import { montarEnRuta } from '../../pruebas/montar';
+import { primariaApagada } from '../../pruebas/acciones';
 
 /**
  * Valores (#75): **un valor emitido es un acto administrativo**.
@@ -170,9 +171,9 @@ describe('registrar el mismo acto dos veces es imposible desde la interfaz', () 
     await waitFor(() => expect(peticiones).toBe(1));
 
     // La observacion se vacia al guardar, asi que la accion vuelve a estar
-    // deshabilitada: para registrar otro acto hay que decir por que, y eso es lo
+    // apagada: para registrar otro acto hay que decir por que, y eso es lo
     // que impide registrar el mismo dos veces de un doble golpe.
-    await waitFor(() => expect(primaria().disabled).toBe(true));
+    await waitFor(() => primariaApagada(primaria()));
     expect(await observacion()).toHaveValue('');
   });
 });

@@ -86,7 +86,10 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
     const entradas = within(indice())
       .getAllByRole('button')
       .map((boton) => boton.textContent);
-    expect(entradas).toEqual(declaradas);
+    // La ultima entrada no es una seccion: es la **salida** hacia la barra de
+    // acciones, que es lo que faltaba para no tener que tabular por los 55
+    // controles de la ficha para llegar al acto (#332).
+    expect(entradas).toEqual([...declaradas, 'Ir a las acciones']);
     expect(within(indice()).getByText('2 secciones')).toBeInTheDocument();
   });
 
@@ -119,7 +122,11 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
     const entradas = within(indice())
       .getAllByRole('button')
       .map((boton) => boton.textContent);
-    expect(entradas).toEqual(['Características de construcción — piso 01', 'Áreas legal y física']);
+    expect(entradas).toEqual([
+      'Características de construcción — piso 01',
+      'Áreas legal y física',
+      'Ir a las acciones',
+    ]);
   });
 
   it('ninguna otra pantalla gana indice: la composicion es opt-in por opcion', async () => {

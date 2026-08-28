@@ -3,6 +3,7 @@ import { solicitar, ProblemaDeApi } from '@sgtm/api-client';
 import type { DatosDePantalla } from '@sgtm/api-client';
 import {
   OPERACIONES_SIMULADAS,
+  PAGINADOS,
   RESPUESTAS,
   RUTAS,
   YA_SERVIDAS,
@@ -41,6 +42,43 @@ describe('el proxy cubre el contrato', () => {
         expect(typeof total.value, `${id} · ${total.label}`).toBe('string');
       }
     }
+  });
+
+  /**
+   * **Y los de un recurso, como los serializa el backend** (#332).
+   *
+   * `ImporteActualizado` publica lo que devuelve `BigDecimal.toPlainString()`:
+   * digitos, un punto y nada mas. El prototipo escribe las cifras para leerlas
+   * —«1,842.60»— y el proxy las servia tal cual, asi que la interfaz se construyo
+   * contra una forma que el servidor no usa. No es un detalle de presentacion: la
+   * baja de deuda manda la cifra de la fila elegida en el cuerpo, el controlador
+   * la lee con `new BigDecimal(texto)` y **ese constructor lanza con la coma
+   * dentro**. Contra el proxy no se veia; contra el backend, 422.
+   */
+  it('los importes de un recurso salen como `toPlainString`, sin separador de miles', () => {
+    const CIFRA = /^-?\d+(\.\d+)?$/;
+    const mirar = (valor: unknown, donde: string): void => {
+      if (Array.isArray(valor)) {
+        valor.forEach((cada, i) => mirar(cada, `${donde}[${i}]`));
+        return;
+      }
+      if (typeof valor !== 'object' || valor === null) return;
+      const objeto = valor as Record<string, unknown>;
+      // `ImporteActualizado` es el par (importe, actualizadoA): donde este ese
+      // par, el importe es una cifra que el backend va a leer con `BigDecimal`.
+      if (typeof objeto['importe'] === 'string' && objeto['actualizadoA'] !== undefined) {
+        expect(objeto['importe'], `${donde}.importe`).toMatch(CIFRA);
+      }
+      for (const [clave, dentro] of Object.entries(objeto)) mirar(dentro, `${donde}.${clave}`);
+    };
+
+    let mirados = 0;
+    for (const [camino, construir] of Object.entries(PAGINADOS)) {
+      mirados += 1;
+      mirar(construir().contenido, camino);
+    }
+    // Si el recorrido no encontrara nada que mirar, esto pasaria sin comprobar.
+    expect(mirados).toBeGreaterThan(5);
   });
 });
 

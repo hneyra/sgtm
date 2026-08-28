@@ -4,7 +4,7 @@ import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { permisosDelClaim, puedeVer } from '../../app/sesion/permisos';
 import { cifrasDeLaTabla, cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
 import { montarEnRuta } from '../../pruebas/montar';
-import { motivoDeLaPrimaria, primariaDeLaPantalla } from '../../pruebas/acciones';
+import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
 
 /**
  * Infracciones administrativas (#78).
@@ -90,7 +90,7 @@ describe('ningun acto de este modulo promete lo que no puede', () => {
     const montada = montarEnRuta(`/infracciones-administrativas/${ranura}`);
     await dibujada('.sgtm-acciones');
 
-    expect(primariaDeLaPantalla().disabled).toBe(true);
+    primariaApagada();
 
     // Sin declaracion no hay a donde escribir, asi que tampoco hay caja de
     // observacion: pedirla seria pedirla para nada.
@@ -98,7 +98,8 @@ describe('ningun acto de este modulo promete lo que no puede', () => {
       screen.queryByRole('region', { name: 'Observación del usuario' }),
     ).not.toBeInTheDocument();
 
-    expect(motivoDeLaPrimaria()).toMatch(/todavía no puede guardar/i);
+    expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
+    expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute('data-causa');
 
     montada.unmount();
   });

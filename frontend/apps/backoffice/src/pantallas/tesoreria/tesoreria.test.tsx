@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { OPCIONES_CONECTADAS } from '../conexiones';
 import { permisosDelClaim, puedeVer } from '../../app/sesion/permisos';
 import { montarEnRuta } from '../../pruebas/montar';
-import { motivoDeLaPrimaria, primariaDeLaPantalla } from '../../pruebas/acciones';
+import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
 
 /**
  * Tesoreria (#74): **donde el sistema se usa a diario y donde un clic de mas se
@@ -78,15 +78,22 @@ describe('la caja dice lo que todavia no puede hacer', () => {
       screen.queryByRole('region', { name: 'Observación del usuario' }),
     ).not.toBeInTheDocument();
 
-    const primaria = primariaDeLaPantalla();
-    expect(primaria.disabled).toBe(true);
+    // Apagada con `aria-disabled` y enfocable, para que su franja se lea.
+    primariaApagada();
 
-    // Y lo dice: `POST /tesoreria/caja/tasas` esta en el contrato —escribe—, asi
-    // que lo que falta es la declaracion de sus campos, no el backend.
-    expect(motivoDeLaPrimaria()).toMatch(/aún no están declarados para escribir/);
+    // Y lo dice **en la lengua del mostrador**, con la salida puesta: el acto se
+    // registra por el procedimiento de siempre. Que lo que falta es la
+    // declaracion de sus campos —y no el backend— lo lleva el `data-causa`, que
+    // no se pinta: es para quien recibe el aviso, no para quien atiende.
+    expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
+    expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
+      'data-causa',
+      'sin-declaracion',
+    );
 
-    // Y no hay forma de mandar nada: no queda ningun control que lo consiga.
-    await usuario.click(primaria);
+    // Y no hay forma de mandar nada: enfocable no es pulsable —el `onClick` se
+    // guarda solo cuando la primaria esta apagada con `aria-disabled`—.
+    await usuario.click(screen.getByRole('button', { name: /Cobrar/ }));
     expect(peticiones).toEqual([]);
   });
 });

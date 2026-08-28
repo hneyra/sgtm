@@ -1,4 +1,16 @@
 /**
+ * **La prosa fija de las pantallas: el aviso permanente y la nota de la
+ * escritura.**
+ *
+ * Vive en su propio modulo, y no junto a lo que la usa, por una razon medida:
+ * son cinco kilobytes de castellano que 127 de las 134 pantallas no necesitan, y
+ * estaban en el trozo de arranque —el que baja quien entra a mirar un recibo—.
+ * Aqui los pide `prosa.ts`, **en el mismo gesto con que la pantalla ya pide el
+ * catalogo de su modulo**, asi que no llega ni un milisegundo mas tarde que
+ * antes: la pantalla no se dibuja hasta que ese trozo esta.
+ *
+ * ── El aviso permanente ─────────────────────────────────────────────────
+ *
  * Lo que una pantalla tiene que decir **siempre**, antes de que alguien teclee.
  *
  * No es un mensaje de error ni una ayuda: es una advertencia permanente sobre
@@ -21,7 +33,7 @@ export interface AvisoDePantalla {
   readonly detalle: string;
 }
 
-const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
+export const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
   fisc_predial: {
     titulo: 'Esto es una copia de trabajo: el padrón no ha cambiado',
     detalle:
@@ -85,8 +97,34 @@ const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
   },
 };
 
-/** El aviso permanente de una opcion, si lo tiene. */
-export const avisoDe = (opcion: string): AvisoDePantalla | undefined => AVISOS[opcion];
-
 /** Las opciones que llevan aviso permanente. La prueba de fiscalizacion las mira. */
 export const OPCIONES_CON_AVISO = Object.keys(AVISOS);
+
+/**
+ * ── La nota de la escritura ─────────────────────────────────────────────
+ *
+ * Lo que esta pantalla **no** manda, dicho antes de que alguien lo teclee.
+ *
+ * Sale de la escritura declarada y no del catalogo —es una propiedad de la
+ * operacion, no del dibujo—, pero su **texto** vive aqui por lo mismo que el
+ * aviso: `escrituras.ts` esta en el trozo de arranque porque el camino de
+ * escritura lo necesita entero y sincrono, y su prosa no. La declaracion se
+ * queda alli (`EscrituraDeclarada.nota`, un booleano); la redaccion, aqui, y
+ * `prosa.test.ts` exige que las dos listas digan lo mismo.
+ */
+export const NOTAS: Readonly<Record<string, string>> = {
+  cambiar_clave:
+    'La contraseña no se escribe aquí y el sistema no la recibe: el cambio lo hace el proveedor de identidad. Al aceptar, queda registrado quién lo pidió y por qué, y se continúa allí.',
+
+  alta_deuda:
+    'Solo se admiten los tributos con código establecido: predial, arbitrios, vehicular y alcabala. La unidad (predio o placa) y el rango de cuotas todavía no se resuelven aquí: el alta queda a nivel de contribuyente y con una sola cuota.',
+
+  baja_deuda:
+    'La baja registra una obligación por acto: se elige su cuota en la tabla y se repite para las demás. La causal no tiene campo propio en el backend —va en la observación, que es donde queda auditada— y el total a extinguir lo calcula el servidor: aquí no se suma ninguna columna. Una fila cuya cuota agrupa varias («1 - 4») no se puede dar de baja todavía: el backend registra una cuota o el año completo, y no hay forma de decirle «de la 1 a la 4».',
+
+  notificacion_valores:
+    'La hora y la dirección de la diligencia no se guardan todavía: el backend solo pide la fecha (sin hora) y, si no se indica una dirección, usa el domicilio fiscal vigente a esa fecha.',
+};
+
+/** Las opciones cuya escritura lleva nota. La comprobacion de coherencia las mira. */
+export const OPCIONES_CON_NOTA = Object.keys(NOTAS);

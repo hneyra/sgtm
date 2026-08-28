@@ -6,7 +6,7 @@ import { OPCIONES_CONECTADAS } from '../conexiones';
 import { permisosDelClaim, puedeEscribir, puedeVer } from '../../app/sesion/permisos';
 import { montarEnRuta } from '../../pruebas/montar';
 import { SIN_DATO } from '../seguridad/listado';
-import { motivoDeLaPrimaria, primariaDeLaPantalla } from '../../pruebas/acciones';
+import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pruebas/acciones';
 
 /**
  * Rentas · Registro (#73): el modulo que mas escribe.
@@ -70,15 +70,22 @@ describe('ningun acto del modulo promete lo que no puede', () => {
       await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
 
       // **La ultima accion es la primaria**, como en el prototipo (FRO-03 §5).
-      expect(primariaDeLaPantalla().disabled).toBe(true);
+      // Apagada con `aria-disabled` y enfocable: es lo unico que hace que su
+      // franja se lea (ver `primariaApagada`).
+      primariaApagada();
 
       // Sin declaracion no hay a donde escribir: tampoco hay caja de observacion.
       expect(
         screen.queryByRole('region', { name: 'Observación del usuario' }),
       ).not.toBeInTheDocument();
 
-      // Su operacion **escribe** en el contrato: lo que falta es la declaracion.
-      expect(motivoDeLaPrimaria()).toMatch(/aún no están declarados para escribir/);
+      // Su operacion **escribe** en el contrato: lo que falta es la declaracion,
+      // y eso lo dice el `data-causa` —la franja habla para la ventanilla—.
+      expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
+      expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
+        'data-causa',
+        'sin-declaracion',
+      );
 
       montada.unmount();
     },
@@ -90,9 +97,9 @@ describe('ningun acto del modulo promete lo que no puede', () => {
     const caja = await screen.findByRole('region', { name: 'Observación del usuario' });
     expect(within(caja).getByLabelText('Observación')).toBeInTheDocument();
 
-    // Sin observacion, deshabilitada. No es un `placeholder` amable: es la
+    // Sin observacion, apagada. No es un `placeholder` amable: es la
     // condicion de guardado (regla 10, RNF-052).
-    expect(primariaDeLaPantalla().disabled).toBe(true);
+    primariaApagada();
 
     montada.unmount();
   });
@@ -103,10 +110,10 @@ describe('ningun acto del modulo promete lo que no puede', () => {
 
     const caja = await screen.findByRole('region', { name: 'Observación del usuario' });
     const primaria = await screen.findByRole('button', { name: 'Dar de alta' });
-    expect(primaria).toBeDisabled();
+    primariaApagada(primaria);
 
     await usuario.type(within(caja).getByLabelText('Observación'), 'Motivo del acto.');
-    await waitFor(() => expect(primaria).toBeEnabled());
+    await waitFor(() => primariaEncendida(primaria));
 
     montada.unmount();
   });

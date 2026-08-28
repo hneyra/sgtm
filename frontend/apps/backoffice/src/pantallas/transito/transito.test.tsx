@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { cifrasDeLaTabla, cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
 import { montarEnRuta } from '../../pruebas/montar';
-import { motivoDeLaPrimaria, primariaDeLaPantalla } from '../../pruebas/acciones';
+import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
 
 /**
  * Transito (#77): el modulo mas grande del menu, y **trece reportes**.
@@ -108,11 +108,11 @@ describe('el cambio de numero es la unica correccion permitida', () => {
     montarEnRuta('/transito/transito-cambio-numero');
     await dibujada('.sgtm-acciones');
 
-    expect(primariaDeLaPantalla().disabled).toBe(true);
+    primariaApagada();
 
     expect(
       screen.queryByRole('region', { name: 'Observación del usuario' }),
     ).not.toBeInTheDocument();
-    expect(motivoDeLaPrimaria()).toMatch(/todavía no puede guardar/i);
+    expect(motivoDeLaPrimaria()).toMatch(/todavía no guarda/i);
   });
 });
