@@ -11,15 +11,13 @@ import { SIN_DATO } from '../seguridad/listado';
  * Consultas (#72): **ninguna cifra sin su fecha**.
  *
  * Es el modulo que mas usa quien atiende en ventanilla, y donde la regla 9 de
- * CLAUDE.md se ve o no se ve. **Diez de las once** ya tienen backend y estan
- * conectadas —`cuenta_corriente` (#21), `consulta_deuda` (#22, #175),
- * `constancia` (#25, #179), `consulta_vehiculos` (#25, #184),
- * `consulta_altas_bajas` (#24), `consulta_pagos` (#25, #219),
- * `consulta_predios` (#25, #222), y ahora `consulta_unificada`,
- * `consulta_resumen_predial` y `consulta_valores` (#25)—; la que falta,
- * `consulta_deudas_beneficio`, no tiene controlador. Lo que **no** espera a
- * nadie es la propiedad que da sentido al modulo, y es lo que se verifica aqui
- * sobre las once a la vez.
+ * CLAUDE.md se ve o no se ve. **Las once** tienen ya backend y estan conectadas
+ * —`cuenta_corriente` (#21), `consulta_deuda` (#22, #175), `constancia` (#25,
+ * #179), `consulta_vehiculos` (#25, #184), `consulta_altas_bajas` (#24),
+ * `consulta_pagos` (#25, #219), `consulta_predios` (#25, #222),
+ * `consulta_unificada`, `consulta_resumen_predial`, `consulta_valores` (#25) y,
+ * con #72, `consulta_deudas_beneficio`—. La propiedad que da sentido al modulo
+ * se verifica aqui sobre las once a la vez.
  *
  * Las tres que entran con este cambio traen cada una una ausencia, y las
  * pruebas de abajo defienden sobre todo eso: que el hueco **siga siendo un
@@ -36,7 +34,7 @@ const LAS_ONCE: readonly string[] = [
   'consulta-unificada/00000025673',
   'consulta-resumen-predial',
   'consulta-altas-bajas',
-  'consulta-deudas-beneficio',
+  'consulta-deudas-beneficio/00000003542',
   'consulta-pagos',
   'consulta-predios',
   'consulta-vehiculos',
@@ -135,13 +133,14 @@ describe('el estado de cuenta es el libro, y se ve como tal', () => {
     expect(acciones.some((texto) => /modificar|editar|anular|corregir/i.test(texto))).toBe(false);
   });
 
-  it('diez de las once estan conectadas; la que falta no tiene controlador', () => {
-    // `consulta_deudas_beneficio` no se conecta y no es un olvido: un beneficio
-    // cambia el importe que se debe, y los valores que lo cuantifican son D-02b
-    // —sin ordenanza ratificada—. Sin `Controller` no hay operacion que pedir,
-    // y una tabla rellena con lo del prototipo se leeria como deuda rebajada.
-    expect(OPCIONES_CONECTADAS).not.toContain('consulta_deudas_beneficio');
+  it('las once estan conectadas, incluida la del beneficio', () => {
+    // `consulta_deudas_beneficio` entra con #72, y sin inventar su cifra: la
+    // campana y lo que descuenta son dato del conjunto sellado (D-02b, D-02c).
+    // Mientras no haya ninguna publicada el servidor lo dice, y la pantalla lo
+    // muestra; lo que no hay es una tabla rellena con lo del prototipo, que se
+    // leeria como la deuda rebajada de alguien.
     for (const opcion of [
+      'consulta_deudas_beneficio',
       'cuenta_corriente',
       'consulta_deuda',
       'constancia',
@@ -307,9 +306,7 @@ describe('consulta_unificada lee ConsultaUnificadaResource', () => {
     expect(screen.getByLabelText('Gasto').textContent).toBe('92.55');
     expect(screen.getByLabelText('Total').textContent).toBe('279.03');
     // Y la frase que las explica la redacta el backend (RNF-080).
-    expect(screen.getByLabelText('Estado de la consulta').textContent).toBe(
-      'CONSULTA FINALIZADA',
-    );
+    expect(screen.getByLabelText('Estado de la consulta').textContent).toBe('CONSULTA FINALIZADA');
     // `aLaFecha` de la respuesta, no el reloj del navegador (regla 9).
     expect(screen.getByText(/Cifras actualizadas al/).textContent).toContain('13/08/2026');
   });
@@ -368,9 +365,7 @@ describe('consulta_resumen_predial lee PredioDelResumenResource', () => {
 
     expect(await screen.findByText('200601005670320A01...')).toBeInTheDocument();
     expect(screen.getByText('SANTIAGO MOSCOL-GASPAR')).toBeInTheDocument();
-    expect(
-      screen.getByText('A.H. CUATRO DE NOVIEMBRE — SANTO TORIBIO 17'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('A.H. CUATRO DE NOVIEMBRE — SANTO TORIBIO 17')).toBeInTheDocument();
   });
 
   /**
@@ -456,7 +451,9 @@ describe('consulta_resumen_predial lee PredioDelResumenResource', () => {
 
     const palabra = await screen.findByLabelText('Palabra');
     expect(palabra).toHaveAttribute('readonly');
-    expect(screen.getByText(/La búsqueda por palabra suelta no se puede resolver/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/La búsqueda por palabra suelta no se puede resolver/),
+    ).toBeInTheDocument();
   });
 });
 
@@ -507,5 +504,129 @@ describe('consulta_valores lee ValorConsultadoResource', () => {
     expect(fila).not.toBeNull();
     const celdas = within(fila as HTMLElement).getAllByRole('cell');
     expect(celdas[6]?.textContent).toBe(SIN_DATO);
+  });
+});
+
+describe('consulta_deudas_beneficio simula, y no inventa el descuento', () => {
+  const RUTA = '/consultas/consulta-deudas-beneficio/00000003542';
+
+  /**
+   * Espera a que la respuesta esté dibujada.
+   *
+   * Se espera a la banda de fecha y no a un valor concreto: la sección
+   * «Resultado del acogimiento» existe desde el primer render con sus campos
+   * vacíos —tiene controles que no son de solo lectura, así que no arranca
+   * plegada—, y sin esperar la prueba mediría el hueco en vez de la cifra.
+   */
+  const conLaRespuestaDibujada = async (): Promise<void> => {
+    await screen.findByText(/Cifras actualizadas al/);
+  };
+
+  it('las cinco cifras del acogimiento llegan del servidor, con su fecha', async () => {
+    montarEnRuta(RUTA);
+    await conLaRespuestaDibujada();
+
+    // Total, acogida, con beneficio, alicuota y ahorro: las cinco tal cual las
+    // publica el recurso. Ninguna se compone aquí (RNF-083) —no hay resta que
+    // valga: el ahorro es un producto y su redondeo lo fija la ordenanza—.
+    expect(screen.getByLabelText('Deuda total (S/)').textContent).toBe('1848.66');
+    expect(screen.getByLabelText('Deuda acogida (S/)').textContent).toBe('797.77');
+    expect(screen.getByLabelText('Deuda con beneficio (S/)').textContent).toBe('250.15');
+    expect(screen.getByLabelText('Beneficio (S/)').textContent).toBe('547.62');
+    expect(screen.getByLabelText('Tasa aplicada (%)').textContent).toBe('68.64');
+    expect(screen.getByText(/Cifras actualizadas al/)).toBeInTheDocument();
+  });
+
+  it('sin campaña elegida, las tres cifras del descuento salen con «—», no con cero', async () => {
+    // Es el estado de **hoy** contra el backend de verdad: ninguna municipalidad
+    // tiene campañas selladas, así que el recurso manda `simulacion: null`. Un
+    // cero aquí se leería como «no te ahorras nada», que es una afirmación sobre
+    // una campaña que nadie eligió.
+    const anterior = globalThis.fetch;
+    globalThis.fetch = (async (entrada: RequestInfo | URL, opciones?: RequestInit) => {
+      const url = typeof entrada === 'string' ? entrada : entrada.toString();
+      if (!url.includes('/consultas/deudas-con-beneficio')) return anterior(entrada, opciones);
+      return new Response(
+        JSON.stringify({
+          contribuyente: {
+            codigo: '00000003542',
+            nombre: 'SANTIAGO MOSCOL-GASPAR',
+            documento: 'DNI 03593174',
+            domicilioFiscal: 'CA. SANTO TORIBIO 17',
+          },
+          aLaFecha: '2026-08-28',
+          deudaTotal: { importe: '1848.66', actualizadoA: '2026-08-28' },
+          deudaAcogida: { importe: '1848.66', actualizadoA: '2026-08-28' },
+          registrosAcogidos: 2,
+          simulacion: null,
+          campaniasAplicables: [],
+          estadoDeLaSimulacion:
+            'No hay ninguna campaña de beneficio publicada para el ejercicio 2026: la deuda se muestra sin acogimiento.',
+          obligaciones: {
+            contenido: [],
+            pagina: 0,
+            tamano: 0,
+            totalElementos: 0,
+            totalPaginas: 0,
+            hayMas: false,
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof globalThis.fetch;
+
+    try {
+      montarEnRuta(RUTA);
+      await conLaRespuestaDibujada();
+
+      expect(screen.getByLabelText('Deuda total (S/)').textContent).toBe('1848.66');
+      for (const rotulo of ['Deuda con beneficio (S/)', 'Tasa aplicada (%)', 'Beneficio (S/)']) {
+        expect(screen.getByLabelText(rotulo).textContent).toBe(SIN_DATO);
+      }
+    } finally {
+      globalThis.fetch = anterior;
+    }
+  });
+
+  it('cinco columnas de la tabla salen vacías: el puerto público no las publica', async () => {
+    montarEnRuta(RUTA);
+
+    // «Convenio», «Cuota», «Fase», «Conc.» y «Est.» no están en
+    // `ObligacionPublica`. Rellenarlas con lo del prototipo pondría una fase y
+    // un estado de cobranza que el servidor no ha dicho.
+    const tabla = await screen.findByRole('table');
+    const fila = (await within(tabla).findAllByText('PREDIAL-REG-E'))[0]?.closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+    for (const columna of [2, 3, 4, 6, 7, 8]) {
+      expect(celdas[columna]?.textContent).toBe(SIN_DATO);
+    }
+    // Y las cinco cifras de la fila sí están, tal cual las manda el recurso.
+    expect(celdas[9]?.textContent).toBe('4.22');
+    expect(celdas[13]?.textContent).toBe('48.87');
+  });
+
+  it('el pie del prototipo no pinta sus tres cifras congeladas bajo la tabla', async () => {
+    montarEnRuta(RUTA);
+    await conLaRespuestaDibujada();
+
+    // «Deuda total 1,848.66 · acogida 797.77 · con beneficio 250.15» es la
+    // captura del manual, y se pintaba igual para cualquier contribuyente. Las
+    // tres cifras las publica el servidor arriba, con su fecha; abajo no
+    // cambiaban nunca. Se suprime en `prosa-textos.ts` (`PIES`).
+    expect(screen.queryByText(/Deuda total 1,848\.66 · acogida/)).toBeNull();
+    // Y el aviso permanente dice por qué esto no rebaja ninguna deuda.
+    expect(
+      await screen.findByText(/simula el acogimiento: no rebaja ninguna deuda/),
+    ).toBeInTheDocument();
+  });
+
+  it('sin contribuyente no manda la petición: pide uno y lo explica', async () => {
+    montarEnRuta('/consultas/consulta-deudas-beneficio');
+
+    expect(
+      await screen.findByText('Busca un contribuyente para simular su acogimiento'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('table')).toBeNull();
   });
 });

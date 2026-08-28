@@ -49,7 +49,10 @@ recalcular ejercicios pasados (ARQ-09).
 | Ámbito | nacional |
 | Vigencia | Cada fila de la tabla anterior vale solo para su propio ejercicio (por ejemplo, 2026–2026); no hay una UIT que rija "desde" un año "hasta" otro. |
 
-**No se carga con este archivo.** La carga depende de D-13.
+**Se carga desde `publicacion/parametros-2026.csv`**, el derivado publicable de este
+archivo, con `infra/carga-de-datos/publicar-parametros.sh` (#188, #247 §4). Las dos firmas
+de la cabecera de arriba son las que llegan a `usuario_carga` y `usuario_aprueba`: la doble
+verificación de ADR-0007 ocurrió aquí, y la herramienta la transporta.
 
 ## 3. Qué no cabe hoy
 

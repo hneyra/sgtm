@@ -23,7 +23,8 @@ import { RESPUESTAS } from './respuestas.generado';
  * #219), los predios de un contribuyente (#25, #222) y, desde #75, los
  * valores emitidos (#37). Desde #72 se suman las tres ultimas de Consultas
  * que tienen controlador: la ficha unificada de un contribuyente, el resumen
- * predial y la consulta de valores emitidos (#25).
+ * predial y la consulta de valores emitidos (#25), y con #72 la ultima de
+ * Consultas: la simulacion del acogimiento a una campana de beneficio (RF-107).
  * **Esta lista crece cuando crece aquella**, no antes: publicar aqui
  * una forma que el backend todavia no sirve seria inventarsela.
  *
@@ -1094,6 +1095,83 @@ const SIETE_PRIVILEGIOS = [
 const permisosDeLaSesion = (): Readonly<Record<string, unknown>> =>
   Object.fromEntries(filasDe('accesos').map(([codigo]) => [codigo, SIETE_PRIVILEGIOS]));
 
+/**
+ * Simulacion del acogimiento a una campana de beneficio
+ * (`DeudasConBeneficioResource`, RF-107, #72).
+ *
+ * No es un listado: es **un objeto** con la cabecera del contribuyente, el
+ * resumen del acogimiento, las campanas aplicables y la rejilla de obligaciones
+ * dentro de su sobre paginado. Se sirve con esa forma porque es la que tiene el
+ * backend.
+ *
+ * **Aqui si hay una campana con su descuento, y contra el backend puede no
+ * haberla**: las campanas son dato del conjunto de parametros sellado (D-02b,
+ * D-02c) y hoy no hay ninguna cargada, asi que el servidor de verdad responde
+ * `simulacion: null` y `campaniasAplicables: []` hasta que alguien selle una. El
+ * proxy es simulacion declarada (ADR-0010) y publica la del prototipo para que
+ * la pantalla se pueda dibujar entera; las cifras son las suyas, no se inventa
+ * ninguna aqui.
+ *
+ * `registrosAcogidos` es **cuantas filas se sirven**, no el «36 de 128» del
+ * prototipo: el proxy no filtra ni pagina, y decir otra cosa seria fingir un
+ * comportamiento del servidor.
+ */
+function deudasConBeneficio(): Readonly<Record<string, unknown>> {
+  const campos = RESPUESTAS['consulta_deudas_beneficio']?.campos ?? {};
+  const valor = (clave: string): string =>
+    typeof campos[clave] === 'string' ? (campos[clave] as string) : '';
+  const fecha = RESPUESTAS['consulta_deudas_beneficio']?.fechaCalculo ?? EL_DIA_DEL_PROTOTIPO;
+  const aLaFecha = (cifra: string) => ({
+    importe: comoImporte(cifra || '0.00'),
+    actualizadoA: fecha,
+  });
+
+  const obligaciones = filasDe('consulta_deudas_beneficio').map(
+    ([ano, unidad, , , , nomTrib, , , , insoluto, reajuste, interes, gastos, total], i) => ({
+      tributo: nomTrib,
+      ejercicio: Number(ano) || new Date().getFullYear(),
+      predioId: unidad && unidad !== '—' ? i + 1 : null,
+      vehiculoId: null,
+      insoluto: aLaFecha(insoluto ?? '0.00'),
+      reajuste: aLaFecha(reajuste ?? '0.00'),
+      interes: aLaFecha(interes ?? '0.00'),
+      gasto: aLaFecha(gastos ?? '0.00'),
+      total: aLaFecha(total ?? '0.00'),
+    }),
+  );
+
+  const campania = valor('benefAplicable');
+
+  return {
+    contribuyente: {
+      codigo: valor('contribuyente'),
+      nombre: valor('contribuyente2'),
+      documento: '',
+      domicilioFiscal: valor('domicilioFiscal'),
+    },
+    aLaFecha: fecha,
+    deudaTotal: aLaFecha(valor('deudaTotalS')),
+    deudaAcogida: aLaFecha(valor('deudaAcogidaS')),
+    registrosAcogidos: obligaciones.length,
+    simulacion: {
+      campania,
+      alicuotaAplicada: valor('tasaAplicada'),
+      baseDelBeneficio: 'TOTAL',
+      baseDelBeneficioImporte: aLaFecha(valor('deudaAcogidaS')),
+      ahorro: aLaFecha(valor('beneficioS')),
+      deudaConBeneficio: aLaFecha(valor('deudaConBeneficioS')),
+    },
+    campaniasAplicables: [{ nombre: campania, alicuota: valor('tasaAplicada'), base: 'TOTAL' }],
+    estadoDeLaSimulacion:
+      'Acogimiento simulado a «' +
+      campania +
+      '»: ' +
+      valor('tasaAplicada') +
+      ' % sobre toda la deuda acogida. Es una simulación: no modifica la deuda registrada.',
+    obligaciones: unaPagina(obligaciones),
+  };
+}
+
 const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>> = {
   '/catastro/fichas/urbana/{codRefCatastral}': urbana,
   '/catastro/fichas/economica/{codRefCatastral}': economica,
@@ -1103,6 +1181,7 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/rentas/declaraciones/{djNro}': declaracionJurada,
   '/consultas/constancias/no-adeudo': constanciaDeNoAdeudo,
   '/consultas/unificada': consultaUnificada,
+  '/consultas/deudas-con-beneficio': deudasConBeneficio,
   '/seguridad/sesion/permisos': permisosDeLaSesion,
 };
 
@@ -1456,14 +1535,41 @@ export interface ArchivoSimulado {
 }
 
 /**
- * El reporte de la ficha del contribuyente, cuando pide un archivo (`?formato=`).
+ * Las rutas cuyo backend sirve el documento con `?formato=`, y como se llama lo
+ * que devuelven.
+ *
+ * Dos, y las dos por el mismo motivo: son consultas que se miran, no emisiones
+ * que se numeren, asi que su backend las dibuja en los tres formatos de RF-132
+ * sin registrar nada. La ficha del contribuyente (#71) y la constancia de no
+ * adeudo (#72, RNF-081).
+ */
+const RUTAS_CON_ARCHIVO: ReadonlyArray<{
+  readonly ruta: RegExp;
+  readonly titulo: string;
+  readonly base: string;
+}> = [
+  {
+    ruta: /^\/catastro\/contribuyentes\/[^/]+\/ficha\.pdf$/,
+    titulo: 'Ficha del contribuyente',
+    base: 'ficha-simulada',
+  },
+  {
+    ruta: /^\/consultas\/constancias\/no-adeudo$/,
+    titulo: 'Constancia de no adeudo',
+    base: 'constancia-simulada',
+  },
+];
+
+/**
+ * Un reporte que sale como archivo, cuando la peticion lo pide (`?formato=`).
  *
  * A diferencia del resto de este archivo, aqui **si se inventa el contenido**:
  * no hay un `Resource` del prototipo del que copiarlo, porque un archivo
  * binario no es un dato de pantalla. Lo que se prueba con esto es el
  * mecanismo de descarga —la cabecera, el nombre, el tipo de medio—, no la
- * fidelidad del documento. Sin `formato`, la ruta sigue su camino de siempre
- * y responde JSON, como cualquier otra pantalla sin conectar.
+ * fidelidad del documento: quien la comprueba es el backend, que dibuja los
+ * tres formatos del mismo modelo y verifica que reimprimir da los mismos bytes.
+ * Sin `formato`, la ruta sigue su camino de siempre y responde JSON.
  */
 export function archivoDe(
   metodo: string,
@@ -1472,14 +1578,15 @@ export function archivoDe(
 ): ArchivoSimulado | null {
   if (metodo.toUpperCase() !== 'GET' || formato === null || formato === '') return null;
   const relativo = camino.replace(/^\/api\/v1/, '');
-  if (!/^\/catastro\/contribuyentes\/[^/]+\/ficha\.pdf$/.test(relativo)) return null;
+  const reporte = RUTAS_CON_ARCHIVO.find((candidata) => candidata.ruta.test(relativo));
+  if (reporte === undefined) return null;
 
   const tipoDeMedio = TIPOS_DE_MEDIO[formato.toUpperCase()];
   if (tipoDeMedio === undefined) return null;
 
   return {
-    cuerpo: `Ficha del contribuyente — documento simulado por el proxy de datos (formato ${formato.toUpperCase()})`,
+    cuerpo: `${reporte.titulo} — documento simulado por el proxy de datos (formato ${formato.toUpperCase()})`,
     tipoDeMedio,
-    nombreDeArchivo: `ficha-simulada.${formato.toLowerCase()}`,
+    nombreDeArchivo: `${reporte.base}.${formato.toLowerCase()}`,
   };
 }

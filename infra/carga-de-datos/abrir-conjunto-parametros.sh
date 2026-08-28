@@ -7,22 +7,26 @@
 # Es el paso PREVIO a esa carga: imprime el conjunto_id que `cargar-arancel-vial.sh --conjunto-id N`
 # espera, y sin el ese N no existe.
 #
-# La secuencia completa de un ejercicio, en tres pasos y en este orden:
+# La secuencia completa de un ejercicio, en cuatro pasos y en este orden:
 #
 #   1. abrir-conjunto-parametros.sh --ambiente stg --municipalidad-id 4 --ejercicio 2026
 #      -> anota el CONJUNTO_ID que imprime
-#   2. cargar-arancel-vial.sh --ambiente stg --municipalidad-id 4 --conjunto-id N \
+#   2. publicar-parametros.sh --ambiente stg \
+#      --archivo docs/10-negocio/valores-normativos/publicacion/parametros-2026.csv
+#   3. cargar-arancel-vial.sh --ambiente stg --municipalidad-id 4 --conjunto-id N \
 #      --archivo arancel_2026.csv
-#   3. abrir-conjunto-parametros.sh --ambiente stg --municipalidad-id 4 --conjunto-id N \
-#      --archivo parametros_2026.csv --sellar
+#   4. abrir-conjunto-parametros.sh --ambiente stg --municipalidad-id 4 --conjunto-id N \
+#      --archivo docs/10-negocio/valores-normativos/publicacion/parametros-2026.csv --sellar
 #
-# El paso 3 es el que congela el ejercicio, y es irreversible: un conjunto sellado no se modifica
+# El paso 4 es el que congela el ejercicio, y es irreversible: un conjunto sellado no se modifica
 # (V9) y la unica salida de un sellado equivocado es otra version. Por eso --sellar es explicito.
 #
-# El archivo NO lleva ninguna cifra: es un CSV `tipo,clave,vigenciaDesde` que NOMBRA valores
-# normativos ya publicados en parametro_tributario. Publicarlos es trabajo de rol_carga_parametros,
-# con su propia conexion y su doble firma (REQ-03, ADR-0007); este proceso solo decide cuales
-# componen el ejercicio.
+# El archivo NO lleva ninguna cifra a este proceso: lee las tres primeras columnas,
+# `tipo,clave,vigenciaDesde`, que NOMBRAN valores normativos ya publicados en parametro_tributario,
+# e ignora las demas. Publicarlos es el paso 2, que corre como rol_carga_parametros con la doble
+# firma que el corpus ya lleva (REQ-03, ADR-0007, #188); este proceso solo decide cuales componen el
+# ejercicio. Por eso los dos pasos usan EL MISMO archivo: con dos, el dia que alguien anade una fila
+# a uno y se olvida del otro, el conjunto se sella sin ese valor.
 #
 #   uso: abrir-conjunto-parametros.sh --ambiente stg|prod --municipalidad-id N \
 #        (--ejercicio AAAA | --conjunto-id N) [--archivo parametros_2026.csv] [--sellar] \
@@ -222,5 +226,7 @@ ID=$(printf '%s\n' "$REGISTRO" | sed -n 's/.*CONJUNTO_ID=\([0-9]\{1,\}\).*/\1/p'
 }
 echo
 echo "conjunto_id = $ID"
-echo "Siguiente paso: cargar-arancel-vial.sh --ambiente $AMBIENTE" \
+echo "Siguiente paso: publicar-parametros.sh --ambiente $AMBIENTE" \
+    "--archivo docs/10-negocio/valores-normativos/publicacion/parametros-<ejercicio>.csv"
+echo "Y despues:     cargar-arancel-vial.sh --ambiente $AMBIENTE" \
     "--municipalidad-id $MUNICIPALIDAD_ID --conjunto-id $ID --archivo arancel_<ejercicio>.csv"

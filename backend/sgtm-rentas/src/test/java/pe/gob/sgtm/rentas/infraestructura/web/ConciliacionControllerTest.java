@@ -343,7 +343,13 @@ class ConciliacionControllerTest {
         }
 
         @Override
-        public DeclaracionJurada marcarSustituida(long id) {
+        public long siguienteCorrelativo(pe.gob.sgtm.dominio.Ejercicio ejercicio) {
+            throw new UnsupportedOperationException("una consulta no escribe declaraciones");
+        }
+
+        @Override
+        public DeclaracionJurada marcar(
+                long id, pe.gob.sgtm.rentas.dominio.EstadoDeDeclaracion nuevo) {
             throw new UnsupportedOperationException("una consulta no escribe declaraciones");
         }
     }

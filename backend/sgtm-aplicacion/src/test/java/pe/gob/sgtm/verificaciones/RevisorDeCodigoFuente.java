@@ -148,6 +148,19 @@ public final class RevisorDeCodigoFuente {
                     // presento ante un notario-. Uno equivocado no se borra: se sustituye emitiendo
                     // otro, con su numero y su derecho de tramite, y los dos quedan (regla 4).
                     "certificado",
+                    // Con #365: la declaracion jurada. Es el documento que el contribuyente firma
+                    // y se lleva, el sustento de toda la determinacion predial y —desde
+                    // ADR-0015— lo UNICO que mete al predio en el padron afecto. Borrarla saca al
+                    // predio de la conciliacion sin dejar acto que lo explique, o sea un omiso
+                    // fabricado. Una DJ equivocada no se borra: se anula, o se rectifica, y en los
+                    // dos casos las filas quedan.
+                    //
+                    // No entra en TABLAS_INMUTABLES, y es deliberado: su `estado` SI cambia en el
+                    // sitio —observar, anular y sustituir son eso, y no llevan mas contenido que
+                    // quien, cuando y por que, que es una fila de auditoria—. Lo que impide tocar
+                    // las demas columnas no es este escaner sino V54, que le concede a sgtm_app el
+                    // UPDATE sobre `estado` y sobre ninguna otra.
+                    "declaracion_jurada",
                     "auditoria");
 
     /**
@@ -418,10 +431,20 @@ public final class RevisorDeCodigoFuente {
      * <p>{@code Dinero} no entra en la lista: un importe literal en produccion casi siempre es un
      * cero o un tope tecnico, y prohibirlo daria mas falsos positivos que hallazgos. Lo que si es
      * casi siempre normativo es lo otro.
+     *
+     * <p><b>Y el constructor cuenta igual que la fabrica</b> (#72). Hasta aqui el patron solo
+     * miraba {@code Alicuota.de("50")}, asi que {@code new Alicuota(new BigDecimal("50"))} pasaba
+     * sin ruido —lo destapo una rotura de #72 que puso un descuento por omision y que este escaner
+     * no vio—. Son la misma cifra compilada escrita de otra manera, y la segunda forma es
+     * <b>mas</b> probable justo donde importa: dentro de una expresion, no en una constante con
+     * nombre que delate la intencion. El {@code new BigDecimal} intermedio es opcional en el patron
+     * porque las dos formas —con y sin— construyen lo mismo.
      */
     private static final Pattern VALOR_TRIBUTARIO_LITERAL =
             Pattern.compile(
-                    "\\b(Alicuota|Porcentaje|ValorNormativo)\\s*\\.\\s*de\\s*\\(\\s*[\"0-9]");
+                    "\\b(Alicuota|Porcentaje|ValorNormativo)\\s*\\.\\s*de\\s*\\(\\s*[\"0-9]"
+                            + "|\\bnew\\s+(Alicuota|Porcentaje|ValorNormativo)\\s*\\(\\s*"
+                            + "(new\\s+BigDecimal\\s*\\(\\s*)?[\"0-9]");
 
     /**
      * Una constante con nombre de valor normativo y una cifra dentro.
@@ -481,6 +504,19 @@ public final class RevisorDeCodigoFuente {
      * tarde deja construir en 2035 con los parametros urbanisticos de 2026, y eso no se descubre
      * hasta que la obra esta levantada.
      *
+     * <p>Con #72 entran {@code BENEFICIO}, {@code DESCUENTO} y {@code CONDONACION}. Es la sexta vez
+     * que el hueco se abre por el mismo sitio. Cuanto descuenta una campana de amnistia lo fija una
+     * ordenanza municipal —D-02b— o un acuerdo de concejo —D-02c—, y ninguna de las dieciseis
+     * palabras anteriores caza {@code BENEFICIO_AMNISTIA = new BigDecimal("50")}: no empieza por
+     * {@code ALICUOTA}, ni por {@code DEDUCCION}, ni por {@code TASA}. Y su consecuencia no es
+     * cobrar de mas ni autorizar de mas: es <b>perdonar</b> de mas. Un porcentaje inventado condona
+     * deuda que ninguna norma condona, la cifra sale escrita en lo que el contribuyente se lleva, y
+     * lo que no cuadra despues es el arqueo.
+     *
+     * <p>{@code DESCUENTO} y {@code CONDONACION} van con ella porque son como se escribe la misma
+     * cifra cuando «beneficio» suena a otra cosa: {@code DESCUENTO_PRONTO_PAGO = ...} y {@code
+     * CONDONACION_DE_INTERESES = ...} son exactamente el mismo dato.
+     *
      * <p>Ojo con el {@code \b}: no caza {@code TIPO_TASA = "TASA_ANUNCIO"} ni {@code TIPO_VIGENCIA
      * = "VIGENCIA_CERTIFICADO"} —el identificador no <b>empieza</b> por la palabra en el primer
      * caso, y en el segundo el valor no lleva ninguna cifra— ni ningun {@code tasa_id = 1} de un
@@ -490,7 +526,7 @@ public final class RevisorDeCodigoFuente {
             Pattern.compile(
                     "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
                             + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA|TASA|TARIFA"
-                            + "|MULTA|VIGENCIA)"
+                            + "|MULTA|VIGENCIA|BENEFICIO|DESCUENTO|CONDONACION)"
                             + "\\w*\\s*=\\s*[^;\\n]*[0-9]");
 
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");

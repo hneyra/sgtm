@@ -296,7 +296,8 @@ const DEL_BACKEND = {
     },
   ],
   // La constancia no dibuja filtros: es un formulario. Pero acredita **a una
-  // fecha**, y sin el contribuyente no hay a quien acreditar.
+  // fecha**, y sin el contribuyente no hay a quien acreditar. Y sale en papel:
+  // `ConstanciaController` responde el documento con `formato` (#72, RNF-081).
   constancia: [
     {
       nombre: 'codContribuyente',
@@ -304,6 +305,7 @@ const DEL_BACKEND = {
       descripcion: 'Filtro «Cod. Contribuyente» de la pantalla',
     },
     { nombre: 'fecha', ejemplo: '', descripcion: 'Fecha de corte; sin ella, la de hoy' },
+    FORMATO_DE_REPORTE,
   ],
   // Las once pantallas que salen en papel (#53, RF-132).
   ...Object.fromEntries(
@@ -339,6 +341,12 @@ const DEL_BACKEND = {
  * pantalla que todavia no la tiene.
  */
 const DESCRIPCIONES = {
+  // Cuenta corriente (#72)
+  constancia: bloque(`
+    Vista previa del documento que se entrega al contribuyente. Se imprime con el mismo
+    formato en papel membretado. Con \`?formato=PDF|XLS|RTF\` sale como documento (RF-132,
+    RNF-081).
+  `),
   // Transito (#53)
   transito_valores: bloque(`
     Registra el criterio de una generación masiva de valores por papeletas de tránsito, por
@@ -691,6 +699,154 @@ const OPERACIONES_ADICIONALES = {
         },
       ],
       paginacion: true,
+    },
+  ],
+  // `declaracion_jurada` declara «GET /rentas/declaraciones/{djNro}» como su
+  // endpoint —consultar la DJ ya presentada—, y hasta #365 eso era todo lo que
+  // el sistema publicaba: el acto que la registra existía en el backend y
+  // ningún controlador lo exponía, así que presentar una declaración se seguía
+  // haciendo por el procedimiento actual, fuera del sistema (ADR-0015 §3).
+  //
+  // Los cuatro verbos son actos de trámite sobre un documento, no ediciones:
+  // `declaracion_jurada` no admite UPDATE desde V54 salvo sobre su `estado`.
+  // Ninguno recibe el número de la DJ en el cuerpo: lo pone el sistema, con el
+  // correlativo de `dj_correlativo` y la plantilla parametrizada de D-09.
+  declaracion_jurada: [
+    {
+      operationId: 'presentar_declaracion_jurada',
+      metodo: 'post',
+      ruta: '/api/v1/rentas/declaraciones',
+      titulo: 'Presentación de la declaración jurada',
+      descripcion: bloque(`
+        Presenta una declaración jurada nueva —HR, PU, PR o VEHICULAR— y es **el acto que
+        concilia** (ADR-0015 §3): a partir de él el predio pertenece al padrón afecto del
+        ejercicio, y la columna «Conciliada» de
+        \`/catastro/fichas/conciliacion\` lo dice. El cuerpo lleva el ejercicio, el código de
+        contribuyente, el tipo, el predio o el vehículo según el tipo, la fecha de presentación
+        y la observación del usuario, obligatoria (RNF-052).
+
+        Lo que **no** viaja en el cuerpo, porque lo resuelve el servidor: el **número** —lo pone
+        el sistema, con correlativo propio y plantilla parametrizada mientras D-09 siga
+        abierta—, la **versión de ficha catastral** vigente a la fecha de presentación, y
+        \`fueraDePlazo\`, que sale de comparar esa fecha con el plazo del conjunto sellado. Un
+        ejercicio sellado sin ese parámetro responde 422 **nombrando la llave**
+        \`PLAZO:DECLARACION_JURADA\`: inventar un plazo clasificaría mal cada declaración que se
+        registre (regla 5).
+
+        Ningún importe. Presentar fuera de plazo genera multa tributaria según el manual, pero
+        esa multa es D-02c: aquí queda el hecho y nada que multiplique dinero.
+      `),
+    },
+    {
+      operationId: 'rectificar_declaracion_jurada',
+      metodo: 'post',
+      ruta: '/api/v1/rentas/declaraciones/{djNro}/rectificacion',
+      titulo: 'Rectificatoria de la declaración jurada',
+      descripcion: bloque(`
+        Crea la versión nueva de una declaración ya presentada y deja la anterior SUSTITUIDA sin
+        tocarle una columna (regla 4): las dos filas quedan en la base y la nueva referencia a la
+        que sustituye. **Puede cambiar de predio**, y la conciliación lo contempla — el predio
+        que se declaró por error deja de conciliar por esa cadena y el que la rectificatoria
+        declara pasa a hacerlo, sin que ninguno cuente dos veces.
+
+        Solo se rectifica una declaración en pie: sobre una ANULADA o una ya SUSTITUIDA responde
+        409. El número de la rectificatoria lo pone el sistema, como el de cualquier otra.
+      `),
+      parametros: [
+        {
+          nombre: 'ano',
+          ejemplo: '2026',
+          descripcion: 'Ejercicio de la declaración que se rectifica, como en el GET de la ruta',
+        },
+      ],
+    },
+    {
+      operationId: 'observar_declaracion_jurada',
+      metodo: 'post',
+      ruta: '/api/v1/rentas/declaraciones/{djNro}/observacion',
+      titulo: 'Observación de la declaración jurada',
+      descripcion: bloque(`
+        La administración objeta el contenido de una declaración presentada. El cuerpo lleva
+        **solo** la observación del usuario (RNF-052): el efecto lo decide el verbo.
+
+        **Observarla no la retira**: el predio sigue conciliando (ADR-0015 §1), porque la
+        administración objetó el contenido de una declaración que existe y fue presentada, y
+        negarle la conciliación diría «este predio no genera deuda predial» de uno que sí la
+        genera. Lo que la observación abre es el camino de la rectificatoria.
+      `),
+      parametros: [
+        {
+          nombre: 'ano',
+          ejemplo: '2026',
+          descripcion: 'Ejercicio de la declaración que se observa, como en el GET de la ruta',
+        },
+      ],
+    },
+    {
+      operationId: 'anular_declaracion_jurada',
+      metodo: 'post',
+      ruta: '/api/v1/rentas/declaraciones/{djNro}/anulacion',
+      titulo: 'Anulación de la declaración jurada',
+      descripcion: bloque(`
+        La administración anula una declaración. El cuerpo lleva **solo** la observación del
+        usuario (RNF-052).
+
+        Al revés que observarla, anularla **sí** la retira: deja de sustentar nada y el predio
+        deja de conciliar por ella. Y es terminal — una anulada no revive: si el contribuyente
+        declara otra vez, se presenta otra declaración, con su número. Un acto sobre una
+        declaración anulada o ya sustituida responde 409.
+      `),
+      parametros: [
+        {
+          nombre: 'ano',
+          ejemplo: '2026',
+          descripcion: 'Ejercicio de la declaración que se anula, como en el GET de la ruta',
+        },
+      ],
+    },
+  ],
+  // `contribuyentes` declara «GET /rentas/contribuyentes» como su endpoint —el
+  // padrón—; resolver quién es el titular de UN predio, con su código, necesita
+  // ruta propia (#366, ADR-0015 §2.4). Cuelga de esta pantalla y no de
+  // `consulta_fichas` porque el permiso que exige es el del padrón: lo que se
+  // pide no es catastro, es el identificador de una persona.
+  //
+  // La ruta, en cambio, sí es la de la pantalla desde la que se hace clic. Y la
+  // sirve `rentas`, que es el único módulo que ve `catastro` y `contribuyentes`
+  // a la vez sin cerrar un ciclo —`catastro` ya depende del padrón—; quién la
+  // sirve es un detalle de dónde vive el código.
+  contribuyentes: [
+    {
+      operationId: 'titulares_del_predio',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/predios/{predioId}/titulares',
+      titulo: 'Titulares del predio, con su código de contribuyente',
+      descripcion:
+        'Quién es titular de un predio a una fecha, con el código con el que se entra a su ficha' +
+        ' de contribuyente. Es la resolución que la fila de `consulta_fichas` necesita para poder' +
+        ' enlazar con la persona: la grilla publica el nombre del titular y no su identificador,' +
+        ' y añadirlo allí convertiría «quien puede listar fichas» en «quien puede cosechar la' +
+        ' correlación predio→persona de toda la municipalidad» (ADR-0015 §2.4). Por eso se' +
+        ' resuelve **al clic, de un predio cada vez**: exige privilegio de lectura sobre' +
+        ' `contribuyentes` —el permiso del padrón, no el de la pantalla desde la que se hace' +
+        ' clic— y cada resolución deja fila en la bitácora con operación ACCESO, la devuelva o no' +
+        ' algún titular. Devuelve la **lista** de cuotas vigentes, no «el» titular: un predio' +
+        ' puede tener varios —dos cónyuges, una sucesión, un condominio—, cada uno con su' +
+        ' porcentaje. La respuesta dice siempre a qué fecha contesta (regla 9, RNF-075). Del' +
+        ' padrón no viaja nada más: ni el identificador interno del contribuyente, ni su' +
+        ' documento; y de la titularidad, ni sus fechas ni el documento que la sustenta.',
+      descripcionesDeRuta: {
+        predioId: 'El predio, por el `predioId` que publica cada fila de la consulta de fichas',
+      },
+      parametros: [
+        {
+          nombre: 'vigenteA',
+          ejemplo: '2026-08-28',
+          descripcion:
+            'Fecha a la que se resuelve la titularidad; si falta, hoy. La titularidad de marzo no' +
+            ' es la de setiembre, y la respuesta dice siempre a cuál contesta (regla 9)',
+        },
+      ],
     },
   ],
   // Las cuatro pantallas de ficha declaran «GET /catastro/fichas/…/{codigo}»

@@ -691,6 +691,43 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que borra una declaracion jurada")
+    void elEscanerDetectaLaMuestraQueBorraUnaDeclaracion() throws IOException {
+        // #365: `declaracion_jurada` entra en TABLAS_PROTEGIDAS y NO en TABLAS_INMUTABLES, y las
+        // dos mitades de esa decision se ven aqui. Borrarla esta prohibido porque desde ADR-0015 es
+        // lo unico que mete al predio en el padron afecto: la fila que desaparece produce un omiso
+        // que ningun acto explica. Editarla en el sitio lo impide V54 con privilegio de COLUMNA
+        // —solo `estado`—, que es lo que este escaner no puede ver y por eso se comprueba
+        // ejecutando, en RegistrarDeclaracionJuradaTest.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueBorraUnaDeclaracion.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los dos DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(2);
+
+        List<String> fragmentos = hallazgos.stream().map(Hallazgo::fragmento).toList();
+        assertThat(fragmentos)
+                .filteredOn(
+                        f ->
+                                f.toLowerCase(java.util.Locale.ROOT)
+                                        .contains("delete from declaracion_jurada"))
+                .as("la declaracion y el rodeo de borrar su rectificatoria: los dos")
+                .hasSize(2);
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra con la vigencia del certificado compilada")
     void elEscanerDetectaLaMuestraDeVigenciaDeCertificado() throws IOException {
         // #54: cuantos meses vale un certificado lo fija el TUPA de cada municipalidad (D-02b).
@@ -718,6 +755,39 @@ class ProhibicionesEnElCodigoFuenteTest {
                 .anySatisfy(f -> assertThat(f).contains("VIGENCIAS_POR_TIPO"))
                 .anySatisfy(f -> assertThat(f).contains("PLAZO_DE_VIGENCIA_EN_MESES"))
                 .anySatisfy(f -> assertThat(f).contains("TASA_DEL_CERTIFICADO"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra con el descuento de un beneficio compilado")
+    void elEscanerDetectaLaMuestraDeBeneficio() throws IOException {
+        // #72: cuanto descuenta una campana de amnistia lo fija una ordenanza local (D-02b) o un
+        // acuerdo de concejo (D-02c). NINGUNA de las dieciseis palabras anteriores cazaba
+        // BENEFICIO_AMNISTIA_2026 —ni ALICUOTA, ni DEDUCCION, ni TASA—, el mismo hueco que #35
+        // destapo con INTERES_DE_FRACCIONAMIENTO, #42 con COSTA_DE_LA_REC2, #51 con TASA_PANEL y
+        // #54 con VIGENCIA_DEL_CERTIFICADO. Por eso entran BENEFICIO, DESCUENTO y CONDONACION.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeBeneficioCompilado.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las cuatro constantes y la alicuota sin nombre; ningun comentario")
+                .hasSize(5);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).contains("BENEFICIO_AMNISTIA_2026"))
+                .anySatisfy(f -> assertThat(f).contains("DESCUENTO_PRONTO_PAGO"))
+                .anySatisfy(f -> assertThat(f).contains("CONDONACION_DE_INTERESES"))
+                .anySatisfy(f -> assertThat(f).contains("ALICUOTA_DE_LA_CAMPANIA"))
+                // La quinta no tiene nombre que la delate: es la cifra dentro de la expresion,
+                // que es como se escribe un valor por omision y lo que #72 destapo.
+                .anySatisfy(f -> assertThat(f).contains("new Alicuota(new BigDecimal(\""));
     }
 
     @Test

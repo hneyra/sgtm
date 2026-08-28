@@ -15,21 +15,22 @@ import {
 } from '../seguridad/listado';
 
 /**
- * Consultas, conectado hasta donde llega el backend: **diez opciones de once**.
+ * Consultas, conectado hasta donde llega el backend: **las once opciones**.
  *
  * `cuenta_corriente` (#21) ya estaba. Se sumaron `consulta_deuda` (#22, #175),
  * `constancia` (#25, #179), `consulta_vehiculos` (#25, #184),
- * `consulta_altas_bajas` (#24, #186), `consulta_pagos` (#25, #219) y
- * `consulta_predios` (#25, #222), y ahora `consulta_unificada`,
- * `consulta_resumen_predial` y `consulta_valores`, cuyos tres controladores
- * publica ya el backend (#25, #72).
+ * `consulta_altas_bajas` (#24, #186), `consulta_pagos` (#25, #219),
+ * `consulta_predios` (#25, #222), `consulta_unificada`,
+ * `consulta_resumen_predial` y `consulta_valores` (#25, #72), y con la ultima
+ * —`consulta_deudas_beneficio` (#72)— el modulo queda entero.
  *
- * **La que queda es `consulta_deudas_beneficio`, y no por descuido**: no tiene
- * controlador. Un beneficio cambia el importe que se debe —deduccion,
- * exoneracion, descuento de campana—, y los valores que lo cuantifican son
- * D-02b, sin ordenanza ratificada. No se finge: sin `Controller` no hay
- * operacion que pedir, y una tabla rellena con lo del prototipo se leeria como
- * la deuda rebajada de alguien.
+ * **La ultima llego sin inventarse su cifra**, que era el motivo por el que
+ * faltaba. Un beneficio cambia el importe que se debe, y cuanto descuenta lo
+ * dice una ordenanza local (D-02b) o un acuerdo de concejo (D-02c). La salida no
+ * fue esperar a que se firmen: fue que **la campana y su descuento sean dato**
+ * del conjunto de parametros sellado. Mientras no haya ninguna publicada, la
+ * lista de campanas sale vacia y simular contra una da un 422 que nombra la
+ * llave que falta; ninguna cifra se inventa por el camino.
  *
  * Las tres que entran aqui traen, cada una, **una ausencia declarada**, y las
  * tres tienen el mismo origen: el impuesto predial se determina por
@@ -791,8 +792,116 @@ function fechaDeValoresDe(valores: readonly unknown[]): Fecha {
   return (mayor ?? hoy()) as Fecha;
 }
 
+/**
+ * Simulacion del acogimiento a una campana de beneficio (RF-107, #72).
+ *
+ * **Simula, no acoge.** El backend no mueve un asiento: responde que quedaria
+ * por pagar si esta deuda se acogiera hoy. Por eso la pantalla no habilita
+ * ninguna escritura —«Bajar deuda» sigue con su impedimento, como cualquier acto
+ * sin operacion declarada—.
+ *
+ * **Las campanas son dato, no codigo.** El desplegable «Benef. aplicable» del
+ * prototipo lista cuatro ordenanzas de Sullana; las que valen son las que el
+ * conjunto de parametros sellado de **esta** municipalidad publica, y viajan en
+ * `campaniasAplicables`. Hoy no hay ninguna —son D-02b y D-02c—, asi que elegir
+ * cualquiera de las cuatro devuelve un 422 que **nombra la llave que falta**
+ * (`BENEFICIO:<CAMPANIA>`). Se deja viajar a proposito, con el mismo criterio
+ * que «RECLAMADO» en `consulta_valores`: ese error explica lo que pasa, y
+ * bloquear el filtro escondería que la campana no esta cargada.
+ *
+ * **Cinco columnas de la tabla salen vacias**, y ninguna por descuido:
+ * «Convenio», «Cuota», «Fase», «Conc.» y «Est.» no las publica
+ * `ObligacionPublica` —el puerto de `cuentacorriente` entrega el desglose que
+ * otro contexto necesita para formalizar deuda, no la fila de una rejilla de
+ * cobranza—. Quien las necesite tiene `consulta_deuda`, que si las trae porque
+ * vive dentro de ese contexto. «Trib.» es el codigo del tributo y el recurso
+ * publica su nombre: va a «Nom. Trib.», que es lo que es.
+ *
+ * Ninguna cifra se compone aqui (RNF-083): el total, lo acogido, el ahorro y lo
+ * que quedaria los calcula el servidor, cada uno con su fecha.
+ */
+const consulta_deudas_beneficio = definirConexion({
+  operacion: 'consulta_deudas_beneficio',
+  parametros: ({ ruta, busqueda }) => ({
+    ...parametrosDeBusqueda('consulta_deudas_beneficio', undefined, busqueda),
+    // El codigo de la ruta manda sobre el filtro: es el registro que se abrio.
+    ...(ruta['codigo'] === undefined || ruta['codigo'] === ''
+      ? {}
+      : { contribuyente: ruta['codigo'] }),
+  }),
+  exige: [
+    {
+      parametro: 'contribuyente',
+      titulo: 'Busca un contribuyente para simular su acogimiento',
+      detalle:
+        'El acogimiento se simula sobre la deuda de una persona: escribe su código arriba y pulsa «Buscar». Sin él no hay deuda que acoger.',
+    },
+  ],
+  leer: (cuerpo) => leerObjeto(cuerpo, 'la simulación del acogimiento'),
+  adaptar: (simulacion): DatosDePantalla => {
+    const contribuyente = esObjeto(simulacion['contribuyente'])
+      ? simulacion['contribuyente']
+      : undefined;
+    const beneficio = esObjeto(simulacion['simulacion']) ? simulacion['simulacion'] : undefined;
+    const aLaFecha = texto(simulacion['aLaFecha']);
+    const cifra = (valor: unknown): string => importeDe(valor)?.importe ?? SIN_DATO;
+
+    const obligaciones = esObjeto(simulacion['obligaciones'])
+      ? leerPaginado(simulacion['obligaciones'], 'las obligaciones acogidas')
+      : leerPaginado({ contenido: [] }, 'las obligaciones acogidas');
+
+    const tabla = tablaDe(
+      obligaciones,
+      (obligacion): readonly Celda[] => [
+        { texto: texto(obligacion['ejercicio']) },
+        { texto: texto(obligacion['predioId'] ?? obligacion['vehiculoId']) },
+        // Convenio, Cuota, Fase, Conc. y Est.: ver el comentario de arriba.
+        { texto: SIN_DATO },
+        { texto: SIN_DATO },
+        { texto: SIN_DATO },
+        { texto: texto(obligacion['tributo']) },
+        { texto: SIN_DATO },
+        { texto: SIN_DATO },
+        { texto: SIN_DATO },
+        { texto: cifra(obligacion['insoluto']) },
+        { texto: cifra(obligacion['reajuste']) },
+        { texto: cifra(obligacion['interes']) },
+        { texto: cifra(obligacion['gasto']) },
+        { texto: cifra(obligacion['total']) },
+      ],
+      'obligaciones',
+    );
+
+    return {
+      // La fecha de corte con la que el servidor calculo todo. Sale de la
+      // respuesta, no del reloj del navegador (regla 9).
+      fechaCalculo: aLaFecha === SIN_DATO ? hoy() : (aLaFecha as Fecha),
+      campos: {
+        contribuyente2: texto(contribuyente?.['nombre']),
+        domicilioFiscal: texto(contribuyente?.['domicilioFiscal']),
+        fechaDeConsulta: aLaFecha,
+        deudaTotalS: cifra(simulacion['deudaTotal']),
+        deudaAcogidaS: cifra(simulacion['deudaAcogida']),
+        registrosAcogidos: texto(simulacion['registrosAcogidos']),
+        // Las tres del descuento **solo existen con campana elegida**. Sin ella
+        // el recurso manda `simulacion: null`, y un cero aqui se leeria como
+        // «no te ahorras nada», que es una afirmacion sobre una campana que
+        // nadie eligio.
+        deudaConBeneficioS: cifra(beneficio?.['deudaConBeneficio']),
+        beneficioS: cifra(beneficio?.['ahorro']),
+        // El rotulo del prototipo dice «Tasa aplicada (%)» y se conserva
+        // (RNF-080); el contrato la llama `alicuotaAplicada`, que es como se
+        // llama un porcentaje (regla 8).
+        tasaAplicada: texto(beneficio?.['alicuotaAplicada']),
+      },
+      tabla,
+    };
+  },
+});
+
 /** Las opciones de Consultas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_CONSULTAS: Readonly<Record<string, Conexion>> = {
+  consulta_deudas_beneficio,
   cuenta_corriente,
   consulta_deuda,
   constancia,

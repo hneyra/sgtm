@@ -1,24 +1,53 @@
 package pe.gob.sgtm.rentas.infraestructura.web;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.Locale;
+import org.jspecify.annotations.Nullable;
+import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.rentas.aplicacion.RegistrarDeclaracionJurada;
+import pe.gob.sgtm.rentas.dominio.DeclaracionJurada;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJuradaRepository;
+import pe.gob.sgtm.rentas.dominio.TipoDeDeclaracion;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
- * Declaracion jurada: {@code GET /api/v1/rentas/declaraciones/{djNro}} (RF-023).
+ * Declaracion jurada: la consulta y los cuatro actos (RF-023, #28, #365).
  *
- * <p>Se busca por numero y año: {@code dj_numero_uq} (V2) es unica por ejercicio, no sola, y sin el
- * año dos declaraciones de ejercicios distintos con el mismo numero serian indistinguibles.
+ * <ul>
+ *   <li>{@code GET /api/v1/rentas/declaraciones/{djNro}} — la DJ ya presentada.
+ *   <li>{@code POST /api/v1/rentas/declaraciones} — presentarla. <b>Es el acto que concilia</b>
+ *       (ADR-0015 §3): a partir de el, el predio esta en el padron afecto del ejercicio y la
+ *       lectura de #344 lo dice.
+ *   <li>{@code POST /api/v1/rentas/declaraciones/{djNro}/rectificacion} — la rectificatoria.
+ *   <li>{@code POST /api/v1/rentas/declaraciones/{djNro}/observacion} y {@code .../anulacion} — los
+ *       dos actos de la administracion, que hasta #365 eran estados que solo la siembra podia
+ *       fabricar.
+ * </ul>
+ *
+ * <p>Se busca por numero y año: aunque desde V54 {@code dj_numero_uq} es unica en la municipalidad
+ * entera, el contrato de {@code djNro} lleva el año desde que se derivo del prototipo —la pantalla
+ * tiene su filtro «Año»— y quitarlo seria romper la ruta que la interfaz ya llama.
+ *
+ * <p><b>El numero no viaja en ningun cuerpo.</b> Lo pone el sistema, con el correlativo de {@code
+ * dj_correlativo} y la plantilla parametrizada de D-09: si el cliente pudiera proponerlo, dos
+ * ventanillas propondrian el mismo y la unica defensa seria el indice.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/rentas/declaraciones")
@@ -26,9 +55,12 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 public class DeclaracionJuradaController {
 
     private final DeclaracionJuradaRepository repositorio;
+    private final RegistrarDeclaracionJurada actos;
 
-    public DeclaracionJuradaController(DeclaracionJuradaRepository repositorio) {
+    public DeclaracionJuradaController(
+            DeclaracionJuradaRepository repositorio, RegistrarDeclaracionJurada actos) {
         this.repositorio = repositorio;
+        this.actos = actos;
     }
 
     /**
@@ -42,15 +74,8 @@ public class DeclaracionJuradaController {
     @GetMapping("/{djNro}")
     @Transactional(readOnly = true)
     public DeclaracionJuradaResource obtener(@PathVariable String djNro, @RequestParam String ano) {
-        int anio;
-        try {
-            anio = Integer.parseInt(ano.strip());
-        } catch (NumberFormatException noEsNumero) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, "El año no es un numero");
-        }
-
         return repositorio
-                .porNumero(djNro, new Ejercicio(anio))
+                .porNumero(djNro, ejercicioDe(ano))
                 .map(DeclaracionJuradaResource::de)
                 .orElseThrow(
                         () ->
@@ -59,4 +84,219 @@ public class DeclaracionJuradaController {
                                         "No hay ninguna declaracion jurada con ese numero en ese"
                                                 + " año"));
     }
+
+    /**
+     * Presenta una declaracion jurada nueva (RF-023, #365).
+     *
+     * <p>Lo que <b>no</b> viene en el cuerpo, porque lo resuelve el sistema: el numero (correlativo
+     * y plantilla), la ficha catastral vigente a la fecha de presentacion, y {@code fueraDePlazo},
+     * que sale de comparar esa fecha con el plazo del conjunto sellado. Un ejercicio sellado sin
+     * ese parametro responde <b>422 nombrando la llave</b> {@code PLAZO:DECLARACION_JURADA}:
+     * inventar un plazo clasificaria mal cada DJ que se registre (regla 5).
+     */
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequiereAcceso(acceso = "declaracion_jurada", privilegio = Privilegio.REGISTRO)
+    public DeclaracionJuradaResource presentar(@RequestBody PeticionDeDeclaracion peticion) {
+        return traduciendoErrores(
+                () ->
+                        actos.registrar(
+                                ejercicioDe(exigir(peticion.ano(), "ano")),
+                                exigir(peticion.codContribuyente(), "codContribuyente"),
+                                tipoDe(peticion.tipo()),
+                                peticion.predioId(),
+                                peticion.vehiculoId(),
+                                fechaDe(peticion.fechaPresentacion()),
+                                observacionDe(peticion.observacion())));
+    }
+
+    /**
+     * La rectificatoria: version nueva, la anterior {@code SUSTITUIDA} sin tocarle una columna
+     * (regla 4).
+     *
+     * <p><b>Puede cambiar de predio</b>: el que se declaro por error deja de conciliar por esta
+     * cadena y el que la rectificatoria declara pasa a hacerlo (ADR-0015 §1).
+     */
+    @PostMapping("/{djNro}/rectificacion")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequiereAcceso(acceso = "declaracion_jurada", privilegio = Privilegio.MODIFICACION)
+    public DeclaracionJuradaResource rectificar(
+            @PathVariable String djNro,
+            @RequestParam String ano,
+            @RequestBody PeticionDeRectificacion peticion) {
+        return traduciendoErrores(
+                () ->
+                        actos.rectificar(
+                                djNro,
+                                ejercicioDe(ano),
+                                peticion.predioId(),
+                                peticion.vehiculoId(),
+                                fechaDe(peticion.fechaPresentacion()),
+                                observacionDe(peticion.observacion())));
+    }
+
+    /**
+     * La administracion objeta el contenido de una declaracion presentada (#365).
+     *
+     * <p>El predio <b>sigue conciliando</b>: observar no retira la declaracion (ADR-0015 §1).
+     */
+    @PostMapping("/{djNro}/observacion")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequiereAcceso(acceso = "declaracion_jurada", privilegio = Privilegio.MODIFICACION)
+    public DeclaracionJuradaResource observar(
+            @PathVariable String djNro,
+            @RequestParam String ano,
+            @RequestBody PeticionDeActo peticion) {
+        return traduciendoErrores(
+                () ->
+                        actos.observar(
+                                djNro, ejercicioDe(ano), observacionDe(peticion.observacion())));
+    }
+
+    /**
+     * La administracion anula una declaracion (#365).
+     *
+     * <p>A partir de aqui el predio <b>deja de conciliar</b> por ella, y el estado es terminal: una
+     * anulada no revive.
+     */
+    @PostMapping("/{djNro}/anulacion")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequiereAcceso(acceso = "declaracion_jurada", privilegio = Privilegio.MODIFICACION)
+    public DeclaracionJuradaResource anular(
+            @PathVariable String djNro,
+            @RequestParam String ano,
+            @RequestBody PeticionDeActo peticion) {
+        return traduciendoErrores(
+                () -> actos.anular(djNro, ejercicioDe(ano), observacionDe(peticion.observacion())));
+    }
+
+    // ------------------------------------------------------------------
+
+    /**
+     * La traduccion de los fallos del dominio a codigos de la API, en un solo sitio.
+     *
+     * <p>Los cuatro actos fallan por las mismas cuatro razones, y escribir el {@code catch} cuatro
+     * veces garantizaria que el cuarto acabara devolviendo otro codigo que los tres primeros.
+     */
+    private DeclaracionJuradaResource traduciendoErrores(Acto acto) {
+        try {
+            return DeclaracionJuradaResource.de(acto.ejecutar());
+        } catch (RegistrarDeclaracionJurada.DeclaracionInexistente noEsta) {
+            throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(noEsta));
+        } catch (RegistrarDeclaracionJurada.ContribuyenteInexistente sinPadron) {
+            throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(sinPadron));
+        } catch (DeclaracionJurada.TransicionIlegal ilegal) {
+            // 409 y no 422: la peticion es correcta, lo que no admite el acto es el estado en que
+            // esta la declaracion. La interfaz distingue las dos cosas para saber si reintentar
+            // tiene sentido.
+            throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(ilegal));
+        } catch (RegistrarDeclaracionJurada.PlazoSinParametrizar sinPlazo) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinPlazo));
+        } catch (LectorDeParametros.EjercicioSinSellar sinSellar) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinSellar));
+        } catch (IllegalArgumentException invalido) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
+        }
+    }
+
+    /** Lo que hace cada uno de los cuatro verbos, para poder envolverlos igual. */
+    @FunctionalInterface
+    private interface Acto {
+        DeclaracionJurada ejecutar();
+    }
+
+    private static Ejercicio ejercicioDe(String ano) {
+        try {
+            return new Ejercicio(Integer.parseInt(ano.strip()));
+        } catch (NumberFormatException noEsNumero) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, "El año no es un numero");
+        } catch (IllegalArgumentException fueraDeRango) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(fueraDeRango));
+        }
+    }
+
+    private static TipoDeDeclaracion tipoDe(@Nullable String texto) {
+        String tipo = exigir(texto, "tipo").toUpperCase(Locale.ROOT);
+        if (TipoDeDeclaracion.RECTIFICATORIA.name().equals(tipo)) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Una rectificatoria no se presenta como declaracion nueva: se registra sobre la"
+                            + " que sustituye, con POST /rentas/declaraciones/{djNro}/rectificacion");
+        }
+        try {
+            return TipoDeDeclaracion.valueOf(tipo);
+        } catch (IllegalArgumentException desconocido) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "El tipo de declaracion no es uno de los del formulario: HR, PU, PR o"
+                            + " VEHICULAR");
+        }
+    }
+
+    private static Observacion observacionDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Toda modificacion exige la observacion del usuario: sin ella no se guarda");
+        }
+        try {
+            return Observacion.de(texto);
+        } catch (IllegalArgumentException invalida) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalida));
+        }
+    }
+
+    private static LocalDate fechaDe(@Nullable String texto) {
+        try {
+            return LocalDate.parse(exigir(texto, "fechaPresentacion").strip());
+        } catch (DateTimeParseException malFormada) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION, "La fecha va en formato AAAA-MM-DD: '" + texto + "'");
+        }
+    }
+
+    private static String exigir(@Nullable String valor, String campo) {
+        if (valor == null || valor.isBlank()) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, "Falta el campo '" + campo + "'");
+        }
+        return valor.strip();
+    }
+
+    private static String mensajeDe(RuntimeException excepcion) {
+        String mensaje = excepcion.getMessage();
+        return mensaje == null ? "El valor recibido no es valido" : mensaje;
+    }
+
+    /**
+     * El cuerpo de una declaracion jurada nueva. <b>Lista blanca</b>: lo que no esta aqui no entra.
+     *
+     * <p>No lleva {@code numero} —lo pone el sistema—, ni {@code fichaCatastralId} —lo resuelve el
+     * sistema a la fecha de presentacion—, ni {@code fueraDePlazo} —se deriva del parametro
+     * sellado—. Los tres son campos que un cliente podria proponer y ninguno es suyo.
+     */
+    public record PeticionDeDeclaracion(
+            @Nullable String observacion,
+            @Nullable String ano,
+            @Nullable String codContribuyente,
+            @Nullable String tipo,
+            @Nullable Long predioId,
+            @Nullable Long vehiculoId,
+            @Nullable String fechaPresentacion) {}
+
+    /**
+     * El cuerpo de una rectificatoria. El tipo no viaja: una rectificatoria es {@code
+     * RECTIFICATORIA} por construccion, y el ejercicio y el contribuyente los hereda de la DJ que
+     * sustituye.
+     */
+    public record PeticionDeRectificacion(
+            @Nullable String observacion,
+            @Nullable Long predioId,
+            @Nullable Long vehiculoId,
+            @Nullable String fechaPresentacion) {}
+
+    /**
+     * El cuerpo de un acto de la administracion: <b>solo</b> la observacion del usuario (regla 10,
+     * RNF-052). Observar y anular no reciben ningun dato mas; el que decide el efecto es el verbo.
+     */
+    public record PeticionDeActo(@Nullable String observacion) {}
 }

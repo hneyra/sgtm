@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 169 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 174 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 169 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 174 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 169 operaciones del contrato, por su `operationId`.
+ * Las 174 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 169 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 174 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -242,6 +242,13 @@ export const OPERACIONES = {
     parametrosDeRuta: [],
     parametrosDeConsulta: ['codigo', 'nombreRazonSocial', 'dNI', 'rUC', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
+  /** Titulares del predio, con su código de contribuyente — `GET /catastro/predios/{predioId}/titulares` */
+  titulares_del_predio: {
+    metodo: 'GET',
+    ruta: '/catastro/predios/{predioId}/titulares',
+    parametrosDeRuta: ['predioId'],
+    parametrosDeConsulta: ['vigenteA'],
+  },
   /** Predios del contribuyente — `GET /rentas/predios` */
   predios_rentas: {
     metodo: 'GET',
@@ -269,6 +276,34 @@ export const OPERACIONES = {
     ruta: '/rentas/declaraciones/{djNro}',
     parametrosDeRuta: ['djNro'],
     parametrosDeConsulta: ['djN', 'codContribuyente', 'ano', 'tipo', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+  },
+  /** Presentación de la declaración jurada — `POST /rentas/declaraciones` */
+  presentar_declaracion_jurada: {
+    metodo: 'POST',
+    ruta: '/rentas/declaraciones',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
+  /** Rectificatoria de la declaración jurada — `POST /rentas/declaraciones/{djNro}/rectificacion` */
+  rectificar_declaracion_jurada: {
+    metodo: 'POST',
+    ruta: '/rentas/declaraciones/{djNro}/rectificacion',
+    parametrosDeRuta: ['djNro'],
+    parametrosDeConsulta: ['ano'],
+  },
+  /** Observación de la declaración jurada — `POST /rentas/declaraciones/{djNro}/observacion` */
+  observar_declaracion_jurada: {
+    metodo: 'POST',
+    ruta: '/rentas/declaraciones/{djNro}/observacion',
+    parametrosDeRuta: ['djNro'],
+    parametrosDeConsulta: ['ano'],
+  },
+  /** Anulación de la declaración jurada — `POST /rentas/declaraciones/{djNro}/anulacion` */
+  anular_declaracion_jurada: {
+    metodo: 'POST',
+    ruta: '/rentas/declaraciones/{djNro}/anulacion',
+    parametrosDeRuta: ['djNro'],
+    parametrosDeConsulta: ['ano'],
   },
   /** Arbitrios municipales — `GET /rentas/arbitrios` */
   arbitrios: {
@@ -842,7 +877,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/consultas/constancias/no-adeudo',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['codContribuyente', 'fecha'],
+    parametrosDeConsulta: ['codContribuyente', 'fecha', 'formato'],
   },
   /** Búsqueda y mantenimiento de valores — `GET /valores` */
   valores_busqueda: {
@@ -1231,7 +1266,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 169 operaciones. */
+/** El `operationId` de una de las 174 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1436,6 +1471,11 @@ export interface ParametrosPorOperacion {
     readonly ordenarPor?: string;
     readonly direccion?: string;
   };
+  /** `GET /catastro/predios/{predioId}/titulares` */
+  readonly titulares_del_predio: {
+    readonly predioId: string;
+    readonly vigenteA?: string;
+  };
   /** `GET /rentas/predios` */
   readonly predios_rentas: {
     readonly contribuyente?: string;
@@ -1469,6 +1509,23 @@ export interface ParametrosPorOperacion {
     readonly tamano?: string;
     readonly ordenarPor?: string;
     readonly direccion?: string;
+  };
+  /** `POST /rentas/declaraciones` */
+  readonly presentar_declaracion_jurada: Readonly<Record<string, never>>;
+  /** `POST /rentas/declaraciones/{djNro}/rectificacion` */
+  readonly rectificar_declaracion_jurada: {
+    readonly djNro: string;
+    readonly ano?: string;
+  };
+  /** `POST /rentas/declaraciones/{djNro}/observacion` */
+  readonly observar_declaracion_jurada: {
+    readonly djNro: string;
+    readonly ano?: string;
+  };
+  /** `POST /rentas/declaraciones/{djNro}/anulacion` */
+  readonly anular_declaracion_jurada: {
+    readonly djNro: string;
+    readonly ano?: string;
   };
   /** `GET /rentas/arbitrios` */
   readonly arbitrios: {
@@ -2099,6 +2156,7 @@ export interface ParametrosPorOperacion {
   readonly constancia: {
     readonly codContribuyente?: string;
     readonly fecha?: string;
+    readonly formato?: string;
   };
   /** `GET /valores` */
   readonly valores_busqueda: {
@@ -2495,10 +2553,15 @@ export interface CuerpoPorOperacion {
   readonly valores_unitarios: undefined;
   readonly depreciacion: undefined;
   readonly contribuyentes: undefined;
+  readonly titulares_del_predio: undefined;
   readonly predios_rentas: undefined;
   readonly predial_individual: CuerpoSinEsquema;
   readonly predial_masivo: CuerpoSinEsquema;
   readonly declaracion_jurada: undefined;
+  readonly presentar_declaracion_jurada: CuerpoSinEsquema;
+  readonly rectificar_declaracion_jurada: CuerpoSinEsquema;
+  readonly observar_declaracion_jurada: CuerpoSinEsquema;
+  readonly anular_declaracion_jurada: CuerpoSinEsquema;
   readonly arbitrios: undefined;
   readonly transferencia_predio: CuerpoSinEsquema;
   readonly alcabala: CuerpoSinEsquema;
@@ -2668,10 +2731,15 @@ export interface RespuestaPorOperacion {
   readonly valores_unitarios: CuerpoSinEsquema;
   readonly depreciacion: CuerpoSinEsquema;
   readonly contribuyentes: CuerpoSinEsquema;
+  readonly titulares_del_predio: CuerpoSinEsquema;
   readonly predios_rentas: CuerpoSinEsquema;
   readonly predial_individual: CuerpoSinEsquema;
   readonly predial_masivo: CuerpoSinEsquema;
   readonly declaracion_jurada: CuerpoSinEsquema;
+  readonly presentar_declaracion_jurada: CuerpoSinEsquema;
+  readonly rectificar_declaracion_jurada: CuerpoSinEsquema;
+  readonly observar_declaracion_jurada: CuerpoSinEsquema;
+  readonly anular_declaracion_jurada: CuerpoSinEsquema;
   readonly arbitrios: CuerpoSinEsquema;
   readonly transferencia_predio: CuerpoSinEsquema;
   readonly alcabala: CuerpoSinEsquema;

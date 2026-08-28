@@ -1,0 +1,30 @@
+# Derivado publicable del corpus de valores normativos (E-3, #200; #188, #247 §4).
+#
+# NINGUNA cifra de este archivo se tecleo de memoria: cada una esta letra por letra en el
+# archivo del corpus que la fila nombra, y `docs/10-negocio/verificar-publicacion.mjs` lo
+# comprueba fila a fila contra ese archivo en cada PR.
+#
+# Las dos ultimas columnas son la doble firma de ADR-0007, y no son de adorno: se copian de la
+# cabecera del archivo del corpus (`Transcribio` y `Verifico`) y viajan a `usuario_carga` y
+# `usuario_aprueba` de `parametro_tributario`, donde `parametro_doble_verificacion_ck` exige
+# que sean distintas. La firma que la base guarda es la del corpus, no la del proceso.
+#
+# El mismo archivo sirve para los dos pasos, porque las tres primeras columnas son exactamente
+# las que `ImportarParametrosDelConjunto` lee y las demas las ignora:
+#
+#   publicar-parametros.sh      --archivo parametros-2026.csv                 (publica el valor)
+#   abrir-conjunto-parametros.sh --archivo parametros-2026.csv --conjunto-id N (lo compone)
+#
+# Que no esta aqui, y por que, en README.md de este directorio.
+tipo,clave,vigencia_desde,vigencia_hasta,valor_numerico,valor_texto,documento_fuente,archivo_del_corpus,transcribio,verifico
+UIT,,2022-01-01,2022-12-31,4600.00,,D.S. N.° 398-2021-EF,uit.md,JNA,Agent
+UIT,,2023-01-01,2023-12-31,4950.00,,D.S. N.° 309-2022-EF,uit.md,JNA,Agent
+UIT,,2024-01-01,2024-12-31,5150.00,,D.S. N.° 309-2023-EF,uit.md,JNA,Agent
+UIT,,2025-01-01,2025-12-31,5350.00,,D.S. N.° 260-2024-EF,uit.md,JNA,Agent
+UIT,,2026-01-01,2026-12-31,5500.00,,D.S. N.° 301-2025-EF,uit.md,JNA,Agent
+TRAMO_PREDIAL,1,2004-11-15,,0.2,Hasta 15 UIT; 0.2%,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13",predial-tramos-y-alicuotas.md,JNA,HNA
+TRAMO_PREDIAL,2,2004-11-15,,0.6,Más de 15 UIT y hasta 60 UIT; 0.6%,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13",predial-tramos-y-alicuotas.md,JNA,HNA
+TRAMO_PREDIAL,3,2004-11-15,,1.0,Más de 60 UIT; 1.0%,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13",predial-tramos-y-alicuotas.md,JNA,HNA
+DEDUCCION_PENSIONISTA,,2004-11-15,,50,50 UIT,TUO LTM art. 19,predial-deducciones.md,JNA,HNA
+DEDUCCION_ADULTO_MAYOR,,2016-07-21,,50,50 UIT,"Ley N.° 30490, Ley de la Persona Adulta Mayor",predial-deducciones.md,JNA,HNA
+PREDIAL_MINIMO,,2004-11-15,,0.6,0.6% de la UIT vigente al 1 de enero del año al que corresponde el impuesto,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13, último párrafo",_plantilla.md,JNA,HNA
