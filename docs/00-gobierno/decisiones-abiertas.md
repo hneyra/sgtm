@@ -19,7 +19,7 @@ sale de esta tabla y entra como ADR o como cambio en el documento que correspond
 | **D-08** | Retención de la auditoría y del histórico de fichas: años en línea, política de archivado | Rentas + TI | El plan de particionado a largo plazo | Abierta |
 | **D-09** | Numeración de valores y expedientes: correlativo por municipalidad y ejercicio, con qué formato y qué reinicio | Rentas del piloto | La emisión de valores | Abierta — **no bloquea**, porque el formato está afuera. `valor_correlativo` (V26), `convenio_correlativo` (V31) y `expediente_correlativo` (V33) garantizan que el correlativo no se repita ni salte; la **composición** del número del expediente coactivo es un parámetro (`PlantillaDeNumeroDeExpediente`, #40), con `EXP-{ejercicio}-{correlativo:6}` por omisión y el correlativo desnudo guardado aparte, de modo que cerrar D-09 sea cambiar la plantilla y no migrar la columna. Mismo precedente que D-10 con `ComposicionCatastral` |
 | **D-10** | **Longitud exacta del código de referencia catastral.** La plantilla del manual (`DDPPddSSMMMLLLEEeeppUUU`) da 23 posiciones; los ejemplos del prototipo de interfaz traen 21 | Catastro del piloto | La validación del código y la carga de fichas | Abierta |
-| **D-11** | **Origen y valor de los cuatro factores sin fuente** que reveló el manual M02 del MEF (`../srtm` NEG-05 §0.1): deducción de Amazonía, `% actualización`, incremento del 5 % sobre el valor unitario **antes** de depreciar, y factor de oficialización de obras complementarias. Los cuatro multiplican o restan sobre importes | Rentas del piloto + asesoría legal | `RT-002`, `RT-005` y `RT-011`; se suma a D-02a | Abierta |
+| **D-11** | **Origen y valor de los cuatro factores sin fuente** que reveló el manual M02 del MEF (`../srtm` NEG-05 §0.1): deducción de Amazonía, `% actualización`, incremento del 5 % sobre el valor unitario **antes** de depreciar, y factor de oficialización de obras complementarias. Los cuatro multiplican o restan sobre importes | Rentas del piloto + asesoría legal | `RT-002`, `RT-005` y `RT-011`; se suma a D-02a | Abierta — **tres de los cuatro ya tienen fuente leída en el PDF oficial y transcrita en el corpus**: el **factor de oficialización** es `Fo = 0,68`, del Anexo II de la R.M. 277-2025-VIVIENDA (`obras-complementarias-y-oficializacion-2026.md`, fila 10 del mapa); el **incremento del 5 %** es una nota al pie del propio Cuadro de Valores Unitarios, «EN EDIFICIOS AUMENTAR EL VALOR POR M2 EN 5 % A PARTIR DEL 5° PISO» (`valores-unitarios-2026.md`, fila 7) —falta saber si es único o acumulativo—; y la **deducción de Amazonía** tiene norma (Ley 27037 art. 18 y D.S. 031-99-EF) y no tiene cifra nacional, porque el porcentaje lo fija anualmente cada municipalidad de la Amazonía (`predial-deduccion-amazonia.md`, fila 32, que nace en D-02b). Los tres archivos están en `TRANSCRITO`: les falta la segunda firma. Sigue sin fuente el **`% actualización`** |
 | **D-12** | **Qué pasa con el autovalúo cuya titularidad no llega a 100 %.** El esquema ya admite titularidad parcial —valida «no excede 100», como el SRTM del MEF—; falta decidir si la porción sin titular identificado se determina a alguien o simplemente no se cobra | Rentas + asesoría legal | La base imponible del predial (`RT-011`) | Abierta |
 | **D-14** | **La regla de imputación de un pago parcial**: qué parte de la deuda extingue —insoluto, reajuste, interés o gasto, y en qué orden entre obligaciones—. Es normativa (TUO del Código Tributario, art. 31), no una decisión de diseño: hay que transcribirla y firmarla, no elegirla. **#33 la declinó** para `A_CUENTA` y **#35 la vuelve a declinar** para `CUOTA_CONVENIO`, con la consecuencia que hace segura la omisión: mientras la caja rechace los dos tipos, ningún pago parcial entra, y por eso el quiebre de un convenio nunca tiene que repartir nada —devuelve lo pendiente entero, que es exactamente lo acogido— | Rentas + asesoría legal | `TipoDePago.A_CUENTA` y `TipoDePago.CUOTA_CONVENIO`; con ellos, el cobro de cuotas del convenio y su seguimiento real | Abierta — no bloquea el ciclo de vida del convenio, que está completo y probado sin ella |
 
@@ -69,9 +69,15 @@ datos más se pueden buscar hoy, sin piloto**, y `#192` deja de esperar a D-01.
 Las etiquetas del tablero salen de ahí, y `docs/10-negocio/verificar-mapa-normativo.mjs` comprueba
 en las dos direcciones que sigan diciendo lo mismo.
 
-**Lo único de D-02 que no se resuelve buscando es D-11**, los cuatro factores sin fuente. Ahí sí
-hay una decisión: si la fuente no aparece, ¿se implementan igual, se omiten, o se bloquea la
-emisión? Los cuatro multiplican o restan sobre importes, así que omitir uno **no es neutro**.
+**De D-02, lo que no se resolvía buscando era D-11**, los cuatro factores sin fuente. Buscarlos de
+todos modos resultó valer la pena: **tres de los cuatro sí estaban en una norma publicada** —el
+factor de oficialización y el incremento del 5 %, en la resolución anual del sector Vivienda; la
+deducción de Amazonía, en la Ley 27037 y su reglamento— y lo que la búsqueda devolvió no fue solo la
+cifra sino **quién la fija**: la de Amazonía no la fija ninguna norma nacional, sino cada
+municipalidad de la Amazonía todos los años, así que nace en D-02b (fila 32 del mapa). Queda el
+`% actualización`, y para él la decisión sigue en pie: si la fuente no aparece, ¿se implementa
+igual, se omite, o se bloquea la emisión? Multiplica sobre importes, así que omitirlo **no es
+neutro**.
 
 ## Cómo se cierra D-03c
 

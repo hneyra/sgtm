@@ -56,9 +56,11 @@ reclamó otro archivo, pone esto en rojo.
    que el proceso batch publica.
 3. **Qué no cabe hoy.** Donde se anota lo que el esquema todavía no puede guardar. Sigue habiendo
    dos casos vivos, y los dos salieron de intentar la carga: a `depreciacion` le falta el **uso de
-   la edificación** —el Anexo I publica cuatro tablas— y al cuadro de valores unitarios le falta
-   confirmar sus cifras contra el Anexo I.2 real (GOB-03, H-14 y H-15). Una sección vacía se
-   escribe «Nada», no se borra: que esté vacía es información.
+   la edificación** —el Anexo I publica cuatro tablas— y al cuadro de valores unitarios le faltan la
+   segunda firma y las otras tres regiones (GOB-03, H-14 y H-15). Lo de confirmar sus cifras contra
+   el Anexo I.2 real ya se hizo, el 2026-08-28, y el cotejo cambió el cuadro entero: **la norma tiene
+   3 partidas, no las 7 que el archivo transcribía**. Una sección vacía se escribe «Nada», no se
+   borra: que esté vacía es información.
 
 ## El libro mayor
 
