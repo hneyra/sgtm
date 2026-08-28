@@ -509,6 +509,84 @@ export function faltaEnElAlta(
   return undefined;
 }
 
+/** Donde se resuelve el predio, dicho para quien atiende «Transferencia de predio». */
+const DONDE_EL_PREDIO = 'Está en «Código predial», dentro de «Datos del acto».';
+
+/**
+ * Que le falta a «Transferencia de predio» para poder registrarse (#73).
+ *
+ * El predio y el valor viajan por el resolutor de `rentas/composicion.ts`
+ * (`ResolutorDePredioDeTransferencia`); el resto son los campos que
+ * `TransferenciaPredioController` exige y que el catálogo sí dibuja.
+ */
+function faltaEnLaTransferenciaDePredio(
+  borrador: Readonly<Record<string, string>>,
+): string | undefined {
+  const dato = (clave: string): string => (borrador[clave] ?? '').trim();
+
+  if (dato('predioId') === '') {
+    return `Falta el predio: busca su código catastral y elígelo en la lista. Sin él, la transferencia no señala a ningún predio. ${DONDE_EL_PREDIO}`;
+  }
+  const valor = dato('valorTransferencia');
+  if (valor === '') {
+    return `Falta el valor de la transferencia: es la base sobre la que se liquida la alcabala, y sin él el acto no se puede registrar. ${DONDE_EL_PREDIO}`;
+  }
+  if (!IMPORTE_DEL_CUERPO.test(valor)) {
+    return `El valor de la transferencia no llegó como cifra («${valor}»): escríbelo sin separador de miles, por ejemplo «95000.00».`;
+  }
+  if (dato('transferenteDocumento') === '') {
+    return 'Falta el código del transferente: quien vende, dona o cede el predio.';
+  }
+  if (dato('adquirenteDocumento') === '') {
+    return 'Falta el código del adquirente: quien lo recibe.';
+  }
+  if (dato('tipoDeActo') === '') {
+    return 'Falta el tipo de acto: compra-venta, donación, permuta y las demás formas que reconoce la ley.';
+  }
+  if (dato('fechaDelActo') === '') {
+    return 'Falta la fecha del acto: es desde cuándo corre la afectación del adquirente.';
+  }
+  if (dato('transferido') === '') {
+    return 'Falta el porcentaje transferido: cuánto del predio cambia de titular en este acto.';
+  }
+  return undefined;
+}
+
+/**
+ * Que le falta a «Transferencia de vehículo» para poder registrarse (#73).
+ *
+ * Sin resolutor de identificador: `placa` viaja tal cual —
+ * `TransferenciaVehiculoController` la resuelve él mismo contra el padrón— y
+ * el transferente lo toma de quien figura hoy como titular. Solo el valor de
+ * la transferencia necesita el campo que `rentas/composicion.ts` añade.
+ */
+function faltaEnLaTransferenciaDeVehiculo(
+  borrador: Readonly<Record<string, string>>,
+): string | undefined {
+  const dato = (clave: string): string => (borrador[clave] ?? '').trim();
+
+  if (dato('placa') === '') {
+    return 'Falta la placa: es el vehículo que cambia de titular.';
+  }
+  const valor = dato('valorTransferencia');
+  if (valor === '') {
+    return 'Falta el valor de la transferencia: es parte del hecho que queda asentado, y sin él el acto no se puede registrar. Está junto a «Transferente — documento».';
+  }
+  if (!IMPORTE_DEL_CUERPO.test(valor)) {
+    return `El valor de la transferencia no llegó como cifra («${valor}»): escríbelo sin separador de miles, por ejemplo «95000.00».`;
+  }
+  if (dato('adquirenteDocumento') === '') {
+    return 'Falta el código del adquirente: quien recibe el vehículo.';
+  }
+  if (dato('tipoDeActo') === '') {
+    return 'Falta el tipo de acto: compra-venta, donación, remate y las demás formas que reconoce la ley.';
+  }
+  if (dato('fechaDeTransferencia') === '') {
+    return 'Falta la fecha de transferencia: es desde cuándo responde el adquirente por el impuesto.';
+  }
+  return undefined;
+}
+
 const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   /**
    * Cambiar el año de trabajo.
@@ -653,6 +731,77 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
       }
       return undefined;
     },
+    nota: true,
+  },
+
+  /**
+   * Transferencia de predio (RF-026/RF-027, #29, #73): da de baja al transferente y de alta al
+   * adquirente desde la fecha del acto.
+   *
+   * `predioId` y `valorTransferencia` no los dibuja ningún campo del catálogo: los llena
+   * `ResolutorDePredioDeTransferencia` (`rentas/composicion.ts`), que sustituye a «Código
+   * predial» y resuelve el primero contra `consulta_fichas` mientras añade el segundo —la
+   * base sobre la que se liquida la alcabala, que el manual dibuja en otra pantalla y el
+   * backend no lee ahí—. Ver `ACTOS_SIN_CAMPO` en `pantallas/actos.ts` para el estado anterior
+   * a esta declaración.
+   *
+   * `codTransferente`/`codAdquiriente` son **códigos**, no identificadores internos:
+   * `TransferenciaPredioController` los resuelve él mismo contra el padrón, así que el texto
+   * que se teclea en «Transferente/Adquirente — documento» viaja tal cual.
+   *
+   * `nDeExpediente` y `notaria` no viajan: `PeticionDeTransferenciaPredio` no tiene ningún
+   * campo para ellos. `documentoOrigen` sale de «Nº de minuta / escritura», que es el
+   * documento con que se registra el acto. `generaAlcabala` tampoco viaja: es una casilla y
+   * `CampoDelCuerpo` no tiene una forma de mandar un booleano real —enviarlo como texto
+   * («si»/«») fallaría contra un campo `Boolean`—; `afectaAlcabala` queda sin marcar, que es
+   * el valor por omisión que el propio controlador ya aplica cuando el campo no llega.
+   */
+  transferencia_predio: {
+    campos: {
+      tipoDeActo: { campo: 'tipoTransferencia' },
+      fechaDelActo: { campo: 'fechaTransferencia' },
+      nDeMinutaEscritura: { campo: 'documentoOrigen' },
+      transferido: { campo: 'porcentajeTransferido' },
+      transferenteDocumento: { campo: 'codTransferente' },
+      adquirenteDocumento: { campo: 'codAdquiriente' },
+      predioId: { campo: 'predioId', entero: true },
+      valorTransferencia: { campo: 'valorTransferencia', importe: true },
+    },
+    exigir: (borrador) => faltaEnLaTransferenciaDePredio(borrador),
+    nota: true,
+  },
+
+  /**
+   * Transferencia de vehículo (RF-026, #29, #73): registra el cambio de titular.
+   *
+   * Sin resolutor de identificador: `placa` viaja tal cual, porque
+   * `TransferenciaVehiculoController` la resuelve él mismo contra el padrón de vehículos, y
+   * **sin `codTransferente`**: el transferente es quien figura hoy como titular, y el
+   * controlador lo lee de ahí —pedirlo aquí abriría la puerta a que se escriba un código
+   * distinto del que la base realmente tiene—.
+   *
+   * `valorTransferencia` no lo dibuja ningún campo del catálogo (#73, misma frontera que
+   * `transferencia_predio`): lo llena `ResolutorDeValorDeTransferencia`
+   * (`rentas/composicion.ts`), que sustituye a «Transferente — documento» —un campo que hoy no
+   * llega a ningún sitio, porque ninguna de las dos peticiones del controlador lo acepta para
+   * un vehículo— y lo sigue dibujando tal cual, sin marcarlo escribible.
+   *
+   * `nroDeExpediente` no viaja: `PeticionDeTransferenciaVehiculo` no tiene campo para él.
+   * `documentoOrigen` sale de «Nº del documento». `documentoSustentatorio` (el tipo de
+   * documento) tampoco viaja: el controlador solo pide el número, no su tipo.
+   * `generaAlcabala` no tiene campo en esta pantalla —a diferencia de la de predio, el
+   * catálogo no lo dibuja aquí—, así que `afectaAlcabala` queda igual sin marcar.
+   */
+  transferencia_vehiculo: {
+    campos: {
+      placa: { campo: 'placa' },
+      fechaDeTransferencia: { campo: 'fechaTransferencia' },
+      tipoDeActo: { campo: 'tipoTransferencia' },
+      nDelDocumento: { campo: 'documentoOrigen' },
+      adquirenteDocumento: { campo: 'codAdquiriente' },
+      valorTransferencia: { campo: 'valorTransferencia', importe: true },
+    },
+    exigir: (borrador) => faltaEnLaTransferenciaDeVehiculo(borrador),
     nota: true,
   },
 

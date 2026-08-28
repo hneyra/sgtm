@@ -341,6 +341,12 @@ export const NOTAS: Readonly<Record<string, string>> = {
 
   notificacion_valores:
     'La hora y la dirección de la diligencia no se guardan todavía: el backend solo pide la fecha (sin hora) y, si no se indica una dirección, usa el domicilio fiscal vigente a esa fecha.',
+
+  transferencia_predio:
+    'El valor de la transferencia se pide junto al código predial, no en un campo del manual: es la base sobre la que se liquida la alcabala. El «Nº de expediente» y la «Notaría» no viajan —el backend no tiene ningún campo para ellos—, y «Genera alcabala» tampoco: es una casilla, y el acto se registra sin marcarla.',
+
+  transferencia_vehiculo:
+    'El valor de la transferencia se pide junto a «Transferente — documento», que no llega a ningún sitio: el sistema resuelve al transferente por quien figura hoy como titular del vehículo. El «Nº de expediente» no viaja —el backend no tiene ningún campo para él—.',
 };
 
 /** Las opciones cuya escritura lleva nota. La comprobacion de coherencia las mira. */
