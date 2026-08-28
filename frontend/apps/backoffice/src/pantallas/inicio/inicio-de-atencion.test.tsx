@@ -89,6 +89,29 @@ const unaSolaPersona = (): Response =>
     { status: 200, headers: { 'content-type': 'application/json' } },
   );
 
+/** Una pagina con `cuantas` personas distintas. Para contar, no para leer. */
+const variasPersonas = (cuantas: number): Response =>
+  new Response(
+    JSON.stringify({
+      contenido: Array.from({ length: cuantas }, (_, i) => ({
+        id: i + 1,
+        codigo: `0000000000${i + 1}`,
+        tipoDocumento: 'DNI',
+        numeroDocumento: `4421893${i}`,
+        tipoPersona: 'NATURAL',
+        nombreRazonSocial: `MEDINA MEDINA, PERSONA ${i + 1}`,
+        condicionEspecial: null,
+        activo: true,
+      })),
+      pagina: 0,
+      tamano: cuantas,
+      totalElementos: cuantas,
+      totalPaginas: 1,
+      hayMas: false,
+    }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  );
+
 beforeEach(() => {
   pedidas = [];
   olvidarAtenciones();
@@ -100,6 +123,7 @@ afterEach(() => {
   limpiarSesion();
   desinstalarProxyDeDatos();
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 /** Teclea en la caja del inicio y espera a que la mano se «apose» (300 ms). */
@@ -131,12 +155,37 @@ describe('la heurística manda a cada lectura lo suyo', () => {
     // «T2G-418» y «V1H-882» son las que el padron tiene de verdad. Un patron
     // propio de «tres letras y tres digitos» las dejaria fuera; las reglas son
     // las de `Placa` en el dominio.
+    //
+    // Y **tambien se preguntan como nombre**: la forma de placa y la de razon
+    // social se solapan, y son dos lecturas distintas.
     for (const placa of ['ABC-123', 'T2G-418', 'V1H882', 't2g 418']) {
       expect(
         preguntasDe(placa).map((p) => p.clave),
         placa,
-      ).toEqual(['placa']);
+      ).toEqual(['placa', 'nombre']);
     }
+  });
+
+  it('una razón social con forma de placa llega **a las dos** franjas', () => {
+    /* Este es el defecto que la heuristica tenia: «AGRO 2000» y «TEXTIL 21»
+       cumplen las reglas de `Placa` —alfanumerico, con letra y digito, de 5 a
+       10— y son razones sociales del padron. Preguntando solo al padron
+       vehicular, quien tiene la lectura de personas y no la de vehiculos se
+       quedaba **sin ninguna franja**, que es justo lo que el propio archivo
+       declara que la heuristica no puede hacer: decide a quien se pregunta, no
+       que se ensena. */
+    for (const razon of ['AGRO 2000', 'TEXTIL 21']) {
+      expect(
+        preguntasDe(razon).map((p) => p.clave),
+        razon,
+      ).toEqual(['placa', 'nombre']);
+    }
+    // El valor de cada una es el suyo: normalizado para la placa, tal cual para
+    // el nombre —que es lo que el backend busca por aproximacion—.
+    expect(preguntasDe('AGRO 2000')).toEqual([
+      { clave: 'placa', valor: 'AGRO2000' },
+      { clave: 'nombre', valor: 'AGRO 2000' },
+    ]);
   });
 
   it('un nombre se busca desde tres letras, y con menos no se pregunta nada', () => {
@@ -161,9 +210,18 @@ describe('el abanico consulta lo que el permiso cubre, y nada más', () => {
       name: 'Consulta de fichas catastrales',
     });
     // Y cada una dice de donde salio con el rotulo del catalogo, sin
-    // reescribirlo (RNF-080): la opcion y el modulo al que pertenece.
+    // reescribirlo (FRO-03 §5, ADR-0014 §5): la opcion y el modulo.
     expect(within(personas).getByText('Rentas · Registro')).toBeInTheDocument();
     expect(within(catastro).getByText('Catastro')).toBeInTheDocument();
+    /* El nombre de la region **es su encabezado**, no un `aria-label` que lo
+       repita: el resto de la aplicacion titula con headings y quien navega por
+       ellos tiene que encontrar las franjas. Con `aria-label` la region seguia
+       llamandose igual y el encabezado no existia, asi que esto es lo unico que
+       distingue las dos formas. */
+    expect(within(personas).getByRole('heading', { name: 'Contribuyentes' })).toBeInTheDocument();
+    expect(
+      within(catastro).getByRole('heading', { name: 'Consulta de fichas catastrales' }),
+    ).toBeInTheDocument();
   });
 
   it('sin el permiso de vehículos no hay franja de vehículos: ni vacía, ni con error', async () => {
@@ -173,12 +231,15 @@ describe('el abanico consulta lo que el permiso cubre, y nada más', () => {
     montarEnRuta('/');
     await teclear(usuario, 'T2G-418');
 
-    // La placa solo la responde `consulta_vehiculos`, y este perfil no la tiene.
-    await screen.findByText(/no tiene ninguna de las consultas/i);
     expect(screen.queryByRole('region', { name: 'Consulta de vehículos' })).not.toBeInTheDocument();
     // Y **no se pregunto**: sin permiso no se consulta, no es que se consulte y
     // se esconda la respuesta.
     expect(pedidas.filter((camino) => camino.startsWith('/consultas/vehiculos'))).toEqual([]);
+    // Lo que si se pregunto es el padron de personas, que este perfil si tiene:
+    // «T2G-418» tiene tambien forma de razon social.
+    await waitFor(() =>
+      expect(pedidas.some((camino) => camino.startsWith('/rentas/contribuyentes'))).toBe(true),
+    );
   });
 
   it('sin ninguna de las tres, se dice que desde aquí no se puede buscar', async () => {
@@ -188,8 +249,63 @@ describe('el abanico consulta lo que el permiso cubre, y nada más', () => {
     await teclear(usuario, 'MEDINA');
 
     expect(
-      await screen.findByText(/no tiene ninguna de las consultas del padrón/i),
+      await screen.findByText(/no tiene ninguna de las consultas del padrón/i, undefined, {
+        timeout: 4000,
+      }),
     ).toBeInTheDocument();
+  });
+
+  it('con alguna consulta pero no la que responde, **se nombra la que falta**', async () => {
+    /* Las dos frases son distintas, y la segunda no existia: con cualquier
+       permiso del padron que no fuera el que responde a lo escrito salia «tu
+       perfil no tiene ninguna de las consultas del padrón», que es falso. A
+       quien lo lee le deja creyendo que desde aqui no puede buscar a nadie,
+       cuando puede buscar a casi todos.
+
+       Siete digitos solo los responde el catastro: no son ni un DNI (ocho) ni
+       un RUC (once), y desde seis son el prefijo de un codigo de referencia
+       catastral. Con el padron de personas y sin el de catastro, la frase tiene
+       que **nombrar la fuente que falta con el rotulo del catalogo** —que es
+       como se le pide al administrador— y decir el camino que si hay. */
+    const usuario = userEvent.setup();
+    entraCon(SOLO_PERSONAS);
+    montarEnRuta('/');
+    await teclear(usuario, '2001060');
+
+    const frase = await screen.findByText(/Consulta de fichas catastrales/, undefined, {
+      timeout: 4000,
+    });
+    expect(frase).toHaveTextContent(/y tu perfil no la tiene/i);
+    expect(frase).toHaveTextContent(/Desde aquí se busca por DNI, por RUC o por nombre/i);
+    // Y **no** la frase de «ninguna consulta», que es la mentira que se corrige.
+    expect(screen.queryByText(/no tiene ninguna de las consultas/i)).not.toBeInTheDocument();
+  });
+
+  it('un error en una franja no calla el recuento de las demás', async () => {
+    /* El bloque del error tiene su `role="alert"` y su distincion entre el 403 y
+       el fallo de red. Callar ademas el recuento deja a quien no ve la pantalla
+       sin saber que debajo hay cuatro personas: el silencio es para cuando el
+       error es lo unico que hay. */
+    const usuario = userEvent.setup();
+    entraCon(VENTANILLA);
+    espiar((camino) => {
+      if (camino.startsWith('/catastro/fichas')) return problema(403);
+      if (camino.startsWith('/rentas/contribuyentes')) return variasPersonas(4);
+      return undefined;
+    });
+    montarEnRuta('/');
+    await teclear(usuario, '44218937');
+
+    expect(
+      await screen.findByText(/4 resultados/, undefined, { timeout: 4000 }),
+    ).toBeInTheDocument();
+    // Y el error sigue contandose donde le toca, sin repetirse en la region viva.
+    const franja = await screen.findByRole(
+      'region',
+      { name: 'Consulta de fichas catastrales' },
+      { timeout: 4000 },
+    );
+    expect(within(franja).getByText(/Tu perfil no puede consultar/)).toBeInTheDocument();
   });
 });
 
@@ -251,6 +367,81 @@ describe('Intro abre el destino, y no elige por nadie', () => {
     expect(await screen.findByRole('heading', { name: 'Contribuyentes' })).toBeInTheDocument();
   });
 
+  it('dentro del rebote **no abre nada**: lo que hay en pantalla es de la pregunta anterior', async () => {
+    /* El defecto, reproducido: se busca un DNI, sale una persona, y quien
+       atiende se da cuenta de que se equivoco de digito. Corrige y pulsa Intro
+       sin esperar los 300 ms del rebote — y se abre la ficha de **la persona de
+       la pregunta anterior**, porque `encontrados` todavia son las respuestas de
+       lo que ya no esta escrito. En ventanilla eso es abrir a otra persona y
+       operar sobre ella.
+
+       La guarda es la misma que ya protegia a la region viva: si lo escrito no
+       es lo preguntado, no hay todavia nada que abrir. */
+    const usuario = userEvent.setup();
+    entraCon(SOLO_PERSONAS);
+    espiar((camino) =>
+      camino.startsWith('/rentas/contribuyentes') ? unaSolaPersona() : undefined,
+    );
+    montarEnRuta('/');
+    const caja = await teclear(usuario, '44218937');
+    await screen.findByText(/1 resultado/);
+
+    // Se corrige lo tecleado y se pulsa Intro sin esperar. Que estamos dentro
+    // del rebote lo dice la propia region viva, y no el reloj de la prueba.
+    await usuario.type(caja, '2');
+    expect(screen.getByText('Buscando…')).toBeInTheDocument();
+    await usuario.type(caja, '{Enter}');
+
+    expect(screen.getByRole('heading', { name: '¿A quién atiendes?' })).toBeInTheDocument();
+  });
+
+  it('con la caja vaciada, Intro tampoco abre la ficha que sigue dibujada', async () => {
+    // El mismo defecto por el otro lado: vaciar la caja no borra las franjas
+    // hasta que el rebote vence, asi que Intro sobre una caja **vacia**
+    // navegaba. La guarda cubre los dos, porque compara con lo preguntado.
+    const usuario = userEvent.setup();
+    entraCon(SOLO_PERSONAS);
+    espiar((camino) =>
+      camino.startsWith('/rentas/contribuyentes') ? unaSolaPersona() : undefined,
+    );
+    montarEnRuta('/');
+    const caja = await teclear(usuario, '44218937');
+    await screen.findByText(/1 resultado/);
+
+    await usuario.clear(caja);
+    expect(caja).toHaveValue('');
+    await usuario.type(caja, '{Enter}');
+
+    expect(screen.getByRole('heading', { name: '¿A quién atiendes?' })).toBeInTheDocument();
+  });
+
+  it('la pregunta dice cómo se vuelve a ella desde media pantalla', async () => {
+    // El inicio no es una opcion del catalogo, asi que sus dos caminos de vuelta
+    // —la marca y la entrada del lanzador— hay que decirlos: nadie los deduce, y
+    // quien no los conoce edita la barra de direcciones o se queda donde esta.
+    entraCon(SOLO_PERSONAS);
+    montarEnRuta('/');
+
+    expect(await screen.findByText(/Desde cualquier pantalla se vuelve aquí/i)).toHaveTextContent(
+      /la marca de arriba a la izquierda.*rejilla de módulos/i,
+    );
+  });
+
+  it('Esc vacía la caja y el foco se queda en ella', async () => {
+    // El gesto de «esta no es, viene el siguiente»: sin el hay que borrar a mano
+    // lo tecleado, y en una cola eso es lo que acaba llevando al raton (RNF-082).
+    const usuario = userEvent.setup();
+    entraCon(SOLO_PERSONAS);
+    montarEnRuta('/');
+    const caja = await teclear(usuario, 'MEDINA');
+    await screen.findByRole('region', { name: 'Contribuyentes' });
+
+    await usuario.keyboard('{Escape}');
+
+    expect(caja).toHaveValue('');
+    expect(document.activeElement).toBe(caja);
+  });
+
   it('con varios, Intro baja a la lista en vez de abrir el primero', async () => {
     const usuario = userEvent.setup();
     entraCon(SOLO_PERSONAS);
@@ -306,9 +497,17 @@ describe('las atenciones recientes', () => {
        cierre de sesion, al cambio de operador y al cambio de municipalidad. Lo
        que se comprueba no es una clave concreta: es que **ni el codigo, ni el
        nombre, ni el documento** estan en ningun sitio del almacenamiento.
-       Persistir la lista pone esto en rojo, que es de lo que se trata. */
-    const guardado = Object.keys(localStorage)
-      .map((clave) => `${clave} ${localStorage.getItem(clave) ?? ''}`)
+       Persistir la lista pone esto en rojo, que es de lo que se trata.
+
+       **Y los dos almacenes, no uno.** Recorriendo solo `localStorage`, una
+       sonda que persistiera la lista en `sessionStorage` dejaba las dieciseis
+       pruebas de este archivo en verde: la prohibicion es guardar esto en el
+       navegador, y `sessionStorage` es el navegador igual —sobrevive a la
+       recarga y al cambio de operador dentro de la misma pestana—. */
+    const guardado = [localStorage, sessionStorage]
+      .flatMap((almacen) =>
+        Object.keys(almacen).map((clave) => `${clave} ${almacen.getItem(clave) ?? ''}`),
+      )
       .join(' | ');
     expect(guardado).not.toContain('00000025673');
     expect(guardado).not.toContain('RUFINA');

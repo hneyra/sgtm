@@ -188,6 +188,18 @@ const TEXTOS: { estado: string; selector: string; sobre: string }[] = [
        el codigo    con que identificador se abre lo elegido */
   { estado: 'inicio · rótulo', selector: '.sgtm-atencion__eyebrow', sobre: '--bg' },
   { estado: 'inicio · ayuda de la búsqueda', selector: '.sgtm-atencion__ayuda', sobre: '--bg' },
+  { estado: 'inicio · camino de vuelta', selector: '.sgtm-atencion__vuelta', sobre: '--bg' },
+  /* El texto de sugerencia de la caja, que va **sobre la tarjeta** porque la
+     caja lleva su propio relleno. Sin regla propia lo pintaba el navegador —una
+     opacidad sobre el color del texto—: 3,8:1 en tema oscuro, y ahi va la lista
+     de lo que se puede teclear, que es lo unico que dice como se busca antes de
+     escribir nada. El selector lleva pseudoelemento, y `colorDe` lo encuentra
+     igual: lo que busca es el bloque literal y su declaracion de `color`. */
+  {
+    estado: 'inicio · sugerencia de la caja',
+    selector: '.sgtm-atencion__caja input::placeholder',
+    sobre: '--bg-card',
+  },
   {
     estado: 'inicio · fuente de la franja',
     selector: '.sgtm-atencion__fuente-opcion',
@@ -223,6 +235,32 @@ describe('los cuatro estados se leen: 4,5:1 sobre su fondo', () => {
         `${selector} (${token} sobre ${sobre}) en tema ${tema}: ${razon.toFixed(2)}:1`,
       ).toBeGreaterThanOrEqual(MINIMO);
     }
+  });
+});
+
+/**
+ * **Lo que es un enlace tiene que verse que lo es.**
+ *
+ * La marca de la barra lateral paso a ser la vuelta al inicio (#296) y siguio
+ * pintada como un bloque de identidad: sin `:hover` y sin foco visible propio,
+ * un enlace que no reacciona a nada es un enlace que nadie pulsa —y hasta que
+ * gano su entrada en el lanzador era el **unico** camino de vuelta—.
+ *
+ * Se comprueba leyendo la hoja y no el DOM porque es una regla de estilo: jsdom
+ * no resuelve pseudoclases, asi que una prueba de componente no podria verlo.
+ */
+describe('la vuelta al inicio se ve que se puede pulsar', () => {
+  const APLICACION = HOJAS[1] ?? '';
+
+  it.each([
+    ['el puntero encima', '.sgtm-nav__cabecera:hover'],
+    ['el foco del teclado', '.sgtm-nav__cabecera:focus-visible'],
+  ])('la marca responde a %s', (_que, selector) => {
+    const desde = APLICACION.indexOf(`${selector} {`);
+    expect(desde, `«${selector}» no existe en la hoja de la aplicacion`).toBeGreaterThanOrEqual(0);
+    // Y con algo que se vea: un bloque vacio cumpliria la letra y nada mas.
+    const bloque = APLICACION.slice(desde, APLICACION.indexOf('}', desde));
+    expect(bloque).toMatch(/(background|outline):/);
   });
 });
 

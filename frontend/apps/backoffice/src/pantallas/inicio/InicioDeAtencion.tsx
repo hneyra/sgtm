@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Aviso, Icono } from '@sgtm/design-system';
@@ -12,7 +12,13 @@ import { useValorAposentado } from '../aposentar';
 import { SIN_DATO, esObjeto, leerPaginado, texto } from '../seguridad/listado';
 import { anotarAtencion, leerAtenciones } from './atenciones';
 import type { Atencion } from './atenciones';
-import { FUENTE_DE, loQueFalta, preguntasDe } from './busqueda-de-atencion';
+import {
+  COMO_SE_BUSCA_EN,
+  FUENTE_DE,
+  FUENTES,
+  loQueFalta,
+  preguntasDe,
+} from './busqueda-de-atencion';
 import type { FuenteDeAtencion, PreguntaDeAtencion } from './busqueda-de-atencion';
 
 /**
@@ -27,9 +33,12 @@ import type { FuenteDeAtencion, PreguntaDeAtencion } from './busqueda-de-atencio
  * que se pregunta y lo que se ve sale entero de las tres opciones que ya
  * existen—. El panel de recaudacion, que era la portada, **sigue siendo la
  * opcion que siempre fue** y se abre por su ruta desde el lanzador, la paleta o
- * el menu; lo unico que dejo de ser es el inicio (ADR-0016 §1). El camino de
- * vuelta hasta aqui es la marca de la barra lateral, porque una ruta que no es
- * opcion no la alcanza ni el menu ni la paleta.
+ * el menu; lo unico que dejo de ser es el inicio (ADR-0016 §1). Una ruta que no
+ * es opcion no la alcanzan ni el menu ni la paleta, asi que la vuelta hasta aqui
+ * son **dos puertas puestas a mano**: la marca de la barra lateral y la primera
+ * entrada del lanzador —la barra se pliega en cajon en movil, y con una sola
+ * puerta quien entra por un enlace se queda sin camino—. Las dos se dicen bajo
+ * la caja, porque ninguna de las dos se deduce.
  *
  * ── Un abanico, no un agregador ────────────────────────────────────────────
  *
@@ -127,15 +136,43 @@ export function InicioDeAtencion() {
      varios, el foco baja a la lista y se elige con el tabulador y Enter, que es
      como se recorre cualquier lista de esta interfaz. Nunca se abre «el
      primero» de varios: elegir por quien atiende es lo que produce una atencion
-     sobre la persona equivocada, y aqui la equivocada es un homonimo. */
+     sobre la persona equivocada, y aqui la equivocada es un homonimo.
+
+     **Y nunca sobre las respuestas de otra pregunta.** Lo que hay en pantalla
+     durante los 300 ms del rebote son los resultados de lo que se pregunto
+     **antes**: quien corrige un digito del DNI y pulsa Intro sin esperar abria
+     la ficha de la persona anterior, y con la caja vaciada tambien —el estado
+     dice `''` y las franjas siguen llenas—. La misma guarda que ya protege a la
+     region viva (ver `anuncioDe`): si lo escrito no es lo preguntado, no hay
+     todavia nada que abrir. */
   const alEnviar = (evento: React.FormEvent): void => {
     evento.preventDefault();
+    if (escrito.trim() !== abanico.preguntado.trim()) return;
     const unico = encontrados.length === 1 ? encontrados[0] : undefined;
     if (unico !== undefined) {
       abrir(unico);
       return;
     }
     lista.current?.querySelector<HTMLElement>('button')?.focus();
+  };
+
+  /* **Esc vacia la caja y se queda en ella** (RNF-082). Es el gesto de «esta no
+     es, viene el siguiente»: sin el hay que borrar a mano lo tecleado, que en
+     una cola es lo que hace que se termine usando el raton. El `type="search"`
+     lo hace solo en algunos navegadores y en otros no, asi que se escribe.
+
+     **Las flechas no recorren la lista, y es deliberado.** La paleta de comandos
+     puede permitirselas porque su lista es una y suya; aqui las franjas son
+     tantas como padrones responda el perfil, cada una con su cabecera, y un foco
+     itinerante sobre varias listas exige `aria-activedescendant` y un modelo de
+     seleccion que hoy no existe. El recorrido es con el tabulador —como en
+     cualquier otra lista de esta interfaz— y por eso tampoco se dibuja el cartel
+     «↑ ↓ · Enter» de la paleta: prometeria un recorrido que no hay. */
+  const alTeclear = (evento: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (evento.key !== 'Escape') return;
+    evento.preventDefault();
+    fijarEscrito('');
+    caja.current?.focus();
   };
 
   return (
@@ -158,10 +195,20 @@ export function InicioDeAtencion() {
             placeholder="DNI, RUC, nombre, placa o código de predio…"
             value={escrito}
             onChange={(evento) => fijarEscrito(evento.target.value)}
+            onKeyDown={alTeclear}
           />
         </div>
         <p className="sgtm-atencion__ayuda" role="status">
           {anuncioDe(escrito, abanico, encontrados.length)}
+        </p>
+        {/* El camino de vuelta, dicho una vez y donde se lee: el inicio no es
+            una opcion del catalogo, asi que quien se va a media pantalla no
+            tiene el menu ni la paleta para volver (#296). Fuera de la region
+            viva a proposito —es una frase fija, y `role="status"` volveria a
+            leerla en cada busqueda—. */}
+        <p className="sgtm-atencion__vuelta">
+          Desde cualquier pantalla se vuelve aquí: con la marca de arriba a la izquierda, o con «¿A
+          quién atiendes?» en la rejilla de módulos de la cabecera.
         </p>
       </form>
 
@@ -175,8 +222,12 @@ export function InicioDeAtencion() {
           deja de tener `contribuyentes` deja de verlas, aunque sigan en memoria
           (ver `atenciones.ts`). */}
       {atenciones.length > 0 && (
-        <section className="sgtm-atencion__recientes" aria-label="Atenciones recientes">
-          <p className="sgtm-atencion__eyebrow">Atenciones recientes</p>
+        <section className="sgtm-atencion__recientes" aria-labelledby="sgtm-atencion-recientes">
+          {/* Encabezado, como las franjas: la region se nombra con el, no con
+              un `aria-label` que lo duplique. */}
+          <h3 className="sgtm-atencion__eyebrow" id="sgtm-atencion-recientes">
+            Atenciones recientes
+          </h3>
           <ul>
             {atenciones.map((atencion) => (
               <li key={atencion.codigo}>
@@ -208,11 +259,17 @@ export function InicioDeAtencion() {
 
 /**
  * Una franja, con **su fuente dicha**: el titulo de la opcion del catalogo y su
- * modulo, sin reescribir ninguno de los dos (RNF-080).
+ * modulo, sin reescribir ninguno de los dos (FRO-03 §5, ADR-0014 §5 — una
+ * opcion se nombra en todas las puertas como la nombra el catalogo).
  *
  * No es decoracion: es lo que permite entender por que una persona ve tres
  * franjas y su compañero de al lado ve una. Cada franja **es** una opcion, con
  * su permiso.
+ *
+ * El nombre de la region **es su encabezado**, no un `aria-label` que lo repita:
+ * el resto de la aplicacion titula con `h3` y quien navega por encabezados
+ * necesita encontrarlas ahi. `aria-labelledby` ata las dos cosas, asi que el
+ * nombre accesible y el titulo visible no pueden separarse.
  */
 function FranjaDeResultados({
   franja,
@@ -221,10 +278,12 @@ function FranjaDeResultados({
   readonly franja: Franja;
   readonly onAbrir: (resultado: Resultado) => void;
 }) {
+  const idDelTitulo = useId();
+
   if (franja.error !== undefined) {
     return (
-      <section className="sgtm-atencion__franja" aria-label={franja.opcion.title}>
-        <Cabecera opcion={franja.opcion} />
+      <section className="sgtm-atencion__franja" aria-labelledby={idDelTitulo}>
+        <Cabecera opcion={franja.opcion} idDelTitulo={idDelTitulo} />
         <ErrorDeLaFranja error={franja.error} opcion={franja.opcion} />
       </section>
     );
@@ -235,8 +294,8 @@ function FranjaDeResultados({
   if (franja.resultados.length === 0) return null;
 
   return (
-    <section className="sgtm-atencion__franja" aria-label={franja.opcion.title}>
-      <Cabecera opcion={franja.opcion} />
+    <section className="sgtm-atencion__franja" aria-labelledby={idDelTitulo}>
+      <Cabecera opcion={franja.opcion} idDelTitulo={idDelTitulo} />
       <ul>
         {franja.resultados.map((resultado) => (
           <li key={resultado.clave}>
@@ -258,12 +317,23 @@ function FranjaDeResultados({
   );
 }
 
-function Cabecera({ opcion }: { readonly opcion: OpcionSituada }) {
+function Cabecera({
+  opcion,
+  idDelTitulo,
+}: {
+  readonly opcion: OpcionSituada;
+  readonly idDelTitulo: string;
+}) {
   return (
-    <p className="sgtm-atencion__fuente">
-      <span className="sgtm-atencion__fuente-opcion">{opcion.title}</span>
+    <div className="sgtm-atencion__fuente">
+      {/* Solo el titulo de la opcion dentro del encabezado: el modulo va al
+          lado, porque entra en el nombre accesible de la region lo que este
+          nodo contenga. */}
+      <h3 className="sgtm-atencion__fuente-opcion" id={idDelTitulo}>
+        {opcion.title}
+      </h3>
       <span className="sgtm-atencion__fuente-modulo">{opcion.modulo.label}</span>
-    </p>
+    </div>
   );
 }
 
@@ -324,14 +394,13 @@ function anuncioDe(escrito: string, abanico: Abanico, cuantos: number): string {
      estaria contando el estado de la busqueda **anterior**. */
   if (escrito.trim() !== abanico.preguntado.trim()) return 'Buscando…';
   if (franjas.some((franja) => franja.buscando)) return 'Buscando…';
-  // Los errores tienen su bloque, con su distincion: aqui no se repiten.
-  if (franjas.some((franja) => franja.error !== undefined)) return '';
-  if (abanico.hayPreguntas && franjas.length === 0) {
-    // Habia a quien preguntar y no quedo ninguna franja: ninguna de las tres
-    // lecturas la ofrece el catalogo visible. No es que no haya nadie, es que
-    // este perfil no puede preguntar a ningun padron.
-    return 'Tu perfil no tiene ninguna de las consultas del padrón, así que desde aquí no se puede buscar a nadie.';
-  }
+  /* Un error tiene su bloque, con `role="alert"` y su distincion entre el 403 y
+     el fallo de red: aqui no se repite. Pero **callar el recuento porque una
+     franja fallo es callar lo que si respondieron las otras**: quien no ve la
+     pantalla se queda sin saber que hay cuatro personas debajo. El silencio se
+     reserva para cuando el error es lo unico que hay. */
+  if (franjas.some((franja) => franja.error !== undefined) && cuantos === 0) return '';
+  if (abanico.hayPreguntas && franjas.length === 0) return sinPadronQueResponda(abanico);
   if (cuantos === 0)
     return 'Nadie responde a eso. Revisa lo escrito, o búscalo en el padrón que corresponda.';
   const recortadas = franjas.filter((franja) => franja.recortada).length > 0;
@@ -339,6 +408,39 @@ function anuncioDe(escrito: string, abanico: Abanico, cuantos: number): string {
   return recortadas
     ? `${cuenta}: se enseñan los ${MAXIMO} primeros de cada padrón. Escribe más para acotar.`
     : `${cuenta}. Intro ${cuantos === 1 ? 'lo abre' : 'baja a la lista'}.`;
+}
+
+/**
+ * Habia a quien preguntar y no quedo ninguna franja. **Son dos cosas distintas
+ * y hasta ahora se decian igual**, con la peor de las dos:
+ *
+ * - el perfil **no tiene ninguna** de las tres consultas del padron: desde aqui
+ *   no se puede buscar a nadie, y eso hay que decirlo tal cual;
+ * - el perfil tiene alguna, pero **no la que responde a lo escrito**: una placa
+ *   con el padron de personas y sin el vehicular. Decirle a esa persona que no
+ *   tiene ninguna consulta es falso, y ademas la deja sin saber que si puede
+ *   buscar por DNI o por nombre.
+ *
+ * La fuente que falta se nombra **con el rotulo del catalogo**, que es como se
+ * llama en todas las demas puertas: es lo que se le pide al administrador.
+ */
+function sinPadronQueResponda(abanico: Abanico): string {
+  if (abanico.disponibles.length === 0) {
+    return 'Tu perfil no tiene ninguna de las consultas del padrón, así que desde aquí no se puede buscar a nadie.';
+  }
+  const nombres = abanico.faltan.map((fuente) => `«${opcionPorId(fuente)?.title ?? fuente}»`);
+  const una = nombres.length === 1;
+  const camino = enLista(abanico.disponibles.map((fuente) => COMO_SE_BUSCA_EN[fuente]));
+  return (
+    `Lo que has escrito lo ${una ? 'responde' : 'responden'} ${enLista(nombres)}, ` +
+    `y tu perfil no ${una ? 'la tiene' : 'las tiene'}. Desde aquí se busca ${camino}.`
+  );
+}
+
+/** «a», «a y b», «a, b y c». */
+function enLista(partes: readonly string[]): string {
+  if (partes.length <= 1) return partes[0] ?? '';
+  return `${partes.slice(0, -1).join(', ')} y ${partes.at(-1) ?? ''}`;
 }
 
 /* ── El abanico ────────────────────────────────────────────────────────────
@@ -363,7 +465,14 @@ interface Abanico {
   readonly preguntado: string;
   /** Habia algo que preguntar. Sin franjas y con esto, lo que falta es permiso. */
   readonly hayPreguntas: boolean;
+  /** Las lecturas que lo escrito necesita y este perfil **no** ofrece. */
+  readonly faltan: readonly FuenteDeAtencion[];
+  /** Las que si ofrece, respondan o no a lo escrito: por ahi si se puede buscar. */
+  readonly disponibles: readonly FuenteDeAtencion[];
 }
+
+/** Lo que devuelve una consulta que se quedo sin pregunta. Ver el `queryFn`. */
+const NADA: Promise<Encontrados> = Promise.resolve({ resultados: [], recortada: false });
 
 function useAbanicoDeAtencion(escrito: string, catalogo: CatalogoVisible): Abanico {
   const aposentado = useValorAposentado(escrito, ESPERA);
@@ -385,7 +494,11 @@ function useAbanicoDeAtencion(escrito: string, catalogo: CatalogoVisible): Abani
        mostrador**, y los tres reintentos con espera creciente de TanStack dejan
        «Buscando…» hasta catorce segundos antes de decir nada. */
     retry: 1,
-    queryFn: ({ signal }) => buscarPersonas(personas as PreguntaDeAtencion, signal),
+    /* La guarda explicita y no un `as`: `enabled` ya impide que esto corra sin
+       pregunta, pero un cast lo **afirma** y una guarda lo comprueba —y si un
+       dia `enabled` y la clave dejan de decir lo mismo, con el cast sale un
+       `undefined.clave` en produccion y con esto una franja vacia—. */
+    queryFn: ({ signal }) => (personas === undefined ? NADA : buscarPersonas(personas, signal)),
   });
 
   const consultaDeVehiculos = useQuery({
@@ -402,6 +515,10 @@ function useAbanicoDeAtencion(escrito: string, catalogo: CatalogoVisible): Abani
     queryFn: ({ signal }) => buscarPredios(predios?.valor ?? '', signal),
   });
 
+  const pedidas = FUENTES.filter((fuente) =>
+    preguntas.some((pregunta) => FUENTE_DE[pregunta.clave] === fuente),
+  );
+
   return {
     franjas: [
       franjaDe('contribuyentes', personas, catalogo, consultaDePersonas),
@@ -410,6 +527,8 @@ function useAbanicoDeAtencion(escrito: string, catalogo: CatalogoVisible): Abani
     ].filter((franja): franja is Franja => franja !== undefined),
     preguntado: aposentado,
     hayPreguntas: preguntas.length > 0,
+    faltan: pedidas.filter((fuente) => !catalogo.puedeVer(fuente)),
+    disponibles: FUENTES.filter((fuente) => catalogo.puedeVer(fuente)),
   };
 }
 

@@ -68,19 +68,27 @@ export function BarraLateral({
           se atiende, hacia falta un camino de vuelta: no es una opcion del
           catalogo, asi que ni el menu ni el lanzador ni la paleta llegan a ella.
           El de siempre —la marca de arriba a la izquierda— es el que no hay que
-          explicarle a nadie. */}
+          explicarle a nadie.
+
+          El `aria-label` **sustituye** al contenido en el arbol accesible, y con
+          el se iba de ahi el nombre de la municipalidad: la cabecera de la
+          aplicacion tampoco lo deja —su boton lleva `aria-label={«Menú de …»}`,
+          que tapa el chip donde se lee—, asi que el dato no se anunciaba en
+          ninguna parte. `aria-describedby` lo devuelve como descripcion del
+          enlace: primero a donde lleva, y despues donde se esta. */}
       <Link
         className="sgtm-nav__cabecera"
         to="/"
         onClick={onNavegar}
         aria-label="Inicio: a quién atiendes"
+        aria-describedby="sgtm-nav-entidad"
       >
         <div className="sgtm-nav__marca" aria-hidden="true">
           S
         </div>
         <div className="sgtm-nav__identidad">
           <div className="sgtm-nav__producto">SGTM</div>
-          <div className="sgtm-nav__entidad" title={preferencias.entidad}>
+          <div className="sgtm-nav__entidad" id="sgtm-nav-entidad" title={preferencias.entidad}>
             {preferencias.entidad}
           </div>
         </div>

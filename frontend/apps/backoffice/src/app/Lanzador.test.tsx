@@ -50,12 +50,15 @@ describe('el lanzador ensena el catalogo visible, no el entero', () => {
     expect(within(menu).getByText('3 opciones')).toBeInTheDocument();
   });
 
-  it('contra el proxy, sin proveedor de identidad, lista los doce', async () => {
+  it('contra el proxy, sin proveedor de identidad, lista los doce y el inicio', async () => {
     const usuario = userEvent.setup();
     montarEnRuta('/inicio/inicio');
 
     await usuario.click(screen.getByRole('button', { name: 'Abrir los módulos' }));
-    expect(entradasDelPanel()).toHaveLength(12);
+    // Doce modulos y, la primera, la vuelta al inicio: no es un modulo ni una
+    // opcion, es la puerta del shell (#296).
+    expect(entradasDelPanel()).toHaveLength(13);
+    expect(entradasDelPanel()[0]).toHaveTextContent('¿A quién atiendes?');
   });
 
   it('sin ningun modulo visible el boton no existe: no hay nada que lanzar', async () => {
@@ -94,6 +97,43 @@ describe('el lanzador ensena el catalogo visible, no el entero', () => {
   });
 });
 
+/**
+ * **La vuelta al inicio tiene una puerta en la cabecera** (#296, ADR-0016).
+ *
+ * `/` dejo de ser un desvio al panel de recaudacion y paso a ser la pregunta de
+ * a quien se atiende. No es una opcion del catalogo —no publica lectura ni
+ * permiso propios—, asi que ni el menu, ni la paleta, ni el lanzador llegaban a
+ * ella: el unico camino era la marca de la barra lateral, que en movil se pliega
+ * en cajon. Quien entraba por un enlace a media pantalla no tenia como volver a
+ * preguntar por la persona siguiente sin editar la barra de direcciones.
+ */
+describe('el inicio es la primera entrada del lanzador', () => {
+  it('lleva a la pregunta de a quien se atiende', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/tesoreria/caja-tributaria');
+
+    await usuario.click(await screen.findByRole('button', { name: 'Abrir los módulos' }));
+    await usuario.click(screen.getByRole('menuitem', { name: /¿A quién atiendes\?/ }));
+
+    expect(await screen.findByRole('heading', { name: '¿A quién atiendes?' })).toBeInTheDocument();
+  });
+
+  it('esta aunque el perfil no tenga **ninguna** consulta del padron', async () => {
+    /* La entrada no se filtra por permiso, y es deliberado: el filtro de
+       REQ-03 §5 es sobre opciones con permiso, y esta no tiene ninguno que
+       comprobar. Atarla a los padrones dejaria sin camino de vuelta justo a
+       quien mas lo necesita —el que entro por un enlace—, y la pregunta ya dice
+       ella misma, y con el rotulo del catalogo, que consultas le faltan. */
+    const usuario = userEvent.setup();
+    entraCon(CAJERO);
+    montarEnRuta('/tesoreria/caja-tributaria');
+
+    await usuario.click(await screen.findByRole('button', { name: 'Abrir los módulos' }));
+    const menu = screen.getByRole('menu', { name: 'Lanzador de módulos' });
+    expect(within(menu).getByText('¿A quién atiendes?')).toBeInTheDocument();
+  });
+});
+
 describe('el lanzador se opera entero con el teclado (RNF-082)', () => {
   it('Enter abre y el foco entra a la primera entrada', async () => {
     const usuario = userEvent.setup();
@@ -118,9 +158,9 @@ describe('el lanzador se opera entero con el teclado (RNF-082)', () => {
     boton.focus();
     await usuario.keyboard('{Enter}');
 
-    // Dos flechas abajo: del primero (Inicio) al tercero (Rentas · Registro).
-    await usuario.keyboard('{ArrowDown}{ArrowDown}');
-    expect(entradasDelPanel()[2]).toHaveFocus();
+    // Tres flechas abajo: de la primera (el inicio) a Rentas · Registro.
+    await usuario.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+    expect(entradasDelPanel()[3]).toHaveFocus();
     expect(document.activeElement).toHaveTextContent('Rentas · Registro');
     // Una arriba: el recorrido va en las dos direcciones.
     await usuario.keyboard('{ArrowUp}');
@@ -139,9 +179,9 @@ describe('el lanzador se opera entero con el teclado (RNF-082)', () => {
     montarEnRuta('/inicio/inicio');
 
     await usuario.click(screen.getByRole('button', { name: 'Abrir los módulos' }));
-    const quinta = entradasDelPanel()[4];
-    expect(quinta).toBeDefined();
-    quinta?.focus();
+    const sexta = entradasDelPanel()[5];
+    expect(sexta).toBeDefined();
+    sexta?.focus();
     await usuario.keyboard('{Enter}');
 
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();

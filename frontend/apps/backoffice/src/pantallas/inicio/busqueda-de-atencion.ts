@@ -34,6 +34,31 @@
  *                   que el backend busca **por aproximacion** (`CriterioDeBusqueda`:
  *                   sin tildes, apellidos invertidos, una letra de menos)
  *
+ * ── Una placa es tambien un nombre, y por eso se pregunta a las dos ────────
+ *
+ * La forma de placa y la de razon social **se solapan**: «AGRO 2000» y «TEXTIL
+ * 21» cumplen las reglas de `Placa` —alfanumerico, en mayusculas, con letra y
+ * digito, de 5 a 10— y son razones sociales del padron. Emitir solo `placa`
+ * dejaba a la razon social sin preguntar a nadie, y a quien tiene el padron de
+ * personas y no el vehicular, sin ninguna franja: exactamente lo que la
+ * invariante de arriba prohibe —la heuristica **no decide que se ensena**—.
+ *
+ * Asi que lo que tiene forma de placa se pregunta **a las dos**: `placa` al
+ * padron vehicular y `nombre` al de personas. No choca con «como mucho una
+ * pregunta por lectura» porque son lecturas distintas, y el coste de la de mas
+ * es una franja vacia que ni siquiera se dibuja.
+ *
+ * ── Lo que no se puede buscar todavia: CE, pasaporte y partida ─────────────
+ *
+ * `TipoDocumento` admite `CE`, `PASAPORTE` y `PARTIDA` —de 1 a 20 caracteres,
+ * sin formato fijo— y `CriterioDeBusqueda.porNumeroDeDocumento` existe en el
+ * dominio, pero **el contrato de `contribuyentes` no publica `numeroDocumento`**:
+ * solo `codigo`, `nombreRazonSocial`, `dNI` y `rUC`. Un carne de extranjeria no
+ * se puede preguntar por ningun filtro publicado, asi que aqui no se inventa la
+ * forma de uno: quien atiende a un extranjero lo busca por nombre, que si esta.
+ * Anadir `numeroDocumento` al contrato es trabajo de backend, y queda anotado en
+ * las consecuencias de ADR-0016.
+ *
  * ── El codigo de contribuyente no se busca aqui, y es deliberado ───────────
  *
  * El padron numera a sus contribuyentes con once digitos («00000025673»), que es
@@ -64,6 +89,27 @@ export const FUENTE_DE: Readonly<Record<ClaveDeAtencion, FuenteDeAtencion>> = {
   ruc: 'contribuyentes',
   placa: 'consulta_vehiculos',
   predio: 'consulta_fichas',
+};
+
+/** Las tres, en el orden en que se dibujan sus franjas. */
+export const FUENTES: readonly FuenteDeAtencion[] = [
+  'contribuyentes',
+  'consulta_vehiculos',
+  'consulta_fichas',
+];
+
+/**
+ * Con que se le puede preguntar a cada lectura, dicho para quien escribe.
+ *
+ * Vive aqui y no en la pantalla porque **es la heuristica de arriba leida al
+ * reves**: si un dia el minimo del nombre cambia o aparece otra forma, las dos
+ * cosas se corrigen en el mismo archivo. Se usa para decirle a quien no tiene un
+ * padron **por donde si puede buscar**, en vez de dejarlo sin salida.
+ */
+export const COMO_SE_BUSCA_EN: Readonly<Record<FuenteDeAtencion, string>> = {
+  contribuyentes: 'por DNI, por RUC o por nombre',
+  consulta_vehiculos: 'por placa',
+  consulta_fichas: 'por código de predio',
 };
 
 /**
@@ -98,7 +144,9 @@ const MAXIMO_PLACA = 10;
  *
  * Como mucho una pregunta por lectura: `nombre`, `dni` y `ruc` van todas a
  * `contribuyentes` y se excluyen entre si por construccion —un texto o tiene
- * letras o no las tiene, y un numero o mide ocho o mide once—.
+ * letras o no las tiene, y un numero o mide ocho o mide once—. Lo que si se
+ * suma es una pregunta de **otra** lectura: `placa` y `nombre` viajan juntas
+ * cuando lo escrito tiene las dos formas (ver arriba).
  */
 export function preguntasDe(escrito: string): readonly PreguntaDeAtencion[] {
   const limpio = escrito.trim();
@@ -118,13 +166,16 @@ export function preguntasDe(escrito: string): readonly PreguntaDeAtencion[] {
     ];
   }
 
-  if (esPlaca(sinEspacios)) return [{ clave: 'placa', valor: sinEspacios }];
+  // Lo que lleve letras y llegue al minimo es un nombre o una razon social. El
+  // guion bajo del largo minimo es el que evita preguntar por «A».
+  const nombre: readonly PreguntaDeAtencion[] =
+    /\p{L}/u.test(limpio) && limpio.length >= MINIMO.nombre
+      ? [{ clave: 'nombre', valor: limpio }]
+      : [];
 
-  // Lo demas que lleve letras es un nombre o una razon social. El guion bajo del
-  // largo minimo es el que evita preguntar por «A».
-  return /\p{L}/u.test(limpio) && limpio.length >= MINIMO.nombre
-    ? [{ clave: 'nombre', valor: limpio }]
-    : [];
+  // Y si ademas tiene forma de placa, se pregunta tambien al padron vehicular:
+  // son dos lecturas distintas y ninguna esconde a la otra.
+  return esPlaca(sinEspacios) ? [{ clave: 'placa', valor: sinEspacios }, ...nombre] : nombre;
 }
 
 /**

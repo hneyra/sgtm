@@ -76,6 +76,19 @@
   background: var(--bg-elev);
 }
 
+/* Y **se ve que es un enlace**: sin esto, la unica vuelta al inicio (#296) era
+   un bloque de marca que no reaccionaba a nada, asi que nadie lo pulsaba. El
+   anillo va por dentro porque la cabecera es `sticky` y llega a los dos bordes:
+   fuera se lo comeria el borde de la barra. */
+.sgtm-nav__cabecera:hover {
+  background: var(--accent-soft);
+}
+
+.sgtm-nav__cabecera:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .sgtm-nav__marca {
   width: 34px;
   height: 34px;
@@ -2468,10 +2481,27 @@
   outline: none;
 }
 
+/* El texto de sugerencia se dice, no se insinua: el color por omision del
+   navegador daba 3,8:1 sobre la caja en tema oscuro, y ahi va la lista de lo
+   que se puede teclear. `--ink-3` es el mismo que usa el detalle de cada fila,
+   y se verifica en `contraste.test.ts`. */
+.sgtm-atencion__caja input::placeholder {
+  color: var(--ink-3);
+  opacity: 1;
+}
+
 .sgtm-atencion__ayuda {
   margin: 0;
   min-height: 18px;
   font-size: 12px;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+/* La frase del camino de vuelta: fija, mas tenue que la region viva y debajo. */
+.sgtm-atencion__vuelta {
+  margin: 0;
+  font-size: 11.5px;
   text-align: center;
   color: var(--ink-3);
 }
@@ -2499,7 +2529,10 @@
   padding: 11px 16px 9px;
 }
 
+/* Es un `h3`: la franja se nombra con su encabezado y no con un `aria-label`
+   que lo repita. De ahi el reinicio de margen y tamaño. */
 .sgtm-atencion__fuente-opcion {
+  margin: 0;
   font-size: 10.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;

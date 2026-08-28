@@ -33,6 +33,20 @@ describe('la cabecera dice donde esta uno', () => {
 });
 
 describe('la barra lateral de dos niveles', () => {
+  it('la marca vuelve al inicio **sin borrar la municipalidad** del árbol accesible', async () => {
+    /* La marca es la vuelta a la pregunta de #296 y lleva `aria-label`, que
+       **sustituye** al contenido: con el se iba de ahi el nombre de la
+       municipalidad, y el otro sitio donde se lee —el chip de la cabecera— esta
+       dentro de un boton que tambien lo tapa con su `aria-label`. Quedaba en
+       ninguna parte. `aria-describedby` lo devuelve: primero a donde lleva el
+       enlace, y despues donde se esta. */
+    montarEnRuta('/tesoreria/caja-tributaria');
+
+    const marca = await screen.findByRole('link', { name: 'Inicio: a quién atiendes' });
+    expect(marca).toHaveAttribute('href', '/');
+    expect(marca).toHaveAccessibleDescription('Municipalidad Provincial de Sullana');
+  });
+
   it('al abrir una opcion queda en el nivel de su modulo, con la opcion marcada', () => {
     montarEnRuta('/tesoreria/caja-tributaria');
 

@@ -1,3 +1,5 @@
+import { alOlvidarLaSesion } from '../../app/sesion/olvidos';
+
 /**
  * **Las ultimas personas atendidas, en memoria y no en el navegador** (#296).
  *
@@ -33,11 +35,19 @@
  * mide en minutos. Lo que dura mas que la sesion ya tiene su sitio, y es la
  * auditoria del servidor (RNF-052), que si sabe quien miro que y cuando.
  *
+ * **Pero no basta con no persistirla.** Una variable de modulo sobrevive a todo
+ * lo que no recargue la pagina, y hay dos caminos que cambian de quien sin
+ * recargar: cerrar sesion sin `finDeSesion` configurado y **cambiar de
+ * municipalidad**, que no recarga nunca —por eso `ProveedorDeSesion` vacia ahi
+ * la cache a mano—. Sin olvidarla, el operador siguiente veria a quien atendio
+ * el anterior, y en la otra municipalidad, a gente de la primera. Por eso esta
+ * lista se apunta al registro de olvidos de la sesion (`app/sesion/olvidos.ts`).
+ *
  * ── Que se guarda ──────────────────────────────────────────────────────────
  *
- * Lo que la respuesta trajo y la franja ya enseño (RNF-083): el codigo, el
- * nombre y el documento, tal cual. Nada recompuesto y nada pedido de mas —no se
- * vuelve a consultar al padron para dibujar esta lista—.
+ * Lo que la respuesta trajo y la franja ya enseño: el codigo, el nombre y el
+ * documento, tal cual. Nada recompuesto y nada pedido de mas —no se vuelve a
+ * consultar al padron para dibujar esta lista—.
  *
  * Y no se dibuja sin el permiso de `contribuyentes`: quien deja de tener esa
  * lectura deja de ver estas filas, aunque sigan en memoria. Lo decide quien
@@ -78,10 +88,16 @@ export function anotarAtencion(atencion: Atencion): void {
 /**
  * Vacia la lista.
  *
- * La usan las pruebas —una variable de modulo no se reinicia entre casos— y es
- * ademas lo que tendria que llamar el cierre de sesion el dia que la lista
- * sobreviva a algo: hoy no sobrevive a nada, asi que no hay a quien llamarlo.
+ * La usan las pruebas —una variable de modulo no se reinicia entre casos— y la
+ * llama el cierre de sesion y el cambio de municipalidad, por el registro de
+ * abajo. **No es una comodidad de pruebas**: los dos caminos cambian de quien
+ * sin recargar la pagina, asi que sin esto la lista los sobrevive.
  */
 export function olvidarAtenciones(): void {
   atenciones = [];
 }
+
+/* Y se apunta al cargar el modulo, no al montar la pantalla: la lista existe
+   para sobrevivir al desmontaje, asi que una suscripcion en un `useEffect` se
+   iria justo cuando hay algo que olvidar. */
+alOlvidarLaSesion(olvidarAtenciones);
