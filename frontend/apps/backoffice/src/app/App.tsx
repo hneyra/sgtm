@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import { HubDeModulo } from '../pantallas/HubDeModulo';
 import { Pantalla } from '../pantallas/Pantalla';
+import { Atencion } from '../pantallas/atencion/Atencion';
 import { Inicio } from '../pantallas/inicio/Inicio';
 import { ProveedorDeEjercicio } from './ejercicio';
 import { ProveedorDePreferencias } from './preferencias';
@@ -61,6 +62,12 @@ export function App() {
                 <Routes>
                   <Route element={<Shell />}>
                     <Route path="/" element={<Inicio />} />
+                    {/* La ficha 360° de una persona (#297, ADR-0016 §2). Va
+                        antes de `/:moduloId/:ranura` para leerse en el orden en
+                        que se navega, no porque haga falta: React Router puntúa
+                        por encima el segmento estático, y ningún módulo del
+                        catálogo se llama «atencion». */}
+                    <Route path="/atencion/:codigo" element={<Atencion />} />
                     <Route path="/:moduloId" element={<HubDeModulo />} />
                     <Route path="/:moduloId/:ranura" element={<Pantalla />} />
                     {/* El registro abierto va en la ruta, no en el estado: pegar el

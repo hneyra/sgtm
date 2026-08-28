@@ -8,6 +8,7 @@ import { ProveedorDeSesion } from '../app/sesion/ProveedorDeSesion';
 import { Shell } from '../app/Shell';
 import { HubDeModulo } from '../pantallas/HubDeModulo';
 import { Pantalla } from '../pantallas/Pantalla';
+import { Atencion } from '../pantallas/atencion/Atencion';
 import { Inicio } from '../pantallas/inicio/Inicio';
 
 /**
@@ -59,11 +60,14 @@ export function montarEnRutas(
               <PuenteDeNavegacion />
               <Routes>
                 <Route element={<Shell />}>
-                  {/* Las mismas cuatro rutas que `App.tsx`, `/` incluida: el
+                  {/* Las mismas cinco rutas que `App.tsx`, `/` incluida: el
                       inicio dejo de ser un desvio al panel de recaudacion y es
                       la pregunta de #296, asi que una prueba que monte en `/`
-                      tiene que ver lo que ve quien entra. */}
+                      tiene que ver lo que ve quien entra. Y `/atencion/:codigo`
+                      es la ficha 360° de #297: sin ella aqui, la prueba que
+                      recorre del inicio a la ficha no llegaria a ninguna. */}
                   <Route path="/" element={<Inicio />} />
+                  <Route path="/atencion/:codigo" element={<Atencion />} />
                   <Route path="/:moduloId" element={<HubDeModulo />} />
                   <Route path="/:moduloId/:ranura" element={<Pantalla />} />
                   <Route path="/:moduloId/:ranura/:codigo" element={<Pantalla />} />

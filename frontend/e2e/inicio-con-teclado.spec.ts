@@ -36,11 +36,66 @@ test('de la pregunta del inicio a la ficha, solo con el teclado', async ({ page 
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: '¿A quién atiendes?' })).toBeVisible();
 
-  // Y desde ahí, Intro sobre la fila enfocada abre a esa persona.
+  // Y desde ahí, Intro sobre la fila enfocada abre **su ficha 360°** (#297,
+  // ADR-0016 §2), no el padrón con el código en el filtro.
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Contribuyentes');
   // El código viaja en la dirección: el enlace de la atención se puede compartir.
-  await expect(page).toHaveURL(/codigo=/);
+  await expect(page).toHaveURL(/\/atencion\/\d+$/);
+  // Y lo que encabeza la ficha es **quién es**, no el título de una opción: la
+  // ficha no es una de las 134.
+  await expect(page.getByRole('heading', { name: /MEDINA/ })).toBeVisible();
+});
+
+/**
+ * **De la pregunta a la ficha, y por la ficha, sin tocar el ratón**
+ * (#297, ADR-0016 §2, RNF-082).
+ *
+ * La ficha compone seis opciones en seis pestañas, y una barra de pestañas a la
+ * que solo se llega con el ratón deja media ficha fuera del alcance de quien
+ * atiende. Este camino la recorre con el teclado: tabula hasta la barra, se mueve
+ * con las flechas —que activan la pestaña **y se llevan el foco**— y comprueba
+ * que lo que se activa es lo que se ve.
+ */
+test('la ficha 360° se recorre con las flechas, y el foco sigue a la pestaña activa', async ({
+  page,
+}) => {
+  await page.goto('/');
+  // El trozo del inicio llega diferido: se espera al foco, que es la señal de
+  // que la caja ya existe. Sin esto lo tecleado se pierde antes de aterrizar.
+  await expect(page.getByRole('searchbox', { name: 'Buscar a quién atiendes' })).toBeFocused();
+  await page.keyboard.type('MEDINA');
+  await expect(page.getByRole('region', { name: 'Contribuyentes' })).toBeVisible();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/atencion\/\d+$/);
+
+  // La cabecera dice quién es y cuánto debe, con la fecha de la respuesta.
+  await expect(page.getByRole('region', { name: 'Resumen de saldos' })).toContainText(
+    /Cifras actualizadas al/,
+  );
+
+  const barra = page.getByRole('tablist', { name: /se compone de esta persona/i });
+  await expect(barra).toBeVisible();
+
+  // La primera pestaña es la única tabulable: el foco entra en la barra por ella.
+  const primera = page.getByRole('tab').first();
+  await primera.focus();
+  await expect(primera).toHaveAttribute('aria-selected', 'true');
+
+  await page.keyboard.press('ArrowRight');
+  const segunda = page.getByRole('tab').nth(1);
+  await expect(segunda).toBeFocused();
+  await expect(segunda).toHaveAttribute('aria-selected', 'true');
+
+  // Y lo que se ve es lo de la pestaña activa, con su fuente dicha.
+  await expect(page.getByRole('tabpanel')).toContainText('Fuente: Consultas · Consulta de predios');
+
+  // Fin lleva a la última, que es el expediente coactivo.
+  await page.keyboard.press('End');
+  await expect(page.getByRole('tab').last()).toBeFocused();
+  await expect(page.getByRole('tabpanel')).toContainText(
+    'Fuente: Coactiva · Expedientes coactivos',
+  );
 });
 
 /**
