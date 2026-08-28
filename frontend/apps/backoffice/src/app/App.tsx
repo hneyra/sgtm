@@ -6,8 +6,7 @@ import { Atencion } from '../pantallas/atencion/Atencion';
 import { Inicio } from '../pantallas/inicio/Inicio';
 import { ProveedorDeEjercicio } from './ejercicio';
 import { ProveedorDePreferencias } from './preferencias';
-import { ProveedorDeSesion } from './sesion/ProveedorDeSesion';
-import { PuertaDeSesion } from './sesion/PuertaDeSesion';
+import { ProveedorDeSesion, PuertaDeSesion } from '@sgtm/sesion';
 import { Shell } from './Shell';
 
 /**

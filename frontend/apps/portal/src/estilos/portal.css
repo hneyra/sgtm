@@ -1,0 +1,217 @@
+/* El portal del contribuyente: una columna, pensada para 390 px (#298).
+ *
+ * Es toda la hoja de estilos de la aplicacion, y esa es la mitad del asunto: el
+ * back-office trae ~1.600 lineas de shell —barra lateral, cabecera, lanzador,
+ * paleta, hub de modulo, tablas de siete columnas— que aqui no se dibujan.
+ *
+ * Movil primero, y sin `@media` que lo desmienta: nada mide en pixeles fijos,
+ * asi que en una pantalla ancha la columna crece hasta su tope y se centra. En
+ * un telefono de 360 px **nada se sale**: es lo que comprueba
+ * `e2e/portal-en-movil.spec.ts`, porque desplazarse en horizontal para leer una
+ * deuda es no poder consultarla.
+ */
+
+.sgtm-portal-app {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sgtm-portal-app__cabecera {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-3);
+}
+
+.sgtm-portal-app__eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sgtm-portal-app__titular {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-serif, serif);
+  font-size: 26px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+/* —— La caja de consulta ———————————————————————————————————————— */
+
+.sgtm-portal-app__consulta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+}
+
+.sgtm-portal-app__campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sgtm-portal-app__campo label {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.sgtm-portal-app__campo select,
+.sgtm-portal-app__campo input {
+  /* 16px, y no menos: por debajo de eso Safari en iOS hace zoom al enfocar y
+     el formulario se sale de la pantalla sin que nadie lo haya tocado. */
+  font: inherit;
+  font-size: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: var(--bg-elev);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2);
+}
+
+.sgtm-portal-app__ayuda {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+/* —— El resultado ——————————————————————————————————————————————— */
+
+.sgtm-portal-app__resultado {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sgtm-portal-app__identidad h2 {
+  margin: 0;
+  font-family: var(--font-serif, serif);
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.sgtm-portal-app__identidad dl,
+.sgtm-portal-app__resumen dl,
+.sgtm-portal-app__fila {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+}
+
+.sgtm-portal-app__identidad dl > div,
+.sgtm-portal-app__resumen dl > div,
+.sgtm-portal-app__fila > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  /* `wrap` y no `nowrap`: un rotulo largo —«Insoluto S/»— junto a un importe
+     largo caben en 360 px partiendo la linea, y no ensanchando el documento. */
+  flex-wrap: wrap;
+}
+
+.sgtm-portal-app__identidad dt,
+.sgtm-portal-app__resumen dt,
+.sgtm-portal-app__fila dt {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.sgtm-portal-app__identidad dd,
+.sgtm-portal-app__resumen dd,
+.sgtm-portal-app__fila dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--ink);
+  /* Un importe largo se parte antes que ensanchar la pagina. */
+  overflow-wrap: anywhere;
+}
+
+.sgtm-portal-app__resumen {
+  padding: var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+}
+
+.sgtm-portal-app__resumen h2 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+
+.sgtm-portal-app__resumen dl > div[data-fuerte='1'] dt,
+.sgtm-portal-app__resumen dl > div[data-fuerte='1'] dd {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.sgtm-portal-app__secciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sgtm-portal-app__seccion h3 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.sgtm-portal-app__conteo {
+  margin: var(--space-1) 0 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.sgtm-portal-app__fila {
+  padding: var(--space-3);
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+}
+
+.sgtm-portal-app__nota {
+  margin: var(--space-2) 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+.sgtm-portal-app__pie {
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-3);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+.sgtm-portal-app__pie p {
+  margin: 0;
+}
+
+/* Se lee en voz alta y no se ve: la region de estado de la consulta. */
+.sgtm-portal-app__oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

@@ -39,10 +39,28 @@ export default defineConfig({
     ...(chromium === undefined ? {} : { launchOptions: { executablePath: chromium } }),
   },
   projects: [{ name: 'escritorio', use: { ...devices['Desktop Chrome'] } }],
-  webServer: {
-    command: 'yarn build && yarn preview --port 4173 --strictPort',
-    url: 'http://localhost:4173',
-    reuseExistingServer: !process.env['CI'],
-    timeout: 120_000,
-  },
+  /**
+   * Dos servidores, uno por aplicacion (#298, ADR-0016 §3).
+   *
+   * El portal del contribuyente es su propio paquete y se sirve en `/portal/`
+   * —igual que en produccion, donde `nginx.conf` lo pone ahi—, asi que su camino
+   * no se puede recorrer contra la vista previa del back-office: son dos
+   * `dist/` distintos. Cada uno compila el suyo; `yarn build` de la raiz compila
+   * los dos, y `--strictPort` evita que uno se cuele en el puerto del otro y la
+   * prueba mida la aplicacion equivocada.
+   */
+  webServer: [
+    {
+      command: 'yarn build:backoffice && yarn preview --port 4173 --strictPort',
+      url: 'http://localhost:4173',
+      reuseExistingServer: !process.env['CI'],
+      timeout: 120_000,
+    },
+    {
+      command: 'yarn build:portal && yarn preview:portal --port 4174 --strictPort',
+      url: 'http://localhost:4174/portal/',
+      reuseExistingServer: !process.env['CI'],
+      timeout: 120_000,
+    },
+  ],
 });

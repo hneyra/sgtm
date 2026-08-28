@@ -82,4 +82,20 @@ describe('el portal es de quien no conoce el sistema', () => {
     );
     expect(acciones.filter((t) => /anular|emitir|dar de baja|transferir/i.test(t))).toEqual([]);
   });
+
+  it('lleva a la aplicacion que descarga el ciudadano, y dice que es una vista previa', async () => {
+    montarEnRuta('/inicio/portal');
+    await waitFor(() => expect(document.querySelector('.sgtm-pasos')).not.toBeNull());
+
+    /* La opcion sigue siendo la del catalogo —la vista del funcionario— y desde
+       #298 la aplicacion del ciudadano es otra, servida en `/portal/`. El
+       enlace es un `<a>` de verdad: una navegacion del enrutador no sale de esta
+       aplicacion (ADR-0016 §3). */
+    const enlace = screen.getByRole('link', { name: 'Ver el portal del contribuyente' });
+    expect(enlace).toHaveAttribute('href', '/portal/');
+    // Y no promete un acceso que no existe: se abre con esta misma sesion.
+    expect(
+      screen.getByText(/el acceso propio del contribuyente todavía no existe/),
+    ).toBeInTheDocument();
+  });
 });

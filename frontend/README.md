@@ -10,7 +10,8 @@ apaga el proxy y la interfaz no se entera ([ADR-0010](../docs/30-arquitectura/ad
 ```bash
 cd frontend
 yarn install
-yarn dev            # http://localhost:5173
+yarn dev            # el back-office, en http://localhost:5173
+yarn dev:portal     # el portal del contribuyente, en http://localhost:5174/portal/
 ```
 
 Requiere Node 22 o superior.
@@ -22,7 +23,7 @@ Requiere Node 22 o superior.
 | `yarn typecheck`           | `tsc --build`, en modo estricto                                |
 | `yarn test`                | Vitest: dominio, cliente, proxy, catálogo, shell y las 134     |
 | `yarn format`              | Prettier. Si el build se queja del formato, no lo pelees       |
-| `yarn build`               | Construye la aplicación                                        |
+| `yarn build`               | Construye **las dos** aplicaciones: back-office y portal       |
 | `yarn portar-catalogo`     | Regenera el catálogo desde `design/`                           |
 | `yarn generar-operaciones` | Regenera los tipos de la API desde el contrato                 |
 
@@ -192,21 +193,59 @@ sin ubicación territorial asignada—, no un descuadre.
 ### Lo que le cuesta al ciudadano abrir el portal
 
 El portal es el único flujo del sistema que no usa alguien de la municipalidad: se entra desde un
-teléfono, una vez al año, con la red que haya. `yarn comprobar-compilaciones` mide su ruta aparte
-del arranque y la presupuesta:
+teléfono, una vez al año, con la red que haya. Hasta #298 su ruta era el arranque del back-office
+más el trozo de «Inicio» —**147.4 KB medidos**, con el presupuesto en 152, y dentro los 11.5 KB del
+catálogo de navegación de los doce módulos, con sus 134 opciones, sus iconos y sus resúmenes, que el
+ciudadano se descargaba para no usarlos nunca—. Esa era la conversación que el número dejaba
+abierta, y ADR-0016 §3 la cerró: la tercera condición de
+[ADR-0009](../docs/30-arquitectura/adr/ADR-0009-plataforma-frontend.md)
+—el paquete arrastra código que solo usa el back-office— se cumplía, y basta con una de las tres.
+
+Ahora el portal es **`apps/portal`**: su propio paquete, sin el shell y sin el catálogo, servido en
+`/portal/` del mismo origen. `yarn comprobar-compilaciones` mide el paquete de cada aplicación por
+separado y presupuesta los dos:
 
 ```
-Portal: 123.6 KB comprimidos de 135 (arranque 122.8 + Inicio 0.9)
+Portal: 80.9 KB comprimidos de 84.
+Arranque: 146.6 KB comprimidos de 150. Doce trozos por modulo, el mayor 8.9 KB de 11.
 ```
 
-**Y ahí está el hallazgo**: el trozo de «Inicio» pesa 0.9 KB, y el arranque 122.8 — dentro del cual
-van los **11.5 KB del catálogo de navegación de los doce módulos**, con sus 134 opciones, sus iconos
-y sus resúmenes. El ciudadano se los descarga para no usarlos nunca.
+**80.9 donde había 147.4** —66.5 KB menos, un 45 %—, y el margen es de tres kilobytes a propósito:
+el portal es una pantalla, no doce módulos, y no tiene por qué crecer. La bajada son dos cosas: 62.3
+KB de shell y catálogo que la separación se llevó, y **4.2 KB más al dejar de pedir con
+`pedirOperacion`** —que resuelve la ruta leyendo el mapa de las 169 operaciones del contrato, 84 de
+ellas de escritura, y lo metía entero en la aplicación destinada a ser pública—. El portal declara
+sus dos rutas en `apps/portal/src/lecturas.ts` y pide con `solicitar()`; que cuadren con el contrato
+lo comprueba `verificaciones/portal-separado.test.ts`, que no viaja al navegador. De los 81, unos 60
+son React y el cliente de consultas; lo propio del portal —su pantalla, los adaptadores de
+`@sgtm/lectura` y la puerta de sesión— no llega a 21. Bajar de ahí es cambiar de biblioteca, no de
+pantalla.
 
-El presupuesto está puesto en lo que mide hoy, no en lo que debería medir: así la cifra no puede
-empeorar en silencio, y la conversación sobre bajarla queda abierta con su número delante. Bajarla
-es sacar el portal del shell del backoffice —que además no necesita: no tiene módulos que navegar—,
-y ésa es una decisión de producto, no del renderizador.
+Y lo que el navegador guarda de todo eso lo dice `nginx.conf`, **para las dos aplicaciones**: los
+activos con huella (`/assets/` y `/portal/assets/`) un año e inmutables, los dos `index.html` con
+`no-cache`. Se escriben como expresión regular porque un prefijo no alcanza al portal, y
+`verificaciones/politica-de-cache.test.ts` simula la precedencia de nginx para comprobar **qué regla
+gana** en cada ruta: buscar el texto en el archivo pasaba en verde con la configuración anterior,
+que ya lo contenía y dejaba al ciudadano sin ninguna cabecera de caché.
+
+**Lo que la separación NO es**: no hay realm ciudadano, no hay sesión propia del contribuyente y
+ninguna lectura se abre al público (ADR-0009 §1 y §2 siguen sin cumplirse). El portal se sirve tras
+**la misma puerta de sesión del funcionario** —la marcha blanca en que quien atiende previsualiza lo
+que verá el ciudadano—, y la pantalla lo dice en vez de disimularlo. **Y la opción `portal` de las
+134 sigue en el catálogo**, con su id, su ruta y su permiso: es la vista del funcionario, y desde
+ella se abre la aplicación del ciudadano por un enlace.
+
+Las dos enseñan **las mismas cifras a la misma fecha de cálculo** porque leen la respuesta con los
+mismos adaptadores: `@sgtm/lectura` —la identidad del padrón y las seis secciones de
+`consulta_unificada`— lo comparten la ficha 360° y el portal. Lo que cambia es el ancho: en 390 px
+no hay siete columnas, así que cada fila se lee como pares rótulo/valor con **el rótulo de su
+columna del catálogo** (RNF-080).
+
+Lo otro que cambia son **las notas bajo cada rejilla**. Las del back-office nombran la opción
+hermana a la que ir por el dato que ahí no cabe —«se ven en «Consulta de deuda»»—, y desde el portal
+esas cuatro opciones no existen: no hay navegación, ni catálogo, ni permiso que las abra. La rejilla
+declara por eso una segunda redacción, `notaDelCiudadano`, y **el portal no dibuja nunca la otra**:
+lo que falta se sigue diciendo, con la salida que sí es suya —la municipalidad—.
 
 ### La copia se ve como copia
 
@@ -707,14 +746,24 @@ frontend/
 │   ├── pantallas/       El renderizador, sus diez bloques y las opciones conectadas
 │   │   └── inicio/      Primera opción con operación tipada y adaptador propios
 │   └── estilos/         Shell y bloques, con los tokens de Juris PE
+├── apps/portal/src/     El portal del contribuyente: una pantalla, sin shell ni catálogo (#298)
 ├── packages/
 │   ├── design-system/   Tokens y los componentes que usan las pantallas
 │   ├── dominio/         Importe, Fecha, Estado y su formateo
 │   ├── api-client/      Cliente HTTP tipado y el contrato de datos de una pantalla
-│   └── api-mock/        El proxy de datos (generado + 130 líneas de encaminamiento)
+│   ├── api-mock/        El proxy de datos (generado + 130 líneas de encaminamiento)
+│   ├── lectura/         Los adaptadores del contribuyente que las dos aplicaciones comparten
+│   └── sesion/          La puerta de sesión: token, renovación y permisos efectivos
 ├── scripts/             El portador del catálogo y el generador de operaciones
 └── verificaciones/      Las reglas del proyecto, con una muestra que viola cada una
 ```
+
+**Dos aplicaciones y un solo origen.** `apps/portal` nació en #298 al cumplirse la tercera condición
+de ADR-0009, y con él los dos paquetes que las dos comparten: `@sgtm/sesion` —la puerta que ya
+existía, movida entera, porque el portal se sirve tras la misma sesión— y `@sgtm/lectura` —los
+lectores del contrato y los adaptadores de `contribuyentes` y `consulta_unificada`—. Copiar
+cualquiera de los dos habría producido dos versiones del mismo lector que se separan a la primera
+corrección, y una de ellas enseñando el importe sin su fecha.
 
 **Los directorios por módulo aparecen cuando una opción necesita código propio, y no antes**, que
 es la diferencia deliberada con [FRO-01 §2](../docs/60-frontend/arquitectura-frontend.md): las 134
@@ -812,7 +861,14 @@ dice en la misma frase en que excluye el token.
 | Ni una cifra cambia de formato              | Recomponiendo una celda numérica                                        | Rojas, en tres módulos        |
 | El panel no calcula nada                    | Retocando un indicador o deduciendo el avance                           | Rojas, dos y dos              |
 | El panel dice su fecha de corte             | Quitando el bloque de fecha                                             | Roja                          |
-| El portal cabe en su presupuesto            | Es medido en cada compilación, con su número                            | 123.6 KB de 135               |
+| El portal cabe en su presupuesto            | Bajándolo por debajo de lo medido: rojo con el número y qué hacer       | 80.9 KB de 84                 |
+| El portal no arrastra el back-office        | Importándole el catálogo —o metiéndoselo por `packages/lectura`—        | Rojas, una por rotura         |
+| Del portal no se escribe                    | Un `useMutation`, y una ruta que la tabla de lecturas no declara        | Rojas, dos                    |
+| Ni lleva el mapa de las 169 operaciones     | Devolviéndole `pedirOperacion`, o una ruta que no es la del contrato    | Rojas, dos                    |
+| La opción `portal` sigue en las 134         | Quitándola del catálogo generado                                        | Rojas, diez                   |
+| El portal cabe en 360 px de verdad          | `min-width: 900px` en su columna, con el ancho del **dispositivo**      | Roja                          |
+| Las dos apps tienen política de caché       | Devolviendo el prefijo `/assets/` y la exacta `= /index.html`           | Rojas, dos (las del portal)   |
+| Al ciudadano no se le manda al shell        | Dibujándole en el portal la nota que nombra «Consulta de deuda»         | Rojas, dos                    |
 
 ## Lo que todavía no está
 
@@ -840,4 +896,5 @@ dice en la misma frase en que excluye el token.
 [FRO-03 mapa de pantallas](../docs/60-frontend/mapa-de-pantallas.md) ·
 [FRO-04 estándares](../docs/60-frontend/estandares-de-codigo-frontend.md) ·
 [ADR-0009](../docs/30-arquitectura/adr/ADR-0009-plataforma-frontend.md) ·
-[ADR-0010](../docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md)
+[ADR-0010](../docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md) ·
+[ADR-0016](../docs/30-arquitectura/adr/ADR-0016-el-inicio-pregunta-la-ficha-compone.md)

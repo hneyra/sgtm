@@ -9,8 +9,7 @@ import {
   leerAtenciones,
   olvidarAtenciones,
 } from '../../pantallas/inicio/atenciones';
-import { ProveedorDeSesion, useSesion } from './ProveedorDeSesion';
-import { PuertaDeSesion } from './PuertaDeSesion';
+import { ProveedorDeSesion, PuertaDeSesion, useSesion } from '@sgtm/sesion';
 
 /**
  * La sesion de trabajo (FRO-01 §5, ADR-0005).
@@ -296,7 +295,7 @@ describe('cerrar sesion no deja nada de la sesion anterior', () => {
 });
 
 /**
- * **Lo que vive en memoria tampoco se queda** (#296, `app/sesion/olvidos.ts`).
+ * **Lo que vive en memoria tampoco se queda** (#296, `@sgtm/sesion`).
  *
  * La cache de consultas ya se vaciaba en los dos caminos. Lo que no: las
  * variables de modulo, y ahi vive la lista de a quien se ha atendido. **Ninguno

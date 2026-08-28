@@ -60,6 +60,10 @@ RUN yarn build
 FROM nginx:1.31.4-alpine AS interfaz
 
 COPY --from=construccion /origen/apps/backoffice/dist /usr/share/nginx/html
+# Y el portal del contribuyente, bajo /portal/ del mismo origen (#298). `yarn
+# build` compila las dos aplicaciones; `nginx.conf` sirve esta con su propio
+# index.html.
+COPY --from=construccion /origen/apps/portal/dist /usr/share/nginx/html/portal
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Sin root (issue #157). La imagen base ya trae el usuario "nginx" —lo usan sus

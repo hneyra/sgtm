@@ -1,11 +1,19 @@
 import { Boton } from '@sgtm/design-system';
 
 /**
- * Portal ciudadano (FRO-03 §5, bloque 3).
+ * Portal ciudadano (FRO-03 §5, bloque 3): **la vista del funcionario**.
  *
- * Es **una** de las 134 opciones, no una aplicacion aparte; el criterio para
- * separarla en `apps/portal` esta en ADR-0009 y ninguno de sus tres supuestos
- * se cumple todavia (FRO-01 §1).
+ * Sigue siendo una de las 134 opciones, con su id, su ruta y su permiso, y no
+ * se toca: quitarla seria reescribir el catalogo del manual por un motivo de
+ * empaquetado (ADR-0016 §3). Lo que cambio en #298 es que **ya no es lo unico
+ * que hay**: la aplicacion que descarga el ciudadano es `apps/portal`, servida
+ * en `/portal/` del mismo origen y sin el shell ni el catalogo de navegacion.
+ *
+ * La tercera condicion de ADR-0009 —el paquete arrastra codigo que solo usa el
+ * back-office— es la que se cumplio; **la primera y la segunda siguen sin
+ * cumplirse**, asi que no hay realm ciudadano, no hay sesion propia del
+ * contribuyente y ninguna lectura se abre al publico. Por eso el enlace de abajo
+ * dice lo que dice: lo que se abre es una vista previa tras esta misma sesion.
  *
  * Lo usa quien no conoce el sistema, una vez al ano, desde un movil con red
  * mala: es una de las tres pantallas que FRO-03 §6 marca para validar con
@@ -45,6 +53,14 @@ export function Portal({ pasos }: PortalProps) {
           </Boton>
         </div>
       </section>
+      {/* La aplicacion que descarga el ciudadano, para poder verla como la ve
+          el ciudadano (#298). Es un `<a>` y no un `Link`: `/portal/` es OTRA aplicacion
+          del mismo origen —su propio paquete, su propio `index.html`—, y una
+          navegacion del enrutador no saldria de esta. */}
+      <p className="sgtm-portal__vistaprevia">
+        <a href="/portal/">Ver el portal del contribuyente</a> — se abre la aplicación que descarga
+        el ciudadano, con esta misma sesión: el acceso propio del contribuyente todavía no existe.
+      </p>
       <ol className="sgtm-pasos">
         {pasos.map((paso, i) => (
           <li key={paso} className="sgtm-pasos__paso" data-hecho={i < 3 ? '1' : '0'}>

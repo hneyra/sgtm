@@ -20,13 +20,12 @@ del corpus**, no las del proceso que carga: `transcribio` y `verifico` se copian
 archivo del corpus y viajan tal cual a `usuario_carga` y `usuario_aprueba`. Quien corre
 `publicar-parametros.sh` no firma nada; transporta lo que ya se firmó al leer la norma.
 
-> **Hay que decirlo: `uit.md` está verificado por «Agent».** Su cabecera dice `Transcribió | JNA` y
-> `Verificó | Agent`, así que las cinco filas de la UIT llegan a la base con `usuario_aprueba =
-> 'Agent'`. La restricción se cumple —son dos firmas distintas— y la comprobación pasa, pero la
-> segunda lectura de la UIT la hizo un agente y no una persona. Los otros tres archivos
-> (`predial-tramos-y-alicuotas.md`, `predial-deducciones.md`, `predial-minimo.md`) llevan `HNA`.
-> Re-verificar la UIT con firma humana no cambia una línea de código: cambia una celda de `uit.md`
-> y la columna `verifico` de cinco filas de este CSV.
+> La UIT estuvo verificada por «Agent» hasta el 2026-08-28 —una segunda lectura hecha por un
+> agente y no por una persona, y quedó dicho aquí como deuda—. Ese día se re-verificó con firma
+> humana: `uit.md` dice `Verificó | HNA` y las cinco filas de la UIT viajan con
+> `usuario_aprueba = 'HNA'`, como los demás archivos del corpus. Cambiarlo costó lo que este
+> párrafo anunciaba: una celda de `uit.md` y la columna `verifico` de cinco filas de este CSV,
+> ni una línea de código.
 
 ## Un solo archivo para los dos pasos
 

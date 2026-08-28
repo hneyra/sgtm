@@ -1,6 +1,26 @@
-import type { Celda } from '@sgtm/api-client';
-import { SIN_DATO, esObjeto, texto } from '../seguridad/listado';
-import { importeDe } from '../consultas';
+import { REJILLAS_DE_LA_UNIFICADA } from '@sgtm/lectura';
+import type { RejillaDeLaFicha } from '@sgtm/lectura';
+
+/**
+ * **Las seis rejillas, el resumen y los lectores viven en `@sgtm/lectura`**
+ * (#298). Se reexportan desde aqui para las pruebas y las pantallas que ya los
+ * pedian a este archivo.
+ *
+ * Se movieron al separarse `apps/portal`: el portal del contribuyente dibuja
+ * esas mismas seis secciones, con los mismos rotulos y a la misma fecha de
+ * calculo (ADR-0016 §3). Lo que se queda aqui es lo que **no** se puede
+ * compartir: la tabla de composicion por opcion del catalogo, que es del
+ * back-office porque es quien tiene catalogo.
+ */
+export {
+  ESTADO_DE_LA_CONSULTA,
+  REJILLAS_DE_LA_UNIFICADA,
+  RESUMEN_DE_SALDOS,
+  conteoDeLaRejilla,
+  fechaDeCorteDe,
+  seccionDeLaFicha,
+} from '@sgtm/lectura';
+export type { RejillaDeLaFicha, SeccionDeLaFicha } from '@sgtm/lectura';
 
 /**
  * **De qué compone la ficha 360°, pestaña a pestaña** (#297, ADR-0016 §2).
@@ -89,51 +109,6 @@ export interface TablaDeclarada {
   readonly num?: readonly number[];
 }
 
-/**
- * Una de las seis rejillas que `consulta_unificada` trae en su respuesta.
- *
- * `rotulos` nombra la opción de cuyo catálogo salen sus columnas: son dos
- * lecturas del mismo dato —la unificada las consolida y la opción hermana las
- * lista con sus filtros—, así que la ficha las nombra como ya se llaman.
- */
-export interface RejillaDeLaFicha {
-  /** Como la nombra el manual. Del catálogo, no inventado. */
-  readonly titulo: string;
-  /** La sección de `ConsultaUnificadaResource` de la que salen sus filas. */
-  readonly clave: string;
-  /**
-   * La opción de cuyo catálogo salen los rótulos de sus columnas, **y a la que
-   * se sale cuando la sección trae más de lo que cabe**: es la que pagina.
-   */
-  readonly rotulos: string;
-  /**
-   * Cómo se llama **una** de sus filas, y cómo se llaman varias.
-   *
-   * El conteo se redacta con esto —«3 de 43 deudas»— y no con «filas»: quien
-   * atiende lee obligaciones, pagos y convenios, no filas de una tabla. A
-   * diferencia de los rótulos de columna, que se comparan letra a letra contra
-   * el catálogo, estos sustantivos no tienen rótulo del manual contra el que
-   * probarse: son redacción en lenguaje del dominio, y los vigila la revisión,
-   * no una prueba.
-   */
-  readonly una: string;
-  readonly varias: string;
-  readonly cols: readonly string[];
-  readonly num?: readonly number[];
-  readonly fila: (registro: Readonly<Record<string, unknown>>) => readonly Celda[];
-  /**
-   * Sus cifras están todas a la fecha de corte de la consulta, y la banda la
-   * dice una vez.
-   *
-   * Sin esto, la rejilla no dibuja banda porque **cada fila trae la suya** —un
-   * pago de marzo no se actualiza— o porque no dibuja ninguna cifra. Las tres
-   * situaciones son distintas y ninguna admite la fecha de otra (regla 9).
-   */
-  readonly aLaFechaDeCorte?: true;
-  /** Qué falta en esta rejilla y dónde está. Se dibuja bajo la tabla. */
-  readonly nota?: string;
-}
-
 /** A dónde lleva una acción con el contexto puesto: a otra de las 134. */
 export interface AccionDeLaFicha {
   readonly opcion: string;
@@ -178,188 +153,6 @@ export interface PestanaDeLaFicha {
   readonly rejillas?: readonly RejillaDeLaFicha[];
   readonly acciones?: readonly AccionDeLaFicha[];
 }
-
-/** Un importe con su fecha, o el guion. Nunca el importe sin la fecha (regla 9). */
-const importe = (valor: unknown): string => importeDe(valor)?.importe ?? SIN_DATO;
-
-/** La fecha valor de un asiento: es la que lleva su propio monto. */
-const fechaDelMonto = (registro: Readonly<Record<string, unknown>>): string =>
-  importeDe(registro['monto'])?.actualizadoA ?? SIN_DATO;
-
-/**
- * `CARGO` incorpora deuda (alta); `ABONO` la extingue (baja) — `MovimientoDeDeuda`.
- *
- * Es la única traducción de esta tabla, y no contradice «el texto es siempre el
- * del backend»: CARGO/ABONO son vocabulario del **contrato**, no del manual, y
- * el manual llama a estos movimientos altas y bajas. `condicionEspecial`, en
- * cambio, viaja ya redactada por el backend —«PENSIONISTA», «ADULTO MAYOR»— y
- * por eso la cabecera la muestra tal cual, sin diccionario que mantener.
- */
-function altaOBaja(tipo: unknown): string {
-  if (tipo === 'CARGO') return 'ALTA';
-  if (tipo === 'ABONO') return 'BAJA';
-  return SIN_DATO;
-}
-
-/**
- * El tono de un estado. **El texto es siempre el del backend**: aquí solo se
- * decide el color, y nunca en lugar de la palabra (FRO-02 §2.1).
- */
-function conTono(valor: unknown, buenos: readonly string[], malos: readonly string[]): Celda {
-  const nombre = texto(valor);
-  if (buenos.includes(nombre)) return { texto: nombre, tono: 'ok' };
-  if (malos.includes(nombre)) return { texto: nombre, tono: 'bad' };
-  return { texto: nombre };
-}
-
-/**
- * Las seis rejillas de `consulta_unificada`, en el orden en que el manual las
- * dibuja: primero lo que se debe, que es a lo que viene la gente.
- *
- * **Dónde falta un importe y por qué falta.** La regla es una y se aplica igual
- * a las seis: un importe se dibuja solo cuando su fecha está a la vista —o la
- * rejilla entera comparte una y la banda la dice, o la fila la trae en una
- * columna—. Donde no se cumple ninguna de las dos, el importe no se dibuja aquí
- * y la nota dice dónde está (regla 9, RNF-075).
- */
-export const REJILLAS_DE_LA_UNIFICADA: readonly RejillaDeLaFicha[] = [
-  {
-    titulo: 'Deudas Pendientes',
-    clave: 'deudasPendientes',
-    una: 'deuda',
-    varias: 'deudas',
-    rotulos: 'consulta_deuda',
-    cols: ['Año', 'Tributo', 'Insoluto S/', 'Reajuste S/', 'Interés S/', 'Gastos S/', 'Total S/'],
-    num: [2, 3, 4, 5, 6],
-    aLaFechaDeCorte: true,
-    fila: (obligacion) => [
-      { texto: texto(obligacion['ejercicio']) },
-      { texto: texto(obligacion['tributo']) },
-      { texto: importe(obligacion['insoluto']) },
-      { texto: importe(obligacion['reajuste']) },
-      { texto: importe(obligacion['interes']) },
-      { texto: importe(obligacion['gasto']) },
-      { texto: importe(obligacion['total']) },
-    ],
-    // «Cuota» y «Fase» son columnas de `consulta_deuda` y `ObligacionDeLaFicha`
-    // no las publica: la unificada consolida por tributo y ejercicio.
-    nota: 'La cuota y la fase de cada obligación se ven en «Consulta de deuda».',
-  },
-  {
-    titulo: 'Pagos Realizados',
-    clave: 'pagosRealizados',
-    una: 'pago',
-    varias: 'pagos',
-    rotulos: 'consulta_pagos',
-    cols: ['Fecha', 'Recibo', 'Concepto', 'Año', 'Importe S/'],
-    num: [4],
-    // Sin banda: **cada fila trae su fecha**, que es la fecha valor del asiento.
-    // Un pago de marzo no se actualiza, y fecharlo hoy sería mentir sobre una
-    // cifra que no se ha movido.
-    fila: (asiento) => [
-      { texto: fechaDelMonto(asiento) },
-      { texto: texto(asiento['documentoOrigen']) },
-      { texto: texto(asiento['tributo']) },
-      { texto: texto(asiento['ejercicio']) },
-      { texto: importe(asiento['monto']) },
-    ],
-  },
-  {
-    titulo: 'Altas y Bajas',
-    clave: 'altasYBajas',
-    una: 'movimiento',
-    varias: 'movimientos',
-    rotulos: 'consulta_altas_bajas',
-    cols: ['A/B', 'Doc. Aprob.', 'Fecha Reg.'],
-    fila: (asiento) => [
-      { texto: altaOBaja(asiento['tipo']) },
-      { texto: texto(asiento['documentoOrigen']) },
-      { texto: fechaDelMonto(asiento) },
-    ],
-    // La lista de altas y bajas del manual **no tiene columna de importe**, y
-    // esta no se la inventa: lo que movió cada asiento se lee en el libro.
-    nota: 'El importe de cada movimiento se ve en «Estado de cuenta corriente».',
-  },
-  {
-    titulo: 'Fraccionamientos',
-    clave: 'fraccionamientos',
-    una: 'convenio',
-    varias: 'convenios',
-    rotulos: 'consulta_convenios',
-    cols: ['Nro. convenio', 'Fecha', 'Cuotas', 'Pagadas', 'Vencidas', 'Saldo S/', 'Estado'],
-    num: [2, 3, 4, 5],
-    aLaFechaDeCorte: true,
-    fila: (convenio) => [
-      { texto: texto(convenio['numero']) },
-      { texto: texto(convenio['fecha']) },
-      { texto: texto(convenio['cuotas']) },
-      { texto: texto(convenio['pagadas']) },
-      { texto: texto(convenio['vencidas']) },
-      { texto: importe(convenio['saldo']) },
-      conTono(convenio['estado'], ['VIGENTE'], ['QUEBRADO']),
-    ],
-    // La deuda acogida se queda fuera **por su fecha**: va a la fecha de corte
-    // del convenio, que no es la de esta consulta ni la columna «Fecha» —esa es
-    // la de suscripción—. Dos cifras de días distintos bajo una sola banda es
-    // exactamente lo que el recurso separa en dos `ImporteActualizado`.
-    nota: 'La deuda acogida va a la fecha de corte del convenio: se ve en «Consulta de convenios».',
-  },
-  {
-    titulo: 'Valores',
-    clave: 'valores',
-    una: 'valor',
-    varias: 'valores',
-    rotulos: 'consulta_valores',
-    cols: ['Nro. valor', 'Tipo', 'Tributo', 'Periodo', 'Estado'],
-    fila: (valor) => [
-      { texto: texto(valor['numero']) },
-      { texto: texto(valor['tipo']) },
-      { texto: texto(valor['tributos']) },
-      { texto: texto(valor['periodo']) },
-      conTono(valor['situacion'], ['PAGADO'], ['COACTIVA', 'EXIGIBLE']),
-    ],
-    // Sin importe, y no por olvido: el desglose de un valor está **congelado** a
-    // su `proyectadoA` —la fecha de la emisión (AC de #37)—, que no es la de la
-    // consulta y que ninguna columna del catálogo nombra. Sin sitio donde poner
-    // esa fecha, la cifra no se dibuja.
-    nota: 'El importe de cada valor está congelado a la fecha de su emisión: se ve, con ella, en «Consulta de valores emitidos».',
-  },
-  {
-    titulo: 'Declaraciones presentadas',
-    clave: 'declaracionesJuradas',
-    una: 'declaración',
-    varias: 'declaraciones',
-    rotulos: 'declaracion_jurada',
-    cols: ['DJ N°', 'Año', 'Tipo', 'Fecha', 'Estado'],
-    fila: (declaracion) => [
-      { texto: texto(declaracion['numero']) },
-      { texto: texto(declaracion['ejercicio']) },
-      { texto: texto(declaracion['tipo']) },
-      { texto: texto(declaracion['fechaPresentacion']) },
-      conTono(declaracion['estado'], ['CONFORME'], ['OBSERVADA']),
-    ],
-  },
-];
-
-/**
- * Los rótulos del «Resumen de saldos», tal como los declara el catálogo de
- * `consulta_unificada` (pestaña «Resumen de Deudas»).
- *
- * Las cinco cifras salen **sumadas por el servidor** y la frase que las explica
- * viene redactada: aquí no se suma ni se compone texto con cifras dentro
- * (RNF-083). El día que el total y el desglose discreparan, la explicación tiene
- * que venir del mismo sitio que las cifras.
- */
-export const RESUMEN_DE_SALDOS: readonly { readonly clave: string; readonly label: string }[] = [
-  { clave: 'insoluto', label: 'Insoluto' },
-  { clave: 'reajuste', label: 'Reajuste' },
-  { clave: 'interes', label: 'Interés' },
-  { clave: 'gasto', label: 'Gasto' },
-  { clave: 'total', label: 'Total' },
-];
-
-/** La clave de la frase que el backend redacta bajo el resumen. */
-export const ESTADO_DE_LA_CONSULTA = 'estadoDeLaConsulta';
 
 /** Sin código no hay a quién componer: ninguna pestaña sale sin él. */
 const conCodigo = (
@@ -552,42 +345,3 @@ export const PESTANAS: readonly PestanaDeLaFicha[] = [
     ],
   },
 ];
-
-/**
- * Una sección paginada de la respuesta de la unificada: **sus filas y cuántas
- * hay detrás**.
- *
- * Las tres cosas juntas y no solo las filas, que era el defecto: cada sección
- * viaja en su propio sobre `RespuestaPaginada` y el agregador **la pagina a
- * veinte**, así que dibujar `contenido.length` decía «20 deudas» junto a un
- * total de cabecera que cubre las cuarenta y tres. La cifra no estaba mal
- * calculada: estaba contando otra cosa, y nada en la pantalla lo decía.
- *
- * `totalElementos` y `hayMas` los trae la propia sección; aquí no se deducen.
- * Cuando falten —una respuesta sin sobre— el total es lo que se ve, que es la
- * única afirmación que se puede sostener.
- */
-export interface SeccionDeLaFicha {
-  readonly filas: readonly Readonly<Record<string, unknown>>[];
-  /** Cuántas hay en total, según la propia sección. Nunca deducido. */
-  readonly totalElementos: number;
-  /** Quedan más detrás de las que llegaron: la salida es la opción que pagina. */
-  readonly hayMas: boolean;
-}
-
-export function seccionDeLaFicha(
-  ficha: Readonly<Record<string, unknown>> | undefined,
-  clave: string,
-): SeccionDeLaFicha {
-  const seccion = ficha?.[clave];
-  if (!esObjeto(seccion) || !Array.isArray(seccion['contenido'])) {
-    return { filas: [], totalElementos: 0, hayMas: false };
-  }
-  const filas = seccion['contenido'].filter(esObjeto);
-  const total = seccion['totalElementos'];
-  return {
-    filas,
-    totalElementos: typeof total === 'number' ? total : filas.length,
-    hayMas: seccion['hayMas'] === true,
-  };
-}

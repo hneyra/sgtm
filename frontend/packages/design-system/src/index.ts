@@ -30,6 +30,13 @@ export { Icono, IconoDeModulo } from './componentes/Icono';
 export type { IconoProps, IconoDeModuloProps, NombreDeIcono } from './componentes/Icono';
 export { Campo } from './componentes/Campo';
 export type { CampoProps, TipoDeCampo } from './componentes/Campo';
+/* A que fecha estan actualizadas las cifras de la pantalla (regla 9, RNF-075).
+   Estaba en `apps/backoffice/src/pantallas/bloques` y subio aqui al separarse
+   `apps/portal` (#298): la banda de la fecha es del design system desde el
+   momento en que la dibujan **dos** aplicaciones, y copiarla habria dejado dos
+   maneras de decir la unica frase que la regla 9 exige. */
+export { FechaDeCalculo } from './componentes/FechaDeCalculo';
+export type { FechaDeCalculoProps } from './componentes/FechaDeCalculo';
 
 /**
  * Densidad de la interfaz. Cambia el alto de los items de navegacion

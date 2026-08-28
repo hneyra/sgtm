@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
-import { permisosDelClaim, puedeVer } from '../../app/sesion/permisos';
+import { permisosDelClaim, puedeVer } from '@sgtm/sesion';
 import { cifrasDeLaTabla, cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
 import { montarEnRuta } from '../../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada, primariaDeLaPantalla } from '../../pruebas/acciones';
