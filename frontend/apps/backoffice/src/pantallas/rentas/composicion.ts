@@ -29,6 +29,17 @@ const ResumenDeDeclaracion = lazy(async () => ({
 const ResolutorDeUnidad = lazy(async () => ({
   default: (await import('./ResolutorDeUnidad')).ResolutorDeUnidad,
 }));
+/**
+ * El valor de la transferencia, y el predio de la de predio (#73), tambien
+ * perezosos: los dos traen su propia busqueda o su propia prosa, y son codigo
+ * que 132 de las 134 pantallas no usan nunca.
+ */
+const ResolutorDePredioDeTransferencia = lazy(async () => ({
+  default: (await import('./ResolutorDeTransferencia')).ResolutorDePredioDeTransferencia,
+}));
+const ResolutorDeValorDeTransferencia = lazy(async () => ({
+  default: (await import('./ResolutorDeTransferencia')).ResolutorDeValorDeTransferencia,
+}));
 
 /**
  * Lo que Rentas · Registro compone alrededor de los bloques comunes (#330, #332).
@@ -133,6 +144,40 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * sustituir. Con `true`, `seccionesDe` devuelve sus tres secciones tal cual.
    */
   predial_individual: { indice: true, indiceConLaTabla: true },
+  /**
+   * Transferencia de predio, con su valor y su predio resueltos (#73).
+   *
+   * `codigoPredial` sustituye por el mismo motivo que `unidadPredioPlaca` en
+   * `alta_deuda`: `predioId` es el identificador interno que
+   * `TransferenciaPredioController` pide, y el codigo catastral no viaja. El
+   * mismo control ademas anade `valorTransferencia` —un dato que ninguna
+   * seccion del catalogo dibuja—, porque los dos son el mismo gesto: fijar el
+   * objeto del acto y su valor.
+   */
+  transferencia_predio: {
+    resolutores: {
+      codigoPredial: {
+        campos: ['predioId', 'valorTransferencia'],
+        Control: ResolutorDePredioDeTransferencia,
+      },
+    },
+  },
+  /**
+   * Transferencia de vehiculo: solo el valor (#73). Sin identificador que
+   * resolver —`placa` viaja tal cual—, el resolutor se cuelga de «Transferente
+   * — documento», un campo que hoy no llega a ningun sitio porque
+   * `TransferenciaVehiculoController` no acepta `codTransferente` para un
+   * vehiculo: lo resuelve del titular vigente. El control lo sigue dibujando
+   * tal cual lo dibujaba antes de declararse aqui.
+   */
+  transferencia_vehiculo: {
+    resolutores: {
+      transferenteDocumento: {
+        campos: ['valorTransferencia'],
+        Control: ResolutorDeValorDeTransferencia,
+      },
+    },
+  },
   baja_deuda: {
     seleccion: {
       tabla: 'cuotas',

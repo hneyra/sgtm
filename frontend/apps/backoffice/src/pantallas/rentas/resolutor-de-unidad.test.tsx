@@ -56,9 +56,16 @@ describe('el resolutor es un opt-in de la composicion, no una bifurcacion del re
       'vehiculoId',
     ]);
     // Las demás siguen dibujando su `Campo` de siempre: negación por omisión.
-    for (const opcion of ['transferencia_predio', 'baja_deuda', 'contribuyentes']) {
+    // `transferencia_predio` sí declara un resolutor propio desde #73 —el suyo
+    // resuelve el predio y añade el valor de la transferencia, no la unidad—:
+    // se comprueba en `ResolutorDeTransferencia`, no aquí.
+    for (const opcion of ['baja_deuda', 'contribuyentes']) {
       expect(composicionDe(opcion).resolutores).toBeUndefined();
     }
+    expect(composicionDe('transferencia_predio').resolutores?.['codigoPredial']?.campos).toEqual([
+      'predioId',
+      'valorTransferencia',
+    ]);
   });
 });
 
