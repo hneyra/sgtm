@@ -76,6 +76,33 @@ como contexto de CAL-02.
 | `…/v2.0.0_Manual_Usuario_Modulo_Rentas.pdf` … `v6.1.0_Clasificadores_de_Ingreso.pdf` (10 archivos) | La serie de manuales de usuario y de cambios del módulo de Rentas del SRTM: v2.0.0 (manual base), v2.1–2.3 (mejoras), v3.0.0 (arbitrios), v3.1.0 (proceso masivo), v4.0.0 (manual), v5.0.0 (beneficios tributarios y notificaciones), v6.0.0 (multas tributarias y fiscalización), v6.1.0 (clasificadores de ingreso) | Referencia del sistema; **v3.1.0 (proceso masivo) y v5.0.0 (beneficios)** son los primeros a mirar para el `% actualización` y las campañas | ver `sha256sum` abajo |
 | `guia-registro-determinacion-ip/Guia_para_el_registro_y_determinacion_IP.pdf` | «Guía para el Registro y Determinación del Impuesto Predial» (MEF, 116 páginas) | Doctrina del MEF; posible segunda fuente del factor 2 | `9f743df4…97c7ed` |
 
+## 5. Legislación tributaria general — prescripción, valores y cobranza coactiva (#192)
+
+Las dos normas que el corpus de #192 transcribe: `prescripcion-y-plazos.md` (ya `VERIFICADO`) y
+los dos archivos nuevos del punto 2 (`valores-plazos-de-reclamacion.md` y
+`prescripcion-inicio-del-computo.md`) citan estos PDF como fuente consultada.
+
+**Tipo S3: `codigo-tributario`** y **`ejecucion-coactiva`.**
+
+```bash
+scripts/valores-normativos/archivar_fuente_normativa.sh \
+  --bucket sgtm-fuentes-normativas --ubigeo 200105 --tipo codigo-tributario \
+  gob-docs/tuo-codigo-tributario/textoCompleto-TUO-CT.pdf
+scripts/valores-normativos/archivar_fuente_normativa.sh \
+  --bucket sgtm-fuentes-normativas --ubigeo 200105 --tipo ejecucion-coactiva \
+  gob-docs/ds-018-2008-jus/DS-018-2008-JUS.pdf
+```
+
+| Archivo | Qué es (leído del contenido) | Cierra | sha256 |
+|---|---|---|---|
+| `tuo-codigo-tributario/textoCompleto-TUO-CT.pdf` | **El TUO del Código Tributario (D.S. 133-2013-EF) en la edición de SUNAT con modificaciones incorporadas** — 253 páginas; trae los textos vigentes y los anteriores lado a lado, con la nota de qué decreto legislativo tocó cada parte (la más reciente vista: D. Leg. 1540). ⚠️ Su art. 44 termina en el numeral 7: el D. Leg. 1421 **no** le añadió párrafo alguno —trató la prescripción en una disposición complementaria transitoria— | Los arts. 43–46 de `prescripcion-y-plazos.md`; los arts. 44, 78, 136 y 137 del punto 2 de #192 | `d27a0cab…d4023f333` |
+| `ds-018-2008-jus/DS-018-2008-JUS.pdf` | **El TUO de la Ley 26979, Ley de Procedimiento de Ejecución Coactiva (D.S. 018-2008-JUS)** — 19 páginas. El capítulo III (arts. 24–33) es el exclusivo de obligaciones tributarias de gobiernos locales: el art. 25 (deuda exigible), el art. 29 (los siete días hábiles de la REC, artículo propio además del art. 14 general) y el art. 31.2 (la OP reclamada sin pago previo) | El art. 14 de `prescripcion-y-plazos.md`; los arts. 25, 29 y 31.2 del punto 2 de #192 | `b662a3eb…934ec4f1` |
+
+**Pendiente de conseguir en PDF: el TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF).**
+Su art. 34 (la DJ anual del vehicular) ya está transcrito en `prescripcion-inicio-del-computo.md`
+desde el PDF de `muniate.gob.pe` alcanzado en sesión; cuando se descargue, va en
+`gob-docs/ds-156-2004-ef/` con **tipo S3 `tributacion-municipal`**, y su huella se añade aquí.
+
 ## Huellas completas
 
 ```
@@ -105,6 +132,8 @@ fd7492aef0b8b3bfc58457cc25084f2dc8e4f6cb2643856942da0447c8d40da5  mef-manuales-r
 c41076c851c479a494d6aac1b08500f41ba0fabd859c1e7dbce45f1b70e869be  mef-manuales-registro-determinacion/v5.0.0_Beneficios_Tributarios_Notificaciones.pdf
 f3338530af946f605c1bcd0a1e82fe06b255167513fc892df1af7efb49207759  mef-manuales-registro-determinacion/v6.0.0_Multas_Tributarias_Fiscalizacion.pdf
 2a91371e0971946f7b232d1f1c74ea8f9788ccfd2acb3ee3f94a38ac597424cb  mef-manuales-registro-determinacion/v6.1.0_Clasificadores_de_Ingreso.pdf
+d27a0caba13cb4a9b99304f12f4c6bba7f830c482ca625950235051d4023f333  tuo-codigo-tributario/textoCompleto-TUO-CT.pdf
+b662a3eba4663c59543bd6ccd3dc1cbb892a692e529305ec04cec4f6934ec4f1  ds-018-2008-jus/DS-018-2008-JUS.pdf
 ```
 
 ## Qué sigue después del archivado
