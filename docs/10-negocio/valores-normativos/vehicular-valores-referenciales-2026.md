@@ -3,19 +3,20 @@
 | Campo | Valor |
 |---|---|
 | Norma | TUO de la Ley de Tributación Municipal (D.S. N.° 156-2004-EF), arts. 30 a 37 (hecho gravado, alícuota, años de afectación); Resolución Ministerial N.° 008-2026-EF/15 (tabla de valores referenciales de vehículos, ejercicio 2026), conforme al art. 32 del TUO LTM |
-| Artículo | 30 a 37; anexo de la R.M. N.° 008-2026-EF/15 |
+| Artículo | 30 a 37 (TUO LTM); arts. 1 a 3 y anexo de la R.M. N.° 008-2026-EF/15 (fechada en Lima el 2026-01-14) |
 | Publicada | 2004-11-15, El Peruano (TUO LTM); 2026-01-15, El Peruano (R.M. N.° 008-2026-EF/15) |
 | Ejercicios que rige | 2004– (alícuota y años de afectación, TUO LTM); 2026 (tabla de valores referenciales, propia de ese ejercicio) |
 | Filas de NEG-02 §2 | 16 |
-| Transcribió | JNA, 2026-08-24; adición del anexo leído en la fuente (§1.2 y §1.3): Agent, 2026-08-28 |
+| Transcribió | JNA, 2026-08-24; adición del anexo leído en la fuente (§1.2 y §1.3): Agent, 2026-08-28; parte resolutiva de la R.M. leída completa (§1.4): Agent, 2026-08-28 |
 | Verificó | — |
 | Estado | TRANSCRITO |
 
 > **Por qué este archivo vuelve a `TRANSCRITO`.** El 2026-08-25 HNA verificó el archivo tal como
 > estaba entonces, cuando el anexo de la R.M. N.° 008-2026-EF/15 **no se había podido leer** y la
 > sección 1.2 solo describía su estructura por analogía con el ejercicio anterior. El 2026-08-28 se
-> leyeron los dos PDF oficiales del anexo y se añadió lo que se vio en ellos (§1.2 y §1.3, y la
-> reescritura de §3). **Esa adición no la ha verificado nadie todavía**, y el corpus no admite que
+> leyeron los tres PDF oficiales —los dos del anexo y el de la propia resolución— y se añadió lo que
+> se vio en ellos (§1.2, §1.3 y §1.4, y la reescritura de §3). **Esa adición no la ha verificado
+> nadie todavía**, y el corpus no admite que
 > quien transcribe se verifique a sí mismo (ADR-0007): el estado baja a `TRANSCRITO` y `Verificó`
 > vuelve a `—` hasta que una segunda persona vuelva a la fuente y re-firme. La verificación de HNA
 > del 2026-08-25 sigue en el historial de git, sobre el contenido que entonces tenía el archivo.
@@ -59,10 +60,11 @@ documentos:
 - La propia resolución (parte considerativa y resolutiva, sin el anexo): `https://cdn.www.gob.pe/uploads/document/file/9293913/7623157-rm-n-008-2026-ef-15.pdf`
 - Página institucional del MEF que enlaza ambos documentos: `https://www.mef.gob.pe/es/tabla-impuesto-vehicular` (sección "Impuesto al Patrimonio Vehicular 2026")
 
-**Procedencia de lo que sigue.** El 2026-08-28 el dueño del repositorio descargó de gob.pe los dos
-PDF del anexo y los puso en su Google Drive; desde ahí se leyeron en esta sesión. Lo de §1.2.1 a
-§1.2.4 y todo §1.3 sale de esos dos documentos, no de una fuente secundaria ni de la analogía con el
-ejercicio anterior. Lo que **no** se llegó a ver —y por qué— está en la nota de §1.2.5 y en §3.
+**Procedencia de lo que sigue.** El 2026-08-28 el dueño del repositorio descargó de gob.pe los tres
+PDF —los dos del anexo y el de la propia resolución— y los puso en su Google Drive; desde ahí se
+leyeron en esta sesión. Lo de §1.2.1 a §1.2.4, todo §1.3 y todo §1.4 sale de esos documentos, no de
+una fuente secundaria ni de la analogía con el ejercicio anterior. Lo que **no** se llegó a ver —y
+por qué— está en la nota de §1.2.5 y en §3.
 
 #### 1.2.1 Cómo se identifica el documento leído
 
@@ -121,12 +123,13 @@ verbatim.
 > transcrita, y reformatear una muestra de forma la desmiente. Fuera de este bloque verbatim, el
 > corpus sigue con su convención de siempre.
 
-#### 1.2.4 Una observación sobre el redondeo, dicha como observación
+#### 1.2.4 Una observación sobre los valores del anexo
 
 Todos los valores vistos en el anexo terminan en múltiplo de 10 (`18,000`, `16,200`, `135,890`,
-`36,680`…), lo que es **consistente** con el redondeo a la decena de soles que el resolutivo de la
-R.M. del ejercicio 2025 describía. Se anota como observación de lo leído, **no como norma
-transcrita**: el texto normativo que fija el redondeo para el ejercicio 2026 no se ha visto (§3).
+`36,680`…). Se anota como observación de lo leído: el redondeo que la R.M. 2026 **sí** fija como
+norma (art. 2.2, transcrito en §1.4.2) se aplica al valor **derivado por factor** para los años de
+fabricación anteriores a 2023, no dice nada de cómo se construyeron los valores directos del anexo.
+Que estos también sean múltiplos de 10 es un hecho del documento, no una regla transcrita.
 
 #### 1.2.5 Lo que sigue sin confirmarse de la tabla 2026
 
@@ -138,13 +141,9 @@ CAMIONES solo hasta la marca IVECO —el texto se corta a media fila, en «CABIN
 extraída no se afirma nada. Y de la parte sí extraída tampoco se transcribe fila por fila: son más
 de ocho mil cifras normativas, y reteclearlas a mano no sería una transcripción confiable (ver §3).›`
 
-`‹NO CONFIRMADO EN FUENTE OFICIAL: los factores de depreciación por antigüedad para los años de
-fabricación anteriores a 2023, el método que los aplica y el texto del redondeo, para el ejercicio
-2026. En lo extraído del anexo no aparece ni la tabla de factores, ni el texto del método, ni el del
-redondeo: o están en la cola truncada del anexo principal, o en la parte resolutiva de la propia
-R.M. N.° 008-2026-EF/15 (el tercer PDF, `7623157-rm-n-008-2026-ef-15.pdf`, que no se pudo consultar
-en esta sesión). Los factores 0.7…0.1 que se citan abajo son los de la R.M. del ejercicio 2025, y
-siguen sin verificarse contra la norma de 2026.›`
+Los factores de depreciación por antigüedad, el método que los aplica y el texto del redondeo **ya
+no están pendientes**: no estaban en el anexo sino en la parte resolutiva de la propia R.M. (arts.
+2.1 y 2.2), leída completa el mismo día — transcritos en §1.4.
 
 Lo que se sabe de la estructura, con la procedencia de cada línea:
 
@@ -153,9 +152,9 @@ Lo que se sabe de la estructura, con la procedencia de cada línea:
 | Categorías de vehículo cubiertas | Automóviles, camionetas, station wagons, camiones, buses, ómnibus y remolcadores o tracto camiones | Parcialmente. En el anexo 2026 se vieron las secciones `A1`, `A2`, `A3`, `A4`, `BUSES Y OMNIBUSES` y `CAMIONES`. La de remolcadores o tracto camiones **no** apareció en lo extraído; que la norma la define consta en §1.3.2, y en la R.M. del ejercicio anterior |
 | Variables que fijan el valor | Categoría, marca, modelo y año de fabricación | Sí, §1.2.2 |
 | Método para años de fabricación recientes | La tabla trae un valor directo en soles para los vehículos de fabricación de los tres años más recientes al ejercicio | Sí: para el ejercicio 2026 son los años de fabricación 2023, 2024 y 2025, en columnas rotuladas `2025 2024 2023` (§1.2.2) |
-| Método para años de fabricación anteriores | El valor se calcula multiplicando el valor del año base de la tabla por un factor de depreciación por antigüedad que decrece por año (en la R.M. 2025, de 0.7 para el año inmediato anterior al rango cubierto, hasta 0.1 para el año más antiguo y anteriores) | No. Ni la tabla de factores ni el texto del método aparecen en lo extraído |
-| Redondeo | El resultado se redondea a la decena de soles más cercana | No como texto normativo de 2026. Sí, como observación, que todos los valores vistos son múltiplos de 10 (§1.2.4) |
-| Insumos que usa el MEF para fijar los valores | Información del Servicio de Administración Tributaria (SAT) de la Municipalidad Metropolitana de Lima, y data especializada sobre la composición del parque automotor nacional | No en el anexo; viene del resolutivo de la R.M. del ejercicio 2025 |
+| Método para años de fabricación anteriores | El valor se calcula multiplicando **el valor señalado para el año 2025** en el anexo por el factor del año de fabricación (0,7 para 2022 … 0,1 para 2016 y anteriores) | Sí: art. 2.1 de la R.M., transcrito verbatim en §1.4.2. Ojo: la norma dice «el valor del vehículo señalado para el año 2025», no «el del año base» ni «el del año más antiguo» |
+| Redondeo | El valor derivado por factor se redondea a la decena de Soles: superior si las unidades son S/ 5,00 o más, inferior si son menos | Sí: art. 2.2 de la R.M., transcrito verbatim en §1.4.2 |
+| Insumos que usa el MEF para fijar los valores | Información del Servicio de Administración Tributaria (SAT) de la Municipalidad Metropolitana de Lima, y la información especializada del parque automotor | Sí: considerando de la R.M. 2026, §1.4.1 |
 
 ### 1.3 Continuación del anexo (R.M. N.° 008-2026-EF/15)
 
@@ -239,12 +238,85 @@ Para los modelos no comprendidos expresamente en la Tabla, el anexo prevé estas
 
 (La grafía «SOUESAST» es la del documento.)
 
+### 1.4 La parte resolutiva de la R.M. N.° 008-2026-EF/15, leída completa
+
+El tercer PDF —la resolución misma, `7623157-rm-n-008-2026-ef-15.pdf`— se leyó el 2026-08-28 por el
+mismo camino que los otros dos. Su parte resolutiva llegó **completa**: abre con los sellos de
+visación, sigue con los considerandos y los tres artículos, y cierra con «Regístrese, comuníquese y
+publíquese» y la firma de la ministra. (El mismo archivo trae a continuación el anexo entero, y esa
+parte sí llega truncada en la extracción — no cambia nada de §1.2.5.)
+
+#### 1.4.1 Identificación y considerandos
+
+| Dato | Tal como aparece en el PDF |
+|---|---|
+| Lugar y fecha | «Lima, 14 de enero del 2026» |
+| Firma | «DENISSE MIRALLES MIRALLES — Ministra de Economía y Finanzas» |
+| Cierre | «Regístrese, comuníquese y publíquese.» |
+
+Considerando de los insumos, literal:
+
+> «Que, para la determinación de los valores referenciales de los modelos y marcas de vehículos a
+> considerarse en la Tabla a que se hace referencia en el considerando anterior, se ha evaluado la
+> información remitida por el Servicio de Administración Tributaria (SAT) de la Municipalidad
+> Metropolitana de Lima, así como la información especializada del parque automotor en nuestro
+> país;»
+
+El artículo 1 aprueba la Tabla «respecto de los vehículos cuyo año de fabricación sea del 2023 al
+2025» — segunda confirmación, ahora por el texto resolutivo, del patrón de tres años con valor
+directo que §1.2.2 confirmó por el encabezado del anexo.
+
+#### 1.4.2 Artículo 2: factores por antigüedad y redondeo, literales
+
+Texto de la norma, literal:
+
+> «Artículo 2. Determinación de valores referenciales para vehículos cuyo año de fabricación sea
+> anterior al 2023
+>
+> 2.1 Para efectos de determinar el valor referencial de aquellos vehículos afectos al impuesto
+> cuyo año de fabricación sea anterior al 2023, se debe multiplicar el valor del vehículo señalado
+> para el año 2025 contenido en el Anexo de la presente Resolución Ministerial, por el factor
+> indicado para el año al que corresponde su fabricación, comprendido en la siguiente tabla:»
+
+| Año de Fabricación | Factor |
+|---|---|
+| 2022 | 0,7 |
+| 2021 | 0,6 |
+| 2020 | 0,5 |
+| 2019 | 0,4 |
+| 2018 | 0,3 |
+| 2017 | 0,2 |
+| 2016 y años anteriores | 0,1 |
+
+> «2.2 El valor determinado según el procedimiento indicado en el numeral anterior deberá ser
+> redondeado a la decena de Soles superior, si la cifra de unidades es de Cinco Soles (S/ 5,00) o
+> mayor; o a la decena de Soles inferior, si la cifra de unidades es menor a Cinco Soles
+> (S/ 5,00).»
+
+Dos precisiones que la letra de la norma fija y que una lectura de memoria erraría:
+
+- **El factor multiplica el valor del año 2025** — la columna del año de fabricación más reciente
+  del anexo—, no el del año 2023 ni «el del año base». Con la conjetura anterior de este archivo
+  («el valor del año base») un vehículo de 2022 habría salido con el factor aplicado sobre la
+  columna equivocada.
+- **El redondeo del art. 2.2 es del valor derivado por factor.** Es un punto de redondeo con
+  nombre y regla propios (decena de Soles, media decena hacia arriba), y entra al sistema como
+  dato del conjunto sellado igual que los demás puntos de D-03c — no como política compilada.
+
+#### 1.4.3 Lo que la parte resolutiva no trae
+
+Las categorías `A1`–`A4` del anexo **no se definen** en la resolución: ni «cilindrada», ni
+«automóvil», ni «camioneta» aparecen en sus considerandos o artículos. La definición de qué
+vehículo cae en cada código vive fuera de esta R.M. anual, y sigue
+`‹NO CONFIRMADO EN FUENTE OFICIAL: la definición normativa de las categorías A1, A2, A3 y A4 que
+usa el anexo; no se transcribe de fuentes secundarias›`.
+
 ## 2. Cómo entra al sistema
 
 | Qué | Dónde |
 |---|---|
-| Tipo | `parametro_tributario` (tipo `VEHICULAR_ALICUOTA`, `VEHICULAR_MINIMO_UIT`, `VEHICULAR_ANIOS_AFECTOS`, y el tipo de cambio mensual de §1.3.1); `valor_referencial_vehiculo` (la tabla de valores por categoría/marca/modelo/año de fabricación) |
-| Clave | `VEHICULAR_ALICUOTA` y `VEHICULAR_MINIMO_UIT` llevan el ejercicio como parte de la clave compuesta; el tipo de cambio, el ejercicio de la tabla más el año y el mes de la adquisición; `valor_referencial_vehiculo` se identifica por categoría + marca + modelo + año de fabricación + ejercicio |
+| Tipo | `parametro_tributario` (tipo `VEHICULAR_ALICUOTA`, `VEHICULAR_MINIMO_UIT`, `VEHICULAR_ANIOS_AFECTOS`, el tipo de cambio mensual de §1.3.1, los factores por antigüedad del art. 2.1 y el punto de redondeo del art. 2.2 —un punto de D-03c con regla ya normada, ver §1.4.2—); `valor_referencial_vehiculo` (la tabla de valores por categoría/marca/modelo/año de fabricación) |
+| Clave | `VEHICULAR_ALICUOTA` y `VEHICULAR_MINIMO_UIT` llevan el ejercicio como parte de la clave compuesta; el tipo de cambio, el ejercicio de la tabla más el año y el mes de la adquisición; los factores del art. 2.1, el ejercicio de la tabla más el año de fabricación; `valor_referencial_vehiculo` se identifica por categoría + marca + modelo + año de fabricación + ejercicio |
 | Ámbito | nacional |
 | Vigencia | Alícuota y años de afectación: 2004–, sin modificación conocida. Tabla de valores referenciales, tipo de cambio y equivalencias de marcas: 2026 únicamente — cada ejercicio tiene su propia resolución y su propio anexo, y no se derogan entre sí (conviven, versionadas por vigencia, igual que la UIT) |
 
@@ -254,28 +326,26 @@ Para los modelos no comprendidos expresamente en la Tabla, el anexo prevé estas
 
 - **La tabla de valores referenciales del anexo 2026 sigue sin estar transcrita fila por fila en
   este archivo.** Lo que cambió el 2026-08-28 es que ya no es cierto que "no se pudo leer el
-  documento": los dos PDF oficiales del anexo se leyeron (procedencia en §1.2), y de ahí salen la
-  estructura confirmada de §1.2.2, las cinco filas de muestra de §1.2.3 y la continuación completa
-  de §1.3. Lo que falta es otra cosa, y son tres cosas distintas:
+  documento": los tres PDF oficiales se leyeron (procedencia en §1.2), y de ahí salen la
+  estructura confirmada de §1.2.2, las cinco filas de muestra de §1.2.3, la continuación completa
+  de §1.3 y la parte resolutiva completa de §1.4 —con los factores por antigüedad y el redondeo,
+  que eran el hueco que impedía valorizar un vehículo fabricado antes de 2023—. Lo que falta es
+  otra cosa, y son dos cosas distintas:
   1. **La extracción del anexo principal quedó truncada** a unos 658 000 caracteres: llegaron unas
      8 525 filas, la sección `CAMIONES` solo hasta la marca IVECO —corte a media fila en «CABINATTO
      70C14 GNC 148,880 133,990 119,100»— y no llegó ninguna sección de remolcadores o tracto
-     camiones. De la cola no extraída no se afirma nada.
-  2. **Los factores de depreciación por antigüedad no aparecen en lo extraído**: ni la tabla de
-     factores, ni el texto del método para años de fabricación anteriores a 2023, ni el texto del
-     redondeo. O están en esa cola truncada, o en la parte resolutiva de la propia R.M. —el tercer
-     PDF, `7623157-rm-n-008-2026-ef-15.pdf`, que no se pudo consultar en esta sesión—. Es el hueco
-     que impide calcular la base imponible de un vehículo fabricado antes de 2023.
-  3. **La carga fila por fila a `valor_referencial_vehiculo` no se hace retecleando.** Son más de
+     camiones. La copia del anexo que acompaña al PDF de la resolución (§1.4) se trunca aún antes,
+     en `CAMIONES`/HYUNDAI. De la cola no extraída no se afirma nada.
+  2. **La carga fila por fila a `valor_referencial_vehiculo` no se hace retecleando.** Son más de
      ocho mil cifras normativas; transcribirlas a mano —o, peor, reproducirlas de memoria a partir
      de una lectura— no es una transcripción confiable, y un valor referencial equivocado se
      convierte en base imponible equivocada de un padrón entero. Esa carga exige el PDF con sus
      bytes exactos y una herramienta **mecánica** de extracción de tablas, con la salida comparada
      contra la fuente; y de todos modos espera a **D-13**, como todo lo de este directorio.
-- La regla de depreciación por antigüedad (el factor que multiplica el valor del año base para los
-  vehículos más antiguos) es, según el patrón de años anteriores, parte del **mismo anexo**, no una
-  fórmula aparte fijada por el TUO LTM. En el anexo 2026 no se ha visto todavía —punto 2 de arriba—,
-  así que esos factores siguen pendientes de transcribir junto con la tabla.
+- La regla de depreciación por antigüedad **ya no está pendiente**: para el ejercicio 2026 no vive
+  en el anexo sino en el artículo 2 de la propia resolución, transcrito literal en §1.4.2 — con la
+  corrección de que el factor multiplica el valor del **año 2025**, no «el del año base» como este
+  archivo conjeturaba a partir del ejercicio anterior.
 - El tipo de cambio de §1.3.1 sí está completo, pero **no basta por sí solo**: convierte a soles el
   valor de adquisición en moneda extranjera, y ese valor se contrasta luego contra la tabla, que es
   lo que falta.
