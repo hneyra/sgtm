@@ -56,9 +56,16 @@ describe('el resolutor es un opt-in de la composicion, no una bifurcacion del re
       'vehiculoId',
     ]);
     // Las demás siguen dibujando su `Campo` de siempre: negación por omisión.
-    for (const opcion of ['transferencia_predio', 'baja_deuda', 'contribuyentes']) {
+    // `transferencia_predio` sí declara un resolutor propio desde #73 —el suyo
+    // resuelve el predio y añade el valor de la transferencia, no la unidad—:
+    // se comprueba en `ResolutorDeTransferencia`, no aquí.
+    for (const opcion of ['baja_deuda', 'contribuyentes']) {
       expect(composicionDe(opcion).resolutores).toBeUndefined();
     }
+    expect(composicionDe('transferencia_predio').resolutores?.['codigoPredial']?.campos).toEqual([
+      'predioId',
+      'valorTransferencia',
+    ]);
   });
 });
 
@@ -104,6 +111,7 @@ describe('lo resuelto viaja; lo tecleado, no', () => {
       'ARBITRIOS MUNICIPALES',
     );
     await elegirLaPrimeraUnidad(usuario, CODIGO);
+    await llenarAnoYDocumento(usuario);
 
     await usuario.type(
       within(await screen.findByRole('region', { name: 'Observación del usuario' })).getByLabelText(
@@ -218,6 +226,40 @@ describe('no se pregunta por tecla, y un fallo no es un «no existe»', () => {
     // encadenar; lo que la prueba niega es «una por tecla».
     expect(consultas.length).toBeLessThanOrEqual(3);
     expect(consultas.length).toBeLessThan(CODIGO.length);
+  });
+
+  /**
+   * **`MINIMO = 6` no protegía nada** (#342, nit 2): las pruebas de este
+   * archivo siempre escriben el código entero (21 dígitos) o la placa entera
+   * (6 caracteres, que ya es el mínimo), así que ninguna ejercía el aviso de
+   * «todavía no se ha buscado» con menos. Aquí se escriben cinco: uno menos
+   * que el mínimo, para que la guarda tenga algo que impedir.
+   */
+  it('con menos de MINIMO caracteres no sale ninguna consulta, y lo dice', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta(ALTA);
+    await screen.findByLabelText('Unidad (predio / placa)');
+
+    const proxy = globalThis.fetch;
+    const consultas: string[] = [];
+    globalThis.fetch = (entrada, opciones) => {
+      const url = typeof entrada === 'string' ? entrada : String(entrada);
+      if (url.includes('/catastro/fichas')) consultas.push(url);
+      return proxy(entrada, opciones);
+    };
+
+    // Cinco caracteres: uno menos que el minimo de seis.
+    await usuario.type(screen.getByLabelText('Unidad (predio / placa)'), CODIGO.slice(0, 5));
+
+    const region = document.querySelector('.sgtm-resolutor__nota');
+    await waitFor(() =>
+      expect(region?.textContent).toBe(
+        'Todavía no se ha buscado: hacen falta al menos 6 caracteres.',
+      ),
+    );
+    // El respiro del `useValorAposentado` (300 ms) ya paso al esperar arriba:
+    // si algo hubiera salido, ya habria llegado.
+    expect(consultas).toHaveLength(0);
   });
 
   /**
@@ -379,6 +421,7 @@ describe('la multa administrativa se puede asentar sobre su predio', () => {
       'MULTA ADMINISTRATIVA',
     );
     await elegirLaPrimeraUnidad(usuario, CODIGO);
+    await llenarAnoYDocumento(usuario);
     await usuario.type(await laObservacion(), 'Multa de construcción sin licencia.');
 
     primariaEncendida(screen.getByRole('button', { name: 'Dar de alta' }));
@@ -401,6 +444,7 @@ describe('la multa administrativa se puede asentar sobre su predio', () => {
       screen.getByLabelText('Concepto / tributo'),
       'MULTA ADMINISTRATIVA',
     );
+    await llenarAnoYDocumento(usuario);
     await usuario.type(await laObservacion(), 'Multa sin predio asociado.');
 
     await usuario.click(screen.getByRole('button', { name: 'Dar de alta' }));
@@ -472,6 +516,7 @@ describe('el concepto no se elige solo', () => {
       await screen.findByLabelText('Concepto / tributo'),
       'IMPUESTO PREDIAL',
     );
+    await llenarAnoYDocumento(usuario);
     await usuario.type(await laObservacion(), 'Deuda migrada del sistema anterior.');
     await usuario.click(screen.getByRole('button', { name: 'Dar de alta' }));
 
@@ -593,7 +638,8 @@ describe('el cruce del titular', () => {
 
     const aviso = await screen.findByText(/figura a nombre de MEDINA MEDINA, RUFINA/);
     expect(aviso).toBeInTheDocument();
-    // Avisa y no bloquea: con su observación, la primaria se enciende.
+    // Avisa y no bloquea: con año, documento y su observación, la primaria se enciende.
+    await llenarAnoYDocumento(usuario);
     await usuario.type(await laObservacion(), 'Arbitrios del predio.');
     primariaEncendida(screen.getByRole('button', { name: 'Dar de alta' }));
   });
@@ -698,6 +744,7 @@ describe('resolver por placa', () => {
       'PATRIMONIO VEHICULAR',
     );
     await elegirPorPlaca(usuario, PLACA);
+    await llenarAnoYDocumento(usuario);
     await usuario.type(await laObservacion(), 'Vehicular incorporado a mano.');
     await usuario.click(screen.getByRole('button', { name: 'Dar de alta' }));
 
@@ -909,6 +956,7 @@ describe('lo elegido se recuerda, y guardar lo suelta', () => {
       'ARBITRIOS MUNICIPALES',
     );
     await elegirLaPrimeraUnidad(usuario, CODIGO);
+    await llenarAnoYDocumento(usuario);
     await usuario.type(await laObservacion(), 'Arbitrios del predio.');
     await usuario.click(screen.getByRole('button', { name: 'Dar de alta' }));
 
@@ -948,6 +996,7 @@ describe('lo elegido se recuerda, y guardar lo suelta', () => {
       'ARBITRIOS MUNICIPALES',
     );
     await elegirLaPrimeraUnidad(usuario, CODIGO);
+    await llenarAnoYDocumento(usuario);
     await usuario.type(await laObservacion(), 'Arbitrios del predio.');
     await usuario.click(screen.getByRole('button', { name: 'Dar de alta' }));
 
@@ -1151,6 +1200,16 @@ const laObservacion = async (): Promise<HTMLElement> =>
   within(await screen.findByRole('region', { name: 'Observación del usuario' })).getByLabelText(
     'Observación',
   );
+
+/**
+ * Llena el año y el documento que sustenta el alta: desde #342 (nit 3) los
+ * dos son tan obligatorios como el concepto, así que ninguna prueba de este
+ * archivo que llegue a guardar puede dejarlos sin elegir.
+ */
+const llenarAnoYDocumento = async (usuario: ReturnType<typeof userEvent.setup>): Promise<void> => {
+  await usuario.selectOptions(await screen.findByLabelText('Año'), '2026');
+  await usuario.type(screen.getByLabelText('Nº del documento'), 'RD-2026-000123');
+};
 
 /** La placa que el juego de datos del prototipo trae en la ficha de vehículo. */
 const PLACA = 'T2G-418';

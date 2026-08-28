@@ -105,6 +105,10 @@ const TRIBUTO_DEL_BACKEND: Readonly<Record<string, string>> = {
   'ARBITRIOS MUNICIPALES': 'ARBITRIO',
   'PATRIMONIO VEHICULAR': 'VEHICULAR',
   ALCABALA: 'ALCABALA',
+  // `MULTA_ADMINISTRATIVA` mide exactamente 20 caracteres: cabe justo, sin
+  // sobrar uno, en el `tributo varchar(20)` de `cuenta_corriente_asiento`
+  // (V2__rentas_y_cuenta_corriente.sql). No es un defecto (#342, nit 5); es un
+  // borde a recordar si algun dia se agrega un codigo mas largo que este.
   'MULTA ADMINISTRATIVA': 'MULTA_ADMINISTRATIVA',
 };
 
@@ -153,6 +157,128 @@ const RESULTADO_DE_NOTIFICACION_DEL_BACKEND: Readonly<Record<string, string>> = 
 
 const resultadoDeNotificacionDe = (texto: string): string | undefined =>
   RESULTADO_DE_NOTIFICACION_DEL_BACKEND[texto];
+
+/**
+ * «Tipo de valor» del catalogo → `TipoValor.codigo()` (OP, RD, RM). Tres traducciones
+ * distintas y no una sola porque cada pantalla dibuja su propio vocabulario para lo mismo:
+ * `valores_busqueda` lo abrevia («RES. DETERMINACIÓN»), `valores_individual` lo escribe
+ * entero y `valores_masivo` no ofrece «RESOLUCIÓN DE MULTA» —una multa no se emite en
+ * bloque, se emite una a una tras una fiscalizacion—. Fusionar las tres en una tabla
+ * comun dejaria que una pantalla mandara un tipo que su propio desplegable no ofrece.
+ */
+const TIPO_DE_VALOR_INDIVIDUAL: Readonly<Record<string, string>> = {
+  'ORDEN DE PAGO': 'OP',
+  'RESOLUCIÓN DE DETERMINACIÓN': 'RD',
+  'RESOLUCIÓN DE MULTA': 'RM',
+};
+
+const tipoDeValorIndividualDe = (texto: string): string | undefined =>
+  TIPO_DE_VALOR_INDIVIDUAL[texto];
+
+const TIPO_DE_VALOR_MASIVO: Readonly<Record<string, string>> = {
+  'ORDEN DE PAGO': 'OP',
+  'RESOLUCIÓN DE DETERMINACIÓN': 'RD',
+};
+
+const tipoDeValorMasivoDe = (texto: string): string | undefined => TIPO_DE_VALOR_MASIVO[texto];
+
+/**
+ * «Tributo» del catalogo de `valores_individual`/`valores_masivo`/`prescripcion` →
+ * el codigo que `ConsultaDeDeudaPublica`/el libro reconocen.
+ *
+ * **No es `TRIBUTO_DEL_BACKEND`** (la de `alta_deuda`, mas arriba): esa traduce
+ * «ARBITRIOS MUNICIPALES»/«MULTA ADMINISTRATIVA», y estas tres pantallas dibujan
+ * «ARBITRIOS»/«MULTA» a secas —el mismo desplegable del manual, escrito distinto en
+ * cada pantalla del prototipo—. Los **codigos de destino son los mismos**
+ * (`SelectorDeObligacion.tributo()` se compara con `equalsIgnoreCase` contra lo que
+ * publica el libro, igual que en `alta_deuda`), asi que fusionar las llaves de origen
+ * en una sola tabla dejaria una de las dos pantallas sin su propia etiqueta.
+ */
+const TRIBUTO_DE_VALORES: Readonly<Record<string, string>> = {
+  'IMPUESTO PREDIAL': 'PREDIAL',
+  ARBITRIOS: 'ARBITRIO',
+  'PATRIMONIO VEHICULAR': 'VEHICULAR',
+  ALCABALA: 'ALCABALA',
+  MULTA: 'MULTA_ADMINISTRATIVA',
+};
+
+const tributoDeValoresDe = (texto: string): string | undefined => TRIBUTO_DE_VALORES[texto];
+
+/**
+ * La obligacion que formaliza `valores_individual` (`POST /valores`, #37, #75).
+ *
+ * `PeticionDeValor.obligaciones` es un arreglo, y el catalogo dibuja un formulario
+ * plano de una sola obligacion —un tributo, un periodo—: la pantalla
+ * (`GeneracionIndividualDeValores.tsx`) sincroniza esos dos campos en una tabla de,
+ * como mucho, una fila cada vez que cambian; no hay boton para anadir una segunda.
+ *
+ * `predioId`/`vehiculoId` no se declaran: son el identificador interno del predio o
+ * el vehiculo, y esta pantalla no tiene todavia un resolutor que los traduzca desde
+ * el codigo catastral o la placa (el que #331 le dio a `alta_deuda` es de esa
+ * pantalla, con su propio componente). Sin ellos, el selector cae sobre la
+ * obligacion del tributo/ejercicio que no cuelga de un predio o vehiculo concreto;
+ * el backend contesta `ObligacionSinDeuda` en vez de adivinar cual.
+ */
+const OBLIGACION_UNICA: TablaDelCuerpo = {
+  campo: 'obligaciones',
+  columnas: {
+    tributo: { campo: 'tributo', valor: tributoDeValoresDe },
+    periodo: { campo: 'ejercicio', entero: true },
+  },
+};
+
+/**
+ * El criterio de una corrida de `valores_masivo` (`POST /valores/masivo`, #38, #75).
+ *
+ * `IniciarCorridaMasiva` exige **exactamente uno** de `contribuyentes` (una lista de
+ * codigos) o `archivoCsv` (una hoja importada en base64): esta pantalla conecta solo
+ * el primero —«seleccion individual», en el vocabulario del javadoc de
+ * `PeticionDeValorMasivo`—, tecleado uno por linea. La importacion de hoja de
+ * calculo no tiene todavia ningun control en el catalogo ni en el prototipo —ni
+ * `type="file"` en ninguna pantalla del sistema— y anadir uno seria un componente
+ * escrito antes de que ninguna otra pantalla lo pida.
+ *
+ * `columnaUnica`: el backend declara `List<String>`, no una lista de objetos.
+ */
+const CONTRIBUYENTES_DE_LA_CORRIDA: TablaDelCuerpo = {
+  campo: 'contribuyentes',
+  columnaUnica: 'codigo',
+  columnas: { codigo: { campo: 'codigo' } },
+};
+
+/**
+ * La causal del art. 43 del TUO del Codigo Tributario que sustenta la prescripcion
+ * (`prescripcion`, `PeticionDePrescripcion.plazoAplicable`, #39, #75). Los tres
+ * plazos —4, 6 y 10 anios— **no viajan**: son la cifra normativa que vive en el
+ * parametro sellado (regla 5); lo que este desplegable manda es la causal, y el
+ * backend deriva el plazo de ella.
+ */
+const CAUSAL_DE_PRESCRIPCION: Readonly<Record<string, string>> = {
+  '4 AÑOS — DECLARACIÓN PRESENTADA': 'DECLARACION_PRESENTADA',
+  '6 AÑOS — NO PRESENTÓ DECLARACIÓN': 'SIN_DECLARACION',
+  '10 AÑOS — AGENTE DE RETENCIÓN': 'AGENTE_RETENCION',
+};
+
+const causalDePrescripcionDe = (texto: string): string | undefined => CAUSAL_DE_PRESCRIPCION[texto];
+
+/**
+ * El hecho que interrumpe el computo de la prescripcion (art. 45 del TUO), tal como
+ * lo elige el unico desplegable que el catalogo dibuja —«Acto de interrupcion»—.
+ *
+ * Es una tabla de, como mucho, una fila: `PrescripcionDeLaDeuda.tsx` la sincroniza
+ * con «NINGUNO» vaciandola. `clase` viaja fija en `INTERRUPCION` —el catalogo no
+ * dibuja ninguna suspension (art. 46), y esta pantalla no inventa la que no esta—.
+ * `fechaHasta` no se declara por el mismo motivo: una interrupcion no tiene fin, se
+ * cuenta de nuevo desde el dia siguiente (`ClaseDeHecho`).
+ */
+const HECHO_DE_INTERRUPCION: TablaDelCuerpo = {
+  campo: 'hechos',
+  columnas: {
+    clase: { campo: 'clase' },
+    causal: { campo: 'causal' },
+    fechaDesde: { campo: 'fechaDesde' },
+  },
+};
 
 /**
  * La tabla de pisos, que el alta de una ficha y su actualizacion declaran igual.
@@ -395,6 +521,12 @@ const DONDE = 'Está en «Unidad (predio / placa)», dentro de «Deuda a dar de 
 /** Lo mismo, para el desplegable del concepto. */
 const DONDE_EL_CONCEPTO = 'Está en «Concepto / tributo», dentro de «Deuda a dar de alta».';
 
+/** Lo mismo, para el desplegable del año. */
+const DONDE_EL_ANO = 'Está en «Año», dentro de «Deuda a dar de alta».';
+
+/** Lo mismo, para el campo del documento que sustenta el alta. */
+const DONDE_EL_DOCUMENTO = 'Está en «Nº del documento», dentro de «Deuda a dar de alta».';
+
 /**
  * Que le falta al alta para poder registrarse, dicho para quien atiende (#331).
  *
@@ -418,8 +550,18 @@ const DONDE_EL_CONCEPTO = 'Está en «Concepto / tributo», dentro de «Deuda a 
  * lo que el backend contesta entonces es sobre un campo que la pantalla enseñaba
  * lleno. El desplegable ya no miente —`eleccionObligatoria` en `Formulario`— y
  * aqui no se deja pasar: elegir es un acto.
+ *
+ * `resolverUnidad` tiene por omision `unidadDelTributo` y solo una prueba lo
+ * cambia (#342, nit 2): con los cinco tributos que hoy manda el alta clasificados
+ * en `UNIDAD_DEL_TRIBUTO`, la rama `unidad === undefined` no la alcanza ningun
+ * dato real, y una guarda que nunca se ejerce no protege nada. Inyectar el
+ * resolutor deja simular «un tributo que la clasificacion todavia no cubre» sin
+ * tocar `UNIDAD_DEL_TRIBUTO` de produccion.
  */
-function faltaEnElAlta(borrador: Readonly<Record<string, string>>): string | undefined {
+export function faltaEnElAlta(
+  borrador: Readonly<Record<string, string>>,
+  resolverUnidad: (codigo: string) => ReturnType<typeof unidadDelTributo> = unidadDelTributo,
+): string | undefined {
   const dato = (clave: string): string => (borrador[clave] ?? '').trim();
 
   const concepto = dato('conceptoTributo');
@@ -436,7 +578,7 @@ function faltaEnElAlta(borrador: Readonly<Record<string, string>>): string | und
      codigo a `TRIBUTO_DEL_BACKEND` y se olvide aqui, la pantalla dejaria
      registrar el alta sin unidad —y sin decir nada— sobre un tributo que quiza
      cuelga de una. La lista blanca del cuerpo es cerrada; esta tambien. */
-  const unidad = unidadDelTributo(tributo);
+  const unidad = resolverUnidad(tributo);
   if (unidad === undefined) {
     return `El sistema todavía no sabe de qué unidad cuelga la deuda de «${concepto}» —si de un predio, de un vehículo o de ninguno—, y de eso depende a qué obligación se asienta. Avísale a sistemas antes de darla de alta.`;
   }
@@ -463,6 +605,107 @@ function faltaEnElAlta(borrador: Readonly<Record<string, string>>): string | und
   }
   // `'predio-opcional'` no tiene rama: ni se exige ni se rechaza. Ver
   // `UNIDAD_DEL_TRIBUTO`, y `RegistrarPapeleta.java:164-170`.
+
+  /* **El año se exige con la misma dureza que el concepto** (#342, nit 3):
+     `MovimientosDeDeudaController.entero` llama a su propio `exigir` sobre
+     `peticion.ano()` y responde 422 «Falta el campo 'ano'» si llega en blanco.
+     El desplegable de año tambien lleva `eleccionObligatoria` —la opcion vacia
+     va antepuesta—, asi que sin esta rama la primaria se habilita con el año
+     sin elegir y el primer intento de guardar se va y vuelve con un rechazo que
+     la pantalla ya sabia de sobra. */
+  const ano = dato('ano');
+  if (ano === '') {
+    return `Falta el año: elige el ejercicio al que corresponde la deuda. Sin él el alta no se puede asentar sobre ninguna obligación. ${DONDE_EL_ANO}`;
+  }
+
+  /* **Y el documento que sustenta el alta, menor pero igual de duro**: el mismo
+     controlador exige `peticion.documentoOrigen()` con `exigir`, sin el que
+     mande el desplegable de arriba —`documentoQueSustenta` no viaja, es
+     presentacion—. El campo de texto no lleva `eleccionObligatoria` porque no
+     es un `select`, y por eso puede quedar en blanco sin que nada lo marque. */
+  const documento = dato('nDelDocumento');
+  if (documento === '') {
+    return `Falta el número del documento que sustenta el alta: una resolución, un acta o la referencia de la migración. Sin él no queda con qué defender la deuda ante el contribuyente. ${DONDE_EL_DOCUMENTO}`;
+  }
+
+  return undefined;
+}
+
+/** Donde se resuelve el predio, dicho para quien atiende «Transferencia de predio». */
+const DONDE_EL_PREDIO = 'Está en «Código predial», dentro de «Datos del acto».';
+
+/**
+ * Que le falta a «Transferencia de predio» para poder registrarse (#73).
+ *
+ * El predio y el valor viajan por el resolutor de `rentas/composicion.ts`
+ * (`ResolutorDePredioDeTransferencia`); el resto son los campos que
+ * `TransferenciaPredioController` exige y que el catálogo sí dibuja.
+ */
+function faltaEnLaTransferenciaDePredio(
+  borrador: Readonly<Record<string, string>>,
+): string | undefined {
+  const dato = (clave: string): string => (borrador[clave] ?? '').trim();
+
+  if (dato('predioId') === '') {
+    return `Falta el predio: busca su código catastral y elígelo en la lista. Sin él, la transferencia no señala a ningún predio. ${DONDE_EL_PREDIO}`;
+  }
+  const valor = dato('valorTransferencia');
+  if (valor === '') {
+    return `Falta el valor de la transferencia: es la base sobre la que se liquida la alcabala, y sin él el acto no se puede registrar. ${DONDE_EL_PREDIO}`;
+  }
+  if (!IMPORTE_DEL_CUERPO.test(valor)) {
+    return `El valor de la transferencia no llegó como cifra («${valor}»): escríbelo sin separador de miles, por ejemplo «95000.00».`;
+  }
+  if (dato('transferenteDocumento') === '') {
+    return 'Falta el código del transferente: quien vende, dona o cede el predio.';
+  }
+  if (dato('adquirenteDocumento') === '') {
+    return 'Falta el código del adquirente: quien lo recibe.';
+  }
+  if (dato('tipoDeActo') === '') {
+    return 'Falta el tipo de acto: compra-venta, donación, permuta y las demás formas que reconoce la ley.';
+  }
+  if (dato('fechaDelActo') === '') {
+    return 'Falta la fecha del acto: es desde cuándo corre la afectación del adquirente.';
+  }
+  if (dato('transferido') === '') {
+    return 'Falta el porcentaje transferido: cuánto del predio cambia de titular en este acto.';
+  }
+  return undefined;
+}
+
+/**
+ * Que le falta a «Transferencia de vehículo» para poder registrarse (#73).
+ *
+ * Sin resolutor de identificador: `placa` viaja tal cual —
+ * `TransferenciaVehiculoController` la resuelve él mismo contra el padrón— y
+ * el transferente lo toma de quien figura hoy como titular. Solo el valor de
+ * la transferencia necesita el campo que `rentas/composicion.ts` añade.
+ */
+function faltaEnLaTransferenciaDeVehiculo(
+  borrador: Readonly<Record<string, string>>,
+): string | undefined {
+  const dato = (clave: string): string => (borrador[clave] ?? '').trim();
+
+  if (dato('placa') === '') {
+    return 'Falta la placa: es el vehículo que cambia de titular.';
+  }
+  const valor = dato('valorTransferencia');
+  if (valor === '') {
+    return 'Falta el valor de la transferencia: es parte del hecho que queda asentado, y sin él el acto no se puede registrar. Está junto a «Transferente — documento».';
+  }
+  if (!IMPORTE_DEL_CUERPO.test(valor)) {
+    return `El valor de la transferencia no llegó como cifra («${valor}»): escríbelo sin separador de miles, por ejemplo «95000.00».`;
+  }
+  if (dato('adquirenteDocumento') === '') {
+    return 'Falta el código del adquirente: quien recibe el vehículo.';
+  }
+  if (dato('tipoDeActo') === '') {
+    return 'Falta el tipo de acto: compra-venta, donación, remate y las demás formas que reconoce la ley.';
+  }
+  if (dato('fechaDeTransferencia') === '') {
+    return 'Falta la fecha de transferencia: es desde cuándo responde el adquirente por el impuesto.';
+  }
   return undefined;
 }
 
@@ -614,6 +857,77 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   },
 
   /**
+   * Transferencia de predio (RF-026/RF-027, #29, #73): da de baja al transferente y de alta al
+   * adquirente desde la fecha del acto.
+   *
+   * `predioId` y `valorTransferencia` no los dibuja ningún campo del catálogo: los llena
+   * `ResolutorDePredioDeTransferencia` (`rentas/composicion.ts`), que sustituye a «Código
+   * predial» y resuelve el primero contra `consulta_fichas` mientras añade el segundo —la
+   * base sobre la que se liquida la alcabala, que el manual dibuja en otra pantalla y el
+   * backend no lee ahí—. Ver `ACTOS_SIN_CAMPO` en `pantallas/actos.ts` para el estado anterior
+   * a esta declaración.
+   *
+   * `codTransferente`/`codAdquiriente` son **códigos**, no identificadores internos:
+   * `TransferenciaPredioController` los resuelve él mismo contra el padrón, así que el texto
+   * que se teclea en «Transferente/Adquirente — documento» viaja tal cual.
+   *
+   * `nDeExpediente` y `notaria` no viajan: `PeticionDeTransferenciaPredio` no tiene ningún
+   * campo para ellos. `documentoOrigen` sale de «Nº de minuta / escritura», que es el
+   * documento con que se registra el acto. `generaAlcabala` tampoco viaja: es una casilla y
+   * `CampoDelCuerpo` no tiene una forma de mandar un booleano real —enviarlo como texto
+   * («si»/«») fallaría contra un campo `Boolean`—; `afectaAlcabala` queda sin marcar, que es
+   * el valor por omisión que el propio controlador ya aplica cuando el campo no llega.
+   */
+  transferencia_predio: {
+    campos: {
+      tipoDeActo: { campo: 'tipoTransferencia' },
+      fechaDelActo: { campo: 'fechaTransferencia' },
+      nDeMinutaEscritura: { campo: 'documentoOrigen' },
+      transferido: { campo: 'porcentajeTransferido' },
+      transferenteDocumento: { campo: 'codTransferente' },
+      adquirenteDocumento: { campo: 'codAdquiriente' },
+      predioId: { campo: 'predioId', entero: true },
+      valorTransferencia: { campo: 'valorTransferencia', importe: true },
+    },
+    exigir: (borrador) => faltaEnLaTransferenciaDePredio(borrador),
+    nota: true,
+  },
+
+  /**
+   * Transferencia de vehículo (RF-026, #29, #73): registra el cambio de titular.
+   *
+   * Sin resolutor de identificador: `placa` viaja tal cual, porque
+   * `TransferenciaVehiculoController` la resuelve él mismo contra el padrón de vehículos, y
+   * **sin `codTransferente`**: el transferente es quien figura hoy como titular, y el
+   * controlador lo lee de ahí —pedirlo aquí abriría la puerta a que se escriba un código
+   * distinto del que la base realmente tiene—.
+   *
+   * `valorTransferencia` no lo dibuja ningún campo del catálogo (#73, misma frontera que
+   * `transferencia_predio`): lo llena `ResolutorDeValorDeTransferencia`
+   * (`rentas/composicion.ts`), que sustituye a «Transferente — documento» —un campo que hoy no
+   * llega a ningún sitio, porque ninguna de las dos peticiones del controlador lo acepta para
+   * un vehículo— y lo sigue dibujando tal cual, sin marcarlo escribible.
+   *
+   * `nroDeExpediente` no viaja: `PeticionDeTransferenciaVehiculo` no tiene campo para él.
+   * `documentoOrigen` sale de «Nº del documento». `documentoSustentatorio` (el tipo de
+   * documento) tampoco viaja: el controlador solo pide el número, no su tipo.
+   * `generaAlcabala` no tiene campo en esta pantalla —a diferencia de la de predio, el
+   * catálogo no lo dibuja aquí—, así que `afectaAlcabala` queda igual sin marcar.
+   */
+  transferencia_vehiculo: {
+    campos: {
+      placa: { campo: 'placa' },
+      fechaDeTransferencia: { campo: 'fechaTransferencia' },
+      tipoDeActo: { campo: 'tipoTransferencia' },
+      nDelDocumento: { campo: 'documentoOrigen' },
+      adquirenteDocumento: { campo: 'codAdquiriente' },
+      valorTransferencia: { campo: 'valorTransferencia', importe: true },
+    },
+    exigir: (borrador) => faltaEnLaTransferenciaDeVehiculo(borrador),
+    nota: true,
+  },
+
+  /**
    * Notificacion de valores (RF-093, #39, #75). `PeticionDeNotificacion` es un cuerpo plano —a
    * diferencia de `valores_individual`/`valores_masivo`, que piden un arreglo (ver
    * `pantallas/valores/index.ts`)—, y el catalogo dibuja el mismo formulario campo a campo.
@@ -645,9 +959,110 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
     nota: true,
   },
 
-  // `pase_coactiva` no esta aqui a proposito, aunque `PeticionDeMovimiento` (#39) es un cuerpo
-  // tan plano como el de `notificacion_valores`: ver `pantallas/valores/index.ts` para por que
-  // conectarla hoy la haria menos segura, no mas.
+  /**
+   * Generacion individual de valores (`POST /valores`, #37, #75). Ver `OBLIGACION_UNICA`,
+   * `TIPO_DE_VALOR_INDIVIDUAL` y `TRIBUTO_DE_VALORES` mas arriba.
+   *
+   * `nroDeValor`, `fechaDeEmision`, `baseLegal` y toda la seccion «Importes» del catalogo
+   * son «ro»: el correlativo lo numera `ValorRepository.siguienteCorrelativo`, la fecha es
+   * la de hoy —`RegistrarValor.emitir` no acepta otra desde esta ruta— y `baseLegal` la
+   * deriva `TipoValor.baseLegal()` del tipo. El desglose (insoluto, reajuste, interes,
+   * gastos, total) es lo que la emision **congela**: no existe hasta que se emite, y
+   * `ValorDetalle` lo trae en la respuesta —esta pantalla no lo previsualiza, porque no hay
+   * ningun `GET` que calcule sin emitir—.
+   */
+  valores_individual: {
+    campos: {
+      tipoDeValor: { campo: 'tipo', valor: tipoDeValorIndividualDe },
+      codContribuyente: { campo: 'codContribuyente' },
+    },
+    tablas: { obligaciones: OBLIGACION_UNICA },
+    nota: true,
+  },
+
+  /**
+   * Generacion masiva de valores (`POST /valores/masivo`, #38, #75). Ver
+   * `CONTRIBUYENTES_DE_LA_CORRIDA`, `TIPO_DE_VALOR_MASIVO` y `TRIBUTO_DE_VALORES` mas
+   * arriba.
+   *
+   * `sector`, `montoMinimoDeEmisionS`, `excluyeContribuyentesConConvenio` y
+   * `excluyeDeudaReclamada` **no viajan**: `PeticionDeValorMasivo` no tiene ningun campo
+   * para ellos —`IniciarCorridaMasiva` filtra por tributo y ejercicio, no por sector ni
+   * por un monto minimo, y no excluye nada todavia—. Mandarlos seria fingir un filtro que
+   * el backend ignora en silencio.
+   *
+   * `fechaDeEmision` del catalogo se declara como `fechaCriterio`: es la fecha a la que se
+   * evalua la deuda disponible de cada candidato, congelada al registrar el criterio
+   * (`RegistrarValor.emitir(..., fecha)`), no la fecha en la que efectivamente corre la
+   * etapa «generacion» —que es un proceso aparte, en el perfil batch—.
+   */
+  valores_masivo: {
+    campos: {
+      tipoDeValor: { campo: 'tipo', valor: tipoDeValorMasivoDe },
+      ejercicioDesde: { campo: 'ejercicioDesde', entero: true },
+      ejercicioHasta: { campo: 'ejercicioHasta', entero: true },
+      tributo: { campo: 'tributo', valor: tributoDeValoresDe },
+      fechaDeEmision: { campo: 'fechaCriterio' },
+    },
+    tablas: { contribuyentes: CONTRIBUYENTES_DE_LA_CORRIDA },
+    nota: true,
+  },
+
+  /**
+   * Prescripcion de la deuda (`POST /coactiva/prescripcion`, #39, #75). Ver
+   * `CAUSAL_DE_PRESCRIPCION`, `HECHO_DE_INTERRUPCION` y `TRIBUTO_DE_VALORES` mas arriba.
+   *
+   * `ejerciciosSolicitados` del catalogo —un solo campo de texto libre, «2021 — 2026»— no
+   * se declara: `PeticionDePrescripcion` pide `ejercicioDesde`/`ejercicioHasta` como dos
+   * enteros separados, y partir un texto libre en dos numeros no es una traduccion de
+   * `CampoDelCuerpo.valor` —esa devuelve una cadena, no dos campos—.
+   * `PrescripcionDeLaDeuda.tsx` dibuja dos selectores de ejercicio en su lugar, y cada uno
+   * escribe el campo declarado que le toca.
+   *
+   * `inicioDelComputo`, `nuevoInicioDelComputo`, `fechaDePrescripcion`, `resultado` y
+   * `montoAExtinguirS` son «ro»: el computo, el veredicto y el monto los deriva el
+   * servidor del conjunto sellado y de la deuda del contribuyente; dejar que viajaran
+   * seria dejar que el cliente declarara prescrita una deuda que no lo esta.
+   */
+  prescripcion: {
+    campos: {
+      codContribuyente: { campo: 'codContribuyente' },
+      tributo: { campo: 'tributo', valor: tributoDeValoresDe },
+      ejercicioDesde: { campo: 'ejercicioDesde', entero: true },
+      ejercicioHasta: { campo: 'ejercicioHasta', entero: true },
+      fechaDePresentacion: { campo: 'fechaDePresentacion' },
+      plazoAplicable: { campo: 'plazoAplicable', valor: causalDePrescripcionDe },
+      nDeResolucion: { campo: 'nDeResolucion' },
+    },
+    tablas: { hechos: HECHO_DE_INTERRUPCION },
+    nota: true,
+  },
+
+  /**
+   * Pase de un valor a coactiva (`POST /valores/{numero}/movimientos`, #39, #75).
+   *
+   * `PeticionDeMovimiento` es un cuerpo tan plano como el de `notificacion_valores`, pero
+   * el catalogo dibuja las acciones de esta pantalla como `["Nuevo", "Modificar",
+   * "Generar", "Inactivar", "Imprimir"]` —la ultima es «Imprimir», que ni escribe de
+   * verdad ni es irreversible—, asi que el renderizador generico (que trata **la ultima**
+   * accion como la primaria que escribe) dejaria pasar un valor a coactiva sin ninguna
+   * confirmacion. Por eso vive en su propio componente (`PaseACoactiva.tsx`, en
+   * `COMPONENTES_PROPIOS` de `Pantalla.tsx`) con su propia barra de una sola accion —
+   * «Derivar a coactiva», la unica que escribe, siempre la primaria—, no en el
+   * renderizador generico.
+   *
+   * `tipoDeMovimiento` **no lo elige quien atiende**: `ValoresController.mover` rechaza
+   * cualquier valor que no sea `PCO` («#39 registra el pase (PCO). ACO/RCO son la
+   * respuesta de coactiva, y la escribe el modulo coactiva» — eso es #40, cuando exista
+   * el expediente que responde—), asi que la pantalla lo fija sola: no hay un desplegable
+   * pidiendo una eleccion que solo tiene una respuesta correcta.
+   */
+  pase_coactiva: {
+    campos: {
+      tipoDeMovimiento: { campo: 'tipoDeMovimiento' },
+      fechaDelMovimiento: { campo: 'fechaDelMovimiento' },
+    },
+  },
 
   /* ── Catastro: el territorio y la ficha (#320, #321) ─────────────────── */
 
@@ -751,6 +1166,46 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
       vigenciaDesde: { campo: 'vigenciaDesde' },
     },
     tablas: { construcciones: CONSTRUCCIONES },
+  },
+
+  /* ── Tesorería: la ventanilla (#33, #34, #35, #36, #74) ──────────────── */
+
+  /**
+   * Anulación de recibo (RF-083, #34, #74). El recibo que se anula llega por la URL —su número
+   * impreso, `/tesoreria/anulacion-recibo/{nro}`—, no por el campo «Nro. de recibo» de la
+   * pantalla: el contrato declara `nro` como parámetro de ruta y `PeticionDeAnulacion` no lo lee
+   * del cuerpo. Se abre igual que una ficha catastral, por su código en la dirección.
+   *
+   * `motivo` y `autorizadoPor` viajan **tal cual los escribe quien atiende**: el backend los
+   * guarda como texto libre —quedan impresos en el duplicado, para que quien tenga el papel sepa
+   * por qué dejó de valer— y no hay ningún `CHECK` que traducir, a diferencia del tributo de
+   * `alta_deuda`. Las opciones del desplegable del prototipo son una ayuda para teclear, no un
+   * código que este archivo tenga que conocer.
+   *
+   * Lo que **no** viaja, y por qué:
+   *
+   * - `detalle` (el área de la pantalla): es la misma observación que ya exige `useEscritura`
+   *   (regla 10) — dos cajas de texto libre pidiendo lo mismo acabarían con una de las dos
+   *   vacía—. `nota` lo dice antes de que alguien lo busque.
+   * - `devuelveLaDeudaACuentaCorriente` (la casilla): no es una opción. `PeticionDeAnulacion`
+   *   no tiene ningún campo para ella porque la reversión de los abonos **va siempre**: anular un
+   *   recibo sin deshacerlos dejaría el pago asentado sobre un documento que ya no vale, y el
+   *   contribuyente figuraría al corriente sin haber pagado.
+   * - `nroDeRecibo` (el campo de la sección «Recibo a anular»): es el mismo registro que ya trae
+   *   la URL. Declararlo dejaría dos sitios para el mismo número y ninguna forma de decidir cuál
+   *   manda cuando no coincidan.
+   */
+  anulacion_recibo: {
+    campos: {
+      motivo: { campo: 'motivo' },
+      autorizadoPor: { campo: 'autorizadoPor' },
+      nDeMemorando: { campo: 'nDeMemorando' },
+    },
+    exigir: (borrador) =>
+      (borrador['motivo'] ?? '').trim() === ''
+        ? 'Elige el motivo de la anulación: es el sustento del acto, y queda impreso en el duplicado del recibo.'
+        : undefined,
+    nota: true,
   },
 };
 
