@@ -58,7 +58,8 @@ sitio.
 
 El nombre del usuario en la cabecera abre un menú con lo suyo: cambiar el año de trabajo,
 preferencias y el acceso a Seguridad —que conserva además su entrada como módulo: dos puertas,
-mismo permiso, misma pantalla—.
+mismo permiso, misma pantalla—. La entrada de preferencias llega cuando exista un panel de
+preferencias que abrir: el menú ofrece solo lo que opera.
 
 ### 4. Dentro de cada módulo, grupos por tarea
 
@@ -81,7 +82,8 @@ reportes. Cada hoja conserva su identificador de opción, su ruta y su permiso.
   siendo la clave del permiso, y `useCatalogoVisible` filtra el lanzador y el menú igual que hoy
   filtra la barra, el hub y la paleta. Una puerta nueva no es una superficie de exploración
   nueva.
-- La reagrupación cambia `bloqueDe` en `portar-catalogo.mjs` y regenera el catálogo; las pruebas
+- La reagrupación vive en una tabla exhaustiva (`scripts/grupos-por-tarea.mjs`), importable y con
+  guardas probadas; `bloqueDe` queda como respaldo de los módulos sin tabla. Las pruebas
   del catálogo que fijan los bloques se actualizan, y una prueba nueva exige que todo módulo con
   grupos por tarea asigne **cada una** de sus opciones exactamente una vez.
 - La ficha 360° y la búsqueda transversal del inicio quedan **bloqueadas por backend**; se

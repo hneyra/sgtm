@@ -209,4 +209,24 @@ describe('el lanzador se opera entero con el teclado (RNF-082)', () => {
     await usuario.click(screen.getByRole('heading', { level: 1 }));
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
+
+  it('navegar desde otra puerta cierra el panel abierto', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/inicio/inicio');
+
+    // Abierto con el raton, el foco se queda en el boton: ni Tab ni Esc van a
+    // intervenir aqui. La otra puerta es la paleta: buscar y abrir una opcion
+    // cambia la ruta con el panel todavia abierto, y sin la guarda de navegar
+    // el lanzador se queda flotando sobre la pantalla nueva.
+    const boton = screen.getByRole('button', { name: 'Abrir los módulos' });
+    await usuario.click(boton);
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+
+    await usuario.keyboard('{Control>}k{/Control}');
+    await usuario.keyboard('caja de tasas');
+    await usuario.keyboard('{Enter}');
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(boton).toHaveAttribute('aria-expanded', 'false');
+  });
 });

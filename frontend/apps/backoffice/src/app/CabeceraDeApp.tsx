@@ -67,6 +67,9 @@ export function CabeceraDeApp({
         <strong>{ejercicio}</strong>
       </p>
       <Lanzador />
+      {/* El menu de la persona —y con el «Cerrar sesion»— es solo de escritorio
+          por ahora: vive en el bloque oculto en movil. Donde va en movil es una
+          decision pendiente, no un olvido. */}
       <div className="sgtm-cabecera__derecha" data-oculto-en-movil="1">
         {preferencias.mostrarEndpoint && endpoint && (
           <code className="sgtm-cabecera__endpoint">{endpoint}</code>

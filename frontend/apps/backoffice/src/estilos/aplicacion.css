@@ -628,7 +628,7 @@
    «…». En movil sigue cinendose al viewport. */
 .sgtm-lanzador__panel {
   display: grid;
-  grid-template-columns: repeat(2, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 2px;
   width: min(520px, calc(100vw - 24px));
   max-height: 70vh;
