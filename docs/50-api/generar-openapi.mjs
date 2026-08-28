@@ -249,6 +249,77 @@ const OPERACIONES_ADICIONALES = {
         ' sus predios, así que cambiarlo desalinearía el de todos ellos.',
     },
   ],
+  // Las cuatro pantallas de ficha declaran «GET /catastro/fichas/…/{codigo}»
+  // como su endpoint —la lectura de la ficha de un predio—; darla de alta
+  // necesita su propio verbo, y sin parámetro de ruta: el predio todavía no
+  // existe (#290).
+  //
+  // **El alta crea el predio en el mismo acto si no existe.** No es una
+  // comodidad: `ficha_catastral.predio_id` es NOT NULL, así que sin el predio
+  // no hay ficha; y hacerlo en dos peticiones dejaría predios sin ficha cada
+  // vez que la segunda falle.
+  ...Object.fromEntries(
+    [
+      ['ficha_urbana', 'registrar_ficha_urbana', 'urbana', 'urbana individual', 'RF-001'],
+      ['ficha_economica', 'registrar_ficha_economica', 'economica', 'económica', 'RF-002'],
+      ['ficha_bienes', 'registrar_ficha_bienes', 'bienes-comunes', 'de bienes comunes', 'RF-003'],
+      ['ficha_rural', 'registrar_ficha_rural', 'rural', 'rural', 'RF-004'],
+    ].map(([id, operationId, tramo, comoSeLlama, requisito]) => [
+      id,
+      [
+        {
+          operationId,
+          metodo: 'post',
+          ruta: `/api/v1/catastro/fichas/${tramo}`,
+          titulo: `Alta de ficha ${comoSeLlama}`,
+          descripcion:
+            `Inscribe la primera versión de la ficha ${comoSeLlama} (${requisito}) de un` +
+            ' predio, y da de alta' +
+            ' el predio en el mismo acto si todavía no existe. El cuerpo lleva el código de' +
+            ' referencia catastral, la ubicación del predio, los datos de la ficha —áreas y' +
+            ' categorías, ningún importe—, su titularidad inicial si ya se conoce, y la' +
+            ' observación del usuario, obligatoria (RNF-052). Si el predio ya tiene ficha de' +
+            ' ese tipo, es 409: lo que toca entonces es actualizarla.',
+        },
+      ],
+    ]),
+  ),
+  // «Actualización del Catastro» es una sola opción del manual y ya publica el
+  // PUT de la ficha urbana como su endpoint. Los otros tres tipos versionan
+  // igual y bajo la misma opción —el tipo de ficha no cambia quién puede
+  // actualizarla—, pero cada uno se identifica como lo hace su lectura (#290).
+  actualizacion_catastro: [
+    {
+      operationId: 'actualizar_ficha_economica',
+      metodo: 'put',
+      ruta: '/api/v1/catastro/fichas/economica/{codRefCatastral}/actualizacion',
+      titulo: 'Actualización de la ficha económica',
+      descripcion:
+        'Crea la versión siguiente de la ficha económica y cierra la anterior, que queda entera.' +
+        ' Lo que el cuerpo no manda, no cambia: una lista ausente copia la de la versión' +
+        ' vigente y una lista presente aunque vacía la reemplaza.',
+    },
+    {
+      operationId: 'actualizar_ficha_bienes',
+      metodo: 'put',
+      ruta: '/api/v1/catastro/fichas/bienes-comunes/{codEdificacion}/actualizacion',
+      titulo: 'Actualización de la ficha de bienes comunes',
+      descripcion:
+        'Crea la versión siguiente de la ficha de bienes comunes y cierra la anterior. Las áreas' +
+        ' comunes y su reparto se copian si el cuerpo no los declara; declararlos los' +
+        ' reemplaza.',
+    },
+    {
+      operationId: 'actualizar_ficha_rural',
+      metodo: 'put',
+      ruta: '/api/v1/catastro/fichas/rural/{codUnidad}/actualizacion',
+      titulo: 'Actualización de la ficha rural',
+      descripcion:
+        'Crea la versión siguiente de la ficha rural y cierra la anterior. Los grupos de tierra' +
+        ' van en hectáreas —el arancel rural se publica por hectárea— y se copian si el cuerpo' +
+        ' no los declara.',
+    },
+  ],
 };
 
 /* ── Recoger las operaciones ──────────────────────────────────────────── */

@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 141 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 148 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 141 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 148 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 141 operaciones del contrato, por su `operationId`.
+ * Las 148 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 141 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 148 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -67,12 +67,26 @@ export const OPERACIONES = {
     parametrosDeRuta: ['codRefCatastral'],
     parametrosDeConsulta: ['fecha', 'historico', 'codigoDeRefCatastral', 'codContribuyenteRentas', 'nroFicha', 'uso', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
+  /** Alta de ficha urbana individual — `POST /catastro/fichas/urbana` */
+  registrar_ficha_urbana: {
+    metodo: 'POST',
+    ruta: '/catastro/fichas/urbana',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
   /** Ficha catastral económica — `GET /catastro/fichas/economica/{codRefCatastral}` */
   ficha_economica: {
     metodo: 'GET',
     ruta: '/catastro/fichas/economica/{codRefCatastral}',
     parametrosDeRuta: ['codRefCatastral'],
     parametrosDeConsulta: ['fecha', 'historico', 'codigoDeRefCatastral', 'contribuyente', 'ciiu'],
+  },
+  /** Alta de ficha económica — `POST /catastro/fichas/economica` */
+  registrar_ficha_economica: {
+    metodo: 'POST',
+    ruta: '/catastro/fichas/economica',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
   },
   /** Ficha de bienes comunes — `GET /catastro/fichas/bienes-comunes/{codEdificacion}` */
   ficha_bienes: {
@@ -81,12 +95,26 @@ export const OPERACIONES = {
     parametrosDeRuta: ['codEdificacion'],
     parametrosDeConsulta: ['fecha', 'historico', 'denominacion', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
+  /** Alta de ficha de bienes comunes — `POST /catastro/fichas/bienes-comunes` */
+  registrar_ficha_bienes: {
+    metodo: 'POST',
+    ruta: '/catastro/fichas/bienes-comunes',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
   /** Ficha catastral rural — `GET /catastro/fichas/rural/{codUnidad}` */
   ficha_rural: {
     metodo: 'GET',
     ruta: '/catastro/fichas/rural/{codUnidad}',
     parametrosDeRuta: ['codUnidad'],
     parametrosDeConsulta: ['fecha', 'historico', 'codUnidadCatastralUc', 'contribuyente', 'valleSector'],
+  },
+  /** Alta de ficha rural — `POST /catastro/fichas/rural` */
+  registrar_ficha_rural: {
+    metodo: 'POST',
+    ruta: '/catastro/fichas/rural',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
   },
   /** Consulta de fichas catastrales — `GET /catastro/fichas` */
   consulta_fichas: {
@@ -101,6 +129,27 @@ export const OPERACIONES = {
     ruta: '/catastro/fichas/{codigo}/actualizacion',
     parametrosDeRuta: ['codigo'],
     parametrosDeConsulta: ['codRefCatastral', 'nDeFicha', 'sector', 'tipoDeActualizacion'],
+  },
+  /** Actualización de la ficha económica — `PUT /catastro/fichas/economica/{codRefCatastral}/actualizacion` */
+  actualizar_ficha_economica: {
+    metodo: 'PUT',
+    ruta: '/catastro/fichas/economica/{codRefCatastral}/actualizacion',
+    parametrosDeRuta: ['codRefCatastral'],
+    parametrosDeConsulta: [],
+  },
+  /** Actualización de la ficha de bienes comunes — `PUT /catastro/fichas/bienes-comunes/{codEdificacion}/actualizacion` */
+  actualizar_ficha_bienes: {
+    metodo: 'PUT',
+    ruta: '/catastro/fichas/bienes-comunes/{codEdificacion}/actualizacion',
+    parametrosDeRuta: ['codEdificacion'],
+    parametrosDeConsulta: [],
+  },
+  /** Actualización de la ficha rural — `PUT /catastro/fichas/rural/{codUnidad}/actualizacion` */
+  actualizar_ficha_rural: {
+    metodo: 'PUT',
+    ruta: '/catastro/fichas/rural/{codUnidad}/actualizacion',
+    parametrosDeRuta: ['codUnidad'],
+    parametrosDeConsulta: [],
   },
   /** Reporte de ficha del contribuyente — `GET /catastro/contribuyentes/{codigo}/ficha.pdf` */
   ficha_contribuyente_reporte: {
@@ -1035,7 +1084,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 141 operaciones. */
+/** El `operationId` de una de las 148 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1072,6 +1121,8 @@ export interface ParametrosPorOperacion {
     readonly ordenarPor?: string;
     readonly direccion?: string;
   };
+  /** `POST /catastro/fichas/urbana` */
+  readonly registrar_ficha_urbana: Readonly<Record<string, never>>;
   /** `GET /catastro/fichas/economica/{codRefCatastral}` */
   readonly ficha_economica: {
     readonly codRefCatastral: string;
@@ -1081,6 +1132,8 @@ export interface ParametrosPorOperacion {
     readonly contribuyente?: string;
     readonly ciiu?: string;
   };
+  /** `POST /catastro/fichas/economica` */
+  readonly registrar_ficha_economica: Readonly<Record<string, never>>;
   /** `GET /catastro/fichas/bienes-comunes/{codEdificacion}` */
   readonly ficha_bienes: {
     readonly codEdificacion: string;
@@ -1092,6 +1145,8 @@ export interface ParametrosPorOperacion {
     readonly ordenarPor?: string;
     readonly direccion?: string;
   };
+  /** `POST /catastro/fichas/bienes-comunes` */
+  readonly registrar_ficha_bienes: Readonly<Record<string, never>>;
   /** `GET /catastro/fichas/rural/{codUnidad}` */
   readonly ficha_rural: {
     readonly codUnidad: string;
@@ -1101,6 +1156,8 @@ export interface ParametrosPorOperacion {
     readonly contribuyente?: string;
     readonly valleSector?: string;
   };
+  /** `POST /catastro/fichas/rural` */
+  readonly registrar_ficha_rural: Readonly<Record<string, never>>;
   /** `GET /catastro/fichas` */
   readonly consulta_fichas: {
     readonly codRefCatastral?: string;
@@ -1120,6 +1177,18 @@ export interface ParametrosPorOperacion {
     readonly nDeFicha?: string;
     readonly sector?: string;
     readonly tipoDeActualizacion?: string;
+  };
+  /** `PUT /catastro/fichas/economica/{codRefCatastral}/actualizacion` */
+  readonly actualizar_ficha_economica: {
+    readonly codRefCatastral: string;
+  };
+  /** `PUT /catastro/fichas/bienes-comunes/{codEdificacion}/actualizacion` */
+  readonly actualizar_ficha_bienes: {
+    readonly codEdificacion: string;
+  };
+  /** `PUT /catastro/fichas/rural/{codUnidad}/actualizacion` */
+  readonly actualizar_ficha_rural: {
+    readonly codUnidad: string;
   };
   /** `GET /catastro/contribuyentes/{codigo}/ficha.pdf` */
   readonly ficha_contribuyente_reporte: {
@@ -2142,11 +2211,18 @@ export interface CuerpoPorOperacion {
   readonly inicio: undefined;
   readonly portal: undefined;
   readonly ficha_urbana: undefined;
+  readonly registrar_ficha_urbana: CuerpoSinEsquema;
   readonly ficha_economica: undefined;
+  readonly registrar_ficha_economica: CuerpoSinEsquema;
   readonly ficha_bienes: undefined;
+  readonly registrar_ficha_bienes: CuerpoSinEsquema;
   readonly ficha_rural: undefined;
+  readonly registrar_ficha_rural: CuerpoSinEsquema;
   readonly consulta_fichas: undefined;
   readonly actualizacion_catastro: CuerpoSinEsquema;
+  readonly actualizar_ficha_economica: CuerpoSinEsquema;
+  readonly actualizar_ficha_bienes: CuerpoSinEsquema;
+  readonly actualizar_ficha_rural: CuerpoSinEsquema;
   readonly ficha_contribuyente_reporte: undefined;
   readonly calles: undefined;
   readonly registrar_via: CuerpoSinEsquema;
@@ -2287,11 +2363,18 @@ export interface RespuestaPorOperacion {
   readonly inicio: CuerpoSinEsquema;
   readonly portal: CuerpoSinEsquema;
   readonly ficha_urbana: CuerpoSinEsquema;
+  readonly registrar_ficha_urbana: CuerpoSinEsquema;
   readonly ficha_economica: CuerpoSinEsquema;
+  readonly registrar_ficha_economica: CuerpoSinEsquema;
   readonly ficha_bienes: CuerpoSinEsquema;
+  readonly registrar_ficha_bienes: CuerpoSinEsquema;
   readonly ficha_rural: CuerpoSinEsquema;
+  readonly registrar_ficha_rural: CuerpoSinEsquema;
   readonly consulta_fichas: CuerpoSinEsquema;
   readonly actualizacion_catastro: CuerpoSinEsquema;
+  readonly actualizar_ficha_economica: CuerpoSinEsquema;
+  readonly actualizar_ficha_bienes: CuerpoSinEsquema;
+  readonly actualizar_ficha_rural: CuerpoSinEsquema;
   readonly ficha_contribuyente_reporte: CuerpoSinEsquema;
   readonly calles: CuerpoSinEsquema;
   readonly registrar_via: CuerpoSinEsquema;

@@ -1,9 +1,7 @@
 package pe.gob.sgtm.catastro.infraestructura.web;
 
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
@@ -16,13 +14,9 @@ import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.catastro.aplicacion.ActualizarFichaCatastral;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
-import pe.gob.sgtm.catastro.dominio.CategoriasConstructivas;
-import pe.gob.sgtm.catastro.dominio.Construccion;
 import pe.gob.sgtm.catastro.dominio.FichaCatastral;
-import pe.gob.sgtm.catastro.dominio.OrigenDeLaFicha;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.TipoFicha;
-import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.web.Api;
@@ -30,9 +24,28 @@ import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
- * Actualizacion del catastro: {@code PUT /api/v1/catastro/fichas/{codigo}/actualizacion}.
+ * Actualizacion del catastro, para los cuatro tipos de ficha:
  *
- * <p><b>El primer endpoint de escritura del sistema.</b> Tres cosas que conviene mirar:
+ * <ul>
+ *   <li>{@code PUT /api/v1/catastro/fichas/{codigo}/actualizacion} — la urbana (RF-001)
+ *   <li>{@code PUT /api/v1/catastro/fichas/economica/{codRefCatastral}/actualizacion} (RF-002)
+ *   <li>{@code PUT /api/v1/catastro/fichas/bienes-comunes/{codEdificacion}/actualizacion} (RF-003)
+ *   <li>{@code PUT /api/v1/catastro/fichas/rural/{codUnidad}/actualizacion} (RF-004)
+ * </ul>
+ *
+ * <p><b>La urbana conserva su ruta sin el tramo del tipo</b>, y no es una asimetria que convenga
+ * arreglar: {@code actualizacion_catastro} es la opcion de Procesos del manual y su {@code
+ * endpoint} salio del prototipo. Cambiarla renombraria una operacion que el contrato ya publica y
+ * que la interfaz ya llama.
+ *
+ * <p>Las cuatro son la <b>misma opcion del menu</b> —{@code actualizacion_catastro}, privilegio
+ * {@code MODIFICACION}—: en el manual «Actualizacion del Catastro» es un solo proceso, y el tipo de
+ * ficha que se actualiza no cambia quien puede hacerlo. Cada tipo se identifica como lo hace su
+ * lectura: la urbana y la economica por el codigo de referencia catastral, la de bienes comunes por
+ * el de la edificacion y la rural por el de la unidad. Los tres nombres reciben lo mismo —el codigo
+ * de referencia catastral del predio— y se respetan porque son los del contrato.
+ *
+ * <h2>Tres cosas que conviene mirar</h2>
  *
  * <ol>
  *   <li><b>La observacion viene en el cuerpo y es obligatoria.</b> Sin ella no se guarda (regla 10,
@@ -40,9 +53,14 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *       columna es {@code NOT NULL}.
  *   <li><b>{@code PUT} no significa sobrescribir.</b> El verbo lo fija el contrato; lo que hace por
  *       debajo es crear la version siguiente y cerrar la anterior. La ficha de ayer sigue entera.
- *   <li><b>El cuerpo solo lleva lo que la opcion declara.</b> Nada de aceptar un mapa y volcarlo:
- *       un campo que la pantalla no pide no entra por aqui.
+ *   <li><b>Lo que no se manda, no cambia.</b> Una lista ausente copia la de la version vigente; una
+ *       lista presente aunque vacia la reemplaza. Confundir las dos vacia lo declarado sin que
+ *       ningun {@code DELETE} aparezca en el diff, que es justo lo que el versionado existe para
+ *       evitar. La regla vive en {@link DeclaracionDeFicha}, una sola vez para los dos verbos.
  * </ol>
+ *
+ * <p>Un predio sin ficha vigente de ese tipo es {@code 404} y no una incidencia: lo que falta es la
+ * <b>primera</b> version, y esa se registra con el {@code POST} de su tipo, no se actualiza.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/catastro/fichas")
@@ -60,46 +78,74 @@ public class ActualizacionController {
         this.reloj = reloj;
     }
 
+    /** La ficha urbana individual (RF-001). Su ruta es la que el contrato ya publicaba. */
     @PutMapping("/{codigo}/actualizacion")
     public FichaResource actualizar(
             @PathVariable String codigo, @RequestBody PeticionDeActualizacion peticion) {
+        return versionar(codigo, TipoFicha.UNICA, peticion);
+    }
 
-        Observacion observacion = observacionDe(peticion.observacion());
+    @PutMapping("/economica/{codRefCatastral}/actualizacion")
+    public FichaResource actualizarEconomica(
+            @PathVariable String codRefCatastral, @RequestBody PeticionDeActualizacion peticion) {
+        return versionar(codRefCatastral, TipoFicha.ECONOMICA, peticion);
+    }
+
+    @PutMapping("/bienes-comunes/{codEdificacion}/actualizacion")
+    public FichaResource actualizarBienesComunes(
+            @PathVariable String codEdificacion, @RequestBody PeticionDeActualizacion peticion) {
+        return versionar(codEdificacion, TipoFicha.BIENES_COMUNES, peticion);
+    }
+
+    @PutMapping("/rural/{codUnidad}/actualizacion")
+    public FichaResource actualizarRural(
+            @PathVariable String codUnidad, @RequestBody PeticionDeActualizacion peticion) {
+        return versionar(codUnidad, TipoFicha.RURAL, peticion);
+    }
+
+    // ------------------------------------------------------------------
+
+    /**
+     * Un solo camino para los cuatro, por lo mismo que en la lectura: si cada tipo resolviera su
+     * fecha y su semantica trivaluada por separado, uno de los cuatro acabaria copiando donde los
+     * otros reemplazan.
+     */
+    private FichaResource versionar(
+            String codigo, TipoFicha tipo, PeticionDeActualizacion peticion) {
+
+        Observacion observacion = DeclaracionDeFicha.observacionDe(peticion.observacion());
         Predio predio = predioDe(codigo);
         long predioId = Objects.requireNonNull(predio.id(), "El predio leido tiene identificador");
 
         LocalDate desde =
                 peticion.vigenciaDesde() == null
                         ? LocalDate.now(reloj)
-                        : parsear(peticion.vigenciaDesde());
+                        : DeclaracionDeFicha.fechaDe(peticion.vigenciaDesde(), "vigenciaDesde");
 
-        FichaCatastral nueva =
-                fichas.actualizar(
-                        predioId,
-                        TipoFicha.UNICA,
-                        desde,
-                        origenDe(peticion.origen()),
-                        exigir(peticion.documentoOrigen(), "documentoOrigen"),
-                        construccionesDe(peticion.construcciones()),
-                        null,
-                        null,
-                        observacion);
-
-        return FichaResource.de(nueva);
-    }
-
-    // ------------------------------------------------------------------
-
-    private static Observacion observacionDe(@Nullable String texto) {
-        if (texto == null || texto.isBlank()) {
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION,
-                    "Toda modificacion exige la observacion del usuario: sin ella no se guarda");
-        }
         try {
-            return Observacion.de(texto);
-        } catch (IllegalArgumentException invalida) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalida));
+            FichaCatastral nueva =
+                    fichas.actualizar(
+                            predioId,
+                            tipo,
+                            desde,
+                            DeclaracionDeFicha.origenDe(peticion.origen()),
+                            DeclaracionDeFicha.exigir(
+                                    peticion.documentoOrigen(), "documentoOrigen"),
+                            DeclaracionDeFicha.construccionesDe(peticion.construcciones()),
+                            DeclaracionDeFicha.instalacionesDe(peticion.instalaciones()),
+                            DeclaracionDeFicha.detalleDe(
+                                    tipo,
+                                    peticion.economico(),
+                                    peticion.bienesComunes(),
+                                    peticion.rural()),
+                            observacion);
+            return FichaResource.de(nueva);
+        } catch (ActualizarFichaCatastral.SinFichaVigente sinFicha) {
+            // Lo que falta es la primera version, y esa se registra. Un 500 aqui diria que el
+            // sistema fallo, cuando lo que pasa es que el recurso no esta.
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.NO_ENCONTRADO,
+                    "El predio no tiene ficha " + tipo + " vigente al " + desde);
         }
     }
 
@@ -108,7 +154,8 @@ public class ActualizacionController {
         try {
             referencia = CodigoReferenciaCatastral.de(codigo);
         } catch (IllegalArgumentException invalido) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION, DeclaracionDeFicha.mensajeDe(invalido));
         }
         return catastro.predioPorCodigo(referencia)
                 .orElseThrow(
@@ -119,120 +166,23 @@ public class ActualizacionController {
                                                 + " catastral"));
     }
 
-    private static @Nullable List<Construccion> construccionesDe(
-            @Nullable List<ConstruccionDeclarada> declaradas) {
-        // Nulo significa «lo mismo que tenia»: la copia es el comportamiento por omision.
-        if (declaradas == null) {
-            return null;
-        }
-        List<Construccion> construcciones = new ArrayList<>();
-        for (ConstruccionDeclarada declarada : declaradas) {
-            construcciones.add(
-                    Construccion.en(
-                            exigir(declarada.piso(), "piso"),
-                            areaDe(declarada.areaConstruida()),
-                            categoriasDe(declarada)));
-        }
-        return List.copyOf(construcciones);
-    }
-
-    private static CategoriasConstructivas categoriasDe(ConstruccionDeclarada declarada) {
-        try {
-            return new CategoriasConstructivas(
-                    letra(declarada.categoriaMuros()),
-                    letra(declarada.categoriaTechos()),
-                    letra(declarada.categoriaPisos()),
-                    letra(declarada.categoriaPuertas()),
-                    letra(declarada.categoriaRevestimientos()),
-                    letra(declarada.categoriaBanios()),
-                    letra(declarada.categoriaInstalaciones()));
-        } catch (IllegalArgumentException invalida) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalida));
-        }
-    }
-
-    private static @Nullable Character letra(@Nullable String texto) {
-        if (texto == null || texto.isBlank()) {
-            return null;
-        }
-        String limpio = texto.strip();
-        if (limpio.length() != 1) {
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION, "Una categoria es una sola letra: '" + texto + "'");
-        }
-        return Character.toUpperCase(limpio.charAt(0));
-    }
-
-    private static AreaM2 areaDe(@Nullable String texto) {
-        try {
-            return new AreaM2(new BigDecimal(exigir(texto, "areaConstruida")));
-            // NumberFormatException es una IllegalArgumentException, asi que un multi-catch
-            // con las dos no compila: la segunda ya cubre a la primera.
-        } catch (IllegalArgumentException invalida) {
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION, "El area construida no es un numero valido");
-        }
-    }
-
-    private static OrigenDeLaFicha origenDe(@Nullable String texto) {
-        if (texto == null || texto.isBlank()) {
-            // El caso normal de esta pantalla: el contribuyente declara.
-            return OrigenDeLaFicha.DECLARACION_JURADA;
-        }
-        try {
-            return OrigenDeLaFicha.valueOf(texto.strip().toUpperCase(java.util.Locale.ROOT));
-        } catch (IllegalArgumentException desconocido) {
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION, "Origen de ficha desconocido: '" + texto + "'");
-        }
-    }
-
-    private static LocalDate parsear(String fecha) {
-        try {
-            return LocalDate.parse(fecha);
-        } catch (java.time.format.DateTimeParseException malFormada) {
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION, "La fecha va en formato AAAA-MM-DD: '" + fecha + "'");
-        }
-    }
-
-    private static String exigir(@Nullable String valor, String campo) {
-        if (valor == null || valor.isBlank()) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, "Falta el campo '" + campo + "'");
-        }
-        return valor.strip();
-    }
-
     /**
-     * El mensaje de una excepcion es {@code @Nullable} para el verificador. Aqui nunca lo es —los
-     * objetos de valor siempre explican por que rechazan—, pero decirlo con un texto de reserva
-     * cuesta menos que discutirlo.
-     */
-    private static String mensajeDe(RuntimeException excepcion) {
-        String mensaje = excepcion.getMessage();
-        return mensaje == null ? "El valor recibido no es valido" : mensaje;
-    }
-
-    /**
-     * El cuerpo de la actualizacion. <b>Lista blanca</b>: lo que no esta aqui no entra, aunque
-     * llegue en el JSON.
+     * El cuerpo de la actualizacion, el mismo para los cuatro tipos. <b>Lista blanca</b>: lo que no
+     * esta aqui no entra, aunque llegue en el JSON.
+     *
+     * <p>Los tres bloques de detalle conviven en el record y <b>solo entra el del tipo que la ruta
+     * declara</b>: mandar el de otro es {@code 422}. Uno por ruta seria un record por tipo con once
+     * campos repetidos, y el dia que se agregue un campo a la construccion se agregaria a tres de
+     * los cuatro.
      */
     public record PeticionDeActualizacion(
             @Nullable String observacion,
             @Nullable String documentoOrigen,
             @Nullable String origen,
             @Nullable String vigenciaDesde,
-            @Nullable List<ConstruccionDeclarada> construcciones) {}
-
-    /** Una construccion declarada: medidas y categorias. Ningun importe (regla 5). */
-    public record ConstruccionDeclarada(
-            @Nullable String piso,
-            @Nullable String areaConstruida,
-            @Nullable String categoriaMuros,
-            @Nullable String categoriaTechos,
-            @Nullable String categoriaPisos,
-            @Nullable String categoriaPuertas,
-            @Nullable String categoriaRevestimientos,
-            @Nullable String categoriaBanios,
-            @Nullable String categoriaInstalaciones) {}
+            @Nullable List<DeclaracionDeFicha.ConstruccionDeclarada> construcciones,
+            @Nullable List<DeclaracionDeFicha.InstalacionDeclarada> instalaciones,
+            DeclaracionDeFicha.@Nullable EconomicoDeclarado economico,
+            DeclaracionDeFicha.@Nullable BienesComunesDeclarados bienesComunes,
+            DeclaracionDeFicha.@Nullable RuralDeclarado rural) {}
 }
