@@ -854,7 +854,18 @@ public final class ReglasDeArquitectura {
                                 + PAQUETE_RAIZ
                                 + ".dominio.Ejercicio, java.time.LocalDate, "
                                 + PAQUETE_RAIZ
-                                + ".compartido.Paginacion)");
+                                + ".compartido.Paginacion)",
+                        // El titular de un predio, resuelto al clic (ADR-0015 §2.4, #366). Misma
+                        // forma exacta que la anterior: es una CONSULTA —no modifica ningun dato—
+                        // y lo unico que escribe es su propia fila de ACCESO, cuya observacion no
+                        // la puede dar el usuario porque nadie escribe un motivo para preguntar de
+                        // quien es un predio. Es transaccional de escritura solo para que esa fila
+                        // caiga dentro de la misma transaccion que la lectura: sin eso, quedaria
+                        // constancia de consultas que fallaron y no la habria de las que si
+                        // devolvieron el codigo de una persona.
+                        PAQUETE_RAIZ
+                                + ".rentas.aplicacion.ConsultaDeTitulares.resolver(long,"
+                                + " java.time.LocalDate)");
 
         ConObservacionEnLasEscrituras() {
             super("exigir una Observacion en todo metodo transaccional de escritura");

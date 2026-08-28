@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas treinta y cinco operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas treinta y seis operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -115,8 +115,15 @@ describe('las operaciones generadas son las del contrato', () => {
     //     catastro no puede depender de rentas: la sirve rentas, en su propia
     //     ruta, y la de catastro redirige alli con 307 la peticion que trae el
     //     filtro.
+    //   - `titulares_del_predio` (#366, ADR-0015 §2.4): quien es titular de un
+    //     predio a una fecha, con su codigo del padron. No cabe en ninguna de
+    //     las dos pantallas que la usan: la grilla de `consulta_fichas` publica
+    //     el nombre del titular y no su identificador —anadirlo la convertiria
+    //     en un extractor de la correlacion predio→persona—, asi que el codigo
+    //     se resuelve AL CLIC, de un predio cada vez, con el permiso del padron
+    //     (`contribuyentes`) y dejando fila de ACCESO en la bitacora.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(169);
+    expect(Object.keys(OPERACIONES)).toHaveLength(170);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {
