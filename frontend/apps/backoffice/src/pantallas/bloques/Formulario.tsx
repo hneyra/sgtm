@@ -1,7 +1,9 @@
-import { Campo } from '@sgtm/design-system';
+import { Suspense } from 'react';
+import { Campo, Esqueleto } from '@sgtm/design-system';
 import type { ValorDeCampo } from '@sgtm/api-client';
 import type { SeccionDePantalla } from '../../catalogo';
 import { arrancaCerrada } from '../../catalogo';
+import { resolutorDeCampo } from '../composicion';
 import { Icono } from '@sgtm/design-system';
 
 /**
@@ -16,8 +18,21 @@ import { Icono } from '@sgtm/design-system';
  * no declara se dibuja bloqueado, y lo tecleado en el no se guarda en ningun
  * sitio. Es lo que hace que la pantalla de contrasena no pueda retener una
  * clave: no es que se borre despues, es que nunca entra.
+ *
+ * **Y un campo puede traer control propio**, igual que ya podia traerlo uno de
+ * busqueda (#331): si la opcion declara un `resolutor` para su clave, se dibuja
+ * ese en vez del `Campo`. No bifurca nada —el resto de la seccion se dibuja
+ * igual— y es negacion por omision: 133 de las 134 pantallas no declaran
+ * ninguno y no se enteran.
  */
 export interface FormularioProps {
+  /**
+   * La opcion a la que pertenece este formulario.
+   *
+   * Sirve para **una** cosa, la misma que en `Filtros`: preguntar si declara un
+   * control propio para alguno de sus campos (`composicion.ts`).
+   */
+  readonly opcion: string;
   readonly secciones: readonly SeccionDePantalla[];
   readonly valores: Readonly<Record<string, ValorDeCampo>>;
   readonly cargando: boolean;
@@ -39,7 +54,11 @@ export interface FormularioProps {
   readonly anclaDe?: (indice: number) => string;
 }
 
+/** Sin `onCampo` no hay donde escribir; el resolutor se dibuja inerte igualmente. */
+const NADA = (): void => {};
+
 export function Formulario({
+  opcion,
   secciones,
   valores,
   cargando,
@@ -83,6 +102,31 @@ export function Formulario({
             {!cerrada && (
               <div className="sgtm-seccion__rejilla">
                 {seccion.campos.map((campo) => {
+                  /* El control propio de un campo que **resuelve**, si la opcion
+                     declara uno. Llega en el trozo de su modulo, asi que se
+                     dibuja dentro de un `Suspense` con el mismo hueco que
+                     ocuparia el campo. */
+                  const resolutor = resolutorDeCampo(opcion, campo.clave);
+                  if (resolutor !== undefined) {
+                    // Resuelve **solo si esta pantalla puede mandar los campos
+                    // que llena**: sin declararlos, `fijarCampo` los descartaria
+                    // en silencio y la busqueda seria un adorno.
+                    const puede = resolutor.campos.every(
+                      (llena) => escribibles?.has(llena) ?? false,
+                    );
+                    return (
+                      <Suspense key={campo.clave} fallback={<Esqueleto alto={72} />}>
+                        <resolutor.Control
+                          etiqueta={campo.label}
+                          resuelto={Object.fromEntries(
+                            resolutor.campos.map((llena) => [llena, borrador[llena] ?? '']),
+                          )}
+                          onCampo={onCampo ?? NADA}
+                          bloqueado={!puede}
+                        />
+                      </Suspense>
+                    );
+                  }
                   const escribible = escribibles?.has(campo.clave) ?? false;
                   // El borrador manda sobre lo que sirvio la API: lo que el
                   // usuario acaba de teclear es mas nuevo que lo que se pidio.

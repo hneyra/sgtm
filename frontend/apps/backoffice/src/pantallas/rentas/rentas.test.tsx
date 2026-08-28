@@ -52,12 +52,23 @@ import {
  * declaradas, y eso se comprueba abajo y en `pantallas/escritura.test.tsx`.
  */
 const LAS_QUE_ESCRIBEN_SIN_DECLARAR: readonly string[] = [
-  'predial-individual',
   'predial-masivo',
   'transferencia-predio',
   'vehicular-calculo',
   'transferencia-vehiculo',
 ];
+
+/**
+ * Y la que **no guarda campos: pide una determinacion** (#333).
+ *
+ * `predial-individual` estaba en la lista de arriba y su franja decia «la
+ * pantalla aún no manda estos campos» sobre una pantalla con 15 de sus 19
+ * campos en `"ro"`: ahi no hay ningun campo que mandar, y lo que falta no es una
+ * entrada en la lista blanca sino la capa web entera de la determinacion —el
+ * dominio calcula (`RT-001`…`RT-016`) y ningun controlador lo publica—. La
+ * primaria sigue apagada; lo que cambia es que la franja dice la verdad.
+ */
+const LA_QUE_DETERMINA = 'predial-individual';
 
 /**
  * Y las dos cuya **primaria no es un acto**: «Imprimir liquidación» (#337).
@@ -104,6 +115,23 @@ describe('ningun acto del modulo promete lo que no puede', () => {
       montada.unmount();
     },
   );
+
+  it(`${LA_QUE_DETERMINA} no promete campos: dice que la determinación la hace el servidor`, async () => {
+    const montada = montarEnRuta(`/rentas-registro/${LA_QUE_DETERMINA}`);
+    await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+    primariaApagada();
+    expect(motivoDeLaPrimaria()).toMatch(/Aquí no se calcula nada/);
+    // Y **no** la frase de la causa anterior, que era la equivocada: aquí no se
+    // escribe nada que se pueda mandar.
+    expect(motivoDeLaPrimaria()).not.toMatch(/Lo que se escriba aquí/);
+    expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
+      'data-causa',
+      'sin-determinacion',
+    );
+
+    montada.unmount();
+  });
 
   it.each(LAS_DE_SALIDA)(
     '%s imprime: la primaria esta apagada y **sin** franja',
@@ -346,8 +374,11 @@ describe('alta_deuda manda solo lo que su lista blanca declara', () => {
 
     await usuario.type(await screen.findByLabelText('Cod. Contribuyente'), '00000025673');
     await usuario.selectOptions(screen.getByLabelText('Concepto / tributo'), 'IMPUESTO PREDIAL');
-    // «Unidad (predio / placa)» se llena pero no viaja: ver escrituras.ts.
-    await usuario.type(screen.getByLabelText('Unidad (predio / placa)'), '01-02-03-04-05-06');
+    /* **La unidad se deja sin resolver, y para el predial esa es la unica forma
+       correcta**: se determina por contribuyente sobre el conjunto de sus
+       predios (NEG-05 §1), y el esquema lo hace imposible de otra forma
+       —`determinacion_predial_sin_predio_ck`—. Con una unidad resuelta, `exigir`
+       apaga la primaria y lo dice; eso se comprueba en `resolutor-de-unidad`. */
     await usuario.selectOptions(screen.getByLabelText('Año'), '2026');
     await usuario.type(screen.getByLabelText('Cuota desde'), '1');
     await usuario.type(screen.getByLabelText('Cuota hasta'), '4');
@@ -376,24 +407,66 @@ describe('alta_deuda manda solo lo que su lista blanca declara', () => {
     });
   });
 
-  it('un tributo sin codigo establecido no viaja, y la peticion falla en el backend', async () => {
+  /**
+   * **Un concepto sin codigo ya no manda una peticion muda** (#331).
+   *
+   * Antes viajaba el cuerpo **sin** `tributo` y el backend contestaba «Falta el
+   * campo 'tributo'», que es un mensaje sobre un campo que la pantalla si
+   * ensenaba lleno: quien atiende habia elegido «MULTA TRIBUTARIA» y no tenia
+   * como saber que el sistema no la sabe asentar. Ahora la primaria se queda
+   * apagada y lo dice antes de escribir nada mas.
+   *
+   * Quedan **dos** conceptos asi, no tres: «MULTA ADMINISTRATIVA» si tiene
+   * codigo en el libro —`RegistrarPapeleta` asienta `MULTA_ADMINISTRATIVA`—, y
+   * la traduccion que faltaba se corrige en `escrituras.ts`.
+   */
+  it.each(['MULTA TRIBUTARIA', 'DERECHOS ADMINISTRATIVOS'])(
+    '«%s» no tiene codigo en el libro: la primaria se apaga y lo dice, sin mandar nada',
+    async (concepto) => {
+      const usuario = userEvent.setup();
+      laApiResponde();
+      montarEnRuta('/rentas-registro/alta-deuda');
+
+      await usuario.type(await screen.findByLabelText('Cod. Contribuyente'), '00000025673');
+      await usuario.selectOptions(screen.getByLabelText('Concepto / tributo'), concepto);
+      await usuario.type(
+        within(
+          await screen.findByRole('region', { name: 'Observación del usuario' }),
+        ).getByLabelText('Observación'),
+        'Multa por declaración jurada omisa.',
+      );
+
+      const primaria = screen.getByRole('button', { name: 'Dar de alta' });
+      primariaApagada(primaria);
+      expect(motivoDeLaPrimaria()).toMatch(/no tiene todavía un código de tributo/);
+      expect(motivoDeLaPrimaria()).toContain(concepto);
+
+      await usuario.click(primaria);
+      expect(peticiones).toHaveLength(0);
+    },
+  );
+
+  /** Y la que si lo tiene desde #331 viaja con el codigo que el libro usa. */
+  it('«MULTA ADMINISTRATIVA» viaja como MULTA_ADMINISTRATIVA, que es lo que asienta el libro', async () => {
     const usuario = userEvent.setup();
     laApiResponde();
     montarEnRuta('/rentas-registro/alta-deuda');
 
     await usuario.type(await screen.findByLabelText('Cod. Contribuyente'), '00000025673');
-    // Ninguna de las tres tiene codigo de tributo establecido todavia.
-    await usuario.selectOptions(screen.getByLabelText('Concepto / tributo'), 'MULTA TRIBUTARIA');
+    await usuario.selectOptions(
+      screen.getByLabelText('Concepto / tributo'),
+      'MULTA ADMINISTRATIVA',
+    );
     await usuario.type(
       within(await screen.findByRole('region', { name: 'Observación del usuario' })).getByLabelText(
         'Observación',
       ),
-      'Multa por declaración jurada omisa.',
+      'Multa administrativa migrada del sistema anterior.',
     );
     await usuario.click(screen.getByRole('button', { name: 'Dar de alta' }));
 
     await waitFor(() => expect(peticiones).toHaveLength(1));
     const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
-    expect(cuerpo['tributo']).toBeUndefined();
+    expect(cuerpo['tributo']).toBe('MULTA_ADMINISTRATIVA');
   });
 });

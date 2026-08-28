@@ -2253,6 +2253,53 @@
   color: var(--ink);
 }
 
+/* ── El campo que resuelve (#331) ─────────────────────────────────────────
+   Ocupa la fila entera de la rejilla de la seccion: lleva dos controles, su
+   estado y una lista de candidatos, y en media columna la lista sale ilegible.
+   Ningun color nuevo — los tokens son los mismos que usan los demas bloques. */
+.sgtm-resolutor {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sgtm-resolutor--resuelto {
+  align-items: flex-start;
+  gap: 4px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+}
+
+.sgtm-resolutor__eyebrow {
+  margin: 0;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+
+.sgtm-resolutor__codigo {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.sgtm-resolutor__detalle {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.sgtm-resolutor__nota {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
 /* El aviso de duplicado: insignia de advertencia del design system, no un color
    nuevo (FRO-02 §2.1, y `contraste.test.ts` ya verifica ese par). */
 .sgtm-duplicado {

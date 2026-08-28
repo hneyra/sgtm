@@ -801,6 +801,7 @@ function Bloques({
            (ADR-0014 lo hizo igual con el centro de reportes). */
         conIndice(
           <Formulario
+            opcion={estructura.id}
             secciones={secciones}
             valores={valores}
             cargando={cargando}

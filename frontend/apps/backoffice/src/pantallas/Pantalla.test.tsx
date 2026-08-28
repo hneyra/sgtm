@@ -99,10 +99,18 @@ describe('las secciones colapsables', () => {
   it('«Opcional» arranca cerrada y el resto abiertas', async () => {
     montarEnRuta('/rentas-registro/predial-individual');
 
-    const opcional = await screen.findByRole('button', { name: /Beneficios aplicados/ });
+    /* Dentro del formulario, y no en la pantalla entera: desde #333 esta opcion
+       lleva indice, y el indice repite el rotulo de cada seccion en una entrada
+       que se llama «Ir a Beneficios aplicados». Con la busqueda global habia dos
+       botones que casaban y no podia decidir. Lo que aqui se comprueba sigue
+       siendo el colapso, que es el de las 134. */
+    await screen.findByRole('navigation', { name: 'Secciones de la pantalla' });
+    const formulario = within(document.querySelector('.sgtm-formulario') as HTMLElement);
+
+    const opcional = formulario.getByRole('button', { name: /Beneficios aplicados/ });
     expect(opcional).toHaveAttribute('aria-expanded', 'false');
 
-    const sinHint = screen.getByRole('button', { name: /Escala progresiva acumulativa/ });
+    const sinHint = formulario.getByRole('button', { name: /Escala progresiva acumulativa/ });
     expect(sinHint).toHaveAttribute('aria-expanded', 'true');
   });
 

@@ -151,12 +151,15 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
         .sort();
 
     // `true` conserva la barra de pestanas y indexa la activa: las once de la
-    // ficha urbana siguen siendo once.
+    // ficha urbana siguen siendo once. Y sirve tambien para una pantalla **sin**
+    // pestanas: `predial_individual` (#333), donde lo que el indice recorre es
+    // la memoria de calculo —base, escala, beneficios y cuotas—.
     expect(declarado(true)).toEqual([
       'ficha_bienes',
       'ficha_economica',
       'ficha_rural',
       'ficha_urbana',
+      'predial_individual',
     ]);
     // `'en-vez-de-pestanas'` las sustituye (#330): nueve pestanas de
     // contribuyentes y seis de la ficha de vehiculo pasan a una sola pagina.

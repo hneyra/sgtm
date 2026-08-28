@@ -34,15 +34,26 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(impedimentoDelActo('transferencia_predio')?.causa).toBe('sin-declaracion');
     // Sin declarar y con verbo de lectura: no hay a donde guardar.
     expect(impedimentoDelActo('contribuyentes')?.causa).toBe('sin-backend');
+    /* Y sin declarar, con verbo de escritura, pero con una primaria que **pide
+       una determinacion** (#333): ninguna de las dos frases de arriba es cierta.
+       `predial_individual` declara un `POST` y no declara escritura, asi que
+       hasta hoy decia «la pantalla aún no manda estos campos» sobre una pantalla
+       con 15 de sus 19 campos en `"ro"` — no hay campos que mandar, y lo que
+       falta es la capa web entera de la determinacion. */
+    expect(impedimentoDelActo('predial_individual', ['Buscar', 'Simular', 'Calcular'])?.causa).toBe(
+      'sin-determinacion',
+    );
   });
 
-  it('las dos causas hablan de la ventanilla, y la tecnica se queda en el `data-`', () => {
+  it('las tres causas hablan de la ventanilla, y la tecnica se queda en el `data-`', () => {
     const sinBackend = impedimentoDelActo('contribuyentes')?.detalle ?? '';
     const sinDeclaracion = impedimentoDelActo('predial_masivo')?.detalle ?? '';
+    const sinDeterminacion =
+      impedimentoDelActo('predial_individual', ['Buscar', 'Calcular'])?.detalle ?? '';
 
-    // Los dos dicen **por donde se sale**: el acto existe fuera del sistema, y
+    // Los tres dicen **por donde se sale**: el acto existe fuera del sistema, y
     // quedarse en «no se puede» deja el mostrador parado.
-    for (const texto of [sinBackend, sinDeclaracion]) {
+    for (const texto of [sinBackend, sinDeclaracion, sinDeterminacion]) {
       expect(texto).toMatch(/Registra el acto por el procedimiento actual/);
       expect(texto).toMatch(/avísale a sistemas/);
       // Y **ninguno habla de desarrollador**: quien atiende no sabe qué es «el
@@ -52,13 +63,23 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     }
     // No son el mismo texto con otro nombre: si lo fueran, distinguir las causas
     // no serviria de nada.
-    expect(sinBackend).not.toBe(sinDeclaracion);
+    expect(new Set([sinBackend, sinDeclaracion, sinDeterminacion]).size).toBe(3);
+    // Y la que se suma dice **lo que esa pantalla hace**: no calcula, muestra lo
+    // que el servidor determine, y mientras tanto los importes salen con «—».
+    expect(sinDeterminacion).toMatch(/Aquí no se calcula nada/);
+    expect(sinDeterminacion).toMatch(/—/);
   });
 
   it('cada una de las 134 cae en su casilla, y las cuentas son las que son', async () => {
     const pantallas = await todasLasPantallas();
     const declaradas = new Set(OPCIONES_QUE_ESCRIBEN);
-    const porCausa = { declarada: 0, salida: 0, 'sin-backend': 0, 'sin-declaracion': 0 };
+    const porCausa = {
+      declarada: 0,
+      salida: 0,
+      'sin-backend': 0,
+      'sin-declaracion': 0,
+      'sin-determinacion': 0,
+    };
 
     for (const [opcion, estructura] of Object.entries(pantallas)) {
       const acciones = estructura.acciones ?? [];
@@ -97,7 +118,10 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       declarada: 6,
       salida: 50,
       'sin-backend': 41,
-      'sin-declaracion': 37,
+      // Una se muda de casilla al sumarse la tercera causa (#333): «Cálculo
+      // individual del impuesto predial», cuya primaria es «Calcular».
+      'sin-declaracion': 36,
+      'sin-determinacion': 1,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);

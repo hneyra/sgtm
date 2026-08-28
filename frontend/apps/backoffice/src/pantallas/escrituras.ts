@@ -49,10 +49,7 @@ export interface EscrituraDeclarada {
 }
 
 /**
- * «Concepto/tributo» **del desplegable del prototipo** → el codigo corto que ya
- * usa `determinacion` (`CHECK` de `V2__rentas_y_cuenta_corriente.sql`):
- * `PREDIAL`, `ARBITRIO`, `VEHICULAR`, `ALCABALA`, `ESPECTACULOS`, `ANUNCIOS`,
- * `JUEGOS`.
+ * «Concepto/tributo» **del desplegable del prototipo** → el codigo del libro.
  *
  * **Solo la usa `alta_deuda`**, y por una razon que es la que justifica que la
  * traduccion exista: ahi el tributo lo elige quien atiende en un desplegable
@@ -64,17 +61,35 @@ export interface EscrituraDeclarada {
  * que publica `consulta_deuda`, que ya habla el vocabulario del backend. Ver
  * `CUOTAS_DE_LA_BAJA`.
  *
- * Solo cuatro de las siete opciones del desplegable tienen codigo. Las otras
- * tres —«MULTA TRIBUTARIA», «MULTA ADMINISTRATIVA», «DERECHOS
- * ADMINISTRATIVOS»— no son parte del vocabulario del `CHECK` de
- * `determinacion`, asi que se devuelve `undefined` y el campo no viaja, igual
- * que si no se hubiera llenado.
+ * **Cual es la lista buena, que no es la que parecia** (#331). Esta tabla decia
+ * seguir el `CHECK` de `determinacion` (`V2__rentas_y_cuenta_corriente.sql`), y
+ * esa es la restriccion equivocada: un alta de deuda no escribe una
+ * determinacion, escribe un **movimiento** —`saldo` y `asiento`—, y ahi
+ * `tributo` es `varchar(20)` **sin `CHECK`**; `PeticionDeMovimiento.tributo` es
+ * un `String` libre que `ClaveDeSaldo` solo normaliza. Es exactamente el mismo
+ * defecto que #337 encontro del otro lado del movimiento, donde pasar la baja
+ * por este diccionario **rechazaba las multas** que el libro si tiene.
+ *
+ * Asi que la quinta entrada no es una ampliacion: es la correccion de una
+ * omision. `RegistrarPapeleta` asienta `MULTA_ADMINISTRATIVA` en el libro, y una
+ * multa administrativa incorporada a mano —que es literalmente lo que la
+ * descripcion de la pantalla nombra: «determinaciones de fiscalizacion, multas o
+ * deuda migrada»— tiene que poder señalar a esa misma deuda. Sin ella, elegir
+ * «MULTA ADMINISTRATIVA» dejaba el campo sin viajar y el backend contestaba
+ * «Falta el campo 'tributo'», que no es lo que pasaba.
+ *
+ * Las **dos** que siguen sin codigo son «MULTA TRIBUTARIA» y «DERECHOS
+ * ADMINISTRATIVOS»: ninguna aparece en el libro, en ningun `CHECK` ni en ningun
+ * caso de uso que asiente. Se dejan fuera a proposito —inventarles un codigo
+ * seria crear un tributo que nadie sabe leer— y, a diferencia de antes, la
+ * pantalla **lo dice** en vez de callarse: ver `faltaEnElAlta`.
  */
 const TRIBUTO_DEL_BACKEND: Readonly<Record<string, string>> = {
   'IMPUESTO PREDIAL': 'PREDIAL',
   'ARBITRIOS MUNICIPALES': 'ARBITRIO',
   'PATRIMONIO VEHICULAR': 'VEHICULAR',
   ALCABALA: 'ALCABALA',
+  'MULTA ADMINISTRATIVA': 'MULTA_ADMINISTRATIVA',
 };
 
 const tributoDe = (texto: string): string | undefined => TRIBUTO_DEL_BACKEND[texto];
@@ -282,6 +297,79 @@ function faltaEnLaCuota(fila: Readonly<Record<string, string>>): string | undefi
   return undefined;
 }
 
+/**
+ * **De que unidad cuelga la obligacion de cada tributo**, que es lo que decide
+ * si el alta puede registrarse sin resolver ninguna (#331).
+ *
+ * No es una convencion de esta pantalla: sale de `ClaveDeSaldo`, que identifica
+ * una obligacion por (contribuyente, tributo, ejercicio, periodo, `predioId`,
+ * `vehiculoId`) **con igualdad exacta**. Mandar la unidad equivocada —o no
+ * mandarla— no es un campo de menos: es señalar a otra obligacion.
+ *
+ *   `'predio'`   arbitrios y alcabala se determinan sobre un predio concreto
+ *   `'vehiculo'` el impuesto vehicular, sobre un vehiculo concreto
+ *   `'ninguna'`  **el predial**, y esa es la unica que sorprende: NEG-05 §1 dice
+ *                que se calcula por contribuyente y no por predio, y el esquema
+ *                lo hace imposible por diseño —`determinacion_predial_sin_predio_ck`
+ *                de `V20`: «tributo <> 'PREDIAL' OR predio_id IS NULL»—. Un alta
+ *                predial atada a un predio crea una obligacion que la emision
+ *                anual —que asienta sin predio— no va a encontrar nunca: quedan
+ *                las dos, y el contribuyente paga una y sigue debiendo la otra
+ *   `'ninguna'`  tambien la multa administrativa: `RegistrarPapeleta` la asienta
+ *                sin predio ni vehiculo
+ */
+const UNIDAD_DEL_TRIBUTO: Readonly<Record<string, 'predio' | 'vehiculo' | 'ninguna'>> = {
+  PREDIAL: 'ninguna',
+  MULTA_ADMINISTRATIVA: 'ninguna',
+  ARBITRIO: 'predio',
+  ALCABALA: 'predio',
+  VEHICULAR: 'vehiculo',
+};
+
+/**
+ * Que le falta al alta para poder registrarse, dicho para quien atiende (#331).
+ *
+ * Dos ramas, y las dos hablan **del concepto elegido**, que es lo que decide a
+ * que obligacion señala el alta. Ninguna repite lo que el backend valida por su
+ * cuenta —el contribuyente que falta lo dice `MovimientosDeDeudaController` con
+ * un mensaje bueno—: aqui solo esta lo que la pantalla sabe **antes** y el
+ * backend no puede decir despues, porque no seria un rechazo sino un 201 sobre
+ * otra obligacion.
+ *
+ * La unidad no se pide siempre ni se prohibe siempre: se pide **cuando ese
+ * tributo cuelga de una** (ver `UNIDAD_DEL_TRIBUTO`). Antes no se pedia nunca,
+ * porque no habia forma de resolverla, y el alta quedaba a nivel de
+ * contribuyente sin que nada lo dijera.
+ */
+function faltaEnElAlta(borrador: Readonly<Record<string, string>>): string | undefined {
+  const dato = (clave: string): string => (borrador[clave] ?? '').trim();
+
+  const concepto = dato('conceptoTributo');
+  const tributo = concepto === '' ? undefined : tributoDe(concepto);
+  if (concepto !== '' && tributo === undefined) {
+    return `El sistema no tiene todavía un código de tributo para «${concepto}», así que esa deuda no se puede asentar. Elige otro concepto, o pide que se defina.`;
+  }
+
+  // Sin concepto elegido no se puede decir de que unidad cuelga: lo que falta
+  // ahi es el concepto, y eso lo dice el backend.
+  const unidad = tributo === undefined ? 'ninguna' : (UNIDAD_DEL_TRIBUTO[tributo] ?? 'ninguna');
+  const predio = dato('predioId');
+  const vehiculo = dato('vehiculoId');
+
+  if (unidad === 'predio' && predio === '') {
+    return 'Falta la unidad: busca el predio por su código catastral y elígelo en la lista. Sin él, el alta señalaría a la deuda que ese contribuyente tenga sin predio, que es otra.';
+  }
+  if (unidad === 'vehiculo' && vehiculo === '') {
+    return 'Falta la unidad: busca el vehículo por su placa y elígelo en la lista. Sin él, el alta señalaría a la deuda que ese contribuyente tenga sin vehículo, que es otra.';
+  }
+  if (unidad === 'ninguna' && (predio !== '' || vehiculo !== '')) {
+    return tributo === 'PREDIAL'
+      ? 'El impuesto predial se determina por contribuyente, no por predio: los tramos se aplican al conjunto de sus predios. Pulsa «Cambiar» y deja la unidad sin resolver, o el alta quedaría aparte de la emisión anual.'
+      : 'Ese concepto no cuelga de ninguna unidad: pulsa «Cambiar» y déjala sin resolver.';
+  }
+  return undefined;
+}
+
 const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   /**
    * Cambiar el año de trabajo.
@@ -312,12 +400,19 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   },
 
   /**
-   * Alta de deuda (RF-043, #24, #73): incorpora manualmente una obligacion a la cuenta corriente.
+   * Alta de deuda (RF-043, #24, #73, #331): incorpora manualmente una obligacion a la cuenta
+   * corriente.
    *
-   * `unidadPredioPlaca` no viaja: el backend pide `predioId`/`vehiculoId` como identificador
-   * interno, y esta pantalla no resuelve todavia un codigo o una placa contra ese identificador
-   * (esa resolucion es la misma que le falta a `transferencia_predio`/`transferencia_vehiculo`).
-   * El alta queda a nivel de contribuyente, sin atar la obligacion a una unidad concreta.
+   * **`unidadPredioPlaca` sigue sin viajar, y ahora eso es exacto**: lo que viaja son los dos
+   * identificadores internos que `PeticionDeMovimiento` acepta, `predioId` y `vehiculoId`, y los
+   * llena el resolutor de la composicion (`rentas/ResolutorDeUnidad.tsx`) buscando en dos
+   * lecturas ya publicadas —`consulta_fichas`, que publica `predioId`, y `vehiculos`, que publica
+   * el `id` del vehiculo—. El codigo catastral o la placa que se teclean son texto de
+   * presentacion y se quedan en el control: el backend no los sabe leer.
+   *
+   * Ninguna de las dos columnas la dibuja el catalogo, igual que en la baja: son claves que
+   * `ClaveDeSaldo` compara y no datos que quien atiende teclee. Y **enteros**, porque
+   * `PeticionDeMovimiento` los declara `Long`.
    *
    * `cuotaHasta` tampoco viaja: `PeticionDeMovimiento` solo admite una `cuota` entera, no un
    * rango — se toma `cuotaDesde` como la cuota unica de esta alta.
@@ -333,6 +428,8 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
       conceptoTributo: { campo: 'tributo', valor: tributoDe },
       ano: { campo: 'ano' },
       cuotaDesde: { campo: 'cuota', entero: true },
+      predioId: { campo: 'predioId', entero: true },
+      vehiculoId: { campo: 'vehiculoId', entero: true },
       // Los cuatro importes, con la misma guarda que los de la baja: lo que el backend no
       // puede leer no sale. Aqui los teclea quien atiende, asi que «1,842.60» y «S/ 120» son
       // lo normal, y `new BigDecimal` con cualquiera de los dos **lanza** — un 422 despues de
@@ -344,6 +441,7 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
       fechaDeVencimiento: { campo: 'fechaValor' },
       nDelDocumento: { campo: 'documentoOrigen' },
     },
+    exigir: (borrador) => faltaEnElAlta(borrador),
     nota: true,
   },
 

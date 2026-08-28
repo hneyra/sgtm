@@ -13,11 +13,15 @@ import { COMPOSICION_DE_RENTAS } from './rentas/composicion';
  * dentro de `Pantalla`, que es como se bifurca un renderizador que da servicio a
  * 134 pantallas.
  *
- * Ocho opt-in, y ninguno cambia el dibujo de las otras opciones:
+ * Nueve opt-in, y ninguno cambia el dibujo de las otras opciones:
  *
  *   widgetsDeFiltro  un campo de busqueda con control propio, por clave de
  *                    campo. Sin declaracion, `Filtros` dibuja su `Campo` de
  *                    texto de siempre
+ *   resolutores      lo mismo, **para un campo de seccion**: el que resuelve un
+ *                    codigo, una placa o un RUC contra el identificador interno
+ *                    que el backend pide. Sin declaracion, `Formulario` dibuja
+ *                    su `Campo` de siempre
  *   resumen          una cabecera-resumen encima de los datos, compuesta con lo
  *                    que el adaptador **ya trae**: no pide nada nuevo
  *   indice           la pantalla lleva indice de secciones que **desplaza**, no
@@ -75,6 +79,62 @@ export interface WidgetDeFiltro {
    * —guiones incluidos—, que el backend no resuelve por prefijo.
    */
   readonly normalizar: (valor: string) => string;
+}
+
+/**
+ * Lo que recibe un campo de seccion **que resuelve** (#331).
+ *
+ * El hueco que cierra: quien atiende tiene un codigo catastral, una placa o un
+ * RUC, y el backend pide identificadores internos —`predioId`, `vehiculoId`,
+ * `transferenciaId`, `organizadorId`—. Sin un sitio donde hacer esa traduccion,
+ * el campo se teclea y **no viaja**, que es lo que le pasaba a
+ * `unidadPredioPlaca` de `alta_deuda`.
+ *
+ * Es hermano de {@link WidgetDeFiltro} y no lo mismo, y la diferencia importa:
+ * un widget de filtro compone **una cadena** que acaba en la URL, y esto fija
+ * **campos del cuerpo** que pasan por la lista blanca de `escrituras.ts`. Lo
+ * tecleado —el codigo, la placa— es texto de presentacion y no viaja: se queda
+ * en el control, como el borrador de `Filtros`.
+ */
+export interface ResolutorProps {
+  /** El rotulo del campo del catalogo al que sustituye. No se reescribe (RNF-080). */
+  readonly etiqueta: string;
+  /**
+   * Lo que ya esta resuelto, por su clave declarada. Sale del borrador de la
+   * escritura, que es la unica fuente: el control no guarda el identificador
+   * por su cuenta.
+   */
+  readonly resuelto: Readonly<Record<string, string>>;
+  /** Fija —o vacia— uno de los campos que este resolutor llena. */
+  readonly onCampo: (campo: string, valor: string) => void;
+  /**
+   * La opcion no puede escribir esos campos: el control se dibuja, no resuelve.
+   *
+   * Ocurre cuando el perfil no tiene el privilegio del acto, o cuando la opcion
+   * no declara los campos en `escrituras.ts` — y entonces `fijarCampo` los
+   * ignoraria en silencio, que es peor que no ofrecer la busqueda.
+   */
+  readonly bloqueado: boolean;
+}
+
+export interface CampoResolutor {
+  /**
+   * Los campos del cuerpo que la resolucion llena, **por su clave declarada en
+   * `escrituras.ts`**.
+   *
+   * Se declaran aqui y no se deducen del control por dos motivos: es lo que
+   * permite comprobar antes de dibujar si esta pantalla puede escribirlos, y es
+   * lo que deja leer en la composicion —sin abrir el componente— que un
+   * resolutor de unidad llena `predioId` y `vehiculoId` y ninguna otra cosa.
+   */
+  readonly campos: readonly string[];
+  /**
+   * `ComponentType` y no una funcion suelta, por lo mismo que
+   * {@link AltaEnPanel.Formulario}: el control busca contra el backend y trae
+   * su propia prosa, y eso llega en el trozo de su modulo (`lazy`), no en el
+   * arranque. `Formulario` lo dibuja dentro de un `Suspense`.
+   */
+  readonly Control: ComponentType<ResolutorProps>;
 }
 
 /** Lo que recibe el formulario de un alta abierta en panel. */
@@ -195,6 +255,8 @@ export interface SeleccionDeFilas {
 
 export interface ComposicionDeOpcion {
   readonly widgetsDeFiltro?: Readonly<Record<string, WidgetDeFiltro>>;
+  /** Campos de seccion que resuelven un codigo contra el registro del backend. */
+  readonly resolutores?: Readonly<Record<string, CampoResolutor>>;
   readonly resumen?: ComponenteDeResumen;
   /**
    * Indice de secciones que **desplaza**, no recarga.
@@ -293,4 +355,17 @@ export const widgetDeFiltro = (opcion: string, campo: string): WidgetDeFiltro | 
   const widgets = composicionDe(opcion).widgetsDeFiltro;
   if (widgets === undefined || !Object.hasOwn(widgets, campo)) return undefined;
   return widgets[campo];
+};
+
+/**
+ * El resolutor de un campo de seccion, si esa opcion declara uno.
+ *
+ * Misma forma —y misma barrera de `Object.hasOwn`— que `widgetDeFiltro`: un
+ * campo llamado `constructor` daria un «resolutor» heredado del prototipo de
+ * `Object`, y el formulario intentaria dibujarlo en vez de su campo.
+ */
+export const resolutorDeCampo = (opcion: string, campo: string): CampoResolutor | undefined => {
+  const resolutores = composicionDe(opcion).resolutores;
+  if (resolutores === undefined || !Object.hasOwn(resolutores, campo)) return undefined;
+  return resolutores[campo];
 };
