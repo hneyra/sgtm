@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { OPCIONES_CONECTADAS } from '../conexiones';
 import { montarEnRuta } from '../../pruebas/montar';
+import { motivoDeLaPrimaria } from '../../pruebas/acciones';
 import { SIN_DATO as SIN_CIFRA } from '../seguridad/listado';
 
 /**
@@ -243,20 +244,93 @@ describe('las construcciones salen con sus categorias, nunca con importes', () =
 /* ── La consulta de fichas ─────────────────────────────────────────────── */
 
 describe('la consulta de fichas pagina contra el servidor', () => {
+  /** La fila del primer predio del juego de datos, por su titular. */
+  const primeraFila = async (): Promise<HTMLElement> => {
+    const celda = await screen.findByText('MEDINA MEDINA, RUFINA (SUC.)');
+    const fila = celda.closest('tr');
+    expect(fila).not.toBeNull();
+    return fila as HTMLElement;
+  };
+
   it('lee FichaEncontradaResource y deja vacio lo que no publica', async () => {
     montarEnRuta('/catastro/consulta-fichas');
 
-    const fila = (await screen.findByText('200601010150010101001')).closest('tr');
-    expect(fila).not.toBeNull();
-    expect(
-      within(fila as HTMLElement).getByText('MEDINA MEDINA, RUFINA (SUC.)'),
-    ).toBeInTheDocument();
-    // Codigo predial de rentas, area construida y conciliada: no las publica el
-    // recurso. El area construida habria que sumarla por piso, y la interfaz no
-    // suma (RNF-083).
-    expect(within(fila as HTMLElement).getAllByText(SIN_CIFRA)).toHaveLength(3);
+    const fila = await primeraFila();
+    // **Dos** huecos y no tres (#322, ADR-0015): el codigo predial de rentas
+    // dejo de ser uno. Los que quedan son el area construida —que el recurso
+    // publica y este proxy todavia no manda— y la conciliacion, que es un
+    // derivado que **ninguna** lectura publica: catastro no puede componerlo
+    // sin depender de rentas.
+    expect(within(fila).getAllByText(SIN_CIFRA)).toHaveLength(2);
 
     expect(peticiones.filter((u) => u.includes('/api/v1/catastro/fichas?'))).toHaveLength(0);
     expect(peticiones.some((u) => u.endsWith('/api/v1/catastro/fichas'))).toBe(true);
+  });
+
+  /**
+   * **«Cod. Predial Rentas» es el codigo de referencia catastral** (ADR-0015).
+   *
+   * No hay dos padrones de predios: `sgtm-rentas` traduce su `codigoPredial` a
+   * `p.codigo_ref_catastral`. Por eso las dos columnas traen **el mismo valor y
+   * escrito igual**: troquelar una de las dos fabricaria la apariencia de un
+   * segundo codigo distinto, que es la ilusion que el ADR desmonta.
+   */
+  it('las dos columnas de código traen el mismo valor, y escrito igual', async () => {
+    montarEnRuta('/catastro/consulta-fichas');
+
+    const celdas = within(await primeraFila()).getAllByRole('cell');
+    expect(celdas[0]?.textContent).toBe('200601010150010101001');
+    expect(celdas[1]?.textContent).toBe(celdas[0]?.textContent);
+    // Y ninguna de las dos sale troquelada: lo troquelado es el codigo de la
+    // cabecera de una ficha, donde no hay con que confundirlo.
+    expect(celdas[1]?.textContent).not.toContain('-');
+  });
+
+  /**
+   * **Lo que la columna «Conciliada» significa, dicho** (#322).
+   *
+   * Un predio que rentas no reconoce **no genera deuda predial**, y esa es la
+   * consecuencia mas cara del modulo. Sin el aviso, un «—» en esa columna se lee
+   * como un fallo de la tabla; con el, se lee lo que es —nadie publica todavia
+   * esa lectura— y se sabe que hacer: registrar la declaracion jurada.
+   */
+  it('dice la consecuencia y el acto: sin declaración jurada no hay deuda predial', async () => {
+    montarEnRuta('/catastro/consulta-fichas');
+
+    expect(
+      await screen.findByText('Un predio sin declaración jurada no genera deuda predial'),
+    ).toBeInTheDocument();
+    // El acto que concilia, nombrado: no es escribir un codigo en la ficha
+    // —el codigo ya lo tiene— sino incorporar el predio al padron afecto.
+    expect(screen.getByText(/registrar su declaración jurada/)).toBeInTheDocument();
+    // Y por que las dos primeras columnas coinciden.
+    expect(screen.getByText(/el mismo código de referencia catastral/)).toBeInTheDocument();
+    // La referencia al ADR se queda en el codigo: en ventanilla no es
+    // informacion, es ruido con forma de numero de expediente.
+    expect(screen.queryByText(/ADR-0015/)).not.toBeInTheDocument();
+  });
+
+  /**
+   * **«Conciliar seleccionadas» no promete lo que no puede** (#337, ADR-0015 §3).
+   *
+   * La accion masiva a ciegas del prototipo no se implementa, y la operacion de
+   * esta pantalla es un `GET`: no hay a donde guardar. La franja de actos
+   * honestos lo dice, y la causa es `sin-backend` —no `sin-declaracion`, que
+   * pediria una lista blanca para una escritura que no existe, ni ninguna de las
+   * de salida, porque «Conciliar» no imprime ni exporta nada—.
+   */
+  it('«Conciliar seleccionadas» se queda apagada, y la franja lo explica', async () => {
+    montarEnRuta('/catastro/consulta-fichas');
+    await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+    expect(screen.getByRole('button', { name: 'Conciliar seleccionadas' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
+    expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
+      'data-causa',
+      'sin-backend',
+    );
   });
 });

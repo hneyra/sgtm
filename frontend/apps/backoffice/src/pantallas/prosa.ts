@@ -6,7 +6,7 @@ import type { AvisoDePantalla } from './prosa-textos';
  * El aviso permanente de una opcion y la nota de su escritura son cinco
  * kilobytes de castellano —«esto es una copia de trabajo», «la contraseña no se
  * escribe aquí»— que viajaban en el trozo de arranque, el que baja quien entra a
- * mirar un recibo. Ciento veintisiete de las 134 pantallas no los usan nunca.
+ * mirar un recibo. Ciento veintiuna de las 134 pantallas no los usan nunca.
  *
  * Lo que **no** se hace, y es el punto: diferirlos a un `Suspense` propio. Son
  * advertencias —«el padrón no ha cambiado»— y una advertencia que llega tarde es

@@ -63,7 +63,48 @@ export function ResumenDeFicha({ codigo, datos, cargando }: ResumenDePantallaPro
         {/* La suma de las areas por piso la haria el backend o no la hace nadie. */}
         <Dato etiqueta="Área construida" valor={SIN_DATO} />
       </dl>
+      <LineaDeConciliacion />
     </section>
+  );
+}
+
+/**
+ * «Conciliación con rentas: — · el padrón no publica todavía si reconoce este
+ * predio» (#322, ADR-0015).
+ *
+ * Es la consecuencia mas cara del modulo y la mas invisible: **un predio que
+ * rentas no reconoce no genera deuda predial**. Quien abre una ficha no puede
+ * saberlo hoy, y el hueco no estaba ni dicho: la ficha se leia entera sin que
+ * nada mencionara que su predio pudiera estar fuera del padron afecto.
+ *
+ * Va aqui y no como un dato mas de la lista por lo mismo que la deuda del
+ * contribuyente (#330): **no es un campo que falte, es una lectura que no
+ * existe**. Un guion en la lista se leeria como «la ficha no lo trae»; un guion
+ * explicado dice que nadie lo publica todavia, que es lo cierto.
+ *
+ * No se inventa el dato ni el mecanismo:
+ *
+ *   por que «—»    «conciliada» es un derivado —existe una declaracion jurada
+ *                  vigente apuntando a esta ficha (`declaracion_jurada
+ *                  .ficha_catastral_id`, V19)— y la lectura que lo compone le
+ *                  toca a `sgtm-rentas`: catastro no puede consultarlo sin
+ *                  cerrar el ciclo que `verificarArquitectura` rechaza
+ *   cuando llegue   sera **insignia con texto** —«CONCILIADA» / «SIN
+ *                  DECLARACION»—, nunca solo color (FRO-02 §2.1), con el mismo
+ *                  `Insignia` que esta cabecera ya usa para la vigencia. No hay
+ *                  hueco que preparar: el componente esta, y lo que falta es el
+ *                  dato
+ *   que hacer      conciliar es **registrar la declaracion jurada**, que tiene
+ *                  su opcion, su permiso y su observacion (ADR-0015 §3). Eso lo
+ *                  dice el aviso de la consulta de fichas, que es donde se
+ *                  eligen los predios; aqui solo se mira uno
+ */
+function LineaDeConciliacion() {
+  return (
+    <p className="sgtm-resumen__pendiente">
+      <strong>Conciliación con rentas: {SIN_DATO}</strong> · el padrón no publica todavía si
+      reconoce este predio.
+    </p>
   );
 }
 

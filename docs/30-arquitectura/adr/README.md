@@ -20,6 +20,7 @@ historial de por qué se hizo algo vale más que la coherencia del documento.
 | [0012](ADR-0012-usuarios-y-grupos-declarativos.md) | Usuarios y grupos de Keycloak declarativos, sin clave en git; la fija el usuario por correo en su primer acceso | Aceptado |
 | [0013](ADR-0013-permisos-de-la-sesion.md) | La interfaz pide sus permisos efectivos a `GET /seguridad/sesion/permisos`, no a un claim del token | Aceptado |
 | [0014](ADR-0014-navegacion-centrada-en-la-atencion.md) | La atención al contribuyente como inicio; los módulos detrás de un lanzador, reagrupados por tarea | Aceptado |
+| [0015](ADR-0015-conciliacion-catastro-rentas.md) | La conciliación catastro↔rentas: un derivado que publica rentas, no un estado que guarda catastro | Aceptado |
 
 Decisiones **pendientes**: [GOB-02](../../00-gobierno/decisiones-abiertas.md).
 

@@ -285,14 +285,48 @@ const consulta_fichas = definirConexion({
         paginado,
         (fila): readonly Celda[] => [
           { texto: texto(fila['codRefCatastral']) },
-          // El codigo predial de rentas y el area construida no los publica
-          // `FichaEncontradaResource`: el primero lo tiene contribuyentes, y la
-          // segunda hay que sumarla por piso —y la interfaz no suma (RNF-083)—.
-          { texto: SIN_DATO },
+          // **El «Cod. Predial Rentas» es el mismo codigo de referencia
+          // catastral** (ADR-0015 §Contexto): no hay dos padrones de predios ni
+          // dos codigos. `sgtm-rentas` los trata como sinonimos por escrito
+          // —`CriterioDeArbitrio` documenta `codigoPredial` como «el código de
+          // referencia catastral del predio» y su repositorio lo traduce a
+          // `p.codigo_ref_catastral`—, asi que la columna del prototipo se
+          // rellena con el mismo valor de la primera.
+          //
+          // Y se rellena **sin troquelar**, identico: pintarlo con otro formato
+          // fabricaria la apariencia de un segundo codigo distinto, que es justo
+          // la ilusion de los dos padrones que el ADR desmonta. Que las dos
+          // columnas coincidan es el dato; el aviso de la pantalla lo dice con
+          // todas sus letras.
+          //
+          // (El comentario anterior decia que este codigo «lo tiene
+          // contribuyentes». Es falso: no existe ningun codigo predial de rentas
+          // aparte del catastral. El unico que puede no coincidir es el
+          // **heredado** del sistema anterior, y emparejarlo es migracion —D-04,
+          // ADR-0015 §5—, no una columna de la operacion diaria.)
+          { texto: texto(fila['codRefCatastral']) },
+          // El titular sale como **nombre y nada mas**, y por eso la fila no
+          // enlaza a su ficha de contribuyente (#322): `FichaEncontradaResource`
+          // publica `titular`, no el codigo del contribuyente, y un enlace
+          // armado por nombre abre al homonimo o a nadie. Para que enlace, el
+          // recurso tiene que publicar ese codigo.
           { texto: texto(fila['titular']) },
           { texto: texto(fila['uso']) },
           { texto: texto(fila['areaTerreno']) },
-          { texto: SIN_DATO },
+          // El area construida **si** la publica el recurso, y viene ya sumada
+          // desde el servidor (#290): la interfaz la pinta, no la suma
+          // (RNF-083). Nula —un terreno sin construir— sale con «—» y no con un
+          // cero, que seria un area declarada.
+          { texto: texto(fila['areaConstruida']) },
+          // «Conciliada» es un **derivado, no un estado guardado** (ADR-0015
+          // §1): un predio esta conciliado cuando existe una declaracion jurada
+          // vigente que apunta a una version de su ficha
+          // (`declaracion_jurada.ficha_catastral_id`, V19). Hoy **ninguna
+          // lectura lo publica**, y catastro no puede publicarlo sin depender de
+          // rentas —el ciclo que `verificarArquitectura` rechaza—: la lectura
+          // compuesta le toca a `sgtm-rentas` (§2). Hasta entonces «—», que es
+          // la verdad; un «No» inventado acusaria de omiso a quien quiza no lo
+          // es.
           { texto: SIN_DATO },
         ],
         'fichas',

@@ -6,9 +6,9 @@ import { OPCIONES_QUE_ESCRIBEN, escrituraDe } from './escrituras';
 /**
  * La prosa fija de las pantallas, separada de quien la declara (#332).
  *
- * Cinco kilobytes de castellano —el aviso permanente de siete opciones y la nota
+ * Cinco kilobytes de castellano —el aviso permanente de nueve opciones y la nota
  * de cuatro escrituras— viajaban en el trozo de arranque, que es el que baja
- * quien entra a mirar un recibo y no va a abrir ninguna de las once. Ahora viaja
+ * quien entra a mirar un recibo y no va a abrir ninguna de las trece. Ahora viaja
  * con el catalogo del modulo, que es una peticion que **ya bloquea el dibujo**:
  * la advertencia sigue estando cuando la pantalla aparece.
  *

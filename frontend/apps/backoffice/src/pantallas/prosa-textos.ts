@@ -109,6 +109,39 @@ export const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
     detalle:
       'Los tramos y las alícuotas se aplican al conjunto de los predios del contribuyente, ponderado cada uno por su porcentaje de propiedad: no se calcula predio por predio ni se suman después los impuestos. Esta pantalla no calcula nada —el valor de la UIT, los tramos, las alícuotas y las cuotas los determina el servidor con el conjunto de parámetros sellado del ejercicio—, así que lo que todavía no llega sale con «—», que no es cero.',
   },
+  /**
+   * **La conciliacion con rentas: la consecuencia, y el acto** (#322, ADR-0015).
+   *
+   * Es la columna mas cara del modulo y la mas invisible: un predio que rentas
+   * no reconoce **no genera deuda predial**, y eso no se lee en ningun sitio de
+   * la pantalla —«Conciliada» sale con «—» y la primaria promete una accion
+   * masiva que no existe—.
+   *
+   * Lo que el aviso dice, y lo dice porque el ADR lo decidio:
+   *
+   *   no hay dos codigos  «Cod. Predial Rentas» **es** el codigo de referencia
+   *                       catastral. `sgtm-rentas` los trata como sinonimos por
+   *                       escrito, y por eso las dos primeras columnas coinciden
+   *                       —que coincidan es el dato, no un fallo de la tabla—
+   *   por que «—»         «conciliada» no es un estado guardado: es un derivado
+   *                       —existe una declaracion jurada vigente que apunta a la
+   *                       ficha— y **hoy ninguna lectura lo publica**. Un «No»
+   *                       inventado acusaria de omiso a un predio que quiza no
+   *                       lo es
+   *   por donde se sale   conciliar es **registrar la declaracion jurada**, que
+   *                       tiene su propia opcion, su permiso y su observacion.
+   *                       No es escribir un codigo en la ficha: el codigo ya lo
+   *                       tiene
+   *
+   * La referencia al ADR se queda **en este comentario**, que es donde tiene
+   * lector: en ventanilla, «ADR-0015» no es informacion, es ruido con forma de
+   * numero de expediente.
+   */
+  consulta_fichas: {
+    titulo: 'Un predio sin declaración jurada no genera deuda predial',
+    detalle:
+      'Conciliar un predio es registrar su declaración jurada: ese es el acto que lo incorpora al padrón afecto, y tiene su propia opción. No hay dos códigos —el «Cod. Predial Rentas» es el mismo código de referencia catastral, y por eso las dos primeras columnas coinciden—. La columna «Conciliada» dirá si rentas reconoce el predio cuando el sistema publique esa lectura; mientras tanto sale con «—», que no es un «no».',
+  },
   fisc_historico: {
     titulo: 'Versiones del proceso, no del padrón',
     detalle:

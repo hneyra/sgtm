@@ -65,6 +65,44 @@ describe('la cabecera-resumen dice de que ficha es y de cuando', () => {
     expect(cabecera.getByText('Uso').nextElementSibling).toHaveTextContent('Casa habitación');
   });
 
+  /**
+   * **La conciliacion con rentas, dicha en la cabecera** (#322, ADR-0015).
+   *
+   * Es la consecuencia mas cara del modulo —un predio que rentas no reconoce no
+   * genera deuda predial— y la mas invisible: la ficha se leia entera sin que
+   * nada la mencionara. La linea no inventa el dato: dice que **nadie lo publica
+   * todavia**, que es lo unico cierto. El dato es un derivado (existe una
+   * declaracion jurada vigente apuntando a la ficha) y su lectura le toca a
+   * rentas; catastro no puede componerla sin cerrar un ciclo de modulos.
+   */
+  it('la cabecera dice que la conciliación con rentas no se publica todavía', async () => {
+    montarEnRuta(URBANA);
+    await screen.findByRole('region', { name: 'Versión de la ficha' });
+
+    const cabecera = within(resumen());
+    expect(cabecera.getByText(`Conciliación con rentas: ${SIN_DATO}`)).toBeInTheDocument();
+    expect(cabecera.getByText(/no publica todavía si reconoce este predio/)).toBeInTheDocument();
+    /* Y **no** se inventa un estado: ni «No», ni «Sin conciliar», ni una
+       insignia de tono. Cuando el dato llegue sera insignia con texto —como la
+       vigencia de al lado—, y hasta entonces la unica insignia de la cabecera es
+       la de la version. */
+    expect(cabecera.getAllByText(/./, { selector: '.sgtm-insignia' })).toHaveLength(1);
+  });
+
+  /** Las cuatro fichas la llevan: la conciliacion es del predio, no del tipo de ficha. */
+  it.each([
+    ['/catastro/ficha-economica/200601010150010101001'],
+    ['/catastro/ficha-bienes/200601010150010101'],
+    ['/catastro/ficha-rural/11024-0418'],
+  ])('%s también la lleva', async (ruta) => {
+    const montada = montarEnRuta(ruta);
+    await screen.findByRole('region', { name: 'Versión de la ficha' });
+
+    expect(within(resumen()).getByText(`Conciliación con rentas: ${SIN_DATO}`)).toBeInTheDocument();
+
+    montada.unmount();
+  });
+
   it('sin registro abierto no hay resumen: no hay ficha que resumir', async () => {
     montarEnRuta('/catastro/ficha-urbana');
     expect(await screen.findByText(/Elige un registro/)).toBeInTheDocument();

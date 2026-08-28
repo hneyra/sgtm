@@ -115,6 +115,17 @@ const busqueda = () => within(screen.getByRole('region', { name: 'Búsqueda' }))
 const tramo = (nombre: string): HTMLInputElement =>
   busqueda().getByLabelText(`Cod. Ref. Catastral · ${nombre}`) as HTMLInputElement;
 
+/**
+ * La tabla ya dibujada, esperada **por el titular** de su primera fila.
+ *
+ * Se esperaba por el codigo del predio, y desde #322 ese codigo aparece **dos
+ * veces** en la fila: «Cod. Predial Rentas» es el mismo codigo de referencia
+ * catastral (ADR-0015), asi que las dos columnas traen el mismo valor y
+ * `findByText` encontraria dos. El titular es unico por fila y sirve igual: lo
+ * unico que se espera aqui es que la respuesta haya llegado.
+ */
+const laTablaDibujada = () => screen.findByText('MEDINA MEDINA, RUFINA (SUC.)');
+
 /** Los valores de `codRefCatastral` que salieron de verdad, uno por peticion. */
 const codRefCatastralPedido = (): string[] =>
   peticiones
@@ -124,7 +135,7 @@ const codRefCatastralPedido = (): string[] =>
 describe('la consulta de fichas compone el codigo en sus tramos', () => {
   it('dibuja los diez tramos con su nombre en vez de una caja de texto', async () => {
     montarEnRuta('/catastro/consulta-fichas');
-    await screen.findByText('200601010150010101001');
+    await laTablaDibujada();
 
     for (const declarado of TRAMOS_DEL_CODIGO) {
       expect(
@@ -139,7 +150,7 @@ describe('la consulta de fichas compone el codigo en sus tramos', () => {
   it('pegar el codigo entero lo reparte, con guiones o sin ellos', async () => {
     const usuario = userEvent.setup();
     montarEnRuta('/catastro/consulta-fichas');
-    await screen.findByText('200601010150010101001');
+    await laTablaDibujada();
 
     await usuario.click(tramo('Depto.'));
     await usuario.paste('20-06-01-01-015-001-01-01-00-123');
@@ -159,7 +170,7 @@ describe('la consulta de fichas compone el codigo en sus tramos', () => {
   it('un tramo lleno salta al siguiente, y Retroceso en uno vacio vuelve al anterior', async () => {
     const usuario = userEvent.setup();
     montarEnRuta('/catastro/consulta-fichas');
-    await screen.findByText('200601010150010101001');
+    await laTablaDibujada();
 
     await usuario.click(tramo('Depto.'));
     await usuario.keyboard('2006');
@@ -178,7 +189,7 @@ describe('la consulta de fichas compone el codigo en sus tramos', () => {
   it('las flechas mueven entre tramos, y solo se admiten digitos', async () => {
     const usuario = userEvent.setup();
     montarEnRuta('/catastro/consulta-fichas');
-    await screen.findByText('200601010150010101001');
+    await laTablaDibujada();
 
     // Con el ubigeo ya puesto: el codigo es un prefijo posicional y se llena de
     // izquierda a derecha, asi que un tramo del medio solo es «el del medio»
@@ -201,7 +212,7 @@ describe('la consulta de fichas compone el codigo en sus tramos', () => {
   it('lo compuesto viaja al filtro y a la URL igual que la caja de texto de antes', async () => {
     const usuario = userEvent.setup();
     montarEnRuta('/catastro/consulta-fichas');
-    await screen.findByText('200601010150010101001');
+    await laTablaDibujada();
 
     await usuario.click(tramo('Depto.'));
     await usuario.paste('200601010150010101001');
@@ -222,7 +233,7 @@ describe('la consulta de fichas compone el codigo en sus tramos', () => {
     // sin pasar por el formulario— manda el crudo, que el prefijo por rango
     // del backend no encuentra.
     montarEnRuta('/catastro/consulta-fichas?codRefCatastral=20-06-01-01-015-001-01-01-01-001');
-    await screen.findByText('200601010150010101001');
+    await laTablaDibujada();
 
     expect(tramo('Depto.').value).toBe('20');
     await waitFor(() => expect(codRefCatastralPedido()).toEqual(['20060101015001010101001']));
@@ -234,7 +245,7 @@ describe('la consulta de fichas compone el codigo en sus tramos', () => {
     // operador quedaba mirando otro predio sin saberlo.
     const usuario = userEvent.setup();
     montarEnRuta('/catastro/consulta-fichas');
-    await screen.findByText('200601010150010101001');
+    await laTablaDibujada();
 
     await usuario.click(tramo('Depto.'));
     await usuario.paste('20060101015001010100123');
