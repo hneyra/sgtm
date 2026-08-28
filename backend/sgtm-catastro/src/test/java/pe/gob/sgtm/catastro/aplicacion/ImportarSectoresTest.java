@@ -26,6 +26,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.carga.InformeDeImportacion;
 import pe.gob.sgtm.catastro.infraestructura.CatastroRepositoryJdbc;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.dominio.MunicipalidadId;

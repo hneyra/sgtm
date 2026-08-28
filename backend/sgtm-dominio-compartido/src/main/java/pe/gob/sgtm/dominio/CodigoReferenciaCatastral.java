@@ -1,6 +1,8 @@
 package pe.gob.sgtm.dominio;
 
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Codigo de referencia catastral de un predio (RF-005).
@@ -56,6 +58,65 @@ public record CodigoReferenciaCatastral(String valor, ComposicionCatastral compo
     /** Codigo con una composicion distinta, para cuando D-10 se cierre en otro sentido. */
     public static CodigoReferenciaCatastral de(String texto, ComposicionCatastral composicion) {
         return new CodigoReferenciaCatastral(texto, composicion);
+    }
+
+    /**
+     * Arma el codigo <b>tramo a tramo</b>, rellenando con ceros a la izquierda hasta la longitud
+     * que cada uno declara.
+     *
+     * <p>Existe para que quien carga un archivo no tenga que escribir la longitud de nada. Un
+     * importador que compusiera el codigo concatenando y rellenando a mano estaria escribiendo la
+     * plantilla del manual una segunda vez —«dos para el sector, tres para la manzana»— y el dia
+     * que D-10 se cierre en las 21 posiciones del prototipo, esa copia seguiria produciendo codigos
+     * de 23 sin que nada se queje: la validacion de longitud pasa a comprobar contra la composicion
+     * nueva y todos los archivos empezarian a rechazarse, o peor, a componerse desalineados.
+     *
+     * <p>Un tramo que no venga en el mapa se rellena entero de ceros: es lo correcto para un predio
+     * sin edificacion, sin entrada, sin piso y sin unidad, que es el caso comun. Un nombre que la
+     * composicion no tenga se <b>rechaza</b> en lugar de ignorarse: si el archivo trae «entrada» y
+     * la composicion vigente no la tiene, perder ese dato en silencio es exactamente el fallo que
+     * esto evita.
+     *
+     * @param porTramo valor de cada tramo por su nombre; los que falten valen cero
+     * @throws IllegalArgumentException si un nombre no existe en la composicion, o si un valor no
+     *     es de digitos o no cabe en su tramo
+     */
+    public static CodigoReferenciaCatastral componer(
+            Map<String, String> porTramo, ComposicionCatastral composicion) {
+        Objects.requireNonNull(porTramo, "Componer necesita el valor de los tramos");
+        Objects.requireNonNull(composicion, "Componer necesita la composicion (D-10)");
+
+        Set<String> conocidos =
+                composicion.tramos().stream()
+                        .map(ComposicionCatastral.Tramo::nombre)
+                        .collect(java.util.stream.Collectors.toSet());
+        for (String nombre : porTramo.keySet()) {
+            if (!conocidos.contains(nombre)) {
+                throw new IllegalArgumentException(
+                        "La composicion vigente no tiene el tramo '"
+                                + nombre
+                                + "'; los que tiene son "
+                                + conocidos.stream().sorted().toList());
+            }
+        }
+
+        StringBuilder codigo = new StringBuilder(composicion.longitud());
+        for (ComposicionCatastral.Tramo tramo : composicion.tramos()) {
+            String valor = porTramo.get(tramo.nombre());
+            valor = valor == null ? "" : valor.strip();
+            if (valor.length() > tramo.longitud()) {
+                throw new IllegalArgumentException(
+                        "El tramo '"
+                                + tramo.nombre()
+                                + "' ocupa "
+                                + tramo.longitud()
+                                + " digito(s) y se recibio '"
+                                + valor
+                                + "'");
+            }
+            codigo.append("0".repeat(tramo.longitud() - valor.length())).append(valor);
+        }
+        return new CodigoReferenciaCatastral(codigo.toString(), composicion);
     }
 
     /**

@@ -22,35 +22,37 @@ import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
 
 /**
- * Carga el catalogo vial de una municipalidad ya implantada, leyendo el CSV que produce {@code
- * importar_arancel_via_gpkg.py} o cualquier otro con el mismo formato (#121).
+ * Carga el catalogo de sectores de una municipalidad ya implantada (#121), leyendo un CSV {@code
+ * codigo,nombre,zona}.
  *
- * <p>Corre en el perfil {@code batch}, igual que {@link
- * pe.gob.sgtm.seguridad.aplicacion.ImplantarMunicipalidad} y por la misma razon: es un proceso de
- * arranque de vida corta, sin servidor web, que hace su trabajo y termina. A diferencia de la
- * implantacion, no necesita las credenciales de {@code sgtm_owner} —{@code via} es una tabla de
- * tenant que {@code sgtm_app} ya puede escribir—, asi que la municipalidad tiene que existir de
- * antemano: este proceso no la crea.
+ * <p>Copia exacta del patron de {@link CargarCatalogoVial}: perfil {@code batch} porque es un
+ * proceso de arranque de vida corta sin servidor web, credenciales de {@code sgtm_app} —{@code
+ * sector} es una tabla de tenant—, y los dos contextos que en una peticion salen del token fijados
+ * aqui a mano, porque el perfil {@code batch} no tiene filtros HTTP.
  *
- * <p>El perfil {@code batch} no tiene filtros HTTP, asi que los dos contextos que en una peticion
- * salen del token se fijan aqui a mano, igual que hace la implantacion.
+ * <h2>La secuencia: sectores antes que manzanas</h2>
  *
- * <p>El informe de {@link ImportarVias#importar} se registra completo: cuantas filas entraron y
- * cuales se rechazaron, con su motivo. Una fila rechazada no aborta el proceso —es exactamente el
- * comportamiento que #121 pide—, pero tiene que quedar visible en el log de quien corrio la carga.
+ * <p>El archivo de manzanas referencia su sector <b>por codigo</b>, y {@link ImportarManzanas}
+ * rechaza la fila cuyo sector no existe. Asi que este proceso corre antes que {@link
+ * CargarManzanas}; al reves, el informe sale con todas las filas rechazadas y ninguna manzana
+ * cargada. Es lo mismo que ya documenta {@link ImportarManzanas} para los importadores.
+ *
+ * <p>El informe se registra completo —cuantas filas entraron y cuales se rechazaron, con su
+ * motivo—. Una fila rechazada no aborta el proceso, pero tiene que quedar visible en el log de
+ * quien corrio la carga.
  */
 @Component
 @Profile("batch")
-@ConditionalOnProperty("sgtm.carga-vial.archivo")
-@EnableConfigurationProperties(DatosDeCargaVial.class)
-public class CargarCatalogoVial implements ApplicationRunner {
+@ConditionalOnProperty("sgtm.carga-sectores.archivo")
+@EnableConfigurationProperties(DatosDeCargaSectores.class)
+public class CargarSectores implements ApplicationRunner {
 
-    private static final Logger log = LoggerFactory.getLogger(CargarCatalogoVial.class);
+    private static final Logger log = LoggerFactory.getLogger(CargarSectores.class);
 
-    private final ImportarVias importar;
-    private final DatosDeCargaVial datos;
+    private final ImportarSectores importar;
+    private final DatosDeCargaSectores datos;
 
-    public CargarCatalogoVial(ImportarVias importar, DatosDeCargaVial datos) {
+    public CargarSectores(ImportarSectores importar, DatosDeCargaSectores datos) {
         this.importar = importar;
         this.datos = datos;
     }
@@ -65,11 +67,12 @@ public class CargarCatalogoVial implements ApplicationRunner {
                     importar.importar(archivo, Observacion.de(datos.observacion()));
 
             for (FilaRechazada rechazada : informe.rechazadas()) {
-                log.warn("Via de la fila {} rechazada: {}", rechazada.fila(), rechazada.motivo());
+                log.warn(
+                        "Sector de la fila {} rechazado: {}", rechazada.fila(), rechazada.motivo());
             }
             log.info(
-                    "Catalogo vial de la municipalidad {} cargado desde {}: {} fila(s) leidas, {}"
-                            + " via(s) nueva(s), {} rechazada(s)",
+                    "Sectores de la municipalidad {} cargados desde {}: {} fila(s) leidas, {}"
+                            + " sector(es) nuevo(s), {} rechazada(s)",
                     datos.municipalidadId(),
                     datos.archivo(),
                     informe.totalFilas(),

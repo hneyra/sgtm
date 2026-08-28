@@ -1,4 +1,4 @@
-package pe.gob.sgtm.catastro.aplicacion;
+package pe.gob.sgtm.carga;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -7,7 +7,7 @@ import java.io.StringReader;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import pe.gob.sgtm.catastro.aplicacion.LectorDeFilasCsv.FilaCsv;
+import pe.gob.sgtm.carga.LectorDeFilasCsv.FilaCsv;
 
 /**
  * El lector de archivos de los tres importadores de #121, sin base de datos: es mecanica de texto,
@@ -114,5 +114,46 @@ class LectorDeFilasCsvTest {
         List<FilaCsv> filas = LectorDeFilasCsv.leer(new StringReader(""));
 
         assertThat(filas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("los comentarios de cabecera no son el encabezado ni una fila")
+    void losComentariosDeCabeceraNoSonElEncabezado() throws IOException {
+        // Sin esto, el archivo de ejemplo versionado no puede decir de donde salio: la
+        // primera linea del archivo seria el aviso, y el encabezado real entraria como
+        // fila de datos.
+        String archivo =
+                """
+                # Catalogo vial de ejemplo — Catacaos.
+                # ESTRUCTURA, no valores.
+                codigo,tipo,nombre
+                V-1,AVENIDA,Avenida Uno
+                """;
+
+        List<FilaCsv> filas = LectorDeFilasCsv.leer(new StringReader(archivo));
+
+        assertThat(filas).hasSize(1);
+        assertThat(filas.get(0).campos()).containsExactly("V-1", "AVENIDA", "Avenida Uno");
+        assertThat(filas.get(0).numeroDeLinea())
+                .as("la numeracion sigue siendo la linea real del archivo, comentarios incluidos")
+                .isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("un comentario entre filas se salta sin descolocar la numeracion")
+    void unComentarioEntreFilasSeSalta() throws IOException {
+        String archivo =
+                """
+                codigo,nombre
+                S-1,Sector Uno
+                # los dos siguientes son del anexo
+                S-2,Sector Dos
+                """;
+
+        List<FilaCsv> filas = LectorDeFilasCsv.leer(new StringReader(archivo));
+
+        assertThat(filas).hasSize(2);
+        assertThat(filas.get(1).numeroDeLinea()).isEqualTo(4);
+        assertThat(filas.get(1).campos()).containsExactly("S-2", "Sector Dos");
     }
 }

@@ -14,13 +14,13 @@ import pe.gob.sgtm.plataforma.SeguridadWeb;
  * Artefacto unico del SGTM, desplegado en los perfiles {@code web} y {@code batch} (ADR-0003).
  * Mismo codigo y misma imagen; lo que cambia es la configuracion.
  *
- * <p>Siete modulos se declaran <b>compartidos</b>: {@code dominio} (el vocabulario comun), {@code
+ * <p>Ocho modulos se declaran <b>compartidos</b>: {@code dominio} (el vocabulario comun), {@code
  * compartido} (el contexto de tenant), {@code plataforma} (el camino del token al {@code SET
  * LOCAL}), {@code persistencia} (el patron de repositorio), {@code auditoria}, {@code documentos}
- * (la generacion y reimpresion, RF-132) y {@code web}. Ninguno es un contexto acotado, y que
- * cualquier contexto los use no es una violacion de los limites sino su proposito: sin declararlos,
- * cada contexto que use {@code Dinero} o extienda {@code RepositorioJdbc} contaria como una
- * dependencia que explicar.
+ * (la generacion y reimpresion, RF-132), {@code carga} (lo comun a toda carga masiva desde archivo)
+ * y {@code web}. Ninguno es un contexto acotado, y que cualquier contexto los use no es una
+ * violacion de los limites sino su proposito: sin declararlos, cada contexto que use {@code Dinero}
+ * o extienda {@code RepositorioJdbc} contaria como una dependencia que explicar.
  */
 @Modulithic(
         systemName = "SGTM",
@@ -31,6 +31,7 @@ import pe.gob.sgtm.plataforma.SeguridadWeb;
             "persistencia",
             "auditoria",
             "documentos",
+            "carga",
             "web"
         })
 @SpringBootApplication
