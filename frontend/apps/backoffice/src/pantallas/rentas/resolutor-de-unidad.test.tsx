@@ -303,6 +303,52 @@ describe('no se pregunta por tecla, y un fallo no es un «no existe»', () => {
     // Y **no** la frase que afirma algo sobre el catastro.
     expect(screen.queryByText(/No hay ninguna unidad con ese código/)).not.toBeInTheDocument();
   });
+
+  /**
+   * **El error no se queda pegado sobre una lista encontrada** (#379, esta
+   * pasada). Cada búsqueda distinta es otra clave de `useQuery` —el texto
+   * escrito entra en ella—, así que un fallo con un código y un acierto con
+   * otro no comparten estado: seguir tecleando hasta un código que sí resuelve
+   * tiene que quitar el banner rojo, no dejarlo encima de los candidatos.
+   */
+  it('un fallo se limpia con una busqueda posterior que si encuentra', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta(ALTA);
+    await screen.findByLabelText('Unidad (predio / placa)');
+
+    const proxy = globalThis.fetch;
+    let fallar = true;
+    globalThis.fetch = (entrada, opciones) => {
+      const url = typeof entrada === 'string' ? entrada : String(entrada);
+      if (fallar && url.includes('/catastro/fichas')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ type: 'about:blank', title: 'Error', status: 500, detail: 'roto' }),
+            { status: 500, headers: { 'content-type': 'application/problem+json' } },
+          ),
+        );
+      }
+      return proxy(entrada, opciones);
+    };
+
+    const campo = screen.getByLabelText('Unidad (predio / placa)');
+    await usuario.type(campo, CODIGO);
+    expect(
+      await screen.findByText('No se pudo buscar la unidad', {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
+
+    // Deja de fallar y dispara otra búsqueda: distinto texto, distinta clave de
+    // `useQuery` —el mismo texto no volvería a preguntar, con la respuesta ya
+    // en caché con error—. El proxy no filtra (ADR-0010): un dígito más sigue
+    // devolviendo la misma ficha.
+    fallar = false;
+    await usuario.type(campo, '9');
+
+    // La lista de verdad aparece: el candidato se nombra por el código…
+    expect(await screen.findByRole('button', { name: new RegExp(CODIGO) })).toBeInTheDocument();
+    // …y el banner de la búsqueda anterior ya no está.
+    expect(screen.queryByText('No se pudo buscar la unidad')).not.toBeInTheDocument();
+  });
 });
 
 /** Teclea el código y elige el primer candidato que ofrezca la lista. */

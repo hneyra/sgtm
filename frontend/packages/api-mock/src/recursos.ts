@@ -1184,6 +1184,9 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/catastro/fichas/rural/{codUnidad}': rural,
   '/rentas/vehiculos/{placa}': vehiculo,
   '/rentas/declaraciones/{djNro}': declaracionJurada,
+  '/tesoreria/recibos/{nro}/duplicado': duplicadoRecibo,
+  '/tesoreria/recaudacion/avance': avanceRecaudacion,
+  '/tesoreria/recaudacion/por-area': recaudacionPorArea,
   '/consultas/constancias/no-adeudo': constanciaDeNoAdeudo,
   '/consultas/unificada': consultaUnificada,
   '/consultas/deudas-con-beneficio': deudasConBeneficio,
@@ -1330,6 +1333,198 @@ const respaldo = (): Paginado =>
     },
   ]);
 
+/* ── Tesoreria: convenios, recibos y recaudacion ──────────────────────────── */
+
+/**
+ * Convenios de fraccionamiento, listado (`ConvenioResource.FilaResource`,
+ * #35, #74).
+ *
+ * Las claves del prototipo ya coinciden letra por letra con los campos del
+ * recurso real —`nroConvenio`, `contribuyente`, `fecha`, `deudaAcogidaS`,
+ * `cuotas`, `pagadas`, `vencidas`, `saldoS`, `estado`—, asi que aqui no se
+ * reescribe ninguna: se copian con el nombre que publica el backend.
+ * `fechaCorte` no la dibuja el prototipo por separado: se repite la de
+ * suscripcion, que es lo unico que hay. `motivo`, `cronograma`,
+ * `deudaOriginal` y `movimientos` son el detalle de **un** convenio abierto
+ * (`GET .../convenios?nroDeConvenio=...`, cuando la pagina trae una sola
+ * fila): la lista los deja `null`, sin inventar ninguno.
+ */
+const convenios = (): Paginado =>
+  unaPagina(
+    filasDe('consulta_convenios').map(
+      ([numero, contribuyente, suscrito, acogida, cuotas, pagadas, vencidas, saldo, estado]) => {
+        const fecha = fechaDe(suscrito ?? '') ?? EL_DIA_DEL_PROTOTIPO;
+        return {
+          nroConvenio: numero,
+          contribuyente,
+          fecha,
+          fechaCorte: fecha,
+          deudaAcogidaS: comoImporte(acogida ?? '0.00'),
+          cuotas: Number(cuotas) || 0,
+          pagadas: Number(pagadas) || 0,
+          vencidas: Number(vencidas) || 0,
+          saldoS: comoImporte(saldo ?? '0.00'),
+          saldoALaFecha: EL_DIA_DEL_PROTOTIPO,
+          estado: (estado ?? '').toUpperCase(),
+          motivo: null,
+          cronograma: null,
+          deudaOriginal: null,
+          movimientos: null,
+        };
+      },
+    ),
+  );
+
+/**
+ * La vista previa de un recibo (`DuplicadoResource`, #34, #74).
+ *
+ * `GET .../recibos/{nro}/duplicado` trae **uno**, igual que `vehiculo()` y
+ * `declaracionJurada()`: se sirve la primera fila de «Recibos localizados»
+ * del prototipo con esa forma. El recurso real no publica el nombre del
+ * contribuyente en `ReciboResource` —ni en ningun otro sitio de este
+ * endpoint—, asi que la columna «Contribuyente» del prototipo no tiene con
+ * que llenarse y no se inventa.
+ */
+function duplicadoRecibo(): Readonly<Record<string, unknown>> {
+  const [fila] = RESPUESTAS['duplicado_recibo']?.tabla?.filas ?? [];
+  const [numero, fecha, hora, , concepto, importeS, duplicados, estado] = (fila ?? []).map(
+    (c) => c.texto,
+  );
+  const fechaIso = fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO;
+  const horaIso = hora && hora !== '—' ? hora : '00:00';
+  const total = comoImporte(importeS ?? '0.00');
+  const [serie = '001', correlativoTexto = '1'] = (numero ?? '001-0000001').split('-');
+  const correlativo = Number(correlativoTexto) || 1;
+  const anulado = (estado ?? '').toUpperCase() === 'ANULADO';
+  const importe = (valor: string) => ({ importe: valor, actualizadoA: fechaIso });
+  return {
+    estado: anulado ? 'ANULADO' : 'EMITIDO',
+    duplicados: Number(duplicados) || 0,
+    anulacion: anulado
+      ? { fecha: fechaIso, motivo: 'Anulación registrada en ventanilla', usuario: null }
+      : null,
+    recibo: {
+      numero: numero || `${serie}-${String(correlativo).padStart(7, '0')}`,
+      serie,
+      correlativo,
+      cajero: 'admin',
+      formaDePago: 'EFECTIVO',
+      tipoDePago: 'NORMAL_TRIBUTARIO',
+      beneficioDeclarado: null,
+      emitidoEn: `${fechaIso}T${horaIso}:00Z`,
+      total: importe(total),
+      lineas: [
+        {
+          tributo: concepto || 'IMPUESTO PREDIAL',
+          concepto: 'PAGO',
+          ejercicio: null,
+          predioId: null,
+          vehiculoId: null,
+          cantidad: null,
+          precioUnitario: null,
+          insoluto: importe(total),
+          reajuste: importe('0.00'),
+          interes: importe('0.00'),
+          gasto: importe('0.00'),
+          monto: importe(total),
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * El avance de recaudacion por tributo (`RecaudacionResource.Avance`, #36, #74).
+ *
+ * **Sin «Emitido», «Saldo», «% avance», «Meta» ni «% de meta»**: son las
+ * columnas que dibuja el prototipo y que `RecaudacionController` no publica
+ * —la meta no tiene tabla, y lo emitido son cargos del libro, que este
+ * contexto no lee (javadoc de `RecaudacionResource.Avance`)—. Inventar un
+ * numero ahi seria mostrar un avance que nadie calculo. Lo unico que el
+ * recurso real trae por fila es `cobrado`/`anulado`/`neto`: el prototipo solo
+ * distingue un importe, «Recaudado S/», que es el que mas se parece a `neto`
+ * —lo que de verdad entro—; sin dato de anulaciones en el prototipo, se
+ * publica en cero y no se inventa un reparto.
+ */
+function avanceRecaudacion(): Readonly<Record<string, unknown>> {
+  const filas = filasDe('avance_recaudacion').map(([tributo, , recaudadoS]) => {
+    const neto = comoImporte(recaudadoS ?? '0.00');
+    return { tributo, cobrado: neto, anulado: '0.00', neto };
+  });
+  const totalNeto = sumaDeImportes(filas.map((f) => f.neto));
+  const aLaFecha = EL_DIA_DEL_PROTOTIPO;
+  const importe = (valor: string) => ({ importe: valor, actualizadoA: aLaFecha });
+  return {
+    desde: `${aLaFecha.slice(0, 4)}-01-01`,
+    hasta: aLaFecha,
+    aLaFecha,
+    filas: filas.map((f) => ({
+      tributo: f.tributo,
+      cobrado: importe(f.cobrado),
+      anulado: importe(f.anulado),
+      neto: importe(f.neto),
+    })),
+    cobrado: importe(totalNeto),
+    anulado: importe('0.00'),
+    neto: importe(totalNeto),
+    turno: null,
+  };
+}
+
+/**
+ * La recaudacion por area generadora y partida (`RecaudacionResource.Distribucion`,
+ * #36, #74).
+ *
+ * El prototipo dibuja «Partida», «Descripción» y «Monto S/» —una fila por
+ * partida, sin la unidad organica ni el tributo aparte—, y el recurso real
+ * agrupa por (area, partida, tributo). Sin esos dos datos por separado en el
+ * prototipo, `area` y `areaNombre` salen nulos —lo mismo que publica el
+ * recurso para la parte tributaria, que no tiene area (javadoc de
+ * `RecaudacionResource.FilaDePartida`)— y `tributo` se llena con la
+ * descripcion de la partida, que es lo unico que la fila trae para nombrarla.
+ */
+function recaudacionPorArea(): Readonly<Record<string, unknown>> {
+  const aLaFecha = EL_DIA_DEL_PROTOTIPO;
+  const importe = (valor: string) => ({ importe: valor, actualizadoA: aLaFecha });
+  const filas = filasDe('recaudacion_area').map(([partida, descripcion, montoS]) => {
+    const monto = comoImporte(montoS ?? '0.00');
+    return {
+      area: null,
+      areaNombre: null,
+      partida: partida && partida !== '—' ? partida : null,
+      tributo: descripcion || 'SIN PARTIDA',
+      cobrado: importe(monto),
+      anulado: importe('0.00'),
+      neto: importe(monto),
+    };
+  });
+  const totalNeto = sumaDeImportes(filas.map((f) => f.neto.importe));
+  return {
+    desde: `${aLaFecha.slice(0, 4)}-01-01`,
+    hasta: aLaFecha,
+    aLaFecha,
+    filas,
+    neto: importe(totalNeto),
+    netoSinPartida: importe('0.00'),
+  };
+}
+
+/** Suma exacta de importes en texto plano, sin pasar por coma flotante (regla 1). */
+function sumaDeImportes(valores: readonly string[]): string {
+  let centavos = 0n;
+  for (const valor of valores) {
+    const [entero = '0', decimal = '00'] = valor.split('.');
+    const signo = entero.startsWith('-') ? -1n : 1n;
+    const enteroAbs = entero.replace('-', '') || '0';
+    centavos += signo * (BigInt(enteroAbs) * 100n + BigInt(decimal.padEnd(2, '0').slice(0, 2)));
+  }
+  const negativo = centavos < 0n;
+  const absoluto = negativo ? -centavos : centavos;
+  const texto = absoluto.toString().padStart(3, '0');
+  const resultado = `${texto.slice(0, -2)}.${texto.slice(-2)}`;
+  return negativo ? `-${resultado}` : resultado;
+}
+
 /* ── Papeletas: transito e infracciones administrativas ──────────────────── */
 
 /**
@@ -1367,7 +1562,6 @@ const papeletasTransito = (): Paginado =>
       lugar: 'VÍA PÚBLICA',
       placa,
       vehiculoId: i + 1,
-      licenciaConducir: null,
       infractorId: i + 1,
       propietarioId: null,
       contribuyenteId: null,
@@ -1414,7 +1608,6 @@ const adminEstadoCuenta = (): Paginado => {
       lugar: 'INSPECCIÓN MUNICIPAL',
       placa: null,
       vehiculoId: null,
-      licenciaConducir: null,
       infractorId: null,
       propietarioId: null,
       contribuyenteId: 1,
@@ -1500,6 +1693,7 @@ const coactivaExpedientes = (): Paginado =>
 /** Por camino del contrato, relativo a `/api/v1`. Casi todas son `GET`: ver `respaldo`. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/catastro/vias': vias,
+  '/tesoreria/convenios': convenios,
   '/rentas/contribuyentes': contribuyentes,
   '/rentas/beneficios': beneficios,
   '/rentas/arbitrios': arbitrios,

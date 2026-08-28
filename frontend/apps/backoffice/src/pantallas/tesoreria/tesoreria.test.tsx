@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { OPCIONES_CONECTADAS } from '../conexiones';
 import { permisosDelClaim, puedeVer } from '@sgtm/sesion';
 import { montarEnRuta } from '../../pruebas/montar';
@@ -115,20 +116,98 @@ describe('SoD-3 y lo que este modulo todavia no puede', () => {
     expect(puedeVer(CAJERO, 'recaudacion_area')).toBe(false);
   });
 
-  it('ninguna de las diez esta conectada: el backend de tesoreria no existe', () => {
+  /**
+   * Cinco de las diez siguen sin conectar (#74, esta pasada): las cinco son
+   * `POST` —abrir la pantalla no puede lanzar el acto— y ninguna tiene todavia
+   * una lectura propia que alimentarla. Las otras cinco se conectaron aqui —
+   * `caja_tributaria` leyendo `consulta_deuda`, igual que `baja_deuda`—: ver
+   * `pantallas/tesoreria/index.ts` y el resto de este archivo.
+   */
+  it('cinco de las diez siguen sin conectar: son escrituras sin lectura propia', () => {
     for (const opcion of [
-      'caja_tributaria',
       'caja_tasas',
       'fraccionamiento',
-      'consulta_convenios',
-      'duplicado_recibo',
       'anulacion_recibo',
       'anulacion_convenio',
       'cierre_caja',
-      'avance_recaudacion',
-      'recaudacion_area',
     ]) {
       expect(OPCIONES_CONECTADAS).not.toContain(opcion);
     }
+  });
+});
+
+describe('las cinco lecturas conectadas hablan la forma del Resource real (#74)', () => {
+  beforeEach(() => instalarProxyDeDatos({ latencia: false }));
+  afterEach(() => desinstalarProxyDeDatos());
+
+  it('las cinco estan en el registro de conexiones', () => {
+    for (const opcion of [
+      'consulta_convenios',
+      'duplicado_recibo',
+      'avance_recaudacion',
+      'recaudacion_area',
+      'caja_tributaria',
+    ]) {
+      expect(OPCIONES_CONECTADAS).toContain(opcion);
+    }
+  });
+
+  it('consulta_convenios dibuja filas de verdad contra el proxy, sin interceptar', async () => {
+    montarEnRuta('/tesoreria/consulta-convenios');
+    // Espera a la fila de verdad, no al esqueleto: `findAllByRole('cell')` se
+    // resuelve ya con las celdas vacias del esqueleto, antes de que llegue el
+    // dato.
+    await screen.findByText('CASTILLO PASCUALA, MARÍA E.');
+    // El estado, en mayusculas, es el vocabulario de `EstadoDeConvenio` (V31) y
+    // no el del prototipo: «vigente», «cumplido»… El proxy ya lo publica asi.
+    // `role: 'cell'` y no `findByText` a secas: «VIGENTE» tambien es una opcion
+    // del filtro «Estado», y el texto suelto encuentra las dos.
+    await screen.findByRole('cell', { name: 'VIGENTE' });
+    await screen.findByText('CONV-2026-00412');
+  });
+
+  it('duplicado_recibo pide su numero y dibuja el recibo encontrado', async () => {
+    montarEnRuta('/tesoreria/duplicado-recibo?nroDeRecibo=001-0000123');
+    const filas = await screen.findAllByRole('row');
+    expect(filas.length).toBeGreaterThan(1);
+  });
+
+  it('avance_recaudacion y recaudacion_area dibujan sus filas y sus totales', async () => {
+    montarEnRuta('/tesoreria/avance-recaudacion');
+    const filasAvance = await screen.findAllByRole('row');
+    expect(filasAvance.length).toBeGreaterThan(1);
+
+    montarEnRuta('/tesoreria/recaudacion-area');
+    const filasArea = await screen.findAllByRole('row');
+    expect(filasArea.length).toBeGreaterThan(1);
+  });
+
+  /**
+   * El bloqueante #2 de esta pasada: `caja_tributaria` no declara `filtros` en
+   * su catalogo, y sin el bloque `Filtros` no se dibuja nunca. La franja de
+   * busqueda sale de `filtrosPropios` (`pantallas/tesoreria/composicion.ts`).
+   */
+  it('caja_tributaria dibuja su bloque de busqueda, teclea y carga la deuda', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/tesoreria/caja-tributaria');
+
+    // El bloque de busqueda existe y tiene un campo de texto para el codigo.
+    const campo = await screen.findByRole('textbox', { name: 'Cód. Contribuyente' });
+    expect(campo).not.toHaveAttribute('readonly');
+
+    await usuario.type(campo, '03593174');
+    await usuario.click(screen.getByRole('button', { name: 'Buscar' }));
+
+    // Con el codigo en la URL, la grilla carga de verdad contra el proxy: la
+    // fila deja de ser el esqueleto y trae el tributo de la deuda. Dos filas
+    // la dibujan, y «IMPUESTO PREDIAL» ademas es una opcion del desplegable
+    // «Forma de pago» — por eso se cuentan las celdas de la tabla, no el texto
+    // suelto.
+    await waitFor(() => {
+      const celdas = screen
+        .getAllByRole('cell')
+        .filter((celda) => celda.textContent === 'IMPUESTO PREDIAL');
+      expect(celdas.length).toBeGreaterThan(0);
+    });
   });
 });

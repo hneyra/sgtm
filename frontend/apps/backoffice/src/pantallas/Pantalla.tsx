@@ -1,4 +1,5 @@
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
+import type { ComponentType } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Aviso, Boton, Esqueleto, FechaDeCalculo } from '@sgtm/design-system';
@@ -32,7 +33,7 @@ import { impedimentoDelActo } from './actos';
 import { useEjercicio } from '../app/ejercicio';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
-import { composicionDe, hayQueResumir } from './composicion';
+import { composicionDe, filtrosDe, hayQueResumir } from './composicion';
 import type { ComposicionDeOpcion } from './composicion';
 import { PanelLateral } from './bloques/PanelLateral';
 import { useDatosDeOperacion } from './useDatosDeOperacion';
@@ -45,9 +46,6 @@ import { Portal } from './bloques/Portal';
 import { Reporte } from './bloques/Reporte';
 import { useDescargaDeArchivo } from './useDescargaDeArchivo';
 import type { DescargaDeArchivo } from './useDescargaDeArchivo';
-import { ActualizacionDeCatastro } from './catastro/ActualizacionDeCatastro';
-import { ValoresUnitarios } from './catastro/ValoresUnitarios';
-import { Depreciacion } from './catastro/Depreciacion';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
 import { IndiceDeSecciones } from './bloques/IndiceDeSecciones';
 import { Versionado } from './bloques/Versionado';
@@ -166,6 +164,26 @@ type Estructura = EstructuraDePantalla;
  */
 const ANCLA_DE_LA_TABLA = 'sgtm-tabla-de-la-pantalla';
 
+/**
+ * Las tres pantallas de valores catastrales, cargadas con quien las abre y no
+ * en el arranque (#379, esta pasada; mismo patron que `rentas/composicion.ts`).
+ *
+ * Cada una trae su propia logica de valuacion —`ActualizacionDeCatastro` con
+ * `TablaDePisos` y `CodigoCatastral`, las otras dos con `useTablaDeValuacion`—
+ * y ninguna de las 131 pantallas que no son estas tres la necesita nunca.
+ * Medido: el arranque bajo de 148,6 a 145,9 KB comprimidos al sacarlas del
+ * trozo comun (`yarn comprobar-compilaciones`).
+ */
+const ActualizacionDeCatastro = lazy(async () => ({
+  default: (await import('./catastro/ActualizacionDeCatastro')).ActualizacionDeCatastro,
+}));
+const ValoresUnitarios = lazy(async () => ({
+  default: (await import('./catastro/ValoresUnitarios')).ValoresUnitarios,
+}));
+const Depreciacion = lazy(async () => ({
+  default: (await import('./catastro/Depreciacion')).Depreciacion,
+}));
+
 /** Las pantallas cuyo recurso trae version y vigencia. Hoy, las cuatro fichas. */
 const VERSIONADAS: ReadonlySet<string> = new Set([
   'ficha_urbana',
@@ -217,7 +235,7 @@ const VERSIONADAS: ReadonlySet<string> = new Set([
  * saber de listas, de booleanos o de un verbo que miente.
  */
 const COMPONENTES_PROPIOS: Readonly<
-  Record<string, (props: { readonly estructura: Estructura }) => React.JSX.Element>
+  Record<string, ComponentType<{ readonly estructura: Estructura }>>
 > = {
   permisos: PermisosMatrix,
   miembros: MiembrosDeGrupo,
@@ -230,7 +248,14 @@ const COMPONENTES_PROPIOS: Readonly<
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
   const Propio = COMPONENTES_PROPIOS[estructura.id];
   if (Propio !== undefined) {
-    return <Propio estructura={estructura} />;
+    // El `Suspense` es de las tres perezosas de catastro; las de seguridad no
+    // suspenden nunca —viajan en el trozo comun—, y envolverlas igual no
+    // cuesta nada: sin promesa pendiente, `Suspense` no dibuja su `fallback`.
+    return (
+      <Suspense fallback={<Esqueleto alto={320} />}>
+        <Propio estructura={estructura} />
+      </Suspense>
+    );
   }
   const conexion = conexionDe(estructura.id);
   return conexion === undefined ? (
@@ -335,6 +360,9 @@ function Bloques({
   const { moduloId = '', ranura = '', codigo } = useParams();
 
   const busquedaActiva = leerBusqueda(busqueda);
+  // El bloque de busqueda: el del catalogo, o el que esta opcion compone
+  // cuando el catalogo no trae ninguno (`filtrosPropios`, ver `composicion.ts`).
+  const filtrosDeLaPantalla = filtrosDe(estructura.id, estructura.filtros);
   const operacion = operacionDe(estructura.id);
   // Una operacion que escribe no se pide al abrir la pantalla: abrir «Copias de
   // seguridad» no puede lanzar un respaldo. La pantalla se dibuja de su catalogo
@@ -733,11 +761,11 @@ function Bloques({
         />
       )}
 
-      {estructura.filtros && (
+      {filtrosDeLaPantalla && (
         <div ref={refDeBusqueda}>
           <Filtros
             opcion={estructura.id}
-            campos={estructura.filtros}
+            campos={filtrosDeLaPantalla}
             buscado={busquedaActiva.filtros}
             cargando={consulta.isFetching}
             // Buscar reescribe la URL: es donde vive lo buscado. Y devuelve a la

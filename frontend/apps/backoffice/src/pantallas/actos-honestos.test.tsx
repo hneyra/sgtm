@@ -6,7 +6,7 @@ import { escribe } from '@sgtm/api-client';
 import { todasLasPantallas } from '../catalogo';
 import { montarEnRuta } from '../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada } from '../pruebas/acciones';
-import { impedimentoDelActo } from './actos';
+import { ACTOS_SIN_CAMPO, impedimentoDelActo } from './actos';
 import { operacionDe } from './busqueda';
 import { OPCIONES_QUE_ESCRIBEN } from './escrituras';
 
@@ -345,5 +345,18 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
     expect(motivoDeLaPrimaria()).toBeUndefined();
 
     montada.unmount();
+  });
+});
+
+/**
+ * `ActoSinCampo.campos` promete, en su propio javadoc, que existe «para que la
+ * prueba pueda nombrarlo» — y ninguna lo nombraba (#379, esta pasada). Sin este
+ * guardia, una entrada con `campos: []` pasaba en verde: documenta el dato que
+ * falta y no dice como se llama en el backend, que es justo lo que le sirve a
+ * quien mantiene el sistema para no tener que abrir el controlador.
+ */
+describe('ACTOS_SIN_CAMPO.campos nombra el campo del backend, no lo deja vacio', () => {
+  it.each(Object.entries(ACTOS_SIN_CAMPO))('%s declara al menos un campo', (_opcion, acto) => {
+    expect(acto.campos.length).toBeGreaterThan(0);
   });
 });
