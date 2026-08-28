@@ -13,7 +13,14 @@ import type { Fecha } from '@sgtm/dominio';
 /** Lo que se muestra cuando el backend no manda ese dato. Nunca una cadena vacia. */
 export const SIN_DATO = '—';
 
-const esObjeto = (valor: unknown): valor is Readonly<Record<string, unknown>> =>
+/**
+ * Un objeto JSON, y no un arreglo ni `null`.
+ *
+ * Se exporta porque el mismo predicado estaba copiado en media docena de
+ * adaptadores: seis copias de tres condiciones que un dia dejan de decir lo
+ * mismo —la de `!Array.isArray` es justo la que se olvida—.
+ */
+export const esObjeto = (valor: unknown): valor is Readonly<Record<string, unknown>> =>
   typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 
 export const texto = (valor: unknown): string =>

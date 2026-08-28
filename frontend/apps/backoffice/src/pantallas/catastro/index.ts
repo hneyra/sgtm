@@ -1,10 +1,11 @@
-import type { Celda, DatosDePantalla, ValorDeCampo } from '@sgtm/api-client';
+import type { Celda, DatosDePantalla, DetalleDeFila, ValorDeCampo } from '@sgtm/api-client';
 import { definirConexion } from '../conexiones';
 import type { Conexion, ContextoDePantalla } from '../conexiones';
 import { parametrosDeBusqueda } from '../busqueda';
 import {
   SIN_DATO,
   datosDe,
+  esObjeto,
   estado,
   leerLista,
   leerPaginado,
@@ -301,30 +302,109 @@ const consulta_fichas = definirConexion({
 
 /* ── Los sectores ──────────────────────────────────────────────────────── */
 
+/**
+ * El catalogo territorial, con **los conteos que el sector trae** (#309, #321).
+ *
+ * `SectorResource` publica `manzanas`, `predios` y `lotes` contados por la base
+ * sobre la pagina ya limitada. Aqui se dibujan **tal cual**: no se suman, no se
+ * completan y no se deducen unos de otros. Que significa cada uno lo decide el
+ * backend y conviene saberlo antes de leer la tabla como si fuera un cuadre:
+ *
+ * - `predios` son los **activos**. Los dados de baja siguen en la base porque
+ *   aparecen en determinaciones ya emitidas (RNF-051) y el sector ya no los
+ *   tiene.
+ * - `lotes` cuenta pares (manzana, lote) **distintos**: tres departamentos de un
+ *   mismo lote son tres predios y **un** lote. Que `lotes` sea menor que
+ *   `predios` es lo normal, no un descuadre.
+ * - **Un predio sin sector no cuenta en ninguno.** La suma de los `predios` de
+ *   todos los sectores puede ser menor que el padron, y eso es informacion —hay
+ *   predios sin ubicacion territorial asignada— y no un error de la tabla.
+ *
+ * Mientras la ruta la conteste el proxy de datos, los tres salen «—», y **eso es
+ * correcto**: el proxy no finge lo que el backend no le ha dado (ADR-0010 §4).
+ * El dia que la operacion se sirva de verdad se pintan sin tocar esta pantalla.
+ */
 const sectores = definirConexion({
   operacion: 'sectores',
   parametros: deLaBusqueda('sectores'),
   leer: (cuerpo) => leerPaginado(cuerpo, 'los sectores'),
-  adaptar: (paginado) =>
-    datosDe(
-      tablaDe(
-        paginado,
-        (sector): readonly Celda[] => [
-          { texto: texto(sector['codigo']) },
-          { texto: texto(sector['nombre']) },
-          // Cuantas manzanas, cuantos lotes y cuantos predios inscritos tiene:
-          // son conteos que `SectorResource` no publica, y contarlos aqui
-          // exigiria traerse el padron entero.
-          { texto: SIN_DATO },
-          { texto: SIN_DATO },
-          { texto: SIN_DATO },
-          { texto: texto(sector['zona']) },
-          estado(sector['activo']),
-        ],
-        'sectores',
-      ),
-    ),
+  adaptar: (paginado) => {
+    const tabla = tablaDe(
+      paginado,
+      (sector): readonly Celda[] => [
+        { texto: texto(sector['codigo']) },
+        { texto: texto(sector['nombre']) },
+        { texto: conteo(sector['manzanas']) },
+        { texto: conteo(sector['lotes']) },
+        { texto: conteo(sector['predios']) },
+        { texto: texto(sector['zona']) },
+        estado(sector['activo']),
+      ],
+      'sectores',
+    );
+    return datosDe({
+      ...tabla,
+      // `esObjeto` del listado compartido y no una copia local: el predicado
+      // son tres condiciones y la de `!Array.isArray` es justo la que se olvida
+      // al copiarlo.
+      detalles: paginado.contenido.filter(esObjeto).map(detalleDelSector),
+    });
+  },
 });
+
+/**
+ * Lo que cuelga de un sector: sus manzanas.
+ *
+ * **El backend todavia no las lista.** `POST /catastro/sectores/{codigo}/manzanas`
+ * da de alta una manzana y no hay ningun `GET` que las devuelva —el repositorio
+ * tiene `manzanasDe(sectorId)` y ningun controlador lo publica—, asi que el
+ * desplegable dice que falta en vez de aparecer vacio, que se leeria como «este
+ * sector no tiene ninguna».
+ *
+ * Cuando lo publique, `manzanas` sera **una lista** donde hoy es un conteo, y las
+ * fichas se pintan solas: es la misma clave porque es el mismo concepto —las
+ * manzanas del sector—, contado mientras solo se cuenta y enumerado cuando se
+ * enumere. Lo que **no** se hace es inventar aqui una clave que el contrato no
+ * declara ni ensenar en el proxy unas manzanas que nadie sirvio (ADR-0010 §4).
+ */
+function detalleDelSector(sector: Readonly<Record<string, unknown>>): DetalleDeFila {
+  const codigo = typeof sector['codigo'] === 'string' ? sector['codigo'] : '';
+  const listadas = listaDe(sector['manzanas']);
+  return {
+    clave: codigo,
+    titulo: `Manzanas del sector ${codigo === '' ? SIN_DATO : codigo}`,
+    items: listadas.map((manzana) => {
+      const lotes = manzana['lotes'];
+      return {
+        texto: texto(manzana['codigo']),
+        // El conteo de lotes de la manzana, **si el servidor lo manda**. Un
+        // «0 lotes» inventado diria de una manzana recien creada algo que nadie
+        // ha comprobado.
+        ...(typeof lotes === 'number' ? { nota: `${lotes} lotes` } : {}),
+      };
+    }),
+    ...(listadas.length === 0
+      ? {
+          nota: 'El sistema todavía no publica las manzanas de un sector: solo su alta. Mientras tanto se ve cuántas hay en la columna «Manzanas», y desde aquí se puede añadir una.',
+        }
+      : {}),
+  };
+}
+
+/**
+ * Un conteo del servidor, tal cual.
+ *
+ * Numero, se muestra. Lista —el dia que el backend enumere lo que hoy cuenta—,
+ * se muestra cuantos elementos mando, que es contar lo recibido y no componer
+ * una cifra (lo mismo que ya hace `tablaDeLista` con su conteo). Cualquier otra
+ * cosa, incluido el nulo con el que `SectorResource` dice «no se conto», sale
+ * «—»: un `0` significaria «ninguna», que es una afirmacion distinta.
+ */
+function conteo(valor: unknown): string {
+  if (typeof valor === 'number') return String(valor);
+  if (Array.isArray(valor)) return String(valor.length);
+  return SIN_DATO;
+}
 
 /* ── Aranceles: la unica tabla de valuacion sin pivote ──────────────────── */
 
@@ -375,12 +455,7 @@ const aranceles = definirConexion({
 });
 
 const listaDe = (valor: unknown): readonly Readonly<Record<string, unknown>>[] =>
-  Array.isArray(valor)
-    ? valor.filter(
-        (dato): dato is Readonly<Record<string, unknown>> =>
-          typeof dato === 'object' && dato !== null && !Array.isArray(dato),
-      )
-    : [];
+  Array.isArray(valor) ? valor.filter(esObjeto) : [];
 
 const cadena = (valor: unknown): string | undefined =>
   typeof valor === 'string' && valor !== '' ? valor : undefined;

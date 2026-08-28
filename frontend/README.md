@@ -160,6 +160,35 @@ con «—». Donde eso importa más es en las cifras: el arancel por m², el val
 y el autovalúo rural alimentan la valuación de un predio, y una cifra inventada ahí acaba en un
 valor mal emitido. Que falte se ve; que esté mal, no.
 
+### Catastro escribe: el alta guiada y el territorio operable
+
+Dos cosas que el prototipo dibujaba y no hacían nada.
+
+**El alta de una ficha son cuatro pasos, no cuarenta campos** (`catastro/AltaGuiadaDeFicha.tsx`).
+Se abre desde la acción «Nuevo» de la ficha urbana —la que ya estaba dibujada y muerta—, sustituye
+a los bloques mientras dura, y el orden no es cosmético: **el error caro se comete al principio**.
+Un código con un sector que no existe, o que ya está inscrito, no se descubre al pulsar «Guardar»;
+se descubre cuando dos predios colisionan y el padrón deja de cuadrar con el catastro. Por eso el
+paso 2 comprueba el sector contra el catálogo y avisa del duplicado —con quién lo tiene y un enlace
+a esa ficha— **antes** de pedir el resto. Las tres comprobaciones son operaciones de **lectura** que
+ya existían (`sectores`, `calles`, `consulta_fichas`, `contribuyentes`): ninguna se inventó, y el
+proxy no finge ninguna.
+
+**Nada se guarda hasta el paso 4.** Los tres primeros son borrador en el componente —lo único que
+FRO-04 §5 deja quedarse ahí— y el cierre no se habilita sin la observación que crea la v1.
+
+**Territorio** (`sectores`, `calles`) dibuja los conteos de `SectorConConteos` —manzanas, lotes y
+predios activos— **tal como llegan**, despliega las manzanas de un sector en su fila y da de alta
+sector, manzana y vía desde un panel lateral con observación obligatoria. Mientras la ruta la
+conteste el proxy los tres conteos salen «—», y eso es correcto: el proxy no inventa lo que el
+backend no le ha dado (ADR-0010 §4). Del desplegable de manzanas hoy sale la nota de que el backend
+todavía no las lista —hay `POST` para darlas de alta y ningún `GET` que las devuelva—; el día que
+las publique, se pintan solas.
+
+Y una advertencia de dominio que la tabla necesita: **un predio sin sector no cuenta en ninguno**,
+así que la suma de «Predios inscritos» puede ser menor que el padrón. Es información —hay predios
+sin ubicación territorial asignada—, no un descuadre.
+
 ### Lo que le cuesta al ciudadano abrir el portal
 
 El portal es el único flujo del sistema que no usa alguien de la municipalidad: se entra desde un

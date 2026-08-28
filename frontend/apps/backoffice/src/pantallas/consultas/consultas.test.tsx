@@ -217,6 +217,11 @@ describe('consulta_altas_bajas lee AsientoResource, la misma forma que cuenta_co
   it('cuatro columnas de expediente salen vacias: el asiento no las trae', async () => {
     montarEnRuta('/consultas/consulta-altas-bajas');
 
+    // La tabla existe **tambien mientras carga**, con una fila de esqueleto por
+    // celda: esperarla a ella dejaba la prueba a merced de que la respuesta
+    // llegara antes que el primer chequeo. Lo que dice que los datos ya estan es
+    // la fecha de la respuesta, igual que en la prueba de al lado.
+    await screen.findByText(/Cifras actualizadas al/);
     const tabla = await screen.findByRole('table');
     const filas = await within(tabla).findAllByRole('row');
     // La primera fila es la cabecera; la primera de datos alcanza para probarlo.

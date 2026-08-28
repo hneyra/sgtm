@@ -79,6 +79,23 @@ export function repartirEnTramos(valor: string): readonly string[] {
   return tramos;
 }
 
+/**
+ * Lo que un codigo dice en uno de sus tramos, por el **nombre** del tramo.
+ *
+ * Se busca por nombre y no por posicion porque la posicion es exactamente lo que
+ * D-10 tiene abierto: si la plantilla pasa de 23 a 21, el sector deja de empezar
+ * en la septima posicion y un `slice(6, 8)` escrito a mano empezaria a leer otro
+ * tramo sin que nada fallara. Con el nombre, la lista manda —y la prueba que la
+ * compara contra `ComposicionCatastral` manda sobre ella—.
+ *
+ * Devuelve lo escrito, sin rellenar: en un codigo a medio componer un tramo
+ * puede venir corto o vacio, y eso es una busqueda por prefijo, no un error.
+ */
+export function tramoDelCodigo(valor: string, nombre: string): string {
+  const indice = TRAMOS_DEL_CODIGO.findIndex((tramo) => tramo.nombre === nombre);
+  return indice < 0 ? '' : (repartirEnTramos(valor)[indice] ?? '');
+}
+
 /** El codigo que componen unos tramos: su concatenacion, sin separadores. */
 export const componerDeTramos = (tramos: readonly string[]): string => tramos.join('');
 

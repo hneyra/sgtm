@@ -3,7 +3,15 @@ import type { Fecha } from '@sgtm/dominio';
 import { definirConexion } from '../conexiones';
 import type { Conexion } from '../conexiones';
 import { parametrosDeBusqueda } from '../busqueda';
-import { SIN_DATO, hoy, leerObjeto, leerPaginado, tablaDe, texto } from '../seguridad/listado';
+import {
+  SIN_DATO,
+  esObjeto,
+  hoy,
+  leerObjeto,
+  leerPaginado,
+  tablaDe,
+  texto,
+} from '../seguridad/listado';
 
 /**
  * Consultas, conectado hasta donde llega el backend: **siete opciones de once**.
@@ -27,9 +35,6 @@ interface ImporteConFecha {
   readonly importe: string;
   readonly actualizadoA: Fecha;
 }
-
-const esObjeto = (valor: unknown): valor is Readonly<Record<string, unknown>> =>
-  typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 
 function importeDe(valor: unknown): ImporteConFecha | undefined {
   if (!esObjeto(valor)) return undefined;

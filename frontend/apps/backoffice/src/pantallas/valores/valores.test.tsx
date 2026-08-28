@@ -171,8 +171,11 @@ describe('emitir la misma tanda dos veces es imposible desde la interfaz', () =>
 const escrituraDeMentira = (): Escritura => ({
   operacion: 'valores_masivo',
   campos: new Set<string>(),
+  tablas: new Set<string>(),
   borrador: {},
   fijarCampo: () => {},
+  filasDe: () => [],
+  fijarFilas: () => {},
   observacion: 'Emisión anual del ejercicio 2026.',
   fijarObservacion: () => {},
   puedeEnviar: true,

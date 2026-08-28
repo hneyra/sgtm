@@ -1,7 +1,24 @@
+import { lazy } from 'react';
 import type { ComposicionDeOpcion } from '../composicion';
 import { CodigoCatastral } from './CodigoCatastral';
 import { normalizarCodigoCatastral } from './codigo';
 import { ResumenDeFicha } from './ResumenDeFicha';
+
+/**
+ * Los formularios de alta, **cargados cuando se abren**.
+ *
+ * Este archivo lo importa `pantallas/composicion.ts`, y ese lo importa
+ * `Pantalla`: importar aqui el asistente de cuatro pasos —700 lineas— y las tres
+ * altas del territorio los metia en el trozo de arranque, que es el que baja
+ * quien entra a mirar un recibo y no va a dar de alta nada. `lazy` los deja
+ * donde tienen que estar: en un trozo aparte que solo pide quien pulsa «Nuevo».
+ */
+const AltaGuiadaDeFicha = lazy(async () => ({
+  default: (await import('./AltaGuiadaDeFicha')).AltaGuiadaDeFicha,
+}));
+const AltaDeVia = lazy(async () => ({ default: (await import('./altas')).AltaDeVia }));
+const AltaDeSector = lazy(async () => ({ default: (await import('./altas')).AltaDeSector }));
+const AltaDeManzana = lazy(async () => ({ default: (await import('./altas')).AltaDeManzana }));
 
 /**
  * Lo que Catastro compone alrededor de los bloques comunes (#318, #319).
@@ -49,6 +66,44 @@ export const COMPOSICION_DE_CATASTRO: Readonly<Record<string, ComposicionDeOpcio
     ...FICHA,
     widgetsDeFiltro: CODIGO('codigoDeRefCatastral'),
     acto: ACTO_DE_ACTUALIZAR,
+    // El «Nuevo» que el prototipo dibuja, con algo detras: el alta guiada de
+    // cuatro pasos (#320). Va en la ficha urbana y no en las otras tres porque
+    // es la unica que se abre por el codigo de referencia catastral, que es
+    // exactamente lo que el paso 2 compone y comprueba.
+    flujo: { accion: 'Nuevo', titulo: 'Nueva ficha urbana', Asistente: AltaGuiadaDeFicha },
+  },
+  // El catalogo vial: hasta hoy su «Nuevo» estaba dibujado y muerto (#321).
+  calles: {
+    altas: [
+      {
+        accion: 'Nuevo',
+        titulo: 'Nueva vía',
+        descripcion:
+          'La nomenclatura vial alimenta el domicilio fiscal y la ubicación del predio. Su tipo sale del catálogo: con texto libre, la misma calle entra tres veces.',
+        Formulario: AltaDeVia,
+      },
+    ],
+  },
+  // Los sectores, con sus manzanas colgando de la fila. El alta de una manzana
+  // cuelga del sector porque es como se identifica: la 001 del sector 01 y la
+  // 001 del 02 son manzanas distintas, y elegir el sector aparte se prestaria a
+  // darla de alta en el que no era.
+  sectores: {
+    altas: [
+      {
+        accion: 'Nuevo sector',
+        titulo: 'Nuevo sector',
+        descripcion:
+          'El código de un sector es un tramo del código catastral de todos sus predios, así que después no se cambia: la edición no lo toca y la baja es lógica.',
+        Formulario: AltaDeSector,
+      },
+    ],
+    altaDeFila: {
+      accion: '+ Añadir manzana',
+      titulo: 'Nueva manzana del sector',
+      descripcion: 'La manzana se da de alta dentro del sector que se desplegó.',
+      Formulario: AltaDeManzana,
+    },
   },
   ficha_economica: {
     ...FICHA,

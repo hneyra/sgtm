@@ -16,7 +16,19 @@ const AQUI = dirname(fileURLToPath(import.meta.url));
 const ESTILOS = join(AQUI, '../packages/design-system/src/estilos');
 
 const colores = readFileSync(join(ESTILOS, 'tokens/colors.css'), 'utf8');
-const componentes = readFileSync(join(ESTILOS, 'componentes.css'), 'utf8');
+/**
+ * Las dos hojas donde vive el color de un texto.
+ *
+ * `componentes.css` es la del design system, y `aplicacion.css` la de la
+ * aplicacion: ahi viven el riel del asistente, el panel lateral y el aviso de
+ * duplicado, que son **los que estrenan color**. Leer solo la primera dejaba
+ * fuera exactamente lo nuevo, y la comprobacion parecia mas amplia de lo que
+ * era: el «PENDIENTE» del riel llevaba dias a 4,25:1 sin que nada lo dijera.
+ */
+const HOJAS = [
+  readFileSync(join(ESTILOS, 'componentes.css'), 'utf8'),
+  readFileSync(join(AQUI, '../apps/backoffice/src/estilos/aplicacion.css'), 'utf8'),
+];
 
 /** Los tokens de un bloque de la hoja: `:root` es el tema claro. */
 function tokensDe(desde: string): Readonly<Record<string, string>> {
@@ -51,13 +63,17 @@ function contraste(frente: string, fondo: string): number {
   return ((claro ?? 0) + 0.05) / ((oscuro ?? 0) + 0.05);
 }
 
-/** El token de color que usa un selector de la hoja de estilos. */
+/** El token de color que usa un selector, en cualquiera de las dos hojas. */
 function colorDe(selector: string): string {
-  const bloque = componentes.slice(componentes.indexOf(`${selector} {`));
-  const declaracion = bloque.slice(0, bloque.indexOf('}')).match(/\bcolor:\s*var\((--[\w-]+)\)/);
-  const token = declaracion?.[1];
-  if (token === undefined) throw new Error(`«${selector}» no declara un color con token`);
-  return token;
+  for (const hoja of HOJAS) {
+    const desde = hoja.indexOf(`${selector} {`);
+    if (desde < 0) continue;
+    const bloque = hoja.slice(desde);
+    const declaracion = bloque.slice(0, bloque.indexOf('}')).match(/\bcolor:\s*var\((--[\w-]+)\)/);
+    const token = declaracion?.[1];
+    if (token !== undefined) return token;
+  }
+  throw new Error(`«${selector}» no declara un color con token en ninguna hoja`);
 }
 
 const MINIMO = 4.5;
@@ -73,6 +89,23 @@ const TEXTOS: { estado: string; selector: string; sobre: string }[] = [
   },
   { estado: 'error · traza', selector: '.sgtm-aviso__traza', sobre: '--bg-card' },
   { estado: 'tabla · conteo', selector: '.sgtm-tarjeta__conteo', sobre: '--bg-card' },
+  { estado: 'campo · ayuda', selector: '.sgtm-campo__ayuda', sobre: '--bg-card' },
+  // Los del asistente y el panel lateral (#320, #321), que viven en la hoja de
+  // la aplicacion. El del riel es el que importa: el estado del paso es lo que
+  // **sustituye al color** para decir cual va (FRO-02 §2.1), asi que un texto
+  // que no se lee deja el paso comunicado solo por color.
+  { estado: 'riel · estado del paso', selector: '.sgtm-riel__estado', sobre: '--bg-card' },
+  {
+    estado: 'asistente · qué se da de alta',
+    selector: '.sgtm-asistente__flujo',
+    sobre: '--bg-card',
+  },
+  { estado: 'asistente · nota', selector: '.sgtm-asistente__nota', sobre: '--bg-card' },
+  { estado: 'asistente · lo que falta', selector: '.sgtm-asistente__falta', sobre: '--bg-card' },
+  { estado: 'panel lateral · lo que falta', selector: '.sgtm-lateral__falta', sobre: '--bg-card' },
+  // El aviso de duplicado lleva su propio relleno: se mide sobre el, no sobre
+  // la tarjeta.
+  { estado: 'duplicado · aviso', selector: '.sgtm-duplicado', sobre: '--warn-bg' },
 ];
 
 describe('los cuatro estados se leen: 4,5:1 sobre su fondo', () => {
@@ -101,14 +134,27 @@ describe('las insignias de estado, texto sobre su propio fondo', () => {
     { insignia: 'atencion', frente: '--warn-fg', fondo: '--warn-bg' },
     { insignia: 'critico', frente: '--bad-fg', fondo: '--bad-bg' },
   ])('$insignia', ({ frente, fondo }) => {
-    const color = CLARO[frente];
-    const relleno = CLARO[fondo];
-    // La de advertencia es la que FRO-02 §5 dejaba pendiente: sin sus tokens, el
-    // tono «atencion» salia sin color, no es que saliera con poco contraste.
-    expect(color, `${frente} no esta definido`).toBeDefined();
-    expect(relleno, `${fondo} no esta definido`).toBeDefined();
-    const razon = contraste(color ?? '#000000', relleno ?? '#ffffff');
-    expect(razon, `${frente} sobre ${fondo}: ${razon.toFixed(2)}:1`).toBeGreaterThanOrEqual(MINIMO);
+    // **En los dos temas.** La insignia lleva su propio relleno, asi que hoy los
+    // dos dan lo mismo —el tema oscuro no redefine ninguno de los seis tokens—,
+    // y eso es justo lo que hay que fijar: redefinir la mitad de un par es el
+    // defecto que ya se pago una vez con `--accent-ink`, que quedo a 1,15:1
+    // porque el oscuro cambio el relleno y no la tinta.
+    for (const [tema, tokens] of [
+      ['claro', CLARO],
+      ['oscuro', OSCURO],
+    ] as const) {
+      const color = tokens[frente];
+      const relleno = tokens[fondo];
+      // La de advertencia es la que FRO-02 §5 dejaba pendiente: sin sus tokens,
+      // el tono «atencion» salia sin color, no es que saliera con poco contraste.
+      expect(color, `${frente} no esta definido en el tema ${tema}`).toBeDefined();
+      expect(relleno, `${fondo} no esta definido en el tema ${tema}`).toBeDefined();
+      const razon = contraste(color ?? '#000000', relleno ?? '#ffffff');
+      expect(
+        razon,
+        `${frente} sobre ${fondo} en tema ${tema}: ${razon.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(MINIMO);
+    }
   });
 
   it('el texto sobre el relleno del acento se lee en los dos temas', () => {

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { MODULOS, situarOpciones } from '../../catalogo';
 import type { ModuloDelCatalogo, OpcionSituada } from '../../catalogo';
-import { catalogoVisible, puedeEscribir, puedeVer } from './permisos';
+import { catalogoVisible, puedeEscribir, puedeRegistrar, puedeVer } from './permisos';
 import { useSesion } from './ProveedorDeSesion';
 
 /**
@@ -17,6 +17,8 @@ export interface CatalogoVisible {
   readonly opciones: readonly OpcionSituada[];
   readonly puedeVer: (opcion: string) => boolean;
   readonly puedeEscribir: (opcion: string) => boolean;
+  /** Dar de alta exige `registro`, no cualquier escritura: ver `puedeRegistrar`. */
+  readonly puedeRegistrar: (opcion: string) => boolean;
 }
 
 export function useCatalogoVisible(): CatalogoVisible {
@@ -29,6 +31,7 @@ export function useCatalogoVisible(): CatalogoVisible {
       opciones: situarOpciones(modulos),
       puedeVer: (opcion: string) => puedeVer(permisos, opcion),
       puedeEscribir: (opcion: string) => puedeEscribir(permisos, opcion),
+      puedeRegistrar: (opcion: string) => puedeRegistrar(permisos, opcion),
     };
   }, [permisos]);
 }

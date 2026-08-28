@@ -22,6 +22,8 @@ export { pedirDatosDePantalla } from './pantallas';
 export type {
   DatosDePantalla,
   DatosDeTabla,
+  DetalleDeFila,
+  ItemDeDetalle,
   Paginacion,
   Paginado,
   DatosDeReporte,

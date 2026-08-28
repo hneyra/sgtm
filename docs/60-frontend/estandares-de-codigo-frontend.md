@@ -105,6 +105,43 @@ el campo de observación, que el envío se deshabilita mientras esté vacío, y 
 error del backend por observación faltante nunca debería llegar a verse. Si se ve, es un defecto
 del formulario.
 
+**El camino de escritura es uno solo —`useEscritura`— y lo que puede mandar cada opción está
+declarado campo a campo** en `pantallas/escrituras.ts`. Lo que no está declarado no viaja y ni
+siquiera se puede escribir en el formulario: es lo que impide que una contraseña acabe en el
+estado de React cuando el backend no la pide. Desde #320 la declaración cubre tres formas:
+
+| Forma | Qué declara | Ejemplo |
+|---|---|---|
+| `campos` | Un campo plano, con su nombre en el cuerpo | `documentoOrigen` |
+| `tablas` | Una **lista de filas**, con su lista blanca por columna | los pisos de una ficha |
+| `tablas` + `unica` | Un **bloque** que el backend declara como objeto, no lista | el `titular` de un alta |
+
+La tabla existe porque media docena de formularios del manual son una tabla, y sin ella cada uno
+tenía que armar su cuerpo entero a mano con `cuerpo` —la salida de emergencia—, y entonces la
+lista blanca deja de decir qué puede escribir esa pantalla. `exigir` completa el cuadro: lo que
+además de la observación hace falta para poder guardar, dicho como el motivo por el que todavía no
+se puede, en vez de dejar pulsar y contestar con un 422 a algo que la pantalla ya sabía. Recibe el
+borrador **y las filas**: sin ellas una opción no podía exigir «al menos un piso» ni «el titular
+necesita su documento», porque eso no está en el borrador plano.
+
+**La lista blanca muerde al escribir, no solo al enviar, y también por columna.** Las dos barreras
+protegen de cosas distintas: la de escritura evita que el valor exista en el estado de React, y la
+del envío evita que viaje si alguien un día rellena el borrador por otro camino. Estaban
+desparejadas —un campo no declarado no entraba, pero una **columna** no declarada de una fila sí—,
+y esa mitad que faltaba es exactamente la que la lista blanca vino a impedir. Se comprobó quitando
+la guarda: la batería entera seguía en verde, así que la prueba tampoco existía. Ahora existe, en
+`pantallas/escritura.test.tsx`.
+
+Dos detalles del cuerpo que se resuelven ahí y en ningún otro sitio: la resolución de un campo
+declarado usa `Object.hasOwn` —indexar resuelve por la cadena de prototipos, y un campo llamado
+`constructor` producía un «declarado» que nadie declaró—, y **lo que se escribe viaja recortado**:
+un campo de solo espacios es no haber escrito nada, no un campo lleno que el backend rechaza.
+
+Y el motivo por el que la acción está apagada **se pinta**, no se pone en un `title`: un `title`
+sobre un botón `disabled` no existe ni para el teclado —no se puede enfocar— ni para el lector de
+pantalla. `useEscritura` expone `motivo`, que es `exigir` más «falta la observación»; quien lo
+dibuje, con `role="status"` y referenciado desde el botón con `aria-describedby`.
+
 ## 7. Accesibilidad
 
 | Regla | Verificación |

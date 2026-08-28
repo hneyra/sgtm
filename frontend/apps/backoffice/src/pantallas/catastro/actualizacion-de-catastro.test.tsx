@@ -93,8 +93,11 @@ describe('guardar manda exactamente la lista blanca del controlador', () => {
     await screen.findByText('02');
 
     const filaDos = (await screen.findByText('02')).closest('tr');
-    await userEvent.click(within(filaDos as HTMLElement).getByRole('button', { name: 'Quitar' }));
-    expect(screen.getByText('1 pisos')).toBeInTheDocument();
+    // El boton dice **de que piso es**: diez «Quitar» iguales no se distinguen.
+    await userEvent.click(
+      within(filaDos as HTMLElement).getByRole('button', { name: 'Quitar el piso 02' }),
+    );
+    expect(screen.getByText('1 piso')).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText('Documento de origen'), 'Acta 2026-9');
     await userEvent.type(screen.getByLabelText('Observación'), 'Se retira el segundo piso.');
@@ -110,8 +113,8 @@ describe('guardar manda exactamente la lista blanca del controlador', () => {
     montarEnRuta('/catastro/actualizacion-catastro/200601010150010101001');
     await screen.findByText('02');
 
-    await userEvent.type(screen.getByLabelText('Nº Piso'), '03');
-    await userEvent.type(screen.getByLabelText('Área construida (m²)'), '32.00');
+    await userEvent.type(screen.getByLabelText('Piso'), '03');
+    await userEvent.type(screen.getByLabelText('Área m²'), '32.00');
     await userEvent.type(screen.getByLabelText('Muros'), 'b');
     await userEvent.type(screen.getByLabelText('Techos'), 'b');
     await userEvent.type(screen.getByLabelText('Pisos'), 'b');
@@ -145,6 +148,45 @@ describe('guardar manda exactamente la lista blanca del controlador', () => {
       categoriaBanios: 'B',
       categoriaInstalaciones: 'B',
     });
+  });
+
+  it('mientras se leen los pisos de la versión vigente, guardar no manda nada', async () => {
+    // La barra de acciones se dibuja **desde el primer render**, también durante
+    // la carga. En ese momento la tabla está vacía, y en este verbo una lista
+    // vacía no es «no lo sé»: es «ningún piso». Guardar ahí borraba las
+    // construcciones del predio sin que nadie lo pidiera y sin que ningún
+    // `DELETE` apareciera en el diff.
+    let soltar: () => void = () => undefined;
+    const espera = new Promise<void>((resolver) => {
+      soltar = resolver;
+    });
+    const proxy = globalThis.fetch;
+    globalThis.fetch = async (entrada, opciones) => {
+      const url = typeof entrada === 'string' ? entrada : String(entrada);
+      if (
+        url.includes('/api/v1/catastro/fichas/urbana/200601010150010101001') &&
+        (opciones?.method ?? 'GET') === 'GET'
+      ) {
+        await espera;
+      }
+      return proxy(entrada, opciones);
+    };
+
+    montarEnRuta('/catastro/actualizacion-catastro/200601010150010101001');
+
+    await userEvent.type(await screen.findByLabelText('Documento de origen'), 'Acta 2026-1');
+    await userEvent.type(screen.getByLabelText('Observación'), 'Se confirma la ficha.');
+
+    const guardar = screen.getByRole('button', { name: 'Guardar' });
+    expect(guardar).toBeDisabled();
+    expect(screen.getByText(/Todavía se están leyendo los pisos/)).toBeInTheDocument();
+    await userEvent.click(guardar);
+    expect(PUT()).toHaveLength(0);
+
+    // Y en cuanto llegan, se puede guardar con ellos dentro.
+    soltar();
+    await screen.findByText('02');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Guardar' })).toBeEnabled());
   });
 
   it('sin documento de origen, guardar falla en voz alta y no manda nada', async () => {

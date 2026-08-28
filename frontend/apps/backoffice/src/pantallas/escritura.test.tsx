@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, renderHook, screen, waitFor, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import { crearClienteDeConsultas } from '../app/App';
-import { montarEnRuta } from '../pruebas/montar';
+import { clienteDePruebas, montarEnRuta } from '../pruebas/montar';
+import { useEscritura } from './escritura';
+import type { OpcionesDeEscritura } from './escritura';
 
 /**
  * El camino de escritura completo (regla 10 de CLAUDE.md, RNF-052).
@@ -227,6 +231,168 @@ describe('los errores se cuentan donde toca', () => {
     expect(
       screen.getByText('El usuario no tiene el nivel de accesibilidad requerido.'),
     ).toBeInTheDocument();
+  });
+});
+
+/* ── La lista blanca, **al escribir** ──────────────────────────────────── */
+
+/**
+ * Lo declarado por la opcion de prueba: un campo, una tabla y una columna.
+ *
+ * La lista blanca se comprobaba solo **al enviar**, y eso la dejaba asimetrica:
+ * un campo no declarado no viajaba pero **si entraba en el estado de React**, y
+ * una columna no declarada de una fila, tambien. Es exactamente lo que la lista
+ * blanca vino a impedir —que una contrasena escrita en un formulario exista en
+ * algun sitio del cliente— y no lo impedia. Se comprobo que estas pruebas
+ * faltaban de la unica forma que vale: quitando `if (!declaradas.has(tabla))
+ * return;` de `fijarFilas`, la bateria entera seguia en verde.
+ */
+const DECLARADA: OpcionesDeEscritura = {
+  campos: { declarado: { campo: 'declarado' } },
+  tablas: {
+    construcciones: { campo: 'construcciones', columnas: { piso: { campo: 'piso' } } },
+  },
+};
+
+function escrituraDePrueba() {
+  const cliente = clienteDePruebas();
+  return renderHook(() => useEscritura('registrar_ficha_urbana', {}, DECLARADA), {
+    wrapper: ({ children }: { readonly children: ReactNode }) => (
+      <QueryClientProvider client={cliente}>{children}</QueryClientProvider>
+    ),
+  });
+}
+
+describe('lo que la opcion no declara no entra en el estado, no solo no viaja', () => {
+  it('un campo no declarado no llega al borrador', () => {
+    const { result } = escrituraDePrueba();
+
+    act(() => result.current.fijarCampo('noDeclarado', 'x'));
+
+    expect(result.current.borrador).not.toHaveProperty('noDeclarado');
+    // Y el declarado si, para que la prueba no pase por no escribir nada.
+    act(() => result.current.fijarCampo('declarado', 'si'));
+    expect(result.current.borrador['declarado']).toBe('si');
+  });
+
+  it('una tabla no declarada no llega ni al estado ni al cuerpo', async () => {
+    laApiResponde(201);
+    const { result } = escrituraDePrueba();
+
+    act(() => result.current.fijarFilas('noDeclarada', [{ loQueSea: 'x' }]));
+    expect(result.current.filasDe('noDeclarada')).toEqual([]);
+
+    act(() => result.current.fijarObservacion('Alta de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}');
+    expect(cuerpo).not.toHaveProperty('noDeclarada');
+  });
+
+  it('un campo o una columna que se llame como algo de `Object.prototype` tampoco', async () => {
+    laApiResponde(201);
+    const { result } = escrituraDePrueba();
+
+    // `constructor` y `toString` **no** estan declarados, pero la indexacion
+    // cruda —`campos[campo]`, `columnas[columna]`— los resuelve por la cadena de
+    // prototipos y devuelve una funcion: un «declarado» que no declaro nadie.
+    // Con eso, la columna se quedaba en la fila y al enviar `declarado.campo`
+    // era `undefined`, asi que el cuerpo salia con una clave literal
+    // «undefined». La lista blanca decia que si a lo unico que tenia que
+    // negar sin pensarlo.
+    act(() => result.current.fijarCampo('constructor', 'x'));
+    act(() => result.current.fijarCampo('toString', 'y'));
+    act(() =>
+      result.current.fijarFilas('construcciones', [
+        { piso: '01', constructor: 'x', toString: 'y' },
+      ]),
+    );
+
+    // `Object.hasOwn` y no `toHaveProperty`: **todo** objeto tiene `constructor`
+    // por herencia, asi que `toHaveProperty` estaria en verde diga lo que diga
+    // el borrador.
+    expect(Object.hasOwn(result.current.borrador, 'constructor')).toBe(false);
+    expect(Object.hasOwn(result.current.borrador, 'toString')).toBe(false);
+    expect(result.current.filasDe('construcciones')).toEqual([{ piso: '01' }]);
+
+    act(() => result.current.fijarObservacion('Alta de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}');
+    expect(cuerpo.construcciones).toEqual([{ piso: '01' }]);
+    // Ni la clave heredada, ni la que produce leerla: `cuerpo[declarado.campo]`
+    // con `declarado.campo` indefinido escribe la cadena «undefined».
+    expect(cuerpo).not.toHaveProperty('undefined');
+  });
+
+  it('una columna de mas no se queda en la fila', () => {
+    const { result } = escrituraDePrueba();
+
+    // `mep` es una de las que el prototipo dibuja y el controlador no acepta.
+    act(() => result.current.fijarFilas('construcciones', [{ piso: '01', mep: 'X' }]));
+
+    expect(result.current.filasDe('construcciones')).toEqual([{ piso: '01' }]);
+  });
+});
+
+describe('idempotencia: una tabla que no cambia no empieza otro intento', () => {
+  it('cambiar las filas da clave nueva; fijar las mismas, la misma', () => {
+    const { result } = escrituraDePrueba();
+
+    const alPrincipio = result.current.clave;
+    act(() => result.current.fijarFilas('construcciones', [{ piso: '01' }]));
+    const conUnPiso = result.current.clave;
+    expect(conUnPiso).not.toBe(alPrincipio);
+
+    // Volver a fijar **lo mismo** no es corregir nada: con clave nueva, el
+    // reintento de un envio fallido dejaria de ser un reintento.
+    act(() => result.current.fijarFilas('construcciones', [{ piso: '01' }]));
+    expect(result.current.clave).toBe(conUnPiso);
+
+    act(() => result.current.fijarFilas('construcciones', [{ piso: '02' }]));
+    expect(result.current.clave).not.toBe(conUnPiso);
+  });
+});
+
+describe('lo que se escribe viaja sin los espacios de alrededor', () => {
+  it('un campo de solo espacios no viaja, y uno con espacios viaja recortado', async () => {
+    laApiResponde(201);
+    const { result } = escrituraDePrueba();
+
+    act(() => result.current.fijarCampo('declarado', '  Acta 0244-2026  '));
+    act(() => result.current.fijarObservacion('Alta de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}').declarado).toBe('Acta 0244-2026');
+  });
+
+  it('solo espacios es no haber escrito nada', async () => {
+    laApiResponde(201);
+    const { result } = escrituraDePrueba();
+
+    act(() => result.current.fijarCampo('declarado', '   '));
+    act(() => result.current.fijarObservacion('Alta de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).not.toHaveProperty('declarado');
+  });
+});
+
+describe('el motivo por el que no se puede guardar se puede pintar', () => {
+  it('sin observacion, el motivo lo dice; con ella, no hay motivo', () => {
+    const { result } = escrituraDePrueba();
+
+    // `falta` es solo lo que la opcion exige; `motivo` incluye la observacion,
+    // que es el motivo mas frecuente y el que vivia en un `title`.
+    expect(result.current.falta).toBeUndefined();
+    expect(result.current.motivo).toMatch(/observación/i);
+
+    act(() => result.current.fijarObservacion('Alta de prueba.'));
+    expect(result.current.motivo).toBeUndefined();
   });
 });
 

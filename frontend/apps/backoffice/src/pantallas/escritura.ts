@@ -36,14 +36,43 @@ export interface Escritura {
   readonly operacion?: IdDeOperacion;
   /** Los campos del formulario que esta pantalla puede escribir. Los demas, no. */
   readonly campos: ReadonlySet<string>;
+  /** Las tablas que esta pantalla puede escribir. Igual que `campos`, pero de filas. */
+  readonly tablas: ReadonlySet<string>;
   /** Lo escrito en esos campos, todavia sin enviar. */
   readonly borrador: Readonly<Record<string, string>>;
   /** Escribe un campo. Uno que no este declarado se ignora, y no se guarda. */
   readonly fijarCampo: (campo: string, valor: string) => void;
+  /** Las filas escritas en una tabla declarada. Vacio si no lo esta. */
+  readonly filasDe: (tabla: string) => readonly Readonly<Record<string, string>>[];
+  /**
+   * Sustituye las filas de una tabla declarada. Una tabla que no lo este se
+   * ignora, y **de cada fila solo entran las columnas declaradas**.
+   */
+  readonly fijarFilas: (tabla: string, filas: readonly Readonly<Record<string, string>>[]) => void;
   readonly observacion: string;
   readonly fijarObservacion: (texto: string) => void;
-  /** Sin observacion no se habilita la accion. Esa es toda la regla. */
+  /**
+   * Si la accion se puede pulsar.
+   *
+   * Son tres condiciones, no una: que la pantalla tenga a donde escribir, que la
+   * observacion no este vacia (regla 10, y esa no se negocia) y que la opcion no
+   * exija ademas otra cosa (`exigir`). El envio en curso deshabilita tambien,
+   * porque pulsar dos veces es una pulsacion.
+   */
   readonly puedeEnviar: boolean;
+  /** Por que todavia no se puede guardar, cuando la opcion exige algo mas (`exigir`). */
+  readonly falta?: string;
+  /**
+   * Por que todavia no se puede guardar, **incluida la observacion que falta**.
+   *
+   * Existe porque `falta` solo cuenta lo que la opcion exige, y el motivo mas
+   * frecuente de que la accion este apagada no es ese: es que nadie ha escrito
+   * la observacion. Ese motivo vivia en un `title` sobre un boton `disabled`, y
+   * un `title` ahi **no existe** —ni para el teclado, que no puede enfocarlo, ni
+   * para el lector de pantalla—. Quien lo pinte, que lo pinte siempre y con
+   * `role="status"`.
+   */
+  readonly motivo?: string;
   readonly enviando: boolean;
   readonly enviada: boolean;
   readonly errorPorCampo: Readonly<Record<string, string>>;
@@ -79,8 +108,44 @@ export interface CampoDelCuerpo {
   readonly valor?: (texto: string) => string | undefined;
 }
 
+/**
+ * Un campo del cuerpo que **no es plano: es una tabla**.
+ *
+ * Existe porque el camino de escritura solo llevaba campos planos, y hay
+ * formularios del manual cuya mitad es una tabla: los pisos de una ficha
+ * catastral (#320) y los de su actualizacion (#71). Sin esto, cada uno de esos
+ * formularios tenia que armar su cuerpo entero a mano con `cuerpo`, que es la
+ * salida de emergencia: se salta la lista blanca, y entonces **la lista blanca
+ * deja de decir que puede escribir esa pantalla**.
+ *
+ * La declaracion es la misma idea un nivel mas abajo: la tabla declara sus
+ * `columnas` con los mismos `CampoDelCuerpo` de siempre, y **una clave de fila
+ * que no este declarada no viaja**, igual que un campo suelto. Por eso una fila
+ * con una columna de mas —porque el prototipo la dibuja y el backend no la
+ * pide— sale filtrada sin que nadie tenga que acordarse.
+ */
+export interface TablaDelCuerpo {
+  /** Como se llama la lista en el cuerpo que espera el backend. */
+  readonly campo: string;
+  /** Lista blanca de la fila: clave del formulario → como viaja. Lo que no este, no viaja. */
+  readonly columnas: Readonly<Record<string, CampoDelCuerpo>>;
+  /**
+   * El backend declara **un bloque, no una lista**: viaja la primera fila tal
+   * cual, y si no hay ninguna el campo no viaja.
+   *
+   * Es el caso degenerado de una tabla —a lo sumo una fila— y existe para el
+   * `titular` del alta de una ficha, que `FichaController.PeticionDeAlta`
+   * declara como un objeto opcional. Sin esto habria que armar ese cuerpo a
+   * mano con `cuerpo`, que es justo lo que la lista blanca vino a evitar.
+   */
+  readonly unica?: boolean;
+}
+
 /** Sin campos declarados. Constante para que la lista blanca no cambie cada render. */
 const SIN_CAMPOS: Readonly<Record<string, CampoDelCuerpo>> = {};
+
+/** Sin tablas declaradas. Misma razon que `SIN_CAMPOS`. */
+const SIN_TABLAS: Readonly<Record<string, TablaDelCuerpo>> = {};
 
 export interface OpcionesDeEscritura {
   /**
@@ -96,6 +161,34 @@ export interface OpcionesDeEscritura {
    * observacion**, y sus controles no se pueden escribir.
    */
   readonly campos?: Readonly<Record<string, CampoDelCuerpo>>;
+  /**
+   * Las tablas del formulario que viajan, por su clave, con su lista blanca de
+   * columnas. Ver {@link TablaDelCuerpo}.
+   */
+  readonly tablas?: Readonly<Record<string, TablaDelCuerpo>>;
+  /**
+   * Lo que **ademas de la observacion** hace falta para poder guardar, dicho
+   * como el motivo por el que todavia no se puede.
+   *
+   * Devolver un texto deshabilita la accion y lo explica; `undefined` la deja
+   * pasar. Existe para lo que la lista blanca no puede expresar —«la ficha
+   * necesita su documento de origen»— y sustituye a lanzar dentro del envio,
+   * que dejaba pulsar y contestaba con un error despues de haberlo hecho.
+   *
+   * Recibe el borrador **del render en curso** en vez de leerlo de un cierre:
+   * un cierre sobre el estado de quien la declara se evalua antes de que ese
+   * estado exista, y la condicion se quedaria mirando siempre el formulario
+   * vacio.
+   *
+   * Recibe tambien **las filas**, por el mismo motivo: media docena de estos
+   * formularios son una tabla, y sin ellas una opcion no podia exigir «al menos
+   * un piso» ni «el titular necesita su documento» —lo unico que podia mirar era
+   * el borrador plano, donde eso no esta—.
+   */
+  readonly exigir?: (
+    borrador: Readonly<Record<string, string>>,
+    filas: Readonly<Record<string, readonly Readonly<Record<string, string>>[]>>,
+  ) => string | undefined;
   /**
    * Que hacer con la respuesta cuando lo guardado cambia algo global a la
    * sesion —hoy, el ejercicio de trabajo—.
@@ -121,15 +214,24 @@ export interface OpcionesDeEscritura {
 export function useEscritura(
   operacion: IdDeOperacion | undefined,
   parametros: Readonly<Record<string, string>>,
-  { campos = SIN_CAMPOS, alGuardar, cuerpo }: OpcionesDeEscritura = {},
+  { campos = SIN_CAMPOS, tablas = SIN_TABLAS, exigir, alGuardar, cuerpo }: OpcionesDeEscritura = {},
 ): Escritura {
   const [observacion, fijarTexto] = useState('');
   const [borrador, fijarBorrador] = useState<Readonly<Record<string, string>>>({});
+  const [filas, fijarTodasLasFilas] = useState<
+    Readonly<Record<string, readonly Readonly<Record<string, string>>[]>>
+  >({});
   const clave = useRef(nuevaClaveDeIdempotencia());
   const clientes = useQueryClient();
   // La lista blanca en forma de conjunto, estable entre renders: entra en la
   // dependencia de lo que se manda y en si un control se puede escribir.
   const declarados = useMemo(() => new Set(Object.keys(campos)), [campos]);
+  const declaradas = useMemo(() => new Set(Object.keys(tablas)), [tablas]);
+  // Lo que ademas de la observacion falta para poder guardar. Se pregunta en
+  // cada render porque es un cierre sobre el estado de quien lo declara.
+  const falta = exigir?.(borrador, filas);
+  // Y el motivo completo, con la observacion incluida: es el que se pinta.
+  const motivo = falta ?? (observacion.trim() === '' ? FALTA_LA_OBSERVACION : undefined);
 
   // Este es el unico sitio del frontend donde se escribe, y es el que exige la
   // observacion: la regla de ESLint protege a todos los demas de saltarsela.
@@ -143,7 +245,9 @@ export function useEscritura(
         // La observacion va siempre; lo demas, solo lo declarado —o lo que
         // `cuerpo` construya, para la pantalla que no cabe en campos planos—.
         {
-          ...(cuerpo ? cuerpo() : soloDeclarados(borrador, campos)),
+          ...(cuerpo
+            ? cuerpo()
+            : { ...soloDeclarados(borrador, campos), ...soloDeclaradas(filas, tablas) }),
           observacion,
         } as CuerpoDe<IdDeOperacion>,
         clave.current,
@@ -156,6 +260,7 @@ export function useEscritura(
       // Y el borrador se vacia: lo que se escribio ya esta guardado, y dejarlo
       // en memoria es exactamente lo que la pantalla de contrasena no permite.
       fijarBorrador({});
+      fijarTodasLasFilas({});
       // Lo global a la sesion se atiende primero y puede quedarse con la cache
       // entera; si no lo hace, se invalida lo que este afectado.
       if (alGuardar?.(respuesta) === 'cache-vaciada') return;
@@ -166,6 +271,7 @@ export function useEscritura(
   return {
     ...(operacion === undefined ? {} : { operacion }),
     campos: declarados,
+    tablas: declaradas,
     borrador,
     fijarCampo: (campo: string, valor: string) => {
       // Un campo que la opcion no declaro no entra en el estado. Es la misma
@@ -175,6 +281,25 @@ export function useEscritura(
       if (borrador[campo] !== valor) clave.current = nuevaClaveDeIdempotencia();
       fijarBorrador((previo) => ({ ...previo, [campo]: valor }));
     },
+    filasDe: (tabla: string) => filas[tabla] ?? [],
+    fijarFilas: (tabla, nuevas) => {
+      // Una tabla no declarada no entra en el estado, por lo mismo que un campo.
+      const declarada = tablas[tabla];
+      if (!declaradas.has(tabla) || declarada === undefined) return;
+      // Y **de cada fila solo entran sus columnas declaradas**. La lista blanca
+      // de una tabla filtraba solo al enviar, y eso la dejaba asimetrica con la
+      // de los campos planos: una columna que la opcion no declara —porque el
+      // prototipo la dibuja y el backend no la pide— llegaba igual al estado de
+      // React, que es justo donde no tiene que estar.
+      const limpias = nuevas.map((fila) => soloColumnas(fila, declarada.columnas));
+      // Cambiar la tabla cambia lo que se manda, y por tanto el intento: con la
+      // clave anterior, quitar un piso devolveria el resultado del envio de
+      // antes —el que todavia lo tenia— en vez de aplicar la correccion. Pero
+      // **solo si cambia**: regenerarla al fijar lo mismo que ya habia convierte
+      // un reintento en un segundo envio, que es la mitad exacta de la regla.
+      if (!mismasFilas(filas[tabla] ?? [], limpias)) clave.current = nuevaClaveDeIdempotencia();
+      fijarTodasLasFilas((previas) => ({ ...previas, [tabla]: limpias }));
+    },
     observacion,
     fijarObservacion: (texto: string) => {
       // Cambiar lo que se manda empieza un intento nuevo: con la clave anterior,
@@ -183,7 +308,13 @@ export function useEscritura(
       if (texto !== observacion) clave.current = nuevaClaveDeIdempotencia();
       fijarTexto(texto);
     },
-    puedeEnviar: operacion !== undefined && observacion.trim() !== '' && !mutacion.isPending,
+    puedeEnviar:
+      operacion !== undefined &&
+      observacion.trim() !== '' &&
+      falta === undefined &&
+      !mutacion.isPending,
+    ...(falta === undefined ? {} : { falta }),
+    ...(motivo === undefined ? {} : { motivo }),
     enviando: mutacion.isPending,
     enviada: mutacion.isSuccess,
     errorPorCampo: erroresPorCampo(mutacion.error),
@@ -191,7 +322,7 @@ export function useEscritura(
     enviar: () => {
       // Pulsar dos veces rapido es una pulsacion: el boton se deshabilita al
       // primer envio, y esto cubre la carrera entre las dos.
-      if (mutacion.isPending || observacion.trim() === '') return;
+      if (mutacion.isPending || observacion.trim() === '' || falta !== undefined) return;
       mutacion.mutate();
     },
     clave: clave.current,
@@ -211,19 +342,95 @@ function soloDeclarados(
 ): Readonly<Record<string, string | number>> {
   const cuerpo: Record<string, string | number> = {};
   for (const [campo, valor] of Object.entries(borrador)) {
+    // `Object.hasOwn` y no `campos[campo]`: la indexacion resuelve por la cadena
+    // de prototipos, asi que un campo llamado `constructor` o `toString` daba un
+    // «declarado» que no declaro nadie —y con el, un `cuerpo[undefined]`—.
+    if (!Object.hasOwn(campos, campo)) continue;
     const declarado = campos[campo];
-    if (declarado === undefined || valor === '') continue;
+    if (declarado === undefined) continue;
+    // Lo que se escribio con espacios alrededor viaja sin ellos, y si solo eran
+    // espacios no viaja: un `documentoOrigen` de un espacio pasaba la lista
+    // blanca, llegaba al backend y volvia como 422 por un campo «lleno».
+    const limpio = valor.trim();
+    if (limpio === '') continue;
     if (declarado.valor !== undefined) {
       // Un valor que la traduccion no reconoce no viaja: ver el javadoc de `CampoDelCuerpo`.
-      const traducido = declarado.valor(valor);
+      const traducido = declarado.valor(limpio);
       if (traducido !== undefined) cuerpo[declarado.campo] = traducido;
     } else if (declarado.entero === true) {
-      const entero = Number.parseInt(valor, 10);
+      const entero = Number.parseInt(limpio, 10);
       // Un entero que no lo es no viaja: mandar `NaN` produciria un 400 con un
       // mensaje del deserializador en vez de un error del dominio.
       if (Number.isInteger(entero)) cuerpo[declarado.campo] = entero;
     } else {
-      cuerpo[declarado.campo] = valor;
+      cuerpo[declarado.campo] = limpio;
+    }
+  }
+  return cuerpo;
+}
+
+/**
+ * Una fila, con **solo las columnas que su tabla declara**.
+ *
+ * Es la misma lista blanca de `soloDeclarados`, pero un paso antes y sin
+ * traducir: aqui la fila sigue siendo del formulario —sus claves son las del
+ * catalogo—, y lo unico que se decide es si la columna puede existir.
+ */
+function soloColumnas(
+  fila: Readonly<Record<string, string>>,
+  columnas: Readonly<Record<string, CampoDelCuerpo>>,
+): Readonly<Record<string, string>> {
+  const limpia: Record<string, string> = {};
+  for (const [columna, valor] of Object.entries(fila)) {
+    if (Object.hasOwn(columnas, columna)) limpia[columna] = valor;
+  }
+  return limpia;
+}
+
+/** Si dos juegos de filas dicen lo mismo. Lo que decide si el intento es otro. */
+function mismasFilas(
+  previas: readonly Readonly<Record<string, string>>[],
+  nuevas: readonly Readonly<Record<string, string>>[],
+): boolean {
+  if (previas.length !== nuevas.length) return false;
+  return previas.every((previa, i) => {
+    const nueva = nuevas[i];
+    if (nueva === undefined) return false;
+    const claves = Object.keys(previa);
+    return (
+      claves.length === Object.keys(nueva).length &&
+      claves.every((clave) => previa[clave] === nueva[clave])
+    );
+  });
+}
+
+/** Lo que falta cuando no falta nada mas: la observacion (regla 10, RNF-052). */
+const FALTA_LA_OBSERVACION = 'Falta la observación: sin ella no se guarda.';
+
+/**
+ * Las tablas, filtradas por su lista blanca de columnas.
+ *
+ * Una tabla declarada **viaja aunque este vacia**: un arreglo vacio es una
+ * instruccion —«ningun piso»— y omitirlo significaria otra cosa distinta en la
+ * actualizacion de una ficha («lo mismo que tenia», dice
+ * `DeclaracionDeFicha`). Confundir las dos vacia las construcciones de un
+ * predio sin que ningun `DELETE` aparezca en el diff.
+ */
+function soloDeclaradas(
+  filas: Readonly<Record<string, readonly Readonly<Record<string, string>>[]>>,
+  tablas: Readonly<Record<string, TablaDelCuerpo>>,
+): Readonly<Record<string, unknown>> {
+  const cuerpo: Record<string, unknown> = {};
+  for (const [tabla, declarada] of Object.entries(tablas)) {
+    const escritas = (filas[tabla] ?? []).map((fila) => soloDeclarados(fila, declarada.columnas));
+    if (declarada.unica === true) {
+      // Un bloque sin escribir **no viaja**: mandarlo vacio no es «no lo se»,
+      // es «esto es», y el backend lo rechazaria por faltarle sus campos.
+      const [primera] = escritas;
+      if (primera !== undefined && Object.keys(primera).length > 0)
+        cuerpo[declarada.campo] = primera;
+    } else {
+      cuerpo[declarada.campo] = escritas;
     }
   }
   return cuerpo;

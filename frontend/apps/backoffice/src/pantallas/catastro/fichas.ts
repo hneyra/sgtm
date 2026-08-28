@@ -1,6 +1,6 @@
 import type { DatosDeVersionado, ValorDeCampo, Version } from '@sgtm/api-client';
 import type { Fecha } from '@sgtm/dominio';
-import { SIN_DATO } from '../seguridad/listado';
+import { SIN_DATO, esObjeto } from '../seguridad/listado';
 
 /**
  * La frontera de las cuatro fichas: el cuerpo que manda el backend, leido una
@@ -15,9 +15,6 @@ import { SIN_DATO } from '../seguridad/listado';
  * «este predio no declara actividad» y «esta ficha no es de las que la
  * declaran» no se confunden.
  */
-
-const esObjeto = (valor: unknown): valor is Readonly<Record<string, unknown>> =>
-  typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 
 const texto = (valor: unknown): string => (typeof valor === 'string' ? valor : '');
 

@@ -158,11 +158,17 @@ describe('el acto de la ficha es alcanzable', () => {
 
     // Y las del prototipo que siguen sin acto se quedan como estaban: visibles y
     // apagadas. Dos primarias en la misma barra dirian que hay dos actos.
-    for (const etiqueta of ['Nuevo', 'Modificar', 'Deshacer', 'Imprimir', 'Guardar']) {
+    for (const etiqueta of ['Modificar', 'Deshacer', 'Imprimir', 'Guardar']) {
       const boton = screen.getByRole('button', { name: etiqueta });
       expect(boton).toBeDisabled();
       expect(boton).not.toHaveClass('sgtm-boton--primario');
     }
+
+    // «Nuevo» si tiene acto desde #320 —abre el alta guiada—, y aun asi **no es
+    // la primaria**: la primaria con un predio abierto es actualizarlo.
+    const nuevo = screen.getByRole('button', { name: 'Nuevo' });
+    expect(nuevo).toBeEnabled();
+    expect(nuevo).not.toHaveClass('sgtm-boton--primario');
 
     await usuario.click(acto);
     // La pantalla de destino abre el predio por su codigo, sin volver a buscarlo.
