@@ -173,6 +173,26 @@ export function seccionesDe(
   return pantalla.secciones ?? [];
 }
 
+/**
+ * **Todas** las secciones de la pantalla, con las de sus pestanas apiladas en el
+ * orden en que el manual las declara.
+ *
+ * Es lo que mira una opcion cuyo indice **sustituye** a las pestanas (#330): el
+ * padron de contribuyentes reparte 56 campos en nueve pestanas y la ficha de
+ * vehiculo 54 en seis, y saber si un dato existe cuesta nueve clics. Apiladas en
+ * una sola pagina, el indice las recorre desplazando.
+ *
+ * **No renombra ni agrupa nada** (RNF-080): las secciones son las del catalogo,
+ * con su rotulo del manual y en su orden. Lo unico que desaparece es la barra de
+ * pestanas, que era navegacion, no contenido.
+ */
+export function seccionesApiladas(pantalla: EstructuraDePantalla): readonly SeccionDePantalla[] {
+  if (pantalla.tabs && pantalla.tabs.length > 0) {
+    return pantalla.tabs.flatMap((pestana) => pestana.secciones);
+  }
+  return pantalla.secciones ?? [];
+}
+
 /** Arrancan cerradas las secciones que el prototipo marca asi (FRO-03 §5). */
 const HINTS_CERRADOS = new Set(['Colapsado', 'Opcional', 'Solo lectura']);
 

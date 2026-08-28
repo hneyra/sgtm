@@ -63,15 +63,31 @@ function contraste(frente: string, fondo: string): number {
   return ((claro ?? 0) + 0.05) / ((oscuro ?? 0) + 0.05);
 }
 
-/** El token de color que usa un selector, en cualquiera de las dos hojas. */
+/**
+ * El token de color que usa un selector, en cualquiera de las dos hojas.
+ *
+ * Resuelve tambien el `var()` anidado —`var(--a, var(--b))`—, que es como se
+ * escribe un respaldo: se queda con **el primer token que exista de verdad**. Sin
+ * esto, un respaldo cuyo primer token no estuviera definido se medía sobre un
+ * token inexistente y la prueba fallaba diciendo «sin valor», que no es lo que
+ * pasa: lo que pasa es que rige el segundo. (Hoy no queda ninguno en la hoja
+ * —`var(--ink-2, var(--ink-3))` era un respaldo muerto, porque `--ink-2` esta
+ * definido en los dos temas—, y por eso mismo conviene que la funcion sepa
+ * resolverlo el dia que alguien escriba uno de verdad.)
+ */
 function colorDe(selector: string): string {
   for (const hoja of HOJAS) {
     const desde = hoja.indexOf(`${selector} {`);
     if (desde < 0) continue;
     const bloque = hoja.slice(desde);
-    const declaracion = bloque.slice(0, bloque.indexOf('}')).match(/\bcolor:\s*var\((--[\w-]+)\)/);
-    const token = declaracion?.[1];
-    if (token !== undefined) return token;
+    const declaracion = bloque
+      .slice(0, bloque.indexOf('}'))
+      .match(/\bcolor:\s*var\((--[\w-]+)(?:\s*,\s*var\((--[\w-]+)\))?\)/);
+    const primero = declaracion?.[1];
+    const respaldo = declaracion?.[2];
+    if (primero !== undefined) {
+      return CLARO[primero] !== undefined || respaldo === undefined ? primero : respaldo;
+    }
   }
   throw new Error(`«${selector}» no declara un color con token en ninguna hoja`);
 }
@@ -106,6 +122,58 @@ const TEXTOS: { estado: string; selector: string; sobre: string }[] = [
   // El aviso de duplicado lleva su propio relleno: se mide sobre el, no sobre
   // la tarjeta.
   { estado: 'duplicado · aviso', selector: '.sgtm-duplicado', sobre: '--warn-bg' },
+  /* Los tres que estrena #332, y los tres cuentan algo que no se puede
+     comunicar de otra forma:
+
+       el motivo    por que la accion primaria no puede guardar. Es **lo unico**
+                    que hay junto a un boton apagado; ilegible, la pantalla
+                    vuelve a estar muda
+       la banda     cuantas filas hay elegidas en un acto irreversible
+       el pendiente «Deuda a hoy: —», que es la respuesta a la pregunta que trae
+                    a la gente a la ventanilla
+
+     La banda se mide sobre `--bg-elev`, que es su relleno: llevaba
+     `var(--bg-suave, ...)`, y `--bg-suave` **no existe en ninguna hoja** —el
+     respaldo tapaba el token inventado, asi que nadie lo noto—. */
+  { estado: 'acciones · motivo', selector: '.sgtm-acciones__motivo', sobre: '--bg-card' },
+  { estado: 'tabla · banda de selección', selector: '.sgtm-seleccion', sobre: '--bg-elev' },
+  { estado: 'resumen · lo pendiente', selector: '.sgtm-resumen__pendiente', sobre: '--bg-card' },
+  // Y el rotulo de cada dato de la cabecera-resumen, que estaba en `--ink-4`:
+  // 3,13:1. Sin el rotulo, el valor de al lado no se sabe de que es.
+  { estado: 'resumen · rótulo del dato', selector: '.sgtm-resumen__dato dt', sobre: '--bg-card' },
+  /* Los del campo que resuelve la unidad del alta de deuda (#331). Los cuatro
+     primeros van sobre `--bg-elev`, que es el relleno de la tarjeta de la
+     unidad resuelta; la nota de la busqueda, sobre la tarjeta de la seccion.
+     Lo que cuentan no se puede comunicar de otra forma:
+
+       el codigo    **cual** unidad quedo resuelta, que es lo que decide sobre
+                    que obligacion se asienta el alta
+       el detalle   de quien es y donde esta, que es como se comprueba
+       la nota      si se busco, si no habia, o cuantas hay y que estan
+                    recortadas
+       el cruce     que la unidad resuelta es de otro titular */
+  { estado: 'resolutor · rótulo', selector: '.sgtm-resolutor__eyebrow', sobre: '--bg-elev' },
+  {
+    estado: 'resolutor · código resuelto',
+    selector: '.sgtm-resolutor__codigo',
+    sobre: '--bg-elev',
+  },
+  { estado: 'resolutor · detalle', selector: '.sgtm-resolutor__detalle', sobre: '--bg-elev' },
+  {
+    estado: 'resolutor · nota de la búsqueda',
+    selector: '.sgtm-resolutor__nota',
+    sobre: '--bg-card',
+  },
+  {
+    estado: 'resolutor · cruce de titular',
+    selector: '.sgtm-resolutor__cruce',
+    sobre: '--warn-bg',
+  },
+  {
+    estado: 'resolutor · cruce de titular, título',
+    selector: '.sgtm-resolutor__cruce-titulo',
+    sobre: '--warn-bg',
+  },
 ];
 
 describe('los cuatro estados se leen: 4,5:1 sobre su fondo', () => {
@@ -181,5 +249,62 @@ describe('las insignias de estado, texto sobre su propio fondo', () => {
   it('la de advertencia es la que FRO-02 §5 dejo escrita', () => {
     expect(CLARO['--warn-bg']).toBe('#f6ecd9');
     expect(CLARO['--warn-fg']).toBe('#8a6420');
+  });
+});
+
+/**
+ * El acento **no lleva texto**, y por eso se mide contra otro minimo.
+ *
+ * WCAG 1.4.11 pide 3:1 para lo que comunica sin texto, y por `--accent` pasan
+ * las dos cosas de esa clase que la caja necesita: el `outline` del foco visible
+ * (`base.css`, RNF-082 — se atiende con teclado) y el `accent-color` de las
+ * casillas con que se elige una cuota. En tema oscuro daba **1,53:1**: el foco
+ * no se veia, y con el foco invisible el teclado deja de poder operarse.
+ *
+ * Y el par completo, porque los dos lados se mueven juntos: si el acento se
+ * aclara para verse sobre el papel oscuro, lo que va **encima** de el —el rotulo
+ * del boton primario, las iniciales de la marca, el texto del portal— tiene que
+ * oscurecerse. Era `#fff` escrito a mano en cuatro sitios; con el acento claro
+ * daba 1,98:1. Redefinir la mitad de un par es el defecto que ya se pago una vez
+ * con `--accent-ink`.
+ */
+describe('el acento se ve en los dos temas, y lo que va encima tambien', () => {
+  const NO_TEXTUAL = 3;
+
+  it.each([
+    ['claro', CLARO],
+    ['oscuro', OSCURO],
+  ] as const)('%s', (tema, tokens) => {
+    const acento = tokens['--accent'];
+    const fondo = tokens['--bg-card'];
+    const encima = tokens['--accent-contraste'];
+    expect(acento, `--accent sin valor en el tema ${tema}`).toBeDefined();
+    expect(encima, `--accent-contraste sin valor en el tema ${tema}`).toBeDefined();
+
+    // El foco y la casilla, sobre la superficie donde se dibujan.
+    const foco = contraste(acento ?? '#000000', fondo ?? '#ffffff');
+    expect(
+      foco,
+      `--accent sobre --bg-card en tema ${tema}: ${foco.toFixed(2)}:1`,
+    ).toBeGreaterThanOrEqual(NO_TEXTUAL);
+
+    // Y el rotulo que va encima del acento, que si es texto: 4,5:1.
+    const rotulo = contraste(encima ?? '#ffffff', acento ?? '#000000');
+    expect(
+      rotulo,
+      `--accent-contraste sobre --accent en tema ${tema}: ${rotulo.toFixed(2)}:1`,
+    ).toBeGreaterThanOrEqual(MINIMO);
+  });
+
+  /**
+   * Y el tema se le dice **al navegador**, no solo a la hoja.
+   *
+   * Sin `color-scheme`, el cromo nativo —casillas, desplegables, barras de
+   * desplazamiento— se pinta claro sobre el papel casi negro del tema oscuro: la
+   * casilla con que se elige una cuota salia blanca en un fondo #1c1914.
+   */
+  it('cada tema declara su `color-scheme`', () => {
+    expect(colores).toMatch(/:root\s*\{[\s\S]*?color-scheme:\s*light/);
+    expect(colores).toMatch(/\[data-theme="dark"\]\s*\{[\s\S]*?color-scheme:\s*dark/);
   });
 });

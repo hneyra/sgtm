@@ -177,6 +177,7 @@ class ActosCoactivosJdbcTest {
     private static NotificacionRepositoryJdbc notificacionesDeValor;
     private static MovimientoDeValorRepositoryJdbc movimientosDeValor;
     private static ExpedienteRepositoryJdbc expedientes;
+    private static LiquidacionDeCostasRepositoryJdbc costas;
     private static MovimientoDelExpedienteRepositoryJdbc movimientos;
     private static ActoCoactivoRepositoryJdbc actos;
     private static NotificacionCoactivaRepositoryJdbc diligencias;
@@ -212,6 +213,7 @@ class ActosCoactivosJdbcTest {
         notificacionesDeValor = new NotificacionRepositoryJdbc(jdbc);
         movimientosDeValor = new MovimientoDeValorRepositoryJdbc(jdbc);
         expedientes = new ExpedienteRepositoryJdbc(jdbc);
+        costas = new LiquidacionDeCostasRepositoryJdbc(jdbc);
         movimientos = new MovimientoDelExpedienteRepositoryJdbc(jdbc);
         actos = new ActoCoactivoRepositoryJdbc(jdbc);
         diligencias = new NotificacionCoactivaRepositoryJdbc(jdbc);
@@ -236,7 +238,9 @@ class ActosCoactivosJdbcTest {
                 envolver(
                         new ImportarValoresACoactiva(
                                 expedientes, movimientos, puerto, auditoria, RELOJ));
-        consulta = envolver(new ConsultaDeExpedientes(expedientes, movimientos, puerto, deuda));
+        consulta =
+                envolver(
+                        new ConsultaDeExpedientes(expedientes, movimientos, puerto, deuda, costas));
 
         PlazosCoactivosParametrizados plazos =
                 new PlazosCoactivosParametrizados(

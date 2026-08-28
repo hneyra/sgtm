@@ -19,17 +19,22 @@ import pe.gob.sgtm.dominio.Dinero;
  *
  * <h2>Las costas</h2>
  *
- * <p>{@link #costas} existe desde ahora y vale cero: las costas y gastos del procedimiento son
- * <b>#42</b>, y su importe sale del arancel de costas aprobado. Aqui esta el enganche —la columna
- * de la grilla, el sumando del total— y <b>ningun importe inventado</b>: un porcentaje de costas
- * escrito a mano seria un literal tributario en el codigo (regla 5) y una liquidacion sin sustento
- * normativo en todo un padron.
+ * <p>{@link #costas} nacio en cero con #40 —«el enganche, y ningun importe inventado»— y desde #42
+ * <b>trae cifra</b>. La cifra no es un campo del expediente: es lo que el libro dice, a la misma
+ * fecha que las otras cuatro, de las obligaciones de costas que las liquidaciones del expediente
+ * abrieron (concepto {@code GASTO}, fase {@code COACTIVA}). Se lee por el mismo camino y con la
+ * misma pregunta, y por eso no puede discrepar de lo que se cobra en ventanilla.
+ *
+ * <p>Lo que sigue sin haber aqui es un importe inventado: cuanto vale la costa de cada acto sale
+ * del arancel sellado (D-02c, #193), y sin el parametro la liquidacion falla nombrando la llave en
+ * vez de escribir un numero.
  *
  * @param insoluto el tributo debido, sin reajuste ni interes
  * @param reajuste el ajuste de cuotas por el indice vigente
  * @param interes el interes moratorio
  * @param gasto los gastos administrativos y de cobranza asentados
- * @param costas las costas y gastos del procedimiento coactivo; cero hasta #42
+ * @param costas las costas y gastos del procedimiento coactivo, releidas del libro a la misma fecha
+ *     (#42); cero mientras el expediente no tenga ninguna liquidada
  * @param actualizadaA el dia al que corresponden las cinco cifras (regla 9, RNF-075)
  */
 public record DeudaDelExpediente(
@@ -73,6 +78,21 @@ public record DeudaDelExpediente(
                 this.gasto.mas(gasto),
                 costas,
                 actualizadaA);
+    }
+
+    /**
+     * La misma deuda con sus costas puestas (#42).
+     *
+     * <p>Un metodo aparte de {@link #mas} y no un quinto sumando suyo: las cuatro partes se
+     * acumulan <b>obligacion por obligacion</b> del expediente, mientras que las costas se leen una
+     * sola vez de sus propias obligaciones. Sumarlas dentro de {@code mas} las multiplicaria por el
+     * numero de obligaciones del expediente, que es la clase de defecto que no se ve hasta que un
+     * expediente tiene dos.
+     */
+    public DeudaDelExpediente conCostas(Dinero delProcedimiento) {
+        Objects.requireNonNull(delProcedimiento, "Las costas viajan, aunque sean cero");
+        return new DeudaDelExpediente(
+                insoluto, reajuste, interes, gasto, delProcedimiento, actualizadaA);
     }
 
     /** La deuda materia de cobranza: las cuatro partes, sin costas. */

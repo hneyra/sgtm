@@ -383,6 +383,49 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que edita una licencia o borra su duplicado")
+    void elEscanerDetectaLaMuestraQueEditaUnaLicencia() throws IOException {
+        // #44: licencia_funcionamiento, licencia_duplicado y licencia_movimiento entran en
+        // TABLAS_INMUTABLES, por lo mismo que el recibo en #33, el convenio en #35, el expediente
+        // en #40 y el acto coactivo en #41. Una licencia se EXHIBE en el establecimiento, y el
+        // titular tiene el papel. Con los tres rodeos cerrados: si el dato ya no se puede tocar,
+        // la tentacion siguiente es devolverle una columna de estado, reescribir el movimiento que
+        // la cancelo, o borrar el duplicado que se autorizo por error.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnaLicencia.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los tres UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(4);
+
+        List<String> fragmentos = hallazgos.stream().map(Hallazgo::fragmento).toList();
+        assertThat(fragmentos)
+                .filteredOn(
+                        f ->
+                                f.toLowerCase(java.util.Locale.ROOT)
+                                        .contains("licencia_funcionamiento"))
+                .as("el UPDATE de la denominacion y el del estado, los dos")
+                .hasSize(2);
+        assertThat(fragmentos)
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update licencia_movimiento set"));
+        assertThat(fragmentos)
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("delete from licencia_duplicado"));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra que edita una resolucion de gerencia (#50)")
     void elEscanerDetectaLaMuestraQueEditaUnaResolucionDeGerencia() throws IOException {
         // #50: `descargo`, `resolucion_gerencia`, `internamiento` e `internamiento_movimiento`
@@ -519,6 +562,71 @@ class ProhibicionesEnElCodigoFuenteTest {
         assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
                 .anySatisfy(f -> assertThat(f).contains("INTERES_DE_FRACCIONAMIENTO"))
                 .anySatisfy(f -> assertThat(f).contains("CUOTAS_MAXIMAS"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra que edita una liquidacion de costas")
+    void elEscanerDetectaLaMuestraQueEditaUnaLiquidacionDeCostas() throws IOException {
+        // #42: liquidacion_costas, costa_procesal y costa_obligacion entran en TABLAS_INMUTABLES.
+        // Aqui el motivo es literal: el importe de la liquidacion YA ESTA en el libro como cargo
+        // de concepto GASTO. Corregir la fila deja el cargo diciendo una cifra y la liquidacion
+        // otra, y la que se cobra en ventanilla es la del libro.
+        //
+        // Y con los rodeos cerrados: corregir la linea en vez de la cabecera, borrarla, y -el
+        // propio de #42- mudar `costa_obligacion` a otro expediente, que traslada un cobro de un
+        // procedimiento a otro sin dejar rastro.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnaLiquidacionDeCostas.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los tres UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(4);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update liquidacion_costas set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update costa_procesal set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from costa_procesal"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update costa_obligacion set"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra con el arancel de costas compilado (regla 5)")
+    void elEscanerDetectaLaMuestraDeArancelDeCostas() throws IOException {
+        // #42: el arancel de costas es de ordenanza local (D-02c, #193 bloqueado). ARANCEL ya
+        // estaba en la lista de nombres y caza ARANCEL_COSTA_REC1; lo que NO cazaba, y por eso
+        // COSTA entra ahora, es COSTA_DE_LA_REC2 -que es como se escribe cuando a alguien le
+        // parece que treinta y cinco soles por resolucion son un detalle de implementacion-.
+        // Es el mismo hueco que #35 destapo con INTERES_DE_FRACCIONAMIENTO.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeArancelDeCostasCompilado.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las tres constantes, y ninguno de los comentarios que las explican")
+                .hasSize(3);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).contains("ARANCEL_COSTA_REC1"))
+                .anySatisfy(f -> assertThat(f).contains("COSTA_DE_LA_REC2"))
+                .anySatisfy(f -> assertThat(f).contains("COSTAS_PORCENTAJE_SOBRE_LA_DEUDA"));
     }
 
     private static List<Path> fuentesDeProduccion(Path raiz) throws IOException {

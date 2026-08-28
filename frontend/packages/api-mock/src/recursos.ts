@@ -79,6 +79,23 @@ function instante(texto = ''): string | null {
   return `${anio}-${mes}-${dia}T${hora}:${minuto}:00Z`;
 }
 
+/**
+ * Un importe **como lo serializa el backend**: `1,842.60` → `1842.60`.
+ *
+ * El prototipo escribe las cifras para leerlas —con separador de miles—, y
+ * `ImporteActualizado` publica lo que devuelve `BigDecimal.toPlainString()`:
+ * digitos, un punto decimal y nada mas. No es un detalle de presentacion. La
+ * baja de deuda manda la cifra de la fila elegida en el cuerpo, el controlador
+ * la lee con `new BigDecimal(texto)` y ese constructor **lanza** con la coma
+ * dentro: el proxy estaba sirviendo una forma que el backend no sirve, y contra
+ * el backend de verdad la baja habria fallado con un 422 que aqui nunca aparece
+ * (#332).
+ *
+ * Solo se quita el separador de grupo. Ni se redondea, ni se reescala, ni se
+ * completan decimales: el valor sigue siendo el del prototipo.
+ */
+const comoImporte = (texto: string): string => texto.replace(/,/g, '');
+
 /** `PC-CAJA3 · 10.0.2.43` → equipo e IP por separado, como los guarda la bitacora. */
 function origen(texto = ''): { equipo: string | null; ip: string | null } {
   const [equipo = '', ip = ''] = texto.split('·').map((parte) => parte.trim());
@@ -324,7 +341,7 @@ const consultaDeuda = (): Paginado => {
     typeof RESPUESTAS['consulta_deuda']?.campos?.['fechaDeCorte'] === 'string'
       ? (RESPUESTAS['consulta_deuda'].campos['fechaDeCorte'] as string)
       : '2026-08-13';
-  const importe = (valor: string) => ({ importe: valor, actualizadoA: fecha });
+  const importe = (valor: string) => ({ importe: comoImporte(valor), actualizadoA: fecha });
 
   return unaPagina(
     filasDe('consulta_deuda').map(
@@ -363,7 +380,7 @@ function constanciaDeNoAdeudo(): Readonly<Record<string, unknown>> {
   const reporte = RESPUESTAS['constancia']?.reporte;
   const fecha = '2026-08-13';
   const codigo = reporte?.meta.find((dato) => dato.k === 'Código')?.v ?? '00000000000';
-  const importe = (valor: string) => ({ importe: valor, actualizadoA: fecha });
+  const importe = (valor: string) => ({ importe: comoImporte(valor), actualizadoA: fecha });
 
   const obligaciones = (reporte?.filas ?? []).map(([tributo, rango, , saldo], i) => {
     const primerAnio = Number((rango ?? '').split('—')[0]?.trim());
@@ -423,7 +440,7 @@ function consultaVehiculos(): Paginado {
           contribuyenteId: i + 1,
           codigoContribuyente: `C-VEH-${String(i + 1).padStart(4, '0')}`,
           titular,
-          deuda: { importe: deudaS ?? '0.00', actualizadoA: fecha },
+          deuda: { importe: comoImporte(deudaS ?? '0.00'), actualizadoA: fecha },
         };
       },
     ),
@@ -483,7 +500,10 @@ function pagos(): Paginado {
       predioId: null,
       vehiculoId: null,
       referenciaExterna: null,
-      monto: { importe: importeS ?? '0.00', actualizadoA: fechaDe(fecha ?? '') ?? '2026-08-13' },
+      monto: {
+        importe: comoImporte(importeS ?? '0.00'),
+        actualizadoA: fechaDe(fecha ?? '') ?? '2026-08-13',
+      },
       documentoOrigen: recibo || 'S/D',
       asientoReversadoId: null,
       usuarioId: null,
@@ -507,7 +527,7 @@ function predios(): Paginado {
       tipo: 'URBANO',
       direccion,
       porcentajeTitularidad: '100.0000',
-      deuda: { importe: deudaS ?? '0.00', actualizadoA: fecha },
+      deuda: { importe: comoImporte(deudaS ?? '0.00'), actualizadoA: fecha },
     })),
   );
 }
@@ -545,7 +565,7 @@ const cuentaCorriente = (): Paginado => {
           ...comun,
           id: asientos.length + 1,
           tipo: 'CARGO',
-          monto: { importe: emitido, actualizadoA: `${ejercicio}-02-28` },
+          monto: { importe: comoImporte(emitido), actualizadoA: `${ejercicio}-02-28` },
         });
       }
       if (pagado && pagado !== '0.00') {
@@ -553,7 +573,7 @@ const cuentaCorriente = (): Paginado => {
           ...comun,
           id: asientos.length + 1,
           tipo: 'ABONO',
-          monto: { importe: pagado, actualizadoA: `${ejercicio}-03-1${i % 9}` },
+          monto: { importe: comoImporte(pagado), actualizadoA: `${ejercicio}-03-1${i % 9}` },
         });
       }
     },

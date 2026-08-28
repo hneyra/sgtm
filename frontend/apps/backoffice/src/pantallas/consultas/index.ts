@@ -138,6 +138,48 @@ const FASES_DEL_BACKEND: Readonly<Record<string, string>> = {
 const faseDe = (cruda: string | null): string | undefined =>
   cruda === null ? undefined : FASES_DEL_BACKEND[cruda];
 
+/**
+ * Una obligacion de `consulta_deuda`, leida en las cifras que publica.
+ *
+ * Se exporta porque **la baja de deuda lee la misma operacion** (#332): su
+ * pantalla es un `POST`, asi que no puede pedir su propia tabla, y la deuda que
+ * se puede dar de baja es exactamente esta. Dos lecturas del mismo recurso
+ * acabarian leyendo campos distintos —y una de las dos, mal—; se lee una vez.
+ *
+ * Todo sale **tal cual lo publica el backend**: ni se suma, ni se resta, ni se
+ * completa el total a partir de las partes (RNF-083).
+ */
+export interface ObligacionDeDeuda {
+  readonly ejercicio: string;
+  readonly tributo: string;
+  /** `3`, `3 - 7` o `Anual`, como lo escribe el manual. */
+  readonly cuota: string;
+  readonly insoluto: string;
+  readonly reajuste: string;
+  readonly interes: string;
+  readonly gasto: string;
+  readonly total: string;
+  readonly fase: string;
+}
+
+export function obligacionDeDeuda(
+  obligacion: Readonly<Record<string, unknown>>,
+): ObligacionDeDeuda {
+  const deuda = esObjeto(obligacion['deuda']) ? obligacion['deuda'] : undefined;
+  const parte = (nombre: string): string => importeDe(deuda?.[nombre])?.importe ?? SIN_DATO;
+  return {
+    ejercicio: texto(obligacion['ejercicio']),
+    tributo: texto(obligacion['tributo']),
+    cuota: cuotaDe(obligacion['periodoDesde'], obligacion['periodoHasta']),
+    insoluto: parte('insoluto'),
+    reajuste: parte('reajuste'),
+    interes: parte('interes'),
+    gasto: parte('gasto'),
+    total: parte('total'),
+    fase: texto(obligacion['fase']),
+  };
+}
+
 /** `3` → `3`; `3` y `7` → `3 - 7`; `0` y `0` → `Anual` (periodo 0, V2). */
 function cuotaDe(desde: unknown, hasta: unknown): string {
   const d = typeof desde === 'number' ? desde : Number.NaN;
@@ -169,22 +211,17 @@ const consulta_deuda = definirConexion({
     const tabla = tablaDe(
       paginado,
       (obligacion): readonly Celda[] => {
-        const deuda = esObjeto(obligacion['deuda']) ? obligacion['deuda'] : undefined;
-        const insoluto = importeDe(deuda?.['insoluto']);
-        const reajuste = importeDe(deuda?.['reajuste']);
-        const interes = importeDe(deuda?.['interes']);
-        const gasto = importeDe(deuda?.['gasto']);
-        const total = importeDe(deuda?.['total']);
+        const leida = obligacionDeDeuda(obligacion);
         return [
-          { texto: texto(obligacion['ejercicio']) },
-          { texto: texto(obligacion['tributo']) },
-          { texto: cuotaDe(obligacion['periodoDesde'], obligacion['periodoHasta']) },
-          { texto: insoluto?.importe ?? SIN_DATO },
-          { texto: reajuste?.importe ?? SIN_DATO },
-          { texto: interes?.importe ?? SIN_DATO },
-          { texto: gasto?.importe ?? SIN_DATO },
-          { texto: total?.importe ?? SIN_DATO },
-          { texto: texto(obligacion['fase']) },
+          { texto: leida.ejercicio },
+          { texto: leida.tributo },
+          { texto: leida.cuota },
+          { texto: leida.insoluto },
+          { texto: leida.reajuste },
+          { texto: leida.interes },
+          { texto: leida.gasto },
+          { texto: leida.total },
+          { texto: leida.fase },
         ];
       },
       'obligaciones',
@@ -203,8 +240,15 @@ const consulta_deuda = definirConexion({
   },
 });
 
-/** La fecha de corte con que se calculo, de cualquier obligacion: las cinco cifras la comparten. */
-function fechaDeCorteDe(obligaciones: readonly unknown[]): Fecha {
+/**
+ * La fecha de corte con que se calculo, de cualquier obligacion: las cinco
+ * cifras la comparten.
+ *
+ * Se exporta por lo mismo que {@link obligacionDeDeuda}: la baja de deuda lee la
+ * misma operacion, y **toda cifra se muestra con su fecha de calculo** (regla 9,
+ * RNF-075). Sin esto, cada lectura resolveria «a que fecha» por su cuenta.
+ */
+export function fechaDeCorteDe(obligaciones: readonly unknown[]): Fecha {
   for (const obligacion of obligaciones) {
     if (!esObjeto(obligacion) || !esObjeto(obligacion['deuda'])) continue;
     const insoluto = importeDe(obligacion['deuda']['insoluto']);

@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import type { RenderResult } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { ProveedorDeEjercicio } from '../app/ejercicio';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
+import { ProveedorDeEjercicio, useEjercicio } from '../app/ejercicio';
 import { ProveedorDePreferencias } from '../app/preferencias';
 import { ProveedorDeSesion } from '../app/sesion/ProveedorDeSesion';
 import { Shell } from '../app/Shell';
@@ -30,12 +30,32 @@ export const clienteDePruebas = (): QueryClient =>
  * prueba no diria nada.
  */
 export function montarEnRuta(ruta: string, cliente = clienteDePruebas()): RenderResult {
+  return montarEnRutas([ruta], cliente);
+}
+
+/**
+ * Monta con **varias entradas en el historial**, para poder volver atras.
+ *
+ * Existe por un defecto que ninguna prueba de una sola entrada podia encontrar
+ * (#332): el boton Atras del navegador restaura la busqueda anterior sin pasar
+ * por «Buscar», y lo que quedaba marcado en la tabla seguia marcado —senalando
+ * a otra fila y con el contribuyente de la busqueda restaurada—. Con un solo
+ * `initialEntries` no hay a donde volver, asi que el camino no se podia recorrer.
+ *
+ * La ultima entrada es la que se esta viendo, como en un navegador de verdad.
+ */
+export function montarEnRutas(
+  rutas: readonly string[],
+  cliente = clienteDePruebas(),
+): RenderResult {
   return render(
     <QueryClientProvider client={cliente}>
       <ProveedorDeSesion>
         <ProveedorDeEjercicio>
           <ProveedorDePreferencias>
-            <MemoryRouter initialEntries={[ruta]}>
+            <PuenteDeEjercicio />
+            <MemoryRouter initialEntries={[...rutas]} initialIndex={rutas.length - 1}>
+              <PuenteDeNavegacion />
               <Routes>
                 <Route element={<Shell />}>
                   <Route path="/:moduloId" element={<HubDeModulo />} />
@@ -49,4 +69,48 @@ export function montarEnRuta(ruta: string, cliente = clienteDePruebas()): Render
       </ProveedorDeSesion>
     </QueryClientProvider>,
   );
+}
+
+/** El `navigate` del enrutador montado, para que {@link volverAtras} lo alcance. */
+let navegarDelMontaje: ((delta: number) => void) | undefined;
+
+/**
+ * Deja el `navigate` del enrutador a la vista de la prueba.
+ *
+ * `MemoryRouter` no expone su historial y `window.history.back()` no lo toca:
+ * sin este puente, el gesto mas comun de quien atiende —volver atras— no se
+ * puede recorrer en una prueba. No dibuja nada.
+ */
+function PuenteDeNavegacion() {
+  navegarDelMontaje = useNavigate();
+  return null;
+}
+
+/** El boton Atras del navegador, sobre el ultimo montaje. */
+export function volverAtras(): void {
+  if (navegarDelMontaje === undefined) throw new Error('No hay ningun montaje al que volver.');
+  act(() => navegarDelMontaje?.(-1));
+}
+
+/** El `adoptar` del ejercicio de trabajo del montaje, para {@link cambiarEjercicio}. */
+let adoptarDelMontaje: ((respuesta: unknown) => unknown) | undefined;
+
+/**
+ * Deja a la vista de la prueba el unico camino que cambia el ejercicio de
+ * trabajo.
+ *
+ * El ejercicio es global a la sesion y lo cambia el `PUT` de «Cambiar el año de
+ * trabajo», en otra pantalla: desde una prueba de **esta** pantalla no hay forma
+ * de recorrer ese camino sin desmontarla, y desmontarla se lleva por delante
+ * justamente lo que hay que comprobar que se vacia. No dibuja nada.
+ */
+function PuenteDeEjercicio() {
+  adoptarDelMontaje = useEjercicio().adoptar;
+  return null;
+}
+
+/** Cambia el ejercicio de trabajo del montaje, como lo haria el `PUT` de la sesion. */
+export function cambiarEjercicio(ejercicio: number): void {
+  if (adoptarDelMontaje === undefined) throw new Error('No hay ningun montaje que cambiar.');
+  act(() => void adoptarDelMontaje?.({ ejercicioDeTrabajo: ejercicio }));
 }

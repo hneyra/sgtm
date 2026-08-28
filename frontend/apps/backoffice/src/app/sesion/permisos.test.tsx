@@ -95,6 +95,40 @@ describe('el perfil de consulta ve, y no toca', () => {
   });
 });
 
+/**
+ * **Un `POST` del catalogo exige `registro`, no «escribir» a secas** (#332).
+ *
+ * `puedeEscribir` admite `registro` **o** `modificacion`, que es lo correcto para
+ * corregir una ficha; pero los `POST` del backend piden `REGISTRO` —lo hace
+ * `MovimientosDeDeudaController` en sus dos rutas, y los `POST` de sector, via y
+ * ficha—. Con el criterio ancho, un perfil de `modificacion` veia la primaria de
+ * «Baja de deuda» encendida, elegia su cuota, escribia la observacion, confirmaba
+ * un acto irreversible y recibia un 403. Es el mismo criterio que `puedeRegistrar`
+ * ya aplicaba a los paneles de alta, aplicado ahora a la barra.
+ */
+describe('el privilegio de la barra es el que exige el verbo de su operacion', () => {
+  it('con `modificacion` y sin `registro`, la baja de deuda no ofrece escribir', async () => {
+    entraCon({ baja_deuda: ['lectura', 'modificacion'], consulta_deuda: ['lectura'] });
+    montarEnRuta('/rentas-registro/baja-deuda?codContribuyente=00000006550');
+
+    await screen.findByRole('button', { name: /Dar de baja/ });
+    // Sin privilegio para el `POST` no hay a donde escribir: ni caja de
+    // observacion, ni promesa de guardar.
+    expect(
+      screen.queryByRole('region', { name: 'Observación del usuario' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('con `registro`, la misma pantalla si pide su observacion', async () => {
+    entraCon({ baja_deuda: ['lectura', 'registro'], consulta_deuda: ['lectura'] });
+    montarEnRuta('/rentas-registro/baja-deuda?codContribuyente=00000006550');
+
+    expect(
+      await screen.findByRole('region', { name: 'Observación del usuario' }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('«Recientes» no resucita lo que ya no se puede ver', () => {
   it('una opcion guardada en el navegador desaparece si se pierde el permiso', async () => {
     // El cajero estuvo en coactiva cuando tenia permiso; ahora ya no lo tiene.

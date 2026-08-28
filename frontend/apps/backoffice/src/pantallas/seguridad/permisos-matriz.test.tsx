@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { montarEnRuta } from '../../pruebas/montar';
+import { primariaApagada } from '../../pruebas/acciones';
 
 /**
  * La matriz de permisos, con su GET de lectura (#70).
@@ -69,7 +70,9 @@ describe('guardar manda exactamente lo que se ve, y exige observacion', () => {
     montarEnRuta('/seguridad/permisos/1');
     await screen.findByText('calles');
 
-    expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
+    // Apagada con `aria-disabled`: enfocable, para que la franja que dice que
+    // falta la observacion tenga quien la lea (#332).
+    primariaApagada(screen.getByRole('button', { name: 'Guardar' }));
   });
 
   it('marcar una casilla nueva y guardar manda los dos privilegios y la observacion', async () => {
@@ -84,7 +87,9 @@ describe('guardar manda exactamente lo que se ve, y exige observacion', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
     await waitFor(() =>
-      expect(aLaOperacion('/api/v1/seguridad/grupos/1/permisos').filter((p) => p.metodo === 'PUT')).toHaveLength(1),
+      expect(
+        aLaOperacion('/api/v1/seguridad/grupos/1/permisos').filter((p) => p.metodo === 'PUT'),
+      ).toHaveLength(1),
     );
     const [peticion] = aLaOperacion('/api/v1/seguridad/grupos/1/permisos').filter(
       (p) => p.metodo === 'PUT',
@@ -131,7 +136,10 @@ describe('guardar manda exactamente lo que se ve, y exige observacion', () => {
     expect(screen.getByText('calles')).toBeInTheDocument();
     expect(screen.getByLabelText('Consulta sobre calles')).not.toBeChecked();
 
-    await userEvent.type(screen.getByLabelText('Observación'), 'Se retira el acceso al catalogo vial.');
+    await userEvent.type(
+      screen.getByLabelText('Observación'),
+      'Se retira el acceso al catalogo vial.',
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
     await waitFor(() =>

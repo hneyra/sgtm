@@ -45,6 +45,61 @@ export interface ContextoDePantalla {
    * sesion entera, y se ve en la cabecera.
    */
   readonly ejercicio: number;
+  /**
+   * Lo escrito en el formulario de la pantalla, **por su clave del catalogo**,
+   * todavia sin enviar.
+   *
+   * Existe por un caso, y se entiende mejor con el delante: en «Baja de deuda»
+   * la fecha con efecto tributario del acto es la de su resolucion, y el backend
+   * valida la baja contra `deudaActualizadaA(fechaValor)`. Con la tabla leida a
+   * la fecha de hoy —que es lo que hacia—, una resolucion anterior manda un
+   * interes mayor que el que el backend calcula a esa fecha, y la baja vuelve
+   * como 422 **despues** de confirmar un acto irreversible. La lectura tiene que
+   * ir a la misma fecha que el acto, y esa fecha vive en el borrador.
+   *
+   * Es tambien la regla 9 de punta a punta: lo que se ve y lo que se manda son
+   * de la misma fecha, y la que se pinta encima de la tabla sigue siendo la que
+   * el backend devolvio con esas cifras.
+   */
+  readonly borrador: Readonly<Record<string, string>>;
+}
+
+/**
+ * Un filtro **sin el cual la operacion no se puede pedir**, y que decir mientras
+ * falte.
+ *
+ * `GET /consultas/deuda` declara `codContribuyente` como `@RequestParam`
+ * obligatorio: abrir «Baja de deuda» sin haber buscado a nadie es un 400 contra
+ * el backend real —el proxy lo tapa, porque contesta igual con filtro o sin el—.
+ * Un 400 ahi no le dice nada a quien atiende; lo que hay que decirle es que
+ * busque un contribuyente, que es lo que iba a hacer de todos modos.
+ *
+ * No es lo mismo que el registro que falta (`registroQueFalta`): aquel es el que
+ * **abre** la pantalla y va en la direccion; este es un filtro de la busqueda. El
+ * efecto sobre la peticion si es el mismo —sin el, no sale—, y por eso comparten
+ * el estado «sin-registro» de la pantalla.
+ */
+export interface FiltroExigido {
+  /** El parametro de consulta, tal como lo declara el contrato. */
+  readonly parametro: string;
+  readonly titulo: string;
+  readonly detalle: string;
+}
+
+/**
+ * Que decir cuando la lectura de esta pantalla responde 403.
+ *
+ * Existe porque hay opciones cuya lectura **no es la suya**: «Baja de deuda»
+ * escribe con su permiso y lee la deuda por `consulta_deuda`, que es otra opcion
+ * del catalogo con otro permiso. Quien tenga una y no la otra recibe el 403 de
+ * la segunda, y el aviso generico —«no tienes permiso para esta opción»— le
+ * miente: si tiene permiso para esta, lo que le falta es el de la que alimenta
+ * su tabla. Sin declararlo, el sintoma es una pantalla que dice que no y un
+ * administrador dando el permiso equivocado.
+ */
+export interface AvisoDeSinPermiso {
+  readonly titulo: string;
+  readonly detalle: string;
 }
 
 /** Una conexion ya montada, sin los tipos de su operacion: es lo que guarda el registro. */
@@ -56,6 +111,10 @@ export interface Conexion {
     parametros: Readonly<Record<string, string>>,
     senal?: AbortSignal,
   ) => Promise<DatosDePantalla>;
+  /** Ver {@link AvisoDeSinPermiso}. Sin esto, el aviso generico de la pantalla. */
+  readonly sinPermiso?: AvisoDeSinPermiso;
+  /** Ver {@link FiltroExigido}. Sin uno de estos, la lectura no se dispara. */
+  readonly exige?: readonly FiltroExigido[];
 }
 
 export interface DefinicionDeConexion<O extends IdDeOperacion, R> {
@@ -63,6 +122,8 @@ export interface DefinicionDeConexion<O extends IdDeOperacion, R> {
   readonly parametros: (contexto: ContextoDePantalla) => ParametrosDe<O>;
   readonly leer: (cuerpo: RespuestaDe<O>, parametros: ParametrosDe<O>) => R;
   readonly adaptar: (recurso: R) => DatosDePantalla;
+  readonly sinPermiso?: AvisoDeSinPermiso;
+  readonly exige?: readonly FiltroExigido[];
 }
 
 /**
@@ -77,6 +138,8 @@ export function definirConexion<O extends IdDeOperacion, R>(
 ): Conexion {
   return {
     operacion: definicion.operacion,
+    ...(definicion.sinPermiso === undefined ? {} : { sinPermiso: definicion.sinPermiso }),
+    ...(definicion.exige === undefined ? {} : { exige: definicion.exige }),
     parametros: (contexto) => sinVacios(definicion.parametros(contexto)),
     cargar: async (parametros, senal) => {
       const tipados = parametros as ParametrosDe<O>;

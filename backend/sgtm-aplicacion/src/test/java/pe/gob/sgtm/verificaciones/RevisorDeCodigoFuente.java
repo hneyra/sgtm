@@ -69,6 +69,23 @@ public final class RevisorDeCodigoFuente {
                     "expediente_valor",
                     "expediente_movimiento",
                     "acto_coactivo",
+                    // Con #42: la liquidacion de costas, su detalle y la fila que dice de que
+                    // expediente son las costas de una obligacion. Borrar una liquidacion seria
+                    // borrar la unica explicacion de un cargo que ya esta en el libro; borrar
+                    // `costa_obligacion` dejaria a dos expedientes compartiendo la obligacion de
+                    // costas del mismo obligado, que es justo lo que esa tabla existe para impedir.
+                    "liquidacion_costas",
+                    "costa_procesal",
+                    "costa_obligacion",
+                    // Con #44: la licencia de funcionamiento, sus duplicados y su historial.
+                    // Borrar una licencia seria borrar la unica constancia de que el
+                    // establecimiento estuvo autorizado —y con ella el sustento de los arbitrios
+                    // que se le cobraron—; borrar un duplicado o un movimiento seria borrar el
+                    // acto que la reimprimio o la dejo sin efecto, que no esta en ninguna otra
+                    // parte. Una licencia se cancela con su resolucion (regla 4, AC de #44).
+                    "licencia_funcionamiento",
+                    "licencia_duplicado",
+                    "licencia_movimiento",
                     // Con #50: el escrito que el administrado presento, la resolucion que la
                     // gerencia dicto sobre su multa, y el paso del vehiculo por el deposito.
                     // Borrar un descargo seria borrar la constancia de que alguien recurrio -y con
@@ -164,7 +181,35 @@ public final class RevisorDeCodigoFuente {
                     // Un acto equivocado se deja sin efecto con otro acto -un levantamiento, una
                     // suspension-, y los dos quedan.
                     "acto_coactivo",
-                    // Y con #50, la quinta vez y por el mismo camino. V41 le retira a `descargo`
+                    // Y la liquidacion de costas, con #42. Sexta vez por el mismo camino: V35 no
+                    // le concede UPDATE a `liquidacion_costas` ni a `costa_obligacion`, y se lo
+                    // retira a `costa_procesal`. El motivo es el de siempre y aqui es literal: el
+                    // importe de la liquidacion YA ESTA ASENTADO en el libro como cargo. Corregir
+                    // la fila dejaria el cargo diciendo una cifra y la liquidacion otra, y la que
+                    // se cobra en ventanilla es la del libro. Una costa mal liquidada se arregla
+                    // reversando su asiento y liquidando de nuevo.
+                    //
+                    // `costa_obligacion` esta aqui ademas por su propio motivo: cambiarle el
+                    // expediente en el sitio moveria las costas de un procedimiento a otro sin
+                    // dejar rastro, y es la unica fila que sabe de quien son.
+                    "liquidacion_costas",
+                    "costa_procesal",
+                    "costa_obligacion",
+                    // Y la licencia de funcionamiento con sus duplicados y su historial, con #44.
+                    // Septima vez seguida y por el mismo camino: V37 le retira a
+                    // `licencia_funcionamiento` las columnas de estado que V4 le habia puesto
+                    // -decian VIGENTE para siempre- y le revoca el UPDATE junto con el de
+                    // `licencia_duplicado`. El estado se deriva de `licencia_movimiento`, que solo
+                    // se agrega.
+                    //
+                    // Aqui el REVOKE SI se pudo, al reves que con `cierre_caja` (V32 §1.bis), y no
+                    // por casualidad: el ordinal del siguiente duplicado se serializa con
+                    // `licencia_duplicado_uq` y no con un `SELECT ... FOR UPDATE` sobre la
+                    // licencia, precisamente para que el privilegio se pudiera retirar.
+                    "licencia_funcionamiento",
+                    "licencia_duplicado",
+                    "licencia_movimiento",
+                    // Y con #50, la octava vez y por el mismo camino. V41 le retira a `descargo`
                     // las columnas de resultado que V4 le habia puesto -el fallo dentro del
                     // escrito que otro presento- y a `internamiento` la `fecha_salida`, y les
                     // revoca el UPDATE. `resolucion_gerencia` e `internamiento_movimiento` nacen
@@ -258,11 +303,18 @@ public final class RevisorDeCodigoFuente {
      * que el identificador <b>empiece</b> por la palabra, y no empieza por {@code
      * INTERES_MORATORIO}. {@code CUOTAS} cubre el maximo de cuotas, que es la otra cifra de esa
      * misma ordenanza y cuya consecuencia es un convenio a plazo que nada respalda.
+     *
+     * <p>Con #42 entra {@code COSTA}. {@code ARANCEL} ya estaba y caza {@code ARANCEL_COSTA_REC1 =
+     * new BigDecimal("35.00")}, pero <b>no</b> caza {@code COSTA_DE_LA_REC1 = ...} ni {@code
+     * COSTAS_POR_ACTO = ...}, que es exactamente como se escribiria si a alguien le pareciera que
+     * «treinta y cinco soles por resolucion» es un detalle de implementacion. El arancel de costas
+     * es de ordenanza local —D-02c, #193 esta bloqueado esperandolo— y compilarlo produce un cobro
+     * sin sustento normativo en toda la cartera coactiva.
      */
     private static final Pattern CONSTANTE_NORMATIVA =
             Pattern.compile(
                     "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
-                            + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS)\\w*\\s*=\\s*[^;\\n]*[0-9]");
+                            + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA)\\w*\\s*=\\s*[^;\\n]*[0-9]");
 
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
     private static final Pattern COMENTARIO_DE_BLOQUE = Pattern.compile("(?s)/\\*.*?\\*/");

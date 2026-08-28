@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 151 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 154 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 151 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 154 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 151 operaciones del contrato, por su `operationId`.
+ * Las 154 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 151 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 154 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -893,6 +893,13 @@ export const OPERACIONES = {
     parametrosDeRuta: ['numero'],
     parametrosDeConsulta: [],
   },
+  /** Liquidaciones de costas procesales encontradas — `GET /coactiva/liquidaciones-costas` */
+  costas_procesales_listado: {
+    metodo: 'GET',
+    ruta: '/coactiva/liquidaciones-costas',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: ['nroLiquidacion', 'nroExpedCoact', 'contribuyente', 'estado', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+  },
   /** Liquidación de costas procesales — `POST /coactiva/liquidaciones-costas` */
   costas_procesales: {
     metodo: 'POST',
@@ -956,6 +963,13 @@ export const OPERACIONES = {
     parametrosDeRuta: [],
     parametrosDeConsulta: ['nroLicencia', 'nExpediente', 'nombreDelContribuyente', 'denominacionComercial', 'direccion', 'pagina', 'tamano', 'ordenarPor'],
   },
+  /** Emisión de licencia de funcionamiento — `POST /licencias/funcionamiento` */
+  emitir_licencia: {
+    metodo: 'POST',
+    ruta: '/licencias/funcionamiento',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
   /** Padrón de licencias de funcionamiento — `POST /licencias/funcionamiento/reportes/padron` */
   licencia_padron: {
     metodo: 'POST',
@@ -1004,6 +1018,13 @@ export const OPERACIONES = {
     ruta: '/licencias/ciiu',
     parametrosDeRuta: [],
     parametrosDeConsulta: ['codigoCiiu', 'descripcion', 'seccion', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+  },
+  /** Alta de giro CIIU — `POST /licencias/ciiu` */
+  registrar_ciiu: {
+    metodo: 'POST',
+    ruta: '/licencias/ciiu',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
   },
   /** Certificados de numeración y zonificación — `POST /licencias/certificados` */
   certificados: {
@@ -1105,7 +1126,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 151 operaciones. */
+/** El `operationId` de una de las 154 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -2016,6 +2037,17 @@ export interface ParametrosPorOperacion {
   readonly cambiar_direccion_ref: {
     readonly numero: string;
   };
+  /** `GET /coactiva/liquidaciones-costas` */
+  readonly costas_procesales_listado: {
+    readonly nroLiquidacion?: string;
+    readonly nroExpedCoact?: string;
+    readonly contribuyente?: string;
+    readonly estado?: string;
+    readonly pagina?: string;
+    readonly tamano?: string;
+    readonly ordenarPor?: string;
+    readonly direccion?: string;
+  };
   /** `POST /coactiva/liquidaciones-costas` */
   readonly costas_procesales: {
     readonly nroLiquidacion?: string;
@@ -2092,6 +2124,8 @@ export interface ParametrosPorOperacion {
     readonly tamano?: string;
     readonly ordenarPor?: string;
   };
+  /** `POST /licencias/funcionamiento` */
+  readonly emitir_licencia: Readonly<Record<string, never>>;
   /** `POST /licencias/funcionamiento/reportes/padron` */
   readonly licencia_padron: Readonly<Record<string, never>>;
   /** `GET /licencias/funcionamiento/reportes/resumen-anual` */
@@ -2147,6 +2181,8 @@ export interface ParametrosPorOperacion {
     readonly ordenarPor?: string;
     readonly direccion?: string;
   };
+  /** `POST /licencias/ciiu` */
+  readonly registrar_ciiu: Readonly<Record<string, never>>;
   /** `POST /licencias/certificados` */
   readonly certificados: {
     readonly nDeCertificado?: string;
@@ -2364,6 +2400,7 @@ export interface CuerpoPorOperacion {
   readonly rec_impresion: CuerpoSinEsquema;
   readonly expediente_historial: CuerpoSinEsquema;
   readonly cambiar_direccion_ref: CuerpoSinEsquema;
+  readonly costas_procesales_listado: undefined;
   readonly costas_procesales: CuerpoSinEsquema;
   readonly fraccionamiento_coactivo: CuerpoSinEsquema;
   readonly actos_coactivos: CuerpoSinEsquema;
@@ -2373,6 +2410,7 @@ export interface CuerpoPorOperacion {
   readonly anuncios: undefined;
   readonly anuncios_reportes: CuerpoSinEsquema;
   readonly licencia_funcionamiento: undefined;
+  readonly emitir_licencia: CuerpoSinEsquema;
   readonly licencia_padron: CuerpoSinEsquema;
   readonly licencia_resumen_anual: undefined;
   readonly licencia_resolucion_cancelacion: CuerpoSinEsquema;
@@ -2380,6 +2418,7 @@ export interface CuerpoPorOperacion {
   readonly fue_edificacion: undefined;
   readonly edificacion_reporte: undefined;
   readonly ciiu: undefined;
+  readonly registrar_ciiu: CuerpoSinEsquema;
   readonly certificados: CuerpoSinEsquema;
   readonly modulos: undefined;
   readonly usuarios: undefined;
@@ -2519,6 +2558,7 @@ export interface RespuestaPorOperacion {
   readonly rec_impresion: CuerpoSinEsquema;
   readonly expediente_historial: CuerpoSinEsquema;
   readonly cambiar_direccion_ref: CuerpoSinEsquema;
+  readonly costas_procesales_listado: CuerpoSinEsquema;
   readonly costas_procesales: CuerpoSinEsquema;
   readonly fraccionamiento_coactivo: CuerpoSinEsquema;
   readonly actos_coactivos: CuerpoSinEsquema;
@@ -2528,6 +2568,7 @@ export interface RespuestaPorOperacion {
   readonly anuncios: CuerpoSinEsquema;
   readonly anuncios_reportes: CuerpoSinEsquema;
   readonly licencia_funcionamiento: CuerpoSinEsquema;
+  readonly emitir_licencia: CuerpoSinEsquema;
   readonly licencia_padron: CuerpoSinEsquema;
   readonly licencia_resumen_anual: CuerpoSinEsquema;
   readonly licencia_resolucion_cancelacion: CuerpoSinEsquema;
@@ -2535,6 +2576,7 @@ export interface RespuestaPorOperacion {
   readonly fue_edificacion: CuerpoSinEsquema;
   readonly edificacion_reporte: CuerpoSinEsquema;
   readonly ciiu: CuerpoSinEsquema;
+  readonly registrar_ciiu: CuerpoSinEsquema;
   readonly certificados: CuerpoSinEsquema;
   readonly modulos: CuerpoSinEsquema;
   readonly usuarios: CuerpoSinEsquema;
