@@ -55,9 +55,12 @@ Origen: `cdn.www.gob.pe/uploads/document/file/22026/RM_172-2016-VIVIENDA.pdf`.
 | `ley-27037/5136617-ley-n-27037.pdf` | Ley N.° 27037, Ley de Promoción de la Inversión en la Amazonía — versión con concordancias (cita la RTF 05516-A-2022) | **D-11 factor 1** (RT-011): el art. 18 (deducción del autovalúo) y el **art. 3.1 (el ámbito, a transcribir completo** — es lo que permite decidir por ubigeo; Catacaos queda fuera) | `aeb0eea9…4861e2` |
 | `ds-103-99-ef/ds-103-99-ef.pdf` | D.S. N.° 103-99-EF — Reglamento de las disposiciones tributarias de la Ley 27037 (texto SPIJ, con concordancias) | La mecánica del porcentaje anual de la deducción | `aa3ca187…6a15b0` |
 
-**Pendiente de conseguir:** el **D.S. N.° 031-99-EF**, que la investigación de D-11 encontró
-citado como reglamento alternativo para la regla del porcentaje anual — hasta abrir los dos no
-se sabe cuál manda para el art. 18.
+**Pendiente de conseguir: el D.S. N.° 031-99-EF — y ya se sabe que es EL que manda.** La
+ambigüedad 103 vs 031 quedó resuelta leyendo los dos documentos de esta carpeta: el texto del
+D.S. 103-99-EF no menciona el predial ni una vez (reglamenta IGV, Renta e importación
+exonerada), y la propia Ley 27037 trae bajo su art. 18 la concordancia explícita
+«CONCORDANCIA: D.S. Nº 031-99-EF». El 103 se queda archivado como contexto del régimen; la
+regla del porcentaje anual de la deducción predial hay que leerla en el 031.
 
 ## 4. Documentación del SRTM del MEF y guías
 
