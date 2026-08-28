@@ -5,6 +5,7 @@ import type { EstructuraDeTabla } from '../../catalogo';
 import { Paginacion } from './Paginacion';
 import type { Sentido } from '../busqueda';
 import { vacioDe } from '../estados';
+import { pieDe } from '../prosa';
 import { SIN_DATO } from '../seguridad/listado';
 
 /**
@@ -29,6 +30,17 @@ import { SIN_DATO } from '../seguridad/listado';
  */
 export interface TablaDePantallaProps {
   readonly estructura: EstructuraDeTabla;
+  /**
+   * La opcion a la que pertenece esta tabla, para **una** cosa: preguntar si su
+   * pie del prototipo sigue siendo cierto (`prosa-textos.ts`, `PIES`).
+   *
+   * El pie viene del catalogo portado, que es un `.generado.ts` y no se edita a
+   * mano: cuando lo que dice ha dejado de ser verdad —o contradice al aviso
+   * permanente de la misma pantalla— la correccion vive en la prosa, y esto es
+   * lo que la deja llegar hasta aqui. Sin opcion, el pie se pinta tal cual, que
+   * es lo que hacen las tablas de `Respaldos` y las de las pruebas.
+   */
+  readonly opcion?: string;
   readonly datos?: DatosDeTabla;
   readonly cargando: boolean;
   readonly orden?: string;
@@ -92,6 +104,7 @@ const ARIA_SENTIDO = { ASCENDENTE: 'ascending', DESCENDENTE: 'descending' } as c
 
 export function TablaDePantalla({
   estructura,
+  opcion,
   datos,
   cargando,
   orden,
@@ -114,6 +127,11 @@ export function TablaDePantalla({
   // —el desplegable seguia abierto ensenando el detalle de otro sector—.
   const [desplegada, fijarDesplegada] = useState<string | null>(null);
   const columnas = estructura.cols.length + (detalles === undefined ? 0 : 1);
+  // El pie: el del catalogo, salvo que la prosa lo corrija. `undefined` en el
+  // corrector es «esta opcion no declara nada», que es lo que devuelven 133 de
+  // las 134; `null` es «suprimido», y no hay que confundirlo con lo anterior.
+  const correccionDelPie = opcion === undefined ? undefined : pieDe(opcion);
+  const pie = correccionDelPie === undefined ? estructura.note : (correccionDelPie ?? undefined);
 
   return (
     <section
@@ -147,7 +165,22 @@ export function TablaDePantalla({
       {vacia ? (
         <Vacio hayFiltros={hayFiltros} que={estructura.title.toLowerCase()} />
       ) : (
-        <div className="sgtm-tabla__marco">
+        // **El marco se desplaza, asi que tiene que poder recibir el foco**
+        // (FRO-04 §7, RNF-082). Es un contenedor con `overflow-x: auto` y una
+        // tabla con `min-width` dentro: en 1366 px —la resolucion de la caja de
+        // ventanilla— las siete columnas de la consulta de fichas no caben y la
+        // ultima, «Conciliada», queda fuera. Con raton se arrastra; **sin raton
+        // no habia forma de llegar a ella**, porque un `div` que desborda no
+        // esta en el recorrido del tabulador y ningun control de dentro esta a
+        // la derecha del corte que lo obligara a desplazarse.
+        //
+        // Los tres atributos van juntos y ninguno sobra: `tabIndex` mete el
+        // marco en el tabulador, `role="region"` es lo que hace que un lector de
+        // pantalla lo anuncie como algo en lo que se ha entrado en vez de como
+        // un contenedor mudo, y sin `aria-label` una region no tiene nombre y no
+        // se puede anunciar. El nombre es el titulo de la tabla del catalogo
+        // —«Fichas encontradas»—, que es como la pantalla ya la llama.
+        <div className="sgtm-tabla__marco" tabIndex={0} role="region" aria-label={estructura.title}>
           <table className="sgtm-tabla">
             <thead>
               <tr>
@@ -286,7 +319,7 @@ export function TablaDePantalla({
         </div>
       )}
       {datos?.paginacion && onPagina && <Paginacion datos={datos.paginacion} onPagina={onPagina} />}
-      {estructura.note && <p className="sgtm-tarjeta__pie">{estructura.note}</p>}
+      {pie && <p className="sgtm-tarjeta__pie">{pie}</p>}
     </section>
   );
 }

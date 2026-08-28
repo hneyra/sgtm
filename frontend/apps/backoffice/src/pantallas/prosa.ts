@@ -41,3 +41,34 @@ export const avisoDe = (opcion: string): AvisoDePantalla | undefined => textos?.
 
 /** La nota de la escritura de una opcion, si la declara. */
 export const notaDe = (opcion: string): string | undefined => textos?.NOTAS[opcion];
+
+/**
+ * Que hacer con el pie que el catalogo trae para esta opcion.
+ *
+ *   `undefined`  la opcion no declara nada: se pinta el pie del catalogo, tal
+ *                cual. Es lo que devuelven 133 de las 134
+ *   `null`       el pie **se suprime**
+ *   cadena       el pie **se sustituye** por esta
+ *
+ * `Object.hasOwn` y no la indexacion cruda, porque aqui los tres resultados
+ * significan cosas distintas: una opcion llamada `constructor` devolveria por la
+ * cadena de prototipos algo que no es `undefined`, y el pie del catalogo
+ * desapareceria sin que nadie lo hubiera declarado.
+ */
+export function pieDe(opcion: string): string | null | undefined {
+  const pies = textos?.PIES;
+  if (pies === undefined || !Object.hasOwn(pies, opcion)) return undefined;
+  return pies[opcion];
+}
+
+/**
+ * Por que este filtro de esta opcion se dibuja y no se manda.
+ *
+ * Quien decide **que** se bloquea es `composicion.ts`, que viaja en el arranque;
+ * esto solo trae la redaccion. Que el bloqueo no dependa de la prosa es
+ * deliberado: si la prosa no hubiera llegado, el filtro sigue bloqueado —lo que
+ * no puede pasar es que se mande y acabe en 422—, y lo unico que falta es la
+ * explicacion.
+ */
+export const motivoDeFiltro = (opcion: string, campo: string): string | undefined =>
+  textos?.MOTIVOS_DE_FILTRO[`${opcion}.${campo}`];

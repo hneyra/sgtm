@@ -752,6 +752,7 @@ function Bloques({
       {estructura.tabla && (
         <TablaDePantalla
           estructura={estructura.tabla}
+          opcion={estructura.id}
           datos={datos?.tabla}
           cargando={cargando}
           {...(indexaLaTabla ? { ancla: ANCLA_DE_LA_TABLA } : {})}

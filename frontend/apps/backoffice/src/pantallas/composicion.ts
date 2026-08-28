@@ -13,11 +13,13 @@ import { COMPOSICION_DE_RENTAS } from './rentas/composicion';
  * dentro de `Pantalla`, que es como se bifurca un renderizador que da servicio a
  * 134 pantallas.
  *
- * Nueve opt-in, y ninguno cambia el dibujo de las otras opciones:
+ * Diez opt-in, y ninguno cambia el dibujo de las otras opciones:
  *
  *   widgetsDeFiltro  un campo de busqueda con control propio, por clave de
  *                    campo. Sin declaracion, `Filtros` dibuja su `Campo` de
  *                    texto de siempre
+ *   filtrosBloqueados un campo de busqueda que se ve y no se manda, con su
+ *                    motivo: el que el servidor rechaza con 422
  *   resolutores      lo mismo, **para un campo de seccion**: el que resuelve un
  *                    codigo, una placa o un RUC contra el identificador interno
  *                    que el backend pide. Sin declaracion, `Formulario` dibuja
@@ -290,6 +292,37 @@ export interface SeleccionDeFilas {
 
 export interface ComposicionDeOpcion {
   readonly widgetsDeFiltro?: Readonly<Record<string, WidgetDeFiltro>>;
+  /**
+   * Claves de filtros que la pantalla **dibuja pero no manda**.
+   *
+   * El hueco que cierra: un filtro que el contrato declara y el servidor rechaza
+   * con 422. `conciliadaConRentas` es el caso —`ConsultaController` lo rechaza
+   * con cualquier valor, «Todas» incluida, porque la lectura que lo respondería
+   * no existe (ADR-0015 §2)—, y hasta ahora estaba **vivo**: elegir cualquier
+   * cosa en ese desplegable dejaba la busqueda en 422. No se veia en ninguna
+   * prueba porque el proxy de datos ignora los filtros, asi que el camino
+   * completo solo se recorre contra el backend de verdad.
+   *
+   * Se **bloquea y no se quita**: el rotulo del prototipo se conserva (RNF-080),
+   * y un filtro que desaparece deja a quien lo buscaba pensando que se ha roto
+   * algo. Bloqueado y con su motivo dice lo que pasa —y que no es culpa suya—.
+   *
+   * **Aqui va la declaracion; la redaccion del motivo va en `prosa-textos.ts`**,
+   * exactamente el reparto que ya tiene la nota de la escritura
+   * (`EscrituraDeclarada.nota` es un booleano y su texto vive alla): este archivo
+   * esta en el trozo de arranque —el renderizador lo consulta para dibujar— y su
+   * castellano no tiene por que estarlo. `prosa.test.ts` exige que las dos listas
+   * digan lo mismo.
+   *
+   * Es un opt-in propio y no un {@link WidgetDeFiltro} con un `Campo` bloqueado
+   * dentro por una razon medida: el control propio solo recibe rotulo, valor y
+   * cambio, asi que tendria que **volver a declarar en codigo las opciones del
+   * desplegable** —«Todas», «Sí», «No»— que el catalogo portado ya publica. Dos
+   * copias de la misma lista, y la del codigo no la regenera nadie. Asi
+   * `Filtros` sigue dibujando el campo del catalogo, con sus opciones, y lo
+   * unico que anade es que no se escribe y por que.
+   */
+  readonly filtrosBloqueados?: readonly string[];
   /** Campos de seccion que resuelven un codigo contra el registro del backend. */
   readonly resolutores?: Readonly<Record<string, CampoResolutor>>;
   readonly resumen?: ComponenteDeResumen;
@@ -408,6 +441,16 @@ export const widgetDeFiltro = (opcion: string, campo: string): WidgetDeFiltro | 
   if (widgets === undefined || !Object.hasOwn(widgets, campo)) return undefined;
   return widgets[campo];
 };
+
+/** Si esta opcion declara que este filtro se dibuja pero no se manda. */
+export const filtroBloqueado = (opcion: string, campo: string): boolean =>
+  composicionDe(opcion).filtrosBloqueados?.includes(campo) === true;
+
+/** Cada filtro bloqueado, con su opcion. `prosa.test.ts` exige que todos tengan motivo. */
+export const FILTROS_BLOQUEADOS: readonly { readonly opcion: string; readonly campo: string }[] =
+  Object.entries(COMPOSICIONES).flatMap(([opcion, composicion]) =>
+    (composicion.filtrosBloqueados ?? []).map((campo) => ({ opcion, campo })),
+  );
 
 /**
  * El resolutor de un campo de seccion, si esa opcion declara uno.

@@ -71,9 +71,10 @@ describe('la cabecera-resumen dice de que ficha es y de cuando', () => {
    * Es la consecuencia mas cara del modulo —un predio que rentas no reconoce no
    * genera deuda predial— y la mas invisible: la ficha se leia entera sin que
    * nada la mencionara. La linea no inventa el dato: dice que **nadie lo publica
-   * todavia**, que es lo unico cierto. El dato es un derivado (existe una
-   * declaracion jurada vigente apuntando a la ficha) y su lectura le toca a
-   * rentas; catastro no puede componerla sin cerrar un ciclo de modulos.
+   * todavia**, que es lo unico cierto. El dato es un derivado —existe una
+   * declaracion jurada del ejercicio sobre el predio, `declaracion_jurada
+   * .predio_id`, en estado PRESENTADA u OBSERVADA (ADR-0015 §1)— y su lectura le
+   * toca a rentas; catastro no puede componerla sin cerrar un ciclo de modulos.
    */
   it('la cabecera dice que la conciliación con rentas no se publica todavía', async () => {
     montarEnRuta(URBANA);
@@ -81,7 +82,13 @@ describe('la cabecera-resumen dice de que ficha es y de cuando', () => {
 
     const cabecera = within(resumen());
     expect(cabecera.getByText(`Conciliación con rentas: ${SIN_DATO}`)).toBeInTheDocument();
-    expect(cabecera.getByText(/no publica todavía si reconoce este predio/)).toBeInTheDocument();
+    // **Y el sujeto es «rentas», el mismo que el aviso de la consulta de
+    // fichas** (revision de #322): decia «el padrón», que en este sistema es el
+    // de predios o el de contribuyentes segun quien lo lea, y las dos pantallas
+    // hablan de la misma cosa.
+    expect(
+      cabecera.getByText(/rentas no publica todavía si reconoce este predio/),
+    ).toBeInTheDocument();
     /* Y **no** se inventa un estado: ni «No», ni «Sin conciliar», ni una
        insignia de tono. Cuando el dato llegue sera insignia con texto —como la
        vigencia de al lado—, y hasta entonces la unica insignia de la cabecera es

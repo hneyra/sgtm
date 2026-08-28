@@ -269,10 +269,19 @@ const consulta_fichas = definirConexion({
   // URL directamente, sin pasar por ningun formulario.
   parametros: (contexto) => {
     const parametros = deLaBusqueda('consulta_fichas')(contexto);
-    const codigo = parametros['codRefCatastral'];
-    if (codigo === undefined) return parametros;
-    const digitos = normalizarCodigoCatastral(codigo);
     const normalizados: Record<string, string> = { ...parametros };
+    // **`conciliadaConRentas` no viaja nunca** (ADR-0015 §2). El contrato lo
+    // declara y `ConsultaController` lo rechaza con 422 con cualquier valor,
+    // «Todas» incluida: la lectura que lo responderia vive en rentas y no
+    // existe. Su desplegable ya se dibuja bloqueado (`catastro/composicion.ts`),
+    // asi que desde la pantalla no puede entrar en la URL; esto cubre el otro
+    // camino, que es real —el montaje lee la URL directamente— y el mas caro: un
+    // enlace compartido con el filtro puesto deja la consulta de fichas en 422
+    // antes de que nadie toque nada.
+    delete normalizados['conciliadaConRentas'];
+    const codigo = parametros['codRefCatastral'];
+    if (codigo === undefined) return normalizados;
+    const digitos = normalizarCodigoCatastral(codigo);
     // Un valor sin ningun digito no es un codigo: no viaja como filtro vacio.
     if (digitos === '') delete normalizados['codRefCatastral'];
     else normalizados['codRefCatastral'] = digitos;
@@ -318,15 +327,22 @@ const consulta_fichas = definirConexion({
           // (RNF-083). Nula —un terreno sin construir— sale con «—» y no con un
           // cero, que seria un area declarada.
           { texto: texto(fila['areaConstruida']) },
-          // «Conciliada» es un **derivado, no un estado guardado** (ADR-0015
-          // §1): un predio esta conciliado cuando existe una declaracion jurada
-          // vigente que apunta a una version de su ficha
-          // (`declaracion_jurada.ficha_catastral_id`, V19). Hoy **ninguna
-          // lectura lo publica**, y catastro no puede publicarlo sin depender de
-          // rentas —el ciclo que `verificarArquitectura` rechaza—: la lectura
-          // compuesta le toca a `sgtm-rentas` (§2). Hasta entonces «—», que es
-          // la verdad; un «No» inventado acusaria de omiso a quien quiza no lo
-          // es.
+          // «Conciliada» es un **derivado, no un estado guardado, y lleva su
+          // ejercicio** (ADR-0015 §1): un predio esta conciliado a un ejercicio
+          // cuando existe una declaracion jurada de ese ejercicio sobre **el
+          // predio** —`declaracion_jurada.predio_id`, de V2— en estado
+          // PRESENTADA u OBSERVADA. El predicado va por `predio_id` y no por
+          // `ficha_catastral_id`: esa columna es *nullable* por diseno —«nulo si
+          // el predio no tiene ficha registrada todavia»— y nula en toda fila
+          // anterior a V19, asi que derivar de ella marcaria «no conciliado» a
+          // quien si declaro. Es el falso omiso, y aqui costaria acusar de
+          // omiso a un padron entero.
+          //
+          // Hoy **ninguna lectura lo publica**, y catastro no puede publicarlo
+          // sin depender de rentas —el ciclo que `verificarArquitectura`
+          // rechaza—: la lectura compuesta le toca a `sgtm-rentas` (§2). Hasta
+          // entonces «—», que es la verdad; un «No» inventado acusaria de omiso
+          // a quien quiza no lo es.
           { texto: SIN_DATO },
         ],
         'fichas',

@@ -53,6 +53,23 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       ...jsxA11y.flatConfigs.recommended.rules,
 
+      // —— FRO-04 §7: un contenedor que se desplaza tiene que poder recibir el
+      // foco ——
+      //
+      // La regla prohibe `tabIndex` sobre lo no interactivo, y tiene razon casi
+      // siempre: un `div` en el tabulador que no hace nada es una parada muerta
+      // para quien navega con teclado. La excepcion es la que la propia regla ya
+      // contempla para `tabpanel`, y por el mismo motivo: **un contenedor con
+      // `overflow` es contenido al que no se llega de otra forma**. El marco de
+      // las tablas del sistema desborda —siete columnas no caben en la caja de
+      // ventanilla— y sin esto la ultima columna solo existe para quien tiene
+      // raton (WCAG 2.1.1). Se anade `region` y nada mas: sigue haciendo falta
+      // el rol, y una region sin `aria-label` la caza `jsx-a11y` aparte.
+      'jsx-a11y/no-noninteractive-tabindex': [
+        'error',
+        { tags: [], roles: ['tabpanel', 'region'], allowExpressionValues: true },
+      ],
+
       // —— FRO-04 §3: `any` prohibido ——
       '@typescript-eslint/no-explicit-any': 'error',
 
