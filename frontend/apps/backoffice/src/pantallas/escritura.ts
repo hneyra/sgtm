@@ -186,6 +186,24 @@ export interface TablaDelCuerpo {
    * lo dijera.
    */
   readonly plana?: boolean;
+  /**
+   * El backend declara un arreglo de **valores sueltos**, no de objetos: cada
+   * fila aporta un solo valor, bajo esta columna, y lo que viaja es el arreglo
+   * de esos valores —`["00000003541", "00000006550"]`—, no
+   * `[{"codigo":"00000003541"}, ...]`.
+   *
+   * Es el cuarto caso de una tabla, y existe por `contribuyentes` de
+   * `valores_masivo` (#38, #75): `IniciarCorridaMasiva` declara
+   * `List<String> contribuyentes`, un codigo de contribuyente por elemento, no
+   * una lista de objetos con una sola clave. Sin esto la unica forma de
+   * mandarlo era `cuerpo`, la salida de emergencia, perdiendo la lista blanca
+   * por columna que ya trae `columnas`.
+   *
+   * El valor es la **clave del catalogo** de esa columna —lo que se declara en
+   * `columnas`, no el nombre que lleva en el cuerpo—: `soloDeclaradas` traduce
+   * con el mismo `CampoDelCuerpo` que usaria cualquier columna.
+   */
+  readonly columnaUnica?: string;
 }
 
 /** Sin campos declarados. Constante para que la lista blanca no cambie cada render. */
@@ -527,6 +545,15 @@ function soloDeclaradas(
       const [primera] = escritas;
       if (primera !== undefined && Object.keys(primera).length > 0)
         cuerpo[declarada.campo] = primera;
+    } else if (declarada.columnaUnica !== undefined) {
+      // Un arreglo de valores sueltos: la clave del cuerpo de esa columna
+      // —no la del catalogo, que es lo que declara `columnaUnica`— dice bajo
+      // que nombre `soloDeclarados` dejo el valor de cada fila.
+      const clave = declarada.columnas[declarada.columnaUnica]?.campo;
+      cuerpo[declarada.campo] =
+        clave === undefined
+          ? []
+          : escritas.flatMap((fila) => (fila[clave] === undefined ? [] : [fila[clave]]));
     } else {
       cuerpo[declarada.campo] = escritas;
     }

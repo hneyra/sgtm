@@ -127,14 +127,24 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
        o cuando una opcion declara su escritura, que son exactamente los dos
        cambios sobre los que hay que llamar la atencion. */
     expect(porCausa).toEqual({
-      declarada: 6,
-      salida: 50,
+      // Cuatro se mudan a esta casilla al conectarse las cuatro opciones de
+      // Valores que le faltaban a #75 (`valores_individual`, `valores_masivo`,
+      // `prescripcion`, `pase_coactiva`): las cuatro declaran su escritura en
+      // `escrituras.ts` desde ahi.
+      declarada: 10,
+      // Y una se va de aqui: `pase_coactiva` no tenia impedimento porque su
+      // primaria del catalogo («Imprimir») pasaba el filtro de salida, aunque
+      // la pantalla de verdad escribe con otra accion («Derivar a coactiva»,
+      // en su propio componente). Contarla como declarada es lo honesto.
+      salida: 49,
       'sin-backend': 41,
       // Una se muda de casilla al sumarse la tercera causa (#333): «Cálculo
-      // individual del impuesto predial», cuya primaria es «Calcular». Y **dos
-      // mas al sumarse la cuarta** (#73): las dos transferencias, a las que no
-      // les falta una lista blanca sino un campo en la pantalla.
-      'sin-declaracion': 34,
+      // individual del impuesto predial», cuya primaria es «Calcular». Dos mas
+      // al sumarse la cuarta (#73): las dos transferencias, a las que no les
+      // falta una lista blanca sino un campo en la pantalla. Y tres se van a
+      // «declarada» con #75: `valores_individual`, `valores_masivo` y
+      // `prescripcion`.
+      'sin-declaracion': 31,
       'sin-determinacion': 1,
       'sin-campo': 2,
     });
