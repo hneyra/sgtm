@@ -25,6 +25,7 @@ import { escrituraDe } from './escrituras';
 import { useEjercicio } from '../app/ejercicio';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
+import { composicionDe } from './composicion';
 import { useDatosDeOperacion } from './useDatosDeOperacion';
 import { useDatosDePantalla } from './useDatosDePantalla';
 import { BarraDeAcciones } from './bloques/BarraDeAcciones';
@@ -39,6 +40,7 @@ import { ActualizacionDeCatastro } from './catastro/ActualizacionDeCatastro';
 import { ValoresUnitarios } from './catastro/ValoresUnitarios';
 import { Depreciacion } from './catastro/Depreciacion';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
+import { IndiceDeSecciones } from './bloques/IndiceDeSecciones';
 import { Versionado } from './bloques/Versionado';
 import { Totales } from './bloques/Totales';
 import { PermisosMatrix } from './seguridad/PermisosMatrix';
@@ -305,6 +307,24 @@ function Bloques({
   // aqui y no por el catalogo porque es una propiedad de la operacion, no del
   // dibujo —el prototipo no tiene forma de expresarla—.
   const esVersionada = VERSIONADAS.has(estructura.id);
+  // Lo que esta opcion compone **alrededor** de los bloques comunes: cabecera
+  // -resumen, indice de secciones, control propio de un filtro y el acto que
+  // vive en otra pantalla. Vacio para 130 de las 134, y entonces no cambia nada.
+  const composicion = composicionDe(estructura.id);
+  const Resumen = composicion.resumen;
+  // El ancla de cada seccion lleva la pestana dentro: dos pestanas pueden
+  // declarar secciones con el mismo rotulo, y dos anclas iguales en la misma
+  // pagina llevan siempre a la primera.
+  const anclaDe = (indice: number): string => `sgtm-seccion-${pestana}-${indice}`;
+  const conIndice = (formulario: React.JSX.Element): React.JSX.Element =>
+    composicion.indice === true ? (
+      <div className="sgtm-conindice">
+        <IndiceDeSecciones secciones={secciones} anclaDe={anclaDe} />
+        <div className="sgtm-conindice__panel">{formulario}</div>
+      </div>
+    ) : (
+      formulario
+    );
   // Tras cobrar, el foco vuelve al campo de identificacion: entra el siguiente
   // contribuyente y hay que poder teclear su documento sin buscar donde.
   const refDeBusqueda = useFocoTrasGuardar(escritura.enviada);
@@ -364,6 +384,13 @@ function Bloques({
 
       {estructura.kind === 'portal' && <Portal pasos={estructura.steps ?? []} />}
 
+      {/* La cabecera-resumen: cual ficha es, de quien, de que uso y de cuando.
+          Solo con registro abierto —sin el no hay nada que resumir— y compuesta
+          con lo que el adaptador ya trajo: no pide nada nuevo (#319). */}
+      {Resumen !== undefined && codigo !== undefined && codigo !== '' && (
+        <Resumen codigo={codigo} datos={datos} cargando={cargando} />
+      )}
+
       {/* Que version se esta viendo va **antes** que sus datos: es lo que dice
           de cuando son los numeros que vienen debajo. Solo lo traen las
           pantallas cuyo backend no sobrescribe. */}
@@ -384,6 +411,7 @@ function Bloques({
       {estructura.filtros && (
         <div ref={refDeBusqueda}>
           <Filtros
+            opcion={estructura.id}
             campos={estructura.filtros}
             buscado={busquedaActiva.filtros}
             cargando={consulta.isFetching}
@@ -459,22 +487,28 @@ function Bloques({
         </div>
       )}
 
-      {secciones.length > 0 && (
-        <Formulario
-          secciones={secciones}
-          valores={valores}
-          cargando={cargando}
-          cerradas={cerradas}
-          pestana={pestana}
-          escribibles={escritura.campos}
-          borrador={escritura.borrador}
-          onCampo={escritura.fijarCampo}
-          errorPorCampo={escritura.errorPorCampo}
-          onAlternar={(clave, cerrada) =>
-            fijarCerradas((previas) => ({ ...previas, [clave]: cerrada }))
-          }
-        />
-      )}
+      {secciones.length > 0 &&
+        /* El indice **no bifurca el renderizador**: el formulario es el mismo
+           componente con los mismos datos, y lo unico que cambia es que se
+           dibuja dentro de una rejilla de dos columnas con su indice al lado
+           (ADR-0014 lo hizo igual con el centro de reportes). */
+        conIndice(
+          <Formulario
+            secciones={secciones}
+            valores={valores}
+            cargando={cargando}
+            cerradas={cerradas}
+            pestana={pestana}
+            escribibles={escritura.campos}
+            borrador={escritura.borrador}
+            onCampo={escritura.fijarCampo}
+            errorPorCampo={escritura.errorPorCampo}
+            onAlternar={(clave, cerrada) =>
+              fijarCerradas((previas) => ({ ...previas, [clave]: cerrada }))
+            }
+            {...(composicion.indice === true ? { anclaDe } : {})}
+          />,
+        )}
 
       {estructura.kind === 'report' && estructura.reporte && (
         <Reporte
@@ -499,6 +533,16 @@ function Bloques({
           // se traslada. Contar las filas dibujadas diria «20», que es cuantas
           // caben en la pagina, no cuantas se van a emitir.
           {...(datos?.tabla?.conteo === undefined ? {} : { alcance: datos.tabla.conteo })}
+          /* El acto de esta pantalla, cuando vive en otra opcion y hay un
+             registro abierto que llevarse. Sin registro no hay a donde ir. */
+          {...(composicion.acto !== undefined && codigo !== undefined && codigo !== ''
+            ? {
+                enlace: {
+                  etiqueta: composicion.acto.etiqueta,
+                  ruta: composicion.acto.rutaDe(codigo),
+                },
+              }
+            : {})}
         />
       )}
     </>

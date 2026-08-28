@@ -14,6 +14,7 @@ import {
 } from '../seguridad/listado';
 import { campo, leerFicha } from './fichas';
 import type { Ficha } from './fichas';
+import { normalizarCodigoCatastral } from './codigo';
 
 /**
  * Catastro, conectado hasta donde llega el backend: **diez opciones de doce**.
@@ -260,7 +261,22 @@ const ficha_rural = definirConexion({
  */
 const consulta_fichas = definirConexion({
   operacion: 'consulta_fichas',
-  parametros: deLaBusqueda('consulta_fichas'),
+  // El codigo puede llegar troquelado —`20-06-…`— en un enlace compartido: el
+  // propio formato que `formatearCodigoCatastral` produce. Al backend viajan
+  // los digitos, porque el prefijo por rango no encuentra un valor con guiones.
+  // Se normaliza aqui y no solo en el widget: la peticion del montaje lee la
+  // URL directamente, sin pasar por ningun formulario.
+  parametros: (contexto) => {
+    const parametros = deLaBusqueda('consulta_fichas')(contexto);
+    const codigo = parametros['codRefCatastral'];
+    if (codigo === undefined) return parametros;
+    const digitos = normalizarCodigoCatastral(codigo);
+    const normalizados: Record<string, string> = { ...parametros };
+    // Un valor sin ningun digito no es un codigo: no viaja como filtro vacio.
+    if (digitos === '') delete normalizados['codRefCatastral'];
+    else normalizados['codRefCatastral'] = digitos;
+    return normalizados;
+  },
   leer: (cuerpo) => leerPaginado(cuerpo, 'las fichas'),
   adaptar: (paginado) =>
     datosDe(
@@ -368,6 +384,15 @@ const listaDe = (valor: unknown): readonly Readonly<Record<string, unknown>>[] =
 
 const cadena = (valor: unknown): string | undefined =>
   typeof valor === 'string' && valor !== '' ? valor : undefined;
+
+/**
+ * Lo que este modulo compone alrededor de los bloques vive en
+ * `catastro/composicion.ts` y **no se reexporta aqui**, a proposito: este
+ * archivo son operaciones y adaptadores —datos—, y aquel son componentes. Quien
+ * importa las conexiones no tiene por que arrastrarse React detras, y hay una
+ * verificacion que lo nota: `adaptador-conserva-la-fecha.test.ts` compila el
+ * adaptador de verdad con un `tsc` sin `--jsx`.
+ */
 
 /** Las opciones de catastro ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_CATASTRO: Readonly<Record<string, Conexion>> = {
