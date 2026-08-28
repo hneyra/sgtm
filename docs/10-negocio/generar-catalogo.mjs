@@ -2,8 +2,10 @@
    pantallas del prototipo de interfaz (design/sgtm-data-*.js).
 
    Son 134 opciones: escribir la tabla a mano garantizaria que se desincronizara
-   con el prototipo. La clasificacion en bloques es la misma que usa la
-   navegacion de la interfaz.
+   con el prototipo. La clasificacion en bloques es la del manual, calculada por
+   el titulo de la pantalla; **no es la que agrupa la navegacion de la interfaz**,
+   que desde ADR-0014 §4 agrupa por tarea con la tabla que declara modulo a
+   modulo `frontend/scripts/grupos-por-tarea.mjs`.
 
    Uso: node docs/10-negocio/generar-catalogo.mjs
 */
@@ -25,7 +27,7 @@ for (let i = 1; i <= 5; i++) {
 const NAV = ventana.SGTM_NAV;
 const PANTALLAS = ventana.SGTM_SCREENS;
 
-/** Misma clasificacion que la navegacion de la interfaz, por titulo de pantalla. */
+/** Clasificacion del manual, por titulo de pantalla (FRO-03 §4). */
 function clasificar(pantalla, etiqueta) {
   const t = ((pantalla && pantalla.title) || etiqueta || '').toLowerCase();
   if ((pantalla && pantalla.kind === 'report')
@@ -83,8 +85,18 @@ lineas.push('**Este archivo se genera.** Regenerarlo con `node docs/10-negocio/g
 lineas.push('cuando cambie el catálogo del prototipo; no editarlo a mano.');
 lineas.push('');
 lineas.push('Leyenda de bloque: `Registro` = registro y mantenimiento · `Procesos` · `Consultas` ·');
-lineas.push('`Documentos` = documentos y reportes. Es la clasificación que usa la navegación de la');
-lineas.push('interfaz, y la calcula el título de la pantalla.');
+lineas.push('`Documentos` = documentos y reportes. Es la **taxonomía del manual**, y la calcula el');
+lineas.push('título de la pantalla ([FRO-03 §4](../60-frontend/mapa-de-pantallas.md)).');
+lineas.push('');
+lineas.push('> **No es la clasificación que agrupa la navegación de la interfaz.** Desde');
+lineas.push('> [`ADR-0014`](../30-arquitectura/adr/ADR-0014-navegacion-centrada-en-la-atencion.md) §4 el');
+lineas.push('> menú agrupa **por tarea**, con los grupos que declara módulo a módulo la tabla del');
+lineas.push('> portador (`frontend/scripts/grupos-por-tarea.mjs`); los cuatro bloques quedan ahí como');
+lineas.push('> respaldo de un módulo que la tabla no cubra. Las dos clasificaciones conviven sin');
+lineas.push('> estorbarse porque **nada funcional depende de esta columna**: el backend siembra los');
+lineas.push('> accesos leyendo de cada fila solo el `id` y el nombre de la opción');
+lineas.push('> (`CatalogoDeOpciones`), y el identificador de la opción sigue siendo la clave del');
+lineas.push('> permiso, agrupe quien agrupe.');
 lineas.push('');
 lineas.push('| Módulo | Manual | Contexto | Opciones |');
 lineas.push('|---|---|---|---|');

@@ -52,7 +52,7 @@ cosas donde espera.
 - [Contextos acotados](30-arquitectura/contextos-acotados.md) — nueve contextos y sus límites
 - [Estrategia multi-tenant](30-arquitectura/estrategia-multitenant.md) — token → `SET LOCAL` → RLS
 - [Estándares de código del backend](30-arquitectura/estandares-de-codigo-backend.md) — reglas y su verificación
-- [Decisiones de arquitectura (ADR)](30-arquitectura/adr/) — 11 aceptadas
+- [Decisiones de arquitectura (ADR)](30-arquitectura/adr/) — 14 aceptadas
 
 ### 40 — Datos
 - [Modelo lógico-físico](40-datos/modelo-logico-fisico.md) — el esquema, tabla por tabla
