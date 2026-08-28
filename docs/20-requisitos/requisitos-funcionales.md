@@ -104,8 +104,8 @@ no que la pantalla cubra ya todas las secciones que el manual dibuja.
 
 | # | Requisito | Opciones |
 |---|---|---|
-| RF-080 | **Caja tributaria**: seleccionar deudas del contribuyente con filtros, aplicar forma de pago y campaña de beneficio, y cobrar en una transacción | `caja_tributaria` |
-| RF-081 | **Caja de tasas**: cobrar derechos por área, contribuyente y tributo | `caja_tasas` |
+| RF-080 | **Caja tributaria**: seleccionar deudas del contribuyente con filtros, aplicar forma de pago y campaña de beneficio, y cobrar en una transacción ‹escritura publicada #33: el importe lo relee `cuentacorriente` con `deudaActualizadaA(fecha de pago)` y el recibo dice a qué fecha; la campaña de beneficio se **registra** pero no descuenta, ‹bloqueado por D-02b›; modalidad `NORMAL` (a cuenta, preconvenio y cuota de convenio son de RF-084)› | `caja_tributaria` |
+| RF-081 | **Caja de tasas**: cobrar derechos por área, contribuyente y tributo ‹escritura publicada #33: la tarifa sale de `tasa`, vigente a la fecha del cobro, nunca de la petición ni de una constante (regla 5)› | `caja_tasas` |
 | RF-082 | Emitir **duplicado de recibo** por número | `duplicado_recibo` |
 | RF-083 | **Anular recibo** el mismo día del pago, devolviendo la deuda cancelada a pendiente mediante asiento de reversión | `anulacion_recibo` |
 | RF-084 | Registrar **convenio de fraccionamiento**: preconvenio (cuota inicial en caja), selección de deudas, generación de cuotas y emisión de solicitud, compromiso y resolución | `fraccionamiento` |
@@ -169,4 +169,4 @@ no que la pantalla cubra ya todas las secciones que el manual dibuja.
 | RF-130 | **Panel de recaudación** con indicadores del ejercicio en tiempo real | `inicio` |
 | RF-131 | **Portal del contribuyente**: consulta de deuda por documento y pago en línea ‹bloqueado por D-07› | `portal` |
 | RF-132 | Exportar cualquier reporte a hoja de cálculo (`.xls`) y a texto enriquecido (`.rtf`), como promete el manual | todos los reportes |
-| RF-133 | Toda operación compuesta se registra **completa o no se registra**: transacción única | todos los procesos |
+| RF-133 | Toda operación compuesta se registra **completa o no se registra**: transacción única ‹verificado en #33 contra PostgreSQL: se provoca el fallo con el recibo ya insertado y sus abonos ya asentados, y quedan cero filas de las tres tablas› | todos los procesos |

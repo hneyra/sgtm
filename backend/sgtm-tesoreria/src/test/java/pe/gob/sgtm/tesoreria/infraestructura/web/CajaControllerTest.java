@@ -1,0 +1,269 @@
+package pe.gob.sgtm.tesoreria.infraestructura.web;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
+import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
+import pe.gob.sgtm.cuentacorriente.SeleccionDeObligacion;
+import pe.gob.sgtm.dominio.Dinero;
+import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.tesoreria.aplicacion.AbrirCaja;
+import pe.gob.sgtm.tesoreria.aplicacion.CobrarDeuda;
+import pe.gob.sgtm.tesoreria.aplicacion.CobrarTasa;
+import pe.gob.sgtm.tesoreria.dobles.CajasEnMemoria;
+import pe.gob.sgtm.tesoreria.dobles.ContribuyentesDeMentira;
+import pe.gob.sgtm.tesoreria.dobles.LibroDeMentira;
+import pe.gob.sgtm.tesoreria.dobles.RecibosEnMemoria;
+import pe.gob.sgtm.tesoreria.dobles.TasasEnMemoria;
+import pe.gob.sgtm.tesoreria.dobles.TurnosEnMemoria;
+import pe.gob.sgtm.tesoreria.dominio.Caja;
+import pe.gob.sgtm.tesoreria.dominio.Tasa;
+import pe.gob.sgtm.web.ConfiguracionDeJson;
+import pe.gob.sgtm.web.ManejadorDeErrores;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * #33 — Capa web: se prueba el transporte, no la persistencia —eso lo verifica {@code CajaJdbcTest}
+ * contra PostgreSQL real—.
+ */
+@DisplayName("Capa web — /api/v1/tesoreria/caja")
+class CajaControllerTest {
+
+    private static final LocalDate HOY = LocalDate.of(2026, 3, 15);
+    private static final Clock RELOJ =
+            Clock.fixed(HOY.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC);
+
+    private static final SeleccionDeObligacion PREDIAL =
+            new SeleccionDeObligacion("PREDIAL", new Ejercicio(2025), 55L, null);
+
+    private final CajasEnMemoria cajas =
+            new CajasEnMemoria().con(new Caja(1L, "C-01", "Caja tributaria", "001", null, true));
+    private final RecibosEnMemoria recibos = new RecibosEnMemoria();
+    private final LibroDeMentira libro = new LibroDeMentira();
+    private final TasasEnMemoria tasas = new TasasEnMemoria();
+    private final ContribuyentesDeMentira contribuyentes =
+            new ContribuyentesDeMentira()
+                    .con(new ResumenDeContribuyente(7L, "C-0007", "TITULAR, PRUEBA", "DNI 1234"));
+
+    private final AbrirCaja abrirCaja =
+            new AbrirCaja(
+                    cajas, new TurnosEnMemoria(), (RegistroDeAuditoria registro) -> {}, RELOJ);
+
+    private final MockMvc mvc =
+            MockMvcBuilders.standaloneSetup(
+                            new CajaController(
+                                    new CobrarDeuda(
+                                            abrirCaja,
+                                            libro,
+                                            recibos,
+                                            (RegistroDeAuditoria registro) -> {},
+                                            RELOJ),
+                                    new CobrarTasa(
+                                            abrirCaja,
+                                            tasas,
+                                            recibos,
+                                            (RegistroDeAuditoria registro) -> {},
+                                            RELOJ),
+                                    contribuyentes,
+                                    RELOJ))
+                    .setControllerAdvice(new ManejadorDeErrores())
+                    .setMessageConverters(
+                            new JacksonJsonHttpMessageConverter(
+                                    JsonMapper.builder()
+                                            .addModule(
+                                                    new ConfiguracionDeJson()
+                                                            .moduloDeObjetosDeValor())
+                                            .build()))
+                    .build();
+
+    @Test
+    @DisplayName("cobra y devuelve 201 con el numero del recibo y su fecha de actualizacion")
+    void cobraYDevuelve201() throws Exception {
+        libro.con(PREDIAL, Dinero.de("100.00"), Dinero.CERO, Dinero.de("8.40"), Dinero.CERO);
+
+        MvcResult resultado = cobranza(cuerpoDeCobranza("Cobranza en ventanilla"));
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("\"numero\":\"001-0000001\"");
+        assertThat(cuerpo)
+                .as("toda cifra sale con su fecha (RNF-075, regla 9)")
+                .contains("\"actualizadoA\":\"2026-03-15\"");
+    }
+
+    @Test
+    @DisplayName("sin observacion, 422: no se cobra")
+    void sinObservacionRechaza() throws Exception {
+        libro.con(PREDIAL, Dinero.de("100.00"), Dinero.CERO, Dinero.CERO, Dinero.CERO);
+
+        MvcResult resultado = cobranza(cuerpoDeCobranza(""));
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(recibos.emitidos()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("cobrar la misma deuda dos veces, 409: el estado no admite la operacion")
+    void elDobleCobroDevuelve409() throws Exception {
+        libro.con(PREDIAL, Dinero.de("100.00"), Dinero.CERO, Dinero.CERO, Dinero.CERO);
+
+        assertThat(cobranza(cuerpoDeCobranza("Primera")).getResponse().getStatus()).isEqualTo(201);
+        assertThat(cobranza(cuerpoDeCobranza("Segunda")).getResponse().getStatus()).isEqualTo(409);
+        assertThat(recibos.emitidos()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("un importe en el cuerpo se ignora: no hay campo donde ponerlo")
+    void unImporteEnElCuerpoNoEntra() throws Exception {
+        libro.con(PREDIAL, Dinero.de("100.00"), Dinero.CERO, Dinero.CERO, Dinero.CERO);
+
+        String conImporte =
+                """
+                {"caja":"C-01","cajero":"cajero.prueba","codContribuyente":"C-0007",
+                 "formaDePago":"EFECTIVO","fechaDePago":"2026-03-15","total":"1.00",
+                 "obligaciones":[{"tributo":"PREDIAL","ejercicio":2025,"predioId":55,
+                                  "monto":"1.00"}],
+                 "observacion":"Intento de poner el importe desde el cliente"}
+                """;
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post("/api/v1/tesoreria/caja/cobranza")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(conImporte))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(recibos.emitidos())
+                .singleElement()
+                .satisfies(
+                        recibo ->
+                                assertThat(recibo.total())
+                                        .as("se cobra lo que el libro dice, no lo que el cliente")
+                                        .isEqualTo(Dinero.de("100.00")));
+    }
+
+    @Test
+    @DisplayName("la cabecera idempotency-key evita el segundo recibo del doble clic")
+    void laCabeceraDeIdempotenciaEvitaElSegundoRecibo() throws Exception {
+        libro.con(PREDIAL, Dinero.de("100.00"), Dinero.CERO, Dinero.CERO, Dinero.CERO);
+
+        for (int intento = 0; intento < 2; intento++) {
+            MvcResult resultado =
+                    mvc.perform(
+                                    MockMvcRequestBuilders.post("/api/v1/tesoreria/caja/cobranza")
+                                            .header("Idempotency-Key", "una-clave")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(cuerpoDeCobranza("Cobranza en ventanilla")))
+                            .andReturn();
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        }
+
+        assertThat(recibos.emitidos()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("una caja que no existe, 404")
+    void unaCajaInexistenteDevuelve404() throws Exception {
+        libro.con(PREDIAL, Dinero.de("100.00"), Dinero.CERO, Dinero.CERO, Dinero.CERO);
+
+        String cuerpo =
+                """
+                {"caja":"NO-EXISTE","cajero":"cajero.prueba","codContribuyente":"C-0007",
+                 "formaDePago":"EFECTIVO","fechaDePago":"2026-03-15",
+                 "obligaciones":[{"tributo":"PREDIAL","ejercicio":2025,"predioId":55}],
+                 "observacion":"Cobranza en ventanilla"}
+                """;
+
+        assertThat(cobranza(cuerpo).getResponse().getStatus()).isEqualTo(404);
+    }
+
+    @Test
+    @DisplayName("caja de tasas: 201 con el importe que sale de la tabla")
+    void cobraTasasYDevuelve201() throws Exception {
+        tasas.con(
+                new Tasa(
+                        3L,
+                        "T-001",
+                        "Constancia de no adeudo",
+                        9L,
+                        "1.3.1.1.1.1",
+                        Dinero.de("12.50"),
+                        LocalDate.of(2026, 1, 1),
+                        null,
+                        "TUPA 2026 de la prueba"));
+
+        String cuerpo =
+                """
+                {"caja":"C-01","cajero":"cajero.prueba","codContribuyente":"C-0007",
+                 "formaDePago":"EFECTIVO","fechaDeCobro":"2026-03-15",
+                 "conceptos":[{"conceptoTupa":"T-001","cantidad":2}],
+                 "observacion":"Derecho de tramite"}
+                """;
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post("/api/v1/tesoreria/caja/tasas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(recibos.emitidos())
+                .singleElement()
+                .satisfies(recibo -> assertThat(recibo.total()).isEqualTo(Dinero.de("25.00")));
+    }
+
+    @Test
+    @DisplayName("un concepto del TUPA sin tarifa vigente, 404")
+    void unConceptoSinTarifaDevuelve404() throws Exception {
+        String cuerpo =
+                """
+                {"caja":"C-01","cajero":"cajero.prueba","codContribuyente":"C-0007",
+                 "formaDePago":"EFECTIVO","fechaDeCobro":"2026-03-15",
+                 "conceptos":[{"conceptoTupa":"T-999","cantidad":1}],
+                 "observacion":"Derecho de tramite"}
+                """;
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post("/api/v1/tesoreria/caja/tasas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(404);
+        assertThat(recibos.emitidos()).isEmpty();
+    }
+
+    // ------------------------------------------------------------------
+
+    private MvcResult cobranza(String cuerpo) throws Exception {
+        return mvc.perform(
+                        MockMvcRequestBuilders.post("/api/v1/tesoreria/caja/cobranza")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(cuerpo))
+                .andReturn();
+    }
+
+    private static String cuerpoDeCobranza(String observacion) {
+        return """
+                {"caja":"C-01","cajero":"cajero.prueba","codContribuyente":"C-0007",
+                 "formaDePago":"EFECTIVO","fechaDePago":"2026-03-15",
+                 "obligaciones":[{"tributo":"PREDIAL","ejercicio":2025,"predioId":55}],
+                 "observacion":"%s"}
+                """
+                .formatted(observacion);
+    }
+}

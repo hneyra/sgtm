@@ -67,7 +67,15 @@ public final class RevisorDeCodigoFuente {
                     // antes de que nadie lo descubra en ejecucion.
                     "notificacion",
                     "valor_movimiento",
-                    "prescripcion");
+                    "prescripcion",
+                    // Y el recibo, con #33. Es el caso mas claro de todos: el contribuyente se
+                    // lleva el papel. Corregir el recibo en la base deja al papel y al sistema
+                    // diciendo cosas distintas, y quien tenga el papel gana la discusion. Su
+                    // desglose esta congelado por el mismo motivo (V29): la reimpresion tiene que
+                    // salir identica al original aunque el libro haya seguido moviendose. La
+                    // anulacion y el duplicado (#34) se registran agregando, no editando.
+                    "recibo",
+                    "recibo_detalle");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =

@@ -2,10 +2,13 @@ package pe.gob.sgtm.cuentacorriente.infraestructura;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeObligacion;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
 import pe.gob.sgtm.cuentacorriente.dominio.SaldoProyectado;
@@ -35,6 +38,17 @@ public class SaldoRepositoryJdbc extends RepositorioJdbc implements SaldoReposit
     private static final String COLUMNAS =
             "contribuyente_id, tributo, ejercicio, periodo, predio_id, vehiculo_id,"
                     + " insoluto_saldo, fase, ultimo_asiento_id, fecha_calculo";
+
+    /**
+     * El filtro de una obligacion: como {@code saldo_uq} pero sin el periodo, y con los mismos
+     * {@code COALESCE} que el indice, para que la busqueda de una obligacion sin unidad lo use.
+     */
+    private static final String DE_LA_OBLIGACION =
+            " WHERE contribuyente_id = :contribuyente"
+                    + "   AND tributo = :tributo"
+                    + "   AND ejercicio = :ejercicio"
+                    + "   AND COALESCE(predio_id, 0) = :predio"
+                    + "   AND COALESCE(vehiculo_id, 0) = :vehiculo";
 
     public SaldoRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
@@ -73,6 +87,47 @@ public class SaldoRepositoryJdbc extends RepositorioJdbc implements SaldoReposit
                 .param("contribuyente", contribuyenteId)
                 .query(SaldoRepositoryJdbc::mapear)
                 .list();
+    }
+
+    @Override
+    public List<SaldoProyectado> deLaObligacion(ClaveDeObligacion obligacion) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS
+                                + " FROM saldo_proyectado"
+                                + DE_LA_OBLIGACION
+                                + " ORDER BY periodo")
+                .params(parametrosDe(obligacion))
+                .query(SaldoRepositoryJdbc::mapear)
+                .list();
+    }
+
+    /**
+     * {@code FOR UPDATE} y no {@code FOR NO KEY UPDATE}: el bloqueo tiene que excluir tambien a
+     * otro lector que vaya a cobrar, no solo a quien escriba.
+     *
+     * <p>Sin {@code NOWAIT} ni {@code SKIP LOCKED} a proposito. La segunda cobranza <b>tiene</b>
+     * que esperar y volver a leer: saltarse la fila la dejaria cobrando sobre un libro viejo, y
+     * fallar de inmediato convertiria dos cajeros trabajando a la vez en un error para el
+     * contribuyente que llego segundo.
+     */
+    @Override
+    public int bloquear(ClaveDeObligacion obligacion) {
+        return jdbc().sql("SELECT id FROM saldo_proyectado" + DE_LA_OBLIGACION + " FOR UPDATE")
+                .params(parametrosDe(obligacion))
+                .query(Long.class)
+                .list()
+                .size();
+    }
+
+    private static Map<String, Object> parametrosDe(ClaveDeObligacion obligacion) {
+        Map<String, Object> parametros = new LinkedHashMap<>();
+        parametros.put("contribuyente", obligacion.contribuyenteId());
+        parametros.put("tributo", obligacion.tributo());
+        parametros.put("ejercicio", obligacion.ejercicio().valor());
+        parametros.put("predio", obligacion.predioId() == null ? 0L : obligacion.predioId());
+        parametros.put("vehiculo", obligacion.vehiculoId() == null ? 0L : obligacion.vehiculoId());
+        return parametros;
     }
 
     @Override
