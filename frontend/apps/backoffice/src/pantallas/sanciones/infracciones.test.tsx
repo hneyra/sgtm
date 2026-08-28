@@ -97,7 +97,8 @@ describe('adm_estado_cuenta lee PapeletaResource, conectada desde #363', () => {
       // Insoluto: «lo que corresponde pagar, sin beneficio» (importeAPagar),
       // sin separador de miles — asi lo sirve el backend de verdad, y no como
       // lo escribia el catalogo del prototipo («2,675.00»).
-      '2675.00',
+      // La tabla agrupa los millares al dibujar (#342): el dato viaja intacto.
+      '2 675.00',
       SIN_DATO,
       SIN_DATO,
       SIN_DATO,

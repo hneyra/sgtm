@@ -137,7 +137,8 @@ describe('coactiva_expedientes lee ExpedienteResource, conectada desde #363', ()
       '3',
       // Sin separador de miles: asi lo sirve `ExpedienteResource` de verdad,
       // no como lo escribia el catalogo del prototipo («9,412.15»).
-      '9412.15',
+      // La tabla agrupa los millares al dibujar (#342): el dato viaja intacto.
+      '9 412.15',
       '941.20',
       // «Medida cautelar»: el recurso no publica una descripcion de la medida
       // trabada, solo el estado del expediente (ultima columna).
