@@ -55,12 +55,18 @@ Origen: `cdn.www.gob.pe/uploads/document/file/22026/RM_172-2016-VIVIENDA.pdf`.
 | `ley-27037/5136617-ley-n-27037.pdf` | Ley N.° 27037, Ley de Promoción de la Inversión en la Amazonía — versión con concordancias (cita la RTF 05516-A-2022) | **D-11 factor 1** (RT-011): el art. 18 (deducción del autovalúo) y el **art. 3.1 (el ámbito, a transcribir completo** — es lo que permite decidir por ubigeo; Catacaos queda fuera) | `aeb0eea9…4861e2` |
 | `ds-103-99-ef/ds-103-99-ef.pdf` | D.S. N.° 103-99-EF — Reglamento de las disposiciones tributarias de la Ley 27037 (texto SPIJ, con concordancias) | La mecánica del porcentaje anual de la deducción | `aa3ca187…6a15b0` |
 
-**Pendiente de conseguir: el D.S. N.° 031-99-EF — y ya se sabe que es EL que manda.** La
-ambigüedad 103 vs 031 quedó resuelta leyendo los dos documentos de esta carpeta: el texto del
-D.S. 103-99-EF no menciona el predial ni una vez (reglamenta IGV, Renta e importación
-exonerada), y la propia Ley 27037 trae bajo su art. 18 la concordancia explícita
-«CONCORDANCIA: D.S. Nº 031-99-EF». El 103 se queda archivado como contexto del régimen; la
-regla del porcentaje anual de la deducción predial hay que leerla en el 031.
+La ambigüedad 103 vs 031 quedó resuelta leyendo los documentos: el D.S. 103-99-EF no menciona
+el predial ni una vez (reglamenta IGV, Renta e importación exonerada) y la propia Ley 27037
+trae bajo su art. 18 la concordancia «CONCORDANCIA: D.S. Nº 031-99-EF». **El 031 ya está en la
+carpeta** y es él: su título reglamenta exactamente el beneficio del art. 18, y su art. 3 trae
+la regla completa — el porcentaje lo establece **anualmente cada municipalidad de la Amazonía**
+(considerando los valores unitarios oficiales, la ubicación y el uso del predio), se aplica
+sobre el autoavalúo y el resultante es el nuevo autoavalúo para la base imponible. El 103 se
+queda archivado como contexto del régimen.
+
+| Archivo | Qué es | Cierra | sha256 |
+|---|---|---|---|
+| `ds-031-99-ef/DS-031-99-EF.pdf` | **D.S. N.° 031-99-EF** — «Reglamentan beneficio referido a la deducción del valor correspondiente a los predios… Art. 18 de la Ley N.° 27037» (2 páginas) | **La mecánica y el porcentaje de la deducción de Amazonía** (D-11 factor 1, RT-011): arts. 1 a 4 | `b9232da7…bcd46e` |
 
 ## 4. Documentación del SRTM del MEF y guías
 
