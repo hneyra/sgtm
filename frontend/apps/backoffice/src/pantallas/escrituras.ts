@@ -49,43 +49,32 @@ export interface EscrituraDeclarada {
 }
 
 /**
- * «Concepto/tributo» del prototipo → el codigo corto que ya usa `determinacion`
- * (`CHECK` de `V2__rentas_y_cuenta_corriente.sql`): `PREDIAL`, `ARBITRIO`,
- * `VEHICULAR`, `ALCABALA`, `ESPECTACULOS`, `ANUNCIOS`, `JUEGOS`.
+ * «Concepto/tributo» **del desplegable del prototipo** → el codigo corto que ya
+ * usa `determinacion` (`CHECK` de `V2__rentas_y_cuenta_corriente.sql`):
+ * `PREDIAL`, `ARBITRIO`, `VEHICULAR`, `ALCABALA`, `ESPECTACULOS`, `ANUNCIOS`,
+ * `JUEGOS`.
  *
- * Solo cuatro de las siete opciones del catalogo tienen ese codigo. Las otras
+ * **Solo la usa `alta_deuda`**, y por una razon que es la que justifica que la
+ * traduccion exista: ahi el tributo lo elige quien atiende en un desplegable
+ * que el prototipo escribio en su propio vocabulario («IMPUESTO PREDIAL»), y
+ * mandarlo tal cual seria mandar el rotulo de una pantalla como si fuera un
+ * codigo del libro.
+ *
+ * La baja **no** pasa por aqui: su tributo no lo teclea nadie, lo trae la fila
+ * que publica `consulta_deuda`, que ya habla el vocabulario del backend. Ver
+ * `CUOTAS_DE_LA_BAJA`.
+ *
+ * Solo cuatro de las siete opciones del desplegable tienen codigo. Las otras
  * tres —«MULTA TRIBUTARIA», «MULTA ADMINISTRATIVA», «DERECHOS
- * ADMINISTRATIVOS»— no son parte del vocabulario de `tributo` en ningun sitio
- * del sistema todavia, y una de ellas ni siquiera entra en las 20 posiciones
- * de la columna (`DERECHOS_ADMINISTRATIVOS` son 24). Inventar un codigo aqui
- * seria una decision de negocio que no le toca a esta pantalla: se devuelve
- * `undefined` y el campo no viaja, igual que si no se hubiera llenado.
- *
- * **Y que no viaje no puede ser el final de la historia** (#332): `tributo` es
- * obligatorio en `PeticionDeMovimiento`, asi que una baja sobre una multa salia
- * con la accion habilitada y volvia como 422 despues de confirmarse. Donde la
- * fila **es** el acto —la baja de deuda— quien lo caza antes es `exigir`, que
- * apaga la accion y nombra el tributo que no tiene codigo. La traduccion sigue
- * siendo traduccion; lo que se anadio es que la pantalla lo diga.
+ * ADMINISTRATIVOS»— no son parte del vocabulario del `CHECK` de
+ * `determinacion`, asi que se devuelve `undefined` y el campo no viaja, igual
+ * que si no se hubiera llenado.
  */
 const TRIBUTO_DEL_BACKEND: Readonly<Record<string, string>> = {
   'IMPUESTO PREDIAL': 'PREDIAL',
   'ARBITRIOS MUNICIPALES': 'ARBITRIO',
-  // El mismo tributo, escrito corto: es como lo rotula la tabla de deuda de
-  // «Baja de deuda», y como lo lista su filtro. Dos rotulos del prototipo, un
-  // solo codigo del dominio; inventar un segundo codigo para el mismo tributo
-  // partiria el padron en dos.
-  ARBITRIOS: 'ARBITRIO',
   'PATRIMONIO VEHICULAR': 'VEHICULAR',
   ALCABALA: 'ALCABALA',
-  // Y los codigos del dominio, tal cual. No es redundancia: la tabla de «Baja de
-  // deuda» **no sale del prototipo, sale del backend** (`consulta_deuda` publica
-  // `tributo` ya en el vocabulario del libro), asi que la fila elegida trae
-  // «PREDIAL» y no «IMPUESTO PREDIAL». Sin estas cuatro lineas, el tributo de una
-  // baja no viajaria y el backend la rechazaria por un campo que si estaba.
-  PREDIAL: 'PREDIAL',
-  ARBITRIO: 'ARBITRIO',
-  VEHICULAR: 'VEHICULAR',
 };
 
 const tributoDe = (texto: string): string | undefined => TRIBUTO_DEL_BACKEND[texto];
@@ -201,15 +190,30 @@ const TITULAR: TablaDelCuerpo = {
  * el identificador interno, que va aparte— y el segundo es una suma que el backend rehace.
  * Ninguna de las dos entra ni en el estado ni en el cuerpo, que es exactamente lo que la
  * lista blanca por columna vino a garantizar.
+ *
+ * **El tributo viaja tal cual, sin traducir.** No es un descuido: esta tabla **no sale del
+ * prototipo, sale del backend** —`consulta_deuda` publica `tributo` ya en el vocabulario del
+ * libro—, y `PeticionDeMovimiento.tributo` es un `String` libre que `ClaveDeSaldo` solo
+ * normaliza; la columna `tributo` del libro es `varchar` sin `CHECK`, y `RegistrarPapeleta`
+ * asienta ahi `MULTA_TRANSITO` y `MULTA_ADMINISTRATIVA`. Pasarlo por el diccionario del
+ * desplegable de `alta_deuda` hacia lo contrario de lo que parecia: **rechazaba las multas**
+ * —que si tienen deuda en el libro— por un codigo que el sistema si tiene.
  */
 const CUOTAS_DE_LA_BAJA: TablaDelCuerpo = {
   campo: 'cuotas',
   plana: true,
   columnas: {
     codContribuyente: { campo: 'codContribuyente' },
-    tributo: { campo: 'tributo', valor: tributoDe },
+    tributo: { campo: 'tributo' },
     ano: { campo: 'ano' },
     cuota: { campo: 'cuota', entero: true },
+    /* **La fase de la obligacion, que tambien identifica de cual se habla.**
+       `SaldoRepositoryJdbc.proyectar` hace `DO UPDATE SET fase = EXCLUDED.fase`, y una baja
+       sin `fase` resuelve a `ORDINARIA`: dar de baja parcialmente una deuda que estaba en
+       COACTIVA o en CONVENIO la devolvia a la fase ordinaria **en silencio**, deshaciendo el
+       procedimiento sin que ningun asiento lo dijera. La publica `obligacionDeDeuda()` y llega
+       por `DatosDeTabla.valores`, como los dos identificadores: ninguna columna la dibuja. */
+    fase: { campo: 'fase' },
     // Los dos identificadores internos de `ClaveDeSaldo`. Enteros porque
     // `PeticionDeMovimiento` los declara `Long`, y a lo sumo uno de los dos
     // tiene valor: una obligacion cuelga de un predio, de un vehiculo o de
@@ -246,9 +250,13 @@ function faltaEnLaCuota(fila: Readonly<Record<string, string>>): string | undefi
   if (dato('codContribuyente') === '') {
     return 'Falta el código de contribuyente: búscalo arriba, porque la baja se registra sobre su cuenta corriente.';
   }
-  const tributo = dato('tributo');
-  if (tributo === '' || tributoDe(tributo) === undefined) {
-    return `La baja no se puede registrar sobre «${tributo === '' ? 'sin tributo' : tributo}»: el sistema todavía no tiene un código para ese tributo. Elige una cuota de predial, arbitrios, patrimonio vehicular o alcabala.`;
+  /* El tributo tiene que estar, y **no se juzga cual es**: el que trae la fila es el que el
+     libro asento —`tributo` es `varchar` sin `CHECK`, y ahi viven tambien las multas—, asi
+     que la unica pregunta que esta pantalla puede hacer es si llego. Rechazar los que no
+     estan en el desplegable de `alta_deuda` apagaba la baja de toda multa con un motivo
+     falso: «el sistema todavía no tiene un código para ese tributo», cuando lo tiene. */
+  if (dato('tributo') === '') {
+    return 'La cuota elegida no trae su tributo, y sin él la baja no señala a ninguna obligación. Vuelve a buscar la deuda.';
   }
   if (dato('ano') === '') {
     return 'La cuota elegida no trae su año, y sin año no señala a ninguna obligación. Vuelve a buscar la deuda.';
@@ -325,10 +333,14 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
       conceptoTributo: { campo: 'tributo', valor: tributoDe },
       ano: { campo: 'ano' },
       cuotaDesde: { campo: 'cuota', entero: true },
-      insolutoS: { campo: 'insoluto' },
-      reajusteS: { campo: 'reajuste' },
-      interesS: { campo: 'interes' },
-      gastosS: { campo: 'gasto' },
+      // Los cuatro importes, con la misma guarda que los de la baja: lo que el backend no
+      // puede leer no sale. Aqui los teclea quien atiende, asi que «1,842.60» y «S/ 120» son
+      // lo normal, y `new BigDecimal` con cualquiera de los dos **lanza** — un 422 despues de
+      // pulsar «Dar de alta», que es el mismo defecto tardio del otro lado del movimiento.
+      insolutoS: { campo: 'insoluto', importe: true },
+      reajusteS: { campo: 'reajuste', importe: true },
+      interesS: { campo: 'interes', importe: true },
+      gastosS: { campo: 'gasto', importe: true },
       fechaDeVencimiento: { campo: 'fechaValor' },
       nDelDocumento: { campo: 'documentoOrigen' },
     },
@@ -366,6 +378,11 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
    *   lo que `ClaveDeSaldo` compara.
    * - `totalS`: es la suma de insoluto e interes, que el backend rehace. Mandarla seria
    *   dejar que el cliente proponga un total (RNF-083).
+   *
+   * `fechaDeResolucion` hace **dos cosas**, y la segunda no se ve desde aqui: es el
+   * `fechaValor` del movimiento y es tambien la fecha a la que se lee la deuda, porque el
+   * backend valida la baja contra `deudaActualizadaA(fechaValor)`. Ver la conexion en
+   * `pantallas/rentas/index.ts`.
    */
   baja_deuda: {
     campos: {

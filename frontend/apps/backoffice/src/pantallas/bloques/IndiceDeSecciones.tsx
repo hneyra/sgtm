@@ -99,6 +99,14 @@ export function IndiceDeSecciones({
           key={`${indice}|${seccion.label}`}
           type="button"
           className="sgtm-indice__entrada"
+          /* **El nombre accesible dice que hace, no solo a que se refiere.**
+             La cabecera de cada seccion es tambien un boton —la que la pliega—,
+             y se llama exactamente igual: quien navega por lista de controles
+             veia «Identificación» dos veces, sin nada que los distinga, y uno
+             lleva a la seccion y el otro la esconde. El rotulo visible no
+             cambia: es el de la seccion, que es lo que hay que leer en el
+             indice. */
+          aria-label={`Ir a ${seccion.label}`}
           data-activa={indice === activa ? '1' : '0'}
           aria-current={indice === activa ? 'true' : undefined}
           onClick={() => {

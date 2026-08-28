@@ -102,6 +102,30 @@ describe('el indice ofrece la salida hacia las acciones', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Buscar' }));
   });
 
+  /**
+   * **Cada rotulo de seccion es dos botones**, y hay que poder distinguirlos
+   * (#337).
+   *
+   * La cabecera de la seccion tambien es un boton —la que la pliega— y se llama
+   * exactamente igual que su entrada del indice: quien navega por lista de
+   * controles oia «Identificación» dos veces sin nada que las separe, y una
+   * lleva a la seccion y la otra la esconde. El rotulo visible no cambia: en el
+   * indice, lo que hay que leer es el nombre de la seccion.
+   */
+  it('la entrada del índice dice que **va** a la sección, y el rótulo visible no cambia', () => {
+    render(
+      <MemoryRouter>
+        <IndiceDeSecciones secciones={SECCIONES} anclaDe={(i) => `s-${i}`} />
+      </MemoryRouter>,
+    );
+
+    const entrada = screen.getByRole('button', { name: 'Ir a Identificación' });
+    expect(entrada).toHaveTextContent('Identificación');
+    // Y el nombre a secas ya no nombra a la entrada del indice: es el de la
+    // cabecera plegable, que es el otro boton.
+    expect(screen.queryByRole('button', { name: 'Identificación' })).not.toBeInTheDocument();
+  });
+
   it('sin barra de acciones no se ofrece una salida a ninguna parte', () => {
     render(
       <MemoryRouter>

@@ -4,7 +4,7 @@ import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { permisosDelClaim, puedeVer } from '../../app/sesion/permisos';
 import { cifrasDeLaTabla, cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
 import { montarEnRuta } from '../../pruebas/montar';
-import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
+import { motivoDeLaPrimaria, primariaApagada, primariaDeLaPantalla } from '../../pruebas/acciones';
 
 /**
  * Infracciones administrativas (#78).
@@ -23,8 +23,19 @@ import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
 /** Las dos pantallas del modulo que son hoja de reporte. */
 const HOJAS: readonly string[] = ['adm-resolucion-gerencia', 'adm-notificacion-resolucion'];
 
-/** Las tres que escriben. */
-const ESCRIBEN: readonly string[] = ['adm-notificacion', 'adm-valores', 'adm-reportes'];
+/**
+ * Las que escriben **y cuya primaria es un acto**.
+ *
+ * `adm-notificacion` y `adm-valores` salieron de aqui en #337: escriben en el
+ * contrato, pero la ultima accion de su catalogo —que es la primaria (FRO-03
+ * §5)— es «Imprimir». Contarle a quien atiende que «registre el acto por el
+ * procedimiento actual» debajo de un boton de imprimir es reganarle por algo que
+ * no estaba haciendo. Su primaria sigue apagada, sin franja: ver abajo.
+ */
+const ESCRIBEN: readonly string[] = ['adm-reportes'];
+
+/** Y las dos cuya primaria imprime: apagadas, y **sin** franja (#337). */
+const DE_SALIDA: readonly string[] = ['adm-notificacion', 'adm-valores'];
 
 beforeEach(() => instalarProxyDeDatos({ latencia: false }));
 afterEach(() => desinstalarProxyDeDatos());
@@ -100,6 +111,19 @@ describe('ningun acto de este modulo promete lo que no puede', () => {
 
     expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
     expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute('data-causa');
+
+    montada.unmount();
+  });
+
+  it.each(DE_SALIDA)('%s imprime: la primaria esta apagada y **sin** franja', async (ranura) => {
+    const montada = montarEnRuta(`/infracciones-administrativas/${ranura}`);
+    await dibujada('.sgtm-acciones');
+
+    // Apagada con `disabled` y no con `aria-disabled`: no hay motivo que leer al
+    // lado, asi que tampoco hace falta que reciba el foco.
+    expect(primariaDeLaPantalla()).toBeDisabled();
+    expect(motivoDeLaPrimaria()).toBeUndefined();
+    expect(document.getElementById('sgtm-motivo-de-la-accion')?.textContent).toBe('');
 
     montada.unmount();
   });

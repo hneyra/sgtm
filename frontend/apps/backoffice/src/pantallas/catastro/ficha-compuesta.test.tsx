@@ -98,8 +98,10 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
     montarEnRuta(URBANA);
     await screen.findByRole('region', { name: 'Versión de la ficha' });
 
+    // Por su nombre accesible, que **no** es el rotulo a secas: la cabecera
+    // plegable de la seccion es otro boton y se llama igual (#337).
     const segunda = within(indice()).getByRole('button', {
-      name: 'Ubicación del predio catastral',
+      name: 'Ir a Ubicación del predio catastral',
     });
     await usuario.click(segunda);
 

@@ -248,16 +248,28 @@ function ContenidoConectado({
   readonly estructura: Estructura;
   readonly conexion: Conexion;
 }) {
+  /* **Lo que se esta escribiendo, un piso por encima de quien lo escribe.**
+     El borrador vive en `useEscritura`, dentro de `Bloques`, y la lectura lo
+     necesita **antes**: hay conexiones cuyos parametros dependen de un campo del
+     formulario (`ContextoDePantalla.borrador`). Con la escritura donde esta, la
+     unica forma de que la lectura lo vea es que el hijo lo suba; se sube por
+     este estado, y no por un contexto, porque el consumidor es el padre.
+
+     No es un bucle: `escritura.borrador` solo cambia de identidad cuando alguien
+     escribe un campo, y fijar el mismo objeto no vuelve a dibujar. */
+  const [borrador, fijarBorrador] = useState<Readonly<Record<string, string>>>({});
   // La ficha de un predio se abre por su codigo. Sin codigo no hay peticion, y
   // lo que toca decir es que falta elegir uno —no dibujar un esqueleto para
-  // siempre—.
-  const { consulta, falta } = useDatosDeOperacion(conexion);
+  // siempre—. Lo mismo con el filtro que la operacion exige.
+  const { consulta, falta, faltaFiltro } = useDatosDeOperacion(conexion, borrador);
   return (
     <Bloques
       estructura={estructura}
       consulta={consulta}
       {...(falta === undefined ? {} : { faltaRegistro: falta })}
+      {...(faltaFiltro === undefined ? {} : { faltaFiltro })}
       {...(conexion.sinPermiso === undefined ? {} : { sinPermiso: conexion.sinPermiso })}
+      alCambiarBorrador={fijarBorrador}
     />
   );
 }
@@ -266,17 +278,33 @@ function Bloques({
   estructura,
   consulta,
   faltaRegistro,
+  faltaFiltro,
   sinPermiso,
+  alCambiarBorrador,
 }: {
   readonly estructura: Estructura;
   readonly consulta: ReturnType<typeof useDatosDePantalla>;
   /** Nombre del parametro que la pantalla necesita y todavia no tiene. */
   readonly faltaRegistro?: string;
   /**
+   * El filtro obligatorio que la operacion pide y la busqueda no trae, con lo
+   * que hay que decir mientras falte. Ver `Conexion.exige`.
+   */
+  readonly faltaFiltro?: {
+    readonly parametro: string;
+    readonly titulo: string;
+    readonly detalle: string;
+  };
+  /**
    * Que decir si la **lectura** de esta pantalla responde 403, cuando esa
    * lectura no es la de esta opcion. Ver `Conexion.sinPermiso`.
    */
   readonly sinPermiso?: { readonly titulo: string; readonly detalle: string };
+  /**
+   * Sube el borrador a quien pide los datos, cuando la lectura depende de el
+   * (`ContextoDePantalla.borrador`). Solo lo pasa el camino conectado.
+   */
+  readonly alCambiarBorrador?: (borrador: Readonly<Record<string, string>>) => void;
 }) {
   const [pestana, fijarPestana] = useState(0);
   const [cerradas, fijarCerradas] = useState<Readonly<Record<string, boolean>>>({});
@@ -304,7 +332,13 @@ function Bloques({
   // seguridad» no puede lanzar un respaldo. La pantalla se dibuja de su catalogo
   // y espera a que alguien pulse.
   const pide = operacion !== undefined && !escribe(operacion);
-  const estado = estadoDePantalla(consulta, faltaRegistro, pide);
+  /* Las dos formas de no tener peticion que la pantalla cuenta igual: falta el
+     registro que la abre, o falta el filtro que su operacion exige. Las dos
+     dejan la consulta apagada, asi que las dos tienen que salir del estado
+     «cargando» —o el esqueleto se queda para siempre—. Lo que cambia es el
+     texto, no el estado. */
+  const sinPedir = faltaRegistro ?? faltaFiltro?.parametro;
+  const estado = estadoDePantalla(consulta, sinPedir, pide);
   // Los niveles de accesibilidad apagan **acciones**, no solo opciones: ver una
   // ficha sin poder modificarla es un perfil de consulta, no un error.
   const puedeEscribirAqui = catalogo.puedeEscribir(estructura.id);
@@ -358,7 +392,9 @@ function Bloques({
   // otra cosa —y sugerir un aviso a sistemas por algo que arregla el
   // administrador de la municipalidad—.
   const impedimento =
-    puedeActuarAqui && !componeSuActo ? impedimentoDelActo(estructura.id) : undefined;
+    puedeActuarAqui && !componeSuActo
+      ? impedimentoDelActo(estructura.id, estructura.acciones ?? [])
+      : undefined;
   const datos = consulta.data;
 
   /* ── La seleccion de filas, y por que no vive en un efecto ───────────────
@@ -422,7 +458,7 @@ function Bloques({
   // escriba —esas no se piden al abrir—. Sin este `pide`, una pantalla que
   // escribe se quedaba con todos sus campos en esqueleto y deshabilitados para
   // siempre, porque su consulta nunca deja de estar pendiente.
-  const cargando = pide && consulta.isPending && faltaRegistro === undefined;
+  const cargando = pide && consulta.isPending && sinPedir === undefined;
   const valores: Readonly<Record<string, ValorDeCampo>> = datos?.campos ?? {};
   // Las cuatro fichas: su backend versiona y nunca sobrescribe (#18). Se sabe
   // aqui y no por el catalogo porque es una propiedad de la operacion, no del
@@ -501,6 +537,13 @@ function Bloques({
     });
     escritura.fijarFilas(seleccionable.tabla, filas);
   };
+
+  /* El borrador sube a quien pide los datos, cuando la lectura depende de el.
+     El efecto se dispara **solo cuando el borrador cambia de verdad**: es un
+     estado de `useEscritura`, asi que su identidad no cambia entre dibujos. */
+  useEffect(() => {
+    alCambiarBorrador?.(escritura.borrador);
+  }, [escritura.borrador, alCambiarBorrador]);
 
   // Guardado el acto, lo elegido deja de estarlo: la escritura ya vacio sus
   // filas, y dejar las casillas marcadas diria que aquello sigue por dar de baja.
@@ -637,8 +680,11 @@ function Bloques({
 
       {estado === 'sin-registro' && (
         <Aviso
-          titulo="Elige un registro para abrirlo"
-          detalle={`Esta pantalla abre un registro por su «${faltaRegistro}». Búscalo arriba, o pega el enlace de la ficha: el registro abierto va en la dirección, así que ese enlace se puede compartir.`}
+          titulo={faltaFiltro?.titulo ?? 'Elige un registro para abrirlo'}
+          detalle={
+            faltaFiltro?.detalle ??
+            `Esta pantalla abre un registro por su «${faltaRegistro}». Búscalo arriba, o pega el enlace de la ficha: el registro abierto va en la dirección, así que ese enlace se puede compartir.`
+          }
         />
       )}
 

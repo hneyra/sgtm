@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render } from '@testing-library/react';
 import type { RenderResult } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
-import { ProveedorDeEjercicio } from '../app/ejercicio';
+import { ProveedorDeEjercicio, useEjercicio } from '../app/ejercicio';
 import { ProveedorDePreferencias } from '../app/preferencias';
 import { ProveedorDeSesion } from '../app/sesion/ProveedorDeSesion';
 import { Shell } from '../app/Shell';
@@ -53,6 +53,7 @@ export function montarEnRutas(
       <ProveedorDeSesion>
         <ProveedorDeEjercicio>
           <ProveedorDePreferencias>
+            <PuenteDeEjercicio />
             <MemoryRouter initialEntries={[...rutas]} initialIndex={rutas.length - 1}>
               <PuenteDeNavegacion />
               <Routes>
@@ -89,4 +90,27 @@ function PuenteDeNavegacion() {
 export function volverAtras(): void {
   if (navegarDelMontaje === undefined) throw new Error('No hay ningun montaje al que volver.');
   act(() => navegarDelMontaje?.(-1));
+}
+
+/** El `adoptar` del ejercicio de trabajo del montaje, para {@link cambiarEjercicio}. */
+let adoptarDelMontaje: ((respuesta: unknown) => unknown) | undefined;
+
+/**
+ * Deja a la vista de la prueba el unico camino que cambia el ejercicio de
+ * trabajo.
+ *
+ * El ejercicio es global a la sesion y lo cambia el `PUT` de «Cambiar el año de
+ * trabajo», en otra pantalla: desde una prueba de **esta** pantalla no hay forma
+ * de recorrer ese camino sin desmontarla, y desmontarla se lleva por delante
+ * justamente lo que hay que comprobar que se vacia. No dibuja nada.
+ */
+function PuenteDeEjercicio() {
+  adoptarDelMontaje = useEjercicio().adoptar;
+  return null;
+}
+
+/** Cambia el ejercicio de trabajo del montaje, como lo haria el `PUT` de la sesion. */
+export function cambiarEjercicio(ejercicio: number): void {
+  if (adoptarDelMontaje === undefined) throw new Error('No hay ningun montaje que cambiar.');
+  act(() => void adoptarDelMontaje?.({ ejercicioDeTrabajo: ejercicio }));
 }

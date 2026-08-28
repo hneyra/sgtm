@@ -6,7 +6,12 @@ import { OPCIONES_CONECTADAS } from '../conexiones';
 import { permisosDelClaim, puedeEscribir, puedeVer } from '../../app/sesion/permisos';
 import { montarEnRuta } from '../../pruebas/montar';
 import { SIN_DATO } from '../seguridad/listado';
-import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pruebas/acciones';
+import {
+  motivoDeLaPrimaria,
+  primariaApagada,
+  primariaDeLaPantalla,
+  primariaEncendida,
+} from '../../pruebas/acciones';
 
 /**
  * Rentas · Registro (#73): el modulo que mas escribe.
@@ -50,11 +55,20 @@ const LAS_QUE_ESCRIBEN_SIN_DECLARAR: readonly string[] = [
   'predial-individual',
   'predial-masivo',
   'transferencia-predio',
-  'alcabala',
   'vehicular-calculo',
   'transferencia-vehiculo',
-  'espectaculos',
 ];
+
+/**
+ * Y las dos cuya **primaria no es un acto**: «Imprimir liquidación» (#337).
+ *
+ * Escriben en el contrato y tampoco declaran, pero la ultima accion de su
+ * catalogo —que es la primaria (FRO-03 §5)— imprime. Contarle a quien atiende
+ * que «registre el acto por el procedimiento actual» debajo de un boton de
+ * imprimir es regañarle por algo que no estaba haciendo, y eso pasaba en 50 de
+ * las 134 pantallas. La primaria sigue apagada; lo que se quita es la franja.
+ */
+const LAS_DE_SALIDA: readonly string[] = ['alcabala', 'espectaculos'];
 
 /** Las dos que **si** declaran su lista blanca, y por tanto guardan de verdad. */
 const LAS_DECLARADAS: readonly string[] = ['alta-deuda', 'baja-deuda'];
@@ -86,6 +100,22 @@ describe('ningun acto del modulo promete lo que no puede', () => {
         'data-causa',
         'sin-declaracion',
       );
+
+      montada.unmount();
+    },
+  );
+
+  it.each(LAS_DE_SALIDA)(
+    '%s imprime: la primaria esta apagada y **sin** franja',
+    async (ranura) => {
+      const montada = montarEnRuta(`/rentas-registro/${ranura}`);
+      await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+      // Apagada con `disabled`, no con `aria-disabled`: no hay ningun motivo que
+      // leer al lado, asi que tampoco hace falta que reciba el foco.
+      expect(primariaDeLaPantalla()).toBeDisabled();
+      expect(motivoDeLaPrimaria()).toBeUndefined();
+      expect(document.getElementById('sgtm-motivo-de-la-accion')?.textContent).toBe('');
 
       montada.unmount();
     },

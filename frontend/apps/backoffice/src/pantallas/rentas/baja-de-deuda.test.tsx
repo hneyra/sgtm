@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
-import { montarEnRuta, montarEnRutas, volverAtras } from '../../pruebas/montar';
+import { cambiarEjercicio, montarEnRuta, montarEnRutas, volverAtras } from '../../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pruebas/acciones';
 
 /**
@@ -38,6 +38,22 @@ const OTRA_BAJA = '/rentas-registro/baja-deuda?codContribuyente=00000025673';
 
 const original = globalThis.fetch;
 let peticiones: { metodo: string; cuerpo: string }[] = [];
+/** Las URL con las que se leyo la deuda. Lo que mira la prueba de la fecha de corte. */
+let lecturasDeDeuda: string[] = [];
+/**
+ * Si el padron ya cambio debajo.
+ *
+ * Se dispara a mano y no contando lecturas: **la pantalla lee mas de una vez por
+ * motivos legitimos** —escribir la fecha de la resolucion vuelve a pedir la deuda
+ * a esa fecha (#337)—, asi que «la segunda lectura» dejo de significar «alguien
+ * pago mientras tanto», que es lo que la prueba quiere simular.
+ */
+let cambiadaDebajo = false;
+
+/** Alguien pago en la ventanilla de al lado: desde aqui, la lectura trae lo otro. */
+const laDeudaCambia = (): void => {
+  cambiadaDebajo = true;
+};
 
 /**
  * Una obligacion tal como la publica `ObligacionConDeudaResource` (#22).
@@ -105,19 +121,20 @@ const pagina = (contenido: readonly Readonly<Record<string, unknown>>[]) => ({
  */
 function laApiResponde(
   deuda?: readonly Readonly<Record<string, unknown>>[],
-  /** Lo que sirve **a partir de la segunda lectura**, si la deuda cambia debajo. */
+  /** Lo que sirve **desde que alguien llama a {@link laDeudaCambia}**, no antes. */
   despues?: readonly Readonly<Record<string, unknown>>[],
 ): void {
   peticiones = [];
-  let lecturas = 0;
+  lecturasDeDeuda = [];
+  cambiadaDebajo = false;
   const proxy = globalThis.fetch;
   globalThis.fetch = (entrada, opciones) => {
     const metodo = opciones?.method ?? 'GET';
     const url = typeof entrada === 'string' ? entrada : String(entrada);
     if (metodo === 'GET') {
+      if (url.includes('/consultas/deuda')) lecturasDeDeuda.push(url);
       if (deuda !== undefined && url.includes('/consultas/deuda')) {
-        lecturas += 1;
-        const servida = lecturas > 1 ? (despues ?? deuda) : deuda;
+        const servida = cambiadaDebajo ? (despues ?? deuda) : deuda;
         return Promise.resolve(
           new Response(JSON.stringify(pagina(servida)), {
             status: 200,
@@ -143,6 +160,7 @@ function laApiResponde(
 /** Y la lectura que **no se puede hacer**: 403 sobre `GET /consultas/deuda`. */
 function laDeudaNoSeDejaLeer(): void {
   peticiones = [];
+  lecturasDeDeuda = [];
   const proxy = globalThis.fetch;
   globalThis.fetch = (entrada, opciones) => {
     const url = typeof entrada === 'string' ? entrada : String(entrada);
@@ -340,6 +358,7 @@ describe('la tabla elige sus filas, y la banda las cuenta sin sumarlas', () => {
     // Salir de la pestaña y volver relee la deuda —es lo que hace el cliente de
     // consultas al recuperar la visibilidad—, y es justo cuando el padron puede
     // haber cambiado: alguien pago en la ventanilla de al lado.
+    laDeudaCambia();
     volverALaPestana();
 
     // La tabla trae ya la otra obligacion…
@@ -362,6 +381,30 @@ describe('la tabla elige sus filas, y la banda las cuenta sin sumarlas', () => {
 
     await waitFor(() => expect(banda()).toContain('0 cuotas elegidas'));
     // Y la accion vuelve a pedir que se elija: no queda nada capturado detras.
+    expect(motivoDeLaPrimaria()).toMatch(/Elige en la tabla la cuota/);
+  });
+
+  /**
+   * **Y cambiar el año de trabajo tambien lo vacia** (#337).
+   *
+   * El ejercicio es global a la sesion: cambiarlo cambia lo que muestran las doce
+   * modulos, esta tabla incluida. La cuota que estaba marcada era del ejercicio
+   * anterior, y dejarla marcada sobre el padron del ano nuevo es la misma clase
+   * de defecto que el boton Atras: lo que viaja no es lo que se esta mirando.
+   * `Pantalla` ya lo vaciaba —el efecto depende de `trabajo.ejercicio`— y nada lo
+   * comprobaba: quitar esa dependencia dejaba las 767 en verde.
+   */
+  it('cambiar el año de trabajo vacía lo elegido', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta(BAJA);
+
+    const [primera] = await casillas();
+    await usuario.click(primera as HTMLInputElement);
+    expect(banda()).toContain('1 cuota elegida');
+
+    cambiarEjercicio(2025);
+
+    await waitFor(() => expect(banda()).toContain('0 cuotas elegidas'));
     expect(motivoDeLaPrimaria()).toMatch(/Elige en la tabla la cuota/);
   });
 });
@@ -397,26 +440,43 @@ describe('el motivo por el que todavia no se puede dar de baja se ve', () => {
   });
 
   /**
-   * Y un tributo **sin codigo en el dominio** tampoco (`V2`: PREDIAL, ARBITRIO,
-   * VEHICULAR, ALCABALA, ESPECTACULOS, ANUNCIOS, JUEGOS).
+   * **Una multa si se puede dar de baja**, y ese rechazo era falso (#337).
    *
-   * «MULTA ADMINISTRATIVA» no es ninguno. `tributoDe` devolvia `undefined`, el
-   * campo no viajaba y `tributo` es obligatorio en `PeticionDeMovimiento`: la
-   * primaria se habilitaba, alguien confirmaba un acto irreversible y el 422
-   * llegaba despues.
+   * La pantalla apagaba la accion diciendo que «el sistema todavía no tiene un
+   * código para ese tributo», y lo tiene: `RegistrarPapeleta` asienta
+   * `MULTA_TRANSITO` y `MULTA_ADMINISTRATIVA`, la columna `tributo` del libro es
+   * `varchar` sin `CHECK` y `PeticionDeMovimiento.tributo` es un `String` libre
+   * que `ClaveDeSaldo` solo normaliza. Lo que sobraba era traducir un tributo
+   * que **ya viene del backend** por el diccionario del desplegable de otra
+   * pantalla. El motivo falso dejaba sin dar de baja toda la deuda por multas.
    */
-  it('un tributo sin código en el dominio se rechaza, nombrándolo', async () => {
+  it('una multa se puede dar de baja: su tributo viaja tal cual', async () => {
     const usuario = userEvent.setup();
+    laApiResponde([
+      obligacion({
+        tributo: 'MULTA ADMINISTRATIVA',
+        ejercicio: 2023,
+        periodoDesde: 1,
+        periodoHasta: 1,
+        insoluto: '350.00',
+        interes: '61.25',
+      }),
+    ]);
     montarEnRuta(BAJA);
 
-    // La cuarta fila del juego de datos es «2023 · 1 · MULTA ADMINISTRATIVA».
-    const filas = await casillas();
-    await usuario.click(filas[3] as HTMLInputElement);
+    const [primera] = await casillas();
+    await usuario.click(primera as HTMLInputElement);
+    await sustento(usuario);
+    await usuario.type(await observacion(), 'Resolución que deja sin efecto la multa.');
 
-    const motivo = motivoDeLaPrimaria() ?? '';
-    expect(motivo).toContain('MULTA ADMINISTRATIVA');
-    expect(motivo).toMatch(/no tiene un código para ese tributo/);
-    primariaApagada();
+    // Ni motivo que lo impida, ni accion apagada.
+    await waitFor(() => primariaEncendida(screen.getByRole('button', { name: 'Dar de baja (1)' })));
+    await usuario.click(screen.getByRole('button', { name: 'Dar de baja (1)' }));
+    await usuario.click(await screen.findByRole('button', { name: /^Confirmar/ }));
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    // Verbatim: es el vocabulario del libro, no el del prototipo.
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}').tributo).toBe('MULTA ADMINISTRATIVA');
   });
 
   it('con dos filas elegidas dice que la baja registra una obligacion por acto', async () => {
@@ -466,6 +526,9 @@ describe('el cuerpo lleva la obligacion entera, y solo lo que la lista blanca de
     await sustento(usuario);
     await usuario.type(await observacion(), 'Prescripción declarada de oficio.');
 
+    // Escribir la fecha de la resolución **vuelve a leer la deuda a esa fecha**
+    // (ver la prueba de la fecha de corte): se espera a que la lectura vuelva.
+    await waitFor(() => primariaEncendida(screen.getByRole('button', { name: 'Dar de baja (1)' })));
     await usuario.click(screen.getByRole('button', { name: 'Dar de baja (1)' }));
     // Dar de baja no se deshace: se confirma diciendo que va a pasar (regla 4).
     const aviso = await screen.findByText(/y eso no se deshace/);
@@ -490,6 +553,10 @@ describe('el cuerpo lleva la obligacion entera, y solo lo que la lista blanca de
       // dibujada llevaria «1,842.60», y `new BigDecimal` con la coma lanza.
       insoluto: '1842.60',
       interes: '84.12',
+      // **Y la fase.** Sin ella la baja resuelve a ORDINARIA y `proyectar` hace
+      // `DO UPDATE SET fase = EXCLUDED.fase`: una baja parcial sobre deuda en
+      // coactiva la devolvia a la fase ordinaria en silencio.
+      fase: 'ORDINARIA',
       // El sustento documental: sin el, `MovimientoDeDeuda` no se construye.
       documentoOrigen: 'RGAT-0244-2026-MPS',
       fechaValor: '2026-08-04',
@@ -502,6 +569,100 @@ describe('el cuerpo lleva la obligacion entera, y solo lo que la lista blanca de
     // lo rehace el servidor (RNF-083).
     expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).not.toHaveProperty('unidad');
     expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).not.toHaveProperty('totalS');
+  });
+});
+
+/**
+ * **La deuda se lee a la fecha del acto** (#337, regla 9).
+ *
+ * `fechaValor` de la baja es la fecha de la resolucion, y el backend valida la
+ * baja contra `deudaActualizadaA(fechaValor)`: manda el insoluto y el interes que
+ * la pantalla eligio y los compara con los que el calcula **a esa fecha**. Con la
+ * tabla leida a hoy —que es lo que pasaba, porque la pantalla no mandaba fecha de
+ * corte— y una resolucion anterior, el interes que viaja es mayor, y la baja
+ * volvia como `BajaMayorQueLaDeuda` (422) despues de confirmar un acto que no se
+ * deshace.
+ */
+describe('lo que se ve y lo que se manda son de la misma fecha', () => {
+  it('con la fecha de resolución escrita, la deuda se vuelve a leer a esa fecha', async () => {
+    const usuario = userEvent.setup();
+    laApiResponde([CUOTA_UNICA]);
+    montarEnRuta(BAJA);
+
+    await casillas();
+    // La primera lectura es la de abrir la pantalla: sin fecha, la de hoy.
+    expect(lecturasDeDeuda[0]).not.toContain('fechaDeCorte');
+
+    const fecha = screen.getByLabelText('Fecha de resolución');
+    await usuario.clear(fecha);
+    await usuario.type(fecha, '2026-08-04');
+
+    await waitFor(() => {
+      const ultima = lecturasDeDeuda[lecturasDeDeuda.length - 1] ?? '';
+      expect(ultima).toContain('fechaDeCorte=2026-08-04');
+    });
+  });
+
+  /**
+   * Y una fecha a medias no se manda: el campo se teclea caracter a caracter, y
+   * «2026-0» es un 400 por cada pulsacion.
+   */
+  it('una fecha incompleta no viaja como fecha de corte', async () => {
+    const usuario = userEvent.setup();
+    laApiResponde([CUOTA_UNICA]);
+    montarEnRuta(BAJA);
+
+    await casillas();
+    const fecha = screen.getByLabelText('Fecha de resolución');
+    await usuario.clear(fecha);
+    await usuario.type(fecha, '2026-08');
+
+    // Ninguna lectura sale con una fecha que `LocalDate` no sabria leer.
+    for (const url of lecturasDeDeuda) {
+      expect(url).not.toMatch(/fechaDeCorte=(?!\d{4}-\d{2}-\d{2}(&|$))/);
+    }
+  });
+});
+
+/**
+ * **Sin contribuyente no hay deuda que leer** (#337).
+ *
+ * `codContribuyente` es `@RequestParam` obligatorio de `GET /consultas/deuda`:
+ * abrir la pantalla sin buscar a nadie es un 400 contra el backend real. El proxy
+ * lo tapa —contesta igual con filtro o sin el—, asi que el defecto solo se ve al
+ * conectar; lo que se comprueba aqui es que **la peticion no sale** y que lo que
+ * se dice es lo que hay que hacer.
+ */
+describe('la lectura no se dispara sin el filtro que su operacion exige', () => {
+  it('sin contribuyente, ni petición ni tabla muda: se pide que se busque', async () => {
+    laApiResponde([CUOTA_UNICA]);
+    montarEnRuta('/rentas-registro/baja-deuda');
+
+    expect(await screen.findByText('Busca un contribuyente para ver su deuda')).toBeInTheDocument();
+    expect(lecturasDeDeuda).toEqual([]);
+  });
+});
+
+/**
+ * **La primaria apagada no abre la confirmación de un acto irreversible** (#337).
+ *
+ * Se apaga con `aria-disabled` y no con `disabled` —para que su motivo se pueda
+ * leer con teclado y con lector—, y eso deja el `onClick` vivo: sin la guarda,
+ * pulsarla abria «vas a dar de baja sobre 0 cuotas, y eso no se deshace», que
+ * despues no hace nada. Una confirmacion de un acto que no va a ocurrir es peor
+ * que ninguna.
+ */
+describe('la primaria apagada no promete nada al pulsarla', () => {
+  it('pulsar la primaria con motivo no abre la confirmación', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta(BAJA);
+
+    const primaria = await screen.findByRole('button', { name: 'Dar de baja (0)' });
+    primariaApagada(primaria);
+    await usuario.click(primaria);
+
+    expect(screen.queryByText(/y eso no se deshace/)).not.toBeInTheDocument();
+    expect(peticiones).toEqual([]);
   });
 });
 

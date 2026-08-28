@@ -519,6 +519,84 @@ describe('un importe con formato de pantalla, y un guion, no viajan', () => {
     expect(cuerpo['insoluto']).toBe(viaja);
   });
 
+  /**
+   * **Y la guarda vale igual en una columna de tabla**, que es de donde vino el
+   * problema (#337).
+   *
+   * Esta mitad no estaba probada por separado: en «Baja de deuda» la tapa
+   * `faltaEnLaCuota`, que apaga la accion antes de que nadie pueda enviar, asi
+   * que quitarle el `importe: true` a las dos columnas de la baja dejaba la
+   * bateria entera en verde. Son dos defensas distintas —una explica, la otra
+   * impide— y hay que poder perder una sin perder las dos: aqui se comprueba la
+   * que impide, sobre una tabla que **no** tiene la que explica.
+   */
+  it('una columna de importe con separador de miles no viaja, aunque nadie lo explique', async () => {
+    laApiResponde(201);
+    const cliente = clienteDePruebas();
+    const { result } = renderHook(
+      () =>
+        useEscritura(
+          'registrar_ficha_urbana',
+          {},
+          {
+            tablas: {
+              // `plana` como la de la baja: sus columnas se despliegan en el
+              // nivel superior del cuerpo.
+              cuotas: {
+                campo: 'cuotas',
+                plana: true,
+                columnas: {
+                  insolutoS: { campo: 'insoluto', importe: true },
+                  ano: { campo: 'ano' },
+                },
+              },
+            },
+          },
+        ),
+      {
+        wrapper: ({ children }: { readonly children: ReactNode }) => (
+          <QueryClientProvider client={cliente}>{children}</QueryClientProvider>
+        ),
+      },
+    );
+
+    // Lo que lleva de verdad una celda dibujada, si alguien la copia al cuerpo.
+    act(() => result.current.fijarFilas('cuotas', [{ insolutoS: '1,842.60', ano: '2026' }]));
+    act(() => result.current.fijarObservacion('Baja de prueba.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    // `new BigDecimal("1,842.60")` **lanza**: lo que el backend no puede leer no
+    // sale. Y el resto de la fila si viaja, para que la prueba no pase por no
+    // haber mandado nada.
+    expect(cuerpo).not.toHaveProperty('insoluto');
+    expect(cuerpo['ano']).toBe('2026');
+  });
+
+  /**
+   * **Y el alta lo declara igual que la baja** (#337): son los dos lados del
+   * mismo movimiento, y sus cuatro importes los teclea quien atiende —donde
+   * «1,842.60» no es un caso raro, es como se escribe—. Sin la guarda, el 422
+   * llega despues de pulsar «Dar de alta».
+   */
+  it('un importe tecleado con separador de miles no viaja en el alta de deuda', async () => {
+    const usuario = userEvent.setup();
+    laApiResponde(201);
+    montarEnRuta(ALTA);
+
+    await usuario.type(await screen.findByLabelText('Insoluto (S/)'), '1,842.60');
+    await usuario.type(await screen.findByLabelText('Reajuste (S/)'), '10.00');
+    await usuario.type(await observacion(), 'Determinación de fiscalización.');
+    await usuario.click(await screen.findByRole('button', { name: 'Dar de alta' }));
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo).not.toHaveProperty('insoluto');
+    // Y el que si es una cifra viaja: la guarda es por campo, no por formulario.
+    expect(cuerpo['reajuste']).toBe('10.00');
+  });
+
   it('y el guion tampoco viaja en un campo de texto: no es un documento llamado «—»', async () => {
     laApiResponde(201);
     const { result } = conImporte();

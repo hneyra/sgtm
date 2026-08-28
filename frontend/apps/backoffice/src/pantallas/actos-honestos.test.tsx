@@ -58,15 +58,28 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
   it('cada una de las 134 cae en su casilla, y las cuentas son las que son', async () => {
     const pantallas = await todasLasPantallas();
     const declaradas = new Set(OPCIONES_QUE_ESCRIBEN);
-    const porCausa = { declarada: 0, 'sin-backend': 0, 'sin-declaracion': 0 };
+    const porCausa = { declarada: 0, salida: 0, 'sin-backend': 0, 'sin-declaracion': 0 };
 
-    for (const opcion of Object.keys(pantallas)) {
-      const impedimento = impedimentoDelActo(opcion);
+    for (const [opcion, estructura] of Object.entries(pantallas)) {
+      const acciones = estructura.acciones ?? [];
+      const impedimento = impedimentoDelActo(opcion, acciones);
       if (impedimento === undefined) {
-        // Sin impedimento **solo** si la opcion declaro su escritura: es la
-        // unica salida honesta de la funcion.
-        expect(declaradas.has(opcion), `«${opcion}» sin impedimento y sin declarar`).toBe(true);
-        porCausa.declarada += 1;
+        /* Sin impedimento **solo** por una de dos razones, y las dos son
+           honestas: la opcion declaro su escritura, o su primaria no guarda nada
+           —imprime, exporta, limpia, abre—. Cualquier otra seria la funcion
+           callandose. */
+        if (declaradas.has(opcion)) {
+          porCausa.declarada += 1;
+          continue;
+        }
+        const primaria = acciones[acciones.length - 1] ?? '';
+        expect(
+          /^(imprimir|impresi|exportar|excel|pdf|descargar|limpiar|ver\b|abrir|visualizar|previsualizar|consultar|buscar)/i.test(
+            primaria,
+          ),
+          `«${opcion}» sin impedimento, sin declarar y con primaria «${primaria}»`,
+        ).toBe(true);
+        porCausa.salida += 1;
         continue;
       }
       porCausa[impedimento.causa] += 1;
@@ -80,21 +93,58 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
        funcion: salen de contar el catalogo, y cambian cuando cambia el catalogo
        o cuando una opcion declara su escritura, que son exactamente los dos
        cambios sobre los que hay que llamar la atencion. */
-    expect(porCausa).toEqual({ declarada: 6, 'sin-backend': 80, 'sin-declaracion': 48 });
+    expect(porCausa).toEqual({
+      declarada: 6,
+      salida: 50,
+      'sin-backend': 41,
+      'sin-declaracion': 37,
+    });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);
   });
 
   it('una opcion testigo por causa, nombrada: los recuentos solos no dicen cual', () => {
-    // Lectura pura: no hay a donde guardar.
-    expect(impedimentoDelActo('consulta_deuda')?.causa).toBe('sin-backend');
+    // Lectura pura, con una primaria que **si** es un acto: «Registrar pago».
+    expect(impedimentoDelActo('cuenta_corriente', ['Exportar', 'Registrar pago'])?.causa).toBe(
+      'sin-backend',
+    );
     // Escribe en el contrato y no ha declarado su cuerpo.
-    expect(impedimentoDelActo('caja_tributaria')?.causa).toBe('sin-declaracion');
+    expect(impedimentoDelActo('caja_tributaria', ['Cobrar'])?.causa).toBe('sin-declaracion');
     // Y declarada: sin impedimento ninguno.
-    expect(impedimentoDelActo('notificacion_valores')).toBeUndefined();
+    expect(impedimentoDelActo('notificacion_valores', ['Registrar notificación'])).toBeUndefined();
     // La misma pareja, comprobada por el otro lado: la causa es la del verbo.
     expect(escribe(operacionDe('caja_tributaria') ?? 'inicio')).toBe(true);
-    expect(escribe(operacionDe('consulta_deuda') ?? 'inicio')).toBe(false);
+    expect(escribe(operacionDe('cuenta_corriente') ?? 'inicio')).toBe(false);
+  });
+
+  /**
+   * **La franja no regana donde no hay ningun acto pendiente** (#337).
+   *
+   * `impedimentoDelActo` miraba solo el verbo de la operacion, asi que en la
+   * mitad del sistema —50 de las 134— decia «registra el acto por el
+   * procedimiento actual y avísale a sistemas» debajo de un boton que dice
+   * «Imprimir liquidación». Ahi no hay acto que registrar por el procedimiento
+   * actual: lo que hay es una consulta y su impresion. Una advertencia que
+   * aparece donde no advierte nada es la forma mas rapida de que dejen de leerse
+   * las que si dicen algo.
+   *
+   * Se decide **por el catalogo** —la etiqueta de la ultima accion, que es la
+   * primaria (FRO-03 §5)— y no por una lista de pantallas: una lista hay que
+   * mantenerla al dia contra 134 opciones y empieza a mentir en cuanto una
+   * cambie su primaria.
+   */
+  it.each([
+    { primaria: 'Imprimir liquidación', hay: false },
+    { primaria: 'Exportar a Excel', hay: false },
+    { primaria: 'Limpiar campos', hay: false },
+    { primaria: 'Ver ficha', hay: false },
+    // Y los verbos que si son actos: la franja se queda donde hace falta.
+    { primaria: 'Registrar pago', hay: true },
+    { primaria: 'Dar de baja', hay: true },
+    { primaria: 'Emitir', hay: true },
+    { primaria: 'Cobrar', hay: true },
+  ])('«$primaria»: ¿franja? $hay', ({ primaria, hay }) => {
+    expect(impedimentoDelActo('cuenta_corriente', ['Nuevo', primaria]) !== undefined).toBe(hay);
   });
 });
 
@@ -134,6 +184,23 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
     // Lo que la apaga es la observacion que falta (regla 10), no el sistema.
     expect(motivoDeLaPrimaria()).toMatch(/Falta la observación/);
     expect(motivoDeLaPrimaria()).not.toMatch(/avísale a sistemas/);
+    expect(document.getElementById('sgtm-motivo-de-la-accion')).not.toHaveAttribute('data-causa');
+  });
+
+  /**
+   * Y tampoco donde la primaria **no guarda porque no le toca** (#337): la
+   * pantalla de salida, con su boton de imprimir.
+   */
+  it('una pantalla de consulta con primaria de salida no lleva franja', async () => {
+    montarEnRuta('/consultas/consulta-deuda?codContribuyente=00000006550');
+    await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+    // La primaria del catalogo es «Imprimir liquidación»: no hay ningun acto
+    // pendiente que registrar por el procedimiento actual.
+    expect(
+      await screen.findByRole('button', { name: 'Imprimir liquidación de deuda' }),
+    ).toBeInTheDocument();
+    expect(document.getElementById('sgtm-motivo-de-la-accion')?.textContent).toBe('');
     expect(document.getElementById('sgtm-motivo-de-la-accion')).not.toHaveAttribute('data-causa');
   });
 

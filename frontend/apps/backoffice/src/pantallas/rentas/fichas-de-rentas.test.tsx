@@ -271,7 +271,9 @@ describe('el indice sustituye a las pestanas, y solo donde se declara', () => {
     montarEnRuta(VEHICULO);
     const indice = await screen.findByRole('navigation', { name: 'Secciones de la pantalla' });
 
-    const tercera = within(indice).getByRole('button', { name: 'Titular del vehículo' });
+    // «Ir a …»: el rotulo a secas es tambien el de la cabecera plegable de la
+    // seccion, y dos botones con el mismo nombre accesible no se distinguen.
+    const tercera = within(indice).getByRole('button', { name: 'Ir a Titular del vehículo' });
     await usuario.click(tercera);
 
     const ancla = document.getElementById('sgtm-seccion-0-2');

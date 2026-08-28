@@ -63,6 +63,19 @@ const SIN_BACKEND = `Aquí todavía no se puede guardar nada: lo que hay es de c
 const SIN_DECLARACION = `Lo que se escriba aquí todavía no se guarda: la pantalla aún no manda estos campos. ${SALIDA}`;
 
 /**
+ * Acciones que **sacan algo de la pantalla en vez de guardar algo en el
+ * sistema**: imprimir, exportar, limpiar el formulario, abrir lo que ya existe.
+ *
+ * Se mira la etiqueta de la accion y no la opcion, por lo mismo que
+ * `esIrreversible`: es lo que el usuario lee, y es lo que el catalogo dibuja. La
+ * alternativa —una lista de pantallas de salida— seria una lista que alguien
+ * tiene que mantener al dia contra 134 opciones, y que empieza a mentir el dia
+ * que una de ellas cambie su primaria.
+ */
+const DE_SALIDA =
+  /^(imprimir|impresi|exportar|excel|pdf|descargar|limpiar|ver\b|abrir|visualizar|previsualizar|consultar|buscar)/i;
+
+/**
  * Por que la accion primaria de esta opcion no puede guardar todavia, o nada si
  * puede.
  *
@@ -70,9 +83,30 @@ const SIN_DECLARACION = `Lo que se escriba aquí todavía no se guarda: la panta
  * funcionan igual que siempre —la observacion sigue siendo la condicion de
  * guardado, y `exigir` puede pedir mas—, y lo que las apaga lo dice
  * `Escritura.motivo`, no esto.
+ *
+ * **Y tambien cuando la primaria es de salida**, que es lo que faltaba: en
+ * «Consulta de deuda» la ultima accion es «Imprimir liquidación», y la franja
+ * decia «registra el acto por el procedimiento actual y avísale a sistemas» al
+ * lado de un boton que no registra ningun acto —no hay ninguno pendiente que
+ * llevar a papel—. Eso pasaba en medio centenar de pantallas de consulta, y una
+ * advertencia que aparece donde no hay nada que advertir es la forma mas rapida
+ * de que dejen de leerse las que si dicen algo. No se sustituye por un texto
+ * neutro: un texto neutro seguiria ocupando la franja de la primaria, que es el
+ * sitio donde se lee **por que no se puede guardar**, y ahi no hay nada que
+ * responder. La franja se queda vacia, que es como esta en las pantallas cuya
+ * primaria funciona.
+ *
+ * La primaria es **la ultima accion** (FRO-03 §5), la misma que dibuja
+ * `BarraDeAcciones`.
  */
-export function impedimentoDelActo(opcion: string): ImpedimentoDelActo | undefined {
+export function impedimentoDelActo(
+  opcion: string,
+  /** Las acciones del catalogo de esa pantalla, en su orden. */
+  acciones: readonly string[] = [],
+): ImpedimentoDelActo | undefined {
   if (escrituraDe(opcion) !== undefined) return undefined;
+  const primaria = acciones[acciones.length - 1];
+  if (primaria !== undefined && DE_SALIDA.test(primaria.trim())) return undefined;
   const operacion = operacionDe(opcion);
   if (operacion === undefined || !escribe(operacion)) {
     return { causa: 'sin-backend', detalle: SIN_BACKEND };

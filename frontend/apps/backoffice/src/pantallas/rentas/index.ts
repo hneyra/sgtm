@@ -315,8 +315,37 @@ const arbitrios = definirConexion({
  */
 const baja_deuda = definirConexion({
   operacion: 'consulta_deuda',
-  parametros: ({ busqueda }) => parametrosDeBusqueda('consulta_deuda', undefined, busqueda),
+  /* **La deuda se lee a la fecha del acto, no a la de hoy** (regla 9, y #337).
+     `fechaValor` de la baja es la fecha de la resolucion, y el backend valida
+     `deudaActualizadaA(fechaValor)` contra el insoluto y el interes que se
+     mandan (`RegistrarMovimientoDeDeuda`). Con la tabla leida a hoy —que es lo
+     que pasaba, porque la pantalla no mandaba fecha de corte— y una resolucion
+     anterior —que es lo normal: primero se resuelve y despues se registra—, el
+     interes que viaja es **mayor** que el que el backend calcula a esa fecha, y
+     la baja vuelve como 422 despues de confirmar un acto irreversible.
+     Mandando la fecha, lo que se ve y lo que se manda son de la misma fecha. */
+  parametros: ({ busqueda, borrador }) => {
+    const fechaDeCorte = (borrador['fechaDeResolucion'] ?? '').trim();
+    return {
+      ...parametrosDeBusqueda('consulta_deuda', undefined, busqueda),
+      // Solo cuando esta escrita entera: el campo se teclea, y una fecha a
+      // medias («2026-0») es un 400 por cada pulsacion.
+      ...(FECHA_ISO.test(fechaDeCorte) ? { fechaDeCorte } : {}),
+    };
+  },
   leer: (cuerpo) => leerPaginado(cuerpo, 'la deuda del contribuyente'),
+  /* Sin contribuyente no hay deuda que leer: `codContribuyente` es
+     `@RequestParam` obligatorio de `GET /consultas/deuda`, asi que abrir la
+     pantalla sin buscar a nadie es un 400 contra el backend real —el proxy lo
+     tapa porque contesta igual—. Lo que hay que decir ahi no es el 400. */
+  exige: [
+    {
+      parametro: 'codContribuyente',
+      titulo: 'Busca un contribuyente para ver su deuda',
+      detalle:
+        'La baja se registra sobre la cuenta corriente de un contribuyente: escribe su código arriba y pulsa «Buscar». Hasta entonces no hay ninguna cuota que elegir.',
+    },
+  ],
   sinPermiso: {
     titulo: 'Falta el permiso de lectura de «Consulta de deuda»',
     detalle:
@@ -360,6 +389,12 @@ const baja_deuda = definirConexion({
           interesS: leida.interes,
           predioId: identificador(obligacion['predioId']),
           vehiculoId: identificador(obligacion['vehiculoId']),
+          /* Y la fase, que tampoco dibuja ninguna columna. Sin ella la baja
+             resuelve a `ORDINARIA` y `SaldoRepositoryJdbc.proyectar` hace
+             `DO UPDATE SET fase = EXCLUDED.fase`: una baja parcial sobre deuda
+             en COACTIVA o en CONVENIO la devolvia a la fase ordinaria sin que
+             nada lo dijera. */
+          fase: leida.fase,
         };
       },
     ),
@@ -376,6 +411,9 @@ const baja_deuda = definirConexion({
  */
 const identificador = (valor: unknown): string =>
   typeof valor === 'number' ? String(valor) : typeof valor === 'string' ? valor : '';
+
+/** Una fecha entera, como la escribe un `input[type=date]` y como la lee `LocalDate`. */
+const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Las opciones de Rentas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_RENTAS: Readonly<Record<string, Conexion>> = {
