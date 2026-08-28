@@ -359,6 +359,67 @@ const OPERACIONES_ADICIONALES = {
         ' licencia lo pone el sistema desde su correlativo: no viene en el cuerpo.',
     },
   ],
+  // `fue_edificacion` declara «GET /api/v1/licencias/edificacion» como su
+  // endpoint —la grilla del Formulario Único de Edificaciones—; el FUE se
+  // presenta, se completa POR PARTES y sólo entonces se emite (#48, RF-113), y
+  // cada uno de esos tres actos necesita su propio verbo.
+  //
+  // No hay PUT ni PATCH, y no es una omisión: las secciones del FUE se
+  // VERSIONAN —cada POST guarda la siguiente y la anterior queda entera— y la
+  // cabecera no admite UPDATE desde V43. Corregir un dato del expediente sin
+  // dejar el anterior borraría justo lo que explica una observación del
+  // evaluador.
+  //
+  // La AMPLIACIÓN no tiene verbo propio: es un FUE nuevo que nombra la licencia
+  // original, así que entra por el mismo POST de presentación (AC 3).
+  fue_edificacion: [
+    {
+      operationId: 'presentar_fue',
+      metodo: 'post',
+      titulo: 'Presentación del FUE',
+      descripcion:
+        'Da de alta el expediente del Formulario Único de Edificaciones (RF-113). El cuerpo lleva' +
+        ' el expediente, el solicitante, el tipo de trámite, la obra, la modalidad de aprobación,' +
+        ' el representante legal —opcional— y la observación del usuario, obligatoria (RNF-052).' +
+        ' Presentar NO otorga nada: no numera ninguna licencia ni comprueba ningún derecho de' +
+        ' trámite. Una ampliación o una revalidación nombran aquí la licencia original, y la' +
+        ' referencian sin sustituirla.',
+    },
+    {
+      operationId: 'completar_seccion_fue',
+      metodo: 'post',
+      ruta: '/api/v1/licencias/edificacion/{expediente}/secciones',
+      titulo: 'Sección del FUE completada',
+      descripcion:
+        'Completa una sección del FUE: TERRENO, PROYECTO, VALORIZACION, PROFESIONALES o' +
+        ' DOCUMENTOS. Se pueden completar en cualquier orden y en visitas distintas; completar una' +
+        ' que ya estaba guarda la versión siguiente y deja la anterior entera. La valorización va' +
+        ' por pisos y estructuras y NO admite importes: el valor por metro cuadrado sale del cuadro' +
+        ' de valores unitarios de edificación.',
+    },
+    {
+      operationId: 'emitir_licencia_edificacion',
+      metodo: 'post',
+      ruta: '/api/v1/licencias/edificacion/{expediente}/licencia',
+      titulo: 'Emisión de licencia de edificación',
+      descripcion:
+        'Otorga la licencia de edificación del expediente (RF-113). Sólo se emite cuando están las' +
+        ' cinco secciones obligatorias, y el error dice cuáles faltan. Sin un recibo válido de caja' +
+        ' de tasas —del titular, no anulado y por el concepto del TUPA que corresponde— no se' +
+        ' emite. El número de la licencia lo pone el sistema desde su correlativo; la vigencia' +
+        ' entra como dato del acto, porque el plazo es una cifra normativa y no se compila.',
+    },
+    {
+      operationId: 'revalidar_licencia_edificacion',
+      metodo: 'post',
+      ruta: '/api/v1/licencias/edificacion/{expediente}/revalidacion',
+      titulo: 'Revalidación de licencia de edificación',
+      descripcion:
+        'Prorroga el plazo de la licencia que el expediente de revalidación nombra. NO sustituye la' +
+        ' vigencia original: agrega el tramo siguiente, y la respuesta devuelve los dos con el acto' +
+        ' que concedió cada uno. Se cobra en caja de tasas antes, con su propio concepto del TUPA.',
+    },
+  ],
   // `ciiu` declara «GET /licencias/ciiu» como su endpoint —el catálogo—; RF-112
   // exige que sea extensible por el usuario, y extenderlo necesita su verbo.
   ciiu: [

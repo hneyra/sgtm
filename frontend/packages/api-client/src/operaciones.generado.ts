@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 151 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 155 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 151 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 155 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 151 operaciones del contrato, por su `operationId`.
+ * Las 155 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 151 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 155 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -984,6 +984,34 @@ export const OPERACIONES = {
     parametrosDeRuta: [],
     parametrosDeConsulta: ['nroExpediente', 'nroLicencia', 'nombreContribuyente', 'lugarMz', 'lugarLt', 'tipoTramite', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
+  /** Presentación del FUE — `POST /licencias/edificacion` */
+  presentar_fue: {
+    metodo: 'POST',
+    ruta: '/licencias/edificacion',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
+  /** Sección del FUE completada — `POST /licencias/edificacion/{expediente}/secciones` */
+  completar_seccion_fue: {
+    metodo: 'POST',
+    ruta: '/licencias/edificacion/{expediente}/secciones',
+    parametrosDeRuta: ['expediente'],
+    parametrosDeConsulta: [],
+  },
+  /** Emisión de licencia de edificación — `POST /licencias/edificacion/{expediente}/licencia` */
+  emitir_licencia_edificacion: {
+    metodo: 'POST',
+    ruta: '/licencias/edificacion/{expediente}/licencia',
+    parametrosDeRuta: ['expediente'],
+    parametrosDeConsulta: [],
+  },
+  /** Revalidación de licencia de edificación — `POST /licencias/edificacion/{expediente}/revalidacion` */
+  revalidar_licencia_edificacion: {
+    metodo: 'POST',
+    ruta: '/licencias/edificacion/{expediente}/revalidacion',
+    parametrosDeRuta: ['expediente'],
+    parametrosDeConsulta: [],
+  },
   /** Reporte general de licencias de edificación — `GET /licencias/edificacion/reportes/general` */
   edificacion_reporte: {
     metodo: 'GET',
@@ -1105,7 +1133,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 151 operaciones. */
+/** El `operationId` de una de las 155 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -2129,6 +2157,20 @@ export interface ParametrosPorOperacion {
     readonly ordenarPor?: string;
     readonly direccion?: string;
   };
+  /** `POST /licencias/edificacion` */
+  readonly presentar_fue: Readonly<Record<string, never>>;
+  /** `POST /licencias/edificacion/{expediente}/secciones` */
+  readonly completar_seccion_fue: {
+    readonly expediente: string;
+  };
+  /** `POST /licencias/edificacion/{expediente}/licencia` */
+  readonly emitir_licencia_edificacion: {
+    readonly expediente: string;
+  };
+  /** `POST /licencias/edificacion/{expediente}/revalidacion` */
+  readonly revalidar_licencia_edificacion: {
+    readonly expediente: string;
+  };
   /** `GET /licencias/edificacion/reportes/general` */
   readonly edificacion_reporte: {
     readonly desde?: string;
@@ -2382,6 +2424,10 @@ export interface CuerpoPorOperacion {
   readonly licencia_resolucion_cancelacion: CuerpoSinEsquema;
   readonly licencia_resolucion_duplicado: CuerpoSinEsquema;
   readonly fue_edificacion: undefined;
+  readonly presentar_fue: CuerpoSinEsquema;
+  readonly completar_seccion_fue: CuerpoSinEsquema;
+  readonly emitir_licencia_edificacion: CuerpoSinEsquema;
+  readonly revalidar_licencia_edificacion: CuerpoSinEsquema;
   readonly edificacion_reporte: undefined;
   readonly ciiu: undefined;
   readonly registrar_ciiu: CuerpoSinEsquema;
@@ -2537,6 +2583,10 @@ export interface RespuestaPorOperacion {
   readonly licencia_resolucion_cancelacion: CuerpoSinEsquema;
   readonly licencia_resolucion_duplicado: CuerpoSinEsquema;
   readonly fue_edificacion: CuerpoSinEsquema;
+  readonly presentar_fue: CuerpoSinEsquema;
+  readonly completar_seccion_fue: CuerpoSinEsquema;
+  readonly emitir_licencia_edificacion: CuerpoSinEsquema;
+  readonly revalidar_licencia_edificacion: CuerpoSinEsquema;
   readonly edificacion_reporte: CuerpoSinEsquema;
   readonly ciiu: CuerpoSinEsquema;
   readonly registrar_ciiu: CuerpoSinEsquema;

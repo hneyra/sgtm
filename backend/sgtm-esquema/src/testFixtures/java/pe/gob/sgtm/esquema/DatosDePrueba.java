@@ -1271,19 +1271,97 @@ public final class DatosDePrueba {
                 "INSERT INTO licencia_correlativo (municipalidad_id, ejercicio, ultimo)"
                         + " VALUES (?, 2026, 1)",
                 muni);
+        // El FUE, con la forma que V43 le dio: el expediente identifica el tramite mientras no hay
+        // licencia, el estado se deriva y NO hay columna de valor de obra —la valorizacion se
+        // calcula contra el cuadro de #17 y guardarla aqui la duplicaria (#48 AC 2)—.
+        long fueId =
+                insertar(
+                        app,
+                        "INSERT INTO licencia_edificacion (municipalidad_id, expediente,"
+                                + " fecha_declaracion, contribuyente_id, predio_id, tipo_tramite,"
+                                + " tipo_obra, modalidad, solicitante_propietario,"
+                                + " usuario_registro, fecha_registro, observacion)"
+                                + " VALUES (?, ?, ?, ?, ?, 'LICENCIA_DE_OBRA',"
+                                + "         'EDIFICACION_NUEVA', 'A', true, 'prueba', now(),"
+                                + "         'expediente de edificacion de prueba')"
+                                + " RETURNING id",
+                        muni,
+                        "EXP-LE-" + sufijo,
+                        VIGENCIA,
+                        titular,
+                        predioId);
         ejecutar(
                 app,
-                "INSERT INTO licencia_edificacion (municipalidad_id, numero, contribuyente_id,"
-                        + " predio_id, modalidad, tipo_obra, area_terreno, area_construida,"
-                        + " valor_obra, fecha_emision, usuario_registro, observacion)"
-                        + " VALUES (?, ?, ?, ?, 'A', 'OBRA_NUEVA', 120.00, 80.00, ?, ?, 'prueba',"
-                        + "         'licencia de edificacion de prueba')",
+                "INSERT INTO edificacion_terreno (municipalidad_id, fue_id, version, direccion,"
+                        + " manzana, lote, area_terreno, zonificacion, usuario_registro,"
+                        + " fecha_registro, observacion)"
+                        + " VALUES (?, ?, 1, 'Jr. Union 100', 'A', '3', 200.00, 'RDM', 'prueba',"
+                        + "         now(), 'terreno de prueba')",
                 muni,
-                "LE-" + sufijo,
-                titular,
-                predioId,
-                MIL,
-                VIGENCIA);
+                fueId);
+        ejecutar(
+                app,
+                "INSERT INTO edificacion_proyecto (municipalidad_id, fue_id, version, uso,"
+                        + " numero_pisos, area_techada, usuario_registro, fecha_registro,"
+                        + " observacion)"
+                        + " VALUES (?, ?, 1, 'VIVIENDA UNIFAMILIAR', 2, 160.00, 'prueba', now(),"
+                        + "         'proyecto de prueba')",
+                muni,
+                fueId);
+        // La valorizacion, SIN importe: solo partida, categoria y area. Cuanto vale la letra lo
+        // dice valor_unitario_edificacion, y solo ahi (#48 AC 2).
+        ejecutar(
+                app,
+                "INSERT INTO edificacion_estructura (municipalidad_id, fue_id, version, piso,"
+                        + " partida, categoria, area)"
+                        + " VALUES (?, ?, 1, 1, 'MUROS', 'A', 40.00)",
+                muni,
+                fueId);
+        ejecutar(
+                app,
+                "INSERT INTO edificacion_profesional (municipalidad_id, fue_id, version, tipo,"
+                        + " nombre, colegio, colegiatura)"
+                        + " VALUES (?, ?, 1, 'RESPONSABLE_OBRA', 'ROJAS, JULIO', 'CIP', '67890')",
+                muni,
+                fueId);
+        ejecutar(
+                app,
+                "INSERT INTO edificacion_requisito (municipalidad_id, fue_id, version, requisito,"
+                        + " presentado, folios)"
+                        + " VALUES (?, ?, 1, 'FUE FIRMADO POR EL SOLICITANTE', true, 2)",
+                muni,
+                fueId);
+        long movimientoDelFue =
+                insertar(
+                        app,
+                        "INSERT INTO edificacion_movimiento (municipalidad_id, fue_id, tipo, fecha,"
+                                + " numero_licencia, recibo_id, documento_id, documento_numero,"
+                                + " usuario_registro, fecha_registro, observacion)"
+                                + " VALUES (?, ?, 'EMISION', ?, ?, ?, ?, ?, 'prueba', now(),"
+                                + "         'emision de edificacion de prueba')"
+                                + " RETURNING id",
+                        muni,
+                        fueId,
+                        VIGENCIA,
+                        "LE-" + sufijo,
+                        reciboId,
+                        documentoDeLaLicencia,
+                        "LICENCIA_EDIFICACION-2026-" + sufijo);
+        ejecutar(
+                app,
+                "INSERT INTO edificacion_vigencia (municipalidad_id, licencia_id, movimiento_id,"
+                        + " orden, desde, hasta)"
+                        + " VALUES (?, ?, ?, 1, ?, ?)",
+                muni,
+                fueId,
+                movimientoDelFue,
+                VIGENCIA,
+                VIGENCIA.plusYears(3));
+        ejecutar(
+                app,
+                "INSERT INTO edificacion_correlativo (municipalidad_id, ejercicio, ultimo)"
+                        + " VALUES (?, 2026, 1)",
+                muni);
         ejecutar(
                 app,
                 "INSERT INTO anuncio (municipalidad_id, numero, contribuyente_id, predio_id, tipo,"

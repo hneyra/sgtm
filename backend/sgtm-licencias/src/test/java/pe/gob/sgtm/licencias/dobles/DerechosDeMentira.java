@@ -23,11 +23,27 @@ public final class DerechosDeMentira implements LectorDeParametros {
 
     private final @Nullable String conceptoDeLaLicencia;
     private final @Nullable String conceptoDelDuplicado;
+    private @Nullable String conceptoDeLaEdificacion;
+    private @Nullable String conceptoDeLaRevalidacion;
 
     public DerechosDeMentira(
             @Nullable String conceptoDeLaLicencia, @Nullable String conceptoDelDuplicado) {
         this.conceptoDeLaLicencia = conceptoDeLaLicencia;
         this.conceptoDelDuplicado = conceptoDelDuplicado;
+    }
+
+    /**
+     * Los dos conceptos del FUE de edificacion (#48).
+     *
+     * <p>Un {@code null} significa «ese parametro no esta en el conjunto», igual que arriba: es lo
+     * que hace falta para probar que la emision falla nombrando la llave en vez de admitir
+     * cualquier recibo.
+     */
+    public DerechosDeMentira conEdificacion(
+            @Nullable String deLaLicencia, @Nullable String deLaRevalidacion) {
+        this.conceptoDeLaEdificacion = deLaLicencia;
+        this.conceptoDeLaRevalidacion = deLaRevalidacion;
+        return this;
     }
 
     @Override
@@ -38,6 +54,12 @@ public final class DerechosDeMentira implements LectorDeParametros {
         }
         if (conceptoDelDuplicado != null) {
             constructor.texto("TUPA", "DERECHO_DUPLICADO_LICENCIA", conceptoDelDuplicado);
+        }
+        if (conceptoDeLaEdificacion != null) {
+            constructor.texto("TUPA", "DERECHO_LICENCIA_EDIFICACION", conceptoDeLaEdificacion);
+        }
+        if (conceptoDeLaRevalidacion != null) {
+            constructor.texto("TUPA", "DERECHO_REVALIDACION_EDIFICACION", conceptoDeLaRevalidacion);
         }
         return constructor.construir();
     }

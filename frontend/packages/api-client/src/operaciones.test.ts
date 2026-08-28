@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas catorce operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas dieciocho operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -66,8 +66,15 @@ describe('las operaciones generadas son las del contrato', () => {
     //     pantallas (`licencia_funcionamiento`, `ciiu`) declaran el GET de la
     //     grilla y el catalogo como su endpoint, y escribir necesita verbo
     //     propio bajo la misma opcion.
+    //   - `presentar_fue` / `completar_seccion_fue` /
+    //     `emitir_licencia_edificacion` / `revalidar_licencia_edificacion`
+    //     (#48): el FUE se presenta, se completa POR PARTES y solo entonces se
+    //     emite, y su plazo se prorroga con otro acto. Su pantalla
+    //     (`fue_edificacion`) declara el GET de la grilla como su endpoint, y
+    //     los cuatro actos necesitan verbo propio bajo la misma opcion. No hay
+    //     PUT: las secciones se versionan, y la cabecera no admite UPDATE.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(151);
+    expect(Object.keys(OPERACIONES)).toHaveLength(155);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {
