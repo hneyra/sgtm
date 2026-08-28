@@ -503,9 +503,9 @@ function PasoDeCierre({
         <div className="sgtm-tarjeta__cabecera">
           <h3 className="sgtm-tarjeta__titulo">Lo capturado</h3>
         </div>
-        <dl className="sgtm-resumen">
+        <dl className="sgtm-asistente__resumen">
           {resumenDe(escritura).map(({ rotulo, valor }) => (
-            <div key={rotulo} className="sgtm-resumen__par">
+            <div key={rotulo} className="sgtm-asistente__resumen-par">
               <dt>{rotulo}</dt>
               <dd>{valor}</dd>
             </div>

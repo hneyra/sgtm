@@ -6,6 +6,12 @@ import { OPCIONES_CONECTADAS } from '../conexiones';
 import { permisosDelClaim, puedeEscribir, puedeVer } from '../../app/sesion/permisos';
 import { montarEnRuta } from '../../pruebas/montar';
 import { SIN_DATO } from '../seguridad/listado';
+import {
+  motivoDeLaPrimaria,
+  primariaApagada,
+  primariaDeLaPantalla,
+  primariaEncendida,
+} from '../../pruebas/acciones';
 
 /**
  * Rentas · Registro (#73): el modulo que mas escribe.
@@ -32,40 +38,112 @@ import { SIN_DATO } from '../seguridad/listado';
  * calcula (ver el doc de `rentas/index.ts`). Las demas esperan a su backend.
  */
 
-/** Las ocho opciones del modulo cuya operacion escribe, por su ranura. */
-const LAS_QUE_ESCRIBEN: readonly string[] = [
+/**
+ * Las siete opciones del modulo cuya operacion escribe y que **no declaran**
+ * todavia que campos suyos acepta el backend.
+ *
+ * Hasta #332 esta lista eran las nueve, y la prueba decia: sin observacion la
+ * primaria esta apagada, con observacion se habilita. Las dos mitades eran
+ * ciertas y la segunda era el defecto: lo que la observacion habilitaba en estas
+ * siete era mandar **solo la observacion** —catorce campos rellenos que no
+ * viajan, y un backend que rechaza o que no existe—. Ahora quedan apagadas y
+ * dicen por que, que es lo que #332 pedia; la observacion sigue siendo la
+ * condicion de guardado de `alta_deuda` y de `baja_deuda`, que si estan
+ * declaradas, y eso se comprueba abajo y en `pantallas/escritura.test.tsx`.
+ */
+const LAS_QUE_ESCRIBEN_SIN_DECLARAR: readonly string[] = [
   'predial-individual',
   'predial-masivo',
   'transferencia-predio',
-  'alcabala',
   'vehicular-calculo',
   'transferencia-vehiculo',
-  'espectaculos',
-  'alta-deuda',
-  'baja-deuda',
 ];
+
+/**
+ * Y las dos cuya **primaria no es un acto**: «Imprimir liquidación» (#337).
+ *
+ * Escriben en el contrato y tampoco declaran, pero la ultima accion de su
+ * catalogo —que es la primaria (FRO-03 §5)— imprime. Contarle a quien atiende
+ * que «registre el acto por el procedimiento actual» debajo de un boton de
+ * imprimir es regañarle por algo que no estaba haciendo, y eso pasaba en 50 de
+ * las 134 pantallas. La primaria sigue apagada; lo que se quita es la franja.
+ */
+const LAS_DE_SALIDA: readonly string[] = ['alcabala', 'espectaculos'];
+
+/** Las dos que **si** declaran su lista blanca, y por tanto guardan de verdad. */
+const LAS_DECLARADAS: readonly string[] = ['alta-deuda', 'baja-deuda'];
 
 beforeEach(() => instalarProxyDeDatos({ latencia: false }));
 afterEach(() => desinstalarProxyDeDatos());
 
-describe('ninguna de las escrituras del modulo se envia sin observacion', () => {
-  it.each(LAS_QUE_ESCRIBEN)('%s no habilita su accion primaria sin ella', async (ranura) => {
-    const usuario = userEvent.setup();
+describe('ningun acto del modulo promete lo que no puede', () => {
+  it.each(LAS_QUE_ESCRIBEN_SIN_DECLARAR)(
+    '%s deja su primaria apagada, y la franja dice por que',
+    async (ranura) => {
+      const montada = montarEnRuta(`/rentas-registro/${ranura}`);
+      await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+      // **La ultima accion es la primaria**, como en el prototipo (FRO-03 §5).
+      // Apagada con `aria-disabled` y enfocable: es lo unico que hace que su
+      // franja se lea (ver `primariaApagada`).
+      primariaApagada();
+
+      // Sin declaracion no hay a donde escribir: tampoco hay caja de observacion.
+      expect(
+        screen.queryByRole('region', { name: 'Observación del usuario' }),
+      ).not.toBeInTheDocument();
+
+      // Su operacion **escribe** en el contrato: lo que falta es la declaracion,
+      // y eso lo dice el `data-causa` —la franja habla para la ventanilla—.
+      expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
+      expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
+        'data-causa',
+        'sin-declaracion',
+      );
+
+      montada.unmount();
+    },
+  );
+
+  it.each(LAS_DE_SALIDA)(
+    '%s imprime: la primaria esta apagada y **sin** franja',
+    async (ranura) => {
+      const montada = montarEnRuta(`/rentas-registro/${ranura}`);
+      await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+      // Apagada con `disabled`, no con `aria-disabled`: no hay ningun motivo que
+      // leer al lado, asi que tampoco hace falta que reciba el foco.
+      expect(primariaDeLaPantalla()).toBeDisabled();
+      expect(motivoDeLaPrimaria()).toBeUndefined();
+      expect(document.getElementById('sgtm-motivo-de-la-accion')?.textContent).toBe('');
+
+      montada.unmount();
+    },
+  );
+
+  it.each(LAS_DECLARADAS)('%s si pide su observacion, y sin ella no guarda', async (ranura) => {
     const montada = montarEnRuta(`/rentas-registro/${ranura}`);
 
     const caja = await screen.findByRole('region', { name: 'Observación del usuario' });
-    // **La ultima accion es la primaria**, como en el prototipo (FRO-03 §5).
-    const acciones = document.querySelectorAll<HTMLButtonElement>('.sgtm-acciones .sgtm-boton');
-    const primaria = acciones[acciones.length - 1];
-    expect(primaria).toBeDefined();
-    if (!primaria) return;
+    expect(within(caja).getByLabelText('Observación')).toBeInTheDocument();
 
-    // Sin observacion, deshabilitada. No es un `placeholder` amable: es la
+    // Sin observacion, apagada. No es un `placeholder` amable: es la
     // condicion de guardado (regla 10, RNF-052).
-    expect(primaria.disabled).toBe(true);
+    primariaApagada();
+
+    montada.unmount();
+  });
+
+  it('la observacion sola habilita el alta, porque el alta si declara sus campos', async () => {
+    const usuario = userEvent.setup();
+    const montada = montarEnRuta('/rentas-registro/alta-deuda');
+
+    const caja = await screen.findByRole('region', { name: 'Observación del usuario' });
+    const primaria = await screen.findByRole('button', { name: 'Dar de alta' });
+    primariaApagada(primaria);
 
     await usuario.type(within(caja).getByLabelText('Observación'), 'Motivo del acto.');
-    await waitFor(() => expect(primaria.disabled).toBe(false));
+    await waitFor(() => primariaEncendida(primaria));
 
     montada.unmount();
   });
@@ -94,7 +172,7 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
     ]);
   });
 
-  it('las diez restantes siguen sin Conexion propia', () => {
+  it('las nueve restantes siguen sin Conexion propia', () => {
     for (const opcion of [
       'predios_rentas',
       'predial_individual',
@@ -105,7 +183,6 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
       'transferencia_vehiculo',
       'espectaculos',
       'alta_deuda',
-      'baja_deuda',
     ]) {
       expect(OPCIONES_CONECTADAS).not.toContain(opcion);
     }
@@ -115,6 +192,12 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
       'declaracion_jurada',
       'beneficios',
       'arbitrios',
+      // `baja_deuda` se suma en #332, y es la unica del sistema cuya conexion
+      // **lee otra operacion**: la suya es un `POST`, que no se pide al abrir la
+      // pantalla, y la deuda que se da de baja la publica `consulta_deuda` (#22).
+      // Sin eso, su tabla —y la columna de seleccion que el prototipo dibuja—
+      // se quedaban vacias para siempre.
+      'baja_deuda',
     ]) {
       expect(OPCIONES_CONECTADAS).toContain(opcion);
     }

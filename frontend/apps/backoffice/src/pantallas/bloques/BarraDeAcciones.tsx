@@ -60,7 +60,38 @@ export interface BarraDeAccionesProps {
    * servidor va a rechazar con 403.
    */
   readonly altas?: Readonly<Record<string, () => void>>;
+  /**
+   * Por que la accion primaria **no puede guardar todavia** (#332): la operacion
+   * no escribe, o la opcion no ha declarado sus campos (`pantallas/actos.ts`).
+   *
+   * Cuando lo hay no hay escritura ninguna —ni caja de observacion—, porque no
+   * hay a donde escribir; lo que hay es esta franja diciendolo. Sin ella, la
+   * primaria se quedaba apagada y muda, que en ventanilla se lee como un error
+   * de quien atiende y acaba en una llamada a soporte.
+   *
+   * Llegan las dos mitades: `detalle` es lo que lee quien atiende, y `causa` lo
+   * que necesita quien mantiene. La segunda no se pinta —viaja en `data-causa`—.
+   */
+  readonly impedimento?: { readonly detalle: string; readonly causa: string };
+  /**
+   * Cuantas filas hay elegidas, cuando la pantalla elige las suyas: la primaria
+   * lo dice —«Dar de baja (2)»—, porque el acto es sobre lo elegido y no sobre
+   * lo que se ve. No renombra la accion (RNF-080): le anade su cuenta.
+   */
+  readonly contadorDeLaPrimaria?: number;
 }
+
+/** El `id` de la franja, para que la primaria la referencie con `aria-describedby`. */
+const MOTIVO = 'sgtm-motivo-de-la-accion';
+
+/**
+ * El `id` del bloque de acciones, para que el indice de secciones tenga a donde
+ * mandar «Ir a las acciones» (#332).
+ *
+ * Se exporta porque quien enlaza es otro bloque, y dos literales iguales en dos
+ * archivos son un ancla que un dia lleva a ningun sitio.
+ */
+export const ID_DE_LAS_ACCIONES = 'sgtm-acciones-de-la-pantalla';
 
 export function BarraDeAcciones({
   acciones,
@@ -68,9 +99,18 @@ export function BarraDeAcciones({
   alcance,
   enlace,
   altas,
+  impedimento,
+  contadorDeLaPrimaria,
 }: BarraDeAccionesProps) {
   const [porConfirmar, fijarPorConfirmar] = useState<string | null>(null);
   const escribe = escritura?.operacion !== undefined;
+  /* Los tres estados de una accion, y solo uno se pinta a la vez:
+     puede guardar (sin motivo) · puede guardar y le falta algo del formulario
+     (`escritura.motivo`) · no puede guardar todavia (`impedimento`).
+     Con `enlace` no se pinta ninguno: la primaria es el enlace, y esa lleva a
+     otra pantalla en vez de guardar aqui. */
+  const motivo = enlace !== undefined ? undefined : (impedimento?.detalle ?? escritura?.motivo);
+  const causa = enlace !== undefined ? undefined : impedimento?.causa;
   // Si el acto de la pantalla es abrir un alta, la ultima accion deja de ser la
   // primaria: si no, quedarian dos botones primarios y uno de ellos apagado.
   const altaEsElActo =
@@ -127,52 +167,97 @@ export function BarraDeAcciones({
         </section>
       )}
 
-      <div className="sgtm-acciones" data-no-imprimible="1">
-        {acciones.map((accion, i) => {
-          // Una accion que abre un alta **es** el acto de esta pantalla cuando no
-          // hay otro: si la pantalla no escribe (es de lectura) y no lleva a otra
-          // opcion, la primaria es esta. Con enlace o con escritura propia se
-          // queda de secundaria: dos primarias dirian que hay dos actos.
-          const abrirAlta = altas?.[accion];
-          if (abrirAlta !== undefined) {
+      {/* ── La franja y la barra, **en el mismo bloque fijo** ──────────────
+          Estaban sueltas y solo la barra era `sticky`. En una pantalla larga
+          —el padron de contribuyentes apilado mide 4 800 px— eso deja al
+          operador viendo «Guardar» apagado al pie, con la explicacion a cuatro
+          mil pixeles de scroll: apagado y mudo, que es exactamente el estado
+          que la franja vino a eliminar. Van juntos o la franja no sirve. */}
+      <div className="sgtm-acciones__fija" data-no-imprimible="1">
+        {/* El motivo se **pinta**, no se pone en un `title`: un `title` sobre un
+            boton `disabled` no existe ni para el teclado —no se puede enfocar—
+            ni para el lector de pantalla (FRO-04 §6).
+
+            **Se dibuja siempre, vacio si no hay motivo.** Una region viva que
+            aparece con su texto dentro no anuncia nada: los lectores de
+            pantalla anuncian los cambios de una region que ya estaban
+            observando, y la que se monta con contenido no llega a tiempo. Vacia
+            no ocupa ni se ve (`:empty` en la hoja), y cuando el motivo aparece
+            es un cambio, que es lo que si se lee. */}
+        <p
+          className="sgtm-acciones__motivo"
+          role="status"
+          id={MOTIVO}
+          {...(causa === undefined ? {} : { 'data-causa': causa })}
+        >
+          {motivo ?? ''}
+        </p>
+
+        <div className="sgtm-acciones" id={ID_DE_LAS_ACCIONES}>
+          {acciones.map((accion, i) => {
+            // Una accion que abre un alta **es** el acto de esta pantalla cuando
+            // no hay otro: si la pantalla no escribe (es de lectura) y no lleva a
+            // otra opcion, la primaria es esta. Con enlace o con escritura propia
+            // se queda de secundaria: dos primarias dirian que hay dos actos.
+            const abrirAlta = altas?.[accion];
+            if (abrirAlta !== undefined) {
+              return (
+                <Boton
+                  key={accion}
+                  variante={altaEsElActo ? 'primario' : 'secundario'}
+                  onClick={abrirAlta}
+                >
+                  {accion}
+                </Boton>
+              );
+            }
+            // «La ultima es la primaria» (FRO-03 §5), salvo cuando el acto de la
+            // pantalla es el enlace: dos botones primarios en la misma barra
+            // dirian que hay dos actos, y uno de los dos esta apagado.
+            const esPrimaria = !altaEsElActo && enlace === undefined && i === acciones.length - 1;
+            const habilitada = esPrimaria && escribe && (escritura?.puedeEnviar ?? false);
+            /* La primaria apagada **con un motivo escrito al lado** se apaga con
+               `aria-disabled`, no con `disabled`, y sigue siendo enfocable.
+               Motivo: un boton `disabled` no recibe foco, asi que el
+               `aria-describedby` que apunta a la franja no se lee nunca —quien
+               navega con teclado o con lector pasa de largo y no se entera de por
+               que no puede guardar—. Con `aria-disabled` el lector anuncia
+               «no disponible» **y** lee la descripcion. El `onClick` guarda la
+               otra mitad: enfocable no es pulsable. Las apagadas sin motivo
+               —una secundaria del prototipo, la primaria mientras envia— siguen
+               con `disabled`: ahi no hay nada que leer. */
+            const apagadaConMotivo = esPrimaria && motivo !== undefined;
             return (
               <Boton
                 key={accion}
-                variante={altaEsElActo ? 'primario' : 'secundario'}
-                onClick={abrirAlta}
+                variante={esPrimaria ? 'primario' : 'secundario'}
+                {...(apagadaConMotivo
+                  ? { 'aria-disabled': true, 'aria-describedby': MOTIVO }
+                  : { disabled: !habilitada })}
+                title={tituloDe(accion, esPrimaria, escribe, escritura)}
+                onClick={() => {
+                  if (apagadaConMotivo) return;
+                  if (!escritura) return;
+                  // Lo irreversible se confirma diciendo que va a pasar; lo demas
+                  // se manda directamente, que para eso se pulso.
+                  if (esIrreversible(accion)) fijarPorConfirmar(accion);
+                  else escritura.enviar();
+                }}
               >
-                {accion}
+                {escritura?.enviando && esPrimaria
+                  ? `${accion}…`
+                  : esPrimaria && contadorDeLaPrimaria !== undefined
+                    ? `${accion} (${contadorDeLaPrimaria})`
+                    : accion}
               </Boton>
             );
-          }
-          // «La ultima es la primaria» (FRO-03 §5), salvo cuando el acto de la
-          // pantalla es el enlace: dos botones primarios en la misma barra
-          // dirian que hay dos actos, y uno de los dos esta apagado.
-          const esPrimaria = !altaEsElActo && enlace === undefined && i === acciones.length - 1;
-          const habilitada = esPrimaria && escribe && (escritura?.puedeEnviar ?? false);
-          return (
-            <Boton
-              key={accion}
-              variante={esPrimaria ? 'primario' : 'secundario'}
-              disabled={!habilitada}
-              title={tituloDe(accion, esPrimaria, escribe, escritura)}
-              onClick={() => {
-                if (!escritura) return;
-                // Lo irreversible se confirma diciendo que va a pasar; lo demas
-                // se manda directamente, que para eso se pulso.
-                if (esIrreversible(accion)) fijarPorConfirmar(accion);
-                else escritura.enviar();
-              }}
-            >
-              {escritura?.enviando && esPrimaria ? `${accion}…` : accion}
-            </Boton>
-          );
-        })}
-        {enlace !== undefined && (
-          <Link className="sgtm-boton sgtm-boton--primario" to={enlace.ruta}>
-            {enlace.etiqueta}
-          </Link>
-        )}
+          })}
+          {enlace !== undefined && (
+            <Link className="sgtm-boton sgtm-boton--primario" to={enlace.ruta}>
+              {enlace.etiqueta}
+            </Link>
+          )}
+        </div>
       </div>
     </>
   );

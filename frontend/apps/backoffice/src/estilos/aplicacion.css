@@ -79,7 +79,7 @@
   flex: 0 0 34px;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contraste);
   display: grid;
   place-items: center;
   font-family: var(--font-serif);
@@ -484,11 +484,14 @@
   border-top: 1px solid var(--line);
 }
 
+/* `--ink-4` da 3,13:1 sobre la tarjeta, y estos son los rotulos de la ficha
+   —«D.N.I.», «Domicilio fiscal»—: sin ellos, los valores de al lado no se sabe
+   de que son. `--ink-3`, 5,98:1, verificado en contraste.test.ts. */
 .sgtm-resumen__dato dt {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .sgtm-resumen__dato dd {
@@ -496,6 +499,17 @@
   font-size: 13.5px;
   color: var(--ink);
   overflow-wrap: anywhere;
+}
+
+/* La linea de lo que el padron no publica todavia (#330). No es un error ni una
+   advertencia: es un guion **explicado**, y por eso no lleva tono de aviso. */
+.sgtm-resumen__pendiente {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
 }
 
 /* ── El codigo catastral, tramo a tramo (#318) ──────────────────────────
@@ -1287,7 +1301,7 @@
 
 .sgtm-portal {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contraste);
   border-radius: 12px;
   padding: 26px 24px;
   display: flex;
@@ -1351,7 +1365,7 @@
 }
 
 .sgtm-boton.sgtm-portal__boton {
-  background: #fff;
+  background: var(--accent-contraste);
   color: var(--accent);
   font-weight: 600;
   padding: 11px 20px;
@@ -1721,16 +1735,49 @@
 
 /* —— Bloque 10: barra de acciones —————————————————————————————— */
 
-.sgtm-acciones {
+/* El bloque fijo: la franja del motivo **y** la barra, juntas.
+   Lo `sticky` era solo la barra, y la franja se quedaba donde se dibujo. En el
+   padron de contribuyentes apilado —4 800 px de alto— eso significa ver la
+   primaria apagada al pie de la ventana y su explicacion cuatro mil pixeles mas
+   arriba: apagada y muda, que es el estado que la franja vino a eliminar. */
+.sgtm-acciones__fija {
   position: sticky;
   bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  background: linear-gradient(to top, var(--bg) 78%, transparent);
+}
+
+/* Por que la primaria no puede guardar todavia (#332). Se **pinta**: un `title`
+   sobre un boton `disabled` no lo lee ni el teclado ni el lector de pantalla. */
+.sgtm-acciones__motivo {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ink-4);
+  border-radius: 8px;
+  background: var(--bg-card);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+/* La region viva se dibuja **siempre**, para que anunciar sea un cambio y no un
+   montaje: vacia no ocupa ni se ve, pero sigue en el arbol de accesibilidad. */
+.sgtm-acciones__motivo:empty {
+  padding: 0;
+  border: 0;
+}
+
+.sgtm-acciones {
   display: flex;
   gap: 9px;
   flex-wrap: wrap;
   justify-content: flex-end;
   padding: 12px 0 0;
   border-top: 1px solid var(--line);
-  background: linear-gradient(to top, var(--bg) 62%, transparent);
 }
 
 /* —— Responsive ———————————————————————————————————————————————
@@ -1861,6 +1908,42 @@
 .sgtm-tabla__desplegar {
   width: 34px;
   text-align: center;
+}
+
+/* La columna de seleccion (#332): es la primera columna del catalogo —la que el
+   prototipo dibuja vacia—, no una columna nueva al lado. */
+.sgtm-tabla__elegir {
+  width: 34px;
+  text-align: center;
+}
+
+.sgtm-tabla__casilla {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.sgtm-tabla__casilla input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* La banda de la seleccion: cuantas filas, y **ninguna cifra** (RNF-083). */
+.sgtm-seleccion {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.sgtm-seleccion strong {
+  color: var(--ink);
 }
 
 .sgtm-tabla__desplegar button {
@@ -2138,7 +2221,12 @@
   color: var(--ink-3);
 }
 
-.sgtm-resumen {
+/* «Lo capturado» del alta guiada. Se llamaba `.sgtm-resumen`, **como la
+   cabecera-resumen de las fichas**, y al estar mas abajo en la hoja ganaba: las
+   tres cabeceras de rentas y la de catastro perdian sus tres bandas —dejaban de
+   ser una columna con separadores y pasaban a ser la rejilla de este—. Dos
+   bloques distintos, dos nombres. */
+.sgtm-asistente__resumen {
   margin: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -2146,20 +2234,20 @@
   padding: 12px 14px 14px;
 }
 
-.sgtm-resumen__par {
+.sgtm-asistente__resumen-par {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.sgtm-resumen dt {
+.sgtm-asistente__resumen dt {
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--ink-3);
 }
 
-.sgtm-resumen dd {
+.sgtm-asistente__resumen dd {
   margin: 0;
   font-size: 13.5px;
   color: var(--ink);

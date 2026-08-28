@@ -36,10 +36,10 @@
   border: 0;
   padding: 10px 22px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contraste);
 }
 
-.sgtm-boton--primario:hover:not(:disabled) {
+.sgtm-boton--primario:hover:not(:disabled):not([aria-disabled='true']) {
   background: var(--accent-2);
 }
 
@@ -50,7 +50,7 @@
   color: var(--ink);
 }
 
-.sgtm-boton--secundario:hover:not(:disabled) {
+.sgtm-boton--secundario:hover:not(:disabled):not([aria-disabled='true']) {
   border-color: var(--ink-3);
 }
 
@@ -62,7 +62,7 @@
   font-size: 12px;
 }
 
-.sgtm-boton--fantasma:hover:not(:disabled) {
+.sgtm-boton--fantasma:hover:not(:disabled):not([aria-disabled='true']) {
   border-color: var(--ink-3);
 }
 
@@ -71,7 +71,13 @@
   font-size: 12.5px;
 }
 
-.sgtm-boton:disabled {
+/* Apagado de las dos formas, y las dos se ven igual.
+   `aria-disabled` en vez de `disabled` es lo que deja **enfocable** al boton que
+   lleva su motivo escrito al lado: un `aria-describedby` sobre un boton
+   `disabled` no llega a nadie —el foco no puede pararse ahi—, asi que el motivo
+   estaba escrito para un lector que nunca lo alcanzaba (FRO-04 §6). */
+.sgtm-boton:disabled,
+.sgtm-boton[aria-disabled='true'] {
   opacity: 0.55;
   cursor: not-allowed;
 }

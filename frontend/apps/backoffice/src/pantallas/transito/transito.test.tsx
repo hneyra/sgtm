@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, waitFor } from '@testing-library/react';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { cifrasDeLaTabla, cifrasEnPantalla, cifrasServidas } from '../../pruebas/cifras';
 import { montarEnRuta } from '../../pruebas/montar';
+import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
 
 /**
  * Transito (#77): el modulo mas grande del menu, y **trece reportes**.
@@ -94,19 +94,25 @@ describe('la papeleta muestra su desglose guardado, no uno recalculado', () => {
 });
 
 describe('el cambio de numero es la unica correccion permitida', () => {
-  it('exige observacion, como cualquier otra escritura', async () => {
-    const usuario = userEvent.setup();
+  /**
+   * Decia «exige observacion, como cualquier otra escritura», y con la
+   * observacion escrita la primaria se habilitaba. Desde #332 no: la opcion no
+   * declara su escritura en `escrituras.ts`, asi que lo unico que podia mandar
+   * era la observacion sola —corregir el numero de una papeleta mandando un
+   * texto y ningun numero—. Ahora la accion se queda apagada y dice por que.
+   *
+   * Que la observacion es la condicion de guardado de las que **si** escriben
+   * sigue comprobandose, en `pantallas/escritura.test.tsx`.
+   */
+  it('no promete la correccion mientras no pueda mandarla', async () => {
     montarEnRuta('/transito/transito-cambio-numero');
     await dibujada('.sgtm-acciones');
 
-    const acciones = document.querySelectorAll<HTMLButtonElement>('.sgtm-acciones .sgtm-boton');
-    const primaria = acciones[acciones.length - 1];
-    expect(primaria).toBeDefined();
-    if (!primaria) return;
-    expect(primaria.disabled).toBe(true);
+    primariaApagada();
 
-    const caja = await screen.findByRole('region', { name: 'Observación del usuario' });
-    await usuario.type(within(caja).getByLabelText('Observación'), 'Error de tipeo en el número.');
-    await waitFor(() => expect(primaria.disabled).toBe(false));
+    expect(
+      screen.queryByRole('region', { name: 'Observación del usuario' }),
+    ).not.toBeInTheDocument();
+    expect(motivoDeLaPrimaria()).toMatch(/todavía no guarda/i);
   });
 });

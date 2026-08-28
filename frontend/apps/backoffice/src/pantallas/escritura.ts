@@ -104,9 +104,36 @@ export interface CampoDelCuerpo {
   readonly campo: string;
   /** El backend lo declara entero, no cadena. Nunca para importes. */
   readonly entero?: boolean;
+  /**
+   * El backend lo lee como importe: viaja **solo** si es una cadena decimal
+   * simple (`-?\d+(\.\d+)?`).
+   *
+   * No convierte nada —un importe es texto de punta a punta (regla 1,
+   * RNF-055)—: lo unico que hace es no dejar salir lo que el backend no puede
+   * leer. Un `new BigDecimal("1,842.60")` **lanza**, y el separador de miles es
+   * exactamente lo que una celda de tabla lleva cuando alguien la copia al
+   * cuerpo (#332). Rechazarlo aqui convierte un 422 tardio —despues de que la
+   * baja se confirmara— en un campo que no viaja, y la opcion que lo declara lo
+   * dice ademas en su `exigir`.
+   */
+  readonly importe?: boolean;
   /** Traduce el texto del formulario al que espera el backend. Ver el javadoc de arriba. */
   readonly valor?: (texto: string) => string | undefined;
 }
+
+/**
+ * Lo que la interfaz dibuja donde el backend no mando dato: `SIN_DATO` de
+ * `pantallas/seguridad/listado.ts`.
+ *
+ * Se repite aqui como constante local, y no se importa, por una razon: este
+ * archivo es el camino de escritura y no puede depender de como dibuja un
+ * adaptador. Lo que importa es la propiedad —**un guion no es un valor**—, y esa
+ * vale aunque el dia de manana el guion se escriba de otra forma.
+ */
+const GUION = '—';
+
+/** Una cadena decimal simple, que es lo unico que `new BigDecimal` acepta. */
+const IMPORTE = /^-?\d+(\.\d+)?$/;
 
 /**
  * Un campo del cuerpo que **no es plano: es una tabla**.
@@ -139,6 +166,26 @@ export interface TablaDelCuerpo {
    * mano con `cuerpo`, que es justo lo que la lista blanca vino a evitar.
    */
   readonly unica?: boolean;
+  /**
+   * El backend declara la obligacion **en el cuerpo plano**, sin nombre de
+   * lista: las columnas declaradas de la fila elegida se despliegan en el nivel
+   * superior, y `campo` no se usa.
+   *
+   * Es el tercer caso de una tabla, y existe por `baja_deuda`:
+   * `MovimientosDeDeudaController.PeticionDeMovimiento` es un cuerpo plano
+   * —`tributo`, `ano`, `cuota`, `insoluto`, `interes`— porque **da de baja una
+   * obligacion por acto**, y lo que la pantalla elige es exactamente esa
+   * obligacion, en una fila de su tabla. Sin esto, la unica forma de mandarla
+   * seria volver a teclear a mano lo que la tabla ya muestra, o abrir el cuerpo
+   * entero con `cuerpo` —la salida de emergencia— y perder la lista blanca.
+   *
+   * **Solo viaja la primera fila.** Una tabla `plana` no puede expresar dos
+   * obligaciones, y por eso la opcion que la declara exige tambien —con
+   * `exigir`— que haya exactamente una elegida: mandar la primera y callarse las
+   * demas seria dar de baja una cuota y dejar tres sin dar de baja, sin que nada
+   * lo dijera.
+   */
+  readonly plana?: boolean;
 }
 
 /** Sin campos declarados. Constante para que la lista blanca no cambie cada render. */
@@ -230,8 +277,16 @@ export function useEscritura(
   // Lo que ademas de la observacion falta para poder guardar. Se pregunta en
   // cada render porque es un cierre sobre el estado de quien lo declara.
   const falta = exigir?.(borrador, filas);
-  // Y el motivo completo, con la observacion incluida: es el que se pinta.
-  const motivo = falta ?? (observacion.trim() === '' ? FALTA_LA_OBSERVACION : undefined);
+  /* Y el motivo completo, con la observacion incluida: es el que se pinta.
+     **Sin operacion no hay motivo**, y esa condicion faltaba: una pantalla sin
+     sitio a donde escribir devolvia «falta la observación» —y la franja lo
+     pintaba— al lado de una pantalla que ni siquiera dibuja la caja de
+     observacion. Lo que le pasa a esa pantalla no es que falte un texto: es que
+     no hay escritura, y eso lo cuenta el impedimento del acto, no esto. */
+  const motivo =
+    operacion === undefined
+      ? undefined
+      : (falta ?? (observacion.trim() === '' ? FALTA_LA_OBSERVACION : undefined));
 
   // Este es el unico sitio del frontend donde se escribe, y es el que exige la
   // observacion: la regla de ESLint protege a todos los demas de saltarsela.
@@ -353,14 +408,27 @@ function soloDeclarados(
     // blanca, llegaba al backend y volvia como 422 por un campo «lleno».
     const limpio = valor.trim();
     if (limpio === '') continue;
+    // **Un guion no es un valor.** Es lo que la interfaz dibuja donde el backend
+    // no mando dato, y una fila elegida en una tabla lo lleva en sus celdas
+    // vacias. Mandarlo convierte «no llego» en un dato: el backend lo leeria
+    // como un documento llamado «—», o lo rechazaria como importe (#332).
+    if (limpio === GUION) continue;
+    if (declarado.importe === true && !IMPORTE.test(limpio)) {
+      // Ver `CampoDelCuerpo.importe`: lo que el backend no puede leer no sale.
+      continue;
+    }
     if (declarado.valor !== undefined) {
       // Un valor que la traduccion no reconoce no viaja: ver el javadoc de `CampoDelCuerpo`.
       const traducido = declarado.valor(limpio);
       if (traducido !== undefined) cuerpo[declarado.campo] = traducido;
     } else if (declarado.entero === true) {
-      const entero = Number.parseInt(limpio, 10);
-      // Un entero que no lo es no viaja: mandar `NaN` produciria un 400 con un
-      // mensaje del deserializador en vez de un error del dominio.
+      // Un entero es entero **entero**. `Number.parseInt` se queda con el
+      // prefijo, y eso no es una conversion: es una reinterpretacion silenciosa
+      // —una cuota escrita «1-4», que es como el manual escribe las cuatro
+      // cuotas de un ano, viajaria como la cuota 1 y las otras tres se
+      // perderian sin que nada lo dijera—. Lo que no es un entero no viaja,
+      // igual que un campo vacio.
+      const entero = /^[+-]?\d+$/.test(limpio) ? Number(limpio) : Number.NaN;
       if (Number.isInteger(entero)) cuerpo[declarado.campo] = entero;
     } else {
       cuerpo[declarado.campo] = limpio;
@@ -423,7 +491,13 @@ function soloDeclaradas(
   const cuerpo: Record<string, unknown> = {};
   for (const [tabla, declarada] of Object.entries(tablas)) {
     const escritas = (filas[tabla] ?? []).map((fila) => soloDeclarados(fila, declarada.columnas));
-    if (declarada.unica === true) {
+    if (declarada.plana === true) {
+      // El cuerpo plano del backend: las columnas de la fila elegida, en el
+      // nivel superior. Sin fila no viaja nada —igual que un bloque `unica` sin
+      // escribir—, y nunca se mezclan dos filas: ver `TablaDelCuerpo.plana`.
+      const [primera] = escritas;
+      if (primera !== undefined) Object.assign(cuerpo, primera);
+    } else if (declarada.unica === true) {
       // Un bloque sin escribir **no viaja**: mandarlo vacio no es «no lo se»,
       // es «esto es», y el backend lo rechazaria por faltarle sus campos.
       const [primera] = escritas;
