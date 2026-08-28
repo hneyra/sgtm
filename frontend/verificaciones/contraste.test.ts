@@ -174,6 +174,36 @@ const TEXTOS: { estado: string; selector: string; sobre: string }[] = [
     selector: '.sgtm-resolutor__cruce-titulo',
     sobre: '--warn-bg',
   },
+  /* Los del inicio que pregunta a quien se atiende (#296). Los dos primeros van
+     sobre la pagina —la pregunta no esta dentro de ninguna tarjeta—; los cuatro
+     de las franjas, sobre la tarjeta que las contiene. Lo que cuentan no se
+     puede comunicar de otra forma:
+
+       la ayuda     si se busco, cuantos hay y si Intro basta. Es la unica
+                    region viva de la pantalla
+       la fuente    **de que padron** salio cada franja, que es lo que explica
+                    por que dos personas ven distinto numero de franjas
+       el detalle   el documento, o de que vehiculo se trata: lo que distingue a
+                    un homonimo del otro
+       el codigo    con que identificador se abre lo elegido */
+  { estado: 'inicio · rótulo', selector: '.sgtm-atencion__eyebrow', sobre: '--bg' },
+  { estado: 'inicio · ayuda de la búsqueda', selector: '.sgtm-atencion__ayuda', sobre: '--bg' },
+  {
+    estado: 'inicio · fuente de la franja',
+    selector: '.sgtm-atencion__fuente-opcion',
+    sobre: '--bg-card',
+  },
+  {
+    estado: 'inicio · módulo de la franja',
+    selector: '.sgtm-atencion__fuente-modulo',
+    sobre: '--bg-card',
+  },
+  {
+    estado: 'inicio · detalle de la fila',
+    selector: '.sgtm-atencion__detalle',
+    sobre: '--bg-card',
+  },
+  { estado: 'inicio · código de la fila', selector: '.sgtm-atencion__codigo', sobre: '--bg-card' },
 ];
 
 describe('los cuatro estados se leen: 4,5:1 sobre su fondo', () => {

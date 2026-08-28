@@ -63,7 +63,18 @@ export function BarraLateral({
 
   return (
     <aside className="sgtm-nav" data-abierta={abierta ? '1' : '0'}>
-      <div className="sgtm-nav__cabecera">
+      {/* La marca es **la vuelta al inicio** (#296). Desde que `/` dejo de ser
+          un desvio al panel de recaudacion y pasa a ser la pregunta de a quien
+          se atiende, hacia falta un camino de vuelta: no es una opcion del
+          catalogo, asi que ni el menu ni el lanzador ni la paleta llegan a ella.
+          El de siempre —la marca de arriba a la izquierda— es el que no hay que
+          explicarle a nadie. */}
+      <Link
+        className="sgtm-nav__cabecera"
+        to="/"
+        onClick={onNavegar}
+        aria-label="Inicio: a quién atiendes"
+      >
         <div className="sgtm-nav__marca" aria-hidden="true">
           S
         </div>
@@ -73,7 +84,7 @@ export function BarraLateral({
             {preferencias.entidad}
           </div>
         </div>
-      </div>
+      </Link>
 
       <div className="sgtm-nav__buscador">
         <button type="button" onClick={onAbrirPaleta}>

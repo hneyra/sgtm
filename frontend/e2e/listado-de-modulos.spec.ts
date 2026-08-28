@@ -3,11 +3,16 @@ import { expect, test } from '@playwright/test';
 /**
  * El listado de módulos de la barra lateral (FRO-03 §3).
  *
- * La navegación es de dos niveles: la app aterriza *dentro* de un módulo
- * —`/inicio/inicio`—, así que la barra muestra solo las opciones de ese módulo.
- * El nivel raíz —los doce módulos del manual— está a un clic, en «Todos los
- * módulos». Este fue el punto que confundió en producción: la barra parecía
- * traer solo dos entradas cuando en realidad estaba en el nivel de módulo.
+ * La navegación es de dos niveles. **Desde #296 la app ya no aterriza dentro de
+ * un módulo**: `/` es la pregunta de a quién se atiende (ADR-0016 §1), que no
+ * pertenece a ninguno, así que la barra arranca en el nivel raíz con los doce
+ * del manual. El nivel de módulo es donde deja a quien entra en uno, y de ahí se
+ * vuelve con «Todos los módulos». Lo que confundió en producción era lo
+ * contrario —la barra parecía traer solo dos entradas cuando estaba en el nivel
+ * de módulo—, y por eso los dos niveles se siguen recorriendo aquí.
+ *
+ * **El panel de recaudación no desapareció**: dejó de ser la portada y sigue
+ * siendo la opción que siempre fue, dentro de Inicio. El primer caso lo abre.
  *
  * Corre contra la app compilada con su proxy de datos. Sin proveedor de
  * identidad la autorización es «se ve todo» —es como se trabaja contra el
@@ -30,25 +35,31 @@ const MODULOS: ReadonlyArray<{ label: string; opciones: number }> = [
   { label: 'Seguridad', opciones: 11 },
 ];
 
-test('al aterrizar, la barra muestra el módulo Inicio y el paso al nivel raíz', async ({
+test('al aterrizar, la barra está en el nivel raíz; el módulo Inicio está a un clic', async ({
   page,
 }) => {
   await page.goto('/');
-  await expect(page).toHaveURL(/\/inicio\/inicio$/);
+  // La portada ya no redirige a ninguna opción: es la pregunta (#296).
+  await expect(page).toHaveURL(/localhost:4173\/$/);
+  await expect(page.getByRole('heading', { name: '¿A quién atiendes?' })).toBeVisible();
 
   const barra = page.locator('.sgtm-nav');
-  // Nivel de módulo: el nombre del módulo abierto y sus dos opciones.
+  await expect(barra.locator('.sgtm-nav__modulo')).toHaveCount(MODULOS.length);
+  await expect(barra.locator('.sgtm-nav__modulo-actual')).toHaveCount(0);
+
+  // Y el panel de recaudación sigue siendo la opción que siempre fue.
+  await barra.locator('.sgtm-nav__modulo', { hasText: 'Inicio' }).click();
   await expect(barra.locator('.sgtm-nav__modulo-actual')).toHaveText('Inicio');
-  await expect(barra.getByRole('link', { name: 'Panel de recaudación' })).toBeVisible();
-  await expect(barra.getByRole('link', { name: 'Portal ciudadano' })).toBeVisible();
-  // Y el botón que lleva al nivel raíz.
-  await expect(barra.getByRole('button', { name: 'Todos los módulos' })).toBeVisible();
+  await barra.getByRole('link', { name: 'Panel de recaudación' }).click();
+  await expect(page).toHaveURL(/\/inicio\/inicio$/);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Panel de recaudación');
 });
 
 test('«Todos los módulos» lista los doce del manual, con su recuento de opciones', async ({
   page,
 }) => {
-  await page.goto('/');
+  // Desde dentro de un módulo, que es donde el botón de volver existe.
+  await page.goto('/inicio/inicio');
   await page.locator('.sgtm-nav').getByRole('button', { name: 'Todos los módulos' }).click();
 
   const modulos = page.locator('.sgtm-nav__modulo');
@@ -69,9 +80,9 @@ test('«Todos los módulos» lista los doce del manual, con su recuento de opcio
 });
 
 test('desde el nivel raíz se entra a un módulo y se vuelve', async ({ page }) => {
+  // El inicio ya deja la barra en el nivel raíz: no hay a qué volver primero.
   await page.goto('/');
   const barra = page.locator('.sgtm-nav');
-  await barra.getByRole('button', { name: 'Todos los módulos' }).click();
 
   await barra.locator('.sgtm-nav__modulo', { hasText: 'Seguridad' }).click();
   await expect(page).toHaveURL(/\/seguridad$/);
