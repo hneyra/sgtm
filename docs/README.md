@@ -40,7 +40,7 @@ cosas donde espera.
 - [Mapa de macroprocesos](10-negocio/mapa-de-macroprocesos.md) — los siete procesos del sistema
 - [Marco normativo](10-negocio/marco-normativo.md) — normas citadas, y el mapa de qué dato falta, qué norma lo fija y quién lo espera
 - [Catálogo de opciones](10-negocio/catalogo-de-opciones.md) — las 134 opciones ↔ figuras del manual
-- [Observaciones del SRTM del MEF](10-negocio/observaciones-srtm-mef/README.md) — la campaña que cierra D-03c: dónde redondea el sistema del MEF
+- [Observaciones del SRTM del MEF](10-negocio/observaciones-srtm-mef/README.md) — dónde redondea el sistema del MEF: la campaña que exigirá la primera migración (ADR-0018)
 - [Valores normativos transcritos](10-negocio/valores-normativos/README.md) — lo que cierra D-02a, norma a norma, con dos firmas y sin cargar nada
 
 ### 20 — Requisitos

@@ -1,4 +1,11 @@
-# Campaña de observación del SRTM del MEF — cómo se cierra D-03c
+# Campaña de observación del SRTM del MEF — el prerrequisito de una migración
+
+> **D-03c se cerró el 2026-08-28 sin esta campaña**
+> ([ADR-0018](../../30-arquitectura/adr/ADR-0018-el-redondeo-decidido.md)): el piloto arranca con
+> padrón nuevo y no tiene determinaciones del SRTM que reproducir, así que sus puntos de redondeo
+> los fija el propio ADR. **Esta carpeta no se borra: revive con la primera municipalidad que
+> migre saldos del SRTM** (fila D-04 de GOB-02) — conciliar lo migrado exige reproducir sus
+> cifras céntimo a céntimo, y para eso todo lo de abajo vuelve a ser el procedimiento.
 
 **Qué se responde aquí:** en qué puntos del cálculo redondea el SRTM del MEF. No es una decisión
 —nadie puede decidir cómo redondea un sistema ajeno—: es **ingeniería inversa contra
@@ -63,7 +70,8 @@ redondear también produce un importe, y ese importe es plausible y equivocado.
 | `REAJUSTE` | — | Sin observar |
 | `INTERES` | — | Sin observar |
 
-Esta tabla es el progreso de D-03c. Bajar el número de «sin observar» es lo único que la cierra.
+Esta tabla es el progreso de la campaña. Bajar el número de «sin observar» es lo único que la
+completa — y solo hace falta completarla para migrar (ADR-0018).
 
 ## Dónde acaba una ficha cerrada
 
@@ -85,5 +93,5 @@ Quien calcula **lee**: `RegistrarDeterminacionPredial` ya no recibe las polític
 conjunto sellado del ejercicio. Escribir una a mano no compila el build: el escáner de fuentes la
 detecta (regla 5, D-03).
 
-Issue: [#203](https://github.com/hneyra/sgtm/issues/203). Depende de **acceso al SRTM del MEF**, no
-de D-01 ni de D-02.
+Issue: [#203](https://github.com/hneyra/sgtm/issues/203). Depende de **acceso al SRTM del MEF** y
+de que exista una municipalidad que migre (D-04); no de D-01 ni de D-02.
