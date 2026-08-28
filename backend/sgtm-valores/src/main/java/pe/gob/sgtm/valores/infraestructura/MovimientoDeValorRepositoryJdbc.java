@@ -84,6 +84,48 @@ public class MovimientoDeValorRepositoryJdbc extends RepositorioJdbc
     }
 
     @Override
+    public MovimientoDeValor registrarRespuesta(MovimientoDeValor movimiento) {
+        if (!movimiento.esNuevo()) {
+            throw new IllegalArgumentException(
+                    "Un movimiento ya registrado no se vuelve a insertar ni se corrige: se"
+                            + " registra otro movimiento");
+        }
+        if (movimiento.tipo() == TipoDeMovimiento.PCO) {
+            throw new IllegalArgumentException(
+                    "El pase (PCO) se registra con registrarPase, que es el que la base"
+                            + " serializa; aqui van ACO y RCO");
+        }
+
+        Long id =
+                jdbc().sql(
+                                "INSERT INTO valor_movimiento"
+                                        + " (municipalidad_id, valor_id, tipo, fecha,"
+                                        + "  notificacion_id, exigible_desde, usuario_registro,"
+                                        + "  observacion)"
+                                        + " VALUES ("
+                                        + MUNICIPALIDAD_ACTUAL
+                                        + ", :valorId, :tipo, :fecha, :notificacionId,"
+                                        + "  :exigibleDesde, :usuario, :observacion)"
+                                        + " RETURNING id")
+                        .param("valorId", movimiento.valorId())
+                        .param("tipo", movimiento.tipo().name())
+                        .param("fecha", movimiento.fecha())
+                        .param("notificacionId", movimiento.notificacionId())
+                        .param("exigibleDesde", movimiento.exigibleDesde())
+                        .param("usuario", usuarioActual())
+                        .param("observacion", movimiento.observacion().texto())
+                        .query(Long.class)
+                        .single();
+
+        return porId(java.util.Objects.requireNonNull(id))
+                .orElseThrow(
+                        () ->
+                                new IllegalStateException(
+                                        "El movimiento recien insertado no se puede releer: eso"
+                                                + " solo pasa sin contexto de tenant"));
+    }
+
+    @Override
     public Optional<MovimientoDeValor> paseDe(long valorId) {
         return jdbc().sql(
                         "SELECT "

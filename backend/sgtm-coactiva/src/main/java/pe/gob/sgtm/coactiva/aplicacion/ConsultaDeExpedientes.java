@@ -1,0 +1,261 @@
+package pe.gob.sgtm.coactiva.aplicacion;
+
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import org.jspecify.annotations.Nullable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import pe.gob.sgtm.coactiva.dominio.CriterioDeExpedientes;
+import pe.gob.sgtm.coactiva.dominio.DeudaDelExpediente;
+import pe.gob.sgtm.coactiva.dominio.EstadoDelExpediente;
+import pe.gob.sgtm.coactiva.dominio.ExpedienteCoactivo;
+import pe.gob.sgtm.coactiva.dominio.ExpedienteEnConsulta;
+import pe.gob.sgtm.coactiva.dominio.ExpedienteRepository;
+import pe.gob.sgtm.coactiva.dominio.MovimientoDelExpediente;
+import pe.gob.sgtm.coactiva.dominio.MovimientoDelExpedienteRepository;
+import pe.gob.sgtm.coactiva.dominio.ValorDelExpediente;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
+import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
+import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.valores.ObligacionDelValor;
+import pe.gob.sgtm.valores.ValorParaCoactiva;
+import pe.gob.sgtm.valores.ValoresEnCoactiva;
+
+/**
+ * La grilla de {@code coactiva_expedientes} y la ficha de un expediente (#40, RF-100).
+ *
+ * <h2>La deuda del expediente se pregunta, no se suma de lo congelado</h2>
+ *
+ * <p>Un valor guarda su desglose tal como estaba el dia de la emision (AC de #37). Sumar eso y
+ * pintarlo como «Deuda S/» daria la cifra de un dia pasado con la etiqueta de hoy, que es
+ * exactamente lo que la regla 9 prohibe.
+ *
+ * <p>Lo que se hace es: se piden al modulo de valores <b>que obligaciones</b> formalizan los
+ * valores del expediente, y se le pregunta a {@code cuentacorriente} —la unica fuente de cuanto se
+ * debe— cuanto vale cada una <b>a la fecha pedida</b>. Las dos preguntas van por API publica: este
+ * contexto no lee ni una tabla ajena (ARQ-01 §4).
+ *
+ * <p><b>Las obligaciones se deduplican.</b> Dos valores del mismo expediente pueden formalizar la
+ * misma obligacion —una orden de pago y, mas tarde, una resolucion de determinacion sobre el mismo
+ * predial de 2025—, y contarla dos veces duplicaria la deuda del procedimiento.
+ *
+ * <p><b>Las costas van a cero y con nombre.</b> Son #42, y su importe sale del arancel aprobado.
+ * Aqui esta el sumando; el numero no se inventa (regla 5).
+ *
+ * <p>Por {@code @Transactional(readOnly = true)}: sin transaccion no hay {@code SET LOCAL}, y sin
+ * el la politica RLS falla en vez de devolver filas.
+ */
+@Service
+public class ConsultaDeExpedientes {
+
+    private final ExpedienteRepository expedientes;
+    private final MovimientoDelExpedienteRepository movimientos;
+    private final ValoresEnCoactiva valores;
+    private final ConsultaDeDeudaPublica deuda;
+
+    public ConsultaDeExpedientes(
+            ExpedienteRepository expedientes,
+            MovimientoDelExpedienteRepository movimientos,
+            ValoresEnCoactiva valores,
+            ConsultaDeDeudaPublica deuda) {
+        this.expedientes = expedientes;
+        this.movimientos = movimientos;
+        this.valores = valores;
+        this.deuda = deuda;
+    }
+
+    /**
+     * La grilla, con la deuda de cada expediente actualizada a la fecha.
+     *
+     * @param aLaFecha a que dia se actualiza la deuda de cada fila (regla 9). No afecta al estado:
+     *     el estado es el ultimo movimiento del historial, y eso no depende de cuando se mire
+     */
+    @Transactional(readOnly = true)
+    public Pagina<ExpedienteConDeuda> buscar(
+            CriterioDeExpedientes criterio, LocalDate aLaFecha, Paginacion paginacion) {
+
+        Pagina<ExpedienteEnConsulta> pagina = expedientes.consultar(criterio, paginacion);
+        // Una sola lectura del padron y del libro por contribuyente de la pagina, no por fila:
+        // varios expedientes del mismo obligado son lo corriente en esta pantalla.
+        Map<Long, List<ObligacionPublica>> obligacionesPorContribuyente = new HashMap<>();
+        Map<Long, List<ValorParaCoactiva>> valoresPorContribuyente = new HashMap<>();
+
+        return pagina.mapear(
+                fila ->
+                        new ExpedienteConDeuda(
+                                fila,
+                                deudaDe(
+                                        fila.expediente(),
+                                        aLaFecha,
+                                        obligacionesPorContribuyente,
+                                        valoresPorContribuyente)));
+    }
+
+    /** Un expediente por su numero, con su historial, su direccion vigente y su deuda. */
+    @Transactional(readOnly = true)
+    public Optional<FichaDelExpediente> porNumero(String numero, LocalDate aLaFecha) {
+        return expedientes.porNumero(numero).map(expediente -> fichaDe(expediente, aLaFecha));
+    }
+
+    /** La deuda del expediente actualizada a esa fecha. */
+    @Transactional(readOnly = true)
+    public DeudaDelExpediente deudaDe(ExpedienteCoactivo expediente, LocalDate aLaFecha) {
+        return deudaDe(expediente, aLaFecha, new HashMap<>(), new HashMap<>());
+    }
+
+    // ------------------------------------------------------------------
+
+    private FichaDelExpediente fichaDe(ExpedienteCoactivo expediente, LocalDate aLaFecha) {
+        List<MovimientoDelExpediente> historial =
+                movimientos.deExpediente(expediente.identificador());
+        List<ValorDelExpediente> susValores = expedientes.valoresDe(expediente.identificador());
+        String vigente =
+                historial.stream()
+                        .filter(m -> m.direccionReferencial() != null)
+                        .reduce((primero, segundo) -> segundo)
+                        .map(MovimientoDelExpediente::direccionNueva)
+                        .orElseGet(expediente::direccionReferencial);
+
+        return new FichaDelExpediente(
+                expediente,
+                EstadoDelExpediente.delHistorial(historial),
+                vigente,
+                susValores,
+                historial,
+                deudaDe(expediente, aLaFecha));
+    }
+
+    private DeudaDelExpediente deudaDe(
+            ExpedienteCoactivo expediente,
+            LocalDate aLaFecha,
+            Map<Long, List<ObligacionPublica>> obligacionesPorContribuyente,
+            Map<Long, List<ValorParaCoactiva>> valoresPorContribuyente) {
+
+        Set<Long> delExpediente = new HashSet<>();
+        for (ValorDelExpediente valor : expedientes.valoresDe(expediente.identificador())) {
+            delExpediente.add(valor.valorId());
+        }
+        if (delExpediente.isEmpty()) {
+            return DeudaDelExpediente.ninguna(aLaFecha);
+        }
+
+        long contribuyente = expediente.contribuyenteId();
+        List<ValorParaCoactiva> susValores =
+                valoresPorContribuyente.computeIfAbsent(
+                        contribuyente, id -> valores.delContribuyente(id, aLaFecha));
+
+        Set<ClaveDeObligacion> claves = new HashSet<>();
+        for (ValorParaCoactiva valor : susValores) {
+            if (!delExpediente.contains(valor.id())) {
+                continue;
+            }
+            for (ObligacionDelValor obligacion : valor.obligaciones()) {
+                claves.add(ClaveDeObligacion.de(obligacion));
+            }
+        }
+        if (claves.isEmpty()) {
+            return DeudaDelExpediente.ninguna(aLaFecha);
+        }
+
+        List<ObligacionPublica> obligaciones =
+                obligacionesPorContribuyente.computeIfAbsent(
+                        contribuyente, id -> deuda.deTodoElContribuyente(id, aLaFecha));
+
+        DeudaDelExpediente acumulada = DeudaDelExpediente.ninguna(aLaFecha);
+        Set<ClaveDeObligacion> contadas = new HashSet<>();
+        for (ObligacionPublica obligacion : obligaciones) {
+            ClaveDeObligacion clave = ClaveDeObligacion.de(obligacion);
+            if (!claves.contains(clave) || !contadas.add(clave)) {
+                continue;
+            }
+            acumulada =
+                    acumulada.mas(
+                            obligacion.insoluto(),
+                            obligacion.reajuste(),
+                            obligacion.interes(),
+                            obligacion.gasto());
+        }
+        return acumulada;
+    }
+
+    /**
+     * La clave con la que se cruzan las obligaciones que un valor formaliza y las que el libro
+     * tiene.
+     *
+     * <p>Son los cuatro campos que {@code cuentacorriente} usa para agrupar sus asientos. El
+     * tributo se compara en mayusculas porque los dos lados lo normalizan asi, pero por si acaso.
+     */
+    private record ClaveDeObligacion(
+            String tributo, int ejercicio, @Nullable Long predioId, @Nullable Long vehiculoId) {
+
+        static ClaveDeObligacion de(ObligacionDelValor obligacion) {
+            return new ClaveDeObligacion(
+                    obligacion.tributo().toUpperCase(java.util.Locale.ROOT),
+                    obligacion.ejercicio().valor(),
+                    obligacion.predioId(),
+                    obligacion.vehiculoId());
+        }
+
+        static ClaveDeObligacion de(ObligacionPublica obligacion) {
+            return new ClaveDeObligacion(
+                    obligacion.tributo().toUpperCase(java.util.Locale.ROOT),
+                    obligacion.ejercicio().valor(),
+                    obligacion.predioId(),
+                    obligacion.vehiculoId());
+        }
+    }
+
+    /**
+     * Una fila de la grilla con su deuda actualizada.
+     *
+     * @param fila la cabecera y lo que la pantalla muestra
+     * @param deuda cuanto se debe, con la fecha a la que esta (regla 9)
+     */
+    public record ExpedienteConDeuda(ExpedienteEnConsulta fila, DeudaDelExpediente deuda) {
+
+        public ExpedienteConDeuda {
+            Objects.requireNonNull(fila, "La fila es obligatoria");
+            Objects.requireNonNull(deuda, "Toda cifra viaja con su fecha (regla 9)");
+        }
+    }
+
+    /**
+     * Un expediente con todo lo que sus tres pantallas necesitan.
+     *
+     * @param expediente la cabecera
+     * @param estado el estado derivado del historial
+     * @param direccionReferencialVigente la del ultimo cambio, o la de apertura
+     * @param valores los valores que agrupa
+     * @param historial la traza completa, del primero al ultimo
+     * @param deuda cuanto se debe, con su fecha
+     */
+    public record FichaDelExpediente(
+            ExpedienteCoactivo expediente,
+            EstadoDelExpediente estado,
+            @Nullable String direccionReferencialVigente,
+            List<ValorDelExpediente> valores,
+            List<MovimientoDelExpediente> historial,
+            DeudaDelExpediente deuda) {
+
+        public FichaDelExpediente {
+            Objects.requireNonNull(expediente, "La ficha es la de un expediente");
+            Objects.requireNonNull(estado, "El estado se deriva, pero nunca falta");
+            valores = List.copyOf(valores);
+            historial = List.copyOf(historial);
+            Objects.requireNonNull(deuda, "Toda cifra viaja con su fecha (regla 9)");
+        }
+
+        /** El ejercicio del expediente, que la pantalla pinta como «Año». */
+        public Ejercicio ejercicio() {
+            return expediente.ejercicio();
+        }
+    }
+}

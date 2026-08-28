@@ -40,6 +40,32 @@ public final class MovimientosEnMemoria implements MovimientoDeValorRepository {
         return conId;
     }
 
+    /**
+     * La respuesta de coactiva (ACO o RCO). No es idempotente, igual que en la base: el indice
+     * unico de V28 es parcial sobre {@code PCO}, y un valor puede ser rechazado, vuelto a pasar y
+     * aceptado despues.
+     */
+    @Override
+    public MovimientoDeValor registrarRespuesta(MovimientoDeValor movimiento) {
+        if (movimiento.tipo() == TipoDeMovimiento.PCO) {
+            throw new IllegalArgumentException(
+                    "El pase (PCO) se registra con registrarPase, que es el que la base"
+                            + " serializa; aqui van ACO y RCO");
+        }
+        MovimientoDeValor conId =
+                new MovimientoDeValor(
+                        siguienteId++,
+                        movimiento.valorId(),
+                        movimiento.tipo(),
+                        movimiento.fecha(),
+                        movimiento.notificacionId(),
+                        movimiento.exigibleDesde(),
+                        "prueba",
+                        movimiento.observacion());
+        guardados.add(conId);
+        return conId;
+    }
+
     @Override
     public Optional<MovimientoDeValor> paseDe(long valorId) {
         return guardados.stream()

@@ -916,24 +916,45 @@ public final class DatosDePrueba {
                 prescripcionId,
                 VIGENCIA);
 
+        ejecutar(
+                app,
+                "INSERT INTO expediente_correlativo (municipalidad_id, ejercicio, ultimo)"
+                        + " VALUES (?, ?, 1)",
+                muni,
+                EJERCICIO);
         long expedienteId =
                 insertar(
                         app,
-                        "INSERT INTO expediente_coactivo (municipalidad_id, numero,"
-                                + " contribuyente_id, ejecutor, fecha_apertura, observacion)"
-                                + " VALUES (?, ?, ?, 'ejecutor', ?, 'expediente de prueba')"
+                        "INSERT INTO expediente_coactivo (municipalidad_id, numero, ejercicio,"
+                                + " correlativo, contribuyente_id, ejecutor, fecha_apertura,"
+                                + " usuario_registro, fecha_registro, observacion)"
+                                + " VALUES (?, ?, ?, 1, ?, 'ejecutor', ?, 'prueba', now(),"
+                                + "         'expediente de prueba')"
                                 + " RETURNING id",
                         muni,
                         "EXP-" + sufijo,
+                        EJERCICIO,
                         titular,
                         VIGENCIA);
         ejecutar(
                 app,
-                "INSERT INTO expediente_valor (municipalidad_id, expediente_id, valor_id)"
-                        + " VALUES (?, ?, ?)",
+                "INSERT INTO expediente_valor (municipalidad_id, expediente_id, valor_id,"
+                        + " fecha_importacion)"
+                        + " VALUES (?, ?, ?, ?)",
                 muni,
                 expedienteId,
-                valorId);
+                valorId,
+                VIGENCIA);
+        // La apertura del expediente: sin ella su estado no se puede derivar (V33, #40).
+        ejecutar(
+                app,
+                "INSERT INTO expediente_movimiento (municipalidad_id, expediente_id, tipo, estado,"
+                        + " fecha, motivo, usuario_registro, fecha_registro, observacion)"
+                        + " VALUES (?, ?, 'APERTURA', 'INICIADO', ?, 'importacion de prueba',"
+                        + "         'prueba', now(), 'apertura de prueba')",
+                muni,
+                expedienteId,
+                VIGENCIA);
         ejecutar(
                 app,
                 "INSERT INTO acto_coactivo (municipalidad_id, expediente_id, tipo, numero, fecha,"
