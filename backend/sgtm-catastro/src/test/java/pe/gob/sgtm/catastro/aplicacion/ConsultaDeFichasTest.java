@@ -513,6 +513,16 @@ class ConsultaDeFichasTest {
          */
         private static final int PREDIOS = 30_000;
 
+        /**
+         * Dos pisos por ficha (#313).
+         *
+         * <p>{@code construccion} es la tabla que mas crece del catastro: una fila por piso, por
+         * ficha y por <b>version</b> de la ficha, que no se sobrescribe nunca. Sesenta mil filas
+         * bastan para que el planificador deje de considerar barata la tabla entera, que es la
+         * condicion para que la prueba mida el indice y no el tamano.
+         */
+        private static final int PISOS = 2;
+
         /** Como lo escribe el repositorio: el prefijo como rango, con operadores leakproof. */
         private static final String RANGO =
                 "EXPLAIN SELECT p.id FROM predio p"
@@ -523,6 +533,37 @@ class ConsultaDeFichasTest {
         private static final String CON_LIKE =
                 "EXPLAIN SELECT p.id FROM predio p"
                         + " WHERE p.codigo_ref_catastral LIKE '2701019000000000001%'";
+
+        /**
+         * Como lo escribe el repositorio: la suma del area construida de las fichas de la pagina.
+         *
+         * <p>Los identificadores se enumeran en el hueco, igual que hace el {@code IN (:fichas)}
+         * del repositorio al expandir la lista; se interpolan porque el plan de un {@code EXPLAIN}
+         * con parametros sin valor no dice cual es el plan que corre.
+         */
+        private static final String SUMA_DEL_AREA =
+                "EXPLAIN SELECT ficha_id, sum(area_construida) AS area_construida"
+                        + "  FROM construccion"
+                        + " WHERE ficha_id IN (%s)"
+                        + " GROUP BY ficha_id";
+
+        /**
+         * Como lo escribe {@code construccionesDe(ficha)}: el detalle de UNA ficha.
+         *
+         * <p>Comparte el hueco con la de arriba para no duplicar el ayudante; con un solo
+         * identificador PostgreSQL reduce el {@code IN} a la igualdad, y el plan lo confirma
+         * imprimiendo {@code ficha_id = 35}.
+         */
+        private static final String CONSTRUCCIONES_DE_UNA_FICHA =
+                "EXPLAIN SELECT id, ficha_id, piso, area_construida"
+                        + "  FROM construccion WHERE ficha_id IN (%s) ORDER BY piso, id";
+
+        /** Las fichas sembradas, para armar con ellas la lista de una pagina de la grilla. */
+        private static final String FICHAS_SEMBRADAS =
+                "SELECT f.id FROM ficha_catastral f"
+                        + " JOIN predio p ON p.id = f.predio_id"
+                        + " WHERE p.codigo_ref_catastral LIKE '2701019%'"
+                        + " ORDER BY f.id LIMIT ";
 
         @Test
         @DisplayName("con miles de predios, el prefijo del codigo usa indice y no recorre la tabla")
@@ -556,6 +597,59 @@ class ConsultaDeFichasTest {
                                     + " a LIKE porque «se lee mejor», la de arriba se pone roja y esta"
                                     + " dice por que")
                     .contains("Seq Scan on predio");
+        }
+
+        @Test
+        @DisplayName(
+                "la suma del area construida de la pagina usa indice y no recorre construccion")
+        void laSumaDelAreaConstruidaUsaIndice() throws SQLException {
+            sembrarVolumen();
+
+            String plan = explicarSobreLasFichas(SUMA_DEL_AREA, 20);
+
+            assertThat(plan)
+                    .as(
+                            "sin construccion_ficha_ix (V53) la suma de VEINTE fichas lee las %d"
+                                    + " construcciones del inquilino: acotada en filas devueltas, no"
+                                    + " en filas leidas, y el coste crece con el padron aunque la"
+                                    + " pantalla siga mostrando una pagina",
+                            PREDIOS * PISOS)
+                    .contains("construccion_ficha_ix");
+            assertThat(condicionesDeIndice(plan))
+                    .as(
+                            "y el filtro por ficha tiene que ser CONDICION del indice, no un Filter"
+                                    + " posterior al recorrido. Es el reverso del hallazgo del LIKE:"
+                                    + " int8eq SI es leakproof, asi que bajo RLS PostgreSQL lo evalua"
+                                    + " antes de la politica y lo empuja al indice. Si el indice"
+                                    + " existiera pero ficha_id quedara como Filter, el plan diria"
+                                    + " «Index» y seguiria leyendo la tabla entera")
+                    .isNotEmpty()
+                    .anySatisfy(
+                            condicion ->
+                                    assertThat(condicion)
+                                            .contains("municipalidad_id")
+                                            .contains("ficha_id"));
+            assertThat(plan)
+                    .as("y un recorrido secuencial de construccion es justo lo que #313 cierra")
+                    .doesNotContain("Seq Scan on construccion");
+        }
+
+        @Test
+        @DisplayName("el detalle de construcciones de UNA ficha tampoco recorre construccion")
+        void elDetalleDeUnaFichaUsaIndice() throws SQLException {
+            sembrarVolumen();
+
+            String plan = explicarSobreLasFichas(CONSTRUCCIONES_DE_UNA_FICHA, 1);
+
+            assertThat(plan)
+                    .as(
+                            "construccionesDe(ficha) ya filtraba por ficha_id antes de #309 y tampoco"
+                                    + " tenia indice: es el camino que abre la ficha de cada predio,"
+                                    + " y sin el %d construcciones se recorren para devolver dos"
+                                    + " pisos",
+                            PREDIOS * PISOS)
+                    .contains("construccion_ficha_ix");
+            assertThat(plan).doesNotContain("Seq Scan on construccion");
         }
 
         /** Se siembra una vez para las dos pruebas: son treinta mil filas, no una por prueba. */
@@ -592,12 +686,26 @@ class ConsultaDeFichasTest {
                     sentencia.setLong(1, municipalidad);
                     sentencia.executeUpdate();
                 }
+                try (PreparedStatement sentencia =
+                        app.prepareStatement(
+                                "INSERT INTO construccion (municipalidad_id, ficha_id, piso,"
+                                        + " area_construida)"
+                                        + " SELECT ?, f.id, g::text, 60.00"
+                                        + "   FROM ficha_catastral f"
+                                        + "   JOIN predio p ON p.id = f.predio_id"
+                                        + "  CROSS JOIN generate_series(1, ?) g"
+                                        + "  WHERE p.codigo_ref_catastral LIKE '2701019%'")) {
+                    sentencia.setLong(1, municipalidad);
+                    sentencia.setInt(2, PISOS);
+                    sentencia.executeUpdate();
+                }
                 app.commit();
             }
             // Sin estadisticas el planificador adivina, y la prueba mediria su adivinanza.
             try (Connection owner = base.conexion(BaseDeDatosDePrueba.OWNER);
                     PreparedStatement sentencia =
-                            owner.prepareStatement("ANALYZE predio, ficha_catastral")) {
+                            owner.prepareStatement(
+                                    "ANALYZE predio, ficha_catastral, construccion")) {
                 sentencia.execute();
                 owner.commit();
             }
@@ -610,6 +718,41 @@ class ConsultaDeFichasTest {
                                     String.join(
                                             "\n", jdbc.sql(consulta).query(String.class).list()));
             return plan == null ? "" : plan;
+        }
+
+        /**
+         * Explica una consulta sobre las {@code cuantas} primeras fichas sembradas.
+         *
+         * <p>Los identificadores se leen dentro de la misma transaccion que el {@code EXPLAIN}: sin
+         * ella no hay {@code SET LOCAL}, y bajo RLS la lectura ni siquiera llega a devolver filas.
+         */
+        private String explicarSobreLasFichas(String plantilla, int cuantas) {
+            String plan =
+                    transaccion.execute(
+                            estado -> {
+                                String fichas =
+                                        jdbc
+                                                .sql(FICHAS_SEMBRADAS + cuantas)
+                                                .query(Long.class)
+                                                .list()
+                                                .stream()
+                                                .map(String::valueOf)
+                                                .collect(Collectors.joining(","));
+                                return String.join(
+                                        "\n",
+                                        jdbc.sql(plantilla.formatted(fichas))
+                                                .query(String.class)
+                                                .list());
+                            });
+            return plan == null ? "" : plan;
+        }
+
+        /** Las lineas «Index Cond» del plan: donde se ve QUE condicion resolvio el indice. */
+        private static List<String> condicionesDeIndice(String plan) {
+            return plan.lines()
+                    .map(String::strip)
+                    .filter(linea -> linea.startsWith("Index Cond:"))
+                    .toList();
         }
     }
 
