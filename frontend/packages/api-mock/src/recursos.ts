@@ -1717,7 +1717,10 @@ function recaudacionPorArea(): Readonly<Record<string, unknown>> {
     const monto = comoImporte(montoS ?? '0.00');
     return {
       area: null,
-      areaNombre: null,
+      // `FilaDePartida.areaNombre` es el unico texto explicativo que el
+      // recurso trae para esta fila (javadoc del backend): se llena con la
+      // «Descripción» del prototipo, que es la partida en prosa.
+      areaNombre: descripcion || null,
       partida: partida && partida !== '—' ? partida : null,
       tributo: descripcion || 'SIN PARTIDA',
       cobrado: importe(monto),

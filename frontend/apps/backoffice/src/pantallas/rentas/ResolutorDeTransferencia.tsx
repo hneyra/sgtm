@@ -212,7 +212,7 @@ export function ResolutorDePredioDeTransferencia({
       <p className="sgtm-resolutor__nota" role="status">
         {anuncioDePredio(consulta, preguntable, escrito, bloqueado)}
       </p>
-      {consulta.error !== undefined && <ErrorDeLaBusquedaDePredio error={consulta.error} />}
+      {consulta.error !== null && <ErrorDeLaBusquedaDePredio error={consulta.error} />}
       {candidatos.length > 0 && (
         <ul className="sgtm-asistente__resultados">
           {candidatos.map((candidato) => (
@@ -250,7 +250,7 @@ function anuncioDePredio(
       : '';
   }
   // El error tiene su propio bloque: no se repite aquí.
-  if (consulta.error !== undefined) return '';
+  if (consulta.error !== null) return '';
   const candidatos = Array.isArray(consulta.data) ? consulta.data.length : 0;
   if (candidatos === 0) {
     return 'Ningún predio responde a eso. Revisa el código catastral.';

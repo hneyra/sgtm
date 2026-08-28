@@ -131,6 +131,30 @@ describe('transferencia de predio: el predio y el valor los llena el resolutor',
     expect(screen.getByLabelText('Valor de transferencia (S/)')).toBeInTheDocument();
   });
 
+  /**
+   * **El error no se pinta encima de una lista encontrada** (#379, esta pasada).
+   *
+   * `consulta.error` de `useQuery` es `Error | null`, nunca `undefined`: la
+   * comprobación `consulta.error !== undefined` es cierta siempre —con o sin
+   * error—, así que el banner «No se pudo buscar el predio» se dibujaba en
+   * cada búsqueda que sí encontraba resultados, y la región viva nunca decía
+   * cuántos predios había porque `anuncioDePredio` devolvía cadena vacía por
+   * el mismo motivo.
+   */
+  it('con predios encontrados, no hay banner de error y la región viva cuenta', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta(RUTA);
+    await usuario.type(await screen.findByLabelText('Código predial'), CODIGO);
+
+    // La lista de verdad llega…
+    await screen.findByRole('button', { name: new RegExp(CODIGO) });
+    // …sin ningún banner de error encima…
+    expect(screen.queryByText('No se pudo buscar el predio')).not.toBeInTheDocument();
+    expect(screen.queryByText(/No hay ningún predio con ese código/)).not.toBeInTheDocument();
+    // …y la región viva cuenta lo que encontró, no se queda muda.
+    expect(screen.getByText(/predios? encontrados?/)).toBeInTheDocument();
+  });
+
   it('con todo puesto y observación, la primaria se habilita y pide confirmación al pulsarla', async () => {
     const usuario = userEvent.setup();
     montarEnRuta(RUTA);

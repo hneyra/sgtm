@@ -53,10 +53,6 @@ import { Totales } from './bloques/Totales';
 import { PermisosMatrix } from './seguridad/PermisosMatrix';
 import { MiembrosDeGrupo } from './seguridad/MiembrosDeGrupo';
 import { Respaldos } from './seguridad/Respaldos';
-import { GeneracionIndividualDeValores } from './valores/GeneracionIndividualDeValores';
-import { GeneracionMasivaDeValores } from './valores/GeneracionMasivaDeValores';
-import { PrescripcionDeLaDeuda } from './valores/PrescripcionDeLaDeuda';
-import { PaseACoactiva } from './valores/PaseACoactiva';
 
 /**
  * **El renderizador.** Una sola pantalla para las 134 del manual.
@@ -169,13 +165,15 @@ type Estructura = EstructuraDePantalla;
 const ANCLA_DE_LA_TABLA = 'sgtm-tabla-de-la-pantalla';
 
 /**
- * Las tres pantallas de valores catastrales, cargadas con quien las abre y no
- * en el arranque (#379, esta pasada; mismo patron que `rentas/composicion.ts`).
+ * Siete pantallas propias, cargadas con quien las abre y no en el arranque
+ * (#379, esta pasada; mismo patron que `rentas/composicion.ts`).
  *
- * Cada una trae su propia logica de valuacion —`ActualizacionDeCatastro` con
- * `TablaDePisos` y `CodigoCatastral`, las otras dos con `useTablaDeValuacion`—
- * y ninguna de las 131 pantallas que no son estas tres la necesita nunca.
- * Medido: el arranque bajo de 148,6 a 145,9 KB comprimidos al sacarlas del
+ * Las tres de valores catastrales —`ActualizacionDeCatastro` con `TablaDePisos`
+ * y `CodigoCatastral`, las otras dos con `useTablaDeValuacion`— y las cuatro
+ * de `Valores` (RF-093 a RF-096, #75): `GeneracionIndividualDeValores`,
+ * `GeneracionMasivaDeValores`, `PrescripcionDeLaDeuda` y `PaseACoactiva`.
+ * Ninguna de las 127 pantallas que no son estas siete la necesita nunca.
+ * Medido: el arranque bajo de 150,2 a 148,0 KB comprimidos al sacarlas del
  * trozo comun (`yarn comprobar-compilaciones`).
  */
 const ActualizacionDeCatastro = lazy(async () => ({
@@ -186,6 +184,18 @@ const ValoresUnitarios = lazy(async () => ({
 }));
 const Depreciacion = lazy(async () => ({
   default: (await import('./catastro/Depreciacion')).Depreciacion,
+}));
+const GeneracionIndividualDeValores = lazy(async () => ({
+  default: (await import('./valores/GeneracionIndividualDeValores')).GeneracionIndividualDeValores,
+}));
+const GeneracionMasivaDeValores = lazy(async () => ({
+  default: (await import('./valores/GeneracionMasivaDeValores')).GeneracionMasivaDeValores,
+}));
+const PrescripcionDeLaDeuda = lazy(async () => ({
+  default: (await import('./valores/PrescripcionDeLaDeuda')).PrescripcionDeLaDeuda,
+}));
+const PaseACoactiva = lazy(async () => ({
+  default: (await import('./valores/PaseACoactiva')).PaseACoactiva,
 }));
 
 /** Las pantallas cuyo recurso trae version y vigencia. Hoy, las cuatro fichas. */
@@ -267,9 +277,10 @@ const COMPONENTES_PROPIOS: Readonly<
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
   const Propio = COMPONENTES_PROPIOS[estructura.id];
   if (Propio !== undefined) {
-    // El `Suspense` es de las tres perezosas de catastro; las de seguridad no
-    // suspenden nunca —viajan en el trozo comun—, y envolverlas igual no
-    // cuesta nada: sin promesa pendiente, `Suspense` no dibuja su `fallback`.
+    // El `Suspense` es de las siete perezosas de catastro y valores; las de
+    // seguridad no suspenden nunca —viajan en el trozo comun—, y envolverlas
+    // igual no cuesta nada: sin promesa pendiente, `Suspense` no dibuja su
+    // `fallback`.
     return (
       <Suspense fallback={<Esqueleto alto={320} />}>
         <Propio estructura={estructura} />

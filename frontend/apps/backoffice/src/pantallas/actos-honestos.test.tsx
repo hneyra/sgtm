@@ -189,9 +189,9 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     // Escribe en el contrato y no ha declarado su cuerpo: `cierre_caja` (#36,
     // #74) — el `declarado` que exige `PeticionDeCierre` es un mapa por forma
     // de pago, y `CampoDelCuerpo`/`TablaDelCuerpo` no saben construirlo todavía.
-    expect(impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja'])?.causa).toBe(
-      'sin-declaracion',
-    );
+    expect(
+      impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja'])?.causa,
+    ).toBe('sin-declaracion');
     // Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
     // no tiene donde escribir** (#33, #74): a `caja_tributaria` le falta el
     // medio de pago —EFECTIVO/CHEQUE/DEPOSITO/TARJETA/TRANSFERENCIA—, un campo
