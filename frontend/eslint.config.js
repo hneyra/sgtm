@@ -64,7 +64,9 @@ export default tseslint.config(
       // las tablas del sistema desborda —siete columnas no caben en la caja de
       // ventanilla— y sin esto la ultima columna solo existe para quien tiene
       // raton (WCAG 2.1.1). Se anade `region` y nada mas: sigue haciendo falta
-      // el rol, y una region sin `aria-label` la caza `jsx-a11y` aparte.
+      // el rol. El nombre accesible de la region NO lo vigila ninguna regla de
+      // `jsx-a11y`: lo sostiene la prueba que la busca por su nombre
+      // (`getByRole('region', { name: … })` en catastro.test.tsx).
       'jsx-a11y/no-noninteractive-tabindex': [
         'error',
         { tags: [], roles: ['tabpanel', 'region'], allowExpressionValues: true },

@@ -401,6 +401,18 @@ describe('la consulta de fichas pagina contra el servidor', () => {
     expect(peticiones.some((u) => u.includes('conciliadaConRentas'))).toBe(false);
   });
 
+  it('un enlace compartido con el filtro puesto no lo lleva a la petición', async () => {
+    // El control bloqueado cubre solo el camino barato: quien teclea. El caro
+    // es la URL compartida —el montaje lee la consulta directamente, sin pasar
+    // por ningun formulario—, y lo cubre el borrado de la clave en los
+    // parametros de la conexion. Sin esta prueba, quitar ese borrado dejaba
+    // las 856 en verde y el 422 volvia por el enlace.
+    montarEnRuta('/catastro/consulta-fichas?conciliadaConRentas=S%C3%AD');
+    await screen.findByText('MEDINA MEDINA, RUFINA (SUC.)');
+    await waitFor(() => expect(peticiones.length).toBeGreaterThan(0));
+    expect(peticiones.some((u) => u.includes('conciliadaConRentas'))).toBe(false);
+  });
+
   /**
    * **La tabla se alcanza con el teclado** (FRO-04 §7, RNF-082).
    *
