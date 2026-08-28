@@ -2031,6 +2031,79 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/liquidaciones":
+    post:
+      operationId: liquidar_fiscalizacion
+      summary: "Liquidación de un acta de fiscalización"
+      description: "Emite la liquidación de un acta: el contraste hallado/declarado, una línea por unidad y ejercicio del periodo fiscalizado. Cada línea fija el conjunto de parámetros SELLADO de su ejercicio, de modo que cambiar los parámetros de hoy no altera una liquidación ya emitida. Sin importes: los liquidados y las multas esperan a D-02a (#198). El cuerpo lleva la observación del usuario, obligatoria (RNF-052)."
+      tags: ["Fiscalización"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/liquidaciones/{numero}/reliquidaciones":
+    post:
+      operationId: reliquidar_fiscalizacion
+      summary: "Reliquidación"
+      description: "Corrige una liquidación emitiendo OTRA versión que la referencia. La anterior no cambia ni una columna, las dos quedan, y la respuesta explica qué cambió entre ellas. Las líneas heredan el conjunto sellado de la versión anterior: una reliquidación corrige el contraste, no el marco normativo."
+      tags: ["Fiscalización"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/liquidaciones/{numero}/estados":
+    patch:
+      operationId: estado_de_liquidacion
+      summary: "Estado de una liquidación de fiscalización"
+      description: "Mueve la liquidación de estado conservando el historial. No actualiza ninguna fila: agrega un movimiento, y el estado se DERIVA de él. Una liquidación anulada no vuelve: corregirla es reliquidar."
+      tags: ["Fiscalización"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/fiscalizacion/resoluciones/{numero}":
     get:
       operationId: resolucion_determinacion_fisc
@@ -2321,6 +2394,62 @@ paths:
           example: "ASCENDENTE"
       responses:
         200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: registrar_internamiento
+      summary: "Registro de ingreso al depósito"
+      description: >-
+        Interna un vehículo en el depósito municipal y emite su acta (#50, RF-064). La
+        pantalla «Internamiento vehicular» declara «GET /transito/internamientos» como su
+        endpoint —la grilla— y su acción «Registrar ingreso» necesita un verbo aparte. El
+        cuerpo lleva la placa, el depósito, el concepto del TUPA con que se cobrará la
+        custodia y la observación del usuario, obligatoria (RNF-052).
+      tags: ["Tránsito"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/internamientos/{placa}/liberacion":
+    post:
+      operationId: liberar_internamiento
+      summary: "Liberación del vehículo internado"
+      description: >-
+        Entrega el vehículo a quien lo retira y emite el acta de liberación (#50, RF-064).
+        Exige el recibo con que se pagó la custodia: el backend lo acredita contra
+        `tesoreria` por su API pública, y sin esa acreditación el vehículo no sale. La
+        casilla «Custodia cancelada» de la pantalla no basta —la marca quien entrega el
+        vehículo—.
+      tags: ["Tránsito"]
+      parameters:
+        - name: placa
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
           description: Operacion realizada
           content:
             application/json:
@@ -2688,6 +2817,39 @@ paths:
       summary: "Resolución de gerencia sancionadora"
       description: "Segunda resolución, emitida luego de la ordinaria. Tiene carácter sancionador y se deriva a la Dirección General de Transportes."
       tags: ["Tránsito"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/transito/resoluciones/{numero}/notificacion":
+    post:
+      operationId: notificar_resolucion_transito
+      summary: "Notificación de resolución de gerencia de tránsito"
+      description: >-
+        Cédula de notificación de la resolución ordinaria o sancionadora de tránsito, con
+        su acuse (#50, RF-074). **Es de donde sale el derecho a la sancionadora**: la
+        diligencia que surte efecto sobre la ordinaria fija, con el plazo parametrizado del
+        conjunto sellado, el día desde el que se puede sancionar. Infracciones
+        administrativas tiene la suya
+        (`/infracciones/administrativas/resoluciones/{id}/notificacion`); tránsito no la
+        tenía, y sin ella la sancionadora no se puede dictar nunca.
+      tags: ["Tránsito"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -5975,6 +6137,107 @@ paths:
           example: "ASCENDENTE"
       responses:
         200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: presentar_fue
+      summary: "Presentación del FUE"
+      description: "Da de alta el expediente del Formulario Único de Edificaciones (RF-113). El cuerpo lleva el expediente, el solicitante, el tipo de trámite, la obra, la modalidad de aprobación, el representante legal —opcional— y la observación del usuario, obligatoria (RNF-052). Presentar NO otorga nada: no numera ninguna licencia ni comprueba ningún derecho de trámite. Una ampliación o una revalidación nombran aquí la licencia original, y la referencian sin sustituirla."
+      tags: ["Autorizaciones y licencias"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/edificacion/{expediente}/secciones":
+    post:
+      operationId: completar_seccion_fue
+      summary: "Sección del FUE completada"
+      description: "Completa una sección del FUE: TERRENO, PROYECTO, VALORIZACION, PROFESIONALES o DOCUMENTOS. Se pueden completar en cualquier orden y en visitas distintas; completar una que ya estaba guarda la versión siguiente y deja la anterior entera. La valorización va por pisos y estructuras y NO admite importes: el valor por metro cuadrado sale del cuadro de valores unitarios de edificación."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: expediente
+          in: path
+          required: true
+          description: "Numero de expediente del FUE"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/edificacion/{expediente}/licencia":
+    post:
+      operationId: emitir_licencia_edificacion
+      summary: "Emisión de licencia de edificación"
+      description: "Otorga la licencia de edificación del expediente (RF-113). Sólo se emite cuando están las cinco secciones obligatorias, y el error dice cuáles faltan. Sin un recibo válido de caja de tasas —del titular, no anulado y por el concepto del TUPA que corresponde— no se emite. El número de la licencia lo pone el sistema desde su correlativo; la vigencia entra como dato del acto, porque el plazo es una cifra normativa y no se compila."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: expediente
+          in: path
+          required: true
+          description: "Numero de expediente del FUE"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/edificacion/{expediente}/revalidacion":
+    post:
+      operationId: revalidar_licencia_edificacion
+      summary: "Revalidación de licencia de edificación"
+      description: "Prorroga el plazo de la licencia que el expediente de revalidación nombra. NO sustituye la vigencia original: agrega el tramo siguiente, y la respuesta devuelve los dos con el acto que concedió cada uno. Se cobra en caja de tasas antes, con su propio concepto del TUPA."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: expediente
+          in: path
+          required: true
+          description: "Numero de expediente de la revalidacion"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
           description: Operacion realizada
           content:
             application/json:

@@ -121,6 +121,7 @@ class CambioDeNumeroControllerTest {
                             null,
                             null,
                             null,
+                            1L,
                             Dinero.de("5500"),
                             Alicuota.de("8"),
                             Dinero.de("440"),
@@ -140,6 +141,17 @@ class CambioDeNumeroControllerTest {
         @Override
         public Optional<Papeleta> porNumero(String numero) {
             return filas.stream().filter(p -> p.numero().equals(numero)).findFirst();
+        }
+
+        @Override
+        public Optional<Papeleta> porNumero(
+                pe.gob.sgtm.sanciones.dominio.Familia familia, String numero) {
+            return porNumero(numero);
+        }
+
+        @Override
+        public Optional<Papeleta> porId(long id) {
+            return Optional.empty();
         }
 
         @Override

@@ -1332,6 +1332,16 @@ class EscrituraDeFichasControllerTest {
      */
     private static final class PrediosEnMemoria implements CatastroRepository {
 
+        @Override
+        public pe.gob.sgtm.compartido.Pagina<pe.gob.sgtm.catastro.PredioDelPadron> padron(
+                @org.jspecify.annotations.Nullable String sectorCodigo,
+                java.time.LocalDate aLaFecha,
+                pe.gob.sgtm.compartido.Paginacion paginacion) {
+            // El padron con su titular vigente (#49) solo lo recorre la deteccion de omisos, que
+            // se prueba contra PostgreSQL: aqui no hay nada que devolver.
+            throw new UnsupportedOperationException("esta prueba no recorre el padron");
+        }
+
         private final List<Sector> sectores =
                 new ArrayList<>(List.of(new Sector(1L, "SC-1", "Sector Centro", "Zona A", true)));
 
@@ -1524,6 +1534,11 @@ class EscrituraDeFichasControllerTest {
      * «funcionaria» tambien en el orden equivocado y la prueba no diria nada del orden real.
      */
     private static final class FichasEnMemoria implements FichaCatastralRepository {
+
+        @Override
+        public java.util.Optional<pe.gob.sgtm.catastro.dominio.FichaCatastral> porId(long fichaId) {
+            throw new UnsupportedOperationException("esta prueba no lee una version por id");
+        }
 
         private final List<FichaCatastral> versiones = new ArrayList<>();
         private long siguiente = 1L;

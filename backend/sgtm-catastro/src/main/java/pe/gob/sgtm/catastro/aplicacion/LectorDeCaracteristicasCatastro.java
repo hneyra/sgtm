@@ -33,10 +33,12 @@ public class LectorDeCaracteristicasCatastro implements LectorDeCaracteristicas 
             return Optional.empty();
         }
 
-        String uso =
-                fichas.vigenteA(predioId, TipoFicha.UNICA, fecha)
-                        .map(ficha -> ficha.uso())
-                        .orElse(null);
+        // Una sola lectura de la ficha para el uso y el area: son de la misma version, y pedirla
+        // dos veces abriria la puerta a que el uso saliera de una y el area de otra.
+        Optional<pe.gob.sgtm.catastro.dominio.FichaCatastral> vigente =
+                fichas.vigenteA(predioId, TipoFicha.UNICA, fecha);
+        String uso = vigente.map(ficha -> ficha.uso()).orElse(null);
+        pe.gob.sgtm.dominio.AreaM2 area = vigente.map(ficha -> ficha.areaTerreno()).orElse(null);
 
         Long sectorId = predio.get().sectorId();
         String sectorCodigo =
@@ -44,6 +46,6 @@ public class LectorDeCaracteristicasCatastro implements LectorDeCaracteristicas 
                         ? null
                         : catastro.sectorPorId(sectorId).map(Sector::codigo).orElse(null);
 
-        return Optional.of(new CaracteristicasDelPredio(uso, sectorCodigo));
+        return Optional.of(new CaracteristicasDelPredio(uso, sectorCodigo, area));
     }
 }

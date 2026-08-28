@@ -82,6 +82,42 @@ public class DeclaracionJuradaRepositoryJdbc extends RepositorioJdbc
                 DeclaracionJuradaRepositoryJdbc::mapear);
     }
 
+    /**
+     * Las declaraciones vigentes de un lote de predios (#49, RF-055).
+     *
+     * <p>{@code d.predio_id = ANY(:predios)} y no {@code IN (:predios)}: con la primera forma el
+     * lote viaja como <b>un</b> parametro —un arreglo— y el plan se cachea igual para paginas de
+     * veinte y de cien; con {@code IN}, cada tamano de lote produce una consulta distinta.
+     *
+     * <p>Los estados vigentes van como arreglo por el mismo motivo, y salen de {@link
+     * EstadoDeDeclaracion} en vez de escribirse aqui: la definicion de «vigente» vive en un solo
+     * sitio.
+     */
+    @Override
+    public java.util.List<DeclaracionJurada> vigentesDePredios(
+            java.util.Collection<Long> predioIds, Ejercicio ejercicio) {
+        if (predioIds.isEmpty()) {
+            return java.util.List.of();
+        }
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS
+                                + DESDE
+                                + " WHERE d.ejercicio = :ejercicio"
+                                + "   AND d.predio_id = ANY(:predios)"
+                                + "   AND d.estado = ANY(:estados)")
+                .param("ejercicio", ejercicio.valor())
+                .param("predios", predioIds.toArray(Long[]::new))
+                .param(
+                        "estados",
+                        new String[] {
+                            EstadoDeDeclaracion.PRESENTADA.name(),
+                            EstadoDeDeclaracion.OBSERVADA.name()
+                        })
+                .query(DeclaracionJuradaRepositoryJdbc::mapear)
+                .list();
+    }
+
     @Override
     public DeclaracionJurada insertar(DeclaracionJurada declaracion) {
         String usuario = OrigenContext.actual().usuario();

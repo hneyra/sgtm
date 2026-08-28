@@ -38,6 +38,12 @@ import pe.gob.sgtm.sanciones.dominio.PapeletaRepository;
  * contribuyenteObligadoId} es un argumento explícito de quien registra la papeleta, nunca inferido
  * dentro de este caso de uso.
  *
+ * <p><b>Y desde #50 se guarda</b>, en {@code papeleta.obligado_id} (V41 §1). Hasta entonces entraba
+ * por la firma, se usaba para asentar el cargo y se perdía; cuando un descargo se declara fundado
+ * hay que dar de baja esa misma obligación, y sin la columna no había forma de saber contra quién
+ * se asentó —{@code infractorId}, {@code propietarioId} y {@code contribuyenteId} son tres
+ * candidatos y ninguno es la respuesta—.
+ *
  * <p>El cargo se asienta con {@code referenciaExterna = "PAPELETA-" + id}, la clave <b>estable</b>
  * de la fila —no {@code numero}, que {@code CambiarNumeroDePapeleta} puede corregir después en
  * tránsito—: así el enlace con el cargo ya asentado no se rompe cuando el número cambia (AC de
@@ -46,8 +52,12 @@ import pe.gob.sgtm.sanciones.dominio.PapeletaRepository;
 @Service
 public class RegistrarPapeleta {
 
-    private static final String TRIBUTO_TRANSITO = "MULTA_TRANSITO";
-    private static final String TRIBUTO_ADMINISTRATIVA = "MULTA_ADMINISTRATIVA";
+    // Los dos tributos viven en ObligacionDeLaPapeleta desde #50: la baja que una resolucion
+    // fundada asienta tiene que apuntar a la MISMA obligacion que este cargo creo, y dos
+    // escrituras de esa correspondencia acabarian divergiendo.
+    private static final String TRIBUTO_TRANSITO = ObligacionDeLaPapeleta.TRIBUTO_TRANSITO;
+    private static final String TRIBUTO_ADMINISTRATIVA =
+            ObligacionDeLaPapeleta.TRIBUTO_ADMINISTRATIVA;
     private static final String TABLA_AUDITADA = "papeleta";
 
     private final PapeletaRepository papeletas;
@@ -102,6 +112,7 @@ public class RegistrarPapeleta {
                         licenciaConducir,
                         infractorId,
                         propietarioId,
+                        contribuyenteObligadoId,
                         baseImponible,
                         porcentajeInfraccion,
                         importeInfraccion,
@@ -153,6 +164,7 @@ public class RegistrarPapeleta {
                         contribuyenteId,
                         predioId,
                         notificacionPreviaId,
+                        contribuyenteObligadoId,
                         baseImponible,
                         porcentajeInfraccion,
                         importeInfraccion,

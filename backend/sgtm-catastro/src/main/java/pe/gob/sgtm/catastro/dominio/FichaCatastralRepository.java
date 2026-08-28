@@ -25,6 +25,17 @@ public interface FichaCatastralRepository {
     Optional<FichaCatastral> ultimaVersion(long predioId, TipoFicha tipo);
 
     /**
+     * Una version concreta por su identificador, este vigente o no (#49).
+     *
+     * <p>Existe porque otros contextos <b>guardan</b> el identificador de la version que los
+     * sustenta —{@code declaracion_jurada.ficha_catastral_id} desde #28, {@code
+     * acta_fiscalizacion.ficha_id} desde #45— y despues necesitan volver a ella. Resolverla por
+     * predio y fecha no serviria: la fecha que tienen es la de su propio acto, y entre esa fecha y
+     * hoy la ficha pudo versionarse varias veces.
+     */
+    Optional<FichaCatastral> porId(long fichaId);
+
+    /**
      * Inserta una version nueva con sus construcciones e instalaciones.
      *
      * <p>No hay un {@code actualizar}: una version registrada no se edita.
