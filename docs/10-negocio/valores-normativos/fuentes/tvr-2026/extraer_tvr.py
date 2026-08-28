@@ -12,7 +12,11 @@
 #             X hacia atras marca donde termina la celda "modelo 2025" y
 #             empieza "modelo 2026".
 #
-# Uso: python3 extraer_tvr.py  (espera 7623157-anexo-tvr-ipv-2026.pdf al lado)
+# Uso: python3 extraer_tvr.py  (espera 7623157-anexo-tvr-ipv-2026.pdf al lado).
+#      El PDF no se versiona en git: esta archivado en S3. Traerlo antes con
+#      aws s3 cp s3://sgtm-fuentes-normativas/fuentes-normativas/vehicular/200105/\
+#        2026-08-28T17-33-56Z__7623157-anexo-tvr-ipv-2026.pdf 7623157-anexo-tvr-ipv-2026.pdf
+#      Ver README.md de este directorio para el sha256 con que comprobarlo.
 
 import csv
 import re

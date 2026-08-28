@@ -13,12 +13,13 @@ import { textoDeError } from '../estados';
  * la hoja —barra lateral, cabecera, botones— desaparece.
  *
  * **«Descargar PDF» no hace nada, salvo que la pantalla traiga `descargas`.**
- * Para los otros doce reportes el PDF lo emitiria el backend con su
+ * Para los otros once reportes el PDF lo emitiria el backend con su
  * numeracion y su firma, y el regimen de firma digital es la decision abierta
- * D-05: un PDF generado en el navegador no seria el documento oficial. El
- * reporte de la ficha del contribuyente es la excepcion (#71): no se registra
- * como documento emitido —es una consulta, no una emision—, y su backend ya
- * sirve los tres formatos que RNF-081 exige.
+ * D-05: un PDF generado en el navegador no seria el documento oficial. Las dos
+ * excepciones son la ficha del contribuyente (#71) y la constancia de no
+ * adeudo (#72): ninguna de las dos se registra como documento emitido —son
+ * consultas, no emisiones—, y sus backends ya sirven los tres formatos que
+ * RNF-081 exige.
  */
 export interface ReporteProps {
   readonly estructura: EstructuraDeReporte;
@@ -123,7 +124,13 @@ export function Reporte({ estructura, datos, cargando, descargas }: ReporteProps
           FORMATOS.map((formato) => (
             <Boton
               key={formato}
-              disabled={descargas.enCurso !== null}
+              /* Sin hoja no hay nada que exportar, y la descarga no espera a
+                 tenerla: `descargar` va contra el backend por su cuenta, asi
+                 que con la lectura todavia en camino —o caida— el archivo
+                 saldria de una consulta que la pantalla no llego a mostrar, y
+                 el papel diria algo que nadie vio (#332). */
+              disabled={descargas.enCurso !== null || datos === undefined}
+              {...(datos === undefined ? { title: 'Primero hay que cargar el reporte' } : {})}
               onClick={() => descargas.descargar(formato)}
             >
               {descargas.enCurso === formato ? 'Descargando…' : `Descargar ${formato}`}

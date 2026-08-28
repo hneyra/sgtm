@@ -5,9 +5,10 @@ import type { IdDeOperacion, ParametrosDe } from '@sgtm/api-client';
 /**
  * Descarga un archivo —PDF, XLS o RTF— de una operacion de lectura del contrato.
  *
- * Es la puerta lateral de `descargarOperacion` (#71): la unica pantalla que la
- * usa hoy es el reporte de la ficha del contribuyente, que el backend sirve en
- * tres formatos segun el parametro `formato`. **Un archivo a la vez**, igual
+ * Es la puerta lateral de `descargarOperacion` (#71): las dos pantallas que la
+ * usan hoy son el reporte de la ficha del contribuyente y la constancia de no
+ * adeudo (#72, RNF-081), que el backend sirve en tres formatos segun el
+ * parametro `formato`. **Un archivo a la vez**, igual
  * que `useEscritura` deja enviar un intento a la vez: pedir el XLS mientras el
  * PDF todavia esta en camino no tiene ningun beneficio y sí la posibilidad de
  * confundir cual descarga fue cual.
