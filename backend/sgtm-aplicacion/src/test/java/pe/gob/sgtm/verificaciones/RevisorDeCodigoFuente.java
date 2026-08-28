@@ -86,6 +86,21 @@ public final class RevisorDeCodigoFuente {
                     "licencia_funcionamiento",
                     "licencia_duplicado",
                     "licencia_movimiento",
+                    // Con #48: el FUE de edificacion, sus cinco secciones, sus movimientos y sus
+                    // vigencias. Borrar un expediente seria borrar la unica constancia de que una
+                    // obra estuvo autorizada —y con ella el sustento del derecho de tramite que se
+                    // cobro—; borrar una version de seccion seria borrar lo que el administrado
+                    // declaro antes de corregirlo, que es justo lo que explica una observacion del
+                    // evaluador; y borrar una vigencia dejaria una licencia sin plazo o con el
+                    // plazo de la revalidacion como si fuera el original (AC 4).
+                    "licencia_edificacion",
+                    "edificacion_terreno",
+                    "edificacion_proyecto",
+                    "edificacion_estructura",
+                    "edificacion_profesional",
+                    "edificacion_requisito",
+                    "edificacion_movimiento",
+                    "edificacion_vigencia",
                     // Con #50: el escrito que el administrado presento, la resolucion que la
                     // gerencia dicto sobre su multa, y el paso del vehiculo por el deposito.
                     // Borrar un descargo seria borrar la constancia de que alguien recurrio -y con
@@ -248,7 +263,26 @@ public final class RevisorDeCodigoFuente {
                     // tentacion siguiente es corregir la fila que dice en que estado esta.
                     "liquidacion_fiscalizacion",
                     "liquidacion_detalle",
-                    "liquidacion_movimiento");
+                    "liquidacion_movimiento",
+                    // Y el FUE de edificacion con sus secciones, sus movimientos y sus vigencias,
+                    // con #48. Decima vez seguida por el mismo camino: V43 le retira a
+                    // `licencia_edificacion` las columnas de estado y de valor de obra que V4 le
+                    // habia puesto, y le revoca el UPDATE; las cinco tablas de seccion no lo
+                    // reciben nunca, porque se VERSIONAN.
+                    //
+                    // Aqui hay ademas un motivo propio y es el que mas pesa: `valor_obra` era una
+                    // columna. Corregirla en el sitio dejaria el papel que el administrado exhibe
+                    // en la obra y la base diciendo cifras distintas, y esa cifra es la base del
+                    // derecho de tramite que se le cobro. Se retiro entera: la valorizacion se
+                    // calcula contra el cuadro de #17 y no se guarda (AC 2).
+                    "licencia_edificacion",
+                    "edificacion_terreno",
+                    "edificacion_proyecto",
+                    "edificacion_estructura",
+                    "edificacion_profesional",
+                    "edificacion_requisito",
+                    "edificacion_movimiento",
+                    "edificacion_vigencia");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =

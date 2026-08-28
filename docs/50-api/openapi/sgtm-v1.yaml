@@ -6145,6 +6145,107 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: presentar_fue
+      summary: "Presentación del FUE"
+      description: "Da de alta el expediente del Formulario Único de Edificaciones (RF-113). El cuerpo lleva el expediente, el solicitante, el tipo de trámite, la obra, la modalidad de aprobación, el representante legal —opcional— y la observación del usuario, obligatoria (RNF-052). Presentar NO otorga nada: no numera ninguna licencia ni comprueba ningún derecho de trámite. Una ampliación o una revalidación nombran aquí la licencia original, y la referencian sin sustituirla."
+      tags: ["Autorizaciones y licencias"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/edificacion/{expediente}/secciones":
+    post:
+      operationId: completar_seccion_fue
+      summary: "Sección del FUE completada"
+      description: "Completa una sección del FUE: TERRENO, PROYECTO, VALORIZACION, PROFESIONALES o DOCUMENTOS. Se pueden completar en cualquier orden y en visitas distintas; completar una que ya estaba guarda la versión siguiente y deja la anterior entera. La valorización va por pisos y estructuras y NO admite importes: el valor por metro cuadrado sale del cuadro de valores unitarios de edificación."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: expediente
+          in: path
+          required: true
+          description: "Numero de expediente del FUE"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/edificacion/{expediente}/licencia":
+    post:
+      operationId: emitir_licencia_edificacion
+      summary: "Emisión de licencia de edificación"
+      description: "Otorga la licencia de edificación del expediente (RF-113). Sólo se emite cuando están las cinco secciones obligatorias, y el error dice cuáles faltan. Sin un recibo válido de caja de tasas —del titular, no anulado y por el concepto del TUPA que corresponde— no se emite. El número de la licencia lo pone el sistema desde su correlativo; la vigencia entra como dato del acto, porque el plazo es una cifra normativa y no se compila."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: expediente
+          in: path
+          required: true
+          description: "Numero de expediente del FUE"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/edificacion/{expediente}/revalidacion":
+    post:
+      operationId: revalidar_licencia_edificacion
+      summary: "Revalidación de licencia de edificación"
+      description: "Prorroga el plazo de la licencia que el expediente de revalidación nombra. NO sustituye la vigencia original: agrega el tramo siguiente, y la respuesta devuelve los dos con el acto que concedió cada uno. Se cobra en caja de tasas antes, con su propio concepto del TUPA."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: expediente
+          in: path
+          required: true
+          description: "Numero de expediente de la revalidacion"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/licencias/edificacion/reportes/general":
     get:
       operationId: edificacion_reporte

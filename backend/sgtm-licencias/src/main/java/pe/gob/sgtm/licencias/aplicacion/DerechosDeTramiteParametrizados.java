@@ -57,6 +57,20 @@ public class DerechosDeTramiteParametrizados {
     /** El que cobra el derecho de un duplicado de licencia. */
     private static final String CLAVE_DUPLICADO = "DERECHO_DUPLICADO_LICENCIA";
 
+    /**
+     * El que cobra el derecho de tramite de una licencia de <b>edificacion</b> (#48 AC 5).
+     *
+     * <p>Es otro concepto y no el mismo: el TUPA cobra la licencia de obra por su propia linea, que
+     * en muchas municipalidades se liquida ademas como un porcentaje del valor de obra. <b>Ese
+     * porcentaje no esta aqui</b> ni en ninguna parte de este modulo: el importe del derecho vive
+     * en la tabla {@code tasa} desde V3, con su ordenanza y su vigencia, y la mitad que falta —si
+     * la ordenanza lo fija como porcentaje y cual— la espera #197 (D-02b).
+     */
+    private static final String CLAVE_EDIFICACION = "DERECHO_LICENCIA_EDIFICACION";
+
+    /** El que cobra el derecho de la revalidacion de una licencia de edificacion (#48 AC 4). */
+    private static final String CLAVE_REVALIDACION = "DERECHO_REVALIDACION_EDIFICACION";
+
     private final LectorDeParametros parametros;
 
     public DerechosDeTramiteParametrizados(LectorDeParametros parametros) {
@@ -94,6 +108,16 @@ public class DerechosDeTramiteParametrizados {
         /** El codigo del concepto que cobra el derecho de un duplicado. */
         public String paraElDuplicado() {
             return codigo(CLAVE_DUPLICADO);
+        }
+
+        /** El codigo del concepto que cobra el derecho de una licencia de edificacion (#48). */
+        public String paraLaEdificacion() {
+            return codigo(CLAVE_EDIFICACION);
+        }
+
+        /** El que cobra el derecho de la revalidacion de una licencia de edificacion (#48). */
+        public String paraLaRevalidacion() {
+            return codigo(CLAVE_REVALIDACION);
         }
 
         private String codigo(String clave) {

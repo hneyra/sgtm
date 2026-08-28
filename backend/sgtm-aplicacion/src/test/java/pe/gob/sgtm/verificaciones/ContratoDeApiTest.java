@@ -193,7 +193,15 @@ class ContratoDeApiTest {
                     "POST /transito/resoluciones/{numero}/notificacion",
                     "GET /transito/papeletas/{numero}/actos",
                     "POST /infracciones/administrativas/resoluciones",
-                    "POST /infracciones/administrativas/resoluciones/{id}/notificacion");
+                    "POST /infracciones/administrativas/resoluciones/{id}/notificacion",
+                    // #48 — RF-113 y RF-115: el FUE completo, sus secciones por partes, la
+                    // emision de la licencia de edificacion, su revalidacion y el reporte.
+                    "GET /licencias/edificacion",
+                    "POST /licencias/edificacion",
+                    "POST /licencias/edificacion/{expediente}/secciones",
+                    "POST /licencias/edificacion/{expediente}/licencia",
+                    "POST /licencias/edificacion/{expediente}/revalidacion",
+                    "GET /licencias/edificacion/reportes/general");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

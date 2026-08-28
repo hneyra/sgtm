@@ -500,6 +500,53 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que edita un FUE de edificacion")
+    void elEscanerDetectaLaMuestraQueEditaUnFue() throws IOException {
+        // #48: licencia_edificacion, sus cinco tablas de seccion, edificacion_movimiento y
+        // edificacion_vigencia entran en TABLAS_INMUTABLES. Decima vez por el mismo camino, y con
+        // un motivo propio que no tenian las anteriores: aqui la tentacion no es corregir un
+        // estado sino GUARDAR LA CIFRA -devolverle a la cabecera el `valor_obra` que V4 tenia-, y
+        // esa cifra ya vive en el cuadro de valores unitarios de #17. Duplicarla deja dos verdades
+        // sobre la base con que se cobro el derecho de tramite.
+        //
+        // Y con los rodeos cerrados: el estado, la seccion corregida en el sitio en vez de
+        // versionada, la vigencia original pisada al revalidar -que es justo lo que el AC 4
+        // prohibe- y la linea de valorizacion borrada con el papel ya en la obra.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/infraestructura/MuestraDeRepositorioQueEditaUnFue.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los cuatro UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(5);
+
+        List<String> fragmentos = hallazgos.stream().map(Hallazgo::fragmento).toList();
+        assertThat(fragmentos)
+                .filteredOn(
+                        f -> f.toLowerCase(java.util.Locale.ROOT).contains("licencia_edificacion"))
+                .as("el UPDATE del valor de obra y el del estado, los dos")
+                .hasSize(2);
+        assertThat(fragmentos)
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update edificacion_terreno set"))
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update edificacion_vigencia set"))
+                .anySatisfy(
+                        f ->
+                                assertThat(f)
+                                        .containsIgnoringCase(
+                                                "delete from edificacion_estructura"));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra con valores tributarios compilados (regla 5)")
     void elEscanerDetectaLaMuestraDeValoresCompilados() throws IOException {
         Path muestra =
