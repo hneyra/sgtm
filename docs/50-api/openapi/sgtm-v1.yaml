@@ -5760,6 +5760,26 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: emitir_licencia
+      summary: "Emisión de licencia de funcionamiento"
+      description: "Emite una licencia de funcionamiento con sus giros CIIU y su papel (RF-110). El cuerpo lleva el titular, el establecimiento, los giros con su actividad principal, el número del recibo de caja de tasas del derecho de trámite y la observación del usuario, obligatoria (RNF-052). Sin un recibo válido —de caja de tasas, no anulado, del titular y por el concepto del TUPA que corresponde— no se emite. El número de la licencia lo pone el sistema desde su correlativo: no viene en el cuerpo."
+      tags: ["Autorizaciones y licencias"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/licencias/funcionamiento/reportes/padron":
     post:
       operationId: licencia_padron
@@ -6070,6 +6090,26 @@ paths:
           example: "ASCENDENTE"
       responses:
         200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: registrar_ciiu
+      summary: "Alta de giro CIIU"
+      description: "Agrega un giro al catálogo CIIU de la municipalidad (RF-112). El cuerpo lleva el código, la descripción, la sección, el nivel de riesgo de la ITSE si ya está clasificado, la zonificación compatible y la observación del usuario, obligatoria (RNF-052). El giro nace activo y marcado como extensión local: la clasificación oficial se carga por otro camino."
+      tags: ["Autorizaciones y licencias"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
           description: Operacion realizada
           content:
             application/json:

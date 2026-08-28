@@ -159,7 +159,14 @@ class ContratoDeApiTest {
                     "GET /coactiva/liquidaciones-costas",
                     "POST /coactiva/convenios",
                     "GET /coactiva/deudas",
-                    "GET /coactiva/deudas-en-beneficio");
+                    "GET /coactiva/deudas-en-beneficio",
+                    // #44 — RF-110..RF-113: la licencia de funcionamiento y su catalogo CIIU.
+                    "GET /licencias/funcionamiento",
+                    "POST /licencias/funcionamiento",
+                    "POST /licencias/funcionamiento/{id}/cancelacion",
+                    "POST /licencias/funcionamiento/{id}/duplicado",
+                    "GET /licencias/ciiu",
+                    "POST /licencias/ciiu");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

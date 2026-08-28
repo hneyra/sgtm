@@ -61,8 +61,13 @@ describe('las operaciones generadas son las del contrato', () => {
     //     necesita un verbo aparte para listar. Hacer que el POST devolviera
     //     tambien la grilla convertiria una consulta en una escritura, y una
     //     pantalla que lista al abrirse consumiria un correlativo cada vez.
+    //   - `emitir_licencia` / `registrar_ciiu` (#44): la emision de la
+    //     licencia de funcionamiento y el alta en el catalogo CIIU. Sus
+    //     pantallas (`licencia_funcionamiento`, `ciiu`) declaran el GET de la
+    //     grilla y el catalogo como su endpoint, y escribir necesita verbo
+    //     propio bajo la misma opcion.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(149);
+    expect(Object.keys(OPERACIONES)).toHaveLength(151);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

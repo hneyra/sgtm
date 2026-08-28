@@ -383,6 +383,49 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que edita una licencia o borra su duplicado")
+    void elEscanerDetectaLaMuestraQueEditaUnaLicencia() throws IOException {
+        // #44: licencia_funcionamiento, licencia_duplicado y licencia_movimiento entran en
+        // TABLAS_INMUTABLES, por lo mismo que el recibo en #33, el convenio en #35, el expediente
+        // en #40 y el acto coactivo en #41. Una licencia se EXHIBE en el establecimiento, y el
+        // titular tiene el papel. Con los tres rodeos cerrados: si el dato ya no se puede tocar,
+        // la tentacion siguiente es devolverle una columna de estado, reescribir el movimiento que
+        // la cancelo, o borrar el duplicado que se autorizo por error.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnaLicencia.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los tres UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(4);
+
+        List<String> fragmentos = hallazgos.stream().map(Hallazgo::fragmento).toList();
+        assertThat(fragmentos)
+                .filteredOn(
+                        f ->
+                                f.toLowerCase(java.util.Locale.ROOT)
+                                        .contains("licencia_funcionamiento"))
+                .as("el UPDATE de la denominacion y el del estado, los dos")
+                .hasSize(2);
+        assertThat(fragmentos)
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("update licencia_movimiento set"));
+        assertThat(fragmentos)
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("delete from licencia_duplicado"));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra con valores tributarios compilados (regla 5)")
     void elEscanerDetectaLaMuestraDeValoresCompilados() throws IOException {
         Path muestra =
