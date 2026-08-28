@@ -60,6 +60,8 @@ cosas donde espera.
 
 ### 50 — API
 - [`openapi/sgtm-v1.yaml`](50-api/openapi/sgtm-v1.yaml) — contrato derivado del prototipo de interfaz
+- [`generar-openapi.mjs`](50-api/generar-openapi.mjs) — lo deriva, y `--comprobar` exige en CI que
+  el archivo comprometido siga siendo lo que produce (#312)
 
 ### 60 — Frontend
 - [Arquitectura frontend](60-frontend/arquitectura-frontend.md) — monorepo, paquetes y qué existe hoy
