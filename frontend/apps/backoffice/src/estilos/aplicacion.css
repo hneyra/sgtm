@@ -1388,6 +1388,19 @@
 }
 
 /* Etiqueta para quien navega con lector de pantalla; el placeholder no basta. */
+/* El enlace a `apps/portal`, la aplicacion que descarga el ciudadano (#298). */
+.sgtm-portal__vistaprevia {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+.sgtm-portal__vistaprevia a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .sgtm-portal__oculto {
   position: absolute;
   width: 1px;
@@ -1526,21 +1539,6 @@
   font-size: 19px;
   font-weight: 500;
   margin-top: 6px;
-}
-
-/* A que fecha estan los datos de la pantalla. Va arriba, bajo la descripcion, y
-   no dentro de la banda de totales: es de la respuesta, y una pantalla que
-   ensena cifras en una tabla y no tiene banda las ensenaba sin fecha. */
-.sgtm-fecha-de-calculo {
-  margin: 0 0 4px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
-.sgtm-fecha-de-calculo strong {
-  font-family: var(--font-mono);
-  font-weight: 600;
-  color: var(--ink-2);
 }
 
 /* —— Bloque 7: pestanas ———————————————————————————————————————— */

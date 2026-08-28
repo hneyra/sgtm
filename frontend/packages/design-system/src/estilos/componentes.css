@@ -495,3 +495,18 @@ textarea.sgtm-campo__control {
   gap: 8px;
   margin-top: 6px;
 }
+
+/* A que fecha estan los datos de la pantalla. Va arriba, bajo la descripcion, y
+   no dentro de la banda de totales: es de la respuesta, y una pantalla que
+   ensena cifras en una tabla y no tiene banda las ensenaba sin fecha. */
+.sgtm-fecha-de-calculo {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.sgtm-fecha-de-calculo strong {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--ink-2);
+}

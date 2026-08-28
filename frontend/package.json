@@ -13,8 +13,12 @@
   },
   "scripts": {
     "dev": "yarn workspace @sgtm/backoffice dev",
-    "build": "yarn workspace @sgtm/backoffice build",
+    "dev:portal": "yarn workspace @sgtm/portal dev",
+    "build": "yarn build:backoffice && yarn build:portal",
+    "build:backoffice": "yarn workspace @sgtm/backoffice build",
+    "build:portal": "yarn workspace @sgtm/portal build",
     "preview": "yarn workspace @sgtm/backoffice preview",
+    "preview:portal": "yarn workspace @sgtm/portal preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",

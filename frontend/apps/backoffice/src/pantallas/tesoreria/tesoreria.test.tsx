@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { OPCIONES_CONECTADAS } from '../conexiones';
-import { permisosDelClaim, puedeVer } from '../../app/sesion/permisos';
+import { permisosDelClaim, puedeVer } from '@sgtm/sesion';
 import { montarEnRuta } from '../../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
 

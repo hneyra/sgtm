@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Aviso, Boton, Campo, Esqueleto } from '@sgtm/design-system';
+import { Aviso, Boton, Campo, Esqueleto, FechaDeCalculo } from '@sgtm/design-system';
 import { pedirOperacion } from '@sgtm/api-client';
 import type { EstructuraDePantalla } from '../../catalogo';
 import { useCatalogoVisible } from '../../app/sesion/useCatalogoVisible';
 import { useEscritura } from '../escritura';
 import { BarraDeAcciones } from '../bloques/BarraDeAcciones';
-import { FechaDeCalculo } from '../bloques/FechaDeCalculo';
 import { SIN_PERMISO, textoDeError } from '../estados';
 import { hoy, leerLista } from './listado';
 

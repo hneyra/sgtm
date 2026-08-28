@@ -28,6 +28,8 @@ export default defineConfig({
       { find: '@sgtm/dominio', replacement: raiz('../../packages/dominio/src/index.ts') },
       { find: '@sgtm/api-client', replacement: raiz('../../packages/api-client/src/index.ts') },
       { find: '@sgtm/api-mock', replacement: raiz('../../packages/api-mock/src/index.ts') },
+      { find: '@sgtm/lectura', replacement: raiz('../../packages/lectura/src/index.ts') },
+      { find: '@sgtm/sesion', replacement: raiz('../../packages/sesion/src/index.ts') },
     ],
   },
   server: {

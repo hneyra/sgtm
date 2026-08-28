@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Aviso, Boton } from '@sgtm/design-system';
+import { Aviso, Boton, FechaDeCalculo } from '@sgtm/design-system';
 import type { Celda } from '@sgtm/api-client';
 import { pedirOperacion } from '@sgtm/api-client';
 import type { EstructuraDePantalla } from '../../catalogo';
 import { useCatalogoVisible } from '../../app/sesion/useCatalogoVisible';
 import { SIN_PERMISO, textoDeError } from '../estados';
 import { TablaDePantalla } from '../bloques/TablaDePantalla';
-import { FechaDeCalculo } from '../bloques/FechaDeCalculo';
 import { SIN_DATO, hoy, instante, leerPaginado, tablaDe, texto } from './listado';
 
 /**

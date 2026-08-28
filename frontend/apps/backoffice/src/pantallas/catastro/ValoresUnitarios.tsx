@@ -1,8 +1,7 @@
-import { Aviso, Boton, Esqueleto } from '@sgtm/design-system';
+import { Aviso, Boton, Esqueleto, FechaDeCalculo } from '@sgtm/design-system';
 import type { EstructuraDePantalla } from '../../catalogo';
 import { useCatalogoVisible } from '../../app/sesion/useCatalogoVisible';
 import { SIN_PERMISO, textoDeError } from '../estados';
-import { FechaDeCalculo } from '../bloques/FechaDeCalculo';
 import { hoy, texto } from '../seguridad/listado';
 import { useTablaDeValuacion } from './useTablaDeValuacion';
 

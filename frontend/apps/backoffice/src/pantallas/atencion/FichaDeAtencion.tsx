@@ -2,29 +2,32 @@ import { createContext, useContext, useEffect, useId, useRef, useState } from 'r
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { Aviso, Esqueleto, Insignia } from '@sgtm/design-system';
+import { Aviso, Esqueleto, FechaDeCalculo, Insignia } from '@sgtm/design-system';
 import { ProblemaDeApi, pedirDatosDePantalla, pedirOperacion } from '@sgtm/api-client';
 import type { DatosDePantalla } from '@sgtm/api-client';
-import type { Fecha } from '@sgtm/dominio';
+import {
+  SIN_DATO,
+  conteoDeLaRejilla,
+  documentoDe,
+  esObjeto,
+  fechaDeCorteDe,
+  identidadPorCodigo,
+  importeDe,
+  leerObjeto,
+  seccionDeLaFicha,
+  texto,
+} from '@sgtm/lectura';
+import type { Identidad, RejillaDeLaFicha, SeccionDeLaFicha } from '@sgtm/lectura';
 import { opcionPorId } from '../../catalogo';
 import type { OpcionSituada } from '../../catalogo';
 import { useCatalogoVisible } from '../../app/sesion/useCatalogoVisible';
 import type { CatalogoVisible } from '../../app/sesion/useCatalogoVisible';
 import { conexionDe } from '../conexiones';
 import { operacionDe } from '../busqueda';
-import { importeDe } from '../consultas';
-import { FechaDeCalculo } from '../bloques/FechaDeCalculo';
 import { TablaDePantalla } from '../bloques/TablaDePantalla';
-import { SIN_DATO, esObjeto, leerObjeto, leerPaginado, texto } from '../seguridad/listado';
 import { anotarAtencion } from '../inicio/atenciones';
-import { ESTADO_DE_LA_CONSULTA, PESTANAS, RESUMEN_DE_SALDOS, seccionDeLaFicha } from './pestanas';
-import type {
-  AccionDeLaFicha,
-  ContextoDeLaFicha,
-  PestanaDeLaFicha,
-  RejillaDeLaFicha,
-  SeccionDeLaFicha,
-} from './pestanas';
+import { ESTADO_DE_LA_CONSULTA, PESTANAS, RESUMEN_DE_SALDOS } from './pestanas';
+import type { AccionDeLaFicha, ContextoDeLaFicha, PestanaDeLaFicha } from './pestanas';
 
 /**
  * **La ficha 360° del contribuyente** (#297, ADR-0016 §2).
@@ -90,29 +93,12 @@ import type {
  * uno.
  */
 
-/** Lo que la cabecera sabe de la persona. Sale del padrón, no se compone. */
-interface Identidad {
-  readonly codigo: string;
-  readonly nombre: string;
-  readonly tipoDocumento: string;
-  readonly numeroDocumento: string;
-  readonly activo: boolean;
-  /**
-   * Pensionista, adulto mayor o discapacidad, **tal como lo publica**
-   * `ContribuyenteResource` (el nombre de la constante, sin traducir).
-   *
-   * Está en la cabecera porque es lo que decide la deducción del predial —las 50
-   * UIT del pensionista, NEG-05— y quien atiende tiene que verlo antes de
-   * explicar una cifra, no después. Se dibuja como insignia **con su texto
-   * dentro**: nunca solo por color (FRO-02 §2.1).
-   *
-   * Sin rótulo inventado: el catálogo no publica uno para esta condición, y
-   * traducir `ADULTO_MAYOR` a una frase propia sería redactar en lenguaje del
-   * dominio por cuenta de la interfaz (RNF-080). Cuando el backend mande el
-   * rótulo, se cambia aquí y en ningún otro sitio.
-   */
-  readonly condicionEspecial?: string;
-}
+/*
+ * **Quién es, de dónde sale y cómo se lee**: `Identidad` y `identidadPorCodigo`
+ * viven en `@sgtm/lectura` (#298). El portal del contribuyente lee al mismo
+ * contribuyente del mismo padrón (ADR-0016 §3), y dos lectores del mismo recurso
+ * acaban leyendo campos distintos.
+ */
 
 export function FichaDeAtencion() {
   const { codigo = '' } = useParams();
@@ -418,28 +404,7 @@ function useConsultaDeIdentidad(codigo: string, puede: boolean) {
     retry: 1,
     queryFn: async ({ signal }) => {
       const cuerpo = await pedirOperacion('contribuyentes', { codigo }, signal);
-      const pagina = leerPaginado(cuerpo, 'los contribuyentes');
-      const buscado = codigo.toUpperCase();
-      const fila = pagina.contenido
-        .filter(esObjeto)
-        .find(
-          (persona) =>
-            typeof persona['codigo'] === 'string' && persona['codigo'].toUpperCase() === buscado,
-        );
-      if (fila === undefined) return null;
-      const condicion = fila['condicionEspecial'];
-      return {
-        codigo: texto(fila['codigo']),
-        nombre: texto(fila['nombreRazonSocial']),
-        tipoDocumento: typeof fila['tipoDocumento'] === 'string' ? fila['tipoDocumento'] : '',
-        numeroDocumento: typeof fila['numeroDocumento'] === 'string' ? fila['numeroDocumento'] : '',
-        activo: fila['activo'] !== false,
-        // Tal cual llega, sin traducirla: los rótulos de esta condición los
-        // escribe quien la publica. Ver {@link Identidad}.
-        ...(typeof condicion === 'string' && condicion !== ''
-          ? { condicionEspecial: condicion }
-          : {}),
-      };
+      return identidadPorCodigo(cuerpo, codigo);
     },
   });
 }
@@ -484,8 +449,7 @@ function Cabecera({
      quitada, el aviso de que no se pueden ver salía **al lado del nombre y del
      DNI**. Aquí se cierra el segundo camino. */
   const persona = puedeVerElPadron ? identidad : undefined;
-  const documento =
-    persona == null ? SIN_DATO : `${persona.tipoDocumento} ${persona.numeroDocumento}`.trim();
+  const documento = documentoDe(persona ?? undefined);
 
   return (
     <header className="sgtm-ficha__cabecera">
@@ -504,7 +468,7 @@ function Cabecera({
       )}
       <dl className="sgtm-ficha__identidad">
         <Dato etiqueta="Código" valor={codigo === '' ? SIN_DATO : codigo} />
-        <Dato etiqueta="Documento" valor={documento === '' ? SIN_DATO : documento} />
+        <Dato etiqueta="Documento" valor={documento} />
         {persona != null && (
           <div className="sgtm-ficha__dato">
             <dt>Estado</dt>
@@ -644,20 +608,6 @@ function ResumenDeSaldos({
       <FechaDeCalculo {...fechaDeCorteDe(ficha)} />
     </section>
   );
-}
-
-/**
- * La fecha de corte con la que el backend respondió todo lo que depende de hoy.
- *
- * Sale de `aLaFecha` de la respuesta y **no del reloj del navegador**: la banda
- * dice a qué fecha están actualizadas las cifras, y el reloj del cliente diría
- * «hoy» sobre lo que se calculó anteayer (regla 9, RNF-075).
- */
-function fechaDeCorteDe(ficha: Readonly<Record<string, unknown>> | undefined): {
-  readonly fecha?: Fecha;
-} {
-  const aLaFecha = ficha?.['aLaFecha'];
-  return typeof aLaFecha === 'string' && aLaFecha !== '' ? { fecha: aLaFecha as Fecha } : {};
 }
 
 /* ── Los paneles ───────────────────────────────────────────────────────── */
@@ -875,23 +825,6 @@ function Rejilla({
       {rejilla.aLaFechaDeCorte === true && <FechaDeCalculo {...fechaDeCorteDe(ficha)} />}
     </div>
   );
-}
-
-/**
- * «3 deudas», «20 de 43 deudas», «1 convenio».
- *
- * Contar no es redactar en lenguaje del dominio (RNF-080), pero **decir de qué
- * se cuenta sí**, y por eso el sustantivo lo declara la rejilla en vez de salir
- * de aquí como «filas». Las dos cifras cuando no coinciden: cada sección de la
- * unificada viaja paginada y enseñar solo las que caben, sin el total que la
- * propia sección trae, es la cifra que se lee como «esto es todo lo que hay».
- */
-function conteoDeLaRejilla(rejilla: RejillaDeLaFicha, seccion: SeccionDeLaFicha): string {
-  const cuantas = seccion.filas.length;
-  const nombre = seccion.totalElementos === 1 ? rejilla.una : rejilla.varias;
-  return seccion.totalElementos > cuantas
-    ? `${cuantas} de ${seccion.totalElementos} ${nombre}`
-    : `${cuantas} ${cuantas === 1 ? rejilla.una : rejilla.varias}`;
 }
 
 /**

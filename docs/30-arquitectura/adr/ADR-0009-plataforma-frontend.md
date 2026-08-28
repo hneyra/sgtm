@@ -125,3 +125,6 @@ como reglas de ESLint, **cada una con su muestra que la viola** y una prueba que
 - [`FRO-01`](../../60-frontend/arquitectura-frontend.md) · [`FRO-02`](../../60-frontend/design-system.md)
   · [`FRO-03`](../../60-frontend/mapa-de-pantallas.md) · [`FRO-04`](../../60-frontend/estandares-de-codigo-frontend.md)
 - [`ADR-0002`](ADR-0002-estrategia-multi-tenant.md) · [`ADR-0005`](ADR-0005-identidad-y-acceso.md)
+- [`ADR-0016 §3`](ADR-0016-el-inicio-pregunta-la-ficha-compone.md): la separación de
+  `apps/portal` se hizo en #298, por la **condición 3** de este ADR — las condiciones 1 y 2
+  siguen sin cumplirse, y el realm ciudadano sigue siendo trabajo backend

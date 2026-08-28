@@ -4,7 +4,7 @@ import type { RenderResult } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { ProveedorDeEjercicio, useEjercicio } from '../app/ejercicio';
 import { ProveedorDePreferencias } from '../app/preferencias';
-import { ProveedorDeSesion } from '../app/sesion/ProveedorDeSesion';
+import { ProveedorDeSesion } from '@sgtm/sesion';
 import { Shell } from '../app/Shell';
 import { HubDeModulo } from '../pantallas/HubDeModulo';
 import { Pantalla } from '../pantallas/Pantalla';

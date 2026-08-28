@@ -15,34 +15,40 @@ simula la API ([`ADR-0010`](../30-arquitectura/adr/ADR-0010-catalogo-portado-y-p
 | `frontend/packages/api-client` | Cliente HTTP y el contrato `DatosDePantalla` — **con pruebas** |
 | `frontend/packages/design-system` | Tokens de Juris PE y los componentes que usan las pantallas |
 | `frontend/packages/api-mock` | **El proxy de datos**: responde las 134 operaciones del contrato |
+| `frontend/packages/lectura` | Los lectores del contrato y las rejillas de la unificada, compartidos por las dos aplicaciones (#298) |
+| `frontend/packages/sesion` | El proveedor y la puerta de sesión, compartidos por las dos aplicaciones (#298) |
 | `frontend/apps/backoffice` | Shell, navegación de dos niveles, paleta de comandos, hub de módulo y **el renderizador con sus diez bloques** |
+| `frontend/apps/portal` | El portal del contribuyente, separado del shell (§1, ADR-0016 §3) |
 | `frontend/verificaciones` | Diez prohibiciones, cada una con su muestra que la viola |
 
 Lo que **no** existe: ninguna operación va contra Spring Boot, porque Spring Boot todavía no sirve
 ninguna. Es el paso 4 de [FRO-03 §7](mapa-de-pantallas.md), y se hace opción por opción.
 
-## 1. Una aplicación, con la separación del portal aplazada
+## 1. Dos aplicaciones: el portal se separó cuando su condición se cumplió
 
 El SRTM parte de dos aplicaciones desde el primer día —back-office y portal del contribuyente—
-porque son dos productos con usuarios opuestos. El SGTM **arranca con una sola**, y no por
-descuido:
+porque son dos productos con usuarios opuestos. El SGTM **arrancó con una sola**, y no por
+descuido: el prototipo describe un shell con doce módulos y 134 opciones, todas de funcionario, y
+el flujo público era una opción de las 134. Construir entonces una segunda aplicación para una
+pantalla habría sido estructura sin contenido, así que se aplazó con tres condiciones escritas
+(cualquiera bastaba):
 
-- El prototipo describe **un shell** con doce módulos y 134 opciones, todas de funcionario.
-- El flujo público es **una opción de las 134** (`portal`, en el módulo Consultas,
-  `GET /api/v1/portal/deuda`): un descriptor de pantalla, no una aplicación.
+1. El flujo público pasa de una pantalla a un recorrido con sesión propia — **no se cumple**: no
+   existe realm ciudadano, y por eso el portal se sirve tras la sesión del funcionario (marcha
+   blanca) y ninguna lectura se abre al público.
+2. El contribuyente se autentica contra un realm distinto del de los funcionarios (ADR-0005) —
+   **no se cumple**: es trabajo backend, con su issue.
+3. El peso del paquete del portal empieza a depender de código que solo usa el back-office —
+   **se cumplió**, y es la que decidió (#298, [ADR-0016 §3](../30-arquitectura/adr/ADR-0016-el-inicio-pregunta-la-ficha-compone.md)):
+   el ciudadano descargaba el catálogo de doce módulos y el shell para no usarlos nunca.
 
-Construir hoy una segunda aplicación para una pantalla sería estructura sin contenido. Lo que sí
-se conserva es la posibilidad de separarla sin reescribir nada: los workspaces ya existen, los
-paquetes compartidos ya están fuera de la aplicación, y `apps/portal` es un directorio nuevo el
-día que el flujo público crezca.
-
-**Cuándo separar** (cualquiera de las tres basta):
-
-1. El flujo público pasa de una pantalla a un recorrido con sesión propia.
-2. El contribuyente se autentica contra un realm distinto del de los funcionarios (ADR-0005).
-3. El peso del paquete del portal empieza a depender de código que solo usa el back-office.
-
-Mientras ninguna se cumpla, una aplicación es la respuesta honesta.
+Desde entonces `apps/portal` existe: consume los mismos paquetes compartidos, sin el shell ni el
+catálogo de navegación, con su presupuesto propio medido y fijado a la baja. La opción `portal`
+de las 134 **sigue en el catálogo del back-office** —es la vista del funcionario, con su id, su
+ruta y su permiso— y `apps/portal` no la sustituye: servirá al ciudadano el día que exista el
+realm que lo autentique. La separación se hizo como este documento prometía: sin reescribir
+nada, porque los workspaces ya existían y los paquetes compartidos ya estaban fuera de la
+aplicación.
 
 ## 2. Estructura del monorepo
 

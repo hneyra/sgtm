@@ -3,7 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { OPCIONES_CONECTADAS } from '../conexiones';
-import { permisosDelClaim, puedeEscribir, puedeVer } from '../../app/sesion/permisos';
+import { permisosDelClaim, puedeEscribir, puedeVer } from '@sgtm/sesion';
 import { montarEnRuta } from '../../pruebas/montar';
 import { SIN_DATO } from '../seguridad/listado';
 import {
