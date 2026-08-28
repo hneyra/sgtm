@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Aviso, Esqueleto, Insignia } from '@sgtm/design-system';
@@ -157,6 +158,8 @@ export function FichaDeAtencion() {
   /* Qué pestaña tiene el foco, que con activación manual **no es la activa**.
      Se guarda por el id de su opción, por lo mismo que la elegida. */
   const [enfocada, fijarEnfocada] = useState<string | undefined>(undefined);
+  // El nodo de la region viva de los paneles: ver `NodoDeAnuncio`.
+  const [nodoDeAnuncio, fijarNodoDeAnuncio] = useState<HTMLElement | null>(null);
   /* Sin nadie enfocado —o con una pestaña que el permiso ya no ofrece—, el
      tabulador entra por la activa, que es lo que pide la tabulación itinerante. */
   const conFoco = visibles.find((pestana) => pestana.opcion === enfocada);
@@ -283,6 +286,11 @@ export function FichaDeAtencion() {
                 })}
               </div>
 
+              {/* La region viva de los paneles, FUERA de la `section` con
+                  `key`: preexiste al remontado, y por eso lo que el panel
+                  anuncia se anuncia (ver `NodoDeAnuncio`). */}
+              <p className="sgtm-portal__oculto" role="status" ref={fijarNodoDeAnuncio} />
+
               {/* Solo el panel activo se monta: es lo que hace que la consulta
                   salga al activarse. Su `key` lo remonta al cambiar de pestaña,
                   así que cada uno estrena su estado y ninguno hereda el de otro.
@@ -293,26 +301,28 @@ export function FichaDeAtencion() {
                   mil cien píxeles de desplazamiento —la primera pulsación del
                   tabulador se llevaba la cabecera fuera de la pantalla— para
                   llegar a un contenedor que no hace nada. */}
-              <section
-                key={activa.opcion}
-                id={idDePanel(activa.opcion)}
-                role="tabpanel"
-                aria-labelledby={idDePestana(activa.opcion)}
-                className="sgtm-ficha__panel"
-              >
-                {activa.rejillas === undefined ? (
-                  <PanelDeUnaOpcion pestana={activa} contexto={contexto} catalogo={catalogo} />
-                ) : (
-                  <PanelDeLaUnificada
-                    pestana={activa}
-                    ficha={unificada.data}
-                    cargando={unificada.isFetching}
-                    error={unificada.error}
-                    contexto={contexto}
-                    catalogo={catalogo}
-                  />
-                )}
-              </section>
+              <NodoDeAnuncio.Provider value={nodoDeAnuncio}>
+                <section
+                  key={activa.opcion}
+                  id={idDePanel(activa.opcion)}
+                  role="tabpanel"
+                  aria-labelledby={idDePestana(activa.opcion)}
+                  className="sgtm-ficha__panel"
+                >
+                  {activa.rejillas === undefined ? (
+                    <PanelDeUnaOpcion pestana={activa} contexto={contexto} catalogo={catalogo} />
+                  ) : (
+                    <PanelDeLaUnificada
+                      pestana={activa}
+                      ficha={unificada.data}
+                      cargando={unificada.isFetching}
+                      error={unificada.error}
+                      contexto={contexto}
+                      catalogo={catalogo}
+                    />
+                  )}
+                </section>
+              </NodoDeAnuncio.Provider>
             </>
           )}
         </>
@@ -697,7 +707,10 @@ function PanelDeUnaOpcion({
       {sinContexto ? (
         <Aviso
           titulo="Falta con qué preguntar por esta persona"
-          detalle="Esta pestaña se compone con el número de documento del contribuyente, y el padrón no lo devolvió. No quiere decir que no tenga: quiere decir que desde aquí no se puede preguntar."
+          /* El dato que faltó lo redacta la pestaña (`faltante`): sin eso, este
+             aviso hablaba del documento aunque otra pestaña se quedara sin otra
+             cosa. */
+          detalle={`Esta pestaña se compone con ${pestana.faltante ?? 'un dato que otra lectura publica y esta ficha no consiguió'}. No quiere decir que no tenga: quiere decir que desde aquí no se puede preguntar.`}
         />
       ) : fallo ? (
         <AvisoDeLectura error={consulta.error} opcion={pestana.opcion} />
@@ -760,7 +773,8 @@ function cargarLaOpcion(
      Contra el backend real ese camino no falla ruidosamente: devuelve la forma
      que no es y la tabla sale **vacía en silencio**, que es exactamente lo que
      una ficha de atención no puede hacer. Las tres necesitan su conexión —con
-     su `leer` que valide y su adaptador— antes de apagar el proxy (ADR-0010). */
+     su `leer` que valide y su adaptador— antes de apagar el proxy (ADR-0010):
+     issue #363. */
   const operacion = operacionDe(opcion);
   if (operacion === undefined) {
     throw new Error(`La opcion «${opcion}» no es una operacion del contrato.`);
@@ -911,12 +925,21 @@ function notaDeLaPaginacion(
  * tabla y el aviso se lee en su sitio. Lo que falta no es el texto: es que
  * alguien lo diga cuando cambia.
  */
+/**
+ * El nodo persistente donde anuncian los paneles.
+ *
+ * La region viva NO puede vivir dentro de la `section` con `key`: al cambiar de
+ * pestana el panel se remonta, y una `role="status"` que nace ya con su texto
+ * dentro no se anuncia en la mayoria de lectores — el primer anuncio de cada
+ * pestana, que es el que importa, se perdia. El nodo vive arriba, fuera del
+ * subarbol remontado, y cada panel le manda su texto por un portal: la region
+ * preexiste al cambio, que es lo que hace que el cambio se anuncie.
+ */
+const NodoDeAnuncio = createContext<HTMLElement | null>(null);
+
 function Anuncio({ texto: dicho }: { readonly texto: string }) {
-  return (
-    <p className="sgtm-portal__oculto" role="status">
-      {dicho}
-    </p>
-  );
+  const nodo = useContext(NodoDeAnuncio);
+  return nodo === null ? null : createPortal(dicho, nodo);
 }
 
 /** El título con que {@link AvisoDeLectura} nombra un fallo, para poder anunciarlo. */

@@ -426,6 +426,15 @@ describe('las rutas resuelven a la opcion', () => {
   it('una ranura que no existe no resuelve', () => {
     expect(opcionPorRuta('catastro', 'no-existe')).toBeUndefined();
   });
+
+  it('ningun modulo se llama «atencion»: ese segmento es de la ficha 360°', () => {
+    // ADR-0016 §2 afirma que `/atencion/:codigo` no choca con `/:moduloId/:ranura`
+    // porque React Router puntua por encima lo estatico Y porque ningun modulo se
+    // llama asi. Lo primero lo garantiza la biblioteca; lo segundo, esta linea:
+    // sin ella, un modulo nuevo llamado `atencion` dejaria sus opciones a la
+    // sombra de la ficha sin que nada lo dijera.
+    expect(MODULOS.map((m) => m.id)).not.toContain('atencion');
+  });
 });
 
 describe('las secciones que se muestran', () => {

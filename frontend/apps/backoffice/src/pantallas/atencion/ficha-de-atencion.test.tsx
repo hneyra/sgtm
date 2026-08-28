@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { datosDe, desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { OPERACIONES, escribe } from '@sgtm/api-client';
 import type { IdDeOperacion } from '@sgtm/api-client';
-import { montarEnRuta } from '../../pruebas/montar';
+import { clienteDePruebas, montarEnRuta } from '../../pruebas/montar';
 import { configurarProveedor, entraCon, limpiarSesion } from '../../pruebas/sesion';
 import { opcionPorId, todasLasPantallas } from '../../catalogo';
 import { leerAtenciones, olvidarAtenciones } from '../inicio/atenciones';
@@ -271,6 +271,29 @@ describe('lo que un permiso niega no se dibuja', () => {
     // Y el codigo de la ruta si: es lo unico que la ficha sabe sin el padron
     // —encabeza la ficha, en lugar del nombre, y esta en su propio dato—.
     expect(screen.getAllByText(CODIGO).length).toBeGreaterThan(0);
+  });
+
+  it('ni siquiera una identidad ya en caché se pinta sin el permiso', async () => {
+    /* El tercer camino, que las dos guardas de dibujo existen para cerrar y que
+       ninguna prueba distinguía: una respuesta que YA está en la caché —de una
+       sesión con permiso, antes de que el administrador lo quitara— y un
+       `enabled` que ya no la pediría. Sin las guardas del dibujo, el nombre y
+       el DNI cacheados se pintarían igual: la revisión final lo demostró
+       quitándolas con las 54 en verde. */
+    entraCon({ consulta_predios: ['lectura'] });
+    const cliente = clienteDePruebas();
+    cliente.setQueryData(['atencion', 'identidad', CODIGO], {
+      codigo: CODIGO,
+      nombre: 'MEDINA MEDINA, RUFINA (SUC.)',
+      tipoDocumento: 'DNI',
+      numeroDocumento: '03593174',
+      activo: true,
+    });
+    montarEnRuta(RUTA, cliente);
+
+    expect(await screen.findByText(/aquí solo se ve el código/i)).toBeInTheDocument();
+    expect(screen.queryByText(/MEDINA/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/03593174/)).not.toBeInTheDocument();
   });
 
   it('sin la unificada, ni sale la peticion ni hay total, y se dice por que', async () => {
@@ -704,8 +727,12 @@ describe('un 403 inesperado y una red caida no se dicen igual', () => {
 
     await usuario.click(await screen.findByRole('tab', { name: 'Consulta de predios' }));
     const panel = await screen.findByRole('tabpanel');
-    await waitFor(() =>
-      expect(panel).toHaveTextContent(/Tu perfil no puede consultar «Consulta de predios»/),
+    await waitFor(
+      () => expect(panel).toHaveTextContent(/Tu perfil no puede consultar «Consulta de predios»/),
+
+      // Con su reintento por delante: retry 1 + 1000 ms dejan el waitFor
+      // por omision a un milisegundo del rojo con las 63 suites en paralelo.
+      { timeout: 4000 },
     );
     expect(panel).toHaveTextContent(/reintentar dará lo mismo/i);
   });
@@ -718,8 +745,12 @@ describe('un 403 inesperado y una red caida no se dicen igual', () => {
 
     await usuario.click(await screen.findByRole('tab', { name: 'Consulta de predios' }));
     const panel = await screen.findByRole('tabpanel');
-    await waitFor(() =>
-      expect(panel).toHaveTextContent(/No se pudo consultar «Consulta de predios»/),
+    await waitFor(
+      () => expect(panel).toHaveTextContent(/No se pudo consultar «Consulta de predios»/),
+
+      // Con su reintento por delante: retry 1 + 1000 ms dejan el waitFor
+      // por omision a un milisegundo del rojo con las 63 suites en paralelo.
+      { timeout: 4000 },
     );
     expect(panel).toHaveTextContent(/no quiere decir que no exista/i);
   });
@@ -742,8 +773,12 @@ describe('un 403 inesperado y una red caida no se dicen igual', () => {
 
     await usuario.click(await screen.findByRole('tab', { name: 'Consulta de predios' }));
     const panel = await screen.findByRole('tabpanel');
-    await waitFor(() =>
-      expect(panel).toHaveTextContent(/«Consulta de predios» no tiene nada con ese código/),
+    await waitFor(
+      () => expect(panel).toHaveTextContent(/«Consulta de predios» no tiene nada con ese código/),
+
+      // Con su reintento por delante: retry 1 + 1000 ms dejan el waitFor
+      // por omision a un milisegundo del rojo con las 63 suites en paralelo.
+      { timeout: 4000 },
     );
     expect(panel).not.toHaveTextContent(/Vuelve a intentarlo/i);
     expect(panel).toHaveTextContent(/comprueba el código/i);

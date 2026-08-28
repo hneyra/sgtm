@@ -110,9 +110,11 @@ export interface RejillaDeLaFicha {
    * Cómo se llama **una** de sus filas, y cómo se llaman varias.
    *
    * El conteo se redacta con esto —«3 de 43 deudas»— y no con «filas»: quien
-   * atiende lee obligaciones, pagos y convenios, no filas de una tabla. Contar
-   * no es redactar en lenguaje del dominio (RNF-080), pero **nombrar lo que se
-   * cuenta sí**, y el nombre sale del manual.
+   * atiende lee obligaciones, pagos y convenios, no filas de una tabla. A
+   * diferencia de los rótulos de columna, que se comparan letra a letra contra
+   * el catálogo, estos sustantivos no tienen rótulo del manual contra el que
+   * probarse: son redacción en lenguaje del dominio, y los vigila la revisión,
+   * no una prueba.
    */
   readonly una: string;
   readonly varias: string;
@@ -155,6 +157,12 @@ export interface PestanaDeLaFicha {
    */
   readonly tambien?: readonly string[];
   /**
+   * Qué dato falta cuando `parametros` devuelve `undefined`, redactado para el
+   * aviso. Lo declara la pestaña que puede quedarse sin contexto, para que el
+   * aviso no hable del documento cuando lo que faltó sea otra cosa.
+   */
+  readonly faltante?: string;
+  /**
    * Los parámetros con que se pide, o nada si el contexto no da para pedirla.
    *
    * Devolver `undefined` no es lo mismo que devolver `{}`: `{}` pediría el
@@ -178,7 +186,15 @@ const importe = (valor: unknown): string => importeDe(valor)?.importe ?? SIN_DAT
 const fechaDelMonto = (registro: Readonly<Record<string, unknown>>): string =>
   importeDe(registro['monto'])?.actualizadoA ?? SIN_DATO;
 
-/** `CARGO` incorpora deuda (alta); `ABONO` la extingue (baja) — `MovimientoDeDeuda`. */
+/**
+ * `CARGO` incorpora deuda (alta); `ABONO` la extingue (baja) — `MovimientoDeDeuda`.
+ *
+ * Es la única traducción de esta tabla, y no contradice «el texto es siempre el
+ * del backend»: CARGO/ABONO son vocabulario del **contrato**, no del manual, y
+ * el manual llama a estos movimientos altas y bajas. `condicionEspecial`, en
+ * cambio, viaja ya redactada por el backend —«PENSIONISTA», «ADULTO MAYOR»— y
+ * por eso la cabecera la muestra tal cual, sin diccionario que mantener.
+ */
 function altaOBaja(tipo: unknown): string {
   if (tipo === 'CARGO') return 'ALTA';
   if (tipo === 'ABONO') return 'BAJA';
@@ -434,6 +450,7 @@ export const PESTANAS: readonly PestanaDeLaFicha[] = [
     // pestaña filtra por persona: el día que el contrato publique
     // `tipoDocumento`, este es el sitio donde se pone.
     tambien: ['contribuyentes'],
+    faltante: 'el número de documento del contribuyente, y el padrón no lo devolvió',
     parametros: (contexto) =>
       contexto.numeroDocumento === ''
         ? undefined
