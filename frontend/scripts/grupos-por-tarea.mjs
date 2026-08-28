@@ -13,13 +13,20 @@
  * conservan `bloqueDe` hasta que se disene su agrupacion.
  *
  * La tabla es **exhaustiva a proposito**: en un modulo tabulado, cada opcion
- * tiene que aparecer exactamente una vez —incluido lo que se queda
- * deliberadamente en «Documentos y reportes», como las 13 hojas de Transito
- * hasta la fase 2 del centro de reportes—. No hay respaldo implicito para lo
+ * tiene que aparecer exactamente una vez. No hay respaldo implicito para lo
  * que falte: una opcion sin grupo, un id que el modulo no tiene, un id repetido
  * o dos grupos con el mismo nombre rompen el build con nombre y apellido. Asi,
  * anadir una opcion a un modulo tabulado obliga a decidir su grupo en este
  * mismo diff, y ninguna queda huerfana en silencio.
+ *
+ * Un grupo puede llevar un tercer elemento, `{ centro: true }`: entonces se
+ * **pliega en un centro de reportes** (ADR-0014 §5). El menu deja de listar sus
+ * opciones una a una y ensena una entrada unica; el centro las lista dentro.
+ * Cada hoja conserva su id, su ruta y su permiso —el centro es composicion de
+ * navegacion, no una pantalla que las absorba—, y por eso el pliegue se declara
+ * **aqui**, en la tabla, y no como una lista de ids cableada en un componente:
+ * el dia que Infracciones o Consultas quieran el suyo, es una marca en esta
+ * tabla y una regeneracion.
  *
  * Los nombres de las OPCIONES no se reescriben (RNF-080): cambia solo su grupo.
  */
@@ -39,9 +46,10 @@ export const GRUPOS_POR_TAREA = {
     ['Vehículos', ['internamiento']],
     ['Cobranza', ['transito_valores', 'transito_documentos', 'transito_padron_coactiva']],
     ['Catálogos', ['codigos_transito']],
-    // Las 13 hojas siguen juntas hasta la fase 2 (centro de reportes).
+    // Las 13 hojas de Transito, plegadas en su centro de reportes (ADR-0014
+    // §5): en el menu son **una** entrada, y el centro las lista dentro.
     [
-      'Documentos y reportes',
+      'Reportes',
       [
         'transito_reportes',
         'transito_record_conductor',
@@ -57,6 +65,7 @@ export const GRUPOS_POR_TAREA = {
         'transito_resumen_codigo',
         'transito_resumen_placa',
       ],
+      { centro: true },
     ],
   ],
   'rentas-registro': [
@@ -138,4 +147,27 @@ export function asignacionPorTarea(moduloId, items, tabla = GRUPOS_POR_TAREA) {
 /** Los nombres de los grupos de un modulo, en el orden de la tabla. */
 export function nombresDeLosGrupos(moduloId, tabla = GRUPOS_POR_TAREA) {
   return (tabla[moduloId] ?? []).map(([nombre]) => nombre);
+}
+
+/**
+ * El grupo que este modulo pliega en un centro de reportes (ADR-0014 §5), o
+ * `null` si no pliega ninguno.
+ *
+ * Uno como mucho: dos centros en un modulo dejarian la barra lateral con dos
+ * entradas homonimas —«Reportes» y «Reportes»— y ninguna forma de saber cual
+ * abre cual, asi que se rechaza en el build en vez de dibujarse.
+ *
+ * @param moduloId ranura del modulo, como `transito`.
+ * @param tabla la tabla a aplicar; se inyecta para poder probar la guarda.
+ */
+export function centroDeReportesDe(moduloId, tabla = GRUPOS_POR_TAREA) {
+  const grupos = tabla[moduloId];
+  if (!grupos) return null;
+
+  const plegados = grupos.filter(([, , opciones]) => opciones?.centro === true);
+  if (plegados.length > 1) {
+    const nombres = plegados.map(([nombre]) => `«${nombre}»`).join(' y ');
+    throw new Error(`El modulo ${moduloId} pliega dos grupos en centro de reportes: ${nombres}`);
+  }
+  return plegados[0]?.[0] ?? null;
 }

@@ -22,6 +22,16 @@ export interface ModuloDelCatalogo {
    * los tiene disenados (ADR-0014 §4), y si no los bloques de FRO-03 §4.
    */
   readonly bloques: readonly string[];
+  /**
+   * El bloque que este modulo pliega en un centro de reportes (ADR-0014 §5),
+   * si pliega alguno: el menu lo ensena como **una** entrada y el centro lista
+   * sus hojas dentro. Sale de la tabla del portador, no de una lista cableada
+   * en un componente.
+   *
+   * Sus hojas conservan su id, su ruta y su permiso: el centro es composicion
+   * de navegacion, no una pantalla que las absorba.
+   */
+  readonly centroDeReportes?: string;
   readonly opciones: readonly OpcionDelCatalogo[];
 }
 

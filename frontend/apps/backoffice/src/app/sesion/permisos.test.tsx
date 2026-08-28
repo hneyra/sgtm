@@ -102,12 +102,20 @@ describe('«Recientes» no resucita lo que ya no se puede ver', () => {
       'sgtm.recientes',
       JSON.stringify(['coactiva_expedientes', 'caja_tributaria']),
     );
+    const usuario = userEvent.setup();
     entraCon(CAJERO);
     montarEnRuta('/tesoreria/caja-tributaria');
 
-    const navegacion = await screen.findByRole('complementary');
+    // «Recientes» vive en el **nivel raiz** de la barra, y al abrir una opcion
+    // la barra esta en el nivel de su modulo: sin volver a la raiz, esta prueba
+    // miraba la lista de opciones de Tesoreria y no la de recientes, asi que
+    // pasaba sin ejercitar lo que dice ejercitar.
+    await usuario.click(await screen.findByRole('button', { name: /Todos los módulos/ }));
+    const navegacion = screen.getByRole('navigation', { name: 'Módulos del sistema' });
+
     // La que si puede ver sigue en «Recientes» —la lista se dibuja de verdad—,
     // y la que ya no puede, no resucita.
+    expect(await within(navegacion).findByText('Recientes')).toBeInTheDocument();
     expect(within(navegacion).getAllByText('Caja tributaria').length).toBeGreaterThan(0);
     expect(within(navegacion).queryByText('Expedientes coactivos')).not.toBeInTheDocument();
   });

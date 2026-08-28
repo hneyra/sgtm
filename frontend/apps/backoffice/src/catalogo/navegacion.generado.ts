@@ -4,7 +4,8 @@
  *
  * Los 12 modulos del manual y sus 134 opciones, con el bloque de cada una ya
  * clasificado en el build: grupos por tarea donde el modulo esta disenado
- * (ADR-0014 §4) y los bloques de FRO-03 §4 en los demas.
+ * (ADR-0014 §4) y los bloques de FRO-03 §4 en los demas. `centroDeReportes`
+ * nombra el bloque que el modulo pliega en su centro de reportes (ADR-0014 §5).
  *
  * Los nombres vienen del manual y no se reescriben (RNF-080).
  */
@@ -387,8 +388,9 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "Vehículos",
       "Cobranza",
       "Catálogos",
-      "Documentos y reportes"
+      "Reportes"
     ],
+    "centroDeReportes": "Reportes",
     "opciones": [
       {
         "id": "papeletas",
@@ -458,7 +460,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_reportes",
         "label": "Reportes de tránsito",
         "ranura": "transito-reportes",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Reportes de infracción de tránsito",
         "resumen": "Emisor de los reportes del módulo de tránsito. El tipo de reporte habilita los criterios que corresponden y el destino puede ser pantalla, impresora o Excel."
       },
@@ -466,7 +468,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_record_conductor",
         "label": "Record de conductor",
         "ranura": "transito-record-conductor",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Record de conductor",
         "resumen": "Historial de infracciones cometidas por un conductor y el estado de deuda de cada papeleta impuesta."
       },
@@ -474,7 +476,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_record_vehicular",
         "label": "Record vehicular",
         "ranura": "transito-record-vehicular",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Record vehicular",
         "resumen": "Historial de papeletas de infracción de tránsito de un solo vehículo, con el estado de pago de cada una."
       },
@@ -482,7 +484,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_constancia_libre",
         "label": "Constancia libre de infracciones",
         "ranura": "transito-constancia-libre",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Constancia libre de infracciones",
         "resumen": "Documento con el que la municipalidad acredita que un vehículo no registra papeletas de tránsito pendientes de pago."
       },
@@ -490,7 +492,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_padron",
         "label": "Padrón de papeletas",
         "ranura": "transito-padron",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Padrón de papeletas de tránsito",
         "resumen": "Listado de las papeletas registradas en un intervalo de fechas, filtrable por estado de deuda, infracción y placa."
       },
@@ -506,7 +508,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_papeleta_reporte",
         "label": "Reporte de papeleta",
         "ranura": "transito-papeleta-reporte",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Reporte papeleta de infracción",
         "resumen": "Hoja informativa que resume la información relevante de una papeleta de infracción de tránsito."
       },
@@ -514,7 +516,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_rg_ordinaria",
         "label": "Res. de gerencia ordinaria",
         "ranura": "transito-rg-ordinaria",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resolución de gerencia ordinaria",
         "resumen": "Resolución que emite la municipalidad para la cobranza de la papeleta. De no cancelarse, el documento pasa al área de cobranza coactiva."
       },
@@ -522,7 +524,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_rg_sancionadora",
         "label": "Res. de gerencia sancionadora",
         "ranura": "transito-rg-sancionadora",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resolución de gerencia sancionadora",
         "resumen": "Segunda resolución, emitida luego de la ordinaria. Tiene carácter sancionador y se deriva a la Dirección General de Transportes."
       },
@@ -538,7 +540,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_padron_constancias",
         "label": "Padrón de constancias",
         "ranura": "transito-padron-constancias",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Padrón de constancias libres de infracciones",
         "resumen": "Padrón general de constancias libres de infracciones emitidas por la unidad competente."
       },
@@ -546,7 +548,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_resumen_recaudacion",
         "label": "Resumen de recaudación",
         "ranura": "transito-resumen-recaudacion",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resumen de recaudación de tránsito",
         "resumen": "Recaudación por papeletas organizada por tipo de cobranza, año y mes."
       },
@@ -554,7 +556,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_resumen_papeletas",
         "label": "Resumen de papeletas",
         "ranura": "transito-resumen-papeletas",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resumen de papeletas pendientes y pagadas",
         "resumen": "Cantidades e importes de papeletas pendientes y pagadas, diferenciando cobranza ordinaria de cobranza coactiva."
       },
@@ -562,7 +564,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_resumen_codigo",
         "label": "Resumen por código",
         "ranura": "transito-resumen-codigo",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resumen de papeletas por código de infracción",
         "resumen": "Cantidades e importes de papeletas pendientes y pagadas de una infracción determinada."
       },
@@ -570,7 +572,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transito_resumen_placa",
         "label": "Resumen por iniciales de placa",
         "ranura": "transito-resumen-placa",
-        "bloque": "Documentos y reportes",
+        "bloque": "Reportes",
         "title": "Resumen de papeletas por iniciales de placa",
         "resumen": "Resumen de papeletas filtrado por las dos letras iniciales del número de placa del vehículo."
       }

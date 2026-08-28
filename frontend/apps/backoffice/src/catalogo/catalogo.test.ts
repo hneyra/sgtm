@@ -6,6 +6,7 @@ import {
   OPCIONES,
   bloquesDe,
   buscarOpciones,
+  hojasDelCentro,
   opcionPorRuta,
   seccionesDe,
   todasLasPantallas,
@@ -57,8 +58,8 @@ const GRUPOS_POR_TAREA_ESPERADOS: Readonly<Record<string, readonly (readonly [st
       ['Vehículos', 1],
       ['Cobranza', 3],
       ['Catálogos', 1],
-      // Las 13 hojas siguen juntas hasta la fase 2 (centro de reportes).
-      ['Documentos y reportes', 13],
+      // Las 13 hojas, plegadas en el centro de reportes (ADR-0014 §5).
+      ['Reportes', 13],
     ],
     'rentas-registro': [
       ['Padrones', 3],
@@ -167,6 +168,71 @@ describe('la clasificacion en bloques viene precalculada', () => {
   it('una pantalla de reporte de un modulo sin grupos va a «Documentos y reportes»', () => {
     const constancia = OPCIONES.find((o) => o.id === 'constancia');
     expect(constancia?.bloque).toBe('Documentos y reportes');
+  });
+});
+
+/**
+ * Las trece hojas que Transito pliega en su centro de reportes (ADR-0014 §5),
+ * **en el orden del catalogo**. Copiadas a mano, por el mismo motivo que los
+ * grupos de arriba: derivarlas del generado las volveria tautologicas.
+ *
+ * Esta es la lista que se pone roja si una hoja se cae del mecanismo —porque se
+ * desmarco el grupo en la tabla, porque una hoja se movio a otro grupo, o
+ * porque el portador dejo de emitir la marca—. Ninguna de las tres rompe la
+ * compilacion: la opcion seguiria existiendo, con su ruta y su permiso, solo
+ * que fuera del centro y de vuelta compitiendo en el menu.
+ */
+const HOJAS_DEL_CENTRO_DE_TRANSITO: readonly string[] = [
+  'transito_reportes',
+  'transito_record_conductor',
+  'transito_record_vehicular',
+  'transito_constancia_libre',
+  'transito_padron',
+  'transito_papeleta_reporte',
+  'transito_rg_ordinaria',
+  'transito_rg_sancionadora',
+  'transito_padron_constancias',
+  'transito_resumen_recaudacion',
+  'transito_resumen_papeletas',
+  'transito_resumen_codigo',
+  'transito_resumen_placa',
+];
+
+describe('el centro de reportes se declara en el catalogo, no en el componente', () => {
+  it('Transito pliega su bloque «Reportes», y es el unico modulo que pliega alguno', () => {
+    const plegadores = MODULOS.filter((m) => m.centroDeReportes !== undefined).map((m) => [
+      m.id,
+      m.centroDeReportes,
+    ]);
+    expect(plegadores).toEqual([['transito', 'Reportes']]);
+  });
+
+  it('las trece hojas estan en el centro, con su id y su ruta intactos', () => {
+    const transito = MODULOS.find((m) => m.id === 'transito');
+    expect(transito).toBeDefined();
+    if (!transito) return;
+
+    const hojas = hojasDelCentro(transito);
+    expect(hojas.map((h) => h.id)).toEqual(HOJAS_DEL_CENTRO_DE_TRANSITO);
+    // Cada hoja conserva su ruta: el centro no las absorbe, las envuelve.
+    for (const hoja of hojas) {
+      expect(opcionPorRuta('transito', hoja.ranura)?.id, hoja.id).toBe(hoja.id);
+    }
+  });
+
+  it('el bloque plegado es el que dice el modulo, y solo ese', () => {
+    const transito = MODULOS.find((m) => m.id === 'transito');
+    if (!transito) return;
+    const plegados = bloquesDe(transito)
+      .filter((b) => b.plegado)
+      .map((b) => b.label);
+    expect(plegados).toEqual(['Reportes']);
+  });
+
+  it('un modulo sin centro no tiene hojas que plegar', () => {
+    const consultas = MODULOS.find((m) => m.id === 'consultas');
+    expect(consultas?.centroDeReportes).toBeUndefined();
+    expect(consultas && hojasDelCentro(consultas)).toEqual([]);
   });
 });
 

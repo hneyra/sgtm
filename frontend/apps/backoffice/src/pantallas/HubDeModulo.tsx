@@ -51,25 +51,42 @@ export function HubDeModulo() {
       </header>
 
       <div className="sgtm-hub__rejilla">
-        {bloques.map((bloque) => (
-          <section key={bloque.label} className="sgtm-tarjeta">
-            <div className="sgtm-hub__bloque-cabecera">
-              <h3 className="sgtm-hub__bloque-etiqueta">{bloque.label}</h3>
-              <span className="sgtm-tarjeta__conteo">{bloque.opciones.length}</span>
-            </div>
-            <div className="sgtm-hub__filas">
-              {bloque.opciones.map((opcion) => (
-                <Link key={opcion.id} to={rutaDeOpcion(modulo, opcion)} className="sgtm-hub__fila">
-                  <span className="sgtm-hub__fila-texto">
-                    <span className="sgtm-hub__fila-etiqueta">{opcion.label}</span>
-                    <span className="sgtm-hub__fila-desc">{recortar(opcion.resumen)}</span>
-                  </span>
-                  <Icono nombre="chevronDerecha" tamano={14} />
-                </Link>
-              ))}
-            </div>
-          </section>
-        ))}
+        {bloques.map((bloque) => {
+          // Un bloque plegado ensena **una** fila —la que abre el centro de
+          // reportes— con el conteo de las hojas que hay dentro (ADR-0014 §5).
+          // La primera visible es la que abre, igual que en la barra lateral:
+          // no hay ruta de centro, y por tanto no hay permiso que inventar.
+          const filas = bloque.plegado ? bloque.opciones.slice(0, 1) : bloque.opciones;
+          return (
+            <section key={bloque.label} className="sgtm-tarjeta">
+              <div className="sgtm-hub__bloque-cabecera">
+                <h3 className="sgtm-hub__bloque-etiqueta">{bloque.label}</h3>
+                <span className="sgtm-tarjeta__conteo">{bloque.opciones.length}</span>
+              </div>
+              <div className="sgtm-hub__filas">
+                {filas.map((opcion) => (
+                  <Link
+                    key={opcion.id}
+                    to={rutaDeOpcion(modulo, opcion)}
+                    className="sgtm-hub__fila"
+                  >
+                    <span className="sgtm-hub__fila-texto">
+                      <span className="sgtm-hub__fila-etiqueta">
+                        {bloque.plegado ? bloque.label : opcion.label}
+                      </span>
+                      <span className="sgtm-hub__fila-desc">
+                        {bloque.plegado
+                          ? `${bloque.opciones.length} hojas en una pantalla: se elige la hoja a la izquierda y se emite a la derecha.`
+                          : recortar(opcion.resumen)}
+                      </span>
+                    </span>
+                    <Icono nombre="chevronDerecha" tamano={14} />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          );
+        })}
       </div>
     </>
   );

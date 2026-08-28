@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GRUPOS_POR_TAREA,
   asignacionPorTarea,
+  centroDeReportesDe,
   nombresDeLosGrupos,
 } from '../scripts/grupos-por-tarea.mjs';
 import type { ItemDelPrototipo, TablaDeGrupos } from '../scripts/grupos-por-tarea.mjs';
@@ -123,5 +124,41 @@ const GUARDAS: {
 describe('toda guarda de la tabla tiene una tabla que la viola', () => {
   it.each(GUARDAS)('$guarda', ({ tabla, ids, delata }) => {
     expect(() => asignar('transito', ids, tabla)).toThrow(delata);
+  });
+});
+
+/**
+ * El pliegue en centro de reportes (ADR-0014 §5) es **una marca de la tabla**,
+ * no una lista de ids en un componente: el dia que Infracciones o Consultas
+ * quieran el suyo, se marca su grupo y se regenera. Lo que se prueba aqui es
+ * que la marca se lee, que la ausencia de marca tambien, y que su unica guarda
+ * muerde.
+ */
+describe('un grupo se pliega en centro de reportes marcandolo en la tabla', () => {
+  it('Transito pliega «Reportes», que es el grupo marcado', () => {
+    expect(centroDeReportesDe('transito', GRUPOS_POR_TAREA)).toBe('Reportes');
+    // Y sigue siendo un grupo como los demas: asigna sus opciones igual.
+    expect(nombresDeLosGrupos('transito')).toContain('Reportes');
+  });
+
+  it('un modulo tabulado sin ningun grupo marcado no pliega nada', () => {
+    expect(centroDeReportesDe('seguridad', GRUPOS_POR_TAREA)).toBeNull();
+  });
+
+  it('un modulo que no esta en la tabla tampoco', () => {
+    expect(centroDeReportesDe('catastro', GRUPOS_POR_TAREA)).toBeNull();
+  });
+
+  it('dos grupos marcados en el mismo modulo se rechazan en el build', () => {
+    // Dos centros dejarian la barra lateral con dos entradas y ninguna forma de
+    // saber cual abre cual.
+    expect(() =>
+      centroDeReportesDe('transito', {
+        transito: [
+          ['Reportes', ['transito_padron'], { centro: true }],
+          ['Constancias', ['transito_constancia_libre'], { centro: true }],
+        ],
+      }),
+    ).toThrow(/pliega dos grupos en centro de reportes: «Reportes» y «Constancias»/);
   });
 });
