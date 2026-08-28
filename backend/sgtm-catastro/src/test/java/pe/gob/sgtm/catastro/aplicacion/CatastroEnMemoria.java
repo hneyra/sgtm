@@ -1,0 +1,375 @@
+package pe.gob.sgtm.catastro.aplicacion;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import pe.gob.sgtm.catastro.dominio.CatastroRepository;
+import pe.gob.sgtm.catastro.dominio.Construccion;
+import pe.gob.sgtm.catastro.dominio.DetalleDeLaFicha;
+import pe.gob.sgtm.catastro.dominio.FichaCatastral;
+import pe.gob.sgtm.catastro.dominio.FichaCatastralRepository;
+import pe.gob.sgtm.catastro.dominio.FichaEncontrada;
+import pe.gob.sgtm.catastro.dominio.FiltroDeFichas;
+import pe.gob.sgtm.catastro.dominio.Inquilino;
+import pe.gob.sgtm.catastro.dominio.Manzana;
+import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
+import pe.gob.sgtm.catastro.dominio.Predio;
+import pe.gob.sgtm.catastro.dominio.Sector;
+import pe.gob.sgtm.catastro.dominio.TipoFicha;
+import pe.gob.sgtm.catastro.dominio.Titularidad;
+import pe.gob.sgtm.catastro.dominio.VersionDeLaFicha;
+import pe.gob.sgtm.catastro.dominio.Via;
+import pe.gob.sgtm.catastro.dominio.ViaRepository;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
+import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
+import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
+
+/**
+ * Un catastro en memoria para las pruebas de las cargas desde archivo, que no necesitan base de
+ * datos: lo que se verifica es que el proceso lee el archivo, respeta la guarda de demostracion y
+ * rechaza por fila, no como persiste PostgreSQL —eso ya lo prueban los tests {@code ...JdbcTest}
+ * contra el motor de verdad—.
+ *
+ * <p>Implementa los tres puertos que {@link InscribirFicha} y los importadores necesitan, y un
+ * directorio de contribuyentes de mentira. Lo que no usan lanza {@link
+ * UnsupportedOperationException} en vez de devolver vacio: una prueba que pase porque un doble
+ * respondio «nada» a algo que nadie penso no verifica lo que dice verificar.
+ */
+final class CatastroEnMemoria
+        implements CatastroRepository,
+                ViaRepository,
+                FichaCatastralRepository,
+                DirectorioDeContribuyentes {
+
+    private final Map<Long, Sector> sectores = new LinkedHashMap<>();
+    private final Map<Long, Manzana> manzanas = new LinkedHashMap<>();
+    private final Map<Long, Via> vias = new LinkedHashMap<>();
+    private final Map<Long, Predio> predios = new LinkedHashMap<>();
+    private final Map<Long, Titularidad> titularidades = new LinkedHashMap<>();
+    private final Map<Long, FichaCatastral> fichas = new LinkedHashMap<>();
+    private final Map<String, ResumenDeContribuyente> padron = new LinkedHashMap<>();
+
+    private long siguienteId = 1;
+
+    // ------------------------------------------------------------------
+    // Siembra de lo que ya tiene que existir antes de una carga de fichas
+    // ------------------------------------------------------------------
+
+    void sembrarSector(String codigo, String nombre) {
+        long id = siguienteId++;
+        sectores.put(id, new Sector(id, codigo, nombre, null, true));
+    }
+
+    void sembrarManzana(String codigoDeSector, String codigo) {
+        Sector sector =
+                sectorPorCodigo(codigoDeSector)
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Falta el sector " + codigoDeSector));
+        long id = siguienteId++;
+        manzanas.put(id, new Manzana(id, sector.id(), codigo));
+    }
+
+    void sembrarVia(Via via) {
+        long id = siguienteId++;
+        vias.put(
+                id,
+                new Via(id, via.codigo(), via.tipo(), via.nombre(), via.ubigeo(), via.activa()));
+    }
+
+    void sembrarContribuyente(String codigo, String nombre) {
+        long id = siguienteId++;
+        padron.put(codigo, new ResumenDeContribuyente(id, codigo, nombre, "DNI 00000000"));
+    }
+
+    // ------------------------------------------------------------------
+    // Lo que las pruebas preguntan despues
+    // ------------------------------------------------------------------
+
+    List<Predio> prediosRegistrados() {
+        return List.copyOf(predios.values());
+    }
+
+    List<FichaCatastral> fichasRegistradas() {
+        return List.copyOf(fichas.values());
+    }
+
+    List<Titularidad> titularidadesRegistradas() {
+        return List.copyOf(titularidades.values());
+    }
+
+    // ------------------------------------------------------------------
+    // CatastroRepository
+    // ------------------------------------------------------------------
+
+    @Override
+    public Pagina<Sector> sectores(Paginacion paginacion) {
+        throw new UnsupportedOperationException("La carga desde archivo no pagina sectores");
+    }
+
+    @Override
+    public Optional<Sector> sectorPorCodigo(String codigo) {
+        return sectores.values().stream().filter(s -> s.codigo().equals(codigo)).findFirst();
+    }
+
+    @Override
+    public Optional<Sector> sectorPorId(long id) {
+        return Optional.ofNullable(sectores.get(id));
+    }
+
+    @Override
+    public Sector guardar(Sector sector) {
+        long id = sector.esNuevo() ? siguienteId++ : sector.id();
+        Sector guardado =
+                new Sector(id, sector.codigo(), sector.nombre(), sector.zona(), sector.activo());
+        sectores.put(id, guardado);
+        return guardado;
+    }
+
+    @Override
+    public List<Manzana> manzanasDe(long sectorId) {
+        return manzanas.values().stream().filter(m -> m.sectorId() == sectorId).toList();
+    }
+
+    @Override
+    public Manzana guardar(Manzana manzana) {
+        long id = manzana.esNueva() ? siguienteId++ : manzana.id();
+        Manzana guardada = new Manzana(id, manzana.sectorId(), manzana.codigo());
+        manzanas.put(id, guardada);
+        return guardada;
+    }
+
+    @Override
+    public Optional<Predio> predio(long id) {
+        return Optional.ofNullable(predios.get(id));
+    }
+
+    @Override
+    public Optional<Predio> predioPorCodigo(CodigoReferenciaCatastral codigo) {
+        return predios.values().stream()
+                .filter(p -> p.codigo().valor().equals(codigo.valor()))
+                .findFirst();
+    }
+
+    @Override
+    public Pagina<Predio> predios(Paginacion paginacion) {
+        throw new UnsupportedOperationException("La carga desde archivo no pagina predios");
+    }
+
+    @Override
+    public Predio guardar(Predio predio) {
+        long id = predio.id() == null ? siguienteId++ : predio.id();
+        Predio guardado =
+                new Predio(
+                        id,
+                        predio.codigo(),
+                        predio.tipo(),
+                        predio.viaId(),
+                        predio.numeroMunicipal(),
+                        predio.direccion(),
+                        predio.sectorId(),
+                        predio.manzanaId(),
+                        predio.lote(),
+                        predio.ubigeo(),
+                        predio.estado());
+        predios.put(id, guardado);
+        return guardado;
+    }
+
+    @Override
+    public List<Titularidad> titularesDe(long predioId, LocalDate fecha) {
+        return titularidades.values().stream().filter(t -> t.predioId() == predioId).toList();
+    }
+
+    @Override
+    public List<Titularidad> prediosDe(long contribuyenteId, LocalDate fecha) {
+        throw new UnsupportedOperationException("La carga desde archivo no consulta por titular");
+    }
+
+    @Override
+    public Optional<Titularidad> titularidad(long id) {
+        return Optional.ofNullable(titularidades.get(id));
+    }
+
+    @Override
+    public Titularidad guardar(Titularidad titularidad) {
+        long id = titularidad.id() == null ? siguienteId++ : titularidad.id();
+        Titularidad guardada =
+                new Titularidad(
+                        id,
+                        titularidad.predioId(),
+                        titularidad.contribuyenteId(),
+                        titularidad.condicion(),
+                        titularidad.porcentaje(),
+                        titularidad.vigenciaDesde(),
+                        titularidad.vigenciaHasta(),
+                        titularidad.documentoOrigen());
+        titularidades.put(id, guardada);
+        return guardada;
+    }
+
+    @Override
+    public List<Inquilino> inquilinosDe(long predioId, LocalDate fecha) {
+        throw new UnsupportedOperationException("La carga desde archivo no toca inquilinos");
+    }
+
+    @Override
+    public Optional<Inquilino> inquilino(long id) {
+        throw new UnsupportedOperationException("La carga desde archivo no toca inquilinos");
+    }
+
+    @Override
+    public Inquilino guardar(Inquilino inquilino) {
+        throw new UnsupportedOperationException("La carga desde archivo no toca inquilinos");
+    }
+
+    // ------------------------------------------------------------------
+    // ViaRepository
+    // ------------------------------------------------------------------
+
+    @Override
+    public Optional<Via> findById(long id) {
+        return Optional.ofNullable(vias.get(id));
+    }
+
+    @Override
+    public Optional<Via> findByCodigo(String codigo) {
+        return vias.values().stream().filter(v -> v.codigo().equals(codigo)).findFirst();
+    }
+
+    @Override
+    public Pagina<Via> findAll(Paginacion paginacion) {
+        throw new UnsupportedOperationException("La carga desde archivo no pagina vias");
+    }
+
+    @Override
+    public Via save(Via via) {
+        long id = via.id() == null ? siguienteId++ : via.id();
+        Via guardada =
+                new Via(id, via.codigo(), via.tipo(), via.nombre(), via.ubigeo(), via.activa());
+        vias.put(id, guardada);
+        return guardada;
+    }
+
+    // ------------------------------------------------------------------
+    // FichaCatastralRepository
+    // ------------------------------------------------------------------
+
+    @Override
+    public Optional<FichaCatastral> vigenteA(long predioId, TipoFicha tipo, LocalDate fecha) {
+        return ultimaVersion(predioId, tipo);
+    }
+
+    @Override
+    public List<FichaCatastral> historial(long predioId, TipoFicha tipo) {
+        return deEsePredio(predioId, tipo);
+    }
+
+    @Override
+    public Optional<FichaCatastral> ultimaVersion(long predioId, TipoFicha tipo) {
+        return deEsePredio(predioId, tipo).stream()
+                .max(java.util.Comparator.comparingInt(FichaCatastral::version));
+    }
+
+    @Override
+    public FichaCatastral insertar(FichaCatastral ficha) {
+        long id = siguienteId++;
+        FichaCatastral guardada =
+                new FichaCatastral(
+                        id,
+                        ficha.predioId(),
+                        ficha.tipo(),
+                        ficha.version(),
+                        ficha.areaTerreno(),
+                        ficha.uso(),
+                        ficha.frontis(),
+                        ficha.condicionPropiedad(),
+                        ficha.tipoEdificacion(),
+                        ficha.denominacion(),
+                        ficha.vigenciaDesde(),
+                        ficha.vigenciaHasta(),
+                        ficha.origen(),
+                        ficha.documentoOrigen(),
+                        ficha.observacion(),
+                        ficha.construcciones(),
+                        ficha.instalaciones(),
+                        ficha.detalle());
+        fichas.put(id, guardada);
+        return guardada;
+    }
+
+    @Override
+    public FichaCatastral cerrar(FichaCatastral ficha) {
+        fichas.put(ficha.id(), ficha);
+        return ficha;
+    }
+
+    @Override
+    public List<Construccion> construccionesDe(long fichaId) {
+        return List.of();
+    }
+
+    @Override
+    public List<OtraInstalacion> instalacionesDe(long fichaId) {
+        return List.of();
+    }
+
+    @Override
+    public Optional<DetalleDeLaFicha> detalleDe(long fichaId, TipoFicha tipo) {
+        return Optional.empty();
+    }
+
+    @Override
+    public Pagina<FichaEncontrada> consultar(
+            FiltroDeFichas filtro, List<Long> titulares, LocalDate fecha, Paginacion paginacion) {
+        throw new UnsupportedOperationException("La carga desde archivo no consulta la grilla");
+    }
+
+    @Override
+    public List<VersionDeLaFicha> versionesDe(long predioId, TipoFicha tipo) {
+        throw new UnsupportedOperationException("La carga desde archivo no lee el historico");
+    }
+
+    // ------------------------------------------------------------------
+    // DirectorioDeContribuyentes
+    // ------------------------------------------------------------------
+
+    @Override
+    public List<ResumenDeContribuyente> buscar(String texto, int maximo) {
+        throw new UnsupportedOperationException("La carga desde archivo no busca por aproximacion");
+    }
+
+    @Override
+    public Optional<ResumenDeContribuyente> porCodigo(String codigo) {
+        return Optional.ofNullable(padron.get(codigo));
+    }
+
+    @Override
+    public Map<Long, ResumenDeContribuyente> porIds(Set<Long> ids) {
+        throw new UnsupportedOperationException("La carga desde archivo no resuelve titulares");
+    }
+
+    @Override
+    public Optional<String> domicilioFiscalDe(long contribuyenteId, LocalDate fecha) {
+        throw new UnsupportedOperationException("La carga desde archivo no lee domicilios");
+    }
+
+    // ------------------------------------------------------------------
+
+    private List<FichaCatastral> deEsePredio(long predioId, TipoFicha tipo) {
+        List<FichaCatastral> encontradas = new ArrayList<>();
+        for (FichaCatastral ficha : fichas.values()) {
+            if (ficha.predioId() == predioId && ficha.tipo() == tipo) {
+                encontradas.add(ficha);
+            }
+        }
+        return encontradas;
+    }
+}

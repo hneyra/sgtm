@@ -6,8 +6,10 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
-import pe.gob.sgtm.catastro.aplicacion.InformeDeImportacion.FilaRechazada;
-import pe.gob.sgtm.catastro.aplicacion.LectorDeFilasCsv.FilaCsv;
+import pe.gob.sgtm.carga.InformeDeImportacion;
+import pe.gob.sgtm.carga.InformeDeImportacion.FilaRechazada;
+import pe.gob.sgtm.carga.LectorDeFilasCsv;
+import pe.gob.sgtm.carga.LectorDeFilasCsv.FilaCsv;
 import pe.gob.sgtm.dominio.Observacion;
 
 /**

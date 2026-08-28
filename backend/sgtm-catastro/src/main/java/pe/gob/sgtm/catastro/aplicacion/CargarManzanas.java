@@ -20,34 +20,34 @@ import pe.gob.sgtm.carga.InformeDeImportacion.FilaRechazada;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
-import pe.gob.sgtm.parametros.IdentificadorDeConjunto;
 
 /**
- * Carga el arancel de terreno por via de una municipalidad, contra un conjunto de parametros que el
- * llamador ya abrio (docs/10-negocio/valores-normativos/aranceles-2026.md S1.4).
+ * Carga las manzanas de una municipalidad ya implantada (#121), leyendo un CSV {@code
+ * sectorCodigo,codigo}.
  *
- * <p>Corre en el perfil {@code batch}, igual que {@link CargarCatalogoVial} y por la misma razon.
- * No abre ni sella ningun conjunto: eso es {@code AdministrarParametros}, del contexto {@code
- * parametros}, y esta clase solo conoce su paquete raiz (ARQ-01 §4.1). El operador que corre esta
- * carga tiene que haber llamado antes a {@code AdministrarParametros.abrirVersion} —hoy, por el
- * endpoint del modulo de parametros— y pasar aqui el identificador que devolvio.
+ * <p>Copia exacta del patron de {@link CargarCatalogoVial}, con la misma razon para el perfil
+ * {@code batch} y para fijar a mano los dos contextos que en una peticion salen del token.
  *
- * <p>Se ejecuta una vez por ejercicio: el CSV que produce {@code importar_arancel_via_gpkg.py} trae
- * un archivo {@code arancel_<ejercicio>.csv} distinto para cada uno, y cada ejercicio cuelga de su
- * propio conjunto.
+ * <h2>La secuencia: este proceso va el ultimo</h2>
+ *
+ * <p>Cada fila referencia su sector <b>por codigo</b> —lo que trae el archivo, no un identificador
+ * interno—, y {@link ImportarManzanas} rechaza la fila cuyo sector no existe todavia. El orden es
+ * entonces {@link CargarCatalogoVial} y {@link CargarSectores} primero, este despues. Correrlo
+ * antes no rompe nada ni deja datos a medias —cada fila abre su propia transaccion—: deja un
+ * informe con todas las filas rechazadas, que es un sintoma facil de leer y de repetir.
  */
 @Component
 @Profile("batch")
-@ConditionalOnProperty("sgtm.carga-arancel.archivo")
-@EnableConfigurationProperties(DatosDeCargaArancel.class)
-public class CargarArancelVial implements ApplicationRunner {
+@ConditionalOnProperty("sgtm.carga-manzanas.archivo")
+@EnableConfigurationProperties(DatosDeCargaManzanas.class)
+public class CargarManzanas implements ApplicationRunner {
 
-    private static final Logger log = LoggerFactory.getLogger(CargarArancelVial.class);
+    private static final Logger log = LoggerFactory.getLogger(CargarManzanas.class);
 
-    private final ImportarArancel importar;
-    private final DatosDeCargaArancel datos;
+    private final ImportarManzanas importar;
+    private final DatosDeCargaManzanas datos;
 
-    public CargarArancelVial(ImportarArancel importar, DatosDeCargaArancel datos) {
+    public CargarManzanas(ImportarManzanas importar, DatosDeCargaManzanas datos) {
         this.importar = importar;
         this.datos = datos;
     }
@@ -59,23 +59,19 @@ public class CargarArancelVial implements ApplicationRunner {
         try (Reader archivo =
                 Files.newBufferedReader(Path.of(datos.archivo()), StandardCharsets.UTF_8)) {
             InformeDeImportacion informe =
-                    importar.importar(
-                            archivo,
-                            new IdentificadorDeConjunto(datos.conjuntoId()),
-                            Observacion.de(datos.observacion()));
+                    importar.importar(archivo, Observacion.de(datos.observacion()));
 
             for (FilaRechazada rechazada : informe.rechazadas()) {
                 log.warn(
-                        "Arancel de la fila {} rechazado: {}",
+                        "Manzana de la fila {} rechazada: {}",
                         rechazada.fila(),
                         rechazada.motivo());
             }
             log.info(
-                    "Arancel de la municipalidad {} cargado desde {} contra el conjunto {}: {}"
-                            + " fila(s) leidas, {} nueva(s), {} rechazada(s)",
+                    "Manzanas de la municipalidad {} cargadas desde {}: {} fila(s) leidas, {}"
+                            + " manzana(s) nueva(s), {} rechazada(s)",
                     datos.municipalidadId(),
                     datos.archivo(),
-                    datos.conjuntoId(),
                     informe.totalFilas(),
                     informe.nuevas(),
                     informe.rechazadas().size());

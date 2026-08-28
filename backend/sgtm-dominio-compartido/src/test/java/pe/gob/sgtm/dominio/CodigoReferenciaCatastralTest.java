@@ -118,4 +118,76 @@ class CodigoReferenciaCatastralTest {
         assertThatThrownBy(() -> new ComposicionCatastral.Tramo("sector", 0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("componer arma el codigo tramo a tramo, rellenando con ceros a la izquierda")
+    void componerArmaElCodigoTramoATramo() {
+        CodigoReferenciaCatastral codigo =
+                CodigoReferenciaCatastral.componer(
+                        java.util.Map.of(
+                                "departamento", "20",
+                                "provincia", "01",
+                                "distrito", "04",
+                                "sector", "1",
+                                "manzana", "2",
+                                "lote", "3"),
+                        ComposicionCatastral.DEL_MANUAL);
+
+        assertThat(codigo.valor())
+                .as("los tramos que no se dan valen cero, que es el predio sin edificacion")
+                .isEqualTo("20010401002003000000000");
+        assertThat(codigo.ubigeo()).isEqualTo("200104");
+        assertThat(codigo.tramo("manzana")).isEqualTo("002");
+    }
+
+    @Test
+    @DisplayName("componer sin ningun tramo da un codigo de ceros, de la longitud que toca")
+    void componerSinTramosDaCeros() {
+        CodigoReferenciaCatastral codigo =
+                CodigoReferenciaCatastral.componer(
+                        java.util.Map.of(), ComposicionCatastral.DEL_MANUAL);
+
+        assertThat(codigo.valor())
+                .isEqualTo("0".repeat(ComposicionCatastral.DEL_MANUAL.longitud()));
+    }
+
+    @Test
+    @DisplayName("un tramo que no cabe en sus digitos se rechaza, no se recorta")
+    void unTramoQueNoCabeSeRechaza() {
+        // Recortarlo daria un codigo con la longitud correcta y el sector equivocado, que
+        // es la peor de las respuestas: pasa todas las validaciones y apunta a otro predio.
+        assertThatThrownBy(
+                        () ->
+                                CodigoReferenciaCatastral.componer(
+                                        java.util.Map.of("sector", "123"),
+                                        ComposicionCatastral.DEL_MANUAL))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("sector");
+    }
+
+    @Test
+    @DisplayName("un tramo que la composicion vigente no tiene se rechaza, no se ignora")
+    void unTramoDesconocidoSeRechaza() {
+        // El dia que D-10 se cierre en una composicion sin «entrada», un archivo que la
+        // traiga tiene que fallar: ignorarla en silencio perderia el dato y compondria un
+        // codigo que parece bueno.
+        assertThatThrownBy(
+                        () ->
+                                CodigoReferenciaCatastral.componer(
+                                        java.util.Map.of("callejon", "01"),
+                                        ComposicionCatastral.DEL_MANUAL))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("callejon");
+    }
+
+    @Test
+    @DisplayName("un tramo con algo que no es un digito se rechaza al construir el codigo")
+    void unTramoNoNumericoSeRechaza() {
+        assertThatThrownBy(
+                        () ->
+                                CodigoReferenciaCatastral.componer(
+                                        java.util.Map.of("sector", "A1"),
+                                        ComposicionCatastral.DEL_MANUAL))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }
