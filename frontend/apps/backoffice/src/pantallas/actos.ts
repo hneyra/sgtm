@@ -145,44 +145,76 @@ export interface ActoSinCampo {
  * dibuja**, y el catalogo no sabe nada del controlador.
  *
  * Existe por el mismo motivo que `sin-determinacion` (#333): de las causas de
- * arriba, ninguna dice la verdad en estas dos pantallas, y la que les tocaba
+ * arriba, ninguna dice la verdad en una pantalla asi, y la que le tocaba
  * —`sin-declaracion`, «la pantalla aún no manda estos campos»— **invita a la
  * correccion equivocada**. Declarar los campos en `escrituras.ts` no arregla
- * nada aqui: el cuerpo saldria igual sin el valor de la transferencia, y lo que
- * llegaria a ventanilla es un 422 despues de rellenar catorce campos y de
+ * nada por si solo: el cuerpo saldria igual sin el dato que falta, y lo que
+ * llegaria a ventanilla es un 422 despues de rellenar el formulario entero y de
  * confirmar un acto irreversible.
  *
- * **Las dos transferencias, y el dato es el mismo.**
- * `TransferenciaPredioController` y `TransferenciaVehiculoController` exigen
- * `valorTransferencia` —lo pasan por `dineroDe`, que llama a `exigir`— y
- * `Transferencia` lo declara obligatorio: «el valor declarado del acto». Ninguna
- * de las dos pantallas del manual tiene un campo para el; el prototipo lo dibuja
- * en **otra** pantalla, «Impuesto de alcabala» (`valorDeTransferenciaS`), que es
- * justamente la que el backend **no** lee —`RegistrarAlcabala` lo toma de
- * `transferencia.valorTransferencia()` para calcular la base, y de su peticion
- * solo lee `transferenciaId` y `autoavaluoAjustado`—. O sea: el mismo dato, en
- * dos sitios distintos segun a quien se le pregunte, y ninguno de los dos es
- * inventable desde aqui —es la base sobre la que se liquida la alcabala (art. 24
- * de la Ley de Tributacion Municipal, `docs/10-negocio/valores-normativos/alcabala.md`),
- * asi que un 0,00 de relleno no seria un campo vacio: seria una base imponible
- * falsa—.
+ * **Vacia desde #73.** Las dos transferencias que la abrieron —
+ * `TransferenciaPredioController` y `TransferenciaVehiculoController` exigian
+ * `valorTransferencia`, y ninguna de las dos pantallas del manual tenia un
+ * campo para el— ya no estan: `pantallas/rentas/composicion.ts` declara un
+ * resolutor que **anade** el campo dentro del control que sustituye a otro
+ * —«Código predial» en una, «Transferente — documento» en la otra—, sin
+ * reescribir el rotulo de ninguno (RNF-080). No se resolvio editando el
+ * catalogo —`rentas-registro.generado.ts` no se toca a mano— ni inventando el
+ * importe: se anadio un campo nuevo, con su propia etiqueta, junto al control
+ * que ya resolvia lo otro que faltaba.
  *
- * Se sale de aqui el dia que se decida **donde se captura**: o la pantalla gana
- * su campo, o el acto deja de exigirlo. Las dos son decisiones de diseño, y
- * ninguna cabe en la interfaz.
+ * Se queda declarada, y no se borra el mecanismo, porque el hueco que cierra
+ * —un acto que exige un dato para el que ninguna pantalla del manual dibuja un
+ * campo propio— puede volver a aparecer: es lo que le pasa hoy a `alcabala`
+ * (`transferenciaId` no lo resuelve ninguna lectura publicada, y
+ * `autoavaluoAjustado` esta marcado de solo lectura en el catalogo aunque el
+ * controlador lo pida como dato de entrada) y a `espectaculos`
+ * (`ingresoDeclarado`, tambien de solo lectura). Ninguna de las dos entra aqui
+ * **todavia**: su primaria del catalogo es «Imprimir liquidación», que
+ * `DE_SALIDA` reconoce antes de llegar a esta lista, asi que hoy se leen como
+ * pantallas de consulta y no como un acto sin campo. Ver `rentas/index.ts`
+ * para el analisis completo.
  */
 export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
-  transferencia_predio: {
-    dato: 'el valor de la transferencia, el que figura en la minuta o en la escritura',
+  /**
+   * La caja tributaria y la de tasas, y el mismo dato que a las dos les falta (#33, #74).
+   *
+   * `CajaController.cobranza` y `.tasas` exigen `formaDePago` en el cuerpo —EFECTIVO, CHEQUE,
+   * DEPOSITO, TARJETA o TRANSFERENCIA: con qué entra el dinero— y ninguna sección de ninguna de
+   * las dos pantallas dibuja un campo para él. Lo que el prototipo llama «Forma de pago» en
+   * `caja_tributaria` es, en el backend, `tipoDePago` —NORMAL TRIBUTARIO, A CUENTA,
+   * PRECONVENIO…—: un campo distinto, y opcional. Declarar `formaDePago` en `escrituras.ts`
+   * traduciendo esas opciones no arregla nada: el cuerpo saldría igual sin el medio de pago, y lo
+   * que llegaría a ventanilla es un 422 después de rellenar la grilla y de confirmar un cobro.
+   */
+  caja_tributaria: {
+    dato: 'el medio de pago (efectivo, cheque, depósito, tarjeta o transferencia)',
     porque:
-      'Sin él la transferencia no se puede registrar, porque es la base sobre la que se liquida la alcabala.',
-    campos: ['valorTransferencia'],
+      'Sin él el cobro no se puede registrar: es un campo distinto de «Forma de pago» —que aquí es el tipo de cobranza, NORMAL/A CUENTA/PRECONVENIO…—, y ninguna sección de esta pantalla tiene dónde escribirlo.',
+    campos: ['formaDePago'],
   },
-  transferencia_vehiculo: {
-    dato: 'el valor de la transferencia, el que figura en el acta o en el parte registral',
+  caja_tasas: {
+    dato: 'el medio de pago (efectivo, cheque, depósito, tarjeta o transferencia)',
     porque:
-      'Sin él la transferencia no se puede registrar: el valor con que el vehículo cambia de manos es parte del hecho que queda asentado.',
-    campos: ['valorTransferencia'],
+      'Sin él el cobro no se puede registrar, por el mismo motivo que en caja tributaria: el cuerpo lo exige y esta pantalla no dibuja ningún campo para él.',
+    campos: ['formaDePago'],
+  },
+
+  /**
+   * El fraccionamiento, y la grilla que le falta (#35, #74).
+   *
+   * `PeticionDeFraccionamiento` exige al menos una obligación marcada —«un convenio sin deuda
+   * acogida no fracciona nada»—, y el catálogo de esta pantalla no declara ninguna tabla de
+   * deuda para elegirla: la única `tabla` que dibuja, «Detalle cuotas», es el cronograma que
+   * **sale** de la simulación, no una grilla de entrada. Es la misma frontera que separa a
+   * `caja_tributaria` de `consulta_deuda`, pero aquí no hay ni siquiera una tabla vacía a la que
+   * conectar una lectura: el prototipo no reservó el bloque.
+   */
+  fraccionamiento: {
+    dato: 'las deudas que se acogen al convenio, elegidas en una grilla',
+    porque:
+      'Sin ellas el convenio no se puede registrar: el backend exige al menos una obligación marcada, y esta pantalla no dibuja ninguna tabla de deuda donde elegirla.',
+    campos: ['obligaciones'],
   },
 };
 

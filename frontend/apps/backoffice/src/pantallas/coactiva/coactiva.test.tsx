@@ -118,7 +118,10 @@ describe('coactiva_expedientes lee ExpedienteResource, conectada desde #363', ()
     expect(OPCIONES_CONECTADAS).toContain('coactiva_expedientes');
     // El resto del modulo sigue sin conectar: ningun otro endpoint tiene
     // `Controller` publicado como este (#40).
-    expect(OPCIONES_CONECTADAS).not.toContain('proceso_coactivo');
+    // #76 conecto despues las otras tres lecturas del modulo; lo que sigue
+    // sin conectar son las escrituras, bloqueadas por el orden de acciones
+    // del catalogo (ver el javadoc de `pantallas/coactiva/index.ts`).
+    expect(OPCIONES_CONECTADAS).toContain('proceso_coactivo');
     expect(OPCIONES_CONECTADAS).not.toContain('actos_coactivos');
   });
 
@@ -133,7 +136,7 @@ describe('coactiva_expedientes lee ExpedienteResource, conectada desde #363', ()
       // «Contribuyente» es `codContribuyente`: el codigo del obligado, no un
       // nombre —el prototipo dibuja el nombre en esta columna, y el recurso
       // real publica el codigo (ver `pantallas/coactiva/index.ts`)—.
-      'DÍAZ MADRID, JULIO CÉSAR',
+      'C-COACT-0001',
       '3',
       // Sin separador de miles: asi lo sirve `ExpedienteResource` de verdad,
       // no como lo escribia el catalogo del prototipo («9,412.15»).

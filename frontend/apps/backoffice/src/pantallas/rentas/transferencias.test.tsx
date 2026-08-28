@@ -1,148 +1,249 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
-import { escribe } from '@sgtm/api-client';
 import { montarEnRuta } from '../../pruebas/montar';
-import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
-import { ACTOS_SIN_CAMPO, impedimentoDelActo } from '../actos';
-import { operacionDe } from '../busqueda';
-import { OPCIONES_QUE_ESCRIBEN } from '../escrituras';
+import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pruebas/acciones';
 
 /**
- * **Las dos transferencias, y el dato que ninguna pantalla tiene** (#73).
+ * **Las dos transferencias, conectadas** (#73).
  *
- * Lo que estas pruebas fijan no es una funcionalidad nueva: es el motivo por el
- * que dos opciones de Rentas · Registro **no** se conectan, dicho donde se lee
- * —la franja de la primaria— y con la precision que hace falta para que nadie lo
- * arregle por el sitio equivocado.
+ * `TransferenciaPredioController` y `TransferenciaVehiculoController` exigen
+ * `valorTransferencia`, y ninguna de las dos pantallas del manual dibuja un
+ * campo para él. La salida no fue declarar un campo que nadie puede escribir
+ * —eso habría dejado la primaria apagada para siempre, como documentaba la
+ * versión anterior de este archivo—: es un resolutor (`rentas/composicion.ts`,
+ * `ResolutorDeTransferencia.tsx`) que **añade** el campo, con su propia
+ * etiqueta, dentro de un control que ya sustituía a otro. En «Transferencia de
+ * predio» va junto a la búsqueda del predio, porque los dos son el mismo
+ * gesto; en «Transferencia de vehículo», junto a «Transferente — documento»,
+ * un campo que sigue sin llegar a ningún sitio —el transferente lo resuelve el
+ * backend del titular vigente— y que se sigue dibujando igual que antes.
  *
- * El hallazgo, en una linea: `TransferenciaPredioController` y
- * `TransferenciaVehiculoController` exigen `valorTransferencia` y **ninguna de
- * las dos pantallas del manual dibuja un campo para el**. El prototipo lo dibuja
- * en otra —«Impuesto de alcabala»—, que es justo la que el backend no lee:
- * `RegistrarAlcabala` toma la base de `transferencia.valorTransferencia()`. Asi
- * que el mismo dato esta en dos sitios distintos segun a quien se le pregunte, y
- * ninguno de los dos es inventable desde aqui: es la base imponible de un
- * impuesto (art. 24 de la LTM).
+ * Lo que se comprueba aquí:
  *
- * Antes de esto, la franja de las dos decia `sin-declaracion` —«la pantalla aún
- * no manda estos campos»—, que **invita a la correccion equivocada**: declararlos
- * en `escrituras.ts` no cambia nada, porque el que falta no esta en el
- * formulario. Es la misma correccion que #333 hizo con `sin-determinacion`.
+ * 1. **El cuerpo lleva solo lo que la lista blanca declara**, con el predio
+ *    resuelto como número y el valor tal como el backend lo lee.
+ * 2. **Sin predio, sin valor o con un valor que no es cifra, la primaria se
+ *    queda apagada y dice por qué** (#332): ninguna de las tres guardas es
+ *    adorno.
+ * 3. **Registrar una transferencia se confirma** (regla 4): no se deshace.
+ * 4. **El campo que sustituye sigue diciendo lo que decía**: RNF-080 no se
+ *    rompe por añadir un campo nuevo al lado.
  */
 
+/** El código catastral que el juego de datos del prototipo resuelve. */
+const CODIGO = '200601010150010101001';
+
+const original = globalThis.fetch;
+let escrituras: { url: string; cuerpo: string }[] = [];
+
+/** El proxy sigue sirviendo las lecturas; solo se intercepta el `POST` del acto. */
+function seEspiaElActo(): void {
+  escrituras = [];
+  const proxy = globalThis.fetch;
+  globalThis.fetch = (entrada, opciones) => {
+    const url = typeof entrada === 'string' ? entrada : String(entrada);
+    if ((opciones?.method ?? 'GET') === 'POST' && url.includes('/rentas/transferencias/')) {
+      escrituras.push({ url, cuerpo: typeof opciones?.body === 'string' ? opciones.body : '' });
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            id: 501,
+            objeto: url.includes('/predio') ? 'PREDIO' : 'VEHICULO',
+            transferenteId: 1,
+            adquirienteId: 2,
+            tipoTransferencia: 'COMPRA-VENTA',
+            fechaTransferencia: '2026-07-18',
+            valorTransferencia: { importe: '95000.00', actualizadoA: '2026-07-18' },
+            porcentajeTransferido: '100.00',
+            afectaAlcabala: false,
+            documentoOrigen: 'EP-2218-2026',
+          }),
+          { status: 201, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+    }
+    return proxy(entrada, opciones);
+  };
+}
+
 beforeEach(() => instalarProxyDeDatos({ latencia: false }));
-afterEach(() => desinstalarProxyDeDatos());
+afterEach(() => {
+  desinstalarProxyDeDatos();
+  globalThis.fetch = original;
+});
 
-const ACCIONES_DEL_PREDIO = ['Validar deuda del transferente', 'Registrar transferencia'];
-const ACCIONES_DEL_VEHICULO = ['Validar deuda', 'Registrar transferencia'];
+const observacion = async (): Promise<HTMLElement> =>
+  within(await screen.findByRole('region', { name: 'Observación del usuario' })).getByLabelText(
+    'Observación',
+  );
 
-describe('la causa es la del campo que falta, no la del verbo', () => {
-  it.each([
-    { opcion: 'transferencia_predio', acciones: ACCIONES_DEL_PREDIO },
-    { opcion: 'transferencia_vehiculo', acciones: ACCIONES_DEL_VEHICULO },
-  ])('$opcion: sin-campo', ({ opcion, acciones }) => {
-    expect(impedimentoDelActo(opcion, acciones)?.causa).toBe('sin-campo');
-    /* Y **no** por el verbo: las dos operaciones escriben, asi que sin la
-       declaracion caerian en `sin-declaracion`, que es lo que decian hasta hoy.
-       Sin esta comprobacion, la causa nueva podria estar puesta por cualquier
-       otro motivo —una primaria distinta, un contrato sin la ruta— y la prueba
-       no lo notaria. */
-    expect(escribe(operacionDe(opcion) ?? 'inicio')).toBe(true);
+/** Busca el predio por su código y elige el único candidato que ofrezca la lista. */
+async function elegirElPredio(usuario: ReturnType<typeof userEvent.setup>): Promise<void> {
+  // El resolutor llega perezoso (`lazy`), así que el campo no está en el
+  // primer dibujo: hay que esperarlo, no darlo por hecho con `getBy`.
+  await usuario.type(await screen.findByLabelText('Código predial'), CODIGO);
+  await usuario.click(await screen.findByRole('button', { name: new RegExp(CODIGO) }));
+  await screen.findByRole('button', { name: 'Cambiar el predio resuelto' });
+}
+
+describe('transferencia de predio: el predio y el valor los llena el resolutor', () => {
+  const RUTA = '/rentas-registro/transferencia-predio';
+
+  it('sin predio resuelto, la primaria dice que falta y no se puede pulsar', async () => {
+    montarEnRuta(RUTA);
+    await screen.findByLabelText('Código predial');
+
+    primariaApagada();
+    expect(motivoDeLaPrimaria()).toMatch(/Falta el predio/);
+    expect(motivoDeLaPrimaria()).toMatch(/Código predial/);
+  });
+
+  it('con el predio resuelto y sin valor, sigue apagada y dice qué falta', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta(RUTA);
+    await elegirElPredio(usuario);
+
+    primariaApagada();
+    expect(motivoDeLaPrimaria()).toMatch(/Falta el valor de la transferencia/);
+  });
+
+  it('un valor con separador de miles no llega como cifra, y se dice sin nombrar el contrato', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta(RUTA);
+    await elegirElPredio(usuario);
+    await usuario.type(screen.getByLabelText('Valor de transferencia (S/)'), '95,000.00');
+
+    const motivo = motivoDeLaPrimaria() ?? '';
+    expect(motivo).toMatch(/no llegó como cifra/);
+    expect(motivo).not.toMatch(/backend|BigDecimal|contrato/i);
   });
 
   /**
-   * **La causa nueva no se ha comido a la que habia.** Si `sin-campo` alcanzara
-   * a cualquier opcion con verbo de escritura sin declarar, las dos causas
-   * dirian lo mismo y distinguirlas no serviria de nada.
+   * **El campo al que sustituye no cambia de significado** (RNF-080): «Código
+   * predial» sigue siendo la búsqueda del predio, y el valor de la
+   * transferencia tiene su propia etiqueta, no la de otro campo.
    */
-  it('una opcion que escribe, sin declarar y sin el registro, sigue en sin-declaracion', () => {
-    // Con **sus** acciones del catalogo, no con unas inventadas: la primaria es
-    // lo que decide entre tres de las cuatro causas.
-    expect(
-      impedimentoDelActo('predial_masivo', ['Simular', 'Ver observados', 'Ejecutar proceso'])
-        ?.causa,
-    ).toBe('sin-declaracion');
+  it('el rótulo del campo sustituido no cambia; el valor lleva el suyo propio', async () => {
+    montarEnRuta(RUTA);
+    expect(await screen.findByLabelText('Código predial')).toBeInTheDocument();
+    expect(screen.getByLabelText('Valor de transferencia (S/)')).toBeInTheDocument();
   });
 
-  it('el texto habla de la ventanilla y el nombre del campo se queda fuera', () => {
-    for (const opcion of ['transferencia_predio', 'transferencia_vehiculo']) {
-      const detalle = impedimentoDelActo(opcion, ACCIONES_DEL_PREDIO)?.detalle ?? '';
-      // Dice **que** dato falta, con las palabras del papel que lo trae.
-      expect(detalle).toMatch(/valor de la transferencia/);
-      // Y por donde se sale: el acto existe fuera del sistema.
-      expect(detalle).toMatch(/Registra el acto por el procedimiento actual/);
-      expect(detalle).toMatch(/avísale a sistemas/);
-      /* Lo tecnico **no se pinta**: quien atiende no sabe que es
-         `valorTransferencia` ni que son campos declarados, y leyendolo solo
-         puede concluir que la pantalla esta rota y que la culpa es suya. */
-      expect(detalle).not.toMatch(/valorTransferencia/);
-      expect(detalle).not.toMatch(/backend|endpoint|declarad|contrato|API/i);
-    }
-  });
+  it('con todo puesto y observación, la primaria se habilita y pide confirmación al pulsarla', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta(RUTA);
+    seEspiaElActo();
+    await elegirElPredio(usuario);
 
-  it('y la mitad tecnica si nombra el campo, para quien mantiene', () => {
-    for (const opcion of ['transferencia_predio', 'transferencia_vehiculo']) {
-      expect(ACTOS_SIN_CAMPO[opcion]?.campos).toEqual(['valorTransferencia']);
-    }
-  });
+    await usuario.type(screen.getByLabelText('Valor de transferencia (S/)'), '95000.00');
+    await usuario.selectOptions(screen.getByLabelText('Tipo de acto'), 'COMPRA-VENTA');
+    await usuario.type(screen.getByLabelText('Fecha del acto'), '2026-07-18');
+    await usuario.type(screen.getByLabelText('Nº de minuta / escritura'), 'EP-2218-2026');
+    await usuario.type(screen.getByLabelText('% transferido'), '100.00');
+    await usuario.type(screen.getByLabelText('Transferente — documento'), '44218937');
+    await usuario.type(screen.getByLabelText('Adquirente — documento'), '02718844');
+    await usuario.type(await observacion(), 'Compraventa registrada con minuta EP-2218-2026.');
 
-  /**
-   * **Declararse y estar en el registro es una contradiccion**, y el dia que una
-   * transferencia gane su campo hay que sacarla de aqui: `impedimentoDelActo`
-   * devuelve `undefined` para lo declarado, asi que la entrada quedaria viva y
-   * muda, diciendo que falta un dato que ya se escribe.
-   */
-  it('ninguna opcion esta a la vez declarada y en el registro', () => {
-    const declaradas = new Set(OPCIONES_QUE_ESCRIBEN);
-    for (const opcion of Object.keys(ACTOS_SIN_CAMPO)) {
-      expect(
-        declaradas.has(opcion),
-        `«${opcion}» declara escritura y ademas dice que le falta`,
-      ).toBe(false);
-    }
+    const primaria = await screen.findByRole('button', { name: 'Registrar transferencia' });
+    await waitFor(() => primariaEncendida(primaria));
+
+    await usuario.click(primaria);
+    // Registrar una transferencia no se deshace (regla 4): se confirma
+    // diciendo que va a pasar, no preguntando si se está seguro.
+    const aviso = await screen.findByText(/y eso no se deshace/);
+    expect(aviso.textContent?.toLowerCase()).toContain('registrar transferencia');
+    expect(escrituras).toHaveLength(0);
+
+    await usuario.click(screen.getByRole('button', { name: /^Confirmar/ }));
+
+    await waitFor(() => expect(escrituras).toHaveLength(1));
+    const cuerpo = JSON.parse(escrituras[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo).toEqual({
+      // El identificador interno, como número: `PeticionDeTransferenciaPredio`
+      // lo declara `Long`.
+      predioId: 1,
+      codTransferente: '44218937',
+      codAdquiriente: '02718844',
+      tipoTransferencia: 'COMPRA-VENTA',
+      fechaTransferencia: '2026-07-18',
+      // El importe, tal como `new BigDecimal` lo lee: sin separador de miles.
+      valorTransferencia: '95000.00',
+      porcentajeTransferido: '100.00',
+      documentoOrigen: 'EP-2218-2026',
+      observacion: 'Compraventa registrada con minuta EP-2218-2026.',
+    });
+    // Ni el código catastral tecleado —el backend no lo sabe leer—, ni
+    // `afectaAlcabala`: la casilla no viaja (`CampoDelCuerpo` no manda
+    // booleanos), y el controlador ya trata su ausencia como «no marcada».
+    expect(JSON.stringify(cuerpo)).not.toContain(CODIGO);
+    expect(cuerpo).not.toHaveProperty('afectaAlcabala');
   });
 });
 
-describe('las dos pantallas lo dicen donde se lee', () => {
-  it.each([
-    { opcion: 'transferencia_predio', ruta: '/rentas-registro/transferencia-predio' },
-    { opcion: 'transferencia_vehiculo', ruta: '/rentas-registro/transferencia-vehiculo' },
-  ])('$opcion: la primaria apagada y la franja nombra el dato', async ({ ruta }) => {
-    const montada = montarEnRuta(ruta);
-    await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+describe('transferencia de vehículo: solo el valor, sin identificador que resolver', () => {
+  const RUTA = '/rentas-registro/transferencia-vehiculo';
+
+  it('sin valor, la primaria dice que falta junto al campo que lo sustituye', async () => {
+    montarEnRuta(RUTA);
+    await screen.findByLabelText('Placa');
 
     primariaApagada();
-    expect(motivoDeLaPrimaria()).toMatch(/Falta un dato que esta pantalla no tiene dónde escribir/);
-    expect(motivoDeLaPrimaria()).toMatch(/valor de la transferencia/);
-    // La causa tecnica viaja en el `data-`, como las otras tres.
-    expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
-      'data-causa',
-      'sin-campo',
-    );
+    expect(motivoDeLaPrimaria()).toMatch(/Falta la placa/);
 
-    montada.unmount();
+    await userEvent.setup().type(screen.getByLabelText('Placa'), 'ABC-123');
+    expect(motivoDeLaPrimaria()).toMatch(/Falta el valor de la transferencia/);
+    expect(motivoDeLaPrimaria()).toMatch(/Transferente — documento/);
   });
 
   /**
-   * **Y no se puede escribir nada, que es lo coherente con no poder guardar.**
-   * La negacion por omision de `escrituras.ts` sigue mandando: sin declaracion,
-   * ningun campo del formulario entra en el estado de React. Es lo que hace que
-   * la franja no sea un cartel encima de un formulario vivo.
+   * **El campo al que se cuelga sigue dibujándose tal cual**: no escribible,
+   * porque no lo era antes de declararse aquí —ninguna de las dos peticiones
+   * de transferencia acepta `codTransferente` para un vehículo—.
    */
-  it('no hay ni un campo escribible, ni caja de observacion', async () => {
+  it('«Transferente — documento» sigue sin poder escribirse', async () => {
     const usuario = userEvent.setup();
-    montarEnRuta('/rentas-registro/transferencia-predio');
-    await waitFor(() => expect(document.querySelector('.sgtm-formulario')).not.toBeNull());
+    montarEnRuta(RUTA);
+    const campo = await screen.findByLabelText('Transferente — documento');
+    expect(campo).toHaveAttribute('readonly');
+    await usuario.type(campo, '44218937');
+    expect(campo).toHaveValue('');
+  });
 
-    const minuta = screen.getByLabelText('Nº de minuta / escritura');
-    expect(minuta).toHaveAttribute('readonly');
-    await usuario.type(minuta, 'EP-1');
-    expect(minuta).toHaveValue('');
+  it('con todo puesto, registra sin `codTransferente` ni `vehiculoId`', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta(RUTA);
+    seEspiaElActo();
 
-    // Sin escritura no hay observacion que pedir: la regla 10 se cumple sin caja
-    // porque no hay a donde guardar (`useEscritura` no se activa).
-    expect(screen.queryByRole('region', { name: 'Observación del usuario' })).toBeNull();
+    // El resolutor llega perezoso (`lazy`): se espera su campo antes de tocar
+    // el resto del formulario.
+    await usuario.type(await screen.findByLabelText('Valor de transferencia (S/)'), '18500.00');
+    await usuario.type(screen.getByLabelText('Placa'), 'ABC-123');
+    await usuario.type(screen.getByLabelText('Fecha de transferencia'), '2026-07-18');
+    await usuario.selectOptions(screen.getByLabelText('Tipo de acto'), 'COMPRA-VENTA');
+    await usuario.type(screen.getByLabelText('Nº del documento'), 'PR-0044-2026');
+    await usuario.type(screen.getByLabelText('Adquirente — documento'), '02718844');
+    await usuario.type(await observacion(), 'Venta de vehículo con parte registral PR-0044-2026.');
+
+    const primaria = await screen.findByRole('button', { name: 'Registrar transferencia' });
+    await waitFor(() => primariaEncendida(primaria));
+    await usuario.click(primaria);
+    await usuario.click(await screen.findByRole('button', { name: /^Confirmar/ }));
+
+    await waitFor(() => expect(escrituras).toHaveLength(1));
+    const cuerpo = JSON.parse(escrituras[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo).toEqual({
+      placa: 'ABC-123',
+      fechaTransferencia: '2026-07-18',
+      tipoTransferencia: 'COMPRA-VENTA',
+      documentoOrigen: 'PR-0044-2026',
+      codAdquiriente: '02718844',
+      valorTransferencia: '18500.00',
+      observacion: 'Venta de vehículo con parte registral PR-0044-2026.',
+    });
+    expect(cuerpo).not.toHaveProperty('codTransferente');
+    expect(cuerpo).not.toHaveProperty('vehiculoId');
+    expect(cuerpo).not.toHaveProperty('afectaAlcabala');
   });
 });

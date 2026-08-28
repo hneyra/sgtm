@@ -16,26 +16,34 @@ import {
 /**
  * Rentas · Registro (#73): el modulo que mas escribe.
  *
- * Quince opciones, de las cuales **ocho tienen verbo de escritura**. Es donde la
+ * Quince opciones, de las cuales **nueve tienen verbo de escritura**. Es donde la
  * observacion obligatoria (#64) deja de ser una regla escrita y se convierte en
- * ocho formularios que no guardan sin ella, asi que aqui se comprueba sobre las
- * ocho a la vez y no una por una.
+ * nueve formularios que no guardan sin ella, asi que aqui se comprueba sobre las
+ * nueve a la vez y no una por una.
  *
  * Conectadas para lectura hay cinco: el padron de contribuyentes (#11), la
  * ficha de vehiculo (#26), la declaracion jurada (#28), los beneficios (#27)
- * y los arbitrios (#31). `alta_deuda` (#24) se suma como la primera escritura
- * conectada del modulo, con su lista blanca en `escrituras.ts` — ver ahi por
- * que `unidadPredioPlaca` y `cuotaHasta` no viajan todavia.
+ * y los arbitrios (#31). `alta_deuda` (#24) y `baja_deuda` (#332) fueron las
+ * primeras escrituras conectadas del modulo, con su lista blanca en
+ * `escrituras.ts` — ver ahi por que `cuotaHasta` no viaja todavia.
  *
- * `transferencia_predio`, `transferencia_vehiculo` y `baja_deuda` quedan
- * fuera a proposito: las dos primeras necesitan resolver un codigo contra un
- * identificador interno antes de poder enviar (busqueda que no existe
- * todavia), y `baja_deuda` es buscar-y-seleccionar-varias-filas, no un
- * formulario plano — ninguna de las tres es solo una entrada mas en la lista
- * blanca (ver #73). `alcabala`, `vehicular_calculo` y `espectaculos` tienen
- * ya su backend (#32) pero el mismo tipo de hueco: un identificador interno o
- * un valor que el catalogo marca de solo lectura y que el controlador no
- * calcula (ver el doc de `rentas/index.ts`). Las demas esperan a su backend.
+ * **`transferencia_predio` y `transferencia_vehiculo` se suman aqui** (#73):
+ * a las dos les faltaba `valorTransferencia`, un dato que ninguna pantalla
+ * del manual dibuja, y ahora lo llena un resolutor de `rentas/composicion.ts`
+ * —el mismo mecanismo que ya resolvia `predioId`/`vehiculoId` para
+ * `alta_deuda`—. Su bateria entera esta en `transferencias.test.tsx`.
+ *
+ * `alcabala`, `vehicular_calculo` y `espectaculos` tienen ya su backend (#32)
+ * y se quedan fuera: a `alcabala` le falta `transferenciaId` —ninguna lectura
+ * publicada lo resuelve, porque no hay `GET` de transferencias— y
+ * `autoavaluoAjustado` —marcado de solo lectura en el catalogo, aunque el
+ * controlador lo pide como dato de entrada (D-11)—; a `espectaculos` le falta
+ * `ingresoDeclarado`, con el mismo defecto de marcado; y `vehicular_calculo`
+ * tiene un desacuerdo de transporte entre el contrato —que declara `placa`,
+ * `codContribuyente` y `ejercicio` como parametros de consulta— y el
+ * controlador —que los lee del cuerpo—. Ninguna de las tres es una entrada
+ * mas en la lista blanca: ver el doc de `rentas/index.ts`. Las demas esperan
+ * a su backend.
  */
 
 /**
@@ -52,23 +60,6 @@ import {
  * declaradas, y eso se comprueba abajo y en `pantallas/escritura.test.tsx`.
  */
 const LAS_QUE_ESCRIBEN_SIN_DECLARAR: readonly string[] = ['predial-masivo', 'vehicular-calculo'];
-
-/**
- * Y las dos a las que **no les falta la declaracion: les falta un campo** (#73).
- *
- * Estaban en la lista de arriba, y ahi decian «la pantalla aún no manda estos
- * campos», que invita a la correccion equivocada: declararlos en `escrituras.ts`
- * no cambia nada, porque el que falta no esta en el formulario. Los dos
- * controladores de transferencia exigen `valorTransferencia` —la base sobre la
- * que se liquida la alcabala— y **ninguna de las dos pantallas del manual dibuja
- * un campo para el**; el prototipo lo dibuja en «Impuesto de alcabala», que es
- * justo la que el backend no lee. La bateria entera esta en
- * `transferencias.test.tsx`.
- */
-const LAS_QUE_NO_TIENEN_EL_CAMPO: readonly string[] = [
-  'transferencia-predio',
-  'transferencia-vehiculo',
-];
 
 /**
  * Y la que **no guarda campos: pide una determinacion** (#333).
@@ -93,8 +84,17 @@ const LA_QUE_DETERMINA = 'predial-individual';
  */
 const LAS_DE_SALIDA: readonly string[] = ['alcabala', 'espectaculos'];
 
-/** Las dos que **si** declaran su lista blanca, y por tanto guardan de verdad. */
-const LAS_DECLARADAS: readonly string[] = ['alta-deuda', 'baja-deuda'];
+/**
+ * Y las cuatro que **si** declaran su lista blanca, y por tanto guardan de
+ * verdad. Las dos transferencias tienen ademas su propia bateria, con el
+ * resolutor que les llena el campo que les faltaba: `transferencias.test.tsx`.
+ */
+const LAS_DECLARADAS: readonly string[] = [
+  'alta-deuda',
+  'baja-deuda',
+  'transferencia-predio',
+  'transferencia-vehiculo',
+];
 
 beforeEach(() => instalarProxyDeDatos({ latencia: false }));
 afterEach(() => desinstalarProxyDeDatos());
@@ -122,29 +122,6 @@ describe('ningun acto del modulo promete lo que no puede', () => {
       expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
         'data-causa',
         'sin-declaracion',
-      );
-
-      montada.unmount();
-    },
-  );
-
-  it.each(LAS_QUE_NO_TIENEN_EL_CAMPO)(
-    '%s deja su primaria apagada, y la franja nombra el dato que falta',
-    async (ranura) => {
-      const montada = montarEnRuta(`/rentas-registro/${ranura}`);
-      await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
-
-      primariaApagada();
-      expect(
-        screen.queryByRole('region', { name: 'Observación del usuario' }),
-      ).not.toBeInTheDocument();
-
-      // La franja dice **que dato** falta, no que falte una lista blanca.
-      expect(motivoDeLaPrimaria()).toMatch(/valor de la transferencia/);
-      expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
-      expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
-        'data-causa',
-        'sin-campo',
       );
 
       montada.unmount();

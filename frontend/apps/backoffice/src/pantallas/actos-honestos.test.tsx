@@ -6,9 +6,34 @@ import { escribe } from '@sgtm/api-client';
 import { todasLasPantallas } from '../catalogo';
 import { montarEnRuta } from '../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada } from '../pruebas/acciones';
-import { impedimentoDelActo } from './actos';
+import { ACTOS_SIN_CAMPO, impedimentoDelActo } from './actos';
+import type { ActoSinCampo } from './actos';
 import { operacionDe } from './busqueda';
 import { OPCIONES_QUE_ESCRIBEN } from './escrituras';
+
+/**
+ * `ACTOS_SIN_CAMPO` esta vacia desde #73: las dos transferencias que la
+ * abrian ya declaran su escritura, con el campo que faltaba anadido por un
+ * resolutor (`rentas/composicion.ts`). El mecanismo se queda —puede volver a
+ * hacer falta— y esta prueba lo ejercita **sin** una opcion real: mutando el
+ * registro en tiempo de ejecucion, que es lo unico que queda cuando la lista
+ * que se prueba esta vacia a proposito. `readonly` es solo de TypeScript; en
+ * JavaScript el objeto se puede escribir, y aqui se restaura despues.
+ */
+const registro = ACTOS_SIN_CAMPO as Record<string, ActoSinCampo>;
+const MUESTRA_SIN_CAMPO = 'muestra_sin_campo';
+function conUnaMuestraDeSinCampo<T>(cuerpo: () => T): T {
+  registro[MUESTRA_SIN_CAMPO] = {
+    dato: 'el dato de la muestra',
+    porque: 'Por lo que sea, para la prueba.',
+    campos: ['campoDeLaMuestra'],
+  };
+  try {
+    return cuerpo();
+  } finally {
+    delete registro[MUESTRA_SIN_CAMPO];
+  }
+}
 
 /**
  * **Ningun acto promete lo que no puede** (#332), en las 134.
@@ -33,12 +58,18 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
 
     // Sin declarar y con verbo de escritura: falta trabajo del sistema.
     expect(impedimentoDelActo('predial_masivo')?.causa).toBe('sin-declaracion');
-    /* Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
-       no tiene donde escribir** (#73): `sin-declaracion` diria que basta con
-       declarar sus campos, y en las dos transferencias eso no arregla nada
-       —falta `valorTransferencia`, que no esta en el formulario del manual—.
-       Ver `rentas/transferencias.test.tsx`. */
-    expect(impedimentoDelActo('transferencia_predio')?.causa).toBe('sin-campo');
+    /* Y con **un dato que la pantalla no tiene donde escribir** (#73):
+       `sin-declaracion` diria que basta con declarar sus campos, y eso no
+       arregla nada cuando lo que falta no esta en el formulario del manual.
+       Hoy ninguna opcion vive ahi —las dos transferencias que lo hacian ya
+       declararon su escritura, con el campo anadido por un resolutor
+       (`rentas/composicion.ts`)—, asi que se ejercita con una muestra. */
+    expect(
+      conUnaMuestraDeSinCampo(() => impedimentoDelActo(MUESTRA_SIN_CAMPO, ['Guardar'])?.causa),
+    ).toBe('sin-campo');
+    // Y las dos transferencias, declaradas: sin impedimento ninguno.
+    expect(impedimentoDelActo('transferencia_predio')).toBeUndefined();
+    expect(impedimentoDelActo('transferencia_vehiculo')).toBeUndefined();
     // Sin declarar y con verbo de lectura: no hay a donde guardar.
     expect(impedimentoDelActo('contribuyentes')?.causa).toBe('sin-backend');
     /* Y sin declarar, con verbo de escritura, pero con una primaria que **pide
@@ -57,7 +88,9 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     const sinDeclaracion = impedimentoDelActo('predial_masivo')?.detalle ?? '';
     const sinDeterminacion =
       impedimentoDelActo('predial_individual', ['Buscar', 'Calcular'])?.detalle ?? '';
-    const sinCampo = impedimentoDelActo('transferencia_predio')?.detalle ?? '';
+    const sinCampo = conUnaMuestraDeSinCampo(
+      () => impedimentoDelActo(MUESTRA_SIN_CAMPO, ['Guardar'])?.detalle ?? '',
+    );
 
     // Los cuatro dicen **por donde se sale**: el acto existe fuera del sistema, y
     // quedarse en «no se puede» deja el mostrador parado.
@@ -74,7 +107,7 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(new Set([sinBackend, sinDeclaracion, sinDeterminacion, sinCampo]).size).toBe(4);
     // Y la cuarta nombra **el dato que falta**, que es lo que la separa de la
     // segunda: en `sin-declaracion` lo que falta es una lista blanca (#73).
-    expect(sinCampo).toMatch(/valor de la transferencia/);
+    expect(sinCampo).toMatch(/el dato de la muestra/);
     // Y la que se suma dice **lo que esa pantalla hace**: no calcula, muestra lo
     // que el servidor determine, y mientras tanto los importes salen con «—».
     expect(sinDeterminacion).toMatch(/Aquí no se calcula nada/);
@@ -127,16 +160,22 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
        o cuando una opcion declara su escritura, que son exactamente los dos
        cambios sobre los que hay que llamar la atencion. */
     expect(porCausa).toEqual({
-      declarada: 6,
-      salida: 50,
+      // Trece declaran: las seis de antes, `anulacion_recibo` (#74), las dos
+      // transferencias (#73, que salen de `sin-campo` al ganar su resolutor) y
+      // las cuatro de Valores (#75) — y `pase_coactiva` llega desde `salida`,
+      // porque su primaria del catalogo («Imprimir») pasaba el filtro aunque
+      // la pantalla de verdad escribe con «Derivar a coactiva».
+      declarada: 13,
+      salida: 49,
       'sin-backend': 41,
-      // Una se muda de casilla al sumarse la tercera causa (#333): «Cálculo
-      // individual del impuesto predial», cuya primaria es «Calcular». Y **dos
-      // mas al sumarse la cuarta** (#73): las dos transferencias, a las que no
-      // les falta una lista blanca sino un campo en la pantalla.
-      'sin-declaracion': 34,
+      // Tres se van a `declarada` con #75, una con #74; y tres se mudan a
+      // `sin-campo` con #74: `caja_tributaria` y `caja_tasas` —les falta el
+      // medio de pago, un campo distinto de «Forma de pago»— y
+      // `fraccionamiento` —le falta la grilla de deuda a acoger—.
+      'sin-declaracion': 27,
       'sin-determinacion': 1,
-      'sin-campo': 2,
+      // Las tres de tesoreria (#74); las dos transferencias ya no estan (#73).
+      'sin-campo': 3,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);
@@ -147,8 +186,17 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(impedimentoDelActo('cuenta_corriente', ['Exportar', 'Registrar pago'])?.causa).toBe(
       'sin-backend',
     );
-    // Escribe en el contrato y no ha declarado su cuerpo.
-    expect(impedimentoDelActo('caja_tributaria', ['Cobrar'])?.causa).toBe('sin-declaracion');
+    // Escribe en el contrato y no ha declarado su cuerpo: `cierre_caja` (#36,
+    // #74) — el `declarado` que exige `PeticionDeCierre` es un mapa por forma
+    // de pago, y `CampoDelCuerpo`/`TablaDelCuerpo` no saben construirlo todavía.
+    expect(impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja'])?.causa).toBe(
+      'sin-declaracion',
+    );
+    // Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
+    // no tiene donde escribir** (#33, #74): a `caja_tributaria` le falta el
+    // medio de pago —EFECTIVO/CHEQUE/DEPOSITO/TARJETA/TRANSFERENCIA—, un campo
+    // distinto de «Forma de pago» (que en el backend es `tipoDePago`).
+    expect(impedimentoDelActo('caja_tributaria', ['Cobrar'])?.causa).toBe('sin-campo');
     // Y declarada: sin impedimento ninguno.
     expect(impedimentoDelActo('notificacion_valores', ['Registrar notificación'])).toBeUndefined();
     /* «Conciliar seleccionadas» de la consulta de fichas (#322, ADR-0015 §3):
@@ -210,14 +258,10 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
       ruta: '/rentas-registro/predial-masivo',
       causa: 'sin-declaracion',
     },
-    // La cuarta causa tiene su propia bateria en `rentas/transferencias.test.tsx`;
-    // aqui entra por lo que comparte con las otras tres: franja, `role="status"`
-    // y `data-causa`.
-    {
-      caso: 'operacion que escribe y pantalla sin el campo que el acto exige',
-      ruta: '/rentas-registro/transferencia-predio',
-      causa: 'sin-campo',
-    },
+    // La cuarta causa —`sin-campo`— no tiene hoy ninguna pantalla real que la
+    // muestre: se prueba a nivel de funcion, con una muestra, arriba. Las dos
+    // transferencias que la usaban tienen su propia bateria en
+    // `rentas/transferencias.test.tsx`, ya conectadas.
   ])('$caso: la accion se queda apagada y la franja lo explica', async ({ ruta, causa }) => {
     const montada = montarEnRuta(ruta);
     await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
@@ -252,7 +296,6 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
     { caso: 'sin-determinacion', ruta: '/rentas-registro/predial-individual' },
     { caso: 'sin-backend', ruta: '/rentas-registro/contribuyentes' },
     { caso: 'sin-declaracion', ruta: '/rentas-registro/predial-masivo' },
-    { caso: 'sin-campo', ruta: '/rentas-registro/transferencia-predio' },
   ])('$caso: los secundarios no repiten un motivo que ya no es cierto', async ({ ruta }) => {
     const montada = montarEnRuta(ruta);
     await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
