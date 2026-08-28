@@ -1,9 +1,12 @@
 package pe.gob.sgtm.licencias.aplicacion;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
 import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.dominio.ValorNormativo;
+import pe.gob.sgtm.licencias.dominio.TipoDeCertificado;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 
@@ -40,6 +43,19 @@ import pe.gob.sgtm.parametros.ParametrosSellados;
  * <p>El conjunto se resuelve por el ejercicio de la fecha de emision. Sin eso, revisar dentro de
  * dos anios por que se admitio el recibo que se admitio resolveria «el vigente» y podria dar otro
  * concepto, sin avisar (ARQ-09 §3).
+ *
+ * <h2>Con #54 entra un numero, y por eso entra AQUI</h2>
+ *
+ * <p>Un certificado de numeracion o de zonificacion tiene <b>vigencia</b>: vale tantos meses desde
+ * que se emite, y cuantos lo fija el TUPA de cada municipalidad (D-02b). Es una cifra normativa,
+ * asi que no puede estar compilada (regla 5) y vive en el conjunto sellado bajo {@code
+ * VIGENCIA_CERTIFICADO:<TIPO>}.
+ *
+ * <p>Se lee desde <b>esta</b> clase y no desde un servicio aparte por un motivo concreto, el mismo
+ * que {@link Vigentes} explica: el concepto del TUPA y la vigencia son las dos mitades de la misma
+ * linea del TUPA, y la emision de un certificado necesita las dos <b>en el mismo acto</b>.
+ * Resolverlas con dos lecturas separadas abriria la puerta a que un sellado ocurrido entre ellas
+ * dejara un certificado cobrado con una version y fechado con otra.
  */
 @Service
 public class DerechosDeTramiteParametrizados {
@@ -70,6 +86,24 @@ public class DerechosDeTramiteParametrizados {
 
     /** El que cobra el derecho de la revalidacion de una licencia de edificacion (#48 AC 4). */
     private static final String CLAVE_REVALIDACION = "DERECHO_REVALIDACION_EDIFICACION";
+
+    /**
+     * El {@code tipo} bajo el que vive cuantos meses vale cada clase de certificado (#54).
+     *
+     * <p>Es el <b>nombre</b> del parametro, no su valor: no hay ningun numero de meses en esta
+     * clase. La clave la compone {@link TipoDeCertificado#claveDeLaVigencia()}.
+     */
+    private static final String TIPO_VIGENCIA = "VIGENCIA_CERTIFICADO";
+
+    /**
+     * El maximo de meses que se admite como vigencia de un certificado.
+     *
+     * <p><b>No es una cifra normativa</b> y por eso puede estar aqui: no dice cuanto vale ningun
+     * certificado, dice hasta donde se considera que el parametro cargado es un numero de meses y
+     * no un error de transcripcion. Cien años de vigencia no es una politica municipal audaz: es un
+     * cero de mas, y sin este tope se convertiria en un certificado que no caduca nunca.
+     */
+    private static final int MESES_MAXIMOS = 1200;
 
     private final LectorDeParametros parametros;
 
@@ -120,6 +154,64 @@ public class DerechosDeTramiteParametrizados {
             return codigo(CLAVE_REVALIDACION);
         }
 
+        /** El ejercicio con el que se resolvio el conjunto. */
+        public Ejercicio ejercicio() {
+            return ejercicio;
+        }
+
+        /** El codigo del concepto del TUPA que cobra el derecho de ese certificado (#54). */
+        public String paraElCertificado(TipoDeCertificado tipo) {
+            return codigo(tipo.claveDelDerecho());
+        }
+
+        /**
+         * Cuantos meses vale un certificado de ese tipo, segun el TUPA sellado (#54).
+         *
+         * <p><b>No hay valor por omision, y la consecuencia es concreta.</b> Si faltara y se
+         * sustituyera por «indefinido», la municipalidad emitiria certificados de zonificacion que
+         * no caducan nunca y alguien construiria en 2035 con los parametros de 2026. Si se
+         * sustituyera por «un mes», se rechazarian tramites legitimos. Falta el parametro, falla la
+         * emision, y el mensaje dice cual falta.
+         *
+         * @throws DerechoSinParametrizar si el conjunto sellado no dice cuantos meses vale
+         */
+        public int mesesDeVigenciaDelCertificado(TipoDeCertificado tipo) {
+            ValorNormativo valor =
+                    sellados.numero(TIPO_VIGENCIA, tipo.claveDeLaVigencia())
+                            .orElseThrow(
+                                    () ->
+                                            new DerechoSinParametrizar(
+                                                    ejercicio,
+                                                    TIPO_VIGENCIA,
+                                                    tipo.claveDeLaVigencia(),
+                                                    "Sin el no se sabe hasta cuando vale un "
+                                                            + tipo.etiqueta()
+                                                            + ", y un certificado sin caducidad"
+                                                            + " deja construir en 2035 con los"
+                                                            + " parametros de hoy"));
+
+            BigDecimal meses = valor.valor();
+            if (meses.stripTrailingZeros().scale() > 0
+                    || meses.compareTo(BigDecimal.ONE) < 0
+                    || meses.compareTo(BigDecimal.valueOf(MESES_MAXIMOS)) > 0) {
+                throw new IllegalStateException(
+                        "El parametro "
+                                + TIPO_VIGENCIA
+                                + ":"
+                                + tipo.claveDeLaVigencia()
+                                + " del ejercicio "
+                                + ejercicio
+                                + " vale "
+                                + meses.toPlainString()
+                                + ", y una vigencia se expresa en meses enteros entre 1 y "
+                                + MESES_MAXIMOS
+                                + ". Un valor fuera de ese rango es un error de transcripcion, y"
+                                + " aplicarlo produciria un certificado que caduca el dia que se"
+                                + " emite o que no caduca nunca");
+            }
+            return meses.intValueExact();
+        }
+
         private String codigo(String clave) {
             String texto =
                     sellados.texto(TIPO_TUPA, clave)
@@ -147,17 +239,26 @@ public class DerechosDeTramiteParametrizados {
         private final String llave;
 
         DerechoSinParametrizar(Ejercicio ejercicio, String clave) {
+            this(
+                    ejercicio,
+                    TIPO_TUPA,
+                    clave,
+                    "Sin el no se sabe que concepto del TUPA cobra el derecho de tramite, y admitir"
+                            + " cualquiera dejaria emitir una licencia con el recibo de otra cosa");
+        }
+
+        DerechoSinParametrizar(
+                Ejercicio ejercicio, String tipo, String clave, String consecuencia) {
             super(
                     String.format(
                             Locale.ROOT,
-                            "El conjunto sellado del ejercicio %s no tiene el parametro %s:%s. Sin"
-                                    + " el no se sabe que concepto del TUPA cobra el derecho de"
-                                    + " tramite, y admitir cualquiera dejaria emitir una licencia con"
-                                    + " el recibo de otra cosa (regla 5, RF-110)",
+                            "El conjunto sellado del ejercicio %s no tiene el parametro %s:%s. %s"
+                                    + " (regla 5, RF-110)",
                             ejercicio,
-                            TIPO_TUPA,
-                            clave));
-            this.llave = TIPO_TUPA + ":" + clave;
+                            tipo,
+                            clave,
+                            consecuencia));
+            this.llave = tipo + ":" + clave;
         }
 
         /** La llave que falta, {@code tipo:clave}, legible por programa. */

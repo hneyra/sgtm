@@ -6610,6 +6610,65 @@ paths:
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
   "/licencias/certificados":
+    get:
+      operationId: certificados_listado
+      summary: "Certificados emitidos"
+      description: "La grilla «Certificados emitidos» de la pantalla `certificados`, que declara el POST —la emisión— como su endpoint y necesita un verbo aparte para listar. Hacer que el POST devolviera también la grilla convertiría una consulta en una escritura, y una pantalla que lista al abrirse consumiría un correlativo cada vez. El estado de cada fila —VIGENTE o CADUCADO— se deriva a la fecha de hoy y viaja con ella (RNF-075)."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: nDeCertificado
+          in: query
+          required: false
+          description: "Filtro «Nº de certificado» de la pantalla"
+          schema: { type: string }
+        - name: tipo
+          in: query
+          required: false
+          description: "Filtro «Tipo» de la pantalla"
+          schema: { type: string }
+        - name: predio
+          in: query
+          required: false
+          description: "Filtro «Predio» de la pantalla"
+          schema: { type: string }
+        - name: solicitante
+          in: query
+          required: false
+          description: "Filtro por nombre del solicitante; se resuelve contra el padrón por aproximación"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
     post:
       operationId: certificados
       summary: "Certificados de numeración y zonificación"
@@ -6642,6 +6701,33 @@ paths:
           content:
             application/json:
               schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/licencias/certificados/{numero}/impresion":
+    post:
+      operationId: imprimir_certificado
+      summary: "Impresión de un certificado emitido"
+      description: "Vuelve a sacar un certificado ya emitido, con su número original y en el formato que se pida —PDF, hoja de cálculo o texto enriquecido (RF-132)—. El contenido sale de los datos guardados el día de la emisión, no de lo que hoy digan el padrón o el TUPA, y el backend comprueba el SHA-256 antes de entregarlo: si dibujar esos datos ya no da los mismos bytes, la reimpresión falla en lugar de entregar un papel distinto al original con el mismo número. Escribe —cuenta la reimpresión y deja su traza—, así que el cuerpo lleva la observación del usuario, obligatoria (RNF-052). Es la acción «Imprimir certificado» de la pantalla."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          description: "El número del certificado, tal como está impreso"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
         "403":
           $ref: "#/components/responses/SinMunicipalidad"
         "422":

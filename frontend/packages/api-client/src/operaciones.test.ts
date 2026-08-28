@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas treinta y dos operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas treinta y cuatro operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -100,8 +100,16 @@ describe('las operaciones generadas son las del contrato', () => {
     //     la ficha, cargos de la diferencia y resolucion de determinacion, en
     //     una transaccion—. La pantalla declara su grilla como endpoint, y la
     //     frontera delicada del sistema necesita verbo propio.
+    //   - `certificados_listado` / `imprimir_certificado` (#54): la pantalla
+    //     `certificados` declara «POST /licencias/certificados» —la emisión—
+    //     como su endpoint, y su grilla y su acción «Imprimir certificado»
+    //     necesitan verbo propio. Hacer que el POST devolviera también la
+    //     grilla convertiría una consulta en una escritura, y una pantalla que
+    //     lista al abrirse consumiría un correlativo cada vez. No hay PUT:
+    //     `certificado` no admite UPDATE desde V51, y uno equivocado se
+    //     sustituye emitiendo otro.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(166);
+    expect(Object.keys(OPERACIONES)).toHaveLength(168);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

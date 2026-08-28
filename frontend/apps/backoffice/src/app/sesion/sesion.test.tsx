@@ -4,6 +4,11 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { retoDe, solicitar } from '@sgtm/api-client';
 import { useEscritura } from '../../pantallas/escritura';
+import {
+  anotarAtencion,
+  leerAtenciones,
+  olvidarAtenciones,
+} from '../../pantallas/inicio/atenciones';
 import { ProveedorDeSesion, useSesion } from './ProveedorDeSesion';
 import { PuertaDeSesion } from './PuertaDeSesion';
 
@@ -290,6 +295,51 @@ describe('cerrar sesion no deja nada de la sesion anterior', () => {
   });
 });
 
+/**
+ * **Lo que vive en memoria tampoco se queda** (#296, `app/sesion/olvidos.ts`).
+ *
+ * La cache de consultas ya se vaciaba en los dos caminos. Lo que no: las
+ * variables de modulo, y ahi vive la lista de a quien se ha atendido. **Ninguno
+ * de los dos caminos recarga la pagina** —el cierre solo recarga con
+ * `finDeSesion` configurado, y el cambio de municipalidad no recarga nunca, que
+ * es el motivo de que ese `clientes.clear()` exista—, asi que la lista los
+ * sobrevivia: el operador siguiente en el mismo puesto veia a quien atendio el
+ * anterior, y en la municipalidad nueva, gente de la primera.
+ */
+describe('cerrar sesion y cambiar de municipalidad olvidan lo que hay en memoria', () => {
+  const QUIEN = {
+    codigo: '00000025673',
+    nombre: 'SUC. RUFINA MEDINA MEDINA',
+    documento: 'DNI 03593174',
+  };
+
+  it('cerrar sesion olvida las atenciones recientes', async () => {
+    const usuario = userEvent.setup();
+    olvidarAtenciones();
+    montar();
+    await screen.findByText(/Sullana/);
+
+    anotarAtencion(QUIEN);
+    expect(leerAtenciones()).toHaveLength(1);
+
+    await usuario.click(screen.getByRole('button', { name: 'Salir' }));
+    expect(leerAtenciones()).toEqual([]);
+  });
+
+  it('cambiar de municipalidad tambien, y ahi no hay recarga que lo tape', async () => {
+    const usuario = userEvent.setup();
+    olvidarAtenciones();
+    montar();
+    await screen.findByText(/Sullana/);
+
+    anotarAtencion(QUIEN);
+    expect(leerAtenciones()).toHaveLength(1);
+
+    await usuario.click(screen.getByRole('button', { name: 'Cambiar de municipalidad' }));
+    await waitFor(() => expect(leerAtenciones()).toEqual([]));
+  });
+});
+
 describe('cambiar de municipalidad vacia la cache antes de pedir', () => {
   it('el orden se comprueba, no solo el resultado', async () => {
     const usuario = userEvent.setup();
@@ -380,9 +430,7 @@ describe('la municipalidad del token es para mostrarla, no para mandarla', () =>
     // identificador de municipalidad que mandar, asi que no se puede mandar
     // (regla 2, FRO-01 §4). Los permisos NO estan aqui: solo autentica; la
     // matriz la pide `GET /seguridad/sesion/permisos` (ADR-0013).
-    expect(screen.getByTestId('datos')).toHaveTextContent(
-      '["usuario","municipalidad","expira"]',
-    );
+    expect(screen.getByTestId('datos')).toHaveTextContent('["usuario","municipalidad","expira"]');
 
     // Lo que la sesion ya pidio al abrirse —el token y la matriz de permisos
     // (ADR-0013)— no es lo que esta prueba mira: interesa la peticion de datos

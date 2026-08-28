@@ -36,8 +36,10 @@ import pe.gob.sgtm.licencias.aplicacion.DerechosDeTramiteParametrizados;
 import pe.gob.sgtm.licencias.aplicacion.DuplicarLicencia;
 import pe.gob.sgtm.licencias.aplicacion.EmitirLicenciaDeFuncionamiento;
 import pe.gob.sgtm.licencias.aplicacion.MantenerCatalogoCiiu;
+import pe.gob.sgtm.licencias.aplicacion.ResumenAnualDeLicencias;
 import pe.gob.sgtm.licencias.dobles.CajaDeMentira;
 import pe.gob.sgtm.licencias.dobles.CatalogoEnMemoria;
+import pe.gob.sgtm.licencias.dobles.CobrosDeMentira;
 import pe.gob.sgtm.licencias.dobles.DerechosDeMentira;
 import pe.gob.sgtm.licencias.dobles.DocumentosEnMemoria;
 import pe.gob.sgtm.licencias.dobles.DuplicadosEnMemoria;
@@ -161,6 +163,22 @@ class LicenciaControllerTest {
                                         documentos,
                                         (RegistroDeAuditoria registro) -> {},
                                         RELOJ),
+                                // #54: el resumen anual y el generador entran en el controlador
+                                // porque las dos opciones de reportes cuelgan de la misma ruta
+                                // base. Esta prueba no los ejercita —lo hace
+                                // `CertificadosYReportesControllerTest`—, pero el constructor los
+                                // pide.
+                                new ResumenAnualDeLicencias(
+                                        new ConsultaDeLicencias(
+                                                licencias, movimientos, duplicados, padron),
+                                        new CobrosDeMentira(),
+                                        derechos),
+                                new GeneradorDeDocumentos(
+                                        List.of(
+                                                new RenderizadorPdf(),
+                                                new RenderizadorXls(),
+                                                new RenderizadorRtf()),
+                                        RegimenDeLaInstalacion.REAL),
                                 RELOJ),
                         new CiiuController(
                                 new MantenerCatalogoCiiu(

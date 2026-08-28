@@ -20,6 +20,7 @@ import {
   solicitar,
 } from '@sgtm/api-client';
 import type { ConfiguracionDeIdentidad, DatosDelToken } from '@sgtm/api-client';
+import { olvidarLoDeLaSesion } from './olvidos';
 import { NINGUNO, SIN_PROVEEDOR, permisosDelClaim } from './permisos';
 import type { PermisosEfectivos } from './permisos';
 
@@ -38,6 +39,10 @@ import type { PermisosEfectivos } from './permisos';
  * 3. **Cambiar de municipalidad vacia la cache antes de pedir nada** con el
  *    token nuevo. Mostrar una fila de la municipalidad anterior es una fuga
  *    para el usuario aunque el backend este correcto (FRO-01 §4).
+ * 4. **Y con la cache se olvida lo que la aplicacion guarda en memoria**
+ *    (`olvidos.ts`). Ni cerrar sesion —sin `finDeSesion` configurado— ni cambiar
+ *    de municipalidad recargan la pagina, asi que una variable de modulo
+ *    sobrevive a los dos y se lleva al operador siguiente lo del anterior.
  */
 
 export type EstadoDeSesion = 'sin-proveedor' | 'anonima' | 'entrando' | 'abierta';
@@ -180,6 +185,10 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
       salir: () => {
         // Primero la cache: la sesion siguiente no puede ver ni una fila de esta.
         clientes.clear();
+        // Y lo que no esta en la cache: la memoria de la aplicacion. Sin
+        // `finDeSesion` configurado esto **no recarga la pagina**, asi que una
+        // variable de modulo sobrevive al cambio de operador (ver `olvidos.ts`).
+        olvidarLoDeLaSesion();
         fijarDatos(null);
         fijarEstado('anonima');
         cerrarSesion(configuracion);
@@ -190,6 +199,9 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
         // respuesta de la municipalidad anterior seguiria en la cache cuando la
         // primera pantalla de la nueva se dibuje.
         clientes.clear();
+        // Este camino **no recarga nunca**, que es justo el motivo de vaciar la
+        // cache a mano. Lo que vive en memoria necesita lo mismo.
+        olvidarLoDeLaSesion();
         const nueva = await renovar(configuracion, municipalidad);
         fijarDatos(leerToken(nueva.token));
         programar(nueva.dura, () => void renovarAhora());

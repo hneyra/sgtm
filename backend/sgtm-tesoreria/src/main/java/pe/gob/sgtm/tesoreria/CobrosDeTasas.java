@@ -1,5 +1,6 @@
 package pe.gob.sgtm.tesoreria;
 
+import java.time.LocalDate;
 import java.util.Optional;
 
 /**
@@ -34,4 +35,32 @@ public interface CobrosDeTasas {
      * @return la constancia, o vacio si el recibo no existe, no cobro ese concepto o esta anulado
      */
     Optional<TasaCobrada> acreditar(String numeroDeRecibo, String codigoDeTasa);
+
+    /**
+     * Lo que la caja recaudo por ese concepto del TUPA entre esos dos dias (#54, RF-115).
+     *
+     * <h2>Por que es un agregado y no una lista de recibos</h2>
+     *
+     * <p>El resumen anual de licencias necesita, para cada año, la recaudacion por el derecho de
+     * tramite. La alternativa —pedirle a {@code licencias} los identificadores de los recibos de
+     * sus licencias del año y pasarlos aqui— haria viajar miles de identificadores por la frontera
+     * del modulo para obtener una sola cifra, y ademas obligaria al consumidor a saber que un
+     * recibo anulado no cuenta, que es exactamente lo que este puerto existe para no exigir.
+     *
+     * <p>Se reutiliza el agregado que #36 ya escribio para el avance de recaudacion: el rango se
+     * aplica sobre la <b>fecha del turno</b>, y lo anulado se resta en lugar de excluirse.
+     *
+     * <h2>Que es y que no es esta cifra</h2>
+     *
+     * <p>Es lo que la <b>ventanilla cobro</b> por ese concepto en el rango, y no «lo que costaron
+     * las licencias emitidas en el». Los dos numeros pueden diferir legitimamente: un derecho
+     * pagado el 28 de diciembre para una licencia emitida en enero cuenta en el año del cobro.
+     * Quien publica la cifra lo dice; inventar la otra —cruzando recibos con licencias— produciria
+     * un total que no cuadra con ningun arqueo.
+     *
+     * @param codigoDeTasa el concepto del TUPA que se suma
+     * @param desde primer dia del rango, inclusive; es fecha de turno de caja
+     * @param hasta ultimo dia del rango, inclusive
+     */
+    RecaudacionDeTasa recaudado(String codigoDeTasa, LocalDate desde, LocalDate hasta);
 }

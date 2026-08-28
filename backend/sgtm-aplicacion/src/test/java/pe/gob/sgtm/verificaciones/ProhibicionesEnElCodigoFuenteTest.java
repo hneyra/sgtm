@@ -653,6 +653,74 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra que edita un certificado o lo borra")
+    void elEscanerDetectaLaMuestraQueEditaUnCertificado() throws IOException {
+        // #54: `certificado` entra en TABLAS_INMUTABLES, por lo mismo que la licencia en #44 y con
+        // un motivo propio que ninguna de las anteriores tenia: `vigencia_hasta` es una fecha
+        // COPIADA del parametro sellado que regia el dia de la emision, y poder moverla en el sitio
+        // seria poder alargar un papel ya entregado sin que nada lo delate.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve(
+                                "muestras/infraestructura/"
+                                        + "MuestraDeRepositorioQueEditaUnCertificado.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("los tres UPDATE y el DELETE, y ninguno de los comentarios que los explican")
+                .hasSize(4);
+
+        List<String> fragmentos = hallazgos.stream().map(Hallazgo::fragmento).toList();
+        assertThat(fragmentos)
+                .filteredOn(
+                        f ->
+                                f.toLowerCase(java.util.Locale.ROOT)
+                                        .contains("update certificado set"))
+                .as("la direccion, la vigencia y el derecho: los tres")
+                .hasSize(3);
+        assertThat(fragmentos)
+                .as("y el borrado del certificado, que se sustituye emitiendo otro")
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from certificado"));
+    }
+
+    @Test
+    @DisplayName("el escaner detecta la muestra con la vigencia del certificado compilada")
+    void elEscanerDetectaLaMuestraDeVigenciaDeCertificado() throws IOException {
+        // #54: cuantos meses vale un certificado lo fija el TUPA de cada municipalidad (D-02b).
+        // NINGUNA palabra de la lista anterior lo cazaba —VIGENCIA_DEL_CERTIFICADO no empieza por
+        // PLAZO ni por ninguna de las otras catorce—, que es el mismo hueco que #35 destapo con
+        // INTERES_DE_FRACCIONAMIENTO, #42 con COSTA_DE_LA_REC2 y #51 con TASA_PANEL. Por eso entra
+        // VIGENCIA.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeVigenciaDeCertificadoCompilada.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las cuatro constantes, y ninguno de los comentarios que las explican")
+                .hasSize(4);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).contains("VIGENCIA_DEL_CERTIFICADO"))
+                .anySatisfy(f -> assertThat(f).contains("VIGENCIAS_POR_TIPO"))
+                .anySatisfy(f -> assertThat(f).contains("PLAZO_DE_VIGENCIA_EN_MESES"))
+                .anySatisfy(f -> assertThat(f).contains("TASA_DEL_CERTIFICADO"));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra con la tasa de anuncios compilada (regla 5)")
     void elEscanerDetectaLaMuestraDeTasaDeAnuncio() throws IOException {
         // #51: la tasa por anuncios y propaganda es de ordenanza local (D-02b, #199 bloqueado).

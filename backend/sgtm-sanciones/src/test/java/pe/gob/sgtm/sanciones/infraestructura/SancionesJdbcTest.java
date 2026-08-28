@@ -253,7 +253,15 @@ class SancionesJdbcTest {
                         new ExtincionDeDeudaCuentaCorriente(
                                 asientos, saldos, registrarAsiento, calculo, redondeo));
 
-        CobrosDeTasas cobros = envolver(new CobrosDeTasasTesoreria(recibos, movimientosDeRecibo));
+        // El tercer colaborador entra con #54: el agregado de recaudacion por concepto, que esta
+        // prueba no ejercita —lo hace el resumen anual de licencias— pero que el constructor pide.
+        CobrosDeTasas cobros =
+                envolver(
+                        new CobrosDeTasasTesoreria(
+                                recibos,
+                                movimientosDeRecibo,
+                                new pe.gob.sgtm.tesoreria.infraestructura.RecaudacionRepositoryJdbc(
+                                        jdbc)));
 
         EmitirDocumento documentos =
                 envolver(
