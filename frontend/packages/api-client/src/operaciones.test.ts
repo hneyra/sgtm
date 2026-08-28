@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas veinticuatro operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas treinta y dos operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -81,13 +81,27 @@ describe('las operaciones generadas son las del contrato', () => {
     //   - `estado_de_liquidacion` (#49): mover la liquidacion por sus estados
     //     desde `fisc_historico`, que declara solo su GET. No actualiza
     //     ninguna fila: agrega un movimiento y el estado se deriva.
+    //   - `presentar_fue` / `completar_seccion_fue` /
+    //     `emitir_licencia_edificacion` / `revalidar_licencia_edificacion`
+    //     (#48): el FUE se presenta, se completa POR PARTES y solo entonces se
+    //     emite, y su plazo se prorroga con otro acto. Su pantalla
+    //     (`fue_edificacion`) declara el GET de la grilla como su endpoint, y
+    //     los cuatro actos necesitan verbo propio bajo la misma opcion. No hay
+    //     PUT: las secciones se versionan, y la cabecera no admite UPDATE.
+    //   - `registrar_anuncio` / `renovar_anuncio` / `cesar_anuncio` /
+    //     `retirar_anuncio` (#51): el registro de la autorizacion de anuncio
+    //     —que ademas genera su deuda por la tasa— y los tres tramites que la
+    //     pantalla `anuncios` enumera. Ella declara «GET /autorizaciones/
+    //     anuncios» como su endpoint —la grilla—, y `anuncio` no admite UPDATE
+    //     desde V45: renovar, cesar y retirar son ACTOS que producen una fila
+    //     nueva, no ediciones del formulario, asi que cada uno lleva su verbo.
     //   - `transferir_a_rentas` (#52): la accion de `fisc_resultados` que
     //     convierte lo hallado en el dato oficial del padron —version nueva de
     //     la ficha, cargos de la diferencia y resolucion de determinacion, en
     //     una transaccion—. La pantalla declara su grilla como endpoint, y la
     //     frontera delicada del sistema necesita verbo propio.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(158);
+    expect(Object.keys(OPERACIONES)).toHaveLength(166);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

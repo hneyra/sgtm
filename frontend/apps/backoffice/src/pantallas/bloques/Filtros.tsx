@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Boton, Campo } from '@sgtm/design-system';
 import type { CampoDePantalla } from '../../catalogo';
-import { widgetDeFiltro } from '../composicion';
+import { filtroBloqueado, widgetDeFiltro } from '../composicion';
+import { motivoDeFiltro } from '../prosa';
 
 /**
  * Bloque de busqueda (FRO-03 §5, bloque 4).
@@ -70,7 +71,31 @@ export function Filtros({ opcion, campos, buscado, cargando, onBuscar }: Filtros
         {campos.map((campo) => {
           const cambiar = (valor: string): void =>
             fijarBorrador((previos) => ({ ...previos, [campo.clave]: valor }));
-          const propio = widgetDeFiltro(opcion, campo.clave);
+          // **Un filtro bloqueado se dibuja y no se manda** (`composicion.ts`).
+          // El `Campo` del catalogo, con sus opciones y su rotulo; `bloqueado`
+          // para que no se escriba, y el motivo como `ayuda`, que va enlazada
+          // por `aria-describedby` y por tanto se anuncia. Y **sin `onCambio`**:
+          // asi el valor no puede entrar en el borrador, que es lo unico que
+          // `Buscar` manda a la URL. No es la barrera —el servidor rechaza igual
+          // (ADR-0013)—: es no dejar que nadie se lleve un 422 por usar un
+          // control que la pantalla le ofrecia.
+          //
+          // `Campo` resuelve `bloqueado` con `readonly` donde el HTML lo
+          // permite, para no sacar el control del tabulador (RNF-082). En un
+          // `select` **no lo permite** —`readonly` no existe para `select`— y
+          // cae en `disabled`; por eso el motivo va como `ayuda`, que se dibuja
+          // como parrafo aparte y se lee este el control habilitado o no.
+          //
+          // Que la **declaracion** viva en `composicion.ts` y su redaccion en
+          // `prosa-textos.ts` tiene una consecuencia buscada: si la prosa no
+          // hubiera llegado, el filtro sigue bloqueado y solo falta el motivo.
+          // Lo que no puede pasar es lo contrario.
+          const bloqueado = filtroBloqueado(opcion, campo.clave);
+          const motivo = bloqueado ? motivoDeFiltro(opcion, campo.clave) : undefined;
+          // Un filtro bloqueado se dibuja con el `Campo` de siempre y **no** con
+          // su control propio: lo que sustituye a un campo es un widget que
+          // compone un valor, y aqui no hay valor que componer.
+          const propio = bloqueado ? undefined : widgetDeFiltro(opcion, campo.clave);
           // El control propio recibe lo mismo que el `Campo` al que sustituye
           // —rotulo, valor y cambio— y **compone el mismo valor de cadena**: lo
           // que acaba en la URL y en la peticion es identico al de antes.
@@ -82,7 +107,9 @@ export function Filtros({ opcion, campos, buscado, cargando, onBuscar }: Filtros
               valor={borrador[campo.clave] ?? ''}
               ph={campo.ph}
               opciones={campo.opts}
-              onCambio={cambiar}
+              bloqueado={bloqueado}
+              {...(motivo === undefined ? {} : { ayuda: motivo })}
+              {...(bloqueado ? {} : { onCambio: cambiar })}
             />
           ) : (
             <propio.Control

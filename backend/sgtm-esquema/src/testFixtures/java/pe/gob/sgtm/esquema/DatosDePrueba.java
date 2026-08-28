@@ -1471,30 +1471,145 @@ public final class DatosDePrueba {
                 "INSERT INTO licencia_correlativo (municipalidad_id, ejercicio, ultimo)"
                         + " VALUES (?, 2026, 1)",
                 muni);
+        // El FUE, con la forma que V43 le dio: el expediente identifica el tramite mientras no hay
+        // licencia, el estado se deriva y NO hay columna de valor de obra —la valorizacion se
+        // calcula contra el cuadro de #17 y guardarla aqui la duplicaria (#48 AC 2)—.
+        long fueId =
+                insertar(
+                        app,
+                        "INSERT INTO licencia_edificacion (municipalidad_id, expediente,"
+                                + " fecha_declaracion, contribuyente_id, predio_id, tipo_tramite,"
+                                + " tipo_obra, modalidad, solicitante_propietario,"
+                                + " usuario_registro, fecha_registro, observacion)"
+                                + " VALUES (?, ?, ?, ?, ?, 'LICENCIA_DE_OBRA',"
+                                + "         'EDIFICACION_NUEVA', 'A', true, 'prueba', now(),"
+                                + "         'expediente de edificacion de prueba')"
+                                + " RETURNING id",
+                        muni,
+                        "EXP-LE-" + sufijo,
+                        VIGENCIA,
+                        titular,
+                        predioId);
         ejecutar(
                 app,
-                "INSERT INTO licencia_edificacion (municipalidad_id, numero, contribuyente_id,"
-                        + " predio_id, modalidad, tipo_obra, area_terreno, area_construida,"
-                        + " valor_obra, fecha_emision, usuario_registro, observacion)"
-                        + " VALUES (?, ?, ?, ?, 'A', 'OBRA_NUEVA', 120.00, 80.00, ?, ?, 'prueba',"
-                        + "         'licencia de edificacion de prueba')",
+                "INSERT INTO edificacion_terreno (municipalidad_id, fue_id, version, direccion,"
+                        + " manzana, lote, area_terreno, zonificacion, usuario_registro,"
+                        + " fecha_registro, observacion)"
+                        + " VALUES (?, ?, 1, 'Jr. Union 100', 'A', '3', 200.00, 'RDM', 'prueba',"
+                        + "         now(), 'terreno de prueba')",
                 muni,
-                "LE-" + sufijo,
-                titular,
-                predioId,
-                MIL,
+                fueId);
+        ejecutar(
+                app,
+                "INSERT INTO edificacion_proyecto (municipalidad_id, fue_id, version, uso,"
+                        + " numero_pisos, area_techada, usuario_registro, fecha_registro,"
+                        + " observacion)"
+                        + " VALUES (?, ?, 1, 'VIVIENDA UNIFAMILIAR', 2, 160.00, 'prueba', now(),"
+                        + "         'proyecto de prueba')",
+                muni,
+                fueId);
+        // La valorizacion, SIN importe: solo partida, categoria y area. Cuanto vale la letra lo
+        // dice valor_unitario_edificacion, y solo ahi (#48 AC 2).
+        ejecutar(
+                app,
+                "INSERT INTO edificacion_estructura (municipalidad_id, fue_id, version, piso,"
+                        + " partida, categoria, area)"
+                        + " VALUES (?, ?, 1, 1, 'MUROS', 'A', 40.00)",
+                muni,
+                fueId);
+        ejecutar(
+                app,
+                "INSERT INTO edificacion_profesional (municipalidad_id, fue_id, version, tipo,"
+                        + " nombre, colegio, colegiatura)"
+                        + " VALUES (?, ?, 1, 'RESPONSABLE_OBRA', 'ROJAS, JULIO', 'CIP', '67890')",
+                muni,
+                fueId);
+        ejecutar(
+                app,
+                "INSERT INTO edificacion_requisito (municipalidad_id, fue_id, version, requisito,"
+                        + " presentado, folios)"
+                        + " VALUES (?, ?, 1, 'FUE FIRMADO POR EL SOLICITANTE', true, 2)",
+                muni,
+                fueId);
+        long movimientoDelFue =
+                insertar(
+                        app,
+                        "INSERT INTO edificacion_movimiento (municipalidad_id, fue_id, tipo, fecha,"
+                                + " numero_licencia, recibo_id, documento_id, documento_numero,"
+                                + " usuario_registro, fecha_registro, observacion)"
+                                + " VALUES (?, ?, 'EMISION', ?, ?, ?, ?, ?, 'prueba', now(),"
+                                + "         'emision de edificacion de prueba')"
+                                + " RETURNING id",
+                        muni,
+                        fueId,
+                        VIGENCIA,
+                        "LE-" + sufijo,
+                        reciboId,
+                        documentoDeLaLicencia,
+                        "LICENCIA_EDIFICACION-2026-" + sufijo);
+        ejecutar(
+                app,
+                "INSERT INTO edificacion_vigencia (municipalidad_id, licencia_id, movimiento_id,"
+                        + " orden, desde, hasta)"
+                        + " VALUES (?, ?, ?, 1, ?, ?)",
+                muni,
+                fueId,
+                movimientoDelFue,
+                VIGENCIA,
+                VIGENCIA.plusYears(3));
+        ejecutar(
+                app,
+                "INSERT INTO edificacion_correlativo (municipalidad_id, ejercicio, ultimo)"
+                        + " VALUES (?, 2026, 1)",
+                muni);
+        // V45 (#51) le puso a `anuncio` su clase -de la que sale la tasa-, su establecimiento, su
+        // traza y su clave de idempotencia, y le quito la columna `estado`, que ahora se deriva de
+        // `anuncio_movimiento`. La siembra rellena las NOT NULL nuevas: sin ellas, la prueba de
+        // aislamiento no tendria filas de anuncios que aislar.
+        long anuncioId =
+                insertar(
+                        app,
+                        "INSERT INTO anuncio (municipalidad_id, numero, contribuyente_id,"
+                                + " predio_id, licencia_id, clase, tipo, emplazamiento, forma,"
+                                + " denominacion, ubicacion, area, lados, cantidad,"
+                                + " fecha_autorizacion, vigencia_hasta, expediente,"
+                                + " clave_idempotencia, usuario_registro, fecha_registro,"
+                                + " observacion)"
+                                + " VALUES (?, ?, ?, ?, ?, 'PANEL', 'AVISO_LUMINOSO',"
+                                + "         'FACHADA', 'ADOSADO', 'BODEGA SAN MARTIN',"
+                                + "         'AV. GRAU 100', 6.00, 2, 1, ?, ?, ?, ?, 'prueba', ?,"
+                                + "         'anuncio de prueba') RETURNING id",
+                        muni,
+                        "AN-" + sufijo,
+                        titular,
+                        predioId,
+                        licenciaId,
+                        VIGENCIA,
+                        VIGENCIA,
+                        "EXPA-" + sufijo,
+                        "idem-anuncio-" + sufijo,
+                        VIGENCIA);
+        // El acto que la creo, con la referencia del cargo que pidio al libro. Es la fila que
+        // `anuncio_movimiento_cargo_uq` protege, y el importe va copiado del acto -no es una cifra
+        // normativa sembrada, es lo que se asento aquel dia-.
+        ejecutar(
+                app,
+                "INSERT INTO anuncio_movimiento (municipalidad_id, anuncio_id, tipo, fecha,"
+                        + " ejercicio, referencia_cargo, tasa, vigencia_hasta, usuario_registro,"
+                        + " fecha_registro, observacion)"
+                        + " VALUES (?, ?, 'AUTORIZACION', ?, 2026, ?, 90.00, ?, 'prueba', ?,"
+                        + "         'autorizacion de prueba')",
+                muni,
+                anuncioId,
+                VIGENCIA,
+                "ANUNCIO-AN-" + sufijo + "-2026",
+                VIGENCIA,
                 VIGENCIA);
         ejecutar(
                 app,
-                "INSERT INTO anuncio (municipalidad_id, numero, contribuyente_id, predio_id, tipo,"
-                        + " ubicacion, area, fecha_autorizacion, usuario_registro, observacion)"
-                        + " VALUES (?, ?, ?, ?, 'PANEL', 'Fachada', 6.00, ?, 'prueba',"
-                        + "         'anuncio de prueba')",
-                muni,
-                "AN-" + sufijo,
-                titular,
-                predioId,
-                VIGENCIA);
+                "INSERT INTO anuncio_correlativo (municipalidad_id, ejercicio, ultimo)"
+                        + " VALUES (?, 2026, 1)",
+                muni);
     }
 
     // ------------------------------------------------------------------

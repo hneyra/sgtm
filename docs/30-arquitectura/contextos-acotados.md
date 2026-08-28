@@ -165,12 +165,16 @@ Transversal: todos dependen de él y él de ninguno.
 2. **`cuentacorriente` no conoce a nadie.** Recibe asientos; no sabe si vienen de un predial, de
    una papeleta o de una licencia. Si tuviera que saberlo, el modelo estaría mal.
 3. **`parametros` es de solo lectura** para todos los demás.
-4. **Nadie escribe en `catastro` salvo `catastro` y la transferencia de `fiscalizacion`.**
-   La redacción es absoluta y la realidad ya es más ancha, y conviene que se lea aquí: `rentas`
-   escribe en `catastro` por `GestorDeTitularidad` desde [#29](https://github.com/hneyra/sgtm/issues/29),
-   porque una transferencia de predio cambia al titular, y eso es legítimo. Lo que sí está
-   garantizado **mecánicamente** desde [#52](https://github.com/hneyra/sgtm/issues/52) es la mitad
-   de `fiscalizacion` (§3.5): una regla de ArchUnit con sus dos muestras.
+4. **Nadie escribe en `catastro` salvo `catastro` y las dos transferencias.** La de `rentas`
+   va por el puerto público `GestorDeTitularidad` del paquete raíz de catastro
+   ([#29](https://github.com/hneyra/sgtm/issues/29)): `RegistrarTransferencia` vive en
+   `sgtm-rentas/…/aplicacion/` e inyecta ese puerto —cuyo javadoc nombra la arista
+   `catastro ──► rentas`— para cerrar una titularidad y abrir otra. Y la de `fiscalizacion`
+   ([#52](https://github.com/hneyra/sgtm/issues/52), §3.5) va por `TransferenciaDeFiscalizacion`:
+   es la única escritura del contexto hacia fuera, y está garantizada **mecánicamente** por una
+   regla de ArchUnit con sus dos muestras. Fuera de ese puerto, `fiscalizacion` solo lee
+   (`LectorDeFichas`), y por eso `fisc_predial` avisa de que trabaja sobre una copia y el padrón
+   no cambia hasta que alguien transfiere.
 5. **Ningún método público de un contexto recibe `municipalidadId`.** Sale del token.
    Lo verifica ArchUnit.
 6. Lo compartido entre contextos —`MunicipalidadId`, `Ejercicio`, `Dinero`, `TenantContext`— vive

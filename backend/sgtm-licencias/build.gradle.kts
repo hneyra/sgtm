@@ -3,15 +3,18 @@
 // La licencia municipal de funcionamiento, sus giros CIIU, sus duplicados y su
 // cancelacion (#44, RF-110, RF-111, RF-112).
 //
-// NO DETERMINA DEUDA, Y HOY NO GENERA NINGUNA. El derecho de tramite se paga en
-// caja de tasas ANTES de emitir —por eso este modulo lee recibos— y un derecho
-// de tramite no es deuda tributaria: no se determina, no devenga interes y no
-// prescribe. Lo unico que una licencia podria generar es la deuda de arbitrios
-// del establecimiento, que la determina `rentas` con tablas de ordenanza
-// bloqueadas por D-02b; cuando llegue, entrara por
-// `cuentacorriente.GeneradorDeCargos` como todo cargo de otro contexto (ARQ-01
-// §4 regla 2). Mientras tanto este modulo NO depende de `cuentacorriente`, y
-// declarar la dependencia «por si acaso» seria abrir el limite sin usarlo.
+// LA LICENCIA NO GENERA DEUDA; EL ANUNCIO SI. El derecho de tramite de una
+// licencia se paga en caja de tasas ANTES de emitir —por eso este modulo lee
+// recibos— y un derecho de tramite no es deuda tributaria: no se determina, no
+// devenga interes y no prescribe. La tasa de un anuncio (#51, RF-114) es otra
+// cosa: se determina al autorizar, se cobra despues y puede quedar impaga, asi
+// que es deuda y entra en el libro. Con #51 este modulo pasa a depender de
+// `cuentacorriente`, y lo hace por su API PUBLICA —`GeneradorDeCargos`, en el
+// paquete raiz— y nunca por sus tablas: Spring Modulith rechaza cualquier
+// entrada por `.dominio` o `.infraestructura` (ARQ-01 §4 regla 2).
+//
+// Lo que sigue sin estar es la deuda de ARBITRIOS del establecimiento: la
+// determina `rentas` con tablas de ordenanza bloqueadas por D-02b.
 
 plugins {
     id("sgtm.modulo")
@@ -31,6 +34,11 @@ dependencies {
     implementation(project(":sgtm-tesoreria"))
     implementation(project(":sgtm-contribuyentes"))
     implementation(project(":sgtm-catastro"))
+
+    // Y con #51, la quinta: cuentacorriente.GeneradorDeCargos. Registrar un
+    // anuncio GENERA la deuda por su tasa, y esa deuda se le PIDE al libro por
+    // su API publica en vez de asentarla por cuenta propia. Nunca sus tablas.
+    implementation(project(":sgtm-cuentacorriente"))
 
     // Y la cuarta: parametros.LectorDeParametros. De ahi sale QUE concepto del
     // TUPA cobra el derecho de tramite. El importe no: ese vive en la tabla
