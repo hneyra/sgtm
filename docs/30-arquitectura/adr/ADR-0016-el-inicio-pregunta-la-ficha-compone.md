@@ -103,7 +103,7 @@ dos direcciones:
    |---|---|---|
    | 1 | El flujo público pasa de una pantalla a **un recorrido con sesión propia** | **No.** Hay composición, pero no hay sesión propia: no existe realm ciudadano |
    | 2 | El contribuyente se autentica contra **un realm distinto** del de funcionarios (ADR-0005) | **No.** Es trabajo backend, con su issue |
-   | 3 | El paquete del portal **arrastra código que solo usa el back-office** | **Sí.** Los ~11,5 KB de shell y catálogo de doce módulos que el ciudadano descarga para no usarlos nunca |
+   | 3 | El paquete del portal **arrastra código que solo usa el back-office** | **Sí.** Los ~11,5 KB de catálogo de doce módulos que midió el README del frontend (#81) — más el shell que lo dibuja — y que el ciudadano descarga para no usarlos nunca |
 
    La condición 3 basta —ADR-0009 pide *cualquiera* de las tres—, y es además la que describe
    el trabajo que hay: la separación barata que ADR-0009 §final anticipó. `apps/portal` consume
@@ -125,9 +125,9 @@ dos direcciones:
 - ADR-0014 §1 queda corregido en su premisa: la búsqueda y la ficha no estaban bloqueadas por
   backend; estaban bloqueadas por esta decisión. El panel de recaudación pasa de «inicio
   provisional» a opción del lanzador.
-- El frontend corrige el comentario rancio de `consultas/index.ts` y conecta
-  `consulta_unificada`, `consulta_resumen_predial` y `consulta_valores`, que ya tienen
-  controller.
+- El comentario rancio de `consultas/index.ts` ya quedó corregido, y
+  `consulta_unificada`, `consulta_resumen_predial` y `consulta_valores` conectadas (#72):
+  la ficha 360° las encuentra servidas.
 - Backend pendiente, cada uno con su issue: búsqueda de licencias por código o documento;
   **`numeroDocumento` como filtro de `GET /rentas/contribuyentes`** — el contrato solo publica
   `codigo`, `nombreRazonSocial`, `dNI` y `rUC`, así que un carné de extranjería, un pasaporte o

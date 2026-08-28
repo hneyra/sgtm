@@ -119,7 +119,13 @@ export function InicioDeAtencion() {
      entrar sorprende—. La excepcion es una pantalla cuyo contenido **es** el
      control: aqui no hay a donde mover el foco desde otro sitio. */
   useEffect(() => {
-    caja.current?.focus();
+    // Sin reclamarselo a nadie: este componente llega en un trozo diferido, y
+    // el efecto corre cuando el trozo aterriza — que puede ser DESPUES de que
+    // el operador abriera la paleta con Ctrl K. Robarle el foco a un dialogo
+    // abierto manda lo tecleado a la caja equivocada, y en CI es el flake de
+    // `caja-con-teclado.spec.ts`. Solo se toma el foco si nadie lo tiene.
+    const activo = document.activeElement;
+    if (activo === null || activo === document.body) caja.current?.focus();
   }, []);
 
   const abanico = useAbanicoDeAtencion(escrito, catalogo);

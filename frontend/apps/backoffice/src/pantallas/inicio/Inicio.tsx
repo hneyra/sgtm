@@ -5,8 +5,8 @@ import { Esqueleto } from '@sgtm/design-system';
  * La puerta del inicio: **lo unico de la pregunta que viaja en el arranque**.
  *
  * `InicioDeAtencion` trae dentro su abanico de tres consultas, su heuristica y
- * su prosa, y el arranque esta en 144,9 KB de un presupuesto de 150
- * (`yarn comprobar-compilaciones`). Se carga como se cargan las cabeceras-resumen
+ * su prosa, y el arranque anda pegado a su presupuesto de 150 KB
+ * (`yarn comprobar-compilaciones` publica la cifra del dia). Se carga como se cargan las cabeceras-resumen
  * y los formularios de alta —`lazy`, con un `Suspense` que ocupa su sitio— para
  * que lo que crezca aqui no lo pague quien entra por un enlace compartido a una
  * ficha y no pasa nunca por `/`.

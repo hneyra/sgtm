@@ -232,14 +232,17 @@ describe('el abanico consulta lo que el permiso cubre, y nada más', () => {
     await teclear(usuario, 'T2G-418');
 
     expect(screen.queryByRole('region', { name: 'Consulta de vehículos' })).not.toBeInTheDocument();
-    // Y **no se pregunto**: sin permiso no se consulta, no es que se consulte y
-    // se esconda la respuesta.
-    expect(pedidas.filter((camino) => camino.startsWith('/consultas/vehiculos'))).toEqual([]);
     // Lo que si se pregunto es el padron de personas, que este perfil si tiene:
     // «T2G-418» tiene tambien forma de razon social.
     await waitFor(() =>
       expect(pedidas.some((camino) => camino.startsWith('/rentas/contribuyentes'))).toBe(true),
     );
+    // Y **no se pregunto** por vehiculos: sin permiso no se consulta, no es que
+    // se consulte y se esconda la respuesta. La asercion va DESPUES del waitFor
+    // a proposito: antes del rebote no ha salido peticion alguna y la lista
+    // vacia no demostraria nada — la revision final lo cazo mutando el
+    // `enabled` sin que esta linea se inmutara.
+    expect(pedidas.filter((camino) => camino.startsWith('/consultas/vehiculos'))).toEqual([]);
   });
 
   it('sin ninguna de las tres, se dice que desde aquí no se puede buscar', async () => {
@@ -427,6 +430,35 @@ describe('Intro abre el destino, y no elige por nadie', () => {
     );
   });
 
+  it('si otro control ya tiene el foco cuando aterriza el trozo, no se lo roba', async () => {
+    // El componente llega en un trozo diferido: su efecto de foco corre cuando
+    // el trozo aterriza, que puede ser DESPUES de que el operador abriera la
+    // paleta con Ctrl K. Robarle el foco a un dialogo abierto manda lo tecleado
+    // a la caja equivocada — y era el flake de `caja-con-teclado.spec.ts` en
+    // CI. Aqui la paleta se representa con un control cualquiera que ya tiene
+    // el foco antes de que la caja exista.
+    entraCon(SOLO_PERSONAS);
+    const ajena = document.createElement('input');
+    ajena.setAttribute('aria-label', 'control que llego primero');
+    document.body.append(ajena);
+    ajena.focus();
+
+    montarEnRuta('/');
+    await screen.findByRole('searchbox', { name: 'Buscar a quién atiendes' });
+
+    expect(ajena).toHaveFocus();
+    ajena.remove();
+  });
+
+  it('con el foco libre, la caja lo toma al entrar', async () => {
+    // El caso normal de ventanilla: nadie tiene el foco y la caja lo toma para
+    // que teclear sea lo primero que funciona (RNF-082).
+    entraCon(SOLO_PERSONAS);
+    montarEnRuta('/');
+    const caja = await screen.findByRole('searchbox', { name: 'Buscar a quién atiendes' });
+    await waitFor(() => expect(caja).toHaveFocus());
+  });
+
   it('Esc vacía la caja y el foco se queda en ella', async () => {
     // El gesto de «esta no es, viene el siguiente»: sin el hay que borrar a mano
     // lo tecleado, y en una cola eso es lo que acaba llevando al raton (RNF-082).
@@ -500,7 +532,7 @@ describe('las atenciones recientes', () => {
        Persistir la lista pone esto en rojo, que es de lo que se trata.
 
        **Y los dos almacenes, no uno.** Recorriendo solo `localStorage`, una
-       sonda que persistiera la lista en `sessionStorage` dejaba las dieciseis
+       sonda que persistiera la lista en `sessionStorage` dejaba todas las demas
        pruebas de este archivo en verde: la prohibicion es guardar esto en el
        navegador, y `sessionStorage` es el navegador igual —sobrevive a la
        recarga y al cambio de operador dentro de la misma pestana—. */
