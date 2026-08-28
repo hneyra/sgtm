@@ -716,15 +716,17 @@ function cargarLaOpcion(
 ): Promise<DatosDePantalla> {
   const conexion = conexionDe(opcion);
   if (conexion !== undefined) return conexion.cargar(parametros, senal);
-  /* **Tres de las cinco pestañas caen aquí, y eso tiene fecha de caducidad**:
-     `papeletas`, `adm_estado_cuenta` y `coactiva_expedientes` no declaran su
-     `definirConexion`, así que salen por el camino común —el que el proxy de
-     datos atiende sirviendo la respuesta del prototipo, sin validar el cuerpo—.
-     Contra el backend real ese camino no falla ruidosamente: devuelve la forma
-     que no es y la tabla sale **vacía en silencio**, que es exactamente lo que
-     una ficha de atención no puede hacer. Las tres necesitan su conexión —con
-     su `leer` que valide y su adaptador— antes de apagar el proxy (ADR-0010):
-     issue #363. */
+  /* **Las cinco pestañas de esta ficha declaran ya su `definirConexion`**
+     (issue #363: `papeletas`, `adm_estado_cuenta` y `coactiva_expedientes`
+     se sumaron a `consulta_predios` y `consulta_vehiculos`, que ya la
+     tenían). El camino común que sigue este `if` queda para lo que *todavía*
+     no tiene conexión propia —el resto del catálogo que esta ficha no
+     compone— y para nada más: contra el backend real ese camino no falla
+     ruidosamente, devuelve la forma que no es y la tabla sale **vacía en
+     silencio**, que es exactamente lo que una ficha de atención no puede
+     hacer. Toda opción que esta ficha componga tiene que tener su
+     conexión —con su `leer` que valide y su adaptador— antes de apagar el
+     proxy (ADR-0010). */
   const operacion = operacionDe(opcion);
   if (operacion === undefined) {
     throw new Error(`La opcion «${opcion}» no es una operacion del contrato.`);
