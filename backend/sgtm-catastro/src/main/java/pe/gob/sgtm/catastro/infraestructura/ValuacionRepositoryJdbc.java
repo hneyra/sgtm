@@ -16,14 +16,27 @@ import pe.gob.sgtm.parametros.IdentificadorDeConjunto;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 
 /**
- * Aranceles, valores unitarios de edificacion y depreciacion, leidos y escritos siempre por
- * conjunto (#17).
+ * Aranceles, valores unitarios de edificacion y depreciacion, leidos siempre por conjunto (#17);
+ * escrito, solo el arancel (D-13, ADR-0017).
  *
- * <p>Los tres {@code INSERT} no comprueban el estado del conjunto antes de escribir: la
+ * <p>El {@code INSERT} del arancel no comprueba el estado del conjunto antes de escribir: la
  * comprobacion la hace el disparador {@code valuacion_de_conjunto_sellado_es_inmutable} de {@code
  * V18}, y si aqui se leyera el estado antes de insertar habria una ventana entre las dos sentencias
  * donde una carga concurrente podria sellar el conjunto en medio. El disparador no tiene esa
  * ventana: corre en la misma sentencia.
+ *
+ * <h2>Por que las dos lecturas nacionales llevan un JOIN</h2>
+ *
+ * <p>Desde V55 el cuadro de valores unitarios y la tabla de depreciacion son nacionales: no tienen
+ * {@code conjunto_id} porque no pertenecen a ningun conjunto municipal. Lo que un conjunto sella es
+ * <b>que edicion</b> uso, y eso lo dice {@code conjunto_parametro_detalle} —el mismo sitio donde
+ * dice que UIT uso—. De ahi el {@code JOIN}: la fila nacional entra si y solo si el conjunto
+ * compuso su edicion.
+ *
+ * <p>El {@code JOIN} es ademas lo que mantiene el aislamiento sin escribirlo: {@code
+ * conjunto_parametro_detalle} es tabla de tenant y su politica RLS acota la consulta a la
+ * municipalidad del contexto, de modo que preguntar por el conjunto de otra municipalidad no
+ * devuelve nada en vez de devolver su cuadro.
  */
 @Repository
 public class ValuacionRepositoryJdbc extends RepositorioJdbc implements ValuacionRepository {
@@ -87,50 +100,17 @@ public class ValuacionRepositoryJdbc extends RepositorioJdbc implements Valuacio
     public List<ValorUnitarioEdificacion> valoresUnitariosDe(IdentificadorDeConjunto conjunto) {
         return jdbc().sql(
                         """
-                        SELECT id, partida, categoria, anio_construccion_desde,
-                               anio_construccion_hasta, valor_m2, documento_fuente
-                          FROM valor_unitario_edificacion
-                         WHERE conjunto_id = :conjunto
-                         ORDER BY partida, categoria, anio_construccion_desde
+                        SELECT v.id, v.partida, v.categoria, v.anio_construccion_desde,
+                               v.anio_construccion_hasta, v.valor_m2, v.documento_fuente
+                          FROM valor_unitario_edificacion v
+                          JOIN conjunto_parametro_detalle d
+                            ON d.parametro_id = v.publicacion_id
+                         WHERE d.conjunto_id = :conjunto
+                         ORDER BY v.partida, v.categoria, v.anio_construccion_desde
                         """)
                 .param("conjunto", conjunto.valor())
                 .query(ValuacionRepositoryJdbc::mapearValorUnitario)
                 .list();
-    }
-
-    @Override
-    public ValorUnitarioEdificacion guardarValorUnitario(
-            ValorUnitarioEdificacion valorUnitario, IdentificadorDeConjunto conjunto) {
-        long id =
-                jdbc().sql(
-                                """
-                                INSERT INTO valor_unitario_edificacion
-                                    (municipalidad_id, conjunto_id, partida, categoria,
-                                     anio_construccion_desde, anio_construccion_hasta, valor_m2,
-                                     documento_fuente)
-                                VALUES
-                                    (%s, :conjunto, :partida, :categoria, :anioDesde, :anioHasta,
-                                     :valorM2, :documentoFuente)
-                                RETURNING id
-                                """
-                                        .formatted(MUNICIPALIDAD_ACTUAL))
-                        .param("conjunto", conjunto.valor())
-                        .param("partida", valorUnitario.partida().name())
-                        .param("categoria", String.valueOf(valorUnitario.categoria()))
-                        .param("anioDesde", valorUnitario.anioConstruccionDesde())
-                        .param("anioHasta", valorUnitario.anioConstruccionHasta())
-                        .param("valorM2", valorUnitario.valorM2().valor())
-                        .param("documentoFuente", valorUnitario.documentoFuente())
-                        .query(Long.class)
-                        .single();
-        return new ValorUnitarioEdificacion(
-                id,
-                valorUnitario.partida(),
-                valorUnitario.categoria(),
-                valorUnitario.anioConstruccionDesde(),
-                valorUnitario.anioConstruccionHasta(),
-                valorUnitario.valorM2(),
-                valorUnitario.documentoFuente());
     }
 
     private static ValorUnitarioEdificacion mapearValorUnitario(ResultSet fila, int numero)
@@ -152,47 +132,17 @@ public class ValuacionRepositoryJdbc extends RepositorioJdbc implements Valuacio
     public List<Depreciacion> depreciacionesDe(IdentificadorDeConjunto conjunto) {
         return jdbc().sql(
                         """
-                        SELECT id, material, estado_conservacion, antiguedad_hasta, porcentaje,
-                               documento_fuente
-                          FROM depreciacion
-                         WHERE conjunto_id = :conjunto
-                         ORDER BY material, estado_conservacion, antiguedad_hasta
+                        SELECT p.id, p.material, p.estado_conservacion, p.antiguedad_hasta,
+                               p.porcentaje, p.documento_fuente
+                          FROM depreciacion p
+                          JOIN conjunto_parametro_detalle d
+                            ON d.parametro_id = p.publicacion_id
+                         WHERE d.conjunto_id = :conjunto
+                         ORDER BY p.material, p.estado_conservacion, p.antiguedad_hasta
                         """)
                 .param("conjunto", conjunto.valor())
                 .query(ValuacionRepositoryJdbc::mapearDepreciacion)
                 .list();
-    }
-
-    @Override
-    public Depreciacion guardarDepreciacion(
-            Depreciacion depreciacion, IdentificadorDeConjunto conjunto) {
-        long id =
-                jdbc().sql(
-                                """
-                                INSERT INTO depreciacion
-                                    (municipalidad_id, conjunto_id, material, estado_conservacion,
-                                     antiguedad_hasta, porcentaje, documento_fuente)
-                                VALUES
-                                    (%s, :conjunto, :material, :estado, :antiguedad, :porcentaje,
-                                     :documentoFuente)
-                                RETURNING id
-                                """
-                                        .formatted(MUNICIPALIDAD_ACTUAL))
-                        .param("conjunto", conjunto.valor())
-                        .param("material", depreciacion.material())
-                        .param("estado", depreciacion.estadoConservacion())
-                        .param("antiguedad", depreciacion.antiguedadHasta())
-                        .param("porcentaje", depreciacion.porcentaje().valor())
-                        .param("documentoFuente", depreciacion.documentoFuente())
-                        .query(Long.class)
-                        .single();
-        return new Depreciacion(
-                id,
-                depreciacion.material(),
-                depreciacion.estadoConservacion(),
-                depreciacion.antiguedadHasta(),
-                depreciacion.porcentaje(),
-                depreciacion.documentoFuente());
     }
 
     private static Depreciacion mapearDepreciacion(ResultSet fila, int numero) throws SQLException {

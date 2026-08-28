@@ -173,10 +173,11 @@ Ver §3 para lo que este archivo todavía no resuelve.
 | Ámbito | nacional (rústico y centros poblados menores, código 200105); municipal para el plano urbano de Catacaos —`arancel.via_id` referencia el catálogo vial de esa municipalidad— |
 | Vigencia | 2026 (rústico y centros poblados menores); 2023-2026 disponibles en el gpkg para el plano urbano, ver §1.4 |
 
-**No se carga con este archivo.** Para `ARANCEL_RUSTICO` y `ARANCEL_CENTRO_POBLADO_MENOR`, la
-carga depende de D-13 (son datos de norma nacional, y D-13 no resuelve si esos van con
-`municipalidad_id` nulo o no). **`arancel` no tiene esa ambigüedad —D-13 no la nombra— porque es
-inherentemente municipal**: un arancel de vía solo tiene sentido contra el catálogo vial de una
+**No se carga con este archivo.** `ARANCEL_RUSTICO` y `ARANCEL_CENTRO_POBLADO_MENOR` van a
+`parametro_tributario` y se publican con el derivado de [`publicacion/`](publicacion/) (#188).
+**`arancel` es caso aparte, y D-13 lo confirmó al cerrarse**
+([ADR-0017](../../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md)): de las cuatro
+tablas, es la única que **no** pasó a nacional, porque es inherentemente municipal: un arancel de vía solo tiene sentido contra el catálogo vial de una
 municipalidad concreta. Por eso `docs/10-negocio/verificar-valores-normativos.mjs` no incluye
 `arancel` en las tablas que bloquea (`TABLAS_DE_VALORES`, sí bloqueadas: `parametro_tributario`,
 `valor_unitario_edificacion`, `depreciacion`, `valor_referencial_vehiculo`) — un `INSERT` en

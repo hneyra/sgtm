@@ -131,7 +131,9 @@ en páginas del TUPA que **no se transcribieron** en esta pasada.
 | Ámbito | Municipal — Municipalidad Distrital de Catacaos únicamente. No es un dato nacional: otra municipalidad tiene su propio TUPA con sus propios montos |
 | Vigencia | 2023– (ver cabecera); no se transcribió ninguna ordenanza modificatoria posterior porque no se encontró ninguna en las páginas revisadas |
 
-**No se carga con este archivo.** La carga depende de D-13 para el ámbito general de las tablas de
+**No se carga con este archivo.** Va a `parametro_tributario` y se publica con el derivado de
+[`publicacion/`](publicacion/) (#188). D-13 se cerró el 2026-08-28 y ya no condiciona el ámbito de
+las tablas de
 valores, y en este caso además de que #197 resuelva cómo modelar una tarifa por modalidad/tipo de
 edificación en vez de una alícuota simple.
 

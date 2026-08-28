@@ -41,9 +41,25 @@ public interface LectorDeParametros {
      * Que conjunto sellado rige hoy el ejercicio, por su identificador.
      *
      * <p>Existe porque hay datos normativos que <b>no</b> caben en {@link ParametrosSellados} —una
-     * tabla entera de valores referenciales de vehiculos, un arancel por manzana— y viven en su
-     * propia tabla. Esa tabla cuelga del conjunto, no del ejercicio, exactamente por el motivo de
-     * arriba; y para leerla hace falta saber de que conjunto se trata.
+     * tabla entera de valores referenciales de vehiculos, un arancel por manzana, un cuadro de
+     * valores unitarios— y viven en su propia tabla, con sus miles de filas. Para leer cualquiera
+     * de ellas hace falta saber de que conjunto se trata, no de que ejercicio.
+     *
+     * <p><b>Este javadoc decia antes algo que D-13 desmintio, y conviene dejarlo escrito.</b> Decia
+     * que esas tablas «cuelgan del conjunto, no del ejercicio», y agrupaba {@code
+     * valor_referencial_vehiculo} con {@code arancel} como si fueran el mismo caso. No lo son, y
+     * esa frase era la simplificacion que sostenia el hallazgo H-5 de GOB-03: la tabla del MEF
+     * acabo con una copia por municipalidad, que es como dos municipalidades pueden acabar
+     * valorizando el mismo vehiculo con dos cifras distintas de la misma norma. Desde V55
+     * (ADR-0017) las tres tablas de valuacion son nacionales —{@code municipalidad_id} nulo,
+     * cargadas una vez para todas, ARQ-09 §2.1— y el arancel se queda como estaba, porque el
+     * arancel si es municipal.
+     *
+     * <p>Lo que <b>no</b> cambio, y por eso este metodo sigue existiendo con la misma firma: para
+     * leer una tabla nacional tambien hace falta el conjunto. El conjunto ya no la posee, la
+     * <b>compone</b> —una fila en {@code conjunto_parametro_detalle} que nombra la edicion
+     * publicada—, y el sellado congela esa composicion. Resolver por ejercicio seguiria siendo el
+     * defecto de ARQ-09 §3: entre la emision y el recalculo puede haberse publicado otra edicion.
      *
      * <p>Se publica aqui y no se resuelve en cada contexto: repetir el «sellado de mayor version de
      * este ejercicio» en el SQL de rentas, de catastro y de sanciones es tener tres sitios donde

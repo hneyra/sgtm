@@ -215,17 +215,27 @@ class ValoresReferencialesTest {
         }
     }
 
-    /** Un conjunto sellado del mismo ejercicio, con su valor referencial. */
+    /**
+     * Un conjunto sellado del mismo ejercicio, que <b>compone</b> una edicion del cuadro con su
+     * valor referencial.
+     *
+     * <p>Desde V55 (D-13, ADR-0017) la tabla del MEF es nacional: no cuelga de este conjunto, y su
+     * edicion la publica {@code rol_carga_parametros}. Lo que el conjunto guarda es <b>que edicion
+     * uso</b>, en {@code conjunto_parametro_detalle}, que es donde ya guardaba que UIT uso.
+     *
+     * <p>Y el orden importa: el conjunto se crea ABIERTO y se sella al final. Componer sobre uno ya
+     * sellado lo rechaza {@code detalle_de_conjunto_sellado_inmutable} (V9), que es exactamente lo
+     * que esa restriccion existe para impedir.
+     */
     private static long sellarConjunto(int version, BigDecimal valor) throws SQLException {
+        long edicion = publicarEdicion(version, valor);
         try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
             ContextoDeTenant.fijar(app, municipalidad);
             long conjunto;
             try (PreparedStatement sentencia =
                     app.prepareStatement(
-                            "INSERT INTO conjunto_parametros (municipalidad_id, ejercicio, version,"
-                                    + " estado, fecha_sellado, usuario_sellado)"
-                                    + " VALUES (?, ?, ?, 'SELLADO', now(), 'prueba')"
-                                    + " RETURNING id")) {
+                            "INSERT INTO conjunto_parametros (municipalidad_id, ejercicio, version)"
+                                    + " VALUES (?, ?, ?) RETURNING id")) {
                 sentencia.setLong(1, municipalidad);
                 sentencia.setInt(2, EJERCICIO.valor());
                 sentencia.setInt(3, version);
@@ -236,20 +246,60 @@ class ValoresReferencialesTest {
             }
             try (PreparedStatement sentencia =
                     app.prepareStatement(
-                            "INSERT INTO valor_referencial_vehiculo (municipalidad_id, conjunto_id,"
-                                    + " ejercicio, marca, modelo, anio_fabricacion, valor,"
-                                    + " documento_fuente)"
-                                    + " VALUES (?, ?, ?, 'TOYOTA', 'YARIS', ?, ?,"
-                                    + "         'tabla de la prueba, sin valor normativo')")) {
+                            "INSERT INTO conjunto_parametro_detalle (municipalidad_id, conjunto_id,"
+                                    + " parametro_id) VALUES (?, ?, ?)")) {
                 sentencia.setLong(1, municipalidad);
                 sentencia.setLong(2, conjunto);
-                sentencia.setInt(3, EJERCICIO.valor());
-                sentencia.setInt(4, FABRICACION.valor());
-                sentencia.setBigDecimal(5, valor);
+                sentencia.setLong(3, edicion);
+                sentencia.executeUpdate();
+            }
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "UPDATE conjunto_parametros SET estado = 'SELLADO',"
+                                    + " fecha_sellado = now(), usuario_sellado = 'prueba'"
+                                    + " WHERE municipalidad_id = ? AND id = ?")) {
+                sentencia.setLong(1, municipalidad);
+                sentencia.setLong(2, conjunto);
                 sentencia.executeUpdate();
             }
             app.commit();
             return conjunto;
+        }
+    }
+
+    /** La edicion nacional del cuadro, con rol_carga_parametros y sin contexto de municipalidad. */
+    private static long publicarEdicion(int version, BigDecimal valor) throws SQLException {
+        try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS)) {
+            long edicion;
+            try (PreparedStatement sentencia =
+                    carga.prepareStatement(
+                            "INSERT INTO parametro_tributario (municipalidad_id, tipo, clave,"
+                                    + " valor_texto, vigencia_desde, documento_fuente, usuario_carga,"
+                                    + " usuario_aprueba) VALUES (NULL, 'TABLA_DE_LA_PRUEBA', ?,"
+                                    + " 'tabla de la prueba, sin valor normativo', DATE '2026-01-01',"
+                                    + " 'tabla de la prueba, sin valor normativo', 'quien transcribe',"
+                                    + " 'quien verifica') RETURNING id")) {
+                sentencia.setString(1, "v" + version);
+                try (ResultSet fila = sentencia.executeQuery()) {
+                    fila.next();
+                    edicion = fila.getLong(1);
+                }
+            }
+            try (PreparedStatement sentencia =
+                    carga.prepareStatement(
+                            "INSERT INTO valor_referencial_vehiculo (publicacion_id, ejercicio,"
+                                    + " categoria, marca, modelo, anio_fabricacion, valor,"
+                                    + " documento_fuente)"
+                                    + " VALUES (?, ?, 'A2', 'TOYOTA', 'YARIS', ?, ?,"
+                                    + "         'tabla de la prueba, sin valor normativo')")) {
+                sentencia.setLong(1, edicion);
+                sentencia.setInt(2, EJERCICIO.valor());
+                sentencia.setInt(3, FABRICACION.valor());
+                sentencia.setBigDecimal(4, valor);
+                sentencia.executeUpdate();
+            }
+            carga.commit();
+            return edicion;
         }
     }
 }

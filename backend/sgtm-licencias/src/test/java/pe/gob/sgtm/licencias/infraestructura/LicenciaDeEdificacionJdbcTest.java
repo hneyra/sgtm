@@ -1342,10 +1342,20 @@ class LicenciaDeEdificacionJdbcTest {
                 }
             }
             if (conCuadro) {
+                // El cuadro de valores unitarios es NACIONAL desde V55 (D-13, ADR-0017): no
+                // pertenece a este conjunto, el conjunto lo COMPONE. Se publica como edicion con
+                // rol_carga_parametros y se nombra aqui, igual que los dos conceptos del TUPA.
                 // Cifras INVENTADAS para la prueba, y a la vista. Las reales las espera #197.
-                sembrarCelda(app, municipalidadId, conjunto, "MUROS", "A", "120.000000");
-                sembrarCelda(app, municipalidadId, conjunto, "TECHOS", "B", "80.000000");
-                sembrarCelda(app, municipalidadId, conjunto, "PISOS", "C", "40.000000");
+                long edicion = publicarCuadroDeValoresUnitarios(municipalidadId + "_" + ejercicio);
+                try (PreparedStatement sentencia =
+                        app.prepareStatement(
+                                "INSERT INTO conjunto_parametro_detalle (municipalidad_id,"
+                                        + " conjunto_id, parametro_id) VALUES (?, ?, ?)")) {
+                    sentencia.setLong(1, municipalidadId);
+                    sentencia.setLong(2, conjunto);
+                    sentencia.setLong(3, edicion);
+                    sentencia.executeUpdate();
+                }
             }
             try (PreparedStatement sentencia =
                     app.prepareStatement(
@@ -1360,26 +1370,53 @@ class LicenciaDeEdificacionJdbcTest {
         }
     }
 
+    /**
+     * Publica una edicion del cuadro de valores unitarios y devuelve su identificador.
+     *
+     * <p>Va por {@code rol_carga_parametros} porque desde V55 es la unica credencial que puede
+     * escribir esa tabla: es un catalogo nacional, no una tabla de esta municipalidad (D-13,
+     * ADR-0017). La edicion se deja <b>abierta</b>: cerrarla no hace falta aqui, y el disparador de
+     * V55 rechazaria las celdas si se cerrara antes.
+     */
+    private static long publicarCuadroDeValoresUnitarios(String sufijo) throws SQLException {
+        try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS)) {
+            long edicion;
+            try (PreparedStatement sentencia =
+                    carga.prepareStatement(
+                            "INSERT INTO parametro_tributario (municipalidad_id, tipo, clave,"
+                                    + " valor_texto, vigencia_desde, documento_fuente, usuario_carga,"
+                                    + " usuario_aprueba) VALUES (NULL, 'CUADRO_VALORES_UNITARIOS', ?,"
+                                    + " 'Cuadro inventado para la prueba de #48', DATE '2026-01-01',"
+                                    + " 'Cuadro inventado para la prueba de #48', 'siembra',"
+                                    + " 'otra persona') RETURNING id")) {
+                sentencia.setString(1, sufijo);
+                try (ResultSet resultado = sentencia.executeQuery()) {
+                    resultado.next();
+                    edicion = resultado.getLong(1);
+                }
+            }
+            sembrarCelda(carga, edicion, "MUROS", "A", "120.000000");
+            sembrarCelda(carga, edicion, "TECHOS", "B", "80.000000");
+            sembrarCelda(carga, edicion, "PISOS", "C", "40.000000");
+            carga.commit();
+            return edicion;
+        }
+    }
+
     private static void sembrarCelda(
-            Connection app,
-            long municipalidadId,
-            long conjunto,
-            String partida,
-            String categoria,
-            String valorM2)
+            Connection carga, long edicion, String partida, String categoria, String valorM2)
             throws SQLException {
         try (PreparedStatement sentencia =
-                app.prepareStatement(
-                        "INSERT INTO valor_unitario_edificacion (municipalidad_id, conjunto_id,"
-                                + " partida, categoria, anio_construccion_desde,"
-                                + " anio_construccion_hasta, valor_m2, documento_fuente)"
-                                + " VALUES (?, ?, ?, ?, 1990, NULL, ?, 'Cuadro inventado para la"
+                carga.prepareStatement(
+                        "INSERT INTO valor_unitario_edificacion (publicacion_id, partida,"
+                                + " categoria, anio_construccion_desde, anio_construccion_hasta,"
+                                + " valor_m2, documento_fuente)"
+                                + " VALUES (?, ?, ?, 1990, NULL, ?, 'Cuadro inventado para la"
                                 + " prueba de #48')")) {
-            sentencia.setLong(1, municipalidadId);
-            sentencia.setLong(2, conjunto);
-            sentencia.setString(3, partida);
-            sentencia.setString(4, categoria);
-            sentencia.setBigDecimal(5, new BigDecimal(valorM2));
+            sentencia.setLong(1, edicion);
+            sentencia.setString(2, partida);
+            sentencia.setString(3, categoria);
+            sentencia.setBigDecimal(4, new BigDecimal(valorM2));
             sentencia.executeUpdate();
         }
     }
