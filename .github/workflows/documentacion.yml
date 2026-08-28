@@ -1,6 +1,6 @@
 # Verificación de la documentación que se comprueba sola.
 #
-# Son tres, y las tres comprueban en las dos direcciones:
+# Son cuatro, y todas comprueban en las dos direcciones:
 #
 #   1. el **mapa normativo** de NEG-02 §2 — qué norma fija cada dato que falta,
 #      qué parte de D-02 lo bloquea y qué issues lo esperan— contra el etiquetado
@@ -9,7 +9,13 @@
 #      norma, artículo, fecha de publicación y **dos firmas distintas**, que cierre
 #      filas del mapa que existen y que nadie más cierra, y que ninguna cifra haya
 #      acabado cargada en una migración: cargar depende de D-13, no de E-3.
-#   3. el **contrato de la API** (#312) — que `sgtm-v1.yaml` sea todavía lo que su
+#   3. el **derivado publicable** (#188, #247 §4) — que cada cifra de
+#      `valores-normativos/publicacion/` esté letra por letra en el archivo
+#      VERIFICADO del corpus que su fila nombra, y que las dos firmas que van a
+#      `usuario_carga` y `usuario_aprueba` sean las que ese archivo declara. Es lo
+#      único desde lo que `PublicarParametros` escribe en `parametro_tributario`;
+#      y como hoy está en verde, corre además contra sus nueve muestras;
+#   4. el **contrato de la API** (#312) — que `sgtm-v1.yaml` sea todavía lo que su
 #      generador produce. Es el gemelo de «el catálogo generado cuadra con el
 #      prototipo» del flujo de frontend, y existe porque el contrato dejó de
 #      poder reproducirse sin que nada se pusiera rojo: seguía siendo válido, el
@@ -66,6 +72,15 @@ jobs:
 
       - name: Los valores normativos transcritos están en regla
         run: node docs/10-negocio/verificar-valores-normativos.mjs
+
+      # El derivado desde el que `PublicarParametros` publica: cada cifra suya
+      # tiene que estar letra por letra en el archivo VERIFICADO del corpus que la
+      # fila nombra, con las dos firmas de ADR-0007 que ese archivo declara.
+      - name: Las prohibiciones del derivado publicable muerden
+        run: node docs/10-negocio/verificar-las-muestras-de-publicacion.mjs
+
+      - name: Lo publicable es lo que el corpus dice
+        run: node docs/10-negocio/verificar-publicacion.mjs
 
       # No escribe el archivo: lo regenera en memoria y exige que sea el mismo.
       # Se comprobó que muerde, en las dos direcciones: retocando un `summary`
