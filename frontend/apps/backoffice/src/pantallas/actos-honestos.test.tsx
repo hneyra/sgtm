@@ -137,6 +137,17 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(impedimentoDelActo('caja_tributaria', ['Cobrar'])?.causa).toBe('sin-declaracion');
     // Y declarada: sin impedimento ninguno.
     expect(impedimentoDelActo('notificacion_valores', ['Registrar notificación'])).toBeUndefined();
+    /* «Conciliar seleccionadas» de la consulta de fichas (#322, ADR-0015 §3):
+       la accion masiva a ciegas del prototipo **no se implementa**, y la
+       operacion de esa pantalla es un `GET`. Es `sin-backend` y no ninguna otra:
+       `sin-declaracion` pediria una lista blanca para una escritura que no
+       existe, y las de salida no valen —«Conciliar» no imprime ni exporta—. El
+       acto que concilia es registrar la declaracion jurada, y eso lo dice el
+       aviso permanente de la pantalla, no esta franja. */
+    expect(
+      impedimentoDelActo('consulta_fichas', ['Exportar Excel', 'Conciliar seleccionadas'])?.causa,
+    ).toBe('sin-backend');
+    expect(escribe(operacionDe('consulta_fichas') ?? 'inicio')).toBe(false);
     // La misma pareja, comprobada por el otro lado: la causa es la del verbo.
     expect(escribe(operacionDe('caja_tributaria') ?? 'inicio')).toBe(true);
     expect(escribe(operacionDe('cuenta_corriente') ?? 'inicio')).toBe(false);

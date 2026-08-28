@@ -61,7 +61,19 @@ const CODIGO = (clave: string): ComposicionDeOpcion['widgetsDeFiltro'] => ({
 });
 
 export const COMPOSICION_DE_CATASTRO: Readonly<Record<string, ComposicionDeOpcion>> = {
-  consulta_fichas: { widgetsDeFiltro: CODIGO('codRefCatastral') },
+  consulta_fichas: {
+    widgetsDeFiltro: CODIGO('codRefCatastral'),
+    // **«Conciliada con rentas» garantiza un 422** (ADR-0015 §2).
+    // `ConsultaController` lo rechaza con cualquier valor —«Todas» incluida, en
+    // cuanto se elige y viaja—, porque la lectura que lo respondería vive en
+    // rentas y todavia no existe. Vivo, este desplegable era la unica forma de
+    // romper la busqueda desde la propia pantalla; ninguna prueba lo veia porque
+    // el proxy de datos ignora los filtros.
+    //
+    // Mismo trato que «Conciliar seleccionadas»: se ve, no se puede usar, y dice
+    // por que. El motivo se redacta en `prosa-textos.ts`; aqui solo se declara.
+    filtrosBloqueados: ['conciliadaConRentas'],
+  },
   ficha_urbana: {
     ...FICHA,
     widgetsDeFiltro: CODIGO('codigoDeRefCatastral'),

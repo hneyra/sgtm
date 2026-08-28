@@ -63,7 +63,58 @@ export function ResumenDeFicha({ codigo, datos, cargando }: ResumenDePantallaPro
         {/* La suma de las areas por piso la haria el backend o no la hace nadie. */}
         <Dato etiqueta="Área construida" valor={SIN_DATO} />
       </dl>
+      <LineaDeConciliacion />
     </section>
+  );
+}
+
+/**
+ * «Conciliación con rentas: — · rentas no publica todavía si reconoce este
+ * predio» (#322, ADR-0015).
+ *
+ * **El sujeto es «rentas», el mismo que en el aviso de la consulta de fichas**
+ * (revision de #322). Decia «el padrón», y no es sinonimo para quien lee: en
+ * este sistema hay un padron de predios —que es de catastro— y un padron de
+ * contribuyentes, y quien atiende no tiene por que deducir que aqui se hablaba
+ * del padron afecto de rentas. Las dos pantallas hablan de lo mismo; tienen que
+ * nombrarlo igual.
+ *
+ * Es la consecuencia mas cara del modulo y la mas invisible: **un predio que
+ * rentas no reconoce no genera deuda predial**. Quien abre una ficha no puede
+ * saberlo hoy, y el hueco no estaba ni dicho: la ficha se leia entera sin que
+ * nada mencionara que su predio pudiera estar fuera del padron afecto.
+ *
+ * Va aqui y no como un dato mas de la lista por lo mismo que la deuda del
+ * contribuyente (#330): **no es un campo que falte, es una lectura que no
+ * existe**. Un guion en la lista se leeria como «la ficha no lo trae»; un guion
+ * explicado dice que nadie lo publica todavia, que es lo cierto.
+ *
+ * No se inventa el dato ni el mecanismo:
+ *
+ *   por que «—»    «conciliada» es un derivado —existe una declaracion jurada
+ *                  de ese ejercicio sobre **el predio**
+ *                  (`declaracion_jurada.predio_id`, V2), en estado PRESENTADA u
+ *                  OBSERVADA— y la lectura que lo compone le toca a
+ *                  `sgtm-rentas`: catastro no puede consultarlo sin cerrar el
+ *                  ciclo que `verificarArquitectura` rechaza
+ *   cuando llegue   sera **insignia con texto** —«CONCILIADA» / «SIN
+ *                  DECLARACION»—, nunca solo color (FRO-02 §2.1), con el mismo
+ *                  `Insignia` que esta cabecera ya usa para la vigencia, y
+ *                  **con su ejercicio** (regla 9): la DJ de 2024 no concilia
+ *                  2026. No hay hueco que preparar: el componente esta, y lo que
+ *                  falta es el dato
+ *   que hacer      conciliar es **registrar la declaracion jurada**. Hoy ese
+ *                  registro se hace por el procedimiento actual: la opcion del
+ *                  sistema es solo `GET` (ADR-0015 §3). Eso lo dice el aviso de
+ *                  la consulta de fichas, que es donde se eligen los predios;
+ *                  aqui solo se mira uno
+ */
+function LineaDeConciliacion() {
+  return (
+    <p className="sgtm-resumen__pendiente">
+      <strong>Conciliación con rentas: {SIN_DATO}</strong> · rentas no publica todavía si reconoce
+      este predio.
+    </p>
   );
 }
 
