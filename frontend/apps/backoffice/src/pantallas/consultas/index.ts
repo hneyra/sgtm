@@ -14,14 +14,29 @@ import {
 } from '../seguridad/listado';
 
 /**
- * Consultas, conectado hasta donde llega el backend: **siete opciones de once**.
+ * Consultas, conectado hasta donde llega el backend: **diez opciones de once**.
  *
- * `cuenta_corriente` (#21) ya estaba. Se suman `consulta_deuda` (#22, #175),
+ * `cuenta_corriente` (#21) ya estaba. Se sumaron `consulta_deuda` (#22, #175),
  * `constancia` (#25, #179), `consulta_vehiculos` (#25, #184),
  * `consulta_altas_bajas` (#24, #186), `consulta_pagos` (#25, #219) y
- * `consulta_predios` (#25, #222). Las otras cuatro —`consulta_unificada`,
- * `consulta_resumen_predial`, `consulta_valores`, `consulta_deudas_beneficio`—
- * siguen esperando su backend (#25 sigue abierto).
+ * `consulta_predios` (#25, #222), y ahora `consulta_unificada`,
+ * `consulta_resumen_predial` y `consulta_valores`, cuyos tres controladores
+ * publica ya el backend (#25, #72).
+ *
+ * **La que queda es `consulta_deudas_beneficio`, y no por descuido**: no tiene
+ * controlador. Un beneficio cambia el importe que se debe —deduccion,
+ * exoneracion, descuento de campana—, y los valores que lo cuantifican son
+ * D-02b, sin ordenanza ratificada. No se finge: sin `Controller` no hay
+ * operacion que pedir, y una tabla rellena con lo del prototipo se leeria como
+ * la deuda rebajada de alguien.
+ *
+ * Las tres que entran aqui traen, cada una, **una ausencia declarada**, y las
+ * tres tienen el mismo origen: el impuesto predial se determina por
+ * contribuyente y no por predio (NEG-05 §1), y el valuo y los arbitrios
+ * dependen de tablas sin firmar (D-02a, D-02b). Lo que el recurso no publica
+ * sale con {@link SIN_DATO}; lo que ni siquiera es una fila —la rejilla
+ * «Impuesto anual» de la unificada— sale vacia y con su aviso permanente
+ * (`prosa-textos.ts`). Ninguna cifra se compone aqui (RNF-083).
  */
 
 /**
@@ -556,6 +571,233 @@ function fechaDePrediosDe(predios: readonly unknown[]): Fecha {
   return hoy();
 }
 
+/**
+ * La ficha consolidada de un contribuyente (RF-046, #25, #72).
+ *
+ * `ConsultaUnificadaResource` no es un listado: es **un objeto** con una
+ * cabecera, un resumen de saldos y seis rejillas paginadas dentro. De todo eso,
+ * el renderizador de esta opcion dibuja el «Resumen de saldos» —las cinco cifras
+ * y la frase que las explica, que el catalogo declara como campos de solo
+ * lectura— y su fecha de corte.
+ *
+ * **La tabla «Impuesto anual» sale vacia, y es lo unico honesto que se puede
+ * hacer con ella.** Sus trece columnas son valuo afecto, valuo exonerado, valuo
+ * total, impuesto predial y los cuatro arbitrios por ejercicio, y el recurso
+ * **no publica ninguna**: el predial se determina por contribuyente y no por
+ * predio (NEG-05 §1), y el valuo y los arbitrios dependen de tablas sin firmar
+ * (D-02a, D-02b). Rellenarla repartiendo cifras entre ejercicios produciria
+ * numeros plausibles que nadie podria sustentar en una reclamacion. Lo que
+ * explica el hueco es el aviso permanente de la opcion (`prosa-textos.ts`), no
+ * un cero.
+ *
+ * Las seis rejillas de las pestañas —deudas, pagos, altas y bajas,
+ * fraccionamientos, valores y declaraciones— **si viajan** en la respuesta, y
+ * aqui no se dibujan porque el catalogo no declara ninguna tabla para ellas:
+ * sus pestañas son solo criterios. Cada una tiene ademas su propia opcion del
+ * menu, ya conectada, con sus filtros de verdad.
+ *
+ * Sin contribuyente no hay ficha: `GET /consultas/unificada` lo declara
+ * obligatorio y un codigo que no existe da 404, no una ficha vacia.
+ */
+const consulta_unificada = definirConexion({
+  operacion: 'consulta_unificada',
+  parametros: ({ ruta, busqueda }) => ({
+    ...parametrosDeBusqueda('consulta_unificada', undefined, busqueda),
+    // El codigo de la ruta manda sobre el filtro: es el registro que se abrio.
+    // Sin el, sigue valiendo el que el filtro «Contribuyente» haya puesto en la
+    // direccion, que es como se llega a esta pantalla desde la busqueda.
+    ...(ruta['codigo'] === undefined || ruta['codigo'] === ''
+      ? {}
+      : { contribuyente: ruta['codigo'] }),
+  }),
+  exige: [
+    {
+      parametro: 'contribuyente',
+      titulo: 'Busca un contribuyente para ver su ficha unificada',
+      detalle:
+        'Esta consulta consolida lo de una sola persona: escribe su código arriba y pulsa «Buscar». Sin él no hay ficha que pedir.',
+    },
+  ],
+  leer: (cuerpo) => leerObjeto(cuerpo, 'la consulta unificada'),
+  adaptar: (ficha): DatosDePantalla => {
+    const resumen = esObjeto(ficha['resumenDeSaldos']) ? ficha['resumenDeSaldos'] : undefined;
+    const cifra = (nombre: string): string => importeDe(resumen?.[nombre])?.importe ?? SIN_DATO;
+    const aLaFecha = texto(ficha['aLaFecha']);
+
+    return {
+      // La fecha de corte con la que el backend respondio todo lo que depende de
+      // hoy. Sale de la respuesta, no del reloj del navegador (regla 9).
+      fechaCalculo: aLaFecha === SIN_DATO ? hoy() : (aLaFecha as Fecha),
+      campos: {
+        insoluto: cifra('insoluto'),
+        reajuste: cifra('reajuste'),
+        interes: cifra('interes'),
+        gasto: cifra('gasto'),
+        total: cifra('total'),
+        // Redactado por el backend, no compuesto aqui (RNF-080, RNF-083): el
+        // dia que el total y el desglose discreparan, la frase que los explica
+        // tiene que venir del mismo sitio que las cifras.
+        estadoDeLaConsulta: texto(resumen?.['estadoDeLaConsulta']),
+      },
+      // Sin `tabla`: la rejilla «Impuesto anual» se dibuja vacia. Ver arriba.
+    };
+  },
+});
+
+/**
+ * Predios de un sector o de un contribuyente, con su ficha vigente (RF-046, #25, #72).
+ *
+ * `PredioDelResumenResource` publica exactamente las cuatro columnas que dibuja
+ * «Predios encontrados» —codigo catastral, codigo y nombre del propietario y
+ * direccion— y **ningun importe**. Las dos pestañas de cifras del prototipo
+ * quedan por tanto en {@link SIN_DATO}, cada una por su motivo:
+ *
+ * - «Impuesto Predial» (insoluto, reajuste, interes, gasto y total del predio):
+ *   no existe esa cifra. Los tramos progresivos se aplican al conjunto de los
+ *   predios del contribuyente (NEG-05 §1), asi que atribuir una parte a un
+ *   predio concreto obliga a inventar un reparto.
+ * - «Valúo Predial / Arbitrios» (valuo afecto y los cuatro servicios): depende
+ *   de las tablas de valores unitarios, depreciacion y aranceles (D-02a) y de
+ *   ordenanzas sin ratificar (D-02b). Un cero aqui se leeria como «este predio
+ *   no paga arbitrios», que es peor que la ausencia.
+ *
+ * La tercera pestaña, «Movimientos del Predio», ya esta publicada en otra ruta:
+ * el historico versionado de la ficha sale por
+ * `GET /catastro/fichas/{tipo}/{cod}?historico=true`, y cada fila de esta tabla
+ * lleva el `codCatastral` y el `tipo` con que pedirlo.
+ *
+ * El filtro «Palabra» **se dibuja y no se manda** (`consultas/composicion.ts`):
+ * `ResumenPredialController` lo rechaza con 422 con cualquier valor, porque es
+ * texto libre sin columna a la que apuntar.
+ */
+const consulta_resumen_predial = definirConexion({
+  operacion: 'consulta_resumen_predial',
+  parametros: ({ busqueda }) =>
+    parametrosDeBusqueda('consulta_resumen_predial', undefined, busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'los predios del resumen'),
+  adaptar: (paginado): DatosDePantalla => {
+    const tabla = tablaDe(
+      paginado,
+      (predio): readonly Celda[] => [
+        { texto: texto(predio['codCatastral']) },
+        { texto: texto(predio['codPropietario']) },
+        { texto: texto(predio['nombreDelPropietario']) },
+        { texto: texto(predio['direccionDelPredio']) },
+      ],
+      'predios',
+    );
+
+    return {
+      // **Ninguna cifra viaja en esta respuesta**, asi que no hay ninguna que
+      // fechar con lo que mando el backend. La fecha es la del cliente porque
+      // es tambien la que el controlador usa cuando la peticion no lleva
+      // `fecha`: el listado son las fichas vigentes a hoy.
+      fechaCalculo: hoy(),
+      tabla,
+      // **Sin `campos`**, y por eso las diez cifras de las dos pestañas se
+      // dibujan con un guion: un campo de solo lectura sin valor lo pinta el
+      // propio `Campo`, que nunca deja una cadena vacia. Declararlas aqui una a
+      // una con «—» no anadiria nada al dibujo y sugeriria que el adaptador
+      // sabe algo de ellas que no sabe. Lo que dice por que no estan es el
+      // aviso permanente de la opcion.
+    };
+  },
+});
+
+/**
+ * Valores emitidos a un contribuyente, con su situacion de hoy (RF-041, #25, #72).
+ *
+ * Se diferencia de `valores_busqueda` (RF-092) en lo que anade:
+ * `ValorConsultadoResource` trae el tributo y el periodo que el valor formaliza,
+ * la fecha en que se notifico y —sobre todo— **en que punto de la cobranza esta
+ * a dia de hoy**, que no es la columna `estado` sino una funcion de ella y de la
+ * fecha (`SituacionDelValor`).
+ *
+ * «Estado» de la tabla se dibuja con esa `situacion` y **no se reescribe a las
+ * etiquetas del prototipo**: el backend ya redacta (RNF-080), y ademas «FIRME»
+ * y «RECLAMADO» no son lo mismo que EXIGIBLE y que nada. Lo unico que anade
+ * esta pantalla es el tono, para que el estado no se comunique solo por color
+ * (FRO-02 §2.1) ni solo por texto.
+ *
+ * `tipo` sale tal cual lo publica el recurso —`OP`, `RD`, `RM`—, por el mismo
+ * motivo y con el mismo criterio que `valores_busqueda`.
+ *
+ * Los cuatro filtros los resuelve el backend con el vocabulario del prototipo:
+ * «ORDEN DE PAGO» y «RES. DETERMINACIÓN» se reconocen igual que `OP` y `RD`,
+ * «Todos» es la ausencia de filtro y «FIRME» es EXIGIBLE. **«RECLAMADO» no**:
+ * no hay reclamacion de valores en el dominio todavia, y el backend responde
+ * 422 con el motivo en vez de devolver el listado completo. Se deja viajar a
+ * proposito —ese 422 explica lo que pasa; ignorar el filtro enseñaria todos los
+ * valores a quien cree estar viendo solo los reclamados—.
+ */
+const consulta_valores = definirConexion({
+  operacion: 'consulta_valores',
+  parametros: ({ busqueda }) => parametrosDeBusqueda('consulta_valores', undefined, busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'los valores emitidos'),
+  adaptar: (paginado): DatosDePantalla => {
+    const tabla = tablaDe(
+      paginado,
+      (valor): readonly Celda[] => {
+        const monto = importeDe(valor['monto']);
+        return [
+          { texto: texto(valor['numero']) },
+          { texto: texto(valor['tipo']) },
+          { texto: texto(valor['contribuyente']) },
+          { texto: texto(valor['tributo']) },
+          { texto: texto(valor['periodo']) },
+          { texto: monto?.importe ?? SIN_DATO },
+          { texto: texto(valor['notificadoEl']) },
+          situacionDe(valor['situacion']),
+        ];
+      },
+      'valores',
+    );
+
+    return {
+      fechaCalculo: fechaDeValoresDe(paginado.contenido),
+      tabla,
+    };
+  },
+});
+
+/**
+ * El tono de la situacion. **El texto es siempre el que manda el backend**: aqui
+ * solo se decide con que color acompañarlo, y nunca en lugar de la palabra.
+ */
+function situacionDe(situacion: unknown): Celda {
+  const nombre = texto(situacion);
+  if (nombre === 'PAGADO') return { texto: nombre, tono: 'ok' };
+  if (nombre === 'COACTIVA' || nombre === 'EXIGIBLE') return { texto: nombre, tono: 'bad' };
+  if (nombre === 'EMITIDO' || nombre === 'NOTIFICADO') return { texto: nombre, tono: 'warn' };
+  return { texto: nombre };
+}
+
+/**
+ * La fecha del valor emitido mas recientemente.
+ *
+ * **No es la de hoy, y por eso no sale del reloj.** El desglose de un valor esta
+ * congelado a su `proyectadoA` —la fecha a la que se proyectaron los importes
+ * cuando se emitio (AC de #37)—, asi que reimprimirlo dos años despues devuelve
+ * los mismos importes. Es la misma eleccion que hace `cuenta_corriente` con los
+ * asientos del libro: la fecha que se pinta encima es la de la cifra mas nueva
+ * de las que se ven.
+ *
+ * `situacionA` es otra fecha y otra cosa —el dia desde el que se miro si el
+ * plazo vencio—, y no se pinta aqui: la banda dice «cifras actualizadas al», y
+ * la situacion no es una cifra.
+ */
+function fechaDeValoresDe(valores: readonly unknown[]): Fecha {
+  let mayor: string | undefined;
+  for (const valor of valores) {
+    if (!esObjeto(valor)) continue;
+    const monto = importeDe(valor['monto']);
+    if (monto !== undefined && (mayor === undefined || monto.actualizadoA > mayor)) {
+      mayor = monto.actualizadoA;
+    }
+  }
+  return (mayor ?? hoy()) as Fecha;
+}
+
 /** Las opciones de Consultas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_CONSULTAS: Readonly<Record<string, Conexion>> = {
   cuenta_corriente,
@@ -565,4 +807,7 @@ export const CONEXIONES_DE_CONSULTAS: Readonly<Record<string, Conexion>> = {
   consulta_altas_bajas,
   consulta_pagos,
   consulta_predios,
+  consulta_unificada,
+  consulta_resumen_predial,
+  consulta_valores,
 };
