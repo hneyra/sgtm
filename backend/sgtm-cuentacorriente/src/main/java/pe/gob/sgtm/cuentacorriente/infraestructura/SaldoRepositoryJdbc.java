@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeObligacion;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
+import pe.gob.sgtm.cuentacorriente.dominio.PendienteAgregado;
 import pe.gob.sgtm.cuentacorriente.dominio.SaldoProyectado;
 import pe.gob.sgtm.cuentacorriente.dominio.SaldoRepository;
 import pe.gob.sgtm.dominio.Dinero;
@@ -99,6 +100,39 @@ public class SaldoRepositoryJdbc extends RepositorioJdbc implements SaldoReposit
                                 + " ORDER BY periodo")
                 .params(parametrosDe(obligacion))
                 .query(SaldoRepositoryJdbc::mapear)
+                .list();
+    }
+
+    /**
+     * La cartera pendiente del ejercicio, agrupada por tributo <b>en el motor</b> (#56, RF-130).
+     *
+     * <p>Tres cifras por grupo y ninguna fila de detalle: la suma, cuantas obligaciones la componen
+     * y la fecha de la proyeccion mas antigua. Es el AC 4 de #56: el panel no puede traerse la
+     * cartera de un padron —decenas de miles de filas— para escribir una docena de numeros.
+     *
+     * <p>{@code insoluto_saldo > 0} deja fuera lo cancelado y lo pagado en exceso. Sumar los
+     * negativos restaria de la cartera un saldo a favor de un contribuyente contra la deuda de
+     * otro, y el total saldria mas bajo de lo que nadie debe.
+     */
+    @Override
+    public List<PendienteAgregado> pendientePorTributo(Ejercicio ejercicio) {
+        return jdbc().sql(
+                        "SELECT tributo, sum(insoluto_saldo) AS pendiente,"
+                                + "       count(*) AS obligaciones,"
+                                + "       min(fecha_calculo) AS proyectado_desde"
+                                + " FROM saldo_proyectado"
+                                + " WHERE ejercicio = :ejercicio"
+                                + "   AND insoluto_saldo > 0"
+                                + " GROUP BY tributo"
+                                + " ORDER BY tributo")
+                .param("ejercicio", ejercicio.valor())
+                .query(
+                        (fila, numeroDeFila) ->
+                                new PendienteAgregado(
+                                        fila.getString("tributo"),
+                                        new Dinero(fila.getBigDecimal("pendiente")),
+                                        fila.getLong("obligaciones"),
+                                        fila.getTimestamp("proyectado_desde").toInstant()))
                 .list();
     }
 

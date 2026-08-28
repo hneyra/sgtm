@@ -58,6 +58,31 @@ public class RecaudacionDelLibroCuentaCorriente implements RecaudacionDelLibro {
         return new RecaudadoEnElLibro(lineas, desde, hasta, aLaFecha);
     }
 
+    /**
+     * Lo cobrado de <b>todos</b> los tributos en el rango (#56, RF-130).
+     *
+     * <p>Sin lista de tributos que preparar: es un metodo distinto y no la lista vacia
+     * reinterpretada —ver {@code AsientoRepository#recaudadoDeTodos}—. La forma de la respuesta es
+     * la misma, y por eso el panel de inicio y el resumen de un area no pueden discrepar en el
+     * criterio.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public RecaudadoEnElLibro recaudadoDeTodos(
+            LocalDate desde, LocalDate hasta, LocalDate aLaFecha) {
+        Objects.requireNonNull(desde, "El resumen dice desde cuando cuenta");
+        Objects.requireNonNull(hasta, "El resumen dice hasta cuando cuenta");
+        Objects.requireNonNull(aLaFecha, "Toda cifra indica su fecha (RNF-075, regla 9)");
+        if (hasta.isBefore(desde)) {
+            throw new IllegalArgumentException("«hasta» no puede ser anterior a «desde»");
+        }
+        List<RecaudacionDeUnTributo> lineas =
+                asientos.recaudadoDeTodos(desde, hasta).stream()
+                        .map(RecaudacionDelLibroCuentaCorriente::aPublico)
+                        .toList();
+        return new RecaudadoEnElLibro(lineas, desde, hasta, aLaFecha);
+    }
+
     private static RecaudacionDeUnTributo aPublico(RecaudacionAgregada agregada) {
         return new RecaudacionDeUnTributo(
                 agregada.tributo(),

@@ -27,6 +27,22 @@ public interface SaldoRepository {
     List<SaldoProyectado> deLaObligacion(ClaveDeObligacion obligacion);
 
     /**
+     * La cartera pendiente del ejercicio, agrupada por tributo (#56, RF-130).
+     *
+     * <p>La agregacion la hace PostgreSQL. Es la diferencia entre un panel que abre en un parpadeo
+     * y uno que se trae decenas de miles de filas para escribir doce cifras —y que, mientras las
+     * trae, ocupa la conexion que la ventanilla necesita—.
+     *
+     * <p>Cuenta solo las obligaciones con saldo <b>positivo</b>: una fila en cero esta cancelada, y
+     * una negativa es un pago en exceso, que restado taparia la deuda de otro contribuyente.
+     *
+     * <p>Cada linea trae ademas la fecha de la proyeccion <b>mas antigua</b> de su grupo. Sin ella,
+     * la cifra parece de hoy aunque la proyeccion lleve una semana sin recalcularse, y eso es
+     * exactamente lo que un cache no puede dejar de decir (ADR-0006).
+     */
+    List<PendienteAgregado> pendientePorTributo(pe.gob.sgtm.dominio.Ejercicio ejercicio);
+
+    /**
      * <b>Bloquea</b> en la base las filas de esa obligacion hasta que termine la transaccion, y
      * devuelve cuantas bloqueo.
      *

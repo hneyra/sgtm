@@ -127,6 +127,43 @@ public interface AsientoRepository {
     List<RecaudacionAgregada> recaudadoPorTributo(
             Collection<String> tributos, java.time.LocalDate desde, java.time.LocalDate hasta);
 
+    /**
+     * Lo cobrado de <b>todos</b> los tributos entre las dos fechas, con el mismo desglose y los
+     * mismos filtros que {@link #recaudadoPorTributo} (#56, RF-130).
+     *
+     * <p>Es un metodo aparte y no una lista vacia interpretada como «todos». El contrato de {@link
+     * #recaudadoPorTributo} dice que la coleccion vacia devuelve la respuesta vacia, y eso es lo
+     * correcto alli: quien pregunta por los tributos de un area y resulta que el area no tiene
+     * ninguno debe recibir cero, no el padron entero. Reutilizar el mismo metodo con dos
+     * significados opuestos para el mismo argumento es como se escriben los defectos que nadie ve
+     * al revisar.
+     *
+     * <p>Sin filtro de tributo, la <b>unica</b> cota es el rango de fechas, y por eso este metodo
+     * existe para un panel y no para un listado: lo que devuelve es una linea por (tributo,
+     * ejercicio, mes, fase) con movimiento, que crece con el numero de grupos y no con el del
+     * padron.
+     */
+    List<RecaudacionAgregada> recaudadoDeTodos(
+            java.time.LocalDate desde, java.time.LocalDate hasta);
+
+    /**
+     * Lo cargado en un ejercicio, agrupado por tributo (#56, RF-130).
+     *
+     * <p>El reverso de {@link #recaudadoPorTributo}: {@code CARGO} en lugar de {@code ABONO}, y
+     * solo el concepto {@code INSOLUTO} —el tributo puesto a cobrar, sin el reajuste, el interes ni
+     * los gastos que se le anadieron despues—. El mismo criterio de reversion que el otro lado,
+     * para que las dos cifras se puedan dividir sin explicar nada.
+     *
+     * <p>Y una condicion mas que el otro lado no necesita: <b>un asiento que es la reversion de
+     * otro no cuenta como cargo</b>. Reversar un abono produce un cargo del mismo concepto, asi que
+     * un recibo anulado dejaria «lo cargado» inflado por su propio importe. No es deuda nueva: es
+     * la deuda de siempre, que vuelve a estar viva.
+     *
+     * <p>La agregacion la hace el motor, por lo mismo de siempre: los cargos de un ejercicio son el
+     * padron entero.
+     */
+    List<CargoAgregado> cargadoPorTributo(pe.gob.sgtm.dominio.Ejercicio ejercicio);
+
     /** Todos los asientos de un contribuyente, para reconstruir sus saldos de una vez (#23). */
     List<Asiento> deContribuyente(long contribuyenteId);
 

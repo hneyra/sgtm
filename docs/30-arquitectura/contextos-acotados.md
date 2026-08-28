@@ -158,6 +158,25 @@ Módulos, accesos y políticas, grupos, usuarios, miembros, permisos, sesiones y
 Transversal: todos dependen de él y él de ninguno.
 *Módulo Gradle:* `sgtm-seguridad`.
 
+### 3.13 No es un contexto: `indicadores`
+
+El **panel de recaudación** ([#56](https://github.com/hneyra/sgtm/issues/56), RF-130), la pantalla
+de inicio. No es el contexto número trece y no lo será: no tiene modelo, no tiene tablas, no
+determina y no asienta. Lo único que hace es **agregar** lo que otros ya publican —
+`cuentacorriente.RecaudacionDelLibro`, `cuentacorriente.CarteraDelLibro` y
+`tesoreria.AvanceDeCaja`— y redactarlo para una pantalla.
+
+Vive en su propio módulo Gradle, `sgtm-indicadores`, junto a `sgtm-esquema` y `sgtm-plataforma` en
+la lista de los que **no** son contextos acotados. El motivo de que sea un módulo y no un paquete
+de `sgtm-aplicacion` es la frontera: su `build.gradle.kts` declara que solo ve esos dos contextos,
+así que añadir un tercero al panel cuesta una línea y se ve en el diff. Spring Modulith vigila que
+no cruce el límite por dentro; una regla de ArchUnit —`EL_PANEL_NO_HABLA_CON_LA_BASE`, con su
+muestra— vigila que no se lo salte por debajo escribiendo su propio SQL.
+
+**Invariante:** ninguna cifra del panel se calcula en el panel. Si sumara por su cuenta lo que la
+caja ya suma, la pantalla de inicio y la de recaudación podrían decir cifras distintas del mismo
+día, y no habría forma de saber cuál está mal.
+
 ## 4. Reglas de dependencia
 
 1. **Un contexto se importa solo por su API pública.** En Java, el paquete raíz del contexto;

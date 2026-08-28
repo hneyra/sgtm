@@ -17,6 +17,10 @@ dependencies {
     implementation(project(":sgtm-dominio-compartido"))
     implementation(project(":sgtm-plataforma"))
 
+    // El panel de recaudacion (#56). No es un contexto acotado: agrega las APIs
+    // publicas de cuentacorriente y tesoreria y no tiene tablas propias.
+    implementation(project(":sgtm-indicadores"))
+
     // Los doce contextos acotados de ARQ-01 §3.
     implementation(project(":sgtm-contribuyentes"))
     implementation(project(":sgtm-catastro"))

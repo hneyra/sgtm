@@ -66,4 +66,24 @@ public interface RecaudacionDelLibro {
      */
     RecaudadoEnElLibro recaudadoPor(
             Collection<String> tributos, LocalDate desde, LocalDate hasta, LocalDate aLaFecha);
+
+    /**
+     * Lo cobrado de <b>todos</b> los tributos entre las dos fechas, con el mismo desglose y los
+     * mismos criterios que {@link #recaudadoPor} (#56, RF-130).
+     *
+     * <p>Existe para el panel de recaudacion, que no puede enumerar los tributos: hacerlo obligaria
+     * a compilar en el codigo una lista de nombres tributarios que el libro ya conoce, y esa lista
+     * se quedaria corta el dia que apareciera un tributo nuevo —sin fallar, solo dejandolo fuera
+     * del total—.
+     *
+     * <p><b>No es {@link #recaudadoPor} con la coleccion vacia</b>, y esa distincion es deliberada:
+     * alli la coleccion vacia devuelve la respuesta vacia, que es lo correcto cuando un area
+     * pregunta por sus tributos y resulta que no tiene ninguno. El mismo argumento no puede
+     * significar «nada» y «todo».
+     *
+     * @param desde fecha valor minima, inclusive
+     * @param hasta fecha valor maxima, inclusive
+     * @param aLaFecha la fecha con la que se responde; viaja con la cifra (regla 9, RNF-075)
+     */
+    RecaudadoEnElLibro recaudadoDeTodos(LocalDate desde, LocalDate hasta, LocalDate aLaFecha);
 }

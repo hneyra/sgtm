@@ -12,6 +12,12 @@ include("sgtm-esquema")
 // Tampoco es un contexto acotado.
 include("sgtm-plataforma")
 
+// Indicadores: el panel de recaudacion (#56, RF-130). Tampoco es un contexto
+// acotado —ARQ-01 §3 fija doce y este no es el trece—: no tiene modelo, no tiene
+// tablas y no decide nada. Agrega lo que cuentacorriente y tesoreria ya publican,
+// y su build declara que solo puede ver esos dos.
+include("sgtm-indicadores")
+
 // Los doce contextos acotados de ARQ-01 §3. Hoy vacios: la estructura fija los
 // limites antes de que haya codigo que los cruce.
 include("sgtm-contribuyentes")
