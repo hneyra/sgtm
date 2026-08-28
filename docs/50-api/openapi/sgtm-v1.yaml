@@ -5680,6 +5680,104 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: registrar_anuncio
+      summary: "Registro de autorización de anuncio"
+      description: "Registra una autorización de anuncio y GENERA SU DEUDA por la tasa (RF-114). El cuerpo lleva el titular, el establecimiento asociado —opcional—, la clase y el tipo del elemento, sus medidas, la ubicación, la vigencia y la observación del usuario, obligatoria (RNF-052). El número de la autorización lo pone el sistema desde su correlativo y la tasa sale del conjunto sellado: ninguno de los dos viene en el cuerpo. La cabecera `Idempotency-Key` se lee: reenviar el mismo registro devuelve 200 con la autorización de la primera vez y no genera un segundo cargo."
+      tags: ["Autorizaciones y licencias"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/autorizaciones/anuncios/{id}/renovacion":
+    post:
+      operationId: renovar_anuncio
+      summary: "Renovación de autorización de anuncio"
+      description: "Prorroga la autorización por otro ejercicio y devenga otra vez la tasa (RF-114). Un anuncio cesado o retirado no se renueva, y una misma autorización no devenga dos veces el mismo ejercicio. El `id` de la ruta es el número impreso de la autorización."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/autorizaciones/anuncios/{id}/cese":
+    post:
+      operationId: cesar_anuncio
+      summary: "Cese de autorización de anuncio"
+      description: "Deja sin efecto la autorización, con su motivo (RF-114). Detiene la deuda futura —un anuncio cesado no se renueva— y NO toca la ya devengada: no borra ni reversa ningún cargo (regla 4, RNF-051). El cuerpo lleva la fecha, el motivo y la observación del usuario, obligatoria (RNF-052)."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/autorizaciones/anuncios/{id}/retiro":
+    post:
+      operationId: retirar_anuncio
+      summary: "Retiro del elemento publicitario"
+      description: "Registra que el elemento se retiró de la calle, comprobado en campo (RF-114). Va después del cese: primero la autorización deja de regir y después el soporte desaparece. Al revés, el padrón diría que se desmontó un anuncio que sigue autorizado."
+      tags: ["Autorizaciones y licencias"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/autorizaciones/anuncios/reportes":
     post:
       operationId: anuncios_reportes
