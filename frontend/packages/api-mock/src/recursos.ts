@@ -1662,17 +1662,6 @@ const adminEstadoCuenta = (): Paginado => {
 /* ── Coactiva: expedientes ─────────────────────────────────────────────── */
 
 /**
- * Como escribe el prototipo el estado de un expediente coactivo, frente a la
- * etiqueta real de `EstadoDelExpediente` (V33): «Con medida» → `MEDIDA
- * CAUTELAR`, «Iniciado» → `INICIADO`, «Concluido» → `CONCLUIDO` (#363).
- */
-const ESTADO_DE_EXPEDIENTE_DEL_MOCK: Readonly<Record<string, string>> = {
-  'Con medida': 'MEDIDA CAUTELAR',
-  Iniciado: 'INICIADO',
-  Concluido: 'CONCLUIDO',
-};
-
-/**
  * Expedientes coactivos (`ExpedienteResource`, #40, #363).
  *
  * `Contribuyente` sale de `codContribuyente`, que en el recurso real es el

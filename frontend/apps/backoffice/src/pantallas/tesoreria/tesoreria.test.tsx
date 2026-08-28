@@ -166,7 +166,7 @@ describe('consulta_convenios lee la fila corta que publica ConvenioController.li
     // Se busca dentro de la fila y no con `getByText`: «VIGENTE» es también una
     // opción del filtro «Estado» de la búsqueda, y el texto suelto ambiguaria.
     expect(within(fila as HTMLElement).getByText('VIGENTE')).toBeInTheDocument();
-    expect(within(fila as HTMLElement).getByText('1842.60')).toBeInTheDocument();
+    expect(within(fila as HTMLElement).getByText('1 842.60')).toBeInTheDocument();
   });
 
   it('una respuesta que no es un listado paginado se para en voz alta, no con una tabla vacía', async () => {
@@ -206,7 +206,7 @@ describe('duplicado_recibo lee un recibo, no un padrón de resultados', () => {
     expect(screen.getByText('2026-08-20')).toBeInTheDocument();
     expect(screen.getByText('11:44')).toBeInTheDocument();
     expect(screen.getByText('PREDIAL')).toBeInTheDocument();
-    expect(screen.getByText('1842.60')).toBeInTheDocument();
+    expect(screen.getByText('1 842.60')).toBeInTheDocument();
     expect(screen.getByText('1 recibo')).toBeInTheDocument();
     // `ReciboResource` no publica ni el código ni el nombre de quien pagó.
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
@@ -326,7 +326,7 @@ describe('caja_tributaria lee la deuda real del contribuyente, aunque no la pued
 
     const fila = (await screen.findByText('PREDIAL')).closest('tr');
     expect(fila).not.toBeNull();
-    expect(within(fila as HTMLElement).getByText('1926.72')).toBeInTheDocument();
+    expect(within(fila as HTMLElement).getByText('1 926.72')).toBeInTheDocument();
     expect(within(fila as HTMLElement).getByText('ORDINARIA')).toBeInTheDocument();
   });
 });
