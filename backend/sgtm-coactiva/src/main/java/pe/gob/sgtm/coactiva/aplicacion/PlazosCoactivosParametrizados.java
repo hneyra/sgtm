@@ -153,10 +153,11 @@ public class PlazosCoactivosParametrizados {
     /**
      * Falta el plazo que la operacion necesita.
      *
-     * <p>Es lo que ocurre hoy con los plazos: las cifras estan transcritas y verificadas en {@code
-     * docs/10-negocio/valores-normativos/prescripcion-y-plazos.md}, pero todavia no cargadas
-     * (#192). Que falle aqui, nombrando la llave, es preferible a que la operacion siga con un
-     * numero inventado y produzca una medida cautelar nula.
+     * <p>La cifra ya se publica desde #192 —{@code PLAZO:REC1_CUMPLIMIENTO} esta en {@code
+     * docs/10-negocio/valores-normativos/publicacion/parametros-2026.csv}, transcrita y verificada
+     * en {@code prescripcion-y-plazos.md}—, asi que lo que esto senala hoy es un ejercicio cuyo
+     * conjunto se sello sin ella. Que falle aqui, nombrando la llave, es preferible a que la
+     * operacion siga con un numero inventado y produzca una medida cautelar nula.
      */
     public static final class PlazoSinParametrizar extends RuntimeException {
 

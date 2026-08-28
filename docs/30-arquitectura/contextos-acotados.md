@@ -211,4 +211,5 @@ El de más recorrido es `catastro`: desde [#290](https://github.com/hneyra/sgtm/
 publica también la **escritura** —vías y sectores, el alta de manzanas, el alta de las cuatro
 fichas y su actualización versionada—, con observación obligatoria y auditoría. Lo que sigue sin
 implementarse es el **cálculo**: ninguna regla tributaria se escribe contra cifras inventadas
-mientras D-03c y D-11 no cierren ([GOB-02](../00-gobierno/decisiones-abiertas.md)).
+mientras D-11 no cierre ([GOB-02](../00-gobierno/decisiones-abiertas.md); el redondeo ya se
+decidió, ADR-0018).

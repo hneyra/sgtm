@@ -45,6 +45,14 @@ import pe.gob.sgtm.parametros.dominio.PublicacionDeParametros;
  * hace es transportarla a {@code usuario_carga} y {@code usuario_aprueba}, donde {@code
  * parametro_doble_verificacion_ck} exige que sean distintas.
  *
+ * <p>Desde #192 el CSV lleva una columna mas, {@code valor_maquina}, y lo unico que este proceso
+ * hace con ella es preferirla: si la fila la trae, es <b>ella</b> la que va a {@code
+ * parametro_tributario.valor_texto}, y si no, el texto verbatim de la norma. Existe porque hay
+ * valores cuya forma en la norma no es la que el codigo consume —«cuatro (4) anios» frente a «4
+ * ANIOS», que es lo unico que {@code Plazo.de} acepta—, y las dos formas no caben en una columna
+ * sin que una de las dos deje de ser comprobable. Cual de ellas se exige, y a que filas, lo decide
+ * {@code verificar-publicacion.mjs}; aqui no hay ninguna regla sobre tipos concretos de parametro.
+ *
  * <h2>La credencial</h2>
  *
  * <p>Corre como {@code rol_carga_parametros} —no como {@code sgtm_app}, que solo tiene {@code

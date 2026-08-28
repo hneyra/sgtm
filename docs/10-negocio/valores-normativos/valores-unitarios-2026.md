@@ -7,146 +7,216 @@
 | Publicada | 2025-10-30, El Peruano |
 | Ejercicios que rige | 2026 |
 | Filas de NEG-02 §2 | 7 |
-| Transcribió | JNA, 2026-08-24 |
-| Verificó | HNA, 2026-08-25 |
-| Estado | VERIFICADO |
+| Transcribió | JNA, 2026-08-24; cuadro de la Costa leído en el PDF del **Anexo I.2** de la propia resolución, con la corrección de estructura y las 27 cifras que eso trajo (§1 entera y §3): Agent, 2026-08-28 |
+| Verificó | — |
+| Estado | TRANSCRITO |
+
+> **Por qué este archivo vuelve a `TRANSCRITO`, y qué cambió.** El 2026-08-25 HNA verificó el
+> archivo tal como estaba entonces, cuando el PDF del Anexo I.2 **no se había podido leer** —
+> `gob.pe/vivienda` devolvía 418 — y la matriz se había transcrito de un cuadro directoral que otra
+> institución reproduce, con sus 63 cifras marcadas `‹NO CONFIRMADO EN FUENTE OFICIAL›`. El
+> 2026-08-28 se leyó el PDF del Anexo I.2, y **no dice lo que decía este archivo**: el cuadro de la
+> Costa vigente para el Ejercicio Fiscal 2026 tiene **3 partidas, no 7**, y ninguna de sus cifras
+> coincide con las que estaban aquí. La matriz entera se sustituyó por la del anexo. **Esa
+> sustitución no la ha verificado nadie todavía**, y el corpus no admite que quien transcribe se
+> verifique a sí mismo (ADR-0007): el estado baja a `TRANSCRITO` y `Verificó` vuelve a `—` hasta que
+> una segunda persona vuelva al PDF y re-firme. La verificación de HNA del 2026-08-25 sigue en el
+> historial de git, sobre el contenido que entonces tenía el archivo.
 
 ## 1. La tabla tal como está en la norma
 
 **Sin reordenar, sin convertir unidades, sin corregir un encabezado.** El artículo 1 de la RM
 277-2025-VIVIENDA dice, literalmente: «Aprobar los Valores Unitarios Oficiales de Edificación para
 Lima Metropolitana y la Provincia Constitucional del Callao, la Costa, la Sierra y la Selva,
-vigentes para el Ejercicio Fiscal 2026», contenidos en su Anexo I (I.1 a I.4, uno por región). La
-matriz de cada región cruza **categoría de edificación** (filas, de letra, A a I) con **partida**
-(columnas, 7 en total) — **no** con año de construcción; ver la aclaración de H-4 en §3.
+vigentes para el Ejercicio Fiscal 2026», contenidos en su Anexo I (I.1 a I.4, uno por región).
 
 Se transcribe aquí la región **Costa** (Anexo I.2), por ser la más común en el manual del sistema.
-Lima Metropolitana/Callao, Sierra y Selva existen en la misma resolución y no están transcritas en
-este archivo — ver §3.
+Lima Metropolitana/Callao (I.1), Sierra (I.3) y Selva (I.4) existen en la misma resolución y no
+están transcritas en este archivo — ver §3.
 
-**Corrección de estructura respecto a una versión anterior de este archivo:** la matriz tiene
-**7 partidas**, no 3 ni las 6 con que había quedado un borrador previo. La propia norma lo dice
-textualmente en su nota final: «El valor unitario por m² para una edificación determinada, se
-obtiene sumando los valores seleccionados de cada una de las **7 columnas** del cuadro de acuerdo
-a características predominantes». Y las categorías van de **A a I** (nueve), no A a H (ocho) —
-confirmado contra dos ejemplares reales e independientes del cuadro (ver procedencia de los
-valores, abajo), no contra la sugerencia de un tercero.
+**Corrección de estructura, leída en el anexo: la matriz tiene 3 partidas, no 7.** Una versión
+anterior de este archivo publicaba una matriz de 9 categorías × 7 partidas —muros y columnas,
+techos, pisos, puertas y ventanas, revestimientos, baños e instalaciones eléctricas y sanitarias—
+tomada de un cuadro que reproduce un tercero, y decía de sí misma que la estructura de 7 columnas
+estaba confirmada. **El Anexo I.2 de la RM 277-2025-VIVIENDA no tiene esas siete columnas.** Tiene
+tres, agrupadas en dos rubros —`E S T R U C T U R A S` (muros y columnas; techos) y
+`A C A B A D O S` (puertas y ventanas)—, y lo dice en su propia nota al pie:
 
-| Categoría | Muros y columnas (1) | Techos (2) | Pisos (3) | Puertas y ventanas (4) | Revestimientos (5) | Baños (6) | Instalaciones eléctricas y sanitarias (7) |
-|---|---|---|---|---|---|---|---|
-| A | 642.37 | 390.16 | 344.56 | 348.61 | 375.75 | 126.80 | 365.91 |
-| B | 414.16 | 254.55 | 206.52 | 183.76 | 284.69 | 96.41 | 265.35 |
-| C | 285.09 | 210.30 | 135.93 | 118.77 | 211.20 | 66.88 | 165.12 |
-| D | 275.69 | 139.27 | 119.90 | 104.03 | 162.04 | 35.69 | 104.52 |
-| E | 194.09 | 49.77 | 80.33 | 89.01 | 111.49 | 20.98 | 75.97 |
-| F | 146.17 | 27.37 | 54.86 | 66.83 | 78.59 | 15.63 | 41.79 |
-| G | 86.13 | 18.81 | 48.42 | 36.10 | 64.44 | 10.74 | 22.57 |
-| H | — | 0.00 | 30.29 | 18.05 | 25.77 | 0.00 | 0.00 |
-| I | — | — | 6.06 | 0.00 | 0.00 | — | — |
+> «EL VALOR UNITARIO POR M2 PARA UNA EDIFICACIÓN DETERMINADA, SE OBTIENE SUMANDO LOS VALORES
+> SELECCIONADOS DE CADA UNA DE LAS **3 COLUMNAS** DEL CUADRO DE ACUERDO A SUS CARACTERÍSTICAS
+> PREDOMINANTES.»
 
-> Valores en soles por m² de área techada. Notas de la propia tabla: la **categoría A**
-> (estructuras laminares curvadas de concreto armado que incluyen en una sola armadura la
-> cimentación y el techo) **no considera los valores de la columna 2** (techos); la **categoría D**
-> (ladrillo o similar sin elementos de concreto armado, o drywall, que incluye techo) **tampoco
-> considera la columna 2**, por el mismo motivo — el techo ya está incluido en la partida de muros.
-> «En Edificios aumentar el valor por m² en 5% a partir del 5.º Piso» — este es, con alta
-> probabilidad, el origen del factor «incremento del 5%» que D-11 marca sin fuente identificada en
-> NEG-05 §0.1; queda anotado para quien cierre esa decisión.
+Y la propia resolución lo explica en sus considerandos: «por la Resolución Directoral N° 003-2022-
+VIVIENDA/VMVU-DGPRVU, la DGPRVU aprueba la metodología para estimar el valor unitario oficial de
+las edificaciones, que considera la aplicación de **tres partidas de apreciación exterior: Muros y
+columnas, techos, y puertas y ventanas**». Las categorías sí van de **A a I** (nueve), como decía
+la versión anterior.
+
+### 1.1 La matriz, cifra por cifra
+
+Encabezado del anexo, transcrito: **«ANEXO I.2 — CUADRO DE VALORES UNITARIOS OFICIALES DE
+EDIFICACIÓN PARA LA COSTA (EXCEPTO LIMA METROPOLITANA Y CALLAO) AL 31 DE OCTUBRE DE 2025»**, y
+bajo él: **«VALORES POR PARTIDAS EN SOLES POR METRO CUADRADO DE ÁREA TECHADA»**.
+
+| Categoría | ESTRUCTURAS — MUROS Y COLUMNAS (1) | ESTRUCTURAS — TECHOS (2) | ACABADOS — PUERTAS Y VENTANAS (3) |
+|---|---|---|---|
+| A | 894.27 | 543.16 | 485.33 |
+| B | 576.57 | 354.37 | 255.81 |
+| C | 387.43 | 285.80 | 161.41 |
+| D | 374.68 | 181.40 | 141.39 |
+| E | 263.77 | 67.63 | 120.98 |
+| F | 198.64 | 37.19 | 90.81 |
+| G | 117.05 | 25.57 | 49.05 |
+| H | ...... | 0.00 | 24.53 |
+| I | ..... | ..... | 0.00 |
+
+Los puntos suspensivos de las categorías H e I **están así en el cuadro**: no son un dato que falte
+en esta transcripción ni un cero. El cuadro distingue tres cosas —una cifra, un `0.00` explícito
+(H en techos, I en puertas y ventanas) y una celda con puntos— y aquí se conservan las tres tal
+como se leen. Los números 1, 2 y 3 del encabezado son la numeración de columna del propio cuadro.
+
+### 1.2 La descripción de cada casilla, que es el criterio para elegir la categoría
+
+El cuadro no da solo el número: cada casilla trae la descripción constructiva que la selecciona.
+Se transcribe entera, porque sin ella la cifra no se puede aplicar a un predio.
+
+| Categoría | Muros y columnas | Techos | Puertas y ventanas |
+|---|---|---|---|
+| A | ESTRUCTURAS LAMINARES CURVADAS DE CONCRETO ARMADO QUE INCLUYEN EN UNA SOLA ARMADURA LA CIMENTACIÓN Y EL TECHO, PARA ESTE CASO NO SE CONSIDERA LOS VALORES DE LA COLUMNA N° 2 | LOSA O ALIGERADO DE CONCRETO ARMADO CON LUCES LIBRES MAYORES A 6 M. MEDIDA ENTRE CARA DE LOS APOYOS Y SOBRECARGA MAYOR A A 300 KG/M² (6) | ALUMINIO PESADO CON PERFILES ESPECIALES MADERA FINA ORNAMENTAL (CAOBA, CEDRO O PINO SELECTO) VIDRIO INSULADO. (1) |
+| B | COLUMNAS, VIGAS Y/O PLACAS DE CONCRETO ARMADO Y/O METÁLICAS | ALIGERADOS O LOSAS DE CONCRETO ARMADO INCLINADAS | ALUMINIO O MADERA FINA (CAOBA O SIMILAR) DE DISEÑO ESPECIAL, VIDRIO TRATADO POLARIZADO (2) Y CURVADO, LAMINADO O TEMPLADO |
+| C | PLACAS DE CONCRETO E= 10 A 15 CM ALBAÑILERÍA ARMADA, LADRILLO O SIMILAR CON COLUMNAS Y VIGAS DE AMARRE DE CONCRETO ARMADO | ALIGERADO O LOSAS DE CONCRETO ARMADO HORIZONTALES | ALUMINIO O MADERA FINA (CAOBA O SIMILAR) VIDRIO TRATADO POLARIZADO (2) LAMINADO O TEMPLADO |
+| D | LADRILLO O SIMILAR SIN ELEMENTOS DE CONCRETO ARMADO. DRYWALL O SIMILAR INCLUYE TECHO (5) | CALAMINA METÁLICA FIBROCEMENTO SOBRE VIGUERÍA METÁLICA | VENTANAS DE ALUMINIO, PUERTAS DE MADERA SELECTA, VIDRIO TRATADO TRANSPARENTE (3) |
+| E | ADOBE, TAPIAL O QUINCHA | MADERA CON MATERIAL IMPERMEABILIZANTE. | VENTANAS DE FIERRO, PUERTAS DE MADERA SELECTA (CAOBA O SIMILAR) VIDRIO SIMPLE TRANSPARENTE (4) |
+| F | MADERA (ESTORAQUE, PUMAQUIRO, HUAYRURO, MACHINGA, CATAHUA AMARILLA COPAIBA, DIABLO FUERTE, TORNILLO O SIMILARES), DRY WALL O SIMILAR (SIN TECHO) | CALAMINA METÁLICA FIBROCEMENTO O TEJA SOBRE VIGUERÍA DE MADERA CORRIENTE | VENTANAS DE FIERRO O ALUMINIO INDUSTRIAL, PUERTAS DE FIERRO, PUERTAS CONTRAPLACADAS DE MADERA (CEDRO O SIMILAR), PUERTAS MATERIAL MDF o HDF, VIDRIO SIMPLE TRANSPARENTE (4) |
+| G | PIRCADO CON MEZCLA DE BARRO | MADERA RÚSTICA O CAÑA CON TORTA DE BARRO | MADERA CORRIENTE CON MARCOS EN PUERTAS Y VENTANAS DE PVC O MADERA CORRIENTE. |
+| H | *(celda vacía en el cuadro)* | SIN TECHO | MADERA RÚSTICA. |
+| I | *(celda vacía en el cuadro)* | *(celda vacía en el cuadro)* | SIN PUERTAS NI VENTANAS |
+
+> «SOBRECARGA MAYOR A A 300 KG/M²», en la casilla A de techos, **está así en el anexo**: la
+> preposición aparece repetida al final de una línea y al principio de la siguiente. Se transcribe
+> como se lee, sin corregirla.
+
+### 1.3 Las notas del propio cuadro
+
+> «**EN EDIFICIOS AUMENTAR EL VALOR POR M2 EN 5 % A PARTIR DEL 5° PISO**» — es el **incremento del
+> 5 %** que NEG-05 §0.1 marcaba «sin fuente identificada» (D-11). Aquí está su fuente, leída en el
+> anexo oficial: el propio Cuadro de Valores Unitarios, como nota al pie, en soles por m² y a partir
+> del quinto piso de un edificio. Lo que el anexo **no** dice es cómo se acumula piso a piso; ver §3.
 >
-> Descripción resumida de cada categoría, según la propia tabla:
+> «EL VALOR UNITARIO POR M2 PARA UNA EDIFICACIÓN DETERMINADA, SE OBTIENE SUMANDO LOS VALORES
+> SELECCIONADOS DE CADA UNA DE LAS 3 COLUMNAS DEL CUADRO DE ACUERDO A SUS CARACTERÍSTICAS
+> PREDOMINANTES.»
 >
-> | Categoría | Estructura predominante (columna «Muros y columnas») |
+> «LA DEMARCACIÓN TERRITORIAL CONSIGNADA ES DE USO EXCLUSIVO PARA LA APLICACIÓN DEL PRESENTE
+> CUADRO, ABARCA LAS LOCALIDADES UBICADAS EN EL TERRITORIO SOBRE LA VERTIENTE OCCIDENTAL DE LA
+> CORDILLERA DE LOS ANDES Y LIMITANDO: AL NORTE POR LA FRONTERA CON EL ECUADOR; AL SUR POR LA
+> FRONTERA CON CHILE; AL OESTE POR LA LÍNEA DE BAJA MAREA DEL LITORAL Y AL ESTE POR UNA LÍNEA QUE
+> SIGUE APROXIMADAMENTE LA CURVA DEL NIVEL DE 2000 m.s.n.m.» — es la definición de «Costa» **para
+> este cuadro**, y es lo que decide qué región le toca a una municipalidad.
+>
+> Las seis llamadas del cuadro, transcritas:
+>
+> | N.° | Texto |
 > |---|---|
-> | A | Estructuras laminares curvadas de concreto armado (cimentación y techo en una sola armadura) |
-> | B | Columnas, vigas y/o placas de concreto armado y/o metálicas |
-> | C | Placas de concreto (e = 10 a 15 cm), albañilería armada, ladrillo o similar con columnas y vigas de amarre de concreto armado |
-> | D | Ladrillo o similar sin elementos de concreto armado; drywall o similar, incluye techo |
-> | E | Adobe, tapial o quincha; bambú estructural |
-> | F | Madera (estoraque, pumaquiro, huayruro, machinga, catahua amarilla, copaiba, diablo fuerte, tornillo o similares); drywall o similar (sin techo) |
-> | G | Pircado con mezcla de barro |
-> | H | Sin techo |
-> | I | Terra compactada; sin puertas ni ventanas; sin revestimientos en ladrillo, adobe o similar |
+> | (1) | REFERIDO AL DOBLE VIDRIADO HERMÉTICO, CON PROPIEDADES DE AISLAMIENTO TÉRMICO Y ACÚSTICO. |
+> | (2) | REFERIDO AL VIDRIO QUE RECIBE TRATAMIENTO PARA INCREMENTAR SU RESISTENCIA MECÁNICA Y PROPIEDADES DE AISLAMIENTO ACÚSTICO Y TÉRMICO, SON COLOREADOS EN SU MASA PERMITIENDO LA VISIBILIDAD ENTRE 14% Y 83%. |
+> | (3) | REFERIDO AL VIDRIO QUE RECIBE TRATAMIENTO PARA INCREMENTAR SU RESISTENCIA MECÁNICA Y PROPIEDADES DE AISLAMIENTO ACÚSTICO Y TÉRMICO, PERMITEN LA VISIBILIDAD ENTRE 75% Y 92%. |
+> | (4) | REFERIDO AL VIDRIO PRIMARIO SIN TRATAMIENTO, PERMITEN LA TRANSMISIÓN DE LA VISIBILIDAD ENTRE 75% Y 92% |
+> | (5) | PARA ESTE CASO NO SE CONSIDERA LA COLUMNA N° 2 |
+> | (6) | DEBE CUMPLIR LAS DOS CONDICIONES.(LUCES Y SOBRECARGA). LA SOBRECARGA ES LA CARGA VIVA MÍNIMA REPARTIDA (NO AMPLIFICADA) DE ACUERDO A SU OCUPACIÓN O USO, DE CONFORMIDAD AL REGLAMENTO NACIONAL DE EDIFICACIONES. |
+>
+> Las dos casillas que descuentan la columna de techos —la A, por su propio texto, y la D, por la
+> llamada (5)— siguen ahí, igual que en la versión anterior de este archivo: el techo ya está
+> incluido en la partida de muros.
 
-### Procedencia exacta de estos valores, y su límite
+### 1.4 Procedencia de estos valores, y cómo se comprobaron
 
-**No se pudo leer el PDF del Anexo I.2 de la RM 277-2025-VIVIENDA misma.** Se intentó igual que en
-la transcripción anterior: `gob.pe/vivienda` devuelve error 418 (bloqueo de bot) en cada intento —
-incluida la página institucional que enlaza la norma —, y el PDF que aloja el SAT (institución
-tributaria que sí cita la norma correcta) falla con error de conexión en los reintentos de esta
-sesión.
+Se leyeron del PDF del **Anexo I.2** —`i-2-f-costa-2025.pdf`, una página, con capa de texto—, cuyo
+encabezado impreso es el que se transcribe en §1.1. El archivo lo produjo Microsoft Excel el
+2025-10-27, dos días antes de la fecha que la Resolución Ministerial lleva impresa (2025-10-29),
+según sus metadatos.
 
-Los valores de arriba se transcribieron, en cambio, del **Cuadro de Valores Unitarios Oficiales de
-Edificación para la Costa, vigente del 01 al 31 de octubre de 2025** — Resolución Directoral N.º
-00011-2024-VIVIENDA/VMVU-DGPRVU (publicada el 20 de diciembre de 2024), actualizado por el Índice
-de Precios al Consumidor de setiembre de 2025 (Resolución Jefatural N.º 211-2025-INEI, IPC 1.15%),
-tal como lo reproduce el Colegio de Arquitectos del Perú. Es la misma estructura (7 columnas, 9
-categorías) que trae el cuadro vigente para enero de 2026, verificado también contra una segunda
-fuente independiente.
+Las 27 cifras se extrajeron con **dos métodos independientes** que tienen que coincidir —el texto
+plano de la página y el reconocimiento de la tabla por sus líneas (`extract_table`)— y después se
+**leyó la página renderizada como imagen** para comprobar que cada número está en la fila y la
+columna que aquí se le atribuye. Los tres coinciden. La comprobación visual no es un lujo: el error
+que ningún método mecánico distingue por sí solo es un valor correcto en la columna equivocada, y
+las categorías H e I —con sus puntos suspensivos, su `0.00` y su cifra— son exactamente el sitio
+donde una tabla se lee mal.
 
-> `‹NO CONFIRMADO EN FUENTE OFICIAL: que este cuadro —de una Resolución Directoral mensual con
-> ajuste por IPC, no de la RM 277-2025-VIVIENDA misma— sea exactamente el que reproduce el Anexo
-> I.2 de la RM›`. La razón para transcribirlo de todos modos, en vez de dejar la matriz en blanco:
-> el artículo 11 del TUO LTM exige el valor unitario **«vigente al 31 de octubre del año anterior»**
-> para fijar la base del ejercicio siguiente, y este cuadro está fechado exactamente para ese corte
-> («vigente desde el 01 al 31 de octubre del 2025», el año anterior al ejercicio 2026 que rige la
-> cabecera de este archivo) — la práctica conocida de valorización predial en el Perú es que el
-> Ministerio adopta como RM anual justo el cuadro directoral de esa fecha de corte. Es la hipótesis
-> mejor fundada disponible, no una lectura confirmada palabra por palabra del Anexo I.2; alguien con
-> acceso de navegador normal a `gob.pe/vivienda` (sin el bloqueo de bot que encontraron las
-> herramientas de esta sesión) debería cotejar estos nueve por siete valores contra el PDF de la RM
-> misma antes de que este archivo pase a `VERIFICADO`.
+**El PDF no se copia al repositorio**; queda pendiente de archivar en S3 por el dueño del
+repositorio, como los de `vehicular-valores-referenciales-2026.md`.
+
+`‹NO CONFIRMADO EN FUENTE OFICIAL: que el PDF leído se distribuya junto con la parte resolutiva de
+la RM 277-2025-VIVIENDA —el archivo se titula «ANEXO I.2» y no repite el número de la Resolución
+dentro—. Lo que sí está comprobado es que su contenido es el que la Resolución describe: el cuadro
+de la Costa, «AL 31 DE OCTUBRE DE 2025», que es la fecha de corte que el art. 11 del TUO LTM exige
+para el ejercicio siguiente, y con las tres partidas que la propia Resolución nombra en sus
+considerandos›`.
 
 ## 2. Cómo entra al sistema
 
 | Qué | Dónde |
 |---|---|
 | Tipo | `valor_unitario_edificacion` |
-| Clave | `(municipalidad_id, ejercicio, región, categoría, partida)` — categoría ∈ {A..I}, partida ∈ {muros_columnas, techos, pisos, puertas_ventanas, revestimientos, baños, instalaciones_electricas_sanitarias}; sin dimensión de año de construcción, ver H-4 en §3 |
+| Clave | `(ejercicio, región, categoría, partida)` — categoría ∈ {A..I}, partida ∈ {muros_columnas, techos, puertas_ventanas}; sin dimensión de año de construcción, ver H-4 en §3. La tabla es un catálogo nacional desde ADR-0017: `municipalidad_id` es nulo |
 | Ámbito | nacional |
 | Vigencia | 2026 |
 
-**No se carga con este archivo.** La carga depende de D-13.
+**No se carga todavía, y el motivo ya no es el que era.** D-13 se cerró el 2026-08-28
+([ADR-0017](../../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md)) y las cifras ya
+no están sin cotejar: se leyeron en el Anexo I.2 (§1.4). Lo que falta ahora es **la segunda firma**
+—este archivo está en `TRANSCRITO`, y `PublicarCuadros` solo publica desde `VERIFICADO` con dos
+firmas distintas (ADR-0007)— y las otras tres regiones (§3). Con ADR-0017 cada región es una
+**edición** distinta, y el conjunto de una municipalidad compone la suya; publicar la Costa no
+espera a las demás, espera a que alguien vuelva al PDF y firme.
+
+**Y hay un cambio de esquema pendiente antes de cargar:** la tabla se dimensionó para siete
+partidas y el cuadro tiene tres. Si `valor_unitario_edificacion` guarda la partida como un valor de
+un conjunto cerrado, ese conjunto hay que corregirlo; si lo guarda como texto, lo que hay que
+corregir es lo que escriba el proceso de publicación. En cualquiera de los dos casos, cargar las 27
+filas con los nombres de partida de la versión anterior de este archivo produciría un cuadro que
+suma siete columnas donde la norma suma tres.
 
 ## 3. Qué no cabe hoy
 
 **Hallazgo H-4, revisado contra la resolución real:** el mapa (NEG-02 §2, fila 7) y el plan de
 desbloqueo (GOB-03 H-4) dicen que «NEG-05 §RT-002 [del manual del MEF, `../srtm`] dice que el
 cuadro es una matriz **categoría × año de construcción**», y que `valor_unitario_edificacion` no
-tiene dónde guardar esa segunda dimensión. **La RM 277-2025-VIVIENDA no lo confirma así**: su
-artículo 1 aprueba una matriz **categoría × partida** — la de arriba —, y su **artículo 4** precisa
-aparte que «las Tablas de Depreciación por antigüedad y estado de conservación... se encuentran
-contenidas en el Anexo I del Reglamento Nacional de Tasaciones, aprobado por la Resolución
-Ministerial N.° 172-2016-VIVIENDA» (ver `depreciacion.md`). Es decir: **el año de construcción no
-es una dimensión del cuadro de valores unitarios; es la entrada de la tabla de depreciación**, que
-es una tabla distinta con su propia clave (material × antigüedad × estado de conservación).
+tiene dónde guardar esa segunda dimensión. **El Anexo I.2 leído lo desmiente todavía más claramente
+que antes**: su matriz es **categoría × partida**, con tres partidas de apreciación exterior, y el
+artículo 4 de la RM precisa aparte que «las Tablas de Depreciación por antigüedad y estado de
+conservación... se encuentran contenidas en el Anexo I del Reglamento Nacional de Tasaciones,
+aprobado por la Resolución Ministerial N.° 172-2016-VIVIENDA» (ver `depreciacion.md`). El año de
+construcción no es una dimensión del cuadro de valores unitarios; es la entrada de la tabla de
+depreciación, que es otra tabla con su propia clave.
 
 No se pudo leer `../srtm` NEG-05 §RT-002 desde este repositorio (el submódulo no está clonado aquí)
-para comprobar si esa sección describe literalmente una matriz categoria-año, o si describe una
+para comprobar si esa sección describe literalmente una matriz categoría-año, o si describe una
 vista **calculada** por el SRTM del MEF que combina el valor unitario (esta tabla) con la
-depreciación por antigüedad (la otra tabla) en una sola pantalla — lo que, visto desde la pantalla,
-parece una sola matriz aunque provenga de dos tablas normativas distintas. Recomiendo que quien
-tenga acceso a `../srtm` confirme cuál de las dos lecturas es la correcta antes de dar H-4 por
-cerrado en un sentido u otro: si es la segunda, `valor_unitario_edificacion` **no necesita** la
-dimensión «año de construcción» (la clave de arriba, sin ella, ya basta) y el ajuste real está en
-cómo el motor de reglas combina esta tabla con `depreciacion`, no en el esquema de esta tabla.
+depreciación por antigüedad (la otra tabla) en una sola pantalla. Quien tenga acceso a `../srtm`
+debería confirmar cuál de las dos lecturas es la correcta antes de dar H-4 por cerrado.
 
 Aparte de H-4:
 
 - **Solo se transcribe la región Costa (Anexo I.2).** Lima Metropolitana y la Provincia
   Constitucional del Callao (I.1), Sierra (I.3) y Selva (I.4) están en la misma resolución y no
   están transcritas en este archivo — haría falta un archivo por región, o extender este, si el
-  sistema necesita calcular predios fuera de la Costa.
-- **La matriz de Costa tiene cifra, pero su identidad con el Anexo I.2 de la RM no está
-  confirmada palabra por palabra** (ver «Procedencia exacta de estos valores» en §1): se transcribió
-  del cuadro directoral vigente al 31 de octubre de 2025 por ser la fecha de corte exacta que exige
-  el art. 11 del TUO LTM, no por haber leído el PDF de la RM misma. Antes de marcar este archivo
-  `VERIFICADO`, alguien con acceso sin el bloqueo 418 de `gob.pe/vivienda` debe cotejar los 9×7
-  valores contra el Anexo I.2 real.
-- **El incremento del 5% por piso a partir del quinto** está transcrito como nota de la tabla
-  (arriba) y probablemente resuelve el factor D-11 «incremento del 5%» que NEG-05 §0.1 marca sin
-  fuente — no se edita esa decisión aquí porque no es parte del encargo de este archivo, pero queda
-  anotado para quien la cierre.
+  sistema necesita calcular predios fuera de la Costa. Los cuatro PDF existen y no se han leído más
+  que el de la Costa: **no se supone** que las otras tres tengan las mismas tres partidas ni
+  cifras parecidas.
+- **La matriz ya no está sin cotejar, pero sí sin verificar.** Las 27 cifras salen del Anexo I.2 y
+  no de un tercero (§1.4); lo que falta es la segunda firma de ADR-0007. Hasta que exista, este
+  archivo no publica nada.
+- **El incremento del 5 % por piso a partir del quinto tiene fuente, y le falta la mecánica.** El
+  cuadro dice «EN EDIFICIOS AUMENTAR EL VALOR POR M2 EN 5 % A PARTIR DEL 5° PISO» y con eso el
+  factor de D-11 deja de estar sin fuente. Lo que la nota no dice es si el 5 % se aplica **una vez**
+  a todos los pisos desde el quinto, o **acumulativamente** piso a piso, ni sobre qué base —el valor
+  unitario del piso, el del edificio— se calcula.
+  `‹NO CONFIRMADO EN FUENTE OFICIAL: si el 5 % del 5.º piso en adelante es un incremento único o
+  acumulativo, y sobre qué base se aplica›`. Es una diferencia enorme en un edificio de quince
+  pisos, y no se resuelve suponiendo.
 - **Valores Unitarios a costo directo de Obras Complementarias e Instalaciones Fijas y
-  Permanentes**: la misma RM 277-2025-VIVIENDA también aprueba esta segunda tabla (fila 10 de
-  NEG-02 §2, hoy `‹POR CLASIFICAR›`). No se transcribe aquí porque cierra una fila distinta del
-  mapa; queda anotado para quien tome esa fila.
+  Permanentes**: la misma RM 277-2025-VIVIENDA aprueba, por sus artículos 2 y 3, el Instructivo
+  (Anexo II) y esos valores (Anexo III). Cierran la fila 10 del mapa, no esta, y viven en
+  [`obras-complementarias-y-oficializacion-2026.md`](obras-complementarias-y-oficializacion-2026.md).

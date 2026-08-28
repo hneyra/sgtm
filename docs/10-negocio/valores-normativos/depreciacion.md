@@ -140,7 +140,14 @@ antes de que este archivo pase a `VERIFICADO`.
 | Ámbito | nacional |
 | Vigencia | 2016– (Reglamento Nacional de Tasaciones vigente; no se confirmó si alguna modificatoria posterior tocó el Anexo I específicamente — ver §3) |
 
-**No se carga con este archivo.** La carga depende de D-13.
+**No se carga todavía, y ya no por D-13** —cerrada el 2026-08-28 con esta tabla clasificada como
+nacional ([ADR-0017](../../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md))—. Lo
+que falta es una **columna**: el Anexo I publica **cuatro** tablas, una por uso de la edificación
+(§1), y `depreciacion` tiene `(material, estado_conservacion, antiguedad_hasta)` sin ninguna
+columna de uso. Cargar las cuatro hoy dejaría que `depreciacion_uq` se quedara con la primera y
+descartara las otras tres en silencio, que es depreciar una oficina con el porcentaje de una
+vivienda. Y no se arregla con cuatro ediciones: una determinación necesita las cuatro a la vez.
+`PublicarCuadros` rechaza este cuadro nombrando el motivo (GOB-03, H-15).
 
 ## 3. Qué no cabe hoy
 

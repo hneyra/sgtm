@@ -35,8 +35,9 @@ Los tipos del dominio se declaran como `DOMAIN` de PostgreSQL —`dinero`, `alic
   tablas padre— está en [ARQ-03 §3.5](../estrategia-multitenant.md).
 - Una partición nueva por ejercicio es una migración anual. Está previsto automatizarla, pero
   **la migración manual es preferible a un `GRANT` amplio** que la alcance sin querer.
-- La escala y el redondeo de `dinero` (`numeric(15,2)` provisional) siguen pendientes: **D-03**.
-  Ninguna regla de cálculo debe escribirse antes de cerrarla.
+- La escala y el redondeo de `dinero` (`numeric(15,2)`) quedaron decididos el 2026-08-28:
+  escala ratificada y `HALF_UP` ([ADR-0018](ADR-0018-el-redondeo-decidido.md), que cerró
+  D-03a/b/c; el del cierre de caja sigue abierto como D-03d).
 
 ## Alternativas consideradas
 

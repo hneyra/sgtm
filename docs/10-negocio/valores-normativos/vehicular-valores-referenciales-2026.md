@@ -11,15 +11,16 @@
 | Verificó | HNA, 2026-08-28 |
 | Estado | VERIFICADO |
 
-> **Por qué este archivo vuelve a `TRANSCRITO`.** El 2026-08-25 HNA verificó el archivo tal como
-> estaba entonces, cuando el anexo de la R.M. N.° 008-2026-EF/15 **no se había podido leer** y la
-> sección 1.2 solo describía su estructura por analogía con el ejercicio anterior. El 2026-08-28 se
-> leyeron los tres PDF oficiales —los dos del anexo y el de la propia resolución— y se añadió lo que
-> se vio en ellos (§1.2, §1.3 y §1.4, y la reescritura de §3). **Esa adición no la ha verificado
-> nadie todavía**, y el corpus no admite que
-> quien transcribe se verifique a sí mismo (ADR-0007): el estado baja a `TRANSCRITO` y `Verificó`
-> vuelve a `—` hasta que una segunda persona vuelva a la fuente y re-firme. La verificación de HNA
-> del 2026-08-25 sigue en el historial de git, sobre el contenido que entonces tenía el archivo.
+> **Historial de la verificación.** Este archivo se verificó dos veces, y la primera no cubría lo
+> que hoy contiene. El 2026-08-25 HNA verificó el archivo tal como estaba entonces, cuando el
+> anexo de la R.M. N.° 008-2026-EF/15 **no se había podido leer** y la sección 1.2 solo describía
+> su estructura por analogía con el ejercicio anterior. El 2026-08-28 se leyeron los tres PDF
+> oficiales —los dos del anexo y el de la propia resolución— y se añadió lo que se vio en ellos
+> (§1.2, §1.3 y §1.4, y la reescritura de §3); como el corpus no admite que quien transcribe se
+> verifique a sí mismo (ADR-0007), el estado bajó ese día a `TRANSCRITO` con `Verificó` en `—`.
+> **Ese mismo 2026-08-28 HNA volvió a la fuente y re-firmó sobre el contenido ampliado**, que es
+> la verificación que la cabecera registra; las dos quedan en el historial de git, cada una sobre
+> el contenido que el archivo tenía al firmarse.
 
 ## 1. La tabla tal como está en la norma
 
@@ -333,7 +334,14 @@ usa el anexo; no se transcribe de fuentes secundarias›`.
 | Ámbito | nacional |
 | Vigencia | Alícuota y años de afectación: 2004–, sin modificación conocida. Tabla de valores referenciales, tipo de cambio y equivalencias de marcas: 2026 únicamente — cada ejercicio tiene su propia resolución y su propio anexo, y no se derogan entre sí (conviven, versionadas por vigencia, igual que la UIT) |
 
-**No se carga con este archivo.** La carga depende de D-13.
+**No se carga con este archivo, sino con su anexo.** D-13 se cerró el 2026-08-28
+([ADR-0017](../../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md)) y esta tabla es
+un catálogo nacional. La carga la hace `PublicarCuadros` desde
+[`publicacion/cuadros-2026.csv`](publicacion/cuadros-2026.csv), que declara la edición —esta norma,
+estas dos firmas— y nombra [`fuentes/tvr-2026/tvr-2026.csv`](fuentes/tvr-2026/tvr-2026.csv) con su
+sha256. Ese sha256 se recalcula antes de publicar una sola fila. **Las 18 043 líneas del anexo
+entran como 54 111 filas** —una por año de fabricación—; los 18 rechazos son seis líneas que el
+propio anexo repite idénticas.
 
 ## 3. Qué no cabe hoy
 
@@ -354,7 +362,9 @@ usa el anexo; no se transcribe de fuentes secundarias›`.
      de una lectura— no es una transcripción confiable, y un valor referencial equivocado se
      convierte en base imponible equivocada de un padrón entero. Esa carga exige el PDF con sus
      bytes exactos y una herramienta **mecánica** de extracción de tablas, con la salida comparada
-     contra la fuente; y de todos modos espera a **D-13**, como todo lo de este directorio.
+     contra la fuente. **Eso es exactamente lo que hoy existe** (#188): `extraer_tvr.py` produce
+     `fuentes/tvr-2026/tvr-2026.csv` con dos métodos independientes por fila, su sha256 está
+     firmado aquí, y `PublicarCuadros` lo vuelve a calcular antes de publicar una sola fila.
 - La regla de depreciación por antigüedad **ya no está pendiente**: para el ejercicio 2026 no vive
   en el anexo sino en el artículo 2 de la propia resolución, transcrito literal en §1.4.2 — con la
   corrección de que el factor multiplica el valor del **año 2025**, no «el del año base» como este

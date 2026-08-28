@@ -57,7 +57,7 @@ Tribunal Constitucional sobre espectáculos taurinos):
 | Ámbito | nacional |
 | Vigencia | 2007–, desde la sustitución del artículo 57 por la Ley 29168, sin modificación posterior conocida a la fecha de esta transcripción |
 
-**No se carga con este archivo.** La carga depende de D-13.
+**No se carga con este archivo.** Se carga con el derivado de [`publicacion/`](publicacion/), que es lo que `PublicarParametros` lee (#188); este archivo es su fuente, no su entrada. D-13 se cerró el 2026-08-28 y ya no bloquea nada.
 
 ## 3. Qué no cabe hoy
 

@@ -97,6 +97,11 @@ test('desde el nivel raíz se entra a un módulo y se vuelve', async ({ page }) 
 test('la paleta de comandos también llega a cualquier módulo', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.sgtm-nav')).toBeVisible();
+  /* La barra ya se ve, pero la sesion y el catalogo visible pueden seguir
+     resolviendo su primera peticion (#342, nit 1): con cache de Vite fria esa
+     ronda tarda mas, y el atajo puede llegar antes de que el oyente de
+     `keydown` de `Shell` este activo. Se espera a la causa, no al sintoma. */
+  await page.waitForLoadState('networkidle');
   await page.keyboard.press('Control+k');
 
   const paleta = page.getByRole('dialog', { name: 'Buscar en el sistema' });

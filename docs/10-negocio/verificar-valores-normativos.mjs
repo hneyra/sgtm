@@ -10,9 +10,11 @@
         entonces nadie pueda volver a la fuente;
      3. que un archivo diga cerrar una fila del mapa de NEG-02 §2 que no existe, o
         que ya cerro otro. Se comprueba en las dos direcciones, como el mapa;
-     4. que una cifra acabe cargada en la base. Cargar depende de D-13, no de que
-        el archivo exista: un INSERT de valores normativos en una migracion pone
-        esto en rojo.
+     4. que una cifra acabe cargada en la base POR UNA MIGRACION. Cargar es un acto
+        del proceso batch de publicacion, con la credencial de rol_carga_parametros
+        y el derivado del corpus delante (#188, ADR-0017); un INSERT de valores
+        normativos en una migracion pone esto en rojo, y sigue poniendolo despues de
+        cerrar D-13: lo que cambio es quien carga, no que una migracion pueda.
 
    Y un libro mayor: cuantas filas del mapa siguen sin archivo, por parte. Bajar
    el numero de D-02a es el progreso de #200; subirlo sin querer se ve.
@@ -289,8 +291,9 @@ for (const migracion of sqls.sort()) {
     const inserta = new RegExp(`insert\\s+into\\s+${tabla}\\b`, 'i');
     if (inserta.test(sql)) {
       señalar(
-        `${migracion}: carga valores en «${tabla}». Transcribir es E-3; cargar depende de D-13` +
-          ' (hallazgo H-5), y una cifra normativa no entra por una migración.',
+        `${migracion}: carga valores en «${tabla}». Transcribir es E-3; cargar es el proceso` +
+          ' batch de publicación (#188, ADR-0017), con `rol_carga_parametros` y el derivado del' +
+          ' corpus delante. Una cifra normativa no entra por una migración.',
       );
     }
   }

@@ -35,7 +35,6 @@ import pe.gob.sgtm.catastro.dominio.Partida;
 import pe.gob.sgtm.catastro.dominio.ValorUnitarioEdificacion;
 import pe.gob.sgtm.catastro.infraestructura.ValuacionRepositoryJdbc;
 import pe.gob.sgtm.compartido.TenantContext;
-import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
@@ -208,23 +207,12 @@ class TablasDeValuacionTest {
     }
 
     @Test
-    @DisplayName("valores unitarios y depreciacion tambien salen del conjunto vigente")
-    void valoresUnitariosYDepreciacionSalenDelConjunto() {
+    @DisplayName("los cuadros nacionales salen de la edicion que el conjunto compuso (D-13)")
+    void valoresUnitariosYDepreciacionSalenDeLaEdicionCompuesta() throws SQLException {
+        long edicion = publicarEdicionNacional("VUE-DE-LA-PRUEBA");
+        componerEnElConjunto(conjuntoAbierto, edicion);
+
         IdentificadorDeConjunto conjunto = IdentificadorDeConjunto.de(conjuntoAbierto);
-
-        tablas.cargarValorUnitario(
-                ValorUnitarioEdificacion.nuevo(
-                        Partida.MUROS, 'C', 2000, null, new ValorNormativo(VALOR_V1), "resolucion"),
-                conjunto,
-                OBSERVACION);
-        tablas.cargarDepreciacion(
-                Depreciacion.nueva("CONCRETO", "BUENO", 10, Alicuota.de("5"), "resolucion"),
-                conjunto,
-                OBSERVACION);
-
-        // El conjunto abierto no tiene por que ser el vigente de EJERCICIO todavia —solo lo
-        // sellado cuenta—, asi que se lee directamente por identificador, como haria un
-        // recalculo.
         List<ValorUnitarioEdificacion> valoresUnitarios =
                 transacciones.execute(estado -> repositorio.valoresUnitariosDe(conjunto));
         assertThat(valoresUnitarios)
@@ -238,6 +226,61 @@ class TablasDeValuacionTest {
                 .singleElement()
                 .extracting(Depreciacion::material)
                 .isEqualTo("CONCRETO");
+    }
+
+    @Test
+    @DisplayName("el conjunto que no compuso la edicion no ve el cuadro, aunque este publicado")
+    void unConjuntoQueNoLaCompusoNoVeLaEdicion() throws SQLException {
+        // La edicion existe, es nacional y esta publicada: cualquiera la puede leer si la nombra.
+        // Lo que decide si entra en una determinacion NO es que exista, es que el conjunto la haya
+        // compuesto —y el sellado congela esa composicion—. Sin esta prueba, un JOIN escrito de
+        // mas devolveria toda edicion publicada a todo conjunto, y la reproducibilidad de ARQ-09 §3
+        // se perderia sin que ninguna cifra pareciera mal.
+        publicarEdicionNacional("VUE-QUE-NADIE-COMPUSO");
+
+        IdentificadorDeConjunto sinComponer = IdentificadorDeConjunto.de(conjuntoV1);
+        List<ValorUnitarioEdificacion> valoresUnitarios =
+                transacciones.execute(estado -> repositorio.valoresUnitariosDe(sinComponer));
+        List<Depreciacion> depreciaciones =
+                transacciones.execute(estado -> repositorio.depreciacionesDe(sinComponer));
+
+        assertThat(valoresUnitarios).isEmpty();
+        assertThat(depreciaciones).isEmpty();
+    }
+
+    @Test
+    @DisplayName("una edicion sellada no admite una fila mas: corregir es publicar otra")
+    void unaEdicionSelladaNoAdmiteUnaFilaMas() throws SQLException {
+        long edicion = publicarEdicionNacional("VUE-QUE-SE-CIERRA");
+        sellarEdicion(edicion);
+
+        assertThatThrownBy(() -> agregarValorUnitario(edicion, 'D'))
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("sellada");
+    }
+
+    @Test
+    @DisplayName("la aplicacion no puede escribir un cuadro nacional: solo lo lee")
+    void laAplicacionNoEscribeElCuadroNacional() throws SQLException {
+        long edicion = publicarEdicionNacional("VUE-QUE-LA-APP-INTENTA");
+
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO valor_unitario_edificacion (publicacion_id, partida,"
+                                    + " categoria, anio_construccion_desde, valor_m2,"
+                                    + " documento_fuente)"
+                                    + " VALUES (?, 'TECHOS', 'A', 2000, 1.000000, 'de la app')")) {
+                sentencia.setLong(1, edicion);
+                // 42501 = insufficient_privilege. Se compara el SQLSTATE y no el texto porque el
+                // texto depende del idioma del servidor.
+                assertThatThrownBy(sentencia::executeUpdate)
+                        .isInstanceOfSatisfying(
+                                SQLException.class,
+                                error -> assertThat(error.getSQLState()).isEqualTo("42501"));
+            }
+        }
     }
 
     /**
@@ -255,6 +298,99 @@ class TablasDeValuacionTest {
                                 .map(Arancel::valorM2)
                                 .map(ValorNormativo::valor)
                                 .orElseThrow());
+    }
+
+    /**
+     * Publica una edicion nacional —su cabecera en {@code parametro_tributario} y una fila de cada
+     * cuadro— como {@code rol_carga_parametros}, que es la unica credencial que puede.
+     *
+     * <p>Sin contexto de municipalidad, y no por comodidad: no hay ninguna que fijar. La politica
+     * de lectura de estas tablas usa la forma de dos argumentos de {@code current_setting}
+     * justamente para que la carga de un catalogo nacional pueda correr asi (V55).
+     */
+    private static long publicarEdicionNacional(String clave) throws SQLException {
+        try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS)) {
+            long edicion;
+            try (PreparedStatement sentencia =
+                    carga.prepareStatement(
+                            "INSERT INTO parametro_tributario (municipalidad_id, tipo, clave,"
+                                    + " valor_texto, vigencia_desde, documento_fuente, usuario_carga,"
+                                    + " usuario_aprueba)"
+                                    + " VALUES (NULL, 'PRUEBA_EDICION', ?, 'edicion de prueba',"
+                                    + " '2026-01-01', 'tabla de la prueba, sin valor normativo',"
+                                    + " 'quien transcribe', 'quien verifica') RETURNING id")) {
+                sentencia.setString(1, clave);
+                try (ResultSet fila = sentencia.executeQuery()) {
+                    fila.next();
+                    edicion = fila.getLong(1);
+                }
+            }
+            carga.commit();
+            agregarValorUnitario(edicion, 'C');
+            agregarDepreciacion(edicion);
+            return edicion;
+        }
+    }
+
+    private static void agregarValorUnitario(long edicion, char categoria) throws SQLException {
+        try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS);
+                PreparedStatement sentencia =
+                        carga.prepareStatement(
+                                "INSERT INTO valor_unitario_edificacion (publicacion_id, partida,"
+                                        + " categoria, anio_construccion_desde, valor_m2,"
+                                        + " documento_fuente)"
+                                        + " VALUES (?, 'MUROS', ?, 2000, ?, 'tabla de la prueba, sin"
+                                        + " valor normativo')")) {
+            sentencia.setLong(1, edicion);
+            sentencia.setString(2, String.valueOf(categoria));
+            sentencia.setBigDecimal(3, VALOR_V1);
+            sentencia.executeUpdate();
+            carga.commit();
+        }
+    }
+
+    private static void agregarDepreciacion(long edicion) throws SQLException {
+        try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS);
+                PreparedStatement sentencia =
+                        carga.prepareStatement(
+                                "INSERT INTO depreciacion (publicacion_id, material,"
+                                        + " estado_conservacion, antiguedad_hasta, porcentaje,"
+                                        + " documento_fuente)"
+                                        + " VALUES (?, 'CONCRETO', 'BUENO', 10, 1.0000, 'tabla de la"
+                                        + " prueba, sin valor normativo')")) {
+            sentencia.setLong(1, edicion);
+            sentencia.executeUpdate();
+            carga.commit();
+        }
+    }
+
+    /** Cerrar la edicion es lo que hace el proceso de carga cuando termina de publicarla. */
+    private static void sellarEdicion(long edicion) throws SQLException {
+        try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS);
+                PreparedStatement sentencia =
+                        carga.prepareStatement(
+                                "UPDATE parametro_tributario SET sellado = true WHERE id = ?")) {
+            sentencia.setLong(1, edicion);
+            sentencia.executeUpdate();
+            carga.commit();
+        }
+    }
+
+    /** La composicion: la misma fila de detalle con la que un conjunto compone la UIT. */
+    private static void componerEnElConjunto(long conjunto, long edicion) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO conjunto_parametro_detalle (municipalidad_id, conjunto_id,"
+                                    + " parametro_id) VALUES (?, ?, ?)")) {
+                sentencia.setLong(1, municipalidad);
+                sentencia.setLong(2, conjunto);
+                sentencia.setLong(3, edicion);
+                sentencia.executeUpdate();
+            }
+            app.commit();
+        }
     }
 
     private static long crearMunicipalidad() throws SQLException {

@@ -65,8 +65,8 @@ urbano. Toda escritura exige la observación del usuario (RNF-052) y deja audito
 `aranceles`, `valores_unitarios` y `depreciacion` siguen **de solo lectura**, y no por olvido:
 el arancel se carga por lote contra un conjunto de parámetros que alguien abre y sella
 (`AdministrarParametros.abrirVersion` + `ImportarArancel`), no fila a fila desde una pantalla;
-y las otras dos esperan **D-13** —el ámbito del dato de norma nacional— antes de que se decida
-quién las escribe.
+y las otras dos son catálogos nacionales desde ADR-0017, que además dice quién las escribe:
+el proceso batch de publicación, nunca una pantalla.
 
 | id | Opción | Bloque | Endpoint |
 |---|---|---|---|

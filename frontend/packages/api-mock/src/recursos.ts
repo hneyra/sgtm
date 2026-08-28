@@ -25,6 +25,11 @@ import { RESPUESTAS } from './respuestas.generado';
  * que tienen controlador: la ficha unificada de un contribuyente, el resumen
  * predial y la consulta de valores emitidos (#25), y con #72 la ultima de
  * Consultas: la simulacion del acogimiento a una campana de beneficio (RF-107).
+ * Desde #363 se suman las tres pestanas de la ficha 360° que la componian por
+ * el camino comun sin declarar conexion: las papeletas de transito (#46), el
+ * estado de cuenta de papeleta administrativa (#47) y los expedientes
+ * coactivos (#40) — las tres con `Controller` desde antes de #363, y sin
+ * conectar solo por la propia interfaz.
  * **Esta lista crece cuando crece aquella**, no antes: publicar aqui
  * una forma que el backend todavia no sirve seria inventarsela.
  *
@@ -1325,6 +1330,173 @@ const respaldo = (): Paginado =>
     },
   ]);
 
+/* ── Papeletas: transito e infracciones administrativas ──────────────────── */
+
+/**
+ * Como escribe el prototipo el estado de una papeleta de transito, frente al
+ * `enum EstadoDePapeleta` (V4) que `PapeletaResource.estado` publica de
+ * verdad: `IMPUESTA`, `NOTIFICADA`, `RESUELTA`, `PAGADA`, `COACTIVA`,
+ * `ANULADA`, `PRESCRITA`. «Pendiente», «Con descargo» y compania son
+ * etiquetas del catalogo del prototipo, no del enum (#363).
+ */
+const ESTADO_DE_PAPELETA_DEL_MOCK: Readonly<Record<string, string>> = {
+  Pendiente: 'IMPUESTA',
+  'Con descargo': 'RESUELTA',
+  Pagada: 'PAGADA',
+  Coactiva: 'COACTIVA',
+};
+
+/**
+ * Papeletas de infraccion de transito (`PapeletaResource`, familia
+ * `TRANSITO`, #46, #363).
+ *
+ * El recurso real no publica ni el nombre del infractor —solo `infractorId`—
+ * ni el codigo de infraccion ni una gravedad: son columnas que el prototipo
+ * dibuja y `Papeleta` no modela. Aqui tampoco se inventan; lo que se llena
+ * son exactamente los campos que el `Resource` tiene, con el mismo valor que
+ * ya dibuja el catalogo portado.
+ */
+const papeletasTransito = (): Paginado =>
+  unaPagina(
+    filasDe('papeletas').map(([numero, fecha, placa, , , , multaS, estado], i) => ({
+      id: i + 1,
+      familia: 'TRANSITO',
+      numero,
+      fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+      horaInfraccion: null,
+      lugar: 'VÍA PÚBLICA',
+      placa,
+      vehiculoId: i + 1,
+      licenciaConducir: null,
+      infractorId: i + 1,
+      propietarioId: null,
+      contribuyenteId: null,
+      predioId: null,
+      notificacionPreviaId: null,
+      baseImponible: '5350.00',
+      porcentajeInfraccion: '0.10',
+      importeInfraccion: comoImporte(multaS ?? '0.00'),
+      porcentajeACobrar: '0.10',
+      importeAPagar: comoImporte(multaS ?? '0.00'),
+      importeConBeneficio: null,
+      estado: ESTADO_DE_PAPELETA_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',
+      usuarioRegistro: 'admin',
+    })),
+  );
+
+/**
+ * Estado de cuenta de papeleta administrativa (`PapeletaResource`, familia
+ * `ADMINISTRATIVA`, #47, #363).
+ *
+ * `EstadoDeCuentaAdministrativoController` sirve el mismo `PapeletaResource`
+ * que `papeletasTransito`, no una fila por concepto de la deuda: el
+ * prototipo dibuja «Concepto» y «Beneficio por pronto pago» como si fueran
+ * dos lineas de un desglose, y el recurso real es una fila por papeleta. Se
+ * toma la unica papeleta que el prototipo nombra (`campos.papeleta`), con
+ * `importeAPagar` leido de la primera fila del prototipo — la segunda, el
+ * descuento, no tiene con que llenar `importeConBeneficio` sin inventar un
+ * porcentaje que el prototipo no publica como dato aparte, asi que se deja
+ * `null`.
+ */
+const adminEstadoCuenta = (): Paginado => {
+  const campos = RESPUESTAS['adm_estado_cuenta']?.campos ?? {};
+  const numero = typeof campos['papeleta'] === 'string' ? campos['papeleta'] : 'P-000000';
+  const [primera] = RESPUESTAS['adm_estado_cuenta']?.tabla?.filas ?? [];
+  const fecha = primera?.[2]?.texto ?? '';
+  const insoluto = primera?.[3]?.texto ?? '0.00';
+  return unaPagina([
+    {
+      id: 1,
+      familia: 'ADMINISTRATIVA',
+      numero,
+      fechaInfraccion: fechaDe(fecha) ?? EL_DIA_DEL_PROTOTIPO,
+      horaInfraccion: null,
+      lugar: 'INSPECCIÓN MUNICIPAL',
+      placa: null,
+      vehiculoId: null,
+      licenciaConducir: null,
+      infractorId: null,
+      propietarioId: null,
+      contribuyenteId: 1,
+      predioId: null,
+      notificacionPreviaId: null,
+      baseImponible: '5350.00',
+      porcentajeInfraccion: '0.50',
+      importeInfraccion: comoImporte(insoluto),
+      porcentajeACobrar: '0.50',
+      importeAPagar: comoImporte(insoluto),
+      importeConBeneficio: null,
+      estado: 'IMPUESTA',
+      usuarioRegistro: 'admin',
+    },
+  ]);
+};
+
+/* ── Coactiva: expedientes ─────────────────────────────────────────────── */
+
+/**
+ * Como escribe el prototipo el estado de un expediente coactivo, frente a la
+ * etiqueta real de `EstadoDelExpediente` (V33): «Con medida» → `MEDIDA
+ * CAUTELAR`, «Iniciado» → `INICIADO`, «Concluido» → `CONCLUIDO` (#363).
+ */
+const ESTADO_DE_EXPEDIENTE_DEL_MOCK: Readonly<Record<string, string>> = {
+  'Con medida': 'MEDIDA CAUTELAR',
+  Iniciado: 'INICIADO',
+  Concluido: 'CONCLUIDO',
+};
+
+/**
+ * Expedientes coactivos (`ExpedienteResource`, #40, #363).
+ *
+ * `Contribuyente` sale de `codContribuyente`, que en el recurso real es el
+ * **codigo** del obligado (`ExpedienteController.codigoDe`) y no su nombre:
+ * el prototipo dibuja el nombre en esa columna, y aqui no se inventa un
+ * codigo — se guarda el mismo texto que trae el prototipo, tal como haria un
+ * codigo de contribuyente cualquiera, sin fingir que es uno de verdad.
+ *
+ * `insoluto`, `reajuste`, `interes`, `gastos` y `totalExigible` no los
+ * dibuja la grilla («Deuda S/» es `deudaMateriaDeCobranza` y «Costas S/» es
+ * `costas`, las dos columnas que si estan en el prototipo): se rellenan sin
+ * inventar un reparto, con el mismo criterio que ya usa
+ * `constanciaDeNoAdeudo` para las cifras que su recurso no distingue.
+ */
+const coactivaExpedientes = (): Paginado =>
+  unaPagina(
+    filasDe('coactiva_expedientes').map(
+      ([numero, contribuyente, valores, deudaS, costasS, , estado], i) => {
+        const partes = (numero ?? '').split('-');
+        const ejercicio = Number(partes[1]) || new Date().getFullYear();
+        const correlativo = Number(partes[2]) || i + 1;
+        const deuda = comoImporte(deudaS ?? '0.00');
+        const costas = comoImporte(costasS ?? '0.00');
+        return {
+          numero,
+          ejercicio,
+          correlativo,
+          codContribuyente: contribuyente,
+          ejecutor: 'R. MENDOZA CRUZ',
+          auxiliar: null,
+          fechaDeApertura: EL_DIA_DEL_PROTOTIPO,
+          asunto: null,
+          direccionReferencial: null,
+          estado: ESTADO_DE_EXPEDIENTE_DEL_MOCK[estado ?? ''] ?? 'INICIADO',
+          estadoCodigo: '000',
+          valores: Number(valores) || 0,
+          insoluto: deuda,
+          reajuste: '0.00',
+          interes: '0.00',
+          gastos: '0.00',
+          deudaMateriaDeCobranza: deuda,
+          costas,
+          totalExigible: deuda,
+          deudaAlDia: EL_DIA_DEL_PROTOTIPO,
+          valoresImportados: [],
+          historial: [],
+        };
+      },
+    ),
+  );
+
 /** Por camino del contrato, relativo a `/api/v1`. Casi todas son `GET`: ver `respaldo`. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/catastro/vias': vias,
@@ -1349,6 +1521,9 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/seguridad/auditoria': auditoria,
   '/seguridad/parametros': parametros,
   '/seguridad/respaldos': respaldo,
+  '/transito/papeletas': papeletasTransito,
+  '/infracciones/administrativas/estado-cuenta': adminEstadoCuenta,
+  '/coactiva/expedientes': coactivaExpedientes,
 };
 
 /**

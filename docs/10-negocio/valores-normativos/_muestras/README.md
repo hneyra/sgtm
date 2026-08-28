@@ -19,7 +19,7 @@ pueda confundirse jamás con un valor transcrito.
 | `fila-reclamada-dos-veces` | Dos archivos cierran la misma fila |
 | `sin-la-seccion-de-que-no-cabe` | Le falta una de las tres secciones fijas |
 | `cabecera-incompleta` | Le falta un campo obligatorio |
-| `carga-en-la-base` | Una migración con `INSERT INTO parametro_tributario`. Cargar es D-13, no E-3 |
+| `carga-en-la-base` | Una migración con `INSERT INTO parametro_tributario`. Cargar es el proceso batch de publicación, nunca una migración, y no es E-3 |
 | `en-regla` | **Nada.** Va al revés: tiene que pasar |
 
 `en-regla` es la que impide el fallo contrario. Sin ella, una comprobación que rechazara todo pasaría

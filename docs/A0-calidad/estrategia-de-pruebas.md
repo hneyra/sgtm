@@ -44,7 +44,8 @@ por verificado lo que nadie verificó.
 Sin base de datos, sin reloj, sin Spring. Los parámetros entran como argumento y se congelan en el
 caso de prueba, de modo que recalcular el ejercicio 2027 en 2037 da el mismo céntimo.
 
-**Todavía no existen**: la primera regla de cálculo está bloqueada por D-02 y D-03.
+**Todavía no existen**: la primera regla de cálculo está bloqueada por D-11 y por las partes
+locales de D-02 (D-02a está firmada y el redondeo decidido, ADR-0018).
 
 ### 3.2 Persistencia — PostgreSQL real
 
