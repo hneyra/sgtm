@@ -89,6 +89,16 @@ describe('la politica de cache cubre las dos aplicaciones', () => {
     expect(BLOQUES.length).toBeGreaterThanOrEqual(4);
   });
 
+  it('y todos viven en el unico server del archivo', () => {
+    // La simulacion aplana los `location` sin mirar en que `server` estan: con
+    // un segundo `server { listen 8081; }` sirviendo `/portal/` sin ninguna
+    // politica de cache, las pruebas de abajo seguirian en verde leyendo los
+    // `location` del primero. Mientras el archivo tenga un solo `server`, el
+    // aplanado es fiel; el dia que haga falta un segundo, esta linea obliga a
+    // ensenarle a la simulacion a distinguirlos.
+    expect(NGINX.match(/^\s*server\s*\{/gm)).toHaveLength(1);
+  });
+
   it.each([
     ['el back-office', '/assets/index-C3fkxU7l.js'],
     ['el portal', '/portal/assets/index-C3fkxU7l.js'],

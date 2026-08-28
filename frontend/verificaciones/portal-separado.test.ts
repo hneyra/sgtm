@@ -207,15 +207,58 @@ describe('del portal no se escribe', () => {
   });
 
   it('y no lleva dentro el mapa de las 169 operaciones', () => {
-    /* `pedirOperacion` resuelve la ruta leyendo `OPERACIONES`, asi que basta una
-       llamada para que el inventario completo de la API —84 rutas de escritura
-       entre ellas— viaje en el paquete de la aplicacion destinada a ser publica
-       (~3 KB comprimidos, y el mapa de donde esta cada cosa). Se pide con
-       `solicitar()` y la tabla de dos entradas de `lecturas.ts`. */
-    const prohibidos = /\b(pedirOperacion|enviarOperacion|descargarOperacion|OPERACIONES)\b/;
-    const culpables = DE_PRODUCCION.filter(({ codigo }) => prohibidos.test(codigo)).map(
-      ({ archivo }) => archivo,
-    );
+    /* **Lista blanca, no lista negra.** La primera version prohibia cuatro
+       nombres (`pedirOperacion`, `enviarOperacion`, `descargarOperacion`,
+       `OPERACIONES`) y dejaba pasar los otros cinco exportados de
+       `@sgtm/api-client` que leen el mismo mapa —`pedirDatosDePantalla`,
+       `rutaDeOperacion`, `consultaDeOperacion`, `descriptorDe`, `escribe`—:
+       una llamada viva a `pedirDatosDePantalla('portal', …)` subia el arranque
+       de 80,9 a 85,3 KB, metia `/coactiva/prescripcion` en el paquete del
+       ciudadano y sacaba una peticion a `/portal/deuda`, con las once pruebas
+       de este archivo en verde. Lo unico que la cazaba era el presupuesto, por
+       3,1 KB de margen y en otro comando. Por eso aqui se enumera lo que el
+       portal y sus paquetes SI pueden importar de `@sgtm/api-client` —lo mismo
+       que ya hace «solo consume los paquetes compartidos», un nivel mas
+       abajo—. Los `import type` se permiten enteros: se borran al compilar y
+       no pueden arrastrar el mapa. */
+    const PERMITIDOS = new Set([
+      // El portal: pedir por la tabla de `lecturas.ts`, y distinguir el 403.
+      'solicitar',
+      'ProblemaDeApi',
+      // `@sgtm/sesion`: el ciclo de la sesion, que no toca `OPERACIONES`.
+      'canjearSiVuelve',
+      'cerrarSesion',
+      'configuracionDeIdentidad',
+      'configurarRenovacion',
+      'irAAutenticar',
+      'leerToken',
+      'renovar',
+    ]);
+
+    const culpables: string[] = [];
+    for (const { archivo, codigo } of TODO_DE_PRODUCCION) {
+      // Una clausula por sentencia: llaves, `* as` o un default — nunca
+      // `[\s\S]*?` suelto, que cruzaba sentencias y acusaba al import de React.
+      for (const [, clausula] of codigo.matchAll(
+        /import\s+((?:type\s+)?(?:\{[^}]*\}|\*\s+as\s+\w+|\w+))\s+from\s+'@sgtm\/api-client'/g,
+      )) {
+        const importado = (clausula ?? '').trim();
+        // `import type { … }` entero: borrado por el compilador.
+        if (/^type\b/.test(importado)) continue;
+        const nombres = /^\{([\s\S]*)\}$/.exec(importado)?.[1];
+        if (nombres === undefined) {
+          // `import * as api` o un default: darian acceso al mapa entero.
+          culpables.push(`${archivo}: import no nominal de @sgtm/api-client`);
+          continue;
+        }
+        for (const crudo of nombres.split(',')) {
+          const nombre = crudo.trim();
+          if (nombre === '' || nombre.startsWith('type ')) continue;
+          const sinAlias = nombre.split(/\s+as\s+/)[0] ?? nombre;
+          if (!PERMITIDOS.has(sinAlias)) culpables.push(`${archivo}: ${sinAlias}`);
+        }
+      }
+    }
 
     expect(culpables).toEqual([]);
   });

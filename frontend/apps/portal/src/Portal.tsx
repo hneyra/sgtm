@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Aviso, Boton, Esqueleto, FechaDeCalculo, Insignia } from '@sgtm/design-system';
 import { ProblemaDeApi, solicitar } from '@sgtm/api-client';
-import type { Celda } from '@sgtm/api-client';
+import type { Celda, ParametrosDe } from '@sgtm/api-client';
 import {
   ESTADO_DE_LA_CONSULTA,
   REJILLAS_DE_LA_UNIFICADA,
@@ -229,8 +229,14 @@ function useConsultaUnificada(codigo: string) {
     enabled: codigo !== '',
     retry: 1,
     queryFn: async ({ signal }) => {
+      /* El filtro va tipado contra el contrato: al irse `pedirOperacion` (#298)
+         se fue con el la unica comprobacion, y un renombre de `contribuyente`
+         en el contrato dejaba al portal compilando —y preguntando con un
+         parametro que el backend ya no declara—. Con el tipo puesto, ese
+         renombre es un error de `tsc` aqui, no una ficha ajena en pantalla. */
+      const consulta: ParametrosDe<'consulta_unificada'> = { contribuyente: codigo };
       const cuerpo = await solicitar<unknown>(LECTURAS.consulta_unificada, {
-        consulta: { contribuyente: codigo },
+        consulta,
         senal: signal,
       });
       return leerObjeto(cuerpo, 'la consulta unificada');
@@ -243,6 +249,15 @@ type ConsultaUnificada = ReturnType<typeof useConsultaUnificada>;
 
 function anuncioDe(identidad: ConsultaDelPadron, unificada: ConsultaUnificada): string {
   if (identidad.isFetching || unificada.isFetching) return 'Consultando…';
+  /* El 403 no es «vuelve a intentarlo»: el aviso dibujado ya lo distingue, y la
+     region viva tiene que decir lo mismo — anunciar «no se pudo hacer» sobre un
+     rechazo invita a reintentar lo que va a dar lo mismo (el patron de #331). */
+  if (esRechazo(identidad.error) || esRechazo(unificada.error)) {
+    return 'El servidor rechazó la consulta; reintentar dará lo mismo';
+  }
+  /* El 403 no es «vuelve a intentarlo»: el aviso dibujado ya lo distingue, y la
+     region viva tiene que decir lo mismo — anunciar «no se pudo hacer» sobre un
+     rechazo invita a reintentar lo que va a dar lo mismo (el patron de #331). */
   if (hayFallo(identidad.error) || hayFallo(unificada.error)) return 'La consulta no se pudo hacer';
   if (identidad.data === undefined) return '';
   if (identidad.data.identidad === undefined) {
@@ -254,6 +269,9 @@ function anuncioDe(identidad: ConsultaDelPadron, unificada: ConsultaUnificada): 
 }
 
 const hayFallo = (error: unknown): boolean => error !== undefined && error !== null;
+
+const esRechazo = (error: unknown): boolean =>
+  error instanceof ProblemaDeApi && error.problema.status === 403;
 
 /* ── Lo que se ve al consultar ─────────────────────────────────────────── */
 

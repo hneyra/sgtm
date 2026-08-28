@@ -232,6 +232,21 @@ describe('se consulta con lo que el contrato publica', () => {
     await userEvent.setup().type(screen.getByLabelText('Número de documento'), DNI);
     expect(screen.getByRole('button', { name: 'Consultar' })).toBeEnabled();
   });
+
+  it('la primaria apagada dice por que, y de forma programatica', () => {
+    // El motivo esta en la ayuda del campo y `aria-describedby` lo asocia al
+    // boton (el patron de #332). Sin esta prueba, quitar el atributo dejaba
+    // las 21 del archivo en verde: existia y funcionaba, pero no lo exigia
+    // nadie.
+    montar();
+
+    const boton = screen.getByRole('button', { name: 'Consultar' });
+    expect(boton).toBeDisabled();
+    const descriptor = boton.getAttribute('aria-describedby');
+    expect(descriptor).not.toBeNull();
+    const ayuda = document.getElementById(descriptor ?? '');
+    expect(ayuda?.textContent ?? '').not.toBe('');
+  });
 });
 
 describe('lo que se ve al consultar', () => {
@@ -331,6 +346,39 @@ describe('lo que no se encuentra no se dice como «no existe»', () => {
     montar();
 
     expect(screen.queryByRole('region', { name: 'Resultado de la consulta' })).toBeNull();
+  });
+
+  it('en un 403 la region viva no invita a reintentar', async () => {
+    /* El aviso dibujado ya distinguia el rechazo («Reintentar dará lo mismo»),
+       pero `role=status` anunciaba «La consulta no se pudo hacer» —la frase del
+       error reintentable—. Quien consulta con lector de pantalla oia lo
+       contrario de lo que el aviso decia (el patron que #331 ya pago). */
+    const espia = interceptar((url) =>
+      url.pathname === '/api/v1/consultas/unificada'
+        ? new Response(JSON.stringify({ title: 'Acceso denegado', status: 403 }), {
+            status: 403,
+            headers: { 'content-type': 'application/problem+json' },
+          })
+        : undefined,
+    );
+
+    try {
+      montar();
+      await consultar('DNI', DNI);
+
+      expect(
+        // El hook reintenta una vez (`retry: 1`) y el reintento corre por
+        // detras del tope por defecto: mismo trato que en la ficha 360°.
+        await screen.findByText(
+          'El servidor rechazó la consulta; reintentar dará lo mismo',
+          undefined,
+          { timeout: 4000 },
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('La consulta no se pudo hacer')).toBeNull();
+    } finally {
+      espia.restaurar();
+    }
   });
 
   it('un numero que corresponde a dos personas manda a ventanilla, y no elige', async () => {

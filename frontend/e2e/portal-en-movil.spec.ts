@@ -83,6 +83,10 @@ test('el ciudadano no descarga el catalogo de navegacion', async ({ page }) => {
      portal no tiene modulos que navegar (ADR-0016 §3). Y ni barra lateral, ni
      paleta de comandos, ni lanzador. */
   expect(pedidos.filter((url) => url.includes('.generado'))).toEqual([]);
-  await expect(page.locator('.sgtm-barra-lateral')).toHaveCount(0);
+  // `.sgtm-nav` es la clase real de la barra (`BarraLateral.tsx`): la primera
+  // version buscaba `.sgtm-barra-lateral`, que no existe en el producto, asi
+  // que la asercion resolvia a 0 incluso contra el back-office con su barra
+  // dibujada — una comprobacion que no podia fallar.
+  await expect(page.locator('.sgtm-nav')).toHaveCount(0);
   await expect(page.getByRole('navigation')).toHaveCount(0);
 });
