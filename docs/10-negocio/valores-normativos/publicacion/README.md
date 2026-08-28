@@ -39,7 +39,7 @@ infra/carga-de-datos/abrir-conjunto-parametros.sh --ambiente stg --municipalidad
     --conjunto-id N --archivo parametros-2026.csv
 ```
 
-## Las quince filas, y de dónde sale cada una
+## Las veinte filas, y de dónde sale cada una
 
 | Tipo | Clave | Filas | Archivo del corpus |
 |---|---|---|---|
@@ -50,6 +50,8 @@ infra/carga-de-datos/abrir-conjunto-parametros.sh --ambiente stg --municipalidad
 | `PREDIAL_MINIMO` | — | 1 | `predial-minimo.md` |
 | `PLAZO` | `PRESCRIPCION-DECLARACION_PRESENTADA`, `PRESCRIPCION-SIN_DECLARACION`, `PRESCRIPCION-AGENTE_RETENCION` | 3 | `prescripcion-y-plazos.md` |
 | `PLAZO` | `REC1_CUMPLIMIENTO` | 1 | `prescripcion-y-plazos.md` |
+| `PLAZO` | `NOTIFICACION_VALOR-RD`, `NOTIFICACION_VALOR-RM`, `NOTIFICACION_VALOR-OP` | 3 | `valores-plazos-de-reclamacion.md` |
+| `PLAZO` | `PRESCRIPCION_INICIO-PREDIAL`, `PRESCRIPCION_INICIO-VEHICULAR` | 2 | `prescripcion-inicio-del-computo.md` |
 
 La **UIT no lleva clave**: es la forma del tipo con un solo valor, y las cinco filas se distinguen
 por `vigencia_desde`, como describe `LlaveDeParametro`. Cada una vale sólo su ejercicio
@@ -72,7 +74,7 @@ lleva el `%` para que la fila no se pueda leer mal en la base.
 
 ### La columna `valor_maquina`, y por qué hay dos formas del mismo valor
 
-Las cuatro filas de `PLAZO` traen una columna más, la última: `valor_maquina`. Es lo que va a
+Las nueve filas de `PLAZO` traen una columna más, la última: `valor_maquina`. Es lo que va a
 `parametro_tributario.valor_texto` —`4 ANIOS`, `7 DIAS_HABILES`—, mientras que `valor_texto` del CSV
 sigue siendo la **transcripción verbatim** de la norma —«prescribe a los cuatro (4) años», «dentro
 del plazo de siete (7) días hábiles de notificado»—, que es lo que se compara letra por letra contra
@@ -118,6 +120,22 @@ afirma—, aplicado a dos normas distintas:
   **el texto que §1 transcribe no es el original**: es el que le dio el art. 1 de la Ley N.º 28165,
   publicada el 2004-01-10, como el propio §1 dice. La vigencia que se publica es la del texto que
   se transcribió, no la de la ley que lo contiene.
+- **2013-06-22** también para las filas de `NOTIFICACION_VALOR-RD`/`-RM` (art. 137) y las de
+  `PRESCRIPCION_INICIO` (art. 44): salen del mismo TUO del Código Tributario, en la edición que
+  `valores-plazos-de-reclamacion.md` y `prescripcion-inicio-del-computo.md` consultaron.
+- **2008-12-06** para `NOTIFICACION_VALOR-OP`: su fundamento es el art. 25.1.d del TUO de la Ley
+  26979, y esa es la fecha de publicación del D.S. 018-2008-JUS que la cabecera afirma.
+
+### Las dos cifras que la norma implica y no imprime
+
+`NOTIFICACION_VALOR-OP` publica **cero (0) días hábiles** y `PRESCRIPCION_INICIO-*` un desfase de
+**un año**: ninguna de las dos está impresa en un artículo. La primera es la lectura del art.
+25.1.d —una orden de pago emitida conforme a ley es exigible sin espera, y reclamarla exige el pago
+previo—; la segunda, la derivación del numeral 1 del art. 44 cruzado con el vencimiento de febrero.
+Por eso su `valor_texto` combina el fragmento de la norma con la **frase de derivación de §2 del
+archivo del corpus** —«el desfase publicado es de cero (0) días hábiles», «desfase de un año
+respecto del ejercicio»—: la cifra derivada nace en ese §2, con las dos firmas del archivo, y el
+verificador la exige verbatim ahí igual que exige la letra de la norma en §1.
 
 ## Lo que hoy no se publica, y por qué
 
@@ -133,23 +151,19 @@ Los tres cuadros de valuación —`valores-unitarios-2026.md`, `depreciacion.md`
 `valor_referencial_vehiculo`, y el ámbito de esas tres tablas es **D-13**, abierta. Esta herramienta
 no las toca.
 
-`prescripcion-y-plazos.md` está **publicado en parte**, y conviene decir qué parte no. Sus cuatro
-filas son las del art. 43 (tres causales) y la del art. 14 de la Ley 26979. Quedan fuera tres cosas,
-cada una por su motivo:
+De la familia de los plazos quedan fuera dos cosas, cada una por su motivo:
 
-- el **plazo para reclamar un valor** (arts. 137 y 78 del TUO del Código Tributario), que
-  `PlazosParametrizados` pide como `NOTIFICACION_VALOR-<tipo>`: **§1 no transcribe esos artículos**.
-  Este archivo transcribió los arts. 43 a 46, 104 y 106;
-- el **inicio del cómputo** de la prescripción (art. 44), que se pide como
-  `PRESCRIPCION_INICIO-<tributo>`: está citado en la cabecera y **no tiene tabla en §1**;
 - el **cuarto plazo del art. 43** —el de solicitar o efectuar la compensación y la devolución—:
-  está transcrito y verificado, y **ningún código lo consume**. `CausalDePrescripcion`
-  no tiene esa causal porque el sistema no tramita solicitudes de devolución. Publicarlo sería una
-  fila que nadie lee, y una fila que nadie lee no se puede comprobar contra su uso: no aparecería en
-  ninguna de las dos pruebas que cruzan este archivo con las claves del código.
-
-Los dos primeros se cierran transcribiendo esos artículos y firmándolos; el tercero, el día que
-exista la operación que lo pida.
+  está transcrito y verificado en `prescripcion-y-plazos.md`, y **ningún código lo consume**.
+  `CausalDePrescripcion` no tiene esa causal porque el sistema no tramita solicitudes de
+  devolución. Publicarlo sería una fila que nadie lee, y una fila que nadie lee no se puede
+  comprobar contra su uso: no aparecería en ninguna de las dos pruebas que cruzan este archivo con
+  las claves del código. Se cierra el día que exista la operación que lo pida;
+- el **inicio del cómputo para arbitrios** (`PRESCRIPCION_INICIO-ARBITRIOS`): no tienen
+  declaración jurada del contribuyente, así que el numeral 1 del art. 44 no les aplica, y elegir
+  entre el 2 y el 3 es la decisión doctrinaria que `prescripcion-inicio-del-computo.md` §2 deja
+  abierta a propósito. Un desfase «razonable» resuelto en silencio es exactamente lo que la
+  regla 5 prohíbe.
 
 El resto de archivos `VERIFICADO` —`alcabala.md`, `aranceles-2026.md`, `espectaculos.md`,
 `multa-tributaria.md`, `transito-tabla-de-infracciones.md` y
