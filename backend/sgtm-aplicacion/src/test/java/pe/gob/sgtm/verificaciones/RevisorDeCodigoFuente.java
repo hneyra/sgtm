@@ -38,6 +38,7 @@ public final class RevisorDeCodigoFuente {
                     "parametro_tributario",
                     "recibo",
                     "recibo_detalle",
+                    "recibo_movimiento",
                     "valor",
                     "valor_detalle",
                     "valor_movimiento",
@@ -75,7 +76,14 @@ public final class RevisorDeCodigoFuente {
                     // salir identica al original aunque el libro haya seguido moviendose. La
                     // anulacion y el duplicado (#34) se registran agregando, no editando.
                     "recibo",
-                    "recibo_detalle");
+                    "recibo_detalle",
+                    // Y lo que le pasa al recibo, con #34. Una anulacion y un duplicado son
+                    // actos sobre un documento, no el estado de un proceso: no se corrigen en
+                    // el sitio. V30 le revoca el UPDATE, y esto lo rompe antes, en el build.
+                    // Es ademas lo que impide la salida comoda que V29 dejo abierta: en vez de
+                    // editar el recibo -que ya no se puede-, editar el movimiento que dice si
+                    // esta anulado, que es lo mismo con un rodeo.
+                    "recibo_movimiento");
 
     /** {@code SET SESSION}, en cualquier espaciado. */
     private static final Pattern SET_SESSION =

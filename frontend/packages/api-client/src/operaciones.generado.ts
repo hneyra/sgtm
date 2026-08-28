@@ -674,7 +674,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/tesoreria/recibos/{nro}/duplicado',
     parametrosDeRuta: ['nro'],
-    parametrosDeConsulta: ['nroDeRecibo', 'codContribuyente', 'fecha', 'caja', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['nroDeRecibo', 'codContribuyente', 'fecha', 'caja', 'formato', 'observacion', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Anulación de recibo — `POST /tesoreria/recibos/{nro}/anulacion` */
   anulacion_recibo: {
@@ -1739,6 +1739,8 @@ export interface ParametrosPorOperacion {
     readonly codContribuyente?: string;
     readonly fecha?: string;
     readonly caja?: string;
+    readonly formato?: string;
+    readonly observacion?: string;
     readonly pagina?: string;
     readonly tamano?: string;
     readonly ordenarPor?: string;

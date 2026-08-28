@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.cuentacorriente.AbonoAsentado;
 import pe.gob.sgtm.cuentacorriente.RegistroDeAbonos;
+import pe.gob.sgtm.cuentacorriente.ReversionDeAbonos;
 import pe.gob.sgtm.cuentacorriente.SeleccionDeObligacion;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
@@ -136,6 +137,58 @@ public class RegistroDeAbonosCuentaCorriente implements RegistroDeAbonos {
                             + ": o ya se pagaron, o nunca se determinaron");
         }
         return List.copyOf(abonados);
+    }
+
+    /**
+     * Deshace los abonos de un documento asentando su reversion (#34, RF-083).
+     *
+     * <p>Lo que hace que la deuda vuelva a estar pendiente no es escribir la cifra en ningun sitio:
+     * es que {@link CalculoDeDeuda#deudaActualizadaA} netea cargos contra abonos, y al quedar el
+     * abono compensado por su reverso el neteo vuelve a dar lo que daba. Por eso aqui no hay
+     * ninguna suma de deuda —solo se recorre lo que la cobranza escribio y se reversa fila a fila—,
+     * y por eso reversar tambien los <b>cargos</b> es obligatorio: al cobrar se cristalizo el
+     * devengo con un cargo, y dejarlo vivo dejaria a la obligacion debiendo un interes que ya no
+     * corresponde.
+     *
+     * <p>{@link RegistrarAsiento#reversar} reproyecta el saldo de cada obligacion tocada, en esta
+     * misma transaccion. O vuelven la deuda y su proyeccion, o no vuelve ninguna de las dos.
+     */
+    @Override
+    @Transactional
+    public ReversionDeAbonos reversarAbonos(
+            String documentoOrigen,
+            String documentoDeLaReversion,
+            LocalDate fecha,
+            Observacion observacion) {
+
+        if (documentoOrigen.strip().equalsIgnoreCase(documentoDeLaReversion.strip())) {
+            throw new IllegalArgumentException(
+                    "La reversion tiene que llevar un documento de origen distinto del que"
+                            + " reversa; con el mismo, una segunda anulacion encontraria los"
+                            + " asientos de la primera y reversaria la reversion");
+        }
+
+        List<Asiento> delDocumento = asientos.porDocumentoOrigen(documentoOrigen);
+        if (delDocumento.isEmpty()) {
+            throw new SinAbonosQueReversar(
+                    "El documento '"
+                            + documentoOrigen
+                            + "' no origino ningun asiento reversable: o nunca toco el libro, o sus"
+                            + " abonos ya se reversaron");
+        }
+
+        Dinero abonado = Dinero.CERO;
+        for (Asiento original : delDocumento) {
+            registrar.reversar(
+                    java.util.Objects.requireNonNull(original.id()),
+                    fecha,
+                    documentoDeLaReversion,
+                    observacion);
+            if (original.tipo() == TipoAsiento.ABONO) {
+                abonado = abonado.mas(original.monto());
+            }
+        }
+        return new ReversionDeAbonos(delDocumento.size(), abonado, fecha);
     }
 
     // ------------------------------------------------------------------

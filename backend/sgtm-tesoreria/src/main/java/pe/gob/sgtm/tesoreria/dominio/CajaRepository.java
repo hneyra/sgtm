@@ -10,4 +10,12 @@ public interface CajaRepository {
 
     /** La caja con ese codigo, si existe en esta municipalidad. */
     Optional<Caja> porCodigo(String codigo);
+
+    /**
+     * La caja con ese identificador, si existe en esta municipalidad.
+     *
+     * <p>La necesita quien parte de un recibo y no de un codigo tecleado: el duplicado y la
+     * anulacion (#34) llegan con el numero impreso y de ahi salen identificadores, no codigos.
+     */
+    Optional<Caja> porId(long id);
 }

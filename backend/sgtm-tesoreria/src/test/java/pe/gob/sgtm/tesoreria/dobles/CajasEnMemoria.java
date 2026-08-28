@@ -21,4 +21,11 @@ public final class CajasEnMemoria implements CajaRepository {
     public Optional<Caja> porCodigo(String codigo) {
         return Optional.ofNullable(porCodigo.get(codigo.strip().toUpperCase(Locale.ROOT)));
     }
+
+    @Override
+    public Optional<Caja> porId(long id) {
+        return porCodigo.values().stream()
+                .filter(caja -> caja.id() != null && caja.id() == id)
+                .findFirst();
+    }
 }

@@ -87,6 +87,14 @@ public class TurnoDeCajaRepositoryJdbc extends RepositorioJdbc implements TurnoD
                 .optional();
     }
 
+    @Override
+    public Optional<TurnoDeCaja> porId(long id) {
+        return jdbc().sql("SELECT " + COLUMNAS + " FROM cierre_caja WHERE id = :id")
+                .param("id", id)
+                .query(TurnoDeCajaRepositoryJdbc::mapear)
+                .optional();
+    }
+
     private static TurnoDeCaja mapear(ResultSet fila, int numeroDeFila) throws SQLException {
         return new TurnoDeCaja(
                 fila.getLong("id"),

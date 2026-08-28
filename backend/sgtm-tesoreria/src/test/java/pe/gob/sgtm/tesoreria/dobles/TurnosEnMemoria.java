@@ -32,6 +32,36 @@ public final class TurnosEnMemoria implements TurnoDeCajaRepository {
         return this;
     }
 
+    /** Deja sembrado un turno abierto con identificador conocido, para partir de un recibo. */
+    public TurnosEnMemoria conTurnoAbierto(long id, long cajaId, String cajero, LocalDate fecha) {
+        turnos.put(
+                clave(cajaId, cajero, fecha),
+                new TurnoDeCaja(id, cajaId, cajero, fecha, EstadoDeTurno.ABIERTO));
+        siguienteId = Math.max(siguienteId, id + 1);
+        return this;
+    }
+
+    /**
+     * Cierra el turno con ese identificador, conservandolo.
+     *
+     * <p>Distinto de {@link #conTurnoCerrado}: aquel siembra uno nuevo, y este cierra el que ya
+     * existe. Quien parte de un recibo lo busca por su identificador, y sembrar otro con uno
+     * distinto haria que el recibo apuntara a un turno que no esta.
+     */
+    public TurnosEnMemoria cerrar(long id) {
+        turnos.replaceAll(
+                (clave, turno) ->
+                        turno.id() != null && turno.id() == id
+                                ? new TurnoDeCaja(
+                                        turno.id(),
+                                        turno.cajaId(),
+                                        turno.cajero(),
+                                        turno.fecha(),
+                                        EstadoDeTurno.CERRADO)
+                                : turno);
+        return this;
+    }
+
     /** Cuantos turnos se han abierto: lo que delata una apertura duplicada. */
     public int cuantos() {
         return turnos.size();
@@ -52,6 +82,13 @@ public final class TurnosEnMemoria implements TurnoDeCajaRepository {
     @Override
     public Optional<TurnoDeCaja> bloquear(long cajaId, String cajero, LocalDate fecha) {
         return Optional.ofNullable(turnos.get(clave(cajaId, cajero, fecha)));
+    }
+
+    @Override
+    public Optional<TurnoDeCaja> porId(long id) {
+        return turnos.values().stream()
+                .filter(turno -> turno.id() != null && turno.id() == id)
+                .findFirst();
     }
 
     private static String clave(long cajaId, String cajero, LocalDate fecha) {

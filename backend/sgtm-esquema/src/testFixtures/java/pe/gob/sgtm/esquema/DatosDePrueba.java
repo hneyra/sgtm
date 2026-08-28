@@ -646,6 +646,23 @@ public final class DatosDePrueba {
                 CIEN,
                 CIEN);
 
+        // Un duplicado del recibo (V30, #34): lo que le pasa a un recibo se agrega, no se
+        // escribe encima. Se siembra un DUPLICADO y no una ANULACION a proposito: la
+        // anulacion es unica por recibo y el fixture no debe consumirla, porque la prueba
+        // de la caja necesita poder anular ese mismo recibo.
+        ejecutar(
+                app,
+                "INSERT INTO recibo_movimiento (municipalidad_id, recibo_id, tipo, fecha, caja_id,"
+                        + " turno_id, resumen, usuario_registro, observacion)"
+                        + " VALUES (?, ?, 'DUPLICADO', ?, ?, ?, ?, 'prueba',"
+                        + "         'duplicado sembrado por el fixture')",
+                muni,
+                reciboId,
+                VIGENCIA,
+                cajaId,
+                turnoId,
+                "0".repeat(64));
+
         long convenioId =
                 insertar(
                         app,

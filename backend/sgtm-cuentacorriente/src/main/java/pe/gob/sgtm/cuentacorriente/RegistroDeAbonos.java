@@ -68,6 +68,58 @@ public interface RegistroDeAbonos {
             Observacion observacion);
 
     /**
+     * Deshace los abonos que un documento origino, <b>asentando su reversion</b> (#34, RF-083).
+     *
+     * <p>No se borra ni se edita nada: «un asiento equivocado no se corrige, se reversa» (V2). Por
+     * cada asiento que la cobranza escribio queda su opuesto, con {@code asiento_reversado_id}
+     * apuntando al original, y el libro conserva las dos filas. Es la unica forma de que el estado
+     * de cuenta siga contando lo que de verdad paso: que se cobro el 15 de marzo y que se anulo el
+     * mismo dia.
+     *
+     * <p>Se reversan <b>todos</b> los asientos del documento, cargos incluidos. Al cobrar, {@link
+     * #abonarPagoIntegro} cristaliza el reajuste y el interes devengados con un cargo antes de
+     * abonarlos; deshacer solo los abonos dejaria ese cargo vivo y la obligacion debiendo un
+     * interes que ya nadie va a cobrar por esa via.
+     *
+     * <p>Tras la reversion, {@code deudaActualizadaA(hoy)} vuelve a mostrar la deuda pendiente. No
+     * porque se haya escrito esa cifra en ningun sitio, sino porque el neteo de cargos contra
+     * abonos vuelve a dar lo que daba: es la consecuencia de que el libro sea la unica verdad
+     * (ADR-0006).
+     *
+     * @param documentoOrigen el documento cuyos asientos se deshacen; en tesoreria, {@code "RECIBO
+     *     001-0000123"}
+     * @param documentoDeLaReversion el documento que sustenta los asientos nuevos. <b>Tiene que ser
+     *     distinto del anterior</b>, y no es una formalidad: si la reversion se marcara con el
+     *     mismo documento, una segunda llamada la encontraria y reversaria la reversion
+     * @param fecha fecha valor de la reversion; decide ademas en que particion caen los asientos
+     *     nuevos
+     * @param observacion por que se reversa (regla 10); queda como {@code motivo} de cada asiento
+     * @return cuantos asientos se escribieron y cuanto vuelve a deberse
+     * @throws SinAbonosQueReversar si ese documento no origino ningun asiento reversable
+     */
+    ReversionDeAbonos reversarAbonos(
+            String documentoOrigen,
+            String documentoDeLaReversion,
+            LocalDate fecha,
+            Observacion observacion);
+
+    /**
+     * Ese documento no origino ningun asiento que se pueda reversar.
+     *
+     * <p>O nunca los tuvo —un recibo de caja de tasas no toca el libro: un derecho de tramite no es
+     * deuda tributaria— o ya se reversaron. En los dos casos quien llama sabe algo que este
+     * contexto no: si eso es un error o lo esperado.
+     */
+    final class SinAbonosQueReversar extends RuntimeException {
+
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        public SinAbonosQueReversar(String mensaje) {
+            super(mensaje);
+        }
+    }
+
+    /**
      * Ninguna de las obligaciones marcadas tenia deuda a la fecha de pago.
      *
      * <p>Es el error que ve el cajero cuando alguien cobra dos veces: la primera cobranza dejo el

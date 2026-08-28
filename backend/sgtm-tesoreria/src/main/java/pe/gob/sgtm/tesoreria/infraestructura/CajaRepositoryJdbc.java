@@ -28,6 +28,14 @@ public class CajaRepositoryJdbc extends RepositorioJdbc implements CajaRepositor
                 .optional();
     }
 
+    @Override
+    public Optional<Caja> porId(long id) {
+        return jdbc().sql("SELECT " + COLUMNAS + " FROM caja WHERE id = :id")
+                .param("id", id)
+                .query(CajaRepositoryJdbc::mapear)
+                .optional();
+    }
+
     private static Caja mapear(ResultSet fila, int numeroDeFila) throws SQLException {
         long area = fila.getLong("area_id");
         Long areaId = fila.wasNull() ? null : area;

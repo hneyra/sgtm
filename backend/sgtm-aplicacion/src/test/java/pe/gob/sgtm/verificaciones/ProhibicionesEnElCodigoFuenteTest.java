@@ -270,11 +270,16 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
-    @DisplayName("el escaner detecta la muestra que edita un recibo o su detalle (#33)")
+    @DisplayName("el escaner detecta la muestra que edita un recibo, su detalle o su movimiento")
     void elEscanerDetectaLaMuestraQueEditaUnRecibo() throws IOException {
         // #33: recibo y recibo_detalle entran en TABLAS_INMUTABLES. La forma en que el
         // defecto aparece de verdad no es un DELETE -eso se ve venir- sino el UPDATE que
-        // anula en el sitio, porque V3 dejo las columnas de anulacion invitando a usarlas.
+        // corrige en el sitio, porque V3 llego a dejar las columnas de anulacion invitando
+        // a usarlas.
+        //
+        // #34 cierra el rodeo: recibo_movimiento entra tambien. Si el recibo ya no se puede
+        // tocar, la tentacion siguiente es corregir la fila que dice si esta anulado, que
+        // deja al mismo documento diciendo dos cosas distintas por la puerta de al lado.
         Path muestra =
                 raizDelBackend()
                         .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
@@ -289,12 +294,17 @@ class ProhibicionesEnElCodigoFuenteTest {
                         Files.readString(muestra, StandardCharsets.UTF_8));
 
         assertThat(hallazgos)
-                .as("los dos UPDATE y el DELETE, y ninguno de los comentarios que los explican")
-                .hasSize(3);
+                .as(
+                        "los tres UPDATE y los dos DELETE, y ninguno de los comentarios que los"
+                                + " explican")
+                .hasSize(5);
         assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
                 .anySatisfy(f -> assertThat(f).containsIgnoringCase("update recibo set"))
                 .anySatisfy(f -> assertThat(f).containsIgnoringCase("update recibo_detalle set"))
-                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from recibo_detalle"));
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("update recibo_movimiento set"))
+                .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from recibo_detalle"))
+                .anySatisfy(
+                        f -> assertThat(f).containsIgnoringCase("delete from recibo_movimiento"));
     }
 
     @Test

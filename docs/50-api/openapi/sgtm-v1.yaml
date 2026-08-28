@@ -3845,6 +3845,23 @@ paths:
           required: false
           description: "Filtro «Caja» de la pantalla"
           schema: { type: string }
+        - name: formato
+          in: query
+          required: false
+          description: >-
+            Sin el, la respuesta es el contenido del recibo en JSON: la vista previa, que
+            no emite nada. Con el, la respuesta es el duplicado como documento (#34,
+            RF-132).
+          schema: { type: string, enum: [PDF, XLS, RTF] }
+        - name: observacion
+          in: query
+          required: false
+          description: >-
+            Por que se pide el duplicado. Obligatoria cuando se pide con «formato»: cada
+            reimpresion queda registrada con quien la genero, y eso es una escritura
+            (regla 10, RNF-052). Va en la consulta y no en el cuerpo porque el verbo de
+            esta operacion lo fija el prototipo, y un GET no lleva cuerpo.
+          schema: { type: string }
         - name: pagina
           in: query
           required: false

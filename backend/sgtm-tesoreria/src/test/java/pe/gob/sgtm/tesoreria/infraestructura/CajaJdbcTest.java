@@ -473,8 +473,11 @@ class CajaJdbcTest {
             assertThat(
                             sqlStateAlIntentar(
                                     () ->
+                                            // El total y no `estado`: V30 retiro esa columna
+                                            // porque decia EMITIDO para siempre. La regla es la
+                                            // misma y ahora se mide sobre una columna que existe.
                                             jdbc.sql(
-                                                            "UPDATE recibo SET estado = 'ANULADO'"
+                                                            "UPDATE recibo SET total = 1"
                                                                     + " WHERE id = :id")
                                                     .param("id", emitido.id())
                                                     .update()))
