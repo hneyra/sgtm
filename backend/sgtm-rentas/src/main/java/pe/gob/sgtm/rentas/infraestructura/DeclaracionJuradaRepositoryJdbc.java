@@ -2,12 +2,16 @@ package pe.gob.sgtm.rentas.infraestructura;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJurada;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJuradaRepository;
@@ -55,6 +59,27 @@ public class DeclaracionJuradaRepositoryJdbc extends RepositorioJdbc
                 .param("ejercicio", ejercicio.valor())
                 .query(DeclaracionJuradaRepositoryJdbc::mapear)
                 .optional();
+    }
+
+    /**
+     * La lista blanca del {@code ORDER BY}: {@code fecha_presentacion} es el orden por omision de
+     * la ficha unificada, y los otros tres son los que su grilla deja pinchar. El texto del cliente
+     * no llega nunca a la consulta —{@link OrdenSeguro} traduce contra esta lista o no hay
+     * consulta—.
+     */
+    private static final OrdenSeguro ORDEN =
+            OrdenSeguro.sobre("fecha_presentacion", "ejercicio", "numero", "id");
+
+    @Override
+    public Pagina<DeclaracionJurada> deContribuyente(long contribuyenteId, Paginacion paginacion) {
+        String desde = DESDE + " WHERE d.contribuyente_id = :contribuyenteId";
+        return paginar(
+                "SELECT " + COLUMNAS + desde,
+                "SELECT count(*)" + desde,
+                Map.of("contribuyenteId", contribuyenteId),
+                paginacion,
+                ORDEN,
+                DeclaracionJuradaRepositoryJdbc::mapear);
     }
 
     @Override

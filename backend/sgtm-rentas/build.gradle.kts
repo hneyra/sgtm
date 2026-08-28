@@ -32,8 +32,27 @@ dependencies {
     // (ARQ-01 §2) declara la arista cuentacorriente ──► rentas al reves de las otras dos: es
     // justo la excepcion que preve la regla 2 («cuentacorriente no conoce a nadie», ARQ-01 §4).
     // Solo se importa el paquete raiz de cuentacorriente, que es su API publica:
-    // ConsultaDeDeudaPublica.
+    // ConsultaDeDeudaPublica, y desde #25 tambien MovimientosDelLibro -los pagos y las
+    // altas y bajas de la consulta unificada-.
     implementation(project(":sgtm-cuentacorriente"))
+
+    // consulta_unificada (#25, RF-046) es la ficha consolidada del contribuyente, y las
+    // tres dependencias de abajo son las que la hacen posible SIN romper ARQ-01 §4 regla 2.
+    //
+    // La pantalla que mas datos agrega es de `cuentacorriente` -saldo, deudas, pagos,
+    // altas y bajas-, pero no puede vivir alli: «cuentacorriente no conoce a nadie», y la
+    // ficha necesita ademas los convenios y los valores. `rentas` es el unico de los
+    // cuatro que puede depender de los otros tres sin cerrar ningun ciclo, y ademas es el
+    // contexto DE la pantalla: «Consulta unificada predial-arbitrios».
+    //
+    // De cada uno se importa solo el paquete raiz, que es su API publica:
+    //   - contribuyentes -> DirectorioDeContribuyentes, para resolver el codigo y poder
+    //     responder 404 en vez de una ficha vacia sobre alguien que no existe.
+    //   - tesoreria      -> ConveniosDelContribuyente, la pestaña «Fraccionamientos».
+    //   - valores        -> ValoresDelContribuyente, la pestaña «Valores».
+    implementation(project(":sgtm-contribuyentes"))
+    implementation(project(":sgtm-tesoreria"))
+    implementation(project(":sgtm-valores"))
 
     // La prueba del repositorio corre contra PostgreSQL de verdad: provisiona la
     // base como un ambiente real y se conecta como sgtm_app, no como el
