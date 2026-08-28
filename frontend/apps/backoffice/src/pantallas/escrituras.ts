@@ -752,6 +752,46 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
     },
     tablas: { construcciones: CONSTRUCCIONES },
   },
+
+  /* ── Tesorería: la ventanilla (#33, #34, #35, #36, #74) ──────────────── */
+
+  /**
+   * Anulación de recibo (RF-083, #34, #74). El recibo que se anula llega por la URL —su número
+   * impreso, `/tesoreria/anulacion-recibo/{nro}`—, no por el campo «Nro. de recibo» de la
+   * pantalla: el contrato declara `nro` como parámetro de ruta y `PeticionDeAnulacion` no lo lee
+   * del cuerpo. Se abre igual que una ficha catastral, por su código en la dirección.
+   *
+   * `motivo` y `autorizadoPor` viajan **tal cual los escribe quien atiende**: el backend los
+   * guarda como texto libre —quedan impresos en el duplicado, para que quien tenga el papel sepa
+   * por qué dejó de valer— y no hay ningún `CHECK` que traducir, a diferencia del tributo de
+   * `alta_deuda`. Las opciones del desplegable del prototipo son una ayuda para teclear, no un
+   * código que este archivo tenga que conocer.
+   *
+   * Lo que **no** viaja, y por qué:
+   *
+   * - `detalle` (el área de la pantalla): es la misma observación que ya exige `useEscritura`
+   *   (regla 10) — dos cajas de texto libre pidiendo lo mismo acabarían con una de las dos
+   *   vacía—. `nota` lo dice antes de que alguien lo busque.
+   * - `devuelveLaDeudaACuentaCorriente` (la casilla): no es una opción. `PeticionDeAnulacion`
+   *   no tiene ningún campo para ella porque la reversión de los abonos **va siempre**: anular un
+   *   recibo sin deshacerlos dejaría el pago asentado sobre un documento que ya no vale, y el
+   *   contribuyente figuraría al corriente sin haber pagado.
+   * - `nroDeRecibo` (el campo de la sección «Recibo a anular»): es el mismo registro que ya trae
+   *   la URL. Declararlo dejaría dos sitios para el mismo número y ninguna forma de decidir cuál
+   *   manda cuando no coincidan.
+   */
+  anulacion_recibo: {
+    campos: {
+      motivo: { campo: 'motivo' },
+      autorizadoPor: { campo: 'autorizadoPor' },
+      nDeMemorando: { campo: 'nDeMemorando' },
+    },
+    exigir: (borrador) =>
+      (borrador['motivo'] ?? '').trim() === ''
+        ? 'Elige el motivo de la anulación: es el sustento del acto, y queda impreso en el duplicado del recibo.'
+        : undefined,
+    nota: true,
+  },
 };
 
 /**

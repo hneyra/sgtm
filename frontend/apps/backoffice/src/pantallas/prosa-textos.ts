@@ -341,6 +341,9 @@ export const NOTAS: Readonly<Record<string, string>> = {
 
   notificacion_valores:
     'La hora y la dirección de la diligencia no se guardan todavía: el backend solo pide la fecha (sin hora) y, si no se indica una dirección, usa el domicilio fiscal vigente a esa fecha.',
+
+  anulacion_recibo:
+    'El «Detalle» de esta pantalla es la misma observación que pide el sistema, así que no viaja aparte: se escribe abajo, donde ya se pide. La anulación siempre devuelve la deuda a la cuenta corriente —no es una casilla que se pueda destildar— y el número de recibo se toma del que abrió esta pantalla, no del campo «Nro. de recibo».',
 };
 
 /** Las opciones cuya escritura lleva nota. La comprobacion de coherencia las mira. */

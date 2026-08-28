@@ -127,16 +127,17 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
        o cuando una opcion declara su escritura, que son exactamente los dos
        cambios sobre los que hay que llamar la atencion. */
     expect(porCausa).toEqual({
-      declarada: 6,
+      // `anulacion_recibo` se suma a las seis que ya declaraban (#34, #74).
+      declarada: 7,
       salida: 50,
       'sin-backend': 41,
-      // Una se muda de casilla al sumarse la tercera causa (#333): «Cálculo
-      // individual del impuesto predial», cuya primaria es «Calcular». Y **dos
-      // mas al sumarse la cuarta** (#73): las dos transferencias, a las que no
-      // les falta una lista blanca sino un campo en la pantalla.
-      'sin-declaracion': 34,
+      // Tres se mudan de `sin-declaracion` a `sin-campo` con #74: `caja_tributaria`
+      // y `caja_tasas` —les falta el medio de pago, un campo distinto de «Forma
+      // de pago»— y `fraccionamiento` —le falta la grilla de deuda a acoger—.
+      'sin-declaracion': 30,
       'sin-determinacion': 1,
-      'sin-campo': 2,
+      // Las dos transferencias (#73) mas las tres de tesoreria (#74).
+      'sin-campo': 5,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);
@@ -147,8 +148,17 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(impedimentoDelActo('cuenta_corriente', ['Exportar', 'Registrar pago'])?.causa).toBe(
       'sin-backend',
     );
-    // Escribe en el contrato y no ha declarado su cuerpo.
-    expect(impedimentoDelActo('caja_tributaria', ['Cobrar'])?.causa).toBe('sin-declaracion');
+    // Escribe en el contrato y no ha declarado su cuerpo: `cierre_caja` (#36,
+    // #74) — el `declarado` que exige `PeticionDeCierre` es un mapa por forma
+    // de pago, y `CampoDelCuerpo`/`TablaDelCuerpo` no saben construirlo todavía.
+    expect(impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja'])?.causa).toBe(
+      'sin-declaracion',
+    );
+    // Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
+    // no tiene donde escribir** (#33, #74): a `caja_tributaria` le falta el
+    // medio de pago —EFECTIVO/CHEQUE/DEPOSITO/TARJETA/TRANSFERENCIA—, un campo
+    // distinto de «Forma de pago» (que en el backend es `tipoDePago`).
+    expect(impedimentoDelActo('caja_tributaria', ['Cobrar'])?.causa).toBe('sin-campo');
     // Y declarada: sin impedimento ninguno.
     expect(impedimentoDelActo('notificacion_valores', ['Registrar notificación'])).toBeUndefined();
     /* «Conciliar seleccionadas» de la consulta de fichas (#322, ADR-0015 §3):

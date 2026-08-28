@@ -184,6 +184,47 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
       'Sin él la transferencia no se puede registrar: el valor con que el vehículo cambia de manos es parte del hecho que queda asentado.',
     campos: ['valorTransferencia'],
   },
+
+  /**
+   * La caja tributaria y la de tasas, y el mismo dato que a las dos les falta (#33, #74).
+   *
+   * `CajaController.cobranza` y `.tasas` exigen `formaDePago` en el cuerpo —EFECTIVO, CHEQUE,
+   * DEPOSITO, TARJETA o TRANSFERENCIA: con qué entra el dinero— y ninguna sección de ninguna de
+   * las dos pantallas dibuja un campo para él. Lo que el prototipo llama «Forma de pago» en
+   * `caja_tributaria` es, en el backend, `tipoDePago` —NORMAL TRIBUTARIO, A CUENTA,
+   * PRECONVENIO…—: un campo distinto, y opcional. Declarar `formaDePago` en `escrituras.ts`
+   * traduciendo esas opciones no arregla nada: el cuerpo saldría igual sin el medio de pago, y lo
+   * que llegaría a ventanilla es un 422 después de rellenar la grilla y de confirmar un cobro.
+   */
+  caja_tributaria: {
+    dato: 'el medio de pago (efectivo, cheque, depósito, tarjeta o transferencia)',
+    porque:
+      'Sin él el cobro no se puede registrar: es un campo distinto de «Forma de pago» —que aquí es el tipo de cobranza, NORMAL/A CUENTA/PRECONVENIO…—, y ninguna sección de esta pantalla tiene dónde escribirlo.',
+    campos: ['formaDePago'],
+  },
+  caja_tasas: {
+    dato: 'el medio de pago (efectivo, cheque, depósito, tarjeta o transferencia)',
+    porque:
+      'Sin él el cobro no se puede registrar, por el mismo motivo que en caja tributaria: el cuerpo lo exige y esta pantalla no dibuja ningún campo para él.',
+    campos: ['formaDePago'],
+  },
+
+  /**
+   * El fraccionamiento, y la grilla que le falta (#35, #74).
+   *
+   * `PeticionDeFraccionamiento` exige al menos una obligación marcada —«un convenio sin deuda
+   * acogida no fracciona nada»—, y el catálogo de esta pantalla no declara ninguna tabla de
+   * deuda para elegirla: la única `tabla` que dibuja, «Detalle cuotas», es el cronograma que
+   * **sale** de la simulación, no una grilla de entrada. Es la misma frontera que separa a
+   * `caja_tributaria` de `consulta_deuda`, pero aquí no hay ni siquiera una tabla vacía a la que
+   * conectar una lectura: el prototipo no reservó el bloque.
+   */
+  fraccionamiento: {
+    dato: 'las deudas que se acogen al convenio, elegidas en una grilla',
+    porque:
+      'Sin ellas el convenio no se puede registrar: el backend exige al menos una obligación marcada, y esta pantalla no dibuja ninguna tabla de deuda donde elegirla.',
+    campos: ['obligaciones'],
+  },
 };
 
 /** Lo que declara esa opcion, o nada. `Object.hasOwn`, como el resto del camino. */
