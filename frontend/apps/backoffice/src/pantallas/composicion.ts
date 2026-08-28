@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ComponentType, ReactElement } from 'react';
 import type { DatosDePantalla } from '@sgtm/api-client';
 import { COMPOSICION_DE_CATASTRO } from './catastro/composicion';
 
@@ -95,7 +95,14 @@ export interface AltaEnPanel {
   /** Rotulo del panel, que si puede decir de que alta se trata. */
   readonly titulo: string;
   readonly descripcion?: string;
-  readonly Formulario: (props: AltaEnPanelProps) => ReactElement;
+  /**
+   * `ComponentType` y no una funcion suelta: el formulario se carga **cuando se
+   * abre el panel** (`lazy`), no en el arranque. Sin esto, el registro de
+   * composiciones —que `Pantalla` importa siempre— arrastraba al trozo comun
+   * cada formulario de alta del sistema, que es codigo que 133 de las 134
+   * pantallas no van a usar nunca.
+   */
+  readonly Formulario: ComponentType<AltaEnPanelProps>;
 }
 
 /**
@@ -109,7 +116,14 @@ export interface FlujoGuiado {
   /** La accion del catalogo que lo abre. Misma regla que {@link AltaEnPanel.accion}. */
   readonly accion: string;
   readonly titulo: string;
-  readonly Asistente: (props: { readonly onCerrar: () => void }) => ReactElement;
+  /**
+   * Se carga al abrirlo, por lo mismo que {@link AltaEnPanel.Formulario}.
+   *
+   * Recibe el `titulo` porque el de la cabecera sigue siendo el de la pantalla
+   * que hay detras: sin el, el asistente no dice en ningun sitio que es lo que
+   * se esta dando de alta.
+   */
+  readonly Asistente: ComponentType<{ readonly titulo: string; readonly onCerrar: () => void }>;
 }
 
 /** A donde lleva el acto de una pantalla que no lo tiene en su propia barra. */

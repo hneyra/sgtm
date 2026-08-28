@@ -97,7 +97,9 @@ export function TablaDePisos({
     <section className="sgtm-tarjeta">
       <div className="sgtm-tarjeta__cabecera">
         <h2 className="sgtm-tarjeta__titulo">{titulo}</h2>
-        <span className="sgtm-tarjeta__conteo">{cargando ? '…' : `${filas.length} pisos`}</span>
+        <span className="sgtm-tarjeta__conteo">
+          {cargando ? '…' : `${filas.length} ${filas.length === 1 ? 'piso' : 'pisos'}`}
+        </span>
       </div>
 
       {cargando ? (
@@ -108,7 +110,10 @@ export function TablaDePisos({
             <thead>
               <tr>
                 <th>Piso</th>
-                <th className="sgtm-tabla--numerica">Área construida (m²)</th>
+                {/* El rotulo corto es el mismo del campo de abajo: con «Área
+                    construida (m²)» la columna se ensanchaba el doble que su
+                    contenido y la fila de alta no se alineaba con ninguna. */}
+                <th className="sgtm-tabla--numerica">Área m²</th>
                 {CATEGORIAS.map(({ etiqueta }) => (
                   <th key={etiqueta}>{etiqueta}</th>
                 ))}
@@ -134,6 +139,10 @@ export function TablaDePisos({
                     {escribible && (
                       <Boton
                         variante="fantasma"
+                        // Diez botones «Quitar» iguales no se distinguen en la
+                        // lista de un lector de pantalla: cada uno dice de que
+                        // piso es.
+                        aria-label={`Quitar el piso ${fila.piso === '' ? indice + 1 : fila.piso}`}
                         onClick={() =>
                           escritura.fijarFilas(
                             CONSTRUCCIONES,
@@ -154,15 +163,19 @@ export function TablaDePisos({
 
       {escribible && (
         <>
-          <div className="sgtm-tarjeta__acciones">
+          {/* Los nueve campos del alta, en una rejilla de nueve columnas y con
+              **los rotulos de las cabeceras**: antes eran nueve campos de ancho
+              libre en fila, «Nº Piso» y «Área construida (m²)» ocupaban media
+              fila entre los dos, y ninguno caia debajo de su columna. */}
+          <div className="sgtm-pisos__alta">
             <Campo
-              etiqueta="Nº Piso"
+              etiqueta="Piso"
               tipo="text"
               valor={borrador.piso}
               onCambio={(valor) => fijarBorrador({ ...borrador, piso: valor })}
             />
             <Campo
-              etiqueta="Área construida (m²)"
+              etiqueta="Área m²"
               tipo="text"
               valor={borrador.areaConstruida}
               onCambio={(valor) => fijarBorrador({ ...borrador, areaConstruida: valor })}

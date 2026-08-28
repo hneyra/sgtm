@@ -1444,6 +1444,23 @@
   gap: 8px;
 }
 
+/* La fila de alta de la tabla de pisos: nueve campos, nueve columnas, y los
+   rotulos de las cabeceras. En fila libre, los dos primeros —piso y area— se
+   comian media anchura y las siete categorias de una letra quedaban apretadas
+   al final, ninguna debajo de su columna. */
+.sgtm-pisos__alta {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 14px 4px;
+}
+
+@media (max-width: 900px) {
+  .sgtm-pisos__alta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 /* —— Bloque 6: totales ————————————————————————————————————————— */
 
 .sgtm-totales {
@@ -1997,11 +2014,21 @@
   font-weight: 500;
 }
 
+/* El estado del paso, en el color que se lee. Estaba a `--ink-3` con
+   `opacity: .85`, y eso lo dejaba en 4,25:1 sobre la tarjeta en tema claro: por
+   debajo del 4,5:1 de WCAG AA, y justo en el texto que sustituye al color para
+   decir cual paso va (FRO-02 §2.1). La opacidad no se compensa con un token: se
+   quita. */
 .sgtm-riel__estado {
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  opacity: 0.85;
+  color: var(--ink-2);
+}
+
+/* El paso en curso pinta su propia tinta sobre el acento; el estado la hereda. */
+.sgtm-riel__paso[data-estado='actual'] .sgtm-riel__estado {
+  color: inherit;
 }
 
 .sgtm-asistente__panel {
@@ -2012,6 +2039,16 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--bg-card);
+}
+
+/* Que se esta dando de alta, mientras dura: el titulo de la cabecera sigue
+   siendo el de la pantalla que hay detras. */
+.sgtm-asistente__flujo {
+  margin: 0;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-2);
 }
 
 .sgtm-asistente__titulo {
@@ -2045,10 +2082,24 @@
 
 .sgtm-asistente__acciones {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   padding-top: 6px;
   border-top: 1px solid var(--line);
+}
+
+/* «Cancelar» y «Volver» juntos a la izquierda: salir esta en los cuatro pasos,
+   no solo en el primero. */
+.sgtm-asistente__izquierda {
+  display: flex;
+  gap: 10px;
+}
+
+/* Lo que queda tras el 201: el asistente terminado, sin riel. */
+.sgtm-asistente__hecho {
+  display: grid;
+  gap: 18px;
 }
 
 .sgtm-asistente__resultados {

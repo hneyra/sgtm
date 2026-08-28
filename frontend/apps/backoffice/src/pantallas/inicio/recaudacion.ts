@@ -1,6 +1,7 @@
 import type { DatosDePantalla } from '@sgtm/api-client';
 import type { Fecha } from '@sgtm/dominio';
 import { definirConexion } from '../conexiones';
+import { esObjeto } from '../seguridad/listado';
 
 /**
  * Panel de recaudacion: la primera opcion con operacion propia.
@@ -60,9 +61,6 @@ export interface AvanceDeRecaudacion {
    respuesta llega como `CuerpoSinEsquema` y **se valida aqui**, en un solo
    sitio. El dia que el backend sirva su recurso, esto es lo unico que cambia:
    el adaptador ya trabaja sobre el dominio. */
-
-const esObjeto = (valor: unknown): valor is Readonly<Record<string, unknown>> =>
-  typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 
 const texto = (valor: unknown): string => (typeof valor === 'string' ? valor : '');
 

@@ -1,9 +1,24 @@
+import { lazy } from 'react';
 import type { ComposicionDeOpcion } from '../composicion';
 import { CodigoCatastral } from './CodigoCatastral';
 import { normalizarCodigoCatastral } from './codigo';
 import { ResumenDeFicha } from './ResumenDeFicha';
-import { AltaDeManzana, AltaDeSector, AltaDeVia } from './altas';
-import { AltaGuiadaDeFicha } from './AltaGuiadaDeFicha';
+
+/**
+ * Los formularios de alta, **cargados cuando se abren**.
+ *
+ * Este archivo lo importa `pantallas/composicion.ts`, y ese lo importa
+ * `Pantalla`: importar aqui el asistente de cuatro pasos —700 lineas— y las tres
+ * altas del territorio los metia en el trozo de arranque, que es el que baja
+ * quien entra a mirar un recibo y no va a dar de alta nada. `lazy` los deja
+ * donde tienen que estar: en un trozo aparte que solo pide quien pulsa «Nuevo».
+ */
+const AltaGuiadaDeFicha = lazy(async () => ({
+  default: (await import('./AltaGuiadaDeFicha')).AltaGuiadaDeFicha,
+}));
+const AltaDeVia = lazy(async () => ({ default: (await import('./altas')).AltaDeVia }));
+const AltaDeSector = lazy(async () => ({ default: (await import('./altas')).AltaDeSector }));
+const AltaDeManzana = lazy(async () => ({ default: (await import('./altas')).AltaDeManzana }));
 
 /**
  * Lo que Catastro compone alrededor de los bloques comunes (#318, #319).

@@ -40,6 +40,13 @@ export function PanelLateral({ titulo, descripcion, onCerrar, children }: PanelL
   const panel = useRef<HTMLDivElement>(null);
   // A donde vuelve el foco al cerrar: donde estaba justo antes de abrir.
   const devolverA = useRef<HTMLElement | null>(null);
+  // `onCerrar` llega como una lambda nueva en cada render de quien nos dibuja,
+  // asi que ponerla en las dependencias del efecto lo desmonta y lo vuelve a
+  // montar en cada render: se quita y se pone el oyente de Esc a cada pulsacion
+  // de tecla del formulario. Se guarda en una referencia y el efecto se registra
+  // una vez.
+  const cerrar = useRef(onCerrar);
+  cerrar.current = onCerrar;
 
   useEffect(() => {
     devolverA.current = document.activeElement as HTMLElement | null;
@@ -52,7 +59,7 @@ export function PanelLateral({ titulo, descripcion, onCerrar, children }: PanelL
     const alPulsar = (evento: KeyboardEvent): void => {
       if (evento.key === 'Escape') {
         evento.preventDefault();
-        onCerrar();
+        cerrar.current();
         return;
       }
       if (evento.key !== 'Tab' || panel.current === null) return;
@@ -70,7 +77,7 @@ export function PanelLateral({ titulo, descripcion, onCerrar, children }: PanelL
     };
     document.addEventListener('keydown', alPulsar);
     return () => document.removeEventListener('keydown', alPulsar);
-  }, [onCerrar]);
+  }, []);
 
   return (
     <>
@@ -86,9 +93,11 @@ export function PanelLateral({ titulo, descripcion, onCerrar, children }: PanelL
       >
         <div className="sgtm-lateral__cabecera">
           <h2 className="sgtm-lateral__titulo">{titulo}</h2>
+          {/* Con `sgtm-boton` a secas no toma variante y sale como texto plano:
+              parecia un enlace suelto en la cabecera, no la salida del panel. */}
           <button
             type="button"
-            className="sgtm-boton sgtm-boton--menudo"
+            className="sgtm-boton sgtm-boton--secundario sgtm-boton--menudo"
             onClick={onCerrar}
             aria-label={`Cerrar ${titulo}`}
           >

@@ -319,6 +319,47 @@ describe('el alta de vía', () => {
     });
   });
 
+  it('el tipo arranca sin elegir, y sin él no se registra', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/catastro/calles');
+
+    await usuario.click(await screen.findByRole('button', { name: 'Nuevo' }));
+    const panel = await screen.findByRole('dialog', { name: 'Nueva vía' });
+
+    // Un `select` sin valor cuyas opciones no traen la vacía se dibujaba
+    // mostrando la primera —«AVENIDA»—, y el borrador seguía vacío: el alta
+    // salía sin tipo y volvía 422 hablando de un campo que se veía lleno.
+    const tipo = within(panel).getByLabelText('Tipo de vía') as HTMLSelectElement;
+    expect(tipo.value).toBe('');
+
+    await usuario.type(within(panel).getByLabelText('Código de vía'), '00001999');
+    await usuario.type(within(panel).getByLabelText('Nombre'), 'SANTA ROSA');
+    await usuario.type(within(panel).getByLabelText('Observación'), 'Habilitación urbana 0142.');
+
+    const registrar = within(panel).getByRole('button', { name: 'Registrar vía' });
+    expect(registrar).toBeDisabled();
+    // Y se dice por qué, donde se lee: no en un `title` sobre un botón apagado.
+    const motivo = within(panel).getByRole('status');
+    expect(motivo).toHaveTextContent(/Falta el tipo de vía/);
+    expect(registrar).toHaveAttribute('aria-describedby', motivo.id);
+
+    await usuario.selectOptions(tipo, 'JIRON');
+    expect(registrar).toBeEnabled();
+  });
+
+  it('sin observación el motivo también se ve, y no solo cuando falta un campo', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/catastro/calles');
+
+    await usuario.click(await screen.findByRole('button', { name: 'Nuevo' }));
+    const panel = await screen.findByRole('dialog', { name: 'Nueva vía' });
+    await usuario.type(within(panel).getByLabelText('Código de vía'), '00001999');
+    await usuario.selectOptions(within(panel).getByLabelText('Tipo de vía'), 'JIRON');
+    await usuario.type(within(panel).getByLabelText('Nombre'), 'SANTA ROSA');
+
+    expect(within(panel).getByRole('status')).toHaveTextContent(/Falta la observación/);
+  });
+
   it('el panel se cierra con Esc, sin haber mandado nada', async () => {
     const usuario = userEvent.setup();
     montarEnRuta('/catastro/calles');

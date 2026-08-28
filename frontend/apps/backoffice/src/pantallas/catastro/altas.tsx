@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { Aviso, Boton, Campo } from '@sgtm/design-system';
 import type { IdDeOperacion } from '@sgtm/api-client';
@@ -94,12 +95,18 @@ export function AltaDeManzana({ contexto, onCerrar }: AltaEnPanelProps) {
 }
 
 export function AltaDeVia({ onCerrar }: AltaEnPanelProps) {
+  // El tipo entra en `exigir` porque el desplegable ya no viene con uno elegido:
+  // antes arrancaba mostrando «AVENIDA» sin que nadie lo tocara y **no viajaba**
+  // —el borrador seguia vacio—, asi que el alta salia sin tipo y volvia 422
+  // hablando de un campo que la pantalla ensenaba lleno.
   const escritura = useAlta('registrar_via', {}, (borrador) =>
     borrador['codigo'] === undefined || borrador['codigo'].trim() === ''
       ? 'Falta el código de la vía.'
-      : borrador['nombre'] === undefined || borrador['nombre'].trim() === ''
-        ? 'Falta el nombre de la vía.'
-        : undefined,
+      : borrador['tipo'] === undefined || borrador['tipo'].trim() === ''
+        ? 'Falta el tipo de vía: se elige del catálogo, no se teclea.'
+        : borrador['nombre'] === undefined || borrador['nombre'].trim() === ''
+          ? 'Falta el nombre de la vía.'
+          : undefined,
   );
 
   return (
@@ -186,6 +193,7 @@ function FormularioDeAlta({
   readonly onCerrar: () => void;
   readonly children: ReactNode;
 }) {
+  const idDelMotivo = useId();
   return (
     <>
       {children}
@@ -212,26 +220,31 @@ function FormularioDeAlta({
         </p>
       )}
 
+      {/* **Por que no se puede guardar, antes de las acciones y siempre.** Antes
+          se pintaba debajo del boton y solo cuando lo que faltaba era un campo:
+          el motivo mas frecuente —la observacion en blanco— vivia en un `title`
+          sobre un boton `disabled`, y ahi no existe ni para el teclado, que no
+          puede enfocarlo, ni para el lector de pantalla. */}
+      {escritura.motivo !== undefined && (
+        <p className="sgtm-lateral__falta" id={idDelMotivo} role="status">
+          {escritura.motivo}
+        </p>
+      )}
+
       <div className="sgtm-lateral__acciones">
         <Boton onClick={onCerrar}>Cerrar</Boton>
         <Boton
           variante="primario"
           disabled={!escritura.puedeEnviar}
-          title={escritura.falta ?? tituloDe(escritura, accion)}
+          {...(escritura.motivo === undefined ? {} : { 'aria-describedby': idDelMotivo })}
           onClick={escritura.enviar}
         >
           {escritura.enviando ? `${accion}…` : accion}
         </Boton>
       </div>
-      {escritura.falta !== undefined && <p className="sgtm-lateral__falta">{escritura.falta}</p>}
     </>
   );
 }
-
-const tituloDe = (escritura: Escritura, accion: string): string | undefined =>
-  escritura.observacion.trim() === ''
-    ? `Escribe la observación para poder ${accion.toLowerCase()}`
-    : undefined;
 
 function ErrorDelAlta({ error }: { readonly error: unknown }) {
   const texto = textoDeError(error);

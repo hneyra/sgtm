@@ -433,6 +433,15 @@ textarea.sgtm-campo__control {
   color: var(--error-texto);
 }
 
+/* La ayuda de un campo: lo que el `placeholder` no puede decir. Un
+   `input[type=date]` lo ignora —el navegador pinta su propia mascara—, asi que
+   ahi la indicacion o vive debajo o no existe. */
+.sgtm-campo__ayuda {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
 .sgtm-campo--con-error .sgtm-campo__control {
   border-color: var(--error-texto);
 }

@@ -2,7 +2,16 @@ import type { Celda, DatosDePantalla, ValorDeCampo } from '@sgtm/api-client';
 import { definirConexion } from '../conexiones';
 import type { Conexion, ContextoDePantalla } from '../conexiones';
 import { parametrosDeBusqueda } from '../busqueda';
-import { SIN_DATO, datosDe, estado, instante, leerPaginado, tablaDe, texto } from './listado';
+import {
+  SIN_DATO,
+  datosDe,
+  esObjeto,
+  estado,
+  instante,
+  leerPaginado,
+  tablaDe,
+  texto,
+} from './listado';
 
 /**
  * El modulo de seguridad, conectado al backend de verdad.
@@ -183,7 +192,7 @@ const parametros = definirConexion({
 function ejercicioMasReciente(conjuntos: readonly unknown[]): number | undefined {
   let mayor: number | undefined;
   for (const conjunto of conjuntos) {
-    if (!esConjunto(conjunto)) continue;
+    if (!esObjeto(conjunto)) continue;
     const ejercicio = conjunto['ejercicio'];
     if (typeof ejercicio === 'number' && (mayor === undefined || ejercicio > mayor)) {
       mayor = ejercicio;
@@ -191,9 +200,6 @@ function ejercicioMasReciente(conjuntos: readonly unknown[]): number | undefined
   }
   return mayor;
 }
-
-const esConjunto = (valor: unknown): valor is Readonly<Record<string, unknown>> =>
-  typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 
 /** Ver `listado.ts`: la fecha sale del reloj solo porque estas lecturas no la mandan. */
 const hoyDeLaPantalla = () => new Date().toISOString().slice(0, 10);

@@ -94,18 +94,21 @@ const resultadoDeNotificacionDe = (texto: string): string | undefined =>
  * escribe una vez por la misma razon que el backend la escribio una vez: dos copias acaban
  * aceptando cosas distintas.
  *
- * **Ni un importe** (regla 5, D-02a): piso, area, año, material, estado y las siete
- * categorias de una letra. Cuanto vale cada categoria es un valor unitario, y eso vive en
- * datos versionados, no en un formulario.
+ * **Ni un importe** (regla 5, D-02a): piso, area y las siete categorias de una letra.
+ * Cuanto vale cada categoria es un valor unitario, y eso vive en datos versionados, no en
+ * un formulario.
+ *
+ * `anioConstruccion`, `material` y `estadoConservacion` **no estan**, aunque el backend los
+ * acepte: **ningun formulario los captura**. Una columna declarada que ninguna pantalla
+ * escribe no es una prevision, es una lista blanca que dice mas de lo que la interfaz puede
+ * hacer —y la lista blanca vale precisamente por decir la verdad sobre eso—. Entran el dia
+ * que `TablaDePisos` tenga sus tres campos, no antes.
  */
 const CONSTRUCCIONES: TablaDelCuerpo = {
   campo: 'construcciones',
   columnas: {
     piso: { campo: 'piso' },
     areaConstruida: { campo: 'areaConstruida' },
-    anioConstruccion: { campo: 'anioConstruccion', entero: true },
-    material: { campo: 'material' },
-    estadoConservacion: { campo: 'estadoConservacion' },
     categoriaMuros: { campo: 'categoriaMuros' },
     categoriaTechos: { campo: 'categoriaTechos' },
     categoriaPisos: { campo: 'categoriaPisos' },
@@ -290,9 +293,8 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
    * - `economico`, `bienesComunes`, `rural`: son el detalle de los **otros tres** tipos de
    *   ficha, y mandar el de otro tipo es 422, no un campo ignorado.
    *
-   * `anioConstruccion` de un piso viaja como entero porque el backend lo declara `Integer`;
-   * el area construida, **nunca**: es una medida decimal y convertirla perderia centimetros
-   * (regla 1 aplicada a las medidas).
+   * El area construida de un piso **nunca** viaja como numero: es una medida decimal y
+   * convertirla perderia centimetros (regla 1 aplicada a las medidas).
    */
   registrar_ficha_urbana: {
     campos: {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Aviso, Boton, Esqueleto } from '@sgtm/design-system';
@@ -19,7 +19,7 @@ import {
 import { NO_DISPONIBLE, SIN_PERMISO, estadoDePantalla, textoDeError } from './estados';
 import { useCatalogoVisible } from '../app/sesion/useCatalogoVisible';
 import { useEscritura } from './escritura';
-import { useFocoTrasGuardar } from './foco';
+import { useFocoEnLaAccion, useFocoTrasGuardar } from './foco';
 import { avisoDe } from './avisos';
 import { escrituraDe } from './escrituras';
 import { useEjercicio } from '../app/ejercicio';
@@ -348,6 +348,10 @@ function Bloques({
   // Tras cobrar, el foco vuelve al campo de identificacion: entra el siguiente
   // contribuyente y hay que poder teclear su documento sin buscar donde.
   const refDeBusqueda = useFocoTrasGuardar(escritura.enviada);
+  // Al cerrar el alta guiada, el foco vuelve a la accion que la abrio: el flujo
+  // sustituye a la pantalla entera, asi que el boton no esta ahi para
+  // devolverselo el mismo (a diferencia del panel lateral).
+  useFocoEnLaAccion(composicion.flujo?.accion, flujoAbierto);
 
   // El error y el sin permiso son de la pantalla entera, no de un bloque: hay
   // una peticion por pantalla, y no puede fallar la tabla y no el formulario.
@@ -370,7 +374,13 @@ function Bloques({
   // estaba mirando (#320). Solo con privilegio de registro, como el panel.
   if (flujoAbierto && composicion.flujo !== undefined && puedeRegistrarAqui) {
     const Asistente = composicion.flujo.Asistente;
-    return <Asistente onCerrar={() => fijarFlujoAbierto(false)} />;
+    // El asistente llega en su propio trozo (`lazy`): mientras baja, el hueco de
+    // siempre, no una pantalla en blanco.
+    return (
+      <Suspense fallback={<Esqueleto alto={320} />}>
+        <Asistente titulo={composicion.flujo.titulo} onCerrar={() => fijarFlujoAbierto(false)} />
+      </Suspense>
+    );
   }
 
   if (estado === 'error') {
@@ -645,16 +655,22 @@ function PanelDeAlta({
   const Formulario = alta.Formulario;
 
   return (
-    <PanelLateral
-      titulo={alta.titulo}
-      {...(alta.descripcion === undefined ? {} : { descripcion: alta.descripcion })}
-      onCerrar={onCerrar}
-    >
-      <Formulario
-        {...(abierta.contexto === undefined ? {} : { contexto: abierta.contexto })}
+    // El `Suspense` envuelve al panel **entero** y no a su contenido: el panel
+    // lleva el foco a su primer control al montarse, y montarlo alrededor de un
+    // hueco que todavia se esta cargando dejaria el foco en el boton de cerrar
+    // y no lo volveria a mover cuando llegara el formulario.
+    <Suspense fallback={null}>
+      <PanelLateral
+        titulo={alta.titulo}
+        {...(alta.descripcion === undefined ? {} : { descripcion: alta.descripcion })}
         onCerrar={onCerrar}
-      />
-    </PanelLateral>
+      >
+        <Formulario
+          {...(abierta.contexto === undefined ? {} : { contexto: abierta.contexto })}
+          onCerrar={onCerrar}
+        />
+      </PanelLateral>
+    </Suspense>
   );
 }
 

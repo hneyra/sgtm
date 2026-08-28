@@ -66,10 +66,18 @@ export function ActualizacionDeCatastro({
     {
       campos: declarada?.campos ?? {},
       tablas: declarada?.tablas ?? {},
+      // **Mientras no esten sembrados los pisos, no se guarda.** La barra de
+      // acciones se dibuja desde el primer render —tambien durante la carga—, y
+      // en ese momento la tabla esta vacia y el origen sin fijar: guardar ahi
+      // mandaba `construcciones: []`, que en este verbo no es «no lo se» sino
+      // «ningun piso», y borraba las construcciones del predio sin que nadie lo
+      // pidiera y sin que ningun `DELETE` apareciera en el diff.
       exigir: (borrador) =>
-        (borrador['documentoOrigen'] ?? '').trim() === ''
-          ? 'Falta el documento de origen (acta, resolución o declaración jurada).'
-          : undefined,
+        !sembrada
+          ? 'Todavía se están leyendo los pisos de la versión vigente: guardar ahora los borraría.'
+          : (borrador['documentoOrigen'] ?? '').trim() === ''
+            ? 'Falta el documento de origen (acta, resolución o declaración jurada).'
+            : undefined,
     },
   );
 
@@ -144,7 +152,9 @@ export function ActualizacionDeCatastro({
             campo="vigenciaDesde"
             etiqueta="Vigente desde"
             tipo="date"
-            ph="Sin fecha, rige desde hoy"
+            // Un `input[type=date]` **no pinta el `placeholder`**: dibuja su
+            // propia mascara. La indicacion va debajo del campo o no existe.
+            ayuda="Sin fecha, rige desde hoy."
           />
           {escritura.falta !== undefined && (
             <p className="sgtm-asistente__falta">{escritura.falta}</p>
@@ -189,6 +199,7 @@ function CampoDeclarado({
   etiqueta,
   tipo = 'text',
   ph,
+  ayuda,
   opciones,
 }: {
   readonly escritura: Escritura;
@@ -196,6 +207,7 @@ function CampoDeclarado({
   readonly etiqueta: string;
   readonly tipo?: 'text' | 'sel' | 'date';
   readonly ph?: string;
+  readonly ayuda?: string;
   readonly opciones?: readonly string[];
 }) {
   return (
@@ -205,6 +217,7 @@ function CampoDeclarado({
       valor={escritura.borrador[campo] ?? ''}
       bloqueado={!escritura.campos.has(campo)}
       {...(ph === undefined ? {} : { ph })}
+      {...(ayuda === undefined ? {} : { ayuda })}
       {...(opciones === undefined ? {} : { opciones })}
       {...(escritura.errorPorCampo[campo] === undefined
         ? {}

@@ -171,6 +171,17 @@ function compilar(conProxy) {
   const trae = new Set();
   const dominios = new Set();
   const modulos = [];
+  const diferidos = [];
+  // Lo que el navegador pide **antes de pintar la primera pantalla**: el modulo
+  // de entrada, su hoja de estilos y los trozos que Vite precarga porque la
+  // entrada los importa de forma estatica. Es lo que `index.html` enumera.
+  //
+  // Antes se sumaba «todo lo que no es un trozo por modulo», y eso contaba como
+  // arranque tambien lo que se carga con `import()` cuando alguien pulsa un
+  // boton: partir en dos un formulario que nadie abre al entrar hacia **subir**
+  // la cifra que mide lo que cuesta entrar. Un presupuesto que castiga la
+  // correccion empuja a no hacerla.
+  const deLaEntrada = primeraPantalla(salida);
 
   for (const archivo of readdirSync(activos)) {
     if (!archivo.endsWith('.js') && !archivo.endsWith('.css')) continue;
@@ -184,12 +195,34 @@ function compilar(conProxy) {
       for (const dominio of DOMINIOS) if (texto.includes(dominio)) dominios.add(dominio);
     }
 
-    // Los trozos por modulo llevan el nombre de su archivo generado; lo demas
-    // —el indice, las dependencias y la hoja de estilos— es el arranque.
+    // Los trozos por modulo llevan el nombre de su archivo generado.
     if (archivo.includes('.generado-')) modulos.push({ archivo, kb });
-    else arranque += kb;
+    else if (deLaEntrada.has(archivo)) arranque += kb;
+    else diferidos.push({ archivo, kb });
   }
-  return { bytes, trae, dominios, arranque, modulos };
+  return { bytes, trae, dominios, arranque, modulos, diferidos };
+}
+
+/**
+ * Los activos que `index.html` pide para pintar: la entrada, su CSS y los
+ * `modulepreload` de su cierre de importaciones estaticas.
+ *
+ * Falla ruidosamente si no encuentra ninguno: si el formato de `index.html`
+ * cambiara, esta funcion devolveria un conjunto vacio, el arranque saldria 0 KB
+ * y el presupuesto pasaria siempre —una comprobacion que se salta a si misma—.
+ */
+function primeraPantalla(salida) {
+  const html = readFileSync(join(salida, 'index.html'), 'utf8');
+  const activos = new Set(
+    [...html.matchAll(/(?:src|href)="\/assets\/([^"]+)"/g)].map(([, archivo]) => archivo),
+  );
+  if (activos.size === 0) {
+    console.error(
+      '\n\u2717 index.html no enumera ningun activo: la medida del arranque no vale.\n',
+    );
+    process.exit(1);
+  }
+  return activos;
 }
 
 const con = compilar(true);
@@ -287,3 +320,15 @@ console.log(
   `Arranque: ${sin.arranque.toFixed(1)} KB comprimidos de ${PRESUPUESTO.arranque}. ` +
     `Doce trozos por modulo, el mayor ${mayor.kb.toFixed(1)} KB de ${PRESUPUESTO.modulo}.`,
 );
+
+/* Lo que **no** se descarga al entrar, dicho para que se vea que existe: son los
+ * formularios que solo baja quien pulsa la accion que los abre. No tienen
+ * presupuesto propio —no cuestan nada a quien no los usa— pero callarlos
+ * dejaria la impresion de que el arranque bajo porque el codigo desaparecio. */
+if (sin.diferidos.length > 0) {
+  const total = sin.diferidos.reduce((suma, trozo) => suma + trozo.kb, 0);
+  console.log(
+    `Fuera del arranque, a peticion: ${total.toFixed(1)} KB en ${sin.diferidos.length} trozos ` +
+      `(${sin.diferidos.map((t) => t.archivo.replace(/-[^-]+\.js$/, '')).join(', ')}).`,
+  );
+}

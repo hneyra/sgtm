@@ -1,4 +1,4 @@
-import { Fragment, useId, useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Aviso, Boton, Esqueleto, Insignia, TONO_DE_INSIGNIA } from '@sgtm/design-system';
 import type { DatosDeTabla, DetalleDeFila } from '@sgtm/api-client';
 import type { EstructuraDeTabla } from '../../catalogo';
@@ -66,11 +66,12 @@ export function TablaDePantalla({
   const filas = datos?.filas ?? [];
   const vacia = !cargando && filas.length === 0;
   const detalles = datos?.detalles;
-  // Se despliegan de una en una y por indice de fila: la clave del detalle no
-  // sirve —dos paginas distintas pueden traer la misma— y abrir varias a la vez
-  // convierte la tabla en una lista que ya no se puede recorrer con la vista.
-  const [desplegada, fijarDesplegada] = useState<number | null>(null);
-  const idBase = useId();
+  // Se despliegan de una en una: abrir varias a la vez convierte la tabla en una
+  // lista que ya no se puede recorrer con la vista. Se guarda **la clave del
+  // detalle** y no el indice de la fila: con el indice, pasar de pagina o
+  // filtrar dejaba abierta «la fila 3», que en la pagina nueva es otro registro
+  // —el desplegable seguia abierto ensenando el detalle de otro sector—.
+  const [desplegada, fijarDesplegada] = useState<string | null>(null);
   const columnas = estructura.cols.length + (detalles === undefined ? 0 : 1);
 
   return (
@@ -95,7 +96,11 @@ export function TablaDePantalla({
           <table className="sgtm-tabla">
             <thead>
               <tr>
-                {detalles !== undefined && <th className="sgtm-tabla__desplegar" />}
+                {detalles !== undefined && (
+                  <th className="sgtm-tabla__desplegar">
+                    <span className="sgtm-portal__oculto">Desplegar</span>
+                  </th>
+                )}
                 {estructura.cols.map((columna, i) => {
                   const clave = estructura.claves[i];
                   const ordenable = onOrdenar !== undefined && clave !== undefined;
@@ -140,8 +145,7 @@ export function TablaDePantalla({
                   ))
                 : filas.map((fila, f) => {
                     const detalle = detalles?.[f];
-                    const abierta = desplegada === f;
-                    const idDelDetalle = `${idBase}-detalle-${f}`;
+                    const abierta = detalle !== undefined && desplegada === detalle.clave;
                     return (
                       // Las filas del catalogo no traen identificador propio; el
                       // indice es estable porque la lista no se reordena en cliente.
@@ -153,8 +157,7 @@ export function TablaDePantalla({
                                 <button
                                   type="button"
                                   aria-expanded={abierta}
-                                  aria-controls={idDelDetalle}
-                                  onClick={() => fijarDesplegada(abierta ? null : f)}
+                                  onClick={() => fijarDesplegada(abierta ? null : detalle.clave)}
                                 >
                                   <span aria-hidden="true">{abierta ? '▾' : '▸'}</span>
                                   <span className="sgtm-portal__oculto">
@@ -179,8 +182,16 @@ export function TablaDePantalla({
                             </td>
                           ))}
                         </tr>
+                        {/* **Sin `aria-controls`.** Apuntaba a un `id` que solo
+                            existe con la fila desplegada: plegada, el atributo
+                            senalaba a la nada, y un lector de pantalla que sigue
+                            la referencia no encuentra nada que anunciar. La otra
+                            salida —dibujar el detalle siempre y ocultarlo con
+                            `hidden`— mete en el DOM el detalle de cada fila de
+                            cada pagina; `aria-expanded` solo ya dice lo que hay
+                            que decir: si esta abierto o cerrado. */}
                         {detalle !== undefined && abierta && (
-                          <tr id={idDelDetalle} className="sgtm-tabla__fila-detalle">
+                          <tr className="sgtm-tabla__fila-detalle">
                             <td colSpan={columnas}>
                               <Detalle detalle={detalle} altaDeFila={altaDeFila} />
                             </td>
@@ -226,8 +237,10 @@ function Detalle({
       </div>
       {detalle.items.length > 0 && (
         <ul className="sgtm-detalle__fichas">
-          {detalle.items.map((item) => (
-            <li key={item.texto} className="sgtm-detalle__ficha">
+          {detalle.items.map((item, i) => (
+            // El texto no es clave: dos manzanas de sectores distintos se
+            // llaman «001», y React se queda con la primera de las dos.
+            <li key={`${i}-${item.texto}`} className="sgtm-detalle__ficha">
               <span className="sgtm-detalle__codigo">{item.texto}</span>
               {item.nota !== undefined && <span className="sgtm-detalle__conteo">{item.nota}</span>}
             </li>
