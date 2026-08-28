@@ -184,8 +184,12 @@ Quien vuelva a esta cifra el año que viene tiene que leer la resolución de ese
 El PDF del Anexo II lo produjo Microsoft Word el 2025-10-27 y el de la resolución, Word el
 2025-10-29 —la misma fecha que la resolución lleva impresa—, según los metadatos de cada archivo.
 
-**Los PDF no se copian al repositorio**; quedan pendientes de archivar en S3 por el dueño del
-repositorio, como los de `vehicular-valores-referenciales-2026.md`.
+**Los PDF no se copian al repositorio**; el dueño del repositorio los archivó en S3 el
+2026-08-28 (huellas y registro completo en [`fuentes/README.md`](fuentes/README.md)):
+
+- `s3://sgtm-fuentes-normativas/fuentes-normativas/valores-unitarios/200105/2026-08-28T23-43-39Z__anexo_ii.pdf`
+- `s3://sgtm-fuentes-normativas/fuentes-normativas/valores-unitarios/200105/2026-08-28T23-44-05Z__rm-277-2025-vivienda-valores-arancelarios-2026-escudo.pdf`
+- `s3://sgtm-fuentes-normativas/fuentes-normativas/tasaciones/200105/2026-08-28T23-44-08Z__RM_172-2016-VIVIENDA.pdf`
 
 ## 2. Cómo entra al sistema
 

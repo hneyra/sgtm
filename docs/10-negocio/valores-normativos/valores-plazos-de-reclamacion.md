@@ -13,7 +13,10 @@
 
 **Fuente consultada:** `textoCompleto-TUO-CT.pdf` (SUNAT, edición con modificaciones incorporadas
 hasta el D. Leg. 1540) y `DS-018-2008-JUS.pdf`, descargados por el dueño del repositorio el
-2026-08-28 — huellas y destino S3 en el README de la rama `gob-docs`.
+2026-08-28 y archivados en S3 (huellas en [`fuentes/README.md`](fuentes/README.md)):
+
+- `s3://sgtm-fuentes-normativas/fuentes-normativas/codigo-tributario/200105/2026-08-28T23-45-38Z__textoCompleto-TUO-CT.pdf`
+- `s3://sgtm-fuentes-normativas/fuentes-normativas/ejecucion-coactiva/200105/2026-08-28T23-45-41Z__DS-018-2008-JUS.pdf`
 
 ## 1. La tabla tal como está en la norma
 

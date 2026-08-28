@@ -18,8 +18,9 @@
 > nadie y el corpus no admite que quien transcribe se verifique a sí mismo (ADR-0007), el estado
 > bajó a `TRANSCRITO` — y **ese mismo día HNA re-verificó sobre el contenido ampliado**, que es la
 > firma de la cabecera. Las dos verificaciones quedan en el historial de git, cada una sobre el
-> contenido que el archivo tenía al firmarse. El PDF del TUO sigue pendiente de archivar en S3 por
-> el dueño del repositorio (README de la rama `gob-docs`).
+> contenido que el archivo tenía al firmarse. El PDF del TUO está archivado en S3:
+> `s3://sgtm-fuentes-normativas/fuentes-normativas/tributacion-municipal/200105/2026-08-28T23-45-44Z__DS-156-2004-EF-TUO-Ley-Tributacion-Municipal.pdf`
+> (huella en [`fuentes/README.md`](fuentes/README.md)).
 
 ## 1. La tabla tal como está en la norma
 

@@ -25,8 +25,9 @@
 > corrigió la tabla de §1.1 —que describía el texto anterior al D. Leg. 1520— y cerró el
 > `‹NO CONFIRMADO›` del art. 37. **Esa adición la re-verificó HNA ese mismo día**, y esa es la
 > firma que la cabecera registra; las tres verificaciones quedan en el historial de git, cada una
-> sobre el contenido que el archivo tenía al firmarse. El PDF del TUO sigue pendiente de archivar
-> en S3 por el dueño del repositorio (README de la rama `gob-docs`).
+> sobre el contenido que el archivo tenía al firmarse. El PDF del TUO está archivado en S3:
+> `s3://sgtm-fuentes-normativas/fuentes-normativas/tributacion-municipal/200105/2026-08-28T23-45-44Z__DS-156-2004-EF-TUO-Ley-Tributacion-Municipal.pdf`
+> (huella en [`fuentes/README.md`](fuentes/README.md)).
 
 ## 1. La tabla tal como está en la norma
 

@@ -12,9 +12,12 @@
 | Estado | VERIFICADO |
 
 **Fuente consultada:** `textoCompleto-TUO-CT.pdf` (SUNAT), descargado por el dueño del repositorio
-el 2026-08-28 — huella y destino S3 en el README de la rama `gob-docs`; el art. 34, del PDF del
-TUO LTM de `muniate.gob.pe` alcanzado por HNA el 2026-08-28, pendiente de archivar en
-`gob-docs/ds-156-2004-ef/`.
+el 2026-08-28 y archivado en S3 —
+`s3://sgtm-fuentes-normativas/fuentes-normativas/codigo-tributario/200105/2026-08-28T23-45-38Z__textoCompleto-TUO-CT.pdf`—;
+el art. 34, del PDF del TUO LTM de `muniate.gob.pe` alcanzado por HNA el 2026-08-28. El TUO LTM
+completo (D.S. 156-2004-EF, edición con concordancias) quedó también archivado:
+`s3://sgtm-fuentes-normativas/fuentes-normativas/tributacion-municipal/200105/2026-08-28T23-45-44Z__DS-156-2004-EF-TUO-Ley-Tributacion-Municipal.pdf`.
+Huellas de ambos en [`fuentes/README.md`](fuentes/README.md).
 
 ## 1. La tabla tal como está en la norma
 

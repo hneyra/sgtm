@@ -122,8 +122,12 @@ ninguna palabra de memoria ni de una web:
 | D.S. N.° 031-99-EF | `ds-031-99-ef.pdf`, 2 páginas | Los siete artículos completos, incluidos los cuatro que pide este archivo |
 | D.S. N.° 103-99-EF | `ds-103-99-ef.pdf`, 17 páginas | Se leyó **para descartarlo**: ver §3 |
 
-**Los PDF no se copian al repositorio**; quedan pendientes de archivar en S3 por el dueño del
-repositorio, como los de `vehicular-valores-referenciales-2026.md`.
+**Los PDF no se copian al repositorio**; el dueño del repositorio los archivó en S3 el
+2026-08-28 (huellas y registro completo en [`fuentes/README.md`](fuentes/README.md)):
+
+- `s3://sgtm-fuentes-normativas/fuentes-normativas/amazonia/200105/2026-08-28T23-44-12Z__5136617-ley-n-27037.pdf`
+- `s3://sgtm-fuentes-normativas/fuentes-normativas/amazonia/200105/2026-08-28T23-44-15Z__DS-031-99-EF.pdf`
+- `s3://sgtm-fuentes-normativas/fuentes-normativas/amazonia/200105/2026-08-28T23-44-17Z__ds-103-99-ef.pdf`
 
 ## 2. Cómo entra al sistema
 
