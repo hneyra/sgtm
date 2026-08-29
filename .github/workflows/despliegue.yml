@@ -360,6 +360,25 @@ jobs:
           kc config credentials --server http://localhost:8080 --realm master \
             --user "${SGTM_KEYCLOAK_ADMIN:-admin}" --password "$SGTM_CLAVE_KEYCLOAK" >/dev/null
 
+          echo "--- el numero declarado ESTA en el padron de esa municipalidad (cruce a tres bandas)"
+          python3 -c 'import json; [print(u["tipoDocumento"], u["numeroDocumento"]) for u in json.load(open("identidad/ciudadanos/200101.json"))["ciudadanos"]]' > /tmp/declarados
+          test -s /tmp/declarados
+          while read -r tipo numero; do
+            [ -n "${tipo:-}" ] || continue
+            enElPadron=$(sql "SELECT count(*) FROM contribuyente c JOIN municipalidad m ON m.id = c.municipalidad_id WHERE m.ubigeo = '200101' AND c.tipo_documento = '$tipo' AND c.numero_documento = '$numero'")
+            cuenta=$(printf '%s-%s' "$tipo" "$numero" | tr 'A-Z' 'a-z')
+            deKeycloak=$(kc get users -r "$CIUDADANO" -q "username=$cuenta" -q exact=true \
+              | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["attributes"]["numero_documento"][0] if d else "")')
+            echo "archivo=$tipo $numero  padron=$enElPadron  keycloak=$deKeycloak"
+            if [ "$enElPadron" -lt 1 ]; then
+              echo "FALLO: identidad/ciudadanos/200101.json declara $tipo $numero, y esa persona NO" >&2
+              echo "figura en el padron de 200101. Enrolar a alguien que ningun padron conoce es" >&2
+              echo "crear una identidad que el sistema cree y el padron no (ADR-0020 §5)." >&2
+              exit 1
+            fi
+            test "$numero" = "$deKeycloak"
+          done < /tmp/declarados
+
           # Sin `--fields`: kcadm devuelve `attributes` y `requiredActions` vacios cuando se
           # filtran por campo. Se pide la cuenta entera (mismo defecto que anota la 3b).
           ficha=$(kc get users -r "$CIUDADANO" -q "username=$CUENTA" -q exact=true)
@@ -389,25 +408,6 @@ jobs:
 
           echo "--- sin clave, no consigue token"
           test -z "$(tokenDe "$CIUDADANO" "$CUENTA" cualquiera)"
-
-          echo "--- el numero declarado ESTA en el padron de esa municipalidad (cruce a tres bandas)"
-          python3 -c 'import json; [print(u["tipoDocumento"], u["numeroDocumento"]) for u in json.load(open("identidad/ciudadanos/200101.json"))["ciudadanos"]]' > /tmp/declarados
-          test -s /tmp/declarados
-          while read -r tipo numero; do
-            [ -n "${tipo:-}" ] || continue
-            enElPadron=$(sql "SELECT count(*) FROM contribuyente c JOIN municipalidad m ON m.id = c.municipalidad_id WHERE m.ubigeo = '200101' AND c.tipo_documento = '$tipo' AND c.numero_documento = '$numero'")
-            cuenta=$(printf '%s-%s' "$tipo" "$numero" | tr 'A-Z' 'a-z')
-            deKeycloak=$(kc get users -r "$CIUDADANO" -q "username=$cuenta" -q exact=true \
-              | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["attributes"]["numero_documento"][0] if d else "")')
-            echo "archivo=$tipo $numero  padron=$enElPadron  keycloak=$deKeycloak"
-            if [ "$enElPadron" -lt 1 ]; then
-              echo "FALLO: identidad/ciudadanos/200101.json declara $tipo $numero, y esa persona NO" >&2
-              echo "figura en el padron de 200101. Enrolar a alguien que ningun padron conoce es" >&2
-              echo "crear una identidad que el sistema cree y el padron no (ADR-0020 §5)." >&2
-              exit 1
-            fi
-            test "$numero" = "$deKeycloak"
-          done < /tmp/declarados
 
           echo "--- reconciliar dos veces no cambia nada"
           nacio=$(echo "$ficha" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["createdTimestamp"])')
