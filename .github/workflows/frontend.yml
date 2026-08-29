@@ -75,8 +75,9 @@ jobs:
 
   # Seis caminos: los tres que mas cuestan si fallan (FRO-03 §6) —el cobro en
   # caja solo con teclado, el portal en un movil y la impresion de un reporte en
-  # A4— mas el inicio con teclado, la determinacion simulada y el recorrido de
-  # las 134 pantallas. Van en su propio trabajo porque necesitan navegador.
+  # A4— mas el inicio con teclado, la determinacion simulada y el listado de los
+  # doce modulos, cuyos recuentos suman las 134 opciones. Van en su propio
+  # trabajo porque necesitan navegador.
   extremo-a-extremo:
     name: Caminos completos
     runs-on: ubuntu-latest

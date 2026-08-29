@@ -9,21 +9,26 @@ que la regla la detecte.
 
 ## 1. Estructura de un módulo
 
+Las 134 pantallas son un catálogo y un renderizador, así que **el directorio de un módulo
+aparece cuando una de sus opciones necesita código propio, y no antes** —la diferencia
+deliberada con un árbol de doce carpetas vacías está dicha en el
+[README del frontend](../../frontend/README.md)—. Cuando aparece, vive bajo `pantallas/`:
+
 ```
-modulos/tesoreria/
-├── paginas/                  # Una por opción del menú
-│   ├── CobroEnCaja.tsx
-│   └── ArqueoDeCaja.tsx
-├── componentes/              # Solo de este módulo
-├── hooks/
-│   └── useDeudaActualizada.ts
-├── tipos.ts
-└── index.ts                  # Interfaz pública del módulo
+apps/backoffice/src/pantallas/
+├── tesoreria/                # un directorio por módulo, cuando hace falta
+│   ├── composicion.ts        # lo que sus opciones componen alrededor de los bloques
+│   ├── index.ts              # las conexiones, y el motivo de lo que no se conecta
+│   └── tesoreria.test.tsx
+├── bloques/                  # los diez bloques comunes del renderizador
+├── Pantalla.tsx              # el renderizador, uno para las 134
+└── conexiones.ts · escrituras.ts · composicion.ts · actos.ts   # registros por opción
 ```
 
-**Regla:** un módulo importa de otro **solo por su `index.ts`**. Alcanzar un archivo interno de
-otro módulo es un defecto — el equivalente frontend de la regla que Spring Modulith hace cumplir
-en el backend. Un componente que usan dos módulos sube a `packages/design-system`.
+**Regla:** los directorios de módulo **no se importan entre sí**: lo que un módulo aporta entra
+por los registros por opción (`composicion.ts`, `conexiones.ts`, `escrituras.ts`), que son
+quienes lo consultan — el equivalente frontend de la regla que Spring Modulith hace cumplir en
+el backend. Un componente que usan dos módulos sube a `packages/design-system` (FRO-02 §4).
 
 ## 2. Nomenclatura
 
@@ -34,7 +39,7 @@ Checkstyle; aquí, ESLint.
 | Elemento | Convención | Ejemplo |
 |---|---|---|
 | Componentes | `PascalCase`, sustantivo del dominio | `FichaDePredio`, `TablaDeDeuda` |
-| Hooks | `use` + concepto en español | `useDeudaActualizada`, `usePapeleta` |
+| Hooks | `use` + concepto en español | `useDatosDePantalla`, `useEscritura` |
 | Tipos del dominio | Español, sin tildes | `Contribuyente`, `Predio`, `Autovaluo` |
 | Props | `<Componente>Props` | `FichaDePredioProps` |
 | Archivos de utilidad | `camelCase` | `formatearImporte.ts` |
@@ -53,7 +58,7 @@ tipo de tributo del manual. Y `contribuyente`, no «usuario» ni «cliente».
 | Regla | Motivo |
 |---|---|
 | **`any` prohibido.** Si no se conoce el tipo, `unknown` y se estrecha | |
-| Los tipos de la API **se generarán desde OpenAPI**, no a mano | Un cambio de contrato debe romper la compilación (pendiente, FRO-01 §8) |
+| Los tipos de la API **se generan desde OpenAPI**, no a mano | Un cambio de contrato rompe la compilación (hecho: `operaciones.generado.ts`, FRO-01 §8) |
 | Los tipos del dominio viven en `packages/dominio` | |
 | Uniones discriminadas para estados | Hace imposible representar un estado inválido |
 | `as` solo con justificación en comentario | |
@@ -72,8 +77,8 @@ tipo de tributo del manual. Y `contribuyente`, no «usuario» ni «cliente».
 const total = cuotas.reduce((a, c) => a + Number(c.monto), 0);
 
 // correcto: el backend lo calcula, y la cifra dice a qué fecha
-const { data } = useDeudaActualizada(contribuyenteId);
-<Importe valor={data.total} fechaCalculo={data.fechaCalculo} />
+const { consulta } = useDatosDeOperacion(conexion, filtros);
+<Importe valor={consulta.data.total} fechaCalculo={consulta.data.fechaCalculo} />
 ```
 
 ## 5. Estado
@@ -82,7 +87,7 @@ const { data } = useDeudaActualizada(contribuyenteId);
 |---|---|
 | Datos del servidor | **TanStack Query.** Nunca en `useState` |
 | Estado de interfaz local | `useState` |
-| Estado de formulario | React Hook Form |
+| Estado de formulario | El borrador de `useEscritura` (`pantallas/escritura.ts`) |
 | Estado global | Solo sesión y preferencias (densidad, acento, recientes) |
 
 1. **Prohibido copiar datos del servidor a `useState`.** Produce dos fuentes de verdad.
@@ -146,14 +151,19 @@ pantalla. `useEscritura` expone `motivo`, que es `exigir` más «falta la observ
 **Una opción con verbo de escritura y sin declaración no escribe, y lo dice** (#332). Antes «mandaba
 solo su observación», que en un cobro o una transferencia no es guardar nada: el operador rellenaba
 catorce campos, pulsaba la primaria y el backend la rechazaba —o no la rechazaba nadie, porque no
-existe—. La negación por omisión se conserva; lo que cambia es que ahora hay **tres estados** y no
-dos, y `pantallas/actos.ts` distingue los dos que faltaban leyendo lo que ya se sabe:
+existe—. La negación por omisión se conserva; lo que cambia es que ahora la causa **se distingue
+y se dice**: `pantallas/actos.ts` deduce tres de lo que ya se sabe —el verbo del contrato, el
+rótulo de la primaria y el registro de escrituras—, y la cuarta, `sin-campo`, es la única que se
+declara en una lista (`ACTOS_SIN_CAMPO`), porque compara lo que el controlador exige con lo que
+el catálogo dibuja, y eso no se deduce de nada que el frontend tenga delante:
 
 | Estado | Cuándo | Qué pide a quien lo lee |
 |---|---|---|
 | Puede guardar | la opción está en `ESCRITURAS` | la observación, y lo que `exigir` añada |
 | `sin-declaracion` | su operación escribe en el contrato, y no está declarada | trabajo, del que escribe el sistema |
 | `sin-backend` | su operación es de lectura, o no está en el contrato | paciencia |
+| `sin-determinacion` | la primaria pide una determinación —calcular, liquidar…— y no guarda campos (#333) | nada que rellenar: la determinación la hace el servidor |
+| `sin-campo` | el acto exige un dato que la pantalla no tiene dónde escribir (#73) | el dato que falta, nombrado, y la salida en papel |
 
 ## 7. Accesibilidad
 
@@ -173,14 +183,15 @@ dos, y `pantallas/actos.ts` distingue los dos que faltaban leyendo lo que ya se 
 |---|---|---|
 | Unidad y componente | Vitest + Testing Library | Comportamiento observable, no implementación |
 | Reglas del proyecto | Vitest sobre ESLint | Que cada prohibición muerde (§9) |
-| Extremo a extremo | Playwright | Cobro, declaración y consulta del portal (pendiente) |
+| Extremo a extremo | Playwright | Seis caminos en Chromium (`frontend/e2e/`): caja con teclado, portal en móvil, reporte en A4, inicio con teclado, determinación simulada y el listado de módulos |
 
 Se consulta por rol y texto accesible (`getByRole`, `getByLabelText`), no por clase CSS. Una
 prueba que se rompe al cambiar una clase no prueba comportamiento.
 
 ## 9. Las prohibiciones, y dónde se verifican
 
-Nueve prohibiciones, nueve reglas de ESLint, nueve muestras que las violan. La prueba
+Once prohibiciones, once reglas de ESLint, once muestras que las violan —la cuenta que manda es
+la de `PROHIBICIONES` en la propia prueba—. La prueba
 `frontend/verificaciones/reglas-de-eslint.test.ts` linta cada muestra y **exige que la regla la
 señale**; si alguien borra una regla, la prueba se pone roja.
 
@@ -195,6 +206,8 @@ señale**; si alguien borra una regla, la prueba se pone roja.
 | 7 | `any` explícito | §3 | `any-explicito.ts` |
 | 8 | `<Importe>` sin `fechaCalculo` | RNF-075, regla 9 | `importe-sin-fecha.tsx` |
 | 9 | `tabIndex` positivo | §7 | `tabindex-positivo.tsx` |
+| 10 | `fetch` suelto fuera de `@sgtm/api-client` | FRO-01 §5 | `fetch-directo.ts` |
+| 11 | `useMutation` fuera de `escritura.ts` — escritura sin observación | Regla 10, RNF-052 | `escritura-sin-observacion.tsx` |
 
 **Al agregar una prohibición, se agrega también la muestra que la viola.** Es la misma exigencia
 que el backend hace en `verificaciones/muestras/`: una regla que no puede fallar no protege nada.
@@ -205,20 +218,26 @@ pone roja; al devolverla, vuelve a verde.
 Prohibiciones que **todavía no se verifican solas** y viven solo aquí:
 
 - Datos del servidor copiados a `useState` (§5).
-- Reintento automático de una mutación que asienta (§5).
-- Alcanzar un archivo interno de otro módulo (§1).
+- Un directorio de módulo que alcanza los archivos de otro (§1).
 - Texto codificado en el componente en lugar de venir del backend o del catálogo (RNF-080).
-- Modificación sin campo de observación (§6).
+
+Dos que estaban en esta lista ya no lo están: la modificación sin observación la cierra la
+regla 11 —`useMutation` fuera de `escritura.ts` no pasa el lint—, y el reintento automático de
+una mutación lo fija `retry: false` en ese único camino de escritura, con la prueba que lo
+comprueba en `pantallas/escritura.test.tsx`.
 
 ## 10. Herramientas
 
 | Verificación | Comando | Bloqueante |
 |---|---|---|
-| Formato | `yarn format` (Prettier) | Sí |
+| Formato | `yarn format` (Prettier) | No: arregla en vez de reprochar, y CI no comprueba formato |
+| Contrato ↔ tipos generados | `yarn comprobar-operaciones` | Sí |
 | Estilo y reglas | `yarn lint` | Sí |
 | Tipos | `yarn typecheck` | Sí |
 | Pruebas, incluidas las reglas | `yarn test` | Sí |
-| Todo junto | `yarn verificar` | Sí |
+| Los cuatro anteriores, juntos | `yarn verificar` | Sí |
+| Compilación, presupuesto y juego de datos | `yarn comprobar-compilaciones` | Sí, en CI (`frontend.yml`) |
+| Los caminos completos | `yarn e2e` | Sí, en CI, en su propio trabajo |
 
 Igual que en el backend: si el build se queja del formato, no se pelea — `yarn format`.
 
