@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | Aceptada |
+| Estado | Aceptado |
 | Fecha | 2026-08-28 |
 | Decide | Dirección del proyecto |
 | Cierra | **D-13** (GOB-02), y con ella el hallazgo **H-5** de [GOB-03](../../00-gobierno/plan-de-desbloqueo-D-02.md) |

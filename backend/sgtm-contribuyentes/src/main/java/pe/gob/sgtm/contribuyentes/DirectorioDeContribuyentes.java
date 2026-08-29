@@ -19,7 +19,7 @@ import java.util.Set;
  * contribuyentes.dominio} y {@code contribuyentes.aplicacion} como internos, asi que un {@code
  * import} desde otro contexto no compila la verificacion. Publicar exactamente esta interfaz —y no
  * el repositorio— es lo que impide que manana alguien llame a {@code guardar} desde fuera: es el
- * mismo patron que {@code parametros.LectorDeParametros} (ARQ-01 §4.1).
+ * mismo patron que {@code parametros.LectorDeParametros} (ARQ-01 §4, regla 1).
  *
  * <p>Devuelve <b>resumenes</b>, no entidades. Quien consulta desde otro contexto necesita mostrar
  * un nombre y un codigo, no editar un contribuyente; entregarle el agregado entero seria invitar a

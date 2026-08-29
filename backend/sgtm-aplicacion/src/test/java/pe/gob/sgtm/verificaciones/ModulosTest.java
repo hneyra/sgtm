@@ -28,8 +28,9 @@ class ModulosTest {
         // Si Modulith no detectara ningun modulo, verify() pasaria sin comprobar nada.
         //
         // Heredado del SRTM y verificado alli: un paquete con solo package-info.java
-        // NO es un modulo para Modulith, hace falta al menos un tipo. Por eso los doce
-        // contextos acotados todavia no aparecen: apareceran con su primera clase.
+        // NO es un modulo para Modulith, hace falta al menos un tipo. Hoy los doce
+        // contextos tienen codigo, asi que la lista exige los doce: si uno dejara de
+        // detectarse, esta prueba lo nombraria.
         assertThat(detectados)
                 .as("los modulos que ya tienen codigo")
                 .contains(
@@ -41,6 +42,12 @@ class ModulosTest {
                         "documentos",
                         "web",
                         "catastro",
+                        "contribuyentes",
+                        "parametros",
+                        "fiscalizacion",
+                        "valores",
+                        "coactiva",
+                        "licencias",
                         "seguridad",
                         "cuentacorriente",
                         "rentas",

@@ -9,8 +9,8 @@ import pe.gob.sgtm.dominio.Observacion;
  * La <b>unica</b> puerta por la que {@code fiscalizacion} escribe en {@code catastro} (ARQ-01 §3.5
  * y §4 regla 4, #52, RF-054).
  *
- * <p>Vive en el paquete raiz de {@code catastro}, que es su API publica (ARQ-01 §4.1), junto a
- * {@link LectorDeFichas}, {@link LectorDeCaracteristicas}, {@link PadronDePredios} y {@link
+ * <p>Vive en el paquete raiz de {@code catastro}, que es su API publica (ARQ-01 §4, regla 1), junto
+ * a {@link LectorDeFichas}, {@link LectorDeCaracteristicas}, {@link PadronDePredios} y {@link
  * GestorDeTitularidad}. De los cinco, este es el <b>unico que escribe</b> para {@code
  * fiscalizacion}, y esa asimetria no se deja a la buena voluntad: una regla de arquitectura la
  * comprueba —{@code SOLO_LA_TRANSFERENCIA_ESCRIBE_FUERA_DE_FISCALIZACION}— con su clase de muestra

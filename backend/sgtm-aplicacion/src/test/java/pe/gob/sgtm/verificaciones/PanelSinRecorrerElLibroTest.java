@@ -135,7 +135,7 @@ class PanelSinRecorrerElLibroTest {
     @DisplayName("la cartera se apoya en el saldo proyectado, no en releer el libro")
     void laCarteraSeApoyaEnElSaldoProyectado() throws Exception {
         // #23 existe justamente para esto: recorrer el libro en cada consulta cuesta mas
-        // que leer un campo, y la caja no puede esperar (RNF-020). La consulta del panel
+        // que leer un campo, y la caja no puede esperar (RNF-020, ../srtm). La consulta del panel
         // agrupa `saldo_proyectado` en el motor; que lo haga se comprueba sobre la fuente,
         // porque es donde el defecto se escribiria.
         java.nio.file.Path fuente =

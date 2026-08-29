@@ -36,10 +36,10 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * acto que se agrega.
  *
  * <p><b>Una ruta, dos actos.</b> La pantalla «Cierre y arqueo de caja» declara un solo endpoint, y
- * publicar aqui un segundo verbo que ninguna pantalla llama lo rechazaria el contrato (ARQ-05).
- * Cual de los dos es lo dice el cuerpo: con {@code motivoDeReversion} se reversa, sin el se cierra.
- * Es la misma solucion que {@code SectorController} usa para editar y dar de baja con un solo
- * {@code PUT}.
+ * publicar aqui un segundo verbo que ninguna pantalla llama lo rechazaria el contrato ({@code
+ * ContratoDeApiTest}). Cual de los dos es lo dice el cuerpo: con {@code motivoDeReversion} se
+ * reversa, sin el se cierra. Es la misma solucion que {@code SectorController} usa para editar y
+ * dar de baja con un solo {@code PUT}.
  *
  * <p>Cerrar exige {@link Privilegio#REGISTRO}; <b>reversar exige ademas {@link
  * Privilegio#ELIMINACION}</b>, comprobado en el metodo con el mismo puerto que usa el guardia.

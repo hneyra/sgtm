@@ -7,7 +7,8 @@ import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 
 /**
- * Mueve una obligacion de una fase de cobranza a otra, sin alterar cuanto se debe (V2, ARQ-06).
+ * Mueve una obligacion de una fase de cobranza a otra, sin alterar cuanto se debe (V2; ARQ-06 de
+ * {@code ../srtm}).
  *
  * <p>Es la API publica que {@link GeneradorDeCargos} anuncia y no cubre: "reversar, abonar o mover
  * de fase son actos posteriores de otros contextos... que ya tienen su propio caso de uso". {@code

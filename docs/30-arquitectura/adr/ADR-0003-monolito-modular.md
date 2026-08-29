@@ -34,8 +34,9 @@ solo por su paquete raíz; nunca por sus paquetes internos.
   módulos con límites verificados que desde un monolito sin ellos.
 - El perfil batch escala aparte sin duplicar el código ni el despliegue.
 - **Advertencia heredada:** un paquete que solo contiene `package-info.java` no es un módulo para
-  Spring Modulith. Los doce contextos vacíos de hoy no se verifican como módulos hasta que tengan
-  una clase.
+  Spring Modulith. Los doce contextos —vacíos cuando se decidió esto— no se verificaban como
+  módulos hasta tener una clase; hoy los doce tienen código y `ModulosTest` exige que los doce
+  se detecten.
 
 ## Alternativas consideradas
 

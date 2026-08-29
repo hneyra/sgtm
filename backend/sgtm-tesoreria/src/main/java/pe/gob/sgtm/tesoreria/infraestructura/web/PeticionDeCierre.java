@@ -9,8 +9,9 @@ import org.jspecify.annotations.Nullable;
  * <p>Una sola ruta y dos actos, distinguidos por el cuerpo: con {@code declarado} cierra; con
  * {@code motivoDeReversion} reversa el cierre vigente y reabre el turno. No es RPC disfrazado: la
  * pantalla «Cierre y arqueo de caja» declara <b>un</b> endpoint, y publicar aqui una segunda ruta
- * que ninguna pantalla llama la rechazaria el contrato (ARQ-05). Los dos son actos sobre el mismo
- * turno, igual que la anulacion y el duplicado son actos sobre el mismo recibo.
+ * que ninguna pantalla llama la rechazaria el contrato ({@code ContratoDeApiTest}). Los dos son
+ * actos sobre el mismo turno, igual que la anulacion y el duplicado son actos sobre el mismo
+ * recibo.
  *
  * <p><b>Las cifras declaradas llegan como texto</b>, no como numero JSON: un {@code double} que
  * atraviese el analizador ya perdio precision antes de que nadie pueda comprobarlo, y la regla 1

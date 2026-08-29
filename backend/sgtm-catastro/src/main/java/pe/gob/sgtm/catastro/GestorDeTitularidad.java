@@ -9,8 +9,8 @@ import pe.gob.sgtm.dominio.Porcentaje;
  * Los efectos de una transferencia sobre la titularidad de un predio, para otro contexto acotado
  * (ARQ-01 §2, la arista {@code catastro} ──► {@code rentas}; #29).
  *
- * <p>Vive en el paquete raiz de {@code catastro}, que es su API publica (ARQ-01 §4.1). Lo que
- * expone es deliberadamente poco: quien orquesta una transferencia no necesita saber que la
+ * <p>Vive en el paquete raiz de {@code catastro}, que es su API publica (ARQ-01 §4, regla 1). Lo
+ * que expone es deliberadamente poco: quien orquesta una transferencia no necesita saber que la
  * comprobacion de que los porcentajes no exceden 100 es un disparador diferido, ni que cerrar y
  * abrir tienen que ir en la misma transaccion (DAT-01 §4.2) — eso es exactamente lo que este tipo
  * hace por quien lo llama.

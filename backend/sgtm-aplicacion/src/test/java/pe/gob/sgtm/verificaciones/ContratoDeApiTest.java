@@ -43,7 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
  *       /transito/papeletas/{numero}/hoja-informativa}.
  * </ul>
  */
-@DisplayName("ARQ-05 — Contrato de la API")
+@DisplayName("Contrato de la API (docs/50-api)")
 class ContratoDeApiTest {
 
     /** Raiz declarada en {@code servers.url} del contrato. */

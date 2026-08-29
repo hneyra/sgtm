@@ -9,8 +9,8 @@ import pe.gob.sgtm.dominio.Dinero;
  * El saldo de insoluto de una obligacion, precalculado. <b>Cache, no verdad</b> (ADR-0006, #23).
  *
  * <p>Existe por una sola razon: recorrer el libro en cada consulta cuesta mas que leer un campo, y
- * la caja no puede esperar (RNF-020). Si alguna vez discrepa del libro, <b>manda el libro</b>: esta
- * fila se reconstruye, no se discute.
+ * la caja no puede esperar (RNF-020 de {@code ../srtm}). Si alguna vez discrepa del libro, <b>manda
+ * el libro</b>: esta fila se reconstruye, no se discute.
  *
  * <p><b>Solo el insoluto.</b> No hay aqui reajuste ni interes, y no es un olvido: esas dos cifras
  * dependen de la fecha en que se pregunte —«el interes se calcula, no se asienta» (ADR-0012)—, asi

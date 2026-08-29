@@ -5,7 +5,13 @@ documento se corrige en el mismo PR**; salvo en el modelo de datos, donde mandan
 de Flyway y el documento es la explicación.
 
 La numeración de carpetas es la del SRTM, para que quien conozca ese repositorio encuentre las
-cosas donde espera.
+cosas donde espera. **La numeración de documentos, en cambio, es propia de cada repositorio y
+colisiona a propósito de no leerse con cuidado**: un identificador citado sin más se lee local, y
+los del repo hermano se citan con su repo — «NEG-05 de `../srtm`». Los que este repositorio cita
+del SRTM y aquí no existen (o nombran otro documento) son: **NEG-05** (reglas del predial),
+**ARQ-08** (multi-tenant detallado), **ARQ-09** (motor de reglas), **DAT-02** (allí, el modelo
+lógico-físico; aquí, auditoría), **CAL-02** (la etapa de contraste numérico contra el SRTM del
+MEF, aún planeada allí) y los **RNF** menores de 030 (p. ej. RNF-020, latencia de consulta).
 
 | Carpeta | Contenido |
 |---|---|
@@ -42,6 +48,7 @@ cosas donde espera.
 - [Catálogo de opciones](10-negocio/catalogo-de-opciones.md) — las 134 opciones ↔ figuras del manual
 - [Observaciones del SRTM del MEF](10-negocio/observaciones-srtm-mef/README.md) — dónde redondea el sistema del MEF: la campaña que exigirá la primera migración (ADR-0018)
 - [Valores normativos transcritos](10-negocio/valores-normativos/README.md) — lo que cierra D-02a, norma a norma, con dos firmas y sin cargar nada
+- Los verificadores del corpus — `10-negocio/verificar-*.mjs` y `generar-catalogo.mjs`: no son documentación sino comprobaciones que corren en CI y se ponen rojas
 
 ### 20 — Requisitos
 - [Requisitos funcionales](20-requisitos/requisitos-funcionales.md) — RF por módulo
@@ -85,6 +92,9 @@ cosas donde espera.
 
 ### B0 — Operación
 - [Runbooks](B0-operacion/runbooks/) — los diez procedimientos (los escenarios de falla, en INF-01 §5), con la misma estructura
+
+### Fuera de `docs/`
+- [`../despliegue/README.md`](../despliegue/README.md) — el entorno local canónico: compose, identidad e inicialización del motor (INF-11)
 
 ### D0 — Desarrollo
 - [Guía del desarrollador](D0-desarrollo/README.md) — índice, y qué comando para qué tarea

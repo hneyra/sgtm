@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | Aceptada |
+| Estado | Aceptado |
 | Fecha | 2026-08-28 |
 | Decide | Dirección del proyecto |
 | Cierra | **D-12** (GOB-02) |

@@ -1,6 +1,6 @@
 # ADR-0016 — El inicio pregunta y la ficha compone: las fases 3–5 de ADR-0014, sin el agregador que no hacía falta
 
-**Estado:** aceptada · 2026-08-28
+**Estado:** Aceptado · 2026-08-28
 **Decide:** los tres contratos que #296, #297 y #298 exigían decidir antes de implementar, y
 corrige la premisa con que ADR-0014 los dejó «bloqueados por backend».
 
