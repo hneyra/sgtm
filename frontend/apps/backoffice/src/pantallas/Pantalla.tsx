@@ -43,8 +43,6 @@ import { useDatosDePantalla } from './useDatosDePantalla';
 import { BarraDeAcciones } from './bloques/BarraDeAcciones';
 import { Filtros } from './bloques/Filtros';
 import { Formulario } from './bloques/Formulario';
-import { Indicadores } from './bloques/Indicadores';
-import { Portal } from './bloques/Portal';
 import { useDescargaDeArchivo } from './useDescargaDeArchivo';
 import type { DescargaDeArchivo } from './useDescargaDeArchivo';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
@@ -208,6 +206,18 @@ const IndiceDeSecciones = lazy(async () => ({
    mismo movimiento que #379 hizo con las cuatro de `pantallas/valores/` y #424
    con las tres de seguridad, y aqui paga las dos formas de cuerpo de este issue
    sin subir el presupuesto: la alternativa era el umbral, y habia esta. */
+/* **Los indicadores y el portal, perezosos desde #423.** Los dibujan un `kind`
+   cada uno —`dash` es el panel de recaudacion, `portal` la vista del
+   funcionario— y las otras 132 pantallas los descargaban para no montarlos
+   nunca. Mismo movimiento que la hoja del reporte y la memoria del calculo, y
+   por el mismo motivo: `main` llego a 155,9 de 156 con #445 dentro, y el umbral
+   lo sube quien no tiene otra salida. */
+const Indicadores = lazy(async () => ({
+  default: (await import('./bloques/Indicadores')).Indicadores,
+}));
+const Portal = lazy(async () => ({
+  default: (await import('./bloques/Portal')).Portal,
+}));
 const Reporte = lazy(async () => ({
   default: (await import('./bloques/Reporte')).Reporte,
 }));
@@ -893,10 +903,16 @@ function Bloques({
       {aviso !== undefined && <Aviso titulo={aviso.titulo} detalle={aviso.detalle} />}
 
       {estructura.kind === 'dash' && (
-        <Indicadores kpis={datos?.kpis} paneles={datos?.paneles} cargando={cargando} />
+        <Suspense fallback={<Esqueleto alto={240} />}>
+          <Indicadores kpis={datos?.kpis} paneles={datos?.paneles} cargando={cargando} />
+        </Suspense>
       )}
 
-      {estructura.kind === 'portal' && <Portal pasos={estructura.steps ?? []} />}
+      {estructura.kind === 'portal' && (
+        <Suspense fallback={<Esqueleto alto={240} />}>
+          <Portal pasos={estructura.steps ?? []} />
+        </Suspense>
+      )}
 
       {/* La cabecera-resumen: cual ficha es, de quien, de que uso y de cuando.
           Compuesta con lo que el adaptador ya trajo: no pide nada nuevo (#319).
