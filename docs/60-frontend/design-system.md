@@ -6,20 +6,25 @@
 
 ## 1. Qué hay hoy
 
-Los **tokens**, copiados literalmente de `design/ds/tokens/`, y una hoja base con reset, foco
-visible y estilos de impresión. **No hay componentes**, y es intencional: un componente escrito
-antes de la pantalla que lo usa es un componente que nadie pidió, y el prototipo ya fija sus
-medidas exactas para cuando llegue el momento.
+Los **tokens**, copiados literalmente de `design/ds/tokens/`, una hoja base con reset, foco
+visible y estilos de impresión, las tres familias tipográficas autoalojadas (§5) y **nueve
+componentes que salieron todos del renderizador**: ninguno se escribió antes de la pantalla que
+lo usa —un componente escrito antes de su pantalla es un componente que nadie pidió—, y el
+prototipo fija sus medidas exactas.
 
 ```
 packages/design-system/src/
+├── componentes/           # Boton, Insignia, Importe, Indicador, Esqueleto,
+│                          # Aviso, Icono, Campo y FechaDeCalculo (§4)
 ├── estilos/
 │   ├── estilos.css        # punto de entrada
 │   ├── base.css           # reset, foco, impresión A4
+│   ├── componentes.css
+│   ├── tipografias/       # los woff2 autoalojados (§5)
 │   └── tokens/            # copiados de design/ds/tokens/
 │       ├── colors.css     ├── typography.css
 │       ├── spacing.css    └── fonts.css
-└── index.ts               # Densidad, Acento, Insignia
+└── index.ts               # los componentes, Densidad, Acento y el mapeo de tonos
 ```
 
 Los tokens se **copian**, no se importan: `design/` es el prototipo de referencia, no una entrada
@@ -95,23 +100,29 @@ iteración de interfaz las implemente sin reinventarlas:
 La densidad no es cosmética: un cajero trabaja ocho horas al día y cuanta más información quepa
 sin desplazar, menos veces desplaza (RNF-082).
 
-## 4. Componentes por construir
+## 4. Los componentes: qué existe hoy, y dónde
 
-Cuando llegue la iteración de interfaz, con la particularidad que cada uno tiene en este dominio:
+La lista que este documento pedía existe entera, con dos salvedades: algunos nombres cambiaron
+al construirse, y no todo acabó en el design system — lo que solo dibuja el renderizador vive
+con él, en `apps/backoffice`.
 
-| Componente | Particularidad |
+| Lo que se pedía | Lo que existe, y dónde |
 |---|---|
-| `Importe` | **Muestra un importe con su fecha de cálculo** (RNF-075). Sin `fechaCalculo` no compila el lint |
-| `EstadoDeuda` | Insignia con color **y** texto |
-| `Tabla` | Densidad compacta, columnas numéricas en mono a la derecha, teclado completo |
-| `CampoImporte` | Solo decimal, sin `type=number`: el control nativo se comporta de forma errática |
-| `Formulario` / `Seccion` | Secciones colapsables; las marcadas `Colapsado`, `Opcional` o `Solo lectura` arrancan cerradas |
-| `Hoja` (reporte) | A4 vertical, doble regla institucional, dos líneas de firma (RNF-084) |
-| `PaletaDeComandos` | `Ctrl/Cmd + K`, búsqueda sobre las 134 opciones |
-| `Cargando` | Esqueleto, no girador: reduce el salto de diseño |
-| `EstadoVacio` / `EstadoError` | Explican qué pasó y qué hacer; el error trae la traza |
+| `Importe` | `componentes/Importe.tsx`. **Muestra un importe con su fecha de cálculo** (RNF-075): sin `fechaCalculo` no pasa el lint. La banda de fecha de una pantalla es `FechaDeCalculo.tsx`, que subió aquí al separarse `apps/portal` (#298) |
+| `EstadoDeuda` | `componentes/Insignia.tsx`: color **y** texto, con el mapeo de tonos de §2.1 |
+| `CampoImporte` | `componentes/Campo.tsx`, el campo del design system: texto o fecha, nunca `type=number` |
+| `Cargando` | `componentes/Esqueleto.tsx`: esqueleto, no girador |
+| `EstadoVacio` / `EstadoError` | `componentes/Aviso.tsx`: explica qué pasó y qué hacer |
+| `Tabla` | No es del design system: es el bloque `TablaDePantalla.tsx` del renderizador (`apps/backoffice/src/pantallas/bloques/`), mono a la derecha en las columnas numéricas |
+| `Formulario` / `Seccion` | Ídem: `bloques/Formulario.tsx`, con lo opcional arrancando cerrado |
+| `Hoja` (reporte) | Ídem: `bloques/Reporte.tsx` — A4 vertical, doble regla, dos líneas de firma (RNF-084) |
+| `PaletaDeComandos` | De la aplicación: `apps/backoffice/src/app/PaletaDeComandos.tsx`, `Ctrl/Cmd + K` sobre el catálogo visible |
 
-Regla de entrada: **un componente sube aquí cuando lo usan dos módulos**, no antes.
+Y tres que ninguna lista pidió porque los pidieron sus pantallas: `Boton`, `Icono` e
+`Indicador`.
+
+Regla de entrada, que no cambia: **un componente sube aquí cuando lo usan dos módulos —o las
+dos aplicaciones—**, no antes.
 
 ## 5. Pendientes
 

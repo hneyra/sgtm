@@ -97,10 +97,11 @@ const PRESUPUESTO = {
    * respuesta ya compuesta por el servidor, y componer en el servidor pesa cero
    * en el telefono.
    *
-   * Los 4,2 KB que antes bajaron de 85,1 a 80,9 fueron el mapa de las operaciones
-   * del contrato: el portal pedia con `pedirOperacion`, que lo lee para resolver
-   * la ruta, y con el viajaban las 84 rutas de escritura del sistema en la
-   * aplicacion destinada a ser publica. Ahora declara **una** ruta
+   * Los 4,2 KB que antes bajaron de 85,1 a 80,9 fueron el mapa entero de las
+   * operaciones del contrato —169 entonces—: el portal pedia con
+   * `pedirOperacion`, que lo lee para resolver la ruta, y con el viajaban las
+   * rutas de escritura del sistema en la aplicacion destinada a ser publica.
+   * Ahora declara **una** ruta
    * (`apps/portal/src/lecturas.ts`) y pide con `solicitar()`.
    *
    * De los 79, unos 60 son React y el cliente de consultas; lo propio del portal

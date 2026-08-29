@@ -43,7 +43,7 @@ Cuatro eslabones, cada uno con su prueba:
 |---|---|---|
 | Token → contexto | `TenantContextFilter` | Petición con encabezado y parámetro que dicen otra municipalidad |
 | Contexto → transacción | `TenantTransactionManager` | Aislamiento con el pool real |
-| Transacción → filas | Políticas RLS de `V2__rls.sql` | Prueba de aislamiento, bloqueante |
+| Transacción → filas | Políticas RLS de `V6__rls.sql` | Prueba de aislamiento, bloqueante |
 | Devolución al pool | `TenantConnectionGuard` | Prueba gemela **sin** guardia, que demuestra la fuga |
 
 ## 3. Las reglas
@@ -127,6 +127,13 @@ Consecuencias prácticas:
 | `sgtm_app` | La aplicación | `SELECT, INSERT, UPDATE` sobre tablas padre; **sin `DELETE`**; solo `SELECT, INSERT` en el libro de asientos y en auditoría |
 | `sgtm_readonly` | Reportes y réplica de lectura | `SELECT` sobre tablas padre |
 | `rol_carga_parametros` | Carga de catálogos normativos | Escritura sobre `parametro_tributario` y tablas de valuación |
+| `sgtm_respaldo` | El respaldo con wal-g (INF-08, #155) | `pg_read_all_settings` y `EXECUTE` sobre `pg_backup_start`/`pg_backup_stop`; sin `CONNECT` a la base del padrón |
+| `sgtm_monitor` | Métricas de `postgres_exporter` (#156) | El rol predefinido `pg_monitor`: vistas de estadísticas, ni una fila del padrón |
+
+Los cuatro primeros los crea `db/roles/crear-roles.sql` antes de la primera migración; los dos
+últimos nacen solo en el clúster, en `infra/componentes/inicializacion/40-rol-de-respaldo.sh` y
+`50-rol-de-monitoreo.sh` —en el compose de un portátil no hay respaldo ni recolección de
+métricas, y por eso ahí no existen—.
 
 Sin pertenencia entre roles: ser miembro de otro permitiría un `SET ROLE` que borra la
 separación.
@@ -137,11 +144,16 @@ Solo dos, y ninguna desactiva RLS:
 
 1. **`municipalidad`** — el registro de tenants. Lectura para todos (un proceso masivo itera
    municipalidad por municipalidad), escritura solo para `sgtm_owner`.
-2. **Catálogos de ámbito nacional** (`parametro_tributario` con `municipalidad_id IS NULL`, CIIU,
-   códigos de infracción de tránsito) — política que admite `municipalidad_id IS NULL` **o** la
-   del contexto. Aquí sí se usa la forma de dos argumentos de `current_setting`, porque estos
-   catálogos deben poder leerse sin contexto durante el arranque. No hay fuga posible: sin
-   contexto, la comparación da `NULL` y las filas locales quedan invisibles.
+2. **Catálogos con política propia** — `parametro_tributario` con `municipalidad_id IS NULL`, las
+   tres tablas de valuación que V55 volvió nacionales por ADR-0017 (`valor_unitario_edificacion`,
+   `depreciacion` y `valor_referencial_vehiculo`) y `respaldo`, que no lleva `municipalidad_id`
+   porque una copia de seguridad es del clúster entero. En las que sí llevan la columna, la
+   política admite `municipalidad_id IS NULL` **o** la del contexto, y aquí sí se usa la forma de
+   dos argumentos de `current_setting`, porque estos catálogos deben poder leerse sin contexto
+   durante el arranque. No hay fuga posible: sin contexto, la comparación da `NULL` y las filas
+   locales quedan invisibles. Ojo: el CIIU y los códigos de infracción de tránsito **no** están
+   aquí —llevan `municipalidad_id NOT NULL` (V4) y son tablas de tenant—. La lista normativa de
+   catálogos es `TABLAS_DE_CATALOGO`, en el código de la prueba de aislamiento.
 
 Toda tabla nueva es de tenant, de catálogo o exenta, y la lista de exentas tiene **una** entrada:
 `flyway_schema_history`. La prueba falla si aparece una tabla sin clasificar.

@@ -13,8 +13,9 @@
 # `lib-motor-local.sh`, y sobre el:
 #
 #   1. Abre una conexion como sgtm_app con la clave ACTUAL, y la deja abierta.
-#   2. Rota la clave con `secretos/rotar-clave.sh --sin-cluster` —la misma sentencia SQL
-#      que usaria contra un Secret real, sin el paso de Kubernetes—.
+#   2. Rota la clave con el mismo `ALTER ROLE ... PASSWORD :'nueva'` que ejecuta
+#      `secretos/rotar-clave.sh`, escrito aqui inline: este guion corre sin cluster,
+#      asi que no hay Secret que actualizar ni paso de Kubernetes que dar.
 #   3. Comprueba que la conexion ABIERTA en el paso 1 sigue respondiendo.
 #   4. Comprueba que una conexion NUEVA con la clave VIEJA falla.
 #   5. Comprueba que una conexion NUEVA con la clave NUEVA funciona.

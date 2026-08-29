@@ -36,8 +36,9 @@ lo repite: [`despliegue/README.md`](../../despliegue/README.md). Resumido:
 ```bash
 cd despliegue
 cp .env.ejemplo .env          # y poner claves generadas, una distinta por rol
-docker compose up --build --wait aplicacion interfaz
-./identidad/crear-usuario.sh jperez 'una-clave' 1     # usuario de la municipalidad 1
+./identidad/datos-de-implantacion.sh 200101 >> .env   # el administrador, del archivo versionado
+docker compose up --build --wait aplicacion interfaz correo
+./identidad/reconciliar-identidades.sh                # crea los usuarios de municipalidades/*.json
 ```
 
 Para trabajar sin levantar Keycloak ni backend —solo la interfaz contra el proxy de
@@ -51,14 +52,16 @@ existe y sigue vigente**; DEV-01 es el cómo, día a día.
 
 Es el criterio de aceptación del issue #158, y la forma de cumplirlo no es correrlo una
 vez a mano y confiar en que siga funcionando: `.github/workflows/despliegue.yml` **lo
-ejecuta en cada PR**, con nueve comprobaciones contra el sistema que ese comando levanta
+ejecuta en cada PR**, con diez comprobaciones contra el sistema que ese comando levanta
 —no contra el archivo `compose.yaml` revisado a ojo, contra el sistema en marcha—:
 
 | # | Qué pregunta |
 |---|---|
 | 1 | ¿Se aplicaron todas las migraciones del repositorio? |
 | 2 | ¿Responde la sonda de vida, sin publicar detalles? |
-| 3–4 | La escalera de identidad completa, peldaño a peldaño (§4 abajo) |
+| 3 | ¿Existen los tres usuarios de verificación, uno por peldaño de la escalera? |
+| 3b | ¿El alta declarativa manda el enlace de clave, y el `municipalidadId` cuadra a tres bandas? (ADR-0012) |
+| 4 | La escalera de identidad completa, peldaño a peldaño |
 | 5 | ¿Se atiende alguna ruta que no debería? |
 | 6 | ¿Se sirve la interfaz, con el emisor de identidad ya incrustado? |
 | 7 | ¿Puede la aplicación ejecutar DDL? (Tiene que fallar: `sgtm_app` no tiene DDL) |
@@ -67,7 +70,7 @@ ejecuta en cada PR**, con nueve comprobaciones contra el sistema que ese comando
 
 Un compose que se ve correcto en el diff y falla el día que alguien lo necesita es
 exactamente el defecto que este flujo existe para no dejar pasar
-(`despliegue.yml`, comentario de cabecera). Las nueve tienen su propia forma de
+(`despliegue.yml`, comentario de cabecera). Cada una tiene su propia forma de
 demostrarse en rojo, documentada en [`despliegue/README.md`](../../despliegue/README.md)
 §«Cómo se verifica».
 

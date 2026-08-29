@@ -19,7 +19,7 @@ simula la API ([`ADR-0010`](../30-arquitectura/adr/ADR-0010-catalogo-portado-y-p
 | `frontend/packages/sesion` | El proveedor y la puerta de sesión, compartidos por las dos aplicaciones (#298) |
 | `frontend/apps/backoffice` | Shell, navegación de dos niveles, paleta de comandos, hub de módulo y **el renderizador con sus diez bloques** |
 | `frontend/apps/portal` | El portal del contribuyente, separado del shell (§1, ADR-0016 §3) |
-| `frontend/verificaciones` | Diez prohibiciones, cada una con su muestra que la viola |
+| `frontend/verificaciones` | Once prohibiciones, cada una con su muestra que la viola — la cuenta la fija `reglas-de-eslint.test.ts` |
 
 Lo que **no** existe: ninguna operación va contra Spring Boot, porque Spring Boot todavía no sirve
 ninguna. Es el paso 4 de [FRO-03 §7](mapa-de-pantallas.md), y se hace opción por opción.
@@ -57,31 +57,41 @@ frontend/
 ├── package.json                 # yarn workspaces
 ├── eslint.config.js             # las prohibiciones que un linter puede verificar
 ├── apps/
-│   └── backoffice/
-│       ├── src/
-│       │   ├── modulos/         # Un directorio por módulo del manual
-│       │   │   ├── catastro/
-│       │   │   ├── tesoreria/
-│       │   │   └── …            # los doce
-│       │   ├── app/             # Shell, rutas, sesión
-│       │   └── main.tsx
-│       └── vite.config.ts
+│   ├── backoffice/
+│   │   ├── src/
+│   │   │   ├── app/             # Shell, rutas, sesión, paleta de comandos
+│   │   │   ├── catalogo/        # Las 134 pantallas como datos tipados (generado)
+│   │   │   ├── pantallas/       # El renderizador, sus bloques y las conexiones
+│   │   │   │   ├── catastro/    # un directorio por módulo, cuando necesita código propio
+│   │   │   │   ├── tesoreria/
+│   │   │   │   └── …
+│   │   │   ├── estilos/         # Shell y bloques, con los tokens de Juris PE
+│   │   │   └── main.tsx
+│   │   └── vite.config.ts
+│   └── portal/                  # El portal del contribuyente, sin shell ni catálogo (#298)
 ├── packages/
 │   ├── design-system/           # Tokens Juris PE y componentes base (FRO-02)
 │   ├── dominio/                 # Importe, Fecha, Estado y su formateo
-│   └── api-client/              # Cliente HTTP tipado
+│   ├── api-client/              # Cliente HTTP tipado
+│   ├── api-mock/                # El proxy de datos (ADR-0010)
+│   ├── lectura/                 # Los adaptadores que las dos aplicaciones comparten
+│   └── sesion/                  # La puerta de sesión
 └── verificaciones/
     ├── reglas-de-eslint.test.ts # exige que cada regla muerda
     └── muestras/                # una violación por prohibición
 ```
 
 **Regla de organización:** dentro de la aplicación se agrupa **por módulo del manual**, no por
-tipo de archivo. Quien trabaja en Tesorería encuentra todo lo de Tesorería en un directorio, en
-lugar de recorrer `components/`, `hooks/` y `services/`. Los doce módulos son los del catálogo
-([NEG-03](../10-negocio/catalogo-de-opciones.md)), con los mismos nombres.
+tipo de archivo, y **el directorio de un módulo aparece cuando una opción suya necesita código
+propio, no antes**: las 134 pantallas son un catálogo y un renderizador, así que un
+`pantallas/catastro/` vacío no serviría a nadie. Quien trabaja en Tesorería encuentra lo suyo
+en `pantallas/tesoreria/`, en lugar de recorrer `components/`, `hooks/` y `services/`. Los doce
+módulos son los del catálogo ([NEG-03](../10-negocio/catalogo-de-opciones.md)), con los mismos
+nombres.
 
-**Regla de los paquetes compartidos:** un componente que usan dos módulos sube a
-`packages/design-system`. Un módulo importa de otro **solo por su `index.ts`** — el equivalente
+**Regla de los paquetes compartidos:** un componente que usan dos módulos —o las dos
+aplicaciones— sube a `packages/design-system`. Los directorios de módulo no se importan entre
+sí: lo que un módulo aporta entra por los registros por opción de `pantallas/` — el equivalente
 frontend de la regla de Spring Modulith en el backend.
 
 ## 3. Elecciones técnicas
@@ -93,13 +103,15 @@ frontend de la regla de Spring Modulith en el backend.
 | Estado del servidor | TanStack Query | |
 | Estado del cliente | `useState` y contexto | **Sin Redux**: casi todo el estado es del servidor |
 | Enrutado | React Router | Una ruta por opción del menú |
-| Formularios | React Hook Form + Zod | Las declaraciones y las fichas del manual son formularios extensos por secciones |
-| Tablas de alto volumen | TanStack Table | Padrones y carteras, con teclado (RNF-082) |
+| Formularios | React Hook Form + Zod | **Decisión sin ejercer**: hoy el estado de formulario es el borrador de `useEscritura`, y ninguna pantalla ha pedido más |
+| Tablas de alto volumen | TanStack Table | **Decisión sin ejercer**: la tabla del renderizador basta mientras filtrar, ordenar y paginar sean del servidor |
 | Estilos | CSS con los tokens de Juris PE | Sin framework de utilidades: el design system ya está decidido |
 | Cliente HTTP | Derivado de `docs/50-api/openapi/sgtm-v1.yaml` | Un cambio de contrato debe romper la compilación, no la producción |
 | Pruebas | Vitest + Testing Library; Playwright para extremo a extremo | |
 
-Las tres últimas filas están decididas pero **no implementadas**: ver §8.
+Las dos filas marcadas están decididas y **sin ejercer**: ni React Hook Form, ni Zod, ni
+TanStack Table están instaladas ni importadas, y se incorporarán el día que una pantalla las
+pida. Todo lo demás de la tabla está implementado.
 
 ## 4. El contexto de municipalidad nunca sale del frontend
 
@@ -184,10 +196,16 @@ con el esqueleto de carga del design system y un mensaje centrado entre hairline
   (`/rentas-registro/vehiculos/ABC-123`) y los filtros, el orden y la página en la consulta. Sin
   registro no hay petición. Lo que queda por decidir, opción por opción, es **qué búsqueda abre qué
   ficha** cuando el catálogo no lo dice.
-- **No hay pruebas de extremo a extremo.** Playwright, para la caja y la consulta del portal.
-- **No hay presupuesto de tamaño de paquete en CI.**
-- **Las tres familias tipográficas se cargan de Google Fonts.** Para una municipalidad con red
-  mala conviene autoalojar los `woff2` (FRO-02 §4).
+- ~~**No hay pruebas de extremo a extremo.**~~ **Hecho:** `yarn e2e` recorre seis caminos en
+  Chromium (`frontend/e2e/`) —el cobro en caja solo con teclado, el portal en 360 px, el
+  reporte en A4, el inicio con teclado, la determinación simulada y el listado de los doce
+  módulos— y CI los corre en su propio trabajo de `frontend.yml`.
+- ~~**No hay presupuesto de tamaño de paquete en CI.**~~ **Hecho:** `yarn comprobar-compilaciones`
+  mide el arranque, cada trozo de módulo y el portal contra su presupuesto
+  (`scripts/comprobar-compilaciones.mjs`) y falla al superarlo; CI lo corre en cada PR.
+- ~~**Las tres familias tipográficas se cargan de Google Fonts.**~~ **Hecho:** los `woff2`
+  viven autoalojados en `packages/design-system/src/estilos/tipografias/`, con los
+  subconjuntos `latin` y `latin-ext` (FRO-02 §5).
 
 ## 9. Documentos relacionados
 

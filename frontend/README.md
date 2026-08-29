@@ -18,7 +18,7 @@ Requiere Node 22 o superior.
 
 | Comando                    | Qué hace                                                       |
 | -------------------------- | -------------------------------------------------------------- |
-| `yarn verificar`           | Lint, tipos y pruebas. **Lo que hay que pasar antes de un PR** |
+| `yarn verificar`           | Contrato, lint, tipos y pruebas. **Antes de cualquier PR**     |
 | `yarn lint`                | ESLint, con las prohibiciones del proyecto                     |
 | `yarn typecheck`           | `tsc --build`, en modo estricto                                |
 | `yarn test`                | Vitest: dominio, cliente, proxy, catálogo, shell y las 134     |
@@ -194,33 +194,36 @@ sin ubicación territorial asignada—, no un descuadre.
 
 El portal es el único flujo del sistema que no usa alguien de la municipalidad: se entra desde un
 teléfono, una vez al año, con la red que haya. Hasta #298 su ruta era el arranque del back-office
-más el trozo de «Inicio» —**147.4 KB medidos**, con el presupuesto en 152, y dentro los 11.5 KB del
-catálogo de navegación de los doce módulos, con sus 134 opciones, sus iconos y sus resúmenes, que el
-ciudadano se descargaba para no usarlos nunca—. Esa era la conversación que el número dejaba
+más el trozo de «Inicio» —**147.4 KB medidos**, con el presupuesto de entonces en 152, y dentro
+los 11.5 KB del catálogo de navegación de los doce módulos, con sus 134 opciones, sus iconos y
+sus resúmenes, que el ciudadano se descargaba para no usarlos nunca—. Esa era la conversación que el número dejaba
 abierta, y ADR-0016 §3 la cerró: la tercera condición de
 [ADR-0009](../docs/30-arquitectura/adr/ADR-0009-plataforma-frontend.md)
 —el paquete arrastra código que solo usa el back-office— se cumplía, y basta con una de las tres.
 
 Ahora el portal es **`apps/portal`**: su propio paquete, sin el shell y sin el catálogo, servido en
 `/portal/` del mismo origen. `yarn comprobar-compilaciones` mide el paquete de cada aplicación por
-separado y presupuesta los dos:
+separado y presupuesta los dos — salida del 2026-08-28; la cifra vigente la imprime cada corrida, y
+los presupuestos (156 el arranque, 84 el portal, 11 cada módulo) viven comentados con su historia en
+`scripts/comprobar-compilaciones.mjs`:
 
 ```
 Portal: 79.1 KB comprimidos de 82.
-Arranque: 154.5 KB comprimidos de 156. Doce trozos por modulo, el mayor 8.9 KB de 11.
+Arranque: 155.8 KB comprimidos de 156. Doce trozos por modulo, cada uno con su tope de 11.
 ```
 
 **79.1 donde había 147.4** —68.3 KB menos, un 46 %—, y el margen es de tres kilobytes a propósito:
 el portal es una pantalla, no doce módulos, y no tiene por qué crecer. La bajada son tres cosas:
 62.3 KB de shell y catálogo que la separación se llevó; **4.2 KB más al dejar de pedir con
-`pedirOperacion`** —que resuelve la ruta leyendo el mapa de las operaciones del contrato, 84 de
-ellas de escritura, y lo metía entero en la aplicación destinada a ser pública—; y **1.8 KB más con
-ADR-0020**, que es lo que conviene mirar: el portal ganó la sesión del ciudadano y **bajó**, porque
-con ella se fueron la caja de documento, los tres tipos del prototipo, el adaptador de las seis
-rejillas de la unificada y la segunda lectura del padrón. Lo que ahora dibuja es una respuesta ya
-compuesta por el servidor, y componer en el servidor pesa cero en el teléfono. El portal declara
-**una** ruta en `apps/portal/src/lecturas.ts` y pide con `solicitar()`; que cuadre con el contrato
-lo comprueba `verificaciones/portal-separado.test.ts`, que no viaja al navegador. De los 79, unos 60
+`pedirOperacion`** —que resuelve la ruta leyendo el mapa entero de las operaciones del contrato
+(169 entonces, 84 de ellas de escritura; hoy son 175) y lo metía en la aplicación destinada a ser
+pública—; y **1.8 KB más con ADR-0020**, que es lo que conviene mirar: el portal **ganó** la sesión
+del ciudadano y **bajó**, porque con ella se fueron la caja de documento, los tres tipos del
+prototipo, el adaptador de las seis rejillas de la unificada y la segunda lectura del padrón. Lo que
+ahora dibuja es una respuesta ya compuesta por el servidor, y componer en el servidor pesa cero en
+el teléfono. El portal declara **una** ruta en `apps/portal/src/lecturas.ts` y pide con
+`solicitar()`; que cuadre con el contrato lo comprueba `verificaciones/portal-separado.test.ts`,
+que no viaja al navegador. De los 79, unos 60
 son React y el cliente de consultas; lo propio del portal —su pantalla, los adaptadores de
 `@sgtm/lectura` y la puerta de sesión— no llega a 20. Bajar de ahí es cambiar de biblioteca, no de
 pantalla.
@@ -271,8 +274,9 @@ Si la pantalla no lo dice, el fiscalizador cierra el acta creyendo que ya cambi�
 cambiado, se va, y el contribuyente sigue con su declaración antigua y su recibo antiguo hasta que
 alguien se da cuenta meses después.
 
-`pantallas/avisos.ts` declara, **por opción**, lo que una pantalla tiene que decir siempre —antes de
-que nadie teclee—. Por opción y no por módulo a propósito: la lista de omisos también es de
+La constante `AVISOS` de `pantallas/prosa-textos.ts` —que el renderizador consulta con `avisoDe`,
+en `pantallas/prosa.ts`— declara, **por opción**, lo que una pantalla tiene que decir siempre
+—antes de que nadie teclee—. Por opción y no por módulo a propósito: la lista de omisos también es de
 fiscalización y **no** es una copia de nada —es una consulta contra el padrón de verdad—, así que
 decirle lo mismo sería mentir en la dirección contraria. Hay una prueba para cada mitad.
 
@@ -388,7 +392,7 @@ termina bien, y **solo en el flanco**: recolocarlo en cada dibujo dejaría al ca
 el foco a ningún otro sitio. Las dos mitades tienen su prueba, y la segunda necesita provocar un
 render de más para poder distinguirse — sin eso, «una vez» y «en cada render» se ven igual.
 
-### Ocho formularios que no guardan sin observación
+### Nueve formularios que no guardan sin observación
 
 Rentas · Registro es el módulo que más escribe: de sus quince opciones, **nueve tienen verbo de
 escritura**. Ahí la regla 10 deja de ser una regla escrita, así que hay una prueba que las recorre
@@ -460,8 +464,8 @@ resuelve por rango, nunca con `LIKE`, por RLS—. Pegar el código entero lo rep
 salta al siguiente, y copiar desde cualquier tramo copia el código completo.
 
 **El mecanismo es acotado y opt-in por opción y campo.** `pantallas/composicion.ts` es un registro
-por opción —como `avisos.ts` y `escrituras.ts`—, y `Filtros` le pregunta si ese campo tiene control
-propio; sin declaración dibuja su `Campo` de texto de siempre. El renderizador no se bifurca y las
+por opción —como `prosa-textos.ts` y `escrituras.ts`—, y `Filtros` le pregunta si ese campo tiene
+control propio; sin declaración dibuja su `Campo` de texto de siempre. El renderizador no se bifurca y las
 otras 133 pantallas no se enteran. Está declarado donde el campo **es** el código catastral: la
 consulta de fichas y las fichas urbana y económica. `codEdificacion` es el código sin el tramo de
 unidad y `codUnidadCatastralUc` (`11024-0418`) no es un código catastral: troquelarlos diría de
@@ -606,7 +610,7 @@ La clave de idempotencia es la que más cuesta si se hace mal en las dos direcci
 cada reintento convierte un reintento en un segundo cobro, y no regenerarla nunca hace que corregir
 un dato devuelva el resultado del intento anterior. Cambia **cuando cambia lo que se manda**.
 
-**Abrir una pantalla que escribe ya no escribe**: las 54 operaciones con verbo de escritura no se
+**Abrir una pantalla que escribe ya no escribe**: las operaciones con verbo de escritura no se
 piden al montar —abrir «Copias de seguridad» no puede lanzar un respaldo—, se piden cuando alguien
 pulsa.
 
@@ -666,11 +670,15 @@ El catálogo de las 134 pantallas son 445 KB de fuente: **más que la aplicació
 vez, una municipalidad con red mala espera por las 134 para abrir una. Así que va **partido por
 módulo** y se carga al entrar en él:
 
-|                     | Antes       | Ahora           |
+|                     | Antes       | Al partirlo     |
 | ------------------- | ----------- | --------------- |
 | Arranque            | 162,7 KB gz | **117,8 KB gz** |
 | Entrar en Catastro  | —           | 7,4 KB gz       |
 | Entrar en Tesorería | —           | 4,4 KB gz       |
+
+Las cifras son las de la partición; desde entonces el arranque ha crecido con cada módulo
+conectado —las conexiones y las escrituras declaradas viajan en él por diseño— y hoy se mide
+contra un presupuesto de 156 KB, con su historia comentada en `scripts/comprobar-compilaciones.mjs`.
 
 Lo que viaja siempre es la **navegación** —el menú, los títulos y los resúmenes—, porque los
 necesitan el hub, la cabecera y la paleta de comandos: si el título viviera en el archivo del
@@ -698,7 +706,7 @@ integración. `yarn e2e` recorre en Chromium **seis caminos**: los tres que más
 | **Impresión de un reporte**     | Una hoja A4 vertical, con sus dos líneas de firma y sin la interfaz (RNF-084)       |
 | **Inicio: a quién atiendes**    | Las tres franjas se preguntan y se abren con el teclado (ADR-0016 §1, #296)         |
 | **Determinación simulada**      | Se pide con el teclado, y la memoria de cálculo sale con su conjunto sellado (#395) |
-| **Las 134 pantallas**           | Chromium las recorre todas: 0 errores de página y 0 de API                          |
+| **El listado de módulos**       | La barra lista los doce con sus recuentos, y estos suman las 134 opciones           |
 
 La primera encontró un hueco real: **la paleta de comandos no se podía operar con el teclado** —se
 escribía, y luego había que apuntar y hacer clic—. Ahora se elige con ↑ ↓ y se abre con Enter.
@@ -709,8 +717,9 @@ escribía, y luego había que apuntar y hacer clic—. Ahora se elige con ↑ �
 ## El proxy de datos
 
 `@sgtm/api-mock` sustituye `fetch` e intercepta lo que cuelga de `/api/v1`. Responde las 134
-operaciones del contrato con los datos de ejemplo del prototipo, con latencia simulada para que los
-estados de carga se vean, y devuelve `ProblemDetails` con 404 a lo que no existe.
+operaciones del catálogo —una por pantalla; el contrato entero tiene 174— con los datos de
+ejemplo del prototipo, con latencia simulada para que los estados de carga se vean, y devuelve
+`ProblemDetails` con 404 a lo que no existe.
 
 ```bash
 # Contra el backend real, el día que exista:
@@ -772,7 +781,7 @@ frontend/
 │   ├── design-system/   Tokens y los componentes que usan las pantallas
 │   ├── dominio/         Importe, Fecha, Estado y su formateo
 │   ├── api-client/      Cliente HTTP tipado y el contrato de datos de una pantalla
-│   ├── api-mock/        El proxy de datos (generado + 130 líneas de encaminamiento)
+│   ├── api-mock/        El proxy de datos (generado + el encaminamiento de proxy.ts)
 │   ├── lectura/         Los adaptadores del contribuyente que las dos aplicaciones comparten
 │   └── sesion/          La puerta de sesión: token, renovación y permisos efectivos
 ├── scripts/             El portador del catálogo y el generador de operaciones
@@ -786,10 +795,10 @@ lectores del contrato y los adaptadores de `contribuyentes` y `consulta_unificad
 cualquiera de los dos habría producido dos versiones del mismo lector que se separan a la primera
 corrección, y una de ellas enseñando el importe sin su fecha.
 
-**Los directorios por módulo aparecen cuando una opción necesita código propio, y no antes**, que
-es la diferencia deliberada con [FRO-01 §2](../docs/60-frontend/arquitectura-frontend.md): las 134
-pantallas son un catálogo y un renderizador, así que `modulos/catastro/` vacío no sirve a nadie. El
-primero en aparecer ha sido `pantallas/inicio/`, con la conexión del panel de recaudación.
+**Los directorios por módulo aparecen cuando una opción necesita código propio, y no antes**, la
+regla que [FRO-01 §2](../docs/60-frontend/arquitectura-frontend.md) recoge: las 134
+pantallas son un catálogo y un renderizador, así que `pantallas/catastro/` vacío no serviría a
+nadie. El primero en aparecer fue `pantallas/inicio/`, con la conexión del panel de recaudación.
 
 ## Las diez plantillas de contenido
 
@@ -828,7 +837,7 @@ dice en la misma frase en que excluye el token.
 | Verificación                                | Cómo                                                                    | Resultado                     |
 | ------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------- |
 | Las 134 pantallas se dibujan                | `todas-las-pantallas.test.tsx` monta cada una y comprueba su título     | 134 en verde                  |
-| Las 134 en un navegador de verdad           | Chromium recorriendo las 134 rutas                                      | 0 errores de página, 0 de API |
+| Los recuentos del menú suman 134            | Chromium: la barra lista los doce módulos (`listado-de-modulos.spec.ts`) | En verde                      |
 | El proxy responde el contrato               | 10 pruebas: rutas, verbos, parámetros, 404, instalación                 | En verde                      |
 | El catálogo está completo                   | 17 pruebas: 12 módulos, 134 opciones, bloques, rutas y endpoints únicos | En verde                      |
 | El juego de datos no llega a producción     | Dos compilaciones, con y sin la bandera                                 | 145 KB menos, chunk ausente   |
@@ -885,7 +894,7 @@ dice en la misma frase en que excluye el token.
 | El portal cabe en su presupuesto            | Bajándolo por debajo de lo medido: rojo con el número y qué hacer       | 80.9 KB de 84                 |
 | El portal no arrastra el back-office        | Importándole el catálogo —o metiéndoselo por `packages/lectura`—        | Rojas, una por rotura         |
 | Del portal no se escribe                    | Un `useMutation`, y una ruta que la tabla de lecturas no declara        | Rojas, dos                    |
-| Ni lleva el mapa de las 169 operaciones     | Devolviéndole `pedirOperacion`, o una ruta que no es la del contrato    | Rojas, dos                    |
+| Ni lleva el mapa de las operaciones         | Devolviéndole `pedirOperacion`, o una ruta que no es la del contrato    | Rojas, dos                    |
 | La opción `portal` sigue en las 134         | Quitándola del catálogo generado                                        | Rojas, diez                   |
 | El portal cabe en 360 px de verdad          | `min-width: 900px` en su columna, con el ancho del **dispositivo**      | Roja                          |
 | Las dos apps tienen política de caché       | Devolviendo el prefijo `/assets/` y la exacta `= /index.html`           | Rojas, dos (las del portal)   |

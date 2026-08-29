@@ -106,8 +106,8 @@ omisión del kubelet (1 s, la causa del incidente de `../iaac` documentado en `I
 anterior responde a «¿se acordó alguien de declararlo?». No responde a lo que el issue pone como
 no-negociable: *«la base de datos se desaloja la última»*. Comprobado ejecutándolo —no razonándolo—:
 intercambiando `PRIORIDADES.datos` y `PRIORIDADES.lote` en `convenciones.ts`, con PostgreSQL en la
-prioridad **más baja** del clúster y las emisiones masivas en la más alta, las 170 pruebas de
-`yarn verificar` seguían en verde. Cada pod seguía declarando su clase; solo que bajo presión de
+prioridad **más baja** del clúster y las emisiones masivas en la más alta, las pruebas de
+`yarn verificar` —170 entonces— seguían en verde. Cada pod seguía declarando su clase; solo que bajo presión de
 memoria el kubelet desalojaba la base **primero**, sin ningún síntoma hasta el día que el nodo se
 quede sin memoria —el peor día para descubrirlo, porque con un solo nodo no hay a dónde mover lo
 desalojado—.
@@ -236,7 +236,7 @@ sin publicarlas a ningún registro, y las escanea con Trivy. El resultado —CRI
 publica en el resumen del trabajo, visible desde el PR sin abrir un log.
 
 Bloqueante solo en CRITICAL. HIGH se reporta pero no rompe el flujo: las imágenes base
-(`postgres:16-alpine`, `nginx:1.31-alpine`, la base de `eclipse-temurin`) acumulan hallazgos HIGH
+(`postgres:16-alpine`, `nginx:1.31.4-alpine`, la base de `eclipse-temurin`) acumulan hallazgos HIGH
 que este repositorio no puede corregir sin esperar a la propia base — un flujo bloqueante ahí es
 un flujo que termina ignorado. CRITICAL sí bloquea, y no es hipotético: la primera corrida real
 encontró `CVE-2026-31789` (desbordamiento de buffer en OpenSSL, CRITICAL) en `libssl3`/`libcrypto3`

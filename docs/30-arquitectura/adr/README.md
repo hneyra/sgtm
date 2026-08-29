@@ -22,9 +22,9 @@ historial de por qué se hizo algo vale más que la coherencia del documento.
 | [0014](ADR-0014-navegacion-centrada-en-la-atencion.md) | La atención al contribuyente como inicio; los módulos detrás de un lanzador, reagrupados por tarea | Aceptado |
 | [0015](ADR-0015-conciliacion-catastro-rentas.md) | La conciliación catastro↔rentas: un derivado que publica rentas, no un estado que guarda catastro | Aceptado |
 | [0016](ADR-0016-el-inicio-pregunta-la-ficha-compone.md) | El inicio busca con un abanico de lecturas por permiso; la ficha 360° compone opciones publicadas; el portal se separa | Aceptado |
-| [0017](ADR-0017-tablas-de-valuacion-nacionales.md) | Las tres tablas de valuación son catálogos nacionales, no datos de cada municipalidad | Aceptado |
-| [0018](ADR-0018-el-redondeo-decidido.md) | Los puntos de redondeo los define este sistema y entran como dato, no como código | Aceptado |
-| [0019](ADR-0019-titularidad-parcial.md) | La porción sin titular identificado no se determina a nadie | Aceptado |
+| [0017](ADR-0017-tablas-de-valuacion-nacionales.md) | Las tres tablas de valuación son catálogos nacionales: `municipalidad_id` nulo, cargadas una vez para todas; el arancel sigue siendo municipal | Aceptado |
+| [0018](ADR-0018-el-redondeo-decidido.md) | El redondeo, decidido: escala de cálculo ratificada y `HALF_UP` cuando la norma no ordene otra cosa; cierra D-03a/b/c | Aceptado |
+| [0019](ADR-0019-titularidad-parcial.md) | La porción de un predio sin titular identificado no se determina a nadie: no se le inventa un deudor | Aceptado |
 | [0020](ADR-0020-la-sesion-del-ciudadano.md) | El ciudadano tiene sesión propia —realm y emisor distintos— y su consulta recorre el registro de municipalidades, una a la vez | Aceptado |
 
 Decisiones **pendientes**: [GOB-02](../../00-gobierno/decisiones-abiertas.md).

@@ -57,14 +57,14 @@ existe para no dejar que se difumine:
 | `PULUMI_ACCESS_TOKEN` | Secreto de GitHub Actions | Semestral |
 | `SSH_PRIVATE_KEY` (clave de despliegue) | Secreto de GitHub Actions | Semestral |
 
-Ninguno de estos cinco abre el padrón de una municipalidad por sí solo: son lo que
+Ninguno de estos seis abre el padrón de una municipalidad por sí solo: son lo que
 Pulumi necesita para **crear** el mecanismo —el clúster, el `Namespace`, el destino de
 respaldo, el acceso al registro de imágenes—, no un dato del sistema. Es la distinción
 de `ADR-0011` §3, y `infra/componentes/secretos.ts` la hace estructural:
 `SECRETOS_DE_ARRANQUE` y `inventarioDeSecretos()` son dos listas, y una prueba
 (`verificaciones/secretos.test.ts`) exige que ninguna clave aparezca en las dos.
 
-**`registryPullToken` es el más nuevo de los cinco (issue #257).** `sgtm-aplicacion`,
+**`registryPullToken` es el más nuevo de los seis (issue #257).** `sgtm-aplicacion`,
 `sgtm-migrador` y `sgtm-interfaz` son paquetes **privados** en `ghcr.io/hneyra`:
 `publicar-imagenes.yml` los sube con el `GITHUB_TOKEN` efímero de cada corrida, sin
 ningún paso que los marque públicos. Un nodo nuevo —o uno reconstruido desde cero,
@@ -115,7 +115,7 @@ se rota desde el nodo: no es un valor que se pueda fabricar aquí, lo emite otro
 
 ## 2. Cómo se generan: `bootstrap-secretos.sh`, nunca Pulumi
 
-Un despliegue desde cero necesita las cinco claves de §1 antes de que `pulumi up` cree
+Un despliegue desde cero necesita las diez claves de §1 antes de que `pulumi up` cree
 el primer `Deployment` que las referencia. `infra/secretos/bootstrap-secretos.sh` las
 genera **sin que nadie teclee una clave**:
 
@@ -170,9 +170,10 @@ ya estaban abiertas con la clave vieja — lo único que deja de funcionar es un
 **nueva** con la clave vieja. Es lo que demuestra, contra un motor real,
 `infra/secretos/verificar-rotacion.sh`: abre una sesión como `sgtm_app`, rota la clave, y
 comprueba que esa misma sesión sigue respondiendo mientras una conexión nueva con la
-clave vieja falla y una con la clave nueva funciona. Corre en CI (trabajo `motor`, sin
-necesitar el clúster: usa los mismos guiones de inicialización que
-`verificar-el-motor.sh`, vía `lib-motor-local.sh`).
+clave vieja falla y una con la clave nueva funciona. Se corre a mano —ningún workflow
+lo invoca todavía— y sin necesitar el clúster: usa los mismos guiones de inicialización
+que `verificar-el-motor.sh` —el que sí corre en CI, trabajo `motor`—, vía
+`lib-motor-local.sh`.
 
 `sgtm-owner` es un caso más simple todavía: solo lo leen los dos Jobs, y un Job **nuevo**
 ya lee el `Secret` actualizado al crearse — no hay ningún pod en marcha que reprogramar.
@@ -219,7 +220,7 @@ desde Pulumi Cloud y con un par de claves SSH nuevo respectivamente, y se actual
 
 ### 4.1 Ningún secreto de la aplicación en el estado de Pulumi
 
-`config.ts` no lee ni un secreto de los cinco de §1: `loadSettings()` solo pide
+`config.ts` no lee ni un secreto de los diez de §1: `loadSettings()` solo pide
 `kubeconfig` y las credenciales de respaldo. Un `generateRolePasswords: true` en
 cualquier stack pone roja la configuración citando este mismo documento
 (`checkInvariants`, `ADR-0011` §3).
@@ -229,7 +230,7 @@ cualquier stack pone roja la configuración citando este mismo documento
 `completar-secreto.ts` lanza si generara el mismo valor dos veces en una corrida —con
 `crypto.randomBytes(32)` eso es indistinguible de imposible, y la prueba lo fuerza con
 un generador roto—. Y `verificar-claves-distintas.sh` lo comprueba contra un clúster
-real: lee el valor de las cinco claves y exige que ninguna coincida con otra, dentro de
+real: lee el valor de las diez claves y exige que ninguna coincida con otra, dentro de
 un ambiente y entre `stg` y `prod`.
 
 ### 4.3 Rotar es contra la base ya existente
@@ -259,7 +260,7 @@ corre sobre **todo el repositorio**, no solo `infra/`, en cada PR y en cada inte
 | Poner la misma clave para `sgtm_owner` y `sgtm_app` | CI, trabajo `secretos`: `verificar-claves-distintas.sh` la encuentra, ejecutado contra un clúster real (no simulado) |
 | Que `completar-secreto.ts` genere un valor repetido | `verificaciones/completar-secreto.test.ts`, con un generador roto a propósito |
 | Reintroducir `keycloakAdminPassword` en `SECRETOS_DE_ARRANQUE` | `verificaciones/secretos.test.ts`: las dos listas no pueden compartir una clave |
-| Quitar el `ALTER ROLE` de la rotación | `verificar-rotacion.sh`: una conexión nueva con la clave vieja sigue funcionando, y el guion falla |
+| Quitar el `ALTER ROLE` de la rotación | `verificar-rotacion.sh`, corrido a mano (no está en CI): una conexión nueva con la clave vieja sigue funcionando, y el guion falla |
 | Apuntar `keycloakSmtpHost` de `prod` a un buzón (`sgtm-prod-correo`, Mailpit), o dejar `keycloakSmtpAuth` en false | `config.test.ts`, «ADR-0012 — el relay SMTP»: `checkInvariants` lo rechaza citando `INF-03` §4 |
 | Quitar del guion el `execute-actions-email` del alta declarativa | `despliegue.yml`, peldaño «3b»: el buzón Mailpit queda vacío y el paso se pone rojo |
 | Quitar el `ALTER ROLE rol_carga_parametros LOGIN` de `20-asignar-claves.sh` (issue #387) | CI, trabajo `motor`: `verificar-el-motor.sh` falla nombrando el rol («rol_carga_parametros no puede conectarse») |

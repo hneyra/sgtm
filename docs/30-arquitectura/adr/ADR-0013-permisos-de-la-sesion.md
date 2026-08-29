@@ -12,7 +12,8 @@ autorización (el modelo del manual, en la base). El realm versionado
 
 La interfaz, sin embargo, necesita saber **qué puede hacer cada usuario** para dibujar el menú: la
 barra lateral, el hub de cada módulo y la paleta de comandos leen de
-[`permisos.ts`](../../../frontend/apps/backoffice/src/app/sesion/permisos.ts) y esconden lo que el
+[`permisos.ts`](../../../frontend/packages/sesion/src/permisos.ts) —entonces en
+`apps/backoffice/src/app/sesion/`; hoy en `@sgtm/sesion` (#298)— y esconden lo que el
 usuario no puede ver. Ese archivo obtenía los permisos de un claim `permisos` del token —y ese
 claim **no lo producía nada**: ni el realm, ni el guion de reconciliación, ni el backend, y no
 había endpoint que lo devolviera—. Un comentario en `permisos.ts` lo dejaba pendiente («que lo
@@ -111,4 +112,5 @@ todas las pantallas.
 - REQ-03 §5 ([`docs/20-requisitos/actores-y-permisos.md`](../../20-requisitos/actores-y-permisos.md))
 - `SesionController#permisosDeLaSesion` · `PermisoRepository#efectivosDe` ·
   `GuardiaDeAcceso` / `RequiereAcceso.SESION_PROPIA` ·
-  `frontend/apps/backoffice/src/app/sesion/{ProveedorDeSesion,permisos}.ts`
+  `frontend/packages/sesion/src/ProveedorDeSesion.tsx` ·
+  `frontend/packages/sesion/src/permisos.ts` (hoy en `@sgtm/sesion`, #298)

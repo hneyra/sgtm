@@ -19,13 +19,17 @@ src/main/resources/db/
     ├── V4__sanciones_y_licencias.sql
     ├── V5__seguridad_y_auditoria.sql
     ├── V6__rls.sql                Row Level Security en todas las tablas
-    └── V7__privilegios.sql        GRANT solo sobre tablas padre; sin DELETE
+    ├── V7__privilegios.sql        GRANT solo sobre tablas padre; sin DELETE
+    └── …                          hasta V56 (47 migraciones hoy; una fila por
+                                   migración en DAT-01 §1)
 
-src/testFixtures/                  El arranque de la base, reutilizado por sgtm-plataforma
+src/testFixtures/                  El arranque de la base, reutilizado por los demás módulos
 src/test/                          La prueba de aislamiento
 ```
 
-63 tablas de tenant, 2 catálogos, 3 tablas particionadas por ejercicio.
+Hoy, con V56: 113 tablas de tenant, 6 catálogos, 5 tablas particionadas por ejercicio. Las
+cifras vivas salen de las propias migraciones, y la clasificación normativa —tenant, catálogo,
+exenta— vive en el código de la prueba (`TABLAS_DE_CATALOGO`, `TABLAS_EXENTAS`).
 
 ## La prueba
 
@@ -72,7 +76,7 @@ No basta con que esté escrita. Las dos mutaciones más baratas, verificadas:
 
 | Mutación | Qué se pone en rojo |
 |---|---|
-| Quitar `WITH CHECK` de la política de tenant en `V6` | «toda tabla de tenant tiene politica con USING y WITH CHECK», en las 63 tablas |
+| Quitar `WITH CHECK` de la política de tenant en `V6` | «toda tabla de tenant tiene politica con USING y WITH CHECK», en todas las tablas de tenant (113 hoy, con V56) |
 | Agregar `GRANT SELECT ON determinacion_2026 TO sgtm_app` en `V7` | «sgtm_app no tiene ningun privilegio sobre ninguna particion» y «el acceso directo a una particion falla» |
 
 Conviene repetirlas cada vez que se toque el DDL de RLS o de privilegios.
