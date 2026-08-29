@@ -24,7 +24,7 @@ tienen que seguir diciendo «sin conjunto sellado» mientras D-02a esté abierta
 ./sembrar-demostracion.sh --ambiente stg --municipalidad-id 4
 ```
 
-Ocho pasos, en el único orden en que se pueden dar. No es documentación: cada archivo nombra por
+Nueve pasos, en el único orden en que se pueden dar. No es documentación: cada archivo nombra por
 código algo que otro tuvo que escribir antes, y la fila que nombre algo inexistente **se rechaza**
 —no revienta la carga, se rechaza sola y la siguiente entra—. Ejecutados en desorden el resultado
 no es un error ruidoso, es un «0 nuevas, N rechazadas» que se puede leer por encima.
@@ -36,11 +36,12 @@ no es un error ruidoso, es un «0 nuevas, N rechazadas» que se puede leer por e
 | 3 | `cargar-manzanas.sh` | `ejemplos/manzanas.csv` | el sector |
 | 4 | `cargar-contribuyentes-demo.sh` | `ejemplos/contribuyentes.csv` | — |
 | 5 | `cargar-fichas-demo.sh` | `ejemplos/fichas.csv` | sector, manzana, vía y contribuyente |
-| 6 | `cargar-vehiculos-demo.sh` | `ejemplos/vehiculos.csv` | el contribuyente |
-| 7 | `cargar-transferencias-demo.sh` | `ejemplos/transferencias.csv` | el predio y el vehículo |
-| 8 | `cargar-deuda-demo.sh` | `ejemplos/deuda.csv` | contribuyente, predio y vehículo |
+| 6 | `cargar-detalle-fichas-demo.sh` | `ejemplos/detalle-de-fichas.csv` | la ficha del predio, que **versiona** |
+| 7 | `cargar-vehiculos-demo.sh` | `ejemplos/vehiculos.csv` | el contribuyente |
+| 8 | `cargar-transferencias-demo.sh` | `ejemplos/transferencias.csv` | el predio y el vehículo |
+| 9 | `cargar-deuda-demo.sh` | `ejemplos/deuda.csv` | contribuyente, predio y vehículo |
 
-Los pasos 4 a 8 **exigen `municipalidad.es_demostracion = true`**, comprobado contra la base por
+Los pasos 4 a 9 **exigen `municipalidad.es_demostracion = true`**, comprobado contra la base por
 cada proceso —no por el guión— antes de leer una sola fila. Un `--municipalidad-id` equivocado en
 un dígito no siembra ocho personas que no existen en el padrón de una municipalidad que ya opera, y
 aquí no se borra nada (RNF-051). Los pasos 1 a 3 no la exigen: un catálogo vial es estructura real,
@@ -51,8 +52,8 @@ Repetir un paso **no duplica**: las filas ya cargadas se rechazan una a una por 
 
 ### Qué escenario cubre el juego de datos
 
-16 contribuyentes, 23 predios, 8 vehículos, 7 transferencias y 54 obligaciones en el libro. No es
-un volumen de prueba de carga: es una **cobertura de casos**, elegida para que cada pantalla que
+16 contribuyentes, 23 predios con sus 45 versiones de ficha, 8 vehículos, 7 transferencias y 54
+obligaciones en el libro. No es un volumen de prueba de carga: es una **cobertura de casos**, elegida para que cada pantalla que
 lee datos tenga delante el caso que existe para tratar.
 
 **Catastro y titularidad**
@@ -70,6 +71,30 @@ lee datos tenga delante el caso que existe para tratar.
   catastro↔rentas (ADR-0015) y la detección de omisos tengan delante su caso.
 - Dos departamentos del **mismo edificio**, con sus tramos de edificación, entrada, piso y unidad
   distintos del resto.
+
+**El predio por dentro**
+
+Un predio con ficha pero sin nada dentro es media pantalla vacía, así que `detalle-de-fichas.csv`
+llena las cuatro clases de ficha con lo suyo: **22 construcciones** por piso —con su año, material,
+estado de conservación, las siete categorías constructivas del manual y su % construido, incluida
+una obra al 60 %—, **5 obras complementarias** (cerco, horno, piscina, patios), **5 actividades
+económicas** con su CIIU, **3 bienes comunes** con el **reparto entre los dos departamentos**, y
+**5 grupos de tierra** rural con su calidad agrológica, su riego y **7 colindantes** por
+orientación.
+
+Dos cosas de ese archivo no son detalle sino diseño:
+
+- **La unidad de carga es el predio, no la fila.** Una versión de ficha es atómica —todas las filas
+  de un mismo código predial entran en una sola llamada— porque `siguienteVersion` copia de la
+  anterior lo que no se le mande, y media versión es una ficha que miente. De ahí que el informe
+  cuente *fichas versionadas* y no filas.
+- **Versiona, no sobrescribe.** Cada predio acaba con **dos** versiones de ficha: la que inscribió
+  `fichas.csv` y ésta. No es un efecto colateral que disculpar, es la invariante del catastro
+  ejercitada de verdad, y de paso deja historial que mirar en la pantalla que lo lee.
+
+Un predio se queda fuera a propósito: `Jirón Cusco 900` es un **terreno sin construir**, así que su
+ficha conserva cero construcciones. La pantalla tiene que saber dibujar eso, y sin este caso nunca
+se le pediría.
 
 **Transferencias y % de un predio**
 
@@ -111,6 +136,7 @@ Lo que falta no es una lista de pendientes: cada línea es una decisión.
 | Aranceles, valores unitarios de edificación, tablas de depreciación, valores referenciales de vehículos, tramos y alícuotas del predial | Son **valores normativos**. Entran por `publicar-parametros.sh` / `publicar-cuadros.sh` desde el corpus verificado a doble firma, o no entran (D-02a, D-02b, D-13) |
 | Determinaciones —predial, arbitrios, vehicular, alcabala— | Determinar es aplicar reglas, y las reglas siguen bloqueadas por **D-11**: cuatro factores que NEG-05 §0.1 marca sin fuente identificada. Un tramo equivocado produce deuda mal calculada en todo el padrón |
 | Deuda de ejercicios **anteriores a 2026** | `cuenta_corriente_asiento` está particionado por ejercicio y solo tiene declaradas 2026 y 2027: una fila de 2024 se rechaza con «no partition of relation found». Es también lo que impide sembrar hoy una cartera coactiva realista |
+| Años de construcción **anteriores a 1990** | `Construccion.anioConstruccion` es un `Ejercicio`, y `Ejercicio` admite de 1990 a 2100 —el mismo rango que el dominio `ejercicio` de PostgreSQL—, porque es el tipo del *ejercicio tributario* reutilizado como «año de construcción». Una casa de adobe de 1979, corriente en el distrito, hoy **no se puede fichar** |
 | Cajas, turnos y recibos | **Nada crea un `area` ni una `caja`**: no hay caso de uso ni endpoint que las dé de alta, solo las fixtures de prueba. Sin una caja no se puede abrir turno, y sin turno no se puede cobrar |
 | Papeletas, licencias, anuncios, expedientes coactivos | Sus importes salen del catálogo de infracciones, del arancel de costas y de los derechos de trámite, que son **ordenanza local** (D-02b) |
 
@@ -171,6 +197,7 @@ SGTM_CARGASECTORES_MUNICIPALIDADID=1        SGTM_CARGASECTORES_ARCHIVO=$E/sector
 SGTM_CARGAMANZANAS_MUNICIPALIDADID=1        SGTM_CARGAMANZANAS_ARCHIVO=$E/manzanas.csv    java -jar $J
 SGTM_CARGACONTRIBUYENTESDEMO_MUNICIPALIDADID=1 SGTM_CARGACONTRIBUYENTESDEMO_ARCHIVO=$E/contribuyentes.csv java -jar $J
 SGTM_CARGAFICHASDEMO_MUNICIPALIDADID=1      SGTM_CARGAFICHASDEMO_ARCHIVO=$E/fichas.csv    java -jar $J
+SGTM_CARGADETALLEFICHASDEMO_MUNICIPALIDADID=1 SGTM_CARGADETALLEFICHASDEMO_ARCHIVO=$E/detalle-de-fichas.csv java -jar $J
 SGTM_CARGAVEHICULOSDEMO_MUNICIPALIDADID=1   SGTM_CARGAVEHICULOSDEMO_ARCHIVO=$E/vehiculos.csv java -jar $J
 SGTM_CARGATRANSFERENCIASDEMO_MUNICIPALIDADID=1 SGTM_CARGATRANSFERENCIASDEMO_ARCHIVO=$E/transferencias.csv java -jar $J
 SGTM_CARGADEUDADEMO_MUNICIPALIDADID=1       SGTM_CARGADEUDADEMO_ARCHIVO=$E/deuda.csv      java -jar $J
@@ -179,4 +206,4 @@ SGTM_CARGADEUDADEMO_MUNICIPALIDADID=1       SGTM_CARGADEUDADEMO_ARCHIVO=$E/deuda
 Cada proceso se enciende **solo** si su propiedad `…_ARCHIVO` está puesta
 (`@ConditionalOnProperty`), así que el mismo contenedor —o el mismo `jar`— sirve para los ocho y no
 hace nada de más. El `--municipalidad-id` es el que imprimió la implantación, y tiene que ser el de
-una municipalidad marcada como de demostración: si no, los pasos 4 a 8 se paran sin escribir nada.
+una municipalidad marcada como de demostración: si no, los pasos 4 a 9 se paran sin escribir nada.
