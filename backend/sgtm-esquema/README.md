@@ -20,7 +20,7 @@ src/main/resources/db/
     ├── V5__seguridad_y_auditoria.sql
     ├── V6__rls.sql                Row Level Security en todas las tablas
     ├── V7__privilegios.sql        GRANT solo sobre tablas padre; sin DELETE
-    └── …                          hasta V56 (47 migraciones hoy; una fila por
+    └── …                          hasta V57 (48 migraciones hoy; una fila por
                                    migración en DAT-01 §1)
 
 src/testFixtures/                  El arranque de la base, reutilizado por los demás módulos

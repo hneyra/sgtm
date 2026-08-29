@@ -27,27 +27,43 @@ import pe.gob.sgtm.parametros.EstadoDelCalculo;
 import pe.gob.sgtm.parametros.IdentificadorDeRegla;
 import pe.gob.sgtm.parametros.MotorDeReglas;
 import pe.gob.sgtm.parametros.ParametrosSellados;
+import pe.gob.sgtm.parametros.PoliticasDeRedondeoSelladas;
 import pe.gob.sgtm.parametros.ReglaDeAgregacion;
 import pe.gob.sgtm.parametros.ReglaTributaria;
 import pe.gob.sgtm.parametros.ResultadoDelCalculo;
 import pe.gob.sgtm.parametros.ResultadoDelContribuyente;
+import pe.gob.sgtm.rentas.aplicacion.CuadroPredialParametrizado;
+import pe.gob.sgtm.rentas.dominio.predial.MinimoImponible;
 import pe.gob.sgtm.rentas.dominio.predial.RT001ValorDeTerreno;
 import pe.gob.sgtm.rentas.dominio.predial.RT011BaseImponibleDelContribuyente;
+import pe.gob.sgtm.rentas.dominio.predial.TramosProgresivosAcumulativos;
+import pe.gob.sgtm.rentas.parametros.DerivadoPublicado;
 
 /**
- * El corpus de casos de NEG-05, <b>ejecutable con la cifra en blanco</b> (E-5, #201).
+ * El corpus de casos de NEG-05, con sus <b>tres primeras cifras cerradas</b> (E-5, #201, #188).
  *
  * <p>#30 pedia «casos de prueba con las cifras esperadas en blanco». Escrito asi, un corpus sin
  * cifras no verifica nada: es una lista de deseos. Hay una forma en que si verifica: <b>se deja en
- * blanco la cifra, no las aristas del grafo</b>. Con parametros ficticios se comprueba hoy que un
- * caso aplica exactamente las reglas que declara, produce exactamente los conceptos que declara, y
- * que los parametros que declara son los que la regla pide <b>de verdad</b> —recogidos corriendola
- * con un conjunto vacio, no escritos a mano—.
+ * blanco la cifra, no las aristas del grafo</b>. Con parametros ficticios se comprueba que un caso
+ * aplica exactamente las reglas que declara, produce exactamente los conceptos que declara, y que
+ * los parametros que declara son los que la regla pide <b>de verdad</b> —recogidos corriendola con
+ * un conjunto vacio, no escritos a mano—.
  *
- * <p>Y para lo que todavia no se puede correr, el corpus es un <b>libro mayor</b>: cada caso dice
- * quien lo impide, y las cuentas cuadran en las dos direcciones. Un caso que se declara sin regla y
- * cuya regla si esta registrada pone esta prueba en rojo; uno que se declara fuera del motor
- * nombrando una clase que no existe, tambien.
+ * <h2>Y desde #188, tres casos ya no tienen la cifra en blanco</h2>
+ *
+ * <p>Los dos del cuadro de tramos del articulo 13 y el del minimo imponible. Sus parametros —la
+ * UIT, los tres tramos, los dos limites y el minimo— estan transcritos del TUO LTM, firmados a dos
+ * manos (ADR-0007) y publicados en {@code parametros-2026.csv}, asi que <b>la comparacion al
+ * centimo se hace contra lo que el sistema publica</b> y no contra un valor ficticio: un caso con
+ * cifra compone su conjunto con {@link
+ * pe.gob.sgtm.rentas.parametros.DerivadoPublicado#conjuntoCon}, que falla nombrando la llave que el
+ * corpus no respalda. Comparar contra un arancel inventado pasaria en verde, que es peor que no
+ * tener la cifra.
+ *
+ * <p>Y para lo que todavia no se puede correr, el corpus sigue siendo un <b>libro mayor</b>: cada
+ * caso dice quien lo impide, y las cuentas cuadran en las dos direcciones. Un caso que se declara
+ * sin regla y cuya regla si esta registrada pone esta prueba en rojo; uno que se declara fuera del
+ * motor nombrando una clase que no existe, tambien.
  */
 @DisplayName("Corpus de casos de NEG-05 (E-5)")
 class CorpusDeCasosTest {
@@ -102,13 +118,41 @@ class CorpusDeCasosTest {
     private static final List<ReglaDeAgregacion> REGLAS_DE_AGREGACION =
             List.of(new RT011BaseImponibleDelContribuyente());
 
+    /** «A centimo», ADR-0018. No es una cifra tributaria: es la escala del importe. */
+    private static final int ESCALA_DE_ADR_0018 = 2;
+
+    private static final RoundingMode MODO_DE_ADR_0018 = RoundingMode.HALF_UP;
+
     /**
-     * Ficticia y marcada como tal: ninguna cifra de aqui es una decision sobre D-03. Cubre todos
-     * los puntos porque el corpus no sabe cual redondeara cada regla el dia que D-03c cierre.
+     * El redondeo que ADR-0018 decidio, y por eso ya no se llama ficticio.
+     *
+     * <p>Lo era mientras D-03 seguia abierta en sus tres partes. Se cerraron el 2026-08-28: se
+     * redondea <b>al cierre de cada regla, a centimo y {@code HALF_UP}</b>, y los intermedios
+     * corren sin redondear. Cubre los catorce puntos porque el corpus no sabe cual cierra cada
+     * regla, y esa es la unica parte que sigue siendo una aproximacion.
+     *
+     * <p><b>No sale del conjunto sellado, y deberia.</b> ADR-0018 §Consecuencias dice que las filas
+     * {@code REDONDEO:‹punto›} del piloto se pueden publicar por el mismo camino que todo
+     * parametro; hoy el derivado no publica ninguna, asi que {@code PoliticasDeRedondeoSelladas}
+     * fallaria con {@code SinPuntosObservados} y el corpus no podria comparar nada. La prueba
+     * {@link #elDerivadoTodaviaNoPublicaElRedondeo()} se pone roja el dia que se publiquen, para
+     * que quien lo haga venga aqui a leerlas del conjunto en vez de dejar dos verdades.
      */
-    private static final PoliticasDeRedondeo REDONDEO_FICTICIO = redondeoFicticio();
+    private static final PoliticasDeRedondeo REDONDEO_DE_ADR_0018 = redondeoDeAdr0018();
 
     private static final ValorNormativo VALOR_FICTICIO = ValorNormativo.de("1");
+
+    /** El unico ejercicio cuyo derivado esta publicado y firmado hoy. */
+    private static final int EJERCICIO_PUBLICADO = 2026;
+
+    /**
+     * Cuantos casos tienen ya su cifra cerrada.
+     *
+     * <p>Es el contador de #188 y no un detalle: cada uno exige que su parametro este transcrito,
+     * firmado a dos manos y publicado en el derivado. Hoy son los dos del cuadro de tramos y el del
+     * minimo, todos del articulo 13 del TUO LTM.
+     */
+    private static final int CIFRAS_CERRADAS = 3;
 
     private static List<CasoDelCorpus> todosLosCasos() {
         List<CasoDelCorpus> casos = new ArrayList<>();
@@ -307,8 +351,7 @@ class CorpusDeCasosTest {
     }
 
     @Test
-    @DisplayName(
-            "una cifra esperada se compara al centimo, y no se admite si los parametros son ficticios")
+    @DisplayName("una cifra esperada se compara al centimo contra el conjunto que se publica")
     void laCifraEsperadaSeComparaAlCentimo() {
         for (CasoDelCorpus caso : todosLosCasos()) {
             if (caso.esperado().isEmpty()) {
@@ -316,26 +359,61 @@ class CorpusDeCasosTest {
             }
             assertThat(caso.estado().clase())
                     .describedAs(
-                            "%s trae una cifra esperada y no es ejecutable: nadie la comprobaria",
+                            "%s trae una cifra esperada y no se puede correr: nadie la"
+                                    + " comprobaria",
                             caso.caso())
-                    .isEqualTo(EstadoDelCaso.Clase.EJECUTABLE);
-            assertThat(caso.parametrosRequeridos())
-                    .describedAs(
-                            "%s trae una cifra esperada y pide parametros que hoy se rellenan con"
-                                    + " valores ficticios: compararla no probaria nada, y pasar en"
-                                    + " verde seria peor que no tenerla. La comparacion al centimo"
-                                    + " necesita el conjunto sellado real, que es D-02a",
-                            caso.caso())
-                    .isEmpty();
+                    .isIn(EstadoDelCaso.Clase.EJECUTABLE, EstadoDelCaso.Clase.FUERA_DEL_MOTOR);
 
-            Corrida corrida = correr(caso);
-            Concepto ultimo =
-                    Concepto.de(
-                            caso.conceptosEsperados().get(caso.conceptosEsperados().size() - 1));
-            assertThat(corrida.valores().get(ultimo.nombre()))
-                    .describedAs("%s, al centimo", caso.caso())
+            // Los parametros salen del derivado publicable, no de VALOR_FICTICIO: comparar al
+            // centimo contra un arancel inventado no probaria nada y pasaria en verde, que es peor
+            // que no tener la cifra. `conjuntoCon` falla nombrando la llave que el corpus no
+            // respalda, y por eso una cifra solo se cierra cuando su parametro ya esta firmado.
+            Dinero calculado = calcularConLoPublicado(caso);
+
+            assertThat(calculado)
+                    .describedAs(
+                            "%s, al centimo, con %s",
+                            caso.caso(), caso.fuenteDelEsperado().orElseThrow())
                     .isEqualTo(Dinero.de(caso.esperado().orElseThrow()));
         }
+    }
+
+    @Test
+    @DisplayName(
+            "la base del contribuyente no es la de cada predio: los tramos corren una sola vez")
+    void laBaseDelContribuyenteNoEsLaDeCadaPredio() {
+        CasoDelCorpus agregado = caso("RT-013-c02");
+        Dinero base = Dinero.de(agregado.entradas().get("BASE_AFECTA"));
+        Dinero porPredio = new Dinero(base.valor().divide(java.math.BigDecimal.valueOf(3)));
+
+        Dinero delContribuyente = calcularConLoPublicado(agregado);
+        Dinero unoAUno = Dinero.CERO;
+        for (int predio = 0; predio < 3; predio++) {
+            unoAUno = unoAUno.mas(tramosSobre(agregado, porPredio));
+        }
+
+        // Es AC1 de #30 con cifras reales, y hasta hoy no se podia escribir. Los tramos del
+        // articulo 13 corren sobre la base DEL CONTRIBUYENTE: calculada predio por predio, los tres
+        // se quedan en el primer tramo y el error es sistematico a la baja en todo el padron
+        // (NEG-05 §1). Ninguna cifra del recibo lo diria.
+        assertThat(delContribuyente)
+                .describedAs("la base agregada cruza al segundo tramo")
+                .isEqualTo(Dinero.de(agregado.esperado().orElseThrow()));
+        assertThat(unoAUno)
+                .describedAs("predio por predio, ninguno de los tres sale del primer tramo")
+                .isLessThan(delContribuyente);
+    }
+
+    @Test
+    @DisplayName(
+            "el derivado todavia no publica el redondeo: el dia que lo haga, esto se pone rojo")
+    void elDerivadoTodaviaNoPublicaElRedondeo() {
+        // ADR-0018 §Consecuencias deja publicables las filas REDONDEO:‹punto› del piloto. Mientras
+        // no lo esten, el corpus compara con la politica que el ADR decidio, escrita arriba. El dia
+        // que se publiquen hay que leerlas del conjunto —dos verdades sobre el mismo redondeo es
+        // lo que ARQ-09 §3 evita—, y esta prueba es el recordatorio que no se olvida.
+        assertThat(DerivadoPublicado.numerosVigentesEn(EJERCICIO_PUBLICADO).keySet())
+                .noneMatch(llave -> llave.startsWith(PoliticasDeRedondeoSelladas.TIPO + "|"));
     }
 
     @Test
@@ -356,13 +434,22 @@ class CorpusDeCasosTest {
                                         java.util.stream.Collectors.counting()));
 
         System.out.println("Corpus de casos de NEG-05: " + casos.size() + " casos");
-        System.out.println("  SIN_CIFRA: " + sinCifra + " — bajar este numero es D-02a avanzando");
+        System.out.println("  SIN_CIFRA: " + sinCifra + " — bajar este numero es #188 avanzando");
         porEstado.forEach((estado, cuantos) -> System.out.println("  " + estado + ": " + cuantos));
 
         assertThat(casos).describedAs("el corpus no puede estar vacio").isNotEmpty();
+
+        // Ya no son todos. Las tres cifras cerradas son las de las dos reglas del articulo 13
+        // —los tramos y el minimo—, cuyos parametros estan publicados y firmados a dos manos. Las
+        // demas siguen esperando a D-11, a los dos cuadros de GOB-03 y a los valores de ordenanza
+        // (D-02b). Este numero es el libro mayor de #188: bajarlo cuesta transcribir y firmar, y
+        // subirlo sin querer —borrando una cifra ya cerrada— pone esto rojo.
+        assertThat(casos.size() - sinCifra)
+                .describedAs("casos con la cifra cerrada y comparada al centimo")
+                .isEqualTo(CIFRAS_CERRADAS);
         assertThat(sinCifra)
-                .describedAs("hoy ninguna cifra esta cerrada: D-02a sigue abierta")
-                .isEqualTo(casos.size());
+                .describedAs("y los que siguen esperando a que su cifra se pueda cerrar")
+                .isEqualTo(casos.size() - CIFRAS_CERRADAS);
     }
 
     // ------------------------------------------------------------------
@@ -374,6 +461,92 @@ class CorpusDeCasosTest {
             List<String> conceptosProducidos,
             Map<String, Dinero> valores,
             List<String> parametrosPedidos) {}
+
+    /**
+     * Calcula el caso con los parametros que el corpus <b>publica</b>, no con los ficticios.
+     *
+     * <p>El conjunto se compone con <b>exactamente</b> las llaves que el caso declara, y con los
+     * valores del derivado: declararlas de menos falla al construir el cuadro —no pasa en verde con
+     * lo que otro caso dejo cargado— y declarar una que el corpus no respalda falla nombrandola.
+     */
+    private Dinero calcularConLoPublicado(CasoDelCorpus caso) {
+        // La rama de EJECUTABLE no la ejercita ningun caso todavia, y no es codigo muerto: es la
+        // que corre el dia que una regla del motor tenga su cifra. Hoy la unica registrada es
+        // RT-001, y su arancel lo fija la ordenanza de cada municipalidad (D-02b), asi que no esta
+        // en el derivado —y por eso su caso no puede llevar importe—.
+        if (caso.estado().clase() == EstadoDelCaso.Clase.EJECUTABLE) {
+            Corrida corrida = correrCon(caso, conjuntoDelCaso(caso), REDONDEO_DE_ADR_0018);
+            Concepto ultimo =
+                    Concepto.de(
+                            caso.conceptosEsperados().get(caso.conceptosEsperados().size() - 1));
+            Dinero valor = corrida.valores().get(ultimo.nombre());
+            assertThat(valor)
+                    .describedAs("%s no produjo %s", caso.caso(), ultimo.nombre())
+                    .isNotNull();
+            return valor;
+        }
+        return cierreFueraDelMotor(caso, cuadroDelCaso(caso));
+    }
+
+    /** El desglose del articulo 13 sobre otra base, con el mismo cuadro publicado del caso. */
+    private Dinero tramosSobre(CasoDelCorpus caso, Dinero base) {
+        CuadroPredialParametrizado.Vigente cuadro = cuadroDelCaso(caso);
+        return TramosProgresivosAcumulativos.calcular(base, cuadro.tramos(), REDONDEO_DE_ADR_0018);
+    }
+
+    /**
+     * Cierra el calculo de una regla que vive fuera del motor, con el cuadro del ejercicio.
+     *
+     * <p>{@code RT-013} y {@code RT-014} transforman un valor ya agregado en otro, un tercer caso
+     * que {@code MotorDeReglas} no cubre; sus clases lo dicen en su javadoc. Que el corpus sepa
+     * correrlas es lo que permite que sus casos lleven cifra: sin esto habria que registrarlas en
+     * el motor solo para poder compararlas, que es cambiar el diseno para satisfacer una prueba.
+     *
+     * <p>Un caso fuera del motor que traiga cifra y cuya regla no este aqui falla nombrandola.
+     */
+    private Dinero cierreFueraDelMotor(
+            CasoDelCorpus caso, CuadroPredialParametrizado.Vigente cuadro) {
+        return switch (caso.regla()) {
+            case "RT-013" ->
+                    TramosProgresivosAcumulativos.calcular(
+                            Dinero.de(caso.entradas().get("BASE_AFECTA")),
+                            cuadro.tramos(),
+                            REDONDEO_DE_ADR_0018);
+            case "RT-014" ->
+                    MinimoImponible.aplicar(
+                            Dinero.de(caso.entradas().get("IMPUESTO_CALCULADO")),
+                            cuadro.minimoImponible());
+            default ->
+                    throw new IllegalStateException(
+                            caso.caso()
+                                    + " trae una cifra esperada y vive fuera del motor, pero nadie"
+                                    + " sabe correr "
+                                    + caso.regla()
+                                    + ": sin eso la cifra no se comprobaria");
+        };
+    }
+
+    private CuadroPredialParametrizado.Vigente cuadroDelCaso(CasoDelCorpus caso) {
+        Ejercicio ejercicio = new Ejercicio(caso.ejercicio());
+        return new CuadroPredialParametrizado(
+                        DerivadoPublicado.conjuntoCon(
+                                ejercicio, Set.copyOf(caso.parametrosRequeridos())))
+                .vigenteEn(ejercicio);
+    }
+
+    private ParametrosSellados conjuntoDelCaso(CasoDelCorpus caso) {
+        Ejercicio ejercicio = new Ejercicio(caso.ejercicio());
+        return DerivadoPublicado.conjuntoCon(ejercicio, Set.copyOf(caso.parametrosRequeridos()))
+                .vigenteEn(ejercicio);
+    }
+
+    private CasoDelCorpus caso(String identificador) {
+        return todosLosCasos().stream()
+                .filter(c -> c.caso().equals(identificador))
+                .findFirst()
+                .orElseThrow(
+                        () -> new IllegalStateException("El corpus no tiene " + identificador));
+    }
 
     private List<CasoDelCorpus> ejecutables() {
         return todosLosCasos().stream()
@@ -411,14 +584,20 @@ class CorpusDeCasosTest {
     }
 
     private Corrida correrCon(CasoDelCorpus caso, Set<String> parametros) {
+        return correrCon(
+                caso, sellados(new Ejercicio(caso.ejercicio()), parametros), REDONDEO_DE_ADR_0018);
+    }
+
+    private Corrida correrCon(
+            CasoDelCorpus caso, ParametrosSellados sellados, PoliticasDeRedondeo redondeo) {
         Ejercicio ejercicio = new Ejercicio(caso.ejercicio());
         EntradaDeCalculo entrada =
                 new EntradaDeCalculo(
                         ejercicio,
                         estadoDeclarado(caso),
                         caracteristicas(caso),
-                        sellados(ejercicio, parametros),
-                        REDONDEO_FICTICIO);
+                        sellados,
+                        redondeo);
 
         boolean agrega = caso.reglasEsperadas().stream().anyMatch(this::esAgregacion);
         MotorDeReglas motor = new MotorDeReglas(catalogo());
@@ -517,10 +696,10 @@ class CorpusDeCasosTest {
                         .anyMatch(r -> r.identificador().equals(identificador));
     }
 
-    private static PoliticasDeRedondeo redondeoFicticio() {
+    private static PoliticasDeRedondeo redondeoDeAdr0018() {
         PoliticasDeRedondeo.Constructor constructor = PoliticasDeRedondeo.construir();
         for (PuntoDeRedondeo punto : PuntoDeRedondeo.values()) {
-            constructor.en(punto, new PoliticaDeRedondeo(2, RoundingMode.HALF_UP));
+            constructor.en(punto, new PoliticaDeRedondeo(ESCALA_DE_ADR_0018, MODO_DE_ADR_0018));
         }
         return constructor.construir();
     }

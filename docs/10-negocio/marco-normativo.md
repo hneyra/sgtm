@@ -68,7 +68,7 @@ Reglas de lectura del mapa:
 |---|---|---|---|---|
 | 7 | Tabla de **valores unitarios** oficiales de edificación por categoría (**A–I**, nueve, leídas en el Anexo I.2), partida **y año de construcción** | Resolución anual del sector Vivienda, conforme al TUO LTM art. 11: para 2026, la R.M. 277-2025-VIVIENDA, art. 1 y Anexo I (I.1 a I.4, uno por región). **La tabla actual no tiene la dimensión «año de construcción»** (hallazgo H-4), y el anexo leído no la tiene tampoco: cruza categoría × **3 partidas** | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; lo que este dato espera es la segunda firma y las tres regiones que le faltan (GOB-03, H-14): trabajo, no decisión |
 | 8 | **Aranceles** de terreno por vía y ejercicio | Planos arancelares aprobados por el sector Vivienda (TUO LTM art. 11). Norma nacional, pero **sus valores están referidos a las vías de cada localidad**: la transcripción es por municipalidad y necesita #16 | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el archivo está firmado y sin fila en el derivado, porque la transcripción es por municipalidad y espera al catálogo vial |
-| 9 | Tabla de **depreciación** por material, antigüedad y estado de conservación | Anexa a la resolución anual del sector Vivienda `‹confirmar si la fija esa resolución o el Reglamento Nacional de Tasaciones›` | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; lo que espera es la dimensión de uso, sin la cual solo se cargaría una de las cuatro tablas (GOB-03, H-15) |
+| 9 | Tabla de **depreciación** por **uso de la edificación**, material, antigüedad y estado de conservación | Anexo I del Reglamento Nacional de Tasaciones (R.M. 172-2016-VIVIENDA), Tablas 01 a 04; la resolución anual de valores unitarios remite a él en su art. 4 | D-02a | ninguno todavía — **cerrado el 2026-08-29**: `V57` le dio a `depreciacion` su dimensión de uso y sus 492 filas ya se publican desde el corpus, así que a esta fila no le queda nada que esperar (GOB-03, H-15) |
 | 10 | Valorización de **otras instalaciones** y obras complementarias, y el **factor de oficialización** que multiplica el resultado | Resolución anual del sector Vivienda, conforme al TUO LTM art. 11: para 2026, la R.M. 277-2025-VIVIENDA, cuyo art. 2 aprueba el Instructivo (Anexo II, que fija `Fo = 0,68`) y cuyo art. 3 aprueba los valores unitarios a costo directo (Anexo III, de uso **opcional** según la propia resolución). La metodología es la del Reglamento Nacional de Tasaciones, R.M. 172-2016-VIVIENDA art. 31 | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el factor de oficialización tiene fuente y su archivo sigue en TRANSCRITO, a falta de la segunda firma (D-11) |
 
 ### 2.4 Arbitrios
@@ -164,9 +164,9 @@ pueden empezar hoy.
 el 2026-08-25 y una etiqueta que nombra una decisión cerrada dice algo falso. Salieron enteros
 #188, #190, #192, #194 y #198, y perdieron esa parte #195, #196 y #197, que siguen aquí por la
 ordenanza o el acto local. **Retirar la etiqueta no dejó listas sus cifras**, y conviene no leerlo así: lo
-que las filas 7, 9 y 10 siguen esperando es la segunda firma del cuadro de valores unitarios y sus
-tres regiones (H-14), la dimensión de uso de la depreciación (H-15) y el `% actualización` de
-D-11. Eso ya no es una decisión de D-02 —es trabajo, y vive en
+que las filas 7 y 10 siguen esperando es la segunda firma del cuadro de valores unitarios y sus
+tres regiones (H-14), y la de las obras complementarias, más el `% actualización` de D-11. **La
+fila 9 salió de esa lista el 2026-08-29**, con `V57`. Eso ya no es una decisión de D-02 —es trabajo, y vive en
 [GOB-03](../00-gobierno/plan-de-desbloqueo-D-02.md) y en los propios issues—, que es exactamente
 por lo que la etiqueta ya no lo puede representar.
 

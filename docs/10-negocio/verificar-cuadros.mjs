@@ -41,8 +41,13 @@ const CSV_POR_OMISION = fileURLToPath(
 );
 const CORPUS_POR_OMISION = fileURLToPath(new URL('docs/10-negocio/valores-normativos/', raiz));
 
+/* El orden importa y no es cosmetico: los consumidores del manifiesto lo leen por
+   POSICION. Las tres primeras son las de la llave —`tipo,clave,vigencia_desde`—, que es
+   lo que `ImportarParametrosDelConjunto` lee cuando el MISMO archivo se usa para componer
+   la edicion en el conjunto, y por eso `cuadro` va al final (como `valor_maquina` en
+   `parametros-2026.csv`). Con `cuadro` delante, componer leia «2026» como fecha y sellaba
+   el conjunto sin la edicion dentro. */
 const COLUMNAS = [
-  'cuadro',
   'tipo',
   'clave',
   'vigencia_desde',
@@ -53,14 +58,18 @@ const COLUMNAS = [
   'archivo_del_corpus',
   'transcribio',
   'verifico',
+  'cuadro',
 ];
 
-/* Los cuadros que `PublicarCuadros` sabe publicar. Los otros dos no estan porque sus
-   tablas todavia no pueden recibirlos sin perder una dimension —la region en los
-   valores unitarios, el uso de la edificacion en la depreciacion—; el README del
-   directorio lo explica. Un manifiesto que los nombre se rechaza aqui y en el
-   proceso, con el mismo motivo. */
-const CUADROS_PUBLICABLES = new Set(['VALOR_REFERENCIAL']);
+/* Los cuadros que `PublicarCuadros` sabe publicar, y tienen que ser los mismos que
+   `FilaDelManifiesto.CUADROS` del backend. `VALOR_UNITARIO` no esta porque su tabla
+   todavia no puede recibirlo sin perder una dimension: la R.M. anual del MVCS publica
+   un cuadro por region y el corpus solo trae Costa, ademas de faltarle la segunda
+   firma (GOB-03, H-14). `DEPRECIACION` estuvo fuera por lo mismo hasta V57 —cuatro
+   tablas, una por uso de la edificacion, y ninguna columna de uso donde ponerlas
+   (H-15)— y entra desde ahi. Un manifiesto que nombre lo que falta se rechaza aqui y
+   en el proceso, con el mismo motivo. */
+const CUADROS_PUBLICABLES = new Set(['VALOR_REFERENCIAL', 'DEPRECIACION']);
 
 const argumentos = process.argv.slice(2);
 function opcion(nombre, porOmision) {

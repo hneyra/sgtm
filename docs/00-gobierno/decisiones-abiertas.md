@@ -52,7 +52,8 @@ tres grupos tienen responsables y bloqueos distintos:
   esperando es **usar** esas cifras: casi toda regla del predial depende además de D-11
   (H-12, [GOB-03](plan-de-desbloqueo-D-02.md) §0.6) —el redondeo ya no: D-03a/b/c se cerraron el
   2026-08-28 ([ADR-0018](../30-arquitectura/adr/ADR-0018-el-redondeo-decidido.md))—, y dos de los tres cuadros no se pueden cargar
-  todavía porque a sus tablas les falta una dimensión que la norma sí tiene (GOB-03, H-14 y H-15).
+  todavía porque a su tabla le falta una dimensión que la norma sí tiene (GOB-03, H-14); la de
+  depreciación ya no: `V57` le dio la suya el 2026-08-29 y sus 492 filas se publican (H-15).
 - **D-02b** exige la ordenanza del piloto *y* su ratificación provincial. No se puede empezar.
 - **D-02c** está en medio.
 

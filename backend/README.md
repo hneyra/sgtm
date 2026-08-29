@@ -4,7 +4,7 @@ Spring Boot 4 sobre Java 25, multi-módulo, monolito modular con Spring Modulith
 ([ADR-0001](../docs/30-arquitectura/adr/ADR-0001-plataforma-backend.md),
 [ADR-0003](../docs/30-arquitectura/adr/ADR-0003-monolito-modular.md)).
 
-**Qué hay:** el esquema completo como migraciones Flyway (hoy, 47, hasta `V56`), el camino del
+**Qué hay:** el esquema completo como migraciones Flyway (hoy, 48, hasta `V57`), el camino del
 contexto de tenant (token → `SET LOCAL` → RLS), las verificaciones bloqueantes y **negocio real
 en los doce contextos acotados** — del catastro versionado y la caja a la cobranza coactiva.
 **Qué no hay:** ninguna regla de cálculo con cifras normativas sin fuente — lo bloquean D-11 y

@@ -1,6 +1,8 @@
 package pe.gob.sgtm.parametros.dominio;
 
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Dinero;
 
 /**
@@ -46,6 +48,23 @@ public interface PublicacionDeCuadros {
      * parametro_doble_verificacion_ck}).
      */
     long abrirEdicion(ParametroTributario cabecera, String transcribio, String verifico);
+
+    /**
+     * Una fila del cuadro de depreciacion del Anexo I del Reglamento Nacional de Tasaciones.
+     *
+     * @param uso la tabla del Anexo I —{@code 01}..{@code 04}—, con el numero de la propia norma
+     * @param antiguedadHasta el tope del tramo en anios; <b>nulo</b> es «mas de 50 anios», el tramo
+     *     abierto con que cierra cada tabla. Un centinela seria una cifra inventada dentro de un
+     *     cuadro normativo, y ademas una que se lee igual que un tope de verdad (V57)
+     */
+    void agregarDepreciacion(
+            long edicion,
+            String uso,
+            String material,
+            String estadoConservacion,
+            @Nullable Integer antiguedadHasta,
+            Alicuota porcentaje,
+            String documentoFuente);
 
     /** Una fila del cuadro de valores referenciales de vehiculos. */
     void agregarValorReferencial(
