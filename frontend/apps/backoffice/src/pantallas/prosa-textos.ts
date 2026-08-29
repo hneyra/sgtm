@@ -256,6 +256,31 @@ export const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
     detalle:
       'Lo que se ve abajo es cómo saldría impresa la resolución que resuelve el procedimiento sancionador. Dictarla exige la papeleta que resuelve, la fecha y el sustento, y esta pantalla no dibuja ningún campo: el formulario que sí los tiene está en «Descargos y reclamos», pero allí resuelve un recurso presentado, y una resolución también se dicta sin ninguno. Mientras tanto, dicta la resolución por el procedimiento actual y avísale a sistemas: esta pantalla todavía no dicta nada.',
   },
+  /* Y las tres de transito (#429), con las que FRO-06 queda aplicada a las
+     **siete**. Las tres estaban clasificadas desde #77 —la casilla era la
+     correcta— y las tres eran mudas: sin `acciones` no hay `<BarraDeAcciones>`,
+     asi que su causa se calculaba, entraba en el censo y no la leia nadie.
+
+     Las dos resoluciones dicen ademas donde SI esta dibujado su formulario, por
+     lo mismo que las administrativas: en «Descargos y reclamos», colgando de un
+     recurso presentado. La constancia no lo dice, porque no lo hay — y ahi lo
+     que se nombra es el filtro que se le parece y **no** sirve, que es el error
+     que alguien haria si no se dijera. */
+  transito_rg_ordinaria: {
+    titulo: 'Esto es la hoja de la resolución, no el formulario que la dicta',
+    detalle:
+      'Lo que se ve abajo es cómo saldría impresa la resolución que ordena la cobranza de la papeleta. Dictarla exige la papeleta que resuelve, la fecha y el sustento, y esta pantalla no dibuja ningún campo: el formulario que sí los tiene está en «Descargos y reclamos», pero allí resuelve un recurso presentado, y la ordinaria se dicta también sin ninguno. Mientras tanto, dicta la resolución por el procedimiento actual y avísale a sistemas: esta pantalla todavía no dicta nada.',
+  },
+  transito_rg_sancionadora: {
+    titulo: 'Esto es la hoja de la resolución, no el formulario que la dicta',
+    detalle:
+      'Lo que se ve abajo es cómo saldría impresa la segunda resolución, la que se dicta cuando la ordinaria ya surtió efecto y venció su plazo. Dictarla exige la papeleta que resuelve, la fecha y el sustento, y esta pantalla no dibuja ningún campo, por el mismo motivo que la ordinaria. Mientras tanto, dicta la resolución por el procedimiento actual y avísale a sistemas: esta pantalla todavía no dicta nada.',
+  },
+  transito_constancia_libre: {
+    titulo: 'Esto es la constancia, no el formulario que la emite',
+    detalle:
+      'Lo que se ve abajo es cómo saldría impresa la constancia de no tener papeletas pendientes. Emitirla exige la placa del vehículo que se acredita, y esta pantalla no dibuja ningún campo donde escribirla: la placa que se teclea en «Búsqueda de papeletas» sirve para buscar lo que hay, no para decir qué vehículo se acredita. Mientras tanto, emite la constancia por el procedimiento actual y avísale a sistemas: esta pantalla todavía no emite nada.',
+  },
   adm_notificacion_resolucion: {
     titulo: 'Esto es la cédula, no el formulario que registra la diligencia',
     detalle:

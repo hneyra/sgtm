@@ -97,14 +97,18 @@ function aplicada(opcion: string): boolean {
 /**
  * Las que **todavia** no lo tienen, con el issue que las cubre.
  *
- * La decision es transversal y se aplica modulo a modulo, asi que esta lista
- * existe. Solo puede encoger: cada issue quita las suyas y el diff lo ensena.
+ * La decision es transversal y se aplico modulo a modulo, asi que esta lista
+ * existio: cinco al escribirse FRO-06 (#427), tres tras #428 y **ninguna desde
+ * #429**. Solo puede encoger, y el diff lo ensena.
+ *
+ * **Vacia no la vuelve inutil, y por eso se queda.** Lo que la lista permite es
+ * declarar una excepcion **temporal y nombrada**; lo que la prueba de abajo
+ * exige es que no se pueda declarar una que ya no lo sea. Con la lista vacia,
+ * una hoja sin superficie nueva —o una que pierda su aviso— no tiene donde
+ * esconderse: pone en rojo la comprobacion, y no hay linea que anadir que la
+ * calle sin decir de quien es.
  */
-const SIN_APLICAR_TODAVIA: readonly string[] = [
-  'transito_constancia_libre', // #429 — clasificada desde #77; le falta el aviso
-  'transito_rg_ordinaria', // #429 — idem
-  'transito_rg_sancionadora', // #429 — idem
-];
+const SIN_APLICAR_TODAVIA: readonly string[] = [];
 
 describe('una hoja sin superficie dice lo que es y lo que le falta', () => {
   it('son estas siete, y la lista sale del catalogo', () => {
@@ -126,6 +130,20 @@ describe('una hoja sin superficie dice lo que es y lo que le falta', () => {
         `«${opcion}» es una hoja sin superficie sin FRO-06 aplicado: le falta su entrada en ACTOS_SIN_CAMPO —su causa seria «sin-declaracion», que pide declarar campos que la pantalla no tiene— o su aviso permanente, que es lo unico que se dibuja cuando no hay acciones`,
       ).toBe(true);
     }
+  });
+
+  /**
+   * **Las siete, aplicadas** (#429 cierra la lista que #427 abrio).
+   *
+   * Se afirma en positivo y no solo por la ausencia de pendientes: una lista
+   * vacia y una comprobacion que solo mira la lista dirian lo mismo el dia que
+   * alguien borrara el `filter`. Esto compara contra las hojas que salen del
+   * catalogo.
+   */
+  it('ninguna se queda sin aplicar: las siete estan clasificadas y lo dicen', () => {
+    const sinAplicar = hojasSinSuperficie().filter((opcion) => !aplicada(opcion));
+    expect(sinAplicar, 'hojas sin superficie sin FRO-06 aplicado').toEqual([]);
+    expect(SIN_APLICAR_TODAVIA).toEqual([]);
   });
 
   it('la que ya lo tiene nombra el dato que falta, para los dos lectores', () => {

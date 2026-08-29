@@ -90,6 +90,24 @@ import {
  * así que no hay ninguna sección al final de la cual añadir nada. Lo que les
  * falta no es un campo entre varios: es el formulario entero, que el prototipo
  * nunca capturó.
+ *
+ * **Y desde #429 las tres lo dicen** (FRO-06). Eran las últimas tres de las
+ * siete **hojas sin superficie** del sistema, y su clasificación era correcta
+ * desde #77: lo que les faltaba era poder contarlo. Sin `acciones`,
+ * `Pantalla.tsx` no dibuja `<BarraDeAcciones>` —`{estructura.acciones &&
+ * <BarraDeAcciones .../>}`—, así que la causa que `impedimentoDelActo` calcula
+ * para ellas entraba en el censo y **no la leía nadie**: RNF-082 un escalón más
+ * arriba de donde lo cerró #385, donde al menos había un botón apagado con un
+ * `title`. Lo que se lee está ahora en su aviso permanente (`AVISOS` de
+ * `prosa-textos.ts`), que es el único bloque que se dibuja sin acciones.
+ *
+ * Las dos resoluciones dicen además **dónde sí está dibujado su formulario** —en
+ * «Descargos y reclamos», colgando de un recurso presentado, que no es el caso
+ * de una ordinaria dictada sin ninguno—; la constancia no, porque no lo hay, y
+ * ahí lo que se nombra es el filtro que se le parece y **no** sirve: la placa de
+ * «Búsqueda de papeletas» busca lo que hay, no dice qué vehículo se acredita.
+ * Con las tres, la lista de pendientes de
+ * `verificaciones/hojas-sin-superficie.test.ts` queda **vacía**.
  */
 
 /**
