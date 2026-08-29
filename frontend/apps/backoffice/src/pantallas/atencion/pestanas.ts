@@ -344,4 +344,45 @@ export const PESTANAS: readonly PestanaDeLaFicha[] = [
       },
     ],
   },
+  {
+    /**
+     * **Los beneficios de la persona, donde se preguntan** (#393).
+     *
+     * Es la unica de las seis secciones del expediente predial que se puede
+     * componer por contribuyente, y por eso es la unica que entra; el resto del
+     * analisis, opcion por opcion, esta en el javadoc de `pantallas/rentas/index.ts`.
+     *
+     * Y es la que mas se pregunta en ventanilla de las que faltaban: si a este
+     * contribuyente le corre la deduccion de 50 UIT decide lo que se le cobra, y
+     * hasta hoy exigia salir de la ficha y volver a teclear su codigo en otra
+     * pantalla —una de las ocho que lo volvian a pedir—.
+     *
+     * `contribuyente` es el filtro que el contrato declara para esta operacion,
+     * el mismo con el que preguntan la unificada, los predios y los vehiculos.
+     */
+    opcion: 'beneficios',
+    parametros: (contexto) => conCodigo(contexto, { contribuyente: contexto.codigo }),
+    tabla: {
+      title: 'Beneficios registrados',
+      cols: [
+        'Expediente',
+        'Contribuyente',
+        'Tipo',
+        'Resolución',
+        'Vigencia',
+        'Deducción',
+        'Estado',
+      ],
+    },
+    /* La salida a su opcion, que es la que pagina y la que registra: aqui no se
+       aprueba ni se deniega ninguno —las tres acciones de esa pantalla escriben,
+       y ninguna escritura sale de esta ficha (ADR-0016 §2)—. */
+    acciones: [
+      {
+        opcion: 'beneficios',
+        filtro: (contexto) => ({ contribuyente: contexto.codigo }),
+        nota: 'Registrar, aprobar o denegar un beneficio se hace en su opción, con su observación.',
+      },
+    ],
+  },
 ];
