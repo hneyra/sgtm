@@ -2,8 +2,8 @@
   "artboards": [
     { "file": "Hoy.dc.html", "x": 0, "y": 0, "w": 1200, "h": 900, "title": "Hoy · el diagnóstico" },
     { "file": "Main.dc.html", "x": 1320, "y": 0, "w": 1440, "h": 980, "title": "Propuesta A · Reagrupar" },
-    { "file": "Determinacion.dc.html", "x": 0, "y": 1100, "w": 1440, "h": 1060, "title": "Propuesta B · Uniformar la determinación" },
-    { "file": "Expediente.dc.html", "x": 1560, "y": 1100, "w": 1440, "h": 1240, "title": "Propuesta C · Unificar el expediente" }
+    { "file": "Determinacion.dc.html", "x": 0, "y": 1100, "w": 1440, "h": 1220, "title": "Propuesta B · Uniformar la determinación" },
+    { "file": "Expediente.dc.html", "x": 1560, "y": 1100, "w": 1440, "h": 1160, "title": "Propuesta C · Unificar el expediente" }
   ],
   "annotations": [
     {
@@ -23,14 +23,14 @@
     {
       "id": "nota-b",
       "x": 0,
-      "y": 2200,
+      "y": 2400,
       "w": 620,
       "text": "B · El sujeto arriba, la memoria del cálculo en el centro, el acto abajo a la derecha.\nLa acción que escribe es la única primaria, y exige observación (regla 10)."
     },
     {
       "id": "nota-c",
       "x": 1560,
-      "y": 2380,
+      "y": 2400,
       "w": 620,
       "text": "C · Composición, no absorción: seis opciones existentes bajo un mismo contribuyente.\nDepende de A y B; la sección sin permiso no se dibuja."
     }
