@@ -38,9 +38,9 @@ import org.springframework.web.bind.annotation.RestController;
  *       explicito de lo que ya existe: no se puede publicar un endpoint sin anotarlo ahi, ni
  *       retirarlo sin quitarlo. Las operaciones restantes del contrato estan pendientes, y no se
  *       pueden exigir todavia sin dejar el build en rojo permanente —que es la forma segura de que
- *       nadie vuelva a mirar esta prueba—. Hoy quedan <b>tres</b> de las 174:
- *       {@code GET /portal/deuda}, {@code POST /transito/reportes} y
- *       {@code GET /transito/papeletas/{numero}/hoja-informativa}.
+ *       nadie vuelva a mirar esta prueba—. Hoy quedan <b>tres</b> de las 174: {@code GET
+ *       /portal/deuda}, {@code POST /transito/reportes} y {@code GET
+ *       /transito/papeletas/{numero}/hoja-informativa}.
  * </ul>
  */
 @DisplayName("ARQ-05 — Contrato de la API")
