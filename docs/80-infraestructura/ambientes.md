@@ -137,6 +137,41 @@ main ──► stg (automatico) ──► prod (aprobacion manual)
 | **Sin despliegues en ventanas de vencimiento tributario** | Es la regla que más fricción genera y la que más protege |
 | Toda liberación tiene una reversión que no ejecuta `pulumi up` | [`ADR-0011`](../30-arquitectura/adr/ADR-0011-infraestructura-como-codigo.md) §5 |
 
+### 5.1 Registro de despliegues de `prod`
+
+Se anota aquí, no en el PR: un PR se lee una vez y una liberación se consulta durante
+años. **Duración = la del job `pulumi up en prod (con aprobación)`**, no la de la corrida
+entera ni la espera de la aprobación, que depende de cuándo mira una persona.
+
+| Fecha (UTC) | Qué | Duración | Cómo se supo |
+|---|---|---|---|
+| 2026-08-26 22:13 | **El primer `pulumi up` de `prod`, y no fue en CI.** El `Namespace` `sgtm-prod` y sus `Deployment` llevan `creationTimestamp` de esa hora y la etiqueta `gestionado-por: pulumi`, pero **ninguna corrida de `infra.yml` tenía `aplicar-prod` en verde en esa ventana** —las de las 21:40 y 21:55 quedaron `failure` y `cancelled`—: el stack se aplicó desde el propio VPS, a mano | — | `kubectl get ns sgtm-prod -o json`, cotejado con `gh run list --workflow infra.yml` |
+| 2026-08-27 08:11 → 08:12 | Primer `aplicar-prod` **de CI** en verde (corrida `33052256617`) | 58 s | `gh run view` |
+| 2026-08-27 15:02 → 15:12 | El más largo de los nueve: reconcilió el realm (`Job/sgtm-prod-realm-cb3bc57c60`, 8 m 42 s dentro del clúster) | 9 m 59 s | ídem |
+| 2026-08-27 20:07 → 20:09 | El que dejó el estado que duró: `migracion` e `implantacion` de `0eee58e4`, 23 s y 28 s | 2 m 04 s | ídem |
+| 2026-08-28 08:54 → 08:55 | Sin cambios de versión | 65 s | ídem |
+| 2026-08-28 20:40 → 20:41 | El último en verde antes de este registro | 73 s | ídem |
+
+Nueve corridas de `aplicar-prod` en verde entre el 27 y el 28 de agosto, **mediana 73 s**,
+y ninguna se acercó al `timeout-minutes: 20`.
+
+**Lo que ese registro no dice, y es lo que importaba medir:** ninguna de esas nueve
+cambió `applicationBootstrapVersion`. El 2026-08-29, con `prod` «corriendo» y nueve
+despliegues en verde, su base tenía **27 migraciones aplicadas de las 48 que declara
+`main`** — de `V28` a `V57` — porque la versión de arranque seguía en `0eee58e4`
+(2026-08-27). Un ambiente puede estar desplegado, sano, y no tener las tablas de la mitad
+del sistema; el `Deployment` `Ready` no lo distingue, y por eso la comprobación es
+[`verificar-el-ambiente.sh`](../../infra/verificaciones/ambiente/verificar-el-ambiente.sh)
+y no un código 200.
+
+### 5.2 Qué queda a mano, y por qué
+
+| Acto | Por qué no se automatiza | Dónde está escrito |
+|---|---|---|
+| Aprobar el *environment* `prod` | Es la decisión de una persona sobre una ventana, y GitHub registra quién. El *environment* se crea a mano una vez (Settings → Environments) | [Liberar una versión](../B0-operacion/runbooks/liberar-una-version-y-revertirla.md) §«La otra liberación» |
+| Fijar la clave del administrador | `prod` va **sin relay SMTP** a propósito (`Pulumi.prod.yaml`): la cuenta nace sin clave y con `UPDATE_PASSWORD` pendiente, y nadie recibe el enlace | [Recuperar el acceso de un usuario](../B0-operacion/runbooks/recuperar-el-acceso-de-un-usuario.md) |
+| `nmap` desde fuera | Desde el propio nodo el tráfico no atraviesa el cortafuegos: la comprobación pasaría en verde con `ufw` apagado | [Reconstruir el VPS](../B0-operacion/runbooks/reconstruir-el-vps-desde-cero.md) §Cómo se comprueba |
+
 ## 6. Ciclo de vida y costo
 
 | Ambiente | Disponibilidad | Notas |
