@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #1F3A5F; } a:hover { color: #2a4d7a; }
+  </style>
+</helmet>
+
+<div style="width: 1200px; height: 900px; box-sizing: border-box; display: flex; background: #f6f4ef; font-family: Inter, -apple-system, 'Segoe UI', sans-serif; color: #1a1612; -webkit-font-smoothing: antialiased;">
+
+  <!-- Barra lateral real, nivel modulo -->
+  <div style="width: 258px; flex: 0 0 258px; box-sizing: border-box; background: #fbfaf6; border-right: 1px solid #e6e1d6; display: flex; flex-direction: column;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 16px 16px 14px; border-bottom: 1px solid #e6e1d6;">
+      <div style="width: 34px; height: 34px; flex: 0 0 34px; border-radius: 8px; background: #1F3A5F; color: #ffffff; display: grid; place-items: center; font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; font-weight: 600;">S</div>
+      <div style="line-height: 1.2; min-width: 0;">
+        <div style="font-family: 'Source Serif 4', Georgia, serif; font-size: 17px; font-weight: 600; letter-spacing: -0.02em;">SGTM</div>
+        <div style="font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; color: #6b6258; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Mun. Prov. de Sullana</div>
+      </div>
+    </div>
+
+    <div style="padding: 8px 10px 28px; display: flex; flex-direction: column; gap: 2px;">
+      <div style="display: flex; align-items: center; gap: 7px; padding: 7px 8px; font-size: 12px; color: #6b6258;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        <span>Todos los módulos</span>
+      </div>
+      <p style="margin: 0; padding: 4px 8px 8px; font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; font-weight: 600; letter-spacing: -0.01em;">Rentas · Registro</p>
+
+      <!-- Grupo 1 -->
+      <div style="display: flex; align-items: center; gap: 7px; margin: 10px 0 2px; padding: 4px 8px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <span style="flex: 1; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #9a9085;">Padrones</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9a9085;">3</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: #1F3A5F;"></span><span>Contribuyentes</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: #1F3A5F;"></span><span>Predios</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: transparent;"></span><span>Vehículos</span></div>
+
+      <!-- Grupo 2 -->
+      <div style="display: flex; align-items: center; gap: 7px; margin: 10px 0 2px; padding: 4px 8px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <span style="flex: 1; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #9a9085;">Determinación</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9a9085;">4</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; background: #e7ecf3; color: #0e1f33; font-size: 13.5px; font-weight: 600;"><span style="width: 5px; height: 5px; border-radius: 999px; background: #1F3A5F;"></span><span>Predial — individual</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: transparent;"></span><span>Predial — masivo</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: #1F3A5F;"></span><span>Declaración jurada</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: transparent;"></span><span>Cálculo vehicular</span></div>
+
+      <!-- Grupo 3 -->
+      <div style="display: flex; align-items: center; gap: 7px; margin: 10px 0 2px; padding: 4px 8px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <span style="flex: 1; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #9a9085;">Movimientos</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9a9085;">4</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: #1F3A5F;"></span><span>Transferencia de predio</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: transparent;"></span><span>Transferencia de vehículo</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: transparent;"></span><span>Alta de deuda</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: transparent;"></span><span>Baja de deuda</span></div>
+
+      <!-- Grupo 4 -->
+      <div style="display: flex; align-items: center; gap: 7px; margin: 10px 0 2px; padding: 4px 8px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <span style="flex: 1; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #9a9085;">Tributos y beneficios</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9a9085;">4</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: #1F3A5F;"></span><span>Arbitrios</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: #1F3A5F;"></span><span>Alcabala</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: transparent;"></span><span>Espectáculos públicos</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;"><span style="width: 5px; height: 5px; border-radius: 999px; background: #1F3A5F;"></span><span>Beneficios</span></div>
+    </div>
+  </div>
+
+  <!-- Diagnostico -->
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 22px 24px; gap: 14px; overflow: hidden;">
+    <div>
+      <p style="margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: #6b6258;">Diagnóstico · lo que se mide hoy</p>
+      <h1 style="margin: 4px 0 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15;">Quince opciones que no se recorren en el orden en que se trabaja</h1>
+      <p style="margin: 8px 0 0; max-width: 68ch; font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; line-height: 1.55; color: #3d362e; text-wrap: pretty;">El punto azul marca las siete opciones que toca una sola atención de predial. Están repartidas en los cuatro grupos, y ninguno de los cuatro las reúne.</p>
+    </div>
+
+    <!-- Hallazgo 1 -->
+    <div style="background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #e6e1d6;">
+        <h2 style="margin: 0; flex: 1; font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; font-weight: 600;">Una atención cruza los cuatro grupos</h2>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b6258;">7 opciones · 4 grupos</span>
+      </div>
+      <div style="padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+        <span style="display: inline-flex; flex-direction: column; gap: 2px; padding: 7px 11px; border: 1px solid #d8d2c4; border-radius: 7px; background: #fbfaf6;"><span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: #9a9085;">Padrones</span><span style="font-size: 12.5px; color: #3d362e;">Contribuyentes</span></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+        <span style="display: inline-flex; flex-direction: column; gap: 2px; padding: 7px 11px; border: 1px solid #d8d2c4; border-radius: 7px; background: #fbfaf6;"><span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: #9a9085;">Padrones</span><span style="font-size: 12.5px; color: #3d362e;">Predios</span></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+        <span style="display: inline-flex; flex-direction: column; gap: 2px; padding: 7px 11px; border: 1px solid #d8d2c4; border-radius: 7px; background: #fbfaf6;"><span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: #9a9085;">Determinación</span><span style="font-size: 12.5px; color: #3d362e;">Declaración jurada</span></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+        <span style="display: inline-flex; flex-direction: column; gap: 2px; padding: 7px 11px; border: 1px solid #d8d2c4; border-radius: 7px; background: #fbfaf6;"><span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: #9a9085;">Determinación</span><span style="font-size: 12.5px; color: #3d362e;">Predial — individual</span></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+        <span style="display: inline-flex; flex-direction: column; gap: 2px; padding: 7px 11px; border: 1px solid #d8d2c4; border-radius: 7px; background: #fbfaf6;"><span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: #9a9085;">Tributos y beneficios</span><span style="font-size: 12.5px; color: #3d362e;">Arbitrios</span></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+        <span style="display: inline-flex; flex-direction: column; gap: 2px; padding: 7px 11px; border: 1px solid #d8d2c4; border-radius: 7px; background: #fbfaf6;"><span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: #9a9085;">Movimientos</span><span style="font-size: 12.5px; color: #3d362e;">Transferencia de predio</span></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+        <span style="display: inline-flex; flex-direction: column; gap: 2px; padding: 7px 11px; border: 1px solid #d8d2c4; border-radius: 7px; background: #fbfaf6;"><span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: #9a9085;">Tributos y beneficios</span><span style="font-size: 12.5px; color: #3d362e;">Alcabala</span></span>
+      </div>
+      <div style="padding: 11px 16px; border-top: 1px solid #e6e1d6; background: #fbfaf6; font-size: 12px; color: #6b6258;">«Transferencia de predio» tiene una casilla «Genera alcabala» y «Alcabala» vive dos grupos más abajo.</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+      <!-- Hallazgo 2 -->
+      <div style="background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #e6e1d6;">
+          <h2 style="margin: 0; flex: 1; font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; font-weight: 600;">El mismo código, ocho veces</h2>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b6258;">8 / 15</span>
+        </div>
+        <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11.5px; font-weight: 500; color: #6b6258;">Cod. Contribuyente</span>
+            <span style="flex: 1; border: 1px solid #d8d2c4; border-radius: 6px; padding: 8px 10px; background: #fbfaf6; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #1a1612;">00000025673</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span style="padding: 3px 9px; border-radius: 999px; background: #fbfaf6; border: 1px solid #e6e1d6; font-size: 11px; color: #6b6258;">Predios</span>
+            <span style="padding: 3px 9px; border-radius: 999px; background: #fbfaf6; border: 1px solid #e6e1d6; font-size: 11px; color: #6b6258;">Predial — individual</span>
+            <span style="padding: 3px 9px; border-radius: 999px; background: #fbfaf6; border: 1px solid #e6e1d6; font-size: 11px; color: #6b6258;">Declaración jurada</span>
+            <span style="padding: 3px 9px; border-radius: 999px; background: #fbfaf6; border: 1px solid #e6e1d6; font-size: 11px; color: #6b6258;">Vehículos</span>
+            <span style="padding: 3px 9px; border-radius: 999px; background: #fbfaf6; border: 1px solid #e6e1d6; font-size: 11px; color: #6b6258;">Cálculo vehicular</span>
+            <span style="padding: 3px 9px; border-radius: 999px; background: #fbfaf6; border: 1px solid #e6e1d6; font-size: 11px; color: #6b6258;">Beneficios</span>
+            <span style="padding: 3px 9px; border-radius: 999px; background: #fbfaf6; border: 1px solid #e6e1d6; font-size: 11px; color: #6b6258;">Alta de deuda</span>
+            <span style="padding: 3px 9px; border-radius: 999px; background: #fbfaf6; border: 1px solid #e6e1d6; font-size: 11px; color: #6b6258;">Baja de deuda</span>
+          </div>
+          <p style="margin: 0; font-size: 12.5px; line-height: 1.45; color: #6b6258;">Ocho pantallas vuelven a pedirlo, y ninguna sabe que la anterior ya lo tenía.</p>
+        </div>
+      </div>
+
+      <!-- Hallazgo 3 -->
+      <div style="background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #e6e1d6;">
+          <h2 style="margin: 0; flex: 1; font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; font-weight: 600;">Un gesto, siete etiquetas</h2>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b6258;">botón primario</span>
+        </div>
+        <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+          <p style="margin: 0; font-size: 12.5px; line-height: 1.45; color: #6b6258;">«Enséñame el resultado antes de escribir» se llama de siete maneras:</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span style="padding: 4px 10px; border-radius: 6px; border: 1px solid #d8d2c4; background: #ffffff; font-size: 12px; color: #1a1612;">Simular</span>
+            <span style="padding: 4px 10px; border-radius: 6px; border: 1px solid #d8d2c4; background: #ffffff; font-size: 12px; color: #1a1612;">Recalcular</span>
+            <span style="padding: 4px 10px; border-radius: 6px; border: 1px solid #d8d2c4; background: #ffffff; font-size: 12px; color: #1a1612;">Liquidar</span>
+            <span style="padding: 4px 10px; border-radius: 6px; border: 1px solid #d8d2c4; background: #ffffff; font-size: 12px; color: #1a1612;">Previsualizar</span>
+            <span style="padding: 4px 10px; border-radius: 6px; border: 1px solid #d8d2c4; background: #ffffff; font-size: 12px; color: #1a1612;">Vista previa</span>
+            <span style="padding: 4px 10px; border-radius: 6px; border: 1px solid #d8d2c4; background: #ffffff; font-size: 12px; color: #1a1612;">Validar</span>
+            <span style="padding: 4px 10px; border-radius: 6px; border: 1px solid #d8d2c4; background: #ffffff; font-size: 12px; color: #1a1612;">Validar deuda del transferente</span>
+          </div>
+          <p style="margin: 0; font-size: 12.5px; line-height: 1.45; color: #6b6258;">Y como la primaria es siempre la última acción del catálogo, en «Alcabala» el botón navy es <strong style="color: #3d362e;">Imprimir liquidación</strong> y en «Predial — individual» es <strong style="color: #3d362e;">Calcular</strong>: el mismo botón, dos consecuencias distintas.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

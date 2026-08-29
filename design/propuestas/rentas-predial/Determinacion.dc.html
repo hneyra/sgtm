@@ -1,0 +1,159 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #1F3A5F; } a:hover { color: #2a4d7a; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 1060px; box-sizing: border-box; display: flex; flex-direction: column; background: #f6f4ef; font-family: Inter, -apple-system, 'Segoe UI', sans-serif; color: #1a1612; -webkit-font-smoothing: antialiased;">
+
+  <div style="display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #e6e1d6;">
+    <div style="min-width: 0; flex: 1;">
+      <p style="margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: #6b6258;">Propuesta B · Rentas · Registro</p>
+      <p style="margin: 2px 0 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 21px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2;">Cálculo individual del impuesto predial</p>
+    </div>
+    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b6258; background: #fbfaf6; border: 1px solid #e6e1d6; border-radius: 999px; padding: 5px 11px;">POST /api/v1/rentas/predial/calculo-individual</span>
+  </div>
+
+  <div style="flex: 1; min-width: 0; padding: 22px 20px; display: flex; flex-direction: column; gap: 16px;">
+
+    <!-- 1 · Sujeto: se pregunta una vez, y se queda a la vista -->
+    <div style="display: flex; align-items: center; gap: 16px; padding: 14px 16px; background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px;">
+      <div style="flex: 1; min-width: 0;">
+        <p style="margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: #6b6258;">Se determina a</p>
+        <p style="margin: 3px 0 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 19px; font-weight: 600; letter-spacing: -0.01em;">SUC. RUFINA MEDINA MEDINA</p>
+        <p style="margin: 3px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6b6258;">00000025673 · D.N.I. 03593174 · 2 predios</p>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 5px; min-width: 0;">
+        <span style="font-size: 11.5px; font-weight: 500; color: #6b6258;">Ejercicio</span>
+        <span style="border: 1px solid #d8d2c4; border-radius: 6px; padding: 9px 32px 9px 10px; background: #fbfaf6; font-size: 13px;">2026</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 5px; min-width: 0;">
+        <span style="font-size: 11.5px; font-weight: 500; color: #6b6258;">DJ N°</span>
+        <span style="border: 1px solid #d8d2c4; border-radius: 6px; padding: 9px 10px; background: #fbfaf6; font-family: 'JetBrains Mono', monospace; font-size: 13px;">000418</span>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+        <span style="padding: 3px 9px; border-radius: 999px; background: #e7ecf3; color: #0e1f33; font-size: 11px; font-weight: 500;">Parámetros 2026 v1 · sellado</span>
+        <span style="font-size: 12px; color: #6b6258;">Cifras actualizadas al <strong style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #3d362e;">29/08/2026</strong></span>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 16px; align-items: flex-start;">
+
+      <!-- 2 · La base -->
+      <section style="flex: 1; min-width: 0; background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #e6e1d6;">
+          <span style="width: 22px; height: 22px; border-radius: 999px; background: #e7ecf3; color: #0e1f33; display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500;">1</span>
+          <h2 style="margin: 0; flex: 1; font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; font-weight: 600;">La base — predios que la integran</h2>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b6258;">2 predios</span>
+        </div>
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr>
+              <th style="padding: 10px 14px; text-align: left; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: #6b6258; background: #fbfaf6; white-space: nowrap;">Código predial</th>
+              <th style="padding: 10px 14px; text-align: left; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: #6b6258; background: #fbfaf6; white-space: nowrap;">Ubicación</th>
+              <th style="padding: 10px 14px; text-align: left; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: #6b6258; background: #fbfaf6; white-space: nowrap;">Uso</th>
+              <th style="padding: 10px 14px; text-align: right; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: #6b6258; background: #fbfaf6; white-space: nowrap;">% prop.</th>
+              <th style="padding: 10px 14px; text-align: right; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: #6b6258; background: #fbfaf6; white-space: nowrap;">Valuo total S/</th>
+              <th style="padding: 10px 14px; text-align: right; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: #6b6258; background: #fbfaf6; white-space: nowrap;">Valuo afecto S/</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-top: 1px solid #e6e1d6;">
+              <td style="padding: 11px 14px; font-size: 13px; font-weight: 500; color: #1a1612; white-space: nowrap;">02-014-D-14-01</td>
+              <td style="padding: 11px 14px; font-size: 13px; color: #3d362e; white-space: nowrap;">CALLE SANTA ROSA 116</td>
+              <td style="padding: 11px 14px; font-size: 13px; color: #3d362e; white-space: nowrap;">Casa habitación</td>
+              <td style="padding: 11px 14px; font-size: 12.5px; color: #3d362e; text-align: right; font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;">100.00</td>
+              <td style="padding: 11px 14px; font-size: 12.5px; color: #3d362e; text-align: right; font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;">132,196.75</td>
+              <td style="padding: 11px 14px; font-size: 12.5px; color: #3d362e; text-align: right; font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;">132,196.75</td>
+            </tr>
+            <tr style="border-top: 1px solid #e6e1d6;">
+              <td style="padding: 11px 14px; font-size: 13px; font-weight: 500; color: #1a1612; white-space: nowrap;">04-021-B-07-00</td>
+              <td style="padding: 11px 14px; font-size: 13px; color: #3d362e; white-space: nowrap;">MZ. B LT. 7 — BELLAVISTA</td>
+              <td style="padding: 11px 14px; font-size: 13px; color: #3d362e; white-space: nowrap;">Terreno sin construir</td>
+              <td style="padding: 11px 14px; font-size: 12.5px; color: #3d362e; text-align: right; font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;">50.00</td>
+              <td style="padding: 11px 14px; font-size: 12.5px; color: #3d362e; text-align: right; font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;">38,420.00</td>
+              <td style="padding: 11px 14px; font-size: 12.5px; color: #3d362e; text-align: right; font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;">19,210.00</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="padding: 11px 16px; border-top: 1px solid #e6e1d6; background: #fbfaf6; font-size: 12px; color: #6b6258;">La base es del contribuyente, no del predio: el <strong style="color: #3d362e;">% de propiedad</strong> pondera cada fila y la suma no se recompone aquí (RNF-083).</div>
+      </section>
+
+      <!-- 3 · La memoria del calculo -->
+      <section style="flex: 0 0 470px; background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #e6e1d6;">
+          <span style="width: 22px; height: 22px; border-radius: 999px; background: #e7ecf3; color: #0e1f33; display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500;">2</span>
+          <h2 style="margin: 0; flex: 1; font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; font-weight: 600;">La memoria del cálculo</h2>
+          <span style="padding: 3px 9px; border-radius: 999px; background: #fbfaf6; border: 1px solid #e6e1d6; font-size: 11px; color: #6b6258;">Simulación</span>
+        </div>
+        <div style="padding: 6px 16px 12px;">
+          <div style="display: flex; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid #e6e1d6;"><span style="flex: 1; font-size: 13px; color: #3d362e;">Valuo total</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-variant-numeric: tabular-nums;">170,616.75</span></div>
+          <div style="display: flex; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid #e6e1d6;"><span style="flex: 1; font-size: 13px; color: #3d362e;">Valuo exonerado</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-variant-numeric: tabular-nums;">0.00</span></div>
+          <div style="display: flex; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid #e6e1d6;"><span style="flex: 1; font-size: 13px; font-weight: 500;">Valuo afecto</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums;">151,406.75</span></div>
+
+          <p style="margin: 12px 0 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: #9a9085;">Escala progresiva acumulativa · UIT 5,350.00</p>
+          <div style="display: flex; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid #e6e1d6;"><span style="flex: 1; font-size: 13px; color: #3d362e;">Tramo 1 — hasta 15 UIT</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #6b6258;">80,250.00 × 0.2 %</span><span style="width: 84px; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-variant-numeric: tabular-nums;">160.50</span></div>
+          <div style="display: flex; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid #e6e1d6;"><span style="flex: 1; font-size: 13px; color: #3d362e;">Tramo 2 — de 15 a 60 UIT</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #6b6258;">71,156.75 × 0.6 %</span><span style="width: 84px; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-variant-numeric: tabular-nums;">426.94</span></div>
+          <div style="display: flex; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid #e6e1d6;"><span style="flex: 1; font-size: 13px; color: #9a9085;">Tramo 3 — más de 60 UIT</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #9a9085;">0.00 × 1.0 %</span><span style="width: 84px; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #9a9085; font-variant-numeric: tabular-nums;">0.00</span></div>
+          <div style="display: flex; align-items: baseline; gap: 12px; padding: 10px 0 8px; border-bottom: 1px solid #e6e1d6;"><span style="flex: 1; font-size: 13px; color: #3d362e;">Mínimo imponible (0.6 % UIT)</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #6b6258; font-variant-numeric: tabular-nums;">32.10</span></div>
+          <div style="display: flex; align-items: baseline; gap: 12px; padding: 12px 0 4px;"><span style="flex: 1; font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; font-weight: 600;">Impuesto insoluto anual</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums;">S/ 587.44</span></div>
+
+          <p style="margin: 12px 0 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: #9a9085;">Emisión y cuotas · fraccionado en 4</p>
+          <div style="display: flex; gap: 8px;">
+            <span style="flex: 1; border: 1px solid #e6e1d6; border-radius: 7px; padding: 8px; background: #fbfaf6; text-align: center;"><span style="display: block; font-size: 10px; color: #6b6258;">28/02</span><span style="display: block; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; margin-top: 2px;">147.98</span></span>
+            <span style="flex: 1; border: 1px solid #e6e1d6; border-radius: 7px; padding: 8px; background: #fbfaf6; text-align: center;"><span style="display: block; font-size: 10px; color: #6b6258;">31/05</span><span style="display: block; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; margin-top: 2px;">146.86</span></span>
+            <span style="flex: 1; border: 1px solid #e6e1d6; border-radius: 7px; padding: 8px; background: #fbfaf6; text-align: center;"><span style="display: block; font-size: 10px; color: #6b6258;">31/08</span><span style="display: block; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; margin-top: 2px;">146.86</span></span>
+            <span style="flex: 1; border: 1px solid #e6e1d6; border-radius: 7px; padding: 8px; background: #fbfaf6; text-align: center;"><span style="display: block; font-size: 10px; color: #6b6258;">30/11</span><span style="display: block; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; margin-top: 2px;">146.86</span></span>
+            <span style="flex: 1; border: 1px solid #e6e1d6; border-radius: 7px; padding: 8px; background: #fbfaf6; text-align: center;"><span style="display: block; font-size: 10px; color: #6b6258;">Emisión</span><span style="display: block; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; margin-top: 2px;">4.50</span></span>
+          </div>
+        </div>
+        <div style="padding: 11px 16px; border-top: 1px solid #e6e1d6; background: #fbfaf6; font-size: 12px; color: #6b6258;">Nada de esto se compone en la interfaz: cada línea llega de la determinación con su conjunto sellado.</div>
+      </section>
+    </div>
+
+    <!-- 4 · El acto -->
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; gap: 16px; align-items: flex-start;">
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px;">
+          <span style="font-size: 11.5px; font-weight: 500; color: #6b6258;">Observación — por qué se determina así <span style="color: #7C2D12;">·  obligatoria</span></span>
+          <span style="border: 1px solid #d8d2c4; border-radius: 6px; padding: 9px 10px; background: #fbfaf6; font-size: 13px; color: #1a1612; min-height: 19px;">Rectificatoria DJ 000418: se incorpora el predio de Bellavista al 50 % de propiedad.</span>
+        </div>
+        <p style="flex: 0 0 470px; margin: 22px 0 0; padding: 9px 12px; border: 1px solid #e6e1d6; border-left: 3px solid #9a9085; border-radius: 8px; background: #ffffff; font-size: 12.5px; line-height: 1.45; color: #3d362e;">«Calcular» escribe la determinación del ejercicio y emite sus cuotas. «Simular» no escribe nada.</p>
+      </div>
+      <div style="display: flex; gap: 9px; justify-content: flex-end; align-items: center; padding: 12px 0 0; border-top: 1px solid #e6e1d6;">
+        <span style="margin-right: auto; font-size: 12px; color: #6b6258;">Paso 3 · el único botón que escribe está a la derecha, en todas las pantallas de determinación</span>
+        <span style="display: inline-flex; align-items: center; gap: 7px; border: 1px solid #d8d2c4; border-radius: 6px; padding: 10px 18px; background: #ffffff; color: #1a1612; font-size: 13.5px; font-weight: 500;">Buscar</span>
+        <span style="display: inline-flex; align-items: center; gap: 7px; border: 1px solid #d8d2c4; border-radius: 6px; padding: 10px 18px; background: #ffffff; color: #1a1612; font-size: 13.5px; font-weight: 500;">Simular</span>
+        <span style="display: inline-flex; align-items: center; gap: 7px; border-radius: 6px; padding: 10px 22px; background: #1F3A5F; color: #ffffff; font-size: 13.5px; font-weight: 500;">Calcular</span>
+      </div>
+    </div>
+
+    <!-- La misma forma, en las otras cuatro -->
+    <div style="background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e6e1d6;">
+        <h2 style="margin: 0; flex: 1; font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; font-weight: 600;">La misma forma, en las otras cuatro determinaciones</h2>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b6258;">1 sujeto · 2 memoria · 3 acto</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0;">
+        <div style="padding: 12px 16px; border-right: 1px solid #e6e1d6;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Predial — masivo</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">El sujeto es el padrón del ejercicio; la memoria, las etapas de la corrida.</span></div>
+        <div style="padding: 12px 16px; border-right: 1px solid #e6e1d6;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Arbitrios</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">El sujeto es el predio; la memoria, los cuatro servicios y sus criterios.</span></div>
+        <div style="padding: 12px 16px; border-right: 1px solid #e6e1d6;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Cálculo vehicular</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">El sujeto es la placa; la memoria, el 1 % y el mínimo del 1.5 % de la UIT.</span></div>
+        <div style="padding: 12px 16px;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Alcabala</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">El sujeto es la transferencia; la memoria, el mayor valor y las 10 UIT inafectas.</span></div>
+      </div>
+      <div style="padding: 11px 16px; border-top: 1px solid #e6e1d6; background: #fbfaf6; font-size: 12px; color: #6b6258;">No se reescribe ninguna etiqueta del catálogo (RNF-080): lo que se uniforma es <strong style="color: #3d362e;">el sitio y el papel</strong> de cada acción. Las cifras de esta maqueta son las del prototipo; la pantalla real las toma de la determinación, y hoy muestra «—» mientras el backend no publique esa lectura.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
