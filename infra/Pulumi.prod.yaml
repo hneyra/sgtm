@@ -86,11 +86,44 @@ config:
   # un nodo único las dos réplicas caían juntas de todos modos (INF-01 §1). Se vuelve a
   # "2" cuando el nodo crezca a lo que INF-01 §2 dimensiona.
   sgtm:webReplicas: "1"
-  # La versión con la que Pulumi CREA los despliegues, y nada más: el campo `image`
-  # queda ignorado después (ADR-0011 §5), así que cambiar esta línea no despliega nada
-  # sobre un clúster que ya corre. Es con lo que arranca un VPS reconstruido desde
-  # cero, antes de que el flujo de liberación lo ponga al día.
-  sgtm:applicationBootstrapVersion: 0eee58e43e047b20d4f4414a20a0114514e8ce96
+  # La versión con la que Pulumi CREA los despliegues. El campo `image` de los tres
+  # `Deployment` queda ignorado después (ADR-0011 §5), así que subir esta línea **no**
+  # reemplaza la imagen de un `Deployment` que ya corre: eso lo hace el flujo de
+  # liberación con `kubectl set image`.
+  #
+  # **Pero no es inerte sobre un clúster en marcha, y creerlo cuesta caro.** Los dos
+  # Jobs de arranque llevan la versión EN EL NOMBRE (`sufijoDeVersion()`,
+  # `componentes/Migracion.ts`), así que un valor nuevo no modifica un Job: crea otro.
+  # Subir esta línea es, literalmente, «corre el migrador de esa versión contra esta
+  # base y vuelve a implantar la municipalidad». Comprobado sin desplegar:
+  #
+  #   yarn --silent manifiestos --ambiente prod | grep migracion
+  #   # con 0eee58e: Job/sgtm-prod-migracion-0eee58e43e04
+  #   # con 9511f99: Job/sgtm-prod-migracion-9511f999c2b7
+  #
+  # Por eso el orden del runbook de liberación —primero el Job de migración, después la
+  # imagen— no es una recomendación: es lo que esta línea dispara sola.
+  #
+  # **Y por eso queda desactualizarla.** El síntoma de dejarla vieja no es un error: es
+  # una carga que termina en verde y no escribe nada, porque la clase batch que se
+  # invoca no existe en esa imagen y Spring arranca con el contexto vacío y sale con
+  # código 0 (PR #244, medido en `stg` con `cargar-catalogo-vial.sh`). Medido aquí el
+  # 2026-08-29, antes de subirla: el clúster de `prod` corría `0eee58e` (2026-08-27) y
+  # su base tenía **27 migraciones aplicadas** donde `main` declara **48** —de `V28`
+  # (notificación y pase a coactiva) a `V57` (depreciación por uso)—, así que ni las
+  # tres tablas de valuación nacionales de `V55` ni la columna de uso de `V57` existían
+  # en producción, y `publicar-cuadros.sh` no tenía dónde escribir.
+  #
+  # Se sube al último `sha` de `main` con `publicar-imagenes.yml` en verde —el flujo
+  # publica las tres imágenes etiquetadas por commit, nunca `latest`—, confirmado con:
+  #
+  #   gh run list --workflow publicar-imagenes.yml --limit 5 \
+  #     --json headSha,conclusion,createdAt
+  #
+  # `9511f99` (2026-08-29T20:01Z, `success` en los tres jobs de imagen) trae los runners
+  # batch de catálogo vial y arancel —ya estaban en `1ec6bd6`, su ancestro— y además
+  # `V28`…`V57`, `PublicarCuadros` y `PublicarParametros`.
+  sgtm:applicationBootstrapVersion: 9511f999c2b7fa8cdef0a0f337ba781a5b0d1aaa
   # La municipalidad que se implanta. D-01 —municipalidad piloto— se decidió el
   # 2026-08-24: Municipalidad Distrital de Catacaos (`decisiones-abiertas.md`), en
   # reemplazo de la Municipalidad Distrital de Chala que se había decidido un día antes.
