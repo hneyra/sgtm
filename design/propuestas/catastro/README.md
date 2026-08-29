@@ -189,11 +189,64 @@ toca Tránsito, Infracciones administrativas y Autorizaciones y licencias, y mer
 las entradas del menú se quedan como están y todas caen en la misma superficie con su hoja activa.
 Se gana la uniformidad —que es lo que se pedía— sin tocar el plegado de otros tres módulos.
 
-## Orden
+## Qué se implementó
 
-**C ya está** (implementada y verificada). **B a continuación**: es la más barata de las dos que
-quedan y la única que además desbloquea dos pantallas que hoy no se pueden conectar. **A al final**,
-y sólo después de decidir por qué identificador se abre la superficie.
+**Las tres, y los cinco puntos de la espina.** El issue [#391](https://github.com/hneyra/sgtm/issues/391)
+quedó cerrado en cinco PRs, en este orden:
+
+| PR | Qué |
+|---|---|
+| [#404](https://github.com/hneyra/sgtm/pull/404) | Las tres superficies: `Territorio.tsx`, `CuadroDeValuacion.tsx`, `FichaDelPredio.tsx` |
+| [#405](https://github.com/hneyra/sgtm/pull/405) | Tres grupos por tarea en vez de cinco |
+| [#406](https://github.com/hneyra/sgtm/pull/406) | Una primaria que siempre escribe, y un solo buscador |
+| [#408](https://github.com/hneyra/sgtm/pull/408) | La misma anatomía en las doce, y `CabeceraDeRegistro` extraída |
+| [#409](https://github.com/hneyra/sgtm/pull/409) | Plegar el menú deja de significar «carril» |
+
+| | Antes | Después |
+|---|---|---|
+| Opciones | 12 | 12 (ninguna se pierde) |
+| Superficies | 12 | **4** |
+| Grupos | 5 | **3** |
+| Entradas de menú | 12 | **9** |
+| Formas para el mismo objeto | 4 | **1** |
+| Vocabularios de acción | 8 | **1** |
+| Barras de búsqueda del predio | 5 | **1** |
+
+**El patrón, escrito para que otro módulo lo siga**, está en
+[`FRO-05`](../../../docs/60-frontend/superficies-unificadas.md). Esta carpeta conserva el diseño y su
+razonamiento; aquel documento conserva la receta.
+
+### Dónde el diseño se equivocó, y qué lo corrigió
+
+Vale la pena dejarlo escrito, porque las tres correcciones salieron de mirar el código y no la maqueta:
+
+1. **La banda de procedencia daba por publicados cuatro datos que ninguna API manda.** Corregido en
+   el artboard antes de comprometerlo: `ArancelResource`, `ValorUnitarioResource` y
+   `DepreciacionResource` publican `documentoFuente` y nada más.
+2. **El «12 entradas → 5» no salía gratis**, y acabó siendo 12 → 9. Plegar «Predio» habría escondido
+   tres opciones sin retorno —el reporte del contribuyente, la consulta de fichas y la ficha rural—,
+   y lo que lo desbloquea no es interfaz sino que el recurso publique el código del titular.
+3. **La pestaña inicial de la ficha urbana era un valor del artboard, no del producto.** Allí
+   Valorización abre por defecto para enseñar el argumento en reposo; quien abre la ficha tiene que
+   caer en la primera.
+
+### Lo que quedó anotado y sin decidir
+
+La primera línea de la banda de versionado de la ficha dice lo mismo que la apostilla de su
+cabecera. Está anotado en `pantallas/catastro/composicion.ts` y sin tocar: cuál de las dos mitades
+se recorta es contenido, no anatomía.
+
+## El orden en que se hicieron, y por qué importó
+
+**C → B → A**, de coste creciente, y resultó ser lo que las hizo baratas: `Territorio` estrenó el
+patrón —componente propio para varias opciones, hoja activa por la ruta, pestañas como enlaces— y
+las dos siguientes no tuvieron que inventar nada. Después la espina, que sólo se puede uniformar
+cuando ya hay algo uniforme que mirar.
+
+Lo que más ahorró fue **mirar el backend antes de escribir cada encargo**: que los tres controladores
+de valuación aceptan sólo `anio` (así que un único selector de ejercicio no es una preferencia de
+diseño, es lo único que viaja) y que ningún recurso publica la procedencia completa. Las dos cosas
+habrían acabado inventadas.
 
 El registro visual navegable de las cinco páginas está publicado como Artifact, y el issue que las
 recoge es [#391](https://github.com/hneyra/sgtm/issues/391).
