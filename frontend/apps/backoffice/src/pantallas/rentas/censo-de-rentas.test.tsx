@@ -174,7 +174,9 @@ const CENSO: readonly Capacidades[] = [
         'Ejecutar proceso',
       ],
     primaria: 'Ejecutar proceso',
-    causa: 'sin-declaracion',
+    // Desde #445 declara su escritura, asi que ya no hay franja que explicar:
+    // «Ejecutar proceso» asienta la determinacion de verdad.
+    causa: null,
   },
   {
     id: 'declaracion_jurada',
@@ -406,7 +408,7 @@ const textos = (selector: string): string[] =>
   [...document.querySelectorAll<HTMLElement>(selector)].map((n) => (n.textContent ?? '').trim());
 
 /** Lo que la pantalla montada esta dibujando ahora mismo. */
-function loQueDibuja(id: string): Omit<Capacidades, 'id'> {
+function loQueDibuja(): Omit<Capacidades, 'id'> {
   const franja = document.querySelector<HTMLElement>('.sgtm-acciones__motivo');
   return {
     filtros: textos('.sgtm-filtros__rejilla .sgtm-campo__etiqueta'),
@@ -433,7 +435,7 @@ describe('el censo de capacidades de Rentas · Registro', () => {
       await waitFor(() => expect(document.querySelector('.sgtm-esqueleto')).toBeNull());
 
       const { id: _sinId, ...sinIdEsperado } = esperado;
-      expect(loQueDibuja(id)).toEqual(sinIdEsperado);
+      expect(loQueDibuja()).toEqual(sinIdEsperado);
     },
   );
 });
