@@ -243,7 +243,7 @@ function FormularioDeAlta({
           variante="primario"
           disabled={!escritura.puedeEnviar}
           {...(escritura.motivo === undefined ? {} : { 'aria-describedby': idDelMotivo })}
-          onClick={escritura.enviar}
+          onClick={() => escritura.enviar()}
         >
           {escritura.enviando ? `${accion}…` : accion}
         </Boton>

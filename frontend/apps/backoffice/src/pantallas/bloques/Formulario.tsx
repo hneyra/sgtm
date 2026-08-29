@@ -4,6 +4,7 @@ import type { ValorDeCampo } from '@sgtm/api-client';
 import type { SeccionDePantalla } from '../../catalogo';
 import { arrancaCerrada } from '../../catalogo';
 import { memoriaDeSeccion, resolutorDeCampo } from '../composicion';
+import { mapaEnElCampo } from '../escrituras';
 import { MemoriaDeCalculo } from './MemoriaDeCalculo';
 import { Icono } from '@sgtm/design-system';
 
@@ -60,6 +61,10 @@ export interface FormularioProps {
    * en las 134 pantallas seria un atributo que nadie usa.
    */
   readonly anclaDe?: (indice: number) => string;
+  /** Lo escrito en un mapa declarado, por su clave del vocabulario (#423). */
+  readonly entradasDe?: (mapa: string) => Readonly<Record<string, string>>;
+  /** Escribe una entrada de un mapa declarado. Sin esto, el mapa se dibuja bloqueado. */
+  readonly onEntrada?: (mapa: string, clave: string, valor: string) => void;
 }
 
 /** Sin `onCampo` no hay donde escribir; el resolutor se dibuja inerte igualmente. */
@@ -98,6 +103,8 @@ export function Formulario({
   puedeActuar = true,
   errorPorCampo = {},
   anclaDe,
+  entradasDe,
+  onEntrada,
 }: FormularioProps) {
   return (
     <div className="sgtm-formulario">
@@ -155,6 +162,34 @@ export function Formulario({
             {!cerrada && deLaRejilla.length > 0 && (
               <div className="sgtm-seccion__rejilla">
                 {deLaRejilla.map((campo) => {
+                  /* **Un mapa del cuerpo, en el sitio de los campos a los que
+                     sustituye** (#423). El arqueo del cierre de caja son cinco
+                     medios de pago con su importe, y el prototipo dibuja cuatro
+                     casillas con otro vocabulario y sin el cheque: el mapa las
+                     sustituye, y los sustituidos que no son el primero no se
+                     dibujan —dibujarlos dejaria nueve cajas de importe en la
+                     seccion, cuatro de ellas muertas—. */
+                  const enElCampo = mapaEnElCampo(opcion, campo.clave);
+                  if (enElCampo !== undefined) {
+                    if (!('mapa' in enElCampo)) return null;
+                    const { nombre, mapa } = enElCampo;
+                    const escritas = entradasDe?.(nombre) ?? {};
+                    return mapa.entradas.map((entrada) => (
+                      <Campo
+                        key={entrada.clave}
+                        etiqueta={entrada.etiqueta}
+                        tipo="text"
+                        valor={escritas[entrada.clave] ?? ''}
+                        cargando={cargando}
+                        bloqueado={onEntrada === undefined}
+                        {...(onEntrada === undefined
+                          ? {}
+                          : {
+                              onCambio: (nuevo: string) => onEntrada(nombre, entrada.clave, nuevo),
+                            })}
+                      />
+                    ));
+                  }
                   /* El control propio de un campo que **resuelve**, si la opcion
                      declara uno. Llega en el trozo de su modulo, asi que se
                      dibuja dentro de un `Suspense` con el mismo hueco que

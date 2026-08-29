@@ -196,7 +196,11 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // escribe con otro boton («Derivar a coactiva», «Generar valores»); y
       // `transito_cambio_numero` llega desde `sin-declaracion`, porque su
       // primaria del catalogo («Salir») no pasa ningun filtro de salida.
-      declarada: 15,
+      // **Diecisiete con #423**: `cierre_caja` y `anulacion_convenio`, las dos
+      // que #74 dejo fuera porque `escrituras.ts` no sabia declarar sus
+      // cuerpos —un mapa por forma de pago y un discriminador por accion—.
+      // Las dos llegan desde `sin-declaracion`, que es donde estaban.
+      declarada: 17,
       // Dos menos que en la onda 4: `alcabala` y `espectaculos` se mudan a
       // `sin-campo` (#385). Su primaria de impresion las dejaba aqui, con el
       // boton apagado y el motivo real —los campos que el backend exige y la
@@ -233,7 +237,8 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // pasaba ningun filtro de salida («REC 2», «Padrón», «Resol. consentida»,
       // «Cancelar» y «Cancelar»)—, asi que cambian de boton sin cambiar de
       // casilla: el censo cuenta la causa, no el rotulo.
-      'sin-declaracion': 25,
+      // Dos menos con #423: las dos de tesoreria que ya declaran su cuerpo.
+      'sin-declaracion': 23,
       // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
       // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
       // «Guardar» de una ficha `GET` se cae— y repartir el valor de una
@@ -254,12 +259,23 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(impedimentoDelActo('cuenta_corriente', ['Exportar', 'Registrar pago'])?.causa).toBe(
       'sin-backend',
     );
-    // Escribe en el contrato y no ha declarado su cuerpo: `cierre_caja` (#36,
-    // #74) — el `declarado` que exige `PeticionDeCierre` es un mapa por forma
-    // de pago, y `CampoDelCuerpo`/`TablaDelCuerpo` no saben construirlo todavía.
+    /* Escribe en el contrato y no ha declarado su cuerpo: `costas_procesales`
+       (#42, #76). El testigo era `cierre_caja` hasta #423, que le enseño a
+       `escrituras.ts` a declarar un mapa por forma de pago y la saco de esta
+       casilla; se comprueba tambien lo segundo, que es lo que convierte el
+       cambio de testigo en una afirmacion y no en un apaño. */
     expect(
-      impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja'])?.causa,
+      impedimentoDelActo('costas_procesales', [
+        'Nuevo',
+        'Modificar',
+        'Anular',
+        'Imprimir',
+        'Guardar',
+      ])?.causa,
     ).toBe('sin-declaracion');
+    expect(
+      impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja']),
+    ).toBeUndefined();
     // Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
     // no tiene donde escribir** (#33, #74): a `caja_tributaria` le falta el
     // medio de pago —EFECTIVO/CHEQUE/DEPOSITO/TARJETA/TRANSFERENCIA—, un campo
@@ -348,10 +364,10 @@ describe('un solo vocabulario de accion, y solo donde se declara', () => {
     /* Y **cuantas son**, que es lo que convierte el bucle en una comprobacion.
        Sin esta cifra, meter media docena de opciones en cualquiera de las dos
        listas las sacaria del bucle sin que nada lo dijera: el recorrido pasaria
-       igual, con menos vueltas. 134 − 6 − 11. */
-    expect(intactas).toBe(117);
+       igual, con menos vueltas. 134 − 6 − 12. */
+    expect(intactas).toBe(116);
     expect(VOCABULARIO_UNIFORME.size).toBe(6);
-    expect(Object.keys(LA_QUE_ESCRIBE).length).toBe(11);
+    expect(Object.keys(LA_QUE_ESCRIBE).length).toBe(12);
     // Y las seis que si lo declaran existen de verdad en el catalogo: sin
     // esto, un identificador mal escrito dejaria la regla sin aplicarse a nada
     // y las pruebas de abajo seguirian en verde.
@@ -509,6 +525,15 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
       opcion: 'adm_valores',
       escribe: 'Procesar',
       barra: ['Nuevo', 'Modificar', 'Guardar', 'Anular', 'Imprimir', 'Procesar'],
+    },
+    /* Tesoreria (#423), y la primera con **dos** acciones que escriben: «Anular»
+       y «Quebrar» mandan las dos, con `accion` distinta. Lo que se declara aqui
+       sigue siendo una sola cosa —cual es el acto de la pantalla—, y con el orden
+       del catalogo el navy le tocaba a «Quebrar», que es el acto excepcional. */
+    {
+      opcion: 'anulacion_convenio',
+      escribe: 'Anular',
+      barra: ['Nuevo', 'Modificar', 'Guardar', 'Deshacer', 'Reformar', 'Quebrar', 'Anular'],
     },
   ])('$opcion pone «$escribe» al final, y no quita ninguna', async ({ opcion, escribe, barra }) => {
     const pantallas = await todasLasPantallas();

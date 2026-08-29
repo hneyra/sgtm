@@ -16,4 +16,29 @@ export const COMPOSICION_DE_TESORERIA: Readonly<Record<string, ComposicionDeOpci
   caja_tributaria: {
     filtrosPropios: [{ clave: 'codContribuyente', label: 'Cód. Contribuyente', t: 'text' }],
   },
+
+  /**
+   * Y `cierre_caja` es la segunda, por el mismo motivo y con una consecuencia
+   * mas (#423).
+   *
+   * Su catálogo tampoco declara `filtros` —el prototipo dibuja el turno ya
+   * abierto, porque el cliente de escritorio sabía de qué caja y de qué cajero
+   * era la sesión—, y aquí **la caja y el cajero son el sujeto de la pantalla
+   * entera**: identifican el turno (`cierre_uq` de V3 lo hace único por caja,
+   * cajero y fecha), el backend los exige en el cuerpo (`PeticionDeCierre`) y son
+   * los dos parámetros con que `GET /tesoreria/recaudacion/avance` responde el
+   * arqueo en vivo, que es lo que la pantalla llama «Cuadrar».
+   *
+   * Los dos campos que el catálogo dibuja con esos rótulos son `"ro"` y siguen
+   * siéndolo: enseñan lo que el servidor encontró, no lo que se tecleó. El
+   * mismo reparto que en `caja_tributaria` —donde «Cód. Contribuyente» se
+   * pregunta arriba y la grilla la responde el backend—, y el mismo que
+   * `EscrituraDeclarada.delFiltro` documenta para el cuerpo.
+   */
+  cierre_caja: {
+    filtrosPropios: [
+      { clave: 'caja', label: 'Caja', t: 'text' },
+      { clave: 'cajero', label: 'Cajero', t: 'text' },
+    ],
+  },
 };

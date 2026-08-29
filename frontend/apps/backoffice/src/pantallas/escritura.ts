@@ -38,6 +38,17 @@ export interface Escritura {
   readonly campos: ReadonlySet<string>;
   /** Las tablas que esta pantalla puede escribir. Igual que `campos`, pero de filas. */
   readonly tablas: ReadonlySet<string>;
+  /** Los mapas que esta pantalla puede escribir. Igual, pero de vocabularios. */
+  readonly mapas: ReadonlySet<string>;
+  /**
+   * Los rotulos de las acciones **que escriben**, cuando la opcion declara un
+   * discriminador (`segunLaAccion`).
+   *
+   * Vacio cuando no lo declara, y entonces quien escribe es la primaria de
+   * siempre: negacion por omision, como el resto del camino. Lo mira
+   * `BarraDeAcciones` para saber que boton manda y con que cuerpo.
+   */
+  readonly acciones: ReadonlySet<string>;
   /** Lo escrito en esos campos, todavia sin enviar. */
   readonly borrador: Readonly<Record<string, string>>;
   /** Escribe un campo. Uno que no este declarado se ignora, y no se guarda. */
@@ -49,6 +60,13 @@ export interface Escritura {
    * ignora, y **de cada fila solo entran las columnas declaradas**.
    */
   readonly fijarFilas: (tabla: string, filas: readonly Readonly<Record<string, string>>[]) => void;
+  /** Lo escrito en un mapa declarado, por su clave del vocabulario. Vacio si no lo esta. */
+  readonly entradasDe: (mapa: string) => Readonly<Record<string, string>>;
+  /**
+   * Escribe una entrada de un mapa declarado. Un mapa que no lo este —o una
+   * clave que no este en su vocabulario— se ignora, y no se guarda.
+   */
+  readonly fijarEntrada: (mapa: string, clave: string, valor: string) => void;
   readonly observacion: string;
   readonly fijarObservacion: (texto: string) => void;
   /**
@@ -77,7 +95,17 @@ export interface Escritura {
   readonly enviada: boolean;
   readonly errorPorCampo: Readonly<Record<string, string>>;
   readonly error: unknown;
-  readonly enviar: () => void;
+  /**
+   * Manda lo escrito. **Con el rotulo de la accion que se pulso**, cuando la
+   * opcion declara un discriminador: es lo que decide que cuerpo sale.
+   *
+   * Sin discriminador el argumento sobra y se ignora, que es el caso de las
+   * quince opciones que ya escribian. Con discriminador y sin rotulo —o con uno
+   * que no este declarado— **no manda nada**: el cuerpo de esa peticion no
+   * existe, y mandar «el del primer verbo» seria anular un convenio porque
+   * alguien pulso «Quebrar».
+   */
+  readonly enviar: (accion?: string) => void;
   /** La clave del intento en curso. La prueba de idempotencia la mira. */
   readonly clave: string;
 }
@@ -206,6 +234,66 @@ export interface TablaDelCuerpo {
   readonly columnaUnica?: string;
 }
 
+/**
+ * Una entrada del vocabulario de un {@link MapaDelCuerpo}: la clave que viaja y
+ * como se rotula la fila.
+ *
+ * Los dos nombres, por lo mismo que en {@link CampoDelCuerpo}: `clave` es el
+ * vocabulario del backend —`EFECTIVO`, y `FormaDePago.porNombre` no admite
+ * otro— y `etiqueta` es lo que lee quien atiende. Ninguno de los dos cede.
+ */
+export interface EntradaDelMapa {
+  /** Como se llama esa entrada **en el cuerpo**. Lo que no este aqui no viaja. */
+  readonly clave: string;
+  /** Como se rotula su fila en el formulario. */
+  readonly etiqueta: string;
+}
+
+/**
+ * Un campo del cuerpo que **no es plano ni es una tabla: es un mapa**.
+ *
+ * Existe por el arqueo del cierre de caja (#36, #423): `PeticionDeCierre.declarado`
+ * es un `Map<String, String>` cuyas claves son las cinco `FormaDePago` del recibo
+ * —`{"EFECTIVO": "120.00", "CHEQUE": "0.00", …}`—, no cinco campos con nombre
+ * fijo. `CampoDelCuerpo` no puede expresarlo: declararlo campo a campo daria
+ * cinco claves del **formulario** donde el backend espera una sola con un
+ * diccionario dentro.
+ *
+ * **El vocabulario es del dominio, no del formulario**, y por eso se declara
+ * aqui entero en vez de leerse del catalogo: el prototipo dibuja **cuatro**
+ * casillas —efectivo, tarjeta, deposito en cuenta y pago en linea— y deja el
+ * cheque sin ninguna. Declarar por las casillas es exactamente lo que el javadoc
+ * de `PeticionDeCierre` prohibe: «haria que un turno con un cheque saliera
+ * descuadrado sin que el cajero pudiera decir nada».
+ *
+ * La lista blanca es la de siempre, un nivel mas abajo: **una clave que no este
+ * en `entradas` no entra en el estado y no viaja**, igual que un campo suelto o
+ * una columna de tabla. Es lo que impide que el mapa se convierta en la puerta
+ * abierta que `cuerpo` —la salida de emergencia— ya es.
+ */
+export interface MapaDelCuerpo {
+  /** Como se llama el mapa en el cuerpo que espera el backend. */
+  readonly campo: string;
+  /** El vocabulario, en el orden en que se dibujan sus filas. */
+  readonly entradas: readonly EntradaDelMapa[];
+  /**
+   * Cada valor es un importe: viaja **solo** si es una cadena decimal simple,
+   * por lo mismo y con la misma comprobacion que {@link CampoDelCuerpo.importe}.
+   */
+  readonly importe?: true;
+  /**
+   * Los campos del catalogo a los que **sustituye**: el mapa se dibuja en el
+   * sitio del primero y los demas no se dibujan.
+   *
+   * Se declara el sitio en vez de anadir un bloque al final por lo mismo que un
+   * resolutor sustituye a su campo (#331, #73): las cuatro casillas del
+   * prototipo y las cinco filas del mapa son **lo mismo**, y dibujar las dos
+   * cosas dejaria nueve cajas de importe en la seccion «Arqueo» —cuatro
+   * bloqueadas y muertas— sin ninguna forma de saber en cual se teclea.
+   */
+  readonly enVezDe: readonly string[];
+}
+
 /** Sin campos declarados. Constante para que la lista blanca no cambie cada render. */
 const SIN_CAMPOS: Readonly<Record<string, CampoDelCuerpo>> = {};
 
@@ -214,6 +302,15 @@ const SIN_TABLAS: Readonly<Record<string, TablaDelCuerpo>> = {};
 
 /** Sin claves de presentacion. Misma razon que `SIN_CAMPOS`. */
 const SIN_PRESENTACION: readonly string[] = [];
+
+/** Sin mapas declarados. Misma razon que `SIN_CAMPOS`. */
+const SIN_MAPAS: Readonly<Record<string, MapaDelCuerpo>> = {};
+
+/** Sin discriminador: escribe la primaria, como en las quince de siempre. */
+const SIN_DISCRIMINADOR: Readonly<Record<string, Readonly<Record<string, string>>>> = {};
+
+/** Sin nada que traiga el filtro. Misma razon que `SIN_CAMPOS`. */
+const SIN_FILTRO: Readonly<Record<string, string>> = {};
 
 export interface OpcionesDeEscritura {
   /**
@@ -246,6 +343,45 @@ export interface OpcionesDeEscritura {
    */
   readonly tablas?: Readonly<Record<string, TablaDelCuerpo>>;
   /**
+   * Los mapas del formulario que viajan, por su clave, con su vocabulario.
+   * Ver {@link MapaDelCuerpo}.
+   */
+  readonly mapas?: Readonly<Record<string, MapaDelCuerpo>>;
+  /**
+   * **Que accion manda que cuerpo**, para la pantalla que el prototipo capturo
+   * con varios verbos: rotulo de la accion → lo que ese boton anade.
+   *
+   * Existe por «Anulación de convenio» (#35, #423): sus tres acciones —«Anular»,
+   * «Reformar», «Quebrar»— son la misma ruta y el mismo cuerpo con un `accion`
+   * distinto, porque para el libro son el mismo acto —la deuda vuelve a la fase
+   * de la que salio— y lo que cambia es el motivo administrativo. Sin esto, la
+   * unica forma de decir «esta accion manda esto y aquella manda aquello» era un
+   * componente propio, que es una pantalla menos cubierta por las pruebas
+   * transversales del camino de escritura.
+   *
+   * **Lo declarado es un rotulo del catalogo**, el mismo criterio que
+   * `esIrreversible` y `LA_QUE_ESCRIBE` (#421): es lo que el usuario lee y lo que
+   * el prototipo dibuja. Una accion que no este aqui **no escribe**: se queda
+   * secundaria y apagada, como estaba.
+   */
+  readonly segunLaAccion?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /**
+   * Lo que el cuerpo toma **del filtro de la busqueda**, y no del formulario.
+   *
+   * Existe por el cierre de caja: el turno se identifica por (caja, cajero,
+   * fecha), y el catalogo dibuja la caja y el cajero **de solo lectura** —el
+   * prototipo capturo un cliente de escritorio donde los dos salian de la
+   * sesion—. Aqui se teclean en el bloque de busqueda, que es el mismo sitio
+   * desde el que se lee el arqueo en vivo del turno.
+   *
+   * El precedente es `SeleccionDeFilas.contexto` (#332), y es la misma idea: el
+   * sujeto de la pantalla entera **no es una columna ni un campo**, va en el
+   * filtro, y sin el la peticion senala a otro registro. Sigue pasando por la
+   * lista blanca —lo que no este aqui no viaja— y por la misma traduccion de
+   * {@link CampoDelCuerpo}.
+   */
+  readonly delFiltro?: Readonly<Record<string, CampoDelCuerpo>>;
+  /**
    * Lo que **ademas de la observacion** hace falta para poder guardar, dicho
    * como el motivo por el que todavia no se puede.
    *
@@ -263,10 +399,15 @@ export interface OpcionesDeEscritura {
    * formularios son una tabla, y sin ellas una opcion no podia exigir «al menos
    * un piso» ni «el titular necesita su documento» —lo unico que podia mirar era
    * el borrador plano, donde eso no esta—.
+   *
+   * Y **lo que trae el filtro** ({@link delFiltro}), por el mismo motivo que las
+   * filas: el sujeto de la pantalla puede no estar en el formulario, y sin el la
+   * opcion no puede decir que le falta.
    */
   readonly exigir?: (
     borrador: Readonly<Record<string, string>>,
     filas: Readonly<Record<string, readonly Readonly<Record<string, string>>[]>>,
+    delFiltro: Readonly<Record<string, string>>,
   ) => string | undefined;
   /**
    * Que hacer con la respuesta cuando lo guardado cambia algo global a la
@@ -288,6 +429,14 @@ export interface OpcionesDeEscritura {
    * de quien la declara—, igual que `borrador` se lee en cada envio hoy.
    */
   readonly cuerpo?: () => Readonly<Record<string, unknown>>;
+  /**
+   * Lo que se pregunto en el bloque de busqueda, por su clave del catalogo.
+   *
+   * Solo lo mira {@link delFiltro}: de aqui salen los campos del cuerpo que el
+   * formulario no teclea. Sin declaracion no se lee ninguno, asi que una
+   * pantalla que no lo declare no puede mandar un filtro por descuido.
+   */
+  readonly filtros?: Readonly<Record<string, string>>;
 }
 
 export function useEscritura(
@@ -297,6 +446,10 @@ export function useEscritura(
     campos = SIN_CAMPOS,
     presentacion = SIN_PRESENTACION,
     tablas = SIN_TABLAS,
+    mapas = SIN_MAPAS,
+    segunLaAccion = SIN_DISCRIMINADOR,
+    delFiltro = SIN_CAMPOS,
+    filtros = SIN_FILTRO,
     exigir,
     alGuardar,
     cuerpo,
@@ -307,7 +460,15 @@ export function useEscritura(
   const [filas, fijarTodasLasFilas] = useState<
     Readonly<Record<string, readonly Readonly<Record<string, string>>[]>>
   >({});
+  const [entradas, fijarTodasLasEntradas] = useState<
+    Readonly<Record<string, Readonly<Record<string, string>>>>
+  >({});
   const clave = useRef(nuevaClaveDeIdempotencia());
+  /* Con que boton se hizo el ultimo intento. Cambiar de verbo **es otro
+     intento**: con la clave anterior, pulsar «Quebrar» tras un «Anular» que
+     fallo devolveria el resultado del primero —una anulacion— en vez de
+     quebrar. Es la misma regla que ya vale para el borrador y para las filas. */
+  const ultimaAccion = useRef<string | undefined>(undefined);
   const clientes = useQueryClient();
   // La lista blanca en forma de conjunto, estable entre renders: entra en la
   // dependencia de lo que se manda y en si un control se puede escribir.
@@ -316,9 +477,15 @@ export function useEscritura(
     [campos, presentacion],
   );
   const declaradas = useMemo(() => new Set(Object.keys(tablas)), [tablas]);
+  const declaradosMapas = useMemo(() => new Set(Object.keys(mapas)), [mapas]);
+  const queEscriben = useMemo(() => new Set(Object.keys(segunLaAccion)), [segunLaAccion]);
+  /* Lo que el filtro aporta al cuerpo, ya filtrado por su lista blanca: se
+     calcula una vez por render y se usa dos veces —para `exigir` y para el
+     envio—, que es lo que impide que las dos digan cosas distintas. */
+  const delFiltroDeclarado = useMemo(() => soloDelFiltro(filtros, delFiltro), [filtros, delFiltro]);
   // Lo que ademas de la observacion falta para poder guardar. Se pregunta en
   // cada render porque es un cierre sobre el estado de quien lo declara.
-  const falta = exigir?.(borrador, filas);
+  const falta = exigir?.(borrador, filas, delFiltroDeclarado);
   /* Y el motivo completo, con la observacion incluida: es el que se pinta.
      **Sin operacion no hay motivo**, y esa condicion faltaba: una pantalla sin
      sitio a donde escribir devolvia «falta la observación» —y la franja lo
@@ -334,8 +501,16 @@ export function useEscritura(
   // observacion: la regla de ESLint protege a todos los demas de saltarsela.
   // eslint-disable-next-line no-restricted-syntax
   const mutacion = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (accion?: string) => {
       if (operacion === undefined) throw new Error('Esta pantalla no escribe ninguna operacion.');
+      /* Lo que anade el boton que se pulso, cuando la opcion declara un
+         discriminador. `Object.hasOwn` y no la indexacion, por lo mismo que en
+         `soloDeclarados`: una accion rotulada `constructor` daria un «cuerpo»
+         que no declaro nadie. Sin discriminador esto es siempre vacio. */
+      const deLaAccion =
+        accion !== undefined && Object.hasOwn(segunLaAccion, accion)
+          ? (segunLaAccion[accion] ?? {})
+          : {};
       return enviarOperacion(
         operacion,
         parametros as ParametrosDe<IdDeOperacion>,
@@ -344,7 +519,13 @@ export function useEscritura(
         {
           ...(cuerpo
             ? cuerpo()
-            : { ...soloDeclarados(borrador, campos), ...soloDeclaradas(filas, tablas) }),
+            : {
+                ...soloDeclarados(borrador, campos),
+                ...soloDeclarados(delFiltroDeclarado, delFiltro),
+                ...soloDeclaradas(filas, tablas),
+                ...soloDelVocabulario(entradas, mapas),
+              }),
+          ...deLaAccion,
           observacion,
         } as CuerpoDe<IdDeOperacion>,
         clave.current,
@@ -358,6 +539,7 @@ export function useEscritura(
       // en memoria es exactamente lo que la pantalla de contrasena no permite.
       fijarBorrador({});
       fijarTodasLasFilas({});
+      fijarTodasLasEntradas({});
       // Lo global a la sesion se atiende primero y puede quedarse con la cache
       // entera; si no lo hace, se invalida lo que este afectado.
       if (alGuardar?.(respuesta) === 'cache-vaciada') return;
@@ -369,6 +551,8 @@ export function useEscritura(
     ...(operacion === undefined ? {} : { operacion }),
     campos: declarados,
     tablas: declaradas,
+    mapas: declaradosMapas,
+    acciones: queEscriben,
     borrador,
     fijarCampo: (campo: string, valor: string) => {
       // Un campo que la opcion no declaro no entra en el estado. Es la misma
@@ -397,6 +581,21 @@ export function useEscritura(
       if (!mismasFilas(filas[tabla] ?? [], limpias)) clave.current = nuevaClaveDeIdempotencia();
       fijarTodasLasFilas((previas) => ({ ...previas, [tabla]: limpias }));
     },
+    entradasDe: (mapa: string) => entradas[mapa] ?? SIN_FILTRO,
+    fijarEntrada: (mapa, entrada: string, valor) => {
+      // Un mapa no declarado no entra en el estado, por lo mismo que una tabla.
+      const declarado = mapas[mapa];
+      if (!declaradosMapas.has(mapa) || declarado === undefined) return;
+      /* Y **una clave que no este en su vocabulario tampoco**: es la lista
+         blanca por columna de una tabla, dicha para un mapa. Sin ella, el
+         vocabulario del dominio —las cinco `FormaDePago`— se convierte en un
+         diccionario abierto donde cualquiera escribe cualquier clave, y el
+         backend rechaza el cierre entero con «Forma de pago desconocida». */
+      if (!declarado.entradas.some(({ clave: declarada }) => declarada === entrada)) return;
+      const previas = entradas[mapa] ?? {};
+      if (previas[entrada] !== valor) clave.current = nuevaClaveDeIdempotencia();
+      fijarTodasLasEntradas((todas) => ({ ...todas, [mapa]: { ...previas, [entrada]: valor } }));
+    },
     observacion,
     fijarObservacion: (texto: string) => {
       // Cambiar lo que se manda empieza un intento nuevo: con la clave anterior,
@@ -416,11 +615,23 @@ export function useEscritura(
     enviada: mutacion.isSuccess,
     errorPorCampo: erroresPorCampo(mutacion.error),
     error: mutacion.error,
-    enviar: () => {
+    enviar: (accion?: string) => {
       // Pulsar dos veces rapido es una pulsacion: el boton se deshabilita al
       // primer envio, y esto cubre la carrera entre las dos.
       if (mutacion.isPending || observacion.trim() === '' || falta !== undefined) return;
-      mutacion.mutate();
+      /* **Con discriminador, sin accion reconocida no sale nada.** No hay un
+         cuerpo por omision que mandar: los tres verbos de «Anulación de
+         convenio» son tres actos distintos sobre el mismo convenio, y elegir
+         «el primero» por el que no se declaro seria anular porque alguien
+         pulso «Quebrar». Que ningun boton pueda llegar aqui sin su rotulo lo
+         sostiene `BarraDeAcciones`; esto es la barrera, no la comodidad. */
+      if (queEscriben.size > 0) {
+        if (accion === undefined || !queEscriben.has(accion)) return;
+        // Cambiar de verbo es otro intento: otra clave de idempotencia.
+        if (accion !== ultimaAccion.current) clave.current = nuevaClaveDeIdempotencia();
+        ultimaAccion.current = accion;
+      }
+      mutacion.mutate(accion);
     },
     clave: clave.current,
   };
@@ -475,6 +686,61 @@ function soloDeclarados(
     } else {
       cuerpo[declarado.campo] = limpio;
     }
+  }
+  return cuerpo;
+}
+
+/**
+ * Lo que el filtro aporta, **con solo las claves que la opcion declara**.
+ *
+ * Es la misma lista blanca de `soloColumnas`, aplicada a la busqueda: aqui las
+ * claves siguen siendo las del catalogo —lo que se pregunto en el bloque de
+ * busqueda—, y lo unico que se decide es cual de ellas puede llegar al cuerpo.
+ * La traduccion al nombre del backend la hace despues `soloDeclarados`, con el
+ * mismo `CampoDelCuerpo` de siempre.
+ */
+function soloDelFiltro(
+  filtros: Readonly<Record<string, string>>,
+  declarados: Readonly<Record<string, CampoDelCuerpo>>,
+): Readonly<Record<string, string>> {
+  const limpios: Record<string, string> = {};
+  for (const clave of Object.keys(declarados)) {
+    const valor = filtros[clave];
+    if (valor !== undefined) limpios[clave] = valor;
+  }
+  return limpios;
+}
+
+/**
+ * Los mapas, filtrados por su vocabulario.
+ *
+ * **Una clave que el vocabulario no declara no sale**, aunque de algun modo
+ * hubiera llegado al estado: es la barrera gemela de `soloDeclarados`, y
+ * protege de lo mismo un nivel mas abajo. Lo vacio y el guion tampoco viajan,
+ * por lo mismo que en un campo suelto —un arqueo «—» no es un importe—, y con
+ * `importe` se aplica la comprobacion de `CampoDelCuerpo.importe`: lo que
+ * `new BigDecimal` no puede leer no sale.
+ *
+ * **El mapa viaja aunque este vacio**, igual que una tabla declarada: para el
+ * backend `{}` y ausente significan lo mismo —`declaradoDe` trata el nulo como
+ * un mapa vacio—, y mandarlo siempre deja el cuerpo con la misma forma se
+ * teclee o no el arqueo.
+ */
+function soloDelVocabulario(
+  entradas: Readonly<Record<string, Readonly<Record<string, string>>>>,
+  mapas: Readonly<Record<string, MapaDelCuerpo>>,
+): Readonly<Record<string, unknown>> {
+  const cuerpo: Record<string, unknown> = {};
+  for (const [mapa, declarado] of Object.entries(mapas)) {
+    const escritas = entradas[mapa] ?? {};
+    const valores: Record<string, string> = {};
+    for (const { clave } of declarado.entradas) {
+      const limpio = (escritas[clave] ?? '').trim();
+      if (limpio === '' || limpio === GUION) continue;
+      if (declarado.importe === true && !IMPORTE.test(limpio)) continue;
+      valores[clave] = limpio;
+    }
+    cuerpo[declarado.campo] = valores;
   }
   return cuerpo;
 }
@@ -582,8 +848,15 @@ function erroresPorCampo(error: unknown): Readonly<Record<string, string>> {
  * mira la etiqueta de la accion y no la operacion porque es lo que el usuario
  * lee: si el boton dice «Derivar a coactiva», eso es lo que cree que va a
  * hacer.
+ *
+ * **Y con #423, los dos verbos de tesoreria que se conectan ahi**: `quiebre` ya
+ * estaba y el catalogo rotula el boton «Quebrar», que ese patron no caza —el
+ * quiebre mata el convenio y devuelve la deuda a su fase de origen—; y `cerrar
+ * caja`, que es el unico «cerrar» del catalogo que escribe (el otro es «Cerrar
+ * acta»): un cierre no se corrige, se reversa con otro acta, y reversar exige
+ * ademas el privilegio de ELIMINACION (`CierreController`).
  */
 const IRREVERSIBLES =
-  /anular|anulaci|dar de baja|baja de|emitir|emisi|generar valor|notificar|notificaci|coactiva|reversar|quiebre|prescri|transferir|transferencia|cambiar n[uú]mero/i;
+  /anular|anulaci|dar de baja|baja de|emitir|emisi|generar valor|notificar|notificaci|coactiva|reversar|quiebre|quebrar|cerrar caja|prescri|transferir|transferencia|cambiar n[uú]mero/i;
 
 export const esIrreversible = (accion: string): boolean => IRREVERSIBLES.test(accion);

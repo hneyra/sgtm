@@ -565,6 +565,20 @@ export const LA_QUE_ESCRIBE: Readonly<Record<string, string>> = {
    */
   certificados: 'Emitir',
 
+  /* ── Tesorería (#423) ──────────────────────────────────────────────────── */
+
+  /**
+   * «Anulación de convenio» es la primera que declara esto **teniendo mas de una
+   * accion que escribe**: «Anular» y «Quebrar» mandan las dos, con `accion`
+   * distinta (`EscrituraDeclarada.segunLaAccion`). Lo que se declara aqui sigue
+   * siendo una sola cosa —**cual es el acto de la pantalla**—, y es «Anular»:
+   * le da nombre a la opcion, y con el orden del catalogo el navy le tocaba a
+   * «Quebrar», que es el acto excepcional —el que se dicta cuando el
+   * contribuyente incumple—. «Quebrar» se queda de secundaria, encendida y con
+   * su propia confirmacion de irreversible.
+   */
+  anulacion_convenio: 'Anular',
+
   /* ── Infracciones administrativas (#78) ────────────────────────────────── */
 
   /** La ultima es «Imprimir» la notificacion ya registrada. */

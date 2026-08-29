@@ -82,11 +82,19 @@ function inalcanzables(): string[] {
 }
 
 /**
- * Las quince de hoy. **Bajar de aqui es bueno; subir hay que mirarlo.**
+ * Las catorce de hoy. **Bajar de aqui es bueno; subir hay que mirarlo.**
  *
  * Cuatro de ellas —las hojas de resolucion y de constancia— no declaran ninguna
- * accion: el prototipo las modela como papel, no como acto. Las once restantes
+ * accion: el prototipo las modela como papel, no como acto. Las diez restantes
  * ponen «Imprimir» de ultima, que es lo que se hace **despues** del acto.
+ *
+ * **Una se fue con #423, y esto es exactamente la buena noticia que el docblock
+ * anuncia**: `tesoreria/anulacion-convenio` estaba aqui porque su ultima accion
+ * es «Quebrar» y el patron de `esIrreversible` solo conocia «quiebre» —asi que
+ * la pantalla tenia un acto irreversible («Anular») y la primaria no lo era—.
+ * Al conectarla, «Quebrar» resulto ser **otro acto** de la misma pantalla, no un
+ * rotulo distinto del mismo: el patron gana `quebrar`, los dos escriben con su
+ * propio cuerpo (`EscrituraDeclarada.segunLaAccion`) y los dos se confirman.
  */
 const CONOCIDAS: readonly string[] = [
   'autorizaciones-y-licencias/certificados',
@@ -98,7 +106,6 @@ const CONOCIDAS: readonly string[] = [
   'infracciones-administrativas/adm-notificacion-resolucion',
   'infracciones-administrativas/adm-resolucion-gerencia',
   'infracciones-administrativas/adm-valores',
-  'tesoreria/anulacion-convenio',
   'transito/transito-constancia-libre',
   'transito/transito-rg-ordinaria',
   'transito/transito-rg-sancionadora',

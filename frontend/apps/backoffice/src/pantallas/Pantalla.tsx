@@ -51,9 +51,6 @@ import type { DescargaDeArchivo } from './useDescargaDeArchivo';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
 import { IndiceDeSecciones } from './bloques/IndiceDeSecciones';
 import { Totales } from './bloques/Totales';
-import { PermisosMatrix } from './seguridad/PermisosMatrix';
-import { MiembrosDeGrupo } from './seguridad/MiembrosDeGrupo';
-import { Respaldos } from './seguridad/Respaldos';
 
 /**
  * **El renderizador.** Una sola pantalla para las 134 del manual.
@@ -200,6 +197,21 @@ const PrescripcionDeLaDeuda = lazy(async () => ({
 const PaseACoactiva = lazy(async () => ({
   default: (await import('./valores/PaseACoactiva')).PaseACoactiva,
 }));
+/* **Y las tres de seguridad, desde #423.** Viajaban en el trozo comun —eran las
+   unicas de esta lista que no suspendian— y son la matriz de permisos, los
+   miembros de un grupo y las copias de seguridad: tres pantallas de
+   administracion que 131 de las 134 no abren nunca, y ninguna de ellas esta en
+   el camino de quien atiende en ventanilla. Sacarlas del arranque es lo que paga
+   las dos formas de cuerpo de este issue sin subir el presupuesto. */
+const PermisosMatrix = lazy(async () => ({
+  default: (await import('./seguridad/PermisosMatrix')).PermisosMatrix,
+}));
+const MiembrosDeGrupo = lazy(async () => ({
+  default: (await import('./seguridad/MiembrosDeGrupo')).MiembrosDeGrupo,
+}));
+const Respaldos = lazy(async () => ({
+  default: (await import('./seguridad/Respaldos')).Respaldos,
+}));
 const CambioDeNumeroDePapeleta = lazy(async () => ({
   default: (await import('./transito/CambioDeNumeroDePapeleta')).CambioDeNumeroDePapeleta,
 }));
@@ -341,8 +353,8 @@ export const COMPONENTES_PROPIOS: Readonly<
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
   const Propio = COMPONENTES_PROPIOS[estructura.id];
   if (Propio !== undefined) {
-    // El `Suspense` es de las siete perezosas de catastro y valores; las de
-    // seguridad no suspenden nunca —viajan en el trozo comun—, y envolverlas
+    // El `Suspense` es de **todas**: desde #423 las tres de seguridad tambien
+    // llegan en su propio trozo, y envolverlas
     // igual no cuesta nada: sin promesa pendiente, `Suspense` no dibuja su
     // `fallback`.
     return (
@@ -613,11 +625,20 @@ function Bloques({
       // que no hay traduccion que lo saque al cuerpo.
       ...(declarada?.presentacion === undefined ? {} : { presentacion: declarada.presentacion }),
       tablas: declarada?.tablas ?? {},
+      mapas: declarada?.mapas ?? {},
+      ...(declarada?.segunLaAccion === undefined ? {} : { segunLaAccion: declarada.segunLaAccion }),
+      /* Lo que el cuerpo toma del filtro, y **lo que se pregunto**: los dos van
+         juntos porque sin la declaracion no se lee ningun filtro. Es como llega
+         al cuerpo la caja y el cajero del cierre de turno, que el catalogo
+         dibuja de solo lectura (#423). */
+      delFiltro: declarada?.delFiltro ?? {},
+      filtros: busquedaActiva.filtros,
       /* Lo que exige la opcion, **precedido de lo que exige la pagina**. La
          opcion mira el cuerpo —`escrituras.ts` no sabe que es una pagina—; que
          la fila capturada siga estando delante solo lo puede comprobar quien
          tiene la respuesta, y es aqui. */
-      exigir: (borrador, filas) => eleccionPerdida ?? declarada?.exigir?.(borrador, filas),
+      exigir: (borrador, filas, delFiltro) =>
+        eleccionPerdida ?? declarada?.exigir?.(borrador, filas, delFiltro),
       ...(declarada?.cambiaElEjercicio === true ? { alGuardar: trabajo.adoptar } : {}),
     },
   );
@@ -1000,6 +1021,10 @@ function Bloques({
             escribibles={escritura.campos}
             borrador={escritura.borrador}
             onCampo={escritura.fijarCampo}
+            /* Los mapas del cuerpo (#423): el formulario dibuja una fila por
+               entrada del vocabulario, en el sitio de los campos que sustituye. */
+            entradasDe={escritura.entradasDe}
+            onEntrada={escritura.fijarEntrada}
             /* El privilegio del acto, para lo que no basta con «esta clave esta
                declarada»: hoy, el control que busca contra el padron antes de
                escribir (`ResolutorProps.bloqueado`). */
