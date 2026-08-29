@@ -151,6 +151,90 @@ describe('las tres pestanas del predio no se repiten por modalidad', () => {
   });
 });
 
+/* ── El aviso que explica donde vive la actualizacion (#413 A2) ─────────── */
+
+/**
+ * **La fusion, dicha donde se lee.**
+ *
+ * `PropuestaA.dc.html` dibuja sobre la tabla de pisos el bloque que explica que
+ * ahi vive «Actualización del catastro» como modo de edicion versionada, y en el
+ * codigo no estaba: la informacion vivia en el docblock de `FichaDelPredio`, que
+ * es exactamente donde no la lee quien atiende en ventanilla.
+ *
+ * Las dos condiciones son la mitad del valor, y cada una tiene su prueba:
+ *
+ *   fuera del modo edicion  dentro ya hay un aviso —«Guardar reemplaza la lista
+ *                           completa de pisos»— y dos seguidos son ruido: el
+ *                           segundo deja de leerse, y el que importa ahi es el
+ *                           que advierte de que se van a reemplazar los pisos
+ *   solo en la urbana       es la modalidad que la actualizacion versiona
+ *                           (`TipoFicha.UNICA`). En la economica, en bienes
+ *                           comunes o en la rural mandaria a editar una ficha
+ *                           que **no** es la que se esta mirando
+ */
+describe('la pestana de Valorizacion dice donde vive la actualizacion', () => {
+  const AVISO = 'Aquí se actualiza la ficha';
+
+  it('en la ficha urbana lo dice, y nombra el acto que lleva alli', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta(URBANA);
+    await screen.findByRole('region', { name: 'Ficha del predio' });
+
+    // No esta en las otras pestanas: es de Valorizacion, que es la que se edita.
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
+
+    await usuario.click(screen.getByRole('tab', { name: 'Valorización' }));
+    expect(screen.getByText(AVISO)).toBeInTheDocument();
+    /* **Redactado para quien atiende**: dice que cada correccion guarda una
+       version nueva y que la anterior queda en el historico, y nombra el acto
+       con el rotulo con que se dibuja al pie —«Actualizar catastro»—, sin
+       reescribirlo (RNF-080). Nada de «superficie», «componente» ni «catalogo». */
+    const detalle = screen.getByText(/cada corrección guarda una versión nueva/);
+    expect(detalle).toHaveTextContent('Actualizar catastro');
+    expect(detalle).toHaveTextContent(/histórico/);
+    expect(detalle.textContent ?? '').not.toMatch(/superficie|componente|catálogo|pestaña gemela/i);
+    // Y por que el vocabulario dejo de ser doble, con el ejemplo del prototipo.
+    expect(detalle).toHaveTextContent('03 — ADOBE');
+  });
+
+  /**
+   * **En el modo edicion no se repite.** Con los dos avisos seguidos, el que hay
+   * que leer —el que dice que la version nueva lleva exactamente los pisos de la
+   * tabla— queda debajo de una explicacion que quien esta editando ya no
+   * necesita: llego aqui por el acto.
+   */
+  it('en la actualización no se dibuja: ahí ya hay un aviso, y es otro', async () => {
+    montarEnRuta(ACTUALIZACION);
+    await screen.findByRole('tab', { name: 'Valorización' });
+
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Guardar reemplaza la lista completa de pisos'),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * **Y solo en la urbana.** Las otras tres modalidades no se editan desde aqui
+   * —`ficha_bienes` y `ficha_rural` ni siquiera ofrecen el acto
+   * (`catastro/composicion.ts`)—, asi que el aviso mandaria a un sitio que
+   * versiona otra ficha del mismo predio.
+   */
+  it.each([
+    ['/catastro/ficha-economica/200601010150010101001', 'la económica'],
+    ['/catastro/ficha-bienes/200601010150010101', 'la de bienes comunes'],
+    [RURAL, 'la rural'],
+  ])('%s no lo lleva: no es la modalidad que se versiona', async (ruta) => {
+    const usuario = userEvent.setup();
+    const montada = montarEnRuta(ruta);
+    await screen.findByRole('region', { name: 'Ficha del predio' });
+
+    await usuario.click(screen.getByRole('tab', { name: 'Valorización' }));
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
+
+    montada.unmount();
+  });
+});
+
 describe('solo se monta la pestana activa', () => {
   /**
    * Montar las cinco a la vez costaria dibujar noventa campos para ensenar

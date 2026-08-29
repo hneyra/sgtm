@@ -58,6 +58,33 @@ import type { OperacionDeValuacion } from './useTablaDeValuacion';
  * en `Territorio.tsx`: no es que la franja del motivo esté vacía, es que no hay
  * barra de acciones que leer.
  *
+ * **Sí hay «Imprimir», y funciona** (#413). El artboard dibuja dos botones al
+ * pie —«Exportar Excel» e «Imprimir»— y #406 no puso ninguno; con eso, un cuadro
+ * de valuación es un cuadro que se copia a mano. Entra uno solo, y las dos
+ * mitades de la decisión importan:
+ *
+ *   imprimir        entra porque **se puede cumplir hoy**: `window.print()`, que
+ *                   es lo mismo que hace {@link Reporte} al pie de una hoja. Es
+ *                   una acción de salida (`DE_SALIDA` de `pantallas/actos.ts`),
+ *                   así que es **secundaria** y las tres hojas siguen **sin
+ *                   primaria**: aquí no hay nada que escribir
+ *   exportar excel  **no entra.** Hoy es un botón muerto en todo el sistema: el
+ *                   catálogo lo declara dos veces —`consulta_fichas` y
+ *                   `fisc_resultados`— y ninguna de las dos tiene manejador
+ *                   detrás; se dibujan apagadas. Añadir dos más sería añadir dos
+ *                   promesas que nadie puede cumplir (#332). Lo que falta no es
+ *                   la voluntad: es el mecanismo —quién genera el archivo, con
+ *                   qué numeración y desde dónde—, y cuando exista se pone en
+ *                   las cuatro a la vez, no aquí sola
+ *
+ * **Lo que va al papel es el cuadro y su procedencia, no el cromo** (RNF-084).
+ * Las pestañas de hoja, la barra de filtros, el desplegable que acota y el
+ * propio botón llevan `data-no-imprimible`, que es la marca que ya usan
+ * `CentroDeReportes` y `PanelLateral`. La cabecera del ejercicio y
+ * {@link BandaDeProcedencia} **no la llevan, y eso es la mitad del asunto**: un
+ * cuadro impreso sin decir de qué ejercicio es y de qué norma viene no sirve
+ * para defender nada, que es justo para lo que se imprime.
+ *
  * <h2>La anatomía, ranura por ranura (#391 §4)</h2>
  *
  * El orden es el que impone el renderizador común (FRO-03 §5): aviso →
@@ -103,7 +130,10 @@ import type { OperacionDeValuacion } from './useTablaDeValuacion';
  *                     índice sin secciones que listar no es un índice
  *   barra             no aplica, y es el hallazgo de la propuesta B: ninguno de
  *                     los dos botones que el prototipo dibuja podría escribir
- *                     nunca. Ver arriba
+ *                     nunca. Ver arriba. Lo que sí hay al pie es **la salida**
+ *                     —«Imprimir»—, que no es una barra de acciones: no lleva
+ *                     franja de motivo, no lleva observación y no tiene
+ *                     primaria, porque no registra ningún acto
  */
 
 const ARANCELES = 'aranceles';
@@ -188,7 +218,14 @@ export function CuadroDeValuacion({ estructura }: { readonly estructura: Estruct
         cargando={tabla.cargando}
       />
 
-      <div className="sgtm-pestanas" role="tablist" aria-label="Hojas del cuadro de valuación">
+      {/* Cromo, no cuadro: al papel no van las tres pestañas (RNF-084). Lo que
+          dice de qué hoja es el cuadro impreso es la cabecera de arriba. */}
+      <div
+        className="sgtm-pestanas"
+        role="tablist"
+        aria-label="Hojas del cuadro de valuación"
+        data-no-imprimible="1"
+      >
         {HOJAS.filter((opcion) => catalogo.puedeVer(opcion)).map((opcion) => {
           const situada = opcionPorId(opcion);
           if (situada === undefined) return null;
@@ -214,22 +251,26 @@ export function CuadroDeValuacion({ estructura }: { readonly estructura: Estruct
           antes de inventar aquí una versión, una vigencia o un histórico. */}
       <BandaDeProcedencia hoja={hoja} filas={tabla.filas} cargando={tabla.cargando} />
 
+      {/* La barra de búsqueda tampoco va al papel: una caja de texto impresa no
+          dice nada, y lo que se acotó ya se ve en las filas que salieron. */}
       {filtrosDeLaHoja.length > 0 && (
-        <Filtros
-          opcion={estructura.id}
-          campos={filtrosDeLaHoja}
-          buscado={busquedaActiva.filtros}
-          cargando={tabla.cargando}
-          onBuscar={(valores) =>
-            fijarBusqueda(
-              conCambio(new URLSearchParams(busqueda), {
-                ...vaciar(busquedaActiva.filtros),
-                ...valores,
-                [PAGINA]: undefined,
-              }),
-            )
-          }
-        />
+        <div data-no-imprimible="1">
+          <Filtros
+            opcion={estructura.id}
+            campos={filtrosDeLaHoja}
+            buscado={busquedaActiva.filtros}
+            cargando={tabla.cargando}
+            onBuscar={(valores) =>
+              fijarBusqueda(
+                conCambio(new URLSearchParams(busqueda), {
+                  ...vaciar(busquedaActiva.filtros),
+                  ...valores,
+                  [PAGINA]: undefined,
+                }),
+              )
+            }
+          />
+        </div>
       )}
 
       {tabla.cargando ? (
@@ -249,7 +290,37 @@ export function CuadroDeValuacion({ estructura }: { readonly estructura: Estruct
           onMaterial={fijarMaterial}
         />
       )}
+
+      <SalidaDelCuadro />
     </>
+  );
+}
+
+/* ── La salida del cuadro ──────────────────────────────────────────────── */
+
+/**
+ * **Llevar el cuadro al papel**, que es lo único que estas tres hojas pueden
+ * ofrecer hoy (#413).
+ *
+ * No es una barra de acciones y no se dibuja como tal —ni clase
+ * `sgtm-acciones`, ni franja de motivo, ni observación—: aquí no hay ningún acto
+ * que registrar, y ADR-0017 dice que no lo habrá. Es la misma pieza que
+ * {@link Reporte} pone al pie de una hoja, reducida a lo que se puede cumplir.
+ *
+ * **Va marcada `data-no-imprimible`**, como los botones de la hoja de reporte:
+ * un botón impreso al pie de un cuadro de valuación es exactamente el defecto
+ * que RNF-084 describe.
+ *
+ * **Y no lleva «Exportar Excel»**, que es lo otro que el artboard dibuja. Ver el
+ * docblock de la pantalla: hoy ese botón no tiene manejador en ninguna de las
+ * dos opciones que lo declaran, así que ponerlo aquí sería prometer un archivo
+ * que nadie genera (#332). Lo que falta es el mecanismo, no la voluntad.
+ */
+function SalidaDelCuadro() {
+  return (
+    <div className="sgtm-cuadro__salida" data-no-imprimible="1">
+      <Boton onClick={() => window.print()}>Imprimir</Boton>
+    </div>
   );
 }
 
@@ -558,7 +629,13 @@ function HojaDeDepreciacion({
 
   return (
     <>
-      <section className="sgtm-tarjeta sgtm-cuadro__acotar" aria-label="Acotar el cuadro">
+      {/* Cromo: un desplegable impreso no acota nada, y lo que se eligió ya se
+          ve en las matrices que salieron (RNF-084). */}
+      <section
+        className="sgtm-tarjeta sgtm-cuadro__acotar"
+        aria-label="Acotar el cuadro"
+        data-no-imprimible="1"
+      >
         <Campo
           // El rótulo del catálogo, no uno escrito aquí (RNF-080).
           etiqueta={rotuloDelFiltro(estructura, 'materialMep', 'Material (MEP)')}

@@ -3042,6 +3042,17 @@
   max-width: 340px;
 }
 
+/* La salida del cuadro: «Imprimir», y nada mas (#413). No es la barra de
+   acciones —no hay ningun acto que registrar aqui (ADR-0017)—, asi que no lleva
+   ni su fondo fijo ni su franja de motivo: es un pie discreto, alineado a la
+   derecha como los botones de la hoja de reporte. */
+.sgtm-cuadro__salida {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
 /* La procedencia se lee **antes** que las cifras: es lo que sostiene una
    determinacion. Fondo suave y no tarjeta blanca, para que se distinga de las
    tablas sin competir con ellas. */

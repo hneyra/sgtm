@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
@@ -32,6 +32,10 @@ import { agruparPorMaterial, agruparPorTramo, documentosFuente } from './CuadroD
  *    enlace compartido.
  * 7. **No hay «Importar tabla del año» ni «Guardar»**: ninguno de los dos podía
  *    escribir (ADR-0017, V55, V18).
+ * 8. **Sí hay «Imprimir», y funciona; «Exportar Excel» no se promete** (#413):
+ *    el artboard dibuja los dos y sólo uno se puede cumplir hoy.
+ * 9. **Al papel va el cuadro y su procedencia, no el cromo** (RNF-084): un
+ *    cuadro impreso sin decir de qué norma viene no vale para defender nada.
  *
  * **Las filas de las dos hojas nacionales se interponen por encima del proxy**,
  * como ya hace `territorio-unificado.test.tsx`: el proxy no puede fingir un
@@ -526,6 +530,146 @@ describe('no hay «Importar tabla del año» ni «Guardar»', () => {
     expect(document.querySelector('.sgtm-acciones')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Importar tabla del año' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument();
+  });
+});
+
+/* ── 7 bis. La salida: «Imprimir», y sólo «Imprimir» (#413 A1) ─────────── */
+
+/**
+ * **Un cuadro de valuación que no se puede sacar de la pantalla se copia a
+ * mano.** El artboard dibuja dos botones al pie —«Exportar Excel» e
+ * «Imprimir»—, #406 quitó los dos que había y no puso ninguno.
+ *
+ * Entra uno solo, y la asimetría es el fondo del asunto (#332):
+ *
+ *   imprimir        se puede cumplir hoy, con `window.print()` —lo mismo que
+ *                   hace `bloques/Reporte` al pie de una hoja—
+ *   exportar excel  **no se puede cumplir por nadie**: hoy es un botón muerto en
+ *                   todo el sistema. El catálogo lo declara dos veces
+ *                   —`consulta_fichas` y `fisc_resultados`— y las dos se dibujan
+ *                   apagadas, porque no hay manejador detrás. Añadir dos más
+ *                   sería añadir dos promesas que nadie puede cumplir
+ */
+describe('las tres hojas se pueden imprimir, y no se pueden exportar', () => {
+  const pie = () => document.querySelector('.sgtm-cuadro__salida');
+
+  it.each([
+    { ruta: '/catastro/aranceles' },
+    { ruta: '/catastro/valores-unitarios' },
+    { ruta: '/catastro/depreciacion' },
+  ])('$ruta ofrece «Imprimir», y llama a la impresión del navegador', async ({ ruta }) => {
+    const usuario = userEvent.setup();
+    const imprimir = vi.spyOn(window, 'print').mockImplementation(() => undefined);
+    montarEnRuta(ruta);
+
+    await screen.findByRole('tablist', { name: 'Hojas del cuadro de valuación' });
+    const boton = screen.getByRole('button', { name: 'Imprimir' });
+    // Encendido de verdad: no es una promesa apagada con un motivo al lado.
+    expect(boton).toBeEnabled();
+    // **Secundario**: imprimir es una acción de salida (`DE_SALIDA`), así que las
+    // tres hojas siguen sin primaria — aquí no hay nada que escribir (ADR-0017).
+    expect(boton).not.toHaveClass('sgtm-boton--primario');
+
+    await usuario.click(boton);
+    expect(imprimir).toHaveBeenCalledTimes(1);
+
+    imprimir.mockRestore();
+  });
+
+  /**
+   * **La guarda de «Exportar Excel»**: el pie tiene exactamente un botón. Si
+   * alguien añade el segundo del artboard, esto se pone rojo y nombra el botón
+   * que se coló.
+   */
+  it.each([
+    { ruta: '/catastro/aranceles' },
+    { ruta: '/catastro/valores-unitarios' },
+    { ruta: '/catastro/depreciacion' },
+  ])('$ruta no ofrece ninguna exportación: el pie es «Imprimir» y nada más', async ({ ruta }) => {
+    montarEnRuta(ruta);
+
+    await screen.findByRole('tablist', { name: 'Hojas del cuadro de valuación' });
+    const salida = pie();
+    expect(salida).not.toBeNull();
+    expect(
+      within(salida as HTMLElement)
+        .getAllByRole('button')
+        .map((boton) => boton.textContent),
+    ).toEqual(['Imprimir']);
+    // Y ninguna exportación por ningún otro sitio de la pantalla.
+    expect(screen.queryByRole('button', { name: /exportar|excel|descargar/i })).toBeNull();
+  });
+
+  /**
+   * Y **la mitad que sostiene la decisión**: donde el catálogo sí declara
+   * «Exportar Excel», el botón se dibuja apagado. No es que aquí no se quiera:
+   * es que hoy ese botón no lo cumple nadie, y ponerlo en dos pantallas más
+   * multiplicaría la promesa.
+   */
+  it('«Exportar Excel» está muerto donde el catálogo sí lo declara', async () => {
+    montarEnRuta('/catastro/consulta-fichas');
+
+    const exportar = await screen.findByRole('button', { name: 'Exportar Excel' });
+    expect(exportar).toBeDisabled();
+  });
+});
+
+/* ── 7 ter. Lo que va al papel es el cuadro, no el cromo (RNF-084) ─────── */
+
+/**
+ * **Un cuadro impreso sin decir de qué norma viene no vale para defender nada.**
+ *
+ * Esta es la mitad del A1 que no se ve en pantalla: lo que se imprime tiene que
+ * llevar la cabecera del ejercicio y la banda de procedencia, y **no** las
+ * pestañas, la barra de filtros, el desplegable que acota ni el propio botón.
+ * La marca es la misma que ya usan `CentroDeReportes` y `PanelLateral`.
+ *
+ * Se comprueba con `closest('[data-no-imprimible]')` y no con el atributo del
+ * propio nodo: la regla de `base.css` esconde el elemento marcado **y todo lo
+ * que cuelgue de él**, así que envolver la banda en un `div` marcado la
+ * escondería sin que su propio nodo llevara nada.
+ */
+describe('al imprimir sale el cuadro y su procedencia, no el cromo', () => {
+  it('las pestañas, los filtros y el botón se marcan como no imprimibles', async () => {
+    montarEnRuta('/catastro/aranceles');
+
+    const pestanas = await screen.findByRole('tablist', {
+      name: 'Hojas del cuadro de valuación',
+    });
+    expect(pestanas.closest('[data-no-imprimible]')).not.toBeNull();
+    expect(
+      screen.getByRole('region', { name: 'Búsqueda' }).closest('[data-no-imprimible]'),
+    ).not.toBeNull();
+    expect(document.querySelector('.sgtm-cuadro__salida')).toHaveAttribute(
+      'data-no-imprimible',
+      '1',
+    );
+  });
+
+  it('el desplegable que acota tampoco se imprime: en el papel no acota nada', async () => {
+    elBackendResponde(DEPRECIACION, [depreciacion('NOBLE', 'BUENO', 5, '2.00')]);
+    montarEnRuta('/catastro/depreciacion');
+
+    const acotar = await screen.findByRole('region', { name: 'Acotar el cuadro' });
+    expect(acotar.closest('[data-no-imprimible]')).not.toBeNull();
+  });
+
+  /**
+   * **Y la banda de procedencia sí sale**, con la cabecera del ejercicio: son
+   * las dos cosas que convierten una matriz de cifras en algo que se puede
+   * citar. Marcarlas —o envolverlas en algo marcado— pondría esto rojo.
+   */
+  it('la banda de procedencia y la cabecera del ejercicio sí salen en el papel', async () => {
+    elBackendResponde(ARANCELES, []);
+    montarEnRuta('/catastro/aranceles');
+
+    const procedencia = await screen.findByRole('region', { name: 'Procedencia del cuadro' });
+    expect(procedencia.closest('[data-no-imprimible]')).toBeNull();
+    expect((await cabecera()).closest('[data-no-imprimible]')).toBeNull();
+    // Y con ellas lo que hace falta para citar el cuadro: de qué ejercicio es y
+    // de qué ámbito —quién puede cargarlo (ADR-0017)—.
+    expect(elIdentificador()).toHaveTextContent(String(ESTE_ANIO));
+    expect(within(procedencia).getByText('Municipal')).toBeInTheDocument();
   });
 });
 
