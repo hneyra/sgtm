@@ -38,7 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
  *       explicito de lo que ya existe: no se puede publicar un endpoint sin anotarlo ahi, ni
  *       retirarlo sin quitarlo. Las operaciones restantes del contrato estan pendientes, y no se
  *       pueden exigir todavia sin dejar el build en rojo permanente —que es la forma segura de que
- *       nadie vuelva a mirar esta prueba—. Hoy quedan <b>tres</b> de las 174: {@code GET
+ *       nadie vuelva a mirar esta prueba—. Hoy quedan <b>tres</b> de las 176: {@code GET
  *       /portal/deuda}, {@code POST /transito/reportes} y {@code GET
  *       /transito/papeletas/{numero}/hoja-informativa}.
  * </ul>
@@ -149,6 +149,13 @@ class ContratoDeApiTest {
                     "GET /transito/codigos",
                     "GET /infracciones/cuis",
                     "GET /infracciones/administrativas/codigos/reporte",
+                    // #431: la lectura del programa, que faltaba. `/fiscalizacion/programas`
+                    // declaraba solo `post` desde el prototipo, asi que un programa se podia
+                    // registrar y no se podia volver a encontrar —ni por su pantalla, ni por las
+                    // dos actas, que exigen el `programaId` de un programa ya generado—. Es una
+                    // ruta que la pantalla no declara —declara su POST— y entra por
+                    // OPERACIONES_ADICIONALES del generador del contrato.
+                    "GET /fiscalizacion/programas",
                     "POST /fiscalizacion/programas",
                     "POST /fiscalizacion/predial/actas",
                     "POST /fiscalizacion/vehicular",

@@ -9,7 +9,10 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.fiscalizacion.dominio.CriterioDeProgramas;
 import pe.gob.sgtm.fiscalizacion.dominio.EstadoDePrograma;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacionRepository;
@@ -45,6 +48,13 @@ class RegistrarProgramaTest {
                     @Override
                     public Optional<ProgramaFiscalizacion> findById(long id) {
                         return guardados.stream().filter(p -> p.id() == id).findFirst();
+                    }
+
+                    @Override
+                    public Pagina<ProgramaFiscalizacion> consultar(
+                            CriterioDeProgramas criterio, Paginacion paginacion) {
+                        throw new UnsupportedOperationException(
+                                "esta prueba no consulta la grilla de programas");
                     }
                 };
         RegistrarPrograma servicio = new RegistrarPrograma(repositorio, auditados::add);

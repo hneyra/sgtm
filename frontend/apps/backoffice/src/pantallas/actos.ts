@@ -225,9 +225,11 @@ export interface ActoSinCampo {
  *   2. **Es un identificador interno que hay que resolver contra una lista.**
  *      `fisc_predial` y `fisc_vehicular` piden `programaId`/`contribuyenteId`/
  *      `predioId`, y sin una grilla conectada de la que sacarlos —como
- *      `baja_deuda` los saca de `consulta_deuda`— no hay control que valga:
- *      `fisc_programa` ni siquiera tiene operacion de lectura en el contrato.
- *      Lo que falta ahi es mitad backend, y va en el issue de su modulo.
+ *      `baja_deuda` los saca de `consulta_deuda`— no hay control que valga. La
+ *      mitad de backend que faltaba ya esta: `GET /fiscalizacion/programas`
+ *      existe desde #431, asi que el `programaId` tiene de donde salir. Los
+ *      otros dos siguen sin publicarlos ninguna lectura de fiscalizacion, y por
+ *      eso las dos actas se quedan aqui.
  *   3. **Lo determina el sistema, y hoy no lo determina nadie.** El autovaluo
  *      ajustado de `alcabala` (D-11, D-02a) y el ingreso declarado de
  *      `espectaculos`. Ahi **quedarse aqui es la respuesta correcta**: declararle
