@@ -517,6 +517,21 @@ public final class RevisorDeCodigoFuente {
      * cifra cuando «beneficio» suena a otra cosa: {@code DESCUENTO_PRONTO_PAGO = ...} y {@code
      * CONDONACION_DE_INTERESES = ...} son exactamente el mismo dato.
      *
+     * <p>Con #399 entra {@code MINIMO}. Es la septima vez que el hueco se abre por el mismo sitio:
+     * el minimo imponible del vehicular —«no menor al 1.5 % de la UIT», TUO LTM art. 34— y el del
+     * predial —art. 13— son cifras de norma, y ninguna de las veinte palabras anteriores caza
+     * {@code MINIMO_IMPONIBLE_VEHICULAR = new BigDecimal("1.5")}. Su consecuencia no se parece a la
+     * de las demas: un minimo inventado no cobra de mas ni de menos en una cifra que se pueda
+     * comparar, <b>eleva el suelo</b> —solo lo pagan los vehiculos baratos, que son los unicos a
+     * los que el minimo llega, y por eso no lo delata ningun importe raro—.
+     *
+     * <p>Entra la palabra a secas y no {@code MINIMO_IMPONIBLE}, porque la misma cifra se escribe
+     * {@code MINIMO_VEHICULAR} o {@code MINIMOS_POR_TRIBUTO}. El precio fue renombrar tres cotas de
+     * formato que no son cifras tributarias —{@code Placa}, {@code Observacion} y {@code
+     * Ejercicio}, que declaraban {@code MINIMO}/{@code MAXIMO} a secas— a {@code LARGO_MINIMO} y
+     * {@code ANIO_MINIMO}: el {@code \b} no casa a mitad de identificador, y de paso las tres dicen
+     * ahora de que son cota.
+     *
      * <p>Ojo con el {@code \b}: no caza {@code TIPO_TASA = "TASA_ANUNCIO"} ni {@code TIPO_VIGENCIA
      * = "VIGENCIA_CERTIFICADO"} —el identificador no <b>empieza</b> por la palabra en el primer
      * caso, y en el segundo el valor no lleva ninguna cifra— ni ningun {@code tasa_id = 1} de un
@@ -526,7 +541,7 @@ public final class RevisorDeCodigoFuente {
             Pattern.compile(
                     "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
                             + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA|TASA|TARIFA"
-                            + "|MULTA|VIGENCIA|BENEFICIO|DESCUENTO|CONDONACION)"
+                            + "|MULTA|VIGENCIA|BENEFICIO|DESCUENTO|CONDONACION|MINIMO)"
                             + "\\w*\\s*=\\s*[^;\\n]*[0-9]");
 
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");

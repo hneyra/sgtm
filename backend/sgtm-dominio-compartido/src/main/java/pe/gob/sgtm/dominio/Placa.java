@@ -23,8 +23,8 @@ import java.util.regex.Pattern;
  */
 public record Placa(String valor) implements Comparable<Placa> {
 
-    private static final int MINIMO = 5;
-    private static final int MAXIMO = 10;
+    private static final int LARGO_MINIMO = 5;
+    private static final int LARGO_MAXIMO = 10;
 
     /** Bloques alfanumericos en mayusculas separados como mucho por un guion. */
     private static final Pattern COMPOSICION = Pattern.compile("^[0-9A-Z]+(-[0-9A-Z]+)?$");
@@ -35,14 +35,14 @@ public record Placa(String valor) implements Comparable<Placa> {
     public Placa {
         Objects.requireNonNull(valor, "La placa es obligatoria");
         valor = valor.strip().toUpperCase(Locale.ROOT).replace(" ", "");
-        if (valor.length() < MINIMO || valor.length() > MAXIMO) {
+        if (valor.length() < LARGO_MINIMO || valor.length() > LARGO_MAXIMO) {
             throw new IllegalArgumentException(
                     "Placa de longitud invalida: '"
                             + valor
                             + "'. Se admite de "
-                            + MINIMO
+                            + LARGO_MINIMO
                             + " a "
-                            + MAXIMO
+                            + LARGO_MAXIMO
                             + " caracteres");
         }
         if (!COMPOSICION.matcher(valor).matches()

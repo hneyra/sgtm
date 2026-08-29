@@ -300,8 +300,81 @@ function estadoDeLaEtapa(valor: unknown): Celda {
     : { texto: estado, tono: estado === 'OK' ? 'ok' : 'warn' };
 }
 
-/** Las opciones de Rentas cuyo `POST` devuelve un recurso del dominio. Hoy, dos. */
+/**
+ * Calculo del impuesto vehicular (`CalculoVehicularResource`, RF-025, #399).
+ *
+ * Es la tercera determinacion que se lee de su recurso, y la que llego mas
+ * tarde: su controlador existia desde #32 y **ninguna pantalla podia
+ * llamarlo**, porque leia del cuerpo los tres filtros que el contrato declara
+ * de consulta. #399 corrigio el controlador —los tres se leen ya de la
+ * consulta, que es por donde `Filtros` los manda— y de paso saco del cuerpo el
+ * minimo imponible, que es una cifra normativa y sale del conjunto sellado.
+ *
+ * ── Cuatro columnas de seis, y las otras dos con su motivo ─────────────────
+ *
+ * `Ejercicio`, `Base imponible S/` y `Impuesto S/` salen tal cual del recurso;
+ * `Tasa` es la alicuota del ejercicio, que viaja en el sobre porque es del
+ * ejercicio y no del vehiculo. Las otras dos se quedan en «—»:
+ *
+ *   `Cuotas`  el vehicular se paga en cuatro cuotas trimestrales (art. 35),
+ *             pero **esta operacion no arma cronograma**: no hay nada en el
+ *             recurso que decir, y un «4» seria una fraccionacion que nadie
+ *             calculo
+ *   `Estado`  el prototipo escribe ahi «Cancelado», «Emitido», «Proyectado»
+ *             —el estado de **cobranza** de ese ejercicio— y lo unico que el
+ *             recurso publica es el estado de la determinacion. Son dos
+ *             vocabularios distintos en una sola columna, que es lo que #78
+ *             ya rechazo en `infracciones_adm`
+ *
+ * Y la banda de totales entera se queda igual. Sus cuatro etiquetas —«Base
+ * imponible», «Impuesto anual», «Cuota trimestral», «Total tres ejercicios»—
+ * son de la **proyeccion de los tres ejercicios afectos** que el prototipo
+ * dibuja, y esta operacion determina **un** ejercicio por peticion: sumarlas
+ * aqui es exactamente lo que RNF-083 prohibe.
+ */
+const vehicular_calculo = definirAdaptacion({
+  operacion: 'vehicular_calculo',
+  leer: (cuerpo) => leerObjeto(cuerpo, 'el calculo del impuesto vehicular'),
+  adaptar: (recurso): DatosDePantalla => {
+    const determinaciones = listaDe(recurso['determinaciones']);
+    const determinacion = determinacionDe(recurso);
+    const laTasa = alicuota(recurso['alicuota']);
+    return {
+      fechaCalculo: fechaDeCalculo(recurso['fechaCalculo'], 'El calculo del impuesto vehicular'),
+      ...(determinacion === undefined ? {} : { determinacion }),
+      tabla: {
+        filas: determinaciones.map((fila): readonly Celda[] => [
+          celda(fila['ejercicio']),
+          celda(fila['valorReferencial']),
+          laTasa,
+          celda(fila['montoDeterminado']),
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+        ]),
+        conteo: `${determinaciones.length} ${
+          determinaciones.length === 1 ? 'ejercicio afecto' : 'ejercicios afectos'
+        }`,
+      },
+    };
+  },
+});
+
+/**
+ * La alicuota del ejercicio, con el simbolo que la lee como lo que es.
+ *
+ * El `%` lo pone la interfaz y la cifra no: `Alicuota` viaja en tanto por
+ * ciento por definicion (regla 8) y el rotulo de la columna dice «Tasa», que
+ * sin el simbolo se leeria como soles. Es presentacion, igual que la flecha de
+ * los tramos: no suma, no redondea y no completa decimales.
+ */
+function alicuota(valor: unknown): Celda {
+  const publicada = typeof valor === 'string' ? valor.trim() : '';
+  return { texto: publicada === '' ? SIN_DATO : `${publicada} %` };
+}
+
+/** Las opciones de Rentas cuyo `POST` devuelve un recurso del dominio. Hoy, tres. */
 export const ADAPTACIONES_DE_RENTAS: Readonly<Record<string, Adaptacion>> = {
   predial_individual,
   predial_masivo,
+  vehicular_calculo,
 };

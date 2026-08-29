@@ -34,17 +34,22 @@ import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pr
  * —el mismo mecanismo que ya resolvia `predioId`/`vehiculoId` para
  * `alta_deuda`—. Su bateria entera esta en `transferencias.test.tsx`.
  *
- * `alcabala`, `vehicular_calculo` y `espectaculos` tienen ya su backend (#32)
- * y se quedan fuera: a `alcabala` le falta `transferenciaId` —ninguna lectura
- * publicada lo resuelve, porque no hay `GET` de transferencias— y
- * `autoavaluoAjustado` —marcado de solo lectura en el catalogo, aunque el
- * controlador lo pide como dato de entrada (D-11)—; a `espectaculos` le falta
- * `ingresoDeclarado`, con el mismo defecto de marcado; y `vehicular_calculo`
- * tiene un desacuerdo de transporte entre el contrato —que declara `placa`,
- * `codContribuyente` y `ejercicio` como parametros de consulta— y el
- * controlador —que los lee del cuerpo—. Ninguna de las tres es una entrada
- * mas en la lista blanca: ver el doc de `rentas/index.ts`. Las demas esperan
- * a su backend.
+ * `alcabala` y `espectaculos` tienen ya su backend (#32) y se quedan fuera: a
+ * `alcabala` le falta `transferenciaId` —ninguna lectura publicada lo resuelve,
+ * porque no hay `GET` de transferencias— y `autoavaluoAjustado` —marcado de
+ * solo lectura en el catalogo, aunque el controlador lo pide como dato de
+ * entrada (D-11)—; a `espectaculos` le falta `ingresoDeclarado`, con el mismo
+ * defecto de marcado. Ninguna de las dos es una entrada mas en la lista
+ * blanca: ver el doc de `rentas/index.ts`. Las demas esperan a su backend.
+ *
+ * **`vehicular_calculo` ya no esta en esa lista** (#399): su desacuerdo de
+ * transporte —el contrato declaraba `placa`, `codContribuyente` y `ejercicio`
+ * de consulta y el controlador los leia del cuerpo— se cerro corrigiendo el
+ * controlador, y desde entonces la pantalla **lee** su determinacion
+ * (`vehicular-conectado.test.tsx`). Lo que sigue sin poder hacer es
+ * **asentarla**: eso exige la observacion del usuario (regla 10) y una lista
+ * blanca en `escrituras.ts`, asi que su primaria sigue apagada y por eso sigue
+ * en `LAS_QUE_ESCRIBEN_SIN_DECLARAR`.
  *
  * **Desde #385, `alcabala` y `espectaculos` cuentan ese motivo en pantalla**:
  * las dos estan en `ACTOS_SIN_CAMPO`, y su franja gana a la primaria de
@@ -164,7 +169,9 @@ describe('ningun acto del modulo promete lo que no puede', () => {
       primariaApagada();
       // La franja nombra lo que falta —no la frase generica de las sin
       // declarar— y la causa tecnica viaja en el `data-`.
-      expect(motivoDeLaPrimaria()).toMatch(/Falta un dato que esta pantalla no tiene dónde escribir/);
+      expect(motivoDeLaPrimaria()).toMatch(
+        /Falta un dato que esta pantalla no tiene dónde escribir/,
+      );
       expect(motivoDeLaPrimaria()).not.toMatch(/Lo que se escriba aquí/);
       expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
         'data-causa',
