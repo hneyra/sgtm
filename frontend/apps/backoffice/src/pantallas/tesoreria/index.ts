@@ -5,19 +5,28 @@ import { definirConexion } from '../conexiones';
 import type { Conexion, ContextoDePantalla } from '../conexiones';
 import { parametrosDeBusqueda } from '../busqueda';
 import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
-import { SIN_DATO, datosDe, esObjeto, hoy, leerObjeto, leerPaginado, tablaDe, texto } from '../seguridad/listado';
+import {
+  SIN_DATO,
+  datosDe,
+  esObjeto,
+  hoy,
+  leerObjeto,
+  leerPaginado,
+  tablaDe,
+  texto,
+} from '../seguridad/listado';
 
 /**
- * Tesorería, conectado hasta donde llega el backend (#33, #34, #35, #36, #74).
+ * Tesorería, conectado hasta donde llega el backend (#33, #34, #35, #36, #74, #423).
  *
  * Backend servido para **las diez** opciones (#33–#36), y de ahí no se sigue que las diez
  * lean o escriban ya de verdad: cuatro se conectan sin más —`consulta_convenios`,
- * `duplicado_recibo`, `avance_recaudacion`, `recaudacion_area`— y `caja_tributaria` conecta
- * su grilla de deuda, aunque su acto siga sin poder guardarse. Las otras cinco
- * —`caja_tasas`, `fraccionamiento`, `cierre_caja`, `anulacion_convenio`— se quedan fuera con
- * su motivo anotado, y `anulacion_recibo` se declara en `escrituras.ts` porque su cuerpo es
- * campos planos y no necesita conexión propia (no tiene ningún `GET` que leer: se abre por la
- * URL, con el número impreso del recibo).
+ * `duplicado_recibo`, `avance_recaudacion`, `recaudacion_area`—, `caja_tributaria` conecta
+ * su grilla de deuda aunque su acto siga sin poder guardarse, y `cierre_caja` lee el arqueo
+ * en vivo de su turno **y ya lo firma** (#423). `anulacion_recibo` y `anulacion_convenio` se
+ * declaran solo en `escrituras.ts`, porque no tienen ningún `GET` que leer: las dos se abren
+ * por la URL, con el número impreso del recibo o del convenio. Las que se quedan fuera son
+ * `caja_tasas` y `fraccionamiento`, con su motivo anotado.
  *
  * ── Por qué la caja no puede cobrar todavía, aunque el backend ya cobre ──────
  *
@@ -37,14 +46,20 @@ import { SIN_DATO, datosDe, esObjeto, hoy, leerObjeto, leerPaginado, tablaDe, te
  * deuda que elegir —la única `tabla` que dibuja, «Detalle cuotas», es el cronograma de
  * **salida** de la simulación, no una grilla de entrada—. También va a `ACTOS_SIN_CAMPO`.
  *
- * `cierre_caja` y el «Quebrar» de `anulacion_convenio` no tienen el mismo defecto —sus campos
- * sí están dibujados— sino uno de mecanismo: `PeticionDeCierre.declarado` es un mapa por forma
- * de pago (`{"EFECTIVO": "120.00", ...}`) y `PeticionDeCierreDeConvenio` necesita un
- * discriminador (`accion`) que ninguna sección teclea —lo decide qué botón se pulsa, y
- * `BarraDeAcciones` solo conecta el último—. `CampoDelCuerpo`/`TablaDelCuerpo` no saben
- * construir ninguna de las dos formas todavía; ampliarlos es un cambio de `pantallas/escritura.ts`
- * que le sirve a más de una pantalla y no cabe en el alcance de este issue. Se quedan con la
- * causa genérica `sin-declaracion`, que sigue siendo cierta: la pantalla no manda esos campos.
+ * ── Las dos formas de cuerpo que faltaban, y que ya no faltan (#423) ────────
+ *
+ * `cierre_caja` y `anulacion_convenio` nunca tuvieron el defecto de arriba —sus campos sí
+ * están dibujados— sino uno de mecanismo, y #423 lo cerró en `pantallas/escritura.ts`:
+ * `PeticionDeCierre.declarado` es un **mapa** por forma de pago (`{"EFECTIVO": "120.00", …}`,
+ * `MapaDelCuerpo`) y `PeticionDeCierreDeConvenio` necesita un **discriminador** —`accion`, que
+ * decide qué botón se pulsó (`EscrituraDeclarada.segunLaAccion`)—. Las dos formas se declaran
+ * una vez y quedan disponibles: el mapa es la forma de todo arqueo y de toda distribución por
+ * concepto, y el discriminador la de toda pantalla que el prototipo capturó con dos verbos.
+ *
+ * De las tres acciones del convenio se declaran **dos**: «Anular» y «Quebrar». «Reformar»
+ * exige además el convenio nuevo que sustituye al anterior —`PeticionDeFraccionamiento`
+ * entero, con al menos una obligación acogida—, y esta pantalla no dibuja ninguna grilla de
+ * deuda: es el mismo hueco por el que `fraccionamiento` está en `ACTOS_SIN_CAMPO`.
  */
 
 /** El registro que abre un recibo o un convenio: su número impreso. Sin él no hay petición. */
@@ -222,17 +237,15 @@ const avance_recaudacion = definirConexion({
     return {
       fechaCalculo: aLaFecha === SIN_DATO ? hoy() : (aLaFecha as Fecha),
       tabla: {
-        filas: filas.map(
-          (fila): readonly Celda[] => [
-            { texto: texto(fila['tributo']) },
-            { texto: SIN_DATO },
-            { texto: importeDe(fila['cobrado'])?.importe ?? SIN_DATO },
-            { texto: SIN_DATO },
-            { texto: SIN_DATO },
-            { texto: SIN_DATO },
-            { texto: SIN_DATO },
-          ],
-        ),
+        filas: filas.map((fila): readonly Celda[] => [
+          { texto: texto(fila['tributo']) },
+          { texto: SIN_DATO },
+          { texto: importeDe(fila['cobrado'])?.importe ?? SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+        ]),
         conteo: `${filas.length} tributos`,
       },
       totales: [
@@ -259,20 +272,105 @@ const recaudacion_area = definirConexion({
   parametros: ({ busqueda }) => parametrosDeBusqueda('recaudacion_area', undefined, busqueda),
   leer: (cuerpo) => leerObjeto(cuerpo, 'la recaudación por área'),
   adaptar: (distribucion): DatosDePantalla => {
-    const filas = Array.isArray(distribucion['filas']) ? distribucion['filas'].filter(esObjeto) : [];
+    const filas = Array.isArray(distribucion['filas'])
+      ? distribucion['filas'].filter(esObjeto)
+      : [];
     const aLaFecha = texto(distribucion['aLaFecha']);
 
     return {
       fechaCalculo: aLaFecha === SIN_DATO ? hoy() : (aLaFecha as Fecha),
       tabla: {
-        filas: filas.map(
-          (fila): readonly Celda[] => [
-            { texto: texto(fila['partida']) },
-            { texto: texto(fila['areaNombre']) },
-            { texto: importeDe(fila['neto'])?.importe ?? SIN_DATO },
-          ],
-        ),
+        filas: filas.map((fila): readonly Celda[] => [
+          { texto: texto(fila['partida']) },
+          { texto: texto(fila['areaNombre']) },
+          { texto: importeDe(fila['neto'])?.importe ?? SIN_DATO },
+        ]),
         conteo: `${filas.length} partidas`,
+      },
+    };
+  },
+});
+
+/**
+ * Cierre y arqueo de caja (RF-087, #36, #423): **el arqueo en vivo del turno**,
+ * que es lo que la pantalla llama «Cuadrar».
+ *
+ * `cierre_caja` es un `POST` —`/tesoreria/caja/cierre`—, y una operación que
+ * escribe no se pide al abrir la pantalla (#332): abrir el cierre no puede
+ * cerrar nada. Lo que se lee es `GET /tesoreria/recaudacion/avance` con la caja
+ * y el cajero, que el propio `RecaudacionController` publica para esto —«sin
+ * ellos, la pantalla de cierre no podría cuadrar antes de firmar»— y responde el
+ * mismo arqueo que el cierre va a congelar. Es el mismo reparto que ya usa
+ * `caja_tributaria` leyendo `consulta_deuda`.
+ *
+ * **Ninguna cifra se compone aquí** (RNF-083): «Total sistema», «Total
+ * declarado» y «Diferencia» salen de `ArqueoResource`, que las calcula de sus
+ * líneas —`ArqueoDelTurno` es quien resta—, y no de sumar las filas del arqueo
+ * que la pantalla dibuja. Sumar las cinco daría otra cifra en cuanto el arqueo
+ * tuviera una línea que la pantalla no dibuja, y las dos parecerían correctas.
+ *
+ * El día del turno es el del formulario: `desde` y `hasta` van al mismo día,
+ * porque el backend toma **el último del rango** como día del turno. Sale del
+ * borrador (`ContextoDePantalla.borrador`) para que lo que se lee y lo que se
+ * manda sean del mismo día (regla 9), igual que la fecha de la baja de deuda.
+ *
+ * `turno` (MAÑANA / TARDE / CONTINUO) y la hora de cierre salen con `SIN_DATO`:
+ * el primero **no existe como dato** —`cierre_uq` hace único el turno por caja,
+ * cajero y fecha— y la segunda es el instante del acta, que todavía no hay.
+ */
+const cierre_caja = definirConexion({
+  operacion: 'avance_recaudacion',
+  parametros: ({ busqueda, borrador }) => {
+    const dia = (borrador['fecha'] ?? '').trim() === '' ? hoy() : (borrador['fecha'] as string);
+    return {
+      caja: busqueda.get('caja') ?? '',
+      cajero: busqueda.get('cajero') ?? '',
+      desde: dia,
+      hasta: dia,
+    };
+  },
+  leer: (cuerpo) => leerObjeto(cuerpo, 'el arqueo del turno'),
+  exige: [
+    {
+      parametro: 'caja',
+      titulo: 'Busca el turno que vas a cerrar',
+      detalle:
+        'El cierre es de una caja y un cajero: escríbelos arriba y pulsa «Buscar». Hasta entonces no hay ningún arqueo que cuadrar.',
+    },
+    {
+      parametro: 'cajero',
+      titulo: 'Falta el cajero del turno',
+      detalle:
+        'El turno se identifica por caja, cajero y fecha: sin el cajero no hay ningún arqueo que leer ni que firmar.',
+    },
+  ],
+  sinPermiso: {
+    titulo: 'Falta el permiso de lectura de «Avance de recaudación»',
+    detalle:
+      'El arqueo en vivo del turno lo publica esa otra opción, y es la que hay que poder leer para cuadrar antes de firmar. Pídesela al administrador del sistema de tu municipalidad.',
+  },
+  adaptar: (avance): DatosDePantalla => {
+    const turno = esObjeto(avance['turno']) ? avance['turno'] : undefined;
+    const arqueo = esObjeto(turno?.['arqueo']) ? turno['arqueo'] : undefined;
+    const declarado = importeDe(arqueo?.['declarado']);
+    const neto = importeDe(arqueo?.['neto']);
+    const diferencia = importeDe(arqueo?.['diferencia']);
+    const aLaFecha = texto(avance['aLaFecha']);
+
+    return {
+      fechaCalculo: aLaFecha === SIN_DATO ? hoy() : (aLaFecha as Fecha),
+      campos: {
+        caja: texto(turno?.['caja']),
+        cajero: texto(turno?.['cajero']),
+        fecha: texto(turno?.['fecha']),
+        turno: SIN_DATO,
+        horaDeApertura: SIN_DATO,
+        horaDeCierre: SIN_DATO,
+        totalDeclaradoS: declarado?.importe ?? SIN_DATO,
+        totalSistemaS: neto?.importe ?? SIN_DATO,
+        diferenciaS: diferencia?.importe ?? SIN_DATO,
+        recibosEmitidos: texto(arqueo?.['recibosEmitidos']),
+        recibosAnulados: texto(arqueo?.['recibosAnulados']),
       },
     };
   },
@@ -281,6 +379,7 @@ const recaudacion_area = definirConexion({
 /** Las opciones de Tesorería ya conectadas. Crece cuando crezca lo que la pantalla puede leer. */
 export const CONEXIONES_DE_TESORERIA: Readonly<Record<string, Conexion>> = {
   caja_tributaria,
+  cierre_caja,
   consulta_convenios,
   duplicado_recibo,
   avance_recaudacion,

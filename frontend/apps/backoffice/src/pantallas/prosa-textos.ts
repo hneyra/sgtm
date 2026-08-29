@@ -424,6 +424,9 @@ export const NOTAS: Readonly<Record<string, string>> = {
   baja_deuda:
     'La baja registra una obligación por acto: se elige su cuota en la tabla y se repite para las demás. La causal no tiene campo propio en el backend —va en la observación, que es donde queda auditada— y el total a extinguir lo calcula el servidor: aquí no se suma ninguna columna. Una fila cuya cuota agrupa varias («1 - 4») no se puede dar de baja todavía: el backend registra una cuota o el año completo, y no hay forma de decirle «de la 1 a la 4».',
 
+  predial_masivo:
+    'Esta corrida determina el impuesto predial y nada más: los arbitrios son otro tributo, con su propia determinación por periodo, y la cuponera es un documento que todavía no se genera desde aquí. Sus dos casillas se ven, y marcarlas impide ejecutar en vez de fallar después. El alcance se emite a todo el padrón o por sector —«por rango de código» y «solo observados» aún no existen—, y la UIT y el derecho de emisión los pone el servidor desde el conjunto sellado del ejercicio.',
+
   notificacion_valores:
     'La hora y la dirección de la diligencia no se guardan todavía: el backend solo pide la fecha (sin hora) y, si no se indica una dirección, usa el domicilio fiscal vigente a esa fecha.',
 
@@ -442,6 +445,14 @@ export const NOTAS: Readonly<Record<string, string>> = {
     'El plazo, el inicio y el nuevo inicio del cómputo, el resultado y el monto a extinguir los calcula el servidor a partir del conjunto sellado y de la deuda del contribuyente: no se escriben aquí. Esta pantalla solo declara una interrupción (art. 45); la suspensión (art. 46) todavía no tiene campo.',
   anulacion_recibo:
     'El «Detalle» de esta pantalla es la misma observación que pide el sistema, así que no viaja aparte: se escribe abajo, donde ya se pide. La anulación siempre devuelve la deuda a la cuenta corriente —no es una casilla que se pueda destildar— y el número de recibo se toma del que abrió esta pantalla, no del campo «Nro. de recibo».',
+
+  cierre_caja:
+    'El arqueo se declara por los cinco medios de pago del recibo, y el cheque es uno de ellos aunque el manual no le dibuje casilla: un turno con un cheque saldría descuadrado sin poder decirlo. La caja y el cajero se preguntan arriba —son, con la fecha, lo que identifica el turno— y el «Total declarado», el «Total sistema» y la «Diferencia» los calcula el servidor: aquí no se suma ninguna columna. El turno (mañana / tarde / continuo) no viaja porque no existe como dato: hay un turno por caja, cajero y día. Y esta pantalla solo cierra: reversar un cierre ya firmado es otro acto, con otro privilegio.',
+
+  anulacion_convenio:
+    'Las dos acciones escriben y mandan cosas distintas: «Anular» deja el convenio sin efecto y «Quebrar» lo da por incumplido; las dos devuelven la deuda acogida a la fase de la que salió, y ninguna de las dos se deshace. «Reformar» todavía no se puede: exige el convenio nuevo que sustituye al anterior, con su deuda acogida, y esta pantalla no tiene dónde elegirla. El número del convenio se toma del que abrió esta pantalla, no del campo «Num. Conv.», y el responsable y el número de anulación los pone el sistema.',
+  transito_descargos:
+    'Aquí se registra el escrito que el administrado presentó, y nada más: la sección «Evaluación y resolución» no viaja, porque resolver un descargo es dictar una resolución de gerencia, que es otro acto y otro papel. «Dentro del plazo» tampoco se manda —lo calcula el servidor con el plazo vigente, a partir de la fecha de presentación—, y el «Nº de expediente» de arriba es el del descargo que se está consultando: el del escrito nuevo se pide al final de «Solicitud», con su propia etiqueta.',
 };
 
 /** Las opciones cuya escritura lleva nota. La comprobacion de coherencia las mira. */

@@ -42,6 +42,14 @@ import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pr
  * defecto de marcado. Ninguna de las dos es una entrada mas en la lista
  * blanca: ver el doc de `rentas/index.ts`. Las demas esperan a su backend.
  *
+ * **`predial_masivo` salio de esa lista** (#445): es la primera de las cinco
+ * determinaciones que asienta de verdad. Su cuerpo es plano —el de
+ * `predial_individual` lleva ademas un arreglo de predios, que la lista blanca
+ * no sabe declarar suelto todavia—, asi que fue la barata de las cinco. La
+ * marca que separa simular de asentar (`simulacion: false`) va por
+ * `constantes`, y las dos casillas que el backend rechaza apagan la primaria
+ * **antes** de pulsar en vez de producir un 422: `asiento-del-predial.test.tsx`.
+ *
  * **`vehicular_calculo` ya no esta en esa lista** (#399): su desacuerdo de
  * transporte —el contrato declaraba `placa`, `codContribuyente` y `ejercicio`
  * de consulta y el controlador los leia del cuerpo— se cerro corrigiendo el
@@ -69,7 +77,7 @@ import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pr
  * condicion de guardado de `alta_deuda` y de `baja_deuda`, que si estan
  * declaradas, y eso se comprueba abajo y en `pantallas/escritura.test.tsx`.
  */
-const LAS_QUE_ESCRIBEN_SIN_DECLARAR: readonly string[] = ['predial-masivo', 'vehicular-calculo'];
+const LAS_QUE_ESCRIBEN_SIN_DECLARAR: readonly string[] = ['vehicular-calculo'];
 
 /**
  * Y la que **no guarda campos: pide una determinacion** (#333).
@@ -106,6 +114,7 @@ const LAS_DE_SALIDA_CON_MOTIVO: readonly string[] = ['alcabala', 'espectaculos']
 const LAS_DECLARADAS: readonly string[] = [
   'alta-deuda',
   'baja-deuda',
+  'predial-masivo',
   'transferencia-predio',
   'transferencia-vehiculo',
 ];
@@ -181,6 +190,39 @@ describe('ningun acto del modulo promete lo que no puede', () => {
       montada.unmount();
     },
   );
+
+  /**
+   * **Y la franja nombra el dato, no el campo del backend** (#432).
+   *
+   * Las dos declaraban dos datos con el mismo tono, y de los cuatro solo uno es
+   * un campo que falte. Contarlos igual manda a buscar en la pantalla un campo
+   * que no existe —el autovaluo ajustado es un resultado, no una entrada— y deja
+   * sin decir lo unico accionable: que la transferencia no se puede elegir
+   * porque ninguna consulta la devuelve.
+   *
+   * Se comprueba **lo que la franja tiene que contener**, no la frase entera: la
+   * redaccion se puede afinar, y lo que no puede desaparecer es el dato dicho en
+   * castellano. `franja-para-la-ventanilla.test.ts` cierra la otra mitad —que
+   * ahi no aparezca `transferenciaId` ni ningun otro nombre de campo—.
+   */
+  const EL_DATO_DE_CADA_UNA: readonly (readonly [string, RegExp])[] = [
+    ['alcabala', /transferencia ya registrada/i],
+    ['alcabala', /autovalúo ajustado/i],
+    ['espectaculos', /organizador/i],
+    ['espectaculos', /recaudación declarada/i],
+  ];
+
+  it.each(EL_DATO_DE_CADA_UNA)('la franja de %s nombra %s', async (ranura, dicho) => {
+    const montada = montarEnRuta(`/rentas-registro/${ranura}`);
+    await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+    expect(motivoDeLaPrimaria()).toMatch(dicho);
+    // Y no el nombre del campo: eso vive en `campos`, que no se pinta.
+    expect(motivoDeLaPrimaria()).not.toMatch(/transferenciaId|autoavaluoAjustado/);
+    expect(motivoDeLaPrimaria()).not.toMatch(/organizadorId|ingresoDeclarado/);
+
+    montada.unmount();
+  });
 
   it.each(LAS_DECLARADAS)('%s si pide su observacion, y sin ella no guarda', async (ranura) => {
     const montada = montarEnRuta(`/rentas-registro/${ranura}`);

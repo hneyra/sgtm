@@ -193,7 +193,9 @@ export function BarraDeAcciones({
                 variante="primario"
                 onClick={() => {
                   fijarPorConfirmar(null);
-                  escritura.enviar();
+                  // **Con el rotulo del boton que se pulso**: el cuerpo que sale
+                  // es el de esa accion, no el de la primera declarada (#423).
+                  escritura.enviar(porConfirmar);
                 }}
               >
                 Confirmar {porConfirmar.toLowerCase()}
@@ -282,7 +284,17 @@ export function BarraDeAcciones({
               !altaEsElActo &&
               enlace === undefined &&
               i === acciones.length - 1;
-            const habilitada = esPrimaria && escribe && (escritura?.puedeEnviar ?? false);
+            /* **Que boton escribe.** Sin discriminador, la primaria y solo ella,
+               que es como lleva funcionando desde siempre. Con discriminador
+               (#423), **las que la opcion declara**: en «Anulación de convenio»
+               son «Anular» y «Quebrar», dos actos distintos sobre el mismo
+               convenio que llegan por la misma ruta con otro `accion`. Siguen
+               siendo secundarias salvo la ultima —una primaria por pantalla,
+               FRO-03 §5—, pero se pueden pulsar y mandan su cuerpo. */
+            const declaraCual = (escritura?.acciones.size ?? 0) > 0;
+            const actua =
+              escribe && (declaraCual ? escritura?.acciones.has(accion) === true : esPrimaria);
+            const habilitada = actua && (escritura?.puedeEnviar ?? false);
             /* La primaria apagada **con un motivo escrito al lado** se apaga con
                `aria-disabled`, no con `disabled`, y sigue siendo enfocable.
                Motivo: un boton `disabled` no recibe foco, asi que el
@@ -293,7 +305,7 @@ export function BarraDeAcciones({
                otra mitad: enfocable no es pulsable. Las apagadas sin motivo
                —una secundaria del prototipo, la primaria mientras envia— siguen
                con `disabled`: ahi no hay nada que leer. */
-            const apagadaConMotivo = esPrimaria && motivo !== undefined;
+            const apagadaConMotivo = (esPrimaria || actua) && motivo !== undefined;
             return (
               <Boton
                 key={accion}
@@ -301,17 +313,17 @@ export function BarraDeAcciones({
                 {...(apagadaConMotivo
                   ? { 'aria-disabled': true, 'aria-describedby': MOTIVO }
                   : { disabled: !habilitada })}
-                {...tituloDe(accion, esPrimaria, escribe, escritura)}
+                {...tituloDe(accion, actua, escribe, escritura)}
                 onClick={() => {
                   if (apagadaConMotivo) return;
-                  if (!escritura) return;
+                  if (!escritura || !actua) return;
                   // Lo irreversible se confirma diciendo que va a pasar; lo demas
                   // se manda directamente, que para eso se pulso.
                   if (esIrreversible(accion)) fijarPorConfirmar(accion);
-                  else escritura.enviar();
+                  else escritura.enviar(accion);
                 }}
               >
-                {escritura?.enviando && esPrimaria
+                {escritura?.enviando && actua
                   ? `${accion}…`
                   : esPrimaria && contadorDeLaPrimaria !== undefined
                     ? `${accion} (${contadorDeLaPrimaria})`
@@ -348,12 +360,12 @@ export function BarraDeAcciones({
    */
   function tituloDe(
     accion: string,
-    esPrimaria: boolean,
+    actua: boolean,
     escribe: boolean,
     escritura?: Escritura,
   ): { readonly title?: string } {
     if (impedimento !== undefined) return {};
-    if (!esPrimaria || !escribe) {
+    if (!actua || !escribe) {
       return { title: 'La operación se conecta junto con su campo de observación (RNF-052)' };
     }
     if (escritura?.puedeEnviar === false && escritura.observacion.trim() === '') {

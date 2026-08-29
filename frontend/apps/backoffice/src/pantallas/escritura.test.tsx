@@ -797,3 +797,189 @@ describe('lo irreversible se confirma diciendo que va a pasar', () => {
     expect(screen.queryByText(/no se deshace/)).not.toBeInTheDocument();
   });
 });
+
+/* ── Las dos formas de cuerpo que no son campos planos (#423) ──────────── */
+
+/**
+ * Un mapa y un discriminador, declarados **sobre operaciones reales**: el arqueo
+ * del cierre de caja y los tres verbos de la anulación de un convenio.
+ *
+ * Lo que se comprueba aquí es el mecanismo —la lista blanca del vocabulario y la
+ * barrera del cuerpo sin acción—, que es lo que no se puede observar desde la
+ * pantalla: en `tesoreria/formas-de-cuerpo.test.tsx` no hay forma de teclear una
+ * clave que el vocabulario no tenga, porque el formulario dibuja exactamente las
+ * declaradas. Es el mismo reparto que `DECLARADA` de arriba.
+ */
+const CON_MAPA: OpcionesDeEscritura = {
+  mapas: {
+    declarado: {
+      campo: 'declarado',
+      importe: true,
+      enVezDe: ['efectivoS'],
+      entradas: [
+        { clave: 'EFECTIVO', etiqueta: 'Efectivo (S/)' },
+        { clave: 'CHEQUE', etiqueta: 'Cheque (S/)' },
+      ],
+    },
+  },
+};
+
+const CON_DISCRIMINADOR: OpcionesDeEscritura = {
+  campos: { motivo: { campo: 'motivo' } },
+  segunLaAccion: { Anular: { accion: 'ANULACION' }, Quebrar: { accion: 'QUIEBRE' } },
+};
+
+function conOpciones(
+  operacion: 'cierre_caja' | 'anulacion_convenio',
+  opciones: OpcionesDeEscritura,
+) {
+  const cliente = clienteDePruebas();
+  const parametros: Readonly<Record<string, string>> =
+    operacion === 'cierre_caja' ? {} : { numero: 'F-2026-000123' };
+  return renderHook(() => useEscritura(operacion, parametros, opciones), {
+    wrapper: ({ children }: { readonly children: ReactNode }) => (
+      <QueryClientProvider client={cliente}>{children}</QueryClientProvider>
+    ),
+  });
+}
+
+describe('el mapa del cuerpo: su vocabulario es la lista blanca', () => {
+  it('una clave que el vocabulario no declara no entra en el estado', () => {
+    const { result } = conOpciones('cierre_caja', CON_MAPA);
+
+    // La forma de pago inventada: el backend la rechazaría con «Forma de pago
+    // desconocida» y se llevaría por delante el cierre entero.
+    act(() => result.current.fijarEntrada('declarado', 'BITCOIN', '999.00'));
+    expect(result.current.entradasDe('declarado')).not.toHaveProperty('BITCOIN');
+    // Y la declarada sí, para que la prueba no pase por no escribir nada.
+    act(() => result.current.fijarEntrada('declarado', 'CHEQUE', '600.00'));
+    expect(result.current.entradasDe('declarado')['CHEQUE']).toBe('600.00');
+  });
+
+  /**
+   * **Y tampoco viaja**, que es la otra mitad y se prueba aparte.
+   *
+   * Son dos barreras y protegen de cosas distintas, igual que en `soloDeclarados`:
+   * la de escritura evita que el valor exista, y esta evita que viaje si alguien
+   * un día rellena las entradas por otro camino. Separarlas en dos pruebas es lo
+   * que permite medir cada una: con las dos en la misma, la primera afirmación
+   * corta y la segunda barrera no se ejercita nunca.
+   */
+  it('y si de algún modo llegara al estado, tampoco viaja', async () => {
+    laApiResponde(201);
+    const { result } = conOpciones('cierre_caja', CON_MAPA);
+
+    act(() => result.current.fijarEntrada('declarado', 'BITCOIN', '999.00'));
+    act(() => result.current.fijarEntrada('declarado', 'CHEQUE', '600.00'));
+    act(() => result.current.fijarObservacion('Cierre del turno.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}');
+    expect(cuerpo.declarado).toEqual({ CHEQUE: '600.00' });
+  });
+
+  it('un mapa que la opcion no declara se ignora entero', () => {
+    const { result } = conOpciones('cierre_caja', CON_MAPA);
+
+    act(() => result.current.fijarEntrada('noDeclarado', 'EFECTIVO', '1.00'));
+
+    expect(result.current.entradasDe('noDeclarado')).toEqual({});
+  });
+
+  it('lo que el backend no puede leer como importe no sale', async () => {
+    laApiResponde(201);
+    const { result } = conOpciones('cierre_caja', CON_MAPA);
+
+    // `new BigDecimal("1,842.60")` **lanza**: el separador de miles es lo que
+    // lleva una celda copiada, y el 422 llegaría después de firmar el cierre.
+    act(() => result.current.fijarEntrada('declarado', 'EFECTIVO', '1,842.60'));
+    act(() => result.current.fijarEntrada('declarado', 'CHEQUE', '600.00'));
+    act(() => result.current.fijarObservacion('Cierre del turno.'));
+    act(() => result.current.enviar());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}');
+    expect(cuerpo.declarado).toEqual({ CHEQUE: '600.00' });
+  });
+
+  it('cambiar una entrada empieza otro intento; fijar la misma, no', () => {
+    const { result } = conOpciones('cierre_caja', CON_MAPA);
+
+    const alPrincipio = result.current.clave;
+    act(() => result.current.fijarEntrada('declarado', 'EFECTIVO', '400.00'));
+    const conEfectivo = result.current.clave;
+    expect(conEfectivo).not.toBe(alPrincipio);
+
+    act(() => result.current.fijarEntrada('declarado', 'EFECTIVO', '400.00'));
+    expect(result.current.clave).toBe(conEfectivo);
+  });
+});
+
+describe('el discriminador: sin la accion que se pulso no sale ningun cuerpo', () => {
+  it('cada accion manda el suyo, y ninguna otra clave', async () => {
+    laApiResponde(201);
+    const { result } = conOpciones('anulacion_convenio', CON_DISCRIMINADOR);
+
+    act(() => result.current.fijarCampo('motivo', 'Incumplimiento.'));
+    act(() => result.current.fijarObservacion('Se cierra el convenio.'));
+    act(() => result.current.enviar('Quebrar'));
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).toEqual({
+      accion: 'QUIEBRE',
+      motivo: 'Incumplimiento.',
+      observacion: 'Se cierra el convenio.',
+    });
+  });
+
+  /**
+   * **No hay cuerpo por omisión que mandar.** Los tres verbos de la pantalla son
+   * tres actos distintos sobre el mismo convenio, y elegir «el primero» por el
+   * que no se declaró sería anular porque alguien pulsó otra cosa.
+   */
+  it('sin accion, o con una que no esta declarada, no se manda nada', async () => {
+    laApiResponde(201);
+    const { result } = conOpciones('anulacion_convenio', CON_DISCRIMINADOR);
+
+    act(() => result.current.fijarCampo('motivo', 'Incumplimiento.'));
+    act(() => result.current.fijarObservacion('Se cierra el convenio.'));
+    // `puedeEnviar` es cierto —la observación está—: lo único que puede parar
+    // estas dos llamadas es la barrera del discriminador.
+    expect(result.current.puedeEnviar).toBe(true);
+
+    act(() => result.current.enviar());
+    act(() => result.current.enviar('Reformar'));
+    /* Y **después una que sí**, que es lo que convierte esto en una medición.
+       Sin la tercera llamada la prueba no puede fallar: `mutate` es asíncrono y
+       `peticiones` sigue vacío al terminar el `act`, así que un `enviar()` sin
+       acción que sí saliera pasaría igual de verde. Con ella, si alguna de las
+       dos primeras hubiera salido sería la que ocupa el envío —el siguiente lo
+       corta `isPending`— y lo mandado no diría `ANULACION`. */
+    act(() => result.current.enviar('Anular'));
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}').accion).toBe('ANULACION');
+  });
+
+  it('cambiar de verbo es otro intento: otra clave de idempotencia', async () => {
+    laApiResponde(500, { title: 'Error', status: 500, detail: 'No se pudo.' });
+    const { result } = conOpciones('anulacion_convenio', CON_DISCRIMINADOR);
+
+    act(() => result.current.fijarCampo('motivo', 'Incumplimiento.'));
+    act(() => result.current.fijarObservacion('Se cierra el convenio.'));
+    act(() => result.current.enviar('Anular'));
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+
+    // El mismo verbo otra vez es el **reintento** del mismo intento.
+    act(() => result.current.enviar('Anular'));
+    await waitFor(() => expect(peticiones).toHaveLength(2));
+    expect(peticiones[1]?.clave).toBe(peticiones[0]?.clave);
+
+    // Otro verbo es otro acto: otra clave, o el servidor devolvería el resultado
+    // de la anulación cuando lo que se pidió fue el quiebre.
+    act(() => result.current.enviar('Quebrar'));
+    await waitFor(() => expect(peticiones).toHaveLength(3));
+    expect(peticiones[2]?.clave).not.toBe(peticiones[0]?.clave);
+  });
+});

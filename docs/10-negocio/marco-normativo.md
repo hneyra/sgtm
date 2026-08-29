@@ -84,7 +84,7 @@ Reglas de lectura del mapa:
 
 | # | Dato | Norma que lo fija | Parte | Issues |
 |---|---|---|---|---|
-| 15 | Alcabala: alícuota, tramo inafecto en UIT, exoneraciones (primera venta de constructora, gobiernos, bomberos) | TUO LTM arts. 21 a 29 | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el archivo está firmado y todavía sin fila en el derivado publicable |
+| 15 | Alcabala: alícuota, tramo inafecto en UIT, exoneraciones (primera venta de constructora, gobiernos, bomberos), **y el índice con que se ajusta el autovalúo del predio** antes de compararlo con el valor de transferencia | TUO LTM arts. 21 a 29; el ajuste, art. 24: IPM de Lima Metropolitana que publica el INEI | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el archivo está firmado y todavía sin fila en el derivado publicable, y del índice del art. 24 no hay ni archivo del corpus: es lo que deja «Impuesto de alcabala» sin poder liquidar (ver #432) |
 | 16 | Patrimonio vehicular: alícuota, años afectos, tabla de valores referenciales del MEF | TUO LTM arts. 30 a 37; la tabla, por resolución ministerial anual del MEF | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el cuadro de 2026 ya se carga entero, y lo que queda es la categoría del vehículo (GOB-03, H-16) |
 | 17 | Espectáculos públicos no deportivos: alícuotas por tipo | TUO LTM arts. 54 a 59 | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el archivo está firmado y todavía sin fila en el derivado publicable |
 | 18 | Anuncios y propaganda: tasas por tipo y dimensión | Ordenanza municipal `‹confirmar si su ordenanza es materia tributaria y por tanto se ratifica (LOM art. 40)›` | D-02b | #199 |

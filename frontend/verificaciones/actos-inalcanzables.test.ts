@@ -82,7 +82,7 @@ function inalcanzables(): string[] {
 }
 
 /**
- * Las quince de hoy. **Bajar de aqui es bueno; subir hay que mirarlo.**
+ * Las catorce de hoy. **Bajar de aqui es bueno; subir hay que mirarlo.**
  *
  * **Siete** de ellas —las cuatro hojas de resolucion, la de constancia y las dos
  * de gerencia de transito— no declaran ninguna accion: el prototipo las modela
@@ -94,8 +94,16 @@ function inalcanzables(): string[] {
  * (Este parrafo decia «cuatro», y llevaba diciendolo desde que la lista existe:
  * el recuento salio del cotejo de #427, no de una revision.)
  *
- * Las ocho restantes ponen «Imprimir» —o «Limpiar», o «Salir»— de ultima, que es
- * lo que se hace **despues** del acto.
+ * Las siete restantes ponen «Imprimir» —o «Limpiar», o «Salir»— de ultima, que
+ * es lo que se hace **despues** del acto.
+ *
+ * **Y una se fue con #423, que es exactamente la buena noticia que este docblock
+ * anuncia**: `tesoreria/anulacion-convenio` estaba aqui porque su ultima accion
+ * es «Quebrar» y el patron de `esIrreversible` solo conocia «quiebre» —asi que
+ * la pantalla tenia un acto irreversible («Anular») y la primaria no lo era—.
+ * Al conectarla, «Quebrar» resulto ser **otro acto** de la misma pantalla, no un
+ * rotulo distinto del mismo: el patron gana `quebrar`, los dos escriben con su
+ * propio cuerpo (`EscrituraDeclarada.segunLaAccion`) y los dos se confirman.
  */
 const CONOCIDAS: readonly string[] = [
   'autorizaciones-y-licencias/certificados',
@@ -107,7 +115,6 @@ const CONOCIDAS: readonly string[] = [
   'infracciones-administrativas/adm-notificacion-resolucion',
   'infracciones-administrativas/adm-resolucion-gerencia',
   'infracciones-administrativas/adm-valores',
-  'tesoreria/anulacion-convenio',
   'transito/transito-constancia-libre',
   'transito/transito-rg-ordinaria',
   'transito/transito-rg-sancionadora',

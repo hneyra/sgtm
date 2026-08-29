@@ -42,14 +42,11 @@ import { useDatosDeOperacion } from './useDatosDeOperacion';
 import { useDatosDePantalla } from './useDatosDePantalla';
 import { BarraDeAcciones } from './bloques/BarraDeAcciones';
 import { Filtros } from './bloques/Filtros';
+import { HojasDeSuperficie } from './bloques/HojasDeSuperficie';
 import { Formulario } from './bloques/Formulario';
-import { Indicadores } from './bloques/Indicadores';
-import { Portal } from './bloques/Portal';
-import { Reporte } from './bloques/Reporte';
 import { useDescargaDeArchivo } from './useDescargaDeArchivo';
 import type { DescargaDeArchivo } from './useDescargaDeArchivo';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
-import { IndiceDeSecciones } from './bloques/IndiceDeSecciones';
 import { Totales } from './bloques/Totales';
 
 /**
@@ -196,6 +193,34 @@ const PrescripcionDeLaDeuda = lazy(async () => ({
 }));
 const PaseACoactiva = lazy(async () => ({
   default: (await import('./valores/PaseACoactiva')).PaseACoactiva,
+}));
+/* **Y el indice de secciones, por lo mismo.** Lo declaran las opciones con
+   `composicion.indice` —las fichas del predio y el predial individual—, que se
+   dibujan en su propio trozo o son una de 134: el resto lo descargaba para no
+   dibujarlo nunca. */
+const IndiceDeSecciones = lazy(async () => ({
+  default: (await import('./bloques/IndiceDeSecciones')).IndiceDeSecciones,
+}));
+/* **La hoja del reporte, perezosa desde #423.** La dibujan las trece pantallas
+   `kind: 'report'` del manual y nadie mas —es una hoja A4 con sus firmas
+   (RNF-084)—, asi que las otras 121 la descargaban para no usarla nunca. Es el
+   mismo movimiento que #379 hizo con las cuatro de `pantallas/valores/` y #424
+   con las tres de seguridad, y aqui paga las dos formas de cuerpo de este issue
+   sin subir el presupuesto: la alternativa era el umbral, y habia esta. */
+/* **Los indicadores y el portal, perezosos desde #423.** Los dibujan un `kind`
+   cada uno —`dash` es el panel de recaudacion, `portal` la vista del
+   funcionario— y las otras 132 pantallas los descargaban para no montarlos
+   nunca. Mismo movimiento que la hoja del reporte y la memoria del calculo, y
+   por el mismo motivo: `main` llego a 155,9 de 156 con #445 dentro, y el umbral
+   lo sube quien no tiene otra salida. */
+const Indicadores = lazy(async () => ({
+  default: (await import('./bloques/Indicadores')).Indicadores,
+}));
+const Portal = lazy(async () => ({
+  default: (await import('./bloques/Portal')).Portal,
+}));
+const Reporte = lazy(async () => ({
+  default: (await import('./bloques/Reporte')).Reporte,
 }));
 const CambioDeNumeroDePapeleta = lazy(async () => ({
   default: (await import('./transito/CambioDeNumeroDePapeleta')).CambioDeNumeroDePapeleta,
@@ -636,11 +661,22 @@ function Bloques({
       // que no hay traduccion que lo saque al cuerpo.
       ...(declarada?.presentacion === undefined ? {} : { presentacion: declarada.presentacion }),
       tablas: declarada?.tablas ?? {},
+      mapas: declarada?.mapas ?? {},
+      ...(declarada?.segunLaAccion === undefined ? {} : { segunLaAccion: declarada.segunLaAccion }),
+      /* Lo que el cuerpo toma del filtro, y **lo que se pregunto**: los dos van
+         juntos porque sin la declaracion no se lee ningun filtro. Es como llega
+         al cuerpo la caja y el cajero del cierre de turno, que el catalogo
+         dibuja de solo lectura (#423). */
+      delFiltro: declarada?.delFiltro ?? {},
+      filtros: busquedaActiva.filtros,
+      // La mitad de la operacion que se invoca, cuando la operacion es dos.
+      ...(declarada?.constantes === undefined ? {} : { constantes: declarada.constantes }),
       /* Lo que exige la opcion, **precedido de lo que exige la pagina**. La
          opcion mira el cuerpo —`escrituras.ts` no sabe que es una pagina—; que
          la fila capturada siga estando delante solo lo puede comprobar quien
          tiene la respuesta, y es aqui. */
-      exigir: (borrador, filas) => eleccionPerdida ?? declarada?.exigir?.(borrador, filas),
+      exigir: (borrador, filas, delFiltro) =>
+        eleccionPerdida ?? declarada?.exigir?.(borrador, filas, delFiltro),
       ...(declarada?.cambiaElEjercicio === true ? { alGuardar: trabajo.adoptar } : {}),
     },
   );
@@ -697,15 +733,17 @@ function Bloques({
   const conIndice = (formulario: React.JSX.Element): React.JSX.Element =>
     composicion.indice !== undefined ? (
       <div className="sgtm-conindice">
-        <IndiceDeSecciones
-          secciones={secciones}
-          anclaDe={anclaDe}
-          haciaLasAcciones={barra.acciones.length > 0}
-          {...(indexaLaTabla && estructura.tabla !== undefined
-            ? // El rotulo es el del catalogo, no uno redactado aqui (RNF-080).
-              { previa: { rotulo: estructura.tabla.title, ancla: ANCLA_DE_LA_TABLA } }
-            : {})}
-        />
+        <Suspense fallback={<Esqueleto alto={120} />}>
+          <IndiceDeSecciones
+            secciones={secciones}
+            anclaDe={anclaDe}
+            haciaLasAcciones={barra.acciones.length > 0}
+            {...(indexaLaTabla && estructura.tabla !== undefined
+              ? // El rotulo es el del catalogo, no uno redactado aqui (RNF-080).
+                { previa: { rotulo: estructura.tabla.title, ancla: ANCLA_DE_LA_TABLA } }
+              : {})}
+          />
+        </Suspense>
         <div className="sgtm-conindice__panel">{formulario}</div>
       </div>
     ) : (
@@ -849,6 +887,17 @@ function Bloques({
 
   return (
     <>
+      {/* La tira de hojas, cuando esta opcion es una de una superficie (#442).
+          Va lo primero: es navegacion, y dice de que objeto se esta hablando
+          antes que la descripcion de la hoja concreta. */}
+      {composicion.superficie !== undefined && (
+        <HojasDeSuperficie
+          titulo={composicion.superficie.titulo}
+          hojas={composicion.superficie.hojas}
+          activa={estructura.id}
+        />
+      )}
+
       {estructura.desc && <p className="sgtm-descripcion">{estructura.desc}</p>}
 
       {/* A que fecha estan los datos que vienen debajo. Va aqui y no dentro de
@@ -866,10 +915,16 @@ function Bloques({
       {aviso !== undefined && <Aviso titulo={aviso.titulo} detalle={aviso.detalle} />}
 
       {estructura.kind === 'dash' && (
-        <Indicadores kpis={datos?.kpis} paneles={datos?.paneles} cargando={cargando} />
+        <Suspense fallback={<Esqueleto alto={240} />}>
+          <Indicadores kpis={datos?.kpis} paneles={datos?.paneles} cargando={cargando} />
+        </Suspense>
       )}
 
-      {estructura.kind === 'portal' && <Portal pasos={estructura.steps ?? []} />}
+      {estructura.kind === 'portal' && (
+        <Suspense fallback={<Esqueleto alto={240} />}>
+          <Portal pasos={estructura.steps ?? []} />
+        </Suspense>
+      )}
 
       {/* La cabecera-resumen: cual ficha es, de quien, de que uso y de cuando.
           Compuesta con lo que el adaptador ya trajo: no pide nada nuevo (#319).
@@ -1023,6 +1078,10 @@ function Bloques({
             escribibles={escritura.campos}
             borrador={escritura.borrador}
             onCampo={escritura.fijarCampo}
+            /* Los mapas del cuerpo (#423): el formulario dibuja una fila por
+               entrada del vocabulario, en el sitio de los campos que sustituye. */
+            entradasDe={escritura.entradasDe}
+            onEntrada={escritura.fijarEntrada}
             /* El privilegio del acto, para lo que no basta con «esta clave esta
                declarada»: hoy, el control que busca contra el padron antes de
                escribir (`ResolutorProps.bloqueado`). */
@@ -1036,12 +1095,14 @@ function Bloques({
         )}
 
       {estructura.kind === 'report' && estructura.reporte && (
-        <Reporte
-          estructura={estructura.reporte}
-          datos={datos?.reporte}
-          cargando={cargando}
-          {...descargasDelReporte(estructura.id, descargaDeFicha, descargaDeConstancia)}
-        />
+        <Suspense fallback={<Esqueleto alto={320} />}>
+          <Reporte
+            estructura={estructura.reporte}
+            datos={datos?.reporte}
+            cargando={cargando}
+            {...descargasDelReporte(estructura.id, descargaDeFicha, descargaDeConstancia)}
+          />
+        </Suspense>
       )}
 
       {cargando && !estructura.kind && !estructura.tabla && secciones.length === 0 && (
@@ -1051,6 +1112,15 @@ function Bloques({
       {estructura.acciones && (
         <BarraDeAcciones
           acciones={barra.acciones}
+          /* **Y si ninguna de las que quedan escribe, ninguna es la primaria**
+             (#391 §2, #442). Hasta ahora esto solo lo pasaba
+             `catastro/FichaDelPredio`, asi que el camino comun aplicaba media
+             regla: usaba la lista depurada y seguia pintando de navy la ultima,
+             que en una pantalla de consulta es «Imprimir». Es el defecto que la
+             regla existe para cerrar —«quien atiende aprende que el navy es el
+             acto de la pantalla, y en cuatro fichas de consulta el navy
+             imprimia»—, y se colaba por aqui. */
+          {...(barra.conPrimaria ? {} : { sinPrimaria: true as const })}
           escritura={escritura}
           /* Las acciones que el prototipo dibuja y que ahora abren un alta.
              **Solo con privilegio de registro**: sin el se quedan como estaban,

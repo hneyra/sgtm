@@ -1,4 +1,4 @@
-import type { CampoDelCuerpo, TablaDelCuerpo } from './escritura';
+import type { CampoDelCuerpo, MapaDelCuerpo, TablaDelCuerpo } from './escritura';
 
 /**
  * Que puede escribir cada opcion, declarado una a una.
@@ -40,6 +40,23 @@ export interface EscrituraDeclarada {
   readonly presentacion?: readonly string[];
   /** Las tablas del formulario, con su propia lista blanca por columna. */
   readonly tablas?: Readonly<Record<string, TablaDelCuerpo>>;
+  /** Los mapas del cuerpo, con su vocabulario declarado. Ver {@link MapaDelCuerpo}. */
+  readonly mapas?: Readonly<Record<string, MapaDelCuerpo>>;
+  /**
+   * Que accion de la barra manda que cuerpo, para la pantalla que el prototipo
+   * capturo con varios verbos. Ver `OpcionesDeEscritura.segunLaAccion`.
+   */
+  readonly segunLaAccion?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /**
+   * Campos del cuerpo que **los trae el filtro**, no el formulario. Ver
+   * `OpcionesDeEscritura.delFiltro`.
+   */
+  readonly delFiltro?: Readonly<Record<string, CampoDelCuerpo>>;
+  /**
+   * Lo que el cuerpo lleva siempre y nadie teclea: cual de las dos mitades de la
+   * operacion se pide. Ver `OpcionesDeEscritura.constantes`.
+   */
+  readonly constantes?: Readonly<Record<string, string | number | boolean>>;
   /**
    * Lo que **ademas de la observacion** hace falta para poder guardar, dicho
    * como el motivo por el que todavia no se puede. Ver `OpcionesDeEscritura.exigir`.
@@ -47,6 +64,7 @@ export interface EscrituraDeclarada {
   readonly exigir?: (
     borrador: Readonly<Record<string, string>>,
     filas: Readonly<Record<string, readonly Readonly<Record<string, string>>[]>>,
+    delFiltro: Readonly<Record<string, string>>,
   ) => string | undefined;
   /** Lo guardado cambia el ejercicio de trabajo de la sesion, no solo esta pantalla. */
   readonly cambiaElEjercicio?: boolean;
@@ -181,6 +199,27 @@ const TIPO_DE_VALOR_MASIVO: Readonly<Record<string, string>> = {
 };
 
 const tipoDeValorMasivoDe = (texto: string): string | undefined => TIPO_DE_VALOR_MASIVO[texto];
+
+/**
+ * «Tipo de recurso» del catalogo de `transito_descargos` → `TipoDeRecurso` (V41).
+ *
+ * Los cuatro son los mismos cuatro y en el mismo orden; lo unico que cambia es
+ * la tilde, porque el enum de Java no la lleva y el desplegable del manual si.
+ * No se resuelve quitando tildes con una funcion —eso convertiria cualquier
+ * texto en un valor «traducido», incluido uno que el enum no tiene— sino con la
+ * tabla de siempre: lo que no este aqui no viaja.
+ */
+const TIPO_DE_RECURSO_DEL_BACKEND: Readonly<Record<string, string>> = {
+  DESCARGO: 'DESCARGO',
+  // Entrecomilladas por lo mismo que `CEDULÓN` mas arriba: sin las comillas son
+  // identificadores validos de JavaScript, y un identificador con tilde es lo
+  // que ESLint prohibe (FRO-04 §2).
+  'RECONSIDERACIÓN': 'RECONSIDERACION',
+  'APELACIÓN': 'APELACION',
+  NULIDAD: 'NULIDAD',
+};
+
+const tipoDeRecursoDe = (texto: string): string | undefined => TIPO_DE_RECURSO_DEL_BACKEND[texto];
 
 /**
  * «Tributo» del catalogo de `valores_individual`/`valores_masivo`/`prescripcion` →
@@ -386,6 +425,43 @@ const CUOTAS_DE_LA_BAJA: TablaDelCuerpo = {
     insolutoS: { campo: 'insoluto', importe: true },
     interesS: { campo: 'interes', importe: true },
   },
+};
+
+/**
+ * **El arqueo del cierre de caja, medio de pago por medio de pago** (#36, #423).
+ *
+ * `PeticionDeCierre.declarado` es un `Map<String, String>` cuyas claves son las
+ * cinco `FormaDePago` del recibo, las mismas del `CHECK` de `recibo` (V3):
+ * `FormaDePago.porNombre` no admite ninguna otra y rechaza el cierre entero con
+ * «Forma de pago desconocida».
+ *
+ * **Y son cinco, no las cuatro casillas que el prototipo dibuja.** El manual
+ * captura «efectivo», «tarjeta de débito/crédito», «depósito en cuenta» y «pago
+ * en línea», y deja el **cheque** sin ninguna; el javadoc de `PeticionDeCierre`
+ * dice por que eso no se puede copiar: «declarar por las casillas haria que un
+ * turno con un cheque saliera descuadrado sin que el cajero pudiera decir nada».
+ * Asi que el mapa sustituye a las cuatro (`enVezDe`) y dibuja las cinco del
+ * dominio, con el rotulo del prototipo donde lo hay.
+ *
+ * `importe: true`: cada cifra viaja **como texto decimal** —`new BigDecimal(texto)`
+ * al otro lado, regla 1— y lo que no sea una cadena decimal simple no sale.
+ *
+ * **Ningun total.** «Total declarado», «Total sistema» y «Diferencia» son `"ro"`
+ * y los calcula `ArqueoDelTurno`: sumar aqui las cinco filas seria componer un
+ * importe en la interfaz (RNF-083), y ademas daria otra cifra que la archivada
+ * en cuanto el arqueo tuviera una linea que la pantalla no dibuja.
+ */
+const ARQUEO_POR_FORMA_DE_PAGO: MapaDelCuerpo = {
+  campo: 'declarado',
+  importe: true,
+  enVezDe: ['efectivoS', 'tarjetaDeDebitoCreditoS', 'depositoEnCuentaS', 'pagoEnLineaS'],
+  entradas: [
+    { clave: 'EFECTIVO', etiqueta: 'Efectivo (S/)' },
+    { clave: 'CHEQUE', etiqueta: 'Cheque (S/)' },
+    { clave: 'DEPOSITO', etiqueta: 'Depósito en cuenta (S/)' },
+    { clave: 'TARJETA', etiqueta: 'Tarjeta de débito / crédito (S/)' },
+    { clave: 'TRANSFERENCIA', etiqueta: 'Transferencia / pago en línea (S/)' },
+  ],
 };
 
 /** Una cuota entera: `3`. Lo unico que `PeticionDeMovimiento.cuota` sabe leer. */
@@ -682,6 +758,97 @@ function faltaEnLaTransferenciaDePredio(
  * el transferente lo toma de quien figura hoy como titular. Solo el valor de
  * la transferencia necesita el campo que `rentas/composicion.ts` añade.
  */
+/**
+ * Un campo que se **declara para poder verlo**, y que no viaja nunca.
+ *
+ * `soloDeclarados` descarta lo que la traduccion no reconoce, asi que esto lo
+ * descarta siempre. Ver por que hace falta en `predial_masivo`.
+ */
+function nuncaViaja(): undefined {
+  return undefined;
+}
+
+/**
+ * El alcance de la corrida, traducido al que el backend reconoce.
+ *
+ * `DeterminarPredialMasivo` admite **dos**: `TODOS` y `SECTOR`. El desplegable
+ * del manual ofrece **cuatro**, y las otras dos —«POR RANGO DE CÓDIGO» y «SOLO
+ * OBSERVADOS»— no existen todavia en ninguna parte del sistema.
+ *
+ * Lo que no se reconoce **no viaja**, y ademas no se deja pulsar: sin lo segundo,
+ * omitir `alcance` haria que el backend cayera en `TODOS`, y quien pidio «solo
+ * observados» recibiria una emision de **todo el padron** sin que nada se lo
+ * dijera. Ver `faltaEnLaCorridaDelPredial`.
+ */
+function alcanceDeLaCorrida(texto: string): string | undefined {
+  if (texto === 'TODO EL PADRÓN') return 'TODOS';
+  if (texto === 'POR SECTOR') return 'SECTOR';
+  return undefined;
+}
+
+/**
+ * El sector de la corrida. «Todos» **no es un sector**: es la ausencia de uno.
+ *
+ * Mandarlo haria que `enElAlcance` buscara predios del sector literalmente
+ * llamado «Todos», que no es ninguno, y la corrida saldria vacia.
+ */
+function sectorDeLaCorrida(texto: string): string | undefined {
+  return texto === '' || texto === 'Todos' ? undefined : texto;
+}
+
+/**
+ * Lo que le falta a la corrida del predial para poder asentarse (#445).
+ *
+ * Las cinco guardas son las cinco formas que tiene esta pantalla de mandar una
+ * corrida que el backend rechaza o —peor— que acepta queriendo decir otra cosa:
+ *
+ *   ejercicio    `PeticionDeCalculoMasivo` lo exige, y el desplegable de un
+ *                campo escribible abre **en blanco** a proposito (revision de
+ *                #331): un `sel` que enseña su primera opcion sin que nadie la
+ *                elija manda un cuerpo sin ella. Aqui eso seria emitir el
+ *                padron de un año que nadie escogio
+ *   alcance      igual, y ademas con dos de sus cuatro opciones sin sistema
+ *                detras: ver `alcanceDeLaCorrida`
+ *   el sector    con «POR SECTOR» hay que decir cual. El backend lo dice con
+ *                todas las letras: sin el, «solo el sector» y «todo el padron»
+ *                serian la misma corrida
+ *   arbitrios    `PredialController.rechazarLoQueNoHace` devuelve 422. Los
+ *                arbitrios son otro tributo, con su propia determinacion (#37)
+ *   la cuponera  lo mismo: es un documento, y esa capa es #43
+ *
+ * Las dos ultimas son casillas que el manual dibuja y el sistema no hace. Se
+ * podrian haber dejado sin declarar —lo estan— y callar; entonces marcarlas no
+ * haria nada y la corrida saldria sin arbitrios mientras la pantalla enseña
+ * «Incluye arbitrios ✓». Decirlo **antes** de pulsar es lo que #332 pide: ningun
+ * acto promete lo que no puede.
+ */
+function faltaEnLaCorridaDelPredial(
+  borrador: Readonly<Record<string, string>>,
+): string | undefined {
+  const dato = (clave: string): string => (borrador[clave] ?? '').trim();
+
+  if (dato('ejercicioACalcular') === '') {
+    return 'Elige el ejercicio que se va a emitir: el desplegable abre en blanco a propósito, para que la emisión de un año no salga por omisión.';
+  }
+  const alcance = dato('alcance');
+  if (alcance === '') {
+    return 'Elige el alcance de la corrida: si se emite a todo el padrón o solo a un sector.';
+  }
+  if (alcanceDeLaCorrida(alcance) === undefined) {
+    return `El sistema emite a todo el padrón o por sector, y «${alcance}» todavía no. Elige uno de esos dos y avísale a sistemas si necesitas este.`;
+  }
+  if (alcanceDeLaCorrida(alcance) === 'SECTOR' && sectorDeLaCorrida(dato('sector')) === undefined) {
+    return 'Con el alcance por sector hay que decir cuál: sin él, «solo el sector» y «todo el padrón» serían la misma corrida.';
+  }
+  if (dato('incluyeArbitrios') !== '') {
+    return 'Esta corrida determina el impuesto predial. Los arbitrios son otro tributo, con su propia determinación por periodo, y no se emiten aquí: desmarca la casilla y emítelos desde «Arbitrios municipales».';
+  }
+  if (dato('generaCuponeraPdf') !== '') {
+    return 'La cuponera es un documento y todavía no se genera desde aquí: desmarca la casilla para asentar la determinación, y avísale a sistemas que la necesitas.';
+  }
+  return undefined;
+}
+
 function faltaEnLaTransferenciaDeVehiculo(
   borrador: Readonly<Record<string, string>>,
 ): string | undefined {
@@ -705,6 +872,49 @@ function faltaEnLaTransferenciaDeVehiculo(
   }
   if (dato('fechaDeTransferencia') === '') {
     return 'Falta la fecha de transferencia: es desde cuándo responde el adquirente por el impuesto.';
+  }
+  return undefined;
+}
+
+/**
+ * Donde esta el campo que el manual no dibuja, dicho para quien atiende (#422).
+ *
+ * La frase existe por lo mismo que `DONDE_EL_PREDIO`: el campo que falta no
+ * esta donde quien conoce la pantalla lo buscaria, porque hasta hoy no estaba en
+ * ninguna parte.
+ */
+const DONDE_EL_EXPEDIENTE = 'Está al final de «Solicitud», debajo del fundamento.';
+
+/**
+ * Que le falta al descargo para poder registrarse (#50, #77, #422).
+ *
+ * Los cinco que `DescargosController` pasa por `exigir` —`papeleta`,
+ * `nDeExpediente`, `fechaDePresentacion`, `tipoDeRecurso` y `fundamento`—, en el
+ * orden en que se rellenan. El sexto que el cuerpo admite, `familia`, no se
+ * declara: por omision es transito, que es la pantalla que lo manda.
+ *
+ * **La marca «Dentro del plazo» no entra**, y esa ausencia es la que importa: la
+ * calcula el servidor con el plazo parametrizado (`DescargoResource.enPlazo` y
+ * `plazo`), y dejar que la pantalla la mandara seria dejar que quien atiende
+ * declare en plazo un escrito que llego tarde.
+ */
+function faltaEnElDescargo(borrador: Readonly<Record<string, string>>): string | undefined {
+  const dato = (clave: string): string => (borrador[clave] ?? '').trim();
+
+  if (dato('papeletaImpugnada') === '') {
+    return 'Falta la papeleta impugnada: es contra qué se presenta el descargo.';
+  }
+  if (dato('nDeExpedienteDeMesaDePartes') === '') {
+    return `Falta el número de expediente con que el escrito entró por mesa de partes: es lo que ata el descargo al documento que el administrado presentó. ${DONDE_EL_EXPEDIENTE}`;
+  }
+  if (dato('fechaDePresentacion') === '') {
+    return 'Falta la fecha de presentación: de ella sale si el escrito entró en plazo, y eso lo calcula el servidor.';
+  }
+  if (dato('tipoDeRecurso') === '') {
+    return 'Falta el tipo de recurso: descargo, reconsideración, apelación o nulidad.';
+  }
+  if (dato('fundamentoDelAdministrado') === '') {
+    return 'Falta el fundamento del administrado: sin él no queda constancia de qué se alegó.';
   }
   return undefined;
 }
@@ -924,6 +1134,58 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
       valorTransferencia: { campo: 'valorTransferencia', importe: true },
     },
     exigir: (borrador) => faltaEnLaTransferenciaDeVehiculo(borrador),
+    nota: true,
+  },
+
+  /**
+   * **La emision anual del predial** (#395, #445): la corrida masiva, asentada.
+   *
+   * Es la primera de las cinco determinaciones que escribe de verdad. Hasta hoy la pantalla
+   * solo podia **simular** —`useSimulacion` manda `simulacion: true` y el backend calcula sin
+   * asentar—, y su primaria «Ejecutar proceso» se quedaba apagada con la franja
+   * `sin-declaracion`: la unica de las cuatro causas que pedia trabajo de este lado.
+   *
+   * Va primero de las cinco porque su cuerpo es **plano**:
+   * `PeticionDeCalculoMasivo(observacion, ejercicio, alcance, sector, modalidad,
+   * recalculaYaEmitidos, simulacion, incluyeArbitrios, generaCuponeraPdf)`. El de
+   * `predial_individual` lleva ademas un arreglo de predios, que la lista blanca todavia no
+   * sabe declarar suelto (el caso de #75 con `contribuyentes` y `hechos`).
+   *
+   * `simulacion: false` va en `constantes` y no en `campos` porque **no es un dato del
+   * expediente**: es cual de las dos mitades de la operacion se pide. El backend lo exige
+   * —`exigirSimulacion` rechaza el nulo— y la observacion de la regla 10 solo se le pide a la
+   * mitad que asienta.
+   *
+   * Lo que **no** viaja, y por que:
+   *
+   * - `uitDelEjercicioS` es `"ro"`: la UIT vive en el conjunto sellado del ejercicio y la pone
+   *   el servidor. Devolversela seria dejar que el cliente proponga una cifra normativa.
+   * - `derechoDeEmisionS`: `PeticionDeCalculoMasivo` no tiene ningun campo para el. Es ademas un
+   *   valor de ordenanza (D-02b), no algo que se teclee por corrida.
+   * - `modalidad`: el catalogo no dibuja ningun campo, y el backend cae en `TRIMESTRAL` cuando
+   *   falta. Declarar aqui una modalidad que nadie eligio seria elegirla nosotros.
+   * - `incluyeArbitrios` y `generaCuponeraPdf`: ver `faltaEnLaCorridaDelPredial`. **No se
+   *   declaran a proposito**, y ademas se bloquea la primaria cuando alguno esta marcado.
+   */
+  predial_masivo: {
+    campos: {
+      ejercicioACalcular: { campo: 'ejercicio' },
+      alcance: { campo: 'alcance', valor: alcanceDeLaCorrida },
+      sector: { campo: 'sector', valor: sectorDeLaCorrida },
+      recalculaYaEmitidos: { campo: 'recalculaYaEmitidos', booleano: true },
+      /* **Declaradas para poder decir que no**, y con una traduccion que nunca
+         acepta nada: asi quedan en el borrador —`fijarCampo` descarta en
+         silencio lo que la opcion no declara— y `faltaEnLaCorridaDelPredial`
+         puede verlas y apagar la primaria con el motivo del backend. Sin
+         declararlas, marcarlas no llegaria a ninguna parte: la corrida saldria
+         sin arbitrios mientras la pantalla enseña «Incluye arbitrios ✓», que es
+         el defecto silencioso que #332 cerro. Y declaradas a secas viajarian, y
+         `rechazarLoQueNoHace` devolveria un 422 despues de pulsar. */
+      incluyeArbitrios: { campo: 'incluyeArbitrios', valor: nuncaViaja },
+      generaCuponeraPdf: { campo: 'generaCuponeraPdf', valor: nuncaViaja },
+    },
+    constantes: { simulacion: false },
+    exigir: (borrador) => faltaEnLaCorridaDelPredial(borrador),
     nota: true,
   },
 
@@ -1208,6 +1470,103 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
     nota: true,
   },
 
+  /**
+   * Cierre y arqueo de caja (RF-087, #36, #423): el turno se firma con lo que hay
+   * en el cajón, medio de pago por medio de pago.
+   *
+   * **Su cuerpo es un mapa**, y por eso esta pantalla estaba fuera hasta ahora:
+   * `PeticionDeCierre.declarado` es `{"EFECTIVO": "120.00", …}` con las cinco
+   * `FormaDePago`, no cinco campos con nombre fijo (ver `ARQUEO_POR_FORMA_DE_PAGO`).
+   *
+   * **La caja y el cajero salen del filtro**, no del formulario: el catálogo los
+   * dibuja `"ro"` —el prototipo capturó un cliente de escritorio donde los dos
+   * venían de la sesión— y los dos son obligatorios en el cuerpo, porque con la
+   * fecha forman la clave del turno (`cierre_uq`, V3). Se preguntan en el bloque
+   * de búsqueda que compone `tesoreria/composicion.ts`, que es además de donde
+   * sale el arqueo en vivo contra el que se cuadra antes de firmar.
+   *
+   * Lo que **no** viaja, y por qué:
+   *
+   * - `turno` (MAÑANA / TARDE / CONTINUO): **no existe como dato**. `cierre_uq`
+   *   hace único el turno por (caja, cajero, fecha) y no hay columna que lo parta
+   *   en dos; el javadoc de `ArqueoResource` lo dice sin rodeos.
+   * - `horaDeApertura` y `horaDeCierre`: las pone el servidor —la apertura es
+   *   `cierre_caja.fecha_apertura` (V29) y el cierre es el instante del acta—.
+   * - `totalDeclaradoS`, `totalSistemaS`, `diferenciaS`, `recibosEmitidos` y
+   *   `recibosAnulados`: son el arqueo que calcula `ArqueoDelTurno`. Aquí no se
+   *   suma ninguna columna (RNF-083).
+   * - `observacionesDelArqueo`: es la misma observación que ya exige `useEscritura`
+   *   (regla 10). Dos cajas para lo mismo acabarían con una de las dos vacía.
+   * - `motivoDeReversion`: **con él la misma ruta reversa el cierre en vez de
+   *   firmarlo**, y eso exige además el privilegio de ELIMINACION. Ninguna acción
+   *   del catálogo lo pide —«Cuadrar · Imprimir arqueo · Cerrar caja»—, así que
+   *   esta pantalla solo cierra.
+   *
+   * **El arqueo vacío no se rechaza aquí.** Que lo declarado no cuadre con el
+   * neto del sistema es exactamente lo que hay que dejar escrito —`CerrarTurno`
+   * guarda el descuadre en vez de rechazarlo—, así que la interfaz no exige
+   * ninguna cifra: lo que exige son la caja y el cajero, sin los cuales el acto
+   * no señala a ningún turno.
+   */
+  cierre_caja: {
+    campos: { fecha: { campo: 'fecha' } },
+    mapas: { declarado: ARQUEO_POR_FORMA_DE_PAGO },
+    delFiltro: { caja: { campo: 'caja' }, cajero: { campo: 'cajero' } },
+    exigir: (_borrador, _filas, delFiltro) => {
+      if ((delFiltro['caja'] ?? '').trim() === '') {
+        return 'Falta la caja: escribe el código de la ventanilla arriba y pulsa «Buscar». Sin ella el cierre no señala a ningún turno.';
+      }
+      if ((delFiltro['cajero'] ?? '').trim() === '') {
+        return 'Falta el cajero: el turno que se cierra es el suyo, y sin él el arqueo no señala a ninguno.';
+      }
+      return undefined;
+    },
+    nota: true,
+  },
+
+  /**
+   * Anulación de convenio (RF-085, RF-086, #35, #423): el convenio se cierra y la
+   * deuda acogida vuelve a la fase de la que salió.
+   *
+   * **Su cuerpo lo decide el botón**, y por eso esta pantalla estaba fuera: las
+   * tres acciones del prototipo —«Anular», «Reformar», «Quebrar»— son la misma
+   * ruta con `accion` distinta, porque para el libro son el mismo acto y lo que
+   * cambia es el motivo administrativo (`PeticionDeCierreDeConvenio`). Ver
+   * `segunLaAccion` de `OpcionesDeEscritura`.
+   *
+   * **«Reformar» no se declara**, y no por descuido: `REFORMULACION` exige además
+   * el convenio nuevo que sustituye al anterior —`PeticionDeFraccionamiento`
+   * entero, con al menos una obligación acogida—, y esta pantalla no dibuja
+   * ninguna grilla de deuda; es el mismo hueco por el que `fraccionamiento` está
+   * en `ACTOS_SIN_CAMPO`. Declararla mandaría `accion: REFORMULACION` sin
+   * `reformulacion`, que es el 422 que el controlador contesta nombrándolo.
+   *
+   * El número del convenio llega **por la URL** —`/tesoreria/anulacion-convenio/{nro}`,
+   * el número impreso que el contribuyente trae—, igual que en la anulación de un
+   * recibo: `numConv2` no se declara, porque dos sitios para el mismo número no
+   * tienen forma de decidir cuál manda cuando no coinciden.
+   *
+   * `responsableAnul` y `numAnul` son `"ro"`: el primero lo pone el servidor con
+   * quien firma la sesión y el segundo se numera al registrar. `nDeMemorando` no
+   * tiene campo en el catálogo. `glosa` es la misma observación que ya pide
+   * `useEscritura` (regla 10).
+   */
+  anulacion_convenio: {
+    campos: {
+      fechaAnul: { campo: 'fechaAnul' },
+      motivo: { campo: 'motivo' },
+    },
+    segunLaAccion: {
+      Anular: { accion: 'ANULACION' },
+      Quebrar: { accion: 'QUIEBRE' },
+    },
+    exigir: (borrador) =>
+      (borrador['motivo'] ?? '').trim() === ''
+        ? 'Falta el motivo: es el sustento del acto, y el backend lo exige. Sin él no se puede anular ni quebrar el convenio.'
+        : undefined,
+    nota: true,
+  },
+
   /* ── Tránsito (#77) ────────────────────────────────────────────────── */
 
   /**
@@ -1228,6 +1587,44 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
     campos: {
       codPapeletaNueva: { campo: 'numeroNuevo' },
     },
+  },
+
+  /**
+   * Descargos y reclamos de papeletas (`POST /transito/descargos`, #50, RF-064, #422).
+   *
+   * **La primera opcion que sale de `ACTOS_SIN_CAMPO` por el mecanismo declarativo**, y no
+   * por un componente propio: lo unico que le faltaba era el numero de expediente de mesa
+   * de partes —`DescargosController` lo exige y el catalogo lo dibuja `"ro"`, como el del
+   * descargo que se esta consultando—, y `transito/composicion.ts` lo declara como un
+   * control anadido al final de «Solicitud». Su clave es `nDeExpedienteDeMesaDePartes` y no
+   * `nDeExpediente`: esa ya es la del **filtro** con que se busca un descargo registrado, y
+   * dos cosas distintas no comparten clave.
+   *
+   * Y la primaria la pone `LA_QUE_ESCRIBE` (#421): la ultima accion del catalogo es
+   * «Notificar al administrado» y la que registra es la primera de las tres. Los dos
+   * mecanismos son complementarios —uno dice **cual boton** escribe, el otro **donde** se
+   * escribe el dato que le falta—, y esta pantalla necesitaba los dos.
+   *
+   * **La seccion «Evaluación y resolución» no se declara**, y no por descuido: resolver un
+   * descargo es dictar una resolucion de gerencia (`ResolucionesDeGerenciaController`, #50),
+   * que es otro acto, otra ruta y otro papel. `PeticionDeDescargo` no tiene ni un campo para
+   * el area evaluadora, el numero de resolucion, el sentido del fallo ni el efecto sobre la
+   * multa; declararlos aqui los mandaria a un servidor que no los pide.
+   *
+   * `dentroDelPlazo5DiasHabiles` tampoco: lo calcula el servidor con el plazo parametrizado
+   * (regla 5), y es la respuesta la que lo trae. `familia` va por omision a `TRANSITO`, que
+   * es de donde manda esta pantalla.
+   */
+  transito_descargos: {
+    campos: {
+      papeletaImpugnada: { campo: 'papeleta' },
+      nDeExpedienteDeMesaDePartes: { campo: 'nDeExpediente' },
+      fechaDePresentacion: { campo: 'fechaDePresentacion' },
+      tipoDeRecurso: { campo: 'tipoDeRecurso', valor: tipoDeRecursoDe },
+      fundamentoDelAdministrado: { campo: 'fundamento' },
+    },
+    exigir: (borrador) => faltaEnElDescargo(borrador),
+    nota: true,
   },
 
   /**
@@ -1274,3 +1671,32 @@ export const escrituraDe = (opcion: string): EscrituraDeclarada | undefined =>
 
 /** Las opciones que declaran escritura. La prueba de la lista blanca las mira. */
 export const OPCIONES_QUE_ESCRIBEN = Object.keys(ESCRITURAS);
+
+/**
+ * **Que hace el formulario con este campo del catalogo**, cuando un mapa lo
+ * sustituye (#423).
+ *
+ * Dos respuestas y no una, porque un mapa sustituye a **varios** campos y solo
+ * se dibuja una vez:
+ *
+ *   `{ mapa, nombre }`  este es el primero: aqui van sus filas
+ *   `{ }`               este es otro de los sustituidos: no se dibuja nada
+ *   `undefined`         no lo sustituye ningun mapa: el campo de siempre
+ *
+ * Es hermana de `resolutorDeCampo` (`composicion.ts`) y con la misma barrera de
+ * `Object.hasOwn` un nivel arriba —`escrituraDe`—: 132 de las 134 opciones no
+ * declaran ningun mapa y no se enteran de que esto existe.
+ */
+export function mapaEnElCampo(
+  opcion: string,
+  campo: string,
+): { readonly nombre: string; readonly mapa: MapaDelCuerpo } | Record<string, never> | undefined {
+  const mapas = escrituraDe(opcion)?.mapas;
+  if (mapas === undefined) return undefined;
+  for (const [nombre, mapa] of Object.entries(mapas)) {
+    const donde = mapa.enVezDe.indexOf(campo);
+    if (donde === 0) return { nombre, mapa };
+    if (donde > 0) return {};
+  }
+  return undefined;
+}

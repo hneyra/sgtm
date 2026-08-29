@@ -137,8 +137,14 @@ describe('las operaciones generadas son las del contrato', () => {
     //     sigue sin backend—, sino de `apps/portal`. Y en la misma tanda
     //     **desaparece un parametro**: el `doc` de `GET /portal/deuda`, que era
     //     el endpoint de enumeracion del padron que D-07 describia.
+    //   - `fisc_programas_listado` (#431): la lectura del programa de
+    //     fiscalizacion, que faltaba. `/fiscalizacion/programas` declaraba solo
+    //     `post` —programar—, asi que un programa se podia registrar y no se
+    //     podia volver a encontrar: ni por su pantalla, cuya operacion del
+    //     catalogo es ese POST y no se pide al abrirla, ni por las dos actas,
+    //     que exigen el `programaId` de un programa ya generado.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(175);
+    expect(Object.keys(OPERACIONES)).toHaveLength(176);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {
