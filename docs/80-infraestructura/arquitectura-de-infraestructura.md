@@ -296,10 +296,11 @@ Dónde se ejecuta entonces, que es donde el criterio de #149 se cumple igual:
 | El certificado no renueva | El navegador rechaza la conexión. El desafío HTTP-01 necesita el puerto 80 abierto | Alerta a 21 días del vencimiento, no el día del vencimiento | [Mantenimiento del VPS](../B0-operacion/runbooks/mantenimiento-del-vps.md) §5 |
 | Pulumi Cloud no está disponible | **No se puede modificar la infraestructura.** Lo que corre sigue corriendo | Esperar, o tomar la salida de `ADR-0011` §3 | No hace falta |
 
-**Los ocho runbooks de issue #158 están escritos**, en
-[`docs/B0-operacion/runbooks/`](../B0-operacion/runbooks/). Lo que ninguno tiene todavía
-es el ensayo completo contra un VPS real —el propio índice de runbooks lo dice sin
-adornarlo—, porque ese VPS no existe mientras D-01 siga abierta. Escribir el
+**Los diez runbooks de issue #158 están escritos**, en
+[`docs/B0-operacion/runbooks/`](../B0-operacion/runbooks/). Lo que falta es el ensayo
+completo del de reconstrucción —el propio índice de runbooks lo dice sin adornarlo—: los
+dos VPS ya existen y su clúster y su restauración PITR ya se reconstruyeron una vez
+(2026-08-24), pero reaprovisionar el VPS mismo desde cero sigue pendiente. Escribir el
 procedimiento es necesario y no es lo mismo que haberlo corrido: es la distinción que
 cada runbook marca en su propia sección «Estado del ensayo».
 
@@ -320,7 +321,7 @@ Detalle en [`ambientes.md`](ambientes.md) (INF-03). Resumen de topología:
 
 - [ ] Confirmar el proveedor del VPS y el dimensionamiento de §2 con volumetría real (bloqueado por D-01).
 - [x] Definir el proveedor del almacenamiento de objetos externo, que es donde vive el RPO (§1.3). AWS S3, 2026-08-24 — buckets `sgtm-stg-respaldos`/`sgtm-prod-respaldos`, `us-east-1`, confirmado contra un respaldo real (issue #158).
-- [ ] Ensayar [reconstruir el VPS desde cero](../B0-operacion/runbooks/reconstruir-el-vps-desde-cero.md) contra un VPS real y anotar el tiempo (issue #158; los ocho runbooks ya están escritos, y su clúster **y su restauración PITR** —no el VPS mismo— ya se reconstruyeron una vez, 2026-08-24, 359s medidos).
+- [ ] Ensayar [reconstruir el VPS desde cero](../B0-operacion/runbooks/reconstruir-el-vps-desde-cero.md) contra un VPS real y anotar el tiempo (issue #158; los diez runbooks ya están escritos, y su clúster **y su restauración PITR** —no el VPS mismo— ya se reconstruyeron una vez, 2026-08-24, 359s medidos).
 - [ ] Definir la ventana de mantenimiento y cómo se anuncia (RNF-078).
 - [ ] Definir la lista de destinos de salida permitidos cuando aparezca la primera integración (§3).
 - [ ] Medir cuánto tarda de verdad la restauración con el padrón del piloto, y corregir RNF-077 si

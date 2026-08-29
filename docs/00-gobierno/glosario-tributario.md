@@ -1,4 +1,4 @@
-# GOB-03 — Glosario
+# GOB-05 — Glosario
 
 Vocabulario del manual y del dominio tributario municipal peruano. **El término del manual manda
 sobre el sinónimo culto**: si el manual dice «papeleta», el código dice `Papeleta`.

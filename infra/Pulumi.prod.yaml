@@ -24,7 +24,7 @@
 config:
   # Lo ASIGNABLE del nodo, medido — no su capacidad (`capacidad.ts`).
   #
-  # La memoria es la medida sobre `vmd120205` el 2026-08-23 (INF-02 §4): «memoria
+  # La memoria es la medida sobre `vmd120205` el 2026-08-23 (INF-10 §4): «memoria
   # 8 126 500 Ki → asignable 6 029 348 Ki». Son los ~6 GB que este nodo reparte, y no
   # cambian: la reserva de memoria del issue #157 —2 Gi— modela lo que el sistema
   # operativo, containerd y el API server usan de verdad, así que sigue en pie.
@@ -47,7 +47,7 @@ config:
   #
   # La reserva del nodo sigue estando mal en `vmd120205` —reserva 2 de sus 4 núcleos por
   # la duplicación de #252— y corregirla sigue mereciendo la pena: devuelve ~1 000m de
-  # margen. Pero ya no bloquea el despliegue. INF-02 §4 tiene el procedimiento.
+  # margen. Pero ya no bloquea el despliegue. INF-10 §4 tiene el procedimiento.
   #
   # Volver a medirlo después de tocar el nodo o la reserva:
   #   kubectl get node -o jsonpath='{.items[0].status.allocatable.cpu}{"/"}{.items[0].status.allocatable.memory}'

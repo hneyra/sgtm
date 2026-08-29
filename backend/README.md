@@ -4,9 +4,11 @@ Spring Boot 4 sobre Java 25, multi-módulo, monolito modular con Spring Modulith
 ([ADR-0001](../docs/30-arquitectura/adr/ADR-0001-plataforma-backend.md),
 [ADR-0003](../docs/30-arquitectura/adr/ADR-0003-monolito-modular.md)).
 
-**Qué hay:** el esqueleto de Gradle, el esquema completo como migraciones Flyway, el camino del
-contexto de tenant (token → `SET LOCAL` → RLS) y las verificaciones bloqueantes.
-**Qué no hay:** ninguna funcionalidad de negocio, y es deliberado — primero las barreras.
+**Qué hay:** el esquema completo como migraciones Flyway (hoy, 47, hasta `V56`), el camino del
+contexto de tenant (token → `SET LOCAL` → RLS), las verificaciones bloqueantes y **negocio real
+en los doce contextos acotados** — del catastro versionado y la caja a la cobranza coactiva.
+**Qué no hay:** ninguna regla de cálculo con cifras normativas sin fuente — lo bloquean D-11 y
+los cuadros de GOB-03 (ver «Qué falta») —, y es deliberado: las barreras se construyeron primero.
 
 ## Comandos
 
@@ -52,9 +54,11 @@ teclado en español, son los **identificadores con tilde**: `alicuota`, nunca `a
 
 ## Pruebas que necesitan PostgreSQL
 
-Las de `sgtm-esquema`, `sgtm-plataforma`, `sgtm-catastro` y `sgtm-seguridad` necesitan un
-**PostgreSQL real**: una base en memoria no tiene Row Level Security y daría falsos verdes
-(CAL-01 §2).
+Necesita un **PostgreSQL real** todo módulo que arranca la base con los fixtures de
+`sgtm-esquema` — el criterio es su `build.gradle.kts`: declara
+`testImplementation(testFixtures(project(":sgtm-esquema")))` —, más el propio `sgtm-esquema`.
+Hoy son casi todos: con V56, 14 de los 17 módulos. Una base en memoria no tiene Row Level
+Security y daría falsos verdes (CAL-01 §2).
 
 Por omisión levantan un contenedor con Testcontainers, así que hacen falta Docker y la imagen
 `postgres:16-alpine`.
@@ -117,23 +121,28 @@ sgtm-plataforma           Filtro del token, SET LOCAL por transaccion, guardia d
                           auditoria de ADR-0008 (pe.gob.sgtm.auditoria), la capa web
                           comun (pe.gob.sgtm.web) y el guardia de acceso
                           (pe.gob.sgtm.autorizacion)
+sgtm-indicadores          El panel de recaudacion (#56). NO es un contexto acotado:
+                          agrega lo que cuentacorriente y tesoreria ya publican
 sgtm-<contexto> × 12      Los contextos acotados de ARQ-01 §3
 sgtm-aplicacion           Ensambla, y aloja ArchUnit, el escaner y Spring Modulith
 ```
 
 Los doce contextos son `contribuyentes`, `catastro`, `rentas`, `parametros`, `fiscalizacion`,
 `sanciones`, `cuentacorriente`, `tesoreria`, `valores`, `coactiva`, `licencias` y `seguridad`.
-Están vacíos a propósito —la estructura fija los límites antes de que haya código que los cruce—
-salvo `catastro`, que aloja el catálogo vial: es el repositorio de ejemplo del patrón de
-persistencia, elegido porque no arrastra ninguna regla de cálculo y sí tiene `municipalidad_id` y
-política RLS, que es lo que hay que demostrar.
+La estructura se creó vacía a propósito —fijar los límites antes de que hubiera código que los
+cruzara—, y hoy **los doce tienen código de negocio**: el estado por contexto, con lo que cada
+uno publica y lo que le falta, está en [ARQ-01 §5](../docs/30-arquitectura/contextos-acotados.md).
+El de más recorrido sigue siendo `catastro`, que nació como repositorio de ejemplo del patrón de
+persistencia —elegido porque no arrastra ninguna regla de cálculo y sí tiene `municipalidad_id` y
+política RLS, que es lo que había que demostrar— y hoy publica también la escritura versionada de
+las fichas.
 
 `sgtm-dominio-compartido` contiene **dos** paquetes, y la separación importa:
 
 | Paquete | Qué hay | Por qué separado |
 |---|---|---|
-| `pe.gob.sgtm.dominio` | `Dinero`, `Periodo`, `Alicuota`, `Porcentaje`, `AreaM2`, `Ejercicio`, `MunicipalidadId`, `CodigoContribuyente`, `CodigoReferenciaCatastral`, `Placa`, `DocumentoIdentidad`, `Observacion` | Es dominio: le aplican las siete reglas de ArchUnit sin excepción |
-| `pe.gob.sgtm.compartido` | `TenantContext` | Es una utilidad técnica con un `ThreadLocal` dentro; no es vocabulario tributario |
+| `pe.gob.sgtm.dominio` | `Dinero`, `Periodo`, `Alicuota`, `Porcentaje`, `AreaM2`, `Ejercicio`, `MunicipalidadId`, `CodigoContribuyente`, `Placa`, `DocumentoIdentidad`, `Observacion`… y las demás del paquete (hoy, 26 clases; la lista es el propio directorio) | Es dominio: le aplican sin excepción las reglas de ArchUnit —la lista vive en `sgtm-aplicacion/…/verificaciones/ReglasDeArquitectura.java`— |
+| `pe.gob.sgtm.compartido` | `TenantContext`, `Paginacion`, `Pagina` | Son utilidades técnicas —un `ThreadLocal`, el paginado—; no son vocabulario tributario |
 
 El paquete de dominio cuelga de `pe.gob.sgtm` y **no** de `pe.gob.sgtm.compartido` por una razón
 concreta: para Spring Modulith un subpaquete es interno a su módulo, y un objeto de valor que

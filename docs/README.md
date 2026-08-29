@@ -49,10 +49,10 @@ cosas donde espera.
 - [Actores y permisos](20-requisitos/actores-y-permisos.md) — el modelo de seguridad del manual
 
 ### 30 — Arquitectura
-- [Contextos acotados](30-arquitectura/contextos-acotados.md) — nueve contextos y sus límites
+- [Contextos acotados](30-arquitectura/contextos-acotados.md) — doce contextos y sus límites
 - [Estrategia multi-tenant](30-arquitectura/estrategia-multitenant.md) — token → `SET LOCAL` → RLS
 - [Estándares de código del backend](30-arquitectura/estandares-de-codigo-backend.md) — reglas y su verificación
-- [Decisiones de arquitectura (ADR)](30-arquitectura/adr/) — 14 aceptadas
+- [Decisiones de arquitectura (ADR)](30-arquitectura/adr/) — el índice de decisiones, con su estado
 
 ### 40 — Datos
 - [Modelo lógico-físico](40-datos/modelo-logico-fisico.md) — el esquema, tabla por tabla
@@ -84,7 +84,7 @@ cosas donde espera.
 - [Estrategia de pruebas](A0-calidad/estrategia-de-pruebas.md) — qué es bloqueante y por qué
 
 ### B0 — Operación
-- [Runbooks](B0-operacion/runbooks/) — los ocho procedimientos de INF-01 §5, con la misma estructura
+- [Runbooks](B0-operacion/runbooks/) — los diez procedimientos (los escenarios de falla, en INF-01 §5), con la misma estructura
 
 ### D0 — Desarrollo
 - [Guía del desarrollador](D0-desarrollo/README.md) — índice, y qué comando para qué tarea

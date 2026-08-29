@@ -10,6 +10,10 @@
 #      escrito, o un migrador que no se ejecuta, dejan la base a medias sin que
 #      nada falle.
 #   2. ¿Responde la sonda de vida, sin publicar detalles?
+#   3. LOS USUARIOS DE VERIFICACION, uno por peldano de la escalera:
+#      `verificacion` (la cuenta que implanta el stack, con fila y permisos),
+#      `sin-municipalidad` (un token valido sin el claim) y `sin-permisos`
+#      (con el claim pero sin fila en `usuario`).
 #   3b. EL ALTA DECLARATIVA DE USUARIOS (ADR-0012). El mismo guion que el cluster,
 #      en modo compose, crea `jperez` SIN clave a partir del archivo versionado
 #      `identidad/municipalidades/200101.json`. Se comprueba: que nace con

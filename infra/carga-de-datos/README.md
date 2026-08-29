@@ -10,7 +10,7 @@ Hay dos familias, y la diferencia no es de forma sino de **qué se puede afirmar
 | Familia | Qué escribe | Guarda |
 |---|---|---|
 | **Valores normativos** — `publicar-parametros.sh`, `publicar-cuadros.sh`, `abrir-conjunto-parametros.sh`, `cargar-arancel-vial.sh` | Cifras que la ley o la ordenanza fijan | Doble firma del corpus (ADR-0007), rol `rol_carga_parametros`, conjunto sellado |
-| **Municipalidad de demostración** — `sembrar-demostracion.sh` y los ocho `cargar-*` que orquesta | Personas, predios, vehículos y saldos **inventados** | `municipalidad.es_demostracion = true`, comprobado contra la base antes de leer una fila |
+| **Municipalidad de demostración** — `sembrar-demostracion.sh` y los nueve `cargar-*` que orquesta | Personas, predios, vehículos y saldos **inventados** | `municipalidad.es_demostracion = true`, comprobado contra la base antes de leer una fila |
 
 **Ninguna cifra normativa entra por la segunda familia**, y es lo único que no se negocia en este
 directorio. Un arancel, un valor unitario o un tramo del predial inventados se distinguen de los
@@ -178,7 +178,7 @@ en el archivo verificado que la fila nombra.
 
 ## Probarlo sin clúster
 
-Los ocho guiones hablan con Kubernetes. Para recorrer las pantallas en local, la instalación entera
+Todos los guiones de este directorio hablan con Kubernetes. Para recorrer las pantallas en local, la instalación entera
 —motor, migración y aplicación, ya **marcada como de demostración**— la levanta el `compose` de
 [`despliegue/`](../../despliegue/README.md), y la siembra es el **mismo artefacto** con el perfil
 `batch` y una variable por paso:
@@ -204,6 +204,6 @@ SGTM_CARGADEUDADEMO_MUNICIPALIDADID=1       SGTM_CARGADEUDADEMO_ARCHIVO=$E/deuda
 ```
 
 Cada proceso se enciende **solo** si su propiedad `…_ARCHIVO` está puesta
-(`@ConditionalOnProperty`), así que el mismo contenedor —o el mismo `jar`— sirve para los ocho y no
+(`@ConditionalOnProperty`), así que el mismo contenedor —o el mismo `jar`— sirve para los nueve y no
 hace nada de más. El `--municipalidad-id` es el que imprimió la implantación, y tiene que ser el de
 una municipalidad marcada como de demostración: si no, los pasos 4 a 9 se paran sin escribir nada.

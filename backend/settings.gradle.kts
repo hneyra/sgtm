@@ -18,8 +18,9 @@ include("sgtm-plataforma")
 // y su build declara que solo puede ver esos dos.
 include("sgtm-indicadores")
 
-// Los doce contextos acotados de ARQ-01 §3. Hoy vacios: la estructura fija los
-// limites antes de que haya codigo que los cruce.
+// Los doce contextos acotados de ARQ-01 §3. Nacieron vacios —la estructura fijo
+// los limites antes de que hubiera codigo que los cruzara— y hoy los doce tienen
+// codigo de negocio; el estado por contexto esta en ARQ-01 §5.
 include("sgtm-contribuyentes")
 include("sgtm-catastro")
 include("sgtm-rentas")

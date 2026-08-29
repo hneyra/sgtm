@@ -100,7 +100,7 @@ el botón navy acaba siendo «Imprimir» en una pantalla y «Guardar» en la sig
 | `DE_SALIDA` | imprimir, exportar, limpiar, abrir | secundaria; nunca primaria |
 | `DE_MODO` | modificar, editar, deshacer, quitar | **no son actos**: salen de la barra |
 | `DE_ALTA` | nuevo | sólo si la opción declara el formulario que abre |
-| `DE_CALCULO` | calcular, recalcular, simular, distribuir | secundaria: enseña un resultado antes de escribir |
+| `DE_CALCULO` | calcular, recalcular, simular, determinar, liquidar, distribuir | secundaria: enseña un resultado antes de escribir |
 
 **Es opt-in por opción** (`VOCABULARIO_UNIFORME`). Reordenar las 134 barras a la vez cambiaría el
 botón navy de medio sistema en un solo diff; hay una prueba que exige que las opciones no declaradas

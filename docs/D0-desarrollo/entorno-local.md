@@ -124,7 +124,7 @@ levantar Keycloak, usa la forma A.
 cd despliegue
 cp .env.ejemplo .env
 
-# Una clave DISTINTA por marcador. Con `sed` y `$(openssl …)` saldrían las cinco
+# Una clave DISTINTA por marcador. Con `sed` y `$(openssl …)` saldrían las seis
 # iguales: la sustitución de comandos se evalúa una sola vez, antes que el sed.
 python3 - <<'PY'
 import re, secrets, pathlib
@@ -132,8 +132,9 @@ env = pathlib.Path('.env')
 env.write_text(re.sub(r'CAMBIAR_\S+', lambda _: secrets.token_hex(24), env.read_text()))
 PY
 
-docker compose up --build --wait aplicacion interfaz
-./identidad/crear-usuario.sh jperez 'una-clave' 1        # usuario de la municipalidad 1
+./identidad/datos-de-implantacion.sh 200101 >> .env   # el administrador, del archivo versionado
+docker compose up --build --wait aplicacion interfaz correo
+./identidad/reconciliar-identidades.sh                # crea los usuarios de municipalidades/*.json
 ```
 
 | Pieza | Queda en |
@@ -141,14 +142,19 @@ docker compose up --build --wait aplicacion interfaz
 | Interfaz | <http://localhost:8081> |
 | API | <http://localhost:8080> — solo `/actuator/health` sin token |
 | Keycloak | <http://localhost:8180> |
+| Buzón de correo (Mailpit) | <http://localhost:8025> — ahí llega el enlace de primera clave |
 
 El orden de arranque —base → migraciones → implantación → aplicación → interfaz— **no es una
 preferencia**: un esquema a medias con la aplicación ya sirviendo peticiones es el estado que
 `depends_on: service_completed_successfully` existe para impedir. El detalle de cada pieza está en
 [`despliegue/README.md`](../../despliegue/README.md).
 
-El usuario que crees con `crear-usuario.sh` tiene que ser **el mismo** que `SGTM_ADMINISTRADOR` del
-`.env`: es lo único que une la fila de la base con la identidad del token. Y el realm ya trae
+El administrador no se inventa a mano: `datos-de-implantacion.sh` lo vuelca al `.env` desde el
+archivo versionado de su municipalidad, y `reconciliar-identidades.sh` crea los usuarios declarados
+—**sin clave**— en `identidad/municipalidades/*.json`; cada uno recibe en el buzón Mailpit el enlace
+de un solo uso con que fija la suya (ADR-0012). Sin el servicio `correo` levantado, la
+reconciliación falla al enviar ese correo. `crear-usuario.sh` sigue existiendo para los usuarios
+`verificacion` de CI, que necesitan una clave conocida. Y el realm ya trae
 `http://localhost:5173/*` entre sus redirecciones, así que la interfaz en modo desarrollo puede
 autenticarse contra este Keycloak sin tocar nada.
 
@@ -161,6 +167,7 @@ autenticarse contra este Keycloak sin tocar nada.
 | 8080 | API | `bootRun` o el compose |
 | 8081 | Interfaz servida por nginx | Compose |
 | 8180 | Keycloak | Compose |
+| 8025 | Mailpit, el buzón de correo | Compose |
 | 5432 | PostgreSQL | Dentro de la red del compose; no se publica |
 
 ## 4. Variables de entorno

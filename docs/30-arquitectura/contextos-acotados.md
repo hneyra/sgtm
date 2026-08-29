@@ -16,38 +16,30 @@ De ahí salen doce contextos. La correspondencia con el menú está en
 
 ## 2. Mapa
 
-```
-                    ┌─────────────────┐
-                    │  parametros     │  UIT, alicuotas, aranceles, valores
-                    │  (sellado por   │  unitarios, depreciacion, CUIS...
-                    │   ejercicio)    │
-                    └────────┬────────┘
-                             │ lee (nunca escribe)
-   ┌──────────────┐   ┌──────┴───────┐   ┌───────────────┐
-   │  catastro    │──►│   rentas     │◄──│ fiscalizacion │
-   │ fichas,      │   │ determinacion│   │ actas, omisos │
-   │ predios,     │   │ DJ, benefic. │   └───────────────┘
-   │ valuacion    │   └──────┬───────┘
-   └──────┬───────┘          │ asienta cargos
-          │                  ▼
-   ┌──────┴───────┐   ┌──────────────────┐   ┌────────────┐
-   │contribuyentes│──►│ cuentacorriente  │◄──│ sanciones  │
-   │ codigo unico │   │ libro inmutable  │   │ papeletas  │
-   └──────────────┘   └───┬────────┬─────┘   └────────────┘
-                          │        │
-              asienta     │        │  formaliza
-              abonos      ▼        ▼
-                   ┌───────────┐  ┌──────────┐   ┌───────────┐
-                   │ tesoreria │  │ valores  │──►│ coactiva  │
-                   │ caja,     │  │ OP RD RM │   │ expedient.│
-                   │ convenios │  └──────────┘   └───────────┘
-                   └───────────┘
-                   ┌───────────┐   ┌────────────────────────┐
-                   │ licencias │──►│ (deuda por tasa)       │
-                   └───────────┘   └────────────────────────┘
+**La fuente de verdad del grafo son los `build.gradle.kts` de cada módulo**: la tabla de abajo
+recoge solo las dependencias `implementation(project(":sgtm-…"))` de `src/main` —no las de
+prueba ni los `testFixtures`— y se cotejó contra ellos el 2026-08-29. Ante cualquier duda,
+manda el archivo, no esta tabla.
 
-   seguridad ── transversal: accesos, permisos, auditoria, sesiones
-```
+| Módulo | Depende de |
+|---|---|
+| `contribuyentes` | — (la base del grafo: no depende de ningún contexto) |
+| `parametros` | — |
+| `cuentacorriente` | — |
+| `seguridad` | — |
+| `catastro` | `contribuyentes`, `parametros` |
+| `tesoreria` | `cuentacorriente`, `contribuyentes`, `parametros` |
+| `valores` | `cuentacorriente`, `contribuyentes`, `parametros` |
+| `sanciones` | `cuentacorriente`, `contribuyentes`, `parametros`, `tesoreria`, `valores` |
+| `licencias` | `tesoreria`, `contribuyentes`, `catastro`, `cuentacorriente`, `parametros` |
+| `rentas` | `parametros`, `catastro`, `cuentacorriente`, `contribuyentes`, `tesoreria`, `valores` |
+| `fiscalizacion` | `catastro`, `rentas`, `parametros`, `cuentacorriente`, `contribuyentes` |
+| `coactiva` | `valores`, `cuentacorriente`, `contribuyentes`, `parametros`, `tesoreria`, `rentas` |
+| `indicadores` (no es contexto, §3.13) | `cuentacorriente`, `tesoreria` |
+
+`sgtm-aplicacion` depende de todos —es quien ensambla— y es el **único** que declara
+`sgtm-seguridad` (ver §3.12). Todo contexto ve `sgtm-dominio-compartido` por el plugin de
+convenciones `sgtm.modulo`, y esa arista no se lista porque no distingue a nadie.
 
 ## 3. Los contextos
 
@@ -142,22 +134,29 @@ Licencias de funcionamiento (con giros CIIU, duplicados, cancelación), licencia
 
 Desde [#44](https://github.com/hneyra/sgtm/issues/44) tiene código: la licencia de funcionamiento
 completa —emisión con sus giros, cancelación con su resolución, duplicado que conserva el número, y
-el catálogo CIIU extensible—. Consume **cuatro** APIs públicas y ninguna tabla ajena:
+el catálogo CIIU extensible—. Consume **cinco** APIs públicas y ninguna tabla ajena:
 `tesoreria.RecibosDeTramite` (comprobar que el derecho de trámite está pagado, RF-110),
 `contribuyentes.DirectorioDeContribuyentes`, `catastro.LectorDeFichasEconomicas` (la ficha económica
-del predio donde está el establecimiento, #19) y `parametros.LectorDeParametros`.
+del predio donde está el establecimiento, #19), `parametros.LectorDeParametros` y
+`cuentacorriente.GeneradorDeCargos`.
 
-**Todavía no depende de `cuentacorriente`, y es una decisión, no un olvido.** Emitir una licencia no
+**La dependencia de `cuentacorriente` llegó con [#51](https://github.com/hneyra/sgtm/issues/51),
+cuando hubo un cargo real que asentar, y no antes.** Emitir una licencia de funcionamiento no
 genera deuda: el derecho de trámite se paga *antes*, en caja de tasas, y un derecho de trámite no es
-deuda tributaria —no se determina, no devenga interés y no prescribe—. Lo único que una licencia
-podría generar son los **arbitrios del establecimiento**, que los determina `rentas` con tablas de
-ordenanza bloqueadas por D-02b; cuando lleguen, entrarán por `cuentacorriente.GeneradorDeCargos`
-como todo cargo de otro contexto (§4, regla 2). Declarar la dependencia «por si acaso» sería abrir
-el límite sin usarlo.
+deuda tributaria —no se determina, no devenga interés y no prescribe—. Lo que sí genera deuda es la
+**autorización de anuncios**: la tasa anual del anuncio se asienta al autorizar y al renovar, y se
+le **pide** al libro por `cuentacorriente.GeneradorDeCargos`, como todo cargo de otro contexto
+(§4, regla 2); la deuda de una tasa sin ordenanza cargada no se inventa —el borde responde 422
+nombrando la llave `TASA_ANUNCIO:<CLASE>` (D-02b)—. Declarar la dependencia «por si acaso» habría
+sido abrir el límite sin usarlo; se declaró el día que se usó.
 
 ### 3.12 `seguridad`
 Módulos, accesos y políticas, grupos, usuarios, miembros, permisos, sesiones y **auditoría**.
-Transversal: todos dependen de él y él de ninguno.
+Él no depende de ningún contexto, y **ningún contexto depende de él**: solo `sgtm-aplicacion` lo
+declara, para ensamblarlo. La transversalidad del control de acceso no la da este módulo sino
+`sgtm-plataforma` —el guardia de `pe.gob.sgtm.autorizacion` (`@RequiereAcceso`), que todo
+controlador usa sin conocer a `seguridad`—; este contexto es quien administra los datos que ese
+guardia consulta.
 *Módulo Gradle:* `sgtm-seguridad`.
 
 ### 3.13 No es un contexto: `indicadores`
@@ -204,10 +203,10 @@ día, y no habría forma de saber cuál está mal.
 ## 5. Estado actual
 
 Los doce módulos Gradle existen, y la estructura se escribió antes que el código para fijar los
-límites antes de que hubiera algo que los cruzara. Hoy **nueve tienen código** —`catastro`,
-`contribuyentes`, `cuentacorriente`, `fiscalizacion`, `parametros`, `rentas`, `sanciones`,
-`seguridad` y `valores`—; `coactiva`, `licencias` y `tesoreria` siguen con solo su
-`package-info.java`.
+límites antes de que hubiera algo que los cruzara. Hoy **los doce tienen código de negocio**:
+`tesoreria` lo recibió con la caja (#33), `coactiva` con el expediente (#40) y `licencias` con la
+licencia de funcionamiento (#44), que eran los tres que quedaban. El estado fino de cada uno es
+su propio `src/main`, no esta lista.
 
 El de más recorrido es `catastro`: desde [#290](https://github.com/hneyra/sgtm/issues/290)
 publica también la **escritura** —vías y sectores, el alta de manzanas, el alta de las cuatro

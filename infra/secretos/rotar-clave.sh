@@ -13,13 +13,20 @@
 #      estaban abiertas siguen — `ALTER ROLE ... PASSWORD` no las cierra, que es lo que
 #      `verificar-rotacion.sh` demuestra contra un motor real.
 #
-# Los tres roles que NO admite este guion, y por que:
+# Los cuatro roles que NO admite este guion, y por que:
 #
 #   - `postgres-superusuario`: "nunca-desde-el-nodo" en el inventario. Rotarlo exigiria
 #     autenticar contra el motor con el superusuario que se esta cambiando a si mismo, y
 #     el guion de inicializacion solo lo asigna una vez, con el volumen vacio.
 #   - `keycloak-admin`: no es una clave de PostgreSQL. Rotarla es un `kcadm.sh
 #     set-password`, documentado como procedimiento manual en INF-06.
+#   - `respaldo-cifrado`: tampoco es un rol de PostgreSQL — es la clave simetrica de
+#     wal-g, y rotarla deja ilegibles los respaldos ya escritos (INF-08 §4): solo tras
+#     un incidente, con su procedimiento propio.
+#   - `grafana-admin`: la cuenta de administrador de Grafana, no un rol del motor.
+#
+#   Los tres ultimos no llevan `rolDePostgres` en el inventario (secretos.ts), y el
+#   guion los rechaza por eso: no hay ALTER ROLE que ejecutar.
 #
 # Sin `pulumi up` en ningun paso: el `Secret` se actualiza con `kubectl patch`, no
 # recreando el objeto que Pulumi cree gestionar en solitario — el siguiente `pulumi up`

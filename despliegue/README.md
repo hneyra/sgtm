@@ -150,14 +150,19 @@ aserción precisa, porque dice *hasta dónde* llegó la petición:
 | con algo que no es un token | `401 NO_AUTENTICADO` |
 | con un token de otro emisor | `401 NO_AUTENTICADO` |
 | con token del realm, **sin** el claim | `403 SIN_MUNICIPALIDAD` |
-| con token del realm y **con** el claim | `403 SIN_PRIVILEGIO` |
+| el administrador, en toda la municipalidad | `200` (seguridad **y** catastro) |
+| con el claim, pero sin fila de usuario | `403 SIN_PRIVILEGIO` |
 
-El último peldaño es el que importa: `SIN_PRIVILEGIO` significa que el token se
-validó, que el claim se leyó y que la petición llegó hasta el guardia de acceso.
+Los dos últimos peldaños son los que importan, y hay que leerlos juntos: el `200`
+cierra el camino entero —Keycloak emite, el backend valida, el claim se lee, la
+municipalidad está implantada y con sus permisos sembrados (el servicio
+`implantacion` del compose corre antes que la aplicación), el usuario de la base
+está enlazado por su cuenta— y llega a **todo** el catálogo, porque el
+administrador inicial administra la municipalidad entera (#275); y
+`SIN_PRIVILEGIO` —una cuenta con el claim pero sin permisos— dice que esos
+permisos son una barrera y no un sello.
 
-**Y ahí se detiene, a propósito.** La escalera verifica hasta dónde llega la
-petición, no qué ve al llegar: todavía no hay municipalidad ni permisos sembrados
-(#120). Lo que sí llega hasta el final es
+A las filas mismas llega, por su lado,
 [`CadenaDeIdentidadTest`](../backend/sgtm-plataforma/src/test/java/pe/gob/sgtm/plataforma/identidad/CadenaDeIdentidadTest.java),
 en `./gradlew build`: token firmado → cadena → claim → `SET LOCAL` → **las filas
 que RLS deja ver**, contra PostgreSQL y como `sgtm_app`. Las dos hacen falta —una

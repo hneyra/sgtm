@@ -10,7 +10,7 @@ import { COMPOSICION_DE_TRANSITO } from './transito/composicion';
 /**
  * Lo que una opcion compone **alrededor** de los diez bloques comunes.
  *
- * Es la misma idea que ya sostienen `avisos.ts` y `escrituras.ts`: un registro
+ * Es la misma idea que ya sostienen `prosa.ts` y `escrituras.ts`: un registro
  * por opcion que el renderizador consulta, y **negacion por omision** —una
  * opcion que no esta aqui se dibuja exactamente como se dibujaba—. Lo que este
  * archivo evita es lo contrario: un `if (estructura.id === 'ficha_urbana')`

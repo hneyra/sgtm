@@ -112,7 +112,7 @@ una tabla vacía no hay ninguna. `VALIDATE CONSTRAINT` después chocaría con lo
 | `V7__privilegios.sql` | `GRANT` solo sobre tablas padre; sin `DELETE`; sin `UPDATE` en lo inmutable |
 | `V8__respaldo.sql` | Registro de respaldos |
 | `V9__conjuntos_sellados.sql` | Conjuntos de parámetros por ejercicio, con su sellado |
-| `V10__varias_versiones_selladas.sql` | Varias versiones selladas del mismo ejercicio (ARQ-09 §3) |
+| `V10__varias_versiones_selladas.sql` | Varias versiones selladas del mismo ejercicio (ARQ-09 §3, `../srtm`) |
 | `V11__busqueda_por_aproximacion.sql` | `nombre_normalizado(…)` inmutable e índice GIN de trigramas |
 | `V12__responsables_solidarios.sql` | Quién responde por la deuda además del contribuyente |
 | `V13__fichas_economica_bienes_y_rural.sql` | Detalle de los otros tres tipos de ficha |
@@ -120,11 +120,40 @@ una tabla vacía no hay ninguna. `VALIDATE CONSTRAINT` después chocaría con lo
 | `V15__documentos_emitidos.sql` | Documentos emitidos con los datos que los generaron, para reimprimirlos idénticos |
 | `V16__instalacion_de_demostracion.sql` | `municipalidad.es_demostracion`: todo documento que emita el tenant sale marcado |
 | `V17__placa_normalizada_y_valores_por_conjunto.sql` | La placa es única sin su guion, y el valor referencial cuelga del conjunto sellado (ver §0, hallazgo 4) |
+| `V18__tablas_de_valuacion_por_conjunto.sql` | `arancel`, `valor_unitario_edificacion` y `depreciacion` cuelgan de un conjunto de parámetros sellado (#17) |
+| `V19__declaracion_jurada_ficha_y_rectificatoria.sql` | La DJ enlaza la versión de ficha vigente a su presentación, y la rectificatoria es autorreferencia (#28) |
+| `V20__determinacion_detalle_por_predio.sql` | Detalle de la determinación por predio, y el predial nunca por un solo predio (NEG-05 §1, #30) |
+| `V21__lectura_de_flyway_schema_history.sql` | `sgtm_app` puede leer `flyway_schema_history`: el Job de implantación espera a la migración consultándola (#158) |
+| `V22__catalogo_de_infracciones_vigente.sql` | Una sola versión vigente por código de infracción (#43) |
+| `V23__determinacion_de_arbitrios.sql` | Determinación de arbitrios por predio, servicio y cuota, cada servicio con su propia tasa (#31) |
+| `V24__acta_de_fiscalizacion_ficha_y_vehiculo.sql` | El acta guarda de qué versión de ficha partió la visita, y la FK a `vehiculo` que faltaba (#45) |
+| `V25__arancel_sin_tramo_es_unico.sql` | Un arancel sin tramo también es único por vía y conjunto: en el UNIQUE de `V18`, `NULL` no es igual a `NULL` |
 | `V26__valores_correlativo.sql` | Numeración correlativa de OP/RD/RM, por municipalidad, tipo y ejercicio (#37) |
 | `V27__valores_masivo.sql` | Criterio e items de una corrida de generación masiva de valores (#38) |
 | `V28__notificacion_prescripcion_y_pase_a_coactiva.sql` | Acuse de notificación, pase a coactiva (`valor_movimiento`) y declaración de prescripción con su cómputo por ejercicio y sus hechos interruptivos/suspensivos (#39). Le revoca el `UPDATE` que `V7` le daba a `notificacion` |
+| `V29__caja_recibo_y_abono.sql` | El punto donde entra el dinero: la serie es de la caja, el recibo no se edita —`REVOKE UPDATE`— y el cobro es idempotente (#33) |
+| `V30__recibo_movimiento.sql` | Lo que le pasa a un recibo después de emitirse —duplicado y anulación como movimientos—; las columnas de estado de `V3` se retiran (#34) |
+| `V31__convenio_de_fraccionamiento.sql` | El convenio de fraccionamiento de punta a punta: no se edita, su estado se deriva y exige el recibo al formalizar (#35) |
+| `V32__cierre_de_turno.sql` | El cierre del turno y cómo se deja sin efecto —una reversión que reabre—; las columnas de cierre de `V3` se retiran (#36) |
+| `V33__expediente_coactivo.sql` | El expediente coactivo: la carpeta que agrupa lo exigible, con su numeración, sus valores importados y su historial (#40) |
+| `V34__actos_y_notificaciones_coactivas.sql` | Los actos del procedimiento (REC-1, REC-2) y sus notificaciones; `notificacion` sirve tal cual, con `objeto = 'ACTO_COACTIVO'` (#41) |
+| `V35__costas_procesales.sql` | Las costas del procedimiento coactivo, liquidadas acto por acto según el arancel aprobado (#42) |
 | `V37__licencia_de_funcionamiento.sql` | La licencia de funcionamiento (#44): retira de `licencia_funcionamiento` las columnas de estado que decían `VIGENTE` para siempre y el `resolucion` de texto libre; exige el recibo y el documento emitido; agrega `licencia_movimiento` —de donde se deriva el estado— y `licencia_correlativo`; le pone al catálogo `ciiu` su sección, su riesgo de ITSE y su traza; y revoca el `UPDATE` sobre la licencia y sus duplicados |
+| `V39__liquidacion_de_fiscalizacion.sql` | La liquidación de fiscalización, su reliquidación —que referencia a la anterior— y su historial (#49) |
+| `V41__descargos_internamiento_y_resoluciones.sql` | Descargos, internamiento vehicular y resoluciones de gerencia —ordinaria primero, sancionadora después— (#50) |
+| `V43__licencia_de_edificacion.sql` | La licencia de edificación: el FUE completo, por partes; **retira** `valor_obra`, que con una celda ausente habría valido cero (#48) |
+| `V45__anuncios_y_propaganda.sql` | Anuncios y propaganda, con la deuda por la tasa generada al autorizar; retira lo que mentiría, como `V30`–`V37` (#51) |
 | `V47__valores_masivos_de_papeletas_y_constancias.sql` | Los valores masivos de papeletas y los reportes de sanciones (#53): `papeleta_masivo` —el criterio congelado de una corrida, con la `fecha_criterio` a la que se evalúa la deuda de cada candidato— y `papeleta_masivo_item`, con `papeleta_valor_unico_uq`, el índice único **parcial** que garantiza un valor por papeleta en toda la vida del padrón; `constancia_libre`, con la fecha a la que se verificó que el vehículo no debía nada; y los índices de los padrones y resúmenes, incluido `papeleta_placa_prefijo_ix` con `text_pattern_ops`, porque el resumen por iniciales busca por rango y no con `LIKE`. **No hay ninguna tabla de correlativos**: el número de cada resolución de multa sale de `valor_correlativo` (`V26`) |
+| `V49__transferencia_a_rentas.sql` | La transferencia a rentas y su resolución de determinación: la frontera delicada de ARQ-01 §3.5 hecha esquema (#52) |
+| `V51__certificados_y_padrones.sql` | Certificados de numeración y zonificación —acto administrativo nuevo, con numeración y vigencia propias— y lo que los padrones de licencias necesitan del motor (#54) |
+| `V53__indice_de_construccion_por_ficha.sql` | El índice por ficha que le faltaba a `construccion`: sin él, «las construcciones de esta ficha» es un `Seq Scan` (#313) |
+| `V54__declaracion_jurada_correlativo_y_actos.sql` | La declaración jurada como acto: numeración con correlativo propio, unicidad de la rectificatoria y qué columnas puede tocar la aplicación (#365, ADR-0015 §3) |
+| `V55__tablas_de_valuacion_nacionales.sql` | Las tres tablas de valuación pasan a NACIONALES: `municipalidad_id` nulo, se cargan una vez para todas (D-13, ADR-0017, #188) |
+| `V56__determinacion_detalle_valuo_exonerado.sql` | El detalle por predio dice también qué parte del autovalúo **no** está afecta, para que la ponderación se reconstruya (#395) |
+
+La numeración salta —no hay `V36`, `V38`, `V40`, `V42`, `V44`, `V46`, `V48`, `V50` ni `V52`— y no
+es un error: hoy, con `V56`, hay **47** migraciones, y la lista viva es el propio directorio
+`backend/sgtm-esquema/src/main/resources/db/migration/`.
 
 Los roles se crean **antes**, con `db/roles/crear-roles.sql`, que no es una migración: las
 políticas de `V6` los nombran, y un rol no puede crearse a sí mismo.
@@ -152,9 +181,9 @@ clasificar:
 
 | Clase | Cuáles | RLS |
 |---|---|---|
-| **De tenant** | Todas las de negocio (63): llevan `municipalidad_id NOT NULL` | Política con `USING` y `WITH CHECK` |
-| **De catálogo** | `municipalidad`, `parametro_tributario` | Política propia, enumerada en el código de la prueba |
-| **Exenta** | `flyway_schema_history` | Sin RLS; solo la usa `sgtm_owner` |
+| **De tenant** | Todas las de negocio (hoy, con `V56`: 113): llevan `municipalidad_id NOT NULL` | Política con `USING` y `WITH CHECK` |
+| **De catálogo** | Seis: `municipalidad`, `parametro_tributario`, `respaldo` (`V8`) y las tres de valuación nacionales de `V55` —`valor_unitario_edificacion`, `depreciacion`, `valor_referencial_vehiculo`—. La lista normativa es `TABLAS_DE_CATALOGO`, en el código de la prueba de aislamiento | Política propia, enumerada en el código de la prueba |
+| **Exenta** | `flyway_schema_history` | Sin RLS; desde `V21`, `sgtm_app` puede leerla |
 
 ## 4. Las piezas centrales
 
@@ -261,8 +290,9 @@ completa se deshace (ADR-0008). Está particionada por ejercicio y la aplicació
 
 ## 5. Particionado
 
-Tres tablas, por lista sobre `ejercicio`: `determinacion`, `cuenta_corriente_asiento` y
-`auditoria`. Hoy con particiones 2026 y 2027.
+Cinco tablas, por lista sobre `ejercicio`: `determinacion` y `cuenta_corriente_asiento` (`V2`),
+`auditoria` (`V5`), `determinacion_predio_detalle` (`V20`) y `determinacion_arbitrio` (`V23`).
+Hoy con particiones 2026 y 2027.
 
 **Al crear una partición nueva:**
 

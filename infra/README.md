@@ -34,7 +34,7 @@ etiqueta que se cuela en el estado— se detecta en la máquina de quien lo escr
 | `config.ts` | **Toda** la configuración: se lee, se le ponen valores por omisión y se valida |
 | `config.test.ts` | Un caso que viola cada invariante |
 | `index.ts` | La composición. Una sola, para los dos ambientes |
-| `componentes/` | Los cinco componentes de la fase B más el respaldo y la observabilidad de la fase C, como **funciones puras** que devuelven manifiestos |
+| `componentes/` | Los ocho componentes —los cinco de la fase B más el respaldo, la observabilidad y la red de la fase C—, como **funciones puras** que devuelven manifiestos |
 | `auditoria.ts` | Las convenciones de `INF-01` §4 sobre esos manifiestos. Corre en `yarn verificar` **y** en `pulumi up` |
 | `herramientas/` | `yarn manifiestos` y `yarn secretos`: lo que se desplegaría y el inventario de claves, en JSON, sin Pulumi |
 | `secretos/` | Generar lo que falte y rotar lo que ya existe (`INF-06`, issue #154) — nunca `pulumi up` |
@@ -251,13 +251,16 @@ volver a aplicar la misma no hace nada: el migrador es idempotente.
 
 ## Cómo llegar a un VPS real
 
-`.github/workflows/infra.yml` tiene los trabajos de `ADR-0011` §6 —`verificar`, `motor`,
-`manifiestos`, `secretos`, `previsualizar-stg`, `previsualizar-prod`, `aplicar-stg`,
-`aplicar-prod` y la detección de deriva diaria—, con el túnel SSH de `INF-01` §1.4 en los
-que hablan con un clúster. Los primeros corren siempre y no necesitan VPS. **Los que
-hablan con un clúster no pueden correr todavía**, porque los VPS no existen: esos
-trabajos se **omiten con un aviso** en el resumen, no con un rojo, mientras falte
-cualquiera de sus credenciales. Esto es lo que falta, en orden:
+`.github/workflows/infra.yml` tiene los trabajos de `ADR-0011` §6 y los que se le
+sumaron después —`verificar`, `motor`, `raiz-sellada`, `simulacro`, `manifiestos`,
+`capacidad`, `secretos`, `observabilidad-alertas`, `observabilidad-tableros`, `red`,
+`previsualizar-stg`, `previsualizar-prod`, `aplicar-stg`, `aplicar-prod` y la detección
+de deriva diaria—, con el túnel SSH de `INF-01` §1.4 en los que hablan con un clúster.
+Los primeros corren siempre y no necesitan VPS. Los que hablan con un clúster se
+**omiten con un aviso** en el resumen, no con un rojo, mientras falte cualquiera de sus
+credenciales — así se llegó a los dos VPS que **hoy ya existen** con sus credenciales
+puestas (`INF-03` §4), y así se repite el camino el día que haya que montar
+otro. Esto es lo que hace falta, en orden:
 
 **stg y prod son DOS VPS distintos**, con IP y credenciales propias (`INF-03` §4: un
 secreto de stg comprometido no puede abrir prod) — no una simplificación de "por ahora
@@ -290,10 +293,12 @@ secretos de GitHub, e inyectados en caliente por CI (y a mano, localmente, antes
 `preview`/`up` propio; ver el comentario de cabecera de `Pulumi.stg.yaml`/
 `Pulumi.prod.yaml`).
 
-**Los dominios y los destinos de los stacks versionados son de ejemplo** —`example.pe`,
-`s3.example.net`— porque el proveedor del VPS y el del almacenamiento de objetos siguen
-sin decidirse ([`INF-01` §7](../docs/80-infraestructura/arquitectura-de-infraestructura.md)).
-Se reemplazan cuando se decidan; las invariantes ya valen igual.
+**Los dominios y los destinos de los stacks versionados ya son los reales**
+—`vmd120205.contaboserver.net` en `prod`, el nodo de `cloud.elastika.pe` en `stg`, y
+`https://s3.us-east-1.amazonaws.com` como destino del respaldo (AWS S3, decidido
+2026-08-24; [`INF-01` §7](../docs/80-infraestructura/arquitectura-de-infraestructura.md)).
+Lo único que sigue siendo de ejemplo es `acmeEmail` (`operaciones@example.pe`), que se
+reemplaza cuando haya buzón de operaciones; las invariantes valen igual.
 
 ### 3. Una clave SSH de despliegue POR VPS, y solo de despliegue
 
@@ -310,10 +315,10 @@ ssh-keygen -t ed25519 -f despliegue-sgtm-prod -C "github-actions@sgtm-prod" -N "
 #   command="echo 'solo tunel'",no-pty,no-X11-forwarding,no-agent-forwarding <clave-publica>
 ```
 
-### 4. Los secretos de GitHub Actions: uno de repositorio, tres por *environment*
+### 4. Los secretos de GitHub Actions: dos de repositorio, seis por *environment*
 
-`Settings → Secrets and variables → Actions`, en este repositorio. Solo el token es de
-repositorio —es el mismo para los dos ambientes—; todo lo demás va en un *environment*
+`Settings → Secrets and variables → Actions`, en este repositorio. Solo los dos tokens
+son de repositorio —los mismos para los dos ambientes—; todo lo demás va en un *environment*
 por VPS, para que `secrets.VPS_HOST` (y compañía) resuelva al nodo correcto en cada job:
 
 | Secreto | Alcance | Valor |
@@ -370,7 +375,6 @@ decisión de las personas del proyecto, no una que este repositorio pueda tomar.
 | La huella SSH del VPS fijada de antemano, en vez de confiada la primera vez | #157 |
 | Las tres imágenes, publicadas y etiquetadas por commit | [`.github/workflows/publicar-imagenes.yml`](../.github/workflows/publicar-imagenes.yml) |
 | El mecanismo de liberación y reversión —probado contra un clúster efímero de CI, sin `pulumi up`— | El mismo flujo, job `demostrar-liberacion-y-reversion` |
-| El archivado continuo de WAL y el PITR: el `Deployment` de PostgreSQL **no los trae** | #155 |
 | El cortafuegos del VPS, que no es un objeto de Kubernetes | #157, y `vps/cortafuegos.sh` |
 | De dónde salen los secretos de la aplicación | #154 |
 | Los runbooks de operación — escritos; el de reconstrucción, sin ensayar contra un VPS real | [`docs/B0-operacion/runbooks/`](../docs/B0-operacion/runbooks/), issue #158 |
