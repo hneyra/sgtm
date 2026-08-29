@@ -517,6 +517,46 @@ function corridaPredial(cuerpo: unknown): Readonly<Record<string, unknown>> {
   };
 }
 
+/**
+ * Calculo del impuesto vehicular (`CalculoVehicularResource`, #399).
+ *
+ * Las tres filas son las del prototipo —los tres ejercicios en que el vehiculo
+ * permanece afecto—, con su base, su alicuota y su impuesto tal como los
+ * escribe la figura del manual. **Contra el backend de verdad la tabla trae una
+ * fila**: `VehicularController` determina un ejercicio por peticion, y la
+ * proyeccion de los tres es algo que el prototipo dibuja y la operacion no
+ * hace. Aqui se sirven los tres porque la unica fuente de este archivo es la
+ * figura, y la forma —una fila por determinacion, con su `ejercicio`— es la
+ * misma.
+ *
+ * `minimoImponible` sale **vacio**: el prototipo no lo dibuja en ninguna parte
+ * y el proxy no inventa cifras. Es una llave del conjunto sellado
+ * (`VEHICULAR_MINIMO`), y quien la quiera la lee del backend.
+ */
+function calculoVehicular(cuerpo: unknown): Readonly<Record<string, unknown>> {
+  const simulacion = marcaDeSimulacion(cuerpo);
+  const filas = filasDe('vehicular_calculo');
+  // «1.0 %» del prototipo → «1.0», que es como viaja una alicuota (regla 8).
+  const [, , tasaS = ''] = filas[0] ?? [];
+  return {
+    fechaCalculo: `${EL_DIA_DEL_PROTOTIPO}T09:00:00Z`,
+    conjuntoId: 1,
+    conjunto: CONJUNTO_DEL_PROTOTIPO,
+    alicuota: tasaS.replace('%', '').trim(),
+    minimoImponible: '',
+    determinaciones: filas.map(([ejercicio, baseS, , impuestoS], i) => ({
+      id: simulacion ? 0 : i + 1,
+      ejercicio,
+      vehiculoId: 1,
+      placa: campoDelPrototipo('vehicular_calculo', 'placa'),
+      contribuyenteId: 1,
+      valorReferencial: comoImporte(baseS ?? '0.00'),
+      montoDeterminado: comoImporte(impuestoS ?? '0.00'),
+      simulacion,
+    })),
+  };
+}
+
 /** La marca con la que la peticion dice que solo quiere ver la cuenta. */
 const marcaDeSimulacion = (cuerpo: unknown): boolean =>
   typeof cuerpo === 'object' &&
@@ -2175,6 +2215,9 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/infracciones/administrativas/reportes/resumen-recaudacion': resumenRecaudacionAdministrativa,
   '/transito/papeletas/{numero}/actos': expedienteDeLaPapeleta,
   '/transito/reportes/resumen-por-codigo': resumenPorCodigoDeTransito,
+  '/transito/reportes/resumen-papeletas': resumenDePapeletasDeTransito,
+  '/transito/reportes/resumen-recaudacion': resumenRecaudacionDeTransito,
+  '/transito/papeletas/{numero}/hoja-informativa': hojaInformativaDePapeleta,
   '/transito/reportes/resumen-por-placa': resumenPorPlacaDeTransito,
 };
 
@@ -2728,7 +2771,7 @@ const codigosDeTransito = (): Paginado =>
       familia: 'TRANSITO',
       codigo,
       descripcion,
-      porcentajeUit: (Number((uit ?? '0 %').replace('%', '').trim()) / 100).toFixed(2),
+      porcentajeUit: porcentajeDeUit(uit ?? '0 %'),
       medida: medida && medida !== '—' ? medida : null,
       puntos: Number(puntos) || 0,
       baseLegal: 'Reglamento Nacional de Tránsito, D.S. N.° 016-2009-MTC',
@@ -2995,6 +3038,159 @@ function resumenPorPlacaDeTransito(): Readonly<Record<string, unknown>> {
   };
 }
 
+/**
+ * Resumen de papeletas pendientes y pagadas (`transito_resumen_papeletas`,
+ * `ResumenDePapeletasResource`, #53, #398).
+ *
+ * Agrupado por **año**, que es el agrupador por omisión del endpoint desde
+ * #398 y el único que llena la columna «Año» del catálogo. `ano` sale de la
+ * misma celda que `clave` porque eso es lo que hace `AgrupacionDelResumen.ANO`:
+ * la clave del grupo **es** el año.
+ *
+ * `cantidad` es pendientes más pagadas, que es lo que el prototipo publica;
+ * aquí no se inventa un total distinto del que dibujan sus columnas.
+ */
+function resumenDePapeletasDeTransito(): Readonly<Record<string, unknown>> {
+  const filas = filasDe('transito_resumen_papeletas');
+  const lineas = filas.map(
+    ([ano, pendientes, pendienteS, pagadas, pagadoS, enCoactiva, coactivaS]) => ({
+      clave: ano ?? '',
+      descripcion: null,
+      ano: Number(comoImporte(ano ?? '0')) || null,
+      cantidad: cuantas(pendientes) + cuantas(pagadas),
+      importe: masImporte(comoImporte(pendienteS ?? '0.00'), comoImporte(pagadoS ?? '0.00')),
+      pagadas: cuantas(pagadas),
+      importeDeLasPagadas: comoImporte(pagadoS ?? '0.00'),
+      pendientes: cuantas(pendientes),
+      importeDeLasPendientes: comoImporte(pendienteS ?? '0.00'),
+      enCoactiva: cuantas(enCoactiva),
+      importeEnCoactiva: comoImporte(coactivaS ?? '0.00'),
+      actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    }),
+  );
+  return {
+    agrupadoPor: 'ANO',
+    desde: '2026-01-01',
+    hasta: EL_DIA_DEL_PROTOTIPO,
+    papeletas: lineas.reduce((suma, linea) => suma + linea.cantidad, 0),
+    importeTotal: lineas.reduce((suma, linea) => masImporte(suma, linea.importe), '0.00'),
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    lineas,
+  };
+}
+
+/** `1,184` del prototipo → 1184. Un recuento, no un importe: sin decimales. */
+const cuantas = (texto = ''): number => Number(comoImporte(texto)) || 0;
+
+/**
+ * Resumen de recaudación por papeletas de tránsito
+ * (`transito_resumen_recaudacion`, `RecaudacionDeMultasResource`, #53, #398).
+ *
+ * Dos listas, y las dos vienen del backend: `lineas` es lo que devuelve el
+ * libro —una por (tributo, ejercicio, mes, fase)— y `porMes` es el pivote con
+ * **su total ya sumado en el servidor**, que es lo que la columna «Total S/»
+ * dibuja sin recomponer nada (RNF-083, #398).
+ *
+ * El total de cada mes se toma de la columna «Total S/» del prototipo, tal
+ * cual: aquí no se suma nada que el prototipo no publique ya.
+ */
+function resumenRecaudacionDeTransito(): Readonly<Record<string, unknown>> {
+  const filas = filasDe('transito_resumen_recaudacion');
+  const fasesDe = (
+    ordinariaS?: string,
+    coactivaS?: string,
+    conveniosS?: string,
+  ): readonly (readonly [string, string])[] => [
+    ['ORDINARIA', comoImporte(ordinariaS ?? '0.00')],
+    ['COACTIVA', comoImporte(coactivaS ?? '0.00')],
+    ['CONVENIO', comoImporte(conveniosS ?? '0.00')],
+  ];
+
+  const lineas = filas.flatMap(([mes, ordinariaS, coactivaS, conveniosS]) =>
+    fasesDe(ordinariaS, coactivaS, conveniosS).map(([fase, recaudado]) => ({
+      tributo: 'MULTA_TRANSITO',
+      ejercicio: 2026,
+      mes: mesDelPrototipo(mes),
+      fase,
+      abonos: 1,
+      recaudado,
+      actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    })),
+  );
+
+  const porMes = filas.map(([mes, ordinariaS, coactivaS, conveniosS, , totalS]) => ({
+    mes: mesDelPrototipo(mes),
+    porFase: fasesDe(ordinariaS, coactivaS, conveniosS).map(([fase, recaudado]) => ({
+      fase,
+      recaudado,
+      abonos: 1,
+      actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    })),
+    total: comoImporte(totalS ?? '0.00'),
+    abonos: 3,
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+  }));
+
+  return {
+    desde: '2026-01-01',
+    hasta: '2026-12-31',
+    total: porMes.reduce((suma, mes) => masImporte(suma, mes.total), '0.00'),
+    abonos: porMes.reduce((suma, mes) => suma + mes.abonos, 0),
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    lineas,
+    porMes,
+  };
+}
+
+/**
+ * Hoja informativa de una papeleta (`transito_papeleta_reporte`,
+ * `HojaInformativaResource`, #396).
+ *
+ * Un recurso suelto —es **una** papeleta, no un listado—, compuesto con lo que
+ * el prototipo ya dibuja en su hoja: la cabecera (`meta`) y las cinco filas de
+ * su tabla. Los importes se leen de la tercera columna de esas filas, que es
+ * donde el prototipo los pone; aquí no se calcula ninguno.
+ *
+ * `actualizadoA` es la fecha de la infracción y `emitidaEl` la de hoy: son
+ * cosas distintas y el recurso las publica por separado (regla 9).
+ */
+function hojaInformativaDePapeleta(): Readonly<Record<string, unknown>> {
+  const reporte = RESPUESTAS['transito_papeleta_reporte']?.reporte;
+  const meta = new Map((reporte?.meta ?? []).map((dato) => [dato.k, dato.v]));
+  const filas = reporte?.filas ?? [];
+  const importeDe = (indice: number): string => comoImporte(filas[indice]?.[2] ?? '0.00');
+
+  const [fecha = '', hora = ''] = (meta.get('Fecha y hora') ?? '').split('—').map((p) => p.trim());
+  const [dia = '01', mes = '01', anio = '2026'] = fecha.split('/');
+  const [codigo = '', descripcion = ''] = (filas[0]?.[1] ?? '').split('—').map((p) => p.trim());
+
+  return {
+    numero: meta.get('Nº de papeleta') ?? reporte?.code ?? '',
+    fechaInfraccion: `${anio}-${mes}-${dia}`,
+    horaInfraccion: hora === '' ? null : `${hora}:00`,
+    lugar: meta.get('Lugar') ?? '',
+    placa: meta.get('Placa') ?? null,
+    licenciaConducir: meta.get('Licencia') ?? null,
+    codigoInfraccion: codigo === '' ? null : codigo,
+    descripcionInfraccion: descripcion === '' ? null : descripcion,
+    // `HojaInformativaResource` publica el codigo del contribuyente obligado, y
+    // el prototipo dibuja su nombre: no se inventa un codigo que no tiene.
+    obligadoCodigo: null,
+    obligadoNombre: meta.get('Conductor') ?? null,
+    obligadoDocumento: null,
+    obligadoDomicilio: null,
+    estado: 'IMPUESTA',
+    baseImponible: importeDe(1),
+    porcentajeInfraccion: (filas[2]?.[1] ?? '').replace(/[^\d.]/g, ''),
+    importeInfraccion: importeDe(2),
+    porcentajeACobrar: (filas[3]?.[1] ?? '').replace(/[^\d.]/g, ''),
+    importeAPagar: importeDe(3),
+    importeConBeneficio: importeDe(4),
+    actualizadoA: `${anio}-${mes}-${dia}`,
+    emitidaEl: EL_DIA_DEL_PROTOTIPO,
+  };
+}
+
 /** `5,350.00` con el separador de miles del prototipo → `5350.00`, como lo serializa el backend. */
 const importeDelMock = comoImporte;
 
@@ -3002,13 +3198,79 @@ const importeDelMock = comoImporte;
 const LUGAR_DE_LA_INSPECCION = 'INSPECCIÓN MUNICIPAL';
 
 /**
+ * Como escribe el prototipo la fase del procedimiento sancionador (columna
+ * «Estado» de `infracciones_adm`) frente al `enum FaseDelProcedimiento` que
+ * `ProcedimientoSancionadorResource.fase` publica de verdad (#397).
+ *
+ * Son **las cinco palabras del manual**, que el prototipo dibuja capitalizadas
+ * y el recurso publica en mayusculas: no hay traduccion de vocabulario aqui
+ * —eso es lo que distingue esta tabla de `ESTADO_DE_DEUDA_ADMINISTRATIVA_DEL_MOCK`,
+ * que si traduce del idioma de cobranza del prototipo al `enum EstadoDePapeleta`—.
+ */
+const FASE_DEL_PROCEDIMIENTO_DEL_MOCK: Readonly<Record<string, string>> = {
+  Preventiva: 'PREVENTIVA',
+  Constatada: 'CONSTATADA',
+  Sancionada: 'SANCIONADA',
+  Pagada: 'PAGADA',
+  Coactiva: 'COACTIVA',
+};
+
+/**
+ * Lo que la fase implica sobre el estado de la DEUDA, que es el otro
+ * vocabulario (#397).
+ *
+ * No se inventa: `FaseDelProcedimiento` deriva `PAGADA` y `COACTIVA` **de**
+ * `papeleta.estado`, asi que una fila cuya fase es una de esas dos solo puede
+ * tener ese estado de deuda. Las tres de la cabeza —preventiva, constatada,
+ * sancionada— no dicen nada de la deuda mas alla de que no esta pagada ni en
+ * coactiva ni anulada, y `IMPUESTA` es el estado con el que nace toda papeleta
+ * (`Papeleta.nuevaAdministrativa`).
+ */
+const ESTADO_DE_DEUDA_SEGUN_LA_FASE: Readonly<Record<string, string>> = {
+  PAGADA: 'PAGADA',
+  COACTIVA: 'COACTIVA',
+};
+
+/**
+ * Procedimientos sancionadores (`ProcedimientoSancionadorResource`, #397): `GET
+ * /infracciones/actas`.
+ *
+ * **Las ocho columnas del prototipo se llenan las ocho**, y no es casualidad:
+ * es el motivo por el que #397 le dio a esta opcion su propio recurso en vez de
+ * seguir sirviendo `PapeletaResource` —que no publica ni el nombre del
+ * administrado, ni el codigo del CUIS, ni su descripcion, ni la medida
+ * complementaria—.
+ *
+ * `faseAlDia` es el dia del prototipo y no «hoy»: el proxy no tiene reloj de
+ * negocio, y una fecha movil aqui haria que la misma fila dijera otra cosa en
+ * cada corrida de las pruebas.
+ */
+const procedimientosSancionadores = (): Paginado =>
+  unaPagina(
+    filasDe('infracciones_adm').map(
+      ([acta, administrado, cuis, infraccion, uit, multa, medida, estado], i) => {
+        const fase = FASE_DEL_PROCEDIMIENTO_DEL_MOCK[estado ?? ''] ?? null;
+        return {
+          id: i + 1,
+          numeroActa: acta,
+          administrado,
+          codigoCuis: cuis,
+          descripcionInfraccion: infraccion,
+          porcentajeInfraccion: porcentajeDeUit(uit ?? '0'),
+          importeAPagar: importeDelMock(multa ?? '0.00'),
+          actualizadoA: EL_DIA_DEL_PROTOTIPO,
+          medidaComplementaria: medida && medida !== '—' ? medida : null,
+          fase,
+          faseAlDia: EL_DIA_DEL_PROTOTIPO,
+          estadoDeLaDeuda: ESTADO_DE_DEUDA_SEGUN_LA_FASE[fase ?? ''] ?? 'IMPUESTA',
+        };
+      },
+    ),
+  );
+
+/**
  * Papeletas administrativas por contribuyente (`PapeletaResource`, misma
  * familia, #47, #78): `GET .../reportes/por-contribuyente`.
- *
- * `infracciones_adm` (`GET /infracciones/actas`, el mismo `PapeletaResource`) se queda sin
- * conectar por este issue —ver `pantallas/sanciones/index.ts`—, así que no tiene su propia
- * función aquí: nada la registra en `PAGINADOS`, y la ruta sigue respondiendo el juego de datos
- * del prototipo tal cual, como el resto del camino común.
  *
  * `fechaInfraccion` se compone del año y el mes que dibuja el prototipo —no
  * publica el dia— con el primero del mes: es una composicion de presentacion
@@ -3058,6 +3320,21 @@ const ESTADO_DE_DEUDA_ADMINISTRATIVA_DEL_MOCK: Readonly<Record<string, string>> 
 };
 
 /** `Enero`..`Diciembre`, como los escribe el prototipo → el numero de mes de dos cifras. */
+/**
+ * El mes de una etiqueta del prototipo, de 1 a 12; 0 si no se reconoce.
+ *
+ * Se mira **la primera palabra**: el prototipo escribe «Agosto (al 13)» para el
+ * mes en curso, y buscar la etiqueta entera en el diccionario no la encuentra.
+ * El `?? '1'` que esta funcion sustituye la mandaba a **enero** —una segunda
+ * fila de enero con las cifras de agosto, indistinguible de la buena—, que es
+ * exactamente la clase de dato que este proxy no publica.
+ *
+ * El 0 no es un mes valido y ninguna fila del prototipo llega a el; si alguna
+ * llegara, la celda saldria vacia en vez de decir «Enero».
+ */
+const mesDelPrototipo = (etiqueta = ''): number =>
+  Number(MES_DEL_PROTOTIPO[etiqueta.trim().split(/\s+/)[0] ?? ''] ?? '0');
+
 const MES_DEL_PROTOTIPO: Readonly<Record<string, string>> = {
   Enero: '01',
   Febrero: '02',
@@ -3074,10 +3351,19 @@ const MES_DEL_PROTOTIPO: Readonly<Record<string, string>> = {
   Diciembre: '12',
 };
 
-/** `50 %` o `10` → `0.50`/`0.10`, como serializa `porcentajeUit` (`BigDecimal.toPlainString()`). */
-function fraccionDeUit(texto: string): string {
+/**
+ * `50 %` o `50` → `50.00`, como serializa `porcentajeUit` (`Alicuota`, `BigDecimal.toPlainString()`).
+ *
+ * **En tanto por ciento, no en tanto por uno** (#397). `Alicuota` lo dice en su
+ * javadoc —«a partir de su representacion decimal en texto, en tanto por
+ * ciento»— y su rango es 0..100; el `50 %` del prototipo es `50.0000` en
+ * `codigo_infraccion.porcentaje_uit`, no `0.50`. Hasta #397 esta funcion dividia
+ * entre cien y publicaba `0.50`, que es una cifra plausible y equivocada: la
+ * misma columna, leida como alicuota, dice medio por ciento.
+ */
+function porcentajeDeUit(texto: string): string {
   const numero = Number(texto.replace('%', '').trim());
-  return Number.isFinite(numero) ? (numero / 100).toFixed(2) : '0.00';
+  return Number.isFinite(numero) ? numero.toFixed(2) : '0.00';
 }
 
 /**
@@ -3098,7 +3384,7 @@ const codigosCuis = (): Paginado =>
       familia: 'ADMINISTRATIVA',
       codigo,
       descripcion,
-      porcentajeUit: fraccionDeUit(uit ?? '0'),
+      porcentajeUit: porcentajeDeUit(uit ?? '0'),
       medida: medida && medida !== '—' ? medida : null,
       puntos: null,
       baseLegal: 'Ordenanza que aprueba el CUIS vigente',
@@ -3128,7 +3414,7 @@ const codigosDeReporteAdministrativo = (): Paginado =>
       familia: 'ADMINISTRATIVA',
       codigo,
       descripcion: infraccion,
-      porcentajeUit: fraccionDeUit(uit ?? '0'),
+      porcentajeUit: porcentajeDeUit(uit ?? '0'),
       medida: medida && medida !== '—' ? medida : null,
       puntos: null,
       baseLegal: base && base !== '' ? base : 'Ordenanza que aprueba el CUIS vigente',
@@ -3234,7 +3520,7 @@ function resumenRecaudacionAdministrativa(): Readonly<Record<string, unknown>> {
     ).map(([fase, recaudadoS]) => ({
       tributo: 'MULTA_ADMINISTRATIVA',
       ejercicio: 2026,
-      mes: Number(MES_DEL_PROTOTIPO[mes ?? ''] ?? '1'),
+      mes: mesDelPrototipo(mes),
       fase,
       abonos: 1,
       recaudado: importeDelMock(recaudadoS ?? '0.00'),
@@ -3317,6 +3603,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/transito/reportes/padron-constancias': padronDeConstancias,
   '/transito/reportes/record-conductor': recordDeConductor,
   '/transito/reportes/record-vehicular': recordVehicular,
+  '/infracciones/actas': procedimientosSancionadores,
   '/infracciones/administrativas/estado-cuenta': adminEstadoCuenta,
   '/infracciones/cuis': codigosCuis,
   '/infracciones/administrativas/codigos/reporte': codigosDeReporteAdministrativo,
@@ -3434,6 +3721,9 @@ const ESCRITURAS: Readonly<Record<string, (cuerpo: unknown) => Readonly<Record<s
        defecto de #363, la tabla vacia en silencio. */
     'POST /rentas/predial/calculo-individual': determinacionPredial,
     'POST /rentas/predial/calculo-masivo': corridaPredial,
+    /* Y la tercera determinacion, la que llego cuando el contrato y el
+       controlador se pusieron de acuerdo (#399). */
+    'POST /rentas/vehicular/calculo': calculoVehicular,
   };
 
 /** La respuesta de una escritura de seguridad, si el proxy la publica con la forma del backend. */

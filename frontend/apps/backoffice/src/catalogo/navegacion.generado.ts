@@ -4,8 +4,9 @@
  *
  * Los 12 modulos del manual y sus 134 opciones, con el bloque de cada una ya
  * clasificado en el build: grupos por tarea donde el modulo esta disenado
- * (ADR-0014 §4) y los bloques de FRO-03 §4 en los demas. `centroDeReportes`
- * nombra el bloque que el modulo pliega en su centro de reportes (ADR-0014 §5).
+ * (ADR-0014 §4) y los bloques de FRO-03 §4 en los demas. `bloquesPlegados`
+ * nombra los que el menu ensena como una entrada unica, y `centroDeReportes`
+ * el unico de ellos que ademas lleva carril (ADR-0014 §5).
  *
  * Los nombres vienen del manual y no se reescriben (RNF-080).
  */
@@ -52,18 +53,20 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M15 6.6v13.2"
     ],
     "bloques": [
-      "Fichas del predio",
+      "Predio",
       "Territorio",
-      "Tablas de valuación",
-      "Consultas",
-      "Documentos"
+      "Valuación"
+    ],
+    "bloquesPlegados": [
+      "Territorio",
+      "Valuación"
     ],
     "opciones": [
       {
         "id": "ficha_urbana",
         "label": "Ficha urbana individual",
         "ranura": "ficha-urbana",
-        "bloque": "Fichas del predio",
+        "bloque": "Predio",
         "title": "Ficha catastral urbana individual",
         "resumen": "Ficha del predio urbano. El código de referencia catastral se compone de sector, manzana, lote, edificación, entrada, piso y unidad; su cambio obliga a recalcular el autovalúo."
       },
@@ -71,7 +74,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ficha_economica",
         "label": "Ficha económica",
         "ranura": "ficha-economica",
-        "bloque": "Fichas del predio",
+        "bloque": "Predio",
         "title": "Ficha catastral económica",
         "resumen": "Actividad económica que se desarrolla en la unidad catastral, usada para verificar licencias y determinar el uso real del predio."
       },
@@ -79,7 +82,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ficha_bienes",
         "label": "Bienes comunes",
         "ranura": "ficha-bienes",
-        "bloque": "Fichas del predio",
+        "bloque": "Predio",
         "title": "Ficha de bienes comunes",
         "resumen": "Áreas comunes de una edificación en régimen de propiedad exclusiva y común, cuyo valor se distribuye entre las unidades según su porcentaje de participación."
       },
@@ -87,7 +90,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ficha_rural",
         "label": "Ficha rural",
         "ranura": "ficha-rural",
-        "bloque": "Fichas del predio",
+        "bloque": "Predio",
         "title": "Ficha catastral rural",
         "resumen": "Predio rústico valorizado por hectárea según el arancel rural, el tipo de tierra y la disponibilidad de riego."
       },
@@ -95,7 +98,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "consulta_fichas",
         "label": "Consulta de fichas",
         "ranura": "consulta-fichas",
-        "bloque": "Consultas",
+        "bloque": "Predio",
         "title": "Consulta de fichas catastrales",
         "resumen": "Búsqueda transversal de fichas por código, titular o ubicación, con el estado de conciliación entre catastro y el padrón de rentas."
       },
@@ -103,7 +106,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "actualizacion_catastro",
         "label": "Actualización del catastro",
         "ranura": "actualizacion-catastro",
-        "bloque": "Fichas del predio",
+        "bloque": "Predio",
         "title": "Actualización del catastro",
         "resumen": "Actualiza construcciones y otras instalaciones de una ficha ya registrada. El sistema conserva cada versión declarada y verificada por piso, con su MEP, ECS, ECC y estado de conservación."
       },
@@ -111,7 +114,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ficha_contribuyente_reporte",
         "label": "Reporte de ficha del contribuyente",
         "ranura": "ficha-contribuyente-reporte",
-        "bloque": "Documentos",
+        "bloque": "Predio",
         "title": "Reporte de ficha del contribuyente",
         "resumen": "Ficha impresa del contribuyente: identificación, domicilio fiscal, documentos, contactos y unidades afectas."
       },
@@ -135,7 +138,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "aranceles",
         "label": "Aranceles",
         "ranura": "aranceles",
-        "bloque": "Tablas de valuación",
+        "bloque": "Valuación",
         "title": "Aranceles de terreno",
         "resumen": "Valor oficial del metro cuadrado de terreno por vía y tramo, publicado anualmente. Es el multiplicador del área de terreno en el autovalúo."
       },
@@ -143,7 +146,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "valores_unitarios",
         "label": "Valores unitarios",
         "ranura": "valores-unitarios",
-        "bloque": "Tablas de valuación",
+        "bloque": "Valuación",
         "title": "Valores unitarios de edificación",
         "resumen": "Tabla oficial por categoría constructiva. El sistema suma las siete partidas declaradas en la ficha y les aplica la depreciación correspondiente."
       },
@@ -151,7 +154,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "depreciacion",
         "label": "Depreciación",
         "ranura": "depreciacion",
-        "bloque": "Tablas de valuación",
+        "bloque": "Valuación",
         "title": "Tabla de depreciación",
         "resumen": "Porcentaje que se descuenta del valor de edificación según antigüedad, material predominante (MEP) y estado de conservación (ECS)."
       }
@@ -392,6 +395,9 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "Catálogos",
       "Reportes"
     ],
+    "bloquesPlegados": [
+      "Reportes"
+    ],
     "centroDeReportes": "Reportes",
     "opciones": [
       {
@@ -593,6 +599,9 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "Notificaciones",
       "Cobranza",
       "Catálogos",
+      "Reportes"
+    ],
+    "bloquesPlegados": [
       "Reportes"
     ],
     "centroDeReportes": "Reportes",
@@ -1095,6 +1104,9 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
     "bloques": [
       "Licencias y autorizaciones",
       "Catálogos",
+      "Reportes"
+    ],
+    "bloquesPlegados": [
       "Reportes"
     ],
     "centroDeReportes": "Reportes",

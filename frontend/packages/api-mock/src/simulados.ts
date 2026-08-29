@@ -23,14 +23,17 @@ import type { DatosDeDeterminacion, DatosDePantalla } from '@sgtm/api-client';
  * El dia que esa operacion exista, la entrada se borra de aqui y la pantalla no
  * cambia una linea.
  *
- * **Y ese dia llego para dos de las cinco** (#395). `PredialController` publica
- * ya `POST /rentas/predial/calculo-individual` y `POST /rentas/predial/calculo-
- * masivo`, y las dos devuelven el conjunto con el que determinaron dentro de su
- * recurso —`DeterminacionPredialResource.conjunto`, `CorridaPredialResource
- * .conjunto`—, que es exactamente lo que este archivo inventaba para ellas. Sus
- * entradas se borraron: el proxy las contesta ahora por `recursos.ts`, con la
- * forma del backend, y la pantalla las lee de ahi. Quedan tres, y las tres
- * siguen esperando su controlador.
+ * **Y ese dia llego para tres de las cinco** (#395, #399). `PredialController`
+ * publica ya `POST /rentas/predial/calculo-individual` y `POST /rentas/predial/
+ * calculo-masivo`, y `VehicularController` publica `POST /rentas/vehicular/
+ * calculo` —que existia desde #32 y no se podia llamar hasta que el contrato y
+ * el controlador se pusieron de acuerdo sobre por donde viajan sus filtros—.
+ * Las tres devuelven el conjunto con el que determinaron dentro de su recurso
+ * —`DeterminacionPredialResource.conjunto`, `CorridaPredialResource.conjunto`,
+ * `CalculoVehicularResource.conjunto`—, que es exactamente lo que este archivo
+ * inventaba para ellas. Sus entradas se borraron: el proxy las contesta ahora
+ * por `recursos.ts`, con la forma del backend, y la pantalla las lee de ahi.
+ * Quedan dos, y las dos siguen esperando su controlador.
  */
 
 /**
@@ -45,22 +48,22 @@ import type { DatosDeDeterminacion, DatosDePantalla } from '@sgtm/api-client';
 const CONJUNTO_DEL_PROTOTIPO = '2026 v1';
 
 /**
- * Las pantallas que determinan **y todavia se inventan su conjunto**: tres de
- * las cinco, desde #395.
+ * Las pantallas que determinan **y todavia se inventan su conjunto**: dos de
+ * las cinco, desde #399.
  *
  * `sujeto` viene **ya redactado**, como lo redactara el servidor, y no como dos
- * piezas que la interfaz junte: el sujeto de una determinacion masiva no es un
- * nombre —es un alcance—, y el de un calculo vehicular es una placa. Un solo
- * campo de texto es lo unico que admite las tres formas sin obligar a la
- * pantalla a elegir cual esta viendo.
+ * piezas que la interfaz junte: el sujeto de una determinacion no siempre es un
+ * nombre —el de una masiva es un alcance, el de un calculo vehicular es una
+ * placa—. Un solo campo de texto es lo unico que admite las formas sin obligar
+ * a la pantalla a elegir cual esta viendo.
  *
  * Las sustituira la capa web de la determinacion (#333b): la operacion que
  * responda estas pantallas traera el conjunto con el que determino, porque es
- * el unico que lo sabe. Es lo que ya paso con las dos prediales (#395).
+ * el unico que lo sabe. Es lo que ya paso con las dos prediales (#395) y con el
+ * calculo vehicular (#399).
  */
 const DETERMINACIONES: Readonly<Record<string, DatosDeDeterminacion>> = {
   arbitrios: { conjunto: CONJUNTO_DEL_PROTOTIPO, sujeto: 'Predio 02-014-D-14-01' },
-  vehicular_calculo: { conjunto: CONJUNTO_DEL_PROTOTIPO, sujeto: 'Placa V2K-841' },
   alcabala: { conjunto: CONJUNTO_DEL_PROTOTIPO, sujeto: 'Transferencia del 12/03/2026' },
 };
 

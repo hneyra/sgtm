@@ -23,13 +23,26 @@ export interface ModuloDelCatalogo {
    */
   readonly bloques: readonly string[];
   /**
-   * El bloque que este modulo pliega en un centro de reportes (ADR-0014 §5),
-   * si pliega alguno: el menu lo ensena como **una** entrada y el centro lista
-   * sus hojas dentro. Sale de la tabla del portador, no de una lista cableada
-   * en un componente.
+   * Los bloques que el menu **pliega**: en vez de listar sus opciones una a
+   * una, ensena **una** entrada que abre la primera que el usuario pueda ver
+   * (ADR-0014 §5). Un modulo puede plegar varios —Catastro pliega Territorio y
+   * Valuacion—, y un bloque se pliega cuando su superficie ya sabe navegar
+   * entre sus opciones.
    *
-   * Sus hojas conservan su id, su ruta y su permiso: el centro es composicion
-   * de navegacion, no una pantalla que las absorba.
+   * Sale de la tabla del portador, no de una lista cableada en un componente.
+   * Las opciones plegadas conservan su id, su ruta y su permiso: plegar es
+   * composicion de navegacion, no una pantalla que las absorba.
+   */
+  readonly bloquesPlegados?: readonly string[];
+  /**
+   * El bloque que **ademas** lleva carril: el centro de reportes (ADR-0014 §5),
+   * que lista sus hojas al lado de la que se esta viendo. Siempre es uno de
+   * `bloquesPlegados`, y **uno como mucho por modulo**: dos carriles serian dos
+   * formas de navegar lo mismo.
+   *
+   * Lo llevan las hojas que no tienen ninguna otra forma de alcanzarse entre
+   * si; donde hay superficie —las pestanas del territorio, el conmutador de la
+   * ficha— basta con plegar.
    */
   readonly centroDeReportes?: string;
   readonly opciones: readonly OpcionDelCatalogo[];

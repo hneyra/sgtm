@@ -18,6 +18,17 @@ Lo aprobado entra en GOB-02, que sigue siendo el registro. Este plan es el camin
 Del §1 al §7 está el plan **tal como se escribió**. Esta sección dice qué se hizo de él, qué salió
 distinto y qué queda; es lo primero que hay que leer y lo único que cambia con el tiempo.
 
+> **La etiqueta `bloqueado:D-02a` se retiró del tablero el 2026-08-29**, y con ella las veinte
+> filas del mapa que la nombraban. D-02a se cerró el 2026-08-25 ([#200](https://github.com/hneyra/sgtm/issues/200)),
+> y una etiqueta que nombra una decisión cerrada dice algo falso: salieron enteros #188, #190,
+> #192, #194 y #198, y perdieron esa parte #195, #196 y #197. Quedan **siete** issues
+> etiquetados, todos por ordenanza o acto local; la instantánea del tablero
+> ([`etiquetas-de-bloqueo.json`](../10-negocio/etiquetas-de-bloqueo.json)) se regeneró en el mismo
+> cambio, que es lo que `verificar-mapa-normativo.mjs` exige. **Retirar la etiqueta no dejó listas
+> las cifras**: lo que las filas 7, 9 y 10 del mapa siguen esperando son H-14, H-15 y el
+> `% actualización` de D-11, que son trabajo y no decisión —de ahí que la etiqueta ya no los pueda
+> representar—.
+
 ### 0.1 Dos hallazgos más, del día de ejecutar
 
 El plan se escribió el 19 de agosto y se ejecutó el 22. En esos tres días el repositorio se movió,
@@ -87,7 +98,7 @@ ahora explica por qué nunca debió llevarla.
 
 | Paquete | Issue | Estado |
 |---|---|---|
-| **E-3** transcribir y firmar D-02a | #200 | **Hecho, 2026-08-25** (commit `a8622c3`). Los 14 archivos de `docs/10-negocio/valores-normativos/` están `VERIFICADO`, cada uno con **dos firmas distintas**. `verificar-valores-normativos.mjs` y `verificar-mapa-normativo.mjs` pasan en verde. **Ninguna fila cargada en la base todavía**: sigue esperando D-13 (para las tres tablas de valuación) y un mecanismo que invoque `AdministrarParametros.abrirVersion` contra un ambiente real, que hoy no existe (issue #247 §2) |
+| **E-3** transcribir y firmar D-02a | #200 | **Hecho, 2026-08-25** (commit `a8622c3`). Los 14 archivos que cerraban D-02a estaban `VERIFICADO`, cada uno con **dos firmas distintas**; `verificar-valores-normativos.mjs` y `verificar-mapa-normativo.mjs` pasan en verde. **Hoy el corpus tiene 19 archivos y cierra 22 filas del mapa**, y tres siguen en `TRANSCRITO`: los valores unitarios (H-14, que volvieron atrás al cotejarlos contra el Anexo I.2 real) y los dos de D-11 —obras complementarias y deducción de Amazonía—. **Lo que decía esta fila del mecanismo de carga ya no aplica**: D-13 se cerró el 2026-08-28 (ADR-0017) y el camino existe entero —`PublicarParametros` (#188), `PublicarCuadros` y `AbrirConjuntoDeParametros` (#247 §2), con la credencial de `rol_carga_parametros`—. Lo que impide cargar los dos cuadros que faltan es H-14 y H-15, no la ausencia de mecanismo |
 | **E-5** el corpus de casos | #201 | **Hecho.** 32 casos en `sgtm-rentas/src/test/resources/casos/`, uno por regla de NEG-05, con los 17 casos borde de §2 enumerados. Dos ejecutables, y los otros treinta con **quien los impide** en su fila. Al hacerlo salieron tres hallazgos: H-10, H-11 y H-12 (§0.6) |
 | **E-6** la municipalidad de demostración | #202 | Abierto. **Los cuatro entregables de código existen**: la marca en migración, el marcado de todo documento en los tres formatos, sus 19 pruebas, y —desde #212— la regla que impide que nada siembre fuera del perfil `batch`, que era el tercer criterio y no lo comprobaba nadie. Falta **elegir la ordenanza**, y con ella su transcripción y las cifras que el tenant carga |
 | **E-7** puntos de redondeo y campaña de D-03c | #203 | **Los tres entregables de código, hechos**: `PuntoDeRedondeo` con sus catorce puntos, `PoliticasDeRedondeo` que falla cuando falta uno, el formulario de la campaña en `docs/10-negocio/observaciones-srtm-mef/`, y `PoliticasDeRedondeoSelladas`, que las **lee del conjunto sellado** —una fila `REDONDEO:‹punto›` con la escala en `valor_numerico` y el modo en `valor_texto`—. `RegistrarDeterminacionPredial` ya no las recibe: las lee. ~~Queda **solo la campaña**, que necesita acceso al SRTM del MEF~~ **La campaña dejó de hacer falta para el piloto** ([ADR-0018](../30-arquitectura/adr/ADR-0018-el-redondeo-decidido.md), 2026-08-28): arranca con padrón nuevo, sin determinaciones del SRTM que reproducir, y los puntos los fija el propio ADR (cierre de regla, céntimo, `HALF_UP`). La campaña **revive como prerrequisito de D-04** con la primera municipalidad que migre; su formulario sigue en `observaciones-srtm-mef/` |

@@ -11,8 +11,8 @@ import { usePreferencias } from './preferencias';
  *
  * **Nivel raiz:** los recientes y los doce modulos.
  * **Nivel modulo:** vuelta a «Todos los modulos» y las opciones del modulo
- * abierto, repartidas en sus bloques colapsables —salvo el que el modulo
- * pliega en su centro de reportes (ADR-0014 §5), que es una entrada unica—.
+ * abierto, repartidas en sus bloques colapsables —salvo los que el modulo
+ * pliega (ADR-0014 §5), que son una entrada unica cada uno—.
  *
  * El colapso se guarda por clave `modulo|bloque` para que cada bloque conserve
  * su estado con independencia de los demas, como en el prototipo.
@@ -154,11 +154,13 @@ export function BarraLateral({
           </button>
           <p className="sgtm-nav__modulo-actual">{abierto.label}</p>
           {bloquesDe(abierto).map((bloque) => {
-            // Las hojas plegadas no se listan: son una entrada que abre el
-            // centro de reportes (ADR-0014 §5).
+            // Las opciones de un bloque plegado no se listan: son **una**
+            // entrada que abre su superficie (ADR-0014 §5). Que esa superficie
+            // sea un carril de hojas o las pestanas de una pantalla es cosa de
+            // la pantalla, no del menu: aqui los dos se dibujan igual.
             if (bloque.plegado) {
               return (
-                <EntradaDelCentro
+                <EntradaPlegada
                   key={bloque.label}
                   modulo={abierto}
                   bloque={bloque}
@@ -208,18 +210,24 @@ export function BarraLateral({
 }
 
 /**
- * La entrada unica de un bloque plegado en centro de reportes (ADR-0014 §5).
+ * La entrada unica de un bloque plegado (ADR-0014 §5).
  *
- * Navega a **una hoja concreta** —la primera que el usuario puede ver— y no a
- * una ruta nueva: una ruta del centro seria una opcion mas, sin id en el
- * catalogo y sin permiso propio, y esta decision no crea ninguna. El centro
- * lista las demas.
+ * La misma para los dos pliegues, y eso es lo que hace que plegar un grupo
+ * cueste una marca en la tabla: el centro de reportes de Transito y el cuadro
+ * de valuacion de Catastro se dibujan aqui igual, y lo que los diferencia
+ * —tener carril o no— lo decide la pantalla, no el menu.
  *
- * Se dibuja solo si queda alguna hoja visible: el modulo ya llega filtrado por
- * `useCatalogoVisible`, asi que un usuario sin permiso sobre ninguna hoja no ve
- * la entrada (REQ-03 §5).
+ * Navega a **una opcion concreta** —la primera que el usuario puede ver— y no a
+ * una ruta nueva: una ruta del pliegue seria una opcion mas, sin id en el
+ * catalogo y sin permiso propio, y esta decision no crea ninguna. Desde ahi, la
+ * superficie lleva a las demas: el carril en el centro, el conmutador o las
+ * pestanas en las tres superficies de Catastro.
+ *
+ * Se dibuja solo si queda alguna opcion visible: el modulo ya llega filtrado
+ * por `useCatalogoVisible`, asi que un usuario sin permiso sobre ninguna de
+ * ellas no ve la entrada (REQ-03 §5).
  */
-function EntradaDelCentro({
+function EntradaPlegada({
   modulo,
   bloque,
   onNavegar,
@@ -232,16 +240,16 @@ function EntradaDelCentro({
   const primera = bloque.opciones[0];
   if (primera === undefined) return null;
 
-  // Se esta en el centro si la ruta abierta es la de **alguna** de sus hojas.
-  // No se marca `aria-current="page"`: el enlace apunta a la primera hoja, que
-  // casi nunca es la abierta, y decir «esta es la pagina» seria mentir. La que
-  // si lo lleva es la hoja del carril del centro.
-  const dentro = bloque.opciones.some((hoja) => pathname === rutaDeOpcion(modulo, hoja));
+  // Se esta dentro si la ruta abierta es la de **alguna** de sus opciones.
+  // No se marca `aria-current="page"`: el enlace apunta a la primera, que casi
+  // nunca es la abierta, y decir «esta es la pagina» seria mentir. Quien si lo
+  // lleva es la hoja del carril, o la pestana activa de la superficie.
+  const dentro = bloque.opciones.some((opcion) => pathname === rutaDeOpcion(modulo, opcion));
 
   return (
     <Link
       to={rutaDeOpcion(modulo, primera)}
-      className="sgtm-nav__opcion sgtm-nav__centro"
+      className="sgtm-nav__opcion sgtm-nav__plegado"
       data-dentro={dentro ? '1' : '0'}
       onClick={onNavegar}
     >

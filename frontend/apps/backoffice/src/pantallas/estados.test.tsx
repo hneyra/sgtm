@@ -91,7 +91,14 @@ describe('error: el mensaje es el del backend, sin reescribir', () => {
       );
     };
 
-    montarEnRuta('/catastro/calles');
+    /* **Una pantalla de una sola peticion**, que es lo que esta prueba cuenta.
+       Era `/catastro/calles`, y desde que las dos opciones del territorio caen
+       en la misma superficie (`catastro/Territorio.tsx`) esa ruta pide dos
+       cosas: el catalogo vial de la hoja **y** el arbol de sectores del carril.
+       Contar peticiones ahi mediria la superficie, no el reintento. Se mueve al
+       mismo sitio al que se movieron los ejemplos de #363: otra opcion conectada
+       del mismo modulo, sin nada compuesto alrededor. */
+    montarEnRuta('/catastro/aranceles');
     await screen.findByText('Se cayó');
     expect(veces).toBe(1);
 
@@ -162,17 +169,16 @@ describe('vacio: no es lo mismo un padron vacio que un filtro sin resultados', (
   it('sin filtros: todavia no hay nada que buscar', async () => {
     // Una opcion **sin conectar**: aqui se prueba el vacio de la forma que
     // comparten las 134 (`calles`, `aranceles` y `depreciacion` ya piden su
-    // recurso propio, #71; `papeletas`, `codigos_transito` y las demas
-    // lecturas de tránsito ya no sirven para este ejemplo, conectadas desde
-    // #363/#77 —su `leer` rechaza un cuerpo sin `contenido`—;
-    // `transito_resumen_papeletas` sigue sin conectar, ver
-    // `pantallas/transito/index.ts`).
-    montarEnRuta('/transito/transito-resumen-papeletas');
+    // recurso propio, #71; las lecturas de tránsito ya no sirven para este
+    // ejemplo, conectadas desde #363, #77, #396 y #398).
+    // `fisc_resultados` sigue el camino comun: ver
+    // `pantallas/fiscalizacion/index.ts` (#80).
+    montarEnRuta('/fiscalizacion/fisc-resultados');
     expect(await screen.findByText(/Todavía no hay/)).toBeInTheDocument();
   });
 
   it('con un filtro puesto: hay algo que hacer, y se dice cual', async () => {
-    montarEnRuta('/transito/transito-resumen-papeletas?desde=2026-01-01');
+    montarEnRuta('/fiscalizacion/fisc-resultados?estado=DETERMINADO');
     expect(await screen.findByText('Ningún resultado para esta búsqueda')).toBeInTheDocument();
     expect(screen.getByText(/Quita alguno o corrige el valor/)).toBeInTheDocument();
   });

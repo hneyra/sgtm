@@ -17,10 +17,6 @@ import pe.gob.sgtm.documentos.GeneradorDeDocumentos;
 import pe.gob.sgtm.sanciones.aplicacion.ConsultaDePadronesDeSanciones;
 import pe.gob.sgtm.sanciones.aplicacion.ModelosDeLosReportesDeSanciones;
 import pe.gob.sgtm.sanciones.dominio.ConstanciaLibre;
-import pe.gob.sgtm.sanciones.dominio.CriterioDeConstancias;
-import pe.gob.sgtm.sanciones.dominio.CriterioDePadron;
-import pe.gob.sgtm.sanciones.dominio.EstadoDePapeleta;
-import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.sanciones.dominio.PapeletaDelPadron;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -193,21 +189,9 @@ public class PadronesDeTransitoController {
             @Nullable Boolean conValorEmitido,
             ParametrosDePaginacion paginacion) {
 
-        CriterioDePadron criterio =
-                new CriterioDePadron(
-                        Familia.TRANSITO,
-                        PeticionesDeSanciones.fechaSiViene(desde, "desde"),
-                        PeticionesDeSanciones.fechaSiViene(hasta, "hasta"),
-                        PeticionesDeSanciones.enumeradoSiViene(
-                                EstadoDePapeleta.class, estado, "estado"),
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        conValorEmitido,
-                        false);
-        return consulta.papeletas(criterio, paginacion(paginacion));
+        return consulta.papeletas(
+                CriteriosDeTransito.delPadron(desde, hasta, estado, conValorEmitido),
+                paginacion(paginacion));
     }
 
     private Pagina<ConstanciaLibre> paginaDeConstancias(
@@ -217,14 +201,9 @@ public class PadronesDeTransitoController {
             @Nullable String usuarioQueEmitio,
             ParametrosDePaginacion paginacion) {
 
-        CriterioDeConstancias criterio =
-                new CriterioDeConstancias(
-                        PeticionesDeSanciones.fechaSiViene(desde, "desde"),
-                        PeticionesDeSanciones.fechaSiViene(hasta, "hasta"),
-                        PeticionesDeSanciones.vacioEsNulo(numero),
-                        PeticionesDeSanciones.vacioEsNulo(usuarioQueEmitio),
-                        null);
-        return consulta.constancias(criterio, paginacion.aPaginacion("fechaEmision"));
+        return consulta.constancias(
+                CriteriosDeTransito.deConstancias(desde, hasta, numero, usuarioQueEmitio),
+                paginacion.aPaginacion("fechaEmision"));
     }
 
     private static Paginacion paginacion(ParametrosDePaginacion parametros) {

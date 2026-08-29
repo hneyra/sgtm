@@ -36,10 +36,10 @@ describe('la respuesta dice con que conjunto se determino', () => {
    * prototipo, que era la otra mitad de lo que llegaba por el camino comun.
    */
   it('el calculo individual del predial responde su recurso, no la forma comun', async () => {
-    const recurso = await solicitar<Record<string, unknown>>(
-      '/rentas/predial/calculo-individual',
-      { metodo: 'POST', cuerpo: { simulacion: true } },
-    );
+    const recurso = await solicitar<Record<string, unknown>>('/rentas/predial/calculo-individual', {
+      metodo: 'POST',
+      cuerpo: { simulacion: true },
+    });
 
     // El conjunto va dentro del recurso, con el sujeto que redacto el servidor.
     expect(recurso['conjunto']).toBe('2026 v1');
@@ -100,10 +100,11 @@ describe('la respuesta dice con que conjunto se determino', () => {
    * El ejemplo es una que cae en el camino comun de verdad. `contribuyentes`
    * —el candidato obvio— no sirve para esto: su ruta esta en `PAGINADOS` desde
    * #11 y sale por la misma bifurcacion que arbitrios, asi que probar con ella
-   * comprobaria otra vez lo de arriba y no esto.
+   * comprobaria otra vez lo de arriba y no esto. Era
+   * `/transito/reportes/resumen-papeletas` hasta que #398 la conecto.
    */
   it('una pantalla que no determina sale sin el dato, no con el dato vacio', async () => {
-    const datos = await solicitar<DatosDePantalla>('/transito/reportes/resumen-papeletas');
+    const datos = await solicitar<DatosDePantalla>('/fiscalizacion/resultados');
 
     expect(datos.tabla?.filas.length).toBeGreaterThan(0);
     expect(datos.determinacion).toBeUndefined();
@@ -142,18 +143,17 @@ describe('el registro se consulta con Object.hasOwn', () => {
 
 describe('el inventario de lo simulado se puede leer entero', () => {
   /**
-   * Eran cinco y son tres desde #395: `predial_individual` y `predial_masivo`
-   * se fueron el dia que su controlador existio, que es la regla del archivo
-   * cumpliendose. Estan enumeradas para que anadir una cuarta —o quitar otra—
-   * sea un cambio que se ve en el diff. `simulados.ts` es el unico sitio del proxy donde se
-   * inventa algo (ADR-0010 §4): si crece en silencio, deja de verse de lejos,
-   * que es la unica razon por la que esta apartado.
+   * Eran cinco, fueron tres desde #395 y son **dos** desde #399:
+   * `predial_individual` y `predial_masivo` se fueron el dia que su controlador
+   * existio, y `vehicular_calculo` el dia que el suyo se pudo llamar —lo tenia
+   * desde #32 y el contrato y el controlador no decian lo mismo sobre por donde
+   * viajan sus filtros—. Es la regla del archivo cumpliendose. Estan enumeradas
+   * para que anadir una tercera —o quitar otra— sea un cambio que se ve en el
+   * diff. `simulados.ts` es el unico sitio del proxy donde se inventa algo
+   * (ADR-0010 §4): si crece en silencio, deja de verse de lejos, que es la unica
+   * razon por la que esta apartado.
    */
-  it('son exactamente las tres que todavia no tienen controlador', () => {
-    expect([...PANTALLAS_SIMULADAS].sort()).toEqual([
-      'alcabala',
-      'arbitrios',
-      'vehicular_calculo',
-    ]);
+  it('son exactamente las dos que todavia no tienen controlador que las conteste', () => {
+    expect([...PANTALLAS_SIMULADAS].sort()).toEqual(['alcabala', 'arbitrios']);
   });
 });

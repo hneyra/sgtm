@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Aviso, Boton, Campo, Esqueleto } from '@sgtm/design-system';
 import type { Escritura } from '../escritura';
+import { letrasDeCategorias } from './fichas';
 
 /**
  * La tabla de pisos de una ficha catastral, **como campo de la escritura**.
@@ -111,7 +112,12 @@ export function TablaDePisos({
         <Esqueleto alto={120} />
       ) : (
         <div className="sgtm-tabla__marco">
-          <table className="sgtm-tabla">
+          {/* Con nombre accesible, y no solo por las pruebas: desde que la ficha
+              y su edicion caen en la misma superficie hay mas de una tabla en la
+              pagina, y una tabla sin nombre no se distingue de la otra ni con un
+              lector de pantalla ni tabulando (FRO-04). El nombre es el titulo
+              que ya lleva encima: no se redacta uno nuevo. */}
+          <table className="sgtm-tabla" aria-label={titulo}>
             <thead>
               <tr>
                 <th>Piso</th>
@@ -254,18 +260,19 @@ function errorDeLaFila(fila: FilaDePiso): string | undefined {
  * Del recurso de `ficha_urbana`: las categorías llegan como texto —`[BCCBCBB]`
  * en el backend, `C B C C B C B` en el juego de datos del prototipo— y aquí se
  * separan por letra, admitiendo las dos formas.
+ *
+ * El reparto lo hace `letrasDeCategorias`, en `fichas.ts`: lo lee también el
+ * adaptador de la ficha, que pinta esas siete letras en las siete columnas del
+ * prototipo, y dos repartos distintos del mismo texto acabarían diciendo cosas
+ * distintas del mismo piso.
  */
 export function filaDeConstruccionLeida(construccion: {
   readonly piso: string;
   readonly areaConstruida: string;
   readonly categorias: string;
 }): FilaDePiso {
-  const limpio = construccion.categorias.replace(/[[\]]/g, '').trim();
-  const letras = limpio === '' ? [] : limpio.includes(' ') ? limpio.split(/\s+/) : [...limpio];
-  const letra = (indice: number): string => {
-    const caracter = letras[indice];
-    return caracter === undefined || caracter === '-' ? '' : caracter;
-  };
+  const letras = letrasDeCategorias(construccion.categorias);
+  const letra = (indice: number): string => letras[indice] ?? '';
   return {
     piso: construccion.piso,
     areaConstruida: construccion.areaConstruida,

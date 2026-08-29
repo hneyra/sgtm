@@ -7,9 +7,9 @@ import { App } from './app/App';
 /**
  * Proxy de datos: la API simulada del SGTM.
  *
- * Mientras el backend no sirva las 134 operaciones del contrato, el proxy las
- * contesta interceptando `fetch`. La aplicacion no se entera: pide por HTTP a
- * `/api/v1` igual que lo hara en produccion.
+ * Mientras la interfaz no le pida al backend las 134 operaciones del catalogo,
+ * el proxy las contesta interceptando `fetch`. La aplicacion no se entera: pide
+ * por HTTP a `/api/v1` igual que lo hara en produccion.
  *
  * **Para integrar el backend basta apagarlo:** `VITE_SGTM_PROXY_DE_DATOS=false`
  * y `SGTM_API` apuntando al Spring Boot. No hay una segunda ruta de codigo que

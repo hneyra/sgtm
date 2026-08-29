@@ -83,6 +83,43 @@ const SIN_DECLARACION = `Lo que se escriba aquí todavía no se guarda: la panta
 const DE_SALIDA =
   /^(imprimir|impresi|exportar|excel|pdf|descargar|limpiar|ver\b|abrir|visualizar|previsualizar|consultar|buscar)/i;
 
+/**
+ * Acciones que **cambian el modo de la pantalla en vez de registrar un acto**:
+ * «Modificar», «Deshacer», «Quitar» (#391 §2).
+ *
+ * Es la primera de las dos gemelas que le faltaban a `DE_SALIDA`, y se lee por
+ * lo que le pasa a quien la pulsa: `DE_SALIDA` **saca algo** de la pantalla
+ * —una hoja, un archivo—, y esto no saca nada ni guarda nada; deja la misma
+ * pantalla con otro modo. Un modo no es un acto: no tiene observacion (regla
+ * 10 no le aplica, porque no modifica ningun dato), no tiene backend al que
+ * llamar y no puede ser primaria de nada.
+ *
+ * En la barra, ademas, **no hay modo que cambiar**: la interfaz no tiene un
+ * estado «solo lectura» del que «Modificar» saque —los campos se dibujan
+ * editables o no segun el privilegio (ADR-0013)—, «Deshacer» no tiene ninguna
+ * pila de cambios que deshacer, y «Quitar» ya existe **por fila** en
+ * `TablaDePisos`, con su propio `aria-label` («Quitar el piso 02»): diez
+ * «Quitar» iguales al pie no se distinguen, y uno solo no dice de que fila es.
+ *
+ * Deliberadamente estrecho, por lo mismo que `DE_CALCULO`: se aplica solo a las
+ * opciones que declaran el vocabulario uniforme ({@link VOCABULARIO_UNIFORME}),
+ * y ahi las cuatro palabras son las cuatro que el manual escribe.
+ */
+const DE_MODO = /^(modificar|editar|deshacer|quitar)\b/i;
+
+/**
+ * Acciones que **abren un alta** en vez de guardar lo que hay: «Nuevo», «Nuevo
+ * sector».
+ *
+ * La segunda gemela. Un alta no es la accion de la pantalla que se esta
+ * mirando: es otro formulario, y ya tiene su sitio —`composicion.flujo` para el
+ * asistente guiado, `composicion.altas` para el panel lateral—. Se queda en la
+ * barra **solo si esta pantalla declara el formulario que abre**; si no, es un
+ * boton que promete un alta que nadie puede abrir, que es exactamente lo que
+ * #321 cerro para «Nuevo» del catalogo vial.
+ */
+const DE_ALTA = /^nuevo\b/i;
+
 const SIN_DETERMINACION =
   'Aquí no se calcula nada: la determinación la hace el servidor y esta pantalla la muestra. ' +
   `Mientras no llegue, los importes salen con «—» y ninguno se puede recomponer aquí. ${SALIDA}`;
@@ -108,8 +145,20 @@ const SIN_DETERMINACION =
  * **deliberadamente estrecho** —`ejecutar` no entra— porque «Ejecutar proceso»
  * de «Predial — masivo» si manda sus parametros (ejercicio, alcance, derecho de
  * emision), y ahi `sin-declaracion` dice la verdad.
+ *
+ * **Es tambien la familia de la simulacion** (#391 §2): «Calcular», «Distribuir
+ * valor» ensenan un resultado **antes** de escribir, asi que son secundarias y
+ * nunca primarias. Es la misma cosa dicha desde los dos lados —lo que pide una
+ * determinacion no guarda campos—, y por eso no hay un patron aparte: dos
+ * listas del mismo verbo se separan el dia que alguien anada uno a una sola.
+ *
+ * `distribuir` entra con #391: «Distribuir valor» de la ficha de bienes comunes
+ * reparte el valor de la edificacion entre sus unidades, y ese valor es D-02a
+ * —el total sale «—» hoy—. Con ella, esa ficha pasa de `sin-backend` («aquí
+ * todavía no se puede guardar nada», que sugiere un guardado que nunca hubo) a
+ * `sin-determinacion`, que es lo que de verdad le falta.
  */
-const DE_CALCULO = /^(calcular|recalcular|simular|determinar|liquidar)/i;
+const DE_CALCULO = /^(calcular|recalcular|simular|determinar|liquidar|distribuir)/i;
 
 /**
  * Un acto al que le falta **un dato que su pantalla no dibuja** (#73).
@@ -369,4 +418,119 @@ export function impedimentoDelActo(
     return { causa: 'sin-backend', detalle: SIN_BACKEND };
   }
   return { causa: 'sin-declaracion', detalle: SIN_DECLARACION };
+}
+
+/* ── Un solo vocabulario de accion (#391 §2) ───────────────────────────── */
+
+/**
+ * Las opciones que componen su barra con **un solo vocabulario de accion**.
+ *
+ * Hoy las cinco del predio, y no es casualidad que sean las primeras: son cinco
+ * pantallas del **mismo objeto** con cinco vocabularios —«Nuevo · Modificar ·
+ * Deshacer · Imprimir · Guardar», «Nuevo · Guardar · Imprimir», «Distribuir
+ * valor · Guardar», «Calcular · Guardar · Imprimir ficha rural», «Nuevo ·
+ * Guardar · Imprimir · Quitar»—, y la primaria significaba cosas distintas en
+ * cada una: guardar en dos, imprimir en dos. Quien atiende aprende el boton
+ * navy de una pantalla y en la de al lado le imprime.
+ *
+ * **Es opt-in por opcion, y la negacion por omision no cambia**: las 129
+ * restantes reciben su lista del catalogo tal cual —{@link accionesDeLaBarra}
+ * la devuelve intacta— y se dibujan exactamente como se dibujaban. Es
+ * deliberado: reordenar las 134 barras a la vez cambiaria el boton navy de
+ * medio sistema en un solo diff, y lo que este issue pidio es uniformar un
+ * modulo.
+ */
+export const VOCABULARIO_UNIFORME: ReadonlySet<string> = new Set([
+  'ficha_urbana',
+  'ficha_economica',
+  'ficha_bienes',
+  'ficha_rural',
+  'actualizacion_catastro',
+]);
+
+/** La barra tal como se dibuja: que acciones, y si alguna de ellas es la primaria. */
+export interface BarraDeLaPantalla {
+  /**
+   * Las acciones que se quedan, **en el orden de la regla**: primero las que no
+   * escriben, y al final —si la hay— la que escribe.
+   */
+  readonly acciones: readonly string[];
+  /**
+   * La ultima de `acciones` **escribe**, asi que es la primaria (FRO-03 §5).
+   *
+   * `false` dice lo contrario y es una afirmacion, no una ausencia: esta
+   * pantalla **no tiene ningun acto que escribir**, asi que ninguna de sus
+   * acciones puede ser la primaria y ninguna se dibuja navy. Sin esto, la regla
+   * «la ultima es la primaria» convierte a «Imprimir ficha rural» en el boton
+   * navy de una ficha de consulta, que es el defecto que #391 §2 cierra.
+   *
+   * **No decide sobre el alta ni sobre el enlace**: los dos siguen siendo el
+   * acto de la pantalla cuando no hay otro (`BarraDeAcciones`), y los dos
+   * llevan a un sitio donde si se escribe.
+   */
+  readonly conPrimaria: boolean;
+}
+
+/**
+ * **Una primaria por pantalla, siempre la ultima, y siempre la que escribe**
+ * (#391 §2).
+ *
+ * Los rotulos **no se reescriben** (RNF-080): «Imprimir ficha rural» sigue
+ * diciendo «Imprimir ficha rural». Lo que se uniforma es el **sitio y el papel**
+ * de cada accion, y eso se decide por el papel que ya reconocen los patrones de
+ * este archivo:
+ *
+ *   {@link DE_MODO}     no es un acto: fuera de la barra
+ *   {@link DE_ALTA}     abre otro formulario: se queda **si** esta pantalla lo
+ *                       declara (`composicion.flujo` / `composicion.altas`);
+ *                       si no, es un alta que nadie puede abrir
+ *   {@link DE_CALCULO}  ensena un resultado antes de escribir: secundaria
+ *   {@link DE_SALIDA}   saca algo de la pantalla: secundaria
+ *   lo demas            escribe: es la primaria, **y solo si hay a donde
+ *                       escribir**; si no, se cae de la barra
+ *
+ * Esa ultima linea es la que quita los cuatro «Guardar» de las cuatro fichas:
+ * su operacion es un `GET`, asi que ese boton no podia guardar nada ni el dia
+ * que se conectara el backend. Es el precedente de `sectores` en
+ * `Territorio.tsx` y el de las tres hojas de valuacion —ADR-0017 les quita el
+ * «Guardar» por decreto—, aplicado aqui por el mismo motivo: ningun acto promete
+ * lo que no puede (#332).
+ *
+ * **El censo de `actos-honestos.test.tsx` pregunta por aqui**, y tiene que
+ * hacerlo: `impedimentoDelActo` dice que la primaria es «la ultima accion, la
+ * misma que dibuja `BarraDeAcciones`», y desde este issue esa lista ya no es
+ * siempre la del catalogo. Contar sobre la del catalogo dejaria a la funcion
+ * explicando un boton que no existe.
+ */
+export function accionesDeLaBarra(
+  opcion: string,
+  /** Las acciones del catalogo de esa pantalla, en su orden. */
+  acciones: readonly string[],
+  /** Los rotulos que **abren un alta de verdad** aqui, tal como los declara la composicion. */
+  altas: readonly string[] = [],
+): BarraDeLaPantalla {
+  if (!VOCABULARIO_UNIFORME.has(opcion)) return { acciones, conPrimaria: true };
+  // Si la opcion no declara su escritura, no hay a donde guardar: la accion que
+  // escribiria se cae, en vez de quedarse apagada prometiendo un guardado.
+  const puedeEscribir = escrituraDe(opcion) !== undefined;
+  const secundarias: string[] = [];
+  let primaria: string | undefined;
+  for (const accion of acciones) {
+    const texto = accion.trim();
+    if (DE_MODO.test(texto)) continue;
+    if (DE_ALTA.test(texto)) {
+      if (altas.includes(accion)) secundarias.push(accion);
+      continue;
+    }
+    if (DE_CALCULO.test(texto) || DE_SALIDA.test(texto)) {
+      secundarias.push(accion);
+      continue;
+    }
+    // La ultima que escriba, y no la primera: si el prototipo dibujara dos
+    // verbos de guardado, la primaria es la de mas a la derecha.
+    if (puedeEscribir) primaria = accion;
+  }
+  return primaria === undefined
+    ? { acciones: secundarias, conPrimaria: false }
+    : { acciones: [...secundarias, primaria], conPrimaria: true };
 }

@@ -124,10 +124,18 @@ export interface BloqueDeNavegacion {
   readonly label: string;
   readonly opciones: readonly OpcionDelCatalogo[];
   /**
-   * El bloque se pliega en el centro de reportes (ADR-0014 §5): el menu ensena
-   * una entrada unica en vez de sus opciones una a una.
+   * El bloque se pliega (ADR-0014 §5): el menu ensena una entrada unica en vez
+   * de sus opciones una a una, y esa entrada abre la primera visible.
    */
   readonly plegado: boolean;
+  /**
+   * Y ademas sus opciones se dibujan dentro del carril del centro de reportes,
+   * que lista las demas. **`carril` implica `plegado`, y no al reves**: donde
+   * la superficie ya navega entre sus opciones —el territorio, el cuadro de
+   * valuacion— se pliega sin carril, porque un carril al lado de las pestanas
+   * serian dos formas de navegar lo mismo.
+   */
+  readonly carril: boolean;
 }
 
 /**
@@ -137,10 +145,12 @@ export interface BloqueDeNavegacion {
  * orden lo fija el portador del catalogo; aqui solo se reparte.
  */
 export function bloquesDe(modulo: ModuloDelCatalogo): readonly BloqueDeNavegacion[] {
+  const plegados = new Set(modulo.bloquesPlegados ?? []);
   return modulo.bloques.map((label) => ({
     label,
     opciones: modulo.opciones.filter((o) => o.bloque === label),
-    plegado: label === modulo.centroDeReportes,
+    plegado: plegados.has(label),
+    carril: label === modulo.centroDeReportes,
   }));
 }
 

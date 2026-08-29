@@ -41,7 +41,7 @@ identidad, token— está en [DEV-01](entorno-local.md).
 | Arrancar solo el backend | `./gradlew :sgtm-aplicacion:bootRun` | `backend/` |
 | Correr **todas** las pruebas de la interfaz | `yarn test` | `frontend/` |
 | Correr **una** prueba del backend | `./gradlew :sgtm-catastro:test --tests '*ViaRepository*'` | `backend/` |
-| Los tres caminos en un navegador | `yarn e2e` | `frontend/` |
+| Los seis caminos en un navegador | `yarn e2e` | `frontend/` |
 | Arreglar el formato | `./gradlew spotlessApply` · `yarn format` | cada uno |
 | Lo que hay que pasar antes de un PR | `./gradlew build verificarAislamiento verificarArquitectura` · `yarn verificar` | ambos |
 

@@ -5,7 +5,8 @@ import type { IdDeOperacion, ParametrosDe } from './operaciones.generado';
 /**
  * El contrato de datos de una pantalla.
  *
- * Las 134 operaciones del contrato ([`sgtm-v1.yaml`](../../../../docs/50-api/openapi/sgtm-v1.yaml))
+ * Las 134 operaciones que el catalogo declara —una por pantalla, de las 174 que
+ * publica el contrato ([`sgtm-v1.yaml`](../../../../docs/50-api/openapi/sgtm-v1.yaml))—
  * comparten forma de respuesta porque las 134 pantallas comparten renderizador:
  * un panel de indicadores, una tabla, unos totales, un formulario relleno o una
  * hoja de reporte. Esta es esa forma.

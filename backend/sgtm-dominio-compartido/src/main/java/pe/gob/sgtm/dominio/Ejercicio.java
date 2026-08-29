@@ -21,18 +21,18 @@ import java.time.LocalDate;
  */
 public record Ejercicio(int valor) implements Comparable<Ejercicio> {
 
-    private static final int MINIMO = 1990;
-    private static final int MAXIMO = 2100;
+    private static final int ANIO_MINIMO = 1990;
+    private static final int ANIO_MAXIMO = 2100;
 
     public Ejercicio {
-        if (valor < MINIMO || valor > MAXIMO) {
+        if (valor < ANIO_MINIMO || valor > ANIO_MAXIMO) {
             throw new IllegalArgumentException(
                     "Ejercicio fuera de rango: "
                             + valor
                             + ". Se admite de "
-                            + MINIMO
+                            + ANIO_MINIMO
                             + " a "
-                            + MAXIMO);
+                            + ANIO_MAXIMO);
         }
     }
 

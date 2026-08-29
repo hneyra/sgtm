@@ -118,15 +118,23 @@ const GRUPOS_POR_TAREA_ESPERADOS: Readonly<
     ['Sesión', ['cambiar_anio', 'cambiar_clave']],
     ['Operación', ['auditoria', 'respaldo']],
   ],
+  // Tres grupos porque tres son las superficies (#391): la ficha del predio, el
+  // cuadro de valuacion y el territorio.
   catastro: [
     [
-      'Fichas del predio',
-      ['actualizacion_catastro', 'ficha_bienes', 'ficha_economica', 'ficha_rural', 'ficha_urbana'],
+      'Predio',
+      [
+        'actualizacion_catastro',
+        'consulta_fichas',
+        'ficha_bienes',
+        'ficha_contribuyente_reporte',
+        'ficha_economica',
+        'ficha_rural',
+        'ficha_urbana',
+      ],
     ],
     ['Territorio', ['calles', 'sectores']],
-    ['Tablas de valuación', ['aranceles', 'depreciacion', 'valores_unitarios']],
-    ['Consultas', ['consulta_fichas']],
-    ['Documentos', ['ficha_contribuyente_reporte']],
+    ['Valuación', ['aranceles', 'depreciacion', 'valores_unitarios']],
   ],
   fiscalizacion: [
     ['Campaña', ['fisc_omisos', 'fisc_programa']],
@@ -404,6 +412,45 @@ describe('el centro de reportes se declara en el catalogo, no en el componente',
     const consultas = MODULOS.find((m) => m.id === 'consultas');
     expect(consultas?.centroDeReportes).toBeUndefined();
     expect(consultas && hojasDelCentro(consultas)).toEqual([]);
+  });
+
+  /**
+   * **Plegar y llevar carril dejaron de ser lo mismo** (#391 §5): un bloque se
+   * pliega cuando su superficie ya sabe navegar entre sus opciones, y solo
+   * lleva carril cuando esas opciones no tienen ninguna otra forma de
+   * alcanzarse entre si. Por eso Catastro pliega dos bloques y no tiene centro.
+   *
+   * Copiado a mano, como los grupos de arriba y por lo mismo: derivarlo de
+   * `modulo.bloquesPlegados` compararia el generado consigo mismo.
+   */
+  it('los bloques que el menu pliega son estos, y solo uno de ellos lleva carril', () => {
+    const plegados = MODULOS.filter((m) => (m.bloquesPlegados ?? []).length > 0).map((m) => [
+      m.id,
+      m.bloquesPlegados,
+      m.centroDeReportes ?? null,
+    ]);
+    expect(plegados).toEqual([
+      ['catastro', ['Territorio', 'Valuación'], null],
+      ['transito', ['Reportes'], 'Reportes'],
+      ['infracciones-administrativas', ['Reportes'], 'Reportes'],
+      ['autorizaciones-y-licencias', ['Reportes'], 'Reportes'],
+    ]);
+  });
+
+  it('los dos bloques plegados de Catastro no son hojas de ningun centro', () => {
+    const catastro = MODULOS.find((m) => m.id === 'catastro');
+    expect(catastro?.centroDeReportes).toBeUndefined();
+    expect(catastro && hojasDelCentro(catastro)).toEqual([]);
+    // Se pliegan igual: la entrada del menu no distingue los dos pliegues.
+    expect(
+      catastro &&
+        bloquesDe(catastro)
+          .filter((b) => b.plegado)
+          .map((b) => [b.label, b.carril]),
+    ).toEqual([
+      ['Territorio', false],
+      ['Valuación', false],
+    ]);
   });
 });
 

@@ -1,0 +1,450 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1F3A5F; } a:hover { color: #2a4d7a; }
+    button { font: inherit; cursor: pointer; }
+    table { border-collapse: collapse; }
+  </style>
+</helmet>
+
+<div style="background: #f6f4ef; color: #1a1612; padding: 40px 40px 48px; min-height: 100%; box-sizing: border-box;">
+
+  <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px;">
+    <span style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #6b6258;">Propuesta A · Unificar</span>
+    <h1 style="margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 32px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1;">Una sola ficha del predio</h1>
+    <p style="margin: 0; max-width: 900px; font-family: 'Source Serif 4', Georgia, serif; font-size: 17px; line-height: 1.55; color: #3d362e; text-wrap: pretty;">Las cuatro fichas y la actualización se componen en <strong style="font-weight: 600;">una superficie</strong> con cinco pestañas constantes. Cada opción conserva su identificador, su ruta y su permiso — el mismo mecanismo con que el centro de reportes de Tránsito plegó trece hojas.</p>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px;">
+    <span style="display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 500; background: #e7ecf3; color: #0e1f33;">5 opciones → 1 superficie</span>
+    <span style="display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 500; background: #e7ecf3; color: #0e1f33;">11 pestañas → 5</span>
+    <span style="display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 500; background: #e8efe6; color: #2d4a26;">Las 134 siguen siendo 134</span>
+    <span style="display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 500; background: #f6ecd9; color: #8a6420;">Coste: el más alto de las tres</span>
+  </div>
+
+  <section style="background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden;">
+
+    <div style="display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #e6e1d6;">
+      <div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 16px; font-weight: 600; letter-spacing: 0.02em; color: #1a1612;">20-06-01-0034-01-01-01</span>
+          <span style="display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 500; background: #e8efe6; color: #2d4a26;">Conciliada 2026</span>
+        </div>
+        <span style="display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: #6b6258;">Versión 3 de 3 · vigente desde 12/03/2026 · <a href="#" style="text-decoration: underline;">ver histórico</a></span>
+      </div>
+      <dl style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 16px; margin: 0; padding-top: 10px; border-top: 1px solid #e6e1d6;">
+        <div><dt style="font-size: 11px; color: #6b6258;">Titular</dt><dd style="margin: 2px 0 0; font-size: 13px; color: #1a1612;">PEÑA GARCÍA, ROSA E.</dd></div>
+        <div><dt style="font-size: 11px; color: #6b6258;">Uso</dt><dd style="margin: 2px 0 0; font-size: 13px; color: #1a1612;">Casa habitación</dd></div>
+        <div><dt style="font-size: 11px; color: #6b6258;">Área terreno</dt><dd style="margin: 2px 0 0; font-size: 13px; font-family: 'JetBrains Mono', ui-monospace, monospace; color: #1a1612;">180.00 m²</dd></div>
+        <div><dt style="font-size: 11px; color: #6b6258;">Área construida</dt><dd style="margin: 2px 0 0; font-size: 13px; font-family: 'JetBrains Mono', ui-monospace, monospace; color: #1a1612;">214.50 m²</dd></div>
+        <div><dt style="font-size: 11px; color: #6b6258;">Sector · manzana</dt><dd style="margin: 2px 0 0; font-size: 13px; color: #1a1612;">01 · 0034</dd></div>
+        <div><dt style="font-size: 11px; color: #6b6258;">Autovalúo</dt><dd style="margin: 2px 0 0; font-size: 13px; color: #9a9085;">—</dd></div>
+      </dl>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid #e6e1d6; background: #fbfaf6;">
+      <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.13em; color: #6b6258;">Ficha del predio</span>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <sc-for list="{{fichas}}" as="f" hint-placeholder-count="4">
+          <button type="button" style="{{f.estilo}}" onClick="{{ f.pick }}">{{f.label}}</button>
+        </sc-for>
+      </div>
+      <span style="font-size: 12px; color: #6b6258; margin-left: auto;">{{razonApagada}}</span>
+    </div>
+
+    <div style="display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid #e6e1d6;">
+      <sc-for list="{{pestanas}}" as="p" hint-placeholder-count="5">
+        <button type="button" style="{{p.estilo}}" onClick="{{ p.pick }}">{{p.label}}</button>
+      </sc-for>
+    </div>
+
+    <div style="padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+
+      <div style="{{estiloNota}}">
+        <div style="display: contents;">
+          <span style="display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 500; background: #e7ecf3; color: #0e1f33; white-space: nowrap;">Sin repetir</span>
+          <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #3d362e;">{{notaComun}}</p>
+        </div>
+      </div>
+
+      <div style="{{estiloTabla}}">
+        <div style="display: block;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #e6e1d6;">
+            <h3 style="margin: 0; font-size: 14px; font-weight: 600;">{{tabla.titulo}}</h3>
+            <span style="font-size: 12px; color: #6b6258;">{{tabla.conteo}}</span>
+          </div>
+          <div style="{{tabla.estiloCabecera}}">
+            <sc-for list="{{tabla.cols}}" as="col" hint-placeholder-count="6">
+              <span style="display: block; padding: 10px 14px; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: #6b6258; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{col}}</span>
+            </sc-for>
+          </div>
+          <sc-for list="{{tabla.filas}}" as="fila" hint-placeholder-count="3">
+            <div style="{{fila.estiloFila}}">
+              <sc-for list="{{fila.celdas}}" as="celda" hint-placeholder-count="6">
+                <span style="{{celda.estilo}}">{{celda.texto}}</span>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="{{estiloCallout}}">
+        <div style="display: contents;">
+          <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #3d362e; text-wrap: pretty;">Aquí vive «Actualización del catastro»: deja de ser una pantalla gemela y pasa a ser el <strong style="font-weight: 600;">modo de edición versionada</strong> de esta pestaña. Con ello muere el vocabulario divergente —MEP, UCA, acabados— por construcción, no por revisión.</p>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 16px; align-items: flex-start;">
+        <nav style="flex: 0 0 196px; display: flex; flex-direction: column; gap: 2px; padding: 10px; background: #fbfaf6; border: 1px solid #e6e1d6; border-radius: 10px;">
+          <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.13em; color: #6b6258; padding: 4px 8px 8px;">Secciones</span>
+          <sc-for list="{{secciones}}" as="s" hint-placeholder-count="3">
+            <a href="#" style="{{s.estiloIndice}}">{{s.titulo}}</a>
+          </sc-for>
+        </nav>
+
+        <div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 14px;">
+          <sc-for list="{{secciones}}" as="s" hint-placeholder-count="3">
+            <section style="border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden; background: #ffffff;">
+              <div style="display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid #e6e1d6;">
+                <h3 style="margin: 0; font-size: 14px; font-weight: 600;">{{s.titulo}}</h3>
+                <span style="font-size: 11px; color: #6b6258;">{{s.hint}}</span>
+              </div>
+              <div style="padding: 18px 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr)); gap: 15px 16px;">
+                <sc-for list="{{s.campos}}" as="c" hint-placeholder-count="6">
+                  <div style="display: flex; flex-direction: column; gap: 5px; min-width: 0;">
+                    <span style="font-size: 11.5px; font-weight: 500; color: #6b6258;">{{c.label}}</span>
+                    <span style="{{c.estilo}}">{{c.valor}}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </section>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 16px; border-top: 1px solid #e6e1d6; background: #fbfaf6;">
+      <span style="font-size: 12px; color: #6b6258; flex: 1 1 260px;">Toda modificación exige observación del usuario (regla 10).</span>
+      <button type="button" style="display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 6px; font-size: 13.5px; font-weight: 500; border: 1px solid #d8d2c4; padding: 10px 18px; background: #ffffff; color: #1a1612;">Imprimir</button>
+      <button type="button" style="display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 6px; font-size: 13.5px; font-weight: 500; border: 0; padding: 10px 22px; background: #1F3A5F; color: #ffffff;">Guardar</button>
+    </div>
+  </section>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 22px;">
+    <div style="background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; padding: 15px 16px;">
+      <h4 style="margin: 0 0 7px; font-size: 13px; font-weight: 600;">Las cinco pestañas son constantes</h4>
+      <p style="margin: 0; font-size: 12.5px; line-height: 1.55; color: #3d362e; text-wrap: pretty;">Las mismas para las cuatro modalidades. Lo único que cambia con la modalidad es <strong style="font-weight: 600;">Valorización</strong> —pisos, áreas comunes o grupos de tierra— y el bloque de actividad en Uso y servicios. Las doce secciones del prototipo se conservan: se reagrupan, no se reescriben (RNF-080).</p>
+    </div>
+    <div style="background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; padding: 15px 16px;">
+      <h4 style="margin: 0 0 7px; font-size: 13px; font-weight: 600;">Un solo identificador de entrada</h4>
+      <p style="margin: 0; font-size: 12.5px; line-height: 1.55; color: #3d362e; text-wrap: pretty;">La superficie se abre por el código de referencia catastral y resuelve desde ahí los otros dos. Es lo que hoy impide ofrecer «Actualizar» desde bienes comunes y rural, y lo que hace que las cuatro compartan cabecera, versionado e índice.</p>
+    </div>
+    <div style="background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; padding: 15px 16px;">
+      <h4 style="margin: 0 0 7px; font-size: 13px; font-weight: 600;">Lo que hay que decidir</h4>
+      <p style="margin: 0; font-size: 12.5px; line-height: 1.55; color: #3d362e; text-wrap: pretty;">Qué hace la superficie cuando el predio no tiene la ficha que se pide. La chip apagada con su motivo es la respuesta propuesta: se ve, no se puede usar, y dice por qué — como ya hacen «Conciliar seleccionadas» y el desplegable de conciliación.</p>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":1400,"height":1500}}'>
+const TAB = 'display: inline-flex; align-items: center; border: 0; background: transparent; padding: 11px 16px; font-size: 13.5px; white-space: nowrap; border-bottom: 2px solid transparent; color: #6b6258;';
+const TAB_ACTIVA = 'display: inline-flex; align-items: center; border: 0; background: transparent; padding: 11px 16px; font-size: 13.5px; white-space: nowrap; border-bottom: 2px solid #1F3A5F; color: #1a1612; font-weight: 600;';
+const CHIP = 'padding: 7px 14px; border-radius: 999px; border: 1px solid #d8d2c4; background: #ffffff; font-size: 13px; color: #3d362e; min-height: 34px;';
+const CHIP_ACTIVA = 'padding: 7px 14px; border-radius: 999px; border: 1px solid #1F3A5F; background: #1F3A5F; font-size: 13px; font-weight: 500; color: #ffffff; min-height: 34px;';
+const CHIP_APAGADA = 'padding: 7px 14px; border-radius: 999px; border: 1px dashed #d8d2c4; background: #fbfaf6; font-size: 13px; color: #9a9085; min-height: 34px; cursor: not-allowed;';
+
+const CONTROL = 'display: block; min-height: 38px; box-sizing: border-box; border: 1px solid #d8d2c4; border-radius: 6px; padding: 9px 10px; background: #fbfaf6; color: #1a1612; font-size: 13px; line-height: 19px;';
+const LECTURA = 'display: block; min-height: 38px; box-sizing: border-box; border: 1px dashed #d8d2c4; border-radius: 6px; padding: 9px 10px; background: transparent; color: #3d362e; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; line-height: 19px;';
+
+const rejilla = (n) => 'display: grid; grid-template-columns: repeat(' + n + ', minmax(0, 1fr));';
+const conRejilla = (t) => ({
+  titulo: t.titulo,
+  conteo: t.conteo,
+  cols: t.cols,
+  estiloCabecera: rejilla(t.cols.length) + ' background: #fbfaf6;',
+  filas: t.filas.map((f) => ({ celdas: f.celdas, estiloFila: rejilla(t.cols.length) + ' border-top: 1px solid #e6e1d6;' })),
+});
+
+const CELDA = 'display: block; padding: 11px 14px; font-size: 13px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #3d362e;';
+const CELDA_1 = 'display: block; padding: 11px 14px; font-size: 13px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1a1612; font-weight: 500;';
+const CELDA_HUECO = 'display: block; padding: 11px 14px; font-size: 13px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #9a9085;';
+
+const INDICE = 'padding: 7px 8px; border-radius: 6px; font-size: 12.5px; color: #3d362e; text-decoration: none;';
+const INDICE_1 = 'padding: 7px 8px; border-radius: 6px; font-size: 12.5px; color: #0e1f33; background: #e7ecf3; font-weight: 500; text-decoration: none;';
+
+const c = (label, valor) => ({ label, valor, estilo: CONTROL });
+const ro = (label, valor) => ({ label, valor, estilo: LECTURA });
+
+const IDENTIFICACION = [
+  { titulo: 'Datos generales', hint: '', campos: [
+    ro('Código de Ref. Catastral', '20-06-01-0034-01-01-01'),
+    c('Uso', 'Casa habitación'),
+    c('CUC', '0034-0112'),
+    c('Código Hoja Catastral', '11-b-IV'),
+    c('Cod. Contribuyente Rentas', '00000003541'),
+    ro('Nombre del contribuyente', 'PEÑA GARCÍA, ROSA E.'),
+    c('Nro. Ficha', '004182'),
+    ro('Arancel', '—'),
+  ] },
+  { titulo: 'Información complementaria', hint: 'Opcional', campos: [
+    c('Nº de suministro de luz', '4412903'),
+    c('Nº de suministro de agua', '0219884'),
+    c('Nº de licencia de funcionamiento', '—'),
+    c('Fuente de la información', 'Inspección de campo'),
+  ] },
+  { titulo: 'Verificación y notas', hint: '', campos: [
+    c('Ficha verificada en campo', 'Sí'),
+    c('Fecha de verificación', '12/03/2026'),
+    c('Observaciones', 'Ampliación del 2.º piso sin declarar hasta la visita.'),
+  ] },
+];
+
+const UBICACION = [
+  { titulo: 'Dirección', hint: '', campos: [
+    c('Tipo de Vía', '02 — CALLE'),
+    c('Calle', 'SAN MARTÍN'),
+    c('Tipo de Puerta', 'P — PRINCIPAL'),
+    c('Nuevo N. Municipal', '418'),
+    c('Cond. Numeración', '01 — CON CERTIFICADO'),
+    c('Número Adicional', '—'),
+  ] },
+  { titulo: 'Localización territorial', hint: '', campos: [
+    c('Departamento', 'PIURA'),
+    c('Provincia', 'SULLANA'),
+    c('Distrito', 'SULLANA'),
+    c('Sector', '01'),
+    c('Manzana', '0034'),
+    c('Lote', '01'),
+    c('Edificación', '01'),
+    c('Unidad', '01'),
+  ] },
+];
+
+const TITULARIDAD = [
+  { titulo: 'Condición y adquisición', hint: '', campos: [
+    c('Condición del titular', 'PROPIETARIO ÚNICO'),
+    c('Forma de adquisición', 'COMPRA-VENTA'),
+    c('Fecha de adquisición', '04/08/2019'),
+    c('Documento que acredita', 'ESCRITURA PÚBLICA'),
+    c('Nº de partida registral', '11024841'),
+    c('% de participación', '100.00'),
+  ] },
+  { titulo: 'Propietarios', hint: '', campos: [
+    c('Cod. Contribuyente', '00000003541'),
+    ro('Nombre / razón social', 'PEÑA GARCÍA, ROSA E.'),
+    c('D.N.I.', '03593174'),
+    c('% de propiedad', '100.00'),
+    c('Condición', 'TITULAR'),
+    c('Fecha desde', '04/08/2019'),
+  ] },
+  { titulo: 'Ocupantes no propietarios', hint: 'Opcional', campos: [
+    c('Documento', '—'),
+    c('Nombre del inquilino', '—'),
+    c('Área ocupada (m²)', '—'),
+    c('Merced conductiva (S/)', '—'),
+  ] },
+];
+
+const VALORIZACION_URBANA = [
+  { titulo: 'Obras complementarias', hint: '', campos: [
+    c('Tipo de obra', 'CERCO PERIMÉTRICO'),
+    c('Unidad de medida', 'ml'),
+    c('Metrado', '32.00'),
+    c('Año', '2019'),
+    c('Estado de conservación', 'BUENO'),
+    ro('Valor de la obra (S/)', '—'),
+  ] },
+  { titulo: 'Áreas legal y física', hint: 'Opcional', campos: [
+    c('Terreno — LEGAL', '180.00'),
+    c('Terreno — FÍSICO', '180.00'),
+    c('Construc. — LEGAL', '214.50'),
+    c('Construc. — FÍSICO', '229.00'),
+  ] },
+];
+
+const USO_URBANA = [
+  { titulo: 'Servicios básicos del predio', hint: 'Opcional', campos: [
+    c('Agua potable', 'Con conexión'),
+    c('Desagüe', 'Con conexión'),
+    c('Energía eléctrica', 'Con conexión'),
+    c('Alumbrado público', 'Sí'),
+    c('Tipo de vía frente al predio', 'ASFALTADA'),
+  ] },
+  { titulo: 'Datos para el cálculo de arbitrios', hint: '', campos: [
+    c('Cod. Uso REC (recolección)', '01 — CASA HABITACIÓN'),
+    c('Cod. Uso BAR (barrido)', '01 — CASA HABITACIÓN'),
+    c('Frecuencia de recolección', 'INTERDIARIA'),
+    c('Frontis (ml)', '9.00'),
+    c('Posición del predio', 'ESQUINA'),
+    ro('Factor de distribución de costo', '—'),
+  ] },
+];
+
+const VALORIZACION_BIENES = [
+  { titulo: 'Áreas comunes de la edificación', hint: '', campos: [
+    ro('Cod. Edificación', '20-06-01-0034-01'),
+    c('Denominación', 'EDIFICIO SAN MARTÍN'),
+    c('Área común de terreno (m²)', '96.40'),
+    c('Área común construida (m²)', '141.20'),
+    c('Régimen', 'PROPIEDAD EXCLUSIVA Y COMÚN'),
+  ] },
+];
+
+const VALORIZACION_RURAL = [
+  { titulo: 'Unidad catastral rural', hint: '', campos: [
+    ro('Cod. Unidad Catastral (UC)', '11024-0418'),
+    c('Valle / sector', 'CHIRA — MARGEN IZQUIERDA'),
+    ro('Superficie total', '12.5000 HA'),
+    c('Tipo de tierra', 'A2 — CULTIVO EN LIMPIO'),
+    c('Condición de riego', 'BAJO RIEGO'),
+    ro('Arancel rural (S/ por ha)', '—'),
+  ] },
+];
+
+const USO_ECONOMICA = [
+  { titulo: 'Actividad económica en la unidad', hint: '', campos: [
+    c('Nombre comercial', 'BODEGA ROSITA'),
+    c('CIIU', '4711 — VENTA AL POR MENOR'),
+    c('Nº de licencia de funcionamiento', '004182-2024'),
+    c('Área destinada al negocio (m²)', '24.00'),
+    c('Fecha de inicio de actividades', '02/02/2024'),
+    ro('Estado de la licencia', 'CON LICENCIA'),
+  ] },
+];
+
+const FICHAS = [
+  { id: 'urbana', label: 'Urbana' },
+  { id: 'economica', label: 'Económica' },
+  { id: 'bienes', label: 'Bienes comunes' },
+  { id: 'rural', label: 'Rural', apagada: true, razon: 'Rural apagada: este predio es urbano.' },
+];
+
+const PESTANAS = [
+  { id: 'identificacion', label: 'Identificación' },
+  { id: 'ubicacion', label: 'Ubicación' },
+  { id: 'titularidad', label: 'Titularidad' },
+  { id: 'valorizacion', label: 'Valorización' },
+  { id: 'uso', label: 'Uso y servicios' },
+];
+
+const fila = (celdas) => ({ celdas: celdas.map((texto, i) => ({
+  texto,
+  estilo: texto === '—' ? CELDA_HUECO : (i === 0 ? CELDA_1 : CELDA),
+})) });
+
+const TABLA_PISOS = {
+  titulo: 'Pisos declarados',
+  conteo: '3 pisos declarados',
+  cols: ['Nº Piso', 'Mes / Año', 'MEP', 'ECS', 'ECC', 'Categorías', 'Área declarada m²', 'Área verificada m²'],
+  filas: [
+    fila(['01', '06 / 2004', '01 — CONCRETO', '02 — BUENO', '03 — TERMINADO', 'C C C D D D C', '96.00', '96.00']),
+    fila(['02', '11 / 2013', '02 — LADRILLO', '02 — BUENO', '03 — TERMINADO', 'C D D D D D D', '96.00', '96.00']),
+    fila(['03', '03 / 2026', '02 — LADRILLO', '01 — MUY BUENO', '02 — INCONCLUSO', 'D D E E E E D', '22.50', '37.00']),
+  ],
+};
+
+const TABLA_PARTICIPACIONES = {
+  titulo: 'Unidades con participación',
+  conteo: '4 unidades con participación',
+  cols: ['Unidad', 'Contribuyente', 'Área exclusiva m²', '% participación', 'Valor asignado S/'],
+  filas: [
+    fila(['01', 'PEÑA GARCÍA, ROSA E.', '84.20', '27.4000', '—']),
+    fila(['02', 'CHÁVEZ RUIZ, JORGE', '84.20', '27.4000', '—']),
+    fila(['03', 'SUCESIÓN VALDIVIEZO', '69.10', '22.6000', '—']),
+    fila(['04', 'MORÁN SANDOVAL, ANA', '69.10', '22.6000', '—']),
+  ],
+};
+
+const TABLA_TIERRAS = {
+  titulo: 'Grupos de tierra',
+  conteo: '2 grupos declarados',
+  cols: ['Grupo', 'Clasificación', 'Riego', 'Superficie ha', 'Arancel S/ por ha'],
+  filas: [
+    fila(['01', 'A2 — CULTIVO EN LIMPIO', 'BAJO RIEGO', '8.2000', '—']),
+    fila(['02', 'C3 — PASTOS', 'SECANO', '4.3000', '—']),
+  ],
+};
+
+const OCULTO = 'display: none;';
+const BLOQUE_TABLA = 'display: block; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden;';
+const BLOQUE_NOTA = 'display: flex; gap: 10px; align-items: flex-start; padding: 11px 14px; border: 1px solid #e6e1d6; border-radius: 6px; background: #fbfaf6;';
+const BLOQUE_CALLOUT = 'display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid #d8d2c4; border-left: 3px solid #1F3A5F; border-radius: 6px; background: #ffffff;';
+
+const NOTA_COMUN = 'Identificación, ubicación y titularidad son las del predio: esta ficha no las repite ni admite una versión propia de ellas. Se editan una vez, en un solo sitio.';
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { ficha: 'urbana', pestana: 'valorizacion' };
+  }
+
+  seccionesDe(ficha, pestana) {
+    if (pestana === 'identificacion') return IDENTIFICACION;
+    if (pestana === 'ubicacion') return UBICACION;
+    if (pestana === 'titularidad') return TITULARIDAD;
+    if (pestana === 'valorizacion') {
+      if (ficha === 'bienes') return VALORIZACION_BIENES;
+      if (ficha === 'rural') return VALORIZACION_RURAL;
+      return VALORIZACION_URBANA;
+    }
+    if (ficha === 'economica') return USO_ECONOMICA.concat(USO_URBANA.slice(0, 1));
+    return USO_URBANA;
+  }
+
+  tablaDe(ficha, pestana) {
+    if (pestana !== 'valorizacion') return null;
+    if (ficha === 'bienes') return TABLA_PARTICIPACIONES;
+    if (ficha === 'rural') return TABLA_TIERRAS;
+    return TABLA_PISOS;
+  }
+
+  renderVals() {
+    const ficha = this.state.ficha;
+    const pestana = this.state.pestana;
+    const secciones = this.seccionesDe(ficha, pestana);
+    const tabla = this.tablaDe(ficha, pestana);
+    const comun = pestana === 'identificacion' || pestana === 'ubicacion' || pestana === 'titularidad';
+    const apagada = FICHAS.find((f) => f.apagada);
+
+    return {
+      fichas: FICHAS.map((f) => ({
+        id: f.id,
+        label: f.label,
+        estilo: f.apagada ? CHIP_APAGADA : (f.id === ficha ? CHIP_ACTIVA : CHIP),
+        pick: f.apagada ? () => {} : () => this.setState({ ficha: f.id }),
+      })),
+      razonApagada: apagada ? apagada.razon : '',
+      pestanas: PESTANAS.map((p) => ({
+        id: p.id,
+        label: p.label,
+        estilo: p.id === pestana ? TAB_ACTIVA : TAB,
+        pick: () => this.setState({ pestana: p.id }),
+      })),
+      secciones: secciones.map((s, i) => ({
+        titulo: s.titulo,
+        hint: s.hint,
+        campos: s.campos,
+        estiloIndice: i === 0 ? INDICE_1 : INDICE,
+      })),
+      estiloTabla: tabla === null ? OCULTO : BLOQUE_TABLA,
+      tabla: tabla === null ? { titulo: '', conteo: '', cols: [], filas: [], estiloCabecera: '' } : conRejilla(tabla),
+      estiloNota: (comun && ficha !== 'urbana') ? BLOQUE_NOTA : OCULTO,
+      notaComun: NOTA_COMUN,
+      estiloCallout: (pestana === 'valorizacion' && ficha === 'urbana') ? BLOQUE_CALLOUT : OCULTO,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -23,24 +23,24 @@ import java.util.Objects;
 public record Observacion(String texto) {
 
     /** {@code CHECK (length(btrim(observacion)) >= 5)} en la tabla de auditoria. */
-    private static final int MINIMO = 5;
+    private static final int LARGO_MINIMO = 5;
 
     /** El ancho de {@code observacion varchar(500) NOT NULL} de las tablas de negocio. */
-    private static final int MAXIMO = 500;
+    private static final int LARGO_MAXIMO = 500;
 
     public Observacion {
         Objects.requireNonNull(texto, "Toda escritura exige una observacion (regla 10, ADR-0008)");
         texto = texto.strip();
-        if (texto.length() < MINIMO) {
+        if (texto.length() < LARGO_MINIMO) {
             throw new IllegalArgumentException(
                     "La observacion debe explicar el cambio: al menos "
-                            + MINIMO
+                            + LARGO_MINIMO
                             + " caracteres, y no espacios en blanco (ADR-0008)");
         }
-        if (texto.length() > MAXIMO) {
+        if (texto.length() > LARGO_MAXIMO) {
             throw new IllegalArgumentException(
                     "La observacion excede "
-                            + MAXIMO
+                            + LARGO_MAXIMO
                             + " caracteres, que es lo que admite la columna: "
                             + texto.length());
         }

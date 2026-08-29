@@ -47,6 +47,7 @@ class ReportesDeSancionesWebTest {
                             new PadronesDeTransitoController(null, null, RELOJ),
                             new RecordsDeTransitoController(null, null, RELOJ),
                             new ResumenesDeTransitoController(null, null, RELOJ),
+                            new ReportesDeTransitoController(null, null, null, RELOJ),
                             new ReportesAdministrativosController(null, null, null, RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
@@ -199,6 +200,55 @@ class ReportesDeSancionesWebTest {
                 .contains("PADRON_NOTIFICACIONES")
                 .contains("RESUMEN_PAPELETAS")
                 .contains("RESUMEN_RECAUDACION");
+    }
+
+    @Test
+    @DisplayName("el emisor de transito nombra los nueve reportes que sabe emitir")
+    void elEmisorDeTransitoNombraLosNueve() throws Exception {
+        MvcResult resultado =
+                enviar("/api/v1/transito/reportes", "{\"reporte\":\"PADRON_DE_LO_QUE_SEA\"}");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("PADRON_COACTIVA")
+                .contains("PADRON_CONSTANCIAS")
+                .contains("RECORD_CONDUCTOR")
+                .contains("RECORD_VEHICULAR")
+                .contains("RESUMEN_RECAUDACION")
+                .contains("RESUMEN_PAPELETAS")
+                .contains("RESUMEN_CODIGO")
+                .contains("RESUMEN_PLACA");
+    }
+
+    @Test
+    @DisplayName("un criterio que el reporte de transito no usa se rechaza NOMBRANDOLO")
+    void elCriterioDeMasSeRechazaNombrandolo() throws Exception {
+        MvcResult resultado =
+                enviar(
+                        "/api/v1/transito/reportes",
+                        "{\"reporte\":\"RESUMEN_RECAUDACION\",\"ano\":\"2026\","
+                                + "\"placa\":\"P1T-234\"}");
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "con los servicios en null, un 500 significaria que la validacion se movio"
+                                + " detras de la frontera")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("la hoja saldria correcta para una pregunta que no es la que se hizo")
+                .contains("placa")
+                .contains("RESUMEN_RECAUDACION");
+    }
+
+    @Test
+    @DisplayName("y un record sin sujeto se rechaza tambien desde el emisor")
+    void elRecordSinSujetoDesdeElEmisor() throws Exception {
+        MvcResult resultado =
+                enviar("/api/v1/transito/reportes", "{\"reporte\":\"RECORD_CONDUCTOR\"}");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("el padron entero con otro titulo");
     }
 
     @Test

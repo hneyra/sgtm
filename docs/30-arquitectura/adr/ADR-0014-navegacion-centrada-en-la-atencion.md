@@ -76,6 +76,34 @@ Las hojas de un módulo dejan de competir con sus operaciones en el menú: una s
 primero —13 hojas—, con el mismo bloque de hoja parametrizado que ya comparten sus trece
 reportes. Cada hoja conserva su identificador de opción, su ruta y su permiso.
 
+#### Enmienda (2026-08-29, issue [#391](https://github.com/hneyra/sgtm/issues/391))
+
+Plegar el menú y dibujar el carril **eran la misma marca**, y por eso un módulo sólo podía plegar un
+grupo. Al unificar Catastro en cuatro superficies aparecieron grupos que quieren lo primero y no lo
+segundo: sus opciones ya se navegan entre sí —el conmutador de modalidad de la ficha, las pestañas
+de hoja del territorio y del cuadro—, así que un carril al lado sería una segunda forma de navegar
+lo mismo. Las dos cosas se separan:
+
+| Marca | Qué hace |
+|---|---|
+| `{ plegado: true }` | El menú enseña una entrada, que abre la primera opción visible. Nada más |
+| `{ centro: true }` | Pliega igual **y además** dibuja el carril del centro de reportes |
+
+> Un grupo se pliega cuando **su superficie ya sabe navegar entre sus opciones**. Si además sus
+> opciones no tienen otra forma de alcanzarse entre sí, el pliegue lleva carril. Lo primero puede
+> darse varias veces en un módulo; lo segundo, **una sola**.
+
+El límite de «uno por módulo» se conserva sobre `centro`, con el motivo corregido: no era que
+hubiera dos entradas homónimas «Reportes» —la barra lateral y el hub dibujan el nombre del grupo—
+sino que serían dos formas de navegar lo mismo. Tránsito, Infracciones administrativas y
+Autorizaciones y licencias declaran las dos marcas y no cambian de comportamiento.
+
+Y se añade la condición que el mecanismo no comprobaba: **antes de plegar hay que demostrar que la
+superficie lleva a todas las opciones del grupo**, recorriéndolas. Es lo que dejó «Predio» sin
+plegar en Catastro, por un motivo que no es de interfaz: el reporte de ficha se abre por el código
+del contribuyente y ninguna superficie del módulo lo tiene. El patrón entero está en
+[`FRO-05`](../../60-frontend/superficies-unificadas.md).
+
 ## Consecuencias
 
 - **Las 134 opciones, sus rutas y sus permisos no se tocan**: el identificador de la opción sigue

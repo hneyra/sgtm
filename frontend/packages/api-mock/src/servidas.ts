@@ -15,8 +15,8 @@
  * y este archivo se borra. El modo intermedio es transitorio, y su final es
  * parte del trabajo, no un pendiente que se queda.
  *
- * Sigue vacia aunque el backend ya sirva las once operaciones de seguridad
- * (#9, #12, #13), y eso es deliberado: una ruta aqui que el backend no conteste
+ * Sigue vacia aunque el backend ya sirva 171 de las 174 operaciones del
+ * contrato, y eso es deliberado: una ruta aqui que el backend no conteste
  * **falla ruidosamente**, y las pruebas y la compilacion del frontend corren sin
  * ningun Spring Boot al lado. Encenderlas es cosa de quien tiene los dos
  * procesos levantados —ver «Los dos procesos, juntos» en `frontend/README.md`—.

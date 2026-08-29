@@ -177,7 +177,7 @@ Si `municipalidad_id` no está ahí, el problema es del usuario en Keycloak, no 
 
 ```bash
 cd frontend
-yarn e2e                                   # los tres caminos, sin ventana
+yarn e2e                                   # los seis caminos, sin ventana
 yarn e2e --headed                          # con ventana, para verlos
 yarn e2e --ui                              # el modo interactivo de Playwright
 yarn e2e e2e/caja-con-teclado.spec.ts      # solo uno

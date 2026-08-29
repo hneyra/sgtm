@@ -14,7 +14,7 @@ simula la API ([`ADR-0010`](../30-arquitectura/adr/ADR-0010-catalogo-portado-y-p
 | `frontend/packages/dominio` | Importe, Fecha, Estado y su formateo — **con pruebas** |
 | `frontend/packages/api-client` | Cliente HTTP y el contrato `DatosDePantalla` — **con pruebas** |
 | `frontend/packages/design-system` | Tokens de Juris PE y los componentes que usan las pantallas |
-| `frontend/packages/api-mock` | **El proxy de datos**: responde las 134 operaciones del contrato |
+| `frontend/packages/api-mock` | **El proxy de datos**: responde las 134 operaciones del catálogo, una por pantalla |
 | `frontend/packages/lectura` | Los lectores del contrato y las rejillas de la unificada, compartidos por las dos aplicaciones (#298) |
 | `frontend/packages/sesion` | El proveedor y la puerta de sesión, compartidos por las dos aplicaciones (#298) |
 | `frontend/apps/backoffice` | Shell, navegación de dos niveles, paleta de comandos, hub de módulo y **el renderizador con sus diez bloques** |
@@ -166,8 +166,8 @@ con el esqueleto de carga del design system y un mensaje centrado entre hairline
 
 ## 8. Lo que todavía no está
 
-- ~~**Los tipos de la API se escriben a mano.**~~ **Hecho:** los tipos de las 134 operaciones se
-  generan desde [`sgtm-v1.yaml`](../50-api/openapi/sgtm-v1.yaml) hacia `operaciones.generado.ts`,
+- ~~**Los tipos de la API se escriben a mano.**~~ **Hecho:** los tipos de las 174 operaciones del
+  contrato se generan desde [`sgtm-v1.yaml`](../50-api/openapi/sgtm-v1.yaml) hacia `operaciones.generado.ts`,
   y `yarn verificar` regenera y compara. Un campo renombrado en el contrato deja de compilar el
   código que usaba el nombre viejo. **Lo que sigue pendiente son los esquemas de cuerpo y
   respuesta**: el contrato declara verbo, ruta y parámetros, y el esquema de cada recurso se
@@ -178,7 +178,7 @@ con el esqueleto de carga del design system y un mensaje centrado entre hairline
   el claim con las municipalidades autorizadas, que es lo que hace falta para el **selector**; el
   flujo de una sola municipalidad no lo espera.
 - **El servidor de datos de ejemplo es un proxy en el navegador**, no un proceso aparte:
-  `@sgtm/api-mock` sustituye `fetch` y responde las 134 operaciones. Se reabre si hace falta
+  `@sgtm/api-mock` sustituye `fetch` y responde las 134 operaciones del catálogo. Se reabre si hace falta
   simular volumen o escrituras con estado (ADR-0010).
 - ~~**Los parámetros de ruta no están resueltos.**~~ **Hecho:** el registro abierto va en la ruta
   (`/rentas-registro/vehiculos/ABC-123`) y los filtros, el orden y la página en la consulta. Sin

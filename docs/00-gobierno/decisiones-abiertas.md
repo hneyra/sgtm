@@ -39,9 +39,12 @@ Era una sola fila que cubría ~27 datos de siete tributos, y por eso bloqueaba e
 tres grupos tienen responsables y bloqueos distintos:
 
 - **D-02a** son normas nacionales publicadas. **Cerrada el 2026-08-25** ([#200](https://github.com/hneyra/sgtm/issues/200)):
-  los 14 archivos de [`valores-normativos/`](../10-negocio/valores-normativos/) están `VERIFICADO`,
-  con segunda firma distinta cada uno. Cerrar la firma no habilita todavía escribir una regla con
-  cifra real. **La carga a la base ya no espera a nada**: D-13 se cerró el 2026-08-28
+  los 14 archivos de [`valores-normativos/`](../10-negocio/valores-normativos/) que la cerraban
+  estaban `VERIFICADO`, con segunda firma distinta cada uno. **Hoy son 19**, y tres siguen en
+  `TRANSCRITO` a falta de la segunda firma: los valores unitarios —que volvieron atrás el
+  2026-08-28, cuando el cotejo contra el Anexo I.2 real devolvió 3 partidas donde se habían
+  transcrito 7 (GOB-03, H-14)—, las obras complementarias y la deducción de Amazonía, las dos de
+  D-11. Cerrar la firma no habilita todavía escribir una regla con cifra real. **La carga a la base ya no espera a nada**: D-13 se cerró el 2026-08-28
   ([ADR-0017](../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md)) y las tres tablas
   de valuación son catálogos nacionales; el mecanismo completo existe —`PublicarParametros` (#188)
   publica los once valores sueltos, `PublicarCuadros` publica un cuadro entero desde el manifiesto

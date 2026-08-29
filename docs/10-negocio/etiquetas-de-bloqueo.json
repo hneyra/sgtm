@@ -7,21 +7,20 @@
     "  gh issue list --repo hneyra/sgtm --state all --json number,labels \\",
     "    --label bloqueado:D-02a --label bloqueado:D-02b --label bloqueado:D-02c",
     "y se actualiza en el mismo PR que cambia una etiqueta. Si se desincroniza,",
-    "`verificar-mapa-normativo.mjs` se pone en rojo, que es exactamente lo que tiene que pasar."
+    "`verificar-mapa-normativo.mjs` se pone en rojo, que es exactamente lo que tiene que pasar.",
+    "",
+    "El 2026-08-29 desaparecio `bloqueado:D-02a` del tablero: D-02a se cerro el 2026-08-25",
+    "(GOB-02), y una etiqueta que nombra una decision cerrada dice algo falso. Quedan siete",
+    "issues etiquetados, todos por ordenanza o acto local."
   ],
-  "generado": "2026-08-22",
+  "generado": "2026-08-29",
   "etiquetas": {
-    "188": ["D-02a"],
     "189": ["D-02b"],
-    "190": ["D-02a"],
     "191": ["D-02b"],
-    "192": ["D-02a"],
     "193": ["D-02c"],
-    "194": ["D-02a"],
-    "195": ["D-02a", "D-02c"],
-    "196": ["D-02a", "D-02b", "D-02c"],
-    "197": ["D-02a", "D-02b"],
-    "198": ["D-02a"],
+    "195": ["D-02c"],
+    "196": ["D-02b", "D-02c"],
+    "197": ["D-02b"],
     "199": ["D-02b"]
   }
 }
