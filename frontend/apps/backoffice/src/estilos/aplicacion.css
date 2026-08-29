@@ -354,14 +354,15 @@
   white-space: nowrap;
 }
 
-/* La entrada unica del bloque plegado en centro de reportes (ADR-0014 §5): se
-   separa del bloque anterior como lo hace una cabecera de bloque, porque en la
-   lista ocupa su sitio. */
-.sgtm-nav__centro {
+/* La entrada unica de un bloque plegado (ADR-0014 §5): se separa del bloque
+   anterior como lo hace una cabecera de bloque, porque en la lista ocupa su
+   sitio. La misma para los dos pliegues —con carril y sin el—: en el menu se
+   dibujan igual. */
+.sgtm-nav__plegado {
   margin-top: 10px;
 }
 
-.sgtm-nav__centro[data-dentro='1'] {
+.sgtm-nav__plegado[data-dentro='1'] {
   background: var(--accent-soft);
   color: var(--accent-ink);
   font-weight: 600;

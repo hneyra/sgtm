@@ -4,8 +4,9 @@
  *
  * Los 12 modulos del manual y sus 134 opciones, con el bloque de cada una ya
  * clasificado en el build: grupos por tarea donde el modulo esta disenado
- * (ADR-0014 §4) y los bloques de FRO-03 §4 en los demas. `centroDeReportes`
- * nombra el bloque que el modulo pliega en su centro de reportes (ADR-0014 §5).
+ * (ADR-0014 §4) y los bloques de FRO-03 §4 en los demas. `bloquesPlegados`
+ * nombra los que el menu ensena como una entrada unica, y `centroDeReportes`
+ * el unico de ellos que ademas lleva carril (ADR-0014 §5).
  *
  * Los nombres vienen del manual y no se reescriben (RNF-080).
  */
@@ -53,6 +54,10 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
     ],
     "bloques": [
       "Predio",
+      "Territorio",
+      "Valuación"
+    ],
+    "bloquesPlegados": [
       "Territorio",
       "Valuación"
     ],
@@ -390,6 +395,9 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "Catálogos",
       "Reportes"
     ],
+    "bloquesPlegados": [
+      "Reportes"
+    ],
     "centroDeReportes": "Reportes",
     "opciones": [
       {
@@ -591,6 +599,9 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "Notificaciones",
       "Cobranza",
       "Catálogos",
+      "Reportes"
+    ],
+    "bloquesPlegados": [
       "Reportes"
     ],
     "centroDeReportes": "Reportes",
@@ -1093,6 +1104,9 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
     "bloques": [
       "Licencias y autorizaciones",
       "Catálogos",
+      "Reportes"
+    ],
+    "bloquesPlegados": [
       "Reportes"
     ],
     "centroDeReportes": "Reportes",
