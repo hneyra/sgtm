@@ -246,6 +246,21 @@ export const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
     detalle:
       'Lo que se ve abajo es cómo saldría impresa la resolución que autoriza el duplicado. Autorizarlo exige el motivo —extravío, deterioro, robo— y el número del recibo del derecho de trámite del duplicado, y ninguna pantalla del manual dibuja un campo para ninguno de los dos: el «Nº de recibo» de «Licencia de funcionamiento» es el del derecho de la licencia, no el de este duplicado. Mientras tanto, autoriza el duplicado por el procedimiento actual y avísale a sistemas: esta pantalla todavía no dicta nada.',
   },
+
+  /* Las dos de infracciones administrativas (#428), con la misma forma y una
+     diferencia: aqui **si se sabe donde esta dibujado el formulario**, y se
+     dice. No para mandar a nadie alli —cuelga de otro acto, ver FRO-06 §2—,
+     sino para que quien lo busque deje de buscarlo. */
+  adm_resolucion_gerencia: {
+    titulo: 'Esto es la hoja de la resolución, no el formulario que la dicta',
+    detalle:
+      'Lo que se ve abajo es cómo saldría impresa la resolución que resuelve el procedimiento sancionador. Dictarla exige la papeleta que resuelve, la fecha y el sustento, y esta pantalla no dibuja ningún campo: el formulario que sí los tiene está en «Descargos y reclamos», pero allí resuelve un recurso presentado, y una resolución también se dicta sin ninguno. Mientras tanto, dicta la resolución por el procedimiento actual y avísale a sistemas: esta pantalla todavía no dicta nada.',
+  },
+  adm_notificacion_resolucion: {
+    titulo: 'Esto es la cédula, no el formulario que registra la diligencia',
+    detalle:
+      'Lo que se ve abajo es cómo saldría impresa la cédula con que se notifica la resolución de gerencia. Registrar la diligencia exige la resolución que se notifica, su fecha, la modalidad, el resultado y quién notificó, y esta pantalla no dibuja ningún campo: los de la diligencia están en «Notificación», pero allí cuelgan del acta preventiva, que es otro acto. Mientras tanto, notifica por el procedimiento actual y avísale a sistemas: esta pantalla todavía no registra nada.',
+  },
 };
 
 /** Las opciones que llevan aviso permanente. La prueba de fiscalizacion las mira. */
