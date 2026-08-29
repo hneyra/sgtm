@@ -52,21 +52,17 @@ describe('la banda de sujeto abre las cinco determinaciones', () => {
 
   /**
    * **La mitad que falta, dicha.** La otra cosa que hace reproducible una cifra
-   * es el conjunto de parametros sellado con que se calculo, y **hoy ninguna
-   * operacion del contrato lo publica**. La banda lo dice en vez de callarlo.
-   *
-   * Y no se arregla simulandolo en el proxy, que fue lo primero que se intento:
-   * cuatro de las cinco pantallas tienen un `POST` por operacion y no piden nada
-   * al abrir —abrir una pantalla no puede lanzar una determinacion—, asi que no
-   * hay peticion que contestar; y la quinta, «Arbitrios», ya la sirve el proxy
-   * con la forma del `Resource` que el backend publica de verdad, donde anadir
-   * un campo inventado seria decir que el contrato lo tiene.
+   * es el conjunto de parametros sellado con que se calculo. Recien abierta, la
+   * pantalla no lo tiene —su operacion es un `POST` y no pide nada al abrir—, y
+   * la banda lo cuenta en vez de callarlo. Lo que pasa al pedir el calculo lo
+   * fija `simulacion-de-la-determinacion.test.tsx` (#393).
    */
-  it('dice que el conjunto de parametros lo dira el servidor, en vez de callarlo', async () => {
+  it('sin determinacion todavia, la banda lo dice en vez de callarlo', async () => {
     montarEnRuta(`${PREDIAL}?codContribuyente=00000025673&ano=2026`);
 
     const banda = await screen.findByLabelText('Sujeto y parámetros de la determinación');
-    expect(banda.textContent).toMatch(/conjunto de parámetros se determina lo dirá el servidor/);
+    expect(banda.textContent).toMatch(/Todavía no hay determinación/);
+    expect(within(banda).queryByText(/sellado/)).not.toBeInTheDocument();
   });
 
   /** Y la banda es la misma en las cinco: lo que cambia es por quien pregunta. */

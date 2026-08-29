@@ -2,6 +2,7 @@ import type { DatosDePantalla, ProblemDetails } from '@sgtm/api-client';
 import { RESPUESTAS, RUTAS } from './respuestas.generado';
 import { archivoDe, escrituraDe, listaDe, paginadoDe, recursoDe } from './recursos';
 import { YA_SERVIDAS, laSirveElBackend } from './servidas';
+import { conLoSimulado } from './simulados';
 import type { OperacionServida } from './servidas';
 
 /**
@@ -230,7 +231,14 @@ export function instalarProxyDeDatos({
     // Una escritura responde 201 y no guarda nada: simular persistencia sin
     // reglas de negocio produciria un sistema que acepta lo que el backend
     // rechazara.
-    return json(datos, metodo === 'GET' ? 200 : 201);
+    //
+    // Lo que el proxy simula se anade **aqui**, al servir, y no dentro de
+    // `respuestas.generado.ts`: lo generado es el prototipo tal cual —cada
+    // valor sale de una figura del manual—, y una invencion escrita dentro del
+    // generador seria indistinguible de una captura, ademas de irse en el
+    // siguiente `yarn portar-catalogo`. Al ponerla en el camino de salida se ve
+    // quien la anade y de donde sale (`simulados.ts`).
+    return json(conLoSimulado(pantalla, datos), metodo === 'GET' ? 200 : 201);
   };
 
   return desinstalarProxyDeDatos;

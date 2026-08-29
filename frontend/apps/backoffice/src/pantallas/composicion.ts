@@ -337,6 +337,36 @@ export interface MemoriaDeSeccion {
   readonly total?: string;
 }
 
+/**
+ * La accion de una pantalla que **enseña el resultado sin escribir nada** (#393).
+ *
+ * Las cinco pantallas de determinacion tienen una: «Simular», «Recalcular»,
+ * «Liquidar». Hasta que esto existio no hacian nada, y la pantalla se quedaba
+ * con sus importes en «—» sin forma de ver la cuenta que los produce.
+ *
+ * Se declara la **etiqueta exacta del catalogo** y no un patron —`DE_CALCULO` de
+ * `pantallas/actos.ts` ya reconoce el verbo para otra cosa— porque aqui la
+ * consecuencia es una peticion: reconocer de mas significa pulsar «Recalcular»
+ * en una pantalla que no lo espera. Cinco entradas escritas a mano se revisan de
+ * una vez; un patron hay que volver a razonarlo cada vez que el catalogo crece.
+ *
+ * Como esto **no escribe**, no lleva observacion (regla 10 no le aplica: no se
+ * modifica ningun dato) y no pasa por `escrituras.ts`. Sale por
+ * `useSimulacion`, que es el segundo y ultimo sitio del frontend desde el que
+ * sale un `POST`, y que ademas **solo simula mientras contesta el proxy de
+ * datos**: ver su docblock, que es donde vive la justificacion entera.
+ */
+export interface SimulacionDeLaPantalla {
+  /** La etiqueta de la accion del catalogo que la dispara, letra por letra. */
+  readonly accion: string;
+  /**
+   * Lo que viaja en el cuerpo, si algo. Los filtros de la pantalla van por la
+   * URL como en cualquier lectura; esto es para lo que el cuerpo necesite
+   * ademas —hoy, la marca con la que un backend distingue simular de asentar—.
+   */
+  readonly cuerpo?: Readonly<Record<string, string | boolean | number>>;
+}
+
 export interface ComposicionDeOpcion {
   /**
    * El bloque de busqueda, para una opcion cuyo catalogo **no declara `filtros`**.
@@ -458,6 +488,8 @@ export interface ComposicionDeOpcion {
    * siendo la cabecera —sin sujeto devuelve `null`—; esto solo la deja intentarlo.
    */
   readonly resumenSiempre?: true;
+  /** Una accion de esta pantalla enseña el resultado sin escribir nada (#393). */
+  readonly simulacion?: SimulacionDeLaPantalla;
 }
 
 const COMPOSICIONES: Readonly<Record<string, ComposicionDeOpcion>> = {
@@ -588,6 +620,17 @@ export const resolutorDeCampo = (opcion: string, campo: string): CampoResolutor 
  * prototipo de `Object`, y el formulario dibujaria la cuenta en vez de sus
  * campos.
  */
+/**
+ * La accion de esta opcion que simula, o nada.
+ *
+ * No necesita su propia barrera de `Object.hasOwn` —a diferencia de
+ * `resolutorDeCampo`, que indexa un registro anidado por nombre de campo—:
+ * `composicionDe` ya la tiene, y de ella sale un objeto propio del que esta
+ * clave se lee directamente.
+ */
+export const simulacionDe = (opcion: string): SimulacionDeLaPantalla | undefined =>
+  composicionDe(opcion).simulacion;
+
 export const memoriaDeSeccion = (opcion: string, seccion: string): MemoriaDeSeccion | undefined => {
   const memoria = composicionDe(opcion).memoria;
   if (memoria === undefined || !Object.hasOwn(memoria, seccion)) return undefined;

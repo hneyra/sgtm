@@ -1,4 +1,4 @@
-import { Esqueleto, FechaDeCalculo } from '@sgtm/design-system';
+import { Esqueleto, FechaDeCalculo, Insignia } from '@sgtm/design-system';
 import type { ResumenDePantallaProps } from '../composicion';
 
 /**
@@ -16,18 +16,21 @@ import type { ResumenDePantallaProps } from '../composicion';
  *   el ejercicio  de que ano se determina. Es el otro filtro que decide la cifra
  *   la fecha      a cuando estan actualizadas las cifras (regla 9, RNF-075)
  *
- * **Y lo que falta, dicho.** La otra mitad de lo que hace reproducible una cifra
- * es el conjunto de parametros **sellado** con que se calculo —la UIT, los
- * tramos y las alicuotas de un ejercicio viven en un conjunto que no se edita
- * nunca, y dos conjuntos del mismo ejercicio dan dos importes distintos y los
- * dos correctos (`ARQ-09` §3)—. **Hoy ninguna operacion del contrato lo
- * publica**: `determinacion.conjunto_id` existe en la base (V20) y ningun
- * `Resource` lo devuelve. La banda lo dice en vez de callarlo; simularlo en el
- * proxy no lo arreglaria —cuatro de las cinco pantallas tienen un `POST` por
- * operacion y no piden nada al abrir, asi que no hay peticion que contestar—.
+ *   el conjunto   el conjunto de parametros **sellado** con que se calculo: la
+ *                 UIT, los tramos y las alicuotas de un ejercicio viven en un
+ *                 conjunto que no se edita nunca —se crea otro—, y dos conjuntos
+ *                 del mismo ejercicio dan dos importes distintos y los dos
+ *                 correctos (`ARQ-09` §3). Sin el, una cifra no se puede
+ *                 recalcular dentro de diez anos
+ *
+ * **Y mientras no hay determinacion, lo dice.** Las cuatro pantallas cuya
+ * operacion es un `POST` no piden nada al abrir —abrir una pantalla no puede
+ * lanzar una determinacion—, asi que hasta que alguien pulsa la accion que
+ * simula (#393) no hay conjunto que ensenar, y la banda lo cuenta en vez de
+ * callarlo: es la mitad que hace reproducible una cifra.
  *
  * **No pide nada y no compone ninguna cifra**: lo que ensena es lo que se
- * pregunto en el bloque de busqueda, mas la fecha que trajo la respuesta.
+ * pregunto en el bloque de busqueda, mas lo que trajo la respuesta.
  *
  * **Y sin sujeto no se dibuja.** Cuatro de las cinco pantallas tienen un `POST`
  * por operacion y no piden nada al abrir —abrir una pantalla no puede lanzar una
@@ -69,9 +72,13 @@ export function ResumenDeDeterminacion({
   opcion,
   busqueda,
 }: ResumenDePantallaProps) {
+  const determinacion = datos?.determinacion;
   const declarado =
     opcion !== undefined && Object.hasOwn(SUJETO, opcion) ? SUJETO[opcion] : undefined;
-  const sujeto = declarado === undefined ? '' : leer(busqueda, declarado.filtro);
+  // El texto del servidor manda sobre el codigo tecleado: «SUC. RUFINA MEDINA
+  // MEDINA» dice lo mismo mejor, y es el sujeto sobre el que **se determino**.
+  const sujeto =
+    determinacion?.sujeto ?? (declarado === undefined ? '' : leer(busqueda, declarado.filtro));
   const ejercicio = EJERCICIO.map((clave) => leer(busqueda, clave)).find((valor) => valor !== '');
 
   if (cargando && sujeto !== '') return <Esqueleto alto={92} />;
@@ -86,19 +93,26 @@ export function ResumenDeDeterminacion({
             {declarado?.etiqueta ?? 'Determinación'}
             {ejercicio === undefined ? '' : ` · ejercicio ${ejercicio}`}
           </span>
+          {/* «Sellado» con su texto dentro, nunca solo por color: es la
+              diferencia entre una cifra que se puede recalcular y una que no. */}
+          {determinacion !== undefined && (
+            <Insignia tono="ok">Parámetros {determinacion.conjunto} · sellado</Insignia>
+          )}
           <FechaDeCalculo
             {...(datos?.fechaCalculo === undefined ? {} : { fecha: datos.fechaCalculo })}
           />
         </p>
       </div>
-      {/* Lo que **todavia** no se puede decir, dicho donde se buscaria: con que
-          parametros se calculo. No es un adorno pendiente —es la mitad de lo que
-          hace reproducible una cifra— y callarlo dejaria la banda afirmando mas
-          de lo que sabe. */}
-      <p className="sgtm-resumen__nota">
-        Con qué conjunto de parámetros se determina lo dirá el servidor: hoy ninguna operación
-        publica la determinación, y por eso los importes salen con «—».
-      </p>
+      {determinacion === undefined && (
+        /* Lo que **todavia** no se puede decir, dicho donde se buscaria: con que
+           parametros se calculo. No es un adorno pendiente —es la mitad de lo que
+           hace reproducible una cifra— y callarlo dejaria la banda afirmando mas
+           de lo que sabe. */
+        <p className="sgtm-resumen__nota">
+          Todavía no hay determinación: los importes salen con «—» hasta que se pida el cálculo, y
+          entonces esta banda dice con qué conjunto de parámetros se hizo.
+        </p>
+      )}
     </section>
   );
 }

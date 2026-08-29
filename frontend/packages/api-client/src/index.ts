@@ -20,6 +20,7 @@ export { ProblemaDeApi } from './cliente';
 export type { ProblemDetails, OpcionesDeSolicitud, Archivo } from './cliente';
 export { pedirDatosDePantalla } from './pantallas';
 export type {
+  DatosDeDeterminacion,
   DatosDePantalla,
   DatosDeTabla,
   DetalleDeFila,

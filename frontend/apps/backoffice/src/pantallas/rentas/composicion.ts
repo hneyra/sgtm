@@ -89,6 +89,33 @@ const ResolutorDeValorDeTransferencia = lazy(async () => ({
  */
 const DETERMINACION = { resumen: ResumenDeDeterminacion, resumenSiempre: true } as const;
 
+/**
+ * **La accion que enseña el resultado antes de escribir** (#393).
+ *
+ * La declaran las **cuatro** determinaciones cuya operacion es un `POST`, con la
+ * etiqueta que el catalogo ya dibuja: ninguna se reescribe (RNF-080). Arbitrios
+ * no esta, y no por olvido: su operacion es un `GET`, asi que trae sus cifras al
+ * abrir y no tiene nada que simular.
+ *
+ * `cuerpo` solo lo lleva el calculo vehicular, y es el unico caso en que se sabe
+ * lo que el backend espera: `VehicularController.PeticionDeCalculoVehicular`
+ * declara `simulacion` entre sus campos. Para las otras tres **no hay
+ * controlador todavia**, asi que mandarles una marca inventada seria adivinar la
+ * forma de una peticion que nadie ha escrito.
+ *
+ * Y el vehicular tiene ademas su propio desajuste, que **no se puentea aqui**:
+ * su controlador lee `placa`, `codContribuyente` y `ejercicio` del **cuerpo**, y
+ * el contrato los declara como parametros de **consulta** (#333c, anotado en
+ * `rentas/index.ts`). Contra el backend de verdad los leeria nulos. Da igual
+ * mientras esto solo simule contra el proxy —`useSimulacion` no deja hacer otra
+ * cosa—, y es un motivo mas para que la guarda siga donde esta.
+ */
+const simula = (accion: string, cuerpo?: Readonly<Record<string, boolean>>) =>
+  ({
+    ...DETERMINACION,
+    simulacion: { accion, ...(cuerpo === undefined ? {} : { cuerpo }) },
+  }) as const;
+
 /** Cabecera-resumen mas indice que **sustituye** a las pestanas de la ficha. */
 const FICHA_CON_PESTANAS = { indice: 'en-vez-de-pestanas' } as const;
 
@@ -164,7 +191,7 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * sustituir. Con `true`, `seccionesDe` devuelve sus tres secciones tal cual.
    */
   predial_individual: {
-    ...DETERMINACION,
+    ...simula('Simular'),
     indice: true,
     indiceConLaTabla: true,
     /**
@@ -196,11 +223,11 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * proceso— y «Arbitrios» no tiene secciones en absoluto: su determinacion es
    * la tabla por servicio, que ya se lee como tal.
    */
-  predial_masivo: DETERMINACION,
+  predial_masivo: simula('Simular'),
   arbitrios: DETERMINACION,
-  vehicular_calculo: DETERMINACION,
+  vehicular_calculo: simula('Simular', { simulacion: true }),
   alcabala: {
-    ...DETERMINACION,
+    ...simula('Liquidar'),
     /* La clave va **computada** y no como `Liquidación:` a secas: prettier
        quita las comillas de una clave que es un identificador valido, y un
        identificador con tilde es exactamente lo que ESLint prohibe (FRO-04 §2).
