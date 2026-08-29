@@ -109,6 +109,34 @@ EOF
     exit 1
 }
 
+# Y que la credencial SIRVA, no solo que el secreto exista (issue #435).
+#
+# No es lo mismo, y la diferencia costo una corrida entera contra `stg` el 2026-08-29: el secreto
+# estaba, el manifiesto lo declaraba, y `rol_carga_parametros` seguia NOLOGIN en la base porque
+# `20-asignar-claves.sh` solo corre al inicializar el motor y ese cluster se habia creado antes del
+# issue #387. El Job arranco, no pudo conectarse, y el proceso lo reporto como «22 filas
+# rechazadas: revise que las dos firmas sean distintas». Ninguna linea decia la verdad.
+CLAVE_CARGA=$(kubectl -n "$NAMESPACE" get secret "$SECRETO" -o jsonpath='{.data.clave-carga}' \
+    | base64 --decode)
+if ! kubectl -n "$NAMESPACE" exec "deployment/sgtm-${AMBIENTE}-postgres" -c postgres -- \
+        env PGPASSWORD="$CLAVE_CARGA" psql --host=127.0.0.1 --username=rol_carga_parametros \
+        --dbname=sgtm --quiet --command 'SELECT 1' >/dev/null 2>&1; then
+    cat >&2 <<EOF
+El secreto $SECRETO existe, pero rol_carga_parametros NO se conecta con esa clave.
+
+Lo mas probable es que el rol siga NOLOGIN: 20-asignar-claves.sh le da LOGIN al inicializar el
+motor, y en un cluster que ya existia ese guion no vuelve a correr nunca. Llevar la credencial al
+motor en marcha:
+
+  secretos/asignar-claves.sh --ambiente $AMBIENTE
+
+Lo que NO hay que hacer es seguir adelante: el Job arrancaria, no podria conectarse, y la corrida
+terminaria diciendo que las filas fueron rechazadas por la base.
+EOF
+    exit 1
+fi
+echo "Credencial de rol_carga_parametros comprobada contra el motor."
+
 SUFIJO=$(date +%s)
 RECURSO="sgtm-${AMBIENTE}-publicacion-cuadros-${SUFIJO}"
 

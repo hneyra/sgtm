@@ -19,6 +19,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 import pe.gob.sgtm.carga.InformeDeImportacion;
@@ -253,6 +254,8 @@ public class PublicarCuadros implements ApplicationRunner {
                                         + delCuadro.estadoConservacion()
                                         + " / "
                                         + delCuadro.tramo()));
+            } catch (DataAccessResourceFailureException e) {
+                throw sinConexion(e);
             } catch (DataAccessException e) {
                 // Sin repetir el mensaje crudo de la base (ARQ-04 §5), igual que en la vehicular.
                 rechazadas.add(
@@ -309,6 +312,8 @@ public class PublicarCuadros implements ApplicationRunner {
                                             + unaFila.modelo()
                                             + " / "
                                             + unaFila.anioFabricacion()));
+                } catch (DataAccessResourceFailureException e) {
+                    throw sinConexion(e);
                 } catch (DataAccessException e) {
                     // Sin repetir el mensaje crudo de la base (ARQ-04 §5). La causa mas probable es
                     // que la edicion ya este cerrada, o que la credencial no sea la que puede
@@ -537,5 +542,24 @@ public class PublicarCuadros implements ApplicationRunner {
                 throw new IllegalArgumentException("«" + celda + "» no es un importe del anexo", e);
             }
         }
+    }
+    /**
+     * No hay conexion: eso <b>no es una fila rechazada</b> (issue #435).
+     *
+     * <p>{@code CannotGetJdbcConnectionException} es una {@code DataAccessException}, asi que un
+     * {@code catch} de esa clase la cuenta como un rechazo mas y la corrida termina diciendo «N
+     * filas rechazadas: revise la edicion y la credencial» con codigo de salida 0. Paso de verdad
+     * contra {@code stg} el 2026-08-29 con {@code rol_carga_parametros} todavia {@code NOLOGIN}:
+     * veintidos reintentos de pool y veintidos diagnosticos equivocados, sin que la causa real
+     * apareciera en ninguna linea.
+     */
+    private static IllegalStateException sinConexion(Exception causa) {
+        return new IllegalStateException(
+                "No se pudo abrir una conexion contra la base. Esto NO es una fila rechazada: sin"
+                    + " conexion no se publica ninguna. Comprobar que la credencial de"
+                    + " rol_carga_parametros sirve de verdad contra este ambiente —el secreto puede"
+                    + " existir y el rol seguir sin LOGIN— con infra/secretos/asignar-claves.sh"
+                    + " --ambiente <amb> --comprobar",
+                causa);
     }
 }

@@ -291,12 +291,44 @@ dos roles que rotan. Lo que no demuestra es el camino completo por `kubectl exec
 aplicación real sirviendo peticiones. Eso necesita el VPS, y es honesto decirlo así en
 vez de darlo por probado.
 
+### 3.2 Llevar al motor una credencial que se añadió después (issue #435)
+
+`bootstrap-secretos.sh` genera el `Secret`. Quien lo lleva **a la base** es
+`20-asignar-claves.sh`, y ese guion corre **una sola vez**: desde
+`/docker-entrypoint-initdb.d`, con el volumen de datos vacío. En un clúster que ya
+existe no vuelve a ejecutarse nunca.
+
+**Consecuencia, medida contra `stg` el 2026-08-29:** el issue #387 le dio `LOGIN` a
+`rol_carga_parametros` en ese guion, `bootstrap-secretos.sh` creó su `Secret`, el
+manifiesto lo declara… y en la base el rol seguía `NOLOGIN` y sin clave, porque el motor
+se había inicializado días antes. El síntoma no se pareció a la causa: `publicar-parametros.sh`
+terminó con `PUBLICADAS=0 RECHAZADAS=22`, **código de salida 0**, y un aviso por fila que
+decía «revise que las dos firmas sean distintas». Las firmas estaban bien.
+
+```bash
+cd infra
+secretos/asignar-claves.sh --ambiente stg --comprobar   # ¿sirven? no cambia nada
+secretos/asignar-claves.sh --ambiente stg               # y si no, las lleva
+```
+
+Por cada entrada del inventario con `rolDePostgres`, ejecuta `ALTER ROLE :"rol" LOGIN
+PASSWORD :'clave'` leyendo la clave **del `Secret` que ya existe** —no genera ninguna, eso
+es de `bootstrap-secretos.sh`; no rota ninguna, eso es de `rotar-clave.sh`— y después
+**comprueba que la credencial sirva de verdad**. Es idempotente.
+
+**La base de cada rol es dato del inventario, no `sgtm` por omisión.** El primer sondeo
+las probó todas contra el padrón y dio rojo en `sgtm_respaldo` y `keycloak`, que **a
+propósito** no llegan ahí (`INF-08`, `30-base-de-keycloak.sh`). Ese rojo falso era
+indistinguible del de un rol sin `LOGIN`, así que `baseDeDatos` entró a
+`EntradaDeSecreto`.
+
 **Y publicar de punta a punta con `rol_carga_parametros` en un ambiente real.**
-`publicar-parametros.sh` y `publicar-cuadros.sh` están listos y su credencial también
-—`sgtm-<amb>-postgres-carga` existe en `stg` desde el 2026-08-29—, pero la secuencia
-completa no se ha corrido nunca contra un clúster. Hasta el issue #434 no se podía: `stg`
-tenía **25 migraciones aplicadas de las 48** que declara `main`, así que las tres tablas
-de valuación de `V55` no existían y `publicar-cuadros.sh` no tenía dónde escribir.
+**Hecho el 2026-08-29**, después de que #434 subiera `stg` de 25 a 48 migraciones y de
+que `asignar-claves.sh` llevara la credencial al motor: `PUBLICADAS=22 RECHAZADAS=0` de
+parámetros y `PUBLICADAS=492 RECHAZADAS=0` de la tabla de depreciación, contra `stg`
+real. Lo que sigue sin poder correrse es la **edición vehicular**: su archivo de filas
+pesa 1,55 MB y un `ConfigMap` admite 1 MiB, así que necesita los dos pasos de S3 del
+issue #388 —el guion lo dice y se para nombrándolos, que es lo correcto—.
 
 ## 7. Documentos relacionados
 

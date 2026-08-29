@@ -15,6 +15,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 import pe.gob.sgtm.carga.InformeDeImportacion;
@@ -168,6 +169,28 @@ public class PublicarParametros implements ApplicationRunner {
                         new FilaRechazada(
                                 fila.numeroDeLinea(),
                                 "El parametro " + llave + " ya estaba publicado"));
+            } catch (DataAccessResourceFailureException e) {
+                // NO es una fila rechazada: es que no hay con que hablarle a la base. Se corta
+                // aqui, en la primera, en vez de contarlo N veces (issue #435).
+                //
+                // Pasó de verdad contra `stg` el 2026-08-29. `rol_carga_parametros` seguia
+                // NOLOGIN —`20-asignar-claves.sh` solo corre al inicializar el motor, y ese
+                // cluster se habia creado antes del issue #387—, y como
+                // `CannotGetJdbcConnectionException` es una `DataAccessException`, el `catch` de
+                // abajo la trataba como un rechazo de fila: la corrida termino con
+                // `PUBLICADAS=0 RECHAZADAS=22`, un aviso por fila que culpaba a las firmas, y
+                // codigo de salida 0. La causa real —«role "rol_carga_parametros" is not
+                // permitted to log in»— no aparecia en ninguna linea. Veintidos reintentos de
+                // pool, veintidos diagnosticos equivocados.
+                throw new IllegalStateException(
+                        "No se pudo abrir una conexion para publicar "
+                                + llave
+                                + ". Esto NO es una fila rechazada: sin conexion no se publica"
+                                + " ninguna. Comprobar que la credencial de rol_carga_parametros"
+                                + " sirve de verdad contra este ambiente —el secreto puede existir"
+                                + " y el rol seguir sin LOGIN— con"
+                                + " infra/secretos/asignar-claves.sh --ambiente <amb> --comprobar",
+                        e);
             } catch (DataAccessException e) {
                 // Sin repetir el mensaje crudo de la base (ARQ-04 §5). La causa mas probable es
                 // parametro_doble_verificacion_ck, o que la credencial no sea la que puede escribir

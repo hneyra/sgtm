@@ -54,6 +54,19 @@ export interface EntradaDeSecreto {
    * hay pod en marcha que reprogramar.
    */
   requiereReinicioDe?: string;
+  /**
+   * La base a la que ese rol se conecta de verdad, y **no siempre es el padron**
+   * (issue #435).
+   *
+   * `sgtm_respaldo` no tiene `CONNECT` sobre `sgtm` a proposito —`pg_backup_start` y
+   * `pg_backup_stop` son operaciones del cluster, no de una base, y una credencial de
+   * mas apuntando al padron es una credencial de mas (#155)—, y `keycloak` tiene la
+   * suya. Sin este dato, comprobar «¿sirve esta credencial?» conectando a `sgtm` da
+   * un rojo falso justo en los dos roles cuyo aislamiento es deliberado: paso al
+   * escribir `asignar-claves.sh`, y el rojo parecia el mismo que el de un rol sin
+   * `LOGIN`.
+   */
+  baseDeDatos?: string;
 }
 
 /**
@@ -116,6 +129,8 @@ export function inventarioDeSecretos(environment: Environment): EntradaDeSecreto
       consumidor: "Keycloak, para conectarse a su propia base",
       periodicidad: "semestral",
       rolDePostgres: ROL_DE_IDENTIDAD,
+      // Su propia base, y nunca la del padron (30-base-de-keycloak.sh lo revoca).
+      baseDeDatos: "keycloak",
       requiereReinicioDe: servicioDeIdentidad(environment),
     },
     {
@@ -125,6 +140,8 @@ export function inventarioDeSecretos(environment: Environment): EntradaDeSecreto
       consumidor: "El CronJob de respaldo base (issue #155): solo pg_backup_start/stop",
       periodicidad: "semestral",
       rolDePostgres: "sgtm_respaldo",
+      // `postgres`, no `sgtm`: no tiene CONNECT sobre el padron a proposito (INF-08, #155).
+      baseDeDatos: "postgres",
       // Sin Deployment que reiniciar: el CronJob crea un pod nuevo en cada corrida, y
       // ese pod lee el Secret que este en ese momento — igual que sgtm-owner con sus
       // dos Jobs.
@@ -158,6 +175,8 @@ export function inventarioDeSecretos(environment: Environment): EntradaDeSecreto
       consumidor: "postgres-exporter, el sidecar del motor (issue #156): solo pg_monitor",
       periodicidad: "semestral",
       rolDePostgres: "sgtm_monitor",
+      // `pg_monitor` son vistas del cluster; el exportador se conecta a `postgres`.
+      baseDeDatos: "postgres",
       // El sidecar vive en el MISMO pod que postgres: reiniciar el motor lo
       // reinicia a el tambien, asi que no hace falta nombrarlo aparte.
       requiereReinicioDe: servicioDeBaseDeDatos(environment),
