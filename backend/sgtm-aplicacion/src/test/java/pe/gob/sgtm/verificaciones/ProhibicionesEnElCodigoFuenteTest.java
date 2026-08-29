@@ -820,7 +820,8 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
-    @DisplayName("el escaner detecta la muestra con el factor de actualizacion compilado (regla 5, #437)")
+    @DisplayName(
+            "el escaner detecta la muestra con el factor de actualizacion compilado (regla 5, #437)")
     void elEscanerDetectaLaMuestraDeFactorDeActualizacionCompilado() throws IOException {
         // D-11: el `% actualizacion` es el unico de los cuatro factores que sigue sin fuente, y el
         // unico cuyo valor «obvio» es 1 —o sea, ninguno—. Escribirlo no se siente como inventar un
@@ -843,7 +844,7 @@ class ProhibicionesEnElCodigoFuenteTest {
         assertThat(hallazgos)
                 .as(
                         "dos de las tres formas en que acaba escribiendose —el factor y el cuadro"
-                            + " por ejercicio—, y ninguno de los comentarios que las explican")
+                                + " por ejercicio—, y ninguno de los comentarios que las explican")
                 .hasSize(2);
 
         // Y la tercera NO se caza, a proposito: el patron exige la palabra vigilada al PRINCIPIO

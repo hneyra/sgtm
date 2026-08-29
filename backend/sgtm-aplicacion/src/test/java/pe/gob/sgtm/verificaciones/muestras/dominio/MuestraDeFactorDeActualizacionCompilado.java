@@ -3,8 +3,8 @@ package pe.gob.sgtm.verificaciones.muestras.dominio;
 import java.math.BigDecimal;
 
 /**
- * Muestra que viola <b>a proposito</b> la regla 5 con el {@code % actualizacion} del predial
- * (#437, D-11).
+ * Muestra que viola <b>a proposito</b> la regla 5 con el {@code % actualizacion} del predial (#437,
+ * D-11).
  *
  * <p><b>Este es el mas facil de todos, y por eso el mas peligroso.</b> Los otros factores de D-11
  * al menos obligan a inventar una cifra: hay que elegir un 5, un 0,68 o un 1,5 y quien lo escribe
@@ -14,10 +14,10 @@ import java.math.BigDecimal;
  *
  * <p>Y ahi esta el defecto. El {@code % actualizacion} <b>multiplica el autovaluo</b> antes del
  * porcentaje de propiedad, asi que un 1 compilado no es la ausencia del factor: es la
- * <b>afirmacion</b> de que el factor vale 1 en todos los ejercicios y en todas las
- * municipalidades. En un ejercicio en que la norma diga otra cosa, el padron entero se determina de
- * menos y ninguna cifra parece mal — que es la frase con la que el propio issue #437 lo describe:
- * un valor por omision aqui no cobra de mas, <b>determina</b> de mas o de menos, en todo el padron.
+ * <b>afirmacion</b> de que el factor vale 1 en todos los ejercicios y en todas las municipalidades.
+ * En un ejercicio en que la norma diga otra cosa, el padron entero se determina de menos y ninguna
+ * cifra parece mal — que es la frase con la que el propio issue #437 lo describe: un valor por
+ * omision aqui no cobra de mas, <b>determina</b> de mas o de menos, en todo el padron.
  *
  * <p><b>Es el octavo agujero del mismo sitio.</b> Ninguna de las veintiuna palabras que vigilaba la
  * regla 5 antes de #437 caza {@code FACTOR_ACTUALIZACION} ni {@code PORCENTAJE_DE_ACTUALIZACION}:
@@ -41,8 +41,8 @@ public final class MuestraDeFactorDeActualizacionCompilado {
      * El mismo dato escrito como porcentaje — y <b>este el escaner NO lo caza</b>, a proposito.
      *
      * <p>El patron de la regla 5 exige que la palabra vigilada este <b>al principio</b> del
-     * identificador ({@code \b(UIT|TRAMO|…)\w*}), asi que {@code PORCENTAJE_DE_ACTUALIZACION} se
-     * le escapa: la palabra va en medio. No es un descuido de #437 sino un limite de la regla, y
+     * identificador ({@code \b(UIT|TRAMO|…)\w*}), asi que {@code PORCENTAJE_DE_ACTUALIZACION} se le
+     * escapa: la palabra va en medio. No es un descuido de #437 sino un limite de la regla, y
      * ensancharla a «la palabra en cualquier parte del nombre» se midio antes de descartarlo:
      * produce <b>ocho</b> falsos positivos en {@code src/main}, todos de {@code MINIMO} en
      * constantes que no son normativas —{@code LARGO_MINIMO = 5} de {@code Observacion}, {@code
