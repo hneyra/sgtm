@@ -3,7 +3,13 @@
 **Estado:** propuesta, pendiente de aprobación.
 **Alcance decidido:** padrón y determinación, **sin cobranza**.
 **Emisor de identidad decidido:** Keycloak.
-**D-02a:** nadie la está transcribiendo todavía; el paquete E-3 de [#116](https://github.com/hneyra/sgtm/issues/116) arranca en paralelo al código.
+**D-02a: cerrada el 2026-08-25** ([#200](https://github.com/hneyra/sgtm/issues/200)). El paquete E-3 de [#116](https://github.com/hneyra/sgtm/issues/116) terminó, y el mecanismo de carga existe entero. Lo que sigue deteniendo los importes es otra cosa, y está en §5.
+
+> **Vigencia (2026-08-29).** Esta pasada actualiza lo que el plan decía de **D-02a**, que se cerró.
+> §1 y §2 siguen describiendo el repositorio del día en que se escribió: los cuatro hechos de §1
+> (M-1…M-4) están resueltos —`SeguridadWeb`, `backend/Dockerfile` y `despliegue/compose.yaml`,
+> `ImplantarMunicipalidad`— y las ondas avanzaron muy por encima de lo que §2 recoge. Refrescarlos
+> es otro trabajo, y se ve que hace falta.
 
 Este documento no reordena la [hoja de ruta del backend (#58)](https://github.com/hneyra/sgtm/issues/58):
 la recorta a lo que una marcha blanca del predial necesita, y **añade lo que la hoja de ruta no
@@ -53,9 +59,11 @@ identificado. Ninguno depende de D-02.
 | **[#121](https://github.com/hneyra/sgtm/issues/121) · Carga inicial de vías, sectores y manzanas** | Importación masiva desde archivo de los catálogos territoriales de #16, con su rechazo por fila y su observación | Con un archivo donde una fila viola la unicidad: se rechaza esa fila, se informa cuál, y las demás entran |
 | **[#122](https://github.com/hneyra/sgtm/issues/122) · Instalación de demostración** | `municipalidad.es_demostracion` en migración —el hecho vive en la base, no en configuración—; todo documento emitido bajo ese tenant sale marcado | Emitiendo un documento bajo el tenant de demostración sin la marca: la comprobación de reimpresión idéntica de #55 lo detecta |
 
-**#122 es lo que hace honesta una marcha blanca**: mientras D-02a esté abierta, cualquier importe que
-el sistema muestre está calculado con parámetros que nadie firmó. Que el documento lo diga por
-escrito es la diferencia entre una prueba y un valor que alguien puede intentar cobrar.
+**#122 es lo que hace honesta una marcha blanca**: mientras ningún conjunto del ejercicio esté
+sellado con cifras reales, cualquier importe que el sistema muestre sale de parámetros de prueba.
+Cerrar D-02a no cambió eso —firmar la transcripción no es cargar el dato, y dos de los tres cuadros
+todavía no se pueden publicar (§5)—. Que el documento lo diga por escrito es la diferencia entre una
+prueba y un valor que alguien puede intentar cobrar.
 
 ## 4. La secuencia
 
@@ -87,21 +95,32 @@ importe**. Los tres últimos hacen visible lo construido.
 
 ### En paralelo, y sin esperar a ningún PR
 
-**E-3 de #116 — transcribir y firmar D-02a.** No es programación y es el camino crítico real: al
-terminar los diecisiete PR el sistema sabrá determinar y no sabrá con qué cifras. Un archivo por
-norma en `docs/10-negocio/valores-normativos/`, con norma, artículo, fecha de publicación,
-ejercicios que rige, **transcriptor y verificador distintos**, y estado.
+**E-3 de #116 — transcribir y firmar D-02a: hecho el 2026-08-25** ([#200](https://github.com/hneyra/sgtm/issues/200)).
+Un archivo por norma en [`docs/10-negocio/valores-normativos/`](../10-negocio/valores-normativos/),
+con norma, artículo, fecha de publicación, ejercicios que rige, **transcriptor y verificador
+distintos**, y estado. Y ya no es solo papel: `PublicarParametros` publica los valores sueltos,
+`PublicarCuadros` un cuadro entero desde el manifiesto del corpus, y `AbrirConjuntoDeParametros`
+([#247](https://github.com/hneyra/sgtm/issues/247) §2) abre, compone y sella.
 
-El PR 13 existe precisamente para servir a E-3: el corpus corre con un conjunto de parámetros
-vacío y recoge los `ParametroAusente`, así que **el inventario de lo que hay que transcribir deja
-de escribirse a mano**.
+**Lo que sigue en paralelo es lo que quedó detrás de la firma**, y es trabajo, no decisión: la
+segunda firma del cuadro de valores unitarios y las tres regiones que le faltan (H-14), la dimensión
+de uso de la tabla de depreciación (H-15) —`PublicarCuadros` la rechaza a propósito, para que no se
+cargue una de las cuatro y se descarten tres en silencio— y el `% actualización` de D-11, el único
+de los cuatro factores que sigue sin fuente identificada.
+
+El PR 13 sirve exactamente a eso: el corpus corre con un conjunto de parámetros vacío y recoge los
+`ParametroAusente`, así que **el inventario de lo que falta deja de escribirse a mano**.
 
 ## 5. Lo que la marcha blanca no va a poder hacer
 
 Conviene que esté escrito antes, y no descubrirlo el día de la demostración:
 
-- **No determinará importes correctos**, y no es un defecto del código: mientras D-02a esté
-  abierta, el sistema calcula con parámetros sin firmar. Por eso [#122](https://github.com/hneyra/sgtm/issues/122).
+- **No determinará importes correctos**, y no es un defecto del código. D-02a está cerrada, pero
+  **ningún conjunto del ejercicio está sellado con cifras reales**: faltan dos de los tres cuadros
+  —valores unitarios (H-14) y depreciación (H-15) de
+  [GOB-03](plan-de-desbloqueo-D-02.md)— y el `% actualización` de D-11, que multiplica sobre
+  importes y por eso omitirlo **no es neutro**. Mientras tanto el sistema calcula con parámetros de
+  prueba. Por eso [#122](https://github.com/hneyra/sgtm/issues/122).
 - **No cobrará.** Fue la decisión de alcance: caja, recibos y cierre de caja (#33, #34, #36) quedan
   fuera, y con ellos la emisión de valores (#37, #38).
 - **No emitirá HR ni PU con validez.** La generación de documentos existe (#55) y la determinación

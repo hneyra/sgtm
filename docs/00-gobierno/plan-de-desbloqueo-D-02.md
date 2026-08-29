@@ -18,6 +18,17 @@ Lo aprobado entra en GOB-02, que sigue siendo el registro. Este plan es el camin
 Del §1 al §7 está el plan **tal como se escribió**. Esta sección dice qué se hizo de él, qué salió
 distinto y qué queda; es lo primero que hay que leer y lo único que cambia con el tiempo.
 
+> **La etiqueta `bloqueado:D-02a` se retiró del tablero el 2026-08-29**, y con ella las veinte
+> filas del mapa que la nombraban. D-02a se cerró el 2026-08-25 ([#200](https://github.com/hneyra/sgtm/issues/200)),
+> y una etiqueta que nombra una decisión cerrada dice algo falso: salieron enteros #188, #190,
+> #192, #194 y #198, y perdieron esa parte #195, #196 y #197. Quedan **siete** issues
+> etiquetados, todos por ordenanza o acto local; la instantánea del tablero
+> ([`etiquetas-de-bloqueo.json`](../10-negocio/etiquetas-de-bloqueo.json)) se regeneró en el mismo
+> cambio, que es lo que `verificar-mapa-normativo.mjs` exige. **Retirar la etiqueta no dejó listas
+> las cifras**: lo que las filas 7, 9 y 10 del mapa siguen esperando son H-14, H-15 y el
+> `% actualización` de D-11, que son trabajo y no decisión —de ahí que la etiqueta ya no los pueda
+> representar—.
+
 ### 0.1 Dos hallazgos más, del día de ejecutar
 
 El plan se escribió el 19 de agosto y se ejecutó el 22. En esos tres días el repositorio se movió,

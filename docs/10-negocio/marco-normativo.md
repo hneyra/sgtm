@@ -45,8 +45,9 @@ Reglas de lectura del mapa:
 - La columna **Parte** admite `D-02a`, `D-02b` o `D-02c`, y puede llevar un `‹confirmar: …›` cuando
   la clasificación depende de una pregunta legal abierta. Lleva `‹POR CLASIFICAR: …›`, con su
   motivo, cuando ni eso se puede afirmar: es trabajo de E-3, y **se ve**.
-- La columna **Issues** nombra los que esperan esa cifra, o dice `ninguno todavía`. Es la mitad de
-  la comprobación cruzada; la otra mitad es §2.7.
+- La columna **Issues** nombra los que **llevan la etiqueta** de esa parte, o dice `ninguno
+  todavía — …` **con su motivo**: una fila que no dice a quién bloquea, ni por qué no bloquea a
+  nadie, no se puede comprobar. Es la mitad de la comprobación cruzada; la otra mitad es §2.8.
 - Un dato con **dos fuentes** se clasifica por la que bloquea la emisión, y la otra se anota en la
   columna de la norma. La partición sigue siendo una función: **una fila, una parte**.
 
@@ -54,21 +55,21 @@ Reglas de lectura del mapa:
 
 | # | Dato | Norma que lo fija | Parte | Issues |
 |---|---|---|---|---|
-| 1 | UIT del ejercicio | Decreto supremo anual del MEF que fija la UIT | D-02a | #188, #190, #195, #196, #198 |
-| 2 | Tramos del autovalúo en UIT y alícuota de cada tramo | TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF) art. 13 | D-02a | #188 |
-| 3 | Deducción del pensionista: monto en UIT y requisitos | TUO LTM art. 19 | D-02a | #188 |
-| 4 | Deducción del adulto mayor no pensionista, si aplica | Ley 30490 y sus modificatorias, sobre el art. 19 del TUO LTM `‹confirmar artículo vigente›` | D-02a | #188 |
-| 5 | Impuesto mínimo, si existe | TUO LTM art. 13, expresado como porcentaje de la UIT | D-02a | #188 |
-| 6 | Vencimientos: pago al contado y cuatro cuotas trimestrales | TUO LTM art. 15. La prórroga que una ordenanza local pueda dar es otro dato, y es D-02c | D-02a | #188 |
+| 1 | UIT del ejercicio | Decreto supremo anual del MEF que fija la UIT | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; la UIT está firmada y publicada en el derivado |
+| 2 | Tramos del autovalúo en UIT y alícuota de cada tramo | TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF) art. 13 | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; los tramos están firmados y publicados en el derivado |
+| 3 | Deducción del pensionista: monto en UIT y requisitos | TUO LTM art. 19 | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; la deducción está firmada y publicada en el derivado |
+| 4 | Deducción del adulto mayor no pensionista, si aplica | Ley 30490 y sus modificatorias, sobre el art. 19 del TUO LTM `‹confirmar artículo vigente›` | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; la deducción está firmada y publicada en el derivado |
+| 5 | Impuesto mínimo, si existe | TUO LTM art. 13, expresado como porcentaje de la UIT | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el mínimo está firmado y publicado en el derivado |
+| 6 | Vencimientos: pago al contado y cuatro cuotas trimestrales | TUO LTM art. 15. La prórroga que una ordenanza local pueda dar es otro dato, y es D-02c | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el archivo está firmado y todavía sin fila en el derivado publicable |
 
 ### 2.3 Valuación del predio
 
 | # | Dato | Norma que lo fija | Parte | Issues |
 |---|---|---|---|---|
-| 7 | Tabla de **valores unitarios** oficiales de edificación por categoría (**A–I**, nueve, leídas en el Anexo I.2), partida **y año de construcción** | Resolución anual del sector Vivienda, conforme al TUO LTM art. 11: para 2026, la R.M. 277-2025-VIVIENDA, art. 1 y Anexo I (I.1 a I.4, uno por región). **La tabla actual no tiene la dimensión «año de construcción»** (hallazgo H-4), y el anexo leído no la tiene tampoco: cruza categoría × **3 partidas** | D-02a | #188, #194, #197, #198 |
-| 8 | **Aranceles** de terreno por vía y ejercicio | Planos arancelares aprobados por el sector Vivienda (TUO LTM art. 11). Norma nacional, pero **sus valores están referidos a las vías de cada localidad**: la transcripción es por municipalidad y necesita #16 | D-02a | #188 |
-| 9 | Tabla de **depreciación** por material, antigüedad y estado de conservación | Anexa a la resolución anual del sector Vivienda `‹confirmar si la fija esa resolución o el Reglamento Nacional de Tasaciones›` | D-02a | #188, #194, #198 |
-| 10 | Valorización de **otras instalaciones** y obras complementarias, y el **factor de oficialización** que multiplica el resultado | Resolución anual del sector Vivienda, conforme al TUO LTM art. 11: para 2026, la R.M. 277-2025-VIVIENDA, cuyo art. 2 aprueba el Instructivo (Anexo II, que fija `Fo = 0,68`) y cuyo art. 3 aprueba los valores unitarios a costo directo (Anexo III, de uso **opcional** según la propia resolución). La metodología es la del Reglamento Nacional de Tasaciones, R.M. 172-2016-VIVIENDA art. 31 | D-02a | #188 |
+| 7 | Tabla de **valores unitarios** oficiales de edificación por categoría (**A–I**, nueve, leídas en el Anexo I.2), partida **y año de construcción** | Resolución anual del sector Vivienda, conforme al TUO LTM art. 11: para 2026, la R.M. 277-2025-VIVIENDA, art. 1 y Anexo I (I.1 a I.4, uno por región). **La tabla actual no tiene la dimensión «año de construcción»** (hallazgo H-4), y el anexo leído no la tiene tampoco: cruza categoría × **3 partidas** | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; lo que este dato espera es la segunda firma y las tres regiones que le faltan (GOB-03, H-14): trabajo, no decisión |
+| 8 | **Aranceles** de terreno por vía y ejercicio | Planos arancelares aprobados por el sector Vivienda (TUO LTM art. 11). Norma nacional, pero **sus valores están referidos a las vías de cada localidad**: la transcripción es por municipalidad y necesita #16 | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el archivo está firmado y sin fila en el derivado, porque la transcripción es por municipalidad y espera al catálogo vial |
+| 9 | Tabla de **depreciación** por material, antigüedad y estado de conservación | Anexa a la resolución anual del sector Vivienda `‹confirmar si la fija esa resolución o el Reglamento Nacional de Tasaciones›` | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; lo que espera es la dimensión de uso, sin la cual solo se cargaría una de las cuatro tablas (GOB-03, H-15) |
+| 10 | Valorización de **otras instalaciones** y obras complementarias, y el **factor de oficialización** que multiplica el resultado | Resolución anual del sector Vivienda, conforme al TUO LTM art. 11: para 2026, la R.M. 277-2025-VIVIENDA, cuyo art. 2 aprueba el Instructivo (Anexo II, que fija `Fo = 0,68`) y cuyo art. 3 aprueba los valores unitarios a costo directo (Anexo III, de uso **opcional** según la propia resolución). La metodología es la del Reglamento Nacional de Tasaciones, R.M. 172-2016-VIVIENDA art. 31 | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el factor de oficialización tiene fuente y su archivo sigue en TRANSCRITO, a falta de la segunda firma (D-11) |
 
 ### 2.4 Arbitrios
 
@@ -83,9 +84,9 @@ Reglas de lectura del mapa:
 
 | # | Dato | Norma que lo fija | Parte | Issues |
 |---|---|---|---|---|
-| 15 | Alcabala: alícuota, tramo inafecto en UIT, exoneraciones (primera venta de constructora, gobiernos, bomberos) | TUO LTM arts. 21 a 29 | D-02a | #190 |
-| 16 | Patrimonio vehicular: alícuota, años afectos, tabla de valores referenciales del MEF | TUO LTM arts. 30 a 37; la tabla, por resolución ministerial anual del MEF | D-02a | #190 |
-| 17 | Espectáculos públicos no deportivos: alícuotas por tipo | TUO LTM arts. 54 a 59 | D-02a | #190 |
+| 15 | Alcabala: alícuota, tramo inafecto en UIT, exoneraciones (primera venta de constructora, gobiernos, bomberos) | TUO LTM arts. 21 a 29 | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el archivo está firmado y todavía sin fila en el derivado publicable |
+| 16 | Patrimonio vehicular: alícuota, años afectos, tabla de valores referenciales del MEF | TUO LTM arts. 30 a 37; la tabla, por resolución ministerial anual del MEF | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el cuadro de 2026 ya se carga entero, y lo que queda es la categoría del vehículo (GOB-03, H-16) |
+| 17 | Espectáculos públicos no deportivos: alícuotas por tipo | TUO LTM arts. 54 a 59 | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el archivo está firmado y todavía sin fila en el derivado publicable |
 | 18 | Anuncios y propaganda: tasas por tipo y dimensión | Ordenanza municipal `‹confirmar si su ordenanza es materia tributaria y por tanto se ratifica (LOM art. 40)›` | D-02b | #199 |
 
 ### 2.6 Recargos, plazos y sanciones
@@ -93,14 +94,14 @@ Reglas de lectura del mapa:
 | # | Dato | Norma que lo fija | Parte | Issues |
 |---|---|---|---|---|
 | 19 | Interés moratorio: tasa vigente por periodo y forma de cálculo | TUO del Código Tributario art. 33: para los tributos de los gobiernos locales **la TIM la fija una ordenanza municipal**, con tope en la que establece la SUNAT | D-02b | ninguno todavía — lo consume la política de mora de #22, que cerró sin cifras |
-| 20 | Reajuste: índice aplicable y momento de aplicación | TUO LTM art. 15, inc. b: variación acumulada del IPM que publica el INEI | D-02a | #188 |
-| 21 | Plazo de prescripción y sus causales de interrupción y suspensión | TUO del Código Tributario arts. 43 a 46 | D-02a | #192 |
-| 22 | Plazos de notificación y de inicio de la cobranza coactiva | TUO del Código Tributario arts. 104 y 106, y Ley 26979 | D-02a | #192 |
+| 20 | Reajuste: índice aplicable y momento de aplicación | TUO LTM art. 15, inc. b: variación acumulada del IPM que publica el INEI | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el archivo está firmado y todavía sin fila en el derivado publicable |
+| 21 | Plazo de prescripción y sus causales de interrupción y suspensión | TUO del Código Tributario arts. 43 a 46 | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; los plazos están firmados y publicados en el derivado |
+| 22 | Plazos de notificación y de inicio de la cobranza coactiva | TUO del Código Tributario arts. 104 y 106, y Ley 26979 | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; los plazos están firmados y publicados en el derivado |
 | 23 | Costas y gastos del procedimiento coactivo: aranceles vigentes | Ley 26979: las costas se liquidan conforme al arancel aprobado por la entidad | `D-02c ‹confirmar: falta saber quién aprueba ese arancel; si es una ordenanza tributaria ratificada, la fila pasa a D-02b›` | #193 |
-| 24 | Tabla de infracciones de tránsito: código, porcentaje de la UIT, medida y puntos | Reglamento Nacional de Tránsito, D.S. 016-2009-MTC y su cuadro de infracciones `‹confirmar el anexo vigente›` | D-02a | #195 |
+| 24 | Tabla de infracciones de tránsito: código, porcentaje de la UIT, medida y puntos | Reglamento Nacional de Tránsito, D.S. 016-2009-MTC y su cuadro de infracciones `‹confirmar el anexo vigente›` | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el archivo está firmado y todavía sin fila en el derivado publicable |
 | 25 | Cuadro único de infracciones y sanciones administrativas (CUIS) de la municipalidad | Ordenanza municipal `‹confirmar si se ratifica: la sanción administrativa no es tributo, y LOM art. 40 alcanza a la materia tributaria›` | D-02b | #196 |
 | 26 | Descuentos por pronto pago de papeletas | Ordenanza municipal de beneficios, sin ratificación | D-02c | #195, #196 |
-| 27 | Multa tributaria por declarar fuera de plazo | TUO del Código Tributario art. 176 y sus tablas de infracciones y sanciones `‹confirmar la tabla que corresponde a un gobierno local›`. El régimen de gradualidad, si la municipalidad lo aprueba, es local (D-02c) | D-02a | #198 |
+| 27 | Multa tributaria por declarar fuera de plazo | TUO del Código Tributario art. 176 y sus tablas de infracciones y sanciones `‹confirmar la tabla que corresponde a un gobierno local›`. El régimen de gradualidad, si la municipalidad lo aprueba, es local (D-02c) | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el archivo está firmado y todavía sin fila en el derivado publicable |
 
 ### 2.7 Las dos filas que faltaban
 
@@ -112,8 +113,8 @@ otros dos **bloqueaban un issue sin tener línea en este mapa**. Aquí están:
 |---|---|---|---|---|
 | 28 | Interés del convenio de fraccionamiento y número máximo de cuotas | Ordenanza municipal que aprueba el reglamento de fraccionamiento, en el marco del TUO del Código Tributario art. 36 | D-02b | #191 |
 | 29 | Derecho de trámite del TUPA para la licencia de edificación | Ordenanza que aprueba el TUPA, con su ratificación cuando corresponde | D-02b | #197 |
-| 30 | Plazo de reclamación de los valores y exigibilidad coactiva municipal (RD, RM y OP) | TUO del Código Tributario arts. 78, 136 y 137, y TUO de la Ley 26979 art. 25 (con los arts. 29 y 31.2) | D-02a | #192 |
-| 31 | Inicio del cómputo de la prescripción, como desfase por tributo | TUO del Código Tributario art. 44, y TUO LTM art. 34 (la DJ anual del vehicular) | D-02a | #192 |
+| 30 | Plazo de reclamación de los valores y exigibilidad coactiva municipal (RD, RM y OP) | TUO del Código Tributario arts. 78, 136 y 137, y TUO de la Ley 26979 art. 25 (con los arts. 29 y 31.2) | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; los plazos están firmados y publicados en el derivado |
+| 31 | Inicio del cómputo de la prescripción, como desfase por tributo | TUO del Código Tributario art. 44, y TUO LTM art. 34 (la DJ anual del vehicular) | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el desfase está firmado y publicado en el derivado |
 | 32 | Porcentaje de la deducción del valor del predio en la Amazonía, y el ámbito territorial que da derecho a ella | Ley 27037 arts. 3 y 18, y su reglamento en esta materia, el D.S. 031-99-EF arts. 1 a 4. **El ámbito lo fija la Ley; el porcentaje, no**: el art. 3 del D.S. dice que «las Municipalidades de la Amazonía establecerán anualmente, el porcentaje de deducción» | D-02b — confirmado el 2026-08-28 por la Dirección del proyecto: el instrumento con que la municipalidad fija el porcentaje es una ordenanza en materia tributaria, ratificable (LOM art. 40). El D.S. 031-99-EF no lo nombra, por eso hubo que decidirlo | ninguno todavía — el factor lo esperaba D-11, y la deducción no aplica a la municipalidad piloto (Catacaos no está en el ámbito del art. 3) |
 
 **Son 29 filas, no 27.** El número creció porque el mapa se construyó desde los issues hacia la
@@ -146,23 +147,28 @@ o una fila nombra un issue que no la lleva, `verificar-mapa-normativo.mjs` lo se
 
 | Issue | Partes | Filas del mapa |
 |---|---|---|
-| #188 determinación del predial — las cifras | D-02a | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20 |
 | #189 arbitrios — las cifras | D-02b | 11, 12, 13, 14 |
-| #190 vehicular, alcabala y espectáculos — las cifras | D-02a | 1, 15, 16, 17 |
 | #191 fraccionamiento — las cifras | D-02b | 28 |
-| #192 prescripción y plazos — las cifras | D-02a | 21, 22, 30, 31 |
 | #193 arancel de costas procesales — las cifras | D-02c | 23 |
-| #194 impuesto fiscalizado — las cifras | D-02a | 7, 9 |
-| #195 cálculo de la papeleta de tránsito — las cifras | D-02a, D-02c | 1, 24, 26 |
-| #196 cálculo de la papeleta administrativa — las cifras | D-02a, D-02b, D-02c | 1, 25, 26 |
-| #197 valorización de obra y derecho de trámite del FUE — las cifras | D-02a, D-02b | 7, 29 |
-| #198 liquidación y multa tributaria — las cifras | D-02a | 1, 7, 9, 27 |
+| #195 cálculo de la papeleta de tránsito — las cifras | D-02c | 26 |
+| #196 cálculo de la papeleta administrativa — las cifras | D-02b, D-02c | 25, 26 |
+| #197 valorización de obra y derecho de trámite del FUE — las cifras | D-02b | 29 |
 | #199 tasa de anuncios y propaganda — las cifras | D-02b | 18 |
 
-**Ningún otro issue del repositorio lleva etiqueta de bloqueo por D-02.** Los doce de arriba son
+**Ningún otro issue del repositorio lleva etiqueta de bloqueo por D-02.** Los siete de arriba son
 las mitades «cifras» que salieron de partir sus padres en la frontera estructura/valor
 ([GOB-03 §E-2](../00-gobierno/plan-de-desbloqueo-D-02.md)); los padres quedaron sin bloqueo y se
 pueden empezar hoy.
+
+**Eran doce hasta el 2026-08-29**, cuando se retiró `bloqueado:D-02a` del tablero: D-02a se cerró
+el 2026-08-25 y una etiqueta que nombra una decisión cerrada dice algo falso. Salieron enteros
+#188, #190, #192, #194 y #198, y perdieron esa parte #195, #196 y #197, que siguen aquí por la
+ordenanza o el acto local. **Retirar la etiqueta no dejó listas sus cifras**, y conviene no leerlo así: lo
+que las filas 7, 9 y 10 siguen esperando es la segunda firma del cuadro de valores unitarios y sus
+tres regiones (H-14), la dimensión de uso de la depreciación (H-15) y el `% actualización` de
+D-11. Eso ya no es una decisión de D-02 —es trabajo, y vive en
+[GOB-03](../00-gobierno/plan-de-desbloqueo-D-02.md) y en los propios issues—, que es exactamente
+por lo que la etiqueta ya no lo puede representar.
 
 ### 2.9 Lo que cambió de sitio al construir el mapa
 
@@ -209,6 +215,9 @@ node docs/10-negocio/verificar-mapa-normativo.mjs
 Comprueba, **en las dos direcciones**, que este documento y el tablero dicen lo mismo:
 
 - las 32 filas tienen norma y parte, y todo `‹POR CLASIFICAR›` y todo `‹confirmar›` lleva su motivo;
+- toda fila que dice `ninguno todavía` dice **por qué** no bloquea a nadie: el dato ya está
+  firmado, su parte se cerró, o nadie lo consume todavía. Sin motivo, esa celda no se distingue de
+  un olvido, y desde que D-02a se cerró la llevan veintidós de las treinta y dos;
 - todo issue nombrado en una fila aparece en §2.8 con esa parte, y al revés;
 - §2.8 coincide **exactamente** con las etiquetas reales del tablero, que viven en
   [`etiquetas-de-bloqueo.json`](etiquetas-de-bloqueo.json).

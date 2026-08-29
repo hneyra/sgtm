@@ -5,8 +5,12 @@
    tablero, asi que las dos cosas tienen que decir lo mismo —y decirlo **en las
    dos direcciones**, como el contrato de la API—:
 
-     1. toda fila tiene norma y parte, y todo marcador de duda de la columna
-        «Parte» lleva su motivo;
+     1. toda fila tiene norma y parte, todo marcador de duda de la columna
+        «Parte» lleva su motivo, y toda fila que dice «ninguno todavia» dice
+        **por que** no bloquea a nadie —el dato ya esta firmado, la decision se
+        cerro, nadie lo consume aun—: sin motivo, esa celda no se distingue de
+        un olvido, y desde que D-02a se cerro la llevan veintidos de las
+        treinta y dos;
      2. todo issue que una fila nombra aparece en §2.8 con esa parte;
      3. todo issue de §2.8 esta justificado por las filas que declara;
      4. §2.8 coincide exactamente con las etiquetas reales del tablero, que viven
@@ -111,12 +115,19 @@ for (const [numero, dato, norma, parte, issues] of filasDelMapa) {
     }
   }
 
-  const nombrados =
-    plano(issues).startsWith(SIN_ISSUES) ? [] : [...issues.matchAll(/#(\d+)/g)].map((m) => m[1]);
-  if (nombrados.length === 0 && !plano(issues).startsWith(SIN_ISSUES)) {
+  const sinIssues = plano(issues).startsWith(SIN_ISSUES);
+  const nombrados = sinIssues ? [] : [...issues.matchAll(/#(\d+)/g)].map((m) => m[1]);
+  if (nombrados.length === 0 && !sinIssues) {
     señalar(
       `La fila ${n} no nombra issues ni dice «ninguno todavia». Una fila que no dice a quien` +
         ' bloquea no se puede comprobar.',
+    );
+  }
+  if (sinIssues && !/ninguno todavia\s*[—–-]\s*\S.{19,}/.test(plano(issues))) {
+    señalar(
+      `La fila ${n} dice «ninguno todavia» y no dice por que. Una fila que no bloquea a nadie` +
+        ' tiene que decir si es porque el dato ya esta firmado, porque su parte se cerro o' +
+        ' porque nadie lo consume todavia.',
     );
   }
   filas.set(n, { parte: asignada ?? null, issues: nombrados });
