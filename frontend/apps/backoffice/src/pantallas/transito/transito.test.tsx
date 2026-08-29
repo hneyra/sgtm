@@ -683,18 +683,135 @@ describe('transito_valores vive en su propio componente porque «Imprimir» no g
   });
 });
 
-describe('las cuatro opciones sin campo donde escribir el dato que el backend exige (#77)', () => {
-  it('transito_descargos: falta el numero de expediente, de solo lectura en el catalogo', () => {
-    expect(ACTOS_SIN_CAMPO['transito_descargos']).toBeDefined();
-    expect(
-      impedimentoDelActo('transito_descargos', [
-        'Registrar descargo',
-        'Resolver',
-        'Notificar al administrado',
-      ])?.causa,
-    ).toBe('sin-campo');
+/**
+ * **`transito_descargos`, la primera que sale de `ACTOS_SIN_CAMPO` por el
+ * mecanismo declarativo** (#422).
+ *
+ * Lo único que le faltaba era el número de expediente de mesa de partes:
+ * `DescargosController` lo exige y el catálogo lo dibuja `"ro"`, porque ése es
+ * el del descargo que se está **consultando**. Es la primera de las tres formas
+ * del hueco —el dato lo teclea quien atiende y sólo faltaba el control—, y se
+ * cierra **sin componente propio**: `transito/composicion.ts` declara el
+ * control, `escrituras.ts` declara el campo y el renderizador común lo dibuja.
+ *
+ * Y le hacía falta además la otra mitad, la de #421: la última acción del
+ * catálogo es «Notificar al administrado» y la que registra es la primera de
+ * las tres, así que `LA_QUE_ESCRIBE` la pasa al final. Las dos declaraciones se
+ * ejercitan aquí a la vez, que es lo que hace de esta pantalla el caso que
+ * demuestra el mecanismo de extremo a extremo.
+ */
+describe('transito_descargos: el campo que el manual no dibuja, declarado (#422)', () => {
+  const original = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = original;
   });
 
+  it('ya no esta en ACTOS_SIN_CAMPO, y la primaria no tiene nada que advertir', async () => {
+    expect(ACTOS_SIN_CAMPO['transito_descargos']).toBeUndefined();
+    montarEnRuta('/transito/transito-descargos');
+    await dibujada('.sgtm-acciones');
+    // La franja de impedimento no se dibuja: la opcion declara su escritura.
+    expect(document.querySelector('[data-causa]')).toBeNull();
+  });
+
+  it('la primaria es «Registrar descargo», no «Notificar al administrado» (#421)', async () => {
+    montarEnRuta('/transito/transito-descargos');
+    await dibujada('.sgtm-acciones');
+    expect(primariaDeLaPantalla().textContent).toBe('Registrar descargo');
+  });
+
+  /**
+   * El campo añadido tiene **su propia etiqueta** (RNF-080): el catálogo ya
+   * dibuja un «Nº de expediente» en la misma sección —de solo lectura, el del
+   * descargo consultado— y llamarlos igual dejaría dos controles homónimos.
+   */
+  it('dibuja el campo anadido con su etiqueta, al final de «Solicitud»', async () => {
+    montarEnRuta('/transito/transito-descargos');
+    await dibujada('.sgtm-acciones');
+
+    const solicitud = screen.getByRole('heading', { name: 'Solicitud' }).closest('section');
+    expect(solicitud).not.toBeNull();
+    const seccion = within(solicitud as HTMLElement);
+
+    // El del manual sigue donde estaba, con su nombre y de solo lectura: es el
+    // del descargo que se esta consultando, y lo pinta el servidor.
+    expect(seccion.getAllByLabelText(/^Nº de expediente$/)).toHaveLength(1);
+    // Y el anadido lleva **su** etiqueta, no la de ese (RNF-080): en la misma
+    // seccion, dos controles homonimos no se distinguen ni con lector.
+    const anadido = seccion.getByLabelText('Nº de expediente de mesa de partes');
+    expect(anadido).not.toHaveAttribute('readonly');
+
+    // Va el ultimo de la rejilla, detras de los campos del manual.
+    const etiquetas = [...(solicitud as HTMLElement).querySelectorAll('.sgtm-campo__etiqueta')].map(
+      (nodo) => nodo.textContent,
+    );
+    expect(etiquetas[etiquetas.length - 1]).toBe('Nº de expediente de mesa de partes');
+  });
+
+  it('sin el numero de expediente, la primaria dice que falta y no se puede pulsar', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/transito/transito-descargos');
+    await dibujada('.sgtm-acciones');
+
+    await usuario.type(screen.getByLabelText('Papeleta impugnada'), 'D007782');
+    const observacion = within(
+      await screen.findByRole('region', { name: 'Observación del usuario' }),
+    ).getByLabelText('Observación');
+    await usuario.type(observacion, 'Escrito presentado en mesa de partes.');
+
+    primariaApagada();
+    expect(motivoDeLaPrimaria()).toMatch(/número de expediente con que el escrito entró/i);
+  });
+
+  it('con todo relleno, el cuerpo lleva el campo anadido y solo los declarados', async () => {
+    const usuario = userEvent.setup();
+    const peticiones = unaApiQueRegistraLasPeticiones({ id: 1 });
+    montarEnRuta('/transito/transito-descargos');
+    await dibujada('.sgtm-acciones');
+
+    await usuario.type(screen.getByLabelText('Papeleta impugnada'), 'D007782');
+    await usuario.type(
+      screen.getByLabelText('Nº de expediente de mesa de partes'),
+      'EXP-2026-004182',
+    );
+    fireEvent.change(screen.getByLabelText('Fecha de presentación'), {
+      target: { value: '2026-08-20' },
+    });
+    await usuario.selectOptions(screen.getByLabelText('Tipo de recurso'), 'RECONSIDERACIÓN');
+    await usuario.type(
+      screen.getByLabelText('Fundamento del administrado'),
+      'El vehículo estaba en taller ese día.',
+    );
+    // Y un campo de la otra sección, que **no** se declara: resolver un descargo
+    // es dictar una resolución de gerencia, y el cuerpo no tiene sitio para eso.
+    expect(screen.getByLabelText('Nº de resolución')).toHaveAttribute('readonly');
+
+    const observacion = within(
+      await screen.findByRole('region', { name: 'Observación del usuario' }),
+    ).getByLabelText('Observación');
+    await usuario.type(observacion, 'Escrito presentado en mesa de partes.');
+
+    await usuario.click(primariaDeLaPantalla());
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    expect(peticiones[0]?.metodo).toBe('POST');
+    expect(peticiones[0]?.url).toContain('/transito/descargos');
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).toEqual({
+      papeleta: 'D007782',
+      // La clave del formulario es `nDeExpedienteDeMesaDePartes` y viaja como
+      // `nDeExpediente`: la traduccion la hace `escrituras.ts`, no el control.
+      nDeExpediente: 'EXP-2026-004182',
+      fechaDePresentacion: '2026-08-20',
+      // Sin tilde: `TipoDeRecurso` del backend no la lleva, y el desplegable del
+      // manual sí. La traducción es una tabla, no un quitatildes.
+      tipoDeRecurso: 'RECONSIDERACION',
+      fundamento: 'El vehículo estaba en taller ese día.',
+      observacion: 'Escrito presentado en mesa de partes.',
+    });
+  });
+});
+
+describe('las tres opciones sin campo donde escribir el dato que el backend exige (#77)', () => {
   it('transito_constancia_libre, transito_rg_ordinaria y transito_rg_sancionadora: sin ninguna sección', () => {
     for (const opcion of [
       'transito_constancia_libre',
