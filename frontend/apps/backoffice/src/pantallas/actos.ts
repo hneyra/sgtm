@@ -227,17 +227,6 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
    * acción del catálogo es «Notificar al administrado», no «Registrar descargo» —la primera
    * de las tres—: declarar la escritura tal cual habilitaría el botón equivocado.
    */
-
-  /**
-   * Descargos y reclamos de papeletas, y el número de expediente que le falta (#50, #77).
-   *
-   * `DescargosController` exige `nDeExpediente` —«el número con que entra por mesa de
-   * partes»—, y la única sección editable de esta pantalla lo dibuja como `nDeExpediente2`,
-   * de solo lectura (`"t": "ro"`). El «Nº de expediente» de los filtros es para buscar un
-   * descargo ya registrado, no para teclear el de uno nuevo. Y aunque lo hubiera, la última
-   * acción del catálogo es «Notificar al administrado», no «Registrar descargo» —la primera
-   * de las tres—: declarar la escritura tal cual habilitaría el botón equivocado.
-   */
   transito_descargos: {
     dato: 'el número de expediente con que el descargo entra por mesa de partes',
     porque:
@@ -271,6 +260,31 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
     porque:
       'Sin ellos no se puede dictar, por el mismo motivo que en la ordinaria: el backend los exige y esta pantalla tampoco declara ninguna sección con campos.',
     campos: ['papeleta', 'fecha', 'sustento'],
+  },
+
+  /**
+   * Las tres escrituras de fiscalizacion (#45, #80): a las tres les falta un
+   * dato para el que ninguna seccion del catalogo dibuja un campo editable.
+   * Ver el javadoc de `pantallas/fiscalizacion/index.ts` para el analisis
+   * completo, opcion por opcion.
+   */
+  fisc_programa: {
+    dato: 'el código y la descripción del programa',
+    porque:
+      'Sin ellos el programa no se puede registrar: el backend los exige, y la única sección de esta pantalla dibuja el número de programa de solo lectura y ningún campo de descripción — el catálogo capturó el resultado de generar un programa, no el formulario que lo crea.',
+    campos: ['codigo', 'descripcion'],
+  },
+  fisc_predial: {
+    dato: 'el programa, el contribuyente y el predio de la visita',
+    porque:
+      'Sin ellos el acta no se puede registrar: el backend exige los tres identificadores internos, y las columnas que se les parecen en esta pantalla son de solo lectura, a la espera de abrirse desde la fila de un programa generado que todavía no existe.',
+    campos: ['programaId', 'contribuyenteId', 'predioId'],
+  },
+  fisc_vehicular: {
+    dato: 'el programa, el contribuyente y el vehículo de la visita',
+    porque:
+      'Sin ellos el acta no se puede registrar: el backend exige los tres identificadores internos, y esta pantalla no dibuja ninguna sección de campos — su catálogo es un filtro y una grilla de vehículos observados, no el acta que el endpoint registra.',
+    campos: ['programaId', 'contribuyenteId', 'vehiculoId'],
   },
 };
 

@@ -173,15 +173,22 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // Una menos que antes: `transito_valores` se muda a `declarada` (#77).
       salida: 48,
       'sin-backend': 41,
-      // Una menos con `transito_cambio_numero` (#77, se declara); y cuatro
-      // menos con las cuatro de Transito que se mudan a `sin-campo` (#77):
-      // `transito_descargos`, `transito_constancia_libre`,
-      // `transito_rg_ordinaria`, `transito_rg_sancionadora`.
-      'sin-declaracion': 22,
+      // Quince declaran: las trece de la onda 3 mas el cambio de numero de
+      // papeleta y la generacion masiva de valores de transito (#77), con su
+      // componente propio cada una.
+      declarada: 15,
+      // 48: la constancia libre venia de `salida` —su primaria es de
+      // impresion— y `ACTOS_SIN_CAMPO` gana a `DE_SALIDA` al declararla (#77).
+      salida: 48,
+      'sin-backend': 41,
+      // Nueve se mudan a `sin-campo` en la onda 4: cuatro de transito (#77),
+      // tres de fiscalizacion (#80) — mas las tres de tesoreria y las dos
+      // transferencias que ya se habian movido antes; y dos se van a
+      // `declarada` con #77.
+      'sin-declaracion': 19,
       'sin-determinacion': 1,
-      // Las tres de tesoreria (#74) mas las cuatro de Transito (#77); las dos
-      // transferencias ya no estan (#73).
-      'sin-campo': 7,
+      // Tesoreria (3, #74) + transito (4, #77) + fiscalizacion (3, #80).
+      'sin-campo': 10,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);

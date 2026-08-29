@@ -4,6 +4,7 @@ import { CONEXIONES_DE_CATASTRO } from './catastro';
 import { CONEXIONES_DE_COACTIVA } from './coactiva';
 import { CONEXIONES_DE_CONSULTAS } from './consultas';
 import { CONEXIONES_DE_LICENCIAS } from './licencias';
+import { CONEXIONES_DE_FISCALIZACION } from './fiscalizacion';
 import { CONEXIONES_DE_RENTAS } from './rentas';
 import { CONEXIONES_DE_SANCIONES } from './sanciones';
 import { CONEXIONES_DE_TESORERIA } from './tesoreria';
@@ -179,6 +180,7 @@ const CONEXIONES: Readonly<Record<string, Conexion>> = {
   ...CONEXIONES_DE_SEGURIDAD,
   ...CONEXIONES_DE_CATASTRO,
   ...CONEXIONES_DE_CONSULTAS,
+  ...CONEXIONES_DE_FISCALIZACION,
   ...CONEXIONES_DE_RENTAS,
   ...CONEXIONES_DE_TESORERIA,
   ...CONEXIONES_DE_VALORES,

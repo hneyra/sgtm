@@ -1673,6 +1673,191 @@ function certificadosDeNumeracion(): Paginado {
   );
 }
 
+/* ── Fiscalizacion (#80) ───────────────────────────────────────────────── */
+
+/**
+ * `Hallazgo`/`CondicionFiscalizada` del prototipo → el nombre del backend.
+ * Las dos comparten vocabulario (`CondicionFiscalizada` javadoc), asi que una
+ * sola tabla sirve para `fisc_omisos`.
+ */
+const CONDICION_FISCALIZADA_DEL_MOCK: Readonly<Record<string, string>> = {
+  Conforme: 'CONFORME',
+  Omiso: 'OMISO',
+  Subvaluador: 'SUBVALUADOR',
+  'Uso distinto': 'USO_DISTINTO',
+  'No ubicado': 'NO_UBICADO',
+};
+
+/**
+ * Omisos y subvaluadores (`OmisoResource`, #49, #80).
+ *
+ * **Las cuatro columnas de importe salen `null`, tal como las publica el
+ * recurso real** — `valorCatastralS`, `valorDeclaradoS`, `diferenciaS` e
+ * `impuestoOmitidoS` son D-02a (#198) y `OmisoResource.de` nunca les pone
+ * cifra, ni siquiera aqui: reescribirlas con las del prototipo inventaria un
+ * impuesto omitido que ningun cuadro de valores unitarios sustenta.
+ */
+const omisosFiscalizacion = (): Paginado =>
+  unaPagina(
+    filasDe('fisc_omisos').map(([codRefCatastral, titular, condicionCruda]) => ({
+      codRefCatastral,
+      titular,
+      sector: null,
+      condicion: CONDICION_FISCALIZADA_DEL_MOCK[condicionCruda ?? ''] ?? 'OMISO',
+      declaroFueraDePlazo: false,
+      areaCatastral: null,
+      areaDeclarada: null,
+      diferenciaDeArea: null,
+      valorCatastralS: null,
+      valorDeclaradoS: null,
+      diferenciaS: null,
+      impuestoOmitidoS: null,
+    })),
+  );
+
+/**
+ * Estado de cuenta de fiscalizacion (`EstadoDeCuentaResource`, #49, #80).
+ *
+ * **Ninguna linea trae `importe`**: `EstadoDeCuentaDeFiscalizacion` lo lee del
+ * libro de cuenta corriente, y una liquidacion de fiscalizacion solo llega ahi
+ * por transferencia (#52) — mientras nadie transfiera, no hay asiento que
+ * leer, y el recurso real sale igual de vacio. `total` sale `null` por la
+ * misma razon: `EstadoDeCuentaResource` lo deja `null` si **cualquier** linea
+ * no tiene cifra, y aqui ninguna la tiene.
+ */
+const estadoCuentaFiscalizacion = (): Readonly<Record<string, unknown>> => {
+  const campos = RESPUESTAS['fisc_estado_cuenta']?.campos ?? {};
+  const codigo = typeof campos['contribuyente'] === 'string' ? campos['contribuyente'] : '';
+  const fecha =
+    typeof campos['fechaDeConsulta'] === 'string'
+      ? campos['fechaDeConsulta']
+      : EL_DIA_DEL_PROTOTIPO;
+
+  return {
+    codContribuyente: codigo,
+    fechaDeConsulta: fecha,
+    lineas: filasDe('fisc_estado_cuenta').map(([deuda, , ano, , , , , nomTrib, , , estad]) => ({
+      deuda,
+      ano: Number(ano) || new Date().getFullYear(),
+      nomTrib,
+      unidad: null,
+      estad,
+      importe: null,
+    })),
+    total: null,
+  };
+};
+
+/**
+ * `EstadoDeLiquidacion` (V39) → el codigo de una sola letra que dibuja
+ * `fisc_historico`: «A» abierta, «L» liquidada. El prototipo no capturo
+ * «EN PROCESO», «NOTIFICADA» ni «ANULADA» en ninguna fila de su muestra.
+ */
+const ESTADO_DE_LIQUIDACION_DEL_MOCK: Readonly<Record<string, string>> = {
+  A: 'ABIERTA',
+  L: 'LIQUIDADA',
+};
+
+/**
+ * Historico de fiscalizacion predial (`LiquidacionResource.VersionResource`,
+ * #49, #80).
+ *
+ * `LiquidacionController.historico` responde el proceso completo de un acta
+ * cuando se pide `nLiquidacion`, y la grilla paginada de versiones sueltas
+ * cuando no — el proxy no filtra (#80, mismo criterio que el resto de este
+ * archivo), asi que devuelve siempre la segunda forma: cada fila **es** una
+ * `VersionResource`, con `cambios`/`importesSinCifra` vacios, que es
+ * exactamente lo que sirve `LiquidacionController.historico` sin numero
+ * («cada fila es una version suelta»).
+ *
+ * **`numero` no viaja en la fila del prototipo** —su columna es «—»—, asi que
+ * se compone con el codigo de contribuyente, igual que `procesoCoactivo` cae
+ * a un numero fijo cuando el campo que lo trae esta vacio. Las cifras de la
+ * liquidacion —`insolutoOmitido`, `multaTributaria`— son D-02a: `null`, con
+ * `esperaSusCifras: true`.
+ */
+const historicoFiscalizacion = (): Paginado => {
+  const campos = RESPUESTAS['fisc_historico']?.campos ?? {};
+  const desde = Number(campos['periodoFiscalizadoDesde']) || new Date().getFullYear();
+  const hasta = Number(campos['periodoFiscalizadoHasta']) || desde;
+  const tipo =
+    typeof campos['tipoDeFiscalizacion'] === 'string' ? campos['tipoDeFiscalizacion'] : 'CIERTA';
+
+  return unaPagina(
+    filasDe('fisc_historico').map(([estCrudo, codCont, contribuyente, , , versionTexto], i) => {
+      const version = Number(versionTexto) || 1;
+      const liquidacion = {
+        numero: `LIQ-${codCont}`,
+        actaId: i + 1,
+        version,
+        liquidacionAnterior: version > 1 ? i : null,
+        periodoDesde: desde,
+        periodoHasta: hasta,
+        tipoDeFiscalizacion: tipo.replace(' ', '_'),
+        motivoDeterminante: `Fiscalización de ${contribuyente}`,
+        fecha: EL_DIA_DEL_PROTOTIPO,
+        numeroNotificacion: null,
+        estado: ESTADO_DE_LIQUIDACION_DEL_MOCK[estCrudo ?? ''] ?? 'ABIERTA',
+        esperaSusCifras: true,
+        lineas: [],
+        historial: [],
+      };
+      return { version: liquidacion, cambios: [], importesSinCifra: [] };
+    }),
+  );
+};
+
+/**
+ * Resolucion de determinacion de fiscalizacion (`ResolucionResource`, #52,
+ * #80): un recurso suelto, abierto por `{numero}` en la ruta — el mismo
+ * mecanismo que `duplicado_recibo` (#74).
+ *
+ * **`determinado`, `declarado` y `diferencia` salen `null`**, igual que
+ * `insolutoOmitido`/`baseHallada`/`baseDeclarada` en `LiquidacionResource`: son
+ * D-02a. `multa` tampoco tiene cifra, y no tiene columna en el catalogo donde
+ * ir — la pantalla dibuja «Interés S/», que `LineaDeterminadaResource` no
+ * publica en absoluto (no distingue interes de multa), asi que esa columna
+ * sale `SIN_DATO` desde el adaptador, no desde aqui.
+ */
+const resolucionDeterminacionFiscalizacion = (): Readonly<Record<string, unknown>> => {
+  const reporte = RESPUESTAS['resolucion_determinacion_fisc']?.reporte;
+  const meta = new Map((reporte?.meta ?? []).map((dato) => [dato.k, dato.v]));
+  const [ejercicioDesde, ejercicioHasta] = (meta.get('Periodo fiscalizado') ?? '').split('—');
+
+  return {
+    numero: meta.get('Nº de resolución') ?? reporte?.code ?? '',
+    fecha: EL_DIA_DEL_PROTOTIPO,
+    aLaFecha: EL_DIA_DEL_PROTOTIPO,
+    nLiquidacion: `LIQ-${meta.get('R.U.C.') ?? ''}`,
+    versionDeLaLiquidacion: 1,
+    periodoDesde: Number((ejercicioDesde ?? '').trim()) || new Date().getFullYear(),
+    periodoHasta: Number((ejercicioHasta ?? '').trim()) || new Date().getFullYear(),
+    codContribuyente: meta.get('R.U.C.') ?? null,
+    contribuyente: meta.get('Contribuyente') ?? null,
+    predioId: null,
+    vehiculoId: null,
+    documentoSustento: meta.get('Predio') ?? '',
+    sustento: 'Acta de inspección y liquidación de fiscalización predial.',
+    baseLegal: 'Art. 76 y 77 del Texto Único Ordenado del Código Tributario.',
+    fichaAnteriorId: null,
+    fichaNuevaId: null,
+    usuarioRegistro: null,
+    observacion: 'Transferencia del resultado de fiscalización al padrón.',
+    lineas: (reporte?.filas ?? []).map(([ejercicio]) => ({
+      ejercicio: Number(ejercicio) || new Date().getFullYear(),
+      determinado: null,
+      declarado: null,
+      diferencia: null,
+      multa: null,
+      total: null,
+      condicion: 'SUBVALUADOR',
+      areaDeclarada: null,
+      areaHallada: null,
+    })),
+    cargosAsentados: null,
+  };
+};
+
 const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>> = {
   '/catastro/fichas/urbana/{codRefCatastral}': urbana,
   '/catastro/fichas/economica/{codRefCatastral}': economica,
@@ -1688,6 +1873,8 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/consultas/deudas-con-beneficio': deudasConBeneficio,
   '/seguridad/sesion/permisos': permisosDeLaSesion,
   '/coactiva/expedientes/{numero}/proceso': procesoCoactivo,
+  '/fiscalizacion/estado-cuenta': estadoCuentaFiscalizacion,
+  '/fiscalizacion/resoluciones/{numero}': resolucionDeterminacionFiscalizacion,
   '/licencias/funcionamiento/reportes/resumen-anual': resumenAnualDeLicencias,
   '/infracciones/administrativas/reportes/resumen-recaudacion': resumenRecaudacionAdministrativa,
   '/transito/papeletas/{numero}/actos': expedienteDeLaPapeleta,
@@ -2776,6 +2963,8 @@ function resumenRecaudacionAdministrativa(): Readonly<Record<string, unknown>> {
  */
 /** Por camino del contrato, relativo a `/api/v1`. Casi todas son `GET`: ver `respaldo`. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
+  '/fiscalizacion/omisos': omisosFiscalizacion,
+  '/fiscalizacion/predial/historico': historicoFiscalizacion,
   '/catastro/vias': vias,
   '/tesoreria/convenios': convenios,
   '/rentas/contribuyentes': contribuyentes,
