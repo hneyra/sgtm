@@ -113,7 +113,7 @@
         <div style="display: flex; gap: 12px; padding: 16px;">
           <span class="num">3</span>
           <div style="display: flex; flex-direction: column; gap: 8px;">
-            <p class="p"><strong><span class="mono">predios_rentas</span> dibuja «Nuevo» y «Guardar» sobre una lectura sin controlador — y no lo dice.</strong> Su primaria es «Ver ficha catastral», que cae en <span class="mono">DE_SALIDA</span>, así que <span class="mono">impedimentoDelActo</span> devuelve <span class="mono">undefined</span> y no se dibuja ninguna franja.</p>
+            <p class="p"><strong><span class="mono">predios_rentas</span> dibuja «Nuevo» y «Guardar» sobre una operación de lectura — y no lo dice.</strong> Desde #395 tiene controlador y está conectada, y eso lo empeora: la pantalla funciona entera y sigue prometiendo un guardado que su <span class="mono">GET</span> no puede hacer. Su primaria es «Ver ficha catastral», que cae en <span class="mono">DE_SALIDA</span>, así que <span class="mono">impedimentoDelActo</span> devuelve <span class="mono">undefined</span> y no se dibuja ninguna franja.</p>
             <p class="p" style="font-size: 12.5px; color: #6b6258;">Es el defecto que #385 acaba de cerrar en <span class="mono">alcabala</span> y <span class="mono">espectaculos</span>, vivo en otra pantalla del mismo módulo.</p>
           </div>
         </div>

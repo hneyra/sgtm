@@ -70,7 +70,7 @@ calcular» en una. Y tres defectos concretos:
    predial. Una atención de predial fija el mismo contribuyente
    `00000025673` en «Predios», en «Declaración jurada» y en «Cálculo individual», las tres con los
    mismos dos predios detrás.
-3. **`predios_rentas` dibuja «Nuevo» y «Guardar» sobre una lectura sin `Controller` — y no lo
+3. **`predios_rentas` dibuja «Nuevo» y «Guardar» sobre una operación de lectura — y no lo
    dice.** Su primaria es «Ver ficha catastral», que cae en `DE_SALIDA`, así que
    `impedimentoDelActo` devuelve `undefined` y no se dibuja ninguna franja. Es el defecto que
    [#385](https://github.com/hneyra/sgtm/issues/385) acaba de cerrar en `alcabala` y `espectaculos`,
@@ -88,10 +88,10 @@ la hace el servidor» pasan a ser una, que es lo que evita que se lean como cuat
 
 **Por qué va la última:** ninguna de las cuatro puede escribir hoy, y ninguna por el mismo motivo.
 Individual, masivo y vehicular tienen la causa `sin-determinacion` —su primaria pide un cálculo que
-ningún controlador publica—; arbitrios es un `GET`, así que su «Emitir cuponera» no tiene a dónde
-escribir. La superficie es un marco de lectura hasta que [#395](https://github.com/hneyra/sgtm/issues/395)
-publique la capa web de la determinación predial y [#399](https://github.com/hneyra/sgtm/issues/399)
-resuelva que el contrato y el controlador del vehicular no dicen lo mismo.
+ninguna declara escritura—; arbitrios es un `GET`, así que su «Emitir cuponera» no tiene a dónde
+escribir. Desde #395 y #399 las tres primeras **simulan**, pero asentar la determinación sigue sin
+poder pedirse: es lo que cierra [#445](https://github.com/hneyra/sgtm/issues/445). Hasta entonces la
+superficie es un marco de lectura y de simulación.
 
 **Lo que no se hace:** llevar el contribuyente a la hoja de arbitrios. Su contrato no tiene ese
 filtro, y declararlo sería inventar contrato (ADR-0010 §4). Se dice en la cabecera —esa hoja se
@@ -157,7 +157,7 @@ pueden guardar, tres «Nuevo» que no abren ningún alta y dos «Modificar», qu
 | `vehiculos` | ~~Nuevo~~ · ~~Modificar~~ · Excel · Imprimir · ~~Guardar~~ | Excel · Imprimir — sin primaria |
 
 Eso cierra de paso el **defecto 3**: `predios_rentas` deja de prometer un alta y un guardado sobre
-una lectura sin controlador. Lo que la regla **no** arregla es que «Excel» sobreviva sin descargar
+un guardado que su `GET` no puede hacer. Lo que la regla **no** arregla es que «Excel» sobreviva sin descargar
 nada: solo dos descargas están cableadas en todo el sistema (`ficha_contribuyente_reporte` y
 `constancia`), que es el hallazgo A1 de #413 y no es de este módulo.
 
@@ -196,7 +196,7 @@ pasar de una a otra.
 
 **C primero**: es la única cuyas dos primarias escriben hoy, así que se puede verificar de extremo a
 extremo. **B después**, y con su decisión de rótulo resuelta antes de empezar. **A al final**: hasta
-que #395 y #399 no cierren, es un marco de lectura.
+que #445 no cierre —asentar la determinación—, es un marco de lectura y de simulación.
 
 La entrada de las tres opciones del padrón en `VOCABULARIO_UNIFORME` es **independiente de las tres**
 y la más barata de todas: una línea y su prueba.
@@ -207,3 +207,8 @@ El registro visual navegable de las cinco páginas está publicado como Artifact
 recoge es [#442](https://github.com/hneyra/sgtm/issues/442). El tratamiento equivalente en Catastro
 es [#391](https://github.com/hneyra/sgtm/issues/391), con sus artboards en
 [`../catastro/`](../catastro/README.md).
+
+Lo que a **#393** le queda por cerrar y que ninguna de estas tres propuestas cubre —asentar la
+determinación, la banda que le falta a la quinta, los observados de la corrida masiva y las dos
+secciones del expediente que siguen bloqueadas por contrato— está en
+[#445](https://github.com/hneyra/sgtm/issues/445).
