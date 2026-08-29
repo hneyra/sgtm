@@ -103,7 +103,7 @@ Reglas de lectura del mapa:
 | 26 | Descuentos por pronto pago de papeletas | Ordenanza municipal de beneficios, sin ratificación | D-02c | #195, #196 |
 | 27 | Multa tributaria por declarar fuera de plazo | TUO del Código Tributario art. 176 y sus tablas de infracciones y sanciones `‹confirmar la tabla que corresponde a un gobierno local›`. El régimen de gradualidad, si la municipalidad lo aprueba, es local (D-02c) | D-02a | ninguno todavía — D-02a cerrada el 2026-08-25; el archivo está firmado y todavía sin fila en el derivado publicable |
 
-### 2.7 Las dos filas que faltaban
+### 2.7 Las filas que faltaban, y las que se añadieron después
 
 El hallazgo H-3 decía que la partición no era una función sobre los 27 datos. Dos de los cuatro
 huecos eran de clasificación —aranceles y alcabala sí tenían fila, y ahora tienen parte— pero los

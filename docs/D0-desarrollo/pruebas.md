@@ -17,7 +17,7 @@ cd backend
 cd ../frontend
 yarn verificar                    # contrato, lint, tipos y pruebas
 yarn comprobar-compilaciones      # el juego de datos no llega a producción, y el presupuesto
-yarn e2e                          # los tres caminos completos en un navegador
+yarn e2e                          # los seis caminos completos en un navegador
 ```
 
 Es exactamente lo que corre CI, en pasos separados, para que el nombre del paso ya diga qué barrera

@@ -8,11 +8,14 @@ import type { OperacionServida } from './servidas';
 /**
  * Proxy de datos: la API del SGTM, simulada en el navegador.
  *
- * **Por que existe.** El backend todavia no sirve ni una de las 134
- * operaciones del contrato (`backend/README.md`), y la interfaz no puede
- * esperar. La salida facil seria que cada pantalla leyera sus datos de una
+ * **Por que existe.** Cuando se escribio, el backend no servia ninguna de las
+ * 134 operaciones que el catalogo declara —una por pantalla—, y la interfaz no
+ * podia esperar. Hoy publica 171 de las 174 del contrato, y lo que queda es
+ * apagar esto: es #400.
+ *
+ * La salida facil habria sido que cada pantalla leyera sus datos de una
  * constante importada; la trampa de esa salida es que el dia que el backend
- * exista habria que reescribir las 134 pantallas para que pidan por HTTP.
+ * existiera habria que reescribir las 134 pantallas para que pidan por HTTP.
  *
  * Este proxy evita eso interceptando **en la frontera del transporte**, no en
  * la de la aplicacion: sustituye `fetch`. La aplicacion llama a `solicitar()`
@@ -111,7 +114,7 @@ function noEncontrada(metodo: string, camino: string): Response {
     type: 'https://sgtm.gob.pe/problemas/operacion-no-implementada',
     title: 'La operacion no existe en el proxy de datos',
     status: 404,
-    detail: `El proxy de datos no conoce ${metodo} ${camino}. Las 134 operaciones del contrato se declaran en el catalogo del prototipo; si esta es nueva, regenera el catalogo con «yarn portar-catalogo».`,
+    detail: `El proxy de datos no conoce ${metodo} ${camino}. Las 134 operaciones que simula se declaran en el catalogo del prototipo; si esta es nueva, regenera el catalogo con «yarn portar-catalogo».`,
   };
   return json(problema, 404);
 }

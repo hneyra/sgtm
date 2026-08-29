@@ -14,9 +14,10 @@ import { ProblemaDeApi } from '@sgtm/api-client';
  * respuesta. La carga y el vacio si son de cada bloque, porque cada uno sabe
  * que le falta.
  *
- * **`no-disponible` no es un error.** El contrato declara 134 operaciones y el
- * backend publica una fraccion; el resto responde 404. Una pantalla portada del
- * prototipo cuyo backend todavia no se escribio no esta rota: esta pendiente, y
+ * **`no-disponible` no es un error.** El catalogo declara una operacion por
+ * pantalla y no todas tienen backend detras; la que no lo tiene responde 404.
+ * Una pantalla portada del prototipo cuyo backend todavia no se escribio no
+ * esta rota: esta pendiente, y
  * se cuenta sin alarma y sin boton de reintentar —reintentar daria el mismo 404
  * hasta que exista el endpoint—.
  */

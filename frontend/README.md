@@ -47,7 +47,7 @@ Los archivos generados llevan `.generado.ts` en el nombre y **no se editan a man
 
 ## El contrato manda sobre los tipos
 
-Los tipos de las 134 operaciones **no se escriben**: los genera `scripts/generar-operaciones.mjs`
+Los tipos de las **174 operaciones del contrato** no se escriben: los genera `scripts/generar-operaciones.mjs`
 desde [`sgtm-v1.yaml`](../docs/50-api/openapi/sgtm-v1.yaml) hacia
 `packages/api-client/src/operaciones.generado.ts`. `yarn verificar` regenera y compara, así que el
 contrato y la interfaz no pueden divergir en silencio:
@@ -667,17 +667,21 @@ Las **tres familias tipográficas se sirven desde el propio proyecto** (`estilos
 subconjuntos `latin` y `latin-ext`): una municipalidad con red mala no debería depender de un
 tercero para que su sistema se vea legible. Se regeneran con `node scripts/traer-tipografias.mjs`.
 
-## Los tres caminos completos
+## Los caminos completos
 
 Las 134 pantallas se comprueban montadas, y eso vale para la estructura. Lo que no dice nada de un
 camino de usuario —buscar, elegir, llenar, guardar, imprimir— es justo el que rompe una
-integración. `yarn e2e` recorre en Chromium los tres que más cuestan si fallan (FRO-03 §6):
+integración. `yarn e2e` recorre en Chromium **seis caminos**: los tres que más cuestan si fallan
+(FRO-03 §6) y tres que se añadieron después, cada uno cuando su pantalla lo pidió.
 
-| Camino                      | Qué exige                                                                           |
-| --------------------------- | ----------------------------------------------------------------------------------- |
-| **Cobro en caja**           | Se completa **sin tocar el ratón** (RNF-082): la prueba solo escribe y pulsa teclas |
-| **Consulta del portal**     | Cabe en un viewport de 360 px, sin desplazamiento horizontal                        |
-| **Impresión de un reporte** | Una hoja A4 vertical, con sus dos líneas de firma y sin la interfaz (RNF-084)       |
+| Camino                          | Qué exige                                                                           |
+| ------------------------------- | ----------------------------------------------------------------------------------- |
+| **Cobro en caja**               | Se completa **sin tocar el ratón** (RNF-082): la prueba solo escribe y pulsa teclas |
+| **Consulta del portal**         | Cabe en un viewport de 360 px, sin desplazamiento horizontal                        |
+| **Impresión de un reporte**     | Una hoja A4 vertical, con sus dos líneas de firma y sin la interfaz (RNF-084)       |
+| **Inicio: a quién atiendes**    | Las tres franjas se preguntan y se abren con el teclado (ADR-0016 §1, #296)         |
+| **Determinación simulada**      | Se pide con el teclado, y la memoria de cálculo sale con su conjunto sellado (#395) |
+| **Las 134 pantallas**           | Chromium las recorre todas: 0 errores de página y 0 de API                          |
 
 La primera encontró un hueco real: **la paleta de comandos no se podía operar con el teclado** —se
 escribía, y luego había que apuntar y hacer clic—. Ahora se elige con ↑ ↓ y se abre con Enter.
@@ -880,9 +884,11 @@ dice en la misma frase en que excluye el token.
   `permisos` no tiene `GET` con el que cargar la matriz —solo `PUT` para fijarla—, `miembros`
   necesita elegir un usuario y el prototipo no dibuja ese selector, y `respaldo` es un `POST` que
   consulta, así que abrir la pantalla no puede pedirlo (#64). Están detalladas en #70.
-- **Los diez módulos restantes esperan a su backend.** De las 134 operaciones del contrato el
-  servidor publica 22, y las 22 están conectadas. No es un pendiente del frontend y no tiene
-  atajo — fingirlas en el proxy sería construir la interfaz contra una invención.
+- **Ya no es el backend quien hace esperar.** El servidor publica **171 de las 174 operaciones**
+  del contrato —quedan `GET /portal/deuda`, `POST /transito/reportes` y
+  `GET /transito/papeletas/{numero}/hoja-informativa`—, y lo que falta es conectar pantalla a
+  pantalla y apagar el proxy: es #400. Lo que no tiene atajo sigue sin tenerlo — fingir una
+  operación en el proxy sería construir la interfaz contra una invención.
 - **De Catastro quedan tres opciones sin conectar** —las tablas de valuación—, más la
   actualización de la ficha, que escribe una tabla de pisos y el camino de escritura de hoy solo
   lleva campos planos, y el reporte del contribuyente, que devuelve un PDF y no un recurso.

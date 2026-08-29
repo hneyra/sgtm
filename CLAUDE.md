@@ -306,7 +306,7 @@ los respaldos escritos con la anterior; no hay `ALTER ROLE` que los vuelva a cif
 cd frontend
 yarn verificar                    # contrato, lint, tipos y pruebas. Lo que hay que pasar antes de un PR
 yarn comprobar-compilaciones      # el juego de datos no llega a produccion, y el presupuesto de paquete
-yarn e2e                          # los tres caminos completos en un navegador (Playwright)
+yarn e2e                          # los seis caminos completos en un navegador (Playwright)
 yarn test                         # incluye la prueba de que cada regla de ESLint muerde
 yarn generar-operaciones          # regenera los tipos de la API desde sgtm-v1.yaml
 yarn format                       # Prettier; mismo trato que spotlessApply
