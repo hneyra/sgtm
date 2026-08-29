@@ -3635,6 +3635,119 @@ function resumenRecaudacionAdministrativa(): Readonly<Record<string, unknown>> {
   };
 }
 
+/**
+ * Resumen de papeletas administrativas agrupado por codigo del CUIS
+ * (`ResumenDePapeletasResource`, #53, #428).
+ *
+ * El prototipo **no dibuja este resumen en ninguna pantalla propia** —a
+ * diferencia de transito, que tiene `transito_resumen_codigo`—, asi que se
+ * compone de las actas que si dibuja (`infracciones_adm`): una linea por codigo
+ * del CUIS, con cuantas actas lo llevan y por cuanto. No se inventa ninguna
+ * cifra: el importe de cada acta es su columna «Multa S/», y el reparto entre
+ * pagadas y pendientes sale de la fase que la misma fila trae —«Pagada» de un
+ * lado, todo lo demas del otro—, que es la misma derivacion que #397 hizo en el
+ * backend.
+ *
+ * Agrupar y sumar aqui es lo que hace el servidor de verdad
+ * (`ConsultaDeResumenesDeSanciones.resumir`), no la interfaz: RNF-083 prohibe
+ * componer una cifra **en la pantalla**, y este es el lado del proxy.
+ */
+function resumenAdministrativo(agrupadoPor: string): Readonly<Record<string, unknown>> {
+  const porCodigo = new Map<
+    string,
+    { descripcion: string; pagadas: number; pagado: string; pendientes: number; pendiente: string }
+  >();
+
+  for (const [, , cuis, infraccion, , multaS, , estado] of filasDe('infracciones_adm')) {
+    /* El agrupador **decide la clave**, igual que en el backend: `CODIGO` agrupa
+       por codigo del CUIS y la agrupacion por omision (`ESTADO`) por la fase del
+       procedimiento. Ignorarlo y devolver siempre lo mismo dejaria sin efecto el
+       agrupador que la pantalla fija, y nadie lo notaria. */
+    const clave = (agrupadoPor === 'CODIGO' ? cuis : estado) ?? '';
+    const acumulado = porCodigo.get(clave) ?? {
+      descripcion: agrupadoPor === 'CODIGO' ? (infraccion ?? '') : '',
+      pagadas: 0,
+      pagado: '0.00',
+      pendientes: 0,
+      pendiente: '0.00',
+    };
+    const importe = comoImporte(multaS ?? '0.00');
+    if ((estado ?? '') === 'Pagada') {
+      acumulado.pagadas += 1;
+      acumulado.pagado = masImporte(acumulado.pagado, importe);
+    } else {
+      acumulado.pendientes += 1;
+      acumulado.pendiente = masImporte(acumulado.pendiente, importe);
+    }
+    porCodigo.set(clave, acumulado);
+  }
+
+  const lineas = [...porCodigo.entries()].map(([clave, acumulado]) => ({
+    clave,
+    descripcion: acumulado.descripcion,
+    cantidad: acumulado.pagadas + acumulado.pendientes,
+    importe: masImporte(acumulado.pagado, acumulado.pendiente),
+    pagadas: acumulado.pagadas,
+    importeDeLasPagadas: acumulado.pagado,
+    pendientes: acumulado.pendientes,
+    importeDeLasPendientes: acumulado.pendiente,
+    enCoactiva: 0,
+    importeEnCoactiva: '0.00',
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+  }));
+
+  return {
+    agrupadoPor,
+    desde: '2026-01-01',
+    hasta: EL_DIA_DEL_PROTOTIPO,
+    papeletas: lineas.reduce((suma, linea) => suma + linea.cantidad, 0),
+    importeTotal: lineas.reduce((suma, linea) => masImporte(suma, linea.importe), '0.00'),
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    lineas,
+  };
+}
+
+/**
+ * El emisor de reportes administrativos (`POST
+ * /infracciones/administrativas/reportes`, `ReporteAdministrativoResource`,
+ * #53, #428).
+ *
+ * Mismo reparto que `reporteDeTransito`: **no compone ninguna hoja nueva**,
+ * llama a los mismos juegos de datos que los `GET` del modulo ya publican, que
+ * es lo que hace `ReportesAdministrativosController`. La respuesta es una union
+ * de tres secciones y solo una viene llena; un tipo que el emisor no sirve se
+ * contesta con las tres en `null`, como haria su 422.
+ */
+const HOJAS_DEL_EMISOR_ADMINISTRATIVO: Readonly<
+  Record<string, (agrupadoPor: string) => Readonly<Record<string, unknown>>>
+> = {
+  PADRON_NOTIFICACIONES: () => ({ padronDeNotificaciones: padronDeNotificaciones() }),
+  RESUMEN_PAPELETAS: (agrupadoPor) => ({
+    resumenDePapeletas: resumenAdministrativo(agrupadoPor),
+  }),
+  RESUMEN_RECAUDACION: () => ({ recaudacion: resumenRecaudacionAdministrativa() }),
+};
+
+function reporteAdministrativo(cuerpo: unknown): Readonly<Record<string, unknown>> {
+  const enviado =
+    cuerpo !== null && typeof cuerpo === 'object' ? (cuerpo as Record<string, unknown>) : {};
+  const pedido = String(enviado['reporte'] ?? '');
+  // La agrupacion por omision es la del backend (`AgrupacionDelResumen.ESTADO`),
+  // no la que la pantalla suele pedir: fingir aqui el `CODIGO` dejaria sin
+  // efecto el agrupador que el emisor fija, y la prueba pasaria sin el.
+  const agrupadoPor = String(enviado['agrupadoPor'] ?? 'ESTADO');
+  const hoja = Object.hasOwn(HOJAS_DEL_EMISOR_ADMINISTRATIVO, pedido)
+    ? HOJAS_DEL_EMISOR_ADMINISTRATIVO[pedido]
+    : undefined;
+  return {
+    reporte: pedido,
+    padronDeNotificaciones: null,
+    resumenDePapeletas: null,
+    recaudacion: null,
+    ...(hoja === undefined ? {} : hoja(agrupadoPor)),
+  };
+}
+
 /*
  * `adm_notificacion` (`POST .../notificaciones`) y `adm_valores` (`POST
  * .../valores/generacion-masiva`) se quedan sin conectar por este issue —ver
@@ -3823,6 +3936,10 @@ const ESCRITURAS: Readonly<Record<string, (cuerpo: unknown) => Readonly<Record<s
        escribe**: la primera lectura por POST del frontend, y su respuesta es la
        union de `ReporteDeTransitoResource`, no la forma comun. */
     'POST /transito/reportes': reporteDeTransito,
+    /* Y el segundo emisor, el de infracciones administrativas (#428). Mismo
+       motivo: es un `POST` que no escribe, y su respuesta es la union de
+       `ReporteAdministrativoResource`. */
+    'POST /infracciones/administrativas/reportes': reporteAdministrativo,
   };
 
 /** La respuesta de una escritura de seguridad, si el proxy la publica con la forma del backend. */

@@ -18,4 +18,14 @@ public interface CajaRepository {
      * anulacion (#34) llegan con el numero impreso y de ahi salen identificadores, no codigos.
      */
     Optional<Caja> porId(long id);
+
+    /**
+     * Da de alta la ventanilla y devuelve la fila guardada, con su identificador.
+     *
+     * <p>No hay {@code UPDATE} ni {@code DELETE}: una caja que ya no se usa se da de baja con su
+     * columna {@code activa} (RNF-051), y eso es trabajo de la pantalla que el manual no dibuja. Lo
+     * que hacia falta era poder <b>crearla</b>: sin una sola caja, {@code AbrirCaja} falla con
+     * {@code CajaInexistente} y una instalacion recien implantada no puede cobrar (#430).
+     */
+    Caja insertar(Caja caja);
 }

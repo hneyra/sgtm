@@ -54,7 +54,18 @@ config:
   # No es secreto; `registryPullToken` (un PAT con `read:packages`) sí lo es, y CI lo
   # inyecta igual que `backupAccessKeyId` (issue #257).
   sgtm:registryUsername: hneyra
-  sgtm:applicationBootstrapVersion: 1ec6bd62a3d772b8583827a80b4fbe63f014a8ad
+  # Sube con `prod`, y en el mismo PR a propósito: `aplicar-prod` tiene
+  # `needs: aplicar-stg` (`infra.yml`), así que `stg` es la puerta por la que pasa toda
+  # versión que llegue a producción, y dejarla atrás convierte el ensayo en un ensayo de
+  # otra cosa. Medido el 2026-08-29, antes de subirla: `stg` corría `1ec6bd6`
+  # (2026-08-25) con **25 migraciones aplicadas** —dos menos que `prod`—, de modo que las
+  # tres tablas de valuación de `V55` no existían tampoco aquí y la secuencia de
+  # publicación de valores normativos (`publicar-cuadros.sh`) no podía correrse de punta a
+  # punta en el único ambiente donde el issue #435 pide correrla.
+  #
+  # Ver el comentario largo de `Pulumi.prod.yaml`: subir esta línea CREA un Job de
+  # migración nuevo —lleva la versión en el nombre— y vuelve a implantar la municipalidad.
+  sgtm:applicationBootstrapVersion: 5fc02f3a44931d69ac3012e55b17f02dc616eac8
   sgtm:webReplicas: "1"
   # La municipalidad de ensayo. El ubigeo es el de Catacaos, igual que en prod (D-01,
   # 2026-08-24), porque stg restaura los respaldos de prod anonimizados (INF-03 §2 y

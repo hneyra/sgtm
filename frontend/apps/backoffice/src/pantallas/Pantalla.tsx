@@ -245,6 +245,10 @@ const GeneracionMasivaDeValoresDeTransito = lazy(async () => ({
 const EmisorDeReportes = lazy(async () => ({
   default: (await import('./transito/EmisorDeReportes')).EmisorDeReportes,
 }));
+const EmisorDeReportesAdministrativos = lazy(async () => ({
+  default: (await import('./sanciones/EmisorDeReportesAdministrativos'))
+    .EmisorDeReportesAdministrativos,
+}));
 /* Las tres de seguridad **tambien son perezosas desde #424**, y el motivo es el
    presupuesto: eran las unicas pantallas propias que seguian viajando en el
    arranque, y el arranque no tenia margen —156,2 KB de 156 al conectar el
@@ -396,6 +400,7 @@ export const COMPONENTES_PROPIOS: Readonly<
   transito_cambio_numero: CambioDeNumeroDePapeleta,
   transito_valores: GeneracionMasivaDeValoresDeTransito,
   transito_reportes: EmisorDeReportes,
+  adm_reportes: EmisorDeReportesAdministrativos,
   sectores: Territorio,
   calles: Territorio,
 };

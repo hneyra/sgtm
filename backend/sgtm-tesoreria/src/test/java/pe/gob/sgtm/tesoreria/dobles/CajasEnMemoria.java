@@ -28,4 +28,22 @@ public final class CajasEnMemoria implements CajaRepository {
                 .filter(caja -> caja.id() != null && caja.id() == id)
                 .findFirst();
     }
+
+    @Override
+    public Caja insertar(Caja caja) {
+        String clave = caja.codigo().toUpperCase(Locale.ROOT);
+        if (porCodigo.containsKey(clave)) {
+            throw new IllegalStateException("Ya hay una caja con el codigo '" + clave + "'");
+        }
+        Caja guardada =
+                new Caja(
+                        (long) (porCodigo.size() + 1),
+                        caja.codigo(),
+                        caja.nombre(),
+                        caja.serie(),
+                        caja.areaId(),
+                        caja.activa());
+        porCodigo.put(clave, guardada);
+        return guardada;
+    }
 }

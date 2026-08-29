@@ -82,6 +82,68 @@ era la imagen vieja, Kubernetes ya la tiene en su historial de revisiones.
 > forma parte de este runbook: una migración que borra datos para «deshacerse» no pasa
 > la regla 4 de `CLAUDE.md`.
 
+## La otra liberación: subir la versión de arranque
+
+Los pasos 1–3 mueven **qué imagen corre**, con `kubectl`, sin tocar Pulumi. Hay un
+segundo acto, distinto y menos frecuente, que la primera lectura de
+`Pulumi.<amb>.yaml` invita a creer inerte y no lo es:
+
+```yaml
+sgtm:applicationBootstrapVersion: <sha>
+```
+
+Esa línea es **la versión con la que Pulumi crea** los tres `Deployment` —cuyo campo
+`image` lleva `ignoreChanges` después (`ADR-0011` §5)— **y, además, el nombre de los dos
+Jobs de arranque**: `sufijoDeVersion()` en
+[`Migracion.ts`](../../../infra/componentes/Migracion.ts) le pone los doce primeros
+caracteres del `sha` al `Job`. Un valor nuevo no modifica un `Job` existente: **crea
+otro**. Así que subir esa línea y aplicar el stack significa, literalmente:
+
+> corre el migrador de esa versión contra esta base, y vuelve a implantar la
+> municipalidad.
+
+Se puede ver sin desplegar nada:
+
+```bash
+cd infra
+yarn --silent manifiestos --ambiente prod | grep migracion
+# Job/sgtm-prod-migracion-<primeros 12 del sha declarado>
+```
+
+### Cuándo se sube, y por qué no se puede posponer
+
+Se sube cuando el ambiente ha quedado atrás de `main`. **El síntoma de no subirla no es
+un error**: es una carga que termina en verde y no escribe ninguna fila, porque la clase
+batch que se invoca no existe en esa imagen, Spring arranca con el contexto vacío y sale
+con código 0. Pasó en `stg` con `cargar-catalogo-vial.sh` (PR #244) y es exactamente lo
+que hace falta distinguir con un `SELECT count(*)`, no con el código de salida.
+
+```bash
+# El sha al que subir: el último de `main` con las tres imágenes publicadas en verde.
+gh run list --workflow publicar-imagenes.yml --limit 5 \
+  --json headSha,conclusion,createdAt
+```
+
+Nunca una etiqueta móvil ni un `sha` de una corrida `cancelled`: `config.ts` rechaza lo
+primero, y lo segundo puede no existir en el registro.
+
+### El orden, que aquí sí importa
+
+1. **PR con el `sha` nuevo** en `Pulumi.<amb>.yaml`. Merge a `main`.
+2. `infra.yml` corre solo. `aplicar-stg` es automático; **`aplicar-prod` espera una
+   aprobación humana** del *environment* `prod` (Actions → la corrida → *Review
+   deployments*). El grupo de concurrencia `infra-aplicar-prod` retiene **una sola**
+   corrida en espera: aprobar una corrida vieja despliega la versión vieja, que es la
+   trampa entera. Aprobar **la que nace del merge**, no la que estaba esperando.
+3. `pulumi up` crea el `Job` de migración nuevo, espera a que complete, y sigue.
+4. Comprobar con [`verificar-el-ambiente.sh`](../../../infra/verificaciones/ambiente/verificar-el-ambiente.sh)
+   (abajo). Anotar fecha y duración en [`INF-03` §5.1](../../80-infraestructura/ambientes.md).
+
+### Si el Job de migración falla
+
+[La migración falló a mitad](la-migracion-fallo-a-mitad.md). No seguir: el `Deployment`
+se quedará arrancando contra un esquema a medias.
+
 ## Cómo se comprueba que terminó bien
 
 **No** «el `Deployment` está `Ready`». Dos comprobaciones, después de liberar o de
@@ -106,6 +168,22 @@ revertir:
    # no un 200 vacío ni la de otra municipalidad
    ```
 
+3. **Y si lo que se movió fue la versión de arranque, las dos anteriores no bastan**: hay
+   que comprobar que el esquema llegó a donde esa versión lo lleva. Eso lo hace, contra
+   el clúster que hay delante y sin escribir una sola fila:
+
+   ```bash
+   cd infra
+   verificaciones/ambiente/verificar-el-ambiente.sh --ambiente <amb>
+   ```
+
+   Compara las migraciones aplicadas con las que trae el `sha` declarado, cuenta lo que
+   la implantación sembró, y mide el aislamiento **con la credencial de `sgtm_app`**,
+   contrastándola con la del superusuario sobre el mismo contexto: si las dos ven lo
+   mismo, la comprobación no está midiendo nada (un superusuario omite RLS incluso con
+   `FORCE ROW LEVEL SECURITY`). Los puertos desde fuera **no** los comprueba, y lo dice:
+   desde el propio nodo el tráfico no atraviesa el cortafuegos.
+
 ## Si no sale bien
 
 | Síntoma | Qué hacer |
@@ -127,12 +205,17 @@ las dos operaciones** — el límite es 900 s (15 min) y en la práctica tardan 
 Un centinela que intercepta cualquier invocación a `pulumi` confirma que ningún paso lo
 usó.
 
-Lo que ese job **no** prueba, porque no puede: que el `Deployment` sea el real de
-`sgtm-<amb>-aplicacion` (bloqueado por #152, que todavía no crea ese recurso en un
-clúster de verdad) y que el registro sea el de `prod` con tráfico real detrás. El
-mecanismo — la parte que este ADR decidió que fuera independiente de Pulumi — ya se
-demostró que funciona; lo que falta es correrlo sobre el recurso de verdad, el día que
-exista.
+Lo que ese job **no** prueba, porque no puede: que el registro sea el de `prod` con
+tráfico real detrás. El `Deployment` real **ya existe** —`sgtm-prod-aplicacion` corre en
+`vmd120205` desde el 2026-08-26 (`INF-03` §5.1)—, así que la frase que aquí decía
+«bloqueado por #152, que todavía no crea ese recurso» dejó de ser cierta: lo que sigue
+sin ensayarse es `kubectl set image` **sobre ese** `Deployment`, no la existencia del
+recurso.
+
+**Y el ensayo del mecanismo no cubre la otra liberación.** `demostrar-liberacion-y-reversion`
+mueve una etiqueta; subir `applicationBootstrapVersion` corre un migrador. Son dos actos
+con consecuencias distintas —uno es reversible en segundos con `rollout undo`, el otro
+escribe en el esquema— y solo el primero está ensayado en cada `push`.
 
 ## Documentos relacionados
 

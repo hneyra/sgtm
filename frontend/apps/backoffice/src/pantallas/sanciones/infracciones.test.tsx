@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { permisosDelClaim, puedeVer } from '@sgtm/sesion';
 import { censoDeConectadas } from '../aportes-de-modulo';
@@ -45,7 +46,19 @@ const HOJAS: readonly string[] = ['adm-resolucion-gerencia', 'adm-notificacion-r
  * antes de «Imprimir»—, y entonces la franja vuelve a decir la verdad: la
  * operacion escribe y esta opcion no ha declarado sus campos.
  */
-const ESCRIBEN: readonly string[] = ['adm-reportes', 'adm-notificacion', 'adm-valores'];
+const ESCRIBEN: readonly string[] = ['adm-notificacion', 'adm-valores'];
+
+/**
+ * Y `adm-reportes`, que salio de esa lista con **#428**: no escribe.
+ *
+ * Su `POST` es una **lectura** —el emisor compone una hoja, no guarda nada—, y
+ * desde #424 hay una puerta para eso. Lo que la tenia fuera no era la puerta
+ * sino su desplegable: diez tipos de reporte, tres implementados. Ahora ofrece
+ * los tres y de los otros siete dice donde estan, asi que su primaria ya no
+ * lleva la franja de «registra el acto por el procedimiento actual» —no hay
+ * ningun acto que registrar— sino la de «elige el tipo de reporte».
+ */
+const EMISOR = 'adm-reportes';
 
 /**
  * Y una cuya primaria si imprime de verdad: apagada, y **sin** franja (#337).
@@ -182,6 +195,78 @@ describe('ningun acto de este modulo promete lo que no puede', () => {
 
     expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
     expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute('data-causa');
+
+    montada.unmount();
+  });
+
+  /**
+   * **El desplegable ofrece solo lo que el backend sirve** (#428).
+   *
+   * `TipoDeReporteAdministrativo` declara tres hojas y el desplegable del
+   * prototipo ofrece diez. Ofrecer las diez deja siete elecciones que contestan
+   * 422 con el boton encendido —que es peor que el boton apagado que habia—, y
+   * esconderlas sin mas deja a quien las busca pensando que algo se rompio: por
+   * eso las siete siguen alcanzables y **dicen donde esta lo que prometen**.
+   */
+  it('el emisor ofrece los tres reportes que existen, y ninguno mas', async () => {
+    const montada = montarEnRuta(`/infracciones-administrativas/${EMISOR}`);
+    await dibujada('.sgtm-acciones');
+
+    const desplegable = screen.getByLabelText('Reporte') as HTMLSelectElement;
+    const ofrecidos = [...desplegable.options].map((opcion) => opcion.text).filter((t) => t !== '');
+    expect(ofrecidos).toEqual([
+      'PADRÓN DE NOTIFICACIONES',
+      'PAPELETAS POR INFRACCIÓN',
+      'RESUMEN RECAUDACIÓN',
+    ]);
+
+    // Y sin elegir ninguno, la primaria esta apagada y dice que falta elegir
+    // —no «registra el acto por el procedimiento actual»: aqui no hay acto—.
+    primariaApagada();
+    expect(motivoDeLaPrimaria()).toMatch(/Elige el tipo de reporte/);
+    expect(motivoDeLaPrimaria()).not.toMatch(/Registra el acto por el procedimiento actual/);
+
+    montada.unmount();
+  });
+
+  it('emitir uno de los tres trae su hoja, con las columnas de esa hoja', async () => {
+    const usuario = userEvent.setup();
+    const montada = montarEnRuta(`/infracciones-administrativas/${EMISOR}`);
+    await dibujada('.sgtm-acciones');
+
+    await usuario.selectOptions(screen.getByLabelText('Reporte'), 'PAPELETAS POR INFRACCIÓN');
+    await usuario.click(screen.getByRole('button', { name: 'Pantalla' }));
+
+    // Las columnas salen de la seccion que vino llena, no del ultimo rotulo
+    // elegido: `ReporteAdministrativoResource` es una union y solo una llega.
+    const tabla = await screen.findByRole('table');
+    const cabeceras = within(tabla)
+      .getAllByRole('columnheader')
+      .map((celda) => celda.textContent);
+    expect(cabeceras).toContain('Código');
+    expect(cabeceras).toContain('Importe pendiente S/');
+
+    /* Y la primera columna trae **un codigo del CUIS**, no una fase: el rotulo
+       elegido dice «por infraccion» y el catalogo de esta pantalla no dibuja
+       ningun campo para el agrupador, asi que el emisor lo fija. Sin fijarlo, el
+       servidor agrupa por su omision (`ESTADO`) y la hoja saldria con la misma
+       cabecera «Código» sobre las fases del procedimiento. */
+    const primera = within(tabla).getAllByRole('row')[1] as HTMLElement;
+    const clave = within(primera).getAllByRole('cell')[0]?.textContent ?? '';
+    expect(clave, 'la primera columna deberia traer el codigo del CUIS').toMatch(/^[A-Z]-\d+$/);
+
+    montada.unmount();
+  });
+
+  it('elegir uno de los siete que no estan dice donde esta, y no se emite', async () => {
+    const montada = montarEnRuta(`/infracciones-administrativas/${EMISOR}`);
+    await dibujada('.sgtm-acciones');
+
+    // No se puede elegir desde el desplegable —no esta—, y aun asi la pantalla
+    // sabe contestarlo: es lo que hace que quitar un rotulo de `EMITIBLES` no
+    // deje a nadie sin respuesta.
+    const desplegable = screen.getByLabelText('Reporte') as HTMLSelectElement;
+    expect([...desplegable.options].map((o) => o.text)).not.toContain('NOTIFICACIONES VENCIDAS');
 
     montada.unmount();
   });
