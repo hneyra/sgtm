@@ -1,5 +1,9 @@
 # Usuarios y grupos por municipalidad
 
+> Los **funcionarios**. Su hermano para la otra población —los ciudadanos que esa municipalidad
+> enroló en ventanilla, en el realm `sgtm-ciudadano`— es
+> [`../ciudadanos/<ubigeo>.json`](../ciudadanos/README.md) (ADR-0020 §5).
+
 Un archivo `<ubigeo>.json` por municipalidad. Es la **fuente versionada** de las personas y el
 grupo de esa municipalidad en Keycloak, igual que [`../realm-sgtm.json`](../realm-sgtm.json) lo es
 de la estructura del realm. Lo aplica [`../reconciliar-identidades.sh`](../reconciliar-identidades.sh)
