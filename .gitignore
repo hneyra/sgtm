@@ -48,7 +48,20 @@ docs/10-negocio/valores-normativos/fuentes/**/*.gpkg
 # Worktrees temporales de agentes (harness de Claude Code)
 .claude/worktrees/
 
-# El canvas ensamblado de una propuesta de diseno: se vuelve a sembrar desde
-# sus .dc.html con la utilidad del skill, y pesa ~2 MB. Los artboards si van.
-design/propuestas/*/*.html
-!design/propuestas/*/*.dc.html
+# El prototipo de diseno. Su copia entera vive en el bucket S3 `sgtm-design`, y
+# de aqui se va todo —el canvas ensamblado y los ~9 MB de `ref/*.png`— MENOS los
+# cinco `sgtm-data-*.js`.
+#
+# Esos cinco no son un artefacto de diseno: son una ENTRADA DEL BUILD, y este
+# repositorio ya lo tenia escrito. `documentacion.yml` los declara en su filtro
+# de rutas junto a `docs/50-api/**` y lo explica ahi mismo: «son las DOS entradas
+# del generador de OpenAPI, y tocar cualquiera de ellas sin la otra es
+# exactamente lo que la comprobacion tiene que ver». De ellos salen el catalogo
+# portado de las 134 pantallas (`frontend/scripts/portar-catalogo.mjs`) y el
+# contrato de la API (`docs/50-api/generar-openapi.mjs`), cuya reproducibilidad
+# es lo que verifica `--comprobar` desde #312.
+#
+# Sin ellos los dos generadores mueren con ENOENT y se cae todo PR que toque
+# `frontend/**` o `docs/50-api/**`. Pesan ~300 KB entre los cinco.
+design/*
+!design/sgtm-data-*.js

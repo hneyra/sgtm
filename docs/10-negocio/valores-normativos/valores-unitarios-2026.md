@@ -8,20 +8,22 @@
 | Ejercicios que rige | 2026 |
 | Filas de NEG-02 §2 | 7 |
 | Transcribió | JNA, 2026-08-24; cuadro de la Costa leído en el PDF del **Anexo I.2** de la propia resolución, con la corrección de estructura y las 27 cifras que eso trajo (§1 entera y §3): Agent, 2026-08-28 |
-| Verificó | — |
-| Estado | TRANSCRITO |
+| Verificó | HNA, 2026-08-29 |
+| Estado | VERIFICADO |
 
-> **Por qué este archivo vuelve a `TRANSCRITO`, y qué cambió.** El 2026-08-25 HNA verificó el
-> archivo tal como estaba entonces, cuando el PDF del Anexo I.2 **no se había podido leer** —
-> `gob.pe/vivienda` devolvía 418 — y la matriz se había transcrito de un cuadro directoral que otra
-> institución reproduce, con sus 63 cifras marcadas `‹NO CONFIRMADO EN FUENTE OFICIAL›`. El
-> 2026-08-28 se leyó el PDF del Anexo I.2, y **no dice lo que decía este archivo**: el cuadro de la
-> Costa vigente para el Ejercicio Fiscal 2026 tiene **3 partidas, no 7**, y ninguna de sus cifras
-> coincide con las que estaban aquí. La matriz entera se sustituyó por la del anexo. **Esa
-> sustitución no la ha verificado nadie todavía**, y el corpus no admite que quien transcribe se
-> verifique a sí mismo (ADR-0007): el estado baja a `TRANSCRITO` y `Verificó` vuelve a `—` hasta que
-> una segunda persona vuelva al PDF y re-firme. La verificación de HNA del 2026-08-25 sigue en el
-> historial de git, sobre el contenido que entonces tenía el archivo.
+> **Este archivo se ha verificado dos veces, y la segunda no confirma a la primera: la
+> sustituye.** El 2026-08-25 HNA verificó el archivo tal como estaba entonces, cuando el PDF del
+> Anexo I.2 **no se había podido leer** —`gob.pe/vivienda` devolvía 418— y la matriz se había
+> transcrito de un cuadro directoral que otra institución reproduce, con sus 63 cifras marcadas
+> `‹NO CONFIRMADO EN FUENTE OFICIAL›`. El 2026-08-28 se leyó el PDF del Anexo I.2, y **no dice lo
+> que decía este archivo**: el cuadro de la Costa vigente para el Ejercicio Fiscal 2026 tiene **3
+> partidas, no 7**, y ninguna de sus cifras coincide con las que estaban aquí. La matriz entera se
+> sustituyó por la del anexo, el estado bajó a `TRANSCRITO` y `Verificó` volvió a `—`, porque el
+> corpus no admite que quien transcribe se verifique a sí mismo (ADR-0007). **El 2026-08-29 HNA
+> volvió al PDF y firmó esa sustitución.** Lo que está `VERIFICADO` hoy son las **27 cifras del
+> Anexo I.2 y su estructura de tres partidas**, no las 63 de la versión anterior: las dos
+> verificaciones están en el historial de git, cada una sobre el contenido que el archivo tenía ese
+> día, y la de 2026-08-25 no respalda ni una sola de las cifras que hoy se leen aquí.
 
 ## 1. La tabla tal como está en la norma
 
@@ -166,20 +168,34 @@ considerandos›`.
 | Ámbito | nacional |
 | Vigencia | 2026 |
 
-**No se carga todavía, y el motivo ya no es el que era.** D-13 se cerró el 2026-08-28
-([ADR-0017](../../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md)) y las cifras ya
-no están sin cotejar: se leyeron en el Anexo I.2 (§1.4). Lo que falta ahora es **la segunda firma**
-—este archivo está en `TRANSCRITO`, y `PublicarCuadros` solo publica desde `VERIFICADO` con dos
-firmas distintas (ADR-0007)— y las otras tres regiones (§3). Con ADR-0017 cada región es una
-**edición** distinta, y el conjunto de una municipalidad compone la suya; publicar la Costa no
-espera a las demás, espera a que alguien vuelva al PDF y firme.
+**No se carga todavía, y ya no es por ninguna firma.** D-13 se cerró el 2026-08-28
+([ADR-0017](../../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md)), las cifras se
+leyeron en el Anexo I.2 (§1.4) y la segunda firma llegó el 2026-08-29. Con ADR-0017 cada región es
+una **edición** distinta y el conjunto de una municipalidad compone la suya, así que publicar la
+Costa tampoco espera a las otras tres (§3). Lo que falta es trabajo, y se puede nombrar entero:
 
-**Y hay un cambio de esquema pendiente antes de cargar:** la tabla se dimensionó para siete
-partidas y el cuadro tiene tres. Si `valor_unitario_edificacion` guarda la partida como un valor de
-un conjunto cerrado, ese conjunto hay que corregirlo; si lo guarda como texto, lo que hay que
-corregir es lo que escriba el proceso de publicación. En cualquiera de los dos casos, cargar las 27
-filas con los nombres de partida de la versión anterior de este archivo produciría un cuadro que
-suma siete columnas donde la norma suma tres.
+1. **`PublicarCuadros` no sabe publicar este cuadro.** `FilaDelManifiesto.CUADROS` son hoy
+   `DEPRECIACION` y `VALOR_REFERENCIAL`, y un manifiesto que nombre otro se rechaza **nombrando el
+   motivo**, que es lo que se quiere mientras el motivo siga siendo cierto.
+2. **No hay `archivo_de_filas` ni su `sha256`**, y por tanto no hay fila en
+   [`publicacion/cuadros-2026.csv`](publicacion/cuadros-2026.csv). Las 27 cifras caben enteras en
+   este archivo, así que el derivado sale de aquí como el de `depreciacion.md`
+   —[`derivar-depreciacion.mjs`](fuentes/depreciacion-rnt-2016/derivar-depreciacion.mjs)— y no de un
+   PDF.
+3. **El vocabulario de partidas, que no es solo de esta tabla.** `valor_unitario_edificacion.partida`
+   (V1) admite siete valores; las tres del anexo —`MUROS`, `TECHOS`, `PUERTAS`— están entre ellos, de
+   modo que la carga **no fallaría**: dejaría `PISOS`, `REVESTIMIENTOS`, `BANIOS` e `INSTALACIONES`
+   sin ninguna fila, y una edición a la que le faltan cuatro partidas no se distingue de una
+   completa hasta que alguien valoriza un predio. Y el mismo vocabulario de siete está escrito en
+   `construccion` con una columna `categoria_*` por partida (V1), en `edificacion_estructura` (V43),
+   y en Java en `catastro.dominio.Partida` y `licencias.dominio.PartidaDeEdificacion`: reducirlo a
+   tres es una decisión sobre el modelo entero, no un `CHECK` que se corrige. **Y no la puede tomar
+   este archivo**, porque solo leyó la Costa: lo que decide entre tres y siete es leer el Anexo I.1
+   (§3).
+4. **`anio_construccion_desde` es `NOT NULL` desde V18.** Si gana la lectura de este archivo —que el
+   año de construcción es la entrada de la depreciación y no una dimensión de este cuadro— las 27
+   filas entran con **un solo tramo abierto**; esa es la forma que H-4 deja pendiente de decidir
+   (§3).
 
 ## 3. Qué no cabe hoy
 
@@ -194,11 +210,22 @@ aprobado por la Resolución Ministerial N.° 172-2016-VIVIENDA» (ver `depreciac
 construcción no es una dimensión del cuadro de valores unitarios; es la entrada de la tabla de
 depreciación, que es otra tabla con su propia clave.
 
-No se pudo leer `../srtm` NEG-05 §RT-002 desde este repositorio (el submódulo no está clonado aquí)
-para comprobar si esa sección describe literalmente una matriz categoría-año, o si describe una
-vista **calculada** por el SRTM del MEF que combina el valor unitario (esta tabla) con la
-depreciación por antigüedad (la otra tabla) en una sola pantalla. Quien tenga acceso a `../srtm`
-debería confirmar cuál de las dos lecturas es la correcta antes de dar H-4 por cerrado.
+**Leído ya `../srtm` NEG-05 §RT-002, la contradicción no se deshace: se sitúa.** Esa sección dice
+bajo el rótulo «**Confirmado por los manuales**» que «las siete categorías constructivas son muros y
+columnas, techos, puertas y ventanas, pisos, revestimiento, baños e instalaciones eléctricas y
+sanitarias», y a renglón seguido que «el cuadro de valores unitarios es una matriz de dos
+dimensiones: categoría × año de construcción» —las dos, leídas en M02 del MEF—. **Pero la propia
+sección deja esa forma pendiente de comprobar contra la norma**: «`VERIFICAR` en la resolución anual
+del Ministerio de Vivienda: cuadro de valores unitarios por categoría **y año de construcción**:
+`‹VERIFICAR›`». Eso es exactamente lo que se hizo aquí el 2026-08-28, y contra el Anexo I.2 la
+respuesta es que no: ni año de construcción, ni siete partidas. Las siete no llevan `‹VERIFICAR›`
+porque no salen de la resolución: salen del manual. Lo que NEG-05 describe es lo que el manual del
+sistema **del MEF** enseña; lo que este archivo transcribe es lo que la resolución **de la Costa**
+aprueba, y no tienen por qué ser lo mismo —el manual puede estar describiendo una vista calculada, o
+el cuadro de Lima/Callao—. **Quien cierre H-4 tiene que leer el
+Anexo I.1**: es el único de los cuatro que puede decir si las siete partidas siguen existiendo en
+alguna región, y con ello si el vocabulario de siete del esquema (§2, punto 3) describe la norma o
+una versión anterior de ella.
 
 Aparte de H-4:
 
@@ -208,9 +235,10 @@ Aparte de H-4:
   sistema necesita calcular predios fuera de la Costa. Los cuatro PDF existen y no se han leído más
   que el de la Costa: **no se supone** que las otras tres tengan las mismas tres partidas ni
   cifras parecidas.
-- **La matriz ya no está sin cotejar, pero sí sin verificar.** Las 27 cifras salen del Anexo I.2 y
-  no de un tercero (§1.4); lo que falta es la segunda firma de ADR-0007. Hasta que exista, este
-  archivo no publica nada.
+- **La matriz está cotejada y verificada; lo que falta para publicarla es otra cosa.** Las 27 cifras
+  salen del Anexo I.2 y no de un tercero (§1.4), y llevan las dos firmas de ADR-0007 desde el
+  2026-08-29. Que este archivo esté `VERIFICADO` **no lo hace publicable**: los cuatro pasos que
+  faltan están en §2, y ninguno es una firma.
 - **El incremento del 5 % por piso a partir del quinto tiene fuente, y le falta la mecánica.** El
   cuadro dice «EN EDIFICIOS AUMENTAR EL VALOR POR M2 EN 5 % A PARTIR DEL 5° PISO» y con eso el
   factor de D-11 deja de estar sin fuente. Lo que la nota no dice es si el 5 % se aplica **una vez**
