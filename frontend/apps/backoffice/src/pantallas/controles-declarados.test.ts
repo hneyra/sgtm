@@ -178,14 +178,22 @@ describe('las que siguen sin campo siguen sin campo', () => {
     expect(escrituraDe('alcabala')).toBeUndefined();
   });
 
-  it('las trece que quedan son las trece que quedan', () => {
+  it('las quince que quedan son las quince que quedan', () => {
     /* La lista se **nombra**, no se cuenta, y por eso avisa cuando cambia por
        otro sitio: al integrar `main` aparecieron dos que este issue no habia
        visto —las dos hojas de resolucion de licencias, que FRO-06 (#427) trajo
        desde `sin-declaracion`—, y la prueba se puso roja diciendo cuales. Un
        `toHaveLength(11)` habria pasado igual de rojo sin decir nada, y un
-       recuento recalculado no se habria enterado. */
+       recuento recalculado no se habria enterado.
+
+       Y volvio a pasar con #428, que es la prueba de que el aviso sirve: las dos
+       hojas de resolucion de infracciones administrativas llegan por el mismo
+       camino que las de licencias, y con ellas **las siete hojas sin superficie
+       que `hojas-sin-superficie.test.ts` computa del catalogo estan todas
+       aqui**. */
     expect(Object.keys(ACTOS_SIN_CAMPO).sort()).toEqual([
+      'adm_notificacion_resolucion',
+      'adm_resolucion_gerencia',
       'alcabala',
       'caja_tasas',
       'caja_tributaria',

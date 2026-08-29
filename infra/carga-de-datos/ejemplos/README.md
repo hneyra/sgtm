@@ -12,6 +12,7 @@ la especificación funcional—.
 | Archivo | Qué contiene | Naturaleza | Se carga con |
 |---|---|---|---|
 | `vias.csv` | 15 vías de Catacaos | **Estructura**: nombres de vía de dominio público | `cargar-catalogo-vial.sh` |
+| `cajas.csv` | 5 ventanillas y 3 áreas | **Estructura**: sin ellas la caja no se puede abrir (#430) | `cargar-cajas.sh` |
 | `sectores.csv` | 4 sectores | **Estructura** | `cargar-sectores.sh` |
 | `manzanas.csv` | 10 manzanas | **Estructura** | `cargar-manzanas.sh` |
 | `contribuyentes.csv` | 8 contribuyentes | **Ficticio**: personas inventadas | `cargar-contribuyentes-demo.sh` |

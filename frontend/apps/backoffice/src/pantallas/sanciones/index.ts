@@ -14,8 +14,8 @@ import {
 } from '../seguridad/listado';
 
 /**
- * Infracciones administrativas, conectado hasta donde llega el backend: **ocho opciones de
- * trece** (#78 y #397, sobre #363).
+ * Infracciones administrativas, conectado hasta donde llega el backend: **nueve opciones de
+ * trece** (#78, #397 y #428, sobre #363).
  *
  * `adm_estado_cuenta` (`GET /infracciones/administrativas/estado-cuenta`,
  * `EstadoDeCuentaAdministrativoController`, #47) es la que la ficha 360° compone (#297,
@@ -67,7 +67,9 @@ import {
  *                                    esta opción no dibuja —sus campos son «Código de criterio»,
  *                                    «Tipo de recaudo», «Oficina»…, del todo ajenos al cuerpo
  *                                    real—.
- *   `adm_resolucion_gerencia`        `ResolucionesDeGerenciaController.administrativa` exige
+ *   `adm_resolucion_gerencia`        Una **hoja sin superficie**, y desde #428 clasificada como
+ *                                    tal: ver [FRO-06](../../../../../docs/60-frontend/hojas-sin-superficie.md).
+ *                                    `ResolucionesDeGerenciaController.administrativa` exige
  *                                    `papeleta`, `fecha` y `sustento` en el cuerpo, y el catálogo
  *                                    de esta opción **no dibuja ninguna sección, ningún campo y
  *                                    ninguna acción** —solo `desc` y el bloque `reporte`—. No es
@@ -76,25 +78,36 @@ import {
  *                                    sustituir. La hoja se sigue dibujando —`kind: "report"` la
  *                                    renderiza igual, con sus firmas— porque `Reporte.tsx` no
  *                                    necesita datos para eso; lo que no hay es a dónde escribir.
- *   `adm_notificacion_resolucion`    Mismo hueco: `NotificarResolucionDeGerencia` exige
- *                                    `fechaDeNotificacion`, `modalidad`, `resultado` y
+ *                                    Y **sin acciones no hay franja**, así que lo que se lee es su
+ *                                    aviso permanente (`AVISOS`), que además dice dónde sí está
+ *                                    dibujado el formulario: en «Descargos y reclamos», colgando
+ *                                    de un recurso presentado, que no es el caso general.
+ *   `adm_notificacion_resolucion`    Mismo hueco, misma decisión: `NotificarResolucionDeGerencia`
+ *                                    exige `fechaDeNotificacion`, `modalidad`, `resultado` y
  *                                    `notificador`, y el catálogo tampoco declara ni una sección.
- *   `adm_reportes`                   El emisor del manual ofrece diez tipos de reporte y
- *                                    `TipoDeReporteAdministrativo` solo implementa tres —
- *                                    `PADRON_NOTIFICACIONES`, `RESUMEN_PAPELETAS` y
- *                                    `RESUMEN_RECAUDACION`—, ninguno de los tres coincide en
- *                                    literal con las diez opciones del desplegable del prototipo, y
- *                                    la última acción del catálogo es «Cancelar», no «Pantalla».
- *                                    Conectar un emisor que promete diez reportes y sirve tres
- *                                    fingiría cobertura que no tiene; `adm_padron_notificaciones` y
- *                                    `adm_resumen_recaudacion`, que sí tienen `GET` propio, quedan
- *                                    conectadas arriba de todos modos. **Y su primaria sigue
- *                                    siendo «Cancelar»**, que es el mismo cuarteto de
- *                                    `anuncios_reportes` y `licencia_padron` (#421): no se declaró
- *                                    con ellas porque su bloqueo no es el botón sino los siete
- *                                    reportes que el desplegable ofrece y el backend no tiene, y
- *                                    mover el navy a «Pantalla» aquí sería decir que sólo falta
- *                                    conectar. Se declara cuando se decida qué hace esa pantalla.
+ *                                    Su aviso remite a «Notificación», donde la diligencia sí está
+ *                                    dibujada —colgando del acta preventiva, que es otro acto—.
+ *   `adm_reportes`                   **Conectada desde #428**, y con su propio componente
+ *                                    (`EmisorDeReportesAdministrativos.tsx`). Lo que la tenía
+ *                                    fuera eran dos cosas y ninguna era la puerta: su `POST` es
+ *                                    una **lectura** —el emisor compone una hoja, no guarda
+ *                                    nada— y desde #424 hay puerta para eso; y su desplegable
+ *                                    ofrece **diez** tipos de reporte cuando
+ *                                    `TipoDeReporteAdministrativo` implementa **tres**. Conectarla
+ *                                    sin más habría dejado siete elecciones que contestan 422 con
+ *                                    el botón encendido, que es peor que el botón apagado que
+ *                                    había. Ahora el desplegable ofrece **sólo los tres** y de los
+ *                                    otros siete dice dónde están: cinco son otra opción del
+ *                                    catálogo —vencidas, por contribuyente, estado de cuenta, la
+ *                                    resolución y su notificación— y **dos no las sirve nadie**:
+ *                                    la relación de notificaciones por mes (el padrón no agrupa) y
+ *                                    el padrón de papeletas administrativas, que no existe como
+ *                                    reporte —la relación de procedimientos es la grilla de
+ *                                    `infracciones_adm`—. El único rótulo que hay que interpretar
+ *                                    es `RESUMEN_PAPELETAS`: se elige «PAPELETAS POR INFRACCIÓN» y
+ *                                    no «PADRÓN DE PAPELETAS» porque el segundo es un listado que
+ *                                    el backend no publica y el primero nombra una agrupación, que
+ *                                    es lo que `AgrupacionDelResumen.CODIGO` da.
  *
  * El controlador de `adm_estado_cuenta` sirve el **mismo** `PapeletaResource` que `papeletas`
  * (`../transito`), filtrado a `Familia.ADMINISTRATIVA` y a lo todavía pendiente

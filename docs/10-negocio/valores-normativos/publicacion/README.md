@@ -163,7 +163,7 @@ recalcula antes de publicar una sola fila.
 | Cuadro | Estado |
 |---|---|
 | `vehicular-valores-referenciales-2026.md` | **Publicable hoy.** Su anexo es `fuentes/tvr-2026/tvr-2026.csv`, extraído mecánicamente y con su huella firmada; entran 54 111 filas |
-| `valores-unitarios-2026.md` | **No.** Sus 9×7 cifras siguen `‹NO CONFIRMADO EN FUENTE OFICIAL›` contra el Anexo I.2 de la RM, y sólo está la región Costa de las cuatro (GOB-03, H-14) |
+| `valores-unitarios-2026.md` | **No, y ya no por sus cifras ni por sus firmas.** Las 27 del Anexo I.2 están leídas del PDF y `VERIFICADO` desde el 2026-08-29. Le faltan tres cosas y una es de este directorio: **no tiene archivo de filas ni huella**, así que no hay fila que escribir aquí; `FilaDelManifiesto.CUADROS` no incluye `VALOR_UNITARIO`; y sus **3 partidas** conviven con las **7** que declara el esquema, de modo que publicarlas dejaría cuatro sin fila sin que nada lo dijera. Sigue además sólo la región Costa de las cuatro (GOB-03, H-14) |
 | `depreciacion.md` | **Publicable desde el 2026-08-29** (`V57`, H-15). Su archivo de filas es `fuentes/depreciacion-rnt-2016/depreciacion.csv`, **derivado del propio archivo del corpus** y no de un PDF —cabe entero en él— con su huella firmada; entran 492 filas, las cuatro tablas del Anexo I |
 
 `PublicarCuadros` rechaza el que falta **nombrando el motivo**, en vez de publicar un cuadro

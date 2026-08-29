@@ -118,7 +118,8 @@ distintos**, y estado. Y ya no es solo papel: `PublicarParametros` publica los v
 ([#247](https://github.com/hneyra/sgtm/issues/247) §2) abre, compone y sella.
 
 **Lo que sigue en paralelo es lo que quedó detrás de la firma**, y es trabajo, no decisión: la
-segunda firma del cuadro de valores unitarios y las tres regiones que le faltan (H-14)
+lo que le falta al cuadro de valores unitarios, que desde el 2026-08-29 ya no es la segunda firma
+sino el derivado publicable, el vocabulario de partidas y las otras tres regiones (H-14)
 —`PublicarCuadros` lo rechaza a propósito, nombrando el motivo, en vez de publicar un cuadro
 incompleto que nadie distinguiría de uno completo— y el `% actualización` de D-11, el único de los
 cuatro factores que sigue sin fuente identificada. **La tabla de depreciación salió de esa lista el
