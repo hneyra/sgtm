@@ -3,7 +3,8 @@ import { Campo, Esqueleto } from '@sgtm/design-system';
 import type { ValorDeCampo } from '@sgtm/api-client';
 import type { SeccionDePantalla } from '../../catalogo';
 import { arrancaCerrada } from '../../catalogo';
-import { memoriaDeSeccion, resolutorDeCampo } from '../composicion';
+import { controlesDeLaSeccion, memoriaDeSeccion, resolutorDeCampo } from '../composicion';
+import type { ControlDeclarado } from '../composicion';
 import { mapaEnElCampo } from '../escrituras';
 import { MemoriaDeCalculo } from './MemoriaDeCalculo';
 import { Icono } from '@sgtm/design-system';
@@ -26,6 +27,14 @@ import { Icono } from '@sgtm/design-system';
  * ese en vez del `Campo`. No bifurca nada —el resto de la seccion se dibuja
  * igual— y es negacion por omision: 133 de las 134 pantallas no declaran
  * ninguno y no se enteran.
+ *
+ * **Y una seccion puede llevar un campo que el manual no dibuja** (#422): si la
+ * opcion declara `controles` para su etiqueta, se anaden al final de su rejilla,
+ * con **su propia etiqueta** —nunca la de ningun campo del catalogo (RNF-080)—.
+ * Es el otro lado de lo mismo: el resolutor sustituye el dibujo de un campo que
+ * existe, esto anade uno que no. Misma negacion por omision, y misma guarda: un
+ * control solo escribe **el campo que declaro**, y si esta pantalla no lo
+ * declara en `escrituras.ts` se dibuja bloqueado en vez de tragarse lo tecleado.
  */
 export interface FormularioProps {
   /**
@@ -119,6 +128,9 @@ export function Formulario({
            falta. */
         const deLaRejilla =
           memoria === undefined ? seccion.campos : seccion.campos.filter((c) => c.t !== 'ro');
+        /* Lo que esta opcion **anade** al final de esta seccion (#422). Vacio en
+           133 de las 134, y entonces la rejilla es exactamente la del catalogo. */
+        const anadidos = controlesDeLaSeccion(opcion, seccion.label);
         return (
           <section
             key={clave}
@@ -159,7 +171,7 @@ export function Formulario({
                 memoria={memoria}
               />
             )}
-            {!cerrada && deLaRejilla.length > 0 && (
+            {!cerrada && (deLaRejilla.length > 0 || anadidos.length > 0) && (
               <div className="sgtm-seccion__rejilla">
                 {deLaRejilla.map((campo) => {
                   /* **Un mapa del cuerpo, en el sitio de los campos a los que
@@ -266,11 +278,82 @@ export function Formulario({
                     />
                   );
                 })}
+                {anadidos.map((control) => (
+                  <ControlAnadido
+                    key={`anadido|${control.campo}`}
+                    control={control}
+                    valor={borrador[control.campo] ?? ''}
+                    /* Se dibuja **bloqueado** si esta pantalla no declara ese
+                       campo en `escrituras.ts`, o si quien mira no tiene el
+                       privilegio del acto: es la misma guarda que el resolutor
+                       (`ResolutorProps.bloqueado`) y por el mismo motivo —sin la
+                       declaracion, `fijarCampo` se traga lo tecleado en silencio
+                       y el campo anadido seria un adorno—. */
+                    bloqueado={!puedeActuar || !(escribibles?.has(control.campo) ?? false)}
+                    onCampo={onCampo ?? NADA}
+                    {...(errorPorCampo[control.campo] === undefined
+                      ? {}
+                      : { error: errorPorCampo[control.campo] })}
+                  />
+                ))}
               </div>
             )}
           </section>
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Un campo que la opcion **anade** a una seccion del catalogo (#422).
+ *
+ * Es un `Campo` normal y nada mas: lo que lo hace distinto no esta aqui sino en
+ * quien lo declara. Se separa en su propio componente para poder leer de un
+ * vistazo lo unico que hay que mirar aqui: que **la etiqueta que dibuja es la
+ * del control** y no la de ningun campo del catalogo (RNF-080).
+ *
+ * **Y no lleva `soloSusCampos`, a diferencia del resolutor**, aunque la
+ * propiedad que hay que garantizar sea la misma —«escribe solo lo que declaro»—.
+ * Ahi hace falta porque el control es **codigo ajeno**: `CampoResolutor.Control`
+ * es un componente cualquiera al que se le entrega un `onCampo`, y puede llamarlo
+ * con la clave que le de la gana (la muestra de `formulario-resolutor.test.tsx`
+ * lo hace). Aqui no hay codigo: la clave sale de la declaracion y es la unica que
+ * se puede pasar. Envolverlo tambien seria una guarda que **no puede fallar**, y
+ * una regla que no puede fallar no protege nada — se midio quitandola, y no pone
+ * nada en rojo. Lo que si protege, y si muerde, es el censo: la clave declarada
+ * tiene que estar en `escrituras.ts` (`controles-declarados.test.ts`).
+ */
+function ControlAnadido({
+  control,
+  valor,
+  bloqueado,
+  onCampo,
+  error,
+}: {
+  readonly control: ControlDeclarado;
+  readonly valor: string;
+  readonly bloqueado: boolean;
+  readonly onCampo: (campo: string, valor: string) => void;
+  readonly error?: string;
+}) {
+  return (
+    <Campo
+      etiqueta={control.etiqueta}
+      tipo={control.tipo}
+      valor={valor}
+      bloqueado={bloqueado}
+      ayuda={control.ayuda}
+      {...(control.ph === undefined ? {} : { ph: control.ph })}
+      {...(control.opciones === undefined ? {} : { opciones: control.opciones })}
+      /* La misma regla que los `sel` escribibles del catalogo: sin la opcion
+         vacia, el desplegable se dibuja mostrando la primera y no manda nada
+         (revision de #331). Aqui vale siempre —un control declarado se declara
+         para escribirlo—, y estando bloqueado tampoco estorba: no hay nada
+         elegido que ensenar. */
+      {...(control.tipo === 'sel' ? { eleccionObligatoria: true } : {})}
+      {...(error === undefined ? {} : { error })}
+      {...(bloqueado ? {} : { onCambio: (nuevo: string) => onCampo(control.campo, nuevo) })}
+    />
   );
 }

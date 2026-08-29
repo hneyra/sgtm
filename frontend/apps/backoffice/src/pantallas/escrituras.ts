@@ -196,6 +196,27 @@ const TIPO_DE_VALOR_MASIVO: Readonly<Record<string, string>> = {
 const tipoDeValorMasivoDe = (texto: string): string | undefined => TIPO_DE_VALOR_MASIVO[texto];
 
 /**
+ * «Tipo de recurso» del catalogo de `transito_descargos` → `TipoDeRecurso` (V41).
+ *
+ * Los cuatro son los mismos cuatro y en el mismo orden; lo unico que cambia es
+ * la tilde, porque el enum de Java no la lleva y el desplegable del manual si.
+ * No se resuelve quitando tildes con una funcion —eso convertiria cualquier
+ * texto en un valor «traducido», incluido uno que el enum no tiene— sino con la
+ * tabla de siempre: lo que no este aqui no viaja.
+ */
+const TIPO_DE_RECURSO_DEL_BACKEND: Readonly<Record<string, string>> = {
+  DESCARGO: 'DESCARGO',
+  // Entrecomilladas por lo mismo que `CEDULÓN` mas arriba: sin las comillas son
+  // identificadores validos de JavaScript, y un identificador con tilde es lo
+  // que ESLint prohibe (FRO-04 §2).
+  'RECONSIDERACIÓN': 'RECONSIDERACION',
+  'APELACIÓN': 'APELACION',
+  NULIDAD: 'NULIDAD',
+};
+
+const tipoDeRecursoDe = (texto: string): string | undefined => TIPO_DE_RECURSO_DEL_BACKEND[texto];
+
+/**
  * «Tributo» del catalogo de `valores_individual`/`valores_masivo`/`prescripcion` →
  * el codigo que `ConsultaDeDeudaPublica`/el libro reconocen.
  *
@@ -755,6 +776,49 @@ function faltaEnLaTransferenciaDeVehiculo(
   }
   if (dato('fechaDeTransferencia') === '') {
     return 'Falta la fecha de transferencia: es desde cuándo responde el adquirente por el impuesto.';
+  }
+  return undefined;
+}
+
+/**
+ * Donde esta el campo que el manual no dibuja, dicho para quien atiende (#422).
+ *
+ * La frase existe por lo mismo que `DONDE_EL_PREDIO`: el campo que falta no
+ * esta donde quien conoce la pantalla lo buscaria, porque hasta hoy no estaba en
+ * ninguna parte.
+ */
+const DONDE_EL_EXPEDIENTE = 'Está al final de «Solicitud», debajo del fundamento.';
+
+/**
+ * Que le falta al descargo para poder registrarse (#50, #77, #422).
+ *
+ * Los cinco que `DescargosController` pasa por `exigir` —`papeleta`,
+ * `nDeExpediente`, `fechaDePresentacion`, `tipoDeRecurso` y `fundamento`—, en el
+ * orden en que se rellenan. El sexto que el cuerpo admite, `familia`, no se
+ * declara: por omision es transito, que es la pantalla que lo manda.
+ *
+ * **La marca «Dentro del plazo» no entra**, y esa ausencia es la que importa: la
+ * calcula el servidor con el plazo parametrizado (`DescargoResource.enPlazo` y
+ * `plazo`), y dejar que la pantalla la mandara seria dejar que quien atiende
+ * declare en plazo un escrito que llego tarde.
+ */
+function faltaEnElDescargo(borrador: Readonly<Record<string, string>>): string | undefined {
+  const dato = (clave: string): string => (borrador[clave] ?? '').trim();
+
+  if (dato('papeletaImpugnada') === '') {
+    return 'Falta la papeleta impugnada: es contra qué se presenta el descargo.';
+  }
+  if (dato('nDeExpedienteDeMesaDePartes') === '') {
+    return `Falta el número de expediente con que el escrito entró por mesa de partes: es lo que ata el descargo al documento que el administrado presentó. ${DONDE_EL_EXPEDIENTE}`;
+  }
+  if (dato('fechaDePresentacion') === '') {
+    return 'Falta la fecha de presentación: de ella sale si el escrito entró en plazo, y eso lo calcula el servidor.';
+  }
+  if (dato('tipoDeRecurso') === '') {
+    return 'Falta el tipo de recurso: descargo, reconsideración, apelación o nulidad.';
+  }
+  if (dato('fundamentoDelAdministrado') === '') {
+    return 'Falta el fundamento del administrado: sin él no queda constancia de qué se alegó.';
   }
   return undefined;
 }
@@ -1375,6 +1439,44 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
     campos: {
       codPapeletaNueva: { campo: 'numeroNuevo' },
     },
+  },
+
+  /**
+   * Descargos y reclamos de papeletas (`POST /transito/descargos`, #50, RF-064, #422).
+   *
+   * **La primera opcion que sale de `ACTOS_SIN_CAMPO` por el mecanismo declarativo**, y no
+   * por un componente propio: lo unico que le faltaba era el numero de expediente de mesa
+   * de partes —`DescargosController` lo exige y el catalogo lo dibuja `"ro"`, como el del
+   * descargo que se esta consultando—, y `transito/composicion.ts` lo declara como un
+   * control anadido al final de «Solicitud». Su clave es `nDeExpedienteDeMesaDePartes` y no
+   * `nDeExpediente`: esa ya es la del **filtro** con que se busca un descargo registrado, y
+   * dos cosas distintas no comparten clave.
+   *
+   * Y la primaria la pone `LA_QUE_ESCRIBE` (#421): la ultima accion del catalogo es
+   * «Notificar al administrado» y la que registra es la primera de las tres. Los dos
+   * mecanismos son complementarios —uno dice **cual boton** escribe, el otro **donde** se
+   * escribe el dato que le falta—, y esta pantalla necesitaba los dos.
+   *
+   * **La seccion «Evaluación y resolución» no se declara**, y no por descuido: resolver un
+   * descargo es dictar una resolucion de gerencia (`ResolucionesDeGerenciaController`, #50),
+   * que es otro acto, otra ruta y otro papel. `PeticionDeDescargo` no tiene ni un campo para
+   * el area evaluadora, el numero de resolucion, el sentido del fallo ni el efecto sobre la
+   * multa; declararlos aqui los mandaria a un servidor que no los pide.
+   *
+   * `dentroDelPlazo5DiasHabiles` tampoco: lo calcula el servidor con el plazo parametrizado
+   * (regla 5), y es la respuesta la que lo trae. `familia` va por omision a `TRANSITO`, que
+   * es de donde manda esta pantalla.
+   */
+  transito_descargos: {
+    campos: {
+      papeletaImpugnada: { campo: 'papeleta' },
+      nDeExpedienteDeMesaDePartes: { campo: 'nDeExpediente' },
+      fechaDePresentacion: { campo: 'fechaDePresentacion' },
+      tipoDeRecurso: { campo: 'tipoDeRecurso', valor: tipoDeRecursoDe },
+      fundamentoDelAdministrado: { campo: 'fundamento' },
+    },
+    exigir: (borrador) => faltaEnElDescargo(borrador),
+    nota: true,
   },
 
   /**

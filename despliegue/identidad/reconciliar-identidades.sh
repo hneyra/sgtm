@@ -1,11 +1,22 @@
 #!/bin/bash
-# Reconcilia los USUARIOS y GRUPOS de cada municipalidad contra Keycloak (ADR-0012).
+# Reconcilia contra Keycloak lo que el repositorio declara de las PERSONAS (ADR-0012,
+# ADR-0020). Dos poblaciones, dos realms, un solo guion:
+#
+#   ./reconciliar-identidades.sh              los USUARIOS y GRUPOS de cada municipalidad,
+#                                             en el realm de funcionarios
+#   ./reconciliar-identidades.sh ciudadanos   los CIUDADANOS ENROLADOS en ventanilla,
+#                                             en el realm del portal (`<realm>-ciudadano`)
 #
 # Es el equivalente de `reconciliar-realm.sh` para las personas: el realm fija la
-# ESTRUCTURA, y este guion aplica lo que declara `municipalidades/<ubigeo>.json`
-# —una fuente versionada, SIN una sola clave—.
+# ESTRUCTURA, y este guion aplica lo que declaran `municipalidades/<ubigeo>.json` y
+# `ciudadanos/<ubigeo>.json` —fuentes versionadas, SIN una sola clave—. Y es el mismo
+# guion para los dos por el mismo motivo por el que `reconciliar-realm.sh` lo es para los
+# dos realms: lo que cambia son el archivo, el realm y que se comprueba al terminar; el
+# procedimiento —crear lo que falta, actualizar lo declarado, NO tocar la clave de quien
+# ya existia, y COMPROBAR— es identico, y una copia del ultimo paso es una que un dia
+# deja de comprobar lo suyo.
 #
-# Lo que hace, en orden y todo idempotente:
+# ── Modo `funcionarios` (por omision) ──────────────────────────────────────────
 #
 #   1. Por cada municipalidad: crea el grupo de Keycloak si falta y le fija el
 #      atributo `municipalidad_id` (documental; el claim sale del atributo por
@@ -22,22 +33,43 @@
 #      atributo con el valor del archivo y esta en su grupo. Si no -> exit 1, y el
 #      despliegue queda rojo. Es lo que convierte este Job en una verificacion.
 #
-# ── Dos modos, un guion ────────────────────────────────────────────────────────
+# ── Modo `ciudadanos` (D-15 camino B, ADR-0020 §5) ─────────────────────────────
+#
+#   1. Por cada ciudadano declarado: **la cuenta se deriva del documento**
+#      —`dni-70123456`—, nunca se declara. Es lo que hace que la fila `ACCESO` que el
+#      portal deja en la bitacora de cada municipalidad identifique al ciudadano por
+#      su documento, y lo que impide que una cuenta diga una cosa y su atributo otra.
+#      Lleva el TIPO delante porque `CE 12345678` y `DNI 12345678` son dos personas.
+#   2. Se crea con `tipo_documento` y `numero_documento` —los dos claims de ADR-0020—
+#      y con UPDATE_PASSWORD pendiente; si ya existia, se actualizan nombre, apellido
+#      y correo y NO se toca ni la clave ni las acciones pendientes.
+#   3. **Ningun grupo y ningun `municipalidad_id`**: el ciudadano no pertenece a
+#      ninguna municipalidad, y lo que ve sale de recorrer el registro (ADR-0020 §2).
+#   4. El enlace de clave, solo a los recien creados QUE DECLARAN CORREO. El resto
+#      queda con UPDATE_PASSWORD pendiente y la clave se entrega fuera de banda: un
+#      padron real tiene mucha gente sin correo, y exigirlo dejaria fuera del portal
+#      justo a quien va a ventanilla.
+#   5. Comprobacion final: existe, esta `enabled` y sus DOS atributos valen lo que
+#      dice el archivo. Sin `numero_documento` el token sale sin el claim y
+#      `/portal/situacion` responde 403 SIN_DOCUMENTO.
+#
+# ── Dos modos de EJECUCION, un guion ──────────────────────────────────────────
 #
 #   directo  Corre DENTRO de la imagen de Keycloak (el Job del cluster). `kcadm.sh`
-#            es local y los datos llegan pre-derivados en `identidades.tsv`, que
-#            escribe `infra/componentes/Identidad.ts` (la imagen de Keycloak no
-#            trae python ni jq).
+#            es local y los datos llegan pre-derivados en `identidades.tsv` /
+#            `ciudadanos.tsv`, que escribe `infra/componentes/Identidad.ts` (la imagen
+#            de Keycloak no trae python ni jq).
 #   compose  Corre en la maquina o en el runner. `kcadm` se invoca por
-#            `docker compose exec` y los `municipalidades/*.json` se leen con el
-#            python3 del anfitrion.
+#            `docker compose exec` y los `*.json` se leen con el python3 del anfitrion.
 #
 # El modo se detecta solo; se puede forzar con KC_MODO=compose|directo.
 #
 # ── Variables ─────────────────────────────────────────────────────────────────
-#   KC_REALM                  realm; por omision `sgtm`
-#   KC_DIRECTORIO             (directo) carpeta con `identidades.tsv`; por omision /realm
+#   KC_REALM                  realm de funcionarios; por omision `sgtm`
+#   KC_REALM_CIUDADANO        realm del portal; por omision `<KC_REALM>-ciudadano`
+#   KC_DIRECTORIO             (directo) carpeta con los TSV; por omision /realm
 #   MUNICIPALIDADES_DIR       (compose) carpeta con `*.json`; por omision ./municipalidades
+#   CIUDADANOS_DIR            (compose) carpeta con `*.json`; por omision ./ciudadanos
 #   UBIGEO                    (compose) si se fija, solo reconcilia ese `<ubigeo>.json`
 #   KC_SERVIDOR               (directo) URL de Keycloak, p.ej. http://svc:8080/keycloak
 #   KC_ADMIN / KC_CLAVE       (directo) usuario y clave de administracion
@@ -49,8 +81,24 @@
 #   SIN_CORREO=1              omite el envio del enlace (usuario sin clave; solo local)
 set -euo pipefail
 
-REALM="${KC_REALM:-sgtm}"
 AQUI="$(cd "$(dirname "$0")" && pwd)"
+
+# --- Que poblacion se reconcilia ----------------------------------------------
+CUAL="${1:-funcionarios}"
+case "$CUAL" in
+    funcionarios)
+        REALM="${KC_REALM:-sgtm}"
+        ARCHIVO_TSV="identidades.tsv"
+        ;;
+    ciudadanos)
+        REALM="${KC_REALM_CIUDADANO:-${KC_REALM:-sgtm}-ciudadano}"
+        ARCHIVO_TSV="ciudadanos.tsv"
+        ;;
+    *)
+        echo "FALLO: no se sabe reconciliar «$CUAL». Es «funcionarios» o «ciudadanos»." >&2
+        exit 1
+        ;;
+esac
 
 # --- Modo ---------------------------------------------------------------------
 if [ "${KC_MODO:-auto}" = compose ]; then
@@ -89,7 +137,7 @@ else
     ADMIN="${SGTM_KEYCLOAK_ADMIN:-admin}"; CLAVE="$SGTM_CLAVE_KEYCLOAK"
 fi
 
-echo "Reconciliando identidades del realm «$REALM» contra $SERVIDOR (modo $MODO)"
+echo "Reconciliando $CUAL del realm «$REALM» contra $SERVIDOR (modo $MODO)"
 
 intento=0
 until kc config credentials --server "$SERVIDOR" --realm master \
@@ -112,24 +160,112 @@ if [ -n "${KC_SMTP_USUARIO:-}" ]; then
     echo "Relay SMTP: credenciales puestas en el realm (no versionadas)."
 fi
 
-# --- Fuente de datos: identidades.tsv (directo) o los *.json (compose) ----------
+# --- Fuente de datos: el TSV derivado (directo) o los *.json (compose) ----------
 # Formato del TSV, una linea por fila, campos separados por tabulador:
-#   GRUPO   <nombre del grupo>   <municipalidadId>
-#   USUARIO <cuenta> <nombre> <apellido> <correo> <municipalidadId> <grupo>
+#   GRUPO     <nombre del grupo>   <municipalidadId>
+#   USUARIO   <cuenta> <nombre> <apellido> <correo> <municipalidadId> <grupo>
+#   CIUDADANO <cuenta> <nombre> <apellido> <tipoDocumento> <numeroDocumento> <correo>
 DIRECTORIO="${KC_DIRECTORIO:-/realm}"
 LIMPIAR_TSV=0
-if [ -f "$DIRECTORIO/identidades.tsv" ]; then
-    TSV="$DIRECTORIO/identidades.tsv"
+if [ -f "$DIRECTORIO/$ARCHIVO_TSV" ]; then
+    TSV="$DIRECTORIO/$ARCHIVO_TSV"
     echo "Datos: $TSV (derivado por Identidad.ts)"
 else
-    MUNI_DIR="${MUNICIPALIDADES_DIR:-$AQUI/municipalidades}"
+    if [ "$CUAL" = ciudadanos ]; then
+        FUENTE_DIR="${CIUDADANOS_DIR:-$AQUI/ciudadanos}"
+    else
+        FUENTE_DIR="${MUNICIPALIDADES_DIR:-$AQUI/municipalidades}"
+    fi
     if ! command -v python3 >/dev/null 2>&1; then
-        echo "FALLO: no hay «$DIRECTORIO/identidades.tsv» ni python3 para leer $MUNI_DIR." >&2
+        echo "FALLO: no hay «$DIRECTORIO/$ARCHIVO_TSV» ni python3 para leer $FUENTE_DIR." >&2
         exit 1
     fi
     TSV="$(mktemp)"; LIMPIAR_TSV=1
     trap '[ "$LIMPIAR_TSV" = 1 ] && rm -f "$TSV"' EXIT
-    python3 - "$MUNI_DIR" "${UBIGEO:-}" >"$TSV" <<'PY'
+    if [ "$CUAL" = ciudadanos ]; then
+        python3 - "$FUENTE_DIR" "${UBIGEO:-}" >"$TSV" <<'PY'
+import glob, json, os, re, sys
+
+# La forma que exige cada tipo, la MISMA que `TipoDocumento` del dominio: un numero
+# que el dominio no puede leer produce un token que el backend rechaza con 403
+# SIN_DOCUMENTO, y el 403 no dice por que. `componentes.test.ts` comprueba que esta
+# tabla y la del enumerado siguen diciendo lo mismo.
+TIPOS = {"DNI": (8, 8, True), "RUC": (11, 11, True), "CE": (6, 20, False), "PASAPORTE": (6, 20, False), "PARTIDA": (1, 20, False), "OTRO": (1, 20, False)}
+
+carpeta = sys.argv[1]
+solo = sys.argv[2] if len(sys.argv) > 2 else ""
+if not os.path.isdir(carpeta):
+    sys.exit(f"No existe la carpeta de ciudadanos enrolados {carpeta}")
+archivos = sorted(glob.glob(os.path.join(carpeta, "*.json")))
+if solo:
+    archivos = [a for a in archivos if os.path.splitext(os.path.basename(a))[0] == solo]
+    if not archivos:
+        # Que una municipalidad no haya enrolado a nadie es legitimo, y es el estado
+        # de partida de todas. No se inventa un error; se dice y se sigue.
+        print(f"Sin ciudadanos declarados para el ubigeo {solo} en {carpeta}", file=sys.stderr)
+
+filas = []
+declarado = {}
+for ruta in archivos:
+    with open(ruta, encoding="utf-8") as fh:
+        crudo = fh.read()
+    # Ni una clave, nunca (ADR-0012 §2). Se mira el TEXTO del archivo y no el objeto
+    # ya parseado: lo que no puede estar es la palabra, este donde este.
+    prohibida = re.search(r'"(credentials|password|secret|clave)"\s*:', crudo, re.I)
+    if prohibida:
+        sys.exit(f"{ruta}: declara «{prohibida.group(1)}». Aqui no entra ninguna clave (ADR-0012 §2)")
+    if re.search(r'"(cuenta|username)"\s*:', crudo, re.I):
+        sys.exit(f"{ruta}: declara la cuenta. La cuenta se DERIVA del documento (ADR-0020 §5)")
+    c = json.loads(crudo)
+    base = os.path.splitext(os.path.basename(ruta))[0]
+    ubigeo = str(c.get("ubigeo", ""))
+    if not ubigeo.isdigit() or len(ubigeo) != 6:
+        sys.exit(f"{ruta}: «ubigeo» son seis digitos, y es {ubigeo!r}")
+    if ubigeo != base:
+        sys.exit(f"{ruta}: el nombre del archivo ({base}) no es el ubigeo ({ubigeo})")
+    ciudadanos = c.get("ciudadanos")
+    if not isinstance(ciudadanos, list):
+        sys.exit(f"{ruta}: «ciudadanos» es una lista, aunque este vacia")
+    for u in ciudadanos:
+        for campo in ("nombre", "apellido", "tipoDocumento", "numeroDocumento"):
+            valor = u.get(campo)
+            if not valor or not isinstance(valor, str) or "\t" in valor:
+                sys.exit(f"{ruta}: un ciudadano sin «{campo}» valido")
+        tipo = u["tipoDocumento"].strip().upper()
+        if tipo not in TIPOS:
+            sys.exit(f"{ruta}: «{tipo}» no es un tipo de documento conocido: {', '.join(TIPOS)}")
+        numero = u["numeroDocumento"].strip().upper()
+        minimo, maximo, digitos = TIPOS[tipo]
+        if not re.fullmatch(r"[0-9A-Z]+", numero):
+            sys.exit(f"{ruta}: el documento «{numero}» lleva algo que no es digito ni letra")
+        if not minimo <= len(numero) <= maximo:
+            sys.exit(f"{ruta}: un {tipo} tiene de {minimo} a {maximo} caracteres, y «{numero}» tiene {len(numero)}")
+        if digitos and not numero.isdigit():
+            sys.exit(f"{ruta}: un {tipo} es solo digitos, y «{numero}» no lo es")
+        correo = (u.get("correo") or "").strip()
+        if "\t" in correo:
+            sys.exit(f"{ruta}: el correo de «{numero}» lleva un tabulador")
+        # La cuenta se deriva, nunca se declara. Con el tipo delante porque
+        # `CE 12345678` y `DNI 12345678` son dos personas distintas.
+        cuenta = f"{tipo.lower()}-{numero.lower()}"
+        firma = (u["nombre"].strip(), u["apellido"].strip(), tipo, numero, correo)
+        if cuenta in declarado:
+            anterior, ruta_anterior = declarado[cuenta]
+            if anterior != firma:
+                sys.exit(
+                    f"{ruta} y {ruta_anterior} declaran el mismo documento ({tipo} {numero}) "
+                    "con datos distintos. Dos municipalidades no pueden afirmar cosas distintas "
+                    "de la misma persona"
+                )
+            continue
+        declarado[cuenta] = (firma, ruta)
+        filas.append(("CIUDADANO", cuenta, firma[0], firma[1], tipo, numero, correo))
+
+for fila in filas:
+    print("\t".join(fila))
+PY
+    else
+        python3 - "$FUENTE_DIR" "${UBIGEO:-}" >"$TSV" <<'PY'
 import glob, json, os, sys
 
 carpeta = sys.argv[1]
@@ -172,10 +308,11 @@ for ruta in archivos:
 for fila in filas:
     print("\t".join(fila))
 PY
-    echo "Datos: $MUNI_DIR/*.json (leidos con python3)"
+    fi
+    echo "Datos: $FUENTE_DIR/*.json (leidos con python3)"
 fi
 
-# --- 1 y 2: grupos y usuarios -------------------------------------------------
+# --- 1 y 2: grupos, usuarios y ciudadanos -------------------------------------
 buscar_grupo() {
     local salida
     salida=$(kc get groups -r "$REALM" -q "search=$1" -q "exact=true" \
@@ -231,6 +368,57 @@ while IFS=$'\t' read -r tipo c1 c2 c3 c4 c5 c6; do
             fi
             kc update "users/$uid/groups/$gid" -r "$REALM" -n >/dev/null
             ;;
+        CIUDADANO)
+            cuenta="$c1"; nombre="$c2"; apellido="$c3"; tipoDoc="$c4"; numeroDoc="$c5"
+            correo="${c6:-}"
+            uid=$(buscar_usuario "$cuenta")
+            if [ -z "$uid" ]; then
+                # Sin grupo y sin `municipalidad_id`: el ciudadano no pertenece a
+                # ninguna municipalidad (ADR-0020 §2). `emailVerified` solo si hay
+                # correo: marcarlo verificado sin direccion es afirmar algo de una
+                # direccion que no existe.
+                if [ -n "$correo" ]; then
+                    kc create users -r "$REALM" \
+                        -s "username=$cuenta" -s enabled=true -s emailVerified=true \
+                        -s "email=$correo" -s "firstName=$nombre" -s "lastName=$apellido" \
+                        -s "attributes.tipo_documento=$tipoDoc" \
+                        -s "attributes.numero_documento=$numeroDoc" \
+                        -s 'requiredActions=["UPDATE_PASSWORD"]' >/dev/null
+                else
+                    kc create users -r "$REALM" \
+                        -s "username=$cuenta" -s enabled=true \
+                        -s "firstName=$nombre" -s "lastName=$apellido" \
+                        -s "attributes.tipo_documento=$tipoDoc" \
+                        -s "attributes.numero_documento=$numeroDoc" \
+                        -s 'requiredActions=["UPDATE_PASSWORD"]' >/dev/null
+                fi
+                uid=$(buscar_usuario "$cuenta")
+                [ -n "$uid" ] || { echo "FALLO: «$cuenta» no aparece despues de crearlo." >&2; exit 1; }
+                if [ -n "$correo" ]; then
+                    NUEVOS="$NUEVOS $cuenta:$uid"
+                else
+                    echo "«$cuenta» se creo SIN correo: queda con UPDATE_PASSWORD pendiente y la clave se entrega fuera de banda (ver README)."
+                fi
+                echo "Ciudadano «$cuenta» enrolado ($tipoDoc $numeroDoc), con UPDATE_PASSWORD pendiente."
+            else
+                # El documento NO se reescribe aqui por capricho: es el mismo valor del
+                # que se derivo la cuenta, asi que actualizarlo es reafirmarlo. Lo que
+                # no se toca, igual que arriba, es la clave y lo pendiente.
+                if [ -n "$correo" ]; then
+                    kc update "users/$uid" -r "$REALM" \
+                        -s "email=$correo" -s emailVerified=true \
+                        -s "firstName=$nombre" -s "lastName=$apellido" \
+                        -s "attributes.tipo_documento=$tipoDoc" \
+                        -s "attributes.numero_documento=$numeroDoc" >/dev/null
+                else
+                    kc update "users/$uid" -r "$REALM" \
+                        -s "firstName=$nombre" -s "lastName=$apellido" \
+                        -s "attributes.tipo_documento=$tipoDoc" \
+                        -s "attributes.numero_documento=$numeroDoc" >/dev/null
+                fi
+                echo "Ciudadano «$cuenta» ya estaba enrolado; nombre y correo al dia. Clave intacta."
+            fi
+            ;;
         *)
             echo "FALLO: linea de tipo desconocido «$tipo» en el TSV." >&2; exit 1
             ;;
@@ -265,10 +453,38 @@ echo "--- Comprobacion final ---"
 errores=0
 usuarios=0
 grupos=0
+ciudadanos=0
 while IFS=$'\t' read -r tipo c1 c2 c3 c4 c5 c6; do
     case "${tipo:-}" in
         GRUPO) grupos=$((grupos + 1)); continue ;;
         USUARIO) : ;;
+        CIUDADANO)
+            ciudadanos=$((ciudadanos + 1))
+            cuenta="$c1"; tipoDoc="$c4"; numeroDoc="$c5"
+            uid=$(buscar_usuario "$cuenta")
+            if [ -z "$uid" ]; then
+                echo "FALLO: «$cuenta» no existe despues de enrolar." >&2; errores=1; continue
+            fi
+            detalle=$(kc get "users/$uid" -r "$REALM" 2>/dev/null || true)
+            case "$detalle" in
+                *'"numero_documento" : [ "'"$numeroDoc"'" ]'*|*"\"numero_documento\":[\"$numeroDoc\"]"*) ;;
+                *)
+                    echo "FALLO: «$cuenta» sin atributo numero_documento=$numeroDoc." >&2
+                    echo "  Sin ese atributo el token sale sin el claim y /portal/situacion" >&2
+                    echo "  responde 403 SIN_DOCUMENTO, no una situacion vacia (ADR-0020)." >&2
+                    errores=1
+                    ;;
+            esac
+            case "$detalle" in
+                *'"tipo_documento" : [ "'"$tipoDoc"'" ]'*|*"\"tipo_documento\":[\"$tipoDoc\"]"*) ;;
+                *) echo "FALLO: «$cuenta» sin atributo tipo_documento=$tipoDoc." >&2; errores=1 ;;
+            esac
+            case "$detalle" in
+                *'"enabled" : true'*|*'"enabled":true'*) ;;
+                *) echo "FALLO: «$cuenta» no esta enabled." >&2; errores=1 ;;
+            esac
+            continue
+            ;;
         *) continue ;;
     esac
     usuarios=$((usuarios + 1))
@@ -295,7 +511,11 @@ while IFS=$'\t' read -r tipo c1 c2 c3 c4 c5 c6; do
 done < "$TSV"
 
 if [ "$errores" -ne 0 ]; then
-    echo "Reconciliacion de identidades: CON FALLOS." >&2
+    echo "Reconciliacion de $CUAL: CON FALLOS." >&2
     exit 1
 fi
-echo "Identidades reconciliadas: $usuarios usuario(s) en $grupos grupo(s)."
+if [ "$CUAL" = ciudadanos ]; then
+    echo "Ciudadanos enrolados: $ciudadanos cuenta(s) en el realm «$REALM»."
+else
+    echo "Identidades reconciliadas: $usuarios usuario(s) en $grupos grupo(s)."
+fi

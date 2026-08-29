@@ -21,6 +21,18 @@
 #      buzon Mailpit `correo`), que sin clave no consigue token por password, y que
 #      el `municipalidadId` cuadra en el archivo, en la base y en el atributo de
 #      Keycloak (cruce a tres bandas).
+#   3c. EL ENROLAMIENTO DEL CIUDADANO (D-15 camino B, ADR-0020 §5). El mismo guion
+#      otra vez, en su segundo modo, contra el OTRO realm: crea la cuenta del
+#      ciudadano que `identidad/ciudadanos/200101.json` declara, SIN clave. Se
+#      comprueba: que la cuenta se llama como su documento —`dni-70123456`, derivada,
+#      nunca declarada—, que nace con UPDATE_PASSWORD pendiente y sin poder pedir
+#      token, que el numero declarado ESTA EN EL PADRON de esa municipalidad (cruce a
+#      tres bandas: archivo, fila de `contribuyente` y atributo de Keycloak), que
+#      reconciliar dos veces no cambia nada, y que **entra al portal y ve su
+#      situacion** de extremo a extremo. Y los dos peldanos que dan sentido a lo
+#      anterior: un ciudadano cuyo documento no tiene la forma que su tipo exige, y uno
+#      SIN el atributo, reciben **403 SIN_DOCUMENTO** —o no se pueden ni crear—, nunca
+#      una situacion vacia.
 #   4. LA ESCALERA DE IDENTIDAD, peldano a peldano. Cada uno responde con su
 #      codigo del catalogo, y el codigo es lo que hace la asercion precisa —dice
 #      HASTA DONDE llego la peticion, no solo que fallo—:
@@ -76,6 +88,13 @@
 #     el buzon Mailpit queda vacio —el paso se pone rojo—; se cambia el
 #     `municipalidadId` de `identidad/municipalidades/200101.json` y el cruce a
 #     tres bandas deja de cuadrar.
+#   - La 3c: se cambia el `numeroDocumento` de `identidad/ciudadanos/200101.json`
+#     por uno que no figura en ningun padron y el cruce se pone rojo nombrando el
+#     archivo —es lo unico que impide crear identidades que el sistema cree y el
+#     padron no conoce—; se le quita a la cuenta el atributo `numero_documento` con
+#     `kcadm` y `/portal/situacion` pasa de 200 a 403 SIN_DOCUMENTO; se le declara
+#     una `cuenta` al archivo, o unas `credentials`, y la derivacion lo rechaza
+#     nombrandolo.
 
 name: Despliegue
 
@@ -270,6 +289,200 @@ jobs:
           echo "archivo=$delArchivo  base=$deLaBase  keycloak=$deKeycloak"
           test "$delArchivo" = "$deLaBase"
           test "$delArchivo" = "$deKeycloak"
+
+      # ADR-0020 §5 / D-15 camino B: el ciudadano NO se registra solo. Lo enrola un
+      # funcionario con el documento delante, y el acto es declarar y reconciliar —el
+      # mismo mecanismo de ADR-0012, extendido, sin una sola clave en git—. Aqui se
+      # ejerce entero: el archivo versionado, el guion en su segundo modo, el cruce con
+      # el padron, la idempotencia y la entrada al portal.
+      - name: 3c · El enrolamiento del ciudadano en ventanilla (D-15 camino B)
+        run: |
+          set -euo pipefail
+          source .env
+          export SGTM_CLAVE_KEYCLOAK
+          export SGTM_KEYCLOAK_SERVICIO=identidad
+
+          API=http://localhost:8080/api/v1
+          KC=http://localhost:8180
+          CIUDADANO=sgtm-ciudadano
+          CUENTA=dni-70123456
+
+          kc() { docker compose exec -T identidad /opt/keycloak/bin/kcadm.sh "$@" </dev/null; }
+          # `</dev/null` por lo mismo que `kc()`: esto se invoca dentro de un
+          # `while read < archivo`, y sin el `docker compose exec` heredaria el archivo
+          # como stdin y se comeria las filas que el bucle todavia no ha leido.
+          sql() { docker compose exec -T -e PGPASSWORD="$SGTM_CLAVE_SUPERUSUARIO" base \
+            psql --username postgres --dbname sgtm --tuples-only --no-align --command "$1" \
+            </dev/null | tr -d '\r'; }
+          # Devuelve "codigo_http CODIGO_DEL_CATALOGO", igual que la escalera de abajo: el
+          # codigo del catalogo dice HASTA DONDE llego la peticion, no solo que fallo.
+          intento() {
+            local ruta="$1"; shift
+            local estado
+            estado=$(curl --silent --output /tmp/cuerpo --write-out '%{http_code}' "$@" "$API$ruta")
+            echo "$estado $(python3 -c 'import json;print(json.load(open("/tmp/cuerpo")).get("codigo","ok"))' 2>/dev/null || echo 'ok')"
+          }
+          espera() {
+            local esperado="$1" ruta="$2"; shift 2
+            local obtenido
+            obtenido=$(intento "$ruta" "$@")
+            if [ "$obtenido" != "$esperado" ]; then
+              echo "  FALLO $ruta: esperaba «$esperado», obtuve «$obtenido»" >&2
+              echo "  cuerpo: $(cat /tmp/cuerpo 2>/dev/null)" >&2
+              return 1
+            fi
+            echo "  ok $ruta -> $obtenido"
+          }
+          tokenDe() {
+            curl --silent --request POST "$KC/realms/$1/protocol/openid-connect/token" \
+              --data "grant_type=password&client_id=sgtm-verificacion&username=$2&password=$3" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))' \
+              2>/dev/null || true
+          }
+
+          echo "--- el realm del ciudadano esta importado, y es OTRO emisor"
+          for _ in $(seq 1 60); do
+            curl --fail --silent "$KC/realms/$CIUDADANO/.well-known/openid-configuration" >/dev/null && break
+            sleep 5
+          done
+          curl --fail --silent "$KC/realms/$CIUDADANO/.well-known/openid-configuration" >/dev/null
+
+          # La persona que se presento en ventanilla. En una instalacion de verdad esta
+          # fila YA esta en el padron —por eso se enrola a quien tiene el documento
+          # delante—; aqui se siembra a mano y DELIBERADAMENTE sin leerla del archivo
+          # versionado: si el numero saliera del mismo sitio que la declaracion, el cruce
+          # de mas abajo no podria fallar nunca.
+          echo "--- una persona en el padron de 200101"
+          sql "INSERT INTO contribuyente (municipalidad_id, codigo_contribuyente, tipo_documento, numero_documento, tipo_persona, nombre_razon_social, usuario_registro) SELECT id, '00000000001', 'DNI', '70123456', 'NATURAL', 'ROSA CHERO ZAPATA', 'verificacion' FROM municipalidad WHERE ubigeo = '200101' ON CONFLICT DO NOTHING"
+
+          echo "--- el enrolamiento: el MISMO guion, en su segundo modo y contra el otro realm"
+          UBIGEO=200101 ./identidad/reconciliar-identidades.sh ciudadanos
+
+          kc config credentials --server http://localhost:8080 --realm master \
+            --user "${SGTM_KEYCLOAK_ADMIN:-admin}" --password "$SGTM_CLAVE_KEYCLOAK" >/dev/null
+
+          echo "--- el numero declarado ESTA en el padron de esa municipalidad (cruce a tres bandas)"
+          python3 -c 'import json; [print(u["tipoDocumento"], u["numeroDocumento"]) for u in json.load(open("identidad/ciudadanos/200101.json"))["ciudadanos"]]' > /tmp/declarados
+          test -s /tmp/declarados
+          while read -r tipo numero; do
+            [ -n "${tipo:-}" ] || continue
+            enElPadron=$(sql "SELECT count(*) FROM contribuyente c JOIN municipalidad m ON m.id = c.municipalidad_id WHERE m.ubigeo = '200101' AND c.tipo_documento = '$tipo' AND c.numero_documento = '$numero'")
+            cuenta=$(printf '%s-%s' "$tipo" "$numero" | tr 'A-Z' 'a-z')
+            deKeycloak=$(kc get users -r "$CIUDADANO" -q "username=$cuenta" -q exact=true \
+              | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["attributes"]["numero_documento"][0] if d else "")')
+            echo "archivo=$tipo $numero  padron=$enElPadron  keycloak=$deKeycloak"
+            if [ "$enElPadron" -lt 1 ]; then
+              echo "FALLO: identidad/ciudadanos/200101.json declara $tipo $numero, y esa persona NO" >&2
+              echo "figura en el padron de 200101. Enrolar a alguien que ningun padron conoce es" >&2
+              echo "crear una identidad que el sistema cree y el padron no (ADR-0020 §5)." >&2
+              exit 1
+            fi
+            test "$numero" = "$deKeycloak"
+          done < /tmp/declarados
+
+          # Sin `--fields`: kcadm devuelve `attributes` y `requiredActions` vacios cuando se
+          # filtran por campo. Se pide la cuenta entera (mismo defecto que anota la 3b).
+          ficha=$(kc get users -r "$CIUDADANO" -q "username=$CUENTA" -q exact=true)
+          echo "$ficha"
+
+          echo "--- la cuenta se llama como su DOCUMENTO, y nadie la declaro"
+          # `dni-70123456`, derivada. Es lo que hace que la fila ACCESO de la bitacora
+          # identifique al ciudadano por su documento (ADR-0020 §5), y lleva el tipo
+          # delante porque `CE 12345678` y `DNI 12345678` son dos personas distintas.
+          echo "$ficha" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d)==1, d; assert d[0]["username"]=="dni-70123456", d'
+          grep -q '"cuenta"' identidad/ciudadanos/200101.json && { echo "El archivo declara la cuenta"; exit 1; } || true
+
+          echo "--- nace SIN clave, con UPDATE_PASSWORD pendiente y con sus dos claims"
+          echo "$ficha" | grep -q UPDATE_PASSWORD
+          echo "$ficha" | python3 -c 'import json,sys; a=json.load(sys.stdin)[0]["attributes"]; assert a["numero_documento"]==["70123456"], a; assert a["tipo_documento"]==["DNI"], a; assert "municipalidad_id" not in a, a'
+          # Y sin grupo: el ciudadano no pertenece a ninguna municipalidad (ADR-0020 §2).
+          uid=$(echo "$ficha" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])')
+          test -z "$(kc get "users/$uid/groups" -r "$CIUDADANO" --fields name --format csv --noquotes | tr -d '\r')"
+
+          echo "--- y NO existe en el realm de funcionarios: son dos poblaciones"
+          enFuncionarios=$(kc get users -r sgtm -q "username=$CUENTA" -q exact=true --fields id --format csv --noquotes | tr -d '\r')
+          test -z "$enFuncionarios"
+
+          echo "--- Keycloak envio el enlace de clave al ciudadano"
+          curl --fail --silent http://localhost:8025/api/v1/messages \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "rosa.chero@ejemplo.pe" in json.dumps(d), d'
+
+          echo "--- sin clave, no consigue token"
+          test -z "$(tokenDe "$CIUDADANO" "$CUENTA" cualquiera)"
+
+          echo "--- reconciliar dos veces no cambia nada"
+          nacio=$(echo "$ficha" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["createdTimestamp"])')
+          mensajes=$(curl --fail --silent http://localhost:8025/api/v1/messages | python3 -c 'import json,sys; print(json.load(sys.stdin)["messages_count"])')
+          UBIGEO=200101 ./identidad/reconciliar-identidades.sh ciudadanos
+          otraVez=$(kc get users -r "$CIUDADANO" -q "username=$CUENTA" -q exact=true)
+          echo "$otraVez" | grep -q UPDATE_PASSWORD
+          test "$nacio" = "$(echo "$otraVez" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["createdTimestamp"])')"
+          test "$mensajes" = "$(curl --fail --silent http://localhost:8025/api/v1/messages | python3 -c 'import json,sys; print(json.load(sys.stdin)["messages_count"])')"
+
+          echo "--- el ciudadano fija su clave y ENTRA al portal"
+          # Es lo que hace el enlace de un solo uso que acaba de recibir. Aqui se hace con
+          # kcadm porque CI no abre un navegador; lo que se comprueba despues es el camino
+          # entero —token del realm del ciudadano, claim firmado, recorrido y RLS—, no como
+          # se puso la clave.
+          kc set-password -r "$CIUDADANO" --username "$CUENTA" --new-password "$SGTM_CLAVE_VERIFICACION" >/dev/null
+          kc update "users/$uid" -r "$CIUDADANO" -s 'requiredActions=[]' >/dev/null
+          suToken=$(tokenDe "$CIUDADANO" "$CUENTA" "$SGTM_CLAVE_VERIFICACION")
+          test -n "$suToken"
+
+          espera "200 ok" /portal/situacion --header "Authorization: Bearer $suToken"
+          cat /tmp/cuerpo
+          # Sin teclear ningun documento: `GET /portal/situacion` no tiene ni un parametro.
+          python3 -c 'import json; d=json.load(open("/tmp/cuerpo")); assert d["numeroDocumento"]=="70123456", d; assert d["tipoDocumento"]=="DNI", d; assert d["sinRegistros"] is False, d; assert d["municipalidadesRecorridas"]>=1, d; assert d["municipalidades"][0]["ubigeo"]=="200101", d; assert d["municipalidades"][0]["codigoContribuyente"]=="00000000001", d'
+
+          echo "--- y la lectura dejo su fila ACCESO en la bitacora de esa municipalidad"
+          # Con la cuenta como usuario, o sea con el documento: y ese documento ya estaba en
+          # el padron de aqui, asi que la fila no publica nada que aqui no se supiera.
+          test "$(sql "SELECT count(*) FROM auditoria WHERE operacion = 'ACCESO' AND usuario_id = '$CUENTA'")" -ge 1
+
+          echo "--- su token NO vale fuera del portal, y el del funcionario no vale dentro"
+          # Dos emisores. Es lo que separa a las dos poblaciones estructuralmente: sin esto,
+          # lo unico que las separaria seria un `if` dentro de la aplicacion.
+          espera "401 NO_AUTENTICADO" /catastro/vias --header "Authorization: Bearer $suToken"
+          delFuncionario=$(tokenDe sgtm verificacion "$SGTM_CLAVE_VERIFICACION")
+          test -n "$delFuncionario"
+          espera "401 NO_AUTENTICADO" /portal/situacion --header "Authorization: Bearer $delFuncionario"
+
+          echo "--- un documento que el dominio no puede leer: 403 SIN_DOCUMENTO, no una situacion vacia"
+          # El peldano que da sentido a todo lo anterior. `123` pasa el perfil del realm y
+          # NO es un DNI: `DocumentoIdentidad` lo rechaza, y el borde contesta con el codigo
+          # del catalogo en vez de recorrer el registro sin sujeto.
+          kc create users -r "$CIUDADANO" -s username=documento-ilegible -s enabled=true \
+            -s firstName=Sin -s lastName=Documento \
+            -s 'attributes.tipo_documento=DNI' -s 'attributes.numero_documento=123' >/dev/null
+          kc set-password -r "$CIUDADANO" --username documento-ilegible --new-password "$SGTM_CLAVE_VERIFICACION" >/dev/null
+          ilegible=$(tokenDe "$CIUDADANO" documento-ilegible "$SGTM_CLAVE_VERIFICACION")
+          test -n "$ilegible"
+          espera "403 SIN_DOCUMENTO" /portal/situacion --header "Authorization: Bearer $ilegible"
+
+          echo "--- y uno SIN el atributo tampoco llega: es la rotura literal de ADR-0020 §4"
+          # «Quitarle el atributo numero_documento». Se ejerce de verdad, y el sistema
+          # puede cerrarla por dos sitios —los dos valen y los dos se aceptan aqui, porque
+          # lo que se afirma es que NO se llega al portal sin documento acreditado, no por
+          # cual de las dos barreras—:
+          #
+          #   a) el perfil del realm declara `numero_documento` requerido para el
+          #      administrador, asi que Keycloak puede negarse a crear la cuenta;
+          #   b) y si la creara, el borde de la aplicacion contesta 403 SIN_DOCUMENTO.
+          #
+          # Lo que no puede pasar, y es lo que esto vigila, es que salga una situacion.
+          if kc create users -r "$CIUDADANO" -s username=sin-documento -s enabled=true \
+               -s firstName=Sin -s lastName=Atributo >/dev/null 2>&1; then
+            echo "  Keycloak admitio la cuenta sin numero_documento; la para el borde"
+            kc set-password -r "$CIUDADANO" --username sin-documento \
+              --new-password "$SGTM_CLAVE_VERIFICACION" >/dev/null
+            sinDocumento=$(tokenDe "$CIUDADANO" sin-documento "$SGTM_CLAVE_VERIFICACION")
+            test -n "$sinDocumento"
+            espera "403 SIN_DOCUMENTO" /portal/situacion --header "Authorization: Bearer $sinDocumento"
+          else
+            echo "  Keycloak NO deja crear un ciudadano sin numero_documento: el realm lo cierra antes"
+            test -z "$(kc get users -r "$CIUDADANO" -q username=sin-documento -q exact=true \
+              --fields id --format csv --noquotes | tr -d '\r')"
+          fi
 
       - name: 4 · La escalera de identidad, peldano a peldano
         run: |

@@ -74,45 +74,76 @@ class ParametrosDeLaConsultaTest {
      * viejo—; lo que no puede es leerlos <b>solo</b> del cuerpo.
      */
     private static final Map<String, Set<String>> POR_LA_CONSULTA =
-            Map.of(
+            Map.ofEntries(
                     // #395 — la capa web de la determinacion predial. Los dos filtros que la
                     // pantalla dibuja y que deciden la cifra: de quien y de que ano.
-                    "POST /rentas/predial/calculo-individual", Set.of("codContribuyente", "ano"),
+                    Map.entry(
+                            "POST /rentas/predial/calculo-individual",
+                            Set.of("codContribuyente", "ano")),
                     // #399 — el calculo vehicular. Los tres filtros de la pantalla: los dos que
                     // resuelven el objetivo (placa o contribuyente) y el ejercicio. `simulacion` no
                     // esta y no es un olvido: no identifica lo que se calcula, decide si la
                     // operacion escribe, asi que va en el cuerpo (ver VehicularController).
-                    "POST /rentas/vehicular/calculo",
-                            Set.of("placa", "codContribuyente", "ejercicio"));
+                    Map.entry(
+                            "POST /rentas/vehicular/calculo",
+                            Set.of("placa", "codContribuyente", "ejercicio")),
+                    // ------------------------------------------------------------------
+                    // #425 — las nueve que quedaban. De cada operacion se promete lo que su
+                    // cuerpo ya llevaba y el contrato declara `in: query`; los demas parametros
+                    // de consulta que el contrato les pone son filtros de la GRILLA de la misma
+                    // pantalla —el generador los deriva de la opcion, no del verbo— y este POST
+                    // no filtra ninguna lista, asi que prometerlos aqui seria prometer nada.
+                    // ------------------------------------------------------------------
+                    // El expediente cuyas costas se liquidan: sin el no hay nada que liquidar.
+                    Map.entry("POST /coactiva/liquidaciones-costas", Set.of("nroExpedCoact")),
+                    // El dia al que se proyecta la deuda que se IMPRIME en la REC (regla 9): es la
+                    // cifra que el obligado se lleva en la mano.
+                    Map.entry("POST /coactiva/rec/impresion", Set.of("proyectarInteresAl")),
+                    // De que es el programa de fiscalizacion.
+                    Map.entry("POST /fiscalizacion/programas", Set.of("tipo")),
+                    // La conclusion del acta vehicular. Es opcional, y ahi estaba lo peor del
+                    // desajuste: el acta entraba con 201 y SIN hallazgo.
+                    Map.entry("POST /fiscalizacion/vehicular", Set.of("hallazgo")),
+                    // El numero de la notificacion administrativa previa.
+                    Map.entry(
+                            "POST /infracciones/administrativas/notificaciones", Set.of("numero")),
+                    // A quien se le cobra en la ventanilla de tasas. La cobranza tributaria de al
+                    // lado no lo declara `in: query` en el contrato, y por eso no esta aqui.
+                    Map.entry("POST /tesoreria/caja/tasas", Set.of("codContribuyente")),
+                    // El escrito y la papeleta que impugna.
+                    Map.entry("POST /transito/descargos", Set.of("nDeExpediente", "papeleta")),
+                    // Quien diligencio y con que resultado: de esto depende que la deuda quede
+                    // exigible.
+                    Map.entry(
+                            "POST /valores/{nro}/notificacion", Set.of("notificador", "resultado")),
+                    // La UNICA de las nueve que ya estaba conectada (#332). Se corrigio sin tocar
+                    // la pantalla: gana el cuerpo, asi que la peticion que `escrituras.ts` manda
+                    // hoy —los tres dentro de la tabla `cuotas`, aplanada— sigue produciendo el
+                    // mismo movimiento, y ademas se puede llamar como el contrato promete. El
+                    // alta hermana no esta porque su operacion no declara ningun parametro de
+                    // consulta: su pantalla no dibuja filtros.
+                    Map.entry(
+                            "POST /rentas/deuda/bajas",
+                            Set.of("codContribuyente", "tributo", "ano")));
 
     /**
      * Las operaciones que todavia leen del cuerpo un dato que el contrato declara de consulta.
      *
      * <p>Es el censo que #399 destapo al medirlo: el desajuste del calculo vehicular no era unico,
-     * eran <b>nueve</b>. Las ocho que quedan estan aqui con lo que leen. Siete no estan conectadas
-     * todavia en la interfaz —por eso nadie lo habia notado— y la octava lo esta pagandolo de otra
-     * manera, ver su comentario. Cada una se saca de esta lista el dia que su issue de conexion la
-     * corrija, igual que #399 saco al vehicular.
+     * eran <b>nueve</b>. <b>Hoy esta vacio</b>: #425 corrigio las ocho que quedaban y, con ellas,
+     * la novena —{@code POST /rentas/deuda/bajas}, la unica conectada— sin tocar su pantalla,
+     * porque gana el cuerpo. Las nueve pasaron a {@link #POR_LA_CONSULTA}, que promete las dos
+     * mitades a la vez.
+     *
+     * <p>Vacio no quiere decir que la comprobacion deje de morder: la que muerde es {@link
+     * #ningunDatoDeConsultaSeLeeSoloDelCuerpo}, que se aplica a <b>todo</b> controlador publicado y
+     * solo perdona lo que este mapa nombre. Esta lista es la valvula, y cuanto mas vacia este,
+     * menos perdona.
      *
      * <p><b>No se alarga sin motivo escrito.</b> Anadir una entrada aqui es declarar que una
      * pantalla no va a poder llamar a su operacion.
      */
-    private static final Map<String, Set<String>> EL_MISMO_DESAJUSTE_TODAVIA_ABIERTO =
-            Map.of(
-                    "POST /coactiva/liquidaciones-costas", Set.of("nroExpedCoact"),
-                    "POST /coactiva/rec/impresion", Set.of("proyectarInteresAl"),
-                    "POST /fiscalizacion/programas", Set.of("tipo"),
-                    "POST /fiscalizacion/vehicular", Set.of("hallazgo"),
-                    "POST /infracciones/administrativas/notificaciones", Set.of("numero"),
-                    "POST /tesoreria/caja/tasas", Set.of("codContribuyente"),
-                    "POST /transito/descargos", Set.of("nDeExpediente", "papeleta"),
-                    "POST /valores/{nro}/notificacion", Set.of("notificador", "resultado"),
-                    // La unica de las ocho que SI esta conectada (#332), y funciona porque la
-                    // interfaz se adapto al controlador: `escrituras.ts` manda los tres en el
-                    // cuerpo, dentro de la tabla `cuotas` y su `contexto`. El contrato sigue
-                    // prometiendo la consulta, asi que el desajuste sigue ahi —solo que hoy lo
-                    // paga quien lea el YAML, no la pantalla—.
-                    "POST /rentas/deuda/bajas", Set.of("codContribuyente", "tributo", "ano"));
+    private static final Map<String, Set<String>> EL_MISMO_DESAJUSTE_TODAVIA_ABIERTO = Map.of();
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

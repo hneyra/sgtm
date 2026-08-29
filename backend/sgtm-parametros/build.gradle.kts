@@ -15,11 +15,20 @@ dependencies {
     testRuntimeOnly(libs.postgresql)
 }
 
-// Las pruebas del derivado publicable leen el CSV del repositorio (#192). Sin declararlo
-// como entrada, editar el CSV deja a `test` en UP-TO-DATE y una rotura del derivado pasa
-// en verde rancio en local; en CI corre fresco y muerde, pero el sintoma local mentiria.
+// Las pruebas del derivado publicable y del manifiesto de cuadros leen archivos del
+// repositorio que viven FUERA del modulo (#192, #188). Sin declararlos como entrada, editar
+// uno deja a `test` en UP-TO-DATE y la rotura pasa en verde rancio en local; en CI corre
+// fresco y muerde, pero el sintoma local mentiria —y se comprobo: cambiarle el orden de
+// columnas al manifiesto dio BUILD SUCCESSFUL sin correr una sola prueba—.
 tasks.test {
+    val delCorpus = rootProject.file("../docs/10-negocio/valores-normativos")
     inputs
-        .file(rootProject.file("../docs/10-negocio/valores-normativos/publicacion/parametros-2026.csv"))
+        .file(delCorpus.resolve("publicacion/parametros-2026.csv"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs
+        .file(delCorpus.resolve("publicacion/cuadros-2026.csv"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs
+        .file(delCorpus.resolve("fuentes/depreciacion-rnt-2016/depreciacion.csv"))
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }

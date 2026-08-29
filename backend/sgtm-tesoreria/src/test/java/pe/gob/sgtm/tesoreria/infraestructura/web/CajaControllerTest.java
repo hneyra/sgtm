@@ -55,7 +55,10 @@ class CajaControllerTest {
     private final TasasEnMemoria tasas = new TasasEnMemoria();
     private final ContribuyentesDeMentira contribuyentes =
             new ContribuyentesDeMentira()
-                    .con(new ResumenDeContribuyente(7L, "C-0007", "TITULAR, PRUEBA", "DNI 1234"));
+                    .con(new ResumenDeContribuyente(7L, "C-0007", "TITULAR, PRUEBA", "DNI 1234"))
+                    // El segundo existe para #425: con uno solo, «viaja» y «se ignora» darian el
+                    // mismo recibo y la prueba no distinguiria una cosa de la otra.
+                    .con(new ResumenDeContribuyente(8L, "C-0008", "OTRA, PERSONA", "DNI 5678"));
 
     private final AbrirCaja abrirCaja =
             new AbrirCaja(
@@ -228,6 +231,86 @@ class CajaControllerTest {
     }
 
     @Test
+    @DisplayName("el filtro «codContribuyente» viaja por la consulta y decide a quien se cobra")
+    void elContribuyenteViajaPorLaConsultaEnLasTasas() throws Exception {
+        tasas.con(unaTasa());
+
+        String sinContribuyente =
+                """
+                {"caja":"C-01","cajero":"cajero.prueba",
+                 "formaDePago":"EFECTIVO","fechaDeCobro":"2026-03-15",
+                 "conceptos":[{"conceptoTupa":"T-001","cantidad":1}],
+                 "observacion":"Derecho de tramite"}
+                """;
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post("/api/v1/tesoreria/caja/tasas")
+                                        .param("codContribuyente", "C-0008")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(sinContribuyente))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(recibos.emitidos())
+                .as("no basta con que se acepte: el recibo sale a nombre de quien se pidio")
+                .singleElement()
+                .satisfies(recibo -> assertThat(recibo.contribuyenteId()).isEqualTo(8L));
+    }
+
+    @Test
+    @DisplayName("y si viene en los dos sitios gana el cuerpo: el cliente viejo sigue igual")
+    void elCuerpoGanaALaConsultaEnLasTasas() throws Exception {
+        tasas.con(unaTasa());
+
+        String conContribuyente =
+                """
+                {"caja":"C-01","cajero":"cajero.prueba","codContribuyente":"C-0007",
+                 "formaDePago":"EFECTIVO","fechaDeCobro":"2026-03-15",
+                 "conceptos":[{"conceptoTupa":"T-001","cantidad":1}],
+                 "observacion":"Derecho de tramite"}
+                """;
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post("/api/v1/tesoreria/caja/tasas")
+                                        .param("codContribuyente", "C-0008")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(conContribuyente))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(recibos.emitidos())
+                .singleElement()
+                .satisfies(recibo -> assertThat(recibo.contribuyenteId()).isEqualTo(7L));
+    }
+
+    @Test
+    @DisplayName("un contribuyente que no existe en la consulta, 404 y no se cobra")
+    void unContribuyenteInexistenteEnLaConsulta404() throws Exception {
+        tasas.con(unaTasa());
+
+        String sinContribuyente =
+                """
+                {"caja":"C-01","cajero":"cajero.prueba",
+                 "formaDePago":"EFECTIVO","fechaDeCobro":"2026-03-15",
+                 "conceptos":[{"conceptoTupa":"T-001","cantidad":1}],
+                 "observacion":"Derecho de tramite"}
+                """;
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post("/api/v1/tesoreria/caja/tasas")
+                                        .param("codContribuyente", "C-9999")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(sinContribuyente))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(404);
+        assertThat(recibos.emitidos()).isEmpty();
+    }
+
+    @Test
     @DisplayName("un concepto del TUPA sin tarifa vigente, 404")
     void unConceptoSinTarifaDevuelve404() throws Exception {
         String cuerpo =
@@ -257,6 +340,20 @@ class CajaControllerTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(cuerpo))
                 .andReturn();
+    }
+
+    /** La tasa del TUPA con la que cobran las pruebas de la ventanilla de tasas. */
+    private static Tasa unaTasa() {
+        return new Tasa(
+                3L,
+                "T-001",
+                "Constancia de no adeudo",
+                9L,
+                "1.3.1.1.1.1",
+                Dinero.de("12.50"),
+                LocalDate.of(2026, 1, 1),
+                null,
+                "TUPA 2026 de la prueba");
     }
 
     private static String cuerpoDeCobranza(String observacion) {

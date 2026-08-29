@@ -45,11 +45,9 @@ import { Filtros } from './bloques/Filtros';
 import { Formulario } from './bloques/Formulario';
 import { Indicadores } from './bloques/Indicadores';
 import { Portal } from './bloques/Portal';
-import { Reporte } from './bloques/Reporte';
 import { useDescargaDeArchivo } from './useDescargaDeArchivo';
 import type { DescargaDeArchivo } from './useDescargaDeArchivo';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
-import { IndiceDeSecciones } from './bloques/IndiceDeSecciones';
 import { Totales } from './bloques/Totales';
 
 /**
@@ -197,12 +195,38 @@ const PrescripcionDeLaDeuda = lazy(async () => ({
 const PaseACoactiva = lazy(async () => ({
   default: (await import('./valores/PaseACoactiva')).PaseACoactiva,
 }));
-/* **Y las tres de seguridad, desde #423.** Viajaban en el trozo comun —eran las
-   unicas de esta lista que no suspendian— y son la matriz de permisos, los
-   miembros de un grupo y las copias de seguridad: tres pantallas de
-   administracion que 131 de las 134 no abren nunca, y ninguna de ellas esta en
-   el camino de quien atiende en ventanilla. Sacarlas del arranque es lo que paga
-   las dos formas de cuerpo de este issue sin subir el presupuesto. */
+/* **Y el indice de secciones, por lo mismo.** Lo declaran las opciones con
+   `composicion.indice` —las fichas del predio y el predial individual—, que se
+   dibujan en su propio trozo o son una de 134: el resto lo descargaba para no
+   dibujarlo nunca. */
+const IndiceDeSecciones = lazy(async () => ({
+  default: (await import('./bloques/IndiceDeSecciones')).IndiceDeSecciones,
+}));
+/* **La hoja del reporte, perezosa desde #423.** La dibujan las trece pantallas
+   `kind: 'report'` del manual y nadie mas —es una hoja A4 con sus firmas
+   (RNF-084)—, asi que las otras 121 la descargaban para no usarla nunca. Es el
+   mismo movimiento que #379 hizo con las cuatro de `pantallas/valores/` y #424
+   con las tres de seguridad, y aqui paga las dos formas de cuerpo de este issue
+   sin subir el presupuesto: la alternativa era el umbral, y habia esta. */
+const Reporte = lazy(async () => ({
+  default: (await import('./bloques/Reporte')).Reporte,
+}));
+const CambioDeNumeroDePapeleta = lazy(async () => ({
+  default: (await import('./transito/CambioDeNumeroDePapeleta')).CambioDeNumeroDePapeleta,
+}));
+const GeneracionMasivaDeValoresDeTransito = lazy(async () => ({
+  default: (await import('./transito/GeneracionMasivaDeValoresDeTransito'))
+    .GeneracionMasivaDeValoresDeTransito,
+}));
+const EmisorDeReportes = lazy(async () => ({
+  default: (await import('./transito/EmisorDeReportes')).EmisorDeReportes,
+}));
+/* Las tres de seguridad **tambien son perezosas desde #424**, y el motivo es el
+   presupuesto: eran las unicas pantallas propias que seguian viajando en el
+   arranque, y el arranque no tenia margen —156,2 KB de 156 al conectar el
+   emisor de reportes—. Es el mismo movimiento que #379 hizo con las cuatro de
+   `pantallas/valores/` y con las de catastro; sube el umbral quien no tiene otra
+   salida, y aqui la habia. */
 const PermisosMatrix = lazy(async () => ({
   default: (await import('./seguridad/PermisosMatrix')).PermisosMatrix,
 }));
@@ -211,13 +235,6 @@ const MiembrosDeGrupo = lazy(async () => ({
 }));
 const Respaldos = lazy(async () => ({
   default: (await import('./seguridad/Respaldos')).Respaldos,
-}));
-const CambioDeNumeroDePapeleta = lazy(async () => ({
-  default: (await import('./transito/CambioDeNumeroDePapeleta')).CambioDeNumeroDePapeleta,
-}));
-const GeneracionMasivaDeValoresDeTransito = lazy(async () => ({
-  default: (await import('./transito/GeneracionMasivaDeValoresDeTransito'))
-    .GeneracionMasivaDeValoresDeTransito,
 }));
 
 /*
@@ -303,6 +320,14 @@ const GeneracionMasivaDeValoresDeTransito = lazy(async () => ({
  *                            una y «Imprimir» en la otra, ninguna de las
  *                            dos escribe. Cada una trae su barra de una
  *                            sola accion.
+ *   transito_reportes        (#424) la primera pantalla que **lee por
+ *                            `POST`**: no escribe nada, asi que no pasa por
+ *                            `useEscritura` ni pide observacion, y no se
+ *                            puede pedir al abrir porque no hay tipo de
+ *                            reporte elegido. Ademas su ultima accion del
+ *                            catalogo es «Cancelar», y los criterios que
+ *                            viajan dependen del reporte: el backend rechaza
+ *                            con 422 el que esa hoja no usa.
  *   sectores, calles         las dos caen en la **misma** superficie: un
  *                            carril con el arbol territorial —sector →
  *                            manzana— y un panel con las dos hojas como
@@ -346,6 +371,7 @@ export const COMPONENTES_PROPIOS: Readonly<
   pase_coactiva: PaseACoactiva,
   transito_cambio_numero: CambioDeNumeroDePapeleta,
   transito_valores: GeneracionMasivaDeValoresDeTransito,
+  transito_reportes: EmisorDeReportes,
   sectores: Territorio,
   calles: Territorio,
 };
@@ -353,10 +379,9 @@ export const COMPONENTES_PROPIOS: Readonly<
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
   const Propio = COMPONENTES_PROPIOS[estructura.id];
   if (Propio !== undefined) {
-    // El `Suspense` es de **todas**: desde #423 las tres de seguridad tambien
-    // llegan en su propio trozo, y envolverlas
-    // igual no cuesta nada: sin promesa pendiente, `Suspense` no dibuja su
-    // `fallback`.
+    // El `Suspense` cubre a todas: desde #424 tambien las tres de seguridad
+    // son perezosas, asi que ninguna viaja ya en el trozo comun. Sin promesa
+    // pendiente, `Suspense` no dibuja su `fallback`.
     return (
       <Suspense fallback={<Esqueleto alto={320} />}>
         <Propio estructura={estructura} />
@@ -695,15 +720,17 @@ function Bloques({
   const conIndice = (formulario: React.JSX.Element): React.JSX.Element =>
     composicion.indice !== undefined ? (
       <div className="sgtm-conindice">
-        <IndiceDeSecciones
-          secciones={secciones}
-          anclaDe={anclaDe}
-          haciaLasAcciones={barra.acciones.length > 0}
-          {...(indexaLaTabla && estructura.tabla !== undefined
-            ? // El rotulo es el del catalogo, no uno redactado aqui (RNF-080).
-              { previa: { rotulo: estructura.tabla.title, ancla: ANCLA_DE_LA_TABLA } }
-            : {})}
-        />
+        <Suspense fallback={<Esqueleto alto={120} />}>
+          <IndiceDeSecciones
+            secciones={secciones}
+            anclaDe={anclaDe}
+            haciaLasAcciones={barra.acciones.length > 0}
+            {...(indexaLaTabla && estructura.tabla !== undefined
+              ? // El rotulo es el del catalogo, no uno redactado aqui (RNF-080).
+                { previa: { rotulo: estructura.tabla.title, ancla: ANCLA_DE_LA_TABLA } }
+              : {})}
+          />
+        </Suspense>
         <div className="sgtm-conindice__panel">{formulario}</div>
       </div>
     ) : (
@@ -1038,12 +1065,14 @@ function Bloques({
         )}
 
       {estructura.kind === 'report' && estructura.reporte && (
-        <Reporte
-          estructura={estructura.reporte}
-          datos={datos?.reporte}
-          cargando={cargando}
-          {...descargasDelReporte(estructura.id, descargaDeFicha, descargaDeConstancia)}
-        />
+        <Suspense fallback={<Esqueleto alto={320} />}>
+          <Reporte
+            estructura={estructura.reporte}
+            datos={datos?.reporte}
+            cargando={cargando}
+            {...descargasDelReporte(estructura.id, descargaDeFicha, descargaDeConstancia)}
+          />
+        </Suspense>
       )}
 
       {cargando && !estructura.kind && !estructura.tabla && secciones.length === 0 && (

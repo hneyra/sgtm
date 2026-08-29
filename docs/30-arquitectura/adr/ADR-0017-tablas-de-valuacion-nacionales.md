@@ -115,9 +115,11 @@ arancel.
 
 ## Consecuencias
 
-- **Se desbloquea la carga de las tres tablas**, que es lo que D-13 bloqueaba. La vehicular queda
-  cargada por `PublicarCuadros` desde el manifiesto del corpus; las otras dos esperan a que sus
-  tablas ganen la dimensión que les falta (ver GOB-03, H-14 y H-15).
+- **Se desbloquea la carga de las tres tablas**, que es lo que D-13 bloqueaba. La vehicular quedó
+  cargada por `PublicarCuadros` desde el manifiesto del corpus, y **la de depreciación desde el
+  2026-08-29**: `V57` le dio la dimensión de uso que le faltaba y sus 492 filas —las cuatro tablas
+  del Anexo I del RNT— se publican por el mismo camino (H-15). La de valores unitarios sigue
+  esperando su segunda firma y sus otras tres regiones (H-14).
 - **H-5 queda resuelto por construcción**: una sola copia nacional no puede divergir de sí misma.
 - **La región de los valores unitarios cabe sin columna nueva.** La RM de valores unitarios publica
   un cuadro por región —Costa, Lima/Callao, Sierra, Selva—: cada una es una **edición** distinta, y

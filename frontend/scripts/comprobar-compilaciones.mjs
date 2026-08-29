@@ -77,12 +77,22 @@ const HUELLAS = [
  * sobre los 155,9 que ya traia `main` —el margen que quedaba era de 0,1 KB, asi
  * que cualquier cambio transversal habria tenido que tocar este numero—.
  *
+ * **Y de vuelta a 156 el mismo dia** (#424). Aquella subida se pidio por falta
+ * de margen, no por peso: el mapa costaba 0,2 KB y solo quedaban 0,1. Este
+ * issue devolvio el margen sin quitar nada —`PermisosMatrix`, `MiembrosDeGrupo`
+ * y `Respaldos`, las tres pantallas propias de seguridad que seguian en el
+ * trozo comun, pasaron a `lazy()`, el movimiento de #379—, y con el emisor de
+ * reportes ya conectado lo medido es **154,3**. Se baja el numero en vez de
+ * heredarlo: un presupuesto con 2,7 KB de holgura sigue apretando; uno con 0,1
+ * obliga a tocarlo en el proximo cambio transversal, y uno con 2,9 deja de
+ * medir. Bajarlo de verdad —decidir que sale del arranque— es #433.
+ *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */
 const PRESUPUESTO = {
   /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
-  arranque: 157,
+  arranque: 156,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**

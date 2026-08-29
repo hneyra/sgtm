@@ -39,19 +39,24 @@ import {
  * **Y las dos operaciones que no tenían `Controller` ya lo tienen (#396).**
  * `transito_papeleta_reporte` se conecta como hoja —se abre por el número de
  * la papeleta en la ruta, igual que `transito_documentos`—.
- * `transito_reportes` **no se conecta, y no por descuido**: es un `POST` y las
- * dos únicas puertas que el frontend tiene para uno son `useEscritura` —que
- * exige observación (regla 10), y este emisor no modifica nada— y
- * `useSimulacion` —cuya guarda es que el cuerpo declare `simulacion: true`, una
- * marca que `PeticionDeReporteDeTransito` no puede declarar sin mentir—;
- * declarar una `Conexion` lo dispararía **al abrir la pantalla** (ver el
- * docblock de `Adaptacion` en `pantallas/conexiones.ts`), y sin tipo de reporte
- * elegido el backend contestaría 422. Se suma que su última acción del catálogo
- * es «Cancelar» —el cuarteto Exportar/Imprimir/Pantalla/Cancelar de #79, donde
- * el renderizador genérico haría primaria a la que cierra el diálogo— y que su
- * desplegable ofrece quince reportes de los que el backend sirve nueve. En la
- * interfaz no se pierde nada: el centro de reportes (ADR-0014 §5) ya lleva a
- * cada hoja de un clic, y doce de las trece están conectadas.
+ * **Y `transito_reportes` estrena la tercera puerta (#424).** No se conecta con
+ * una `Conexion` —`useDatosDeOperacion` mira los parámetros que faltan y no el
+ * verbo, así que la dispararía **al abrir la pantalla**, sin tipo de reporte
+ * elegido—, ni por `useEscritura` —que exige observación (regla 10), y este
+ * emisor no modifica nada—, ni por `useSimulacion` —cuya guarda es que el
+ * cuerpo declare `simulacion: true`, una marca que
+ * `PeticionDeReporteDeTransito` no puede declarar sin mentir—. Lo suyo es una
+ * **lectura que viaja por `POST`**: `pantallas/lecturas-por-post.ts` la
+ * declara, `useLecturaPorPost` la pide al pulsar, y su pantalla vive en
+ * `EmisorDeReportes.tsx` —en `COMPONENTES_PROPIOS`, porque su última acción del
+ * catálogo es «Cancelar» (el cuarteto Exportar/Imprimir/Pantalla/Cancelar de
+ * #79) y porque los criterios que viajan dependen del reporte elegido: el
+ * backend rechaza con 422, nombrándolo, el que esa hoja no usa—. De los quince
+ * tipos del desplegable el backend sirve nueve, y de esos nueve la pantalla
+ * pide **ocho**: el record de conductor exige la licencia o el documento del
+ * infractor, y aquí el único campo parecido es «Conductor», que es un nombre.
+ * Los siete restantes son otras opciones del catálogo, y el centro de reportes
+ * (ADR-0014 §5) lleva a cada una de un clic — elegirlas en el emisor lo dice.
  *
  * **Tres filtros de los dos resúmenes se dibujan y no se mandan**
  * (`filtrosBloqueados` de `transito/composicion.ts`): el «Agrupado por» de las
@@ -61,14 +66,30 @@ import {
  * separadas— y el «Caja» y el «Tipo de cobranza» del de recaudación —la caja
  * la rechaza el backend con 422—.
  *
- * **Seis escrituras.** `transito_cambio_numero` y `transito_valores` viven en
- * su propio componente (`COMPONENTES_PROPIOS` de `Pantalla.tsx`), por el mismo
- * motivo que `pase_coactiva` (#75): el catálogo dibuja sus acciones sin la que
- * escribe al final. `transito_descargos`, `transito_constancia_libre`,
- * `transito_rg_ordinaria` y `transito_rg_sancionadora` van en `ACTOS_SIN_CAMPO`
- * (`pantallas/actos.ts`): a las cuatro les falta un dato que ninguna sección
- * de su pantalla dibuja editable —el número de expediente de un descargo nuevo
- * es un campo `"ro"`, y las tres restantes no declaran ni una sola sección.
+ * **Seis escrituras, y tres de ellas ya escriben.** `transito_cambio_numero` y
+ * `transito_valores` viven en su propio componente (`COMPONENTES_PROPIOS` de
+ * `Pantalla.tsx`), por el mismo motivo que `pase_coactiva` (#75): el catálogo
+ * dibuja sus acciones sin la que escribe al final.
+ *
+ * **`transito_descargos` es la tercera, y no tiene componente propio** (#422).
+ * Estaba en `ACTOS_SIN_CAMPO` por dos cosas a la vez, y cada una la cerró un
+ * mecanismo declarativo distinto: la última acción del catálogo es «Notificar
+ * al administrado» y la que registra es la primera de las tres —lo resuelve
+ * `LA_QUE_ESCRIBE` (#421), que la pasa al final sin quitar ninguna—, y el número
+ * de expediente de mesa de partes que `DescargosController` exige lo dibuja el
+ * catálogo `"ro"` —el del descargo que se consulta— y no hay dónde teclear el
+ * del escrito nuevo: lo resuelve `ComposicionDeOpcion.controles` (#422), que
+ * añade un campo al final de «Solicitud» con **su propia** etiqueta (RNF-080).
+ * La sección «Evaluación y resolución» sigue sin declararse: resolver un
+ * descargo es dictar una resolución de gerencia, otro acto y otro papel.
+ *
+ * `transito_constancia_libre`, `transito_rg_ordinaria` y
+ * `transito_rg_sancionadora` se quedan en `ACTOS_SIN_CAMPO`
+ * (`pantallas/actos.ts`), y no por el mismo motivo que se fue el descargo: las
+ * tres son `kind: 'report'` **sin una sola sección ni acción** en el catálogo,
+ * así que no hay ninguna sección al final de la cual añadir nada. Lo que les
+ * falta no es un campo entre varios: es el formulario entero, que el prototipo
+ * nunca capturó.
  */
 
 /**
@@ -753,11 +774,7 @@ const transito_papeleta_reporte = definirConexion({
           texto(hoja['porcentajeInfraccion']),
           texto(hoja['importeInfraccion']),
         ],
-        [
-          'Porcentaje a cobrar',
-          texto(hoja['porcentajeACobrar']),
-          texto(hoja['importeAPagar']),
-        ],
+        ['Porcentaje a cobrar', texto(hoja['porcentajeACobrar']), texto(hoja['importeAPagar'])],
         [
           'Importe con beneficio',
           'Descuento registrado en el acta',

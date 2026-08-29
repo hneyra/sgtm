@@ -122,10 +122,15 @@ public class RamaDelCiudadano {
      * La fila de la bitacora de <b>esta</b> municipalidad, en la misma transaccion que la lectura.
      *
      * <p>El usuario no se pasa: sale de {@code OrigenContext}, que para una peticion del portal es
-     * la cuenta del ciudadano en su realm. En el enrolamiento de ventanilla esa cuenta es su numero
-     * de documento (ADR-0020 §4), asi que la bitacora identifica al ciudadano por su documento; y
-     * ese documento ya esta en el padron de esta municipalidad, de modo que la fila no publica aqui
-     * nada que aqui no se supiera.
+     * la cuenta del ciudadano en su realm. En el enrolamiento de ventanilla esa cuenta se
+     * <b>deriva</b> de su documento —{@code dni-70123456}, el tipo y el numero (ADR-0020 §6,
+     * #415)—, asi que la bitacora identifica al ciudadano por su documento; y ese documento ya esta
+     * en el padron de esta municipalidad, de modo que la fila no publica aqui nada que aqui no se
+     * supiera.
+     *
+     * <p>El tipo va delante y no es adorno: {@code CE 12345678} y {@code DNI 12345678} son dos
+     * personas distintas, y con la cuenta llamada solo por el numero serian la misma fila de
+     * bitacora.
      */
     private void registrarElAcceso(
             ContribuyenteAcreditado contribuyente,

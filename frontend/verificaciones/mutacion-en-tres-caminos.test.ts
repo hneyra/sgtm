@@ -22,7 +22,7 @@ import { describe, expect, it } from 'vitest';
  * los literales tributarios: la prohibicion la escribe una herramienta, y otra
  * cuenta las excepciones.
  *
- * Hoy las excepciones son **dos**, y son distintas a proposito:
+ * Hoy las excepciones son **tres**, y son distintas a proposito:
  *
  *   1. `pantallas/escritura.ts` — el camino de escritura entero. Es el que
  *      exige la observacion, y por eso es legitimo.
@@ -31,31 +31,43 @@ import { describe, expect, it } from 'vitest';
  *      contrato es un `POST` (las cinco pantallas de determinacion tienen una
  *      sola operacion, la misma con la que se determinaria), de modo que la
  *      peticion sale por `enviarOperacion` y ESLint la ve como una mutacion
- *      suelta. Su docblock explica la guarda que lo hace seguro: solo simula
- *      mientras conteste el proxy de datos.
+ *      suelta. Su guarda es la marca `simulacion: true` del cuerpo.
+ *   3. `pantallas/useLecturaPorPost.ts` (#424) — una **lectura** cuyo criterio
+ *      no cabe en una URL. Tampoco modifica datos, asi que tampoco pide
+ *      observacion; lo que la pone aqui es lo mismo que a la simulacion, que su
+ *      operacion del contrato es un `POST`. Su guarda vive en
+ *      `pantallas/lecturas-por-post.ts` y la comprueba
+ *      `lectura-por-post.test.ts`: verbo primero, y despues que ninguna opcion
+ *      declare esa operacion como su escritura.
  *
  * Lo que se afirma, en orden:
  *
- *   1. `useMutation` se llama en **exactamente esos dos archivos**, y un tercero
- *      se nombra por su ruta —un «expected 3 to be 2» no dice donde mirar—.
+ *   1. `useMutation` se llama en **exactamente esos tres archivos**, y un cuarto
+ *      se nombra por su ruta —un «expected 4 to be 3» no dice donde mirar—.
  *   2. Cada uno lleva su `eslint-disable-next-line no-restricted-syntax`
  *      **pegado** a su llamada. Que falte lo dice ya ESLint; lo que aqui se
  *      defiende es lo contrario: que el `disable` no viva suelto lejos de lo que
  *      exime, eximiendo de paso a lo que nadie reviso.
  *   3. Cada uno lleva su justificacion escrita al lado, y **dice lo que hace
- *      legitimo a ese** —la observacion en uno, la simulacion que no escribe en
- *      el otro—: un `disable` sin motivo es el que se copia.
- *   4. `useSimulacion.ts` **no pide la observacion a nadie**. Es la afirmacion
- *      que separa los dos caminos: el dia que la simulacion exigiera observacion
- *      seria una escritura, y una escritura no puede ser un camino aparte.
+ *      legitimo a ese** —la observacion en el primero, la simulacion que no
+ *      escribe en el segundo, la lectura que no escribe en el tercero—: un
+ *      `disable` sin motivo es el que se copia.
+ *   4. Los dos que no escriben **no piden la observacion a nadie**. Es la
+ *      afirmacion que separa los tres caminos: el dia que una simulacion o una
+ *      lectura exigieran observacion serian escrituras, y una escritura no puede
+ *      ser un camino aparte.
  */
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 
-/** Los dos, por su ruta relativa a `frontend/`. Es lo que se nombra al fallar. */
+/** Los tres, por su ruta relativa a `frontend/`. Es lo que se nombra al fallar. */
 const ESCRITURA = 'apps/backoffice/src/pantallas/escritura.ts';
 const SIMULACION = 'apps/backoffice/src/pantallas/useSimulacion.ts';
-const PERMITIDOS = [ESCRITURA, SIMULACION];
+const LECTURA_POR_POST = 'apps/backoffice/src/pantallas/useLecturaPorPost.ts';
+const PERMITIDOS = [ESCRITURA, SIMULACION, LECTURA_POR_POST];
+
+/** Los dos que **no** escriben: ninguno puede pedir la observacion (ver §4 de arriba). */
+const SIN_OBSERVACION = [SIMULACION, LECTURA_POR_POST];
 
 /** Un archivo de fuentes, con sus lineas: la posicion importa en este escaner. */
 interface Fuente {
@@ -142,7 +154,7 @@ describe('el escaner mira donde dice mirar', () => {
         `no se escaneo ningun archivo de ${carpeta}`,
       ).toBe(true);
     }
-    // Y los dos que se van a examinar existen con la ruta que aqui se escribe:
+    // Y los tres que se van a examinar existen con la ruta que aqui se escribe:
     // renombrar uno dejaria sus tres comprobaciones sin sujeto.
     for (const camino of PERMITIDOS) {
       expect(
@@ -153,29 +165,30 @@ describe('el escaner mira donde dice mirar', () => {
   });
 });
 
-describe('useMutation vive en dos caminos, y en ningun otro', () => {
-  it('no hay un tercer sitio que escriba por su cuenta', () => {
+describe('useMutation vive en tres caminos, y en ningun otro', () => {
+  it('no hay un cuarto sitio que escriba por su cuenta', () => {
     /* **Se nombra el archivo, uno a uno, antes de contar.** Un `toHaveLength(2)`
        a secas dice «expected 3 to be 2» y deja a quien lo lee buscando cual de
        los cientos de archivos es; lo que hace falta saber es la ruta. */
     for (const { archivo } of CON_MUTACION) {
       expect(
         PERMITIDOS.includes(archivo),
-        `«${archivo}» abre un tercer camino de escritura: llama a useMutation fuera de ` +
-          `«${ESCRITURA}» y «${SIMULACION}». Toda modificacion de datos exige observacion ` +
-          `(regla 10, RNF-052), y lo unico que lo garantiza es que se escriba por un solo sitio.`,
+        `«${archivo}» abre un cuarto camino de escritura: llama a useMutation fuera de ` +
+          `«${ESCRITURA}», «${SIMULACION}» y «${LECTURA_POR_POST}». Toda modificacion de datos ` +
+          `exige observacion (regla 10, RNF-052), y lo unico que lo garantiza es que se escriba ` +
+          `por un solo sitio.`,
       ).toBe(true);
     }
   });
 
-  it('y los dos que hay siguen siendo los dos que se esperan', () => {
-    /* La otra direccion: borrar la llamada de uno de los dos —o dejar de
+  it('y los tres que hay siguen siendo los tres que se esperan', () => {
+    /* La otra direccion: borrar la llamada de uno de los tres —o dejar de
        llamarla y quedarse el `disable`— tambien tiene que decirse. */
     const archivos = CON_MUTACION.map(({ archivo }) => archivo);
     for (const camino of PERMITIDOS) {
       expect(archivos, `«${camino}» ya no llama a useMutation`).toContain(camino);
     }
-    expect(archivos).toHaveLength(2);
+    expect(archivos).toHaveLength(3);
   });
 });
 
@@ -272,6 +285,11 @@ const JUSTIFICACIONES: readonly { camino: string; habla: RegExp; de: string }[] 
     habla: /simulaci[oó]n|no modifica|no escribe|no guarda/i,
     de: 'que simular no modifica datos',
   },
+  {
+    camino: LECTURA_POR_POST,
+    habla: /lectura no modifica|no modifica datos|no escribe|no guarda/i,
+    de: 'que una lectura no modifica datos',
+  },
 ];
 
 describe('cada excepcion dice por que es legitima', () => {
@@ -303,26 +321,29 @@ describe('cada excepcion dice por que es legitima', () => {
   }
 });
 
-describe('la simulacion no es el camino de escritura disfrazado', () => {
-  it(`«${SIMULACION}» no pide la observacion a nadie`, () => {
-    /* Es lo que separa los dos caminos. `useSimulacion` existe **porque** la
-       regla 10 no le aplica: no asienta nada, asi que no hay nada que justificar
-       en la auditoria. El dia que exigiera observacion, lo que estaria haciendo
-       es escribir, y entonces no puede ser un camino aparte: tiene que ser el de
-       `useEscritura`, que es el que ya resuelve la idempotencia, la lista blanca
-       de campos y el error por campo.
+describe('los dos que no escriben no son el camino de escritura disfrazado', () => {
+  for (const camino of SIN_OBSERVACION) {
+    it(`«${camino}» no pide la observacion a nadie`, () => {
+      /* Es lo que separa los tres caminos. `useSimulacion` y `useLecturaPorPost`
+         existen **porque** la regla 10 no les aplica: no asientan nada, asi que
+         no hay nada que justificar en la auditoria. El dia que uno exigiera
+         observacion, lo que estaria haciendo es escribir, y entonces no puede
+         ser un camino aparte: tiene que ser el de `useEscritura`, que es el que
+         ya resuelve la idempotencia, la lista blanca de campos y el error por
+         campo.
 
-       Se mira el archivo entero —importes y menciones— y no solo los `import`:
-       un `useEscritura` en un comentario del docblock significaria que alguien
-       esta pensando en enlazarlos, y el momento de decirlo es ese. */
-    const fuente = fuenteDe(SIMULACION);
-    const linea = fuente.lineas.findIndex((texto) => /\buseEscritura\b/.test(texto));
+         Se mira el archivo entero —importes y menciones— y no solo los `import`:
+         un `useEscritura` en un comentario del docblock significaria que alguien
+         esta pensando en enlazarlos, y el momento de decirlo es ese. */
+      const fuente = fuenteDe(camino);
+      const linea = fuente.lineas.findIndex((texto) => /\buseEscritura\b/.test(texto));
 
-    expect(
-      linea,
-      `«${SIMULACION}:${linea + 1}» menciona useEscritura: si la simulacion necesita la ` +
-        `observacion es que escribe, y una escritura no puede ser un segundo camino ` +
-        `(regla 10, RNF-052). Dice: ${(fuente.lineas[linea] ?? '').trim()}`,
-    ).toBe(-1);
-  });
+      expect(
+        linea,
+        `«${camino}:${linea + 1}» menciona useEscritura: si esto necesita la ` +
+          `observacion es que escribe, y una escritura no puede ser un camino aparte ` +
+          `(regla 10, RNF-052). Dice: ${(fuente.lineas[linea] ?? '').trim()}`,
+      ).toBe(-1);
+    });
+  }
 });

@@ -7,6 +7,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.ValorNormativo;
 import pe.gob.sgtm.parametros.dominio.LlaveDeParametro;
@@ -75,6 +76,33 @@ public class PublicacionDeCuadrosJdbc implements PublicacionDeCuadros {
                 .param("aprueba", verifico)
                 .query(Long.class)
                 .single();
+    }
+
+    @Override
+    public void agregarDepreciacion(
+            long edicion,
+            String uso,
+            String material,
+            String estadoConservacion,
+            @Nullable Integer antiguedadHasta,
+            Alicuota porcentaje,
+            String documentoFuente) {
+        jdbc.sql(
+                        "INSERT INTO depreciacion (publicacion_id, uso, material,"
+                                + " estado_conservacion, antiguedad_hasta, porcentaje,"
+                                + " documento_fuente)"
+                                + " VALUES (:edicion, :uso, :material, :estado, :antiguedad,"
+                                + " :porcentaje, :fuente)")
+                .param("edicion", edicion)
+                .param("uso", uso)
+                .param("material", material)
+                .param("estado", estadoConservacion)
+                // Nulo es «mas de 50 anios» y entra tal cual: depreciacion_uq es NULLS NOT
+                // DISTINCT (V57), asi que el tramo abierto no se puede duplicar.
+                .param("antiguedad", antiguedadHasta)
+                .param("porcentaje", porcentaje.valor())
+                .param("fuente", documentoFuente)
+                .update();
     }
 
     @Override

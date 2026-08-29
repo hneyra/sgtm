@@ -84,11 +84,20 @@ function inalcanzables(): string[] {
 /**
  * Las catorce de hoy. **Bajar de aqui es bueno; subir hay que mirarlo.**
  *
- * Cuatro de ellas —las hojas de resolucion y de constancia— no declaran ninguna
- * accion: el prototipo las modela como papel, no como acto. Las diez restantes
- * ponen «Imprimir» de ultima, que es lo que se hace **despues** del acto.
+ * **Siete** de ellas —las cuatro hojas de resolucion, la de constancia y las dos
+ * de gerencia de transito— no declaran ninguna accion: el prototipo las modela
+ * como papel, no como acto. Son las «hojas sin superficie» de
+ * [FRO-06](../../docs/60-frontend/hojas-sin-superficie.md), y
+ * `hojas-sin-superficie.test.ts` computa esa misma lista del catalogo y exige de
+ * cada una su clasificacion y su aviso.
  *
- * **Una se fue con #423, y esto es exactamente la buena noticia que el docblock
+ * (Este parrafo decia «cuatro», y llevaba diciendolo desde que la lista existe:
+ * el recuento salio del cotejo de #427, no de una revision.)
+ *
+ * Las siete restantes ponen «Imprimir» —o «Limpiar», o «Salir»— de ultima, que
+ * es lo que se hace **despues** del acto.
+ *
+ * **Y una se fue con #423, que es exactamente la buena noticia que este docblock
  * anuncia**: `tesoreria/anulacion-convenio` estaba aqui porque su ultima accion
  * es «Quebrar» y el patron de `esIrreversible` solo conocia «quiebre» —asi que
  * la pantalla tenia un acto irreversible («Anular») y la primaria no lo era—.

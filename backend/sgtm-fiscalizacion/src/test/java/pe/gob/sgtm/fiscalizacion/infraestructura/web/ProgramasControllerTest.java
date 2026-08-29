@@ -17,6 +17,7 @@ import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.fiscalizacion.aplicacion.RegistrarPrograma;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacionRepository;
+import pe.gob.sgtm.fiscalizacion.dominio.TipoDePrograma;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
 import pe.gob.sgtm.web.ManejadorDeErrores;
 import tools.jackson.databind.json.JsonMapper;
@@ -103,6 +104,69 @@ class ProgramasControllerTest {
                                 post("/api/v1/fiscalizacion/programas")
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(cuerpo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(guardados).isEmpty();
+    }
+
+    @Test
+    @DisplayName("el filtro «tipo» viaja por la consulta y decide de que es el programa (#425)")
+    void elTipoViajaPorLaConsulta() throws Exception {
+        String sinTipo =
+                "{\"observacion\":\"Se programa para la prueba\",\"codigo\":\"PF-210\","
+                        + "\"descripcion\":\"Muestra de riesgo\",\"fechaInicio\":\"2026-03-01\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/fiscalizacion/programas")
+                                        .param("tipo", "VEHICULAR")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(sinTipo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(guardados)
+                .as("no basta con que se acepte: el programa guardado es del tipo que se pidio")
+                .singleElement()
+                .satisfies(
+                        programa ->
+                                assertThat(programa.tipo()).isEqualTo(TipoDePrograma.VEHICULAR));
+        assertThat(resultado.getResponse().getContentAsString()).contains("\"tipo\":\"VEHICULAR\"");
+    }
+
+    @Test
+    @DisplayName("y si viene en los dos sitios gana el cuerpo: el cliente viejo sigue igual")
+    void elCuerpoGanaALaConsulta() throws Exception {
+        String conTipo =
+                "{\"observacion\":\"Se programa para la prueba\",\"codigo\":\"PF-211\","
+                        + "\"descripcion\":\"Muestra de riesgo\",\"tipo\":\"PREDIAL\","
+                        + "\"fechaInicio\":\"2026-03-01\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/fiscalizacion/programas")
+                                        .param("tipo", "VEHICULAR")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(conTipo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(resultado.getResponse().getContentAsString()).contains("\"tipo\":\"PREDIAL\"");
+    }
+
+    @Test
+    @DisplayName("sin tipo en ninguno de los dos sitios, 422 y no guarda nada")
+    void sinTipoEnNingunSitio422() throws Exception {
+        String sinTipo =
+                "{\"observacion\":\"Se programa para la prueba\",\"codigo\":\"PF-212\","
+                        + "\"descripcion\":\"Muestra de riesgo\",\"fechaInicio\":\"2026-03-01\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/fiscalizacion/programas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(sinTipo))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);

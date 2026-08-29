@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
@@ -15,6 +16,7 @@ import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.sanciones.aplicacion.RegistrarNotificacionAdministrativa;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.FiltroDeLaConsulta;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
@@ -23,6 +25,11 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *
  * <p>"Un paso previo a la generación de la multa administrativa" —no exige contribuyente ni predio
  * identificados, ni un plazo: sin uno, la notificación nunca vence (#47 AC3).
+ *
+ * <p><b>{@code numero} también viaja por la consulta</b> (#425). Es el filtro «Número» que la
+ * pantalla dibuja y el contrato lo declara {@code in: query}; leerlo solo del cuerpo dejaba la
+ * operación publicada y sin ninguna pantalla que pudiera llamarla. Se sigue aceptando en el cuerpo,
+ * y ahí gana: ver {@link FiltroDeLaConsulta}.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/infracciones/administrativas/notificaciones")
@@ -38,13 +45,16 @@ public class NotificacionAdministrativaController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public NotificacionAdministrativaResource registrar(
+            @RequestParam(required = false) @Nullable String numero,
             @RequestBody PeticionDeNotificacion peticion) {
         Observacion observacion = observacionDe(peticion.observacion());
 
         try {
             return NotificacionAdministrativaResource.de(
                     servicio.registrar(
-                            exigir(peticion.numero(), "numero"),
+                            exigir(
+                                    FiltroDeLaConsulta.primeroNoVacio(peticion.numero(), numero),
+                                    "numero"),
                             fechaDe(peticion.fecha(), "fecha"),
                             peticion.contribuyenteId(),
                             peticion.predioId(),

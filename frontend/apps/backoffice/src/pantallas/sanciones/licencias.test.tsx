@@ -111,3 +111,56 @@ describe('las resoluciones son la misma hoja de siempre', () => {
     expect(document.querySelector('.sgtm-acciones')).toBeNull();
   });
 });
+
+/**
+ * **La hoja sin superficie deja de ser muda** (FRO-06, #427).
+ *
+ * Sin `acciones` no hay `<BarraDeAcciones>` —`Pantalla.tsx` la dibuja solo
+ * `{estructura.acciones && …}`—, y sin barra **no hay franja**: la causa que
+ * `impedimentoDelActo` calcula para estas dos entraba en el censo y no la leia
+ * nadie. Lo que se lee esta ahora en el aviso permanente, que se dibuja arriba
+ * y no depende de que la pantalla tenga nada que pulsar.
+ *
+ * Se comprueba lo que FRO-06 §1.3 pide que diga, y **no la frase literal**: que
+ * es la hoja, que dato falta y por donde se sale. Comparar el parrafo entero
+ * dejaria la prueba pegada a la redaccion en vez de a lo que la redaccion tiene
+ * que contener.
+ */
+describe('las dos hojas de resolucion dicen lo que son y lo que les falta', () => {
+  const HOJAS = [
+    { ranura: 'licencia-resolucion-cancelacion', dato: /motivo/i },
+    { ranura: 'licencia-resolucion-duplicado', dato: /recibo/i },
+  ];
+
+  it.each(HOJAS)('$ranura lo advierte antes de la hoja', async ({ ranura, dato }) => {
+    const montada = montarEnRuta(`${MODULO}/${ranura}`);
+    await dibujada('.sgtm-aviso');
+
+    const aviso = document.querySelector('.sgtm-aviso');
+    // Que es lo que se esta mirando: el papel, no el formulario.
+    expect(aviso?.textContent).toMatch(/hoja de la resolución/i);
+    // El dato que el backend exige y ninguna pantalla del manual dibuja.
+    expect(aviso?.textContent).toMatch(dato);
+    // Y por donde se sale: el procedimiento actual, y avisar a sistemas. Un
+    // aviso que solo cuenta lo que no se puede hacer deja el mostrador parado.
+    expect(aviso?.textContent).toMatch(/procedimiento actual/i);
+    expect(aviso?.textContent).toMatch(/sistemas/i);
+
+    // Y sigue sin haber donde pulsar: el aviso no promete ningun acto.
+    expect(document.querySelector('.sgtm-acciones')).toBeNull();
+
+    montada.unmount();
+  });
+
+  it('el duplicado nombra su propio recibo, no el de la licencia (RNF-080)', async () => {
+    montarEnRuta(`${MODULO}/licencia-resolucion-duplicado`);
+    await dibujada('.sgtm-aviso');
+
+    // `PeticionDeDuplicado.nDeRecibo` es «el recibo del derecho de tramite del
+    // duplicado». El «Nº de recibo» que si dibuja `licencia_funcionamiento` es
+    // el del derecho de la licencia: usarlo seria mentir sobre lo que se pide.
+    expect(document.querySelector('.sgtm-aviso')?.textContent).toMatch(
+      /derecho de trámite del duplicado/i,
+    );
+  });
+});

@@ -111,9 +111,10 @@ public final class DatosDePrueba {
                 edicion);
         ejecutar(
                 carga,
-                "INSERT INTO depreciacion (publicacion_id, material, estado_conservacion,"
+                "INSERT INTO depreciacion (publicacion_id, uso, material, estado_conservacion,"
                         + " antiguedad_hasta, porcentaje, documento_fuente)"
-                        + " VALUES (?, 'CONCRETO', 'BUENO', 10, 1.0000, 'fixture de la prueba')",
+                        + " VALUES (?, '01', 'CONCRETO', 'BUENO', 10, 1.0000, 'fixture de la"
+                        + " prueba')",
                 edicion);
         ejecutar(
                 carga,

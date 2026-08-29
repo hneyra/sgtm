@@ -25,6 +25,7 @@ import pe.gob.sgtm.carga.InformeDeImportacion;
 import pe.gob.sgtm.carga.InformeDeImportacion.FilaRechazada;
 import pe.gob.sgtm.carga.LectorDeFilasCsv;
 import pe.gob.sgtm.carga.LectorDeFilasCsv.FilaCsv;
+import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.parametros.dominio.PublicacionDeCuadros;
 import pe.gob.sgtm.parametros.dominio.PublicacionDeCuadros.Edicion;
@@ -181,6 +182,15 @@ public class PublicarCuadros implements ApplicationRunner {
         return new InformeDeImportacion(leidas, publicadas, rechazadas);
     }
 
+    /**
+     * Puebla la edicion con las filas de su archivo, con el analizador del cuadro que declara.
+     *
+     * <p>Aqui hay <b>dos listas que tienen que crecer juntas</b>: la de cuadros que el manifiesto
+     * admite ({@link FilaDelManifiesto#CUADROS}) y la de cuadros que este proceso sabe poblar. Como
+     * el {@code switch} es sobre un texto, el compilador no puede exigirlo, asi que la rama por
+     * omision <b>revienta nombrando el desajuste</b> en vez de publicar cero filas y decir que fue
+     * bien.
+     */
     private Recuento poblar(
             long edicion,
             FilaDelManifiesto manifiesto,
@@ -191,7 +201,81 @@ public class PublicarCuadros implements ApplicationRunner {
         try (Reader lectura = Files.newBufferedReader(archivoDeFilas, StandardCharsets.UTF_8)) {
             filas = LectorDeFilasCsv.leer(lectura);
         }
+        return switch (manifiesto.cuadro()) {
+            case FilaDelManifiesto.VEHICULAR ->
+                    poblarVehicular(edicion, manifiesto, filas, rechazadas);
+            case FilaDelManifiesto.DEPRECIACION ->
+                    poblarDepreciacion(edicion, manifiesto, filas, rechazadas);
+            default ->
+                    throw new IllegalStateException(
+                            "El manifiesto admite el cuadro "
+                                    + manifiesto.cuadro()
+                                    + " y este proceso no sabe poblarlo: las dos listas tienen que"
+                                    + " crecer juntas");
+        };
+    }
 
+    private Recuento poblarDepreciacion(
+            long edicion,
+            FilaDelManifiesto manifiesto,
+            List<FilaCsv> filas,
+            List<FilaRechazada> rechazadas) {
+        int publicadas = 0;
+        int leidas = 0;
+        for (FilaCsv fila : filas) {
+            FilaDelCuadroDeDepreciacion delCuadro;
+            try {
+                delCuadro = FilaDelCuadroDeDepreciacion.de(fila.campos());
+            } catch (IllegalArgumentException e) {
+                rechazadas.add(FilaRechazada.de(fila.numeroDeLinea(), e));
+                continue;
+            }
+            leidas++;
+            try {
+                publicacion.agregarDepreciacion(
+                        edicion,
+                        delCuadro.uso(),
+                        delCuadro.material(),
+                        delCuadro.estadoConservacion(),
+                        delCuadro.antiguedadHasta(),
+                        delCuadro.porcentaje(),
+                        manifiesto.documentoFuente());
+                publicadas++;
+            } catch (DuplicateKeyException e) {
+                rechazadas.add(
+                        new FilaRechazada(
+                                fila.numeroDeLinea(),
+                                "Ya estaba publicada en esta edicion: tabla "
+                                        + delCuadro.uso()
+                                        + ", "
+                                        + delCuadro.material()
+                                        + " / "
+                                        + delCuadro.estadoConservacion()
+                                        + " / "
+                                        + delCuadro.tramo()));
+            } catch (DataAccessException e) {
+                // Sin repetir el mensaje crudo de la base (ARQ-04 §5), igual que en la vehicular.
+                rechazadas.add(
+                        new FilaRechazada(
+                                fila.numeroDeLinea(),
+                                "La base rechazo la fila de la tabla "
+                                        + delCuadro.uso()
+                                        + " "
+                                        + delCuadro.material()
+                                        + " / "
+                                        + delCuadro.estadoConservacion()
+                                        + ": revise que la edicion siga abierta y que este proceso"
+                                        + " corra como rol_carga_parametros"));
+            }
+        }
+        return new Recuento(leidas, publicadas);
+    }
+
+    private Recuento poblarVehicular(
+            long edicion,
+            FilaDelManifiesto manifiesto,
+            List<FilaCsv> filas,
+            List<FilaRechazada> rechazadas) {
         int publicadas = 0;
         int leidas = 0;
         for (FilaCsv fila : filas) {
@@ -273,6 +357,101 @@ public class PublicarCuadros implements ApplicationRunner {
     }
 
     private record Recuento(int leidas, int publicadas) {}
+
+    /**
+     * Una fila del cuadro de depreciacion: la tabla del Anexo I, el material, el estado, el tramo
+     * de antiguedad y su porcentaje.
+     *
+     * <p>Sus columnas son las del derivado que {@code derivar-depreciacion.mjs} proyecta desde
+     * {@code depreciacion.md}, sin reordenar: {@code tabla, material, estado_conservacion,
+     * antiguedad_hasta, porcentaje}.
+     *
+     * <p><b>El derivado no trae ninguna celda `*`</b>, y por eso este analizador no las conoce: el
+     * Anexo no tabula esas combinaciones —«el perito fija los porcentajes no tabulados»— y lo que
+     * hay ahi no es un cero sino la ausencia de fila. Que llegue una celda vacia en el porcentaje
+     * es una fila mal derivada y se rechaza (#48: una celda que falta no vale cero).
+     */
+    record FilaDelCuadroDeDepreciacion(
+            String uso,
+            String material,
+            String estadoConservacion,
+            @org.jspecify.annotations.Nullable Integer antiguedadHasta,
+            Alicuota porcentaje) {
+
+        /** Columnas del derivado: tabla, material, estado, tope del tramo y porcentaje. */
+        private static final int COLUMNAS = 5;
+
+        /** Como se nombra el tramo en un informe, con el tope abierto dicho y no callado. */
+        String tramo() {
+            return antiguedadHasta == null ? "mas de 50 anios" : "hasta " + antiguedadHasta;
+        }
+
+        static FilaDelCuadroDeDepreciacion de(List<String> campos) {
+            if (campos.size() < COLUMNAS) {
+                throw new IllegalArgumentException(
+                        "La fila del cuadro de depreciacion trae "
+                                + campos.size()
+                                + " columna(s) y hacen falta "
+                                + COLUMNAS
+                                + ": tabla, material, estado_conservacion, antiguedad_hasta,"
+                                + " porcentaje");
+            }
+            String uso = campos.get(0).strip();
+            if (!uso.matches("0[1-4]")) {
+                throw new IllegalArgumentException(
+                        "«"
+                                + uso
+                                + "» no es una de las cuatro tablas del Anexo I (01..04). El uso de"
+                                + " la edificacion es parte de la identidad de la fila: sin el, las"
+                                + " cuatro tablas colapsan en una (H-15)");
+            }
+            String material = obligatorio(campos.get(1), "material");
+            String estado = obligatorio(campos.get(2), "estado_conservacion");
+            return new FilaDelCuadroDeDepreciacion(
+                    uso, material, estado, tope(campos.get(3)), porcentaje(campos.get(4)));
+        }
+
+        /**
+         * El tope del tramo. La celda vacia es «mas de 50 anios», el tramo abierto con que cierra
+         * cada tabla; no es un dato que falte.
+         */
+        private static @org.jspecify.annotations.Nullable Integer tope(String celda) {
+            String limpio = celda.strip();
+            if (limpio.isEmpty()) {
+                return null;
+            }
+            try {
+                return Integer.valueOf(limpio);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException(
+                        "«" + celda + "» no es un tope de tramo de antiguedad en anios", e);
+            }
+        }
+
+        private static Alicuota porcentaje(String celda) {
+            String limpio = celda.strip();
+            if (limpio.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "La fila del cuadro de depreciacion trae el porcentaje vacio; una celda que"
+                                + " la norma no tabula no se publica con cero, no se publica (#48)");
+            }
+            try {
+                return Alicuota.de(limpio);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(
+                        "«" + celda + "» no es un porcentaje de depreciacion del Anexo I", e);
+            }
+        }
+
+        private static String obligatorio(String celda, String columna) {
+            String valor = celda.strip();
+            if (valor.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "La columna " + columna + " del cuadro de depreciacion no puede ir vacia");
+            }
+            return valor;
+        }
+    }
 
     /** Una fila del cuadro, ya analizada: marca, modelo, ano de fabricacion y su valor. */
     record FilaDelCuadroVehicular(
