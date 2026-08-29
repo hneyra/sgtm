@@ -197,6 +197,13 @@ const PrescripcionDeLaDeuda = lazy(async () => ({
 const PaseACoactiva = lazy(async () => ({
   default: (await import('./valores/PaseACoactiva')).PaseACoactiva,
 }));
+const CambioDeNumeroDePapeleta = lazy(async () => ({
+  default: (await import('./transito/CambioDeNumeroDePapeleta')).CambioDeNumeroDePapeleta,
+}));
+const GeneracionMasivaDeValoresDeTransito = lazy(async () => ({
+  default: (await import('./transito/GeneracionMasivaDeValoresDeTransito'))
+    .GeneracionMasivaDeValoresDeTransito,
+}));
 
 /** Las pantallas cuyo recurso trae version y vigencia. Hoy, las cuatro fichas. */
 const VERSIONADAS: ReadonlySet<string> = new Set([
@@ -255,6 +262,11 @@ const VERSIONADAS: ReadonlySet<string> = new Set([
  *                            comun siempre trata la ultima como la
  *                            primaria: conectada tal cual, pasaria un
  *                            valor a coactiva sin confirmacion.
+ *   transito_cambio_numero,  (#77) el mismo problema que `pase_coactiva`:
+ *   transito_valores         la ultima accion del catalogo es «Salir» en
+ *                            una y «Imprimir» en la otra, ninguna de las
+ *                            dos escribe. Cada una trae su barra de una
+ *                            sola accion.
  *
  * Viven en su propio componente en vez de forzar al renderizador comun a
  * saber de listas, de booleanos o de un verbo que miente.
@@ -272,6 +284,8 @@ const COMPONENTES_PROPIOS: Readonly<
   valores_masivo: GeneracionMasivaDeValores,
   prescripcion: PrescripcionDeLaDeuda,
   pase_coactiva: PaseACoactiva,
+  transito_cambio_numero: CambioDeNumeroDePapeleta,
+  transito_valores: GeneracionMasivaDeValoresDeTransito,
 };
 
 function Contenido({ estructura }: { readonly estructura: Estructura }) {

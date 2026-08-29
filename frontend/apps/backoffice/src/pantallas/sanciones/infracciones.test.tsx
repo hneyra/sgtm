@@ -68,10 +68,23 @@ describe('los reportes reusan el bloque de #77, no una copia', () => {
 });
 
 describe('adm_estado_cuenta lee PapeletaResource, conectada desde #363', () => {
-  it('es la unica leida por una Conexion propia', () => {
+  it('las seis lecturas de #78 se suman a la unica de #363', () => {
     expect(OPCIONES_CONECTADAS).toContain('adm_estado_cuenta');
-    // El resto del modulo sigue sin conectar: ningun otro endpoint tiene
-    // `Controller` (#47).
+    for (const opcion of [
+      'codigos_cuis',
+      'adm_codigos_reporte',
+      'adm_padron_notificaciones',
+      'adm_notificaciones_vencidas',
+      'adm_notificaciones_contribuyente',
+      'adm_resumen_recaudacion',
+    ]) {
+      expect(OPCIONES_CONECTADAS, opcion).toContain(opcion);
+    }
+    // `infracciones_adm` tiene `Controller` (#78 lo verifico), pero su filtro
+    // «Estado» no tiene parametro en el backend y su columna «Estado» hablaria
+    // otro vocabulario que ese filtro: se queda en el camino comun (ver
+    // `pantallas/sanciones/index.ts`). `adm_valores` no cabe en la lista blanca
+    // declarativa y su primaria del catalogo es «Imprimir», no «Guardar».
     expect(OPCIONES_CONECTADAS).not.toContain('infracciones_adm');
     expect(OPCIONES_CONECTADAS).not.toContain('adm_valores');
   });
@@ -188,6 +201,178 @@ describe('las notificaciones vencidas son una pantalla de trabajo', () => {
     expect(suya[0]).not.toContain('?');
 
     globalThis.fetch = proxy;
+  });
+});
+
+describe('las seis lecturas de #78, celda por celda (RNF-080)', () => {
+  it('codigos_cuis: código, materia y multa fuera del recurso salen SIN_DATO', async () => {
+    const montada = montarEnRuta('/infracciones-administrativas/codigos-cuis');
+    await dibujada('table');
+
+    const tabla = await screen.findByRole('table');
+    const primera = within(tabla).getAllByRole('row')[1] as HTMLElement;
+    const celdas = within(primera).getAllByRole('cell');
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      'C-101',
+      SIN_DATO,
+      'Funcionar sin licencia municipal de funcionamiento',
+      '0.50',
+      SIN_DATO,
+      'Clausura temporal',
+    ]);
+
+    montada.unmount();
+  });
+
+  it('adm_codigos_reporte: base legal sale de la columna «Base», y «Estado» del recurso no existe', async () => {
+    const montada = montarEnRuta('/infracciones-administrativas/adm-codigos-reporte');
+    await dibujada('table');
+
+    const tabla = await screen.findByRole('table');
+    const primera = within(tabla).getAllByRole('row')[1] as HTMLElement;
+    const celdas = within(primera).getAllByRole('cell');
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      'A-005',
+      'Ocupar la vía pública sin autorización',
+      'UIT',
+      '0.10',
+      SIN_DATO,
+      'Retiro de bienes',
+      SIN_DATO,
+    ]);
+
+    montada.unmount();
+  });
+
+  it('adm_padron_notificaciones: sin papeleta, «Papeleta» y «Deuda S/» no inventan un cero', async () => {
+    const montada = montarEnRuta('/infracciones-administrativas/adm-padron-notificaciones');
+    await dibujada('table');
+
+    const tabla = await screen.findByRole('table');
+    const filas = within(tabla).getAllByRole('row').slice(1);
+    const primera = within(filas[0] as HTMLElement)
+      .getAllByRole('cell')
+      .map((c) => c.textContent);
+    expect(primera).toEqual([
+      '001-004182',
+      '2026-08-02',
+      SIN_DATO,
+      'A-014',
+      SIN_DATO,
+      SIN_DATO,
+      'P-002418',
+      // El adaptador agrupa los millares al dibujar (#342): el dato viaja intacto.
+      '2 675.00',
+    ]);
+
+    const segunda = within(filas[1] as HTMLElement)
+      .getAllByRole('cell')
+      .map((c) => c.textContent);
+    expect(segunda[6]).toBe(SIN_DATO);
+    expect(segunda[7]).toBe(SIN_DATO);
+
+    montada.unmount();
+  });
+
+  it('adm_notificaciones_vencidas: la fila trae numero, fecha, direccion, motivo y vencimiento del recurso', async () => {
+    const montada = montarEnRuta('/infracciones-administrativas/adm-notificaciones-vencidas');
+    await dibujada('table');
+
+    const tabla = await screen.findByRole('table');
+    const primera = within(tabla).getAllByRole('row')[1] as HTMLElement;
+    const celdas = within(primera).getAllByRole('cell');
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      '001-004182',
+      '2026-08-02',
+      SIN_DATO,
+      'AV. JOSÉ DE LAMA 1180',
+      'A-014',
+      '2026-08-12',
+      SIN_DATO,
+    ]);
+
+    montada.unmount();
+  });
+
+  it('adm_notificaciones_contribuyente: exige un contribuyente antes de pedir nada', async () => {
+    const sinFiltro = montarEnRuta(
+      '/infracciones-administrativas/adm-notificaciones-contribuyente',
+    );
+    // El aviso de `Conexion.exige`, no la tabla: sin contribuyente no hay a
+    // quien pedirle nada.
+    expect(await screen.findByText('Busca un contribuyente')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    sinFiltro.unmount();
+
+    const peticiones: string[] = [];
+    const proxy = globalThis.fetch;
+    globalThis.fetch = (entrada, opciones) => {
+      peticiones.push(typeof entrada === 'string' ? entrada : String(entrada));
+      return proxy(entrada, opciones);
+    };
+
+    const conFiltro = montarEnRuta(
+      '/infracciones-administrativas/adm-notificaciones-contribuyente?codContribuyente=00000006551',
+    );
+    await dibujada('table');
+    expect(peticiones.some((u) => u.includes('codContribuyente=00000006551'))).toBe(true);
+    conFiltro.unmount();
+
+    globalThis.fetch = proxy;
+  });
+
+  it('adm_notificaciones_contribuyente: año y mes salen de fechaInfraccion, no de una cifra compuesta', async () => {
+    const montada = montarEnRuta(
+      '/infracciones-administrativas/adm-notificaciones-contribuyente?codContribuyente=00000006551',
+    );
+    await dibujada('table');
+
+    const tabla = await screen.findByRole('table');
+    const primera = within(tabla).getAllByRole('row')[1] as HTMLElement;
+    const celdas = within(primera).getAllByRole('cell');
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      '2026',
+      '08',
+      'P-002418',
+      SIN_DATO,
+      '2 675.00',
+      SIN_DATO,
+      SIN_DATO,
+      'IMPUESTA',
+    ]);
+
+    montada.unmount();
+  });
+
+  it('adm_resumen_recaudacion: es un objeto suelto, y cada línea es una fase, no un mes recompuesto', async () => {
+    const montada = montarEnRuta('/infracciones-administrativas/adm-resumen-recaudacion');
+    await dibujada('table');
+
+    const tabla = await screen.findByRole('table');
+    const primera = within(tabla).getAllByRole('row')[1] as HTMLElement;
+    const celdas = within(primera).getAllByRole('cell');
+    // Enero, fase ORDINARIA: la primera de las tres lineas que produce la primera fila del
+    // prototipo (#78: nada se recompone entre fases, RNF-083).
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      '1',
+      '1',
+      '8 412.00',
+      SIN_DATO,
+      SIN_DATO,
+      '8 412.00',
+    ]);
+
+    montada.unmount();
+  });
+
+  it('una respuesta paginada donde toca un objeto suelto se para en voz alta (mutacion de guarda)', () => {
+    // `leerObjeto` es la guarda que separa `adm_resumen_recaudacion` (un objeto)
+    // del resto de las lecturas (un sobre paginado): sin ella, un `contenido`
+    // que no llega no se distingue de un objeto vacio, y la tabla saldria
+    // vacia en silencio en vez de fallar en voz alta.
+    expect(() => leerPaginado({ desde: '2026-01-01', lineas: [] }, 'el resumen')).toThrow(
+      /no trae un listado paginado/,
+    );
   });
 });
 

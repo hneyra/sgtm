@@ -115,9 +115,12 @@ describe('la aplicacion pide por HTTP y el proxy contesta', () => {
     instalarProxyDeDatos();
     // Sin conectar: los valores unitarios y la depreciacion ya piden su
     // recurso propio (#71) y salen por el camino que se prueba mas abajo, no
-    // por este. `/transito/papeletas` se conecto en #363 y ya no sirve para
-    // este ejemplo — sale con la forma de `PapeletaResource`, no esta.
-    const datos = await solicitar<DatosDePantalla>('/transito/codigos');
+    // por este. `/transito/papeletas` se conecto en #363 y `/transito/codigos`
+    // con el resto del modulo en #77 —ninguna sirve ya para este ejemplo,
+    // salen con la forma de su `Resource`, no esta—;
+    // `/transito/reportes/resumen-papeletas` sigue sin conectar (ver
+    // `pantallas/transito/index.ts` en el back-office).
+    const datos = await solicitar<DatosDePantalla>('/transito/reportes/resumen-papeletas');
     expect(datos.tabla?.filas.length).toBeGreaterThan(0);
     expect(datos.fechaCalculo).toBe('2026-08-13');
   });
@@ -136,14 +139,21 @@ describe('la aplicacion pide por HTTP y el proxy contesta', () => {
 
   it('resuelve rutas con parametro, venga el valor que venga', async () => {
     instalarProxyDeDatos();
-    // Una ruta con parametro que **todavia no conecta** (#73 conecto
-    // `/rentas/vehiculos/{placa}`, que ya sale con la forma de
-    // `VehiculoResource` y no con esta): esta prueba es sobre el camino
-    // comun de las opciones sin backend, no sobre una en particular.
-    // `fechaCalculo` y no `campos`: lo primero lo lleva toda `DatosDePantalla`
-    // (regla 9); lo segundo no lo tienen las pantallas de tipo «reporte».
-    const datos = await solicitar<DatosDePantalla>('/fiscalizacion/resoluciones/RES-2026-0001');
-    expect(datos.fechaCalculo).toBeDefined();
+    // Con #80 se conectaron las ocho rutas con parametro que el contrato
+    // declara para las 134 opciones —la ultima era
+    // `/fiscalizacion/resoluciones/{numero}`—, asi que esta prueba ya no tiene
+    // un ejemplo sin backend donde probar el camino comun: comprueba en su
+    // lugar que el mismo mecanismo de patron sigue resolviendo **sin
+    // filtrar**, con la forma real de `ResolucionResource` — el proxy
+    // devuelve la misma resolucion venga el numero que venga.
+    const primera = await solicitar<Readonly<Record<string, unknown>>>(
+      '/fiscalizacion/resoluciones/RES-2026-0001',
+    );
+    const segunda = await solicitar<Readonly<Record<string, unknown>>>(
+      '/fiscalizacion/resoluciones/OTRO-NUMERO-CUALQUIERA',
+    );
+    expect(primera['numero']).toBeDefined();
+    expect(primera).toEqual(segunda);
   });
 
   it('los parametros de consulta no cambian la respuesta: filtrar es del backend', async () => {

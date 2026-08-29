@@ -162,14 +162,17 @@ describe('vacio: no es lo mismo un padron vacio que un filtro sin resultados', (
   it('sin filtros: todavia no hay nada que buscar', async () => {
     // Una opcion **sin conectar**: aqui se prueba el vacio de la forma que
     // comparten las 134 (`calles`, `aranceles` y `depreciacion` ya piden su
-    // recurso propio, #71; `papeletas` se conecto en #363 y ya no sirve para
-    // este ejemplo: su `leer` rechaza un cuerpo sin `contenido`).
-    montarEnRuta('/transito/codigos-transito');
+    // recurso propio, #71; `papeletas`, `codigos_transito` y las demas
+    // lecturas de tránsito ya no sirven para este ejemplo, conectadas desde
+    // #363/#77 —su `leer` rechaza un cuerpo sin `contenido`—;
+    // `transito_resumen_papeletas` sigue sin conectar, ver
+    // `pantallas/transito/index.ts`).
+    montarEnRuta('/transito/transito-resumen-papeletas');
     expect(await screen.findByText(/Todavía no hay/)).toBeInTheDocument();
   });
 
   it('con un filtro puesto: hay algo que hacer, y se dice cual', async () => {
-    montarEnRuta('/transito/codigos-transito?codigo=M-02');
+    montarEnRuta('/transito/transito-resumen-papeletas?desde=2026-01-01');
     expect(await screen.findByText('Ningún resultado para esta búsqueda')).toBeInTheDocument();
     expect(screen.getByText(/Quita alguno o corrige el valor/)).toBeInTheDocument();
   });

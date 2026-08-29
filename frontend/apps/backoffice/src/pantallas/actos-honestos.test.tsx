@@ -160,22 +160,27 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
        o cuando una opcion declara su escritura, que son exactamente los dos
        cambios sobre los que hay que llamar la atencion. */
     expect(porCausa).toEqual({
-      // Trece declaran: las seis de antes, `anulacion_recibo` (#74), las dos
-      // transferencias (#73, que salen de `sin-campo` al ganar su resolutor) y
-      // las cuatro de Valores (#75) — y `pase_coactiva` llega desde `salida`,
-      // porque su primaria del catalogo («Imprimir») pasaba el filtro aunque
-      // la pantalla de verdad escribe con «Derivar a coactiva».
-      declarada: 13,
-      salida: 49,
+      // Quince declaran: las seis de antes, `anulacion_recibo` (#74), las dos
+      // transferencias (#73, que salen de `sin-campo` al ganar su resolutor),
+      // las cuatro de Valores (#75) y las dos de Transito (#77:
+      // `transito_cambio_numero`, `transito_valores`) — `pase_coactiva` y
+      // `transito_valores` llegan desde `salida`, porque su primaria del
+      // catalogo («Imprimir») pasaba el filtro aunque la pantalla de verdad
+      // escribe con otro boton («Derivar a coactiva», «Generar valores»); y
+      // `transito_cambio_numero` llega desde `sin-declaracion`, porque su
+      // primaria del catalogo («Salir») no pasa ningun filtro de salida.
+      declarada: 15,
+      // Una menos que antes: `transito_valores` se muda a `declarada` (#77).
+      salida: 48,
       'sin-backend': 41,
-      // Tres se van a `declarada` con #75, una con #74; y tres se mudan a
-      // `sin-campo` con #74: `caja_tributaria` y `caja_tasas` —les falta el
-      // medio de pago, un campo distinto de «Forma de pago»— y
-      // `fraccionamiento` —le falta la grilla de deuda a acoger—.
-      'sin-declaracion': 27,
+      // Nueve se mudan a `sin-campo` en la onda 4: cuatro de transito (#77),
+      // tres de fiscalizacion (#80) — mas las tres de tesoreria y las dos
+      // transferencias que ya se habian movido antes; y dos se van a
+      // `declarada` con #77.
+      'sin-declaracion': 19,
       'sin-determinacion': 1,
-      // Las tres de tesoreria (#74); las dos transferencias ya no estan (#73).
-      'sin-campo': 3,
+      // Tesoreria (3, #74) + transito (4, #77) + fiscalizacion (3, #80).
+      'sin-campo': 10,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);

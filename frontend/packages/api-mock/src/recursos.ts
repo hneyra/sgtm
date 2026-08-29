@@ -1403,6 +1403,461 @@ function deudasCoactivasBeneficio(): Paginado {
   );
 }
 
+/* ── Autorizaciones y licencias (#79) ────────────────────────────────────
+ * `AnuncioResource`, `LicenciaResource`, `FueResource`, `ReporteDeEdificacionResource`,
+ * `CiiuResource`, `CertificadoResource` y `ResumenAnualResource`: la misma regla de siempre, las
+ * filas del prototipo con el nombre de campo que declara cada `Resource`. Ningun dato inventado;
+ * lo que la fila no distingue —`ejecutor` en el coactivo de arriba, aqui `tipoDeLicencia`,
+ * `giroPrincipal`— sale del `campos` de la ficha demo del propio catalogo, reutilizado por fila
+ * por la misma razon que ya lo hace `expedientesCoactivos`.
+ */
+
+/** `EstadoDeLicencia` (V37): el desplegable del prototipo tiene mas letras que el backend. */
+const ESTADO_DE_LICENCIA_DEL_MOCK: Readonly<Record<string, string>> = {
+  A: 'VIGENTE',
+  P: 'VIGENTE',
+  C: 'CANCELADA',
+  S: 'CANCELADA',
+  X: 'CANCELADA',
+};
+const estadoDeLicenciaDe = (letra: string): string =>
+  ESTADO_DE_LICENCIA_DEL_MOCK[letra] ?? 'VIGENTE';
+
+/** `EstadoDelAnuncio` (V45): el prototipo solo dibuja «A» y variantes en su columna «Est.». */
+const ESTADO_DE_ANUNCIO_DEL_MOCK: Readonly<Record<string, string>> = {
+  A: 'VIGENTE',
+  I: 'CESADO',
+  P: 'VIGENTE',
+  X: 'CESADO',
+};
+const estadoDeAnuncioDe = (letra: string): string => ESTADO_DE_ANUNCIO_DEL_MOCK[letra] ?? 'VIGENTE';
+
+/** `EstadoDelFue` (V43): el reporte del prototipo escribe la etiqueta del trámite, no el enum. */
+const ESTADO_DEL_FUE_DEL_MOCK: Readonly<Record<string, string>> = {
+  Aprobada: 'VIGENTE',
+  'Conforme de obra': 'VIGENTE',
+  Observada: 'EN_TRAMITE',
+  Denegada: 'ANULADA',
+};
+const estadoDelFueDe = (etiqueta: string): string =>
+  ESTADO_DEL_FUE_DEL_MOCK[etiqueta] ?? 'EN_TRAMITE';
+
+/** `RiesgoItse`: «Bajo/Medio/Alto» del prototipo, en mayúsculas como lo publica el backend. */
+const riesgoItseDe = (etiqueta: string): string | null =>
+  etiqueta === '' ? null : etiqueta.toUpperCase();
+
+/** Anuncio y propaganda (`AnuncioResource`, #51). */
+function anuncios(): Paginado {
+  const campos = RESPUESTAS['anuncios']?.campos ?? {};
+  const claseAnuncio = typeof campos['claseAnuncio'] === 'string' ? campos['claseAnuncio'] : '';
+  const tipoAnuncio = typeof campos['tipoAnuncio'] === 'string' ? campos['tipoAnuncio'] : '';
+  return unaPagina(
+    filasDe('anuncios').map(
+      (
+        [estadoLetra, nroAutorizacion, nroExpediente, contribuyente, dni, , direccion, tasaS],
+        i,
+      ) => ({
+        nroAutorizacion,
+        est: estadoLetra || 'V',
+        estado: estadoDeAnuncioDe(estadoLetra ?? ''),
+        estadoALaFecha: EL_DIA_DEL_PROTOTIPO,
+        contribuyente,
+        codContribuyente: `C-ANU-${String(i + 1).padStart(4, '0')}`,
+        documentoDelTitular: dni,
+        nroLicencia: null,
+        claseAnuncio: claseAnuncio.replace(/\s+/g, '_') || 'LETRERO',
+        tipoAnuncio: tipoAnuncio.replace(/\s+/g, '_') || 'AVISO_SIMPLE',
+        ubicacion: null,
+        forma: null,
+        denominacion: null,
+        direccion,
+        area: '0.00',
+        nroLados: 1,
+        cantidad: 1,
+        fecInicio: EL_DIA_DEL_PROTOTIPO,
+        fecVenc: null,
+        nroDeExpediente: nroExpediente,
+        fechaExp: null,
+        tasaDevengada: {
+          importe: comoImporte(tasaS ?? '0.00'),
+          actualizadoA: EL_DIA_DEL_PROTOTIPO,
+        },
+        historial: [],
+      }),
+    ),
+  );
+}
+
+/** Licencia de funcionamiento (`LicenciaResource`, #44). */
+function licenciaFuncionamiento(): Paginado {
+  const campos = RESPUESTAS['licencia_funcionamiento']?.campos ?? {};
+  const tipoDeLicencia =
+    typeof campos['tipoDeLicencia'] === 'string' ? campos['tipoDeLicencia'] : 'DEFINITIVA';
+  return unaPagina(
+    filasDe('licencia_funcionamiento').map(
+      (
+        [estadoLetra, nroLicencia, contribuyente, nExpediente, denominacionComercial, direccion],
+        i,
+      ) => ({
+        nroLicencia,
+        est: estadoLetra || 'A',
+        estado: estadoDeLicenciaDe(estadoLetra ?? ''),
+        estadoALaFecha: EL_DIA_DEL_PROTOTIPO,
+        contribuyente,
+        codContribuyente: `C-LIC-${String(i + 1).padStart(4, '0')}`,
+        denominacionComercial,
+        direccion,
+        tipoDeLicencia,
+        areaDelEstablecimiento: '0.00',
+        zonificacion: null,
+        aforo: null,
+        fechaDeEmision: EL_DIA_DEL_PROTOTIPO,
+        fechaDeVencimiento: null,
+        nExpediente,
+        fechaDeExpediente: null,
+        fichaEconomica: null,
+        giros: [],
+        historial: [],
+        duplicados: [],
+      }),
+    ),
+  );
+}
+
+/** Resumen de licencias por año (`ResumenAnualResource`, #54): sin sobre paginado. */
+function resumenAnualDeLicencias(): Readonly<Record<string, unknown>> {
+  return {
+    aLaFecha: EL_DIA_DEL_PROTOTIPO,
+    filas: filasDe('licencia_resumen_anual').map(
+      ([ano, emitidas, canceladas, duplicados, vigentesAlCierre, derechoS]) => ({
+        ano: Number(ano) || new Date().getFullYear(),
+        emitidas: Number(comoImporte(emitidas ?? '0')) || 0,
+        canceladas: Number(comoImporte(canceladas ?? '0')) || 0,
+        duplicados: Number(comoImporte(duplicados ?? '0')) || 0,
+        vigentesAlCierre: Number(comoImporte(vigentesAlCierre ?? '0')) || 0,
+        derechoDeTramiteS: {
+          importe: comoImporte(derechoS ?? '0.00'),
+          actualizadoA: EL_DIA_DEL_PROTOTIPO,
+        },
+        derechoNoDisponible: null,
+        alCierre: EL_DIA_DEL_PROTOTIPO,
+      }),
+    ),
+  };
+}
+
+/** El formulario único de edificación, solo su grilla (`FueResource`, #48). */
+function fueEdificacion(): Paginado {
+  const campos = RESPUESTAS['fue_edificacion']?.campos ?? {};
+  const solicitantePropietario = campos['solicitante'] === 'PROPIETARIO';
+  return unaPagina(
+    filasDe('fue_edificacion').map(
+      ([
+        nroExpediente,
+        contribuyente,
+        nombreContribuyente,
+        tipoTramite,
+        nroLicencia,
+        modalidadEtiqueta,
+      ]) => ({
+        nroExpediente,
+        fechaDeclaracion: EL_DIA_DEL_PROTOTIPO,
+        nroLicencia: nroLicencia === '000000' ? null : nroLicencia,
+        est: 'V',
+        estado: 'VIGENTE',
+        estadoALaFecha: EL_DIA_DEL_PROTOTIPO,
+        contribuyente,
+        nombreContribuyente,
+        tipoTramite: (tipoTramite ?? '').replace(/\s+/g, '_'),
+        obra: 'EDIFICACION_NUEVA',
+        modalidad: (modalidadEtiqueta ?? '').replace(/^APROBACI[ÓO]N\s+/i, '').charAt(0) || 'A',
+        revision: null,
+        nroExpedienteAnterior: null,
+        solicitanteEsPropietario: solicitantePropietario,
+        representanteLegal: null,
+        terreno: null,
+        proyecto: null,
+        valorizacion: [],
+        valorDeObra: null,
+        valorDeObraNoDisponible: 'D-02a: sin cuadro de valores unitarios sellado (#48)',
+        llaveQueFalta: null,
+        profesionales: [],
+        documentos: [],
+        historial: [],
+        vigencias: [],
+        seccionesFaltantes: [],
+        completo: false,
+      }),
+    ),
+  );
+}
+
+/** Reporte general de licencias de edificación (`ReporteDeEdificacionResource`, #48). */
+function edificacionReporte(): Paginado {
+  return unaPagina(
+    filasDe('edificacion_reporte').map(
+      ([
+        nLicencia,
+        expediente,
+        fecha,
+        administrado,
+        predio,
+        modalidad,
+        areaM,
+        valorObraS,
+        estadoEtiqueta,
+      ]) => ({
+        nLicencia,
+        expediente,
+        fecha: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        administrado,
+        predio,
+        modalidad,
+        areaAConstruirM: areaM,
+        valorDeObraS: {
+          importe: comoImporte(valorObraS ?? '0.00'),
+          actualizadoA: EL_DIA_DEL_PROTOTIPO,
+        },
+        valorDeObraNoDisponible: null,
+        estado: estadoDelFueDe(estadoEtiqueta ?? ''),
+        estadoALaFecha: EL_DIA_DEL_PROTOTIPO,
+      }),
+    ),
+  );
+}
+
+/** Catálogo CIIU de giros (`CiiuResource`, #44). Cientos de filas de verdad; aquí, seis. */
+function ciiu(): Paginado {
+  return unaPagina(
+    filasDe('ciiu').map(
+      ([codigo, descripcion, seccion, riesgo, zonificacion, requiereSectorial]) => ({
+        codigo,
+        descripcion,
+        seccion,
+        riesgoItse: riesgoItseDe(riesgo ?? ''),
+        zonificacionCompatible: zonificacion,
+        requiereSectorial: (requiereSectorial ?? '').startsWith('S'),
+        extendido: false,
+        activo: true,
+      }),
+    ),
+  );
+}
+
+/** Certificados de numeración y zonificación (`CertificadoResource`, #54): solo su grilla. */
+function certificadosDeNumeracion(): Paginado {
+  return unaPagina(
+    filasDe('certificados').map(
+      ([nCertificado, tipoEtiqueta, predio, solicitante, fecha, derechoS, estado], i) => ({
+        nCertificado,
+        tipo: (tipoEtiqueta ?? '').replace(/\s+Y\s+/g, '_').replace(/\s+/g, '_'),
+        tipoEtiqueta,
+        predio,
+        direccion: '',
+        solicitante,
+        codContribuyente: `C-CERT-${String(i + 1).padStart(4, '0')}`,
+        fecha: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        vigenciaHasta: EL_DIA_DEL_PROTOTIPO,
+        derechoS: { importe: comoImporte(derechoS ?? '0.00'), actualizadoA: EL_DIA_DEL_PROTOTIPO },
+        estado: (estado ?? '').toUpperCase(),
+        estadoALaFecha: EL_DIA_DEL_PROTOTIPO,
+        nExpediente: null,
+        documento: nCertificado,
+        zonificacion: null,
+        alturaMaximaPermitida: null,
+        areaLibreMinima: null,
+        retiroMunicipal: null,
+        coeficienteDeEdificacion: null,
+      }),
+    ),
+  );
+}
+
+/* ── Fiscalizacion (#80) ───────────────────────────────────────────────── */
+
+/**
+ * `Hallazgo`/`CondicionFiscalizada` del prototipo → el nombre del backend.
+ * Las dos comparten vocabulario (`CondicionFiscalizada` javadoc), asi que una
+ * sola tabla sirve para `fisc_omisos`.
+ */
+const CONDICION_FISCALIZADA_DEL_MOCK: Readonly<Record<string, string>> = {
+  Conforme: 'CONFORME',
+  Omiso: 'OMISO',
+  Subvaluador: 'SUBVALUADOR',
+  'Uso distinto': 'USO_DISTINTO',
+  'No ubicado': 'NO_UBICADO',
+};
+
+/**
+ * Omisos y subvaluadores (`OmisoResource`, #49, #80).
+ *
+ * **Las cuatro columnas de importe salen `null`, tal como las publica el
+ * recurso real** — `valorCatastralS`, `valorDeclaradoS`, `diferenciaS` e
+ * `impuestoOmitidoS` son D-02a (#198) y `OmisoResource.de` nunca les pone
+ * cifra, ni siquiera aqui: reescribirlas con las del prototipo inventaria un
+ * impuesto omitido que ningun cuadro de valores unitarios sustenta.
+ */
+const omisosFiscalizacion = (): Paginado =>
+  unaPagina(
+    filasDe('fisc_omisos').map(([codRefCatastral, titular, condicionCruda]) => ({
+      codRefCatastral,
+      titular,
+      sector: null,
+      condicion: CONDICION_FISCALIZADA_DEL_MOCK[condicionCruda ?? ''] ?? 'OMISO',
+      declaroFueraDePlazo: false,
+      areaCatastral: null,
+      areaDeclarada: null,
+      diferenciaDeArea: null,
+      valorCatastralS: null,
+      valorDeclaradoS: null,
+      diferenciaS: null,
+      impuestoOmitidoS: null,
+    })),
+  );
+
+/**
+ * Estado de cuenta de fiscalizacion (`EstadoDeCuentaResource`, #49, #80).
+ *
+ * **Ninguna linea trae `importe`**: `EstadoDeCuentaDeFiscalizacion` lo lee del
+ * libro de cuenta corriente, y una liquidacion de fiscalizacion solo llega ahi
+ * por transferencia (#52) — mientras nadie transfiera, no hay asiento que
+ * leer, y el recurso real sale igual de vacio. `total` sale `null` por la
+ * misma razon: `EstadoDeCuentaResource` lo deja `null` si **cualquier** linea
+ * no tiene cifra, y aqui ninguna la tiene.
+ */
+const estadoCuentaFiscalizacion = (): Readonly<Record<string, unknown>> => {
+  const campos = RESPUESTAS['fisc_estado_cuenta']?.campos ?? {};
+  const codigo = typeof campos['contribuyente'] === 'string' ? campos['contribuyente'] : '';
+  const fecha =
+    typeof campos['fechaDeConsulta'] === 'string'
+      ? campos['fechaDeConsulta']
+      : EL_DIA_DEL_PROTOTIPO;
+
+  return {
+    codContribuyente: codigo,
+    fechaDeConsulta: fecha,
+    lineas: filasDe('fisc_estado_cuenta').map(([deuda, , ano, , , , , nomTrib, , , estad]) => ({
+      deuda,
+      ano: Number(ano) || new Date().getFullYear(),
+      nomTrib,
+      unidad: null,
+      estad,
+      importe: null,
+    })),
+    total: null,
+  };
+};
+
+/**
+ * `EstadoDeLiquidacion` (V39) → el codigo de una sola letra que dibuja
+ * `fisc_historico`: «A» abierta, «L» liquidada. El prototipo no capturo
+ * «EN PROCESO», «NOTIFICADA» ni «ANULADA» en ninguna fila de su muestra.
+ */
+const ESTADO_DE_LIQUIDACION_DEL_MOCK: Readonly<Record<string, string>> = {
+  A: 'ABIERTA',
+  L: 'LIQUIDADA',
+};
+
+/**
+ * Historico de fiscalizacion predial (`LiquidacionResource.VersionResource`,
+ * #49, #80).
+ *
+ * `LiquidacionController.historico` responde el proceso completo de un acta
+ * cuando se pide `nLiquidacion`, y la grilla paginada de versiones sueltas
+ * cuando no — el proxy no filtra (#80, mismo criterio que el resto de este
+ * archivo), asi que devuelve siempre la segunda forma: cada fila **es** una
+ * `VersionResource`, con `cambios`/`importesSinCifra` vacios, que es
+ * exactamente lo que sirve `LiquidacionController.historico` sin numero
+ * («cada fila es una version suelta»).
+ *
+ * **`numero` no viaja en la fila del prototipo** —su columna es «—»—, asi que
+ * se compone con el codigo de contribuyente, igual que `procesoCoactivo` cae
+ * a un numero fijo cuando el campo que lo trae esta vacio. Las cifras de la
+ * liquidacion —`insolutoOmitido`, `multaTributaria`— son D-02a: `null`, con
+ * `esperaSusCifras: true`.
+ */
+const historicoFiscalizacion = (): Paginado => {
+  const campos = RESPUESTAS['fisc_historico']?.campos ?? {};
+  const desde = Number(campos['periodoFiscalizadoDesde']) || new Date().getFullYear();
+  const hasta = Number(campos['periodoFiscalizadoHasta']) || desde;
+  const tipo =
+    typeof campos['tipoDeFiscalizacion'] === 'string' ? campos['tipoDeFiscalizacion'] : 'CIERTA';
+
+  return unaPagina(
+    filasDe('fisc_historico').map(([estCrudo, codCont, contribuyente, , , versionTexto], i) => {
+      const version = Number(versionTexto) || 1;
+      const liquidacion = {
+        numero: `LIQ-${codCont}`,
+        actaId: i + 1,
+        version,
+        liquidacionAnterior: version > 1 ? i : null,
+        periodoDesde: desde,
+        periodoHasta: hasta,
+        tipoDeFiscalizacion: tipo.replace(' ', '_'),
+        motivoDeterminante: `Fiscalización de ${contribuyente}`,
+        fecha: EL_DIA_DEL_PROTOTIPO,
+        numeroNotificacion: null,
+        estado: ESTADO_DE_LIQUIDACION_DEL_MOCK[estCrudo ?? ''] ?? 'ABIERTA',
+        esperaSusCifras: true,
+        lineas: [],
+        historial: [],
+      };
+      return { version: liquidacion, cambios: [], importesSinCifra: [] };
+    }),
+  );
+};
+
+/**
+ * Resolucion de determinacion de fiscalizacion (`ResolucionResource`, #52,
+ * #80): un recurso suelto, abierto por `{numero}` en la ruta — el mismo
+ * mecanismo que `duplicado_recibo` (#74).
+ *
+ * **`determinado`, `declarado` y `diferencia` salen `null`**, igual que
+ * `insolutoOmitido`/`baseHallada`/`baseDeclarada` en `LiquidacionResource`: son
+ * D-02a. `multa` tampoco tiene cifra, y no tiene columna en el catalogo donde
+ * ir — la pantalla dibuja «Interés S/», que `LineaDeterminadaResource` no
+ * publica en absoluto (no distingue interes de multa), asi que esa columna
+ * sale `SIN_DATO` desde el adaptador, no desde aqui.
+ */
+const resolucionDeterminacionFiscalizacion = (): Readonly<Record<string, unknown>> => {
+  const reporte = RESPUESTAS['resolucion_determinacion_fisc']?.reporte;
+  const meta = new Map((reporte?.meta ?? []).map((dato) => [dato.k, dato.v]));
+  const [ejercicioDesde, ejercicioHasta] = (meta.get('Periodo fiscalizado') ?? '').split('—');
+
+  return {
+    numero: meta.get('Nº de resolución') ?? reporte?.code ?? '',
+    fecha: EL_DIA_DEL_PROTOTIPO,
+    aLaFecha: EL_DIA_DEL_PROTOTIPO,
+    nLiquidacion: `LIQ-${meta.get('R.U.C.') ?? ''}`,
+    versionDeLaLiquidacion: 1,
+    periodoDesde: Number((ejercicioDesde ?? '').trim()) || new Date().getFullYear(),
+    periodoHasta: Number((ejercicioHasta ?? '').trim()) || new Date().getFullYear(),
+    codContribuyente: meta.get('R.U.C.') ?? null,
+    contribuyente: meta.get('Contribuyente') ?? null,
+    predioId: null,
+    vehiculoId: null,
+    documentoSustento: meta.get('Predio') ?? '',
+    sustento: 'Acta de inspección y liquidación de fiscalización predial.',
+    baseLegal: 'Art. 76 y 77 del Texto Único Ordenado del Código Tributario.',
+    fichaAnteriorId: null,
+    fichaNuevaId: null,
+    usuarioRegistro: null,
+    observacion: 'Transferencia del resultado de fiscalización al padrón.',
+    lineas: (reporte?.filas ?? []).map(([ejercicio]) => ({
+      ejercicio: Number(ejercicio) || new Date().getFullYear(),
+      determinado: null,
+      declarado: null,
+      diferencia: null,
+      multa: null,
+      total: null,
+      condicion: 'SUBVALUADOR',
+      areaDeclarada: null,
+      areaHallada: null,
+    })),
+    cargosAsentados: null,
+  };
+};
+
 const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>> = {
   '/catastro/fichas/urbana/{codRefCatastral}': urbana,
   '/catastro/fichas/economica/{codRefCatastral}': economica,
@@ -1418,6 +1873,13 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/consultas/deudas-con-beneficio': deudasConBeneficio,
   '/seguridad/sesion/permisos': permisosDeLaSesion,
   '/coactiva/expedientes/{numero}/proceso': procesoCoactivo,
+  '/fiscalizacion/estado-cuenta': estadoCuentaFiscalizacion,
+  '/fiscalizacion/resoluciones/{numero}': resolucionDeterminacionFiscalizacion,
+  '/licencias/funcionamiento/reportes/resumen-anual': resumenAnualDeLicencias,
+  '/infracciones/administrativas/reportes/resumen-recaudacion': resumenRecaudacionAdministrativa,
+  '/transito/papeletas/{numero}/actos': expedienteDeLaPapeleta,
+  '/transito/reportes/resumen-por-codigo': resumenPorCodigoDeTransito,
+  '/transito/reportes/resumen-por-placa': resumenPorPlacaDeTransito,
 };
 
 /* ── Una funcion por recurso, con los campos que declara su `Resource` ──── */
@@ -1772,6 +2234,8 @@ const ESTADO_DE_PAPELETA_DEL_MOCK: Readonly<Record<string, string>> = {
   'Con descargo': 'RESUELTA',
   Pagada: 'PAGADA',
   Coactiva: 'COACTIVA',
+  Cancelada: 'PAGADA',
+  'A cuenta': 'IMPUESTA',
 };
 
 /**
@@ -1784,9 +2248,29 @@ const ESTADO_DE_PAPELETA_DEL_MOCK: Readonly<Record<string, string>> = {
  * son exactamente los campos que el `Resource` tiene, con el mismo valor que
  * ya dibuja el catalogo portado.
  */
+/**
+ * El porcentaje UIT de cada codigo del CUIS de transito, leido de la tabla que
+ * el propio prototipo publica («M-02 · 10 % · 535.00»): permite que el
+ * desglose guardado de cada papeleta VARIE con su codigo en vez de repetir
+ * una cifra unica e identica por fila —el patron fantasma que la validacion
+ * de #379 cazo con `areaNombre` y la de #389 volvio a cazar aqui—. El codigo
+ * que no este en la tabla cae al 10 % del propio prototipo, dicho aqui y no
+ * escondido fila a fila.
+ */
+const PORCENTAJE_DEL_CUIS: Readonly<Record<string, string>> = Object.fromEntries(
+  filasDe('codigos_transito').map(([codigo, , , uit]) => [
+    codigo ?? '',
+    (Number((uit ?? '').replace('%', '').trim()) / 100).toFixed(2),
+  ]),
+);
+const porcentajeDelCodigo = (codigo: string | undefined): string =>
+  PORCENTAJE_DEL_CUIS[codigo ?? ''] ?? '0.10';
+/** La base que el propio prototipo implica: su CUIS empareja 10 % con 535.00. */
+const BASE_DEL_PROTOTIPO = '5350.00';
+
 const papeletasTransito = (): Paginado =>
   unaPagina(
-    filasDe('papeletas').map(([numero, fecha, placa, , , , multaS, estado], i) => ({
+    filasDe('papeletas').map(([numero, fecha, placa, , codigo, , multaS, estado], i) => ({
       id: i + 1,
       familia: 'TRANSITO',
       numero,
@@ -1800,10 +2284,10 @@ const papeletasTransito = (): Paginado =>
       contribuyenteId: null,
       predioId: null,
       notificacionPreviaId: null,
-      baseImponible: '5350.00',
-      porcentajeInfraccion: '0.10',
+      baseImponible: BASE_DEL_PROTOTIPO,
+      porcentajeInfraccion: porcentajeDelCodigo(codigo),
       importeInfraccion: comoImporte(multaS ?? '0.00'),
-      porcentajeACobrar: '0.10',
+      porcentajeACobrar: porcentajeDelCodigo(codigo),
       importeAPagar: comoImporte(multaS ?? '0.00'),
       importeConBeneficio: null,
       estado: ESTADO_DE_PAPELETA_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',
@@ -1858,6 +2342,630 @@ const adminEstadoCuenta = (): Paginado => {
   ]);
 };
 
+/**
+ * Búsqueda avanzada de papeletas (`transito_busqueda`, `PapeletaResource`, #77).
+ *
+ * La fila del prototipo trae doce columnas y solo cinco tienen con qué
+ * llenar `PapeletaResource`: «Serie»+«Número» componen el número del acta,
+ * «Placa», «Fecha» y las dos columnas de importe. Las otras siete —A.Coa,
+ * Coact, Fec. Reg., Deuda, Infracción, Conductor— son las que
+ * `BusquedaDePapeletasControllerTest` no publica, y por eso el adaptador de
+ * `pantallas/transito/index.ts` las dibuja con `SIN_DATO`: aquí tampoco se
+ * inventan.
+ */
+const papeletasDeBusqueda = (): Paginado =>
+  unaPagina(
+    filasDe('transito_busqueda').map(
+      ([, , , , serie, numero, placa, fecha, , , importe, aPagar], i) => ({
+        id: i + 1,
+        familia: 'TRANSITO',
+        numero: `${serie ?? ''}${numero ?? ''}`,
+        fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        horaInfraccion: null,
+        lugar: 'VÍA PÚBLICA',
+        placa,
+        vehiculoId: i + 1,
+        infractorId: i + 1,
+        propietarioId: null,
+        contribuyenteId: null,
+        predioId: null,
+        notificacionPreviaId: null,
+        baseImponible: BASE_DEL_PROTOTIPO,
+        // La tabla de busqueda del prototipo no publica el codigo de
+        // infraccion: no hay con que variar el porcentaje, y se dice aqui.
+        porcentajeInfraccion: porcentajeDelCodigo(undefined),
+        importeInfraccion: comoImporte(importe ?? '0.00'),
+        porcentajeACobrar: porcentajeDelCodigo(undefined),
+        importeAPagar: comoImporte(aPagar ?? importe ?? '0.00'),
+        importeConBeneficio: null,
+        estado: 'IMPUESTA',
+        usuarioRegistro: 'admin',
+      }),
+    ),
+  );
+
+/**
+ * Estado de cuenta de infracciones (`transito_estado_cuenta`,
+ * `PapeletaResource`, #77): la misma tabla de `papeletas`, ya siempre
+ * pendiente —es lo que `EstadoDeCuentaTransitoController` garantiza con su
+ * propio criterio (`soloPendientes()`)—.
+ */
+const estadoDeCuentaDeTransito = (): Paginado =>
+  unaPagina(
+    filasDe('papeletas').map(([numero, fecha, placa, , codigo, , multaS, estado], i) => ({
+      id: i + 1,
+      familia: 'TRANSITO',
+      numero,
+      fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+      horaInfraccion: null,
+      lugar: 'VÍA PÚBLICA',
+      placa,
+      vehiculoId: i + 1,
+      infractorId: i + 1,
+      propietarioId: null,
+      contribuyenteId: null,
+      predioId: null,
+      notificacionPreviaId: null,
+      baseImponible: BASE_DEL_PROTOTIPO,
+      porcentajeInfraccion: porcentajeDelCodigo(codigo),
+      importeInfraccion: comoImporte(multaS ?? '0.00'),
+      porcentajeACobrar: porcentajeDelCodigo(codigo),
+      importeAPagar: comoImporte(multaS ?? '0.00'),
+      importeConBeneficio: comoImporte(multaS ?? '0.00'),
+      estado: ESTADO_DE_PAPELETA_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',
+      usuarioRegistro: 'admin',
+    })),
+  );
+
+/**
+ * Tabla de códigos de infracción de tránsito (`codigos_transito`,
+ * `CodigoInfraccionResource`, #43, #77).
+ *
+ * «Gravedad» y «Multa S/» del prototipo no tienen columna en el recurso real
+ * —ver el docblock de `pantallas/transito/index.ts`—, así que no se leen de
+ * la fila aunque estén ahí: se ignoran, igual que hace el adaptador.
+ */
+const codigosDeTransito = (): Paginado =>
+  unaPagina(
+    filasDe('codigos_transito').map(([codigo, descripcion, , uit, , puntos, medida], i) => ({
+      id: i + 1,
+      familia: 'TRANSITO',
+      codigo,
+      descripcion,
+      porcentajeUit: (Number((uit ?? '0 %').replace('%', '').trim()) / 100).toFixed(2),
+      medida: medida && medida !== '—' ? medida : null,
+      puntos: Number(puntos) || 0,
+      baseLegal: 'Reglamento Nacional de Tránsito, D.S. N.° 016-2009-MTC',
+      vigenciaDesde: '2026-01-01',
+      vigenciaHasta: null,
+    })),
+  );
+
+/**
+ * Internamiento vehicular (`internamiento`, `InternamientoResource`, #50, #77).
+ *
+ * «Tasa diaria S/» y «Custodia S/» del prototipo no se leen: el recurso real
+ * no las publica —son de la ordenanza y de la caja, según el propio
+ * `InternamientosController`—.
+ */
+const internamientos = (): Paginado =>
+  unaPagina(
+    filasDe('internamiento').map(([placa, papeleta, fechaDeIngreso, dias, , , estado], i) => ({
+      id: i + 1,
+      placa,
+      papeleta,
+      deposito: 'DEPÓSITO MUNICIPAL CENTRAL',
+      fechaDeIngreso: fechaDe(fechaDeIngreso ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+      fechaDeSalida: null,
+      dias: Number(dias) || 0,
+      calculadoA: EL_DIA_DEL_PROTOTIPO,
+      estado: (estado ?? '').toUpperCase() === 'INTERNADO' ? 'INTERNADO' : 'EN_ABANDONO',
+      tasaDeCustodia: 'TC-01',
+      acta: `ACTA-INT-${String(i + 1).padStart(4, '0')}`,
+    })),
+  );
+
+/**
+ * El expediente de una papeleta (`transito_documentos`, `ExpedienteResource`,
+ * #50, #77): un recurso suelto, se abre por el número en la ruta —el proxy no
+ * filtra, igual que `procesoCoactivo()`—.
+ *
+ * `descargos` y `actos` salen vacíos: son las dos secciones que el catálogo
+ * ni siquiera declara con datos editables (ver `pantallas/transito/index.ts`),
+ * y un arreglo con un acto inventado construiría la pantalla contra una
+ * respuesta que el prototipo capturado no tiene de dónde sacar.
+ */
+function expedienteDeLaPapeleta(): Readonly<Record<string, unknown>> {
+  const campos = RESPUESTAS['transito_documentos']?.campos ?? {};
+  const valor = (clave: string): string =>
+    typeof campos[clave] === 'string' ? (campos[clave] as string) : '';
+  return {
+    papeleta: valor('papeletaN2') || valor('papeletaN') || 'C2007005161',
+    familia: 'TRANSITO',
+    estado: 'NOTIFICADA',
+    descargos: [],
+    actos: [],
+  };
+}
+
+/**
+ * Padrón de papeletas de tránsito (`transito_padron`,
+ * `PapeletaDelPadronResource`, #53, #77).
+ *
+ * «Importe S/» del catálogo no tiene con qué llenarse —el recurso solo
+ * publica el importe **a pagar**, no un importe base distinto—, así que la
+ * fila del prototipo se lee saltándose esa columna, igual que el adaptador.
+ */
+const padronDeTransito = (): Paginado =>
+  unaPagina(
+    filasDe('transito_padron').map(
+      ([numero, fecha, placa, conductor, infraccion, , aPagar, estado], i) => ({
+        numero,
+        familia: 'TRANSITO',
+        fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        horaInfraccion: null,
+        lugar: 'VÍA PÚBLICA',
+        placa,
+        licenciaConducir: null,
+        codigoInfraccion: infraccion ?? '',
+        descripcionInfraccion: infraccion ?? '',
+        obligadoCodigo: null,
+        obligadoNombre: conductor ?? null,
+        infractorNombre: conductor ?? null,
+        estado: ESTADO_DE_PAPELETA_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',
+        pendiente: (estado ?? '').toLowerCase() === 'pendiente',
+        importeAPagar: comoImporte(aPagar ?? '0.00'),
+        actualizadoA: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        valorNumero: null,
+        id: i + 1,
+      }),
+    ),
+  );
+
+/**
+ * Padrón de papeletas enviadas a coactiva (`transito_padron_coactiva`,
+ * `PapeletaDelPadronResource`, #53, #77).
+ *
+ * `estado` sale siempre `COACTIVA`: toda fila de este padrón, por definición
+ * de `PadronesDeTransitoController#padronCoactiva`, ya tiene resolución de
+ * multa emitida. «Expediente» y «Fec. pase» del prototipo no se leen —ver el
+ * docblock del adaptador—.
+ */
+const padronCoactivaDeTransito = (): Paginado =>
+  unaPagina(
+    filasDe('transito_padron_coactiva').map(([, papeleta, , placa, obligado, deuda], i) => ({
+      numero: papeleta,
+      familia: 'TRANSITO',
+      fechaInfraccion: EL_DIA_DEL_PROTOTIPO,
+      horaInfraccion: null,
+      lugar: 'VÍA PÚBLICA',
+      placa,
+      licenciaConducir: null,
+      codigoInfraccion: '',
+      descripcionInfraccion: '',
+      obligadoCodigo: null,
+      obligadoNombre: obligado ?? null,
+      infractorNombre: obligado ?? null,
+      estado: 'COACTIVA',
+      pendiente: true,
+      importeAPagar: comoImporte(deuda ?? '0.00'),
+      actualizadoA: EL_DIA_DEL_PROTOTIPO,
+      valorNumero: null,
+      id: i + 1,
+    })),
+  );
+
+/**
+ * Padrón de constancias libres de infracciones (`transito_padron_constancias`,
+ * `ConstanciaLibreResource`, #53, #77).
+ */
+const padronDeConstancias = (): Paginado =>
+  unaPagina(
+    filasDe('transito_padron_constancias').map(([numero, fecha, placa, , , , usuario]) => ({
+      numero,
+      placa,
+      verificadaAl: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+      fechaEmision: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+      usuarioQueEmitio: usuario ?? null,
+      observacion: 'Verificación de papeletas pendientes de tránsito.',
+    })),
+  );
+
+/** Las filas de un reporte del prototipo (`report.filas`), ya como texto suelto. */
+function filasDelReporte(pantalla: string): readonly (readonly string[])[] {
+  return RESPUESTAS[pantalla]?.reporte?.filas ?? [];
+}
+
+/**
+ * Los dos records de tránsito (`transito_record_conductor`,
+ * `transito_record_vehicular`; `PapeletaDelPadronResource`, #53, #77): el
+ * mismo recurso que los padrones, paginado, aunque el catálogo lo dibuje como
+ * hoja de reporte.
+ */
+const ESTADO_DEL_RECORD_DEL_MOCK: Readonly<Record<string, string>> = {
+  Cancelada: 'PAGADA',
+  Pendiente: 'IMPUESTA',
+  Coactiva: 'COACTIVA',
+  'A cuenta': 'IMPUESTA',
+};
+
+const recordDeConductor = (): Paginado =>
+  unaPagina(
+    filasDelReporte('transito_record_conductor').map(
+      ([numero, fecha, placa, infraccion, importe, estado], i) => ({
+        numero,
+        familia: 'TRANSITO',
+        fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        horaInfraccion: null,
+        lugar: 'VÍA PÚBLICA',
+        placa,
+        licenciaConducir: 'Q-44218937',
+        codigoInfraccion: infraccion ?? '',
+        descripcionInfraccion: infraccion ?? '',
+        obligadoCodigo: null,
+        obligadoNombre: null,
+        infractorNombre: 'SERNAQUE VILLEGAS, DORIS',
+        estado: ESTADO_DEL_RECORD_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',
+        pendiente: (estado ?? '').toLowerCase() === 'pendiente',
+        importeAPagar: comoImporte(importe ?? '0.00'),
+        actualizadoA: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        valorNumero: null,
+        id: i + 1,
+      }),
+    ),
+  );
+
+const recordVehicular = (): Paginado =>
+  unaPagina(
+    filasDelReporte('transito_record_vehicular').map(
+      ([numero, fecha, conductor, infraccion, importe, estado], i) => ({
+        numero,
+        familia: 'TRANSITO',
+        fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        horaInfraccion: null,
+        lugar: 'VÍA PÚBLICA',
+        placa: 'NB-21169',
+        licenciaConducir: null,
+        codigoInfraccion: infraccion ?? '',
+        descripcionInfraccion: infraccion ?? '',
+        obligadoCodigo: null,
+        obligadoNombre: conductor ?? null,
+        infractorNombre: conductor ?? null,
+        estado: ESTADO_DEL_RECORD_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',
+        pendiente: (estado ?? '').toLowerCase() === 'pendiente',
+        importeAPagar: comoImporte(importe ?? '0.00'),
+        actualizadoA: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        valorNumero: null,
+        id: i + 1,
+      }),
+    ),
+  );
+
+/**
+ * Los dos resúmenes de papeletas cuyo agrupador existe de verdad en
+ * `AgrupacionDelResumen` (`transito_resumen_codigo` con `CODIGO`,
+ * `transito_resumen_placa` con `PLACA`; `ResumenDePapeletasResource`, #53,
+ * #77). Es un recurso suelto —no pagina—, así que vive en `SUELTOS`.
+ */
+function resumenPorCodigoDeTransito(): Readonly<Record<string, unknown>> {
+  const filas = filasDe('transito_resumen_codigo');
+  const lineas = filas.map(([codigo, descripcion, pendientes, pendienteS, pagadas, pagadoS]) => ({
+    clave: codigo,
+    descripcion: descripcion ?? null,
+    cantidad: (Number(pendientes) || 0) + (Number(pagadas) || 0),
+    importe: masImporte(comoImporte(pendienteS ?? '0.00'), comoImporte(pagadoS ?? '0.00')),
+    pagadas: Number(pagadas) || 0,
+    importeDeLasPagadas: comoImporte(pagadoS ?? '0.00'),
+    pendientes: Number(pendientes) || 0,
+    importeDeLasPendientes: comoImporte(pendienteS ?? '0.00'),
+    enCoactiva: 0,
+    importeEnCoactiva: '0.00',
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+  }));
+  return {
+    agrupadoPor: 'CODIGO',
+    desde: '2026-01-01',
+    hasta: EL_DIA_DEL_PROTOTIPO,
+    papeletas: lineas.reduce((suma, linea) => suma + linea.cantidad, 0),
+    importeTotal: lineas.reduce((suma, linea) => masImporte(suma, linea.importe), '0.00'),
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    lineas,
+  };
+}
+
+function resumenPorPlacaDeTransito(): Readonly<Record<string, unknown>> {
+  const filas = filasDe('transito_resumen_placa');
+  const lineas = filas.map(([iniciales, cantidad, pendientes, pendienteS, pagadas, pagadoS]) => ({
+    clave: iniciales,
+    descripcion: null,
+    cantidad: Number(cantidad) || 0,
+    importe: masImporte(comoImporte(pendienteS ?? '0.00'), comoImporte(pagadoS ?? '0.00')),
+    pagadas: Number(pagadas) || 0,
+    importeDeLasPagadas: comoImporte(pagadoS ?? '0.00'),
+    pendientes: Number(pendientes) || 0,
+    importeDeLasPendientes: comoImporte(pendienteS ?? '0.00'),
+    enCoactiva: 0,
+    importeEnCoactiva: '0.00',
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+  }));
+  return {
+    agrupadoPor: 'PLACA',
+    desde: '2026-01-01',
+    hasta: EL_DIA_DEL_PROTOTIPO,
+    papeletas: lineas.reduce((suma, linea) => suma + linea.cantidad, 0),
+    importeTotal: lineas.reduce((suma, linea) => masImporte(suma, linea.importe), '0.00'),
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    lineas,
+  };
+}
+
+/** `5,350.00` con el separador de miles del prototipo → `5350.00`, como lo serializa el backend. */
+const importeDelMock = comoImporte;
+
+/** Un lugar fijo para las papeletas administrativas: ninguna tabla del prototipo lo publica. */
+const LUGAR_DE_LA_INSPECCION = 'INSPECCIÓN MUNICIPAL';
+
+/**
+ * Papeletas administrativas por contribuyente (`PapeletaResource`, misma
+ * familia, #47, #78): `GET .../reportes/por-contribuyente`.
+ *
+ * `infracciones_adm` (`GET /infracciones/actas`, el mismo `PapeletaResource`) se queda sin
+ * conectar por este issue —ver `pantallas/sanciones/index.ts`—, así que no tiene su propia
+ * función aquí: nada la registra en `PAGINADOS`, y la ruta sigue respondiendo el juego de datos
+ * del prototipo tal cual, como el resto del camino común.
+ *
+ * `fechaInfraccion` se compone del año y el mes que dibuja el prototipo —no
+ * publica el dia— con el primero del mes: es una composicion de presentacion
+ * sobre dos columnas que si son del prototipo, no una cifra inventada.
+ */
+const notificacionesPorContribuyente = (): Paginado =>
+  unaPagina(
+    filasDe('adm_notificaciones_contribuyente').map(
+      ([anio, mes, papeleta, , multaS, , , estado], i) => ({
+        id: i + 1,
+        familia: 'ADMINISTRATIVA',
+        numero: papeleta,
+        fechaInfraccion: `${anio}-${MES_DEL_PROTOTIPO[mes ?? ''] ?? '01'}-01`,
+        horaInfraccion: null,
+        lugar: LUGAR_DE_LA_INSPECCION,
+        placa: null,
+        vehiculoId: null,
+        infractorId: null,
+        propietarioId: null,
+        contribuyenteId: 1,
+        predioId: null,
+        notificacionPreviaId: null,
+        baseImponible: '5350.00',
+        porcentajeInfraccion: '0.50',
+        importeInfraccion: importeDelMock(multaS ?? '0.00'),
+        porcentajeACobrar: '0.50',
+        importeAPagar: importeDelMock(multaS ?? '0.00'),
+        importeConBeneficio: null,
+        estado: ESTADO_DE_DEUDA_ADMINISTRATIVA_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',
+        usuarioRegistro: 'admin',
+      }),
+    ),
+  );
+
+/**
+ * Como escribe el prototipo el estado de la deuda de una papeleta administrativa (columna
+ * «Estado» de `adm_notificaciones_contribuyente`): Pendiente, A cuenta, Cancelada, Fraccionada,
+ * Anulada — el vocabulario de cobranza del padron, no el del procedimiento sancionador. El
+ * recurso real solo tiene los siete valores de `EstadoDePapeleta`.
+ */
+const ESTADO_DE_DEUDA_ADMINISTRATIVA_DEL_MOCK: Readonly<Record<string, string>> = {
+  Pendiente: 'IMPUESTA',
+  'A cuenta': 'NOTIFICADA',
+  Cancelada: 'PAGADA',
+  Fraccionada: 'RESUELTA',
+  Anulada: 'ANULADA',
+};
+
+/** `Enero`..`Diciembre`, como los escribe el prototipo → el numero de mes de dos cifras. */
+const MES_DEL_PROTOTIPO: Readonly<Record<string, string>> = {
+  Enero: '01',
+  Febrero: '02',
+  Marzo: '03',
+  Abril: '04',
+  Mayo: '05',
+  Junio: '06',
+  Julio: '07',
+  Agosto: '08',
+  Setiembre: '09',
+  Septiembre: '09',
+  Octubre: '10',
+  Noviembre: '11',
+  Diciembre: '12',
+};
+
+/** `50 %` o `10` → `0.50`/`0.10`, como serializa `porcentajeUit` (`BigDecimal.toPlainString()`). */
+function fraccionDeUit(texto: string): string {
+  const numero = Number(texto.replace('%', '').trim());
+  return Number.isFinite(numero) ? (numero / 100).toFixed(2) : '0.00';
+}
+
+/**
+ * Cuadro unico de infracciones y sanciones administrativas
+ * (`CodigoInfraccionResource`, familia `ADMINISTRATIVA`, #43, #78): `GET
+ * /infracciones/cuis`.
+ *
+ * `baseLegal` es obligatorio en el recurso real y esta tabla del prototipo no
+ * dibuja ninguna cita legal: se deja un texto fijo, igual que `lugar` en
+ * `notificacionesPorContribuyente` — no es una cifra (regla 5, RNF-083 no
+ * aplica), es el mismo hueco que ya resolvia `adminEstadoCuenta` para un campo
+ * obligatorio que el prototipo no publica.
+ */
+const codigosCuis = (): Paginado =>
+  unaPagina(
+    filasDe('codigos_cuis').map(([codigo, , descripcion, uit, , medida], i) => ({
+      id: i + 1,
+      familia: 'ADMINISTRATIVA',
+      codigo,
+      descripcion,
+      porcentajeUit: fraccionDeUit(uit ?? '0'),
+      medida: medida && medida !== '—' ? medida : null,
+      puntos: null,
+      baseLegal: 'Ordenanza que aprueba el CUIS vigente',
+      vigenciaDesde: '2020-01-01',
+      vigenciaHasta: null,
+    })),
+  );
+
+/**
+ * Relacion impresa del CUIS (`CodigoInfraccionResource`, mismo catalogo que
+ * `codigosCuis`, #43, #78): `GET
+ * /infracciones/administrativas/codigos/reporte`.
+ *
+ * Es la **misma** tabla de codigos que `codigosCuis`, servida por el mismo
+ * `CodigoInfraccionRepository` con otro privilegio (`IMPRESION`): el
+ * prototipo la dibuja con otras columnas —«Base», «Sancion no pecuniaria»— y
+ * otro juego de codigos, y aqui no se fuerzan a coincidir con los de
+ * `codigos_cuis`: son dos tablas distintas del mismo prototipo portado, y
+ * unificarlas inventaria una correspondencia que el prototipo no declara.
+ * `baseLegal` sale de la columna «Base», que aqui si trae un valor real —«UIT»—
+ * y no del texto fijo que usa `codigosCuis`.
+ */
+const codigosDeReporteAdministrativo = (): Paginado =>
+  unaPagina(
+    filasDe('adm_codigos_reporte').map(([codigo, infraccion, base, uit, , medida], i) => ({
+      id: i + 1,
+      familia: 'ADMINISTRATIVA',
+      codigo,
+      descripcion: infraccion,
+      porcentajeUit: fraccionDeUit(uit ?? '0'),
+      medida: medida && medida !== '—' ? medida : null,
+      puntos: null,
+      baseLegal: base && base !== '' ? base : 'Ordenanza que aprueba el CUIS vigente',
+      vigenciaDesde: '2020-01-01',
+      vigenciaHasta: null,
+    })),
+  );
+
+/**
+ * Padron de notificaciones administrativas (`NotificacionDelPadronResource`,
+ * #53, #78): `GET .../reportes/padron-notificaciones`.
+ *
+ * `direccion` es obligatoria en el recurso real y esta tabla no la dibuja
+ * —«Infractor», no «Dirección»—: se deja un texto fijo, la misma resolucion
+ * que `baseLegal` en `codigosCuis`. `tienePapeleta`/`papeletaNumero` salen de
+ * la columna «Papeleta» tal como la escribe el prototipo, `—` para «todavia
+ * sin papeleta».
+ */
+const padronDeNotificaciones = (): Paginado =>
+  unaPagina(
+    filasDe('adm_padron_notificaciones').map(
+      ([numero, fecha, , infraccion, , , papeleta, deudaS], i) => {
+        const tienePapeleta = (papeleta ?? '—') !== '—';
+        return {
+          id: i + 1,
+          numero,
+          fecha: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+          direccion: LUGAR_DE_LA_INSPECCION,
+          motivo: infraccion,
+          plazoDias: 10,
+          estado: tienePapeleta ? 'SUBSANADA' : 'VENCIDA',
+          tienePapeleta,
+          papeletaNumero: tienePapeleta ? papeleta : null,
+          papeletaEstado: tienePapeleta ? 'IMPUESTA' : null,
+          importeDeLaPapeleta: tienePapeleta ? importeDelMock(deudaS ?? '0.00') : null,
+          actualizadoA: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        };
+      },
+    ),
+  );
+
+/**
+ * Notificaciones vencidas (`NotificacionAdministrativaResource`, #47, #78):
+ * `GET .../reportes/vencidas`.
+ *
+ * `plazoDias` se compone contando los dias de calendario entre «Fecha» y
+ * «Venció» —las dos son columnas reales del prototipo—, no una cifra
+ * inventada: es la misma composicion de presentacion que ya hace `vehiculo()`
+ * con el año de una fecha.
+ */
+const notificacionesVencidasAdministrativas = (): Paginado =>
+  unaPagina(
+    filasDe('adm_notificaciones_vencidas').map(
+      ([numero, fecha, , direccion, infraccion, vencio], i) => {
+        const fechaIso = fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO;
+        const vencimientoIso = fechaDe(vencio ?? '') ?? fechaIso;
+        return {
+          id: i + 1,
+          numero,
+          fecha: fechaIso,
+          contribuyenteId: i + 1,
+          predioId: null,
+          direccion,
+          motivo: infraccion,
+          plazoDias: diasEntre(fechaIso, vencimientoIso),
+          vencimiento: vencimientoIso,
+          estado: 'VENCIDA',
+          usuarioRegistro: 'admin',
+        };
+      },
+    ),
+  );
+
+/** Dias de calendario entre dos fechas ISO, sin horas: lo que separa a `desde` de `hasta`. */
+function diasEntre(desde: string, hasta: string): number {
+  const unDia = 24 * 60 * 60 * 1000;
+  const diferencia = Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`);
+  return Number.isFinite(diferencia) ? Math.max(0, Math.round(diferencia / unDia)) : 0;
+}
+
+/**
+ * Resumen de recaudacion por multas administrativas
+ * (`RecaudacionDeMultasResource`, #53, #78): `GET
+ * .../reportes/resumen-recaudacion`.
+ *
+ * No es un sobre paginado: el controlador real devuelve **un** objeto con una
+ * linea por (tributo, ejercicio, mes, fase). El prototipo dibuja una fila por
+ * mes con tres columnas de fase ya repartidas —«Ordinaria S/», «Coactiva S/»,
+ * «Convenios S/»—, y aqui no se inventa como el backend reparte una cifra
+ * entre fases: se publican **tres lineas por mes**, una por fase, cada una con
+ * su propio `recaudado` literal —el mismo numero que ya dibuja esa columna del
+ * prototipo—, tal como las devolveria de verdad `RecaudadoEnElLibro`.
+ */
+function resumenRecaudacionAdministrativa(): Readonly<Record<string, unknown>> {
+  const filas = filasDe('adm_resumen_recaudacion');
+  const lineas = filas.flatMap(([mes, , ordinariaS, coactivaS, conveniosS]) =>
+    (
+      [
+        ['ORDINARIA', ordinariaS],
+        ['COACTIVA', coactivaS],
+        ['CONVENIO', conveniosS],
+      ] as const
+    ).map(([fase, recaudadoS]) => ({
+      tributo: 'MULTA_ADMINISTRATIVA',
+      ejercicio: 2026,
+      mes: Number(MES_DEL_PROTOTIPO[mes ?? ''] ?? '1'),
+      fase,
+      abonos: 1,
+      recaudado: importeDelMock(recaudadoS ?? '0.00'),
+      actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    })),
+  );
+  return {
+    desde: '2026-01-01',
+    hasta: '2026-12-31',
+    total: importeDelMock(
+      filas
+        .reduce((suma, [, , , , , totalS]) => suma + Number(importeDelMock(totalS ?? '0')), 0)
+        .toFixed(2),
+    ),
+    abonos: filas.length,
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    lineas,
+  };
+}
+
+/*
+ * `adm_notificacion` (`POST .../notificaciones`) y `adm_valores` (`POST
+ * .../valores/generacion-masiva`) se quedan sin conectar por este issue —ver
+ * `pantallas/sanciones/index.ts`—, así que no tienen respuesta propia aquí: sus rutas siguen
+ * respondiendo el juego de datos del prototipo, como el resto del camino común.
+ */
+
 /* ── Coactiva: expedientes ─────────────────────────────────────────────── */
 
 /**
@@ -1877,6 +2985,8 @@ const adminEstadoCuenta = (): Paginado => {
  */
 /** Por camino del contrato, relativo a `/api/v1`. Casi todas son `GET`: ver `respaldo`. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
+  '/fiscalizacion/omisos': omisosFiscalizacion,
+  '/fiscalizacion/predial/historico': historicoFiscalizacion,
   '/catastro/vias': vias,
   '/tesoreria/convenios': convenios,
   '/rentas/contribuyentes': contribuyentes,
@@ -1901,10 +3011,30 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/seguridad/parametros': parametros,
   '/seguridad/respaldos': respaldo,
   '/transito/papeletas': papeletasTransito,
+  '/transito/papeletas/busqueda': papeletasDeBusqueda,
+  '/transito/estado-cuenta': estadoDeCuentaDeTransito,
+  '/transito/codigos': codigosDeTransito,
+  '/transito/internamientos': internamientos,
+  '/transito/reportes/padron': padronDeTransito,
+  '/transito/reportes/padron-coactiva': padronCoactivaDeTransito,
+  '/transito/reportes/padron-constancias': padronDeConstancias,
+  '/transito/reportes/record-conductor': recordDeConductor,
+  '/transito/reportes/record-vehicular': recordVehicular,
   '/infracciones/administrativas/estado-cuenta': adminEstadoCuenta,
+  '/infracciones/cuis': codigosCuis,
+  '/infracciones/administrativas/codigos/reporte': codigosDeReporteAdministrativo,
+  '/infracciones/administrativas/reportes/padron-notificaciones': padronDeNotificaciones,
+  '/infracciones/administrativas/reportes/vencidas': notificacionesVencidasAdministrativas,
+  '/infracciones/administrativas/reportes/por-contribuyente': notificacionesPorContribuyente,
   '/coactiva/expedientes': expedientesCoactivos,
   '/coactiva/deudas': deudasCoactivas,
   '/coactiva/deudas-en-beneficio': deudasCoactivasBeneficio,
+  '/autorizaciones/anuncios': anuncios,
+  '/licencias/funcionamiento': licenciaFuncionamiento,
+  '/licencias/edificacion': fueEdificacion,
+  '/licencias/edificacion/reportes/general': edificacionReporte,
+  '/licencias/ciiu': ciiu,
+  '/licencias/certificados': certificadosDeNumeracion,
 };
 
 /**

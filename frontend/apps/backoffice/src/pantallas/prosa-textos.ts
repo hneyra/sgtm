@@ -270,6 +270,19 @@ export const PIES: Readonly<Record<string, string | null>> = {
    * **afirma**, y quien la lee no tiene forma de saber que no es la suya.
    */
   consulta_deudas_beneficio: null,
+
+  /**
+   * **`fisc_estado_cuenta`: suprimido** (#80).
+   *
+   * Su pie del prototipo es «Tributo 500.00 · Reajuste 12.50 · Interés 58.35
+   * · Gastos 10.80»: el mismo tipo de cifra congelada que #72 encontro en
+   * `consulta_deudas_beneficio` — cuatro numeros de la captura del manual que
+   * se pintarian bajo la tabla sea quien sea el contribuyente consultado.
+   * `EstadoDeCuentaDeFiscalizacion.LineaDelEstadoDeCuenta` no desglosa la
+   * deuda en esas cuatro partes, y mientras nadie transfiera (#52) ninguna
+   * linea tiene ni siquiera el total.
+   */
+  fisc_estado_cuenta: null,
 };
 
 /** Las opciones cuyo pie de tabla corrige la prosa. La comprobacion de coherencia las mira. */
