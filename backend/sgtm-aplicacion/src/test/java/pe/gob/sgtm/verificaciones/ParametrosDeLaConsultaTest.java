@@ -59,7 +59,7 @@ import org.springframework.web.bind.annotation.RestController;
  *       decir por que.
  * </ul>
  */
-@DisplayName("ARQ-05 — Por donde viajan los datos: contrato y controlador")
+@DisplayName("Por donde viajan los datos: contrato y controlador (docs/50-api)")
 class ParametrosDeLaConsultaTest {
 
     private static final String RAIZ = "/api/v1";

@@ -32,7 +32,7 @@ import pe.gob.sgtm.dominio.Porcentaje;
  * de lo que ya se emitio (regla 9).
  *
  * <p>Devuelve datos, no un documento. Convertirlos en PDF, hoja de calculo o texto enriquecido es
- * la capa de generacion de documentos (#55, RNF-132): un caso de uso que supiera dibujar paginas no
+ * la capa de generacion de documentos (#55, RF-132): un caso de uso que supiera dibujar paginas no
  * se podria probar sin abrirlas.
  */
 @Service

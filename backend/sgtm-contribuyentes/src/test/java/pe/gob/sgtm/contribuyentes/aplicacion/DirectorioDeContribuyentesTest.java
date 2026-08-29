@@ -47,7 +47,7 @@ import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
  * escribiendo lo mismo</b>. Si cada uno tuviera su consulta, un dia divergirian y nadie sabria cual
  * de las dos es la buena.
  */
-@DisplayName("ARQ-01 §4.1 — Directorio de contribuyentes (API publica del contexto)")
+@DisplayName("ARQ-01 §4, regla 1 — Directorio de contribuyentes (API publica del contexto)")
 class DirectorioDeContribuyentesTest {
 
     private static final LocalDate HOY = LocalDate.of(2026, 8, 19);

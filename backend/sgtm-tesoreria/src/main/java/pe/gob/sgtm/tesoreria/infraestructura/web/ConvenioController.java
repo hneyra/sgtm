@@ -194,7 +194,7 @@ public class ConvenioController {
      *
      * <p>Una ruta y no dos porque el prototipo declara una: {@code GET /tesoreria/convenios}. Un
      * {@code GET /tesoreria/convenios/{numero}} seria una ruta que ninguna pantalla llama, y el
-     * contrato la rechazaria (ARQ-05).
+     * contrato la rechazaria ({@code ContratoDeApiTest}).
      */
     @GetMapping("/convenios")
     @RequiereAcceso(acceso = ACCESO_CONSULTA, privilegio = Privilegio.LECTURA)

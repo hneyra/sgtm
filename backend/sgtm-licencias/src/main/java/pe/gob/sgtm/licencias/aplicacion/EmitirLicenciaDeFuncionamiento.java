@@ -69,7 +69,8 @@ import pe.gob.sgtm.tesoreria.RecibosDeTramite;
  * podria generar es la deuda de <b>arbitrios del establecimiento</b>, y esa la determina {@code
  * rentas} con las tablas de la ordenanza, que estan bloqueadas por D-02b. Cuando llegue, entrara
  * por {@code cuentacorriente.GeneradorDeCargos} como entra todo cargo de otro contexto (ARQ-01 §4
- * regla 2); mientras tanto, este modulo no depende de {@code cuentacorriente} y no tiene por que.
+ * regla 2) — asi entra ya la tasa de anuncios (#51), que es por lo que el modulo depende hoy de
+ * {@code cuentacorriente}; esta emision sigue sin tocarlo.
  */
 @Service
 public class EmitirLicenciaDeFuncionamiento {

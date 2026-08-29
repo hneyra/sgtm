@@ -8,9 +8,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * <p>{@code conjuntoId} llega resuelto porque abrir la version es un acto administrativo de {@code
  * parametros} —{@code AdministrarParametros.abrirVersion}—, y {@code catastro} solo importa el
- * paquete raiz de ese contexto (ARQ-01 §4.1): Spring Modulith rechaza cualquier import a {@code
- * parametros.aplicacion} desde aqui. Cargar el arancel y abrir la version del ejercicio son dos
- * actos distintos a proposito, igual que {@code aranceles-2026.md} S1.4 los documenta en ese orden.
+ * paquete raiz de ese contexto (ARQ-01 §4, regla 1): Spring Modulith rechaza cualquier import a
+ * {@code parametros.aplicacion} desde aqui. Cargar el arancel y abrir la version del ejercicio son
+ * dos actos distintos a proposito, igual que {@code aranceles-2026.md} S1.4 los documenta en ese
+ * orden.
  *
  * @param municipalidadId identificador ya existente de la municipalidad cuyo arancel se carga
  * @param conjuntoId el conjunto de parametros, ya abierto y sin sellar, contra el que cuelga este

@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test;
  * rechazaria la transferencia legitima; por eso es {@code DEFERRABLE INITIALLY DEFERRED}, y por eso
  * la prueba verifica en que momento muerde y no solo que muerda.
  */
-@DisplayName("DAT-02 §4.2 — Titularidad: los porcentajes vigentes no exceden 100")
+@DisplayName("Titularidad (DAT-02 §4.2 de ../srtm): los porcentajes vigentes no exceden 100")
 class TitularidadNoExcede100Test {
 
     private static final java.sql.Date VIGENCIA = java.sql.Date.valueOf("2026-01-01");
