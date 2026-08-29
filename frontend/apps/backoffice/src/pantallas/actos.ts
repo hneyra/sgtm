@@ -447,12 +447,33 @@ export function impedimentoDelActo(
  * cada una: guardar en dos, imprimir en dos. Quien atiende aprende el boton
  * navy de una pantalla y en la de al lado le imprime.
  *
- * **Es opt-in por opcion, y la negacion por omision no cambia**: las 129
- * restantes reciben su lista del catalogo tal cual —{@link accionesDeLaBarra}
- * la devuelve intacta— y se dibujan exactamente como se dibujaban. Es
- * deliberado: reordenar las 134 barras a la vez cambiaria el boton navy de
- * medio sistema en un solo diff, y lo que este issue pidio es uniformar un
- * modulo.
+ * **Es opt-in por opcion, y la negacion por omision no cambia**: las que no
+ * estan aqui reciben su lista del catalogo tal cual —{@link accionesDeLaBarra}
+ * la devuelve intacta, salvo la mudanza de {@link LA_QUE_ESCRIBE}— y se dibujan
+ * exactamente como se dibujaban. Es deliberado: reordenar las 134 barras a la
+ * vez cambiaria el boton navy de medio sistema en un solo diff, y lo que aquel
+ * issue pidio es uniformar un modulo.
+ *
+ * **Y la sexta es `calles`** (#421). Su catalogo dibuja «Nuevo · Guardar ·
+ * Inactivar», su operacion es `GET /catastro/vias` y la regla de FRO-03 §5
+ * convertia «Inactivar» en el boton navy: una baja logica con el color del acto
+ * principal, que es exactamente lo que esta regla vino a corregir. Se le habia
+ * escapado a #391 §4 porque `Territorio` pasaba la lista **cruda** del catalogo
+ * en vez de la compuesta, y —el hallazgo que mas dice— **ninguna de las 266
+ * pruebas del modulo se puso roja** al cambiarlo: esa barra no la fijaba nada.
+ *
+ * Con la regla puesta, «Guardar» e «Inactivar» **se caen** y queda «Nuevo», que
+ * es el unico acto que esta pantalla puede hacer hoy —el panel de alta de #321,
+ * vivo—. No se quedan apagadas con su motivo (#332) por dos razones, y la
+ * segunda es la que decide: los dos botones ya estaban apagados y mudos, asi
+ * que no se pierde nada que se pudiera pulsar; y un motivo aqui **no lo leeria
+ * nadie**, porque la primaria de `calles` es el alta, que no lo referencia con
+ * `aria-describedby` —esa franja huerfana es justo el ruido que #332 le quito a
+ * esta pantalla—. El precedente es `sectores`, que perdio su «Guardar» por lo
+ * mismo, y las tres hojas de valuacion (ADR-0017). El dia que se conecte
+ * `editar_via` —`PUT /catastro/vias/{codigo}`, que existe en el contrato y es
+ * quien modifica y quien da de baja— la opcion declarara su escritura y los dos
+ * volveran por la misma regla: esto no borra nada, pone una condicion.
  */
 export const VOCABULARIO_UNIFORME: ReadonlySet<string> = new Set([
   'ficha_urbana',
@@ -460,7 +481,119 @@ export const VOCABULARIO_UNIFORME: ReadonlySet<string> = new Set([
   'ficha_bienes',
   'ficha_rural',
   'actualizacion_catastro',
+  'calles',
 ]);
+
+/**
+ * **Cual accion escribe, cuando no es la ultima del catalogo** (#421).
+ *
+ * Hermana de {@link VOCABULARIO_UNIFORME} y su complemento exacto: aquella
+ * recompone la barra entera por el papel de cada accion —quita modos, se queda
+ * con las altas que abren algo, manda al fondo la que guarda—; esta solo dice
+ * **cual de las que ya hay es el acto**, y deja las demas donde el catalogo las
+ * dibuja. Son dos decisiones de distinto tamaño, y por eso son dos listas.
+ *
+ * Existe porque FRO-03 §5 —«la ultima accion es la primaria»— da por supuesto
+ * que el prototipo dibuja la que guarda al final, y en once pantallas no lo
+ * hace: las capturo como barras de herramientas de escritorio —Nuevo ·
+ * Modificar · Guardar · Imprimir…—, donde el orden es el de la mano que teclea
+ * y no el de la importancia. Declarar la escritura tal cual habilita el boton
+ * equivocado, y el caso que mejor lo dice es `importacion_valores`: pulsar
+ * «Limpiar campos» importaria valores a coactiva —irreversible, RF-100— cuando
+ * quien atiende solo queria borrar el formulario.
+ *
+ * **Es un rotulo, no un indice**: es lo que el catalogo dibuja y lo que el
+ * usuario lee, el mismo criterio que `esIrreversible`, {@link DE_SALIDA} y las
+ * altas de la barra. Un indice se rompe en silencio el dia que el prototipo
+ * reordene su barra; un rotulo que ya no existe lo caza la prueba que compara
+ * cada declaracion contra el catalogo, letra por letra.
+ *
+ * **Y los rotulos no se reescriben** (RNF-080): se nombra el que el catalogo
+ * dibuja, no el que uno querria leer. Por eso `notificaciones_coactivas`
+ * declara «Grabar» y no «Guardar», y `adm_valores` declara «Procesar» y no
+ * «Generar valores» —ese rotulo es el del componente propio de `transito_valores`
+ * (#77), no el de esta pantalla—.
+ *
+ * **Gana a `DE_SALIDA`**, por lo mismo que {@link ACTOS_SIN_CAMPO} le gana desde
+ * #385: la declaracion es deliberada y escasa, y el filtro de salida es una
+ * heuristica sobre el rotulo. Aqui gana **por construccion** y no con un caso
+ * mas en {@link impedimentoDelActo}: al pasar la accion declarada al final, la
+ * de salida deja de ser la primaria y el filtro no llega a verla. Es lo que
+ * saca a `certificados` del silencio —su ultima es «Imprimir certificado», asi
+ * que su motivo se quedaba en un `title` sobre un boton `disabled`, que no
+ * llega ni al teclado ni al lector (RNF-082)—.
+ *
+ * **No conecta ninguna escritura.** Las once siguen sin declarar sus campos en
+ * `escrituras.ts`, asi que su primaria sigue apagada; lo que cambia es **cual**
+ * lo esta, y que la franja pasa a decir por que. Declararlas es de los issues
+ * de su modulo.
+ */
+export const LA_QUE_ESCRIBE: Readonly<Record<string, string>> = {
+  /* ── Coactiva (#76) ────────────────────────────────────────────────────
+     Las seis que el javadoc de `pantallas/coactiva/index.ts` censo una a una. */
+
+  /** La primera de la barra, y la unica irreversible de las cuatro (RF-100). */
+  importacion_valores: 'Importar valores',
+  /**
+   * «Generar» dicta la REC por primera vez; «Imprimir» es la reimpresion
+   * (`PeticionDeRec.reimprimir`) y «REC 2» y «Carátula» son otros dos papeles
+   * del mismo expediente. El catalogo **no dibuja ninguna «REC 1»**: la que
+   * emite es esta.
+   */
+  rec_impresion: 'Generar',
+  /** La penultima; la ultima es «Limpiar», que borra el formulario. */
+  expediente_historial: 'Guardar cambios',
+  /** La penultima; la ultima es «Imprimir» la liquidacion ya asentada. */
+  costas_procesales: 'Guardar',
+  /** La ultima es «Padrón», que es un reporte. */
+  actos_coactivos: 'Guardar',
+  /**
+   * «Grabar», que es como lo escribe el catalogo (RNF-080). La ultima es
+   * «Resol. consentida», otro acto del expediente.
+   */
+  notificaciones_coactivas: 'Grabar',
+
+  /* ── Autorizaciones y licencias (#79) ──────────────────────────────────── */
+
+  /**
+   * Las dos hojas de reporte del prototipo, con el mismo cuarteto «Exportar ·
+   * Imprimir · Pantalla · Cancelar» y la misma primaria equivocada: «Cancelar»
+   * cierra el dialogo, y el navy decia que cerrar era el acto.
+   *
+   * De las tres que quedan se declara **«Pantalla»**, y no «Exportar» ni
+   * «Imprimir» como sugeria el censo del issue: la operacion que el catalogo da
+   * a estas dos opciones es el `POST` **sin** `formato`, que devuelve el padron
+   * para dibujarlo —`LicenciaController.padron`—, mientras que exportar e
+   * imprimir son el mismo `POST` con `?formato=`, que en esta interfaz es una
+   * descarga (`useDescargaDeArchivo`) y no la primaria. Declarar «Imprimir»
+   * dejaria el navy diciendo que imprime cuando lo que hace es traer la hoja a
+   * la pantalla, que es la mentira que RNF-080 y #391 §2 cierran por los dos
+   * lados.
+   */
+  anuncios_reportes: 'Pantalla',
+  licencia_padron: 'Pantalla',
+  /**
+   * La que emite el certificado; la ultima es «Imprimir certificado», que
+   * `DE_SALIDA` reconocia **antes** de llegar a `ACTOS_SIN_CAMPO` y dejaba el
+   * motivo real —falta `nDeRecibo`— sin franja que lo contara.
+   */
+  certificados: 'Emitir',
+
+  /* ── Infracciones administrativas (#78) ────────────────────────────────── */
+
+  /** La ultima es «Imprimir» la notificacion ya registrada. */
+  adm_notificacion: 'Guardar',
+  /**
+   * «Procesar» es la que lanza la corrida —`POST .../valores/generacion-masiva`,
+   * `PeticionDeCorridaDeValores`—; «Guardar» graba el criterio, que ninguna
+   * operacion del contrato publica todavia, y «Imprimir» es la ultima.
+   */
+  adm_valores: 'Procesar',
+};
+
+/** Lo que declara esa opcion, o nada. `Object.hasOwn`, como el resto del camino. */
+const laQueEscribe = (opcion: string): string | undefined =>
+  Object.hasOwn(LA_QUE_ESCRIBE, opcion) ? LA_QUE_ESCRIBE[opcion] : undefined;
 
 /** La barra tal como se dibuja: que acciones, y si alguna de ellas es la primaria. */
 export interface BarraDeLaPantalla {
@@ -515,6 +648,12 @@ export interface BarraDeLaPantalla {
  * misma que dibuja `BarraDeAcciones`», y desde este issue esa lista ya no es
  * siempre la del catalogo. Contar sobre la del catalogo dejaria a la funcion
  * explicando un boton que no existe.
+ *
+ * **Y desde #421 hay una segunda puerta, mas pequeña**: una opcion que declare
+ * {@link LA_QUE_ESCRIBE} sin declarar el vocabulario uniforme recibe su lista
+ * entera, con la accion declarada movida al final. Las dos son opt-in y
+ * **ninguna opcion declara las dos**: serian dos reglas decidiendo la misma
+ * cosa —cual es la primaria—, y hay una prueba que lo exige.
  */
 export function accionesDeLaBarra(
   opcion: string,
@@ -523,7 +662,12 @@ export function accionesDeLaBarra(
   /** Los rotulos que **abren un alta de verdad** aqui, tal como los declara la composicion. */
   altas: readonly string[] = [],
 ): BarraDeLaPantalla {
-  if (!VOCABULARIO_UNIFORME.has(opcion)) return { acciones, conPrimaria: true };
+  if (!VOCABULARIO_UNIFORME.has(opcion)) {
+    const queEscribe = laQueEscribe(opcion);
+    return queEscribe === undefined
+      ? { acciones, conPrimaria: true }
+      : conLaQueEscribeAlFinal(acciones, queEscribe);
+  }
   // Si la opcion no declara su escritura, no hay a donde guardar: la accion que
   // escribiria se cae, en vez de quedarse apagada prometiendo un guardado.
   const puedeEscribir = escrituraDe(opcion) !== undefined;
@@ -547,4 +691,28 @@ export function accionesDeLaBarra(
   return primaria === undefined
     ? { acciones: secundarias, conPrimaria: false }
     : { acciones: [...secundarias, primaria], conPrimaria: true };
+}
+
+/**
+ * La barra con la accion declarada al final, y las demas como estaban.
+ *
+ * **No quita ninguna y no reordena nada mas.** Mover la que escribe es todo lo
+ * que hace falta para que la primaria sea la que escribe; quitar botones es lo
+ * que hace el vocabulario uniforme, que es una decision mas grande —cambia lo
+ * que la pantalla ofrece, no solo cual de sus ofertas es el acto— y tiene su
+ * propia lista. Aqui las once pantallas siguen dibujando lo que el prototipo
+ * capturo, apagado como estaba, y solo cambia cual lleva el color del acto.
+ *
+ * Si el rotulo declarado **no esta** en el catalogo, la lista vuelve intacta: es
+ * una declaracion muerta, y lo que la caza es la prueba que compara cada rotulo
+ * contra el catalogo letra por letra —no un fallo en ventanilla, que dejaria la
+ * pantalla sin barra por una errata—.
+ */
+function conLaQueEscribeAlFinal(acciones: readonly string[], rotulo: string): BarraDeLaPantalla {
+  const declarada = acciones.find((accion) => accion.trim() === rotulo);
+  if (declarada === undefined) return { acciones, conPrimaria: true };
+  return {
+    acciones: [...acciones.filter((accion) => accion !== declarada), declarada],
+    conPrimaria: true,
+  };
 }

@@ -66,12 +66,23 @@ const HUELLAS = [
  * modulos de la onda 4, no para crecer sin mirar: el mayor trozo por modulo
  * sigue apretado en 11 KB.
  *
+ * **Y a 157 el 2026-08-29** (#421), que es la subida mas pequena que cabe. Lo
+ * que la pide es `LA_QUE_ESCRIBE` (`pantallas/actos.ts`): once pares
+ * opcion → rotulo, 0,2 KB comprimidos, que dicen cual accion escribe en las
+ * pantallas donde el prototipo no la dibujo la ultima. La alternativa medida no
+ * es «no gastar»: son **once componentes propios**, uno por opcion, como los que
+ * #75 escribio para `valores_masivo` y `pase_coactiva`; el mas pequeno de
+ * aquellos pesa mas que este mapa entero, y once dejarian ademas once sitios
+ * donde volver a equivocarse. Lo medido al subirlo: 156,1 con la rama ya puesta,
+ * sobre los 155,9 que ya traia `main` —el margen que quedaba era de 0,1 KB, asi
+ * que cualquier cambio transversal habria tenido que tocar este numero—.
+ *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */
 const PRESUPUESTO = {
   /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
-  arranque: 156,
+  arranque: 157,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**

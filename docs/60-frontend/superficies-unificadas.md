@@ -106,9 +106,40 @@ el botón navy acaba siendo «Imprimir» en una pantalla y «Guardar» en la sig
 botón navy de medio sistema en un solo diff; hay una prueba que exige que las opciones no declaradas
 reciban su lista del catálogo intacta.
 
+### 3.1 Cuando la que escribe no es la última
+
+El prototipo capturó buena parte de las pantallas de escritura como **barras de herramientas de
+escritorio** —Nuevo · Modificar · Guardar · Imprimir…—, donde el orden es el de la mano que teclea y
+no el de la importancia. En once opciones la última no es la que escribe, y declarar la escritura tal
+cual habilita el botón equivocado: pulsar «Limpiar campos» en `importación de valores` importaría
+valores a coactiva —irreversible, RF-100— cuando quien atiende sólo quería borrar el formulario.
+
+> La opción declara **el rótulo** de la acción que escribe (`LA_QUE_ESCRIBE`); esa pasa al final de
+> la barra —que es donde va la primaria— y **no se quita ninguna otra**.
+
+Es la hermana pequeña de la regla anterior, y son dos listas porque son dos decisiones de distinto
+tamaño: el vocabulario uniforme cambia **lo que la pantalla ofrece**, y esto sólo dice cuál de sus
+ofertas es el acto. Ninguna opción declara las dos, y hay una prueba que lo exige.
+
+Un **rótulo**, no un índice: es lo que el catálogo dibuja y lo que el usuario lee, el mismo criterio
+que `esIrreversible` y `DE_SALIDA`. Un índice se rompe en silencio si el prototipo reordena; un
+rótulo que ya no existe lo caza la prueba que compara cada declaración contra el catálogo, letra por
+letra. Y los rótulos no se reescriben (RNF-080): se declara «Grabar» donde el manual dice «Grabar».
+
+**Gana a `DE_SALIDA`**, por lo mismo que `ACTOS_SIN_CAMPO` le gana desde #385: la declaración es
+deliberada y escasa, y el filtro de salida es una heurística sobre el rótulo. Gana **por
+construcción** —al pasar la declarada al final, la de salida deja de ser la primaria—, así que la
+mutación que lo mide es devolver el orden, no quitar un `if`.
+
 Y el censo de `actos-honestos.test.tsx` cuenta **la barra que se dibuja**, no la lista cruda del
 catálogo: `impedimentoDelActo` promete explicar «la última acción, la misma que dibuja
 `BarraDeAcciones`», y con la lista cruda explicaría un botón que ya no existe.
+
+**Quien compone la barra tiene que pedírsela a `accionesDeLaBarra`.** No basta con declararlo: una
+superficie propia que pase `estructura.acciones` tal cual no se entera de ninguna de las dos reglas,
+y eso es lo que le pasó a «Vías y calles» —su «Inactivar», una baja lógica, era el botón navy de una
+pantalla que sólo lee—. Al medirlo, ninguna de las 266 pruebas del módulo se puso roja: esa barra no
+la fijaba nada. Una barra compuesta a mano necesita su prueba, y la prueba nombra la opción.
 
 ## 4. Un solo buscador
 
@@ -170,6 +201,8 @@ Las que este patrón pide siempre:
 | Quitar la guarda de permiso de las pestañas | Regla 4 |
 | Devolver el orden del catálogo a la barra | §3: la primaria vuelve a ser «Imprimir» |
 | Dejar un acto de modo detrás del verbo que guarda | §3: le robaría la primaria |
+| Renombrar el rótulo declarado en `LA_QUE_ESCRIBE` | §3.1: la declaración queda muerta y la pantalla, igual |
+| Pasar `estructura.acciones` a la barra desde una superficie propia | §3.1: ninguna de las dos reglas se aplica |
 | La barra de filtros, también con registro abierto | §4 |
 | Un bloque de la anatomía con datos que la API no publica | §2 |
 | Plegar un grupo cuya superficie no lleva a todas sus opciones | §5 |

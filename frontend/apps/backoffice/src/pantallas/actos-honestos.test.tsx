@@ -5,9 +5,11 @@ import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { escribe } from '@sgtm/api-client';
 import { todasLasPantallas } from '../catalogo';
 import { montarEnRuta } from '../pruebas/montar';
+import { COMPONENTES_PROPIOS } from './Pantalla';
 import { motivoDeLaPrimaria, primariaApagada } from '../pruebas/acciones';
 import {
   ACTOS_SIN_CAMPO,
+  LA_QUE_ESCRIBE,
   VOCABULARIO_UNIFORME,
   accionesDeLaBarra,
   impedimentoDelActo,
@@ -225,7 +227,16 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // `sin-backend` —«aquí todavía no se puede guardar nada»— por un boton
       // que la barra uniforme ya no dibuja. Lo que queda de ella es «Nuevo ·
       // Imprimir»: una consulta y su impresion, que es `salida`.
-      salida: 47,
+      //
+      // **Seis menos con #421**, y las seis por el mismo motivo: su primaria
+      // del catalogo era de salida —«Limpiar campos», «Limpiar», «Imprimir»,
+      // «Imprimir», «Imprimir», «Imprimir certificado»— y la que de verdad
+      // escribe estaba antes. `importacion_valores`, `expediente_historial`,
+      // `costas_procesales`, `adm_notificacion`, `adm_valores` y `certificados`
+      // pasan a `sin-declaracion`, que es lo que les toca: su operacion escribe
+      // y no han declarado sus campos. Estaban aqui **por el boton equivocado**,
+      // asi que ninguna de las seis se leia como lo que es.
+      salida: 41,
       // Dos menos con #391 §2, y las dos son el mismo defecto contado de dos
       // maneras: `ficha_urbana` se va a `salida` y `ficha_bienes` a
       // `sin-determinacion`. Las dos estaban aqui por su «Guardar» del
@@ -234,9 +245,18 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // Nueve se mudan a `sin-campo` en la onda 4: cuatro de transito (#77),
       // tres de fiscalizacion (#80) — mas las tres de tesoreria y las dos
       // transferencias que ya se habian movido antes; y dos se van a
-      // `declarada` con #77. **Una menos con #424**: `transito_reportes` se va
-      // a `lectura`.
-      'sin-declaracion': 18,
+      // `declarada` con #77.
+      //
+      // **Seis mas con #421**, las mismas seis que salen de `salida`. Las otras
+      // cinco de `LA_QUE_ESCRIBE` ya estaban aqui —su primaria del catalogo no
+      // pasaba ningun filtro de salida («REC 2», «Padrón», «Resol. consentida»,
+      // «Cancelar» y «Cancelar»)—, asi que cambian de boton sin cambiar de
+      // casilla: el censo cuenta la causa, no el rotulo.
+      //
+      // **Y una menos con #424**: `transito_reportes` se va a `lectura`. Las dos
+      // mudanzas van en direcciones opuestas y **el numero no se sumo a mano**:
+      // se recompuso ejecutando el censo sobre el arbol ya mergeado.
+      'sin-declaracion': 24,
       // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
       // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
       // «Guardar» de una ficha `GET` se cae— y repartir el valor de una
@@ -336,19 +356,28 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
  * `catastro/vocabulario-y-buscador.test.tsx`.
  */
 describe('un solo vocabulario de accion, y solo donde se declara', () => {
-  it('las 129 que no lo declaran reciben su lista del catalogo, intacta', async () => {
+  it('las 117 que no declaran nada reciben su lista del catalogo, intacta', async () => {
     const pantallas = await todasLasPantallas();
+    let intactas = 0;
     for (const [opcion, estructura] of Object.entries(pantallas)) {
-      if (VOCABULARIO_UNIFORME.has(opcion)) continue;
+      if (VOCABULARIO_UNIFORME.has(opcion) || Object.hasOwn(LA_QUE_ESCRIBE, opcion)) continue;
       const acciones = estructura.acciones ?? [];
       const barra = accionesDeLaBarra(opcion, acciones, altasDe(opcion));
       expect(barra.acciones, `«${opcion}» cambio de barra sin declararlo`).toEqual(acciones);
       // Y siguen teniendo primaria: la regla de FRO-03 §5, tal cual.
       expect(barra.conPrimaria).toBe(true);
+      intactas += 1;
     }
-    // Y las cinco que si lo declaran existen de verdad en el catalogo: sin
+    /* Y **cuantas son**, que es lo que convierte el bucle en una comprobacion.
+       Sin esta cifra, meter media docena de opciones en cualquiera de las dos
+       listas las sacaria del bucle sin que nada lo dijera: el recorrido pasaria
+       igual, con menos vueltas. 134 − 6 − 11. */
+    expect(intactas).toBe(117);
+    expect(VOCABULARIO_UNIFORME.size).toBe(6);
+    expect(Object.keys(LA_QUE_ESCRIBE).length).toBe(11);
+    // Y las seis que si lo declaran existen de verdad en el catalogo: sin
     // esto, un identificador mal escrito dejaria la regla sin aplicarse a nada
-    // y las cinco pruebas de abajo seguirian en verde.
+    // y las pruebas de abajo seguirian en verde.
     for (const opcion of VOCABULARIO_UNIFORME) {
       expect(Object.hasOwn(pantallas, opcion), `«${opcion}» no esta en el catalogo`).toBe(true);
     }
@@ -369,6 +398,12 @@ describe('un solo vocabulario de accion, y solo donde se declara', () => {
     // La unica de las cinco que escribe, y su «Guardar» pasa **al final**: el
     // catalogo lo dibuja tercero, con «Quitar» detras.
     { opcion: 'actualizacion_catastro', barra: ['Imprimir', 'Guardar'], conPrimaria: true },
+    /* La sexta, y la que #421 rescata: su catalogo dibuja «Nuevo · Guardar ·
+       Inactivar» sobre `GET /catastro/vias`, asi que la regla de FRO-03 §5
+       hacia de «Inactivar» —una baja logica— el boton navy. Los dos verbos se
+       caen porque no hay a donde escribir, y queda el alta, que es el unico
+       acto que esta pantalla puede hacer hoy. */
+    { opcion: 'calles', barra: ['Nuevo'], conPrimaria: false },
   ])('$opcion compone $barra', async ({ opcion, barra, conPrimaria }) => {
     const pantallas = await todasLasPantallas();
     const compuesta = accionesDeLaBarra(opcion, pantallas[opcion]?.acciones ?? [], altasDe(opcion));
@@ -421,6 +456,225 @@ describe('un solo vocabulario de accion, y solo donde se declara', () => {
       accionesDeLaBarra(opcion, pantallas[opcion]?.acciones ?? [], altasDe(opcion)).acciones;
     expect(causaDe('ficha_urbana', barraDe('ficha_urbana'))).toBe('ninguna');
     expect(causaDe('ficha_bienes', barraDe('ficha_bienes'))).toBe('sin-determinacion');
+  });
+});
+
+/**
+ * **La primaria que no guarda** (#421), en el mecanismo.
+ *
+ * Once pantallas del prototipo dibujan la accion que escribe **antes** de la
+ * ultima, y FRO-03 §5 hace primaria a la ultima. El resultado no es un detalle
+ * de estilo: en `importacion_valores` el boton navy decia «Limpiar campos» y lo
+ * que hay detras es una importacion a coactiva, irreversible (RF-100).
+ *
+ * Lo que se comprueba aqui es la regla, sin montar nada; lo que llega a
+ * ventanilla, mas abajo, con dos pantallas montadas de verdad.
+ */
+describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
+  it.each([
+    // Coactiva (#76): las seis que su javadoc censo una a una.
+    {
+      opcion: 'importacion_valores',
+      escribe: 'Importar valores',
+      barra: ['Expedientes libres', 'Rechazar recaudo', 'Limpiar campos', 'Importar valores'],
+    },
+    {
+      opcion: 'rec_impresion',
+      escribe: 'Generar',
+      barra: [
+        'Listar expedientes',
+        'Seleccionar todos',
+        'Imprimir',
+        'Carátula',
+        'REC 2',
+        'Generar',
+      ],
+    },
+    {
+      opcion: 'expediente_historial',
+      escribe: 'Guardar cambios',
+      barra: ['Nuevo', 'Modificar', 'Quitar', 'Limpiar', 'Guardar cambios'],
+    },
+    {
+      opcion: 'costas_procesales',
+      escribe: 'Guardar',
+      barra: ['Nuevo', 'Modificar', 'Anular', 'Imprimir', 'Guardar'],
+    },
+    {
+      opcion: 'actos_coactivos',
+      escribe: 'Guardar',
+      barra: ['Nuevo', 'Modificar', 'Imprimir', 'Padrón', 'Guardar'],
+    },
+    {
+      opcion: 'notificaciones_coactivas',
+      escribe: 'Grabar',
+      barra: ['Nuevo', 'Modificar', 'Deshacer', 'Vista', 'Resol. consentida', 'Grabar'],
+    },
+    // Autorizaciones y licencias (#79).
+    {
+      opcion: 'anuncios_reportes',
+      escribe: 'Pantalla',
+      barra: ['Exportar', 'Imprimir', 'Cancelar', 'Pantalla'],
+    },
+    {
+      opcion: 'licencia_padron',
+      escribe: 'Pantalla',
+      barra: ['Exportar', 'Imprimir', 'Cancelar', 'Pantalla'],
+    },
+    { opcion: 'certificados', escribe: 'Emitir', barra: ['Imprimir certificado', 'Emitir'] },
+    // Infracciones administrativas (#78).
+    {
+      opcion: 'adm_notificacion',
+      escribe: 'Guardar',
+      barra: ['Nuevo', 'Modificar', 'Anular', 'Imprimir', 'Guardar'],
+    },
+    {
+      opcion: 'adm_valores',
+      escribe: 'Procesar',
+      barra: ['Nuevo', 'Modificar', 'Guardar', 'Anular', 'Imprimir', 'Procesar'],
+    },
+  ])('$opcion pone «$escribe» al final, y no quita ninguna', async ({ opcion, escribe, barra }) => {
+    const pantallas = await todasLasPantallas();
+    const compuesta = accionesDeLaBarra(opcion, pantallas[opcion]?.acciones ?? [], altasDe(opcion));
+
+    expect(compuesta.acciones).toEqual(barra);
+    // La primaria es la ultima (FRO-03 §5), y ahora es la que escribe.
+    expect(compuesta.acciones[compuesta.acciones.length - 1]).toBe(escribe);
+    expect(compuesta.conPrimaria).toBe(true);
+    /* Y **no se pierde ninguna**: esta declaracion mueve, no quita. Quitar es lo
+       que hace el vocabulario uniforme, que es otra decision y otra lista. */
+    expect([...compuesta.acciones].sort()).toEqual([...(pantallas[opcion]?.acciones ?? [])].sort());
+  });
+
+  /**
+   * **Cada rotulo declarado existe letra por letra en el catalogo de su
+   * opcion**, y la opcion existe.
+   *
+   * Es la misma guarda que las seis de `VOCABULARIO_UNIFORME`, y aqui hace mas
+   * falta todavia porque lo declarado es texto: una errata —«Guardar cambio»,
+   * «Emitír»— deja la declaracion muerta y la pantalla exactamente como estaba,
+   * con su primaria equivocada y sin que nada lo diga. `conLaQueEscribeAlFinal`
+   * devuelve la lista intacta a proposito para que el fallo sea este rojo y no
+   * una barra en blanco en ventanilla.
+   */
+  it('cada rotulo declarado es uno que el catalogo de esa opcion dibuja', async () => {
+    const pantallas = await todasLasPantallas();
+    for (const [opcion, rotulo] of Object.entries(LA_QUE_ESCRIBE)) {
+      const acciones = pantallas[opcion]?.acciones;
+      expect(acciones, `«${opcion}» no esta en el catalogo`).toBeDefined();
+      expect(acciones ?? [], `«${opcion}» no dibuja ninguna accion «${rotulo}»`).toContain(rotulo);
+    }
+  });
+
+  /**
+   * **Ninguna opcion declara las dos cosas.**
+   *
+   * Serian dos reglas decidiendo lo mismo —cual accion es la primaria—, y la que
+   * ganaria seria la del `if` que este primero, que es la peor forma de decidir
+   * una convencion. Son dos decisiones de distinto tamaño: el vocabulario
+   * uniforme cambia **lo que la pantalla ofrece** (quita modos, tira los verbos
+   * que no tienen a donde escribir) y esto solo dice cual de sus ofertas es el
+   * acto.
+   */
+  it('el vocabulario uniforme y la accion declarada no se pisan', () => {
+    for (const opcion of Object.keys(LA_QUE_ESCRIBE)) {
+      expect(VOCABULARIO_UNIFORME.has(opcion), `«${opcion}» declara las dos reglas`).toBe(false);
+    }
+  });
+
+  /**
+   * **El renderizador comun no compone ninguna barra del vocabulario uniforme.**
+   *
+   * `Pantalla.tsx` llama a `accionesDeLaBarra` **sin** los rotulos de las altas,
+   * y eso solo es correcto mientras las seis opciones que declaran el vocabulario
+   * tengan componente propio: ese argumento decide si un «Nuevo» se queda en la
+   * barra o se cae, y solo lo lee esa rama. Pasarlo «por si acaso» seria codigo
+   * que nunca se ejecuta; no pasarlo sin esta prueba seria una suposicion que se
+   * rompe en silencio —la barra perderia su alta y nadie sabria por que—.
+   */
+  it('las seis del vocabulario uniforme tienen componente propio', () => {
+    for (const opcion of VOCABULARIO_UNIFORME) {
+      expect(
+        Object.hasOwn(COMPONENTES_PROPIOS, opcion),
+        `«${opcion}» declara el vocabulario uniforme y la dibuja el renderizador comun`,
+      ).toBe(true);
+    }
+  });
+
+  /**
+   * **La declaracion gana a `DE_SALIDA`**, y `certificados` es donde se ve.
+   *
+   * Su catalogo es «Emitir · Imprimir certificado», asi que la primaria de
+   * FRO-03 §5 empieza por «imprimir» y `impedimentoDelActo` la reconoce como
+   * salida **antes** de mirar nada mas: devolvia `undefined`, la franja se
+   * quedaba vacia y el motivo real —`CertificadoController.emitir` exige
+   * `nDeRecibo`, y esta pantalla no dibuja ningun campo para el— se quedaba en
+   * un `title` sobre un boton `disabled`, que no llega ni al teclado ni al
+   * lector (RNF-082). Es el mismo defecto que #385 cerro un escalon mas abajo
+   * para `ACTOS_SIN_CAMPO`, y se cierra por el mismo motivo: la declaracion es
+   * deliberada y escasa; `DE_SALIDA` es una heuristica sobre el rotulo.
+   *
+   * Gana **por construccion**: al pasar «Emitir» al final, el filtro de salida
+   * ya no ve una primaria de impresion. Por eso la rotura que lo mide es
+   * devolver el orden, no quitar un `if`.
+   */
+  it('certificados: con el orden del catalogo no hay franja; con el compuesto, si', async () => {
+    const pantallas = await todasLasPantallas();
+    const acciones = pantallas['certificados']?.acciones ?? [];
+
+    // Como estaba: «Imprimir certificado» de primaria, y el filtro de salida
+    // devolvia `undefined` sin llegar a preguntar por que no se puede guardar.
+    expect(acciones[acciones.length - 1]).toBe('Imprimir certificado');
+    expect(impedimentoDelActo('certificados', acciones)).toBeUndefined();
+
+    // Con la barra compuesta, la primaria es «Emitir» y la franja lo cuenta.
+    const barra = accionesDeLaBarra('certificados', acciones, altasDe('certificados')).acciones;
+    expect(barra[barra.length - 1]).toBe('Emitir');
+    expect(impedimentoDelActo('certificados', barra)?.causa).toBe('sin-declaracion');
+  });
+
+  /**
+   * Los seis testigos del censo, nombrados: los recuentos solos dicen que algo
+   * se movio, no cual ni por que.
+   *
+   * Las otras cinco de `LA_QUE_ESCRIBE` cambian de boton **sin** cambiar de
+   * casilla —su primaria del catalogo tampoco pasaba ningun filtro de salida—,
+   * y eso tambien se afirma aqui: si se movieran, el censo cuadraria por otro
+   * camino y nadie se enteraria.
+   */
+  it('las seis que se mudan de casilla lo hacen por su barra, no por su catalogo', async () => {
+    const pantallas = await todasLasPantallas();
+    const causaDe = (opcion: string, acciones: readonly string[]) =>
+      impedimentoDelActo(opcion, acciones)?.causa ?? 'ninguna';
+    const delCatalogo = (opcion: string) => pantallas[opcion]?.acciones ?? [];
+    const deLaBarra = (opcion: string) =>
+      accionesDeLaBarra(opcion, delCatalogo(opcion), altasDe(opcion)).acciones;
+
+    for (const opcion of [
+      'importacion_valores',
+      'expediente_historial',
+      'costas_procesales',
+      'adm_notificacion',
+      'adm_valores',
+      'certificados',
+    ]) {
+      // Con la lista cruda: una primaria de salida, y ninguna franja.
+      expect(causaDe(opcion, delCatalogo(opcion)), `«${opcion}» del catalogo`).toBe('ninguna');
+      // Con la barra: la operacion escribe y la opcion no ha declarado sus campos.
+      expect(causaDe(opcion, deLaBarra(opcion)), `«${opcion}» compuesta`).toBe('sin-declaracion');
+    }
+    for (const opcion of [
+      'rec_impresion',
+      'actos_coactivos',
+      'notificaciones_coactivas',
+      'anuncios_reportes',
+      'licencia_padron',
+    ]) {
+      expect(causaDe(opcion, delCatalogo(opcion)), `«${opcion}» del catalogo`).toBe(
+        'sin-declaracion',
+      );
+      expect(causaDe(opcion, deLaBarra(opcion)), `«${opcion}» compuesta`).toBe('sin-declaracion');
+    }
   });
 });
 
@@ -547,6 +801,65 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
     expect(document.getElementById('sgtm-motivo-de-la-accion')?.textContent).toBe('');
     expect(document.getElementById('sgtm-motivo-de-la-accion')).not.toHaveAttribute('data-causa');
   });
+
+  /**
+   * **La accion que escribe lleva el color del acto, y las demas no** (#421),
+   * en la pantalla.
+   *
+   * Dos de las once, elegidas por lo que cada una demuestra:
+   *
+   *   `importacion_valores`  el caso que da nombre al defecto. El navy decia
+   *                          «Limpiar campos» y detras hay una importacion a
+   *                          coactiva, irreversible (RF-100)
+   *   `certificados`         el que ademas **estrena la franja**: su ultima es
+   *                          «Imprimir certificado», asi que `DE_SALIDA` la
+   *                          silenciaba antes de mirar nada mas
+   *
+   * Y las dos siguen apagadas: aqui no se conecta ninguna escritura. Lo que
+   * cambia es cual esta apagada y que ahora dice por que, en una franja que se
+   * lee (RNF-082) en vez de un `title` sobre un boton `disabled`.
+   */
+  it.each([
+    {
+      caso: 'la importacion a coactiva',
+      ruta: '/coactiva/importacion-valores',
+      escribe: 'Importar valores',
+      ultimaDelCatalogo: 'Limpiar campos',
+    },
+    {
+      caso: 'el certificado, que ademas estrena franja',
+      ruta: '/autorizaciones-y-licencias/certificados',
+      escribe: 'Emitir',
+      ultimaDelCatalogo: 'Imprimir certificado',
+    },
+  ])(
+    '$caso: la primaria es «$escribe», no «$ultimaDelCatalogo»',
+    async ({ ruta, escribe, ultimaDelCatalogo }) => {
+      const montada = montarEnRuta(ruta);
+      await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+      const navy = [...document.querySelectorAll('.sgtm-acciones .sgtm-boton--primario')].map(
+        (boton) => boton.textContent,
+      );
+      expect(navy, `el boton navy de «${ruta}»`).toEqual([escribe]);
+      // Y la que era primaria sigue dibujada, de secundaria: esto mueve, no quita.
+      expect(screen.getByRole('button', { name: ultimaDelCatalogo })).toHaveClass(
+        'sgtm-boton--secundario',
+      );
+
+      /* Sigue sin poder guardar —la escritura la declara el issue de su modulo—
+         y ahora lo dice donde se lee: apagada con `aria-disabled`, enfocable, y
+         con la franja que su `aria-describedby` señala. */
+      primariaApagada();
+      expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
+      expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
+        'data-causa',
+        'sin-declaracion',
+      );
+
+      montada.unmount();
+    },
+  );
 
   /**
    * **La franja no aparece donde la composicion ya da un acto** (#332).

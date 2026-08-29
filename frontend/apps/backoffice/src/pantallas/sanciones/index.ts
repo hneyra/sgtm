@@ -49,20 +49,24 @@ import {
  *
  *   `adm_notificacion`               `NotificacionAdministrativaController` exige `numero`,
  *                                    `fecha`, `direccion` y `motivo`, y el catálogo sí dibuja
- *                                    controles para los cuatro — pero la última acción de esta
- *                                    opción es «Imprimir», no «Guardar»
+ *                                    controles para los cuatro. Lo que faltaba era el botón: la
+ *                                    última acción de esta opción es «Imprimir», no «Guardar»
  *                                    (`["Nuevo","Modificar","Guardar","Anular","Imprimir"]`), y el
  *                                    renderizador genérico trata siempre la **última** como la
- *                                    primaria (FRO-03 §5): con el camino común, pulsar «Imprimir»
- *                                    registraría la notificación sin decirlo. Un componente propio
- *                                    que reordenara la barra sería honesto, pero es exactamente el
- *                                    trabajo que este issue no le asigna a esta opción — queda
- *                                    documentado aquí para quien lo retome.
- *   `adm_valores`                    Mismo hueco de primaria, y además `PeticionDeCorridaDeValores`
- *                                    exige **uno** de `papeletas` (una lista) o `desde`/`hasta` (un
- *                                    rango), que el catálogo de esta opción no dibuja —sus campos
- *                                    son «Código de criterio», «Tipo de recaudo», «Oficina»…, del
- *                                    todo ajenos al cuerpo real—.
+ *                                    primaria (FRO-03 §5), así que con el camino común pulsar
+ *                                    «Imprimir» habría registrado la notificación sin decirlo.
+ *                                    **#421 lo cerró sin componente propio**: la opción declara
+ *                                    «Guardar» en `LA_QUE_ESCRIBE` (`pantallas/actos.ts`) y esa
+ *                                    pasa al final de la barra. Conectar la escritura —declarar
+ *                                    sus cuatro campos— sigue siendo trabajo del issue de este
+ *                                    módulo.
+ *   `adm_valores`                    Su primaria ya está en su sitio por lo mismo —declara
+ *                                    «Procesar», que es la que lanza la corrida—, pero además
+ *                                    `PeticionDeCorridaDeValores` exige **uno** de `papeletas`
+ *                                    (una lista) o `desde`/`hasta` (un rango), que el catálogo de
+ *                                    esta opción no dibuja —sus campos son «Código de criterio»,
+ *                                    «Tipo de recaudo», «Oficina»…, del todo ajenos al cuerpo
+ *                                    real—.
  *   `adm_resolucion_gerencia`        `ResolucionesDeGerenciaController.administrativa` exige
  *                                    `papeleta`, `fecha` y `sustento` en el cuerpo, y el catálogo
  *                                    de esta opción **no dibuja ninguna sección, ningún campo y
@@ -84,7 +88,13 @@ import {
  *                                    Conectar un emisor que promete diez reportes y sirve tres
  *                                    fingiría cobertura que no tiene; `adm_padron_notificaciones` y
  *                                    `adm_resumen_recaudacion`, que sí tienen `GET` propio, quedan
- *                                    conectadas arriba de todos modos.
+ *                                    conectadas arriba de todos modos. **Y su primaria sigue
+ *                                    siendo «Cancelar»**, que es el mismo cuarteto de
+ *                                    `anuncios_reportes` y `licencia_padron` (#421): no se declaró
+ *                                    con ellas porque su bloqueo no es el botón sino los siete
+ *                                    reportes que el desplegable ofrece y el backend no tiene, y
+ *                                    mover el navy a «Pantalla» aquí sería decir que sólo falta
+ *                                    conectar. Se declara cuando se decida qué hace esa pantalla.
  *
  * El controlador de `adm_estado_cuenta` sirve el **mismo** `PapeletaResource` que `papeletas`
  * (`../transito`), filtrado a `Familia.ADMINISTRATIVA` y a lo todavía pendiente

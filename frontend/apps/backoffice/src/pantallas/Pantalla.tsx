@@ -29,7 +29,7 @@ import { useEscritura } from './escritura';
 import { useFocoEnLaAccion, useFocoTrasGuardar } from './foco';
 import { avisoDe, cargarProsa, notaDe } from './prosa';
 import { escrituraDe } from './escrituras';
-import { impedimentoDelActo } from './actos';
+import { accionesDeLaBarra, impedimentoDelActo } from './actos';
 import { useEjercicio } from '../app/ejercicio';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
@@ -328,8 +328,16 @@ const Respaldos = lazy(async () => ({
  *
  * Viven en su propio componente en vez de forzar al renderizador comun a
  * saber de listas, de booleanos o de un verbo que miente.
+ *
+ * **Se exporta para una prueba, no para reusarla** (#421): el renderizador
+ * comun compone su barra con `accionesDeLaBarra` **sin** los rotulos de las
+ * altas, porque ese argumento solo lo lee la rama del vocabulario uniforme y
+ * ninguna de las opciones que lo declaran llega hasta aqui. Esa afirmacion la
+ * sostiene una prueba que cruza `VOCABULARIO_UNIFORME` con esta lista; sin ella
+ * seria una suposicion que se rompe en silencio el dia que alguien declare el
+ * vocabulario para una opcion sin componente propio.
  */
-const COMPONENTES_PROPIOS: Readonly<
+export const COMPONENTES_PROPIOS: Readonly<
   Record<string, ComponentType<{ readonly estructura: Estructura }>>
 > = {
   permisos: PermisosMatrix,
@@ -541,14 +549,33 @@ function Bloques({
     composicion.altaDeFila !== undefined ||
     composicion.flujo !== undefined ||
     composicion.acto !== undefined;
+  /* **La barra que se dibuja, no la lista cruda del catalogo** (#391 §2, #421).
+     Para 117 de las 134 esto devuelve la lista intacta y no cambia nada; para
+     las once que declaran cual accion escribe, mueve esa al final —que es donde
+     `BarraDeAcciones` pone la primaria (FRO-03 §5)— y deja las demas como
+     estaban. Sin esto, «Limpiar campos» seria el boton navy de la importacion a
+     coactiva, y su motivo se leeria de un `title` sobre un boton apagado, que no
+     llega ni al teclado ni al lector (RNF-082).
+
+     **Sin los rotulos de las altas, y no por descuido**: ese argumento solo lo
+     lee la rama del vocabulario uniforme, que recompone la barra entera, y
+     ninguna de las opciones que la declaran se dibuja aqui —las seis tienen
+     componente propio—. Pasarlo seria codigo que nunca se ejecuta; lo que
+     sostiene la afirmacion es la prueba que exige que las seis esten en
+     {@link COMPONENTES_PROPIOS}, y por eso esa lista se exporta. */
+  const barra = accionesDeLaBarra(estructura.id, estructura.acciones ?? []);
   // Por que la primaria no puede guardar todavia, cuando no puede (#332). Se
   // pregunta **solo con el privilegio que el acto exige**: sin el, lo que apaga
   // la accion es el permiso, y contar que la pantalla no guarda seria contestar
   // otra cosa —y sugerir un aviso a sistemas por algo que arregla el
   // administrador de la municipalidad—.
+  //
+  // Y se pregunta por **la barra compuesta**: la funcion promete explicar «la
+  // ultima accion, la misma que dibuja `BarraDeAcciones`», y con la lista cruda
+  // explicaria un boton que ya no es la primaria.
   const impedimento =
     puedeActuarAqui && !componeSuActo
-      ? impedimentoDelActo(estructura.id, estructura.acciones ?? [])
+      ? impedimentoDelActo(estructura.id, barra.acciones)
       : undefined;
   /* ── Lo que devolvio la simulacion manda sobre lo que hay ────────────────
      Las cinco pantallas de determinacion (#393) tienen un `POST` por operacion,
@@ -673,7 +700,7 @@ function Bloques({
         <IndiceDeSecciones
           secciones={secciones}
           anclaDe={anclaDe}
-          haciaLasAcciones={(estructura.acciones ?? []).length > 0}
+          haciaLasAcciones={barra.acciones.length > 0}
           {...(indexaLaTabla && estructura.tabla !== undefined
             ? // El rotulo es el del catalogo, no uno redactado aqui (RNF-080).
               { previa: { rotulo: estructura.tabla.title, ancla: ANCLA_DE_LA_TABLA } }
@@ -1023,7 +1050,7 @@ function Bloques({
 
       {estructura.acciones && (
         <BarraDeAcciones
-          acciones={estructura.acciones}
+          acciones={barra.acciones}
           escritura={escritura}
           /* Las acciones que el prototipo dibuja y que ahora abren un alta.
              **Solo con privilegio de registro**: sin el se quedan como estaban,
