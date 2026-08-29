@@ -6,6 +6,8 @@ backend/buildSrc/build/
 backend/buildSrc/.gradle/
 backend/buildSrc/.kotlin/
 
+design/
+
 # IDE
 .idea/
 *.iml
@@ -48,7 +50,5 @@ docs/10-negocio/valores-normativos/fuentes/**/*.gpkg
 # Worktrees temporales de agentes (harness de Claude Code)
 .claude/worktrees/
 
-# El canvas ensamblado de una propuesta de diseno: se vuelve a sembrar desde
-# sus .dc.html con la utilidad del skill, y pesa ~2 MB. Los artboards si van.
-design/propuestas/*/*.html
-!design/propuestas/*/*.dc.html
+# Ignorar el canvas de Claude Design una copia esta en S3 sgtm-design
+design/
