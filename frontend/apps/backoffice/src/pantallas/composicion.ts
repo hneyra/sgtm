@@ -464,6 +464,27 @@ export interface SimulacionDeLaPantalla {
 
 export interface ComposicionDeOpcion {
   /**
+   * **La superficie de la que esta opcion es una hoja** (#442).
+   *
+   * Dos o mas opciones que hablan del mismo objeto se dibujan con una tira de
+   * pestañas que lleva de una a otra sin volver al menu. Cada hoja **conserva su
+   * id, su ruta y su permiso**: esto es composicion de navegacion, no una
+   * pantalla que absorba a las demas, y por eso se declara aqui y no como una
+   * lista de ids cableada en un componente.
+   *
+   * La declaran **todas** las hojas, con la misma lista: asi la tira se dibuja
+   * igual se entre por donde se entre, y anadir una tercera es una linea en cada
+   * una en vez de un sitio donde se puede olvidar.
+   *
+   * Ver `bloques/HojasDeSuperficie` para por que esto **no** saca la pantalla del
+   * renderizador generico —y por que `catastro/Territorio.tsx` si tuvo que
+   * hacerlo—.
+   */
+  readonly superficie?: {
+    readonly titulo: string;
+    readonly hojas: readonly string[];
+  };
+  /**
    * El bloque de busqueda, para una opcion cuyo catalogo **no declara `filtros`**.
    *
    * El hueco que cierra: `caja_tributaria` es un `POST` —`ContenidoConectado`

@@ -42,6 +42,7 @@ import { useDatosDeOperacion } from './useDatosDeOperacion';
 import { useDatosDePantalla } from './useDatosDePantalla';
 import { BarraDeAcciones } from './bloques/BarraDeAcciones';
 import { Filtros } from './bloques/Filtros';
+import { HojasDeSuperficie } from './bloques/HojasDeSuperficie';
 import { Formulario } from './bloques/Formulario';
 import { Indicadores } from './bloques/Indicadores';
 import { Portal } from './bloques/Portal';
@@ -851,6 +852,17 @@ function Bloques({
 
   return (
     <>
+      {/* La tira de hojas, cuando esta opcion es una de una superficie (#442).
+          Va lo primero: es navegacion, y dice de que objeto se esta hablando
+          antes que la descripcion de la hoja concreta. */}
+      {composicion.superficie !== undefined && (
+        <HojasDeSuperficie
+          titulo={composicion.superficie.titulo}
+          hojas={composicion.superficie.hojas}
+          activa={estructura.id}
+        />
+      )}
+
       {estructura.desc && <p className="sgtm-descripcion">{estructura.desc}</p>}
 
       {/* A que fecha estan los datos que vienen debajo. Va aqui y no dentro de
