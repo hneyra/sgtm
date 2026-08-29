@@ -216,6 +216,23 @@ quedó cerrado en cinco PRs, en este orden:
 [`FRO-05`](../../../docs/60-frontend/superficies-unificadas.md). Esta carpeta conserva el diseño y su
 razonamiento; aquel documento conserva la receta.
 
+### Los artboards están al día (#413 parte B)
+
+Los cinco dibujos describen **lo que el producto hace**, no lo que la maqueta proponía. Lo que se
+corrigió, y por qué el código tenía razón:
+
+| Artboard | Decía | Dice ahora |
+|---|---|---|
+| `PropuestaA` | Abre en Valorización; «Guardar» navy al pie; tabla de pisos con 8 columnas | Abre en Identificación; **sin primaria** —las cuatro fichas son `GET`—; las **16** columnas reales |
+| `PropuestaB` | «Exportar Excel · Imprimir» al pie | **Sólo «Imprimir»**: exportar es hoy un botón muerto en todo el sistema |
+| `PropuestaC` | «Inactivar · Guardar» al pie de la hoja de sectores | **Sin barra**: el detalle es de sólo lectura y no hay nada que guardar |
+| `Anatomia` | «12 entradas → 5» | **12 → 9**, con el motivo por el que «Predio» no se pliega |
+
+Y una que el cotejo destapó y **no** se arregló: «Vías y calles» sigue con **«Inactivar» de
+primaria**. La regla del vocabulario es opt-in por opción y esa pantalla quedó fuera, porque su
+superficie pasa la lista cruda del catálogo en vez de la de `accionesDeLaBarra`. Está dibujado como
+pendiente, no como hecho.
+
 ### Dónde el diseño se equivocó, y qué lo corrigió
 
 Vale la pena dejarlo escrito, porque las tres correcciones salieron de mirar el código y no la maqueta:
