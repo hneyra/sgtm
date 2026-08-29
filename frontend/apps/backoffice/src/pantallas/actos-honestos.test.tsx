@@ -232,7 +232,12 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // esa causa decia de ella lo unico que no es cierto: que «la pantalla aún
       // no manda estos campos». Los manda; lo que no hace es guardar nada. Es la
       // tercera puerta (`lecturas-por-post.ts`), y su acto funciona.
-      lectura: 1,
+      //
+      // **Y la segunda con #428**: `adm_reportes`, el emisor gemelo. Llega por
+      // el mismo camino y por el mismo motivo, con una diferencia que era la que
+      // la tenia fuera: su desplegable ofrecia diez tipos de reporte y el
+      // backend implementa tres.
+      lectura: 2,
       // Dos menos que en la onda 4: `alcabala` y `espectaculos` se mudan a
       // `sin-campo` (#385). Su primaria de impresion las dejaba aqui, con el
       // boton apagado y el motivo real —los campos que el backend exige y la
@@ -279,7 +284,8 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // «Cancelar» y «Cancelar»)—, asi que cambian de boton sin cambiar de
       // casilla: el censo cuenta la causa, no el rotulo.
       //
-      // **Y una menos con #424**: `transito_reportes` se va a `lectura`. Las dos
+      // **Y una menos con #424**: `transito_reportes` se va a `lectura`; y otra
+      // con #428, `adm_reportes`, que es la segunda que lee por `POST`. Las dos
       // mudanzas van en direcciones opuestas y **el numero no se sumo a mano**:
       // se recompuso ejecutando el censo sobre el arbol ya mergeado.
       //
@@ -288,13 +294,19 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // una seccion —el prototipo capturo el papel, no el formulario—, asi que
       // `sin-declaracion` («la pantalla aún no manda estos campos») pedia
       // declarar campos que no existen. Las tres hojas gemelas de transito ya
-      // estaban donde toca desde #77; estas dos y las dos de infracciones eran
-      // las que quedaban descolocadas.
+      // estaban donde toca desde #77.
       //
       // **Y dos menos con #423**: las dos de tesoreria que ya declaran su
       // cuerpo. Este numero tampoco se sumo a mano: se recompuso ejecutando.
       // **Y una menos con #445**: `predial_masivo` se va a `declarada`.
-      'sin-declaracion': 19,
+      //
+      // **Y tres menos con #428**: `adm_resolucion_gerencia` y
+      // `adm_notificacion_resolucion` se van a `sin-campo` —las dos ultimas
+      // hojas sin superficie que quedaban descolocadas, y con ellas las siete
+      // que `hojas-sin-superficie` computa del catalogo estan **todas** alli—, y
+      // `adm_reportes` se va a `lectura`: su `POST` no escribe, y lo que la
+      // tenia fuera de la tercera puerta era su desplegable.
+      'sin-declaracion': 16,
       // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
       // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
       // «Guardar» de una ficha `GET` se cae— y repartir el valor de una
@@ -313,7 +325,11 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // prototipo nunca capturo, o una cifra que determina el sistema y hoy no
       // determina nadie (D-11, D-02a). Que generalizar el mecanismo no las
       // arrastre a todas lo exige `controles-declarados.test.ts`.
-      'sin-campo': 13,
+      //
+      // **Dos mas con #428**: las dos hojas de resolucion de infracciones
+      // administrativas, que llegan de `sin-declaracion` por lo mismo que las de
+      // licencias en #427 (FRO-06 §1.4).
+      'sin-campo': 15,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);
