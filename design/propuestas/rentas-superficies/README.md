@@ -192,6 +192,28 @@ de catastro: las quince rutas siguen en el menú y todas caen en su superficie c
 les toca. Lo que cambia no es cuántas entradas hay, sino cuántas veces hay que volver a empezar al
 pasar de una a otra.
 
+## Estado
+
+| Parte | Estado |
+|---|---|
+| **La espina** — las tres del padrón en `VOCABULARIO_UNIFORME` | **Implementada.** Ocho botones que no son actos fuera, y con `predios_rentas` el defecto 3 cerrado |
+| **C · Los movimientos de deuda** | **Implementada** en lo navegacional: la tira, el permiso por hoja, la búsqueda a cuestas. La cabecera con el sujeto y el saldo, y la rejilla de contexto del alta, siguen siendo propuesta: las dos piden que `alta_deuda` lea `consulta_deuda` |
+| **B · El acto de transferencia** | Propuesta. Con su decisión de rótulo por resolver |
+| **A · La emisión del ejercicio** | Propuesta |
+
+Lo implementado se coteja contra el navegador en `frontend/e2e/artboards-de-rentas.spec.ts`: `FRO-05`
+remite a esta carpeta, así que estos artboards se leen como especificación, y #413 encontró en los de
+catastro cinco divergencias por no comprobarlo. La prueba se pone roja en las dos direcciones — si
+cambia el producto, y si cambia el artboard sin cambiar el producto.
+
+**La decisión de implementación que más ahorra**, y que conviene tener escrita antes de hacer B y A:
+la superficie **no** es un componente propio. `catastro/Territorio.tsx` tuvo que serlo porque su
+contenido es un árbol y un árbol no cabe en el catálogo; al serlo, dejó de pasar por el renderizador
+genérico y tuvo que rehacer a mano filtros, tabla, secciones y barra. Aquí las hojas **son** pantallas
+del catálogo, así que basta con añadir la tira: cada hoja se sigue dibujando por el camino común, con
+todos sus bloques. Lo comprueba el censo de capacidades (`censo-de-rentas.test.tsx`), que monta las
+quince y compara contra lo que dibujaban.
+
 ## Orden
 
 **C primero**: es la única cuyas dos primarias escriben hoy, así que se puede verificar de extremo a
