@@ -165,10 +165,11 @@ function sinVacios(parametros: object): Readonly<Record<string, string>> {
  *
  * **Ya no se llena aqui** (#433). Hasta este issue este archivo importaba los
  * doce registros de forma estatica, de modo que el `leer` y el `adaptar` de las
- * ~55 opciones conectadas —Transito incluido— viajaban en el trozo de arranque
- * de quien solo iba a abrir Catastro: 13,1 KB comprimidos que pagaban todos. Lo
- * llena `aportes-de-modulo.ts`, al entrar en cada modulo, y ahi esta escrito por
- * que eso no puede fallar en silencio.
+ * 79 opciones conectadas —Transito incluido— viajaban en el trozo de arranque de
+ * quien solo iba a abrir Catastro: **13,1 KB comprimidos** que pagaban todos,
+ * medidos vaciando este registro y volviendo a compilar. Lo llena
+ * `aportes-de-modulo.ts`, al entrar en cada modulo, y ahi esta escrito por que
+ * eso no puede fallar en silencio.
  *
  * Un `Map` y no un objeto: aqui se indexa por un identificador que viene de la
  * URL, y un objeto resuelve `constructor` o `toString` por la cadena de

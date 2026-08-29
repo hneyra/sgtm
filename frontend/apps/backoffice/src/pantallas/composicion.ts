@@ -618,8 +618,10 @@ export interface ComposicionDeOpcion {
  * Lo que compone cada opcion, **llenado al entrar en su modulo** (#433).
  *
  * Cinco modulos declaran composicion, y hasta este issue los cinco archivos
- * viajaban en el arranque: 2,6 KB comprimidos de widgets, resolutores y
- * cabeceras que solo mira quien abre esas pantallas. Ahora llegan con el aporte
+ * viajaban en el arranque: **2,6 KB comprimidos** de widgets, resolutores y
+ * cabeceras que solo mira quien abre esas pantallas, medidos vaciando este
+ * registro. Con los de `conexiones.ts` suman 15,7 sueltos y **14,4 juntos**: la
+ * diferencia es lo que los dos compartian con el arranque y se queda ahi. Ahora llegan con el aporte
  * de su modulo (`aportes-de-modulo.ts`), en la misma espera que ya bloqueaba el
  * dibujo, asi que `composicionDe` sigue respondiendo sincrono cuando se le
  * pregunta.

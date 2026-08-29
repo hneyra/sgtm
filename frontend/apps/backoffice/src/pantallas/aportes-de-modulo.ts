@@ -10,9 +10,9 @@ import type { ComposicionDeOpcion } from './composicion';
  * Un adaptador de Transito no tiene nada que hacer en el paquete que descarga
  * quien abre Catastro, y hasta este issue viajaba ahi: `conexiones.ts` y
  * `composicion.ts` importaban los doce registros de forma estatica, asi que las
- * ~55 opciones conectadas —su `parametros`, su `leer` y su `adaptar`— entraban
- * enteras en el trozo de arranque. Medido sacandolas: **155,7 → 140,0 KB
- * comprimidos**, 13,1 de las conexiones y 2,6 de las composiciones.
+ * 79 opciones conectadas —su `parametros`, su `leer` y su `adaptar`— entraban
+ * enteras en el trozo de arranque, y con ellas las composiciones de los cinco
+ * modulos que declaran alguna. Medido: **155,7 → 141,4 KB comprimidos**.
  *
  * Y lo que arregla no es solo la cifra de hoy: es la **pendiente**. Cada opcion
  * que se conecta suma su `leer` y su `adaptar`, de modo que las seis oleadas de
@@ -39,6 +39,16 @@ import type { ComposicionDeOpcion } from './composicion';
  *      catalogo: un cargador apuntando al modulo vecino se ve al instante;
  *   3. y las pruebas de cada modulo montan sus pantallas conectadas y comparan
  *      celda por celda, asi que un modulo sin cargador se pone rojo ahi tambien.
+ *
+ * La tercera **hubo que ganarsela**, y es el hallazgo del issue: los doce
+ * archivos que censan el catalogo lo hacian cargando y REGISTRANDO los doce
+ * modulos, de modo que se tapaban a si mismos. Con la espera quitada de
+ * `Pantalla` —el defecto que esta carga diferida puede introducir— la suite daba
+ * 28 archivos y 236 pruebas en rojo, y `transito.test.tsx` seguia en VERDE los
+ * 44, junto con los 35 de coactiva: su propio censo habia registrado el modulo
+ * antes de montar la primera pantalla. Con {@link censoDeAportes}, que carga sin
+ * registrar, la misma mutacion da **44 archivos y 403 pruebas**, y esos 79
+ * incluidos.
  */
 export interface AporteDeModulo {
   /** Las opciones del modulo con operacion tipada y adaptador propios. */
