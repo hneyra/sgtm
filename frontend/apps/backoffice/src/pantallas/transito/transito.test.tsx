@@ -431,7 +431,12 @@ describe('transito_cambio_numero vive en su propio componente porque «Salir» n
     ).getByLabelText('Observación');
     await usuario.type(observacion, 'Error del operador al digitar el número.');
 
+    /* Cambiar el numero de un documento oficial no se deshace: entra al
+       patron de lo irreversible (regla 4) y se confirma diciendo que va a
+       pasar — la primera version mandaba el PATCH al primer clic, y la
+       validacion de seguridad de #389 lo señalo. */
     await usuario.click(primariaDeLaPantalla());
+    await usuario.click(await screen.findByRole('button', { name: /^Confirmar/ }));
 
     await waitFor(() => expect(peticiones).toHaveLength(1));
     expect(peticiones[0]?.metodo).toBe('PATCH');
@@ -482,6 +487,13 @@ describe('transito_valores vive en su propio componente porque «Imprimir» no g
       hasta: '2026-08-13',
       observacion: 'Corrida del mes de agosto.',
     });
+
+    /* Y el conteo se ENSENA, no solo viaja: el criterio de aceptacion de #77
+       pide decir cuantos se van a generar, la respuesta trae `totalCandidatos`
+       y la primera version de esta prueba solo miraba la peticion — el
+       recorrido en Chromium de la validacion de #389 encontro la pantalla
+       muda con la prueba en verde. */
+    expect(await screen.findByText(/El servidor cuenta 7 candidato/)).toBeInTheDocument();
   });
 });
 

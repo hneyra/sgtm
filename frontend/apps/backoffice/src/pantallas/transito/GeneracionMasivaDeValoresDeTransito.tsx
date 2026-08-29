@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Aviso, Campo } from '@sgtm/design-system';
 import type { EstructuraDePantalla } from '../../catalogo';
 import { useCatalogoVisible } from '../../app/sesion/useCatalogoVisible';
@@ -5,6 +6,12 @@ import { useEscritura } from '../escritura';
 import { escrituraDe } from '../escrituras';
 import { BarraDeAcciones } from '../bloques/BarraDeAcciones';
 import { SIN_PERMISO } from '../estados';
+import { texto } from '../seguridad/listado';
+
+/** Lo que quedo de la ultima corrida registrada, para ensenarlo como resultado. */
+interface CorridaRegistrada {
+  readonly totalCandidatos?: unknown;
+}
 
 /**
  * Generación masiva de valores de tránsito: `POST /transito/valores/generacion-masiva`
@@ -35,6 +42,7 @@ export function GeneracionMasivaDeValoresDeTransito({
   const catalogo = useCatalogoVisible();
   const puedeEscribirAqui = catalogo.puedeEscribir(estructura.id);
   const declarada = escrituraDe(estructura.id);
+  const [resultado, fijarResultado] = useState<CorridaRegistrada | undefined>(undefined);
 
   const escritura = useEscritura(
     puedeEscribirAqui ? 'transito_valores' : undefined,
@@ -42,6 +50,14 @@ export function GeneracionMasivaDeValoresDeTransito({
     {
       campos: declarada?.campos ?? {},
       exigir: declarada?.exigir,
+      /* El criterio de aceptacion de #77: cuantos se van a generar se dice
+         ANTES de que la corrida corra —`totalCandidatos` es el conteo que el
+         servidor calculo al registrar—, igual que su gemela de #75. */
+      alGuardar: (respuesta) => {
+        if (respuesta !== null && typeof respuesta === 'object') {
+          fijarResultado(respuesta as CorridaRegistrada);
+        }
+      },
     },
   );
 
@@ -52,6 +68,13 @@ export function GeneracionMasivaDeValoresDeTransito({
   return (
     <>
       {estructura.desc && <p className="sgtm-descripcion">{estructura.desc}</p>}
+
+      {resultado !== undefined && (
+        <Aviso
+          titulo="Criterio registrado"
+          detalle={`El servidor cuenta ${texto(resultado.totalCandidatos)} candidato(s). La generacion corre aparte: se revisa en «Busqueda de papeletas».`}
+        />
+      )}
 
       <section className="sgtm-tarjeta">
         <div className="sgtm-tarjeta__cabecera">

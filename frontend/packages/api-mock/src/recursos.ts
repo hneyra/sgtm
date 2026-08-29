@@ -2248,9 +2248,29 @@ const ESTADO_DE_PAPELETA_DEL_MOCK: Readonly<Record<string, string>> = {
  * son exactamente los campos que el `Resource` tiene, con el mismo valor que
  * ya dibuja el catalogo portado.
  */
+/**
+ * El porcentaje UIT de cada codigo del CUIS de transito, leido de la tabla que
+ * el propio prototipo publica («M-02 · 10 % · 535.00»): permite que el
+ * desglose guardado de cada papeleta VARIE con su codigo en vez de repetir
+ * una cifra unica e identica por fila —el patron fantasma que la validacion
+ * de #379 cazo con `areaNombre` y la de #389 volvio a cazar aqui—. El codigo
+ * que no este en la tabla cae al 10 % del propio prototipo, dicho aqui y no
+ * escondido fila a fila.
+ */
+const PORCENTAJE_DEL_CUIS: Readonly<Record<string, string>> = Object.fromEntries(
+  filasDe('codigos_transito').map(([codigo, , , uit]) => [
+    codigo ?? '',
+    (Number((uit ?? '').replace('%', '').trim()) / 100).toFixed(2),
+  ]),
+);
+const porcentajeDelCodigo = (codigo: string | undefined): string =>
+  PORCENTAJE_DEL_CUIS[codigo ?? ''] ?? '0.10';
+/** La base que el propio prototipo implica: su CUIS empareja 10 % con 535.00. */
+const BASE_DEL_PROTOTIPO = '5350.00';
+
 const papeletasTransito = (): Paginado =>
   unaPagina(
-    filasDe('papeletas').map(([numero, fecha, placa, , , , multaS, estado], i) => ({
+    filasDe('papeletas').map(([numero, fecha, placa, , codigo, , multaS, estado], i) => ({
       id: i + 1,
       familia: 'TRANSITO',
       numero,
@@ -2264,10 +2284,10 @@ const papeletasTransito = (): Paginado =>
       contribuyenteId: null,
       predioId: null,
       notificacionPreviaId: null,
-      baseImponible: '5350.00',
-      porcentajeInfraccion: '0.10',
+      baseImponible: BASE_DEL_PROTOTIPO,
+      porcentajeInfraccion: porcentajeDelCodigo(codigo),
       importeInfraccion: comoImporte(multaS ?? '0.00'),
-      porcentajeACobrar: '0.10',
+      porcentajeACobrar: porcentajeDelCodigo(codigo),
       importeAPagar: comoImporte(multaS ?? '0.00'),
       importeConBeneficio: null,
       estado: ESTADO_DE_PAPELETA_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',
@@ -2350,10 +2370,12 @@ const papeletasDeBusqueda = (): Paginado =>
         contribuyenteId: null,
         predioId: null,
         notificacionPreviaId: null,
-        baseImponible: comoImporte(importe ?? '0.00'),
-        porcentajeInfraccion: '0.10',
+        baseImponible: BASE_DEL_PROTOTIPO,
+        // La tabla de busqueda del prototipo no publica el codigo de
+        // infraccion: no hay con que variar el porcentaje, y se dice aqui.
+        porcentajeInfraccion: porcentajeDelCodigo(undefined),
         importeInfraccion: comoImporte(importe ?? '0.00'),
-        porcentajeACobrar: '0.10',
+        porcentajeACobrar: porcentajeDelCodigo(undefined),
         importeAPagar: comoImporte(aPagar ?? importe ?? '0.00'),
         importeConBeneficio: null,
         estado: 'IMPUESTA',
@@ -2370,7 +2392,7 @@ const papeletasDeBusqueda = (): Paginado =>
  */
 const estadoDeCuentaDeTransito = (): Paginado =>
   unaPagina(
-    filasDe('papeletas').map(([numero, fecha, placa, , , , multaS, estado], i) => ({
+    filasDe('papeletas').map(([numero, fecha, placa, , codigo, , multaS, estado], i) => ({
       id: i + 1,
       familia: 'TRANSITO',
       numero,
@@ -2384,10 +2406,10 @@ const estadoDeCuentaDeTransito = (): Paginado =>
       contribuyenteId: null,
       predioId: null,
       notificacionPreviaId: null,
-      baseImponible: '5350.00',
-      porcentajeInfraccion: '0.10',
+      baseImponible: BASE_DEL_PROTOTIPO,
+      porcentajeInfraccion: porcentajeDelCodigo(codigo),
       importeInfraccion: comoImporte(multaS ?? '0.00'),
-      porcentajeACobrar: '0.10',
+      porcentajeACobrar: porcentajeDelCodigo(codigo),
       importeAPagar: comoImporte(multaS ?? '0.00'),
       importeConBeneficio: comoImporte(multaS ?? '0.00'),
       estado: ESTADO_DE_PAPELETA_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',

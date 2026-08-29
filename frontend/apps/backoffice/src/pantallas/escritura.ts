@@ -584,6 +584,6 @@ function erroresPorCampo(error: unknown): Readonly<Record<string, string>> {
  * hacer.
  */
 const IRREVERSIBLES =
-  /anular|anulaci|dar de baja|baja de|emitir|emisi|generar valor|notificar|notificaci|coactiva|reversar|quiebre|prescri|transferir|transferencia/i;
+  /anular|anulaci|dar de baja|baja de|emitir|emisi|generar valor|notificar|notificaci|coactiva|reversar|quiebre|prescri|transferir|transferencia|cambiar n[uú]mero/i;
 
 export const esIrreversible = (accion: string): boolean => IRREVERSIBLES.test(accion);
