@@ -1,10 +1,15 @@
 package pe.gob.sgtm.plataforma;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
@@ -66,8 +71,15 @@ import pe.gob.sgtm.web.RespuestaDeError;
  * autorizadas ademas de la activa, y comprobar que la activa esta en la lista es una defensa
  * barata. El nombre de ese claim no esta fijado. Hasta entonces, un usuario, una municipalidad.
  *
- * <p><b>D-07:</b> el portal del contribuyente, cuyo token no lleva municipalidad, necesita su
- * propia cadena y sus propias pruebas.
+ * <h2>D-07 cerrada: dos cadenas, no una con excepciones (ADR-0020)</h2>
+ *
+ * <p>El portal del contribuyente tiene la suya, ordenada <b>antes</b> que esta y acotada a
+ * {@code /api/v1/portal/**}, con un {@code JwtDecoder} que apunta <b>solo</b> al emisor del realm
+ * del ciudadano. La consecuencia es la que se buscaba, y es estructural y no una comprobacion que
+ * se pueda olvidar: un token de funcionario <b>no autentica</b> en el portal, y uno de ciudadano no
+ * autentica en ninguna otra ruta. Con un solo emisor —o con un cliente mas del mismo realm— lo
+ * unico que separaria a las dos poblaciones seria un {@code if} dentro de la aplicacion, y un
+ * {@code if} que se olvida no rompe nada visible; con dos emisores, olvidarlo produce un 401.
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
