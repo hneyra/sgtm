@@ -146,6 +146,43 @@ día hábil de febrero»— y deja sin decidir dónde vive el cálculo de ese d�
 resuelta sería inventarla, y una fecha de vencimiento inventada es un plazo mal contado en todo un
 padrón.
 
+## Antes de sellar: la lista, y por qué es una lista y no un paso
+
+**Sellar es un acto único por ejercicio.** El disparador de `V9` hace inmutable lo sellado y
+`conjunto_sellado_uq` admite **un solo** conjunto sellado por ejercicio y municipalidad, así que a un
+conjunto sellado **no se le puede añadir una cifra más**: la única salida de un sello prematuro es
+abrir otra versión. Y un conjunto abierto no lo lee nadie —la lectura exige `estado = 'SELLADO'`—, de
+modo que el ejercicio se queda sin poder completarse hasta que alguien lo rehaga entero.
+
+Por eso `--sellar` es explícito, y por eso esta lista existe. **Lo que hay que poder responder que
+sí, antes de escribirlo:**
+
+| | Qué comprobar | Cómo |
+|---|---|---|
+| 1 | Las filas sueltas están publicadas, y sin duplicar | `publicar-parametros.sh` termina en `RECHAZADAS=0`, o dice «ya estaba publicado» para todas — que es lo que se espera de la segunda corrida |
+| 2 | Los cuadros que el ejercicio necesita están publicados | `publicar-cuadros.sh`, una edición por cuadro. Hoy la depreciación entra; la vehicular espera a #388 (su archivo de filas no cabe en un `ConfigMap`) y los valores unitarios no tienen camino de carga |
+| 3 | El arancel de la municipalidad está cargado | `cargar-arancel-vial.sh`, contra **ese** conjunto |
+| 4 | No falta ninguna cifra que una regla vaya a pedir | Cada `‹llave›` que una regla nombre y no esté produce un **422 nombrando la llave**. Eso es correcto en una consulta y es un desastre en una emisión masiva |
+| 5 | Nada de lo que falta es de este ejercicio | Ver «Lo que hoy no se publica, y por qué», arriba: lo que espera a D-02b y D-02c **no** puede entrar hoy, y sellar sin ello es sellar un ejercicio incompleto |
+
+**El punto 5 es el que decide, y hoy la respuesta es que no.** Faltan los valores unitarios (H-14:
+sin camino de carga), el `% actualización` (D-11: sin fuente) y todo lo de ordenanza local (D-02b).
+Sellar 2026 hoy dejaría el ejercicio con la mitad de sus cifras y sin poder recibir la otra mitad.
+
+### Lo que sí está probado, contra `stg` real
+
+El 2026-08-29, después de que #434 subiera `stg` de 25 a 48 migraciones y de que la credencial de
+`rol_carga_parametros` llegara al motor (#435):
+
+| Paso | Resultado |
+|---|---|
+| `abrir-conjunto-parametros.sh --ejercicio 2026` | `CONJUNTO_ID=3`, versión 1 |
+| `publicar-parametros.sh` | **`PUBLICADAS=22 RECHAZADAS=0`** |
+| `publicar-cuadros.sh` (edición de depreciación) | **`PUBLICADAS=492 RECHAZADAS=0`**, las cuatro tablas del Anexo I con su columna de uso |
+| La **segunda** corrida de `publicar-parametros.sh` | informa las 22 como «ya estaba publicado» y **no duplica**: 23 filas de `parametro_tributario` antes, 23 después |
+
+Lo que **no** se hizo, a propósito: `--sellar`.
+
 ## Los cuadros van por el otro archivo
 
 Los tres cuadros de valuación no entran en `parametros-2026.csv`, y no es porque falte decidir nada:
