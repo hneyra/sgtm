@@ -943,9 +943,6 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
     documentosDelCiudadano.perfilDeUsuario,
     documentosDelCiudadano.clientes,
     identidades.tsv,
-    // Y el enrolamiento: enrolar a alguien tiene que crear un Job nuevo, o el ciudadano
-    // se declara en el repositorio y **no puede entrar** —el alta no llega al clúster—.
-    identidades.ciudadanos,
     reconciliarIdentidadesSh(),
     // Y el pod que los aplica, no solo lo que aplica. Ver el docstring de arriba.
     JSON.stringify(plantillaDeReconciliacion),
