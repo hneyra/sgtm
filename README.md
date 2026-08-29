@@ -12,13 +12,16 @@ los estándares de código y la forma de verificar.
 | | Estado |
 |---|---|
 | `docs/` | Arquitectura, datos, requisitos y contrato de API |
-| `backend/` | Esqueleto Gradle, esquema en migraciones Flyway, contexto de tenant y verificaciones bloqueantes. **Sin funcionalidad de negocio** |
-| `frontend/` | Espacio de trabajo montado: workspaces, paquetes compartidos y reglas verificadas. **Sin interfaz todavía** |
-| `design/` | Prototipo de la interfaz web (referencia de diseño; la implementación es la siguiente iteración) |
-| `infra/` | Pulumi en TypeScript con yarn: configuración validada de los dos stacks. **Sin componentes todavía** |
+| `backend/` | Esquema en migraciones Flyway, contexto de tenant, verificaciones bloqueantes **y el negocio de los doce contextos acotados**: caja, cuenta corriente, coactiva, licencias, fiscalización, catastro… |
+| `frontend/` | **Las 134 pantallas** del catálogo sobre un renderizador, contra un proxy que simula la API; lo que el backend publica, ya conectado |
+| `design/` | Prototipo de la interfaz web (la referencia de diseño de la que se derivó `frontend/`) |
+| `infra/` | Pulumi en TypeScript con yarn: los componentes de los dos stacks, verificaciones sin clúster y guiones contra el clúster real |
+| `despliegue/` | Entorno local canónico: compose, identidad (Keycloak) e inicialización del motor |
+| `scripts/` | Guiones del corpus de valores normativos (archivar fuentes y derivados, importar aranceles) |
 
 Primero las barreras, después el negocio: el aislamiento entre municipalidades es el riesgo
-número uno del proyecto y se construye antes que cualquier caso de uso.
+número uno del proyecto, se construyó antes que cualquier caso de uso y sigue bloqueando cada
+build (`verificarAislamiento`).
 
 ## Arrancar
 
@@ -35,7 +38,7 @@ Sin motor de base de datos esas pruebas **fallan**, no se omiten.
 ```bash
 cd frontend
 yarn install
-yarn verificar                    # lint, tipos y pruebas
+yarn verificar                    # contrato, lint, tipos y pruebas
 yarn dev                          # http://localhost:5173
 ```
 
