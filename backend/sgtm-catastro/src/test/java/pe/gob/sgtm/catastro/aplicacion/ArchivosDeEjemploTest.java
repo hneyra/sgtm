@@ -19,6 +19,10 @@ import pe.gob.sgtm.auditoria.Auditoria;
 import pe.gob.sgtm.carga.InformeDeImportacion;
 import pe.gob.sgtm.carga.LectorDeFilasCsv;
 import pe.gob.sgtm.carga.LectorDeFilasCsv.FilaCsv;
+import pe.gob.sgtm.catastro.dominio.DetalleDeBienesComunes;
+import pe.gob.sgtm.catastro.dominio.DetalleEconomico;
+import pe.gob.sgtm.catastro.dominio.DetalleRural;
+import pe.gob.sgtm.catastro.dominio.FichaCatastral;
 import pe.gob.sgtm.catastro.dominio.TipoFicha;
 import pe.gob.sgtm.dominio.Observacion;
 
@@ -52,7 +56,7 @@ class ArchivosDeEjemploTest {
     }
 
     @Test
-    @DisplayName("los cinco archivos existen donde el README dice")
+    @DisplayName("los nueve archivos de la siembra existen donde el README dice")
     void losArchivosExisten() {
         assertThat(ejemplos()).isDirectory();
         for (String nombre :
@@ -62,9 +66,18 @@ class ArchivosDeEjemploTest {
                         "manzanas.csv",
                         "contribuyentes.csv",
                         "fichas.csv",
-                        "README.md")) {
+                        "detalle-de-fichas.csv",
+                        // Los tres de rentas: aqui solo se comprueba que esten, porque
+                        // `sembrar-demostracion.sh` los nombra y una siembra que descubre
+                        // en el paso 7 que falta el archivo del 8 queda a medias, y a
+                        // medias es el estado que peor se lee. Que se analicen de verdad
+                        // lo comprueba ArchivosDeEjemploDeRentasTest, en sgtm-rentas.
+                        "vehiculos.csv",
+                        "transferencias.csv",
+                        "deuda.csv")) {
             assertThat(ejemplos().resolve(nombre)).as(nombre).isRegularFile();
         }
+        assertThat(ejemplos().getParent().resolve("README.md")).isRegularFile();
     }
 
     @Test
@@ -104,14 +117,66 @@ class ArchivosDeEjemploTest {
                 .as(
                         "cada fila nombra sector, manzana, via y contribuyente: si uno falla, sale aqui")
                 .isEmpty();
-        assertThat(fichas.nuevas()).isEqualTo(fichas.totalFilas()).isGreaterThanOrEqualTo(10);
+        assertThat(fichas.nuevas()).isEqualTo(fichas.totalFilas()).isGreaterThanOrEqualTo(20);
         assertThat(catastro.fichasRegistradas().stream().map(f -> f.tipo()).distinct().toList())
                 .as(
                         "los cuatro tipos de ficha, para que la demostracion muestre las cuatro pantallas")
                 .containsExactlyInAnyOrder(TipoFicha.values());
-        assertThat(catastro.titularidadesRegistradas())
-                .as("cada predio de ejemplo tiene titular")
-                .hasSameSizeAs(catastro.fichasRegistradas());
+        // Uno, y solo uno, sin titular. No es un descuido del archivo: en un levantamiento
+        // catastral es lo normal fichar antes de identificar al propietario, InscribirFicha
+        // lo admite, y es el unico modo de que la conciliacion catastro-rentas (ADR-0015) y
+        // la deteccion de omisos tengan delante el caso que existen para tratar. Se cuenta
+        // en vez de admitirse «alguno»: dos serian un archivo que se esta desmoronando.
+        assertThat(catastro.fichasRegistradas().size() - catastro.titularidadesRegistradas().size())
+                .as("exactamente un predio de ejemplo se ficha sin titular identificado")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("detalle-de-fichas.csv versiona las fichas, sin un solo predio rechazado")
+    void elDetalleSeCargaSobreLasFichas() throws IOException {
+        cargarLaEstructura();
+        importarFichas().importar(abrir("fichas.csv"), observacion);
+        int inscritas = catastro.fichasRegistradas().size();
+
+        InformeDeImportacion detalle =
+                new ImportarDetalleDeFichas(
+                                new ActualizarFichaCatastral(catastro, registro -> {}, reloj()),
+                                new PrediosPorCodigo(catastro))
+                        .importar(abrir("detalle-de-fichas.csv"), observacion);
+
+        assertThat(detalle.rechazadas())
+                .as(
+                        "cada grupo nombra su predio y su tipo de ficha: si uno falla, sale aqui"
+                                + " —incluido el anio de construccion anterior a 1990, que Ejercicio"
+                                + " no admite—")
+                .isEmpty();
+        assertThat(detalle.nuevas())
+                .as("nuevas cuenta FICHAS VERSIONADAS, no filas: varias filas son una escritura")
+                .isLessThan(detalle.totalFilas())
+                .isGreaterThanOrEqualTo(20);
+
+        // Cada version nueva es una ficha mas en la base: la anterior no se borra (regla 4).
+        assertThat(catastro.fichasRegistradas()).hasSize(inscritas + detalle.nuevas());
+
+        assertThat(vigentes())
+                .as(
+                        "las cuatro clases de detalle, para que las cuatro pantallas tengan que dibujar")
+                .anySatisfy(ficha -> assertThat(ficha.construcciones()).isNotEmpty())
+                .anySatisfy(ficha -> assertThat(ficha.instalaciones()).isNotEmpty())
+                .anySatisfy(
+                        ficha -> assertThat(ficha.detalle()).isInstanceOf(DetalleEconomico.class))
+                .anySatisfy(
+                        ficha ->
+                                assertThat(ficha.detalle())
+                                        .isInstanceOf(DetalleDeBienesComunes.class))
+                .anySatisfy(ficha -> assertThat(ficha.detalle()).isInstanceOf(DetalleRural.class));
+
+        // Y un predio que se queda sin construcciones, porque es un terreno sin construir:
+        // la pantalla tiene que saber dibujar eso, y sin este caso nunca se le pediria.
+        assertThat(vigentes())
+                .as("el terreno sin construir conserva su ficha vacia")
+                .anySatisfy(ficha -> assertThat(ficha.construcciones()).isEmpty());
     }
 
     @Test
@@ -139,7 +204,8 @@ class ArchivosDeEjemploTest {
                         "sectores.csv",
                         "manzanas.csv",
                         "contribuyentes.csv",
-                        "fichas.csv")) {
+                        "fichas.csv",
+                        "detalle-de-fichas.csv")) {
             List<String> lineas = Files.readAllLines(ejemplos().resolve(nombre));
             for (String linea : lineas) {
                 if (linea.stripLeading().startsWith("#")) {
@@ -164,7 +230,7 @@ class ArchivosDeEjemploTest {
     void losDocumentosSonDeMentira() throws IOException {
         List<FilaCsv> filas = LectorDeFilasCsv.leer(abrir("contribuyentes.csv"));
 
-        assertThat(filas).hasSizeGreaterThanOrEqualTo(8);
+        assertThat(filas).hasSizeGreaterThanOrEqualTo(16);
         assertThat(filas)
                 .allSatisfy(
                         fila -> {
@@ -196,6 +262,13 @@ class ArchivosDeEjemploTest {
         for (FilaCsv fila : LectorDeFilasCsv.leer(abrir("contribuyentes.csv"))) {
             catastro.sembrarContribuyente(fila.campos().get(0), fila.campos().get(4));
         }
+    }
+
+    /** Las fichas todavia abiertas: una por predio, la ultima version de cada uno. */
+    private List<FichaCatastral> vigentes() {
+        return catastro.fichasRegistradas().stream()
+                .filter(ficha -> ficha.vigenciaHasta() == null)
+                .toList();
     }
 
     private ImportarFichas importarFichas() {
