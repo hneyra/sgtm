@@ -1,42 +1,48 @@
 import type { IdDeOperacion } from '@sgtm/api-client';
 
 /**
- * **Las dos lecturas que el portal pregunta, y ninguna mas** (#298, ADR-0016 §3).
+ * **La unica lectura que el portal pregunta** (#57, ADR-0020).
  *
- * ── Por que una tabla de dos entradas y no `pedirOperacion` ────────────────
+ * ── De dos a una, y sin ningun parametro ───────────────────────────────────
+ *
+ * Hasta aqui eran dos: `GET /rentas/contribuyentes` con el documento tecleado, y
+ * `GET /consultas/unificada` con el codigo que aquella devolviera. Las dos son
+ * **endpoints de funcionario**, y el token del ciudadano no autentica en ellas:
+ * la cadena general del backend valida contra el emisor del realm de
+ * funcionarios, asi que desde el portal darian 401.
+ *
+ * Las sustituye `GET /portal/situacion`, que **no tiene ni un parametro**: el
+ * sujeto sale del claim `numero_documento` del token del realm del ciudadano y
+ * el servidor recorre el registro de municipalidades, compone y suma (RNF-083).
+ * Una sola ida y vuelta, y una sola fecha de corte para todo.
+ *
+ * ── Por que una tabla y no `pedirOperacion` ────────────────────────────────
  *
  * `pedirOperacion` resuelve la ruta y el verbo leyendo `OPERACIONES`, que es el
- * mapa de **las 169 operaciones del contrato** —84 de ellas de escritura— con su
+ * mapa de las **175 operaciones del contrato** —84 de ellas de escritura— con su
  * camino y sus parametros. Es lo correcto en el back-office, que sirve las 134
  * opciones; aqui arrastraba al paquete del ciudadano el **inventario completo de
- * la API**: unos 3 KB comprimidos que ademas describen, ruta por ruta, todo lo
- * que el sistema expone. El portal es la aplicacion destinada a ser publica el
- * dia que exista el realm del ciudadano (ADR-0009 §1 y §2), y publicar el mapa
- * de rutas de un sistema tributario no es un coste de kilobytes: es contarle a
- * quien mire el paquete donde esta cada cosa.
+ * la API**, que ademas describe ruta por ruta todo lo que el sistema expone. El
+ * portal es la aplicacion publica, y publicar el mapa de rutas de un sistema
+ * tributario no es un coste de kilobytes: es contarle a quien mire el paquete
+ * donde esta cada cosa.
  *
- * De modo que aqui se declaran **las dos rutas que se piden** y se llaman con
+ * De modo que aqui se declara **la ruta que se pide** y se llama con
  * `solicitar()` de `@sgtm/api-client` —la unica puerta por la que sale una
- * peticion, regla del frontend—. Es exactamente lo que ya hacia
- * `ProveedorDeSesion` con `GET /seguridad/sesion/permisos`, y por el mismo
- * motivo.
+ * peticion, regla del frontend—.
  *
  * ── Lo que sigue comprobado contra el contrato, y donde ────────────────────
  *
- * La comprobacion no desaparece: **cambia de sitio, de tiempo de ejecucion a
- * tiempo de prueba**. Dos barreras:
+ * Dos barreras, y ninguna viaja al navegador:
  *
  *   1. **Las claves son ids de operacion del contrato** (`satisfies`, aqui
  *      abajo): un `operationId` renombrado en `sgtm-v1.yaml` deja de compilar.
- *      Es un tipo, asi que no pesa un byte en el paquete.
  *   2. **La ruta y el verbo, en `verificaciones/portal-separado.test.ts`**: cada
  *      entrada tiene que cuadrar letra a letra con `OPERACIONES[id].ruta` y su
  *      metodo tiene que ser `GET`. Ahi si se lee el mapa entero —una prueba no
  *      viaja al navegador—.
  */
 export const LECTURAS = {
-  /** Quien es: el padron de personas, por codigo, DNI o RUC. */
-  contribuyentes: '/rentas/contribuyentes',
-  /** Lo que debe: la ficha consolidada con su fecha de corte (#25). */
-  consulta_unificada: '/consultas/unificada',
+  /** Lo que debe y tiene, en todas las municipalidades donde figure. */
+  portal_mi_situacion: '/portal/situacion',
 } as const satisfies Readonly<Partial<Record<IdDeOperacion, string>>>;

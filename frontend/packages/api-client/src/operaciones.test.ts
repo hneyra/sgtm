@@ -130,8 +130,15 @@ describe('las operaciones generadas son las del contrato', () => {
     //     concilia**: hasta #365 el caso de uso existia y ningun controlador lo
     //     exponia, asi que un predio solo aparecia conciliado si alguien
     //     sembraba la fila a mano.
+    //   - `portal_mi_situacion` (#57, ADR-0020): la unica operacion del portal
+    //     del contribuyente, y la unica de toda la API que se sirve con el
+    //     token del realm del CIUDADANO. No sale de ninguna pantalla del
+    //     catalogo —la opcion `portal` de las 134 es la vista del funcionario y
+    //     sigue sin backend—, sino de `apps/portal`. Y en la misma tanda
+    //     **desaparece un parametro**: el `doc` de `GET /portal/deuda`, que era
+    //     el endpoint de enumeracion del padron que D-07 describia.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(174);
+    expect(Object.keys(OPERACIONES)).toHaveLength(175);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

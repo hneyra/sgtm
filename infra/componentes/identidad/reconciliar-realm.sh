@@ -16,12 +16,17 @@
 #      OVERWRITE reemplaza el CLIENTE, no el realm: los usuarios de la
 #      municipalidad no se tocan. Un `kc.sh import --override` si los perderia,
 #      y esa es la diferencia por la que este guion existe en vez de aquel.
-#   5. **Comprueba que el mapeador de `municipalidad_id` quedo puesto.** Si no
-#      esta, sale con error y el despliegue queda rojo.
+#   5. **Comprueba que el mapeador del claim quedo puesto.** Si no esta, sale con
+#      error y el despliegue queda rojo.
 #
 # El paso 5 es el que convierte este Job en una verificacion: sin el, un realm sin
-# mapeador se aplicaria en verde y el sintoma aparecceria como un 403
-# SIN_MUNICIPALIDAD que no dice por que se rompio.
+# mapeador se aplicaria en verde y el sintoma aparecceria como un 403 —
+# SIN_MUNICIPALIDAD o SIN_DOCUMENTO— que no dice por que se rompio.
+#
+# Sirve para LOS DOS realms (ADR-0020): sin argumento reconcilia el de
+# funcionarios; con `ciudadano`, el del portal. Cambian los tres archivos, el
+# nombre del realm y el claim que se comprueba; el procedimiento es el mismo, y
+# por eso no hay dos guiones.
 #
 # Los tres archivos JSON no se escriben a mano: los deriva `Identidad.ts` del
 # `realm-sgtm.json` que ya usa el compose, para que haya un solo realm versionado.
@@ -34,6 +39,44 @@ set -euo pipefail
 
 KCADM=/opt/keycloak/bin/kcadm.sh
 DIRECTORIO=${KC_DIRECTORIO:-/realm}
+
+# ---------------------------------------------------------------------------
+# Que realm se reconcilia. Sin argumento, el de funcionarios; con `ciudadano`,
+# el del portal (ADR-0020).
+#
+# El mismo guion para los dos porque el procedimiento es identico —crear o
+# actualizar, aplicar el perfil, importar los clientes y COMPROBAR que el
+# mapeador quedo puesto—; lo que cambia son tres archivos, el nombre del realm y
+# **cual es el claim que no puede faltar**. Copiar el guion habria duplicado el
+# paso 5, que es el que convierte este Job en una verificacion, y una copia del
+# paso 5 es una que un dia deja de comprobar lo suyo.
+# ---------------------------------------------------------------------------
+CUAL=${1:-funcionarios}
+case "$CUAL" in
+    funcionarios)
+        ARCHIVO_REALM="$DIRECTORIO/realm.json"
+        ARCHIVO_PERFIL="$DIRECTORIO/perfil-de-usuario.json"
+        ARCHIVO_CLIENTES="$DIRECTORIO/clientes.json"
+        # Ya viene de las variables de entorno del pod.
+        CLAIM=${KC_CLAIM:-municipalidad_id}
+        ;;
+    ciudadano)
+        : "${KC_REALM_CIUDADANO:?falta KC_REALM_CIUDADANO}"
+        : "${KC_CLIENTES_CIUDADANO:?falta KC_CLIENTES_CIUDADANO}"
+        ARCHIVO_REALM="$DIRECTORIO/realm-ciudadano.json"
+        ARCHIVO_PERFIL="$DIRECTORIO/perfil-de-usuario-ciudadano.json"
+        ARCHIVO_CLIENTES="$DIRECTORIO/clientes-ciudadano.json"
+        KC_REALM=$KC_REALM_CIUDADANO
+        KC_CLIENTES=$KC_CLIENTES_CIUDADANO
+        # El claim del que sale el SUJETO del portal. Sin el, el backend
+        # responde 403 SIN_DOCUMENTO y el 403 no dice por que.
+        CLAIM=numero_documento
+        ;;
+    *)
+        echo "FALLO: no se sabe reconciliar «$CUAL». Es «funcionarios» o «ciudadano»." >&2
+        exit 1
+        ;;
+esac
 
 echo "Reconciliando el realm «${KC_REALM}» contra $KC_SERVIDOR"
 
@@ -54,17 +97,17 @@ done
 
 if "$KCADM" get "realms/$KC_REALM" >/dev/null 2>&1; then
     echo "El realm ya existe: se actualizan sus ajustes."
-    "$KCADM" update "realms/$KC_REALM" -f "$DIRECTORIO/realm.json"
+    "$KCADM" update "realms/$KC_REALM" -f "$ARCHIVO_REALM"
 else
     echo "El realm no existe: se crea."
-    "$KCADM" create realms -f "$DIRECTORIO/realm.json"
+    "$KCADM" create realms -f "$ARCHIVO_REALM"
 fi
 
-# El perfil de usuario declara `municipalidad_id` como atributo. Sin el, el
+# El perfil de usuario declara el atributo del que sale el claim. Sin el, el
 # mapeador leeria un atributo que el realm no admite y el claim saldria vacio.
-"$KCADM" update "users/profile" -r "$KC_REALM" -f "$DIRECTORIO/perfil-de-usuario.json"
+"$KCADM" update "users/profile" -r "$KC_REALM" -f "$ARCHIVO_PERFIL"
 
-"$KCADM" create partialImport -r "$KC_REALM" -f "$DIRECTORIO/clientes.json"
+"$KCADM" create partialImport -r "$KC_REALM" -f "$ARCHIVO_CLIENTES"
 
 # ---------------------------------------------------------------------------
 # La comprobacion. Es lo que hace que este Job valga como verificacion.
@@ -81,16 +124,17 @@ for cliente in $KC_CLIENTES; do
     mapeadores=$("$KCADM" get clients -r "$KC_REALM" -q "clientId=$cliente" 2>/dev/null || true)
 
     case "$mapeadores" in
-        *municipalidad_id*) ;;
+        *"$CLAIM"*) ;;
         *)
-            echo "FALLO: el cliente «${cliente}» quedo SIN el mapeador de municipalidad_id." >&2
-            echo "Es el claim del que sale el SET LOCAL, y con el la separacion entre" >&2
-            echo "municipalidades (ADR-0005). Un realm sin ese mapeador emite tokens que el" >&2
-            echo "backend rechaza con SIN_MUNICIPALIDAD, y el 403 no dice por que." >&2
+            echo "FALLO: el cliente «${cliente}» quedo SIN el mapeador de ${CLAIM}." >&2
+            echo "Es el claim del que sale el sujeto de cada peticion: el SET LOCAL en el" >&2
+            echo "realm de funcionarios (ADR-0005), el documento acreditado en el del" >&2
+            echo "ciudadano (ADR-0020). Un realm sin ese mapeador emite tokens que el" >&2
+            echo "backend rechaza con 403, y el 403 no dice por que." >&2
             exit 1
             ;;
     esac
-    echo "Cliente «${cliente}»: mapeador de municipalidad_id presente."
+    echo "Cliente «${cliente}»: mapeador de ${CLAIM} presente."
 done
 
 echo "Realm «${KC_REALM}» reconciliado."

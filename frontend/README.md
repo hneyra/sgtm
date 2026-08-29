@@ -206,19 +206,23 @@ Ahora el portal es **`apps/portal`**: su propio paquete, sin el shell y sin el c
 separado y presupuesta los dos:
 
 ```
-Portal: 80.9 KB comprimidos de 84.
-Arranque: 146.6 KB comprimidos de 150. Doce trozos por modulo, el mayor 8.9 KB de 11.
+Portal: 79.1 KB comprimidos de 82.
+Arranque: 154.5 KB comprimidos de 156. Doce trozos por modulo, el mayor 8.9 KB de 11.
 ```
 
-**80.9 donde había 147.4** —66.5 KB menos, un 45 %—, y el margen es de tres kilobytes a propósito:
-el portal es una pantalla, no doce módulos, y no tiene por qué crecer. La bajada son dos cosas: 62.3
-KB de shell y catálogo que la separación se llevó, y **4.2 KB más al dejar de pedir con
-`pedirOperacion`** —que resuelve la ruta leyendo el mapa de las 169 operaciones del contrato, 84 de
-ellas de escritura, y lo metía entero en la aplicación destinada a ser pública—. El portal declara
-sus dos rutas en `apps/portal/src/lecturas.ts` y pide con `solicitar()`; que cuadren con el contrato
-lo comprueba `verificaciones/portal-separado.test.ts`, que no viaja al navegador. De los 81, unos 60
+**79.1 donde había 147.4** —68.3 KB menos, un 46 %—, y el margen es de tres kilobytes a propósito:
+el portal es una pantalla, no doce módulos, y no tiene por qué crecer. La bajada son tres cosas:
+62.3 KB de shell y catálogo que la separación se llevó; **4.2 KB más al dejar de pedir con
+`pedirOperacion`** —que resuelve la ruta leyendo el mapa de las operaciones del contrato, 84 de
+ellas de escritura, y lo metía entero en la aplicación destinada a ser pública—; y **1.8 KB más con
+ADR-0020**, que es lo que conviene mirar: el portal ganó la sesión del ciudadano y **bajó**, porque
+con ella se fueron la caja de documento, los tres tipos del prototipo, el adaptador de las seis
+rejillas de la unificada y la segunda lectura del padrón. Lo que ahora dibuja es una respuesta ya
+compuesta por el servidor, y componer en el servidor pesa cero en el teléfono. El portal declara
+**una** ruta en `apps/portal/src/lecturas.ts` y pide con `solicitar()`; que cuadre con el contrato
+lo comprueba `verificaciones/portal-separado.test.ts`, que no viaja al navegador. De los 79, unos 60
 son React y el cliente de consultas; lo propio del portal —su pantalla, los adaptadores de
-`@sgtm/lectura` y la puerta de sesión— no llega a 21. Bajar de ahí es cambiar de biblioteca, no de
+`@sgtm/lectura` y la puerta de sesión— no llega a 20. Bajar de ahí es cambiar de biblioteca, no de
 pantalla.
 
 Y lo que el navegador guarda de todo eso lo dice `nginx.conf`, **para las dos aplicaciones**: los
@@ -228,24 +232,37 @@ activos con huella (`/assets/` y `/portal/assets/`) un año e inmutables, los do
 gana** en cada ruta: buscar el texto en el archivo pasaba en verde con la configuración anterior,
 que ya lo contenía y dejaba al ciudadano sin ninguna cabecera de caché.
 
-**Lo que la separación NO es**: no hay realm ciudadano, no hay sesión propia del contribuyente y
-ninguna lectura se abre al público (ADR-0009 §1 y §2 siguen sin cumplirse). El portal se sirve tras
-**la misma puerta de sesión del funcionario** —la marcha blanca en que quien atiende previsualiza lo
-que verá el ciudadano—, y la pantalla lo dice en vez de disimularlo. **Y la opción `portal` de las
-134 sigue en el catálogo**, con su id, su ruta y su permiso: es la vista del funcionario, y desde
-ella se abre la aplicación del ciudadano por un enlace.
+### El ciudadano entra por su propia puerta (ADR-0020)
 
-Las dos enseñan **las mismas cifras a la misma fecha de cálculo** porque leen la respuesta con los
-mismos adaptadores: `@sgtm/lectura` —la identidad del padrón y las seis secciones de
-`consulta_unificada`— lo comparten la ficha 360° y el portal. Lo que cambia es el ancho: en 390 px
-no hay siete columnas, así que cada fila se lee como pares rótulo/valor con **el rótulo de su
-columna del catálogo** (RNF-080).
+Con #57 se cierra lo que la separación dejó dicho y no podía hacer: **hay realm ciudadano**
+(`sgtm-ciudadano`), con **emisor distinto** del de funcionarios, y el portal se sirve tras **su**
+puerta —`<ProveedorDeSesion quienEntra="ciudadano">`—, no tras la del back-office. El aviso de
+«todavía no hay acceso del ciudadano» se retira porque con la puerta puesta sería falso.
 
-Lo otro que cambia son **las notas bajo cada rejilla**. Las del back-office nombran la opción
-hermana a la que ir por el dato que ahí no cabe —«se ven en «Consulta de deuda»»—, y desde el portal
-esas cuatro opciones no existen: no hay navegación, ni catálogo, ni permiso que las abra. La rejilla
-declara por eso una segunda redacción, `notaDelCiudadano`, y **el portal no dibuja nunca la otra**:
-lo que falta se sigue diciendo, con la salida que sí es suya —la municipalidad—.
+**Y se va la caja de documento**, que es la mitad del cambio. Hasta aquí el portal preguntaba
+«¿quién eres?» y mandaba lo tecleado a `GET /rentas/contribuyentes?dNI=…`: un endpoint que contesta
+por cualquiera a quien teclee ocho dígitos. Ahora el sujeto llega **firmado** en el claim
+`numero_documento` del token, la operación —`GET /portal/situacion`— no tiene ni un parámetro, y el
+servidor recorre las municipalidades, compone y suma. Que aquí no viaje ningún documento es una
+regla de código fuente: `verificaciones/portal-separado.test.ts` la comprueba, y el parámetro `doc`
+desapareció del contrato por el generador (`SUPRIMIDOS`), no a mano.
+
+La guarda que hacía `identidadesQueCoinciden` **no se perdió: cambió de forma**. Ya no hay listado
+del padrón que filtrar, así que lo que se comprueba es que la situación que llegó sea la del
+documento **de este token** (`esLaSituacionDe`, en `@sgtm/lectura`): el proxy no filtra (ADR-0010) y
+una situación de otra persona no se distingue de la propia mirándola —trae un nombre, un código y
+unas cifras que existen—.
+
+**Y la opción `portal` de las 134 sigue en el catálogo**, con su id, su ruta y su permiso: es la
+vista del funcionario, y no gana backend —servirle `/portal/**` a un funcionario sería devolver el
+endpoint que ADR-0020 quita—.
+
+Las dos aplicaciones enseñan **las mismas cifras a la misma fecha de cálculo** porque leen la
+respuesta con los mismos adaptadores de `@sgtm/lectura`: la ficha 360° lee la identidad del padrón y
+las seis secciones de `consulta_unificada`; el portal lee la situación compuesta, cuyo resumen y
+cuyas obligaciones vienen con **la misma forma** —`ImporteActualizado`, las cinco partes sumadas por
+el servidor—. Lo que cambia es el ancho: en 360 px no hay siete columnas, así que cada fila se lee
+como pares rótulo/valor.
 
 ### La copia se ve como copia
 

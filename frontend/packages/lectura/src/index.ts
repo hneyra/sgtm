@@ -19,13 +19,17 @@
 export { SIN_DATO, esObjeto, importeDe, leerObjeto, leerPaginado, texto } from './contrato';
 export type { ImporteConFecha } from './contrato';
 
-export {
-  LOS_TRES_FILTROS_DEL_PADRON,
-  documentoDe,
-  identidadPorCodigo,
-  identidadesQueCoinciden,
-} from './identidad';
-export type { ClaveDelPadron, Identidad } from './identidad';
+export { documentoDe, identidadPorCodigo } from './identidad';
+export type { Identidad } from './identidad';
+
+export { esLaSituacionDe, leerSituacion } from './situacion';
+export type {
+  EnLaMunicipalidad,
+  ObligacionDelCiudadano,
+  PredioDelCiudadano,
+  ResumenDeLaMunicipalidad,
+  SituacionDelCiudadano,
+} from './situacion';
 
 export {
   ESTADO_DE_LA_CONSULTA,

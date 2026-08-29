@@ -78,7 +78,11 @@ import pe.gob.sgtm.plataforma.SeguridadWeb;
 // La exposicion de "prometheus" no es el valor por omision de Spring Boot —solo
 // "health" lo es—, y aqui se fija explicita para probar lo mismo que despliega
 // sgtm-aplicacion (application.yaml), no el comportamiento por omision del starter.
+// `classes` explicito desde #57: este paquete tiene dos contextos de prueba —el de la
+// cadena general y el de las dos cadenas del portal— y sin decirlo Spring Boot busca el
+// unico `@SpringBootConfiguration` del paquete, encuentra los dos y no arranca ninguno.
 @SpringBootTest(
+        classes = CadenaDeIdentidadTest.ContextoDePrueba.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "management.endpoints.web.exposure.include=health,prometheus")
 @DisplayName("ADR-0005 — Del token firmado a las filas que RLS deja ver")

@@ -24,10 +24,8 @@ import pe.gob.sgtm.dominio.MunicipalidadId;
  * <p>La frase que lo gobierna, y que hay que poder repetir:
  *
  * <blockquote>
- *
  * No es una consulta multi-municipalidad; son <i>N</i> consultas de una municipalidad cuya union se
  * filtra a un documento firmado.
- *
  * </blockquote>
  *
  * <p>La base de datos <b>no</b> aprende a cruzar municipalidades: sigue sin poder hacerlo. Cada
@@ -67,9 +65,9 @@ import pe.gob.sgtm.dominio.MunicipalidadId;
  * </ol>
  *
  * <p>Y una consecuencia que el guardia del pool ya vigila: como cada rama es una transaccion y
- * {@code SET LOCAL} muere con ella, ninguna conexion vuelve al pool con {@code app.municipalidad_id}
- * puesto. Recorrer con {@code SET SESSION} —o fijando el parametro fuera de transaccion— lo
- * detectaria {@code TenantConnectionGuard} y descartaria la conexion.
+ * {@code SET LOCAL} muere con ella, ninguna conexion vuelve al pool con {@code
+ * app.municipalidad_id} puesto. Recorrer con {@code SET SESSION} —o fijando el parametro fuera de
+ * transaccion— lo detectaria {@code TenantConnectionGuard} y descartaria la conexion.
  */
 @Component
 public class RecorridoPorMunicipalidades {
@@ -113,10 +111,10 @@ public class RecorridoPorMunicipalidades {
     /**
      * Aplica la rama a cada municipalidad activa y devuelve lo que cada una contesto.
      *
-     * <p>La rama devuelve {@link Optional}: vacio significa «aqui no hay nada que contar» —el sondeo
-     * del padron no encontro a nadie— y por eso no aparece en el resultado. Es lo que hace que una
-     * municipalidad donde la persona no figura <b>no reciba ninguna fila de auditoria</b>: no se
-     * llega a leer nada suyo.
+     * <p>La rama devuelve {@link Optional}: vacio significa «aqui no hay nada que contar» —el
+     * sondeo del padron no encontro a nadie— y por eso no aparece en el resultado. Es lo que hace
+     * que una municipalidad donde la persona no figura <b>no reciba ninguna fila de auditoria</b>:
+     * no se llega a leer nada suyo.
      *
      * <p>Una rama que lanza <b>no interrumpe el recorrido</b>: se anota en {@link
      * Resultado#fallidas()} con su motivo y las demas siguen. Quien compone decide que hacer con
@@ -124,8 +122,32 @@ public class RecorridoPorMunicipalidades {
      *
      * @param rama lo que se lee dentro de la municipalidad, ya con contexto y dentro de transaccion
      */
+    // `IllegalCatch` prohibe atrapar RuntimeException, y con razon: casi siempre esconde
+    // un defecto. Aqui es justo lo contrario, y es la decision de ADR-0020 §2. Lo que se
+    // atrapa no es «un error» sino **una municipalidad que no se pudo leer**, y no se
+    // traga: se anota en `fallidas`, se registra con su tipo y **quita el total
+    // consolidado**, que es la consecuencia que importa. Estrecharlo a un tipo concreto
+    // seria peor: la rama puede lanzar `EjercicioSinSellar`, un fallo de persistencia o
+    // un `ProblemaDeNegocio`, y el que no estuviera en la lista tumbaria el recorrido
+    // entero por culpa de un solo municipio.
+    @SuppressWarnings("checkstyle:IllegalCatch")
     public <T> Resultado<T> recorrer(Function<Municipalidad, Optional<T>> rama) {
         Objects.requireNonNull(rama, "El recorrido necesita saber que leer en cada municipalidad");
+        // Y no desde dentro de una peticion que ya tiene municipalidad: eso dejaria el
+        // contexto de esa peticion cambiado a mitad de camino, que es la forma mas
+        // silenciosa de contaminar una transaccion en curso. Bajo `/api/v1/portal/**` no
+        // corre el filtro de tenant, asi que aqui no puede haber contexto puesto; si lo
+        // hay, alguien esta llamando a esto desde donde no debe.
+        TenantContext.actualSiHay()
+                .ifPresent(
+                        actual -> {
+                            throw new IllegalStateException(
+                                    "El recorrido por municipalidades no puede correr dentro de"
+                                            + " una peticion que ya tiene contexto de"
+                                            + " municipalidad ("
+                                            + actual.valor()
+                                            + "): lo dejaria cambiado a mitad de camino");
+                        });
 
         List<Municipalidad> activas = activas();
         List<T> leidas = new ArrayList<>();

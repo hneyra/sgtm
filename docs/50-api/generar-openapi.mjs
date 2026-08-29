@@ -155,6 +155,33 @@ const FORMATO_DE_REPORTE = {
 };
 
 /**
+ * Parametros que la pantalla del prototipo dibuja y el backend **retira a
+ * proposito**.
+ *
+ * Es el reverso de `DEL_BACKEND`, y hace falta por lo mismo: cuando el backend
+ * ya existe, manda el backend. La diferencia es que aqui no se anade una
+ * divergencia sino que se cierra una, y cada entrada tiene que decir por que
+ * ese parametro no puede existir.
+ *
+ * Se suprime del contrato y no solo «se deja sin implementar» porque un
+ * parametro publicado es una promesa: el generador de tipos del frontend lo
+ * expone, y alguien lo manda.
+ */
+const SUPRIMIDOS = {
+  // `GET /portal/deuda?doc=44218937` es literalmente el endpoint de enumeracion
+  // que mantuvo D-07 abierta: contesta «quien es esta persona y cuanto debe» a
+  // quien teclee ocho digitos. Con la sesion del ciudadano (ADR-0020) el
+  // documento deja de ser un parametro y pasa a ser un claim firmado del token,
+  // asi que no hay nada que teclear y la caja desaparece de la pantalla.
+  //
+  // La operacion `portal` se queda —es la vista del FUNCIONARIO, la opcion del
+  // catalogo de las 134, y sigue sin backend que la sirva (ADR-0016 §3)—; lo
+  // que se va es su parametro. Quien pregunta por su propia situacion usa
+  // `portal_mi_situacion`, que no tiene ninguno.
+  portal: ['doc'],
+};
+
+/**
  * Parametros que el backend tiene y la pantalla no dibuja.
  *
  * Misma regla que `PAGINACION`: cuando el backend ya existe, manda el backend.
@@ -526,6 +553,41 @@ const DESCRIPCIONES_DE_FILTRO = {
  *   que este archivo devuelva el contrato tal como esta comprometido (#312).
  */
 const OPERACIONES_ADICIONALES = {
+  // La consulta del ciudadano sobre SU PROPIA situacion (#57, ADR-0020, RF-131).
+  // No sale de la pantalla `portal` —esa es la vista del funcionario y sigue sin
+  // backend (ADR-0016 §3)— sino de la sesion propia del contribuyente, que no
+  // tiene pantalla en el catalogo de las 134 porque no es del back-office: la
+  // dibuja `apps/portal`.
+  portal: [
+    {
+      operationId: 'portal_mi_situacion',
+      metodo: 'get',
+      ruta: '/api/v1/portal/situacion',
+      titulo: 'Mi situación en todas las municipalidades',
+      descripcion: literal(`
+        Lo que el ciudadano autenticado debe y tiene **en todas las municipalidades del
+        sistema donde figure**, a **una sola** fecha de corte.
+
+        **Sin ningún parámetro, y eso es la decisión.** El sujeto sale del claim
+        \`numero_documento\` del token del realm del ciudadano —emisor distinto del de
+        funcionarios—, validado criptográficamente por la cadena que sirve
+        \`/api/v1/portal/**\`. Sustituye a \`GET /portal/deuda?doc=…\`, que contestaba
+        «quién es esta persona y cuánto debe» a quien tecleara ocho dígitos.
+
+        El servidor **recorre** el registro de municipalidades activas —una transacción y
+        un \`SET LOCAL\` por rama, RLS en cada una—, compone y suma (RNF-083). No es una
+        consulta multi-municipalidad: son *N* consultas de una municipalidad cuya unión se
+        filtra a un documento firmado.
+
+        \`totalConsolidado\` es \`null\` cuando alguna municipalidad no se pudo leer, y
+        entonces \`notaDelTotal\` dice cuáles faltan: un total al que le falta una
+        municipalidad es un importe plausible y equivocado.
+
+        Un token de **funcionario** no autentica aquí (401); uno de ciudadano no autentica
+        en ninguna otra ruta de la API.
+      `),
+    },
+  ],
   permisos: [
     {
       operationId: 'permisos_de_grupo',
@@ -1250,6 +1312,18 @@ const OPERACIONES_ADICIONALES = {
  *   de modo que no hay regla de negocio que pueda incumplir.
  */
 const RESPUESTAS = {
+  // El 403 del ciudadano no es el de siempre: su token no lleva municipalidad —no
+  // pertenece a ninguna— y lo que puede faltarle es el documento acreditado. Y no
+  // tiene 422: no recibe cuerpo ni filtros, asi que no hay regla de negocio que
+  // pueda incumplir (mismo caso que `permisos_de_la_sesion`).
+  portal_mi_situacion: {
+    principal: {
+      codigo: '200',
+      descripcion: 'La situación del ciudadano, municipalidad por municipalidad',
+    },
+    respuesta403: 'SinDocumentoAcreditado',
+    sinValidacion: true,
+  },
   consulta_fichas: {
     extra: [
       {
@@ -1348,25 +1422,28 @@ for (const grupo of NAV) {
       // dibuja la pantalla y —si trae tabla— la paginacion y el orden.
       parametrosDeConsulta: conSuDescripcion(
         id,
-        reunir(
-          parametrosDeRuta,
-          intercalar(
-            [
-              ...delBackend.filter((parametro) => !parametro.tras),
-              ...(consulta
-                ? consulta.split('&').map((p) => {
-                    const [nombre, ejemplo] = p.split('=');
-                    return { nombre, ejemplo: (ejemplo || '').replace(/[{}]/g, '') };
-                  })
-                : []),
-              ...filtrosDe(pantalla).map((filtro) => ({
-                nombre: filtro.nombre,
-                ejemplo: '',
-                descripcion: `Filtro «${filtro.etiqueta}» de la pantalla`,
-              })),
-              ...(pantalla.table && paginan(id, metodo) ? PAGINACION : []),
-            ],
-            delBackend.filter((parametro) => parametro.tras),
+        sinLosSuprimidos(
+          id,
+          reunir(
+            parametrosDeRuta,
+            intercalar(
+              [
+                ...delBackend.filter((parametro) => !parametro.tras),
+                ...(consulta
+                  ? consulta.split('&').map((p) => {
+                      const [nombre, ejemplo] = p.split('=');
+                      return { nombre, ejemplo: (ejemplo || '').replace(/[{}]/g, '') };
+                    })
+                  : []),
+                ...filtrosDe(pantalla).map((filtro) => ({
+                  nombre: filtro.nombre,
+                  ejemplo: '',
+                  descripcion: `Filtro «${filtro.etiqueta}» de la pantalla`,
+                })),
+                ...(pantalla.table && paginan(id, metodo) ? PAGINACION : []),
+              ],
+              delBackend.filter((parametro) => parametro.tras),
+            ),
           ),
         ),
       ),
@@ -1442,6 +1519,20 @@ function reunir(deLaRuta, parametros) {
     if (!porNombre.has(parametro.nombre)) porNombre.set(parametro.nombre, parametro);
   }
   return [...porNombre.values()];
+}
+
+/** Quita los que `SUPRIMIDOS` retira, y falla si nombra uno que no existe. */
+function sinLosSuprimidos(id, parametros) {
+  const fuera = SUPRIMIDOS[id];
+  if (!fuera) return parametros;
+  for (const nombre of fuera) {
+    if (!parametros.some((parametro) => parametro.nombre === nombre)) {
+      // Un nombre que ya no esta es una supresion que dejo de suprimir algo, y
+      // callarlo dejaria la tabla creciendo con entradas muertas.
+      throw new Error(`SUPRIMIDOS['${id}'] nombra «${nombre}», que esa operacion no declara`);
+    }
+  }
+  return parametros.filter((parametro) => !fuera.includes(parametro.nombre));
 }
 
 /** Los que declaran `tras`, detras del parametro que nombran. */
@@ -1587,7 +1678,9 @@ for (const [ruta, ops] of porRuta) {
       escribirDescripcion(lineas, 10, otra.descripcion);
     }
     lineas.push('        "403":');
-    lineas.push('          $ref: "#/components/responses/SinMunicipalidad"');
+    lineas.push(
+      `          $ref: "#/components/responses/${respuestas.respuesta403 ?? 'SinMunicipalidad'}"`,
+    );
     if (!respuestas.sinValidacion) {
       lineas.push('        "422":');
       lineas.push('          $ref: "#/components/responses/ErrorDeValidacion"');
@@ -1602,8 +1695,16 @@ lineas.push('      type: http');
 lineas.push('      scheme: bearer');
 lineas.push('      bearerFormat: JWT');
 lineas.push('      description: |');
-lineas.push('        Token OIDC validado. Debe traer el claim `municipalidad_id`; sin el, la');
-lineas.push('        peticion recibe 403 y no llega al controlador (ADR-0005, RNF-032).');
+lineas.push('        Token OIDC validado, de **uno de los dos emisores** (ADR-0005, ADR-0020).');
+lineas.push('');
+lineas.push('        - Realm de **funcionarios**: debe traer el claim `municipalidad_id`; sin');
+lineas.push('          el, la peticion recibe 403 y no llega al controlador (RNF-032). Vale');
+lineas.push('          para toda la API **salvo** `/portal/**`.');
+lineas.push('        - Realm del **ciudadano**: debe traer `numero_documento` y no lleva');
+lineas.push('          municipalidad. Vale **solo** para `/portal/**`.');
+lineas.push('');
+lineas.push('        Son dos cadenas de seguridad con dos decodificadores, cada uno apuntando');
+lineas.push('        a un solo emisor: un token de una poblacion no autentica en la otra.');
 lineas.push('  schemas:');
 lineas.push('    Importe:');
 lineas.push('      type: string');
@@ -1624,6 +1725,13 @@ lineas.push('    SinMunicipalidad:');
 lineas.push('      description: |');
 lineas.push('        El token no identifica una municipalidad. No hay valor por omision ni');
 lineas.push('        modo sin municipalidad.');
+lineas.push('      content:');
+lineas.push('        application/json:');
+lineas.push('          schema: { $ref: "#/components/schemas/Error" }');
+lineas.push('    SinDocumentoAcreditado:');
+lineas.push('      description: |');
+lineas.push('        El token del ciudadano no identifica un documento. No hay valor por');
+lineas.push('        omision ni modo sin documento (ADR-0020).');
 lineas.push('      content:');
 lineas.push('        application/json:');
 lineas.push('          schema: { $ref: "#/components/schemas/Error" }');

@@ -28,13 +28,20 @@ import { MODULOS, OPCIONES, opcionPorId } from '../apps/backoffice/src/catalogo'
  *      observacion de quien la hace (regla 10, RNF-052). La regla de ESLint
  *      prohibe `useMutation` en todo el frontend; aqui la prohibicion es mas
  *      ancha, porque el portal no puede escribir **de ninguna manera**.
- *   3. **Solo pregunta las dos rutas que declara, y las dos son lecturas del
+ *   3. **Solo pregunta las rutas que declara, y todas son lecturas del
  *      contrato.** El portal no usa `pedirOperacion`: eso arrastraria al paquete
- *      del ciudadano el mapa de las 169 operaciones —84 de escritura—, que es el
+ *      del ciudadano el mapa de las 175 operaciones —84 de escritura—, que es el
  *      inventario completo de la API en la aplicacion destinada a ser publica.
  *      Declara `LECTURAS` y llama con `solicitar()`, y la comprobacion contra el
  *      contrato se hace **aqui**: cada entrada tiene que cuadrar con
  *      `OPERACIONES[id].ruta` y su metodo tiene que ser `GET`.
+ *   3.c **Y no manda NINGUN documento como parametro** (#57, ADR-0020). Es la
+ *      vulnerabilidad original convertida en regla de codigo fuente: mientras el
+ *      documento viajaba en la consulta —`?doc=`, `?dNI=`, `?rUC=`— el portal
+ *      tenia delante un endpoint que contesta «quien es esta persona y cuanto
+ *      debe» a quien teclee ocho digitos. Ahora sale de un claim firmado y no
+ *      hay nada que mandar; volver a mandarlo se pone rojo, nombrando el
+ *      archivo.
  *   3.b **Y los nombres de la lectura compartida se definen una sola vez.**
  *      `esObjeto`, `texto`, `leerPaginado` y compania viven en
  *      `@sgtm/lectura` porque dos copias del mismo lector acaban leyendo campos
@@ -200,13 +207,57 @@ describe('del portal no se escribe', () => {
       );
     }
 
-    /* Y que siga preguntando las dos que compone: un portal que no consulta nada
+    /* Y que siga preguntando la que compone: un portal que no consulta nada
        pasaria sin esfuerzo el bucle de arriba. */
-    expect(pedidas).toContain('contribuyentes');
-    expect(pedidas).toContain('consulta_unificada');
+    expect(pedidas).toContain('portal_mi_situacion');
+
+    /* **Y ninguna de las dos que se fueron.** `GET /rentas/contribuyentes` y
+       `GET /consultas/unificada` son endpoints de FUNCIONARIO: el token del
+       ciudadano no autentica en ellos —la cadena general del backend valida
+       contra el otro emisor (ADR-0020)—, asi que declararlos aqui seria pedir
+       401 en cada carga. Y el primero es, ademas, el endpoint por documento que
+       este issue retira. */
+    expect(pedidas).not.toContain('contribuyentes');
+    expect(pedidas).not.toContain('consulta_unificada');
   });
 
-  it('y no lleva dentro el mapa de las 169 operaciones', () => {
+  it('**no manda ningun documento como parametro**', () => {
+    /* La vulnerabilidad original, convertida en regla de codigo fuente (#57,
+       ADR-0020). No se prohibe la palabra en un texto de pantalla —la pantalla
+       habla del documento, y debe— sino su uso como **clave de consulta**: lo
+       que viaja en la URL o en el objeto que `solicitar` convierte en consulta.
+       Los comentarios ya se quitaron (`sinComentarios`), asi que lo que quede es
+       codigo. */
+    const COMO_PARAMETRO = [
+      // En la ruta escrita a mano: `?doc=`, `&dNI=`, `?numeroDocumento=`…
+      /[?&](doc|dni|dNI|ruc|rUC|documento|numeroDocumento|numero_documento|tipoDocumento)=/,
+      // En el objeto de consulta: `{ dNI: … }`, `consulta: { doc: … }`.
+      /\b(consulta|params|query)\s*:\s*\{[^}]*\b(doc|dNI|rUC|numeroDocumento)\b/,
+      // Y la forma corta de lo mismo, sin envoltorio.
+      /\{\s*\[?\s*(doc|dNI|rUC|numeroDocumento)\b\s*\]?\s*:/,
+    ];
+
+    const culpables: string[] = [];
+    for (const { archivo, codigo } of TODO_DE_PRODUCCION) {
+      for (const patron of COMO_PARAMETRO) {
+        if (patron.test(codigo)) culpables.push(`${archivo}: ${patron.source}`);
+      }
+    }
+
+    expect(culpables).toEqual([]);
+  });
+
+  it('y el contrato tampoco publica ya el parametro que lo llevaba', () => {
+    /* La otra mitad, y la que de verdad cierra la puerta: mientras
+       `GET /portal/deuda` declarara `doc`, el generador de tipos lo expondria y
+       alguien lo mandaria. Se retiro por el generador (`SUPRIMIDOS`), no a mano,
+       y `--comprobar` exige en CI que el YAML siga siendo lo que aquel produce. */
+    expect(OPERACIONES['portal'].parametrosDeConsulta).not.toContain('doc');
+    // Y la operacion del ciudadano no tiene ninguno: el sujeto va en el token.
+    expect(OPERACIONES['portal_mi_situacion'].parametrosDeConsulta).toEqual([]);
+  });
+
+  it('y no lleva dentro el mapa de las 175 operaciones', () => {
     /* **Lista blanca, no lista negra.** La primera version prohibia cuatro
        nombres (`pedirOperacion`, `enviarOperacion`, `descargarOperacion`,
        `OPERACIONES`) y dejaba pasar los otros cinco exportados de
@@ -229,6 +280,9 @@ describe('del portal no se escribe', () => {
       'canjearSiVuelve',
       'cerrarSesion',
       'configuracionDeIdentidad',
+      // El gemelo del anterior para el realm del ciudadano (ADR-0020): resuelve
+      // tres variables de entorno y no toca `OPERACIONES`.
+      'configuracionDelCiudadano',
       'configurarRenovacion',
       'irAAutenticar',
       'leerToken',

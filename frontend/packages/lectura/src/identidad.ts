@@ -1,12 +1,14 @@
-import type { ParametrosDe } from '@sgtm/api-client';
 import { SIN_DATO, esObjeto, leerPaginado, texto } from './contrato';
 
 /**
  * **Quien es**, leido del padron de personas y de una sola fila.
  *
- * Lo usan la ficha 360° del back-office (#297) y el portal del contribuyente
- * (#298): las dos preguntan a `GET /rentas/contribuyentes` y las dos necesitan
- * exactamente estos campos, asi que la lectura se escribe una vez.
+ * La lee la ficha 360° del back-office (#297), que pregunta a
+ * `GET /rentas/contribuyentes` y necesita exactamente estos campos.
+ *
+ * El portal ya no: desde ADR-0020 el ciudadano no teclea ningun documento y su
+ * situacion la compone el servidor (ver `situacion.ts`). Este archivo se quedo
+ * con lo que usa ventanilla.
  */
 export interface Identidad {
   readonly codigo: string;
@@ -58,78 +60,24 @@ export function identidadPorCodigo(cuerpo: unknown, codigo: string): Identidad |
 }
 
 /**
- * Con que se pregunto al padron, y en que campo del recurso se comprueba.
+ * ── Lo que aqui habia y ya no ──────────────────────────────────────────────
  *
- * `ContribuyenteResource` publica **`numeroDocumento`**, no `dNI` ni `rUC`: esos
- * dos son nombres de **filtro** y el recurso los devuelve juntos en un solo
- * campo con su `tipoDocumento` al lado.
+ * `ClaveDelPadron`, `LOS_TRES_FILTROS_DEL_PADRON` e `identidadesQueCoinciden`
+ * vivian aqui y se han retirado con la caja de documento del portal (#57,
+ * ADR-0020). Los tres existian **solo** para ella: el ciudadano elegia DNI, RUC
+ * o codigo, se preguntaba a `GET /rentas/contribuyentes` con ese filtro, y sobre
+ * el listado que llegaba se comprobaba que la fila fuera la pedida.
  *
- * **Sale del contrato, no de aqui.** Escrito como tres literales sueltos, esto
- * decia por su cuenta como se llaman los filtros de `GET /rentas/contribuyentes`
- * y podia quedarse diciendolo cuando el contrato dejara de llamarlos asi: la
- * peticion saldria con un parametro que el backend ya no declara —que no viaja,
- * porque `solicitar` solo manda lo que se le da— y el padron contestaria **el
- * padron entero**, del que este modulo se quedaria con la fila que coincidiera.
- * Atado con `Extract`, el nombre renombrado en `sgtm-v1.yaml` no compila.
+ * Con la sesion del ciudadano no hay documento que teclear ni listado del padron
+ * que filtrar: el sujeto sale del token y el servidor compone la respuesta. La
+ * desconfianza no se ha perdido —seria lo grave—: se mudo a
+ * `esLaSituacionDe` en `situacion.ts`, que comprueba que la situacion que llego
+ * sea la del documento de **este** token. Es la misma guarda sobre la unica fila
+ * que queda.
+ *
+ * Lo que se queda aqui es lo que usa la ficha 360° del back-office:
+ * {@link identidadPorCodigo} y {@link documentoDe}.
  */
-export type ClaveDelPadron = Extract<
-  keyof ParametrosDe<'contribuyentes'>,
-  'codigo' | 'dNI' | 'rUC'
->;
-
-/**
- * La guarda de vuelta: **los tres siguen publicados**.
- *
- * `Extract` se queda con lo que exista en las dos partes, asi que por si solo
- * degrada en silencio —si el contrato dejara de publicar `rUC`, `ClaveDelPadron`
- * pasaria a ser dos claves y todo seguiria compilando, con la caja del RUC
- * mandando un filtro que nadie lee—. Esta constante obliga a la comparacion en
- * la otra direccion: es `true` mientras los tres esten, y no compila en cuanto
- * falte uno.
- */
-export const LOS_TRES_FILTROS_DEL_PADRON: 'codigo' | 'dNI' | 'rUC' extends ClaveDelPadron
-  ? true
-  : never = true;
-
-const CAMPO_DE: Readonly<Record<ClaveDelPadron, string>> = {
-  codigo: 'codigo',
-  dNI: 'numeroDocumento',
-  rUC: 'numeroDocumento',
-};
-
-/**
- * Las filas del padron que **de verdad** coinciden con lo que se pregunto.
- *
- * Es la lectura del portal (#298), y comprueba la coincidencia aqui por el mismo
- * motivo que {@link identidadPorCodigo}: **lo que llega es un listado y quien lo
- * sirve puede traer mas de una fila**. El proxy de datos no filtra y devuelve el
- * padron entero (ADR-0010), asi que sin esta comprobacion el portal le ensenaria
- * a quien teclea su DNI la deuda de la primera persona del padron. No es una
- * concesion al proxy: un filtro del backend que un dia se relaje produce
- * exactamente el mismo destrozo, y aqui no se nota.
- *
- * No se mira el `tipoDocumento`, y es deliberado: un DNI son ocho digitos y un
- * RUC once, asi que el numero ya los separa, y comparar ademas un nombre de tipo
- * cuya forma exacta publica el backend —«DNI», «02 — DNI»— convertiria una
- * diferencia de rotulo en «esa persona no existe».
- *
- * Devuelve **todas** las coincidentes y no la primera: ninguna, una y varias son
- * tres respuestas distintas, y quien llama las dice de tres maneras.
- */
-export function identidadesQueCoinciden(
-  cuerpo: unknown,
-  clave: ClaveDelPadron,
-  valor: string,
-): readonly Identidad[] {
-  const campo = CAMPO_DE[clave];
-  const buscado = valor.trim().toUpperCase();
-  if (buscado === '') return [];
-  const pagina = leerPaginado(cuerpo, 'los contribuyentes');
-  return pagina.contenido
-    .filter(esObjeto)
-    .filter((fila) => typeof fila[campo] === 'string' && fila[campo].toUpperCase() === buscado)
-    .map(identidadDe);
-}
 
 function primeraQueCumpla(
   cuerpo: unknown,

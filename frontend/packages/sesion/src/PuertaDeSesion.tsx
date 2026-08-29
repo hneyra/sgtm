@@ -17,15 +17,18 @@ import { useSesion } from './ProveedorDeSesion';
 export interface PuertaDeSesionProps {
   readonly children: ReactNode;
   /**
-   * Que se ve sin sesion, cuando lo de siempre —el boton de entrar— no sirve.
+   * Que se ve sin sesion, cuando la invitacion de siempre no es la que toca.
    *
-   * Lo pasa **el portal** (#298, ADR-0016 §3): su `redirect_uri` es la raiz del
-   * origen (`sesion.ts`), asi que el boton mandaria al ciudadano a Keycloak para
-   * devolverlo al back-office, no al portal. Y el acceso propio del ciudadano no
-   * existe todavia —no hay realm que lo autentique—, de modo que ahi lo honesto
-   * es decirlo, no ofrecer una puerta que lleva a otro sitio.
+   * Lo pasa **el portal** (ADR-0020): su puerta lleva al realm del **ciudadano**
+   * —otro emisor, y una vuelta a `/portal/` en vez de a la raiz del origen— y lo
+   * que hay al otro lado no es «tu sesion de trabajo» sino la consulta de tu
+   * propia deuda. El mecanismo es el mismo; lo que cambia es a quien se le
+   * habla, y eso no se puede redactar una vez para los dos.
    *
-   * Sin esto se dibuja el boton de siempre, que es lo que el back-office necesita.
+   * Lo que aqui se dibuje **tiene que ofrecer la puerta**: puede llamar a
+   * `useSesion().entrar`, porque se monta dentro del proveedor.
+   *
+   * Sin esto se dibuja la invitacion de siempre, que es la del back-office.
    */
   readonly anonima?: ReactNode;
 }

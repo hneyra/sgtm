@@ -4,24 +4,24 @@ import java.util.Optional;
 import pe.gob.sgtm.dominio.DocumentoIdentidad;
 
 /**
- * Sujeto de la peticion cuando quien pregunta es el <b>ciudadano</b> y no un funcionario (ADR-0020).
+ * Sujeto de la peticion cuando quien pregunta es el <b>ciudadano</b> y no un funcionario
+ * (ADR-0020).
  *
  * <p>Gemelo deliberado de {@link TenantContext}, y con la misma regla: el documento entra <b>una
  * vez</b>, en el borde de la aplicacion, desde un claim del token ya validado, y ninguna capa
  * intermedia lo recibe ni lo pasa. Si el desarrollador no lo maneja, no puede olvidarlo (regla 2).
  *
  * <p>Lo que este contexto sustituye es exactamente lo que D-07 no sabia resolver. El portal del
- * contribuyente <b>no</b> lleva municipalidad: no pertenece a ninguna. Lo que lleva es su documento,
- * y lo lleva <b>firmado</b>: no es un parametro que el cliente elige —eso era
- * {@code GET /portal/deuda?doc=44218937}, el endpoint de enumeracion que ADR-0020 retira— sino un
- * claim que la cadena de seguridad valido criptograficamente contra el emisor del realm del
- * ciudadano.
+ * contribuyente <b>no</b> lleva municipalidad: no pertenece a ninguna. Lo que lleva es su
+ * documento, y lo lleva <b>firmado</b>: no es un parametro que el cliente elige —eso era {@code GET
+ * /portal/deuda?doc=44218937}, el endpoint de enumeracion que ADR-0020 retira— sino un claim que la
+ * cadena de seguridad valido criptograficamente contra el emisor del realm del ciudadano.
  *
  * <p><b>Los dos contextos no conviven en una peticion.</b> Bajo {@code /api/v1/portal/**} corre
  * {@code DocumentoCiudadanoContextFilter} y no {@code TenantContextFilter}; en el resto de la API,
  * al reves. El {@link TenantContext} de una peticion del portal lo mueve, municipalidad por
- * municipalidad, {@code RecorridoPorMunicipalidades}, que es el unico componente del perfil
- * {@code web} autorizado a hacerlo —y lo comprueba una regla de ArchUnit—.
+ * municipalidad, {@code RecorridoPorMunicipalidades}, que es el unico componente del perfil {@code
+ * web} autorizado a hacerlo —y lo comprueba una regla de ArchUnit—.
  *
  * <p>Nombre en ingles el sufijo {@code Context}, como sus dos gemelos: es una utilidad tecnica y no
  * vocabulario tributario (ARQ-04 §3).

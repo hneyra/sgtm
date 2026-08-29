@@ -167,6 +167,10 @@ jobs:
             VITE_SGTM_OIDC_AUTORIZACION=/keycloak/realms/sgtm/protocol/openid-connect/auth
             VITE_SGTM_OIDC_TOKEN=/keycloak/realms/sgtm/protocol/openid-connect/token
             VITE_SGTM_OIDC_FIN_DE_SESION=/keycloak/realms/sgtm/protocol/openid-connect/logout
+            VITE_SGTM_PORTAL_OIDC_CLIENTE=sgtm-portal
+            VITE_SGTM_PORTAL_OIDC_AUTORIZACION=/keycloak/realms/sgtm-ciudadano/protocol/openid-connect/auth
+            VITE_SGTM_PORTAL_OIDC_TOKEN=/keycloak/realms/sgtm-ciudadano/protocol/openid-connect/token
+            VITE_SGTM_PORTAL_OIDC_FIN_DE_SESION=/keycloak/realms/sgtm-ciudadano/protocol/openid-connect/logout
 
   demostrar-liberacion-y-reversion:
     name: El mecanismo de liberación funciona, sin pulumi up

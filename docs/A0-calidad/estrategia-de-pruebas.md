@@ -111,7 +111,11 @@ lugar de convertirse en una aserción intermitente.
   aserción sí.
 - Un paquete con solo `package-info.java` no es un módulo para Spring Modulith: los doce contextos
   no se verifican como módulos hasta que tengan su primera clase.
-- El camino del **portal del contribuyente** no está probado porque no está construido (D-07).
+- El camino del **portal del contribuyente** sí está probado desde #57: las dos cadenas de
+  identidad con dos emisores de verdad (`CadenaDelPortalTest`), el recorrido por municipalidades
+  contra PostgreSQL (`SituacionDelCiudadanoJdbcTest`) y los 360 px en Chromium
+  (`portal-en-movil.spec.ts`). Lo que **no** está probado es el enrolamiento en ventanilla, porque
+  todavía no está construido (D-15, camino B).
 
 ## 5. Al agregar código
 

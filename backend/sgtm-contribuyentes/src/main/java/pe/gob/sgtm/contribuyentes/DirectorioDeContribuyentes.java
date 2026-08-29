@@ -7,7 +7,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Lo unico que este contexto publica a los demas.
+ * Lo que este contexto publica a los demas para responder por un contribuyente <b>identificado por
+ * quien atiende</b>: su codigo, su nombre, sus domicilios.
  *
  * <p>Existe porque {@code catastro} tiene que responder dos preguntas que no puede responder solo:
  * «que predios tiene este contribuyente, escrito su nombre como se escriba» y «que pongo en la
@@ -23,6 +24,13 @@ import java.util.Set;
  * <p>Devuelve <b>resumenes</b>, no entidades. Quien consulta desde otro contexto necesita mostrar
  * un nombre y un codigo, no editar un contribuyente; entregarle el agregado entero seria invitar a
  * que lo modificara.
+ *
+ * <p><b>No es lo unico que este contexto publica</b>, y la otra puerta esta separada a proposito:
+ * {@link AcreditacionEnElPadron} responde por un <b>documento acreditado</b> y su interlocutor no
+ * es un funcionario sino el ciudadano (ADR-0020). Son dos preguntas distintas —«¿quien es el
+ * titular de este predio?» y «¿figura esta persona aqui?»—, con dos respuestas distintas y dos
+ * poblaciones distintas preguntando; juntarlas en esta interfaz habria obligado a que todo
+ * consumidor de ventanilla tuviera algo que contestar sobre el portal.
  */
 public interface DirectorioDeContribuyentes {
 

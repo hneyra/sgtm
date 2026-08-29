@@ -926,6 +926,96 @@ function consultaUnificada(): Readonly<Record<string, unknown>> {
 }
 
 /**
+ * La situacion del ciudadano en todas las municipalidades donde figure
+ * (`SituacionDelCiudadanoResource`, #57, RF-131, ADR-0020).
+ *
+ * ── Sin parametros, y por eso sin filtro que fingir ────────────────────────
+ *
+ * `GET /portal/situacion` no recibe nada: el sujeto sale del claim
+ * `numero_documento` del token del realm del ciudadano. Aqui no hay token que
+ * leer —el proxy no autentica—, asi que se responde por la primera persona del
+ * padron del prototipo, que es la misma con la que se prueba la ficha 360°.
+ *
+ * ── Las dos municipalidades llevan las MISMAS filas, y hay que decirlo ─────
+ *
+ * El prototipo tiene **un** padron. Lo que este recurso demuestra es la
+ * composicion —dos bloques, un total consolidado, una sola fecha de corte—, no
+ * dos juegos de datos: los dos bloques repiten las obligaciones y los predios
+ * del prototipo, y por eso el total es exactamente el doble del de uno. No es un
+ * defecto disimulado: inventar un segundo padron seria inventar deuda, que es lo
+ * que este archivo no hace nunca (ver la cabecera del modulo).
+ *
+ * Las dos municipalidades son las que el proyecto ya nombra: la del manual
+ * —Sullana, de donde salen las 231 figuras— y la del piloto de D-01, Catacaos.
+ * Sus ubigeos son los reales.
+ */
+function situacionDelCiudadano(): Readonly<Record<string, unknown>> {
+  const ficha = consultaUnificada();
+  const cabecera = esObjetoDelMock(ficha['contribuyente']) ? ficha['contribuyente'] : {};
+  const fecha = typeof ficha['aLaFecha'] === 'string' ? ficha['aLaFecha'] : EL_DIA_DEL_PROTOTIPO;
+  const resumen = esObjetoDelMock(ficha['resumenDeSaldos']) ? ficha['resumenDeSaldos'] : {};
+  const obligaciones = deudasDeLaFicha(fecha);
+
+  // El titular del padron, con su documento partido en tipo y numero: el recurso
+  // los publica separados justamente para que la interfaz pueda comparar el
+  // numero con el claim de su token.
+  const [titular] = filasDe('contribuyentes');
+  const [, , , dni = '', ruc = ''] = titular ?? [];
+  const esRuc = ruc !== '' && ruc !== '—';
+
+  const enLaMunicipalidad = (ubigeo: string, nombre: string) => ({
+    ubigeo,
+    nombre,
+    codigoContribuyente: cabecera['codigo'] ?? '',
+    nombreContribuyente: cabecera['nombre'] ?? '',
+    activo: true,
+    resumenDeSaldos: resumen,
+    obligaciones,
+    predios: prediosDelCiudadano(),
+  });
+
+  const total = esObjetoDelMock(resumen['total']) ? resumen['total'] : null;
+  const importeDelTotal =
+    total !== null && typeof total['importe'] === 'string' ? total['importe'] : '0.00';
+
+  return {
+    tipoDocumento: esRuc ? 'RUC' : 'DNI',
+    numeroDocumento: esRuc ? ruc : dni,
+    aLaFecha: fecha,
+    municipalidadesRecorridas: 2,
+    // Las dos ramas se leyeron, asi que hay total. Se suma aqui porque es lo que
+    // hace el servidor (RNF-083): la interfaz no compone ninguna cifra.
+    // Sumado **aqui**, porque es lo que hace el servidor (RNF-083): la interfaz
+    // no compone ninguna cifra. Y con la suma exacta del propio archivo, que no
+    // pasa por coma flotante (regla 1).
+    totalConsolidado: {
+      importe: sumaDeImportes([importeDelTotal, importeDelTotal]),
+      actualizadoA: fecha,
+    },
+    notaDelTotal: null,
+    sinRegistros: false,
+    municipalidades: [
+      enLaMunicipalidad('200601', 'MUNICIPALIDAD PROVINCIAL DE SULLANA'),
+      enLaMunicipalidad('200104', 'MUNICIPALIDAD DISTRITAL DE CATACAOS'),
+    ],
+  };
+}
+
+/** Los predios, con la forma que tienen dentro de la situacion: sin `predioId` ni deuda. */
+function prediosDelCiudadano(): readonly Readonly<Record<string, unknown>>[] {
+  return predios().contenido.map((predio) => ({
+    codigoReferenciaCatastral: predio['codigoReferenciaCatastral'],
+    tipo: predio['tipo'],
+    direccion: predio['direccion'],
+    porcentajeTitularidad: predio['porcentajeTitularidad'],
+  }));
+}
+
+/** Un objeto JSON y no un arreglo: el mismo predicado que usa la interfaz. */
+const esObjetoDelMock = (valor: unknown): valor is Readonly<Record<string, unknown>> =>
+  typeof valor === 'object' && valor !== null && !Array.isArray(valor);
+
+/**
  * «Deudas Pendientes» de la ficha (`ObligacionDeLaFicha`): las mismas filas que
  * `consulta_deuda`, con el desglose **plano** en vez de anidado bajo `deuda`.
  * Son dos recursos distintos del mismo dato, y el proxy respeta las dos formas.
@@ -2075,6 +2165,7 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/tesoreria/recaudacion/por-area': recaudacionPorArea,
   '/consultas/constancias/no-adeudo': constanciaDeNoAdeudo,
   '/consultas/unificada': consultaUnificada,
+  '/portal/situacion': situacionDelCiudadano,
   '/consultas/deudas-con-beneficio': deudasConBeneficio,
   '/seguridad/sesion/permisos': permisosDeLaSesion,
   '/coactiva/expedientes/{numero}/proceso': procesoCoactivo,

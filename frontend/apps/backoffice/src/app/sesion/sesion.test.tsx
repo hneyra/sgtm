@@ -429,7 +429,15 @@ describe('la municipalidad del token es para mostrarla, no para mandarla', () =>
     // identificador de municipalidad que mandar, asi que no se puede mandar
     // (regla 2, FRO-01 §4). Los permisos NO estan aqui: solo autentica; la
     // matriz la pide `GET /seguridad/sesion/permisos` (ADR-0013).
-    expect(screen.getByTestId('datos')).toHaveTextContent('["usuario","municipalidad","expira"]');
+    //
+    // `documento` se anadio con la sesion del ciudadano (ADR-0020) y **en un
+    // token de funcionario llega vacio**: es el claim `numero_documento`, que
+    // solo emite el realm del ciudadano. Esta en la lista, y esta bien que este:
+    // lo que esta prueba vigila es que no aparezca un `municipalidadId` que
+    // alguien pueda mandar de vuelta, no que la forma no crezca nunca.
+    expect(screen.getByTestId('datos')).toHaveTextContent(
+      '["usuario","municipalidad","documento","expira"]',
+    );
 
     // Lo que la sesion ya pidio al abrirse —el token y la matriz de permisos
     // (ADR-0013)— no es lo que esta prueba mira: interesa la peticion de datos

@@ -7,6 +7,7 @@ export {
 } from './cliente';
 export {
   configuracionDeIdentidad,
+  configuracionDelCiudadano,
   irAAutenticar,
   canjearSiVuelve,
   renovar,

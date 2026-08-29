@@ -48,6 +48,47 @@ export function configuracionDeIdentidad(): ConfiguracionDeIdentidad | null {
   };
 }
 
+/**
+ * La configuracion del proveedor del **ciudadano**, o `null` si no hay ninguno
+ * (ADR-0020).
+ *
+ * ── Por que son variables distintas y no las mismas ────────────────────────
+ *
+ * Porque son **dos realms con dos emisores**, y eso es lo que separa a las dos
+ * poblaciones sin un `if`: el backend monta dos cadenas de seguridad, cada una
+ * validando contra un solo emisor, de modo que un token de funcionario no
+ * autentica en `/portal/**` y uno de ciudadano no autentica en ninguna otra
+ * ruta. Reutilizar aqui `VITE_SGTM_OIDC_*` mandaria al ciudadano al formulario
+ * de los funcionarios y le devolveria un token que el portal no puede usar.
+ *
+ * ── Y la vuelta es a `/portal/`, no a la raiz ──────────────────────────────
+ *
+ * `configuracionDeIdentidad` fija `redireccion` en la raiz del origen, que es
+ * donde vive el back-office. El portal se sirve en `/portal/` del **mismo**
+ * origen (ADR-0009 §3), asi que su `redirect_uri` tiene que ser esa: con la de
+ * la raiz, el ciudadano entraria y apareceria en la aplicacion del funcionario.
+ * Era exactamente el motivo por el que la puerta del portal no ofrecia boton
+ * antes de que existiera este realm.
+ */
+export function configuracionDelCiudadano(): ConfiguracionDeIdentidad | null {
+  const entorno = import.meta.env;
+  const cliente = entorno['VITE_SGTM_PORTAL_OIDC_CLIENTE'];
+  const autorizacion = entorno['VITE_SGTM_PORTAL_OIDC_AUTORIZACION'];
+  const token = entorno['VITE_SGTM_PORTAL_OIDC_TOKEN'];
+  if (!cliente || !autorizacion || !token) return null;
+
+  return {
+    autorizacion,
+    token,
+    ...(entorno['VITE_SGTM_PORTAL_OIDC_FIN_DE_SESION']
+      ? { finDeSesion: entorno['VITE_SGTM_PORTAL_OIDC_FIN_DE_SESION'] }
+      : {}),
+    cliente,
+    alcance: entorno['VITE_SGTM_PORTAL_OIDC_ALCANCE'] ?? 'openid profile',
+    redireccion: `${window.location.origin}/portal/`,
+  };
+}
+
 /* ── PKCE ──────────────────────────────────────────────────────────────── */
 
 const base64url = (bytes: Uint8Array): string => {
@@ -233,6 +274,18 @@ function limpiarLaBarraDeDirecciones(): void {
 export interface DatosDelToken {
   readonly usuario: string;
   readonly municipalidad: string;
+  /**
+   * El numero de documento acreditado, cuando el token es del realm del
+   * ciudadano (ADR-0020). Cadena vacia en un token de funcionario, que no lo
+   * lleva.
+   *
+   * **No se lee para mandarlo a ningun sitio**, igual que la municipalidad: el
+   * backend lo toma del claim del token que el mismo valida, y la operacion del
+   * portal no tiene ni un parametro. Se lee para poder <b>comprobar</b> que la
+   * situacion que llego es la de este token —la guarda de `esLaSituacionDe`—, y
+   * eso es lo contrario de mandarlo.
+   */
+  readonly documento: string;
   /** Instante de expiracion, en segundos desde la epoca. */
   readonly expira: number;
 }
@@ -248,6 +301,7 @@ export function leerToken(token: string): DatosDelToken | null {
       usuario: typeof json['name'] === 'string' ? json['name'] : (json['sub'] as string) || '',
       municipalidad:
         typeof json['municipalidad_nombre'] === 'string' ? json['municipalidad_nombre'] : '',
+      documento: typeof json['numero_documento'] === 'string' ? json['numero_documento'] : '',
       expira: typeof json['exp'] === 'number' ? json['exp'] : 0,
     };
   } catch {

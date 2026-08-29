@@ -15,6 +15,7 @@ import {
 } from "./convenciones";
 import {
   municipalidadesJson,
+  realmCiudadanoJson,
   realmSgtmJson,
   reconciliarIdentidadesSh,
   reconciliarRealmSh,
@@ -177,8 +178,19 @@ export function documentosDelRealm(args: {
   realm: string;
   clienteDeVerificacion: boolean;
   smtp?: SmtpSettings;
+  /**
+   * De que archivo versionado salen. Sin esto, el de funcionarios.
+   *
+   * El del ciudadano (ADR-0020) pasa el suyo: son dos realms con dos emisores, y
+   * lo unico que comparten es este derivador —el mismo recorte de `smtpServer`,
+   * la misma reescritura de redirecciones y la misma exigencia de perfil
+   * declarativo—. Copiarlo habria duplicado las tres cosas, y la que mas duele
+   * duplicada es la ultima: sin perfil, el mapeador lee un atributo que el realm
+   * no admite y el claim sale vacio.
+   */
+  fuente?: string;
 }): DocumentosDelRealm {
-  const versionado = JSON.parse(realmSgtmJson()) as RealmVersionado;
+  const versionado = JSON.parse(args.fuente ?? realmSgtmJson()) as RealmVersionado;
 
   // El `smtpServer` del archivo versionado apunta al buzon `correo` del compose y NUNCA
   // llega asi al clúster: o lo decide el stack (ADR-0012), o el ambiente no tiene relay
@@ -207,10 +219,13 @@ export function documentosDelRealm(args: {
       ...c,
       // El realm versionado trae las redirecciones del compose —`localhost:5173`,
       // `localhost:8081`—, que en el clúster no valen y en `prod` serian ademas un
-      // destino de redireccion que nadie controla. Se reescriben con el dominio del
-      // ambiente; una redireccion a localhost en `prod` la caza la prueba.
+      // destino de redireccion que nadie controla. Se reescribe el ORIGEN con el
+      // dominio del ambiente y **se conserva el camino**: el cliente del portal
+      // declara `/portal/*` y tiene que seguir declarandolo, o su `redirect_uri`
+      // pasaria a admitir cualquier ruta del origen (ADR-0020). Una redireccion a
+      // localhost en `prod` la caza la prueba.
       ...(c.redirectUris && c.redirectUris.length > 0
-        ? { redirectUris: [`https://${args.domain}/*`] }
+        ? { redirectUris: [...new Set(c.redirectUris.map((u) => enElDominio(u, args.domain)))] }
         : {}),
       ...(c.webOrigins && c.webOrigins.length > 0
         ? { webOrigins: [`https://${args.domain}`] }
@@ -223,10 +238,11 @@ export function documentosDelRealm(args: {
     ]?.[0];
   if (perfil === undefined) {
     throw new Error(
-      "El realm versionado no trae el perfil de usuario declarativo. De ahi sale el " +
-        "atributo `municipalidad_id`, y sin el el mapeador leeria un atributo que el " +
-        "realm no admite: el claim saldria vacio y el backend responderia 403 " +
-        "SIN_MUNICIPALIDAD sin decir por que.",
+      `El realm versionado «${args.realm}» no trae el perfil de usuario declarativo. De ` +
+        "ahi salen los atributos de los que sale cada claim —`municipalidad_id` en el de " +
+        "funcionarios, `numero_documento` en el del ciudadano—, y sin el el mapeador " +
+        "leeria un atributo que el realm no admite: el claim saldria vacio y el backend " +
+        "responderia 403 sin decir por que.",
     );
   }
 
@@ -251,6 +267,30 @@ export function documentosDelRealm(args: {
     clientes: JSON.stringify({ ifResourceExists: "OVERWRITE", clients: clientes }, null, 2),
     clientesComprobados: clientes.map((c) => c.clientId),
   };
+}
+
+/**
+ * Como se llama el realm del ciudadano, a partir del de funcionarios.
+ *
+ * Derivado y no configurable: son dos realms del mismo Keycloak y de la misma
+ * instalacion, y dos nombres que se pudieran fijar por separado son dos que un
+ * dia dejan de corresponderse —con el backend apuntando su segunda cadena a un
+ * emisor que no existe, y el portal devolviendo 401 sin decir por que—.
+ */
+export function realmDelCiudadano(realm: string): string {
+  return `${realm}-ciudadano`;
+}
+
+/**
+ * El mismo camino de una redireccion, servido desde el dominio del ambiente.
+ *
+ * `http://localhost:5174/portal/*` → `https://<dominio>/portal/*`. Lo que se
+ * reescribe es el origen; el camino es del cliente y no es decorativo: es lo que
+ * acota a donde puede volver quien se autentica.
+ */
+function enElDominio(uri: string, domain: string): string {
+  const camino = uri.replace(/^[a-z]+:\/\/[^/]+/i, "");
+  return `https://${domain}${camino === "" ? "/*" : camino}`;
 }
 
 interface UsuarioVersionado {
@@ -389,6 +429,19 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
   const secreto = secretos(environment);
 
   const documentos = documentosDelRealm({ domain, realm, clienteDeVerificacion, smtp });
+  // El realm del CIUDADANO (ADR-0020). Emisor distinto, cliente distinto y
+  // atributos distintos; el mismo derivador y el mismo Job, porque el
+  // procedimiento de aplicarlo no cambia.
+  const documentosDelCiudadano = documentosDelRealm({
+    domain,
+    realm: realmDelCiudadano(realm),
+    // El cliente de verificacion es del realm de funcionarios: es el que CI usa
+    // para conseguir un token sin navegador. Aqui no existe ninguno, asi que la
+    // bandera no aplica y va en `false` para que el filtro no busque nada.
+    clienteDeVerificacion: false,
+    ...(smtp === undefined ? {} : { smtp }),
+    fuente: realmCiudadanoJson(),
+  });
   const identidades = documentosDeIdentidades({
     municipalidades: municipalidadesJson(),
     ubigeo,
@@ -403,6 +456,11 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
       "realm.json": documentos.realm,
       "perfil-de-usuario.json": documentos.perfilDeUsuario,
       "clientes.json": documentos.clientes,
+      // Los tres del ciudadano, en el mismo ConfigMap y con el mismo guion: el
+      // realm es otro, el procedimiento de aplicarlo no (ADR-0020).
+      "realm-ciudadano.json": documentosDelCiudadano.realm,
+      "perfil-de-usuario-ciudadano.json": documentosDelCiudadano.perfilDeUsuario,
+      "clientes-ciudadano.json": documentosDelCiudadano.clientes,
       "reconciliar-realm.sh": reconciliarRealmSh(),
       // El alta declarativa de usuarios (ADR-0012): el mismo guion que el compose y el
       // TSV que `documentosDeIdentidades` deriva del archivo versionado.
@@ -569,10 +627,14 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
         // Primero el realm y el perfil, despues los usuarios y grupos: el alta
         // declarativa necesita que el atributo `municipalidad_id` ya lo admita el
         // perfil (ADR-0012).
+        // Y el realm del ciudadano al final, cuando el de funcionarios ya esta:
+        // si el portal fallara, la municipalidad sigue pudiendo trabajar, que es
+        // el orden correcto de los dos fallos posibles (ADR-0020).
         command: [
           "/bin/bash",
           "-c",
-          "/realm/reconciliar-realm.sh && /realm/reconciliar-identidades.sh",
+          "/realm/reconciliar-realm.sh && /realm/reconciliar-identidades.sh" +
+            " && /realm/reconciliar-realm.sh ciudadano",
         ],
         env: [
           { name: "KC_SERVIDOR", value: `http://${nombre}:8080${RUTA_DE_IDENTIDAD}` },
@@ -588,6 +650,12 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
             },
           },
           { name: "KC_CLIENTES", value: documentos.clientesComprobados.join(" ") },
+          // El realm del ciudadano y su cliente, para la segunda pasada.
+          { name: "KC_REALM_CIUDADANO", value: realmDelCiudadano(realm) },
+          {
+            name: "KC_CLIENTES_CIUDADANO",
+            value: documentosDelCiudadano.clientesComprobados.join(" "),
+          },
           // Lee `identidades.tsv` del propio ConfigMap (modo «directo»).
           { name: "KC_DIRECTORIO", value: "/realm" },
           // Sin relay (Opción B): el guion crea al usuario y OMITE el enlace de
@@ -632,6 +700,12 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
     .update(documentos.realm)
     .update(documentos.perfilDeUsuario)
     .update(documentos.clientes)
+    // Y los del ciudadano: un cambio suyo tiene que crear un Job nuevo, o el
+    // realm versionado no llegaria nunca al clúster (que es el defecto que este
+    // Job existe para no repetir).
+    .update(documentosDelCiudadano.realm)
+    .update(documentosDelCiudadano.perfilDeUsuario)
+    .update(documentosDelCiudadano.clientes)
     .update(identidades.tsv)
     .update(reconciliarIdentidadesSh())
     // Y el pod que los aplica, no solo lo que aplica. Ver el docstring de arriba.
