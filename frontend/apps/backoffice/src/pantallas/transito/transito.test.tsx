@@ -55,6 +55,69 @@ async function dibujada(selector: string): Promise<void> {
   await waitFor(() => expect(document.querySelector(selector)).not.toBeNull());
 }
 
+/**
+ * Las tres que ademas **escriben**, y por eso llevan aviso (#429, FRO-06).
+ *
+ * `transito_record_conductor`, `transito_record_vehicular` y
+ * `transito_papeleta_reporte` son `GET`: hojas de lectura, y ahi no hay nada que
+ * advertir. Las otras tres son `POST` sin una sola seccion ni accion —el
+ * prototipo capturo el papel, no el formulario—, asi que su primaria no existe y
+ * la franja no se dibuja: lo que se lee es el aviso permanente.
+ */
+const HOJAS_QUE_ESCRIBEN: readonly (readonly [string, RegExp])[] = [
+  ['transito-rg-ordinaria', /papeleta que resuelve/i],
+  ['transito-rg-sancionadora', /papeleta que resuelve/i],
+  ['transito-constancia-libre', /placa del vehículo/i],
+];
+
+describe('la hoja que escribe dice lo que es y lo que le falta', () => {
+  it.each(HOJAS_QUE_ESCRIBEN)('%s lo advierte antes de la hoja', async (ranura, dato) => {
+    const montada = montarEnRuta(`/transito/${ranura}`);
+    await dibujada('.sgtm-aviso');
+
+    const aviso = document.querySelector('.sgtm-aviso');
+    // Que es lo que se esta mirando: el papel, no el formulario.
+    expect(aviso?.textContent).toMatch(/no el formulario|no la constancia|Esto es la/i);
+    // El dato que el acto exige y ninguna pantalla del manual dibuja.
+    expect(aviso?.textContent).toMatch(dato);
+    // Y por donde se sale: un aviso que solo cuenta lo que no se puede hacer
+    // deja el mostrador parado.
+    expect(aviso?.textContent).toMatch(/procedimiento actual/i);
+    expect(aviso?.textContent).toMatch(/sistemas/i);
+
+    // Sigue sin haber donde pulsar: el aviso no promete ningun acto.
+    expect(document.querySelector('.sgtm-acciones')).toBeNull();
+
+    montada.unmount();
+  });
+
+  it('la constancia nombra el filtro que se le parece y no sirve', async () => {
+    montarEnRuta('/transito/transito-constancia-libre');
+    await dibujada('.sgtm-aviso');
+
+    // Es el error que alguien haria sin este parrafo: teclear la placa en la
+    // busqueda y creer que con eso se acredita el vehiculo.
+    expect(document.querySelector('.sgtm-aviso')?.textContent).toMatch(
+      /Búsqueda de papeletas.*buscar/i,
+    );
+  });
+
+  it('las tres de lectura no llevan aviso: no hay nada que advertir', async () => {
+    for (const ranura of ['transito-record-vehicular', 'transito-papeleta-reporte']) {
+      const montada = montarEnRuta(`/transito/${ranura}`);
+      await dibujada('[data-hoja="1"]');
+
+      const avisos = [...document.querySelectorAll('.sgtm-aviso')];
+      expect(
+        avisos.some((a) => /procedimiento actual/i.test(a.textContent ?? '')),
+        ranura,
+      ).toBe(false);
+
+      montada.unmount();
+    }
+  });
+});
+
 describe('las trece hojas son la misma hoja', () => {
   it.each(HOJAS)('%s se dibuja con el bloque de hoja compartido', async (ranura) => {
     const montada = montarEnRuta(`/transito/${ranura}`);
