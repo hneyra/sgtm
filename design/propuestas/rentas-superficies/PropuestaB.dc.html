@@ -1,0 +1,269 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1F3A5F; } a:hover { color: #2a4d7a; }
+    table { border-collapse: collapse; }
+    .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+    .lbl { font-size: 11px; font-weight: 500; color: #6b6258; }
+    .inp { height: 34px; border: 1px solid #d8d2c4; border-radius: 6px; background: #ffffff; display: flex; align-items: center; padding: 0 10px; font-size: 13px; color: #1a1612; }
+    .inp-ro { height: 34px; border: 1px dashed #d8d2c4; border-radius: 6px; background: #fbfaf6; display: flex; align-items: center; padding: 0 10px; font-size: 13px; color: #3d362e; }
+    .vacio { color: #9a9085; }
+    .fld { display: flex; flex-direction: column; gap: 5px; }
+    .sec { background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden; }
+    .sechd { padding: 11px 14px; border-bottom: 1px solid #e6e1d6; font-size: 13.5px; font-weight: 600; color: #1a1612; display: flex; align-items: baseline; gap: 10px; }
+    .hint { font-size: 11.5px; font-weight: 400; color: #6b6258; }
+    .btn { height: 36px; border-radius: 6px; display: inline-flex; align-items: center; padding: 0 16px; font-size: 13.5px; font-weight: 500; border: 1px solid #d8d2c4; background: #ffffff; color: #1a1612; }
+    .btn-p { border: 0; background: #1F3A5F; color: #ffffff; padding: 0 22px; }
+    .btn-off { border: 1px solid #e6e1d6; background: #fbfaf6; color: #9a9085; padding: 0 22px; }
+    .tab { padding: 9px 16px; font-size: 13.5px; font-weight: 500; border: 0; background: transparent; color: #6b6258; border-bottom: 2px solid transparent; }
+    .tab-on { color: #1a1612; border-bottom-color: #1F3A5F; }
+    .p { margin: 0; font-size: 13px; line-height: 1.6; color: #3d362e; text-wrap: pretty; }
+    .note { background: #fbfaf6; border: 1px solid #e6e1d6; border-radius: 8px; padding: 11px 13px; }
+    .franja { background: #f6ecd9; border: 1px solid #e8d9b8; border-radius: 8px; padding: 10px 12px; }
+  </style>
+</helmet>
+
+<div style="background: #f6f4ef; color: #1a1612; padding: 34px 36px 40px; min-height: 100%; box-sizing: border-box;">
+
+  <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px;">
+    <span style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #6b6258;">Propuesta B · Unificar · 3 opciones → 1 superficie</span>
+    <h1 style="margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15;">El acto de transferencia, con su alcabala dentro</h1>
+    <p style="margin: 0; max-width: 940px; font-family: 'Source Serif 4', Georgia, serif; font-size: 15.5px; line-height: 1.55; color: #3d362e; text-wrap: pretty;">Una anatomía constante —<strong>Acto · Objeto · Partes · Liquidación</strong>— y una modalidad que decide qué se transfiere. La alcabala deja de ser una pantalla a la que hay que navegar y volver a teclear el expediente: es la hoja que abre la casilla «Genera alcabala» del acto que se acaba de registrar.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 24px; align-items: start;">
+
+    <div style="border: 1px solid #d8d2c4; border-radius: 12px; overflow: hidden; background: #f6f4ef;">
+
+      <div style="background: #ffffff; border-bottom: 1px solid #e6e1d6; padding: 14px 18px 0; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;">
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <span style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em; color: #6b6258;">Rentas · Registro</span>
+            <span style="font-size: 19px; font-weight: 600; letter-spacing: -0.01em;">Transferencias</span>
+          </div>
+          <div style="display: flex; gap: 22px; padding-top: 4px;">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span class="lbl">Nº de expediente</span>
+              <span class="mono" style="font-size: 13.5px; font-weight: 600;">{{acto.expediente}}</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span class="lbl">Fecha del acto</span>
+              <span style="font-size: 13.5px; font-weight: 600;">{{acto.fecha}}</span>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 4px;">
+          <button class="tab {{predio.clase}}" onClick="{{predio.ir}}">Transferencia de predio</button>
+          <button class="tab {{vehiculo.clase}}" onClick="{{vehiculo.ir}}">Transferencia de vehículo</button>
+          <button class="tab {{alcabala.clase}}" onClick="{{alcabala.ir}}">Impuesto de alcabala</button>
+        </div>
+      </div>
+
+      <div style="padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 14px;">
+
+        <sc-if value="{{esTransferencia}}" hint-placeholder-val="{{true}}">
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+
+            <section class="sec">
+              <div class="sechd"><span>Datos del acto</span><span class="hint">idéntico en las dos modalidades</span></div>
+              <div style="padding: 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;">
+                <div class="fld"><span class="lbl">Nº de expediente</span><div class="inp mono" style="font-size: 12px;">{{acto.expediente}}</div></div>
+                <div class="fld"><span class="lbl">Tipo de acto</span><div class="inp">COMPRA-VENTA</div></div>
+                <div class="fld"><span class="lbl">Fecha del acto</span><div class="inp">{{acto.fecha}}</div></div>
+              </div>
+            </section>
+
+            <section class="sec" style="border-color: #1F3A5F;">
+              <div class="sechd" style="background: #e7ecf3; border-bottom-color: #cdd9e6;"><span>{{objeto.titulo}}</span><span class="hint">lo único que cambia con la modalidad</span></div>
+              <div style="padding: 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;">
+                <div class="fld"><span class="lbl">{{objeto.idLabel}}</span><div class="inp mono" style="font-size: 12px;">{{objeto.idValor}}</div></div>
+                <div class="fld"><span class="lbl">{{objeto.docLabel}}</span><div class="inp">{{objeto.docValor}}</div></div>
+                <div class="fld"><span class="lbl">{{objeto.extraLabel}}</span><div class="inp">{{objeto.extraValor}}</div></div>
+              </div>
+            </section>
+
+            <section class="sec">
+              <div class="sechd"><span>Partes intervinientes</span><span class="hint">idéntico en las dos modalidades</span></div>
+              <div style="padding: 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;">
+                <div class="fld"><span class="lbl">Transferente — documento</span><div class="inp mono" style="font-size: 12px;">44218937</div></div>
+                <div class="fld" style="grid-column: span 2;"><span class="lbl">Transferente — nombre</span><div class="inp-ro">CASTILLO PASCUALA, MARÍA ELENA</div></div>
+                <div class="fld"><span class="lbl">Adquirente — documento</span><div class="inp mono" style="font-size: 12px;">{{partes.adquirenteDoc}}</div></div>
+                <div class="fld" style="grid-column: span 2;"><span class="lbl">Adquirente — nombre</span><div class="inp-ro">{{partes.adquirenteNombre}}</div></div>
+                <div class="fld"><span class="lbl">Transferente afecto hasta</span><div class="inp-ro">31/12/2026</div></div>
+                <div class="fld"><span class="lbl">Adquirente afecto desde</span><div class="inp-ro">01/01/2027</div></div>
+                <div class="fld"><span class="lbl">Deuda pendiente del transferente (S/)</span><div class="inp-ro" style="justify-content: flex-end; font-weight: 600; color: #1a1612;">940.64</div></div>
+              </div>
+              <div style="padding: 10px 14px; border-top: 1px solid #e6e1d6; background: #fbfaf6;">
+                <p class="p" style="font-size: 12px; color: #6b6258;">La deuda del transferente <strong>se enseña</strong>, no solo se valida. Hoy la de vehículo la dibuja y la de predio la esconde detrás de un botón.</p>
+              </div>
+            </section>
+
+            <sc-if value="{{esPredio}}" hint-placeholder-val="{{true}}">
+              <section class="sec">
+                <div class="sechd"><span>Liquidación</span></div>
+                <div style="padding: 14px; display: flex; align-items: center; gap: 10px;">
+                  <span style="width: 15px; height: 15px; border-radius: 3px; background: #1F3A5F; display: inline-flex; align-items: center; justify-content: center;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </span>
+                  <span style="font-size: 13px; color: #1a1612;">Genera alcabala</span>
+                  <span style="font-size: 12px; color: #6b6258;">— abre la hoja «Impuesto de alcabala» con este acto ya puesto</span>
+                </div>
+              </section>
+            </sc-if>
+
+            <section class="sec">
+              <div class="sechd"><span>Observación</span><span class="hint">sin ella no se guarda (regla 10, RNF-052)</span></div>
+              <div style="padding: 14px;">
+                <div style="border: 1px solid #d8d2c4; border-radius: 6px; background: #ffffff; padding: 9px 11px; min-height: 46px; font-size: 13px; color: #3d362e;">{{observacion}}</div>
+              </div>
+            </section>
+
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
+              <button class="btn">{{secundaria}}</button>
+              <button class="btn btn-p">Registrar transferencia</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{esAlcabala}}" hint-placeholder-val="{{true}}">
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            <section class="sec">
+              <div class="sechd"><span>Liquidación</span><span class="hint">lo que la transferencia ya sabe, sin volver a teclearlo</span></div>
+              <div style="padding: 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;">
+                <div class="fld"><span class="lbl">Nº de liquidación</span><div class="inp-ro vacio">—</div></div>
+                <div class="fld"><span class="lbl">Nº de expediente</span><div class="inp mono" style="font-size: 12px; background: #e7ecf3;">2026-0918</div></div>
+                <div class="fld"><span class="lbl">Fecha de la transferencia</span><div class="inp" style="background: #e7ecf3;">18/07/2026</div></div>
+                <div class="fld"><span class="lbl">Valor de transferencia (S/)</span><div class="inp" style="justify-content: flex-end; background: #e7ecf3;">95,000.00</div></div>
+                <div class="fld"><span class="lbl">Autovalúo del predio (S/)</span><div class="inp-ro vacio">—</div></div>
+                <div class="fld"><span class="lbl">IPM aplicado</span><div class="inp-ro vacio">—</div></div>
+                <div class="fld"><span class="lbl">Autovalúo ajustado (S/)</span><div class="inp-ro vacio">—</div></div>
+                <div class="fld"><span class="lbl">Base de cálculo (el mayor)</span><div class="inp-ro vacio">—</div></div>
+                <div class="fld"><span class="lbl">Tramo inafecto — 10 UIT (S/)</span><div class="inp-ro vacio">—</div></div>
+                <div class="fld"><span class="lbl">Base imponible (S/)</span><div class="inp-ro vacio">—</div></div>
+                <div class="fld"><span class="lbl">Tasa</span><div class="inp-ro vacio">—</div></div>
+                <div class="fld"><span class="lbl">Impuesto de alcabala (S/)</span><div class="inp-ro vacio">—</div></div>
+              </div>
+              <div style="padding: 10px 14px; border-top: 1px solid #e6e1d6; background: #fbfaf6;">
+                <p class="p" style="font-size: 12px; color: #6b6258;">En azul, los tres que llegan del acto. Los demás salen «—» porque nadie los publica: esta pantalla es un <span class="mono" style="font-size: 11.5px;">POST</span> y no se pide al abrirla.</p>
+              </div>
+            </section>
+
+            <div class="franja">
+              <p class="p" style="font-size: 12.5px; color: #6b4a12;"><strong>Falta un dato que esta pantalla no tiene dónde escribir: el autovalúo ajustado.</strong> Registra el acto por el procedimiento actual y avísale a sistemas: esta pantalla todavía no guarda.</p>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
+              <button class="btn">Liquidar</button>
+              <button class="btn">Imprimir liquidación</button>
+              <button class="btn btn-off">Generar orden de pago</button>
+            </div>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+
+      <section class="sec">
+        <div class="sechd"><span>Lo que la superficie cierra sola</span></div>
+        <div style="padding: 14px; display: flex; flex-direction: column; gap: 11px;">
+          <p class="p"><strong>La gemela divergente muere por construcción.</strong> «Datos del acto» y «Partes intervinientes» se dibujan <strong>una vez</strong>, así que no hay dos sitios donde el mismo dato pueda llamarse de dos maneras. Es el mismo mecanismo con que la A de catastro mata el vocabulario de <span class="mono" style="font-size: 12px;">MEP</span>/<span class="mono" style="font-size: 12px;">UCA</span>.</p>
+          <p class="p"><strong>La alcabala pierde la mitad de su impedimento.</strong> <span class="mono" style="font-size: 12px;">ACTOS_SIN_CAMPO</span> le declara hoy dos datos que faltan: <span class="mono" style="font-size: 12px;">transferenciaId</span> y <span class="mono" style="font-size: 12px;">autoavaluoAjustado</span>. El primero <strong>es</strong> la transferencia que se acaba de registrar: la superficie lo tiene. El segundo sigue sin publicarse, y la franja pasa a nombrar un dato en vez de dos.</p>
+          <p class="p" style="font-size: 12.5px; color: #6b6258;">La primaria de la hoja de alcabala <strong>sigue apagada</strong>, y eso es el resultado correcto: media causa resuelta no es ninguna causa resuelta.</p>
+        </div>
+      </section>
+
+      <section class="sec" style="border-color: #b8893d;">
+        <div class="sechd" style="background: #f6ecd9; border-bottom-color: #e8d9b8;"><span>Qué hay que decidir antes</span></div>
+        <div style="padding: 14px; display: flex; flex-direction: column; gap: 11px;">
+          <p class="p"><strong>Qué etiqueta lleva el bloque compartido.</strong> Los rótulos no se reescriben (RNF-080), y aquí hay dos para el mismo dato:</p>
+          <table style="width: 100%; font-size: 12px;">
+            <tbody>
+              <tr style="border-top: 1px solid #e6e1d6;"><td style="padding: 6px 0; color: #3d362e;">expediente</td><td style="padding: 6px 0;">«Nº de expediente»</td><td style="padding: 6px 0;">«Nro. de expediente»</td></tr>
+              <tr style="border-top: 1px solid #e6e1d6;"><td style="padding: 6px 0; color: #3d362e;">fecha</td><td style="padding: 6px 0;">«Fecha del acto»</td><td style="padding: 6px 0;">«Fecha de transferencia»</td></tr>
+              <tr style="border-top: 1px solid #e6e1d6;"><td style="padding: 6px 0; color: #3d362e;">afectación</td><td style="padding: 6px 0;">«Transferente afecto hasta»</td><td style="padding: 6px 0;">«Afecto hasta»</td></tr>
+            </tbody>
+          </table>
+          <p class="p" style="font-size: 12.5px;">Dibujar el bloque una vez obliga a que gane una de las dos columnas. El artboard usa la del <strong>predio</strong> —es la que nombra a quién se refiere—, pero <strong>eso no está decidido</strong>: es lo que hay que resolver antes de implementar, igual que la A de catastro tiene que decidir su identificador.</p>
+        </div>
+      </section>
+
+      <section class="sec" style="background: #fbfaf6;">
+        <div class="sechd" style="background: #ffffff;"><span>Cómo se demuestra que muerde</span></div>
+        <div style="padding: 14px; display: flex; flex-direction: column; gap: 9px;">
+          <p class="p" style="font-size: 12.5px;">Devolviendo a cada modalidad su propio bloque de acto y partes → rojo comparando letra por letra los dos juegos de rótulos.</p>
+          <p class="p" style="font-size: 12.5px;">Encendiendo la primaria de la hoja de alcabala → rojo: el autovalúo ajustado sigue sin publicarse.</p>
+          <p class="p" style="font-size: 12.5px;">Rellenando el autovalúo ajustado con el valor de transferencia → rojo: son dos cifras distintas, y la base es el mayor de las dos.</p>
+          <p class="p" style="font-size: 12.5px;">Abriendo la hoja de alcabala desde la modalidad de vehículo → no existe: la alcabala grava la transferencia de <strong>inmuebles</strong>.</p>
+          <p class="p" style="font-size: 12.5px;">Quitando la guarda de permiso del conmutador → una modalidad que el perfil no ve aparece.</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"hoja":{"editor":"enum","options":["predio","vehiculo","alcabala"],"default":"predio","tsType":"string"}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { hoja: undefined };
+  }
+  renderVals() {
+    const hoja = this.state.hoja ?? this.props.hoja ?? 'predio';
+    const esPredio = hoja === 'predio';
+    const esAlcabala = hoja === 'alcabala';
+    const ir = (h) => () => this.setState({ hoja: h });
+    return {
+      esPredio,
+      esAlcabala,
+      esTransferencia: !esAlcabala,
+      acto: esPredio
+        ? { expediente: '2026-0918', fecha: '18/07/2026' }
+        : { expediente: '2026-0944', fecha: '20/06/2026' },
+      objeto: esPredio
+        ? {
+            titulo: 'El predio que se transfiere',
+            idLabel: 'Código predial',
+            idValor: '04-021-B-07-00',
+            docLabel: 'Nº de minuta / escritura',
+            docValor: 'EP-2218-2026',
+            extraLabel: '% transferido',
+            extraValor: '50.00',
+          }
+        : {
+            titulo: 'El vehículo que se transfiere',
+            idLabel: 'Placa',
+            idValor: 'T2G-418',
+            docLabel: 'Documento sustentatorio',
+            docValor: 'ACTA NOTARIAL DE TRANSFERENCIA',
+            extraLabel: 'Nº del documento',
+            extraValor: 'AN-1182-2026',
+          },
+      partes: esPredio
+        ? { adquirenteDoc: '02718844', adquirenteNombre: 'DÍAZ MADRID, JULIO CÉSAR' }
+        : { adquirenteDoc: '03593174', adquirenteNombre: 'SUC. RUFINA MEDINA MEDINA' },
+      secundaria: esPredio ? 'Validar deuda del transferente' : 'Validar deuda',
+      observacion: esPredio
+        ? 'Compraventa del 50 % del predio, según escritura pública EP-2218-2026.'
+        : 'Transferencia por acta notarial AN-1182-2026.',
+      predio: { clase: esPredio ? 'tab-on' : '', ir: ir('predio') },
+      vehiculo: { clase: hoja === 'vehiculo' ? 'tab-on' : '', ir: ir('vehiculo') },
+      alcabala: { clase: esAlcabala ? 'tab-on' : '', ir: ir('alcabala') },
+    };
+  }
+}
+</script>
+</body>
+</html>

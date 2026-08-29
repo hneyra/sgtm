@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1F3A5F; } a:hover { color: #2a4d7a; }
+    table { border-collapse: collapse; }
+    .th { padding: 10px 12px; text-align: left; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: #6b6258; background: #fbfaf6; }
+    .thr { text-align: right; }
+    .td { padding: 8px 12px; color: #3d362e; font-size: 13px; }
+    .tdm { padding: 8px 12px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; font-weight: 500; color: #1a1612; }
+    .tdr { text-align: right; }
+    .row { border-top: 1px solid #e6e1d6; }
+    .mark { background: #f6ecd9; }
+    .hi { font-weight: 600; color: #8a6420; }
+    .none { color: #9a9085; }
+    .card { background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden; }
+    .cardhd { display: flex; align-items: baseline; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #e6e1d6; }
+    .h2 { margin: 0; font-size: 15px; font-weight: 600; color: #1a1612; }
+    .sub { font-size: 12px; color: #6b6258; }
+    .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px; }
+    .p { margin: 0; font-size: 13.5px; line-height: 1.62; color: #3d362e; text-wrap: pretty; }
+    .num { flex: none; width: 22px; height: 22px; border-radius: 50%; background: #1F3A5F; color: #ffffff; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+  </style>
+</helmet>
+
+<div style="background: #f6f4ef; color: #1a1612; padding: 40px 40px 48px; min-height: 100%; box-sizing: border-box;">
+
+  <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px;">
+    <span style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #6b6258;">SGTM · Módulo 03 · Diagnóstico</span>
+    <h1 style="margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1;">Rentas · Registro: quince pantallas, cuatro sujetos</h1>
+    <p style="margin: 0; max-width: 900px; font-family: 'Source Serif 4', Georgia, serif; font-size: 17px; line-height: 1.55; color: #3d362e; text-wrap: pretty;">#393 ya las reagrupó y le dio una anatomía común a la determinación. Lo que sigue en pie es que <strong>quince pantallas dibujan cuatro objetos</strong> —el contribuyente, el predio, el acto y la obligación— y cada una vuelve a preguntar por el suyo. Todo lo que sigue está contado sobre <span class="mono">catalogo/pantallas/rentas-registro.generado.ts</span> y sobre los controladores de <span class="mono">sgtm-rentas</span>, no estimado.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: minmax(0, 1fr) 470px; gap: 28px; align-items: start;">
+
+    <section class="card">
+      <div class="cardhd">
+        <h2 class="h2">Las quince, medidas</h2>
+        <span class="sub">forma · filtros · pestañas · campos · acciones</span>
+      </div>
+      <table style="width: 100%;">
+        <thead>
+          <tr>
+            <th class="th">Opción</th>
+            <th class="th">Forma</th>
+            <th class="th thr">Filtr.</th>
+            <th class="th thr">Pest.</th>
+            <th class="th thr">Campos</th>
+            <th class="th thr">Acc.</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="row mark"><td class="tdm">contribuyentes</td><td class="td">pestañas + tabla</td><td class="td tdr">4</td><td class="td tdr hi">9</td><td class="td tdr hi">56</td><td class="td tdr">4</td></tr>
+          <tr class="row"><td class="tdm">predios_rentas</td><td class="td">2 secciones + tabla</td><td class="td tdr">4</td><td class="td tdr none">—</td><td class="td tdr">15</td><td class="td tdr">3</td></tr>
+          <tr class="row mark"><td class="tdm">vehiculos</td><td class="td">pestañas + tabla</td><td class="td tdr hi">5</td><td class="td tdr hi">6</td><td class="td tdr hi">54</td><td class="td tdr">5</td></tr>
+          <tr class="row"><td class="tdm">declaracion_jurada</td><td class="td">1 sección + tabla</td><td class="td tdr">4</td><td class="td tdr none">—</td><td class="td tdr">5</td><td class="td tdr">2</td></tr>
+          <tr class="row"><td class="tdm">predial_individual</td><td class="td">3 secciones + tabla</td><td class="td tdr hi">5</td><td class="td tdr none">—</td><td class="td tdr">19</td><td class="td tdr">3</td></tr>
+          <tr class="row"><td class="tdm">predial_masivo</td><td class="td">1 sección + tabla</td><td class="td tdr none">0</td><td class="td tdr none">—</td><td class="td tdr">8</td><td class="td tdr">3</td></tr>
+          <tr class="row"><td class="tdm">arbitrios</td><td class="td">tabla + totales</td><td class="td tdr">4</td><td class="td tdr none">—</td><td class="td tdr none">0</td><td class="td tdr">2</td></tr>
+          <tr class="row"><td class="tdm">vehicular_calculo</td><td class="td">tabla + totales</td><td class="td tdr">3</td><td class="td tdr none">—</td><td class="td tdr none">0</td><td class="td tdr">3</td></tr>
+          <tr class="row"><td class="tdm">transferencia_predio</td><td class="td">2 secciones planas</td><td class="td tdr none">0</td><td class="td tdr none">—</td><td class="td tdr">14</td><td class="td tdr">2</td></tr>
+          <tr class="row"><td class="tdm">transferencia_vehiculo</td><td class="td">2 secciones planas</td><td class="td tdr none">0</td><td class="td tdr none">—</td><td class="td tdr">13</td><td class="td tdr">2</td></tr>
+          <tr class="row"><td class="tdm">alcabala</td><td class="td">1 sección + totales</td><td class="td tdr none">0</td><td class="td tdr none">—</td><td class="td tdr">13</td><td class="td tdr">3</td></tr>
+          <tr class="row"><td class="tdm">espectaculos</td><td class="td">1 sección + tabla</td><td class="td tdr">4</td><td class="td tdr none">—</td><td class="td tdr">14</td><td class="td tdr">3</td></tr>
+          <tr class="row"><td class="tdm">beneficios</td><td class="td">1 sección + tabla</td><td class="td tdr">3</td><td class="td tdr none">—</td><td class="td tdr">11</td><td class="td tdr">3</td></tr>
+          <tr class="row"><td class="tdm">alta_deuda</td><td class="td">1 sección plana</td><td class="td tdr none">0</td><td class="td tdr none">—</td><td class="td tdr">15</td><td class="td tdr">2</td></tr>
+          <tr class="row"><td class="tdm">baja_deuda</td><td class="td">1 sección + tabla</td><td class="td tdr">3</td><td class="td tdr none">—</td><td class="td tdr">6</td><td class="td tdr">2</td></tr>
+        </tbody>
+      </table>
+      <div style="padding: 12px 16px; border-top: 1px solid #e6e1d6; background: #fbfaf6;">
+        <p class="p" style="font-size: 12.5px;">Cinco formas distintas para el mismo trabajo, treinta y nueve filtros repartidos en diez barras, y tres etiquetas para un solo dato: el ejercicio se llama <span class="mono">«Año»</span> en cuatro pantallas, <span class="mono">«Ejercicio»</span> en dos y <span class="mono">«Ejercicio a calcular»</span> en una.</p>
+      </div>
+    </section>
+
+    <div style="display: flex; flex-direction: column; gap: 18px;">
+
+      <section class="card">
+        <div class="cardhd"><h2 class="h2">Tres defectos, no impresiones</h2></div>
+
+        <div style="display: flex; gap: 12px; padding: 16px; border-bottom: 1px solid #e6e1d6;">
+          <span class="num">1</span>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <p class="p"><strong>Las dos transferencias son la misma pantalla dos veces</strong>, y el prototipo lo delata solo: <span class="mono">transferencia_predio</span> y <span class="mono">alcabala</span> llevan <strong>el mismo expediente y la misma fecha</strong>.</p>
+            <table style="width: 100%; font-size: 12px;">
+              <tbody>
+                <tr class="row"><td class="td" style="padding: 6px 0; width: 40%;">Nº de expediente</td><td class="tdm" style="padding: 6px 0;">nDeExpediente</td><td class="tdm" style="padding: 6px 0;">nroDeExpediente</td></tr>
+                <tr class="row"><td class="td" style="padding: 6px 0;">Fecha del acto</td><td class="tdm" style="padding: 6px 0;">fechaDelActo</td><td class="tdm" style="padding: 6px 0;">fechaDeTransferencia</td></tr>
+                <tr class="row"><td class="td" style="padding: 6px 0;">Afecto hasta</td><td class="tdm" style="padding: 6px 0;">transferenteAfectoHasta</td><td class="tdm" style="padding: 6px 0;">afectoHasta</td></tr>
+                <tr class="row"><td class="td" style="padding: 6px 0;">La sección de las partes</td><td class="td" style="padding: 6px 0;">«Partes intervinientes»</td><td class="td" style="padding: 6px 0;">«Partes»</td></tr>
+                <tr class="row mark"><td class="td" style="padding: 6px; font-weight: 600; color: #1a1612;">El documento que sustenta</td><td class="td" style="padding: 6px;">notaría y minuta, <strong>texto libre</strong></td><td class="td" style="padding: 6px;">desplegable de <strong>cuatro</strong></td></tr>
+              </tbody>
+            </table>
+            <p class="p" style="font-size: 12.5px; color: #6b6258;">El mismo dato se teclea de dos formas y una de las dos no valida nada. Y la de predio <strong>valida</strong> la deuda del transferente sin enseñarla; la de vehículo la enseña en un campo.</p>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; padding: 16px; border-bottom: 1px solid #e6e1d6;">
+          <span class="num">2</span>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <p class="p"><strong>El sujeto se vuelve a fijar en diez barras, con tres nombres.</strong> <span class="mono">codContribuyente</span> en ocho pantallas, <span class="mono">contribuyente</span> en beneficios —que usa <strong>los dos a la vez</strong>: uno en el filtro y otro en el campo—, <span class="mono">organizador</span> en espectáculos, y en arbitrios no existe: se pregunta por el código predial.</p>
+            <p class="p" style="font-size: 12.5px; color: #6b6258;">Una atención de predial fija el mismo contribuyente <strong>00000025673</strong> en «Predios», en «Declaración jurada» y en «Cálculo individual» — las tres con los mismos dos predios detrás.</p>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; padding: 16px;">
+          <span class="num">3</span>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <p class="p"><strong><span class="mono">predios_rentas</span> dibuja «Nuevo» y «Guardar» sobre una lectura sin controlador — y no lo dice.</strong> Su primaria es «Ver ficha catastral», que cae en <span class="mono">DE_SALIDA</span>, así que <span class="mono">impedimentoDelActo</span> devuelve <span class="mono">undefined</span> y no se dibuja ninguna franja.</p>
+            <p class="p" style="font-size: 12.5px; color: #6b6258;">Es el defecto que #385 acaba de cerrar en <span class="mono">alcabala</span> y <span class="mono">espectaculos</span>, vivo en otra pantalla del mismo módulo.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" style="background: #fbfaf6;">
+        <div class="cardhd" style="background: #ffffff;"><h2 class="h2">Lo que este diagnóstico no repite</h2></div>
+        <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 9px;">
+          <p class="p" style="font-size: 12.5px;">#393 cerró la reagrupación por tarea, la anatomía común de las cinco determinaciones y el expediente predial en la ficha 360°. Nada de eso se rehace aquí.</p>
+          <p class="p" style="font-size: 12.5px;">Lo que #393 <strong>no</strong> tocó es la superficie: las quince siguen siendo quince pantallas. Eso es lo que estas tres propuestas pliegan.</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
