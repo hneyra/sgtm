@@ -393,6 +393,7 @@ export interface OpcionesDeEscritura {
    * {@link CampoDelCuerpo}.
    */
   readonly delFiltro?: Readonly<Record<string, CampoDelCuerpo>>;
+  /**
    * Lo que el cuerpo lleva **siempre** y nadie teclea: la mitad de la operacion
    * que se esta invocando.
    *
