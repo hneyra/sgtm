@@ -11,6 +11,31 @@ Convención de la ruta: `fuentes-normativas/<tipo>/<ubigeo>/<sello>__<archivo>`.
 UBIGEO; para norma nacional el precedente (la R.M. vehicular, [`tvr-2026/`](tvr-2026/README.md))
 usó el del piloto, `200105` (Catacaos), y se sigue igual.
 
+## Los archivos de filas —el derivado, no la fuente— también se archivan aquí (issue #388)
+
+Un cuadro normativo cuyo archivo de filas no cabe en un ConfigMap de Kubernetes (el límite
+práctico de un objeto de etcd es ~1 MiB; el anexo vehicular de 2026 pesa 1,5 MB) se sube al mismo
+bucket, con `scripts/valores-normativos/archivar_derivado.sh` —el hermano de
+`archivar_fuente_normativa.sh`, con la misma disciplina de subir y releer para verificar—, bajo un
+prefijo paralelo: `derivados-normativos/<tipo>/<ubigeo>/<sello>__<archivo>`.
+
+La diferencia con las fuentes de arriba no es solo el prefijo: **el manifiesto en git nunca nombra
+la URI**. `docs/10-negocio/valores-normativos/publicacion/cuadros-2026.csv` sigue declarando
+`archivo_de_filas` como la misma ruta relativa de siempre — es lo que
+`docs/10-negocio/verificar-cuadros.mjs` comprueba letra por letra contra el corpus en cada PR, y
+reescribirla ahí sería reescribir un derivado firmado. Lo que decide de dónde vienen los bytes de
+una fila —del propio git, o de S3— es
+[`derivados-en-s3.csv`](derivados-en-s3.csv): un registro aparte, indexado por el **mismo sha256**
+que la fila del manifiesto ya declara, que `infra/carga-de-datos/publicar-cuadros.sh` consulta
+cuando el archivo local pesa más de lo que un ConfigMap admite. Un `initContainer` descarga esa URI
+y verifica su sha256 contra el que el manifiesto declara ANTES de que el proceso de publicación
+arranque — nunca carga parcial, y un byte distinto en S3 no llega a Postgres.
+
+Hoy `derivados-en-s3.csv` está vacío: ningún archivo de filas se ha migrado todavía. El anexo
+vehicular ([`tvr-2026/`](tvr-2026/README.md), 1,5 MB) sigue en git —`publicar-cuadros.sh` se
+detiene nombrando los dos pasos que faltan si algún día hay que correrlo contra un ambiente real
+sin haberlo migrado antes—.
+
 ## Lote del 2026-08-28
 
 Los 30 documentos que la investigación de D-11 (#188), el punto 2 de #192 y el cotejo del TUO LTM
