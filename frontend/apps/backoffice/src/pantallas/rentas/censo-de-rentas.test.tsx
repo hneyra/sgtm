@@ -99,14 +99,13 @@ const CENSO: readonly Capacidades[] = [
         'Predios',
         'Deuda S/',
       ],
-    acciones: [
-        'Nuevo',
-        'Modificar',
-        'Imprimir',
-        'Guardar',
-      ],
-    primaria: 'Guardar',
-    causa: 'sin-backend',
+    // Desde #442 declara el vocabulario uniforme: «Nuevo» no abre ningun alta,
+    // «Modificar» es un modo y «Guardar» no podria guardar sobre un `GET`.
+    acciones: ['Imprimir'],
+    primaria: null,
+    // Y sin franja: lo unico que le queda es imprimir, que es de salida, asi que
+    // no hay ningun acto que explicar.
+    causa: null,
   },
   {
     id: 'predios_rentas',
@@ -130,12 +129,12 @@ const CENSO: readonly Capacidades[] = [
         'Autovalúo S/',
         'Condición',
       ],
-    acciones: [
-        'Nuevo',
-        'Guardar',
-        'Ver ficha catastral',
-      ],
-    primaria: 'Ver ficha catastral',
+    // El defecto 3 del diagnostico de #442, cerrado: dibujaba «Nuevo» y
+    // «Guardar» sobre un `GET` y **no lo decia** —su primaria «Ver ficha
+    // catastral» cae en `DE_SALIDA` y silenciaba la franja—. Ahora no los
+    // dibuja, y por eso sigue sin franja: ya no hay nada que desmentir.
+    acciones: ['Ver ficha catastral'],
+    primaria: null,
     causa: null,
   },
   {
@@ -270,15 +269,12 @@ const CENSO: readonly Capacidades[] = [
         'NotasOpcional',
       ],
     columnas: [],
-    acciones: [
-        'Nuevo',
-        'Modificar',
-        'Excel',
-        'Imprimir',
-        'Guardar',
-      ],
-    primaria: 'Guardar',
-    causa: 'sin-backend',
+    // Igual que «Contribuyentes». «Excel» sobrevive —`DE_SALIDA` lo reconoce— y
+    // hoy no descarga nada: solo dos descargas estan cableadas en el sistema, y
+    // eso es el hallazgo A1 de #413, no de este modulo.
+    acciones: ['Excel', 'Imprimir'],
+    primaria: null,
+    causa: null,
   },
   {
     id: 'vehicular_calculo',
