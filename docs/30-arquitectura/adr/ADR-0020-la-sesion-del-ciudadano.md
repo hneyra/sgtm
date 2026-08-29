@@ -161,6 +161,12 @@ Y lo que **no** cambia: ni una clave en el archivo (el guion rechaza `credential
 `secret` o `clave` nombrando el archivo), ningún grupo y ningún `municipalidad_id` —el ciudadano no
 pertenece a ninguna—, y las **134 siguen siendo 134**.
 
+Ejercer la rotura de §4 —quitarle el atributo `numero_documento`— enseñó de paso **cuál de las dos
+barreras actúa primero**: Keycloak **no deja crear** la cuenta, porque el perfil declarativo del
+realm exige ese atributo al administrador. La cuenta no llega a existir, de modo que el `403
+SIN_DOCUMENTO` del borde de la aplicación es la segunda barrera y no la primera; sigue haciendo
+falta, y se comprueba con un documento que existe y que el dominio no puede leer.
+
 El costo de §5 se paga y se dice: **el ciudadano que va a ventanilla no sale enrolado, sale
 esperando el despliegue.** Es lo que se compra a cambio de que el acto que fija una identidad tenga
 diff, revisor y corrida reproducible. Si algún día eso no fuera aceptable operativamente, lo que hay
