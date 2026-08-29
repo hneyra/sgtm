@@ -101,8 +101,6 @@ function aplicada(opcion: string): boolean {
  * existe. Solo puede encoger: cada issue quita las suyas y el diff lo ensena.
  */
 const SIN_APLICAR_TODAVIA: readonly string[] = [
-  'adm_notificacion_resolucion', // #428
-  'adm_resolucion_gerencia', // #428
   'transito_constancia_libre', // #429 — clasificada desde #77; le falta el aviso
   'transito_rg_ordinaria', // #429 — idem
   'transito_rg_sancionadora', // #429 — idem

@@ -370,6 +370,36 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
   },
 
   /**
+   * Y las dos de infracciones administrativas: las ultimas dos hojas sin
+   * superficie que quedaban descolocadas (FRO-06, #428).
+   *
+   * Son las gemelas exactas de `transito_rg_ordinaria` y de
+   * `transito_rg_sancionadora` —**el mismo acto administrativo**, dice
+   * `ResolverConResolucionDeGerencia`— y estaban en otra casilla:
+   * `sin-declaracion` pedia declarar campos sobre una pantalla que no tiene ni
+   * una seccion.
+   *
+   * Lo que las dos anaden al motivo, y no tienen las de transito, es **donde si
+   * esta dibujado su formulario**: el de la resolucion, en «Descargos y
+   * reclamos» (`transito_descargos`, que sirve a las dos familias); el de la
+   * diligencia, en «Notificación» (`adm_notificacion`). En los dos casos cuelga
+   * de otro acto, asi que no vale tal cual —ver FRO-06 §2—, pero decirlo evita
+   * que se busque un formulario que nadie dibujo dos veces.
+   */
+  adm_resolucion_gerencia: {
+    dato: 'la papeleta que resuelve, la fecha de la resolución y su sustento',
+    porque:
+      'Sin ellos no se puede dictar: esta pantalla no declara ninguna sección con campos, solo la hoja de la resolución que resultaría. El formulario sí está dibujado en «Descargos y reclamos», pero allí resuelve un recurso presentado, y una resolución también se dicta sin ninguno.',
+    campos: ['papeleta', 'fecha', 'sustento'],
+  },
+  adm_notificacion_resolucion: {
+    dato: 'la resolución que se notifica, y la diligencia: su fecha, la modalidad, el resultado y quién notificó',
+    porque:
+      'Sin ellos no se puede registrar la notificación: esta pantalla no declara ninguna sección con campos, solo la cédula que resultaría. La diligencia sí está dibujada en «Notificación», pero allí cuelga del acta preventiva, que es otro acto.',
+    campos: ['fechaDeNotificacion', 'modalidad', 'resultado', 'notificador'],
+  },
+
+  /**
    * Alcabala y espectaculos publicos: el bloqueo doble que #73 documento, #385
    * dejo registrado como deuda y **#432 contesto por escrito**. Sus primarias
    * del catalogo son de salida («Imprimir liquidacion»), asi que sin esta

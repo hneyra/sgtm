@@ -76,12 +76,13 @@ export interface LecturaPorPost {
  *
  * **Una hoy**, y la lista crece opcion por opcion, igual que `CONEXIONES`.
  *
- * `adm_reportes` (#78) **no esta**, y no por descuido: la puerta le falta
- * igual, pero su desplegable ofrece diez tipos de reporte y
- * `ReportesAdministrativosController` implementa tres, ninguno con el literal
- * que la pantalla ofrece. Conectarla aqui dejaria siete elecciones que
- * contestan 422 con el boton encendido, que es peor que el boton apagado de
- * hoy. Se resuelve en su modulo (#428).
+ * **Dos desde #428.** `adm_reportes` entra con el mismo mecanismo, y lo que la
+ * tenia fuera no era la puerta: su desplegable ofrece diez tipos de reporte y
+ * `ReportesAdministrativosController` implementa tres. Conectarla sin mas
+ * dejaria siete elecciones que contestan 422 con el boton encendido, asi que su
+ * componente **ofrece solo los tres** y de los otros siete dice donde estan
+ * —cinco son otra opcion del catalogo, dos no las sirve nadie—. Ver
+ * `sanciones/EmisorDeReportesAdministrativos.tsx`.
  */
 const LECTURAS_POR_POST: Readonly<Record<string, LecturaPorPost>> = {
   /**
@@ -90,6 +91,12 @@ const LECTURAS_POR_POST: Readonly<Record<string, LecturaPorPost>> = {
    * cuerpo.
    */
   transito_reportes: { operacion: 'transito_reportes', ruta: '/transito/reportes' },
+  /**
+   * El emisor de reportes de infracciones administrativas (#53, #428): tres
+   * hojas de las diez que el desplegable del manual ofrece, y las otras siete
+   * con donde estan.
+   */
+  adm_reportes: { operacion: 'adm_reportes', ruta: '/infracciones/administrativas/reportes' },
 };
 
 /** Lo que declara esa opcion, o nada. `Object.hasOwn`, como el resto del camino. */
