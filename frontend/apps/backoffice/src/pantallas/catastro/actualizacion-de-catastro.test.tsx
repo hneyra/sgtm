@@ -33,6 +33,27 @@ beforeEach(() => {
 
 afterEach(() => desinstalarProxyDeDatos());
 
+/**
+ * La tabla de pisos, por su nombre accesible.
+ *
+ * Desde que la ficha y su edicion caen en la misma superficie
+ * (`FichaDelPredio.tsx`), la pagina lleva las secciones del predio ademas del
+ * cuadro de pisos: buscar «01» a secas encuentra el sector antes que el piso, y
+ * «Piso» encuentra la columna de acabados ademas del campo del alta. Acotar es
+ * lo que devuelve a estas pruebas su sujeto.
+ */
+const pisos = () => screen.getByRole('table', { name: 'Pisos declarados en la nueva versión' });
+
+/**
+ * La fila de alta del cuadro de pisos.
+ *
+ * «Piso» tambien es un tramo del codigo de referencia catastral, y la ficha lo
+ * dibuja en «Localización»: sin acotar, el campo que se teclea aqui no se
+ * distingue del de alla.
+ */
+const altaDePiso = () =>
+  within(document.querySelector('.sgtm-pisos__alta') as HTMLElement);
+
 const aLaOperacion = (camino: string) => peticiones.filter((p) => p.url.includes(camino));
 const PUT = () =>
   aLaOperacion('/api/v1/catastro/fichas/200601010150010101001/actualizacion').filter(
@@ -43,12 +64,13 @@ describe('carga los pisos de la version vigente antes de dejar guardar', () => {
   it('dibuja los dos pisos de la ficha, con sus categorias separadas', async () => {
     montarEnRuta('/catastro/actualizacion-catastro/200601010150010101001');
 
-    const filaUno = (await screen.findByText('01')).closest('tr');
+    await screen.findByRole('table', { name: 'Pisos declarados en la nueva versión' });
+    const filaUno = within(pisos()).getByText('01').closest('tr');
     expect(filaUno).not.toBeNull();
     // «C B C C B C B»: muros, techos, pisos, puertas, revest., banios, instalaciones.
     expect(within(filaUno as HTMLElement).getByText('118.50')).toBeInTheDocument();
 
-    expect(await screen.findByText('02')).toBeInTheDocument();
+    expect(within(pisos()).getByText('02')).toBeInTheDocument();
     expect(screen.getByText('2 pisos')).toBeInTheDocument();
   });
 });
@@ -56,7 +78,7 @@ describe('carga los pisos de la version vigente antes de dejar guardar', () => {
 describe('guardar manda exactamente la lista blanca del controlador', () => {
   it('sin quitar ni agregar nada, guarda los dos pisos cargados', async () => {
     montarEnRuta('/catastro/actualizacion-catastro/200601010150010101001');
-    await screen.findByText('02');
+    await screen.findByRole('table', { name: 'Pisos declarados en la nueva versión' });
 
     await userEvent.type(
       screen.getByLabelText('Documento de origen'),
@@ -91,9 +113,9 @@ describe('guardar manda exactamente la lista blanca del controlador', () => {
 
   it('quitar un piso lo deja fuera de lo que se guarda', async () => {
     montarEnRuta('/catastro/actualizacion-catastro/200601010150010101001');
-    await screen.findByText('02');
+    await screen.findByRole('table', { name: 'Pisos declarados en la nueva versión' });
 
-    const filaDos = (await screen.findByText('02')).closest('tr');
+    const filaDos = within(pisos()).getByText('02').closest('tr');
     // El boton dice **de que piso es**: diez «Quitar» iguales no se distinguen.
     await userEvent.click(
       within(filaDos as HTMLElement).getByRole('button', { name: 'Quitar el piso 02' }),
@@ -112,9 +134,9 @@ describe('guardar manda exactamente la lista blanca del controlador', () => {
 
   it('agregar un piso nuevo lo incluye en lo que se guarda', async () => {
     montarEnRuta('/catastro/actualizacion-catastro/200601010150010101001');
-    await screen.findByText('02');
+    await screen.findByRole('table', { name: 'Pisos declarados en la nueva versión' });
 
-    await userEvent.type(screen.getByLabelText('Piso'), '03');
+    await userEvent.type(altaDePiso().getByLabelText('Piso'), '03');
     await userEvent.type(screen.getByLabelText('Área m²'), '32.00');
     await userEvent.type(screen.getByLabelText('Muros'), 'b');
     await userEvent.type(screen.getByLabelText('Techos'), 'b');
@@ -128,7 +150,7 @@ describe('guardar manda exactamente la lista blanca del controlador', () => {
     expect(screen.getByText('3 pisos')).toBeInTheDocument();
     // La letra se guarda en mayuscula, aunque se haya tecleado en minuscula:
     // las siete categorias de la fila nueva son «B».
-    const filaTres = (await screen.findByText('03')).closest('tr');
+    const filaTres = within(pisos()).getByText('03').closest('tr');
     expect(within(filaTres as HTMLElement).getAllByText('B')).toHaveLength(7);
 
     await userEvent.type(screen.getByLabelText('Documento de origen'), 'Acta 2026-10');
@@ -188,13 +210,13 @@ describe('guardar manda exactamente la lista blanca del controlador', () => {
 
     // Y en cuanto llegan, se puede guardar con ellos dentro.
     soltar();
-    await screen.findByText('02');
+    await screen.findByRole('table', { name: 'Pisos declarados en la nueva versión' });
     await waitFor(() => primariaEncendida(screen.getByRole('button', { name: 'Guardar' })));
   });
 
   it('sin documento de origen, guardar falla en voz alta y no manda nada', async () => {
     montarEnRuta('/catastro/actualizacion-catastro/200601010150010101001');
-    await screen.findByText('02');
+    await screen.findByRole('table', { name: 'Pisos declarados en la nueva versión' });
 
     await userEvent.type(screen.getByLabelText('Observación'), 'Falta el documento.');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));

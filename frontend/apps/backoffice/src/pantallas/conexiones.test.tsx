@@ -67,7 +67,13 @@ describe('una opcion conectada y una sin conectar conviven', () => {
   it('el registro dice cuales estan conectadas, y son pocas todavia', () => {
     expect(OPCIONES_CONECTADAS).toContain('inicio');
     expect(OPCIONES_CONECTADAS).toContain('calles');
-    expect(OPCIONES_CONECTADAS).toContain('aranceles');
+    expect(OPCIONES_CONECTADAS).toContain('consulta_fichas');
+    // `aranceles` **dejo** de conectarse por `definirConexion` con la propuesta
+    // B: las tres tablas de valuacion caen en una sola superficie
+    // (`catastro/CuadroDeValuacion.tsx`) que lee la fila cruda, porque
+    // `documentoFuente` —lo unico que los tres recursos publican de la
+    // procedencia— no sobrevive a un adaptador que produce celdas.
+    expect(OPCIONES_CONECTADAS).not.toContain('aranceles');
     // Las tres pestañas de la ficha 360° que #363 conecto: ver
     // `pantallas/transito`, `pantallas/sanciones` y `pantallas/coactiva`.
     expect(OPCIONES_CONECTADAS).toContain('papeletas');

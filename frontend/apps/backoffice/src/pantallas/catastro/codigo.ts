@@ -149,6 +149,25 @@ export const normalizarCodigoCatastral = (valor: string): string =>
   componerDeTramos(repartirEnTramos(valor));
 
 /**
+ * Si un identificador **es** un codigo de referencia catastral.
+ *
+ * Solo digitos, alguno, y no mas largo que la plantilla. Se admiten codigos mas
+ * cortos que ella a proposito: los ejemplos del prototipo traen 21 posiciones y
+ * la plantilla del manual da 23 —eso es D-10, y sigue abierta—, asi que exigir
+ * la longitud completa dejaria fuera justo los codigos que hay.
+ *
+ * Lo que **no** lo es, y es el caso que importa: la unidad catastral rural del
+ * prototipo (`11024-0418`) lleva guion. Con ella, `predioDe` del backend no
+ * encuentra ningun predio, asi que ninguna de las cuatro fichas se puede pedir
+ * con ese valor —y la superficie que las conmuta tiene que saberlo antes de
+ * ofrecer el enlace (`FichaDelPredio`)—.
+ */
+export const esCodigoDeReferenciaCatastral = (valor: string): boolean => {
+  const limpio = valor.trim();
+  return limpio !== '' && limpio.length <= LONGITUD_DEL_CODIGO && soloDigitos(limpio) === limpio;
+};
+
+/**
  * El codigo con guiones entre tramos, para leerlo de un vistazo.
  *
  * Troquela **lo mismo que reparte el componente**, y por eso admite codigos mas
@@ -161,11 +180,8 @@ export const normalizarCodigoCatastral = (valor: string): string =>
  * esta plantilla diria de ella algo que no es cierto. Sale tal cual.
  */
 export function formatearCodigoCatastral(valor: string): string {
-  const limpio = valor.trim();
-  if (limpio === '' || limpio.length > LONGITUD_DEL_CODIGO || soloDigitos(limpio) !== limpio) {
-    return valor;
-  }
-  return repartirEnTramos(limpio)
+  if (!esCodigoDeReferenciaCatastral(valor)) return valor;
+  return repartirEnTramos(valor.trim())
     .filter((tramo) => tramo !== '')
     .join('-');
 }

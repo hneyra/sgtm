@@ -434,6 +434,39 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
 
     montada.unmount();
   });
+
+  /**
+   * **Las tres tablas de valuacion, sin los dos botones que no podian guardar.**
+   *
+   * Mismo precedente que `sectores`, y con un motivo mas fuerte todavia:
+   * «Importar tabla del año» y «Guardar» no es que estuvieran dibujados y
+   * muertos, es que **no pueden existir**. ADR-0017 deja valores unitarios y
+   * depreciacion como catalogos nacionales que solo escribe
+   * `rol_carga_parametros` (V55, con `REVOKE INSERT/UPDATE` a `sgtm_app`), y el
+   * arancel municipal cuelga del conjunto que V18 vuelve inmutable al sellarse.
+   *
+   * La franja de la primaria decia `sin-backend` —«aquí todavía no se puede
+   * guardar nada»— junto a dos botones que prometian importar y guardar. Se
+   * exige lo mismo que en `sectores`, que es mas que una franja vacia: **no hay
+   * barra que leer**, y los dos rotulos no estan en ninguna parte de la pagina.
+   */
+  it.each([
+    { ruta: '/catastro/aranceles' },
+    { ruta: '/catastro/valores-unitarios' },
+    { ruta: '/catastro/depreciacion' },
+  ])('$ruta no dibuja «Importar tabla del año» ni «Guardar»: no puede escribir', async ({ ruta }) => {
+    const montada = montarEnRuta(ruta);
+
+    // Se espera a la superficie, que llega en su propio trozo (`lazy`).
+    expect(await screen.findByRole('tablist', { name: 'Hojas del cuadro de valuación' })).toBeInTheDocument();
+
+    expect(document.querySelector('.sgtm-acciones')).toBeNull();
+    expect(document.getElementById('sgtm-motivo-de-la-accion')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Importar tabla del año' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument();
+
+    montada.unmount();
+  });
 });
 
 /**

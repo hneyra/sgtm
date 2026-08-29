@@ -7,36 +7,49 @@ import {
   datosDe,
   esObjeto,
   estado,
-  leerLista,
   leerPaginado,
   tablaDe,
-  tablaDeLista,
   texto,
 } from '../seguridad/listado';
-import { campo, leerFicha } from './fichas';
+import { campo, leerFicha, letrasDeCategorias } from './fichas';
 import type { Ficha } from './fichas';
 import { normalizarCodigoCatastral } from './codigo';
 
 /**
- * Catastro, conectado hasta donde llega el backend: **diez opciones de doce**.
+ * Catastro, conectado hasta donde llega el backend: **las doce opciones**.
  *
- * Las dos que faltan son valores unitarios y depreciacion, y ya no es
- * (solo) porque su contenido sea D-02: `ValorUnitarioController` y
- * `DepreciacionController` publican **una fila por partida** (o por estado de
- * conservacion) y el prototipo dibuja una **matriz** —categoria × siete
- * partidas; antiguedad × cuatro estados—. Volcar filas sueltas bajo columnas
- * fijas las mostraria bajo la cabecera de otra partida, que es peor que un
- * hueco. Y para valores unitarios hay una segunda dimension que NEG-05 exige
- * —el ano de construccion— que el prototipo ni siquiera dibuja como filtro:
- * conectarla tal cual eligiria en silencio que rango de anos mostrar. Las dos
- * necesitan una decision de diseno —una tabla nueva, o filtros que el
- * prototipo no declara— antes de que esto sea "conectar", no un adaptador.
+ * Este archivo son las **siete** que siguen la forma comun de una conexion —una
+ * operacion tipada, un lector y un adaptador—. Que las declare aqui no dice
+ * quien las dibuja: cinco de ellas caen ademas en un componente propio de
+ * `COMPONENTES_PROPIOS` (`Pantalla.tsx`), que las lee por esta misma conexion.
  *
- * Aranceles si es la fila suelta que el resto de este modulo ya usa: un
- * `Arancel` por fila, sin pivote. Su endpoint tampoco pagina ni filtra de
- * verdad —`ArancelController` solo lee `anio`—, y aqui se acepta el mismo
- * corte que ya acepto #70 para `accesos` o `usuarios`: el contrato declara mas
- * filtros de los que el controlador recibe, y fingir que la interfaz los
+ *   ficha_urbana,             las cuatro son el mismo predio, y caen con la
+ *   ficha_economica,          actualizacion en una sola superficie
+ *   ficha_bienes,             (`FichaDelPredio.tsx`, propuesta A). La
+ *   ficha_rural,              actualizacion **no tiene conexion propia**:
+ *   actualizacion_catastro    versiona la ficha urbana y la lee de la suya
+ *   sectores, calles          las dos son el mismo territorio, y caen en una
+ *                             sola superficie (`Territorio.tsx`)
+ *   aranceles,                las tres son el mismo cuadro del ejercicio, y
+ *   valores_unitarios,        caen en una sola superficie
+ *   depreciacion              (`CuadroDeValuacion.tsx`, propuesta B)
+ *
+ * **Por que `aranceles` dejo de tener conexion.** Hasta la propuesta B era la
+ * unica tabla de valuacion sin pivote y le bastaba el camino comun. Pero la
+ * superficie unica necesita **la fila cruda** —`documentoFuente` es lo unico
+ * que los tres recursos publican de la procedencia, y un adaptador que produce
+ * celdas lo tira por el camino—, y mantener a la vez una conexion para una hoja
+ * y una lectura cruda para las otras dos dejaba dos caminos para el mismo
+ * cuadro. Las columnas y los huecos de esa hoja no cambian: son los del
+ * catalogo, con el id de la via en vez de su nombre —cruzarlo con el catalogo
+ * vial (#16) traeria las vias enteras a una tabla que solo necesita el
+ * arancel—, con `tramo` como subdivision libre y no como rango —no hay «cuadra
+ * hasta» que separarle— y con la variacion contra el ano anterior en «—»,
+ * porque componerla seria inventar una cifra de valuacion (RNF-083).
+ *
+ * Y el corte de #70 sigue en pie donde estaba: el contrato declara para esas
+ * tres operaciones mas filtros de los que sus controladores reciben —los tres
+ * leen `@RequestParam int anio` y nada mas—, y fingir que la interfaz los
  * aplica seria peor que dejarlos sin efecto.
  *
  * **Lo que se ve es lo que el backend manda.** El prototipo dibuja para la
@@ -121,22 +134,36 @@ const deLaFichaComun = (ficha: Ficha): DatosDePantalla => ({
 });
 
 /**
- * Ficha urbana (RF-001). Su tabla del prototipo es la de direcciones del
- * predio, que `FichaResource` no publica; las construcciones si, y son lo que
- * la pantalla necesita para explicar el area construida.
+ * Los pisos declarados, en las **dieciseis columnas del prototipo**.
+ *
+ * Son las de `actualizacion_catastro` —«Versiones registradas por piso»—, que es
+ * la tabla de pisos que el manual dibuja. La superficie unica de la ficha
+ * (`FichaDelPredio`, propuesta A) la usa para las dos modalidades que valorizan
+ * construccion, en lectura y en edicion, y por eso el adaptador la llena con esa
+ * forma.
+ *
+ * **No es la tabla que `ficha_urbana` declara en el catalogo**: aquella es la de
+ * direcciones del predio —«Nombre Calle», «Tipo Vía»…—, que `FichaResource` no
+ * publica, y hasta esta propuesta sus filas llevaban las construcciones bajo
+ * esas cabeceras. Una tabla con cabeceras de una cosa y datos de otra es peor
+ * que un hueco: nada la delata.
+ *
+ * Las construcciones salen **con sus categorias, nunca con importes**: cuanto
+ * vale cada categoria es D-02a y vive en datos versionados (regla 5). Y lo que
+ * `FichaResource` no publica —el mes, el estado de la construccion, el area
+ * verificada y el uso de la unidad— sale «—», no un cero ni un valor plausible.
+ *
+ * `valores` lleva **la construccion cruda**, que es de donde el modo de edicion
+ * siembra su tabla: una celda es texto de presentacion, y sembrar de ella
+ * mandaria «—» al backend como si fuera un area.
  */
-const ficha_urbana = definirConexion({
-  operacion: 'ficha_urbana',
-  parametros: (contexto) => ({ codRefCatastral: registro(contexto), ...deLaFicha(contexto) }),
-  leer: (cuerpo) => leerFicha(cuerpo, 'urbana'),
-  adaptar: (ficha) => ({
-    ...deLaFichaComun(ficha),
-    tabla: {
-      // Las construcciones salen **con sus categorias, nunca con importes**:
-      // cuanto vale cada categoria es D-02a y vive en datos versionados
-      // (regla 5). Una columna de soles aqui seria una cifra inventada.
-      filas: ficha.construcciones.map((construccion): readonly Celda[] => [
+function pisosDeclarados(ficha: Ficha): DatosDePantalla['tabla'] {
+  return {
+    filas: ficha.construcciones.map((construccion): readonly Celda[] => {
+      const letras = letrasDeCategorias(construccion.categorias);
+      return [
         { texto: construccion.piso },
+        { texto: SIN_DATO },
         {
           texto:
             construccion.anioConstruccion === undefined
@@ -145,15 +172,39 @@ const ficha_urbana = definirConexion({
         },
         { texto: construccion.material ?? SIN_DATO },
         { texto: construccion.estadoConservacion ?? SIN_DATO },
-        { texto: construccion.categorias },
+        { texto: SIN_DATO },
+        ...letras.map((letra) => ({ texto: letra === '' ? SIN_DATO : letra })),
         { texto: construccion.areaConstruida },
-      ]),
-      conteo: `${ficha.construcciones.length} pisos declarados`,
-    },
-  }),
+        { texto: SIN_DATO },
+        { texto: SIN_DATO },
+      ];
+    }),
+    valores: ficha.construcciones.map((construccion) => ({
+      piso: construccion.piso,
+      areaConstruida: construccion.areaConstruida,
+      categorias: construccion.categorias,
+    })),
+    conteo: `${ficha.construcciones.length} pisos declarados`,
+  };
+}
+
+/** Ficha urbana (RF-001): el predio y los pisos que explican su area construida. */
+const ficha_urbana = definirConexion({
+  operacion: 'ficha_urbana',
+  parametros: (contexto) => ({ codRefCatastral: registro(contexto), ...deLaFicha(contexto) }),
+  leer: (cuerpo) => leerFicha(cuerpo, 'urbana'),
+  adaptar: (ficha) => ({ ...deLaFichaComun(ficha), tabla: pisosDeclarados(ficha) }),
 });
 
-/** Ficha economica (RF-002): que se hace en la unidad y con que licencias. */
+/**
+ * Ficha economica (RF-002): que se hace en la unidad y con que licencias.
+ *
+ * Lleva **los mismos pisos** que la urbana, y no es una copia: es el mismo
+ * predio. La actividad economica se declara sobre una unidad de un predio
+ * urbano, asi que su valorizacion es la de aquel —lo que cambia es el bloque de
+ * actividad, en «Uso y servicios»— y `FichaResource` publica las construcciones
+ * en las cuatro modalidades.
+ */
 const ficha_economica = definirConexion({
   operacion: 'ficha_economica',
   parametros: (contexto) => ({ codRefCatastral: registro(contexto), ...deLaFicha(contexto) }),
@@ -163,6 +214,7 @@ const ficha_economica = definirConexion({
     const [primera] = actividades;
     return {
       ...deLaFichaComun(ficha),
+      tabla: pisosDeclarados(ficha),
       campos: {
         ...comunes(ficha),
         // El prototipo dibuja **una** actividad; el recurso publica todas. Se
@@ -473,54 +525,6 @@ function conteo(valor: unknown): string {
   return SIN_DATO;
 }
 
-/* ── Aranceles: la unica tabla de valuacion sin pivote ──────────────────── */
-
-/**
- * Aranceles de terreno (RF-009, #17).
- *
- * `ArancelController` no pagina —devuelve `List<ArancelResource>` tal cual— ni
- * filtra: solo lee `anio`, que es lo unico que se manda. El «Via», «Zona» y
- * «Ejercicio» que dibuja el prototipo siguen en el contrato porque #63 los
- * anadio automaticamente a toda pantalla con tabla; que el controlador no los
- * reciba es una brecha del backend, no algo que el frontend deba disimular
- * (mismo corte que ya acepto #70 para `accesos`).
- *
- * `ArancelResource` publica el id de la via, no su nombre: cruzarlo con el
- * catalogo vial (#16) para mostrarlo traeria las vias completas a una tabla
- * que solo necesita el arancel. Y `tramo` es una subdivision libre —«un tramo
- * con mayor valor que el resto de la cuadra»—, no un rango numerico: no hay
- * «cuadra hasta» que separarle.
- */
-const aranceles = definirConexion({
-  operacion: 'aranceles',
-  // `via` y `zona` viajan si se escriben, igual que en `accesos` (#70): el
-  // contrato los declara y el controlador los ignora, y eso no lo decide esta
-  // pantalla. `anio` es aparte porque no es un filtro de la URL: es el
-  // ejercicio de la sesion, y sin el la peticion ni siquiera es valida.
-  parametros: (contexto) => ({
-    ...deLaBusqueda('aranceles')(contexto),
-    anio: String(contexto.ejercicio),
-  }),
-  leer: (cuerpo) => leerLista(cuerpo, 'los aranceles'),
-  adaptar: (lista) =>
-    datosDe(
-      tablaDeLista(
-        lista,
-        (arancel): readonly Celda[] => [
-          { texto: texto(arancel['viaId']) },
-          { texto: texto(arancel['tramo']) },
-          { texto: SIN_DATO },
-          { texto: SIN_DATO },
-          { texto: texto(arancel['valorM2']) },
-          // La variacion contra el ano anterior no la publica el recurso, y
-          // calcularla aqui seria componer una cifra de valuacion (D-02).
-          { texto: SIN_DATO },
-        ],
-        'aranceles',
-      ),
-    ),
-});
-
 const listaDe = (valor: unknown): readonly Readonly<Record<string, unknown>>[] =>
   Array.isArray(valor) ? valor.filter(esObjeto) : [];
 
@@ -545,5 +549,4 @@ export const CONEXIONES_DE_CATASTRO: Readonly<Record<string, Conexion>> = {
   ficha_economica,
   ficha_bienes,
   ficha_rural,
-  aranceles,
 };

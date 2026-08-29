@@ -3009,3 +3009,151 @@
     align-self: stretch;
   }
 }
+
+/* ── El cuadro de valuacion del ejercicio: banda de procedencia ─────────
+   El selector del ejercicio y el desplegable que acota son tarjetas de una
+   sola fila: el `Campo` del design system trae su propia caja, asi que aqui
+   solo se limita el ancho para que un ano de cuatro digitos no ocupe la
+   pantalla entera. */
+.sgtm-cuadro__ejercicio,
+.sgtm-cuadro__acotar {
+  max-width: 340px;
+}
+
+/* La procedencia se lee **antes** que las cifras: es lo que sostiene una
+   determinacion. Fondo suave y no tarjeta blanca, para que se distinga de las
+   tablas sin competir con ellas. */
+.sgtm-procedencia {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.sgtm-procedencia__ambito,
+.sgtm-procedencia__norma {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+}
+
+.sgtm-procedencia__etiqueta {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sgtm-procedencia__valor {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* Lo que no consta se ve como lo que es: un hueco, no un valor. El texto ya
+   dice «—», asi que el color solo acompana (FRO-02 §2.1). */
+.sgtm-procedencia__hueco {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.sgtm-procedencia__documentos {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.sgtm-procedencia__firmas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+}
+
+.sgtm-procedencia__firmas dd {
+  margin: 2px 0 0;
+}
+
+.sgtm-procedencia__nota {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+/* ── La ficha del predio: el conmutador de modalidad ────────────────────
+
+   Las cuatro fichas del mismo predio, en chips (`catastro/FichaDelPredio.tsx`,
+   propuesta A). Las que se pueden pedir son **enlaces**; la que no —el
+   identificador con que se abrio esta ficha no es un codigo de referencia
+   catastral— se dibuja apagada con su motivo al lado, como «Conciliar
+   seleccionadas» y el desplegable de conciliacion.
+
+   Lo apagado **no se distingue solo por color** (FRO-02 §2.1): lleva borde
+   discontinuo, y el motivo va escrito debajo. */
+
+.sgtm-modalidades {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 11px 14px;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.sgtm-modalidades__rotulo {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sgtm-modalidades__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sgtm-modalidades__chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-card);
+  font-size: 13px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.sgtm-modalidades__chip[data-activa='1'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg-card);
+  font-weight: 500;
+}
+
+.sgtm-modalidades__chip[data-apagada='1'] {
+  border-style: dashed;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.sgtm-modalidades__motivo {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
