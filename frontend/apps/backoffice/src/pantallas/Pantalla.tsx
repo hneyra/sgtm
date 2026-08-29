@@ -636,6 +636,8 @@ function Bloques({
       // que no hay traduccion que lo saque al cuerpo.
       ...(declarada?.presentacion === undefined ? {} : { presentacion: declarada.presentacion }),
       tablas: declarada?.tablas ?? {},
+      // La mitad de la operacion que se invoca, cuando la operacion es dos.
+      ...(declarada?.constantes === undefined ? {} : { constantes: declarada.constantes }),
       /* Lo que exige la opcion, **precedido de lo que exige la pagina**. La
          opcion mira el cuerpo —`escrituras.ts` no sabe que es una pagina—; que
          la fila capturada siga estando delante solo lo puede comprobar quien

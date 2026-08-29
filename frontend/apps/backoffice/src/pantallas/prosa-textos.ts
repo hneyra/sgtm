@@ -424,6 +424,9 @@ export const NOTAS: Readonly<Record<string, string>> = {
   baja_deuda:
     'La baja registra una obligación por acto: se elige su cuota en la tabla y se repite para las demás. La causal no tiene campo propio en el backend —va en la observación, que es donde queda auditada— y el total a extinguir lo calcula el servidor: aquí no se suma ninguna columna. Una fila cuya cuota agrupa varias («1 - 4») no se puede dar de baja todavía: el backend registra una cuota o el año completo, y no hay forma de decirle «de la 1 a la 4».',
 
+  predial_masivo:
+    'Esta corrida determina el impuesto predial y nada más: los arbitrios son otro tributo, con su propia determinación por periodo, y la cuponera es un documento que todavía no se genera desde aquí. Sus dos casillas se ven, y marcarlas impide ejecutar en vez de fallar después. El alcance se emite a todo el padrón o por sector —«por rango de código» y «solo observados» aún no existen—, y la UIT y el derecho de emisión los pone el servidor desde el conjunto sellado del ejercicio.',
+
   notificacion_valores:
     'La hora y la dirección de la diligencia no se guardan todavía: el backend solo pide la fecha (sin hora) y, si no se indica una dirección, usa el domicilio fiscal vigente a esa fecha.',
 
