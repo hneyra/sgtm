@@ -42,7 +42,10 @@ import { lecturaPorPostDe } from './lecturas-por-post';
  * ver {@link ACTOS_SIN_CAMPO}.
  */
 export type CausaDelImpedimento =
-  'sin-backend' | 'sin-declaracion' | 'sin-determinacion' | 'sin-campo';
+  | 'sin-backend'
+  | 'sin-declaracion'
+  | 'sin-determinacion'
+  | 'sin-campo';
 
 export interface ImpedimentoDelActo {
   /**
@@ -207,28 +210,45 @@ export interface ActoSinCampo {
  * llegaria a ventanilla es un 422 despues de rellenar el formulario entero y de
  * confirmar un acto irreversible.
  *
- * **Vacia desde #73.** Las dos transferencias que la abrieron —
- * `TransferenciaPredioController` y `TransferenciaVehiculoController` exigian
- * `valorTransferencia`, y ninguna de las dos pantallas del manual tenia un
- * campo para el— ya no estan: `pantallas/rentas/composicion.ts` declara un
- * resolutor que **anade** el campo dentro del control que sustituye a otro
- * —«Código predial» en una, «Transferente — documento» en la otra—, sin
- * reescribir el rotulo de ninguno (RNF-080). No se resolvio editando el
- * catalogo —`rentas-registro.generado.ts` no se toca a mano— ni inventando el
- * importe: se anadio un campo nuevo, con su propia etiqueta, junto al control
- * que ya resolvia lo otro que faltaba.
+ * **Y de aqui se sale de tres maneras distintas, porque el hueco tiene tres
+ * formas** (#422). No es una taxonomia inventada: sale de mirar las doce que
+ * llego a haber y preguntarse quien puede poner cada dato.
  *
- * Se queda declarada, y no se borra el mecanismo, porque el hueco que cierra
- * —un acto que exige un dato para el que ninguna pantalla del manual dibuja un
- * campo propio— puede volver a aparecer: es lo que le pasa hoy a `alcabala`
- * (`transferenciaId` no lo resuelve ninguna lectura publicada, y
- * `autoavaluoAjustado` esta marcado de solo lectura en el catalogo aunque el
- * controlador lo pida como dato de entrada) y a `espectaculos`
- * (`ingresoDeclarado`, tambien de solo lectura). Ninguna de las dos entra aqui
- * **todavia**: su primaria del catalogo es «Imprimir liquidación», que
- * `DE_SALIDA` reconoce antes de llegar a esta lista, asi que hoy se leen como
- * pantallas de consulta y no como un acto sin campo. Ver `rentas/index.ts`
- * para el analisis completo.
+ *   1. **Lo teclea quien atiende, y solo falta el control.** El medio de pago de
+ *      las dos cajas, el numero de expediente de un descargo, la placa de una
+ *      constancia. Se sale **declarando** el control —`ComposicionDeOpcion.controles`,
+ *      #422—, y `transito_descargos` es el precedente: un `Campo` con su propia
+ *      etiqueta al final de la seccion que la opcion nombre, sin componente
+ *      propio. Antes de #422 la unica salida probada era la de #73 —un componente
+ *      que sustituye a un campo y anade el que falta— y esa no se puede copiar
+ *      doce veces.
+ *   2. **Es un identificador interno que hay que resolver contra una lista.**
+ *      `fisc_predial` y `fisc_vehicular` piden `programaId`/`contribuyenteId`/
+ *      `predioId`, y sin una grilla conectada de la que sacarlos —como
+ *      `baja_deuda` los saca de `consulta_deuda`— no hay control que valga. La
+ *      mitad de backend que faltaba ya esta: `GET /fiscalizacion/programas`
+ *      existe desde #431, asi que el `programaId` tiene de donde salir. Los
+ *      otros dos siguen sin publicarlos ninguna lectura de fiscalizacion, y por
+ *      eso las dos actas se quedan aqui.
+ *   3. **Lo determina el sistema, y hoy no lo determina nadie.** El autovaluo
+ *      ajustado de `alcabala` (D-11, D-02a) y el ingreso declarado de
+ *      `espectaculos`. Ahi **quedarse aqui es la respuesta correcta**: declararle
+ *      un control seria darle a quien atiende una caja donde teclear una cifra
+ *      que ninguna norma respalda, y de esa cifra sale el impuesto. Que
+ *      generalizar el mecanismo no borre esta franja lo exige una prueba.
+ *
+ * Las dos transferencias que abrieron esta lista (#73) salieron por la primera
+ * forma, antes de que fuera un mecanismo: `pantallas/rentas/composicion.ts`
+ * declara un resolutor que **anade** el campo dentro del control que sustituye a
+ * otro —«Código predial» en una, «Transferente — documento» en la otra—, sin
+ * reescribir el rotulo de ninguno (RNF-080). No se resolvio editando el catalogo
+ * —`rentas-registro.generado.ts` no se toca a mano— ni inventando el importe.
+ * `transito_descargos` salio por la misma forma y ya sin componente (#422).
+ *
+ * `alcabala` y `espectaculos` estan aqui desde #385 y son las de la tercera
+ * forma; hasta ese issue su primaria del catalogo —«Imprimir liquidación»— las
+ * sacaba antes de llegar a esta lista, y el motivo real se leia de un `title`
+ * sobre un boton apagado. Ver `rentas/index.ts` para el analisis campo a campo.
  */
 export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
   /**
@@ -272,22 +292,25 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
     campos: ['obligaciones'],
   },
 
-  /**
-   * Descargos y reclamos de papeletas, y el número de expediente que le falta (#50, #77).
+  /*
+   * `transito_descargos` **estaba aqui, y ya no** (#422).
    *
-   * `DescargosController` exige `nDeExpediente` —«el número con que entra por mesa de
-   * partes»—, y la única sección editable de esta pantalla lo dibuja como `nDeExpediente2`,
-   * de solo lectura (`"t": "ro"`). El «Nº de expediente» de los filtros es para buscar un
-   * descargo ya registrado, no para teclear el de uno nuevo. Y aunque lo hubiera, la última
-   * acción del catálogo es «Notificar al administrado», no «Registrar descargo» —la primera
-   * de las tres—: declarar la escritura tal cual habilitaría el botón equivocado.
+   * Era el caso mas limpio de la primera de las tres formas del hueco —el dato
+   * lo teclea quien atiende y solo faltaba el control—: `DescargosController`
+   * exige `nDeExpediente`, «el numero con que entra por mesa de partes», y la
+   * unica seccion editable de la pantalla lo dibuja `"ro"`, porque es el del
+   * descargo que se esta consultando. Desde #422 lo declara
+   * `transito/composicion.ts` como un control **anadido** al final de
+   * «Solicitud», con su propia etiqueta (RNF-080), y la escritura entera esta en
+   * `escrituras.ts`. Le hacia falta ademas la otra mitad, que puso #421: la
+   * ultima accion del catalogo es «Notificar al administrado» y la que registra
+   * es la primera de las tres, asi que `LA_QUE_ESCRIBE` la pasa al final.
+   *
+   * Se deja anotado y no se borra en silencio porque es el precedente: las que
+   * quedan aqui de esa misma forma —el medio de pago de las dos cajas, la placa
+   * de la constancia libre— se cierran por este camino, y las que no son de esa
+   * forma no se cierran por ninguno.
    */
-  transito_descargos: {
-    dato: 'el número de expediente con que el descargo entra por mesa de partes',
-    porque:
-      'Sin él no se puede registrar: el backend lo exige, y la única sección editable de esta pantalla dibuja ese campo de solo lectura. Ninguna de las tres acciones del catálogo es además «la última»: la que registra es la primera.',
-    campos: ['nDeExpediente'],
-  },
 
   /**
    * Constancia libre de infracciones, y la resolución de gerencia ordinaria y sancionadora:
@@ -347,24 +370,32 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
   },
 
   /**
-   * Alcabala y espectaculos publicos: el bloqueo doble que #73 documento y #385
-   * dejo registrado como deuda. Sus primarias del catalogo son de salida
-   * («Imprimir liquidacion»), asi que sin esta entrada la causa `DE_SALIDA`
-   * ganaba y el motivo real —la pantalla entera no puede escribir— no llegaba
-   * ni al teclado ni al lector (RNF-082). Desde #385, `ACTOS_SIN_CAMPO`
-   * gana a `DE_SALIDA` tambien aqui, y la franja del motivo se dibuja. El analisis
-   * campo a campo vive en `pantallas/rentas/index.ts`.
+   * Alcabala y espectaculos publicos: el bloqueo doble que #73 documento, #385
+   * dejo registrado como deuda y **#432 contesto por escrito**. Sus primarias
+   * del catalogo son de salida («Imprimir liquidacion»), asi que sin esta
+   * entrada la causa `DE_SALIDA` ganaba y el motivo real —la pantalla entera no
+   * puede escribir— no llegaba ni al teclado ni al lector (RNF-082). Desde #385,
+   * `ACTOS_SIN_CAMPO` gana a `DE_SALIDA` tambien aqui, y la franja se dibuja.
+   *
+   * **Lo que cambia con #432 es lo que la franja dice**, no la casilla: las dos
+   * seguian nombrando dos datos con el mismo tono, y de los cuatro solo **uno**
+   * es un campo que falta. Los otros tres son cosas distintas —una respuesta que
+   * la pantalla ya recibe y no guarda, una cifra que determina el sistema y hoy
+   * no determina nadie, y una multiplicacion que ni la pantalla puede hacer
+   * (RNF-083) ni el servidor hace—, y decirlas igual manda a buscar un campo que
+   * no existe. El analisis campo a campo, con las dos preguntas de #432
+   * contestadas, vive en `pantallas/rentas/index.ts`.
    */
   alcabala: {
-    dato: 'la transferencia ya registrada que la sustenta, y el autovaluo ajustado',
+    dato: 'la transferencia ya registrada sobre la que se liquida',
     porque:
-      'Sin ellos la alcabala no se puede liquidar: el backend exige el identificador de una transferencia que ninguna lectura del contrato publica, y el autovaluo ajustado que esta pantalla dibuja de solo lectura.',
+      'Ninguna consulta del sistema devuelve todavía las transferencias registradas, así que no hay de dónde elegir la que se liquida ni cómo teclearla. Y aunque la hubiera, la liquidación seguiría sin poder calcularse: el autovalúo ajustado que la ley manda comparar con el valor de la transferencia lo determina el sistema —esta pantalla lo enseña como el resultado de multiplicar el autovalúo del predio por el índice del año—, y hoy no lo determina nadie.',
     campos: ['transferenciaId', 'autoavaluoAjustado'],
   },
   espectaculos: {
-    dato: 'el organizador y el ingreso declarado del espectaculo',
+    dato: 'el organizador, identificado contra el padrón, y la recaudación declarada',
     porque:
-      'Sin ellos el impuesto no se puede registrar: el backend exige el ingreso como dato de entrada y esta pantalla lo dibuja de solo lectura, esperando un calculo de aforo por precio que el servidor no compone.',
+      'Aquí el organizador se escribe por su nombre y el registro lo necesita identificado, y no hay ningún control que lo busque en el padrón. La recaudación declarada tampoco se puede poner: esta pantalla la enseña como el resultado de multiplicar las entradas vendidas por el precio promedio, y esa multiplicación no la hace la pantalla —ninguna cifra de dinero se compone aquí— ni el servidor, que la pide ya hecha.',
     campos: ['organizadorId', 'ingresoDeclarado'],
   },
 
@@ -511,6 +542,26 @@ export const VOCABULARIO_UNIFORME: ReadonlySet<string> = new Set([
   'ficha_rural',
   'actualizacion_catastro',
   'calles',
+  /* **Las tres lecturas del padron de Rentas · Registro** (#442).
+     Son el mismo caso que las cuatro fichas catastrales y por el mismo motivo:
+     su operacion es un `GET`, ninguna declara escritura, y entre las tres
+     dibujan **ocho** botones que no son actos —tres «Guardar» que no podrian
+     guardar ni el dia que se conectara el backend, tres «Nuevo» que no abren
+     ningun alta y dos «Modificar», que es un modo—.
+     Con `predios_rentas` se cierra ademas un defecto que no se veia: su primaria
+     «Ver ficha catastral» cae en `DE_SALIDA`, asi que `impedimentoDelActo`
+     devolvia `undefined` y la pantalla prometia un guardado **sin franja que lo
+     desmintiera**. Es el mismo hueco que #385 cerro en `alcabala` y
+     `espectaculos`, en otra pantalla del mismo modulo.
+     **Las otras doce del modulo se quedan fuera, y no por descuido**: aplicar la
+     regla a las quince borraria nueve actos reales del manual —«Ejecutar
+     proceso», las dos «Emitir cuponera», «Vista previa», «Generar orden de
+     pago», «Registrar»— y dejaria a `beneficios` con la barra vacia, porque sus
+     tres acciones escriben y ninguna esta declarada. La regla se escribio para
+     cuatro fichas de consulta; rentas es un modulo que escribe. Ver #442. */
+  'contribuyentes',
+  'predios_rentas',
+  'vehiculos',
 ]);
 
 /**
@@ -552,10 +603,16 @@ export const VOCABULARIO_UNIFORME: ReadonlySet<string> = new Set([
  * que su motivo se quedaba en un `title` sobre un boton `disabled`, que no
  * llega ni al teclado ni al lector (RNF-082)—.
  *
- * **No conecta ninguna escritura.** Las once siguen sin declarar sus campos en
- * `escrituras.ts`, asi que su primaria sigue apagada; lo que cambia es **cual**
- * lo esta, y que la franja pasa a decir por que. Declararlas es de los issues
- * de su modulo.
+ * **De las doce, once no conectan ninguna escritura**: siguen sin declarar sus
+ * campos en `escrituras.ts`, asi que su primaria sigue apagada; lo que cambia es
+ * **cual** lo esta, y que la franja pasa a decir por que. Declararlas es de los
+ * issues de su modulo.
+ *
+ * La doceava —`transito_descargos`, #422— si: es la primera pantalla en la que
+ * esta declaracion y la de `ComposicionDeOpcion.controles` se necesitan a la
+ * vez, y por eso se anadio aqui y no en el issue de su modulo. Lo que aporta
+ * cada una se separa bien: esta dice **cual boton** escribe, y la otra **donde**
+ * se teclea el dato que el backend exige y el manual no dibuja.
  */
 export const LA_QUE_ESCRIBE: Readonly<Record<string, string>> = {
   /* ── Coactiva (#76) ────────────────────────────────────────────────────
@@ -607,6 +664,35 @@ export const LA_QUE_ESCRIBE: Readonly<Record<string, string>> = {
    * motivo real —falta `nDeRecibo`— sin franja que lo contara.
    */
   certificados: 'Emitir',
+
+  /* ── Tesorería (#423) ──────────────────────────────────────────────────── */
+
+  /**
+   * «Anulación de convenio» es la primera que declara esto **teniendo mas de una
+   * accion que escribe**: «Anular» y «Quebrar» mandan las dos, con `accion`
+   * distinta (`EscrituraDeclarada.segunLaAccion`). Lo que se declara aqui sigue
+   * siendo una sola cosa —**cual es el acto de la pantalla**—, y es «Anular»:
+   * le da nombre a la opcion, y con el orden del catalogo el navy le tocaba a
+   * «Quebrar», que es el acto excepcional —el que se dicta cuando el
+   * contribuyente incumple—. «Quebrar» se queda de secundaria, encendida y con
+   * su propia confirmacion de irreversible.
+   */
+  anulacion_convenio: 'Anular',
+  /* ── Transito (#77, #422) ──────────────────────────────────────────────── */
+
+  /**
+   * La que registra el escrito, y es **la primera** de las tres: las otras dos
+   * —«Resolver», «Notificar al administrado»— son actos posteriores del mismo
+   * expediente, y la ultima del catalogo es la de notificar.
+   *
+   * Es la primera opcion en la que las dos declaraciones de esta onda se
+   * necesitan a la vez (#422): sin `LA_QUE_ESCRIBE` la primaria seria el boton
+   * de notificar, y sin el control anadido de `transito/composicion.ts` no
+   * habria donde teclear el numero de expediente que el backend exige. Ninguna
+   * de las dos sobra, y se ve en que quitar cualquiera de ellas deja la pantalla
+   * exactamente igual de rota, por motivos distintos.
+   */
+  transito_descargos: 'Registrar descargo',
 
   /* ── Infracciones administrativas (#78) ────────────────────────────────── */
 

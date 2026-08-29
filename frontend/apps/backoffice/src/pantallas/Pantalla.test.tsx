@@ -97,9 +97,16 @@ describe('los bloques del descriptor', () => {
     montarEnRuta('/consultas/constancia');
     // La hoja y la barra de acciones ofrecen «Imprimir» las dos, como en el
     // prototipo; aqui interesa la de la hoja.
-    const hoja = await screen.findByText('Cajero / Responsable');
-    expect(hoja).toBeInTheDocument();
-    expect(screen.getByText('Contribuyente')).toBeInTheDocument();
+    /* Las dos firmas se buscan **dentro del bloque de firmas**, y no en la
+       pantalla entera. «Contribuyente» aparece dos veces en la hoja y las dos
+       son legitimas —la clave de sus datos y el pie donde firma—, asi que
+       `getByText` sobre la pantalla dependia de cual de las dos hubiera llegado
+       primero: la prueba pasaba sola y caia en la bateria completa. Acotarla al
+       bloque es ademas lo que su nombre promete. */
+    const firma = await screen.findByText('Cajero / Responsable');
+    const firmas = firma.closest('.sgtm-hoja__firmas');
+    expect(firmas).not.toBeNull();
+    expect(within(firmas as HTMLElement).getByText('Contribuyente')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Imprimir' }).length).toBeGreaterThan(0);
     // El resultado —se emite o se niega— viene de la API, no del catalogo.
     // El codigo del documento (#72) sale vacio a proposito: la numeracion es

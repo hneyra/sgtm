@@ -66,14 +66,30 @@ import {
  * separadas— y el «Caja» y el «Tipo de cobranza» del de recaudación —la caja
  * la rechaza el backend con 422—.
  *
- * **Seis escrituras.** `transito_cambio_numero` y `transito_valores` viven en
- * su propio componente (`COMPONENTES_PROPIOS` de `Pantalla.tsx`), por el mismo
- * motivo que `pase_coactiva` (#75): el catálogo dibuja sus acciones sin la que
- * escribe al final. `transito_descargos`, `transito_constancia_libre`,
- * `transito_rg_ordinaria` y `transito_rg_sancionadora` van en `ACTOS_SIN_CAMPO`
- * (`pantallas/actos.ts`): a las cuatro les falta un dato que ninguna sección
- * de su pantalla dibuja editable —el número de expediente de un descargo nuevo
- * es un campo `"ro"`, y las tres restantes no declaran ni una sola sección.
+ * **Seis escrituras, y tres de ellas ya escriben.** `transito_cambio_numero` y
+ * `transito_valores` viven en su propio componente (`COMPONENTES_PROPIOS` de
+ * `Pantalla.tsx`), por el mismo motivo que `pase_coactiva` (#75): el catálogo
+ * dibuja sus acciones sin la que escribe al final.
+ *
+ * **`transito_descargos` es la tercera, y no tiene componente propio** (#422).
+ * Estaba en `ACTOS_SIN_CAMPO` por dos cosas a la vez, y cada una la cerró un
+ * mecanismo declarativo distinto: la última acción del catálogo es «Notificar
+ * al administrado» y la que registra es la primera de las tres —lo resuelve
+ * `LA_QUE_ESCRIBE` (#421), que la pasa al final sin quitar ninguna—, y el número
+ * de expediente de mesa de partes que `DescargosController` exige lo dibuja el
+ * catálogo `"ro"` —el del descargo que se consulta— y no hay dónde teclear el
+ * del escrito nuevo: lo resuelve `ComposicionDeOpcion.controles` (#422), que
+ * añade un campo al final de «Solicitud» con **su propia** etiqueta (RNF-080).
+ * La sección «Evaluación y resolución» sigue sin declararse: resolver un
+ * descargo es dictar una resolución de gerencia, otro acto y otro papel.
+ *
+ * `transito_constancia_libre`, `transito_rg_ordinaria` y
+ * `transito_rg_sancionadora` se quedan en `ACTOS_SIN_CAMPO`
+ * (`pantallas/actos.ts`), y no por el mismo motivo que se fue el descargo: las
+ * tres son `kind: 'report'` **sin una sola sección ni acción** en el catálogo,
+ * así que no hay ninguna sección al final de la cual añadir nada. Lo que les
+ * falta no es un campo entre varios: es el formulario entero, que el prototipo
+ * nunca capturó.
  */
 
 /**

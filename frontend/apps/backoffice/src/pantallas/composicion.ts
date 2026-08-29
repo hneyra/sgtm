@@ -17,7 +17,7 @@ import { COMPOSICION_DE_TRANSITO } from './transito/composicion';
  * dentro de `Pantalla`, que es como se bifurca un renderizador que da servicio a
  * 134 pantallas.
  *
- * Diez opt-in, y ninguno cambia el dibujo de las otras opciones:
+ * Once opt-in, y ninguno cambia el dibujo de las otras opciones:
  *
  *   widgetsDeFiltro  un campo de busqueda con control propio, por clave de
  *                    campo. Sin declaracion, `Filtros` dibuja su `Campo` de
@@ -28,6 +28,9 @@ import { COMPOSICION_DE_TRANSITO } from './transito/composicion';
  *                    codigo, una placa o un RUC contra el identificador interno
  *                    que el backend pide. Sin declaracion, `Formulario` dibuja
  *                    su `Campo` de siempre
+ *   controles        un campo que el acto necesita y **ninguna seccion del
+ *                    manual dibuja**: se anade al final de la seccion que la
+ *                    opcion nombre, con su propia etiqueta (#422)
  *   resumen          una cabecera-resumen encima de los datos, compuesta con lo
  *                    que el adaptador **ya trae**: no pide nada nuevo
  *   indice           la pantalla lleva indice de secciones que **desplaza**, no
@@ -187,6 +190,97 @@ export interface CampoResolutor {
    * arranque. `Formulario` lo dibuja dentro de un `Suspense`.
    */
   readonly Control: ComponentType<ResolutorProps>;
+}
+
+/**
+ * **Un control que el acto necesita y ninguna seccion del manual dibuja** (#422).
+ *
+ * El hueco que cierra lo censo `ACTOS_SIN_CAMPO` (#73, #332, #385): opciones
+ * cuyo `POST` exige un dato para el que **ninguna seccion del catalogo dibuja
+ * un campo editable**. Hasta hoy la unica salida probada era la de #73 —un
+ * componente propio que sustituye a un campo y anade el que falta,
+ * `ResolutorDeTransferencia`—, y esa no se puede copiar doce veces: cada
+ * componente propio es una pantalla que se sale de las pruebas transversales
+ * del camino de escritura.
+ *
+ * Asi que la mitad que **no** necesita componente se declara. Un control cuyo
+ * dato lo teclea quien atiende —el medio de pago, el numero de expediente de
+ * mesa de partes, la placa— no busca contra el backend ni compone nada: es un
+ * `Campo` con su etiqueta, su tipo y su ayuda. Eso cabe en una declaracion, y
+ * el renderizador comun lo dibuja como dibuja los del catalogo.
+ *
+ * **Es hermano de {@link CampoResolutor} y no lo mismo**: un resolutor
+ * **sustituye** el dibujo de un campo del catalogo —se declara por su clave, y
+ * el control redibuja ese campo ademas de lo suyo— y esto **anade** uno que no
+ * existe, al final de una seccion. Los dos escriben solo lo que declaran, por
+ * la misma funcion (`soloSusCampos`) y con la misma muestra que lo viola.
+ *
+ * **Y no sirve para las tres formas del hueco, solo para una**: cuando el dato
+ * es un identificador interno que hay que resolver contra una lista real
+ * —`fisc_predial` pide `programaId`/`contribuyenteId`/`predioId`— hace falta la
+ * lista, no el control; y cuando lo determina el sistema y hoy no lo determina
+ * nadie —el autovaluo ajustado de `alcabala`, D-11/D-02a— la respuesta correcta
+ * sigue siendo `ACTOS_SIN_CAMPO` con su franja. Declararle un control a esas
+ * seria darle a quien atiende una caja donde teclear una cifra que ninguna
+ * norma respalda.
+ */
+export interface ControlDeclarado {
+  /**
+   * El campo que llena, **por su clave declarada en `escrituras.ts`**.
+   *
+   * No es una clave del catalogo —el catalogo no dibuja este campo, que es todo
+   * el problema—: es la clave con que la opcion lo declara en su lista blanca, y
+   * de ahi sale como se llama en el cuerpo. Igual que `valorTransferencia` en
+   * las dos transferencias (#73).
+   *
+   * Se declara aqui, y no se deduce, por lo mismo que `CampoResolutor.campos`:
+   * es lo que permite comprobar **antes de dibujar** si esta pantalla puede
+   * mandarlo, y lo que deja leer en la composicion —sin abrir nada— que este
+   * control llena una cosa y ninguna otra.
+   */
+  readonly campo: string;
+  /**
+   * **Su propia etiqueta**, nunca la de un campo del catalogo (RNF-080).
+   *
+   * Es lo que separa anadir un campo de rebautizar uno: el catalogo de
+   * `transito_descargos` ya dibuja un «Nº de expediente» —el del descargo que se
+   * esta consultando, de solo lectura—, y el que hace falta es el de mesa de
+   * partes del que se esta registrando. Dos cosas distintas no pueden llamarse
+   * igual en la misma pantalla: quien la recorre con lector no podria
+   * distinguirlas.
+   */
+  readonly etiqueta: string;
+  /**
+   * Los tipos del catalogo que **se teclean**: sin `ro` —esto existe para
+   * escribir— y **sin `chk`**, que no hace falta todavia.
+   *
+   * `chk` se deja fuera a proposito y no por descuido: ninguno de los doce datos
+   * que `ACTOS_SIN_CAMPO` censa es un si/no, y la casilla del catalogo guarda
+   * `'si'`/`''` mientras el resto del formulario guarda texto. Decidir esa
+   * traduccion sin una pantalla que la ejercite seria inventarla; el dia que
+   * haga falta, se anade con su caso.
+   */
+  readonly tipo: 'text' | 'date' | 'sel' | 'area';
+  /** Para un `sel`, sus opciones. El desplegable arranca vacio (`eleccionObligatoria`). */
+  readonly opciones?: readonly string[];
+  readonly ph?: string;
+  /**
+   * Por que hace falta, **dicho para quien atiende**.
+   *
+   * Obligatoria y no opcional: un campo que el manual no dibuja aparece en una
+   * pantalla que alguien ya conoce, y sin decir de donde sale se lee como un
+   * dato inventado por el sistema.
+   */
+  readonly ayuda: string;
+  /**
+   * La seccion del catalogo a cuyo final se dibuja, **por su etiqueta**.
+   *
+   * Por la etiqueta y no por su indice, el mismo criterio que
+   * {@link MemoriaDeSeccion}: un indice se rompe en silencio el dia que el
+   * prototipo reordene sus secciones, y una etiqueta que ya no existe la caza la
+   * prueba que compara cada declaracion contra el catalogo.
+   */
+  readonly seccion: string;
 }
 
 /** Lo que recibe el formulario de un alta abierta en panel. */
@@ -370,6 +464,27 @@ export interface SimulacionDeLaPantalla {
 
 export interface ComposicionDeOpcion {
   /**
+   * **La superficie de la que esta opcion es una hoja** (#442).
+   *
+   * Dos o mas opciones que hablan del mismo objeto se dibujan con una tira de
+   * pestañas que lleva de una a otra sin volver al menu. Cada hoja **conserva su
+   * id, su ruta y su permiso**: esto es composicion de navegacion, no una
+   * pantalla que absorba a las demas, y por eso se declara aqui y no como una
+   * lista de ids cableada en un componente.
+   *
+   * La declaran **todas** las hojas, con la misma lista: asi la tira se dibuja
+   * igual se entre por donde se entre, y anadir una tercera es una linea en cada
+   * una en vez de un sitio donde se puede olvidar.
+   *
+   * Ver `bloques/HojasDeSuperficie` para por que esto **no** saca la pantalla del
+   * renderizador generico —y por que `catastro/Territorio.tsx` si tuvo que
+   * hacerlo—.
+   */
+  readonly superficie?: {
+    readonly titulo: string;
+    readonly hojas: readonly string[];
+  };
+  /**
    * El bloque de busqueda, para una opcion cuyo catalogo **no declara `filtros`**.
    *
    * El hueco que cierra: `caja_tributaria` es un `POST` —`ContenidoConectado`
@@ -427,6 +542,17 @@ export interface ComposicionDeOpcion {
   readonly filtrosBloqueados?: readonly string[];
   /** Campos de seccion que resuelven un codigo contra el registro del backend. */
   readonly resolutores?: Readonly<Record<string, CampoResolutor>>;
+  /**
+   * Campos que el acto necesita y **ninguna seccion del manual dibuja** (#422).
+   *
+   * Una lista y no un registro por clave, a diferencia de `resolutores`: un
+   * resolutor se busca **por la clave del campo del catalogo al que sustituye**
+   * —el renderizador pregunta «¿este campo trae control propio?»—, y estos no
+   * sustituyen a ninguno, asi que no hay clave por la que buscarlos. Lo que el
+   * renderizador pregunta es «¿que se anade al final de esta seccion?», y eso es
+   * un filtro sobre una lista.
+   */
+  readonly controles?: readonly ControlDeclarado[];
   readonly resumen?: ComponenteDeResumen;
   /**
    * Indice de secciones que **desplaza**, no recarga.
@@ -613,6 +739,39 @@ export const resolutorDeCampo = (opcion: string, campo: string): CampoResolutor 
   if (resolutores === undefined || !Object.hasOwn(resolutores, campo)) return undefined;
   return resolutores[campo];
 };
+
+/** Sin controles declarados. Constante para que el filtro no cambie de identidad cada render. */
+const SIN_CONTROLES: readonly ControlDeclarado[] = [];
+
+/** Todo lo que esa opcion anade, sin mirar en que seccion. Lo usa el censo. */
+export const controlesDe = (opcion: string): readonly ControlDeclarado[] =>
+  composicionDe(opcion).controles ?? SIN_CONTROLES;
+
+/**
+ * Lo que esa opcion anade **al final de esa seccion**, o nada.
+ *
+ * Sin `Object.hasOwn` que valga: aqui no se indexa ningun registro por un
+ * nombre venido de fuera —se filtra una lista comparando cadenas—, asi que la
+ * cadena de prototipos no tiene por donde entrar. Una seccion llamada
+ * `constructor` devuelve la lista vacia, como cualquier otra que nadie declare.
+ */
+export const controlesDeLaSeccion = (
+  opcion: string,
+  seccion: string,
+): readonly ControlDeclarado[] => {
+  const declarados = composicionDe(opcion).controles;
+  if (declarados === undefined) return SIN_CONTROLES;
+  const suyos = declarados.filter((control) => control.seccion === seccion);
+  return suyos.length === 0 ? SIN_CONTROLES : suyos;
+};
+
+/** Cada control declarado, con su opcion. El censo de #422 los recorre todos. */
+export const CONTROLES_DECLARADOS: readonly {
+  readonly opcion: string;
+  readonly control: ControlDeclarado;
+}[] = Object.entries(COMPOSICIONES).flatMap(([opcion, composicion]) =>
+  (composicion.controles ?? []).map((control) => ({ opcion, control })),
+);
 
 /**
  * Como se lee esa seccion de esa opcion: memoria de calculo, o nada.

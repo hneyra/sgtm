@@ -92,13 +92,29 @@ describe('la caja no puede cobrar: le falta el medio de pago, no la declaración
 });
 
 describe('el registro de conexiones dice la verdad sobre las diez', () => {
-  it('cinco leen ya un recurso real; cinco siguen sin poder', () => {
-    for (const opcion of ['caja_tributaria', 'consulta_convenios', 'duplicado_recibo', 'avance_recaudacion', 'recaudacion_area']) {
+  it('seis leen ya un recurso real; cuatro siguen sin poder', () => {
+    for (const opcion of [
+      'caja_tributaria',
+      'consulta_convenios',
+      'duplicado_recibo',
+      'avance_recaudacion',
+      'recaudacion_area',
+      // `cierre_caja` lee el arqueo en vivo de su turno por `avance_recaudacion`
+      // (#423), que es lo que la pantalla llama «Cuadrar»: su propia operación es
+      // un `POST` y no se pide al abrir.
+      'cierre_caja',
+    ]) {
       expect(OPCIONES_CONECTADAS).toContain(opcion);
     }
-    // `anulacion_recibo` escribe (se declara en `escrituras.ts`) y no tiene
-    // conexión propia: no hay ningún `GET` que leer para ella.
-    for (const opcion of ['caja_tasas', 'fraccionamiento', 'anulacion_recibo', 'anulacion_convenio', 'cierre_caja']) {
+    // `anulacion_recibo` y `anulacion_convenio` escriben (se declaran en
+    // `escrituras.ts`) y no tienen conexión propia: no hay ningún `GET` que leer
+    // para ellas — las dos se abren por la URL, con su número impreso.
+    for (const opcion of [
+      'caja_tasas',
+      'fraccionamiento',
+      'anulacion_recibo',
+      'anulacion_convenio',
+    ]) {
       expect(OPCIONES_CONECTADAS).not.toContain(opcion);
     }
   });
@@ -245,7 +261,14 @@ describe('avance_recaudacion lee un agregado, no un padrón paginado', () => {
       desde: '2026-01-01',
       hasta: '2026-12-31',
       aLaFecha: '2026-08-20',
-      filas: [{ tributo: 'PREDIAL', cobrado: { importe: '48200.00', actualizadoA: '2026-08-20' }, anulado: { importe: '0.00', actualizadoA: '2026-08-20' }, neto: { importe: '48200.00', actualizadoA: '2026-08-20' } }],
+      filas: [
+        {
+          tributo: 'PREDIAL',
+          cobrado: { importe: '48200.00', actualizadoA: '2026-08-20' },
+          anulado: { importe: '0.00', actualizadoA: '2026-08-20' },
+          neto: { importe: '48200.00', actualizadoA: '2026-08-20' },
+        },
+      ],
       cobrado: { importe: '48200.00', actualizadoA: '2026-08-20' },
       anulado: { importe: '0.00', actualizadoA: '2026-08-20' },
       neto: { importe: '48200.00', actualizadoA: '2026-08-20' },
@@ -368,16 +391,13 @@ function laApiResponde(estado: number, cuerpo: unknown = { estado: 'ANULADO' }):
 beforeEach(() => laApiResponde(201));
 
 async function completarElFormulario(usuario: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await usuario.selectOptions(
-    await screen.findByLabelText('Motivo'),
-    'ERROR EN EL IMPORTE',
-  );
-  await usuario.selectOptions(
-    screen.getByLabelText('Autorizado por'),
-    'RESPONSABLE DE TESORERÍA',
-  );
+  await usuario.selectOptions(await screen.findByLabelText('Motivo'), 'ERROR EN EL IMPORTE');
+  await usuario.selectOptions(screen.getByLabelText('Autorizado por'), 'RESPONSABLE DE TESORERÍA');
   await usuario.type(screen.getByLabelText('Nº de memorando'), 'MEMO-2026-014');
-  await usuario.type(screen.getByRole('textbox', { name: 'Observación' }), 'Doble cobro por error de digitación.');
+  await usuario.type(
+    screen.getByRole('textbox', { name: 'Observación' }),
+    'Doble cobro por error de digitación.',
+  );
 }
 
 describe('anulacion_recibo escribe sobre el recibo que abrió la pantalla', () => {
@@ -404,7 +424,10 @@ describe('anulacion_recibo escribe sobre el recibo que abrió la pantalla', () =
   it('sin motivo, la primaria no se habilita aunque haya observación', async () => {
     const usuario = userEvent.setup();
     montarEnRuta(ANULACION);
-    await usuario.type(await screen.findByRole('textbox', { name: 'Observación' }), 'Falla de impresión.');
+    await usuario.type(
+      await screen.findByRole('textbox', { name: 'Observación' }),
+      'Falla de impresión.',
+    );
 
     primariaApagada(await screen.findByRole('button', { name: 'Anular recibo' }));
     expect(motivoDeLaPrimaria()).toMatch(/motivo de la anulación/);

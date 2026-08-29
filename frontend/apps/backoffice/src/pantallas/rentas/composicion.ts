@@ -128,6 +128,25 @@ const simula = (accion: string, cuerpo?: Readonly<Record<string, boolean>>) =>
 /** Cabecera-resumen mas indice que **sustituye** a las pestanas de la ficha. */
 const FICHA_CON_PESTANAS = { indice: 'en-vez-de-pestanas' } as const;
 
+/**
+ * **Los movimientos de deuda, una superficie de dos hojas** (#442 C).
+ *
+ * `alta_deuda` y `baja_deuda` tocan el mismo objeto —una obligacion de la cuenta
+ * corriente— con dos actos opuestos, y hasta hoy pasar de uno a otro era volver
+ * al menu. El prototipo lo enseña sin querer: el alta teclea
+ * `02-014-D-14-01` en «Unidad (predio / placa)», y ese codigo es una de las
+ * filas que la baja lista.
+ *
+ * Las dos **conservan su id, su ruta y su permiso**: lo que se anade es la tira
+ * que lleva de una a otra con la busqueda a cuestas, para no volver a teclear el
+ * contribuyente. La declaran las dos con la misma lista; ver
+ * `ComposicionDeOpcion.superficie`.
+ */
+const MOVIMIENTOS_DE_DEUDA = {
+  titulo: 'Movimientos de deuda',
+  hojas: ['alta_deuda', 'baja_deuda'],
+} as const;
+
 export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>> = {
   contribuyentes: { ...FICHA_CON_PESTANAS, resumen: ResumenDeContribuyente },
   vehiculos: { ...FICHA_CON_PESTANAS, resumen: ResumenDeVehiculo },
@@ -156,6 +175,7 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    *               solo acepta lo que este resolutor declara llenar
    */
   alta_deuda: {
+    superficie: MOVIMIENTOS_DE_DEUDA,
     resolutores: {
       unidadPredioPlaca: {
         campos: ['predioId', 'vehiculoId'],
@@ -279,6 +299,7 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
     },
   },
   baja_deuda: {
+    superficie: MOVIMIENTOS_DE_DEUDA,
     seleccion: {
       tabla: 'cuotas',
       una: 'cuota',

@@ -74,7 +74,9 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(impedimentoDelActo('baja_deuda')).toBeUndefined();
 
     // Sin declarar y con verbo de escritura: falta trabajo del sistema.
-    expect(impedimentoDelActo('predial_masivo')?.causa).toBe('sin-declaracion');
+    // Era `predial_masivo` hasta #445, que declaro su escritura; el ejemplo pasa
+    // a la otra determinacion que escribe y todavia no declara.
+    expect(impedimentoDelActo('vehicular_calculo')?.causa).toBe('sin-declaracion');
     /* Y con **un dato que la pantalla no tiene donde escribir** (#73):
        `sin-declaracion` diria que basta con declarar sus campos, y eso no
        arregla nada cuando lo que falta no esta en el formulario del manual.
@@ -102,7 +104,7 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
 
   it('las cuatro causas hablan de la ventanilla, y la tecnica se queda en el `data-`', () => {
     const sinBackend = impedimentoDelActo('contribuyentes')?.detalle ?? '';
-    const sinDeclaracion = impedimentoDelActo('predial_masivo')?.detalle ?? '';
+    const sinDeclaracion = impedimentoDelActo('vehicular_calculo')?.detalle ?? '';
     const sinDeterminacion =
       impedimentoDelActo('predial_individual', ['Buscar', 'Calcular'])?.detalle ?? '';
     const sinCampo = conUnaMuestraDeSinCampo(
@@ -209,7 +211,22 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // escribe con otro boton («Derivar a coactiva», «Generar valores»); y
       // `transito_cambio_numero` llega desde `sin-declaracion`, porque su
       // primaria del catalogo («Salir») no pasa ningun filtro de salida.
-      declarada: 15,
+      //
+      // **Y una mas con #422**: `transito_descargos`, la primera que sale de
+      // `sin-campo` por el mecanismo declarativo —`ComposicionDeOpcion.controles`,
+      // no un componente propio—. Necesito las dos declaraciones de esta onda a
+      // la vez: `LA_QUE_ESCRIBE` para que la primaria sea «Registrar descargo» y
+      // no «Notificar al administrado», y el control anadido para el numero de
+      // expediente de mesa de partes, que el catalogo dibuja de solo lectura.
+      //
+      // **Y dos mas con #423**: `cierre_caja` y `anulacion_convenio`, las dos
+      // que #74 dejo fuera porque `escrituras.ts` no sabia declarar sus cuerpos
+      // —un mapa por forma de pago y un discriminador por accion—. Las dos
+      // llegan desde `sin-declaracion`, que es donde estaban.
+      //
+      // **Y una mas con #445**: `predial_masivo`, la primera de las cinco
+      // determinaciones que asienta su corrida en vez de solo simularla.
+      declarada: 19,
       // **Una, y es nueva con #424**: `transito_reportes`. Viene de
       // `sin-declaracion` —su operacion es un `POST` y no declara escritura—, y
       // esa causa decia de ella lo unico que no es cierto: que «la pantalla aún
@@ -236,12 +253,21 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // pasan a `sin-declaracion`, que es lo que les toca: su operacion escribe
       // y no han declarado sus campos. Estaban aqui **por el boton equivocado**,
       // asi que ninguna de las seis se leia como lo que es.
-      salida: 41,
+      //
+      // **Y dos mas con #442**: «Contribuyentes» y «Ficha de vehículo». Las dos
+      // declaran el vocabulario uniforme, se les cae el «Guardar» que no podia
+      // guardar sobre un `GET`, y lo que queda de su barra es lo que de verdad
+      // hacen: imprimir y exportar.
+      salida: 43,
       // Dos menos con #391 §2, y las dos son el mismo defecto contado de dos
       // maneras: `ficha_urbana` se va a `salida` y `ficha_bienes` a
       // `sin-determinacion`. Las dos estaban aqui por su «Guardar» del
       // catalogo, que ni existe ni podria existir sobre un `GET`.
-      'sin-backend': 39,
+      // Treinta y siete desde #442: «Contribuyentes» y «Ficha de vehículo»
+      // declaran el vocabulario uniforme, se les cae el «Guardar» que no podia
+      // guardar sobre un `GET`, y con el su impedimento: su barra pasa a ser de
+      // salida —«Imprimir», «Excel»—, que es lo que de verdad hacen.
+      'sin-backend': 37,
       // Nueve se mudan a `sin-campo` en la onda 4: cuatro de transito (#77),
       // tres de fiscalizacion (#80) — mas las tres de tesoreria y las dos
       // transferencias que ya se habian movido antes; y dos se van a
@@ -264,7 +290,11 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // declarar campos que no existen. Las tres hojas gemelas de transito ya
       // estaban donde toca desde #77; estas dos y las dos de infracciones eran
       // las que quedaban descolocadas.
-      'sin-declaracion': 22,
+      //
+      // **Y dos menos con #423**: las dos de tesoreria que ya declaran su
+      // cuerpo. Este numero tampoco se sumo a mano: se recompuso ejecutando.
+      // **Y una menos con #445**: `predial_masivo` se va a `declarada`.
+      'sin-declaracion': 19,
       // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
       // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
       // «Guardar» de una ficha `GET` se cae— y repartir el valor de una
@@ -275,7 +305,15 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // las dos de rentas que #385 rescata de `salida` (`alcabala`,
       // `espectaculos`) + las dos hojas de resolucion de licencias que FRO-06
       // (#427) trae desde `sin-declaracion`.
-      'sin-campo': 14,
+      //
+      // **Una menos con #422**: `transito_descargos` se va a `declarada`. Es la
+      // primera de las tres formas del hueco —el dato lo teclea quien atiende y
+      // solo faltaba el control—, y las trece que quedan son de las otras dos: un
+      // identificador que hay que resolver contra una lista, una hoja que el
+      // prototipo nunca capturo, o una cifra que determina el sistema y hoy no
+      // determina nadie (D-11, D-02a). Que generalizar el mecanismo no las
+      // arrastre a todas lo exige `controles-declarados.test.ts`.
+      'sin-campo': 13,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);
@@ -286,12 +324,23 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(impedimentoDelActo('cuenta_corriente', ['Exportar', 'Registrar pago'])?.causa).toBe(
       'sin-backend',
     );
-    // Escribe en el contrato y no ha declarado su cuerpo: `cierre_caja` (#36,
-    // #74) — el `declarado` que exige `PeticionDeCierre` es un mapa por forma
-    // de pago, y `CampoDelCuerpo`/`TablaDelCuerpo` no saben construirlo todavía.
+    /* Escribe en el contrato y no ha declarado su cuerpo: `costas_procesales`
+       (#42, #76). El testigo era `cierre_caja` hasta #423, que le enseño a
+       `escrituras.ts` a declarar un mapa por forma de pago y la saco de esta
+       casilla; se comprueba tambien lo segundo, que es lo que convierte el
+       cambio de testigo en una afirmacion y no en un apaño. */
     expect(
-      impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja'])?.causa,
+      impedimentoDelActo('costas_procesales', [
+        'Nuevo',
+        'Modificar',
+        'Anular',
+        'Imprimir',
+        'Guardar',
+      ])?.causa,
     ).toBe('sin-declaracion');
+    expect(
+      impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja']),
+    ).toBeUndefined();
     // Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
     // no tiene donde escribir** (#33, #74): a `caja_tributaria` le falta el
     // medio de pago —EFECTIVO/CHEQUE/DEPOSITO/TARJETA/TRANSFERENCIA—, un campo
@@ -365,7 +414,7 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
  * `catastro/vocabulario-y-buscador.test.tsx`.
  */
 describe('un solo vocabulario de accion, y solo donde se declara', () => {
-  it('las 117 que no declaran nada reciben su lista del catalogo, intacta', async () => {
+  it('las 113 que no declaran nada reciben su lista del catalogo, intacta', async () => {
     const pantallas = await todasLasPantallas();
     let intactas = 0;
     for (const [opcion, estructura] of Object.entries(pantallas)) {
@@ -380,10 +429,14 @@ describe('un solo vocabulario de accion, y solo donde se declara', () => {
     /* Y **cuantas son**, que es lo que convierte el bucle en una comprobacion.
        Sin esta cifra, meter media docena de opciones en cualquiera de las dos
        listas las sacaria del bucle sin que nada lo dijera: el recorrido pasaria
-       igual, con menos vueltas. 134 − 6 − 11. */
-    expect(intactas).toBe(117);
-    expect(VOCABULARIO_UNIFORME.size).toBe(6);
-    expect(Object.keys(LA_QUE_ESCRIBE).length).toBe(11);
+       igual, con menos vueltas. 134 − 9 − 13. */
+    expect(intactas).toBe(112);
+    // Seis de catastro y **tres de rentas** desde #442: las tres lecturas del
+    // padron, que son el mismo caso que las cuatro fichas catastrales.
+    expect(VOCABULARIO_UNIFORME.size).toBe(9);
+    // Once desde #421, la doceava con #429 y la treceava con #423
+    // (`anulacion_convenio`, cuya primaria del catalogo no es la que anula).
+    expect(Object.keys(LA_QUE_ESCRIBE).length).toBe(13);
     // Y las seis que si lo declaran existen de verdad en el catalogo: sin
     // esto, un identificador mal escrito dejaria la regla sin aplicarse a nada
     // y las pruebas de abajo seguirian en verde.
@@ -542,6 +595,15 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
       escribe: 'Procesar',
       barra: ['Nuevo', 'Modificar', 'Guardar', 'Anular', 'Imprimir', 'Procesar'],
     },
+    /* Tesoreria (#423), y la primera con **dos** acciones que escriben: «Anular»
+       y «Quebrar» mandan las dos, con `accion` distinta. Lo que se declara aqui
+       sigue siendo una sola cosa —cual es el acto de la pantalla—, y con el orden
+       del catalogo el navy le tocaba a «Quebrar», que es el acto excepcional. */
+    {
+      opcion: 'anulacion_convenio',
+      escribe: 'Anular',
+      barra: ['Nuevo', 'Modificar', 'Guardar', 'Deshacer', 'Reformar', 'Quebrar', 'Anular'],
+    },
   ])('$opcion pone «$escribe» al final, y no quita ninguna', async ({ opcion, escribe, barra }) => {
     const pantallas = await todasLasPantallas();
     const compuesta = accionesDeLaBarra(opcion, pantallas[opcion]?.acciones ?? [], altasDe(opcion));
@@ -592,21 +654,35 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
   });
 
   /**
-   * **El renderizador comun no compone ninguna barra del vocabulario uniforme.**
+   * **Ninguna barra del vocabulario uniforme pierde un alta en silencio.**
    *
-   * `Pantalla.tsx` llama a `accionesDeLaBarra` **sin** los rotulos de las altas,
-   * y eso solo es correcto mientras las seis opciones que declaran el vocabulario
-   * tengan componente propio: ese argumento decide si un «Nuevo» se queda en la
-   * barra o se cae, y solo lo lee esa rama. Pasarlo «por si acaso» seria codigo
-   * que nunca se ejecuta; no pasarlo sin esta prueba seria una suposicion que se
-   * rompe en silencio —la barra perderia su alta y nadie sabria por que—.
+   * `Pantalla.tsx` llama a `accionesDeLaBarra` **sin** los rotulos de las altas.
+   * Ese argumento decide si un «Nuevo» se queda en la barra o se cae, asi que no
+   * pasarlo solo es correcto para una opcion **que no tenga ninguna alta que
+   * perder**. Hay dos formas de estarlo, y las dos valen:
+   *
+   *   con componente propio   lo pasa el, desde su propia composicion. Es el caso
+   *                           de las seis de catastro
+   *   sin ninguna alta        no hay nada que pasar. Es el caso de las tres
+   *                           lecturas del padron de rentas (#442): su catalogo
+   *                           dibuja «Nuevo», ninguna declara el formulario que
+   *                           abriria, y por eso ese boton **debe** caerse — que
+   *                           es exactamente lo que #321 cerro para el catalogo
+   *                           vial
+   *
+   * Antes esto exigia componente propio a secas, que era mas estrecho que lo que
+   * de verdad protege: dejaba fuera al caso en que no hay alta ninguna. Lo que no
+   * puede pasar —y es lo que sigue vigilandose— es que una opcion con alta
+   * declarada la dibuje el renderizador comun: ahi el «Nuevo» desapareceria sin
+   * que nadie supiera por que.
    */
-  it('las seis del vocabulario uniforme tienen componente propio', () => {
+  it('ninguna del vocabulario uniforme pierde un alta por el camino comun', () => {
     for (const opcion of VOCABULARIO_UNIFORME) {
+      if (Object.hasOwn(COMPONENTES_PROPIOS, opcion)) continue;
       expect(
-        Object.hasOwn(COMPONENTES_PROPIOS, opcion),
-        `«${opcion}» declara el vocabulario uniforme y la dibuja el renderizador comun`,
-      ).toBe(true);
+        altasDe(opcion),
+        `«${opcion}» declara un alta y la dibuja el renderizador comun, que no la pasa`,
+      ).toEqual([]);
     }
   });
 
@@ -685,18 +761,51 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
       expect(causaDe(opcion, deLaBarra(opcion)), `«${opcion}» compuesta`).toBe('sin-declaracion');
     }
   });
+
+  /**
+   * **La doceava es la unica que ademas escribe** (#422).
+   *
+   * `transito_descargos` es donde las dos declaraciones de esta onda se
+   * necesitan a la vez, y por eso vale como testigo de las dos: sin
+   * `LA_QUE_ESCRIBE`, la primaria seria «Notificar al administrado» —el catalogo
+   * la pone la ultima de las tres— y quien atiende pulsaria el boton navy
+   * esperando registrar el escrito; sin el control anadido de
+   * `transito/composicion.ts`, no habria donde teclear el numero de expediente
+   * que `DescargosController` exige.
+   *
+   * Aqui se comprueba la primera mitad. La segunda la comprueba
+   * `transito/transito.test.tsx`, montando la pantalla.
+   */
+  it('transito_descargos: la barra pone al final la que registra, no la que notifica', async () => {
+    const pantallas = await todasLasPantallas();
+    const acciones = pantallas['transito_descargos']?.acciones ?? [];
+
+    // Como el catalogo la dibuja: la que registra es la **primera**.
+    expect(acciones).toEqual(['Registrar descargo', 'Resolver', 'Notificar al administrado']);
+
+    const barra = accionesDeLaBarra('transito_descargos', acciones, altasDe('transito_descargos'));
+    expect(barra.acciones).toEqual(['Resolver', 'Notificar al administrado', 'Registrar descargo']);
+    expect(barra.conPrimaria).toBe(true);
+    // Y ninguna se cae: mover no es quitar.
+    expect(barra.acciones).toHaveLength(acciones.length);
+    // Declarada: sin impedimento que contar, con la barra compuesta o sin ella.
+    expect(impedimentoDelActo('transito_descargos', barra.acciones)).toBeUndefined();
+  });
 });
 
 describe('la franja aparece en la pantalla, y la primaria la referencia', () => {
   it.each([
     {
       caso: 'operacion de lectura',
-      ruta: '/rentas-registro/contribuyentes',
+      // Era «Contribuyentes» hasta #442, que le quito el «Guardar» de un `GET`
+      // y con el la franja: su barra ya solo imprime. «Arbitrios municipales»
+      // sigue siendo el caso —un `GET` cuya primaria promete emitir cuponera—.
+      ruta: '/rentas-registro/arbitrios',
       causa: 'sin-backend',
     },
     {
       caso: 'operacion que escribe y opcion sin declarar',
-      ruta: '/rentas-registro/predial-masivo',
+      ruta: '/rentas-registro/vehicular-calculo',
       causa: 'sin-declaracion',
     },
     // La cuarta causa —`sin-campo`— tiene pantalla real desde #385: la
@@ -741,8 +850,8 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
    */
   it.each([
     { caso: 'sin-determinacion', ruta: '/rentas-registro/predial-individual' },
-    { caso: 'sin-backend', ruta: '/rentas-registro/contribuyentes' },
-    { caso: 'sin-declaracion', ruta: '/rentas-registro/predial-masivo' },
+    { caso: 'sin-backend', ruta: '/rentas-registro/arbitrios' },
+    { caso: 'sin-declaracion', ruta: '/rentas-registro/vehicular-calculo' },
   ])('$caso: los secundarios no repiten un motivo que ya no es cierto', async ({ ruta }) => {
     const montada = montarEnRuta(ruta);
     await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());

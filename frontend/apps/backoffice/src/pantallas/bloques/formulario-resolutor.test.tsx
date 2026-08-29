@@ -54,6 +54,8 @@ vi.mock('../composicion', () => ({
   // Esta prueba mira el resolutor, no como se lee la seccion (#393): ninguna
   // seccion es memoria de calculo aqui, que es lo que declaran 129 de las 134.
   memoriaDeSeccion: () => undefined,
+  // Ni ningun control anadido (#422): eso lo mira `formulario-controles.test.tsx`.
+  controlesDeLaSeccion: () => [],
 }));
 
 const { Formulario } = await import('./Formulario');

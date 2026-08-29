@@ -1038,6 +1038,50 @@ const OPERACIONES_ADICIONALES = {
         ' no los declara.',
     },
   ],
+  // `fisc_programa` declara «POST /fiscalizacion/programas» —programar— como su
+  // unico endpoint, y hasta #431 no habia ninguna lectura: un programa se podia
+  // registrar y no se podia volver a encontrar. No lo pagaba solo esa pantalla;
+  // lo pagaban las dos actas, que exigen el `programaId` de un programa ya
+  // generado y no tenian ninguna fila real de la que sacarlo.
+  //
+  // Mismo reparto que `certificados` y `costas_procesales`: si el POST
+  // devolviera tambien la grilla, abrir la pantalla programaria una
+  // fiscalizacion.
+  //
+  // Declara DOS de los cuatro filtros de la pantalla, y por eso no usa
+  // `filtrosDeLaPantalla`: «Tipo» ofrece seis clases donde `TipoDePrograma`
+  // tiene dos y «Estado» cuatro donde `EstadoDePrograma` tiene tres. Publicar
+  // esos dos seria publicar un filtro que no filtra —o, peor, uno que decide
+  // que «PREDIAL MASIVO» es PREDIAL y esconde en silencio los selectivos—.
+  fisc_programa: [
+    {
+      operationId: 'fisc_programas_listado',
+      metodo: 'get',
+      antes: true,
+      parametros: [
+        {
+          nombre: 'nDePrograma',
+          descripcion: 'Filtro «Nº de programa» de la pantalla; es el codigo del programa, exacto',
+        },
+        {
+          nombre: 'ejercicio',
+          descripcion:
+            'Filtro «Ejercicio» de la pantalla: los programas VIGENTES en ese ejercicio',
+        },
+      ],
+      paginacion: true,
+      titulo: 'Programas de fiscalización',
+      descripcion:
+        'La grilla de programas de fiscalización de la pantalla `fisc_programa`, que declara el' +
+        ' POST —programar— como su endpoint y necesita un verbo aparte para listar. Agregada por' +
+        ' #431: sin ella un programa se registraba y no se podía volver a encontrar, y las actas' +
+        ' predial y vehicular —que exigen el `programaId` de un programa ya generado— no tenían' +
+        ' ninguna fila real de la que resolverlo. «Ejercicio» filtra por VIGENCIA y no por el año' +
+        ' de inicio: un programa que arranca en diciembre y cierra en marzo es un programa del' +
+        ' ejercicio siguiente para quien lo busca. Los otros dos desplegables de la pantalla' +
+        ' —«Tipo» y «Estado»— no viajan: nombran clases y situaciones que el sistema no registra.',
+    },
+  ],
   // «Resultados y determinaciones» declara «GET /fiscalizacion/resultados» como
   // su endpoint —la grilla—; emitir la liquidación de un acta y reliquidarla
   // (RF-053, #49) necesitan sus propios verbos. Sin ellos la pantalla lista un
