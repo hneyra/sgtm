@@ -88,13 +88,16 @@ const GRUPOS_POR_TAREA_ESPERADOS: Readonly<
     ], // plegado en centro de reportes (ADR-0014 §5)
   ],
   'rentas-registro': [
-    ['Padrones', ['contribuyentes', 'predios_rentas', 'vehiculos']],
+    ['Padrón', ['contribuyentes', 'predios_rentas', 'vehiculos']],
     [
       'Determinación',
-      ['declaracion_jurada', 'predial_individual', 'predial_masivo', 'vehicular_calculo'],
+      ['arbitrios', 'declaracion_jurada', 'predial_individual', 'predial_masivo', 'vehicular_calculo'],
     ],
-    ['Movimientos', ['alta_deuda', 'baja_deuda', 'transferencia_predio', 'transferencia_vehiculo']],
-    ['Tributos y beneficios', ['alcabala', 'arbitrios', 'beneficios', 'espectaculos']],
+    [
+      'Actos y transferencias',
+      ['alcabala', 'espectaculos', 'transferencia_predio', 'transferencia_vehiculo'],
+    ],
+    ['Beneficios y ajustes', ['alta_deuda', 'baja_deuda', 'beneficios']],
   ],
   valores: [
     ['Emisión', ['valores_individual', 'valores_masivo']],
