@@ -1,6 +1,7 @@
 import { escribe } from '@sgtm/api-client';
 import { operacionDe } from './busqueda';
 import { escrituraDe } from './escrituras';
+import { lecturaPorPostDe } from './lecturas-por-post';
 
 /**
  * **Ningun acto promete lo que no puede** (#332).
@@ -28,6 +29,11 @@ import { escrituraDe } from './escrituras';
  *                      cierta ahi (#333)
  *   `sin-campo`        el acto necesita **un dato que la pantalla no tiene donde
  *                      escribir**: no falta la lista blanca, falta el campo (#73)
+ *
+ * Y hay una quinta situacion que **no es un impedimento**, aunque su operacion
+ * sea un `POST` y la opcion no declare escritura: la **lectura por `POST`**
+ * (#424, `lecturas-por-post.ts`). Ahi el acto de la pantalla funciona; lo que
+ * pasa es que no guarda nada.
  *
  * Las tres primeras se leen de lo que ya se sabe —el verbo del contrato, el
  * rotulo de la primaria y el registro de escrituras—, sin ninguna lista aparte
@@ -333,6 +339,35 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
   },
 
   /**
+   * Las dos resoluciones de licencia: la misma hoja sin superficie que las tres
+   * de arriba, clasificada donde le toca (FRO-06, #427).
+   *
+   * Estaban en `sin-declaracion` —«la pantalla aún no manda estos campos»— y
+   * esa es la causa que **invita a la correccion equivocada**: no hay campos
+   * que declarar, porque no hay ni una seccion. `LicenciaController.cancelacion`
+   * exige el `motivo` (`CancelarLicencia.SinMotivo`) y `.duplicado` exige ademas
+   * el `nDeRecibo` del derecho de tramite **del duplicado** —no el de la
+   * licencia, que es el que dibuja `licencia_funcionamiento`—.
+   *
+   * Como las tres de transito, su franja no se dibuja: sin `acciones` no hay
+   * `<BarraDeAcciones>`. Lo que se lee esta en `AVISOS`; esto es lo que hace que
+   * el censo diga la verdad, y lo que sostiene la franja el dia que la pantalla
+   * del acto exista.
+   */
+  licencia_resolucion_cancelacion: {
+    dato: 'el motivo por el que la licencia queda sin efecto',
+    porque:
+      'Sin él no se puede cancelar: el backend lo exige, y esta pantalla no declara ninguna sección con campos, solo la hoja de la resolución que resultaría.',
+    campos: ['motivo'],
+  },
+  licencia_resolucion_duplicado: {
+    dato: 'el motivo del duplicado —extravío, deterioro, robo— y el recibo de su derecho de trámite',
+    porque:
+      'Sin ellos no se puede autorizar: el backend los exige, y esta pantalla no declara ninguna sección con campos, solo la hoja de la resolución que resultaría.',
+    campos: ['motivo', 'nDeRecibo'],
+  },
+
+  /**
    * Alcabala y espectaculos publicos: el bloqueo doble que #73 documento y #385
    * dejo registrado como deuda. Sus primarias del catalogo son de salida
    * («Imprimir liquidacion»), asi que sin esta entrada la causa `DE_SALIDA`
@@ -414,6 +449,14 @@ export function impedimentoDelActo(
   acciones: readonly string[] = [],
 ): ImpedimentoDelActo | undefined {
   if (escrituraDe(opcion) !== undefined) return undefined;
+  /* Y tampoco lo tiene la que declara su **lectura por `POST`** (#424): su acto
+     no guarda nada —compone una hoja—, asi que ni le falta la lista blanca de
+     `escrituras.ts` ni le falta un campo. Va al mismo rango que la escritura
+     declarada y por delante de todo lo demas, porque las tres causas de abajo
+     dirian una cosa falsa: `sin-declaracion` pediria declarar campos que esa
+     pantalla no manda, y `sin-backend` diria que no hay a donde guardar cuando
+     lo que hay es que no hay nada que guardar. */
+  if (lecturaPorPostDe(opcion) !== undefined) return undefined;
   const primaria = acciones[acciones.length - 1];
   /* Antes incluso que `DE_SALIDA` (#385): una pantalla declarada aqui tiene un
      motivo REAL que contar —no puede escribir lo que el backend exige—, y con

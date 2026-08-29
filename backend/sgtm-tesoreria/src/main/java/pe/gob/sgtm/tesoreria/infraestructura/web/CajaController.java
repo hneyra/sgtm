@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
@@ -31,6 +32,7 @@ import pe.gob.sgtm.tesoreria.dominio.Recibo;
 import pe.gob.sgtm.tesoreria.dominio.TipoDePago;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.FiltroDeLaConsulta;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
@@ -130,14 +132,27 @@ public class CajaController {
         }
     }
 
-    /** Caja de tasas: cobra derechos del TUPA y emite el recibo (RF-081). */
+    /**
+     * Caja de tasas: cobra derechos del TUPA y emite el recibo (RF-081).
+     *
+     * <p><b>{@code codContribuyente} tambien viaja por la consulta</b> (#425). Es el filtro «Cod.
+     * Contribuyente» que la pantalla dibuja y el contrato lo declara {@code in: query}; leerlo solo
+     * del cuerpo dejaba a la ventanilla de tasas publicada y sin poder cobrarle a nadie —el 422
+     * decia «Falta el campo 'codContribuyente'» mientras la pantalla lo estaba mandando—. La
+     * cobranza tributaria de al lado <b>no</b> lo declara {@code in: query} en el contrato y por
+     * eso no cambia. Se sigue aceptando en el cuerpo, y ahi gana: ver {@link FiltroDeLaConsulta}.
+     */
     @PostMapping("/tasas")
     @RequiereAcceso(acceso = "caja_tasas", privilegio = Privilegio.REGISTRO)
     public ResponseEntity<ReciboResource> tasas(
+            @RequestParam(required = false) @Nullable String codContribuyente,
             @RequestBody PeticionDeCobroDeTasas peticion,
             @RequestHeader(name = "Idempotency-Key", required = false) @Nullable String clave) {
 
-        ResumenDeContribuyente contribuyente = contribuyenteDe(peticion.codContribuyente());
+        ResumenDeContribuyente contribuyente =
+                contribuyenteDe(
+                        FiltroDeLaConsulta.primeroNoVacio(
+                                peticion.codContribuyente(), codContribuyente));
         LocalDate fechaDeCobro = fechaDe(peticion.fechaDeCobro(), "fechaDeCobro");
         Observacion observacion = observacionDe(peticion.observacion());
 

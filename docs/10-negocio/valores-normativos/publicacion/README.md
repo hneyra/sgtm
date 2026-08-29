@@ -164,10 +164,17 @@ recalcula antes de publicar una sola fila.
 |---|---|
 | `vehicular-valores-referenciales-2026.md` | **Publicable hoy.** Su anexo es `fuentes/tvr-2026/tvr-2026.csv`, extraído mecánicamente y con su huella firmada; entran 54 111 filas |
 | `valores-unitarios-2026.md` | **No.** Sus 9×7 cifras siguen `‹NO CONFIRMADO EN FUENTE OFICIAL›` contra el Anexo I.2 de la RM, y sólo está la región Costa de las cuatro (GOB-03, H-14) |
-| `depreciacion.md` | **No.** El Anexo I publica **cuatro** tablas, una por uso de la edificación, y `depreciacion` no tiene columna de uso: cargarlas hoy dejaría que la unicidad se quedara con una y descartara tres en silencio (GOB-03, H-15) |
+| `depreciacion.md` | **Publicable desde el 2026-08-29** (`V57`, H-15). Su archivo de filas es `fuentes/depreciacion-rnt-2016/depreciacion.csv`, **derivado del propio archivo del corpus** y no de un PDF —cabe entero en él— con su huella firmada; entran 492 filas, las cuatro tablas del Anexo I |
 
-`PublicarCuadros` rechaza los dos últimos **nombrando el motivo**, en vez de publicar un cuadro
+`PublicarCuadros` rechaza el que falta **nombrando el motivo**, en vez de publicar un cuadro
 incompleto que nadie distinguiría de uno completo.
+
+Y el manifiesto pone **`cuadro` en la última columna**, no en la primera. Es lo mismo que
+`valor_maquina` en `parametros-2026.csv` y por lo mismo: sus tres consumidores lo leen por
+**posición**, y las tres primeras columnas tienen que ser las de la llave —`tipo,clave,vigencia_desde`—
+porque el mismo archivo sirve para publicar la edición y para componerla en el conjunto. Con
+`cuadro` delante, ese segundo paso leía «2026» como fecha, rechazaba todas las filas y sellaba el
+conjunto **sin la edición dentro**: el nombre del cuadro congelado sin su contenido.
 
 De la familia de los plazos quedan fuera dos cosas, cada una por su motivo:
 

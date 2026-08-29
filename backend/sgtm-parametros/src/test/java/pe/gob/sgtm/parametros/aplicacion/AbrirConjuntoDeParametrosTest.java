@@ -168,6 +168,52 @@ class AbrirConjuntoDeParametrosTest {
     @DisplayName("Componer el conjunto desde el archivo")
     class Componer {
 
+        /** El manifiesto de cuadros que este repositorio versiona, tal como se despliega. */
+        private static final Path MANIFIESTO_DE_CUADROS =
+                Path.of("../../docs/10-negocio/valores-normativos/publicacion/cuadros-2026.csv")
+                        .toAbsolutePath()
+                        .normalize();
+
+        /** Los dos archivos del corpus que este proceso compone, tal como se despliegan. */
+        private static final List<Path> DESPLEGADOS =
+                List.of(
+                        Path.of(
+                                "../../docs/10-negocio/valores-normativos/publicacion/"
+                                        + "parametros-2026.csv"),
+                        MANIFIESTO_DE_CUADROS);
+
+        @Test
+        @DisplayName("el manifiesto de cuadros que se despliega se compone entero, sin rechazos")
+        void elManifiestoDesplegadoSeCompone() throws IOException, SQLException {
+            // Este proceso lee POR POSICION —campos 0, 1 y 2— y no por cabecera, igual que
+            // FilaPublicable y FilaDelManifiesto. `cuadros-2026.csv` tenia `cuadro` en la primera
+            // columna, asi que componerlo leia `tipo = VALOR_REFERENCIAL`, `clave =
+            // TABLA_VALORES_REFERENCIALES` y una fecha que decia «2026»: rechazaba TODAS sus filas
+            // y sellaba el conjunto sin la edicion dentro, que es sellar el nombre del cuadro sin
+            // su contenido. El sintoma no se parece a la causa —el conjunto queda sellado y el
+            // cuadro publicado; lo unico que falta es el renglon que los une—, y por eso el paso 5
+            // del instructivo se comprueba aqui en vez de confiarse a un comentario.
+            for (Path archivo : DESPLEGADOS) {
+                assertThat(archivo.toAbsolutePath().normalize()).exists();
+            }
+            // Las cabeceras de las dos ediciones del manifiesto, publicadas como las publica
+            // PublicarCuadros: sin ellas no habria nada que componer y esto pasaria en verde
+            // rechazando las dos filas por otro motivo.
+            publicarFila("TABLA_VALORES_REFERENCIALES", "2026", LocalDate.of(2026, 1, 1));
+            publicarFila("TABLA_DEPRECIACION", "ANEXO-I", LocalDate.of(2016, 7, 23));
+
+            proceso(datos(2040, 0, MANIFIESTO_DE_CUADROS.toString(), false)).run(null);
+
+            long conjunto = ultimoConjuntoDe(2040);
+            assertThat(parametrosDe(conjunto))
+                    .as(
+                            "el conjunto sella la EDICION del cuadro, no sus miles de filas: si el"
+                                    + " manifiesto no se puede componer, sellar congela un nombre"
+                                    + " que no apunta a nada")
+                    .containsExactlyInAnyOrder(
+                            "TABLA_VALORES_REFERENCIALES:2026", "TABLA_DEPRECIACION:ANEXO-I");
+        }
+
         @Test
         @DisplayName("incorpora los parametros nombrados por llave y se leen por conjunto")
         void incorporaLosParametrosNombrados() throws IOException, SQLException {
@@ -451,6 +497,11 @@ class AbrirConjuntoDeParametrosTest {
     }
 
     private static void publicarFila(String tipo, String clave) throws SQLException {
+        publicarFila(tipo, clave, DESDE);
+    }
+
+    private static void publicarFila(String tipo, String clave, LocalDate desde)
+            throws SQLException {
         try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS);
                 PreparedStatement sentencia =
                         carga.prepareStatement(
@@ -462,7 +513,7 @@ class AbrirConjuntoDeParametrosTest {
             sentencia.setString(1, tipo);
             sentencia.setString(2, clave);
             sentencia.setString(3, VALOR_FICTICIO);
-            sentencia.setDate(4, java.sql.Date.valueOf(DESDE));
+            sentencia.setDate(4, java.sql.Date.valueOf(desde));
             sentencia.executeUpdate();
             carga.commit();
         }

@@ -23,6 +23,7 @@ import pe.gob.sgtm.rentas.aplicacion.DeterminarPredial;
 import pe.gob.sgtm.rentas.aplicacion.DeterminarPredialMasivo;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.FiltroDeLaConsulta;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
@@ -95,10 +96,12 @@ public class PredialController {
                                 + " ninguna determinacion (#395)");
         String contribuyente =
                 exigir(
-                        primeroNoVacio(peticion.codContribuyente(), codContribuyente),
+                        FiltroDeLaConsulta.primeroNoVacio(
+                                peticion.codContribuyente(), codContribuyente),
                         "Hay que decir de que contribuyente se determina: falta"
                                 + " «codContribuyente»");
-        Ejercicio ejercicio = ejercicioDe(primeroNoVacio(peticion.ejercicio(), ano));
+        Ejercicio ejercicio =
+                ejercicioDe(FiltroDeLaConsulta.primeroNoVacio(peticion.ejercicio(), ano));
 
         List<DeterminarPredial.PredioDeclarado> predios = new ArrayList<>();
         List<PeticionDeCalculoPredial.PredioDelCalculo> declarados =
@@ -291,14 +294,6 @@ public class PredialController {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, queFalta);
         }
         return texto.strip();
-    }
-
-    private static @Nullable String primeroNoVacio(
-            @Nullable String delCuerpo, @Nullable String deLaConsulta) {
-        if (delCuerpo != null && !delCuerpo.isBlank()) {
-            return delCuerpo;
-        }
-        return deLaConsulta;
     }
 
     private static String mensajeDe(RuntimeException excepcion) {

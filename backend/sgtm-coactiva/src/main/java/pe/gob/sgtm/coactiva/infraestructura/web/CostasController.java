@@ -30,6 +30,7 @@ import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.FiltroDeLaConsulta;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
@@ -86,14 +87,23 @@ public class CostasController {
      * <p>Responde <b>201</b> con la liquidacion. Con D-02c abierta (#193) responde <b>422</b>
      * nombrando la llave del arancel que falta, que es exactamente lo que tiene que pasar mientras
      * la ordenanza no este cargada: no hay cifra con la que liquidar.
+     *
+     * <p><b>{@code nroExpedCoact} tambien viaja por la consulta</b> (#425). Es el filtro «Nro.
+     * Exped. Coact.» que la pantalla dibuja y el contrato lo declara {@code in: query}; leerlo solo
+     * del cuerpo dejaba esta operacion publicada y sin ninguna pantalla que pudiera llamarla. Se
+     * sigue aceptando en el cuerpo, y ahi gana: ver {@link FiltroDeLaConsulta}.
      */
     @PostMapping("/liquidaciones-costas")
     @RequiereAcceso(acceso = ACCESO_COSTAS, privilegio = Privilegio.REGISTRO)
     public ResponseEntity<LiquidacionResource> liquidar(
+            @RequestParam(required = false) @Nullable String nroExpedCoact,
             @RequestBody PeticionDeLiquidacionDeCostas peticion) {
 
         Observacion observacion = observacionDe(peticion.observacion());
-        String numeroDeExpediente = exigir(peticion.nroExpedCoact(), "nroExpedCoact");
+        String numeroDeExpediente =
+                exigir(
+                        FiltroDeLaConsulta.primeroNoVacio(peticion.nroExpedCoact(), nroExpedCoact),
+                        "nroExpedCoact");
         LocalDate fecha = fechaOpcional(peticion.fecha(), "fecha", LocalDate.now(reloj));
 
         Set<Long> actos =

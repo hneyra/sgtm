@@ -163,6 +163,38 @@ export function municipalidadesJson(): FuenteDeMunicipalidad[] {
 }
 
 /**
+ * Los `despliegue/identidad/ciudadanos/*.json`: la fuente versionada de los ciudadanos
+ * que cada municipalidad **enrolo en ventanilla** (ADR-0020 §5, #415). Sin credenciales.
+ *
+ * Es el hermano de {@link municipalidadesJson} para la otra poblacion, y se lee igual
+ * —crudo, para que `Identidad.ts` lo parsee y lo valide— por el mismo motivo: la imagen
+ * de Keycloak no trae con que analizar JSON, y validarlo aqui lo deja cubierto por
+ * `componentes.test.ts`.
+ *
+ * A diferencia de aquel, la carpeta puede no traer archivo para el ubigeo implantado: una
+ * municipalidad que todavia no enrolo a nadie es el estado de partida de todas, y no un
+ * despliegue mal armado.
+ */
+export function ciudadanosJson(): FuenteDeMunicipalidad[] {
+  const carpeta = join(raizDelRepositorio(), "despliegue/identidad/ciudadanos");
+  if (!existsSync(carpeta)) {
+    throw new Error(
+      `Falta «${carpeta}». Es la fuente versionada de los ciudadanos enrolados en ` +
+        "ventanilla (ADR-0020 §5); si se movio, hay que actualizar esta ruta. Una " +
+        "municipalidad sin nadie enrolado declara `ciudadanos: []`, que no es lo mismo " +
+        "que no tener archivo.",
+    );
+  }
+  return readdirSync(carpeta)
+    .filter((n) => n.endsWith(".json"))
+    .sort()
+    .map((n) => ({
+      ubigeo: n.replace(/\.json$/, ""),
+      contenido: readFileSync(join(carpeta, n), "utf8"),
+    }));
+}
+
+/**
  * `40-rol-de-respaldo.sh` (issue #155). Este tambien es de `infra/`: el compose no
  * archiva WAL ni respalda fuera del contenedor, asi que no necesita el rol.
  */

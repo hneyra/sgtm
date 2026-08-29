@@ -2,26 +2,15 @@ package pe.gob.sgtm.rentas.aplicacion;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.IOException;
-import java.io.Reader;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import pe.gob.sgtm.carga.LectorDeFilasCsv;
-import pe.gob.sgtm.carga.LectorDeFilasCsv.FilaCsv;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
-import pe.gob.sgtm.dominio.ValorNormativo;
-import pe.gob.sgtm.parametros.IdentificadorDeConjunto;
-import pe.gob.sgtm.parametros.LectorDeParametros;
-import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.rentas.dominio.predial.Tramo;
+import pe.gob.sgtm.rentas.parametros.DerivadoPublicado;
 
 /**
  * Que las llaves con las que el derivado publica el cuadro del predial son <b>exactamente</b> las
@@ -44,21 +33,16 @@ import pe.gob.sgtm.rentas.dominio.predial.Tramo;
 @DisplayName("El cuadro del predial, leido del derivado que se publica (#395)")
 class CuadroDelDerivadoTest {
 
-    /** El derivado que este repositorio versiona, tal como se despliega. */
-    private static final Path DERIVADO =
-            Path.of("../../docs/10-negocio/valores-normativos/publicacion/parametros-2026.csv")
-                    .toAbsolutePath()
-                    .normalize();
-
     private static final Ejercicio EJERCICIO = new Ejercicio(2026);
 
     @Test
     @DisplayName("el cuadro del articulo 13 se arma con las llaves que el derivado publica")
-    void elCuadroSeArmaConLoPublicado() throws IOException {
+    void elCuadroSeArmaConLoPublicado() {
         Map<String, String> publicados = numerosDelDerivado();
 
         CuadroPredialParametrizado.Vigente vigente =
-                new CuadroPredialParametrizado(new DelDerivado(publicados)).vigenteEn(EJERCICIO);
+                new CuadroPredialParametrizado(DerivadoPublicado.conjuntoDelEjercicio(EJERCICIO))
+                        .vigenteEn(EJERCICIO);
 
         List<Tramo> tramos = vigente.tramos();
 
@@ -80,11 +64,12 @@ class CuadroDelDerivadoTest {
 
     @Test
     @DisplayName("la UIT y el minimo salen del derivado, y el minimo se convierte con esa UIT")
-    void laUitYElMinimoSalenDelDerivado() throws IOException {
+    void laUitYElMinimoSalenDelDerivado() {
         Map<String, String> publicados = numerosDelDerivado();
 
         CuadroPredialParametrizado.Vigente vigente =
-                new CuadroPredialParametrizado(new DelDerivado(publicados)).vigenteEn(EJERCICIO);
+                new CuadroPredialParametrizado(DerivadoPublicado.conjuntoDelEjercicio(EJERCICIO))
+                        .vigenteEn(EJERCICIO);
 
         Dinero uit = vigente.uit();
         assertThat(uit)
@@ -102,7 +87,7 @@ class CuadroDelDerivadoTest {
 
     @Test
     @DisplayName("el derivado no publica el derecho de emision ni el cronograma: son D-02b")
-    void loQueElDerivadoNoPublica() throws IOException {
+    void loQueElDerivadoNoPublica() {
         Map<String, String> publicados = numerosDelDerivado();
 
         // No es un olvido: el derecho de emision mecanizada y el dia concreto en que vence cada
@@ -125,55 +110,17 @@ class CuadroDelDerivadoTest {
     }
 
     /**
-     * Las filas numericas del derivado, leidas como las lee el proceso: por posicion, {@code
-     * tipo|clave} y su {@code valor_numerico}. Solo las que rigen 2026.
+     * Las filas numericas del derivado que rigen 2026, leidas como las lee el proceso que publica.
+     *
+     * <p>Se leen con {@link DerivadoPublicado}, que es el mismo lector que usa el corpus de casos
+     * de NEG-05: con una copia en cada prueba, el dia que el formato del archivo cambie una de las
+     * dos seguiria verde leyendo mal.
      */
-    private static Map<String, String> numerosDelDerivado() throws IOException {
-        Map<String, String> publicados = new LinkedHashMap<>();
-        try (Reader archivo = Files.newBufferedReader(DERIVADO, StandardCharsets.UTF_8)) {
-            for (FilaCsv fila : LectorDeFilasCsv.leer(archivo)) {
-                List<String> campos = fila.campos();
-                String desde = campos.get(2);
-                String hasta = campos.get(3);
-                boolean rige2026 =
-                        desde.compareTo("2026-12-31") <= 0
-                                && (hasta.isEmpty() || hasta.compareTo("2026-01-01") >= 0);
-                if (!rige2026 || campos.get(4).isEmpty()) {
-                    continue;
-                }
-                publicados.put(campos.get(0) + "|" + campos.get(1), campos.get(4));
-            }
-        }
+    private static Map<String, String> numerosDelDerivado() {
+        Map<String, String> publicados = DerivadoPublicado.numerosVigentesEn(EJERCICIO.valor());
         assertThat(publicados)
                 .as("si el derivado se queda sin filas numericas, esta prueba no prueba nada")
                 .isNotEmpty();
         return publicados;
-    }
-
-    /** Un conjunto sellado compuesto con lo que el derivado publica, y nada mas. */
-    private record DelDerivado(Map<String, String> publicados) implements LectorDeParametros {
-
-        @Override
-        public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
-            ParametrosSellados.Constructor constructor = ParametrosSellados.de(ejercicio, 1);
-            for (Map.Entry<String, String> fila : publicados.entrySet()) {
-                String[] partes = fila.getKey().split("\\|", -1);
-                constructor.numero(
-                        partes[0],
-                        partes[1].isEmpty() ? null : partes[1],
-                        ValorNormativo.de(fila.getValue()));
-            }
-            return constructor.construir();
-        }
-
-        @Override
-        public ParametrosSellados porConjunto(IdentificadorDeConjunto identificador) {
-            return vigenteEn(EJERCICIO);
-        }
-
-        @Override
-        public IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio) {
-            return IdentificadorDeConjunto.de(1L);
-        }
     }
 }

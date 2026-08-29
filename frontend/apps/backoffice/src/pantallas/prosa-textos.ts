@@ -219,6 +219,33 @@ export const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
     detalle:
       'La tabla lista los predios con su ficha vigente: código catastral, propietario y dirección. Las pestañas de cifras salen con «—» por dos motivos distintos. El impuesto predial no se puede dar por predio: los tramos se aplican al conjunto de los predios del contribuyente, así que una cifra por predio sería un reparto inventado. El valúo y los arbitrios sí son del predio, pero dependen de tablas de valores unitarios y de ordenanzas que todavía no están cerradas. Los movimientos del predio se consultan en el histórico de su ficha catastral.',
   },
+
+  /* ── Las hojas sin superficie (FRO-06, #427) ─────────────────────────────
+     Siete opciones de tres modulos que el manual capturo como **el papel que
+     sale** y cuyo endpoint **dicta el acto** que ese papel documenta: un bloque
+     `reporte` con dos columnas, sin una sola seccion y sin una sola accion.
+
+     Y ahi esta el motivo de que el aviso sea el mecanismo y no la franja:
+     `Pantalla.tsx` dibuja la barra solo `{estructura.acciones && …}`, asi que
+     estas pantallas **no tienen franja**. La causa que `impedimentoDelActo`
+     calcula para ellas entra en el censo y no la lee nadie —RNF-082 un escalon
+     mas arriba de donde lo cerro #385, donde al menos habia un boton apagado—.
+
+     El aviso dice las tres cosas que la franja diria: que es la hoja, que dato
+     exige el acto y ninguna pantalla del manual dibuja, y por donde se sale.
+     No dice «pulsa aqui»: hoy no hay ningun sitio del sistema desde el que se
+     pueda dictar, y FRO-06 §2 explica por que ninguna de las pantallas que
+     conocen el sujeto sirve sin inventarle un campo. */
+  licencia_resolucion_cancelacion: {
+    titulo: 'Esto es la hoja de la resolución, no el formulario que la dicta',
+    detalle:
+      'Lo que se ve abajo es cómo saldría impresa la resolución de cancelación. Cancelar una licencia exige el motivo por el que queda sin efecto, y ninguna pantalla del manual dibuja un campo para escribirlo: el «Observaciones» de «Licencia de funcionamiento» es la trazabilidad del trámite, no este motivo. Mientras tanto, cancela la licencia por el procedimiento actual y avísale a sistemas: esta pantalla todavía no dicta nada.',
+  },
+  licencia_resolucion_duplicado: {
+    titulo: 'Esto es la hoja de la resolución, no el formulario que la dicta',
+    detalle:
+      'Lo que se ve abajo es cómo saldría impresa la resolución que autoriza el duplicado. Autorizarlo exige el motivo —extravío, deterioro, robo— y el número del recibo del derecho de trámite del duplicado, y ninguna pantalla del manual dibuja un campo para ninguno de los dos: el «Nº de recibo» de «Licencia de funcionamiento» es el del derecho de la licencia, no el de este duplicado. Mientras tanto, autoriza el duplicado por el procedimiento actual y avísale a sistemas: esta pantalla todavía no dicta nada.',
+  },
 };
 
 /** Las opciones que llevan aviso permanente. La prueba de fiscalizacion las mira. */

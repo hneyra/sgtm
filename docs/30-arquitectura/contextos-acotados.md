@@ -92,9 +92,9 @@ un puerto nuevo para rodearla—.
 **Y escribe en `catastro` y en el libro, no en `rentas`.** El nombre es el de RF-054 y el del manual.
 Lo que `rentas` guarda de un ejercicio es la **declaración jurada**, que es el acto del contribuyente
 y la administración no reescribe; lo que la sustituye es la determinación de oficio, cuya cifra
-sigue esperando —`D-02a` se cerró el 2026-08-25, pero faltan las dos tablas de valuación de
-[GOB-03](../00-gobierno/plan-de-desbloqueo-D-02.md) H-14 y H-15, y el `% actualización` de `D-11`
-(#198)—. Que `rentas` no tenga hoy puerto de escritura no es un olvido: es lo que la regla
+sigue esperando —`D-02a` se cerró el 2026-08-25, pero falta la tabla de valores unitarios de
+[GOB-03](../00-gobierno/plan-de-desbloqueo-D-02.md) H-14 —la de depreciación se carga desde
+`V57`— y el `% actualización` de `D-11` (#198)—. Que `rentas` no tenga hoy puerto de escritura no es un olvido: es lo que la regla
 garantiza, y abrirlo costaría una línea visible en el diff.
 
 ### 3.6 `sanciones`

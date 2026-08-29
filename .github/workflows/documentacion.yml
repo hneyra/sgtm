@@ -1,6 +1,6 @@
 # Verificación de la documentación que se comprueba sola.
 #
-# Son cuatro, y todas comprueban en las dos direcciones:
+# Son cinco, y todas comprueban en las dos direcciones:
 #
 #   1. el **mapa normativo** de NEG-02 §2 — qué norma fija cada dato que falta,
 #      qué parte de D-02 lo bloquea y qué issues lo esperan— contra el etiquetado
@@ -15,7 +15,16 @@
 #      `usuario_carga` y `usuario_aprueba` sean las que ese archivo declara. Es lo
 #      único desde lo que `PublicarParametros` escribe en `parametro_tributario`;
 #      y como hoy está en verde, corre además contra sus doce muestras;
-#   4. el **contrato de la API** (#312) — que `sgtm-v1.yaml` sea todavía lo que su
+#   4. los **cuadros normativos** (#188) — el hermano de la anterior para lo que no
+#      cabe en una fila. Un cuadro tiene miles de cifras y no se transcribe a mano,
+#      así que lo que se comprueba es la cadena que la sustituye: archivo del corpus
+#      VERIFICADO, dos firmas, documento fuente, y el **sha256** del archivo de filas
+#      recalculado y contrastado contra el que el corpus firmó. Junto a ella corre el
+#      generador del derivado de la depreciación, que lo reproduce desde su
+#      transcripción y exige que sea el mismo byte a byte. `verificar-cuadros.mjs`
+#      existía desde #380 y **no lo corría nadie**: una verificación escrita que
+#      nunca se ejecuta no protege nada;
+#   5. el **contrato de la API** (#312) — que `sgtm-v1.yaml` sea todavía lo que su
 #      generador produce. Es el gemelo de «el catálogo generado cuadra con el
 #      prototipo» del flujo de frontend, y existe porque el contrato dejó de
 #      poder reproducirse sin que nada se pusiera rojo: seguía siendo válido, el
@@ -85,6 +94,24 @@ jobs:
 
       - name: Lo publicable es lo que el corpus dice
         run: node docs/10-negocio/verificar-publicacion.mjs
+
+      # El hermano del anterior para lo que no cabe en una fila: un cuadro tiene
+      # miles de cifras y no se transcribe a mano, así que lo que se comprueba es
+      # la cadena que sustituye a esa lectura —archivo VERIFICADO, dos firmas,
+      # documento fuente, y el sha256 del archivo de filas recalculado—. Existía
+      # desde #380 y **no lo corría nadie**: una verificación escrita que nunca se
+      # ejecuta no protege nada. Puesto aquí en #188, al añadirse la segunda
+      # edición del manifiesto.
+      - name: Los cuadros normativos son los que el corpus firmó
+        run: node docs/10-negocio/verificar-cuadros.mjs
+
+      # No escribe el archivo: lo regenera desde `depreciacion.md` y exige que sea
+      # el mismo, byte a byte. Es lo que impide que el derivado y su transcripción
+      # firmada se separen — el derivado no se edita, se regenera.
+      - name: El derivado de la depreciación es el que su generador produce
+        run: >-
+          node docs/10-negocio/valores-normativos/fuentes/depreciacion-rnt-2016/derivar-depreciacion.mjs
+          --comprobar
 
       # No escribe el archivo: lo regenera en memoria y exige que sea el mismo.
       # Se comprobó que muerde, en las dos direcciones: retocando un `summary`

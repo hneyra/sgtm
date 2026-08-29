@@ -117,9 +117,15 @@ class ActoCoactivoControllerTest {
             new ConsultaDeExpedientes(
                     expedientes, movimientos, valores, libroPagado, new CostasEnMemoria());
 
+    /**
+     * El repositorio de documentos, como campo y no anonimo: #425 necesita <b>leer</b> el modelo
+     * con que se dibujo la REC para comprobar que la fecha de proyeccion llego hasta el papel.
+     */
+    private final DocumentosEnMemoria papeles = new DocumentosEnMemoria();
+
     private final EmitirDocumento documentos =
             new EmitirDocumento(
-                    new DocumentosEnMemoria(),
+                    papeles,
                     new GeneradorDeDocumentos(
                             List.of(
                                     new RenderizadorPdf(),
@@ -298,6 +304,57 @@ class ActoCoactivoControllerTest {
             String cuerpo = resultado.getResponse().getContentAsString();
             assertThat(cuerpo).contains("EXP-2026-999999");
             assertThat(cuerpo).contains("REC1-2026-000001");
+        }
+
+        @Test
+        @DisplayName("«proyectarInteresAl» viaja por la consulta y fecha la deuda del papel (#425)")
+        void laProyeccionViajaPorLaConsulta() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    MockMvcRequestBuilders.post("/api/v1/coactiva/rec/impresion")
+                                            .param("proyectarInteresAl", "2026-07-31")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    "{\"expedientes\":[\"EXP-2026-000001\"],"
+                                                            + "\"rec\":\"REC1\",\"observacion\":\"Se"
+                                                            + " emite la REC\"}"))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+            assertThat(fechaDeLaDeudaImpresa("REC1-2026-000001"))
+                    .as(
+                            "no basta con que se acepte: la cifra que el obligado se lleva es la"
+                                    + " del dia que se pidio, no la de hoy (regla 9)")
+                    .isEqualTo(LocalDate.of(2026, 7, 31));
+        }
+
+        @Test
+        @DisplayName("y si viene en los dos sitios gana el cuerpo: el cliente viejo sigue igual")
+        void elCuerpoGanaALaConsultaEnLaRec() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    MockMvcRequestBuilders.post("/api/v1/coactiva/rec/impresion")
+                                            .param("proyectarInteresAl", "2026-07-31")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    "{\"expedientes\":[\"EXP-2026-000001\"],"
+                                                            + "\"rec\":\"REC1\","
+                                                            + "\"proyectarInteresAl\":\"2026-09-30\","
+                                                            + "\"observacion\":\"Se emite la REC\"}"))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+            assertThat(fechaDeLaDeudaImpresa("REC1-2026-000001"))
+                    .isEqualTo(LocalDate.of(2026, 9, 30));
+        }
+
+        @Test
+        @DisplayName("sin proyeccion en ninguno de los dos sitios, la fecha del acto")
+        void sinProyeccionLaFechaDelActo() throws Exception {
+            MvcResult resultado = emitirRec("REC1", null, null);
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+            assertThat(fechaDeLaDeudaImpresa("REC1-2026-000001")).isEqualTo(HOY);
         }
 
         @Test
@@ -500,6 +557,20 @@ class ActoCoactivoControllerTest {
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * A que dia esta la deuda que se imprimio en ese papel.
+     *
+     * <p>Sale del <b>modelo guardado</b> —{@code ModeloDeDocumento.aLaFecha}, que {@code
+     * ModeloDelActoCoactivo} llena con {@code deuda.actualizadaA()}— y no de la respuesta HTTP: es
+     * la cifra que el obligado recibe en la mano, y lo que #425 tiene que poder comprobar.
+     */
+    private LocalDate fechaDeLaDeudaImpresa(String numero) {
+        return papeles.porNumero("REC1", EJERCICIO, numero)
+                .orElseThrow(() -> new AssertionError("No se emitio el documento " + numero))
+                .datos()
+                .aLaFecha();
+    }
 
     private MvcResult emitirRec(String rec, String medida, String fecha) throws Exception {
         StringBuilder cuerpo = new StringBuilder("{\"expedientes\":[\"EXP-2026-000001\"]");

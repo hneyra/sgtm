@@ -194,6 +194,73 @@ class CostasYConveniosControllerTest {
     }
 
     @Test
+    @DisplayName("el filtro «nroExpedCoact» viaja por la consulta y dice que expediente (#425)")
+    void elExpedienteViajaPorLaConsulta() throws Exception {
+        String expediente = expedienteConRec1();
+
+        MvcResult resultado =
+                costasMvc
+                        .perform(
+                                MockMvcRequestBuilders.post("/api/v1/coactiva/liquidaciones-costas")
+                                        .param("nroExpedCoact", expediente)
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"observacion\":\"Se liquidan las costas del"
+                                                        + " procedimiento\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("no basta con que se acepte: se liquido el expediente que se pidio")
+                .contains("\"expedCoact\":\"" + expediente + "\"")
+                .contains("\"totalS\":\"35.00\"");
+        assertThat(cargos.asentados).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("un expediente que no existe en la consulta, 404 y no se liquida nada")
+    void unExpedienteInexistenteEnLaConsulta404() throws Exception {
+        expedienteConRec1();
+
+        MvcResult resultado =
+                costasMvc
+                        .perform(
+                                MockMvcRequestBuilders.post("/api/v1/coactiva/liquidaciones-costas")
+                                        .param("nroExpedCoact", "EXP-2026-999999")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"observacion\":\"Se liquidan las costas del"
+                                                        + " procedimiento\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(404);
+        assertThat(cargos.asentados).isEmpty();
+    }
+
+    @Test
+    @DisplayName("y si viene en los dos sitios gana el cuerpo: el cliente viejo sigue igual")
+    void elCuerpoGanaALaConsultaEnLasCostas() throws Exception {
+        String expediente = expedienteConRec1();
+
+        MvcResult resultado =
+                costasMvc
+                        .perform(
+                                MockMvcRequestBuilders.post("/api/v1/coactiva/liquidaciones-costas")
+                                        .param("nroExpedCoact", "EXP-2026-999999")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"nroExpedCoact\":\""
+                                                        + expediente
+                                                        + "\",\"observacion\":\"Se liquidan las"
+                                                        + " costas del procedimiento\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"expedCoact\":\"" + expediente + "\"");
+    }
+
+    @Test
     @DisplayName("un importe en el cuerpo no entra: la lista blanca no lo tiene")
     void unImporteEnElCuerpoNoEntra() throws Exception {
         String expediente = expedienteConRec1();

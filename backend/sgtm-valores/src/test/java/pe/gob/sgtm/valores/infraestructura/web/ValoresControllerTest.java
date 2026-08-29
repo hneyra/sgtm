@@ -361,6 +361,93 @@ class ValoresControllerTest {
     }
 
     @Test
+    @DisplayName("«notificador» y «resultado» viajan por la consulta y deciden la diligencia")
+    void losDosFiltrosViajanPorLaConsulta() throws Exception {
+        emitirUnValor();
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post(
+                                                "/api/v1/valores/OP-2026-000001/notificacion")
+                                        .param("resultado", "NO_UBICADO")
+                                        .param("notificador", "V. RETO SANDOVAL")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"fechaDeNotificacion":"2026-04-03",
+                                                 "tipoDeNotificacion":"PERSONAL",
+                                                 "observacion":"Se diligencia para la prueba"}
+                                                """))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo)
+                .as("no basta con que se acepte: el resultado que se pidio es el que se guardo")
+                .contains("\"resultado\":\"NO_UBICADO\"")
+                .contains("\"notificador\":\"V. RETO SANDOVAL\"");
+        assertThat(cuerpo)
+                .as(
+                        "y con el se decide lo que mas importa: una diligencia no hallada no deja"
+                                + " la deuda exigible (#39)")
+                .contains("\"surtioEfecto\":false")
+                .contains("\"exigibleDesde\":null");
+    }
+
+    @Test
+    @DisplayName("y si vienen en los dos sitios gana el cuerpo: el cliente viejo sigue igual")
+    void elCuerpoGanaALaConsultaAlNotificar() throws Exception {
+        emitirUnValor();
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post(
+                                                "/api/v1/valores/OP-2026-000001/notificacion")
+                                        .param("resultado", "NO_UBICADO")
+                                        .param("notificador", "V. RETO SANDOVAL")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"fechaDeNotificacion":"2026-04-03",
+                                                 "tipoDeNotificacion":"PERSONAL",
+                                                 "resultado":"NOTIFICADO",
+                                                 "notificador":"J. RUIZ PALACIOS",
+                                                 "personaQueRecibe":"TITULAR",
+                                                 "observacion":"Se diligencia para la prueba"}
+                                                """))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"resultado\":\"NOTIFICADO\"")
+                .contains("\"notificador\":\"J. RUIZ PALACIOS\"")
+                .contains("\"surtioEfecto\":true");
+    }
+
+    @Test
+    @DisplayName("sin notificador en ninguno de los dos sitios, 422")
+    void sinNotificadorEnNingunSitio422() throws Exception {
+        emitirUnValor();
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.post(
+                                                "/api/v1/valores/OP-2026-000001/notificacion")
+                                        .param("resultado", "NOTIFICADO")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"fechaDeNotificacion":"2026-04-03",
+                                                 "tipoDeNotificacion":"PERSONAL",
+                                                 "observacion":"Se diligencia para la prueba"}
+                                                """))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("notificador");
+    }
+
+    @Test
     @DisplayName("notificar sin observacion, 422")
     void notificarSinObservacionRechaza() throws Exception {
         emitirUnValor();

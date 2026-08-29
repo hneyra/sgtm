@@ -49,6 +49,7 @@ import pe.gob.sgtm.valores.dominio.ValorMasivo;
 import pe.gob.sgtm.valores.dominio.ValorRepository;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.FiltroDeLaConsulta;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
@@ -172,16 +173,31 @@ public class ValoresController {
      * exigible <b>no</b> viaja en el cuerpo: lo deriva el servidor del plazo parametrizado, porque
      * dejarlo entrar seria dejar que el cliente decidiera cuando puede empezar la cobranza
      * coactiva.
+     *
+     * <p><b>{@code notificador} y {@code resultado} tambien viajan por la consulta</b> (#425). Son
+     * dos de los filtros que la pantalla dibuja y el contrato los declara {@code in: query};
+     * leerlos solo del cuerpo dejaba la operacion publicada y sin ninguna pantalla que pudiera
+     * llamarla. Se siguen aceptando en el cuerpo, y ahi ganan: ver {@link FiltroDeLaConsulta}.
+     *
+     * @param notificador quien llevo la diligencia
+     * @param resultado NOTIFICADO, NO_UBICADO o RECHAZADO
      */
     @PostMapping("/{nro}/notificacion")
     @RequiereAcceso(acceso = "notificacion_valores", privilegio = Privilegio.REGISTRO)
     public ResponseEntity<NotificacionResource> notificar(
-            @PathVariable String nro, @RequestBody PeticionDeNotificacion peticion) {
+            @PathVariable String nro,
+            @RequestParam(required = false) @Nullable String notificador,
+            @RequestParam(required = false) @Nullable String resultado,
+            @RequestBody PeticionDeNotificacion peticion) {
 
         LocalDate fecha = fechaRequeridaDe(peticion.fechaDeNotificacion(), "fechaDeNotificacion");
         ModalidadDeNotificacion modalidad = modalidadDe(peticion.tipoDeNotificacion());
-        ResultadoDeNotificacion resultado = resultadoDe(peticion.resultado());
-        String notificador = exigir(peticion.notificador(), "notificador");
+        ResultadoDeNotificacion resultadoDeLaDiligencia =
+                resultadoDe(FiltroDeLaConsulta.primeroNoVacio(peticion.resultado(), resultado));
+        String quienNotifico =
+                exigir(
+                        FiltroDeLaConsulta.primeroNoVacio(peticion.notificador(), notificador),
+                        "notificador");
         Observacion observacion = observacionDe(peticion.observacion());
 
         try {
@@ -190,8 +206,8 @@ public class ValoresController {
                             exigir(nro, "nro"),
                             fecha,
                             modalidad,
-                            resultado,
-                            notificador,
+                            resultadoDeLaDiligencia,
+                            quienNotifico,
                             vacioAnulo(peticion.direccion()),
                             vacioAnulo(peticion.personaQueRecibe()),
                             vacioAnulo(peticion.documentoDeQuienRecibe()),

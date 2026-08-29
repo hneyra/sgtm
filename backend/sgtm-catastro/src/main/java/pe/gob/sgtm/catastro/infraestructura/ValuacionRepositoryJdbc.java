@@ -132,13 +132,14 @@ public class ValuacionRepositoryJdbc extends RepositorioJdbc implements Valuacio
     public List<Depreciacion> depreciacionesDe(IdentificadorDeConjunto conjunto) {
         return jdbc().sql(
                         """
-                        SELECT p.id, p.material, p.estado_conservacion, p.antiguedad_hasta,
-                               p.porcentaje, p.documento_fuente
+                        SELECT p.id, p.uso, p.material, p.estado_conservacion,
+                               p.antiguedad_hasta, p.porcentaje, p.documento_fuente
                           FROM depreciacion p
                           JOIN conjunto_parametro_detalle d
                             ON d.parametro_id = p.publicacion_id
                          WHERE d.conjunto_id = :conjunto
-                         ORDER BY p.material, p.estado_conservacion, p.antiguedad_hasta
+                         ORDER BY p.uso, p.material, p.estado_conservacion,
+                                  p.antiguedad_hasta NULLS LAST
                         """)
                 .param("conjunto", conjunto.valor())
                 .query(ValuacionRepositoryJdbc::mapearDepreciacion)
@@ -146,11 +147,15 @@ public class ValuacionRepositoryJdbc extends RepositorioJdbc implements Valuacio
     }
 
     private static Depreciacion mapearDepreciacion(ResultSet fila, int numero) throws SQLException {
+        // getInt sobre un nulo devuelve 0, y aqui el nulo es «mas de 50 anios»: leerlo como cero
+        // convertiria el tramo abierto en uno que no cubre nada, sin ningun error de por medio.
+        Object tope = fila.getObject("antiguedad_hasta");
         return new Depreciacion(
                 fila.getLong("id"),
+                fila.getString("uso"),
                 fila.getString("material"),
                 fila.getString("estado_conservacion"),
-                fila.getInt("antiguedad_hasta"),
+                tope == null ? null : ((Number) tope).intValue(),
                 new Alicuota(fila.getBigDecimal("porcentaje")),
                 fila.getString("documento_fuente"));
     }

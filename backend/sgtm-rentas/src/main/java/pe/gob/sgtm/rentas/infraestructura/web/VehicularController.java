@@ -28,6 +28,7 @@ import pe.gob.sgtm.rentas.dominio.VehiculoEncontrado;
 import pe.gob.sgtm.rentas.dominio.VehiculoRepository;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.FiltroDeLaConsulta;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
@@ -123,12 +124,15 @@ public class VehicularController {
         Objetivo objetivo =
                 new Objetivo(
                         peticion.vehiculoId(),
-                        primeroNoVacio(peticion.placa(), placa),
-                        primeroNoVacio(peticion.codContribuyente(), codContribuyente));
+                        FiltroDeLaConsulta.primeroNoVacio(peticion.placa(), placa),
+                        FiltroDeLaConsulta.primeroNoVacio(
+                                peticion.codContribuyente(), codContribuyente));
         boolean simulacion = exigirSimulacion(peticion.simulacion());
         Observacion observacion = observacionDe(peticion.observacion(), simulacion);
         Ejercicio delCalculo =
-                ejercicioDe(primeroNoVacio(peticion.ejercicio(), ejercicio), simulacion);
+                ejercicioDe(
+                        FiltroDeLaConsulta.primeroNoVacio(peticion.ejercicio(), ejercicio),
+                        simulacion);
         LocalDate fechaCalculo = LocalDate.now(reloj);
 
         List<DeterminacionVehicularResource> resultado = new ArrayList<>();
@@ -283,15 +287,6 @@ public class VehicularController {
             throw new IllegalStateException("Un vehiculo ya guardado siempre tiene identificador");
         }
         return valor;
-    }
-
-    /** El del cuerpo manda; si no viene, el de la consulta. Vacío cuenta como que no viene. */
-    private static @Nullable String primeroNoVacio(
-            @Nullable String delCuerpo, @Nullable String deLaConsulta) {
-        if (delCuerpo != null && !delCuerpo.isBlank()) {
-            return delCuerpo.strip();
-        }
-        return deLaConsulta == null || deLaConsulta.isBlank() ? null : deLaConsulta.strip();
     }
 
     private static String mensajeDe(RuntimeException excepcion) {

@@ -39,19 +39,24 @@ import {
  * **Y las dos operaciones que no tenían `Controller` ya lo tienen (#396).**
  * `transito_papeleta_reporte` se conecta como hoja —se abre por el número de
  * la papeleta en la ruta, igual que `transito_documentos`—.
- * `transito_reportes` **no se conecta, y no por descuido**: es un `POST` y las
- * dos únicas puertas que el frontend tiene para uno son `useEscritura` —que
- * exige observación (regla 10), y este emisor no modifica nada— y
- * `useSimulacion` —cuya guarda es que el cuerpo declare `simulacion: true`, una
- * marca que `PeticionDeReporteDeTransito` no puede declarar sin mentir—;
- * declarar una `Conexion` lo dispararía **al abrir la pantalla** (ver el
- * docblock de `Adaptacion` en `pantallas/conexiones.ts`), y sin tipo de reporte
- * elegido el backend contestaría 422. Se suma que su última acción del catálogo
- * es «Cancelar» —el cuarteto Exportar/Imprimir/Pantalla/Cancelar de #79, donde
- * el renderizador genérico haría primaria a la que cierra el diálogo— y que su
- * desplegable ofrece quince reportes de los que el backend sirve nueve. En la
- * interfaz no se pierde nada: el centro de reportes (ADR-0014 §5) ya lleva a
- * cada hoja de un clic, y doce de las trece están conectadas.
+ * **Y `transito_reportes` estrena la tercera puerta (#424).** No se conecta con
+ * una `Conexion` —`useDatosDeOperacion` mira los parámetros que faltan y no el
+ * verbo, así que la dispararía **al abrir la pantalla**, sin tipo de reporte
+ * elegido—, ni por `useEscritura` —que exige observación (regla 10), y este
+ * emisor no modifica nada—, ni por `useSimulacion` —cuya guarda es que el
+ * cuerpo declare `simulacion: true`, una marca que
+ * `PeticionDeReporteDeTransito` no puede declarar sin mentir—. Lo suyo es una
+ * **lectura que viaja por `POST`**: `pantallas/lecturas-por-post.ts` la
+ * declara, `useLecturaPorPost` la pide al pulsar, y su pantalla vive en
+ * `EmisorDeReportes.tsx` —en `COMPONENTES_PROPIOS`, porque su última acción del
+ * catálogo es «Cancelar» (el cuarteto Exportar/Imprimir/Pantalla/Cancelar de
+ * #79) y porque los criterios que viajan dependen del reporte elegido: el
+ * backend rechaza con 422, nombrándolo, el que esa hoja no usa—. De los quince
+ * tipos del desplegable el backend sirve nueve, y de esos nueve la pantalla
+ * pide **ocho**: el record de conductor exige la licencia o el documento del
+ * infractor, y aquí el único campo parecido es «Conductor», que es un nombre.
+ * Los siete restantes son otras opciones del catálogo, y el centro de reportes
+ * (ADR-0014 §5) lleva a cada una de un clic — elegirlas en el emisor lo dice.
  *
  * **Tres filtros de los dos resúmenes se dibujan y no se mandan**
  * (`filtrosBloqueados` de `transito/composicion.ts`): el «Agrupado por» de las
@@ -769,11 +774,7 @@ const transito_papeleta_reporte = definirConexion({
           texto(hoja['porcentajeInfraccion']),
           texto(hoja['importeInfraccion']),
         ],
-        [
-          'Porcentaje a cobrar',
-          texto(hoja['porcentajeACobrar']),
-          texto(hoja['importeAPagar']),
-        ],
+        ['Porcentaje a cobrar', texto(hoja['porcentajeACobrar']), texto(hoja['importeAPagar'])],
         [
           'Importe con beneficio',
           'Descuento registrado en el acta',

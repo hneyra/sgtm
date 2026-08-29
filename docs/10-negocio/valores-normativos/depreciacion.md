@@ -135,32 +135,40 @@ antes de que este archivo pase a `VERIFICADO`.
 
 | Qué | Dónde |
 |---|---|
-| Tipo | `depreciacion` |
-| Clave | `(municipalidad_id, ejercicio, tabla [01-04 según uso], material, estado_conservación, tramo_antigüedad)` |
-| Ámbito | nacional |
+| Tabla | `depreciacion` |
+| Clave | `(publicacion_id, uso [01-04, la tabla del Anexo I], material, estado_conservacion, antiguedad_hasta)` |
+| Ámbito | nacional (`municipalidad_id` siempre nulo, [ADR-0017](../../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md)) |
 | Vigencia | 2016– (Reglamento Nacional de Tasaciones vigente; no se confirmó si alguna modificatoria posterior tocó el Anexo I específicamente — ver §3) |
+| Archivo de filas | [`fuentes/depreciacion-rnt-2016/depreciacion.csv`](fuentes/depreciacion-rnt-2016/README.md), **derivado de este archivo** por `derivar-depreciacion.mjs` |
 
-**No se carga todavía, y ya no por D-13** —cerrada el 2026-08-28 con esta tabla clasificada como
-nacional ([ADR-0017](../../30-arquitectura/adr/ADR-0017-tablas-de-valuacion-nacionales.md))—. Lo
-que falta es una **columna**: el Anexo I publica **cuatro** tablas, una por uso de la edificación
-(§1), y `depreciacion` tiene `(material, estado_conservacion, antiguedad_hasta)` sin ninguna
-columna de uso. Cargar las cuatro hoy dejaría que `depreciacion_uq` se quedara con la primera y
-descartara las otras tres en silencio, que es depreciar una oficina con el porcentaje de una
-vivienda. Y no se arregla con cuatro ediciones: una determinación necesita las cuatro a la vez.
-`PublicarCuadros` rechaza este cuadro nombrando el motivo (GOB-03, H-15).
+**Se carga desde el 2026-08-29.** Hasta entonces no se podía, y no por D-13 —cerrada el 2026-08-28—
+sino por una **columna**: el Anexo I publica **cuatro** tablas, una por uso de la edificación (§1), y
+`depreciacion` tenía `(material, estado_conservacion, antiguedad_hasta)` sin ninguna de uso, de modo
+que cargar las cuatro habría dejado que `depreciacion_uq` se quedara con la primera y descartara las
+otras tres en silencio —depreciar una oficina con el porcentaje de una vivienda—. Tampoco se
+arreglaba con cuatro ediciones: una determinación necesita las cuatro a la vez.
+
+`V57` le añadió `uso` a la clave y volvió `antiguedad_hasta` anulable, porque «Más de 50 años» no
+tiene tope y un centinela se leería igual que uno de verdad. **Cargarlo midió lo que se temía**: de
+las 492 filas que el Anexo tabula, sin el uso en la clave sobreviven **127**, y **120 de esas 127
+combinaciones llevan un porcentaje distinto según el uso** (GOB-03, H-15).
 
 ## 3. Qué no cabe hoy
 
 - **El estado «Muy malo»** no está tabulado en ninguna de las cuatro tablas (§1): el esquema
   (`depreciacion`, clave arriba) no tiene dónde guardar un porcentaje para esa combinación porque
   la norma no lo fija — igual que las celdas `*`, el sistema necesita permitir un valor manual
-  justificado, no solo lectura de tabla.
+  justificado, no solo lectura de tabla. **Ninguna de las dos cosas se carga con cero**: la fila
+  sencillamente no existe, y quien la busque tendrá que fallar nombrándola (#48).
+- **Qué tabla le toca a un predio.** El Anexo identifica sus cuatro tablas por su número y su
+  título, y eso es lo que `depreciacion.uso` guarda. Traducir el uso que declara la ficha catastral
+  al número de tabla es **criterio, no transcripción**, y no vive en este dato: `RT-004` sigue sin
+  escribirse.
 - **«Y sus modificatorias»** (art. 4 de la RM 277-2025-VIVIENDA cita el reglamento así): se
   encontró al menos una resolución posterior, la RM N.º 186-2021-VIVIENDA, que modifica el numeral
   18.4 del artículo 18 del Reglamento Nacional de Tasaciones — no se confirmó si toca las Tablas
   01-04 del Anexo I o solo el artículo 18. `‹NO CONFIRMADO EN FUENTE OFICIAL: si existe alguna
   modificatoria posterior a 2016 que reemplace específicamente el Anexo I (las tablas de
   depreciación), en vez de otros artículos del reglamento›`.
-- El esquema (`depreciacion`, clave arriba) admite bien la estructura de cuatro tablas por uso de
-  edificación; no hay hallazgo de forma pendiente aquí, a diferencia de H-4 en
-  `valores-unitarios-2026.md`.
+- El esquema admite las cuatro tablas por uso de edificación **desde `V57`**; no queda hallazgo de
+  forma pendiente aquí, a diferencia de H-14 en `valores-unitarios-2026.md`.
