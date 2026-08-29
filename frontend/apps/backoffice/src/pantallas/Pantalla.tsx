@@ -35,7 +35,8 @@ import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
 import { composicionDe, filtrosDe, hayQueResumir } from './composicion';
 import type { ComposicionDeOpcion } from './composicion';
-import { PanelLateral } from './bloques/PanelLateral';
+import { PanelDeAlta } from './bloques/PanelDeAlta';
+import type { AltaAbierta } from './bloques/PanelDeAlta';
 import { useDatosDeOperacion } from './useDatosDeOperacion';
 import { useDatosDePantalla } from './useDatosDePantalla';
 import { BarraDeAcciones } from './bloques/BarraDeAcciones';
@@ -165,14 +166,15 @@ type Estructura = EstructuraDePantalla;
 const ANCLA_DE_LA_TABLA = 'sgtm-tabla-de-la-pantalla';
 
 /**
- * Siete pantallas propias, cargadas con quien las abre y no en el arranque
- * (#379, esta pasada; mismo patron que `rentas/composicion.ts`).
+ * Las pantallas propias, cargadas con quien las abre y no en el arranque
+ * (#379; mismo patron que `rentas/composicion.ts`).
  *
  * Las tres de valores catastrales —`ActualizacionDeCatastro` con `TablaDePisos`
- * y `CodigoCatastral`, las otras dos con `useTablaDeValuacion`— y las cuatro
+ * y `CodigoCatastral`, las otras dos con `useTablaDeValuacion`—, las cuatro
  * de `Valores` (RF-093 a RF-096, #75): `GeneracionIndividualDeValores`,
- * `GeneracionMasivaDeValores`, `PrescripcionDeLaDeuda` y `PaseACoactiva`.
- * Ninguna de las 127 pantallas que no son estas siete la necesita nunca.
+ * `GeneracionMasivaDeValores`, `PrescripcionDeLaDeuda` y `PaseACoactiva`, las
+ * dos de Transito (#77) y `Territorio`, que es la superficie unica de
+ * `sectores` y `calles`. Ninguna de las demas pantallas las necesita nunca.
  * Medido: el arranque bajo de 150,2 a 148,0 KB comprimidos al sacarlas del
  * trozo comun (`yarn comprobar-compilaciones`).
  */
@@ -184,6 +186,9 @@ const ValoresUnitarios = lazy(async () => ({
 }));
 const Depreciacion = lazy(async () => ({
   default: (await import('./catastro/Depreciacion')).Depreciacion,
+}));
+const Territorio = lazy(async () => ({
+  default: (await import('./catastro/Territorio')).Territorio,
 }));
 const GeneracionIndividualDeValores = lazy(async () => ({
   default: (await import('./valores/GeneracionIndividualDeValores')).GeneracionIndividualDeValores,
@@ -267,6 +272,17 @@ const VERSIONADAS: ReadonlySet<string> = new Set([
  *                            una y «Imprimir» en la otra, ninguna de las
  *                            dos escribe. Cada una trae su barra de una
  *                            sola accion.
+ *   sectores, calles         las dos caen en la **misma** superficie: un
+ *                            carril con el arbol territorial —sector →
+ *                            manzana— y un panel con las dos hojas como
+ *                            pestanas. No es que su cuerpo no quepa en los
+ *                            bloques comunes: es que las dos describen **un
+ *                            solo territorio** y separarlas obligaba a
+ *                            volver al menu para pasar de la manzana a la
+ *                            via que la limita. Las dos rutas, su permiso y
+ *                            su entrada de menu siguen intactos: lo unico
+ *                            que decide la ruta es que hoja llega abierta,
+ *                            y cambiar de pestana **navega**.
  *
  * Viven en su propio componente en vez de forzar al renderizador comun a
  * saber de listas, de booleanos o de un verbo que miente.
@@ -286,6 +302,8 @@ const COMPONENTES_PROPIOS: Readonly<
   pase_coactiva: PaseACoactiva,
   transito_cambio_numero: CambioDeNumeroDePapeleta,
   transito_valores: GeneracionMasivaDeValoresDeTransito,
+  sectores: Territorio,
+  calles: Territorio,
 };
 
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
@@ -1049,53 +1067,6 @@ function altasDeLaBarra(
   }
   for (const alta of composicion.altas ?? []) acciones[alta.accion] = () => abrir(alta.accion);
   return acciones;
-}
-
-/** Cual de las altas de la opcion esta abierta, y de que fila cuelga. */
-type AltaAbierta =
-  | { readonly indice: number; readonly deFila?: false; readonly contexto?: undefined }
-  | { readonly deFila: true; readonly contexto: string; readonly indice?: undefined };
-
-/**
- * El panel de la alta abierta.
- *
- * Vive en su propio componente y no en linea porque el formulario de dentro
- * llama a `useEscritura`, y un hook no se llama a veces: montarlo solo cuando el
- * panel esta abierto es lo que evita que la escritura exista mientras nadie la
- * pidio.
- */
-function PanelDeAlta({
-  composicion,
-  abierta,
-  onCerrar,
-}: {
-  readonly composicion: ComposicionDeOpcion;
-  readonly abierta: AltaAbierta;
-  readonly onCerrar: () => void;
-}) {
-  const alta =
-    abierta.deFila === true ? composicion.altaDeFila : composicion.altas?.[abierta.indice];
-  if (alta === undefined) return null;
-  const Formulario = alta.Formulario;
-
-  return (
-    // El `Suspense` envuelve al panel **entero** y no a su contenido: el panel
-    // lleva el foco a su primer control al montarse, y montarlo alrededor de un
-    // hueco que todavia se esta cargando dejaria el foco en el boton de cerrar
-    // y no lo volveria a mover cuando llegara el formulario.
-    <Suspense fallback={null}>
-      <PanelLateral
-        titulo={alta.titulo}
-        {...(alta.descripcion === undefined ? {} : { descripcion: alta.descripcion })}
-        onCerrar={onCerrar}
-      >
-        <Formulario
-          {...(abierta.contexto === undefined ? {} : { contexto: abierta.contexto })}
-          onCerrar={onCerrar}
-        />
-      </PanelLateral>
-    </Suspense>
-  );
 }
 
 /**

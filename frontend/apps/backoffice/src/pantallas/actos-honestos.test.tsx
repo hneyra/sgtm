@@ -401,7 +401,6 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
    */
   it.each([
     { caso: 'un alta en panel', ruta: '/catastro/calles', accion: 'Nuevo' },
-    { caso: 'un alta en panel', ruta: '/catastro/sectores', accion: 'Nuevo sector' },
     { caso: 'un flujo guiado', ruta: '/catastro/ficha-urbana', accion: 'Nuevo' },
   ])('$ruta compone $caso: ni franja, ni causa, ni promesa rota', async ({ ruta, accion }) => {
     const montada = montarEnRuta(ruta);
@@ -412,6 +411,26 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
     // Y la franja se queda vacia: no hay nada que explicar.
     expect(document.getElementById('sgtm-motivo-de-la-accion')?.textContent).toBe('');
     expect(motivoDeLaPrimaria()).toBeUndefined();
+
+    montada.unmount();
+  });
+
+  /**
+   * `sectores` dice lo mismo **sin barra de acciones**, y por eso va aparte.
+   *
+   * Desde que las dos opciones del territorio caen en la misma superficie
+   * (`catastro/Territorio.tsx`), «Nuevo sector» no vive en la barra del fondo:
+   * vive al pie del carril, debajo del arbol del que cuelga. La propiedad que
+   * esta prueba defiende no cambia —la pantalla no promete un guardado que no
+   * puede hacer—, y aqui se puede exigir **mas fuerte** que en las de arriba: no
+   * es que la franja este vacia, es que no hay ninguna franja que leer.
+   */
+  it('/catastro/sectores compone su alta en el carril: ni franja, ni causa, ni promesa rota', async () => {
+    const montada = montarEnRuta('/catastro/sectores');
+
+    expect(await screen.findByRole('button', { name: 'Nuevo sector' })).toBeEnabled();
+    expect(document.querySelector('.sgtm-acciones')).toBeNull();
+    expect(document.getElementById('sgtm-motivo-de-la-accion')).toBeNull();
 
     montada.unmount();
   });

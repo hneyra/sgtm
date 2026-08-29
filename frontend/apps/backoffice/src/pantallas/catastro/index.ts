@@ -355,10 +355,17 @@ const consulta_fichas = definirConexion({
 /**
  * El catalogo territorial, con **los conteos que el sector trae** (#309, #321).
  *
+ * **Quien lo dibuja es el arbol del carril**, no una tabla: `sectores` y
+ * `calles` caen en la misma superficie (`catastro/Territorio.tsx`). Este
+ * adaptador no cambia por eso —sigue produciendo las mismas celdas y los mismos
+ * detalles— y esa es la idea: el arbol lee `tabla.filas` y `tabla.detalles` tal
+ * como llegan, asi que el dia que la superficie vuelva a ser una tabla, lo que
+ * se dibuja no cambia de significado.
+ *
  * `SectorResource` publica `manzanas`, `predios` y `lotes` contados por la base
  * sobre la pagina ya limitada. Aqui se dibujan **tal cual**: no se suman, no se
  * completan y no se deducen unos de otros. Que significa cada uno lo decide el
- * backend y conviene saberlo antes de leer la tabla como si fuera un cuadre:
+ * backend y conviene saberlo antes de leerlos como si fueran un cuadre:
  *
  * - `predios` son los **activos**. Los dados de baja siguen en la base porque
  *   aparecen en determinaciones ya emitidas (RNF-051) y el sector ya no los
@@ -373,6 +380,11 @@ const consulta_fichas = definirConexion({
  * Mientras la ruta la conteste el proxy de datos, los tres salen «—», y **eso es
  * correcto**: el proxy no finge lo que el backend no le ha dado (ADR-0010 §4).
  * El dia que la operacion se sirva de verdad se pintan sin tocar esta pantalla.
+ *
+ * En el arbol, el nodo del sector lleva su conteo de predios y el detalle de la
+ * derecha los tres con el rotulo del catalogo. La columna que el aviso
+ * permanente nombra —«Predios inscritos»— es la del catalogo portado, y por eso
+ * el detalle la rotula con ella y no con una frase escrita a mano (RNF-080).
  */
 const sectores = definirConexion({
   operacion: 'sectores',
@@ -408,8 +420,9 @@ const sectores = definirConexion({
  * **El backend todavia no las lista.** `POST /catastro/sectores/{codigo}/manzanas`
  * da de alta una manzana y no hay ningun `GET` que las devuelva —el repositorio
  * tiene `manzanasDe(sectorId)` y ningun controlador lo publica—, asi que el
- * desplegable dice que falta en vez de aparecer vacio, que se leeria como «este
- * sector no tiene ninguna».
+ * sector desplegado dice que falta en vez de aparecer vacio, que se leeria como
+ * «este sector no tiene ninguna». **Y lo dice una sola vez**, dentro del sector
+ * que se desplego: repetido en cada nodo del arbol seria ruido de fondo.
  *
  * Cuando lo publique, `manzanas` sera **una lista** donde hoy es un conteo, y las
  * fichas se pintan solas: es la misma clave porque es el mismo concepto —las
@@ -435,7 +448,11 @@ function detalleDelSector(sector: Readonly<Record<string, unknown>>): DetalleDeF
     }),
     ...(listadas.length === 0
       ? {
-          nota: 'El sistema todavía no publica las manzanas de un sector: solo su alta. Mientras tanto se ve cuántas hay en la columna «Manzanas», y desde aquí se puede añadir una.',
+          // Se dice **una vez, dentro del sector desplegado**, y no en cada
+          // fila del arbol: repetirla en los cinco sectores del carril la
+          // convierte en ruido de fondo y deja de leerse justo donde importa
+          // —al lado del boton que si puede anadir una—.
+          nota: 'El sistema todavía no publica las manzanas de un sector: solo su alta. Mientras tanto se ve cuántas hay junto al sector, y desde aquí se puede añadir una.',
         }
       : {}),
   };

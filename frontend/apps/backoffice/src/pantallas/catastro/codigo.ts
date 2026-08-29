@@ -99,6 +99,51 @@ export function tramoDelCodigo(valor: string, nombre: string): string {
 /** El codigo que componen unos tramos: su concatenacion, sin separadores. */
 export const componerDeTramos = (tramos: readonly string[]): string => tramos.join('');
 
+/** En que posicion del codigo empieza un tramo, por su nombre. `-1` si no existe. */
+export function inicioDelTramo(nombre: string): number {
+  let desde = 0;
+  for (const tramo of TRAMOS_DEL_CODIGO) {
+    if (tramo.nombre === nombre) return desde;
+    desde += tramo.longitud;
+  }
+  return -1;
+}
+
+/**
+ * El codigo con uno de sus tramos **sustituido**, por el nombre del tramo.
+ *
+ * Es lo que necesita el arbol territorial: senalar el sector 01 y la manzana 003
+ * coloca esos dos tramos del codigo de referencia catastral y deja los demas
+ * como estaban (#318, ADR-0015 §2.4).
+ *
+ * **Y no inventa ni un digito.** El codigo es un prefijo posicional que se llena
+ * de izquierda a derecha (ver `CodigoCatastral`), asi que un tramo solo se puede
+ * colocar en su sitio cuando lo que va delante ya esta escrito: con el ubigeo en
+ * blanco, meter «01» en el tramo de sector escribiria «01» **al principio del
+ * codigo**, o sea en el departamento. Por eso hay dos guardas y las dos devuelven
+ * el codigo tal cual en vez de una cadena que no dice lo que parece:
+ *
+ * - los digitos tienen que ocupar **exactamente** el tramo. Un valor mas corto
+ *   correria todo lo que hay a su derecha;
+ * - lo escrito tiene que llegar ya hasta el principio del tramo. Mientras no
+ *   llegue, lo senalado en el arbol se queda esperando —y la pantalla lo dice—.
+ */
+export function conTramoDelCodigo(valor: string, nombre: string, digitos: string): string {
+  const indice = TRAMOS_DEL_CODIGO.findIndex((tramo) => tramo.nombre === nombre);
+  const tramo = TRAMOS_DEL_CODIGO[indice];
+  if (tramo === undefined) return valor;
+  const limpios = soloDigitos(digitos);
+  if (limpios.length !== tramo.longitud) return valor;
+  const escrito = soloDigitos(valor).slice(0, LONGITUD_DEL_CODIGO);
+  if (escrito.length < inicioDelTramo(nombre)) return valor;
+  const tramos = repartirEnTramos(escrito);
+  return (
+    componerDeTramos(tramos.slice(0, indice)) +
+    limpios +
+    componerDeTramos(tramos.slice(indice + 1))
+  ).slice(0, LONGITUD_DEL_CODIGO);
+}
+
 /** Un valor de fuera (la URL), por el embudo del componente: solo digitos, a lo sumo 23. */
 export const normalizarCodigoCatastral = (valor: string): string =>
   componerDeTramos(repartirEnTramos(valor));

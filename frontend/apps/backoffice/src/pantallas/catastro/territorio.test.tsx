@@ -15,10 +15,20 @@ import { SIN_DATO } from '../seguridad/listado';
  *
  * 1. Los conteos de `SectorConConteos` —manzanas, lotes, predios activos— se
  *    dibujan **tal cual** cuando la respuesta los trae, y salen «—» cuando no.
- * 2. Las manzanas cuelgan de la fila del sector, con su conteo de lotes, y
- *    mientras el backend no las liste el desplegable lo dice.
+ * 2. Las manzanas cuelgan del sector, con su conteo de lotes, y mientras el
+ *    backend no las liste se dice.
  * 3. El alta de sector, de manzana y de vía escribe de verdad, y **sin
  *    observación no se habilita** (regla 10, RNF-052).
+ *
+ * **Dónde se dibujan las tres cambió, y lo que comprueban no.** Desde que
+ * `sectores` y `calles` caen en la misma superficie (`catastro/Territorio.tsx`)
+ * la tabla de sectores es el árbol del carril y el detalle del sector señalado
+ * se lee en el panel de la derecha; el alta de sector cuelga del pie del carril
+ * y la de manzana del sector desplegado. Las propiedades son las mismas —un
+ * conteo que no llegó no se pinta como `0`, una manzana no se corrige después,
+ * sin observación no se guarda—, y lo que se ha reescrito aquí es dónde
+ * buscarlas. Lo nuevo de la superficie se prueba aparte, en
+ * `territorio-unificado.test.tsx`.
  */
 
 interface Peticion {
@@ -100,41 +110,55 @@ const escrituras = (camino: string) =>
 
 /* ── 1. Los conteos ────────────────────────────────────────────────────── */
 
+/** El nodo del árbol de un sector, por su denominación. */
+const nodoDe = (nombre: string | RegExp) =>
+  screen.findByRole('button', { name: typeof nombre === 'string' ? new RegExp(nombre) : nombre });
+
+/**
+ * La tarjeta del detalle, acotada.
+ *
+ * `getByLabelText('Sector')` sin acotar encuentra dos: el dato del sector
+ * señalado y **el tramo «Sector» del código de referencia catastral**, que está
+ * en la misma hoja y se llama igual por el manual. Los dos rótulos son
+ * correctos; lo que hay que decir es de cuál de los dos se habla.
+ */
+const enElDetalle = () =>
+  within(screen.getByText('Lo señalado en el territorio').closest('section') as HTMLElement);
+
 describe('los conteos del sector salen tal como llegan', () => {
   it('manzanas, lotes y predios se pintan sin recomponerse', async () => {
+    const usuario = userEvent.setup();
     elBackendResponde([sector('01', 'CERCADO', { manzanas: 12, lotes: 340, predios: 512 })]);
     montarEnRuta('/catastro/sectores');
 
-    const fila = (await screen.findByText('CERCADO')).closest('tr');
-    expect(fila).not.toBeNull();
-    const celdas = within(fila as HTMLElement).getAllByRole('cell');
-    // La primera celda es el control de desplegado; después van las del catálogo.
-    expect(celdas.slice(1).map((celda) => celda.textContent)).toEqual([
-      '01',
-      'CERCADO',
-      '12',
-      '340',
-      '512',
-      'Zona 1',
-      'ACTIVO',
-    ]);
+    // En el árbol, el sector lleva su conteo de predios al lado del nombre.
+    await usuario.click(await nodoDe('CERCADO'));
+    expect(screen.getByText('512 predios')).toBeInTheDocument();
+
+    // Y en el panel, los tres conteos con el rótulo del catálogo.
+    expect(enElDetalle().getByLabelText('Sector')).toHaveTextContent('01');
+    expect(enElDetalle().getByLabelText('Denominación')).toHaveTextContent('CERCADO');
+    expect(enElDetalle().getByLabelText('Manzanas')).toHaveTextContent('12');
+    expect(enElDetalle().getByLabelText('Lotes')).toHaveTextContent('340');
+    expect(enElDetalle().getByLabelText('Predios inscritos')).toHaveTextContent('512');
+    expect(enElDetalle().getByLabelText('Zona de arbitrios')).toHaveTextContent('Zona 1');
+    expect(enElDetalle().getByLabelText('Estado')).toHaveTextContent('ACTIVO');
   });
 
   it('mientras la ruta la conteste el proxy salen «—», y eso es correcto', async () => {
     // Sin interponer nada: el proxy responde el juego de datos del prototipo,
     // que no trae los conteos porque el backend no se los ha dado (ADR-0010 §4).
+    const usuario = userEvent.setup();
     montarEnRuta('/catastro/sectores');
 
-    // Por el nombre y no por el codigo: «01» tambien es una opcion del filtro
-    // «Sector», y esa no esta en ninguna fila.
-    const fila = (await screen.findByText('CERCADO DE SULLANA')).closest('tr');
-    const celdas = within(fila as HTMLElement).getAllByRole('cell');
-    expect(celdas[3]?.textContent).toBe(SIN_DATO);
-    expect(celdas[4]?.textContent).toBe(SIN_DATO);
-    expect(celdas[5]?.textContent).toBe(SIN_DATO);
+    await usuario.click(await nodoDe('CERCADO DE SULLANA'));
+    expect(enElDetalle().getByLabelText('Manzanas')).toHaveTextContent(SIN_DATO);
+    expect(enElDetalle().getByLabelText('Lotes')).toHaveTextContent(SIN_DATO);
+    expect(enElDetalle().getByLabelText('Predios inscritos')).toHaveTextContent(SIN_DATO);
   });
 
   it('un cero no es lo mismo que «no se contó»', async () => {
+    const usuario = userEvent.setup();
     elBackendResponde([
       sector('07', 'SECTOR NUEVO', { manzanas: 0, lotes: 0, predios: 0 }),
       // `SectorResource` manda nulo en la respuesta de un alta: «no se contó».
@@ -142,10 +166,14 @@ describe('los conteos del sector salen tal como llegan', () => {
     ]);
     montarEnRuta('/catastro/sectores');
 
-    const nuevo = (await screen.findByText('SECTOR NUEVO')).closest('tr');
-    expect(within(nuevo as HTMLElement).getAllByRole('cell')[3]?.textContent).toBe('0');
-    const sinContar = screen.getByText('SECTOR SIN CONTAR').closest('tr');
-    expect(within(sinContar as HTMLElement).getAllByRole('cell')[3]?.textContent).toBe(SIN_DATO);
+    // En el árbol, uno dice «0 predios» y el otro «— predios».
+    expect(await screen.findByText('0 predios')).toBeInTheDocument();
+    expect(screen.getByText(`${SIN_DATO} predios`)).toBeInTheDocument();
+
+    await usuario.click(await nodoDe('SECTOR NUEVO'));
+    expect(enElDetalle().getByLabelText('Manzanas')).toHaveTextContent('0');
+    await usuario.click(await nodoDe('SECTOR SIN CONTAR'));
+    expect(enElDetalle().getByLabelText('Manzanas')).toHaveTextContent(SIN_DATO);
   });
 
   it('dice que un predio sin sector no cuenta en ninguno: es información, no descuadre', async () => {
@@ -159,7 +187,7 @@ describe('los conteos del sector salen tal como llegan', () => {
 
 /* ── 2. Las manzanas del sector, desplegadas ───────────────────────────── */
 
-describe('las manzanas cuelgan de la fila del sector', () => {
+describe('las manzanas cuelgan del sector, en el árbol', () => {
   it('se despliegan con su código y su conteo de lotes cuando la respuesta las trae', async () => {
     const usuario = userEvent.setup();
     elBackendResponde([
@@ -172,24 +200,22 @@ describe('las manzanas cuelgan de la fila del sector', () => {
     ]);
     montarEnRuta('/catastro/sectores');
 
-    const fila = (await screen.findByText('CERCADO')).closest('tr');
-    await usuario.click(
-      within(fila as HTMLElement).getByRole('button', { name: /Desplegar Manzanas del sector 01/ }),
-    );
+    await usuario.click(await nodoDe('CERCADO'));
 
     expect(await screen.findByText('001')).toBeInTheDocument();
     expect(screen.getByText('14 lotes')).toBeInTheDocument();
     expect(screen.getByText('9 lotes')).toBeInTheDocument();
+    // Y el hueco del backend no se dice cuando no hay hueco: aquí sí las hay.
+    expect(
+      screen.queryByText(/todavía no publica las manzanas de un sector/),
+    ).not.toBeInTheDocument();
   });
 
-  it('mientras el backend no las liste, el desplegable lo dice en vez de salir vacío', async () => {
+  it('mientras el backend no las liste, el sector desplegado lo dice en vez de salir vacío', async () => {
     const usuario = userEvent.setup();
     montarEnRuta('/catastro/sectores');
 
-    const fila = (await screen.findByText('CERCADO DE SULLANA')).closest('tr');
-    await usuario.click(
-      within(fila as HTMLElement).getByRole('button', { name: /Desplegar Manzanas del sector/ }),
-    );
+    await usuario.click(await nodoDe('CERCADO DE SULLANA'));
 
     expect(
       await screen.findByText(/todavía no publica las manzanas de un sector/),
@@ -249,7 +275,7 @@ describe('el alta de sector, en panel lateral y con observación', () => {
     entraCon({ sectores: ['lectura', 'modificacion'] });
     montarEnRuta('/catastro/sectores');
 
-    await screen.findByRole('table');
+    await screen.findByRole('tab', { name: 'Sectores, manzanas y lotes' });
     // La accion se queda **como estaba antes de #321**: dibujada y apagada. No
     // desaparece —el prototipo la dibuja— y no abre nada.
     const boton = await screen.findByRole('button', { name: 'Nuevo sector' });
@@ -264,10 +290,7 @@ describe('el alta de manzana cuelga del sector desplegado', () => {
     const usuario = userEvent.setup();
     montarEnRuta('/catastro/sectores');
 
-    const fila = (await screen.findByText('CERCADO DE SULLANA')).closest('tr');
-    await usuario.click(
-      within(fila as HTMLElement).getByRole('button', { name: /Desplegar Manzanas del sector/ }),
-    );
+    await usuario.click(await nodoDe('CERCADO DE SULLANA'));
     await usuario.click(await screen.findByRole('button', { name: '+ Añadir manzana' }));
 
     const panel = await screen.findByRole('dialog', { name: 'Nueva manzana del sector' });

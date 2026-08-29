@@ -91,7 +91,14 @@ describe('error: el mensaje es el del backend, sin reescribir', () => {
       );
     };
 
-    montarEnRuta('/catastro/calles');
+    /* **Una pantalla de una sola peticion**, que es lo que esta prueba cuenta.
+       Era `/catastro/calles`, y desde que las dos opciones del territorio caen
+       en la misma superficie (`catastro/Territorio.tsx`) esa ruta pide dos
+       cosas: el catalogo vial de la hoja **y** el arbol de sectores del carril.
+       Contar peticiones ahi mediria la superficie, no el reintento. Se mueve al
+       mismo sitio al que se movieron los ejemplos de #363: otra opcion conectada
+       del mismo modulo, sin nada compuesto alrededor. */
+    montarEnRuta('/catastro/aranceles');
     await screen.findByText('Se cayó');
     expect(veces).toBe(1);
 

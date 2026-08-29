@@ -96,10 +96,17 @@ export const COMPOSICION_DE_CATASTRO: Readonly<Record<string, ComposicionDeOpcio
       },
     ],
   },
-  // Los sectores, con sus manzanas colgando de la fila. El alta de una manzana
-  // cuelga del sector porque es como se identifica: la 001 del sector 01 y la
-  // 001 del 02 son manzanas distintas, y elegir el sector aparte se prestaria a
-  // darla de alta en el que no era.
+  /* Los sectores, con sus manzanas colgando del nodo del arbol. El alta de una
+     manzana cuelga del sector porque es como se identifica: la 001 del sector 01
+     y la 001 del 02 son manzanas distintas, y elegir el sector aparte se
+     prestaria a darla de alta en el que no era.
+
+     **Las dos altas las abre `catastro/Territorio.tsx`**, no la barra de
+     acciones: desde que `sectores` y `calles` comparten superficie, «Nuevo
+     sector» vive al pie del carril —debajo del arbol del que cuelga— y
+     «+ Añadir manzana» dentro del sector desplegado. Lo que se declara aqui es
+     lo mismo de antes: la accion del catalogo que abre cada una y su
+     formulario. */
   sectores: {
     altas: [
       {
