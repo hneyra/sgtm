@@ -16,6 +16,7 @@ import type { ActoSinCampo } from './actos';
 import { operacionDe } from './busqueda';
 import { ALTAS_DECLARADAS } from './composicion';
 import { OPCIONES_QUE_ESCRIBEN } from './escrituras';
+import { OPCIONES_QUE_LEEN_POR_POST } from './lecturas-por-post';
 
 /**
  * `ACTOS_SIN_CAMPO` esta vacia desde #73: las dos transferencias que la
@@ -131,8 +132,10 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
   it('cada una de las 134 cae en su casilla, y las cuentas son las que son', async () => {
     const pantallas = await todasLasPantallas();
     const declaradas = new Set(OPCIONES_QUE_ESCRIBEN);
+    const leenPorPost = new Set(OPCIONES_QUE_LEEN_POR_POST);
     const porCausa = {
       declarada: 0,
+      lectura: 0,
       salida: 0,
       'sin-backend': 0,
       'sin-declaracion': 0,
@@ -148,7 +151,11 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
          lista del catalogo dejaria a la funcion explicando un boton que ya no
          existe —el «Guardar» de una ficha que es `GET`—. Para las 129 restantes
          `accionesDeLaBarra` devuelve la lista intacta, y esto es un no-op. */
-      const acciones = accionesDeLaBarra(opcion, estructura.acciones ?? [], altasDe(opcion)).acciones;
+      const acciones = accionesDeLaBarra(
+        opcion,
+        estructura.acciones ?? [],
+        altasDe(opcion),
+      ).acciones;
       const impedimento = impedimentoDelActo(opcion, acciones);
       if (impedimento === undefined) {
         /* Sin impedimento **solo** por una de dos razones, y las dos son
@@ -157,6 +164,16 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
            callandose. */
         if (declaradas.has(opcion)) {
           porCausa.declarada += 1;
+          continue;
+        }
+        /* O declaro su **lectura por `POST`** (#424): su acto funciona y no
+           guarda nada, asi que no tiene impedimento y tampoco es una primaria
+           de salida —«Cancelar», en el emisor de reportes de transito—. Sin
+           esta rama el bucle exigiria ahi un rotulo de impresion y se pondria
+           rojo nombrandolo, que es exactamente lo que hay que evitar contando
+           mal en vez de contar otra casilla. */
+        if (leenPorPost.has(opcion)) {
+          porCausa.lectura += 1;
           continue;
         }
         const primaria = acciones[acciones.length - 1] ?? '';
@@ -191,6 +208,12 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // `transito_cambio_numero` llega desde `sin-declaracion`, porque su
       // primaria del catalogo («Salir») no pasa ningun filtro de salida.
       declarada: 15,
+      // **Una, y es nueva con #424**: `transito_reportes`. Viene de
+      // `sin-declaracion` —su operacion es un `POST` y no declara escritura—, y
+      // esa causa decia de ella lo unico que no es cierto: que «la pantalla aún
+      // no manda estos campos». Los manda; lo que no hace es guardar nada. Es la
+      // tercera puerta (`lecturas-por-post.ts`), y su acto funciona.
+      lectura: 1,
       // Dos menos que en la onda 4: `alcabala` y `espectaculos` se mudan a
       // `sin-campo` (#385). Su primaria de impresion las dejaba aqui, con el
       // boton apagado y el motivo real —los campos que el backend exige y la
@@ -211,8 +234,9 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // Nueve se mudan a `sin-campo` en la onda 4: cuatro de transito (#77),
       // tres de fiscalizacion (#80) — mas las tres de tesoreria y las dos
       // transferencias que ya se habian movido antes; y dos se van a
-      // `declarada` con #77.
-      'sin-declaracion': 19,
+      // `declarada` con #77. **Una menos con #424**: `transito_reportes` se va
+      // a `lectura`.
+      'sin-declaracion': 18,
       // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
       // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
       // «Guardar» de una ficha `GET` se cae— y repartir el valor de una
@@ -347,11 +371,7 @@ describe('un solo vocabulario de accion, y solo donde se declara', () => {
     { opcion: 'actualizacion_catastro', barra: ['Imprimir', 'Guardar'], conPrimaria: true },
   ])('$opcion compone $barra', async ({ opcion, barra, conPrimaria }) => {
     const pantallas = await todasLasPantallas();
-    const compuesta = accionesDeLaBarra(
-      opcion,
-      pantallas[opcion]?.acciones ?? [],
-      altasDe(opcion),
-    );
+    const compuesta = accionesDeLaBarra(opcion, pantallas[opcion]?.acciones ?? [], altasDe(opcion));
     expect(compuesta.acciones).toEqual(barra);
     expect(compuesta.conPrimaria).toBe(conPrimaria);
   });
@@ -592,19 +612,26 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
     { ruta: '/catastro/aranceles' },
     { ruta: '/catastro/valores-unitarios' },
     { ruta: '/catastro/depreciacion' },
-  ])('$ruta no dibuja «Importar tabla del año» ni «Guardar»: no puede escribir', async ({ ruta }) => {
-    const montada = montarEnRuta(ruta);
+  ])(
+    '$ruta no dibuja «Importar tabla del año» ni «Guardar»: no puede escribir',
+    async ({ ruta }) => {
+      const montada = montarEnRuta(ruta);
 
-    // Se espera a la superficie, que llega en su propio trozo (`lazy`).
-    expect(await screen.findByRole('tablist', { name: 'Hojas del cuadro de valuación' })).toBeInTheDocument();
+      // Se espera a la superficie, que llega en su propio trozo (`lazy`).
+      expect(
+        await screen.findByRole('tablist', { name: 'Hojas del cuadro de valuación' }),
+      ).toBeInTheDocument();
 
-    expect(document.querySelector('.sgtm-acciones')).toBeNull();
-    expect(document.getElementById('sgtm-motivo-de-la-accion')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Importar tabla del año' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument();
+      expect(document.querySelector('.sgtm-acciones')).toBeNull();
+      expect(document.getElementById('sgtm-motivo-de-la-accion')).toBeNull();
+      expect(
+        screen.queryByRole('button', { name: 'Importar tabla del año' }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument();
 
-    montada.unmount();
-  });
+      montada.unmount();
+    },
+  );
 });
 
 /**

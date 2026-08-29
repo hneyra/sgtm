@@ -3143,6 +3143,52 @@ function resumenRecaudacionDeTransito(): Readonly<Record<string, unknown>> {
 }
 
 /**
+ * El emisor de reportes de transito (`POST /transito/reportes`,
+ * `ReporteDeTransitoResource`, #396, #424).
+ *
+ * **No compone ninguna hoja nueva**: reparte hacia los nueve juegos de datos
+ * que los `GET` del modulo ya publican aqui, que es exactamente lo que hace
+ * `ReportesDeTransitoController` —llama a los mismos `ConsultaDe…` en vez de
+ * armar su propia consulta—. Dos caminos para la misma hoja son dos
+ * oportunidades de divergir.
+ *
+ * La respuesta es una **union**: solo una de las cuatro secciones viene llena, y
+ * `reporte` dice cual. Un tipo que el emisor no sirve se contesta con las cuatro
+ * en `null`, como haria el 422 del backend: aqui no se inventa una hoja.
+ */
+const HOJAS_DEL_EMISOR_DE_TRANSITO: Readonly<
+  Record<string, () => Readonly<Record<string, unknown>>>
+> = {
+  PADRON: () => ({ papeletas: padronDeTransito() }),
+  PADRON_COACTIVA: () => ({ papeletas: padronCoactivaDeTransito() }),
+  PADRON_CONSTANCIAS: () => ({ constancias: padronDeConstancias() }),
+  RECORD_CONDUCTOR: () => ({ papeletas: recordDeConductor() }),
+  RECORD_VEHICULAR: () => ({ papeletas: recordVehicular() }),
+  RESUMEN_PAPELETAS: () => ({ resumenDePapeletas: resumenDePapeletasDeTransito() }),
+  RESUMEN_CODIGO: () => ({ resumenDePapeletas: resumenPorCodigoDeTransito() }),
+  RESUMEN_PLACA: () => ({ resumenDePapeletas: resumenPorPlacaDeTransito() }),
+  RESUMEN_RECAUDACION: () => ({ recaudacion: resumenRecaudacionDeTransito() }),
+};
+
+function reporteDeTransito(cuerpo: unknown): Readonly<Record<string, unknown>> {
+  const pedido =
+    cuerpo !== null && typeof cuerpo === 'object'
+      ? String((cuerpo as Record<string, unknown>)['reporte'] ?? '')
+      : '';
+  const hoja = Object.hasOwn(HOJAS_DEL_EMISOR_DE_TRANSITO, pedido)
+    ? HOJAS_DEL_EMISOR_DE_TRANSITO[pedido]
+    : undefined;
+  return {
+    reporte: pedido,
+    papeletas: null,
+    constancias: null,
+    resumenDePapeletas: null,
+    recaudacion: null,
+    ...(hoja === undefined ? {} : hoja()),
+  };
+}
+
+/**
  * Hoja informativa de una papeleta (`transito_papeleta_reporte`,
  * `HojaInformativaResource`, #396).
  *
@@ -3724,6 +3770,10 @@ const ESCRITURAS: Readonly<Record<string, (cuerpo: unknown) => Readonly<Record<s
     /* Y la tercera determinacion, la que llego cuando el contrato y el
        controlador se pusieron de acuerdo (#399). */
     'POST /rentas/vehicular/calculo': calculoVehicular,
+    /* El emisor de reportes de transito (#396, #424). Es un `POST` que **no
+       escribe**: la primera lectura por POST del frontend, y su respuesta es la
+       union de `ReporteDeTransitoResource`, no la forma comun. */
+    'POST /transito/reportes': reporteDeTransito,
   };
 
 /** La respuesta de una escritura de seguridad, si el proxy la publica con la forma del backend. */
