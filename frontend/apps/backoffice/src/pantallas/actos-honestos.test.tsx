@@ -209,7 +209,14 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // escribe con otro boton («Derivar a coactiva», «Generar valores»); y
       // `transito_cambio_numero` llega desde `sin-declaracion`, porque su
       // primaria del catalogo («Salir») no pasa ningun filtro de salida.
-      declarada: 15,
+      //
+      // **Y una mas con #422**: `transito_descargos`, la primera que sale de
+      // `sin-campo` por el mecanismo declarativo —`ComposicionDeOpcion.controles`,
+      // no un componente propio—. Necesito las dos declaraciones de esta onda a
+      // la vez: `LA_QUE_ESCRIBE` para que la primaria sea «Registrar descargo» y
+      // no «Notificar al administrado», y el control anadido para el numero de
+      // expediente de mesa de partes, que el catalogo dibuja de solo lectura.
+      declarada: 16,
       // **Una, y es nueva con #424**: `transito_reportes`. Viene de
       // `sin-declaracion` —su operacion es un `POST` y no declara escritura—, y
       // esa causa decia de ella lo unico que no es cierto: que «la pantalla aún
@@ -275,7 +282,15 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // las dos de rentas que #385 rescata de `salida` (`alcabala`,
       // `espectaculos`) + las dos hojas de resolucion de licencias que FRO-06
       // (#427) trae desde `sin-declaracion`.
-      'sin-campo': 14,
+      //
+      // **Una menos con #422**: `transito_descargos` se va a `declarada`. Es la
+      // primera de las tres formas del hueco —el dato lo teclea quien atiende y
+      // solo faltaba el control—, y las trece que quedan son de las otras dos: un
+      // identificador que hay que resolver contra una lista, una hoja que el
+      // prototipo nunca capturo, o una cifra que determina el sistema y hoy no
+      // determina nadie (D-11, D-02a). Que generalizar el mecanismo no las
+      // arrastre a todas lo exige `controles-declarados.test.ts`.
+      'sin-campo': 13,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);
@@ -380,10 +395,10 @@ describe('un solo vocabulario de accion, y solo donde se declara', () => {
     /* Y **cuantas son**, que es lo que convierte el bucle en una comprobacion.
        Sin esta cifra, meter media docena de opciones en cualquiera de las dos
        listas las sacaria del bucle sin que nada lo dijera: el recorrido pasaria
-       igual, con menos vueltas. 134 − 6 − 11. */
-    expect(intactas).toBe(117);
+       igual, con menos vueltas. 134 − 6 − 12. */
+    expect(intactas).toBe(116);
     expect(VOCABULARIO_UNIFORME.size).toBe(6);
-    expect(Object.keys(LA_QUE_ESCRIBE).length).toBe(11);
+    expect(Object.keys(LA_QUE_ESCRIBE).length).toBe(12);
     // Y las seis que si lo declaran existen de verdad en el catalogo: sin
     // esto, un identificador mal escrito dejaria la regla sin aplicarse a nada
     // y las pruebas de abajo seguirian en verde.
@@ -684,6 +699,36 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
       );
       expect(causaDe(opcion, deLaBarra(opcion)), `«${opcion}» compuesta`).toBe('sin-declaracion');
     }
+  });
+
+  /**
+   * **La doceava es la unica que ademas escribe** (#422).
+   *
+   * `transito_descargos` es donde las dos declaraciones de esta onda se
+   * necesitan a la vez, y por eso vale como testigo de las dos: sin
+   * `LA_QUE_ESCRIBE`, la primaria seria «Notificar al administrado» —el catalogo
+   * la pone la ultima de las tres— y quien atiende pulsaria el boton navy
+   * esperando registrar el escrito; sin el control anadido de
+   * `transito/composicion.ts`, no habria donde teclear el numero de expediente
+   * que `DescargosController` exige.
+   *
+   * Aqui se comprueba la primera mitad. La segunda la comprueba
+   * `transito/transito.test.tsx`, montando la pantalla.
+   */
+  it('transito_descargos: la barra pone al final la que registra, no la que notifica', async () => {
+    const pantallas = await todasLasPantallas();
+    const acciones = pantallas['transito_descargos']?.acciones ?? [];
+
+    // Como el catalogo la dibuja: la que registra es la **primera**.
+    expect(acciones).toEqual(['Registrar descargo', 'Resolver', 'Notificar al administrado']);
+
+    const barra = accionesDeLaBarra('transito_descargos', acciones, altasDe('transito_descargos'));
+    expect(barra.acciones).toEqual(['Resolver', 'Notificar al administrado', 'Registrar descargo']);
+    expect(barra.conPrimaria).toBe(true);
+    // Y ninguna se cae: mover no es quitar.
+    expect(barra.acciones).toHaveLength(acciones.length);
+    // Declarada: sin impedimento que contar, con la barra compuesta o sin ella.
+    expect(impedimentoDelActo('transito_descargos', barra.acciones)).toBeUndefined();
   });
 });
 
