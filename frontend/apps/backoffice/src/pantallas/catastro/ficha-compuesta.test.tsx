@@ -225,12 +225,22 @@ describe('el acto de la ficha es alcanzable', () => {
     expect(acto).toHaveClass('sgtm-boton--primario');
     expect(acto).toHaveAttribute('href', '/catastro/actualizacion-catastro/200601010150010101001');
 
-    // Y las del prototipo que siguen sin acto se quedan como estaban: visibles y
-    // apagadas. Dos primarias en la misma barra dirian que hay dos actos.
-    for (const etiqueta of ['Modificar', 'Deshacer', 'Imprimir', 'Guardar']) {
-      const boton = screen.getByRole('button', { name: etiqueta });
-      expect(boton).toBeDisabled();
-      expect(boton).not.toHaveClass('sgtm-boton--primario');
+    /* Y la del prototipo que sigue sin acto se queda como estaba: visible y
+       apagada. Dos primarias en la misma barra dirian que hay dos actos.
+
+       **Son una, y no cuatro, desde #391 §2**: «Modificar» y «Deshacer» son
+       modos y salen de la barra, y «Guardar» tambien —la ficha es un `GET`, asi
+       que ese boton no podia guardar ni el dia que llegara el backend—. Lo que
+       queda de las cinco del catalogo es «Nuevo», que abre el alta guiada, y
+       «Imprimir». */
+    const imprimir = screen.getByRole('button', { name: 'Imprimir' });
+    expect(imprimir).toBeDisabled();
+    expect(imprimir).not.toHaveClass('sgtm-boton--primario');
+    for (const etiqueta of ['Modificar', 'Deshacer', 'Guardar']) {
+      expect(
+        screen.queryByRole('button', { name: etiqueta }),
+        `«${etiqueta}» sigue en la barra de la ficha`,
+      ).not.toBeInTheDocument();
     }
 
     // «Nuevo» si tiene acto desde #320 —abre el alta guiada—, y aun asi **no es

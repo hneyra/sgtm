@@ -6,9 +6,15 @@ import { escribe } from '@sgtm/api-client';
 import { todasLasPantallas } from '../catalogo';
 import { montarEnRuta } from '../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada } from '../pruebas/acciones';
-import { ACTOS_SIN_CAMPO, impedimentoDelActo } from './actos';
+import {
+  ACTOS_SIN_CAMPO,
+  VOCABULARIO_UNIFORME,
+  accionesDeLaBarra,
+  impedimentoDelActo,
+} from './actos';
 import type { ActoSinCampo } from './actos';
 import { operacionDe } from './busqueda';
+import { ALTAS_DECLARADAS } from './composicion';
 import { OPCIONES_QUE_ESCRIBEN } from './escrituras';
 
 /**
@@ -49,6 +55,14 @@ function conUnaMuestraDeSinCampo<T>(cuerpo: () => T): T {
 
 beforeEach(() => instalarProxyDeDatos({ latencia: false }));
 afterEach(() => desinstalarProxyDeDatos());
+
+/**
+ * Los rotulos que abren un alta **de verdad** en esa opcion, leidos de la
+ * composicion y no de una lista escrita aqui: es lo que decide si «Nuevo» se
+ * queda en la barra o es un boton que no abre ningun formulario (#391 §2).
+ */
+const altasDe = (opcion: string): readonly string[] =>
+  ALTAS_DECLARADAS.filter((alta) => alta.opcion === opcion).map((alta) => alta.accion);
 
 describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () => {
   it('una opcion declarada no tiene impedimento; una sin declarar, si', () => {
@@ -127,7 +141,14 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     };
 
     for (const [opcion, estructura] of Object.entries(pantallas)) {
-      const acciones = estructura.acciones ?? [];
+      /* **La barra que se dibuja, no la lista cruda del catalogo** (#391 §2).
+         `impedimentoDelActo` promete explicar «la ultima accion, la misma que
+         dibuja `BarraDeAcciones`», y desde ese issue las cinco opciones del
+         predio componen su barra con un solo vocabulario: preguntar por la
+         lista del catalogo dejaria a la funcion explicando un boton que ya no
+         existe —el «Guardar» de una ficha que es `GET`—. Para las 129 restantes
+         `accionesDeLaBarra` devuelve la lista intacta, y esto es un no-op. */
+      const acciones = accionesDeLaBarra(opcion, estructura.acciones ?? [], altasDe(opcion)).acciones;
       const impedimento = impedimentoDelActo(opcion, acciones);
       if (impedimento === undefined) {
         /* Sin impedimento **solo** por una de dos razones, y las dos son
@@ -175,14 +196,29 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // boton apagado y el motivo real —los campos que el backend exige y la
       // pantalla dibuja de solo lectura— silenciado; desde #385
       // `ACTOS_SIN_CAMPO` gana a `DE_SALIDA` y la franja lo cuenta.
-      salida: 46,
-      'sin-backend': 41,
+      //
+      // Y **una mas con #391 §2**: `ficha_urbana`. Su ultima accion del
+      // catalogo es «Guardar» sobre una operacion `GET`, asi que caia en
+      // `sin-backend` —«aquí todavía no se puede guardar nada»— por un boton
+      // que la barra uniforme ya no dibuja. Lo que queda de ella es «Nuevo ·
+      // Imprimir»: una consulta y su impresion, que es `salida`.
+      salida: 47,
+      // Dos menos con #391 §2, y las dos son el mismo defecto contado de dos
+      // maneras: `ficha_urbana` se va a `salida` y `ficha_bienes` a
+      // `sin-determinacion`. Las dos estaban aqui por su «Guardar» del
+      // catalogo, que ni existe ni podria existir sobre un `GET`.
+      'sin-backend': 39,
       // Nueve se mudan a `sin-campo` en la onda 4: cuatro de transito (#77),
       // tres de fiscalizacion (#80) — mas las tres de tesoreria y las dos
       // transferencias que ya se habian movido antes; y dos se van a
       // `declarada` con #77.
       'sin-declaracion': 19,
-      'sin-determinacion': 1,
+      // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
+      // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
+      // «Guardar» de una ficha `GET` se cae— y repartir el valor de una
+      // edificacion entre sus unidades es exactamente una determinacion que el
+      // servidor no hace todavia (D-02a): su total de bienes comunes sale «—».
+      'sin-determinacion': 2,
       // Tesoreria (3, #74) + transito (4, #77) + fiscalizacion (3, #80) +
       // las dos de rentas que #385 rescata de `salida` (`alcabala`,
       // `espectaculos`).
@@ -263,6 +299,108 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     { primaria: 'Cobrar', hay: true },
   ])('«$primaria»: ¿franja? $hay', ({ primaria, hay }) => {
     expect(impedimentoDelActo('cuenta_corriente', ['Nuevo', primaria]) !== undefined).toBe(hay);
+  });
+});
+
+/**
+ * **Un solo vocabulario de accion** (#391 §2), en el mecanismo.
+ *
+ * Lo que se comprueba aqui es la regla, sin montar nada: una primaria por
+ * pantalla, siempre la ultima y siempre la que escribe; lo que no escribe es
+ * secundario y va a su izquierda; y una pantalla sin ninguna accion que escriba
+ * no tiene primaria. Lo que se ve en pantalla lo comprueba
+ * `catastro/vocabulario-y-buscador.test.tsx`.
+ */
+describe('un solo vocabulario de accion, y solo donde se declara', () => {
+  it('las 129 que no lo declaran reciben su lista del catalogo, intacta', async () => {
+    const pantallas = await todasLasPantallas();
+    for (const [opcion, estructura] of Object.entries(pantallas)) {
+      if (VOCABULARIO_UNIFORME.has(opcion)) continue;
+      const acciones = estructura.acciones ?? [];
+      const barra = accionesDeLaBarra(opcion, acciones, altasDe(opcion));
+      expect(barra.acciones, `«${opcion}» cambio de barra sin declararlo`).toEqual(acciones);
+      // Y siguen teniendo primaria: la regla de FRO-03 §5, tal cual.
+      expect(barra.conPrimaria).toBe(true);
+    }
+    // Y las cinco que si lo declaran existen de verdad en el catalogo: sin
+    // esto, un identificador mal escrito dejaria la regla sin aplicarse a nada
+    // y las cinco pruebas de abajo seguirian en verde.
+    for (const opcion of VOCABULARIO_UNIFORME) {
+      expect(Object.hasOwn(pantallas, opcion), `«${opcion}» no esta en el catalogo`).toBe(true);
+    }
+  });
+
+  it.each([
+    {
+      opcion: 'ficha_urbana',
+      // «Modificar» y «Deshacer» son modos; «Guardar», un `GET` que no guarda.
+      barra: ['Nuevo', 'Imprimir'],
+      conPrimaria: false,
+    },
+    // El «Nuevo» de la economica **no abre nada**: el alta guiada la declara la
+    // modalidad urbana, que es la que se abre por el codigo catastral.
+    { opcion: 'ficha_economica', barra: ['Imprimir'], conPrimaria: false },
+    { opcion: 'ficha_bienes', barra: ['Distribuir valor'], conPrimaria: false },
+    { opcion: 'ficha_rural', barra: ['Calcular', 'Imprimir ficha rural'], conPrimaria: false },
+    // La unica de las cinco que escribe, y su «Guardar» pasa **al final**: el
+    // catalogo lo dibuja tercero, con «Quitar» detras.
+    { opcion: 'actualizacion_catastro', barra: ['Imprimir', 'Guardar'], conPrimaria: true },
+  ])('$opcion compone $barra', async ({ opcion, barra, conPrimaria }) => {
+    const pantallas = await todasLasPantallas();
+    const compuesta = accionesDeLaBarra(
+      opcion,
+      pantallas[opcion]?.acciones ?? [],
+      altasDe(opcion),
+    );
+    expect(compuesta.acciones).toEqual(barra);
+    expect(compuesta.conPrimaria).toBe(conPrimaria);
+  });
+
+  /**
+   * **Un modo nunca se convierte en la primaria de la pantalla que si escribe.**
+   *
+   * Esta va con una lista de acciones **inventada**, y hace falta que lo sea: en
+   * las cinco opciones de hoy la clasificacion de «Modificar» y «Deshacer» no se
+   * puede observar. En las cuatro fichas cae en un empate —son `GET`, asi que lo
+   * que no se reconoce como modo se cae igual, por no tener a donde escribir—, y
+   * la unica que escribe no dibuja ninguno de los dos. Es la misma situacion que
+   * `MUESTRA_SIN_CAMPO` de arriba: la propiedad importa, el catalogo no la
+   * ejercita, y comprobarla sobre una muestra es lo unico que queda.
+   *
+   * Y la propiedad importa **mucho**: con un modo detras del verbo que guarda,
+   * la primaria pasa a ser el modo. Ahi la observacion del usuario armaria un
+   * boton que no guarda nada (regla 10, RNF-052), y la franja explicaria un
+   * guardado que ese boton no hace.
+   */
+  it('un modo detras del verbo que guarda no le roba la primaria', () => {
+    const compuesta = accionesDeLaBarra(
+      'actualizacion_catastro',
+      ['Nuevo', 'Guardar', 'Imprimir', 'Modificar', 'Deshacer', 'Quitar'],
+      [],
+    );
+    expect(compuesta.acciones).toEqual(['Imprimir', 'Guardar']);
+    expect(compuesta.conPrimaria).toBe(true);
+  });
+
+  /**
+   * Los dos testigos del censo, nombrados: los recuentos solos no dicen cual se
+   * movio ni por que.
+   */
+  it('las dos que se mudan de casilla lo hacen por su barra, no por su catalogo', async () => {
+    const pantallas = await todasLasPantallas();
+    const causaDe = (opcion: string, acciones: readonly string[]) =>
+      impedimentoDelActo(opcion, acciones)?.causa ?? 'ninguna';
+
+    // Con la lista cruda del catalogo, las dos decian «aquí todavía no se puede
+    // guardar nada» por un «Guardar» que la barra ya no dibuja.
+    expect(causaDe('ficha_urbana', pantallas['ficha_urbana']?.acciones ?? [])).toBe('sin-backend');
+    expect(causaDe('ficha_bienes', pantallas['ficha_bienes']?.acciones ?? [])).toBe('sin-backend');
+
+    // Con la barra que se dibuja, cada una cae donde le toca.
+    const barraDe = (opcion: string) =>
+      accionesDeLaBarra(opcion, pantallas[opcion]?.acciones ?? [], altasDe(opcion)).acciones;
+    expect(causaDe('ficha_urbana', barraDe('ficha_urbana'))).toBe('ninguna');
+    expect(causaDe('ficha_bienes', barraDe('ficha_bienes'))).toBe('sin-determinacion');
   });
 });
 

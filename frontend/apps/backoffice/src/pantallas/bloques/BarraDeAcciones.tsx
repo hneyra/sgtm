@@ -93,6 +93,26 @@ export interface BarraDeAccionesProps {
    * lo que se ve. No renombra la accion (RNF-080): le anade su cuenta.
    */
   readonly contadorDeLaPrimaria?: number;
+  /**
+   * **Ninguna accion del catalogo es la primaria de esta pantalla** (#391 §2).
+   *
+   * La regla de FRO-03 §5 —«la ultima es la primaria»— da por supuesto que hay
+   * una que escribe. Cuando no la hay, convierte en boton navy lo ultimo que
+   * quede: en «Ficha catastral rural», «Imprimir ficha rural». Quien atiende
+   * aprende que el navy es el acto de la pantalla, y en cuatro fichas de
+   * consulta el navy imprimia.
+   *
+   * Con esto puesto, todas las acciones se dibujan secundarias y apagadas.
+   * **No apaga el alta ni el enlace**: los dos siguen siendo el acto de la
+   * pantalla cuando no hay otro —y los dos llevan a un sitio donde si se
+   * escribe—, asi que «Nuevo» de la ficha urbana sigue siendo su primaria
+   * mientras no haya un predio abierto.
+   *
+   * Lo decide `accionesDeLaBarra` (`pantallas/actos.ts`) y lo pasa quien compone
+   * la barra; las 129 opciones que no declaran el vocabulario uniforme no lo
+   * reciben nunca y se dibujan exactamente como se dibujaban.
+   */
+  readonly sinPrimaria?: true;
 }
 
 /** El `id` de la franja, para que la primaria la referencie con `aria-describedby`. */
@@ -116,6 +136,7 @@ export function BarraDeAcciones({
   impedimento,
   contadorDeLaPrimaria,
   simulacion,
+  sinPrimaria,
 }: BarraDeAccionesProps) {
   const [porConfirmar, fijarPorConfirmar] = useState<string | null>(null);
   const escribe = escritura?.operacion !== undefined;
@@ -252,8 +273,15 @@ export function BarraDeAcciones({
             }
             // «La ultima es la primaria» (FRO-03 §5), salvo cuando el acto de la
             // pantalla es el enlace: dos botones primarios en la misma barra
-            // dirian que hay dos actos, y uno de los dos esta apagado.
-            const esPrimaria = !altaEsElActo && enlace === undefined && i === acciones.length - 1;
+            // dirian que hay dos actos, y uno de los dos esta apagado. Y salvo
+            // cuando **ninguna escribe** (`sinPrimaria`, #391 §2): ahi la regla
+            // pintaria de navy lo ultimo que quedara, que en cuatro fichas de
+            // consulta es un «Imprimir».
+            const esPrimaria =
+              sinPrimaria !== true &&
+              !altaEsElActo &&
+              enlace === undefined &&
+              i === acciones.length - 1;
             const habilitada = esPrimaria && escribe && (escritura?.puedeEnviar ?? false);
             /* La primaria apagada **con un motivo escrito al lado** se apaga con
                `aria-disabled`, no con `disabled`, y sigue siendo enfocable.
