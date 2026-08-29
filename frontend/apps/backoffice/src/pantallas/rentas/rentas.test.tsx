@@ -182,6 +182,39 @@ describe('ningun acto del modulo promete lo que no puede', () => {
     },
   );
 
+  /**
+   * **Y la franja nombra el dato, no el campo del backend** (#432).
+   *
+   * Las dos declaraban dos datos con el mismo tono, y de los cuatro solo uno es
+   * un campo que falte. Contarlos igual manda a buscar en la pantalla un campo
+   * que no existe —el autovaluo ajustado es un resultado, no una entrada— y deja
+   * sin decir lo unico accionable: que la transferencia no se puede elegir
+   * porque ninguna consulta la devuelve.
+   *
+   * Se comprueba **lo que la franja tiene que contener**, no la frase entera: la
+   * redaccion se puede afinar, y lo que no puede desaparecer es el dato dicho en
+   * castellano. `franja-para-la-ventanilla.test.ts` cierra la otra mitad —que
+   * ahi no aparezca `transferenciaId` ni ningun otro nombre de campo—.
+   */
+  const EL_DATO_DE_CADA_UNA: readonly (readonly [string, RegExp])[] = [
+    ['alcabala', /transferencia ya registrada/i],
+    ['alcabala', /autovalúo ajustado/i],
+    ['espectaculos', /organizador/i],
+    ['espectaculos', /recaudación declarada/i],
+  ];
+
+  it.each(EL_DATO_DE_CADA_UNA)('la franja de %s nombra %s', async (ranura, dicho) => {
+    const montada = montarEnRuta(`/rentas-registro/${ranura}`);
+    await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+    expect(motivoDeLaPrimaria()).toMatch(dicho);
+    // Y no el nombre del campo: eso vive en `campos`, que no se pinta.
+    expect(motivoDeLaPrimaria()).not.toMatch(/transferenciaId|autoavaluoAjustado/);
+    expect(motivoDeLaPrimaria()).not.toMatch(/organizadorId|ingresoDeclarado/);
+
+    montada.unmount();
+  });
+
   it.each(LAS_DECLARADAS)('%s si pide su observacion, y sin ella no guarda', async (ranura) => {
     const montada = montarEnRuta(`/rentas-registro/${ranura}`);
 

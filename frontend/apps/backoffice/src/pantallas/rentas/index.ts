@@ -104,6 +104,92 @@ import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
  *   anota y no se puentea (ADR-0010 §4); conectarlas sigue siendo rellenar un formulario, confirmar
  *   un acto irreversible y recibir un 422 por un campo que no se puede escribir.
  *
+ * ── (#432) Las dos preguntas de `alcabala`, contestadas ─────────────────────
+ *
+ * #432 no pedia codigo primero: pedia **responder dos preguntas por escrito**, porque de la
+ * segunda depende si esta opcion se puede cerrar hoy. Aqui estan, contestadas contra el catalogo
+ * portado y contra el controlador, no de memoria.
+ *
+ * **1. ¿De donde sale `transferenciaId`?** De la transferencia ya registrada —no hay otra fuente:
+ * `RegistrarAlcabala.determinar` la busca por su identificador y de ella toma el predio, el
+ * adquiriente, la fecha y el valor de transferencia—. Pero **no de una lectura**, que es lo que el
+ * issue daba por hecho: el contrato **no tiene ningun `GET` de transferencias**; lo que declara es
+ * `POST /rentas/transferencias/predio` y `.../vehiculo`, y `/fiscalizacion/transferencias`, que es
+ * otra cosa (la transferencia a rentas de un resultado fiscalizado). Sale de otro sitio:
+ *
+ *   de la respuesta   `TransferenciaResource` —lo que devuelve el `POST` que la interfaz **ya
+ *   del propio acto   llama**, porque `transferencia_predio` declara su escritura desde #73—
+ *                     publica `id` y `afectaAlcabala`. Liquidar la alcabala de una transferencia
+ *                     **recien registrada** no necesita ninguna lectura nueva: necesita que las
+ *                     dos pantallas sean una sola superficie, que es lo que propone
+ *                     `design/propuestas/rentas-superficies` (propuesta B, «el acto de
+ *                     transferencia con su alcabala dentro»)
+ *   de una lectura    liquidar la de **otro dia** si la necesita, y no existe:
+ *   que falta         `TransferenciaRepository` tiene `findById` e `historicoDePredio(predioId)` y
+ *                     **ningun controlador los publica**. Eso es backend, no interfaz
+ *
+ * Asi que la pregunta del issue —«¿se convierte `alcabala` en una pantalla con grilla?»— **se
+ * contesta que no**: la grilla exigiria la lectura que no hay, y el camino que si esta disponible
+ * no es una grilla sino una superficie compartida. Y ninguno de los dos se hace todavia, porque la
+ * pregunta 2 deja la pantalla sin poder liquidar aunque la transferencia se resuelva.
+ *
+ * **2. ¿El autovaluo ajustado lo teclea alguien o lo determina el sistema?** Lo determina el
+ * sistema, y el catalogo lo dice sin ambiguedad: dibuja **la cuenta entera**, tres campos
+ * seguidos y los tres `"ro"` —«Autovalúo del predio (S/)», «IPM aplicado», «Autovalúo ajustado
+ * (S/)»—. Un campo de solo lectura cuyo vecino de arriba es su operando no es un campo de entrada
+ * mal marcado: es un resultado.
+ *
+ * Y **no viene del papel de la transferencia**, que es la otra rama que el issue planteaba. Lo que
+ * trae la escritura publica es el *valor de transferencia*, y ese si esta dibujado editable
+ * (`valorDeTransferenciaS`, `"text"`). El autovaluo del predio es del padron de la municipalidad y
+ * el indice lo publica el INEI: ninguno de los dos los conoce quien liquida en ventanilla.
+ *
+ * Por eso **abrir el campo seria peor que dejarlo cerrado**: el TUO LTM art. 24 manda tomar **el
+ * mayor** entre el valor de transferencia y el autovaluo ajustado, asi que teclear un autovaluo
+ * bajo elige la base y baja el impuesto, con una cifra indistinguible de la correcta. Es el mismo
+ * defecto que #51 midio con la tasa por omision —«un valor inventado no cobra de mas, perdona de
+ * mas»—, solo que aqui lo inventaria quien liquida. `"ro"` **esta bien puesto** (RNF-080): no se
+ * abre.
+ *
+ * **Consecuencia, que es lo que #432 pedia saber: `alcabala` se queda esperando.** Las dos piezas
+ * de esa cuenta faltan, y cada una por su lado:
+ *
+ *   el autovaluo     el sistema no sabe valorizar un predio todavia —faltan el cuadro de valores
+ *   del predio       unitarios y la depreciacion (GOB-03 H-14/H-15) y los aranceles (D-02b)—, asi
+ *                    que #395 lo dejo **declarado** en la peticion del predial y guardado en
+ *                    `determinacion_predio_detalle`. Existe cuando hay determinacion del
+ *                    ejercicio, y **ninguna lectura lo publica**
+ *   el indice del    TUO LTM art. 24 lo nombra —IPM de Lima Metropolitana del INEI— asi que tiene
+ *   art. 24          fuente; lo que no tiene es archivo del corpus ni fila del derivado
+ *                    publicable, que es el camino de #188. Mientras no este, **no se aplica**:
+ *                    inventarlo es exactamente lo que CLAUDE.md prohibe de los factores que
+ *                    multiplican importes
+ *
+ * **Y un hallazgo del cotejo, que no es de interfaz**: `AlcabalaController` pide
+ * `autoavaluoAjustado` **ya multiplicado** en el cuerpo —su javadoc lo dice: «quien complete esta
+ * pantalla lo trae ya calculado»—, o sea que traslada el factor a quien liquida. La forma honesta
+ * es la que #399 dejo para `minimoImponible`: el autovaluo se **declara** (como en el predial) y el
+ * ajuste sale del conjunto sellado, con 422 nombrando la llave que falte. Es backend y es de las
+ * cifras (#188/#194); se anota aqui y no se cambia desde la interfaz.
+ *
+ * ── (#432) Y la de `espectaculos`, que es otra ──────────────────────────────
+ *
+ * Los dos datos que le faltan no se parecen a los de la alcabala, y por eso su franja tampoco lo
+ * dice igual:
+ *
+ * - **`organizadorId` es resoluble**, y es la forma 1 de #422 —el dato lo teclea quien atiende y
+ *   solo falta el control—: «Organizador» es texto libre y `ContribuyenteResource` publica `id`.
+ * - **`ingresoDeclarado` no lo es.** El catalogo dibuja `nDeEntradasVendidas` y `precioPromedioS`
+ *   editables y `recaudacionDeclaradaS` `"ro"`: otra vez la cuenta dibujada entera. Pero aqui el
+ *   resultado **no lo compone nadie**: la interfaz no puede —una cifra de dinero no se compone en
+ *   la pantalla (RNF-083), y la regla de ESLint lo impide— y `RegistrarEspectaculo` lo recibe ya
+ *   hecho. Abrirlo tampoco vale: dejaria teclear una recaudacion que no cuadra con las entradas y
+ *   el precio que estan encima, sin que nada lo compare.
+ *
+ * Resolver solo el organizador no desbloquea nada —el acto sigue sin poder registrarse—, asi que
+ * las dos se quedan en `ACTOS_SIN_CAMPO` con su motivo, y lo que #432 cambia es **lo que la franja
+ * cuenta**: el dato, dicho para quien atiende, y no el nombre del campo del backend.
+ *
  * ── (#399) El calculo vehicular, que estaba fuera por un desacuerdo de transporte ─
  *
  * - `vehicular_calculo`: **conectado desde #399, y lo que hubo que mover fue el controlador.**
