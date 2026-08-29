@@ -36,6 +36,28 @@ public class CajaRepositoryJdbc extends RepositorioJdbc implements CajaRepositor
                 .optional();
     }
 
+    @Override
+    public Caja insertar(Caja caja) {
+        Long id =
+                jdbc().sql(
+                                "INSERT INTO caja"
+                                        + " (municipalidad_id, codigo, nombre, serie, area_id, activa)"
+                                        + " VALUES ("
+                                        + MUNICIPALIDAD_ACTUAL
+                                        + ", :codigo, :nombre, :serie, :areaId, :activa)"
+                                        + " RETURNING id")
+                        .param("codigo", caja.codigo())
+                        .param("nombre", caja.nombre())
+                        .param("serie", caja.serie())
+                        .param("areaId", caja.areaId())
+                        .param("activa", caja.activa())
+                        .query(Long.class)
+                        .single();
+
+        return new Caja(
+                id, caja.codigo(), caja.nombre(), caja.serie(), caja.areaId(), caja.activa());
+    }
+
     private static Caja mapear(ResultSet fila, int numeroDeFila) throws SQLException {
         long area = fila.getLong("area_id");
         Long areaId = fila.wasNull() ? null : area;

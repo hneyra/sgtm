@@ -10,7 +10,7 @@ Hay dos familias, y la diferencia no es de forma sino de **qué se puede afirmar
 | Familia | Qué escribe | Guarda |
 |---|---|---|
 | **Valores normativos** — `publicar-parametros.sh`, `publicar-cuadros.sh`, `abrir-conjunto-parametros.sh`, `cargar-arancel-vial.sh` | Cifras que la ley o la ordenanza fijan | Doble firma del corpus (ADR-0007), rol `rol_carga_parametros`, conjunto sellado |
-| **Municipalidad de demostración** — `sembrar-demostracion.sh` y los nueve `cargar-*` que orquesta | Personas, predios, vehículos y saldos **inventados** | `municipalidad.es_demostracion = true`, comprobado contra la base antes de leer una fila |
+| **Municipalidad de demostración** — `sembrar-demostracion.sh` y los diez `cargar-*` que orquesta | Personas, predios, vehículos y saldos **inventados** | `municipalidad.es_demostracion = true`, comprobado contra la base antes de leer una fila |
 
 **Ninguna cifra normativa entra por la segunda familia**, y es lo único que no se negocia en este
 directorio. Un arancel, un valor unitario o un tramo del predial inventados se distinguen de los
@@ -34,18 +34,52 @@ no es un error ruidoso, es un «0 nuevas, N rechazadas» que se puede leer por e
 | 1 | `cargar-catalogo-vial.sh` | `ejemplos/vias.csv` | — |
 | 2 | `cargar-sectores.sh` | `ejemplos/sectores.csv` | — |
 | 3 | `cargar-manzanas.sh` | `ejemplos/manzanas.csv` | el sector |
-| 4 | `cargar-contribuyentes-demo.sh` | `ejemplos/contribuyentes.csv` | — |
-| 5 | `cargar-fichas-demo.sh` | `ejemplos/fichas.csv` | sector, manzana, vía y contribuyente |
-| 6 | `cargar-detalle-fichas-demo.sh` | `ejemplos/detalle-de-fichas.csv` | la ficha del predio, que **versiona** |
-| 7 | `cargar-vehiculos-demo.sh` | `ejemplos/vehiculos.csv` | el contribuyente |
-| 8 | `cargar-transferencias-demo.sh` | `ejemplos/transferencias.csv` | el predio y el vehículo |
-| 9 | `cargar-deuda-demo.sh` | `ejemplos/deuda.csv` | contribuyente, predio y vehículo |
+| 4 | `cargar-cajas.sh` | `ejemplos/cajas.csv` | — |
+| 5 | `cargar-contribuyentes-demo.sh` | `ejemplos/contribuyentes.csv` | — |
+| 6 | `cargar-fichas-demo.sh` | `ejemplos/fichas.csv` | sector, manzana, vía y contribuyente |
+| 7 | `cargar-detalle-fichas-demo.sh` | `ejemplos/detalle-de-fichas.csv` | la ficha del predio, que **versiona** |
+| 8 | `cargar-vehiculos-demo.sh` | `ejemplos/vehiculos.csv` | el contribuyente |
+| 9 | `cargar-transferencias-demo.sh` | `ejemplos/transferencias.csv` | el predio y el vehículo |
+| 10 | `cargar-deuda-demo.sh` | `ejemplos/deuda.csv` | contribuyente, predio y vehículo |
 
-Los pasos 4 a 9 **exigen `municipalidad.es_demostracion = true`**, comprobado contra la base por
+Los pasos 5 a 10 **exigen `municipalidad.es_demostracion = true`**, comprobado contra la base por
 cada proceso —no por el guión— antes de leer una sola fila. Un `--municipalidad-id` equivocado en
 un dígito no siembra ocho personas que no existen en el padrón de una municipalidad que ya opera, y
-aquí no se borra nada (RNF-051). Los pasos 1 a 3 no la exigen: un catálogo vial es estructura real,
-y ese mismo mecanismo es por el que un día entrará el catálogo de verdad.
+aquí no se borra nada (RNF-051). Los pasos 1 a 4 no la exigen: un catálogo vial, un sector y una
+ventanilla son estructura real, y ese mismo mecanismo es por el que un día entrará el catálogo de
+verdad.
+
+### Cómo nace un `area` y una `caja` (#430)
+
+**El paso 4 lo añadió #430, y no es un adorno.** Hasta entonces *nada* creaba una `caja` ni un
+`area` fuera de las fixtures de prueba: las dos tablas existen desde `V3`, `sgtm_app` puede
+escribirlas desde `V7`, `AbrirCaja` sabe abrir el turno de un cajero en una de ellas… y una
+municipalidad recién implantada no tenía ninguna. El resultado era una instalación con padrón,
+predios y deuda que **no podía cobrar**: la primera cobranza del día fallaba con `CajaInexistente`
+y no había forma de arreglarlo desde dentro del sistema. Lo destapó ejecutar la siembra entera
+contra PostgreSQL, no una revisión.
+
+Se resuelve por donde entra esta clase de dato y no con una pantalla, por dos razones que conviene
+dejar escritas:
+
+- **Ninguna de las diez opciones de Tesorería del manual da de alta una caja** (NEG-03): cobran,
+  cierran, anulan y consultan. Publicar un endpoint que ninguna pantalla llama sería inventar
+  contrato, que es justo lo que `AbrirCaja` evita al no tener ruta propia.
+- **Las ventanillas y sus áreas son configuración de la municipalidad**, como el catálogo vial y
+  los sectores. Vienen del cuadro de organización y del correlativo de recibos que la
+  municipalidad ya usa; no se inventan aquí. Por eso `cargar-cajas.sh` **no exige**
+  `es_demostracion`: es el mismo camino por el que entrarán las cajas de una municipalidad real.
+
+`cajas.csv` es `codigo,nombre,serie,codigoArea,nombreArea`. `serie` es la que numera los recibos de
+esa ventanilla y es única en la municipalidad (`caja_serie_uq`, `V29`) — dos municipios que numeran
+«001» no se estorban, porque la unicidad es por municipalidad como todo lo demás. Las dos últimas
+columnas admiten quedar vacías: la caja tributaria general no imputa a ninguna área (`area_id` es
+*nullable* desde `V3`). Si el área todavía no está registrada, la fila tiene que decir cómo se
+llama; si ya existe, se reutiliza y el archivo **no** le reescribe el nombre.
+
+Lo que sigue sin resolverse por aquí es **dar de baja** una caja: `activa = false` es la operación
+que el manual no dibuja en ninguna pantalla y que nadie ha necesitado todavía. Cuando haga falta,
+va con su acto y su observación, nunca con un `DELETE` (RNF-051).
 
 Repetir un paso **no duplica**: las filas ya cargadas se rechazan una a una por violar su unicidad.
 `--desde N` retoma una siembra interrumpida.
@@ -195,6 +229,7 @@ J=sgtm-aplicacion/build/libs/sgtm.jar
 SGTM_CARGAVIAL_MUNICIPALIDADID=1            SGTM_CARGAVIAL_ARCHIVO=$E/vias.csv            java -jar $J
 SGTM_CARGASECTORES_MUNICIPALIDADID=1        SGTM_CARGASECTORES_ARCHIVO=$E/sectores.csv    java -jar $J
 SGTM_CARGAMANZANAS_MUNICIPALIDADID=1        SGTM_CARGAMANZANAS_ARCHIVO=$E/manzanas.csv    java -jar $J
+SGTM_CARGACAJAS_MUNICIPALIDADID=1           SGTM_CARGACAJAS_ARCHIVO=$E/cajas.csv          java -jar $J
 SGTM_CARGACONTRIBUYENTESDEMO_MUNICIPALIDADID=1 SGTM_CARGACONTRIBUYENTESDEMO_ARCHIVO=$E/contribuyentes.csv java -jar $J
 SGTM_CARGAFICHASDEMO_MUNICIPALIDADID=1      SGTM_CARGAFICHASDEMO_ARCHIVO=$E/fichas.csv    java -jar $J
 SGTM_CARGADETALLEFICHASDEMO_MUNICIPALIDADID=1 SGTM_CARGADETALLEFICHASDEMO_ARCHIVO=$E/detalle-de-fichas.csv java -jar $J
@@ -204,6 +239,6 @@ SGTM_CARGADEUDADEMO_MUNICIPALIDADID=1       SGTM_CARGADEUDADEMO_ARCHIVO=$E/deuda
 ```
 
 Cada proceso se enciende **solo** si su propiedad `…_ARCHIVO` está puesta
-(`@ConditionalOnProperty`), así que el mismo contenedor —o el mismo `jar`— sirve para los nueve y no
+(`@ConditionalOnProperty`), así que el mismo contenedor —o el mismo `jar`— sirve para los diez y no
 hace nada de más. El `--municipalidad-id` es el que imprimió la implantación, y tiene que ser el de
-una municipalidad marcada como de demostración: si no, los pasos 4 a 9 se paran sin escribir nada.
+una municipalidad marcada como de demostración: si no, los pasos 5 a 10 se paran sin escribir nada.
