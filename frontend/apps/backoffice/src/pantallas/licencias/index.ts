@@ -38,20 +38,30 @@ import {
  * (#73), aunque se les parecen:
  *
  * 1. **`licencia_resolucion_cancelacion` y `licencia_resolucion_duplicado` no tienen ninguna
- *    superficie que conectar.** El prototipo las capturo como la vista previa de una resolucion
- *    —un bloque `reporte` con columnas «Concepto»/«Detalle»—, y ninguna de las dos declara
- *    `secciones` ni `acciones`. Sin `acciones`, `Pantalla.tsx` ni siquiera dibuja
- *    `<BarraDeAcciones>` (`{estructura.acciones && <BarraDeAcciones .../>}`), asi que no hay
- *    caja de observacion, no hay boton primario y no hay franja donde contar un impedimento: el
- *    mecanismo que #74 uso para `anulacion_recibo` —abrir por el numero de la ruta, con su propia
- *    seccion de campos y su propio boton— no tiene equivalente aqui porque el prototipo no dibujo
- *    ese equivalente. `LicenciaController.cancelacion`/`.duplicado` exigen ademas `motivo` (y
- *    `duplicado` tambien `nDeRecibo`) sin que ninguna pantalla del manual tenga donde escribirlos
- *    —el mismo hueco que cerro `ACTOS_SIN_CAMPO` en #73—, pero aqui no hay ni siquiera un control
- *    existente que sustituir (`ResolutorDeTransferencia` anadio su campo **junto** a uno que ya
- *    dibujaba la pestaña; aqui no hay pestaña). Conectar cualquiera de las dos exigiria inventar
- *    una pantalla entera que el prototipo nunca capturo, que es justo lo que «Ningun componente
- *    del design system antes de la pantalla que lo use» prohibe.
+ *    superficie que conectar, y eso ya esta decidido** (FRO-06, #427). El prototipo las capturo
+ *    como la vista previa de una resolucion —un bloque `reporte` con columnas
+ *    «Concepto»/«Detalle»—, y ninguna de las dos declara `secciones` ni `acciones`. Sin
+ *    `acciones`, `Pantalla.tsx` ni siquiera dibuja `<BarraDeAcciones>`
+ *    (`{estructura.acciones && <BarraDeAcciones .../>}`), asi que no hay caja de observacion, no
+ *    hay boton primario y no hay franja donde contar un impedimento: el mecanismo que #74 uso
+ *    para `anulacion_recibo` —abrir por el numero de la ruta, con su propia seccion de campos y
+ *    su propio boton— no tiene equivalente aqui porque **el prototipo si dibujo el de
+ *    `anulacion_recibo`** y no dibujo este. `LicenciaController.cancelacion`/`.duplicado` exigen
+ *    ademas `motivo` (y `duplicado` tambien `nDeRecibo`, el del derecho de tramite **del
+ *    duplicado**) sin que ninguna pantalla del manual tenga donde escribirlos.
+ *
+ *    **La decision, y lo que se hizo con ella.** Se cotejaron las dos salidas que #427 nombra
+ *    contra el catalogo y contra el controlador, y ninguna esta disponible hoy: `licencia_funcionamiento`
+ *    —la pantalla que conoce el `{id}` y que hasta trae una accion «Duplicar»— **no dibuja ningun
+ *    motivo**, su «Observaciones» es la trazabilidad del tramite y su «Nº de recibo» es el del
+ *    derecho de la licencia; y ademas el permiso del acto es el de **esta** opcion
+ *    (`@RequiereAcceso(acceso = "licencia_resolucion_cancelacion")`), no el de aquella. El
+ *    analisis completo, con las tres alternativas descartadas, esta en FRO-06.
+ *
+ *    Lo que si cambia: las dos entran en `ACTOS_SIN_CAMPO` —su causa era `sin-declaracion`, que
+ *    pedia declarar campos que no existen— y **lo dicen en la pantalla** con su aviso permanente
+ *    (`AVISOS` de `prosa-textos.ts`), que es el unico bloque que se dibuja sin acciones. Antes la
+ *    hoja salia muda: la causa se calculaba, entraba en el censo y no la leia nadie (RNF-082).
  * 2. **`anuncios_reportes` y `licencia_padron` tenian conductor y apuntaban al boton
  *    equivocado** —cerrado por #421—. Las dos declaran el mismo cuarteto de acciones
  *    —«Exportar», «Imprimir», «Pantalla», «Cancelar»—, y FRO-03 §5 fija la primaria en **la

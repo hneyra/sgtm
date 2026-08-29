@@ -256,7 +256,15 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // **Y una menos con #424**: `transito_reportes` se va a `lectura`. Las dos
       // mudanzas van en direcciones opuestas y **el numero no se sumo a mano**:
       // se recompuso ejecutando el censo sobre el arbol ya mergeado.
-      'sin-declaracion': 24,
+      //
+      // **Y dos menos con FRO-06** (#427): `licencia_resolucion_cancelacion` y
+      // `licencia_resolucion_duplicado` se van a `sin-campo`. Son hojas sin ni
+      // una seccion —el prototipo capturo el papel, no el formulario—, asi que
+      // `sin-declaracion` («la pantalla aún no manda estos campos») pedia
+      // declarar campos que no existen. Las tres hojas gemelas de transito ya
+      // estaban donde toca desde #77; estas dos y las dos de infracciones eran
+      // las que quedaban descolocadas.
+      'sin-declaracion': 22,
       // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
       // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
       // «Guardar» de una ficha `GET` se cae— y repartir el valor de una
@@ -265,8 +273,9 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       'sin-determinacion': 2,
       // Tesoreria (3, #74) + transito (4, #77) + fiscalizacion (3, #80) +
       // las dos de rentas que #385 rescata de `salida` (`alcabala`,
-      // `espectaculos`).
-      'sin-campo': 12,
+      // `espectaculos`) + las dos hojas de resolucion de licencias que FRO-06
+      // (#427) trae desde `sin-declaracion`.
+      'sin-campo': 14,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);

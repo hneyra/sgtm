@@ -318,6 +318,35 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
   },
 
   /**
+   * Las dos resoluciones de licencia: la misma hoja sin superficie que las tres
+   * de arriba, clasificada donde le toca (FRO-06, #427).
+   *
+   * Estaban en `sin-declaracion` —«la pantalla aún no manda estos campos»— y
+   * esa es la causa que **invita a la correccion equivocada**: no hay campos
+   * que declarar, porque no hay ni una seccion. `LicenciaController.cancelacion`
+   * exige el `motivo` (`CancelarLicencia.SinMotivo`) y `.duplicado` exige ademas
+   * el `nDeRecibo` del derecho de tramite **del duplicado** —no el de la
+   * licencia, que es el que dibuja `licencia_funcionamiento`—.
+   *
+   * Como las tres de transito, su franja no se dibuja: sin `acciones` no hay
+   * `<BarraDeAcciones>`. Lo que se lee esta en `AVISOS`; esto es lo que hace que
+   * el censo diga la verdad, y lo que sostiene la franja el dia que la pantalla
+   * del acto exista.
+   */
+  licencia_resolucion_cancelacion: {
+    dato: 'el motivo por el que la licencia queda sin efecto',
+    porque:
+      'Sin él no se puede cancelar: el backend lo exige, y esta pantalla no declara ninguna sección con campos, solo la hoja de la resolución que resultaría.',
+    campos: ['motivo'],
+  },
+  licencia_resolucion_duplicado: {
+    dato: 'el motivo del duplicado —extravío, deterioro, robo— y el recibo de su derecho de trámite',
+    porque:
+      'Sin ellos no se puede autorizar: el backend los exige, y esta pantalla no declara ninguna sección con campos, solo la hoja de la resolución que resultaría.',
+    campos: ['motivo', 'nDeRecibo'],
+  },
+
+  /**
    * Alcabala y espectaculos publicos: el bloqueo doble que #73 documento y #385
    * dejo registrado como deuda. Sus primarias del catalogo son de salida
    * («Imprimir liquidacion»), asi que sin esta entrada la causa `DE_SALIDA`

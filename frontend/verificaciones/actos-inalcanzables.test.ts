@@ -84,9 +84,18 @@ function inalcanzables(): string[] {
 /**
  * Las quince de hoy. **Bajar de aqui es bueno; subir hay que mirarlo.**
  *
- * Cuatro de ellas —las hojas de resolucion y de constancia— no declaran ninguna
- * accion: el prototipo las modela como papel, no como acto. Las once restantes
- * ponen «Imprimir» de ultima, que es lo que se hace **despues** del acto.
+ * **Siete** de ellas —las cuatro hojas de resolucion, la de constancia y las dos
+ * de gerencia de transito— no declaran ninguna accion: el prototipo las modela
+ * como papel, no como acto. Son las «hojas sin superficie» de
+ * [FRO-06](../../docs/60-frontend/hojas-sin-superficie.md), y
+ * `hojas-sin-superficie.test.ts` computa esa misma lista del catalogo y exige de
+ * cada una su clasificacion y su aviso.
+ *
+ * (Este parrafo decia «cuatro», y llevaba diciendolo desde que la lista existe:
+ * el recuento salio del cotejo de #427, no de una revision.)
+ *
+ * Las ocho restantes ponen «Imprimir» —o «Limpiar», o «Salir»— de ultima, que es
+ * lo que se hace **despues** del acto.
  */
 const CONOCIDAS: readonly string[] = [
   'autorizaciones-y-licencias/certificados',

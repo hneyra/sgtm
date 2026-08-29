@@ -76,6 +76,7 @@ MEF, aún planeada allí) y los **RNF** menores de 030 (p. ej. RNF-020, latencia
 - [Mapa de pantallas](60-frontend/mapa-de-pantallas.md) — las 134 opciones y las diez plantillas
 - [Estándares de código del frontend](60-frontend/estandares-de-codigo-frontend.md) — prohibiciones y su verificación
 - [FRO-05 — Superficies unificadas](60-frontend/superficies-unificadas.md) — cómo se unifica un módulo cuyas opciones hablan del mismo objeto, y cómo se demuestra que no se perdió nada
+- [FRO-06 — Las hojas sin superficie](60-frontend/hojas-sin-superficie.md) — qué se hace con la opción que el manual capturó como el papel que sale y cuyo endpoint dicta el acto
 
 ### 80 — Infraestructura
 - [INF-01 — Arquitectura de infraestructura](80-infraestructura/arquitectura-de-infraestructura.md) — un VPS, qué cuesta y qué pasa cuando se cae
