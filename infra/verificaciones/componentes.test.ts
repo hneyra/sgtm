@@ -1060,20 +1060,44 @@ describe("#415 · enrolamiento del ciudadano", () => {
     // mismo orden. Si una deja de entrar —quitar `identidades.ciudadanos` de la lista de
     // `manifiestosDeIdentidad`, por ejemplo—, el nombre del Job y esta cuenta dejan de
     // coincidir.
-    const job = buscar(ms, "Job", "realm");
+    //
+    // Y se mide sobre un ambiente **con alguien enrolado**, que es lo que este issue
+    // aprendio por las malas: la primera version media el ambiente de `AMBIENTE` —cuyo
+    // ubigeo no tiene a nadie— y ahi `ciudadanos.tsv` es la cadena vacia. `update("")`
+    // no cambia un sha256, asi que quitar esa parte de la huella pasaba en VERDE y la
+    // prueba no probaba nada. Por eso lo primero que se exige es que el TSV NO este
+    // vacio: una comprobacion que solo vale con datos tiene que negarse a correr sin ellos.
+    const inv = invariantesDe(AMBIENTE);
+    const conEnrolado = manifiestosDeIdentidad({
+      environment: AMBIENTE,
+      namespace: namespaceName(AMBIENTE),
+      image: "quay.io/keycloak/keycloak:26.0",
+      realm: inv.identity.realm,
+      domain: inv.ingress.domain,
+      clienteDeVerificacion: false,
+      correoDePrueba: false,
+      smtp: SMTP_DE_PRUEBA,
+      // El repositorio versiona un ciudadano enrolado en 200101 (marcha blanca).
+      ubigeo: "200101",
+      administrador: "jperez",
+    });
+    const cm = buscar(conEnrolado, "ConfigMap", "realm") as { data: Record<string, string> };
+    const job = buscar(conEnrolado, "Job", "realm");
     const plantilla = (job as { spec: { template: { spec: EspecificacionDePod } } }).spec.template
       .spec;
-    const d = realmCm.data;
+
+    expect(cm.data["ciudadanos.tsv"]).toContain("CIUDADANO\t");
+
     const recompuesta = huellaDeIdentidad([
-      d["realm.json"] ?? "",
-      d["perfil-de-usuario.json"] ?? "",
-      d["clientes.json"] ?? "",
-      d["realm-ciudadano.json"] ?? "",
-      d["perfil-de-usuario-ciudadano.json"] ?? "",
-      d["clientes-ciudadano.json"] ?? "",
-      d["identidades.tsv"] ?? "",
-      d["ciudadanos.tsv"] ?? "",
-      d["reconciliar-identidades.sh"] ?? "",
+      cm.data["realm.json"] ?? "",
+      cm.data["perfil-de-usuario.json"] ?? "",
+      cm.data["clientes.json"] ?? "",
+      cm.data["realm-ciudadano.json"] ?? "",
+      cm.data["perfil-de-usuario-ciudadano.json"] ?? "",
+      cm.data["clientes-ciudadano.json"] ?? "",
+      cm.data["identidades.tsv"] ?? "",
+      cm.data["ciudadanos.tsv"] ?? "",
+      cm.data["reconciliar-identidades.sh"] ?? "",
       JSON.stringify(plantilla),
     ]);
 
