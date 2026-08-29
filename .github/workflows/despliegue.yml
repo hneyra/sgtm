@@ -118,6 +118,8 @@ jobs:
             echo "SGTM_CLAVE_SUPERUSUARIO=$(openssl rand -hex 24)"
             echo "SGTM_CLAVE_OWNER=$(openssl rand -hex 24)"
             echo "SGTM_CLAVE_APP=$(openssl rand -hex 24)"
+            # rol_carga_parametros (issue #387): sin ella 20-asignar-claves.sh no arranca.
+            echo "SGTM_CLAVE_CARGA=$(openssl rand -hex 24)"
             echo "SGTM_CLAVE_KEYCLOAK=$(openssl rand -hex 24)"
             echo "SGTM_CLAVE_VERIFICACION=$(openssl rand -hex 24)"
             # La municipalidad que se implanta, y el administrador. La cuenta es la

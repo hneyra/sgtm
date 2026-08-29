@@ -8,8 +8,8 @@
 #
 # Requiere, ya fijadas por quien la usa: AMBIENTE, PUERTO, TRABAJO (un directorio de
 # `mktemp -d`). Deja fijadas: PGHOST, PGPORT, MODO, CLAVE_SUPER, CLAVE_OWNER, CLAVE_APP,
-# CLAVE_IDENTIDAD, CLAVE_RESPALDO, CLAVE_MONITOREO, BINARIOS. No tiene `set -euo pipefail` propio: hereda el de quien la
-# usa.
+# CLAVE_CARGA, CLAVE_IDENTIDAD, CLAVE_RESPALDO, CLAVE_MONITOREO, BINARIOS. No tiene
+# `set -euo pipefail` propio: hereda el de quien la usa.
 
 : "${AMBIENTE:?lib-motor-local.sh necesita AMBIENTE}"
 : "${PUERTO:?lib-motor-local.sh necesita PUERTO}"
@@ -31,6 +31,7 @@ export PGPORT=$PUERTO
 CLAVE_SUPER="sup3r'usuario"
 CLAVE_OWNER="o'wner-Cl4ve"
 CLAVE_APP="a'pp-Cl4ve"
+CLAVE_CARGA="c'arga-Cl4ve"
 CLAVE_IDENTIDAD="k'eycloak-Cl4ve"
 CLAVE_RESPALDO="r'espaldo-Cl4ve"
 CLAVE_MONITOREO="m'onitoreo-Cl4ve"
@@ -67,6 +68,7 @@ motor_arrancar_con_docker() {
         --env POSTGRES_PASSWORD="$CLAVE_SUPER" \
         --env SGTM_CLAVE_OWNER="$CLAVE_OWNER" \
         --env SGTM_CLAVE_APP="$CLAVE_APP" \
+        --env SGTM_CLAVE_CARGA="$CLAVE_CARGA" \
         --env SGTM_CLAVE_IDENTIDAD="$CLAVE_IDENTIDAD" \
         --env SGTM_CLAVE_RESPALDO="$CLAVE_RESPALDO" \
         --env SGTM_CLAVE_MONITOREO="$CLAVE_MONITOREO" \
@@ -116,6 +118,7 @@ motor_arrancar_localmente() {
                        >/dev/null ;;
             *.sh) POSTGRES_USER=postgres POSTGRES_DB=sgtm \
                   SGTM_CLAVE_OWNER="$CLAVE_OWNER" SGTM_CLAVE_APP="$CLAVE_APP" \
+                  SGTM_CLAVE_CARGA="$CLAVE_CARGA" \
                   SGTM_CLAVE_IDENTIDAD="$CLAVE_IDENTIDAD" \
                   SGTM_CLAVE_RESPALDO="$CLAVE_RESPALDO" \
                   SGTM_CLAVE_MONITOREO="$CLAVE_MONITOREO" bash "$guion" >/dev/null ;;

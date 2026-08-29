@@ -26,7 +26,8 @@
 # no lo verias como deriva porque el campo que cambia (`data`) no esta en lo que Pulumi
 # declaro con un valor (los manifiestos solo REFERENCIAN el Secret por nombre).
 #
-#   uso: secretos/rotar-clave.sh --ambiente stg|prod --rol sgtm-app|sgtm-owner|keycloak-base
+#   uso: secretos/rotar-clave.sh --ambiente stg|prod \
+#        --rol sgtm-app|sgtm-owner|keycloak-base|sgtm-respaldo|sgtm-monitor|postgres-carga \
 #        [--namespace sgtm-stg]
 set -euo pipefail
 
@@ -42,7 +43,11 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ -n "$AMBIENTE" ] || { echo "Falta --ambiente (stg o prod)." >&2; exit 2; }
-[ -n "$ROL" ] || { echo "Falta --rol. Los admitidos: sgtm-app, sgtm-owner, keycloak-base." >&2; exit 2; }
+[ -n "$ROL" ] || {
+    echo "Falta --rol. Los admitidos: sgtm-app, sgtm-owner, keycloak-base, sgtm-respaldo," \
+         "sgtm-monitor, postgres-carga." >&2
+    exit 2
+}
 NAMESPACE=${NAMESPACE:-sgtm-$AMBIENTE}
 
 AQUI=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
