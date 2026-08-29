@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Aviso, Boton, Campo, FechaDeCalculo } from '@sgtm/design-system';
 import type { Celda, DatosDePantalla, DetalleDeFila } from '@sgtm/api-client';
 import type { EstructuraDePantalla } from '../../catalogo';
-import { opcionPorId, seccionesDe } from '../../catalogo';
+import { opcionPorId, pantallasDelModulo, seccionesDe } from '../../catalogo';
 import { useCatalogoVisible } from '../../app/sesion/useCatalogoVisible';
 import { useEjercicio } from '../../app/ejercicio';
 import { conexionDe } from '../conexiones';
@@ -15,8 +15,11 @@ import { NO_DISPONIBLE, SIN_PERMISO, estadoDePantalla, textoDeError } from '../e
 import { avisoDe } from '../prosa';
 import { PAGINA, conCambio, conOrden, leerBusqueda } from '../busqueda';
 import { BarraDeAcciones } from '../bloques/BarraDeAcciones';
+import { CabeceraDeRegistro } from '../bloques/CabeceraDeRegistro';
+import type { DatoDeCabecera } from '../bloques/CabeceraDeRegistro';
 import { Filtros } from '../bloques/Filtros';
 import { Formulario } from '../bloques/Formulario';
+import { IndiceDeSecciones } from '../bloques/IndiceDeSecciones';
 import { PanelDeAlta } from '../bloques/PanelDeAlta';
 import type { AltaAbierta } from '../bloques/PanelDeAlta';
 import { TablaDePantalla } from '../bloques/TablaDePantalla';
@@ -55,10 +58,67 @@ import { LONGITUD_DEL_CODIGO, conTramoDelCodigo, normalizarCodigoCatastral } fro
  * (`conteo` de `catastro/index.ts`): número, se muestra; nulo, «—». Un `0`
  * significaría «ninguna», que es una afirmación distinta y que nadie ha
  * comprobado.
+ *
+ * <h2>La anatomía, ranura por ranura (#391 §4)</h2>
+ *
+ * El orden es el que impone el renderizador común (FRO-03 §5): aviso →
+ * cabecera-resumen → versionado → filtros → tabla → totales → índice +
+ * formulario → barra de acciones. Esta superficie llena unas y no otras, y lo
+ * que no llena se dice aquí con el mismo detalle con que se dijo por qué
+ * `sectores` se quedó sin barra de acciones:
+ *
+ *   cabecera-resumen  **la llena, y es lo que cambió**. El registro abierto del
+ *                     territorio es el sector —o la manzana— señalado en el
+ *                     árbol, y hasta hoy lo resumía una tarjeta «Lo señalado en
+ *                     el territorio» **a la derecha**, con campos de sólo
+ *                     lectura, fuera de la anatomía. Ahora es
+ *                     {@link CabeceraDeRegistro} arriba del todo y a lo ancho,
+ *                     con el mismo lenguaje visual que la ficha del predio y
+ *                     que el cuadro de valuación. Sin nada señalado la ranura
+ *                     **no desaparece**: dice qué hay que elegir, que es lo que
+ *                     decía la tarjeta vacía. Lo único que se pierde en la
+ *                     mudanza es el `<h2>` visible de la tarjeta: el mismo texto
+ *                     pasa a ser el **nombre accesible** de la región, como en
+ *                     las otras dos cabeceras —ninguna del sistema lleva
+ *                     encabezado visible—, así que se sigue pudiendo pedir por
+ *                     su rótulo y deja de haber un título de tarjeta encima de
+ *                     una cabecera-resumen
+ *   versionado        **no aplica, y no es un olvido**. El backend no versiona
+ *                     el territorio: `SectorResource` y `ViaResource` publican
+ *                     el sector y la vía tal como están, sin `version`, sin
+ *                     `vigenciaDesde` y sin histórico —lo que sí versiona es la
+ *                     ficha catastral (#18)—. `DatosDeVersionado` no llega en
+ *                     ninguna de las dos respuestas, así que una banda aquí
+ *                     tendría que inventarse sus cuatro campos, que es
+ *                     exactamente lo que ADR-0010 §4 prohíbe
+ *   filtros           sólo la hoja de vías: es la única de las dos cuyo catálogo
+ *                     declara filtros, y los suyos viajan. El buscador del
+ *                     carril no es un filtro del servidor —acota lo que ya
+ *                     llegó— y por eso no se dibuja como tal (#391 §3)
+ *   tabla             la de vías. La de sectores **es el árbol**: las mismas
+ *                     celdas y la misma respuesta, repartidas en el carril
+ *   totales           ninguna de las dos los declara en el catálogo
+ *   índice            sólo la hoja de vías, que es la única con secciones —la
+ *                     del formulario de la vía—, y con la entrada previa de su
+ *                     tabla y la salida hacia las acciones. La hoja de sectores
+ *                     no tiene ni una sección del catálogo: lo que queda a su
+ *                     derecha es el compositor del código, que no es una sección
+ *                     de campos sino un control propio, y un índice de una sola
+ *                     entrada que no lista secciones no es un índice
+ *   barra             sólo la hoja de vías. La de sectores se quedó sin ella en
+ *                     la propuesta C —su «Guardar» era una promesa muerta sobre
+ *                     una operación de lectura (#332)— y esta entrega no la
+ *                     devuelve
  */
 
 const SECTORES = 'sectores';
 const CALLES = 'calles';
+
+/** El nombre accesible de la cabecera-resumen. Era el título de la tarjeta. */
+const LO_SENALADO = 'Lo señalado en el territorio';
+
+/** El ancla de la tabla de vías, para la entrada previa del índice. */
+const ANCLA_DE_LA_TABLA = 'sgtm-tabla-de-la-pantalla';
 
 /**
  * Las columnas de la tabla de sectores del catálogo, por lo que significan.
@@ -115,6 +175,19 @@ export function Territorio({ estructura }: { readonly estructura: EstructuraDePa
     enabled: puedeVerElTerritorio,
   });
 
+  /* Los rótulos de la cabecera son **los de las columnas de `sectores`**
+     (RNF-080), y la cabecera se dibuja también en la hoja de vías —el árbol está
+     en las dos—, así que no valen los de `estructura`: ahí serían los de la
+     tabla vial. Se leen del catálogo del módulo, que ya está resuelto y
+     memoizado desde que `Pantalla` cargó esta pantalla; con la misma clave que
+     usa la ficha del predio, así que no sale ninguna petición de más. */
+  const pantallas = useQuery({
+    queryKey: ['catalogo', 'catastro'],
+    queryFn: () => pantallasDelModulo('catastro'),
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+
   const [abierto, fijarAbierto] = useState<string | null>(null);
   const [senalado, fijarSenalado] = useState<Senalado | null>(null);
   const [buscadoEnElArbol, fijarBuscadoEnElArbol] = useState('');
@@ -161,6 +234,22 @@ export function Territorio({ estructura }: { readonly estructura: EstructuraDePa
       <FechaDeCalculo {...(datos?.fechaCalculo ? { fecha: datos.fechaCalculo } : {})} />
 
       {aviso !== undefined && <Aviso titulo={aviso.titulo} detalle={aviso.detalle} />}
+
+      {/* La cabecera-resumen del territorio, en la ranura que le toca: arriba
+          del todo, a lo ancho y antes de cualquier filtro. Sin permiso sobre
+          sectores no hay árbol, así que no hay nada que señalar ni que resumir. */}
+      {puedeVerElTerritorio && (
+        <CabeceraDelTerritorio
+          senalado={senalado}
+          filas={filas}
+          columnas={pantallas.data?.[SECTORES]?.tabla?.cols ?? []}
+          cargando={arbol.isPending}
+          aLaFecha={arbol.data?.fechaCalculo ?? ''}
+        />
+      )}
+
+      {/* Aquí iría la banda de versionado. **No aplica**: el backend no versiona
+          el territorio, y ver el docblock de arriba antes de añadirla. */}
 
       <div className="sgtm-territorio">
         {puedeVerElTerritorio && (
@@ -213,8 +302,6 @@ export function Territorio({ estructura }: { readonly estructura: EstructuraDePa
 
           {hoja === SECTORES ? (
             <HojaDeSectores
-              estructura={estructura}
-              filas={filas}
               senalado={senalado}
               tecleado={tecleado}
               onTecleado={fijarTecleado}
@@ -417,32 +504,123 @@ function Carril({
 }
 
 /**
- * La hoja de sectores: lo señalado en el árbol, y el código que se compone con
- * ello.
+ * **La cabecera-resumen del territorio** (#391 §4): qué hay señalado en el
+ * árbol, arriba del todo y con el lenguaje visual de las otras once.
+ *
+ * Es lo mismo que enseñaba la tarjeta «Lo señalado en el territorio» de la hoja
+ * de sectores —los dos tramos y las seis columnas del catálogo, de sólo
+ * lectura—, movido a la ranura que le toca. Lo que cambia con la mudanza:
+ *
+ * - **se ve en las dos hojas**, porque el árbol está en las dos: quien está
+ *   mirando el catálogo vial y señala un sector ve qué señaló, en vez de tener
+ *   que volver a la otra pestaña;
+ * - **los rótulos siguen siendo los del catálogo de `sectores`** (RNF-080), y
+ *   por eso se le pasan desde arriba en lugar de leerlos de `estructura`: en la
+ *   hoja de vías `estructura` es la de `calles` y sus columnas son otras;
+ * - **los tres conteos van con su fecha** (regla 9): son cifras del padrón
+ *   territorial a un instante, y ese instante es el de la respuesta que los
+ *   trajo. Un conteo que no llegó sigue saliendo «—», y un hueco no se fecha.
+ *
+ * Y sin nada señalado **la ranura no desaparece**: dice qué hay que elegir, que
+ * es lo que decía la tarjeta vacía. Una cabecera que se esfuma deja la página
+ * empezando por el árbol y sin nada que explique para qué sirve señalar.
+ */
+function CabeceraDelTerritorio({
+  senalado,
+  filas,
+  columnas,
+  cargando,
+  aLaFecha,
+}: {
+  readonly senalado: Senalado | null;
+  readonly filas: readonly (readonly Celda[])[];
+  readonly columnas: readonly string[];
+  readonly cargando: boolean;
+  readonly aLaFecha: string;
+}) {
+  if (senalado === null) {
+    return (
+      <CabeceraDeRegistro
+        rotulo={LO_SENALADO}
+        cargando={cargando}
+        vacio="Elige un sector en el árbol de la izquierda —o una de sus manzanas— para ver su detalle y componer el código de referencia catastral de un predio."
+      />
+    );
+  }
+
+  const fila = filas.find((f) => celda(f, COLUMNA.codigo) === senalado.sector);
+  const delSector: readonly DatoDeCabecera[] =
+    fila === undefined
+      ? []
+      : [
+          { etiqueta: columnas[COLUMNA.nombre] ?? 'Denominación', valor: celda(fila, COLUMNA.nombre) },
+          {
+            etiqueta: columnas[COLUMNA.manzanas] ?? 'Manzanas',
+            valor: celda(fila, COLUMNA.manzanas),
+            cifra: true,
+            aLaFecha,
+          },
+          {
+            etiqueta: columnas[COLUMNA.lotes] ?? 'Lotes',
+            valor: celda(fila, COLUMNA.lotes),
+            cifra: true,
+            aLaFecha,
+          },
+          {
+            etiqueta: columnas[COLUMNA.predios] ?? 'Predios inscritos',
+            valor: celda(fila, COLUMNA.predios),
+            cifra: true,
+            aLaFecha,
+          },
+          { etiqueta: columnas[COLUMNA.zona] ?? 'Zona de arbitrios', valor: celda(fila, COLUMNA.zona) },
+          { etiqueta: columnas[COLUMNA.estado] ?? 'Estado', valor: celda(fila, COLUMNA.estado) },
+        ];
+
+  return (
+    <CabeceraDeRegistro
+      rotulo={LO_SENALADO}
+      /* El identificador es **lo señalado**, que puede ser el sector o una de
+         sus manzanas; de cuál de los dos se trata lo dice la insignia, con su
+         texto y nunca sólo por color (FRO-02 §2.1). El sector sigue estando en
+         la rejilla, así que la manzana no queda huérfana de su sector. */
+      identificador={senalado.manzana ?? senalado.sector}
+      insignias={[
+        { texto: senalado.manzana === undefined ? 'SECTOR' : 'MANZANA', tono: 'neutro' as const },
+      ]}
+      datos={[
+        { etiqueta: 'Sector', valor: senalado.sector },
+        ...(senalado.manzana === undefined
+          ? []
+          : [{ etiqueta: 'Manzana', valor: senalado.manzana }]),
+        ...delSector,
+      ]}
+      cargando={cargando}
+    />
+  );
+}
+
+/**
+ * La hoja de sectores: el código de referencia catastral que se compone con lo
+ * señalado en el árbol.
  *
  * La tabla del catálogo ya no se dibuja aquí porque **es el árbol**: las mismas
- * celdas, la misma respuesta y el mismo adaptador, repartidas en el carril. Lo
- * que queda a la derecha es lo que la tabla no podía enseñar: qué es lo
- * señalado, y para qué sirve —componer el código de referencia catastral de un
- * predio y abrir su ficha—.
+ * celdas, la misma respuesta y el mismo adaptador, repartidas en el carril. Y el
+ * detalle de lo señalado tampoco, porque **es la cabecera** (#391 §4): subió a
+ * la ranura de arriba, a lo ancho y con el lenguaje visual de las otras once. Lo
+ * que queda aquí es lo que ni la tabla ni la cabecera pueden hacer: componer el
+ * código de un predio con los tramos señalados y abrir su ficha.
  */
 function HojaDeSectores({
-  estructura,
-  filas,
   senalado,
   tecleado,
   onTecleado,
 }: {
-  readonly estructura: EstructuraDePantalla;
-  readonly filas: readonly (readonly Celda[])[];
   readonly senalado: Senalado | null;
   readonly tecleado: string;
   readonly onTecleado: (valor: string) => void;
 }) {
   const navegar = useNavigate();
   const idDelMotivo = useId();
-  const columnas = estructura.tabla?.cols ?? [];
-  const fila = filas.find((f) => celda(f, COLUMNA.codigo) === senalado?.sector);
 
   // El código con lo señalado ya colocado. Ver `conTramoDelCodigo`: si el
   // código todavía no llega hasta el tramo, no se toca —y se dice—.
@@ -451,93 +629,38 @@ function HojaDeSectores({
   const completo = normalizarCodigoCatastral(codigo).length === LONGITUD_DEL_CODIGO;
 
   return (
-    <>
-      <section className="sgtm-tarjeta">
-        <div className="sgtm-tarjeta__cabecera">
-          <h2 className="sgtm-tarjeta__titulo">Lo señalado en el territorio</h2>
-        </div>
-        {senalado === null ? (
-          <p className="sgtm-territorio__vacio">
-            Elige un sector en el árbol de la izquierda —o una de sus manzanas— para ver su detalle
-            y componer el código de referencia catastral de un predio.
-          </p>
-        ) : (
-          <>
-            <Campo etiqueta="Sector" tipo="ro" valor={senalado.sector} />
-            {senalado.manzana !== undefined && (
-              <Campo etiqueta="Manzana" tipo="ro" valor={senalado.manzana} />
-            )}
-            {fila !== undefined && (
-              <>
-                <Campo
-                  etiqueta={columnas[COLUMNA.nombre] ?? 'Denominación'}
-                  tipo="ro"
-                  valor={celda(fila, COLUMNA.nombre)}
-                />
-                <Campo
-                  etiqueta={columnas[COLUMNA.manzanas] ?? 'Manzanas'}
-                  tipo="ro"
-                  valor={celda(fila, COLUMNA.manzanas)}
-                />
-                <Campo
-                  etiqueta={columnas[COLUMNA.lotes] ?? 'Lotes'}
-                  tipo="ro"
-                  valor={celda(fila, COLUMNA.lotes)}
-                />
-                <Campo
-                  etiqueta={columnas[COLUMNA.predios] ?? 'Predios inscritos'}
-                  tipo="ro"
-                  valor={celda(fila, COLUMNA.predios)}
-                />
-                <Campo
-                  etiqueta={columnas[COLUMNA.zona] ?? 'Zona de arbitrios'}
-                  tipo="ro"
-                  valor={celda(fila, COLUMNA.zona)}
-                />
-                <Campo
-                  etiqueta={columnas[COLUMNA.estado] ?? 'Estado'}
-                  tipo="ro"
-                  valor={celda(fila, COLUMNA.estado)}
-                />
-              </>
-            )}
-          </>
-        )}
-      </section>
-
-      <section className="sgtm-tarjeta">
-        <div className="sgtm-tarjeta__cabecera">
-          <h2 className="sgtm-tarjeta__titulo">Código de referencia catastral</h2>
-        </div>
-        <CodigoCatastral
-          etiqueta="Código de referencia catastral"
-          valor={codigo}
-          onCambio={onTecleado}
-        />
-        {senalado !== null && !colocado && (
-          <p className="sgtm-territorio__pendiente">
-            El sector {senalado.sector} se colocará en su tramo en cuanto el código llegue hasta él:
-            teclea antes el ubigeo —departamento, provincia y distrito—. El código se llena de
-            izquierda a derecha y aquí no se rellena ningún dígito que nadie haya escrito.
-          </p>
-        )}
-        <p className="sgtm-lateral__falta" id={idDelMotivo} role="status">
-          {completo
-            ? ''
-            : 'La ficha se abre con el código completo: mientras falten tramos, esto es una búsqueda por prefijo y no un predio.'}
+    <section className="sgtm-tarjeta">
+      <div className="sgtm-tarjeta__cabecera">
+        <h2 className="sgtm-tarjeta__titulo">Código de referencia catastral</h2>
+      </div>
+      <CodigoCatastral
+        etiqueta="Código de referencia catastral"
+        valor={codigo}
+        onCambio={onTecleado}
+      />
+      {senalado !== null && !colocado && (
+        <p className="sgtm-territorio__pendiente">
+          El sector {senalado.sector} se colocará en su tramo en cuanto el código llegue hasta él:
+          teclea antes el ubigeo —departamento, provincia y distrito—. El código se llena de
+          izquierda a derecha y aquí no se rellena ningún dígito que nadie haya escrito.
         </p>
-        <div className="sgtm-territorio__acciones">
-          <Boton
-            variante="primario"
-            disabled={!completo}
-            {...(completo ? {} : { 'aria-describedby': idDelMotivo })}
-            onClick={() => navegar(`/catastro/ficha-urbana/${encodeURIComponent(codigo)}`)}
-          >
-            Abrir la ficha
-          </Boton>
-        </div>
-      </section>
-    </>
+      )}
+      <p className="sgtm-lateral__falta" id={idDelMotivo} role="status">
+        {completo
+          ? ''
+          : 'La ficha se abre con el código completo: mientras falten tramos, esto es una búsqueda por prefijo y no un predio.'}
+      </p>
+      <div className="sgtm-territorio__acciones">
+        <Boton
+          variante="primario"
+          disabled={!completo}
+          {...(completo ? {} : { 'aria-describedby': idDelMotivo })}
+          onClick={() => navegar(`/catastro/ficha-urbana/${encodeURIComponent(codigo)}`)}
+        >
+          Abrir la ficha
+        </Boton>
+      </div>
+    </section>
   );
 }
 
@@ -548,6 +671,13 @@ function HojaDeSectores({
  * `ViaResource` no publica (sector, zona de arancel y arancel por m²), mismo
  * formulario de la vía y misma barra con su «Nuevo», que abre el alta. Lo único
  * que cambia es dónde se dibuja: dentro del panel, al lado del árbol.
+ *
+ * **Y desde #391 §4 lleva su índice de secciones**, como cualquier otra
+ * superficie con secciones: la tabla como entrada previa —se dibuja encima y
+ * fuera de la rejilla del índice (FRO-03 §5), así que sin ella el índice
+ * empezaría por la segunda cosa de la hoja— y la salida hacia las acciones, que
+ * es lo que evita tabular por los ocho campos de la vía para llegar al acto.
+ * Los dos rótulos son los del catálogo, no textos redactados aquí (RNF-080).
  */
 function HojaDeVias({
   estructura,
@@ -576,6 +706,7 @@ function HojaDeVias({
   const filtros = filtrosDe(estructura.id, estructura.filtros);
   const secciones = seccionesDe(estructura, 0);
   const composicion = composicionDe(estructura.id);
+  const anclaDe = (indice: number): string => `sgtm-seccion-0-${indice}`;
 
   return (
     <>
@@ -603,6 +734,7 @@ function HojaDeVias({
           opcion={estructura.id}
           datos={datos?.tabla}
           cargando={cargando}
+          ancla={ANCLA_DE_LA_TABLA}
           hayFiltros={Object.keys(busquedaActiva.filtros).length > 0}
           {...(busquedaActiva.orden === undefined ? {} : { orden: busquedaActiva.orden })}
           sentido={busquedaActiva.sentido}
@@ -618,15 +750,28 @@ function HojaDeVias({
       )}
 
       {secciones.length > 0 && (
-        <Formulario
-          opcion={estructura.id}
-          secciones={secciones}
-          valores={datos?.campos ?? {}}
-          cargando={cargando}
-          cerradas={cerradas}
-          pestana={0}
-          onAlternar={onAlternar}
-        />
+        <div className="sgtm-conindice">
+          <IndiceDeSecciones
+            secciones={secciones}
+            anclaDe={anclaDe}
+            haciaLasAcciones={(estructura.acciones ?? []).length > 0}
+            {...(estructura.tabla === undefined
+              ? {}
+              : { previa: { rotulo: estructura.tabla.title, ancla: ANCLA_DE_LA_TABLA } })}
+          />
+          <div className="sgtm-conindice__panel">
+            <Formulario
+              opcion={estructura.id}
+              secciones={secciones}
+              valores={datos?.campos ?? {}}
+              cargando={cargando}
+              cerradas={cerradas}
+              pestana={0}
+              onAlternar={onAlternar}
+              anclaDe={anclaDe}
+            />
+          </div>
+        </div>
       )}
 
       {estructura.acciones && (

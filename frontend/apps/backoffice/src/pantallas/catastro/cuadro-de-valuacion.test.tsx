@@ -97,6 +97,13 @@ const alaRuta = (ruta: string) => peticiones.filter((url) => url.includes(ruta))
 const banda = async () =>
   within(await screen.findByRole('region', { name: 'Procedencia del cuadro' }));
 
+/** La cabecera-resumen del cuadro: qué ejercicio, qué hoja y de qué ámbito. */
+const cabecera = () => screen.findByRole('region', { name: 'Resumen del cuadro' });
+
+/** El identificador de esa cabecera, que es el ejercicio. */
+const elIdentificador = () =>
+  screen.getByRole('region', { name: 'Resumen del cuadro' }).querySelector('.sgtm-resumen__codigo');
+
 /** Una fila de valores unitarios, con la forma exacta de `ValorUnitarioResource`. */
 const valorUnitario = (
   partida: string,
@@ -190,14 +197,17 @@ describe('el ejercicio sale de la sesion, no del reloj', () => {
   it('se pinta arriba una sola vez y es lo unico que viaja', async () => {
     montarEnRuta('/catastro/aranceles');
 
-    expect(await screen.findByLabelText('Ejercicio')).toHaveTextContent(String(ESTE_ANIO));
+    // Desde #391 §4 el ejercicio es el **identificador** de la cabecera-resumen
+    // y no un `Campo` de solo lectura dentro de una tarjeta: es lo que
+    // identifica al cuadro, y lo unico que viaja.
+    expect(await cabecera()).toHaveTextContent(String(ESTE_ANIO));
     await waitFor(() => expect(alaRuta(ARANCELES).length).toBeGreaterThan(0));
     expect(alaRuta(ARANCELES)[0]).toContain(`anio=${ESTE_ANIO}`);
 
     // Y **no** hay un segundo selector de ejercicio en el bloque de búsqueda:
     // la propuesta entera es que haya uno.
     expect(screen.queryByLabelText('Ejercicio de trabajo')).not.toBeInTheDocument();
-    expect(screen.getAllByLabelText('Ejercicio')).toHaveLength(1);
+    expect(screen.queryByLabelText('Ejercicio')).not.toBeInTheDocument();
   });
 
   it('cambiar el año de trabajo de la sesion cambia el cuadro que se pide', async () => {
@@ -206,7 +216,7 @@ describe('el ejercicio sale de la sesion, no del reloj', () => {
 
     cambiarEjercicio(2024);
 
-    expect(await screen.findByLabelText('Ejercicio')).toHaveTextContent('2024');
+    await waitFor(() => expect(elIdentificador()).toHaveTextContent('2024'));
     await waitFor(() => expect(alaRuta(DEPRECIACION).some((u) => u.includes('anio=2024'))).toBe(true));
   });
 
