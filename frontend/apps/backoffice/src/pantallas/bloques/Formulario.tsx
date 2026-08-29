@@ -1,12 +1,23 @@
-import { Suspense } from 'react';
+import { Suspense, lazy } from 'react';
 import { Campo, Esqueleto } from '@sgtm/design-system';
 import type { ValorDeCampo } from '@sgtm/api-client';
 import type { SeccionDePantalla } from '../../catalogo';
 import { arrancaCerrada } from '../../catalogo';
 import { controlesDeLaSeccion, memoriaDeSeccion, resolutorDeCampo } from '../composicion';
 import type { ControlDeclarado } from '../composicion';
-import { MemoriaDeCalculo } from './MemoriaDeCalculo';
+import { mapaEnElCampo } from '../escrituras';
 import { Icono } from '@sgtm/design-system';
+
+/* **La memoria del calculo, perezosa.** La dibuja la seccion que declara
+   `memoriaDeSeccion` —hoy el predial individual (#393)— y nadie mas, asi que
+   las otras 133 pantallas la descargaban para no usarla nunca. Es el tercer
+   movimiento de este PR, y el mismo de #379, #424 y el de la hoja del reporte:
+   el umbral lo sube quien no tiene otra salida, y aqui la habia. Hizo falta
+   porque `main` llego a 155,9 de 156 con #445 dentro, y las dos formas de
+   cuerpo de este issue no cabian en el 0,1 KB que quedaba. */
+const MemoriaDeCalculo = lazy(async () => ({
+  default: (await import('./MemoriaDeCalculo')).MemoriaDeCalculo,
+}));
 
 /**
  * Formulario por secciones colapsables (FRO-03 §5, bloque 8).
@@ -69,6 +80,10 @@ export interface FormularioProps {
    * en las 134 pantallas seria un atributo que nadie usa.
    */
   readonly anclaDe?: (indice: number) => string;
+  /** Lo escrito en un mapa declarado, por su clave del vocabulario (#423). */
+  readonly entradasDe?: (mapa: string) => Readonly<Record<string, string>>;
+  /** Escribe una entrada de un mapa declarado. Sin esto, el mapa se dibuja bloqueado. */
+  readonly onEntrada?: (mapa: string, clave: string, valor: string) => void;
 }
 
 /** Sin `onCampo` no hay donde escribir; el resolutor se dibuja inerte igualmente. */
@@ -107,6 +122,8 @@ export function Formulario({
   puedeActuar = true,
   errorPorCampo = {},
   anclaDe,
+  entradasDe,
+  onEntrada,
 }: FormularioProps) {
   return (
     <div className="sgtm-formulario">
@@ -157,16 +174,46 @@ export function Formulario({
                  transferencia son entradas aunque hoy nadie pueda mandarlas, y
                  dibujarlas como texto de una cuenta seria decir que ya estan
                  decididas. */
-              <MemoriaDeCalculo
-                campos={seccion.campos.filter((campo) => campo.t === 'ro')}
-                valores={valores}
-                cargando={cargando}
-                memoria={memoria}
-              />
+              <Suspense fallback={<Esqueleto alto={160} />}>
+                <MemoriaDeCalculo
+                  campos={seccion.campos.filter((campo) => campo.t === 'ro')}
+                  valores={valores}
+                  cargando={cargando}
+                  memoria={memoria}
+                />
+              </Suspense>
             )}
             {!cerrada && (deLaRejilla.length > 0 || anadidos.length > 0) && (
               <div className="sgtm-seccion__rejilla">
                 {deLaRejilla.map((campo) => {
+                  /* **Un mapa del cuerpo, en el sitio de los campos a los que
+                     sustituye** (#423). El arqueo del cierre de caja son cinco
+                     medios de pago con su importe, y el prototipo dibuja cuatro
+                     casillas con otro vocabulario y sin el cheque: el mapa las
+                     sustituye, y los sustituidos que no son el primero no se
+                     dibujan —dibujarlos dejaria nueve cajas de importe en la
+                     seccion, cuatro de ellas muertas—. */
+                  const enElCampo = mapaEnElCampo(opcion, campo.clave);
+                  if (enElCampo !== undefined) {
+                    if (!('mapa' in enElCampo)) return null;
+                    const { nombre, mapa } = enElCampo;
+                    const escritas = entradasDe?.(nombre) ?? {};
+                    return mapa.entradas.map((entrada) => (
+                      <Campo
+                        key={entrada.clave}
+                        etiqueta={entrada.etiqueta}
+                        tipo="text"
+                        valor={escritas[entrada.clave] ?? ''}
+                        cargando={cargando}
+                        bloqueado={onEntrada === undefined}
+                        {...(onEntrada === undefined
+                          ? {}
+                          : {
+                              onCambio: (nuevo: string) => onEntrada(nombre, entrada.clave, nuevo),
+                            })}
+                      />
+                    ));
+                  }
                   /* El control propio de un campo que **resuelve**, si la opcion
                      declara uno. Llega en el trozo de su modulo, asi que se
                      dibuja dentro de un `Suspense` con el mismo hueco que

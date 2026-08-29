@@ -213,7 +213,7 @@ export function AltaGuiadaDeFicha({
               variante="primario"
               disabled={!escritura.puedeEnviar}
               {...(motivo === undefined ? {} : { 'aria-describedby': idDelMotivo })}
-              onClick={escritura.enviar}
+              onClick={() => escritura.enviar()}
             >
               {escritura.enviando ? 'Inscribir ficha…' : 'Inscribir ficha'}
             </Boton>

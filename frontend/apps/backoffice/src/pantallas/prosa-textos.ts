@@ -446,6 +446,11 @@ export const NOTAS: Readonly<Record<string, string>> = {
   anulacion_recibo:
     'El «Detalle» de esta pantalla es la misma observación que pide el sistema, así que no viaja aparte: se escribe abajo, donde ya se pide. La anulación siempre devuelve la deuda a la cuenta corriente —no es una casilla que se pueda destildar— y el número de recibo se toma del que abrió esta pantalla, no del campo «Nro. de recibo».',
 
+  cierre_caja:
+    'El arqueo se declara por los cinco medios de pago del recibo, y el cheque es uno de ellos aunque el manual no le dibuje casilla: un turno con un cheque saldría descuadrado sin poder decirlo. La caja y el cajero se preguntan arriba —son, con la fecha, lo que identifica el turno— y el «Total declarado», el «Total sistema» y la «Diferencia» los calcula el servidor: aquí no se suma ninguna columna. El turno (mañana / tarde / continuo) no viaja porque no existe como dato: hay un turno por caja, cajero y día. Y esta pantalla solo cierra: reversar un cierre ya firmado es otro acto, con otro privilegio.',
+
+  anulacion_convenio:
+    'Las dos acciones escriben y mandan cosas distintas: «Anular» deja el convenio sin efecto y «Quebrar» lo da por incumplido; las dos devuelven la deuda acogida a la fase de la que salió, y ninguna de las dos se deshace. «Reformar» todavía no se puede: exige el convenio nuevo que sustituye al anterior, con su deuda acogida, y esta pantalla no tiene dónde elegirla. El número del convenio se toma del que abrió esta pantalla, no del campo «Num. Conv.», y el responsable y el número de anulación los pone el sistema.',
   transito_descargos:
     'Aquí se registra el escrito que el administrado presentó, y nada más: la sección «Evaluación y resolución» no viaja, porque resolver un descargo es dictar una resolución de gerencia, que es otro acto y otro papel. «Dentro del plazo» tampoco se manda —lo calcula el servidor con el plazo vigente, a partir de la fecha de presentación—, y el «Nº de expediente» de arriba es el del descargo que se está consultando: el del escrito nuevo se pide al final de «Solicitud», con su propia etiqueta.',
 };

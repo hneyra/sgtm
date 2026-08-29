@@ -1,4 +1,4 @@
-import type { CampoDelCuerpo, TablaDelCuerpo } from './escritura';
+import type { CampoDelCuerpo, MapaDelCuerpo, TablaDelCuerpo } from './escritura';
 
 /**
  * Que puede escribir cada opcion, declarado una a una.
@@ -40,6 +40,18 @@ export interface EscrituraDeclarada {
   readonly presentacion?: readonly string[];
   /** Las tablas del formulario, con su propia lista blanca por columna. */
   readonly tablas?: Readonly<Record<string, TablaDelCuerpo>>;
+  /** Los mapas del cuerpo, con su vocabulario declarado. Ver {@link MapaDelCuerpo}. */
+  readonly mapas?: Readonly<Record<string, MapaDelCuerpo>>;
+  /**
+   * Que accion de la barra manda que cuerpo, para la pantalla que el prototipo
+   * capturo con varios verbos. Ver `OpcionesDeEscritura.segunLaAccion`.
+   */
+  readonly segunLaAccion?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /**
+   * Campos del cuerpo que **los trae el filtro**, no el formulario. Ver
+   * `OpcionesDeEscritura.delFiltro`.
+   */
+  readonly delFiltro?: Readonly<Record<string, CampoDelCuerpo>>;
   /**
    * Lo que el cuerpo lleva siempre y nadie teclea: cual de las dos mitades de la
    * operacion se pide. Ver `OpcionesDeEscritura.constantes`.
@@ -52,6 +64,7 @@ export interface EscrituraDeclarada {
   readonly exigir?: (
     borrador: Readonly<Record<string, string>>,
     filas: Readonly<Record<string, readonly Readonly<Record<string, string>>[]>>,
+    delFiltro: Readonly<Record<string, string>>,
   ) => string | undefined;
   /** Lo guardado cambia el ejercicio de trabajo de la sesion, no solo esta pantalla. */
   readonly cambiaElEjercicio?: boolean;
@@ -412,6 +425,43 @@ const CUOTAS_DE_LA_BAJA: TablaDelCuerpo = {
     insolutoS: { campo: 'insoluto', importe: true },
     interesS: { campo: 'interes', importe: true },
   },
+};
+
+/**
+ * **El arqueo del cierre de caja, medio de pago por medio de pago** (#36, #423).
+ *
+ * `PeticionDeCierre.declarado` es un `Map<String, String>` cuyas claves son las
+ * cinco `FormaDePago` del recibo, las mismas del `CHECK` de `recibo` (V3):
+ * `FormaDePago.porNombre` no admite ninguna otra y rechaza el cierre entero con
+ * «Forma de pago desconocida».
+ *
+ * **Y son cinco, no las cuatro casillas que el prototipo dibuja.** El manual
+ * captura «efectivo», «tarjeta de débito/crédito», «depósito en cuenta» y «pago
+ * en línea», y deja el **cheque** sin ninguna; el javadoc de `PeticionDeCierre`
+ * dice por que eso no se puede copiar: «declarar por las casillas haria que un
+ * turno con un cheque saliera descuadrado sin que el cajero pudiera decir nada».
+ * Asi que el mapa sustituye a las cuatro (`enVezDe`) y dibuja las cinco del
+ * dominio, con el rotulo del prototipo donde lo hay.
+ *
+ * `importe: true`: cada cifra viaja **como texto decimal** —`new BigDecimal(texto)`
+ * al otro lado, regla 1— y lo que no sea una cadena decimal simple no sale.
+ *
+ * **Ningun total.** «Total declarado», «Total sistema» y «Diferencia» son `"ro"`
+ * y los calcula `ArqueoDelTurno`: sumar aqui las cinco filas seria componer un
+ * importe en la interfaz (RNF-083), y ademas daria otra cifra que la archivada
+ * en cuanto el arqueo tuviera una linea que la pantalla no dibuja.
+ */
+const ARQUEO_POR_FORMA_DE_PAGO: MapaDelCuerpo = {
+  campo: 'declarado',
+  importe: true,
+  enVezDe: ['efectivoS', 'tarjetaDeDebitoCreditoS', 'depositoEnCuentaS', 'pagoEnLineaS'],
+  entradas: [
+    { clave: 'EFECTIVO', etiqueta: 'Efectivo (S/)' },
+    { clave: 'CHEQUE', etiqueta: 'Cheque (S/)' },
+    { clave: 'DEPOSITO', etiqueta: 'Depósito en cuenta (S/)' },
+    { clave: 'TARJETA', etiqueta: 'Tarjeta de débito / crédito (S/)' },
+    { clave: 'TRANSFERENCIA', etiqueta: 'Transferencia / pago en línea (S/)' },
+  ],
 };
 
 /** Una cuota entera: `3`. Lo unico que `PeticionDeMovimiento.cuota` sabe leer. */
@@ -1420,6 +1470,103 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
     nota: true,
   },
 
+  /**
+   * Cierre y arqueo de caja (RF-087, #36, #423): el turno se firma con lo que hay
+   * en el cajón, medio de pago por medio de pago.
+   *
+   * **Su cuerpo es un mapa**, y por eso esta pantalla estaba fuera hasta ahora:
+   * `PeticionDeCierre.declarado` es `{"EFECTIVO": "120.00", …}` con las cinco
+   * `FormaDePago`, no cinco campos con nombre fijo (ver `ARQUEO_POR_FORMA_DE_PAGO`).
+   *
+   * **La caja y el cajero salen del filtro**, no del formulario: el catálogo los
+   * dibuja `"ro"` —el prototipo capturó un cliente de escritorio donde los dos
+   * venían de la sesión— y los dos son obligatorios en el cuerpo, porque con la
+   * fecha forman la clave del turno (`cierre_uq`, V3). Se preguntan en el bloque
+   * de búsqueda que compone `tesoreria/composicion.ts`, que es además de donde
+   * sale el arqueo en vivo contra el que se cuadra antes de firmar.
+   *
+   * Lo que **no** viaja, y por qué:
+   *
+   * - `turno` (MAÑANA / TARDE / CONTINUO): **no existe como dato**. `cierre_uq`
+   *   hace único el turno por (caja, cajero, fecha) y no hay columna que lo parta
+   *   en dos; el javadoc de `ArqueoResource` lo dice sin rodeos.
+   * - `horaDeApertura` y `horaDeCierre`: las pone el servidor —la apertura es
+   *   `cierre_caja.fecha_apertura` (V29) y el cierre es el instante del acta—.
+   * - `totalDeclaradoS`, `totalSistemaS`, `diferenciaS`, `recibosEmitidos` y
+   *   `recibosAnulados`: son el arqueo que calcula `ArqueoDelTurno`. Aquí no se
+   *   suma ninguna columna (RNF-083).
+   * - `observacionesDelArqueo`: es la misma observación que ya exige `useEscritura`
+   *   (regla 10). Dos cajas para lo mismo acabarían con una de las dos vacía.
+   * - `motivoDeReversion`: **con él la misma ruta reversa el cierre en vez de
+   *   firmarlo**, y eso exige además el privilegio de ELIMINACION. Ninguna acción
+   *   del catálogo lo pide —«Cuadrar · Imprimir arqueo · Cerrar caja»—, así que
+   *   esta pantalla solo cierra.
+   *
+   * **El arqueo vacío no se rechaza aquí.** Que lo declarado no cuadre con el
+   * neto del sistema es exactamente lo que hay que dejar escrito —`CerrarTurno`
+   * guarda el descuadre en vez de rechazarlo—, así que la interfaz no exige
+   * ninguna cifra: lo que exige son la caja y el cajero, sin los cuales el acto
+   * no señala a ningún turno.
+   */
+  cierre_caja: {
+    campos: { fecha: { campo: 'fecha' } },
+    mapas: { declarado: ARQUEO_POR_FORMA_DE_PAGO },
+    delFiltro: { caja: { campo: 'caja' }, cajero: { campo: 'cajero' } },
+    exigir: (_borrador, _filas, delFiltro) => {
+      if ((delFiltro['caja'] ?? '').trim() === '') {
+        return 'Falta la caja: escribe el código de la ventanilla arriba y pulsa «Buscar». Sin ella el cierre no señala a ningún turno.';
+      }
+      if ((delFiltro['cajero'] ?? '').trim() === '') {
+        return 'Falta el cajero: el turno que se cierra es el suyo, y sin él el arqueo no señala a ninguno.';
+      }
+      return undefined;
+    },
+    nota: true,
+  },
+
+  /**
+   * Anulación de convenio (RF-085, RF-086, #35, #423): el convenio se cierra y la
+   * deuda acogida vuelve a la fase de la que salió.
+   *
+   * **Su cuerpo lo decide el botón**, y por eso esta pantalla estaba fuera: las
+   * tres acciones del prototipo —«Anular», «Reformar», «Quebrar»— son la misma
+   * ruta con `accion` distinta, porque para el libro son el mismo acto y lo que
+   * cambia es el motivo administrativo (`PeticionDeCierreDeConvenio`). Ver
+   * `segunLaAccion` de `OpcionesDeEscritura`.
+   *
+   * **«Reformar» no se declara**, y no por descuido: `REFORMULACION` exige además
+   * el convenio nuevo que sustituye al anterior —`PeticionDeFraccionamiento`
+   * entero, con al menos una obligación acogida—, y esta pantalla no dibuja
+   * ninguna grilla de deuda; es el mismo hueco por el que `fraccionamiento` está
+   * en `ACTOS_SIN_CAMPO`. Declararla mandaría `accion: REFORMULACION` sin
+   * `reformulacion`, que es el 422 que el controlador contesta nombrándolo.
+   *
+   * El número del convenio llega **por la URL** —`/tesoreria/anulacion-convenio/{nro}`,
+   * el número impreso que el contribuyente trae—, igual que en la anulación de un
+   * recibo: `numConv2` no se declara, porque dos sitios para el mismo número no
+   * tienen forma de decidir cuál manda cuando no coinciden.
+   *
+   * `responsableAnul` y `numAnul` son `"ro"`: el primero lo pone el servidor con
+   * quien firma la sesión y el segundo se numera al registrar. `nDeMemorando` no
+   * tiene campo en el catálogo. `glosa` es la misma observación que ya pide
+   * `useEscritura` (regla 10).
+   */
+  anulacion_convenio: {
+    campos: {
+      fechaAnul: { campo: 'fechaAnul' },
+      motivo: { campo: 'motivo' },
+    },
+    segunLaAccion: {
+      Anular: { accion: 'ANULACION' },
+      Quebrar: { accion: 'QUIEBRE' },
+    },
+    exigir: (borrador) =>
+      (borrador['motivo'] ?? '').trim() === ''
+        ? 'Falta el motivo: es el sustento del acto, y el backend lo exige. Sin él no se puede anular ni quebrar el convenio.'
+        : undefined,
+    nota: true,
+  },
+
   /* ── Tránsito (#77) ────────────────────────────────────────────────── */
 
   /**
@@ -1524,3 +1671,32 @@ export const escrituraDe = (opcion: string): EscrituraDeclarada | undefined =>
 
 /** Las opciones que declaran escritura. La prueba de la lista blanca las mira. */
 export const OPCIONES_QUE_ESCRIBEN = Object.keys(ESCRITURAS);
+
+/**
+ * **Que hace el formulario con este campo del catalogo**, cuando un mapa lo
+ * sustituye (#423).
+ *
+ * Dos respuestas y no una, porque un mapa sustituye a **varios** campos y solo
+ * se dibuja una vez:
+ *
+ *   `{ mapa, nombre }`  este es el primero: aqui van sus filas
+ *   `{ }`               este es otro de los sustituidos: no se dibuja nada
+ *   `undefined`         no lo sustituye ningun mapa: el campo de siempre
+ *
+ * Es hermana de `resolutorDeCampo` (`composicion.ts`) y con la misma barrera de
+ * `Object.hasOwn` un nivel arriba —`escrituraDe`—: 132 de las 134 opciones no
+ * declaran ningun mapa y no se enteran de que esto existe.
+ */
+export function mapaEnElCampo(
+  opcion: string,
+  campo: string,
+): { readonly nombre: string; readonly mapa: MapaDelCuerpo } | Record<string, never> | undefined {
+  const mapas = escrituraDe(opcion)?.mapas;
+  if (mapas === undefined) return undefined;
+  for (const [nombre, mapa] of Object.entries(mapas)) {
+    const donde = mapa.enVezDe.indexOf(campo);
+    if (donde === 0) return { nombre, mapa };
+    if (donde > 0) return {};
+  }
+  return undefined;
+}

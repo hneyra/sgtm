@@ -218,9 +218,15 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // la vez: `LA_QUE_ESCRIBE` para que la primaria sea «Registrar descargo» y
       // no «Notificar al administrado», y el control anadido para el numero de
       // expediente de mesa de partes, que el catalogo dibuja de solo lectura.
+      //
+      // **Y dos mas con #423**: `cierre_caja` y `anulacion_convenio`, las dos
+      // que #74 dejo fuera porque `escrituras.ts` no sabia declarar sus cuerpos
+      // —un mapa por forma de pago y un discriminador por accion—. Las dos
+      // llegan desde `sin-declaracion`, que es donde estaban.
+      //
       // **Y una mas con #445**: `predial_masivo`, la primera de las cinco
       // determinaciones que asienta su corrida en vez de solo simularla.
-      declarada: 17,
+      declarada: 19,
       // **Una, y es nueva con #424**: `transito_reportes`. Viene de
       // `sin-declaracion` —su operacion es un `POST` y no declara escritura—, y
       // esa causa decia de ella lo unico que no es cierto: que «la pantalla aún
@@ -285,8 +291,10 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // estaban donde toca desde #77; estas dos y las dos de infracciones eran
       // las que quedaban descolocadas.
       //
+      // **Y dos menos con #423**: las dos de tesoreria que ya declaran su
+      // cuerpo. Este numero tampoco se sumo a mano: se recompuso ejecutando.
       // **Y una menos con #445**: `predial_masivo` se va a `declarada`.
-      'sin-declaracion': 21,
+      'sin-declaracion': 19,
       // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
       // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
       // «Guardar» de una ficha `GET` se cae— y repartir el valor de una
@@ -316,12 +324,23 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(impedimentoDelActo('cuenta_corriente', ['Exportar', 'Registrar pago'])?.causa).toBe(
       'sin-backend',
     );
-    // Escribe en el contrato y no ha declarado su cuerpo: `cierre_caja` (#36,
-    // #74) — el `declarado` que exige `PeticionDeCierre` es un mapa por forma
-    // de pago, y `CampoDelCuerpo`/`TablaDelCuerpo` no saben construirlo todavía.
+    /* Escribe en el contrato y no ha declarado su cuerpo: `costas_procesales`
+       (#42, #76). El testigo era `cierre_caja` hasta #423, que le enseño a
+       `escrituras.ts` a declarar un mapa por forma de pago y la saco de esta
+       casilla; se comprueba tambien lo segundo, que es lo que convierte el
+       cambio de testigo en una afirmacion y no en un apaño. */
     expect(
-      impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja'])?.causa,
+      impedimentoDelActo('costas_procesales', [
+        'Nuevo',
+        'Modificar',
+        'Anular',
+        'Imprimir',
+        'Guardar',
+      ])?.causa,
     ).toBe('sin-declaracion');
+    expect(
+      impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja']),
+    ).toBeUndefined();
     // Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
     // no tiene donde escribir** (#33, #74): a `caja_tributaria` le falta el
     // medio de pago —EFECTIVO/CHEQUE/DEPOSITO/TARJETA/TRANSFERENCIA—, un campo
@@ -410,12 +429,14 @@ describe('un solo vocabulario de accion, y solo donde se declara', () => {
     /* Y **cuantas son**, que es lo que convierte el bucle en una comprobacion.
        Sin esta cifra, meter media docena de opciones en cualquiera de las dos
        listas las sacaria del bucle sin que nada lo dijera: el recorrido pasaria
-       igual, con menos vueltas. 134 − 9 − 12. */
-    expect(intactas).toBe(113);
+       igual, con menos vueltas. 134 − 9 − 13. */
+    expect(intactas).toBe(112);
     // Seis de catastro y **tres de rentas** desde #442: las tres lecturas del
     // padron, que son el mismo caso que las cuatro fichas catastrales.
     expect(VOCABULARIO_UNIFORME.size).toBe(9);
-    expect(Object.keys(LA_QUE_ESCRIBE).length).toBe(12);
+    // Once desde #421, la doceava con #429 y la treceava con #423
+    // (`anulacion_convenio`, cuya primaria del catalogo no es la que anula).
+    expect(Object.keys(LA_QUE_ESCRIBE).length).toBe(13);
     // Y las seis que si lo declaran existen de verdad en el catalogo: sin
     // esto, un identificador mal escrito dejaria la regla sin aplicarse a nada
     // y las pruebas de abajo seguirian en verde.
@@ -573,6 +594,15 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
       opcion: 'adm_valores',
       escribe: 'Procesar',
       barra: ['Nuevo', 'Modificar', 'Guardar', 'Anular', 'Imprimir', 'Procesar'],
+    },
+    /* Tesoreria (#423), y la primera con **dos** acciones que escriben: «Anular»
+       y «Quebrar» mandan las dos, con `accion` distinta. Lo que se declara aqui
+       sigue siendo una sola cosa —cual es el acto de la pantalla—, y con el orden
+       del catalogo el navy le tocaba a «Quebrar», que es el acto excepcional. */
+    {
+      opcion: 'anulacion_convenio',
+      escribe: 'Anular',
+      barra: ['Nuevo', 'Modificar', 'Guardar', 'Deshacer', 'Reformar', 'Quebrar', 'Anular'],
     },
   ])('$opcion pone «$escribe» al final, y no quita ninguna', async ({ opcion, escribe, barra }) => {
     const pantallas = await todasLasPantallas();
