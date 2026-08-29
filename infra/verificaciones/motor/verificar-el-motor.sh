@@ -121,6 +121,23 @@ done
 [ "$(comoSuperusuario "SELECT has_database_privilege('sgtm_readonly','sgtm','CONNECT')")" = "t" ] \
     || { echo "FALLO: sgtm_readonly perdio el CONNECT sobre la base del padron" >&2; exit 1; }
 
+# ── 5b. El rol de carga no llega a la base de Keycloak ───────────────────────
+#
+# La leccion de `sgtm_respaldo` (#155), aplicada al otro rol privilegiado, y en la
+# direccion que faltaba: ya se comprobaba que el rol de Keycloak no alcanza el padron,
+# pero no que el rol que publica cifras normativas no alcance la base de identidad.
+# `30-base-de-keycloak.sh` revoca el CONNECT de PUBLIC sobre `keycloak` y se lo concede
+# SOLO a `keycloak`; esto es lo que exige que esa lista no crezca.
+#
+# Lo que NO se comprueba aqui es cuantas TABLAS puede escribir: este guion corre la
+# inicializacion del motor, no las migraciones, asi que el esquema todavia no existe.
+# Esa mitad vive en `LasDosGuardasDeLaCargaTest` (sgtm-parametros), que migra de verdad
+# y la mide por el catalogo — que es lo unico que distingue las dos guardas, porque las
+# dos dan 42501 (#380, #435).
+echo "· rol_carga_parametros no llega a la base de Keycloak"
+[ "$(comoSuperusuario "SELECT has_database_privilege('rol_carga_parametros','keycloak','CONNECT')" postgres)" = "f" ] \
+    || { echo "FALLO: rol_carga_parametros puede conectarse a la base de Keycloak. No la necesita —solo escribe el catalogo normativo del padron—, y una credencial de mas apuntando a otra base es una credencial de mas (la leccion de sgtm_respaldo, #155)" >&2; exit 1; }
+
 # ── 6. Keycloak: base propia, y lejos del padron ─────────────────────────────
 echo "· La base de Keycloak"
 [ "$(comoSuperusuario "SELECT 1 FROM pg_database WHERE datname='keycloak'" postgres)" = "1" ] \

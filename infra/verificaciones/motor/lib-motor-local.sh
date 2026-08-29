@@ -163,6 +163,12 @@ motor_como_superusuario() {
 }
 
 BINARIOS=$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | tail -1 || true)
+# Un PostgreSQL instalado fuera de la ruta de Debian —un toolchain desempaquetado en
+# $HOME, que es como se llega a este guion en una maquina sin Docker ni root— tambien
+# vale: lo que hace falta es `initdb`, no una ruta concreta.
+if [ -z "$BINARIOS" ] && command -v initdb >/dev/null 2>&1; then
+    BINARIOS=$(dirname "$(command -v initdb)")
+fi
 
 # `SGTM_MOTOR_MODO=local` fuerza la instancia local aunque haya Docker. Lo usa
 # `respaldo/simulacro-de-restauracion.sh` (issue #155): el PITR exige apagar el motor,

@@ -162,6 +162,20 @@ jobs:
       - name: verificar-el-motor.sh --con-aislamiento
         run: infra/verificaciones/motor/verificar-el-motor.sh --ambiente stg --con-aislamiento
 
+      # `verificar-rotacion.sh` existia desde #154 y **no lo corria nadie** —INF-06 lo
+      # decia con todas las letras: «corrido a mano (no esta en CI)»—. Una verificacion
+      # escrita que nunca se ejecuta no protege nada; es la misma leccion que
+      # `verificar-cuadros.mjs` dejo en #188. Entra aqui porque necesita exactamente lo
+      # que este trabajo ya tiene: un motor levantado con los guiones del manifiesto.
+      #
+      # Los DOS roles del inventario con `LOGIN` y clave que rotar (issue #435). El de
+      # carga no se habia ejercitado nunca, y es el unico que publica cifras normativas.
+      - name: La rotacion, contra un motor real, para los dos roles que rotan
+        run: |
+          set -euo pipefail
+          infra/secretos/verificar-rotacion.sh --ambiente stg --rol sgtm_app
+          infra/secretos/verificar-rotacion.sh --ambiente stg --rol rol_carga_parametros
+
   raiz-sellada:
     name: La raiz sellada arranca, y su /tmp no es decorativo
     runs-on: ubuntu-latest
@@ -376,43 +390,62 @@ jobs:
       # Correrlo otra vez tiene que ser un no-op: nada nuevo, y los valores que ya
       # existian se quedan exactamente iguales. Se compara por huella (sha256 corto),
       # nunca por el valor.
-      - name: Volver a correrlo no cambia nada
+      #
+      # **Se comparan TODAS las entradas del inventario, no una.** Hasta el issue #435
+      # esto miraba solo `clave-app`, de modo que una entrada nueva —`postgres-carga`
+      # entro con #387— podia regenerarse en cada corrida sin que nada lo dijera, y el
+      # sintoma seria una credencial rotada sin que nadie lo pidiera **en el unico rol
+      # que publica cifras normativas**. La lista sale de `yarn secretos`, asi que la
+      # siguiente entrada entra sola.
+      - name: Volver a correrlo no cambia nada, en NINGUNA clave del inventario
         working-directory: infra
         run: |
           set -euo pipefail
-          huella_de() {
-            kubectl -n "$1" get secret "$2" -o jsonpath="{.data.$3}" \
-              | base64 --decode | sha256sum | cut -c1-12
+          huellas_de() {
+            yarn --silent secretos --ambiente "$1" | node -e '
+              const datos = JSON.parse(require("fs").readFileSync(0, "utf8"));
+              process.stdout.write(datos.map((e) => e.secreto + " " + e.clave).join("\n"));
+            ' | while read -r secreto clave; do
+              [ -n "$secreto" ] || continue
+              valor=$(kubectl -n "sgtm-$1" get secret "$secreto" -o jsonpath="{.data.$clave}")
+              echo "$secreto/$clave $(printf '%s' "$valor" | base64 --decode | sha256sum | cut -c1-12)"
+            done
           }
-          antes=$(huella_de sgtm-stg sgtm-stg-postgres-app clave-app)
+          huellas_de stg > /tmp/antes.txt
+          echo "Inventario medido:"; cat /tmp/antes.txt
 
           ./secretos/bootstrap-secretos.sh --ambiente stg
 
-          despues=$(huella_de sgtm-stg sgtm-stg-postgres-app clave-app)
-          if [ "$antes" != "$despues" ]; then
+          huellas_de stg > /tmp/despues.txt
+          if ! diff -u /tmp/antes.txt /tmp/despues.txt; then
             echo "::error::bootstrap-secretos.sh cambio una clave que ya existia. Eso" \
-                 "rotaria credenciales de la aplicacion en cada pulumi up, sin que" \
-                 "nadie lo pidiera."
+                 "rotaria credenciales en cada pulumi up, sin que nadie lo pidiera."
             exit 1
           fi
-          echo "La huella no cambio: $antes"
+          echo "Ninguna de las $(wc -l < /tmp/antes.txt) huellas cambio."
 
       # La demostracion del issue: "volviendo a poner la misma clave para sgtm_owner y
       # sgtm_app... esa es la que hay que escribir: claves distintas, comprobado". Se
       # fuerza aqui, contra el cluster real, y se exige que la comprobacion de arriba
       # lo detecte.
+      #
+      # **Se fuerza sobre `postgres-carga`, y no sobre `postgres-app`** (issue #435): es
+      # el rol que publica cifras normativas de ambito nacional, el ultimo que entro al
+      # inventario, y el que la demostracion anterior no tocaba. El mecanismo es el
+      # mismo —`verificar-claves-distintas.sh` recorre el inventario entero—, asi que
+      # cambiar la victima no debilita nada y cubre la entrada nueva.
       - name: 'Demostracion: dos claves iguales se detectan'
         working-directory: infra
         run: |
           set -euo pipefail
           valor_de_owner=$(kubectl -n sgtm-stg get secret sgtm-stg-postgres-owner \
               -o jsonpath='{.data.clave-owner}')
-          kubectl -n sgtm-stg patch secret sgtm-stg-postgres-app --type=merge \
-              -p "{\"data\":{\"clave-app\":\"$valor_de_owner\"}}"
+          kubectl -n sgtm-stg patch secret sgtm-stg-postgres-carga --type=merge \
+              -p "{\"data\":{\"clave-carga\":\"$valor_de_owner\"}}"
 
           if ./secretos/verificar-claves-distintas.sh --ambiente stg --namespace sgtm-stg; then
             echo "::error::verificar-claves-distintas.sh NO detecto que sgtm_owner y" \
-                 "sgtm_app comparten clave. La comprobacion no protege nada."
+                 "rol_carga_parametros comparten clave. La comprobacion no protege nada."
             exit 1
           fi
           echo "Correcto: la comprobacion detecto las dos claves iguales."
