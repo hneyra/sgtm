@@ -78,9 +78,11 @@ describe('una opcion conectada y una sin conectar conviven', () => {
     expect(OPCIONES_CONECTADAS).toContain('papeletas');
     expect(OPCIONES_CONECTADAS).toContain('adm_estado_cuenta');
     expect(OPCIONES_CONECTADAS).toContain('coactiva_expedientes');
-    // Veintidos de las veintitres de Transito estan conectadas (#77, #396,
-    // #398, ver `pantallas/transito/index.ts`); la que queda —el emisor de
-    // reportes— es un `POST` y no tiene puerta por la que entrar.
+    // Veintidos de las veintitres de Transito conectan una `Conexion` (#77,
+    // #396, #398, ver `pantallas/transito/index.ts`). La que queda —el emisor
+    // de reportes— **si esta conectada desde #424**, pero por otra puerta: es
+    // una lectura por `POST` (`lecturas-por-post.ts`), y una `Conexion` la
+    // dispararia al abrir la pantalla, sin tipo de reporte elegido.
     expect(OPCIONES_CONECTADAS).toContain('codigos_transito');
     expect(OPCIONES_CONECTADAS).toContain('transito_resumen_papeletas');
     expect(OPCIONES_CONECTADAS).not.toContain('transito_reportes');

@@ -18,6 +18,7 @@ import type { ActoSinCampo } from './actos';
 import { operacionDe } from './busqueda';
 import { ALTAS_DECLARADAS } from './composicion';
 import { OPCIONES_QUE_ESCRIBEN } from './escrituras';
+import { OPCIONES_QUE_LEEN_POR_POST } from './lecturas-por-post';
 
 /**
  * `ACTOS_SIN_CAMPO` esta vacia desde #73: las dos transferencias que la
@@ -133,8 +134,10 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
   it('cada una de las 134 cae en su casilla, y las cuentas son las que son', async () => {
     const pantallas = await todasLasPantallas();
     const declaradas = new Set(OPCIONES_QUE_ESCRIBEN);
+    const leenPorPost = new Set(OPCIONES_QUE_LEEN_POR_POST);
     const porCausa = {
       declarada: 0,
+      lectura: 0,
       salida: 0,
       'sin-backend': 0,
       'sin-declaracion': 0,
@@ -163,6 +166,16 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
            callandose. */
         if (declaradas.has(opcion)) {
           porCausa.declarada += 1;
+          continue;
+        }
+        /* O declaro su **lectura por `POST`** (#424): su acto funciona y no
+           guarda nada, asi que no tiene impedimento y tampoco es una primaria
+           de salida —«Cancelar», en el emisor de reportes de transito—. Sin
+           esta rama el bucle exigiria ahi un rotulo de impresion y se pondria
+           rojo nombrandolo, que es exactamente lo que hay que evitar contando
+           mal en vez de contar otra casilla. */
+        if (leenPorPost.has(opcion)) {
+          porCausa.lectura += 1;
           continue;
         }
         const primaria = acciones[acciones.length - 1] ?? '';
@@ -197,6 +210,12 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // `transito_cambio_numero` llega desde `sin-declaracion`, porque su
       // primaria del catalogo («Salir») no pasa ningun filtro de salida.
       declarada: 15,
+      // **Una, y es nueva con #424**: `transito_reportes`. Viene de
+      // `sin-declaracion` —su operacion es un `POST` y no declara escritura—, y
+      // esa causa decia de ella lo unico que no es cierto: que «la pantalla aún
+      // no manda estos campos». Los manda; lo que no hace es guardar nada. Es la
+      // tercera puerta (`lecturas-por-post.ts`), y su acto funciona.
+      lectura: 1,
       // Dos menos que en la onda 4: `alcabala` y `espectaculos` se mudan a
       // `sin-campo` (#385). Su primaria de impresion las dejaba aqui, con el
       // boton apagado y el motivo real —los campos que el backend exige y la
@@ -233,7 +252,11 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // pasaba ningun filtro de salida («REC 2», «Padrón», «Resol. consentida»,
       // «Cancelar» y «Cancelar»)—, asi que cambian de boton sin cambiar de
       // casilla: el censo cuenta la causa, no el rotulo.
-      'sin-declaracion': 25,
+      //
+      // **Y una menos con #424**: `transito_reportes` se va a `lectura`. Las dos
+      // mudanzas van en direcciones opuestas y **el numero no se sumo a mano**:
+      // se recompuso ejecutando el censo sobre el arbol ya mergeado.
+      'sin-declaracion': 24,
       // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
       // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
       // «Guardar» de una ficha `GET` se cae— y repartir el valor de una

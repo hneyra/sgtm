@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { agruparMiles } from '@sgtm/dominio';
 import { OPCIONES_CONECTADAS } from '../conexiones';
+import { OPCIONES_QUE_LEEN_POR_POST } from '../lecturas-por-post';
 import { SIN_DATO, leerPaginado } from '../seguridad/listado';
 import { montarEnRuta } from '../../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada, primariaDeLaPantalla } from '../../pruebas/acciones';
@@ -28,10 +29,11 @@ import { FILTROS_CON_MOTIVO } from '../prosa-textos';
  * `transito_valores`). Cuatro escrituras se quedan en `ACTOS_SIN_CAMPO`
  * (`pantallas/actos.ts`).
  *
- * El unico que sigue sin conectar es `transito_reportes`, y ya no por falta de
- * `Controller` —#396 lo publico—: es un `POST`, y ninguna de las dos puertas
- * que el frontend tiene para uno le sirve. Ver el docblock de
- * `pantallas/transito/index.ts`.
+ * El ultimo, `transito_reportes`, se conecta con **#424**: no por una
+ * `Conexion` —que lo dispararia al abrir la pantalla, sin tipo de reporte
+ * elegido— sino por la tercera puerta, la lectura que viaja por `POST` y no
+ * escribe nada (`pantallas/lecturas-por-post.ts`). Su pantalla y sus criterios
+ * se comprueban en `emisor-de-reportes.test.tsx`.
  */
 
 /** Las seis pantallas del modulo que son hoja de reporte. */
@@ -118,14 +120,14 @@ describe('el modulo conectado hasta donde llega el backend (#77, #396, #398)', (
     }
   });
 
-  it('el emisor de reportes sigue sin conectar, y ya no por falta de Controller', () => {
-    // `POST /transito/reportes` existe desde #396. Lo que falta es la puerta:
-    // `useEscritura` exige observacion (regla 10) y este emisor no modifica
-    // nada; `useSimulacion` exige `simulacion: true` en el cuerpo, una marca
-    // que `PeticionDeReporteDeTransito` no puede declarar sin mentir; y una
-    // `Conexion` dispararia el `POST` al abrir la pantalla, sin tipo de
-    // reporte elegido. Ver el docblock de `pantallas/transito/index.ts`.
+  it('el emisor de reportes no registra una `Conexion`: entra por la tercera puerta (#424)', () => {
+    /* `POST /transito/reportes` existe desde #396 y desde #424 la pantalla lo
+       pide, pero **no** con una `Conexion`: `useDatosDeOperacion` mira los
+       parametros que faltan y no el verbo, asi que la dispararia al abrir la
+       pantalla —sin tipo de reporte elegido, que es un 422 que nadie pidio—.
+       Lo suyo es `lecturas-por-post.ts`, que se dispara al pulsar. */
     expect(OPCIONES_CONECTADAS).not.toContain('transito_reportes');
+    expect(OPCIONES_QUE_LEEN_POR_POST).toContain('transito_reportes');
   });
 
   it('los cinco filtros que no se pueden servir se dibujan bloqueados, con su motivo', () => {
