@@ -288,7 +288,15 @@ class ContratoDeApiTest {
                     // padron y dejando fila de ACCESO. La sirve rentas por lo mismo que la
                     // conciliacion: es el unico modulo que ve catastro y contribuyentes a la vez
                     // sin cerrar un ciclo.
-                    "GET /catastro/predios/{predioId}/titulares");
+                    "GET /catastro/predios/{predioId}/titulares",
+                    // #396 — las dos ultimas operaciones de Transito que el contrato declaraba y
+                    // ningun controlador servia. Ninguna es una adicion: las dos estaban desde que
+                    // el contrato se derivo del prototipo, y #53 las dejo fuera.
+                    // `transito_reportes`
+                    // es el emisor del modulo —la entrada del centro de reportes de ADR-0014 §5— y
+                    // no trae ninguna consulta nueva: llama a las mismas que los GET.
+                    "POST /transito/reportes",
+                    "GET /transito/papeletas/{numero}/hoja-informativa");
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria, nada mas. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");

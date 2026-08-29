@@ -8,6 +8,8 @@ import { SIN_DATO, leerPaginado } from '../seguridad/listado';
 import { montarEnRuta } from '../../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada, primariaDeLaPantalla } from '../../pruebas/acciones';
 import { ACTOS_SIN_CAMPO, impedimentoDelActo } from '../actos';
+import { FILTROS_BLOQUEADOS } from '../composicion';
+import { FILTROS_CON_MOTIVO } from '../prosa-textos';
 
 /**
  * Transito (#77): el modulo mas grande del menu, y **trece reportes**.
@@ -19,14 +21,17 @@ import { ACTOS_SIN_CAMPO, impedimentoDelActo } from '../actos';
  * puede depender de cual de las trece se toco por ultima vez (RNF-081,
  * RNF-084).
  *
- * De sus veintitres endpoints, veintiuno estan conectados desde #363/#77 —ver
- * `pantallas/transito/index.ts`—: trece lecturas y las dos escrituras propias
- * (`transito_cambio_numero`, `transito_valores`). Cuatro escrituras se quedan
- * en `ACTOS_SIN_CAMPO` (`pantallas/actos.ts`), y dos resumenes —
- * `transito_resumen_recaudacion`, `transito_resumen_papeletas`— sin conectar
- * porque su catalogo no encaja con ningun agrupador real de
- * `AgrupacionDelResumen`. `transito_reportes` y `transito_papeleta_reporte`
- * no tienen `Controller` todavia.
+ * De sus veintitres endpoints, veintidos estan conectados —ver
+ * `pantallas/transito/index.ts`—: **dieciseis lecturas** (las trece de
+ * #363/#77 mas los dos resumenes que #398 desbloqueo y la hoja informativa de
+ * #396) y las dos escrituras propias (`transito_cambio_numero`,
+ * `transito_valores`). Cuatro escrituras se quedan en `ACTOS_SIN_CAMPO`
+ * (`pantallas/actos.ts`).
+ *
+ * El unico que sigue sin conectar es `transito_reportes`, y ya no por falta de
+ * `Controller` —#396 lo publico—: es un `POST`, y ninguna de las dos puertas
+ * que el frontend tiene para uno le sirve. Ver el docblock de
+ * `pantallas/transito/index.ts`.
  */
 
 /** Las seis pantallas del modulo que son hoja de reporte. */
@@ -80,12 +85,12 @@ describe('las trece hojas son la misma hoja', () => {
 });
 
 /**
- * Las trece lecturas conectadas con `definirConexion` (registran una
+ * Las dieciseis lecturas conectadas con `definirConexion` (registran una
  * `Conexion`, que es lo que cuenta `OPCIONES_CONECTADAS`). Las dos escrituras
  * propias —`transito_cambio_numero`, `transito_valores`— no tienen `GET`, así
  * que no pasan por ahí: viven en `COMPONENTES_PROPIOS` y se comprueban aparte.
  */
-const LAS_TRECE_LECTURAS: readonly string[] = [
+const LAS_LECTURAS: readonly string[] = [
   'papeletas',
   'transito_busqueda',
   'transito_estado_cuenta',
@@ -99,23 +104,202 @@ const LAS_TRECE_LECTURAS: readonly string[] = [
   'transito_record_vehicular',
   'transito_resumen_codigo',
   'transito_resumen_placa',
+  // #398 — los dos que el backend no podia servir honestamente hasta ahora.
+  'transito_resumen_papeletas',
+  'transito_resumen_recaudacion',
+  // #396 — la hoja informativa, que hasta ahora no tenia `Controller`.
+  'transito_papeleta_reporte',
 ];
 
-describe('el modulo conectado hasta donde llega el backend (#77)', () => {
-  it('las trece lecturas con Controller estan en el registro', () => {
-    for (const opcion of LAS_TRECE_LECTURAS) {
+describe('el modulo conectado hasta donde llega el backend (#77, #396, #398)', () => {
+  it('las dieciseis lecturas con Controller estan en el registro', () => {
+    for (const opcion of LAS_LECTURAS) {
       expect(OPCIONES_CONECTADAS).toContain(opcion);
     }
   });
 
-  it('los dos resumenes que no encajan con ningun agrupador real siguen sin conectar', () => {
-    expect(OPCIONES_CONECTADAS).not.toContain('transito_resumen_recaudacion');
-    expect(OPCIONES_CONECTADAS).not.toContain('transito_resumen_papeletas');
+  it('el emisor de reportes sigue sin conectar, y ya no por falta de Controller', () => {
+    // `POST /transito/reportes` existe desde #396. Lo que falta es la puerta:
+    // `useEscritura` exige observacion (regla 10) y este emisor no modifica
+    // nada; `useSimulacion` exige `simulacion: true` en el cuerpo, una marca
+    // que `PeticionDeReporteDeTransito` no puede declarar sin mentir; y una
+    // `Conexion` dispararia el `POST` al abrir la pantalla, sin tipo de
+    // reporte elegido. Ver el docblock de `pantallas/transito/index.ts`.
+    expect(OPCIONES_CONECTADAS).not.toContain('transito_reportes');
   });
 
-  it('las dos opciones sin Controller siguen sin conectar', () => {
-    expect(OPCIONES_CONECTADAS).not.toContain('transito_reportes');
-    expect(OPCIONES_CONECTADAS).not.toContain('transito_papeleta_reporte');
+  it('los cinco filtros que no se pueden servir se dibujan bloqueados, con su motivo', () => {
+    const bloqueados = FILTROS_BLOQUEADOS.filter(({ opcion }) =>
+      opcion.startsWith('transito_resumen_'),
+    );
+
+    expect(bloqueados.map(({ opcion, campo }) => `${opcion}.${campo}`)).toEqual([
+      'transito_resumen_papeletas.agrupadoPor',
+      'transito_resumen_papeletas.cobranza',
+      'transito_resumen_recaudacion.agrupadoPor',
+      'transito_resumen_recaudacion.tipoDeCobranza',
+      'transito_resumen_recaudacion.caja',
+    ]);
+    // Un filtro bloqueado sin motivo se lee como una pantalla rota: los dos
+    // huecos que abre separar las listas son mudos (`prosa-textos.ts`).
+    for (const { opcion, campo } of bloqueados) {
+      expect(FILTROS_CON_MOTIVO).toContain(`${opcion}.${campo}`);
+    }
+  });
+});
+
+describe('los dos resumenes que #398 desbloqueo', () => {
+  it('la columna «Año» del resumen de papeletas sale con un año, no con un estado', async () => {
+    montarEnRuta('/transito/transito-resumen-papeletas');
+    const fila = (await screen.findByText('2025')).closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+
+    // `Linea.ano`, no `Linea.clave`: con `ANO` coinciden —y ese es el punto—,
+    // pero el campo que promete un año es `ano` (RNF-080).
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      '2025',
+      '388',
+      agruparMiles('76410.00'),
+      agruparMiles('1042'),
+      agruparMiles('162180.40'),
+      '92',
+      agruparMiles('32118.00'),
+    ]);
+  });
+
+  it('la lectura pide siempre agrupadoPor=ANO, aunque la URL traiga otra cosa', async () => {
+    const pedidas: string[] = [];
+    const original = globalThis.fetch;
+    const espia = globalThis.fetch;
+    globalThis.fetch = (entrada, opciones) => {
+      pedidas.push(typeof entrada === 'string' ? entrada : String(entrada));
+      return espia(entrada, opciones);
+    };
+    try {
+      montarEnRuta('/transito/transito-resumen-papeletas?agrupadoPor=ESTADO');
+      await screen.findByText('2025');
+    } finally {
+      globalThis.fetch = original;
+    }
+
+    const suya = pedidas.filter((url) => url.includes('/transito/reportes/resumen-papeletas'));
+    expect(suya).not.toHaveLength(0);
+    // Sin esto, la primera columna —que dice «Año»— se llenaria de nombres de
+    // estado, que es exactamente lo que #398 existe para impedir.
+    expect(suya.every((url) => url.includes('agrupadoPor=ANO'))).toBe(true);
+    expect(suya.some((url) => url.includes('agrupadoPor=ESTADO'))).toBe(false);
+  });
+
+  it('«Total S/» sale del recurso, y «Papeletas pagadas» sale vacia: un abono no es una papeleta', async () => {
+    montarEnRuta('/transito/transito-resumen-recaudacion');
+    // Dentro de la tabla: «Enero» tambien es una opcion del desplegable «Mes»
+    // que el prototipo dibuja en la barra de filtros.
+    const tabla = await screen.findByRole('table');
+    const fila = (await within(tabla).findByText('Enero')).closest('tr');
+    expect(fila).not.toBeNull();
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      'Enero',
+      agruparMiles('18412.00'),
+      agruparMiles('4120.00'),
+      agruparMiles('2180.00'),
+      // Una papeleta se puede pagar en varios abonos y un recibo puede abonar
+      // varias: `abonos` no es «papeletas pagadas».
+      SIN_DATO,
+      // Del `total` que compone el servidor, no de sumar las tres columnas
+      // (RNF-083).
+      agruparMiles('24712.00'),
+    ]);
+  });
+});
+
+describe('«Total S/» es el del servidor, tambien cuando no es la suma de lo dibujado', () => {
+  const original = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = original;
+  });
+
+  /**
+   * El caso real que el mock no puede publicar sin contradecir al prototipo: el
+   * libro tiene **cuatro** fases y el manual dibuja tres. Lo cobrado de una
+   * papeleta con su resolucion de multa ya emitida cae en `VALOR`, y ni se
+   * reparte entre las tres columnas —seria inventar un reparto— ni se deja
+   * fuera del total —seria publicar menos recaudacion de la que hubo—.
+   *
+   * Sin esta prueba, sumar las tres columnas en la interfaz pasaria en verde:
+   * en el juego de datos del prototipo la columna «Total S/» **coincide** con
+   * la suma de las otras tres, y la regla de ESLint de RNF-083 mira nombres de
+   * campo de dinero —`total`, `importe`, `monto`—, no el `texto` de una celda.
+   */
+  it('un mes con fase VALOR dibuja el total del recurso, no la suma de las tres columnas', async () => {
+    const conFaseValor = {
+      desde: '2026-01-01',
+      hasta: '2026-12-31',
+      total: '1500.00',
+      abonos: 4,
+      actualizadoA: '2026-08-13',
+      lineas: [],
+      porMes: [
+        {
+          mes: 3,
+          porFase: [
+            { fase: 'ORDINARIA', recaudado: '400.00', abonos: 1, actualizadoA: '2026-08-13' },
+            { fase: 'COACTIVA', recaudado: '300.00', abonos: 1, actualizadoA: '2026-08-13' },
+            { fase: 'CONVENIO', recaudado: '200.00', abonos: 1, actualizadoA: '2026-08-13' },
+            { fase: 'VALOR', recaudado: '600.00', abonos: 1, actualizadoA: '2026-08-13' },
+          ],
+          total: '1500.00',
+          abonos: 4,
+          actualizadoA: '2026-08-13',
+        },
+      ],
+    };
+    globalThis.fetch = () =>
+      Promise.resolve(
+        new Response(JSON.stringify(conFaseValor), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    montarEnRuta('/transito/transito-resumen-recaudacion');
+    const tabla = await screen.findByRole('table');
+    const fila = (await within(tabla).findByText('Marzo')).closest('tr');
+    const celdas = within(fila as HTMLElement).getAllByRole('cell');
+
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      'Marzo',
+      '400.00',
+      '300.00',
+      '200.00',
+      SIN_DATO,
+      // 400 + 300 + 200 = 900, y lo recaudado del mes fueron 1 500: los 600 de
+      // la fase VALOR no tienen columna en el manual y aun asi son dinero que
+      // entro.
+      agruparMiles('1500.00'),
+    ]);
+  });
+});
+
+describe('la hoja informativa de una papeleta (#396)', () => {
+  it('se dibuja con los cinco conceptos del acta, y su fecha es la de la infraccion', async () => {
+    montarEnRuta('/transito/transito-papeleta-reporte/C2025002635');
+
+    await screen.findByText('Base imponible');
+    const hoja = document.querySelector('[data-hoja="1"]');
+    expect(hoja).not.toBeNull();
+
+    // El detalle sale del recurso, no del catalogo del prototipo.
+    expect(hoja?.textContent).toContain('DS F1');
+    expect(hoja?.textContent).toContain('Porcentaje a cobrar');
+    // Los importes son los del acta: la hoja los fecha el dia de la
+    // infraccion, no el de hoy (regla 9).
+    expect(hoja?.textContent).toContain('2025-04-12');
+    // Y el pie del prototipo —«dentro de los cinco días hábiles»— no se copia:
+    // ese plazo es un parametro normativo (regla 5, #192).
+    expect(hoja?.textContent).not.toContain('cinco días hábiles');
   });
 });
 

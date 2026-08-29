@@ -17,7 +17,6 @@ import pe.gob.sgtm.sanciones.aplicacion.ConsultaDeResumenesDeSanciones;
 import pe.gob.sgtm.sanciones.aplicacion.ModelosDeLosReportesDeSanciones;
 import pe.gob.sgtm.sanciones.dominio.AgrupacionDelResumen;
 import pe.gob.sgtm.sanciones.dominio.CriterioDePadron;
-import pe.gob.sgtm.sanciones.dominio.EstadoDePapeleta;
 import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.sanciones.dominio.ResumenDePapeletas;
 import pe.gob.sgtm.web.Api;
@@ -207,7 +206,7 @@ public class ResumenesDeTransitoController {
                             + " agrupada por ejercicio, mes y tipo de cobranza");
         }
         LocalDate hoy = LocalDate.now(reloj);
-        int ejercicio = ejercicioDe(ano, hoy);
+        int ejercicio = CriteriosDeTransito.ejercicioDe(ano, hoy);
         return consulta.recaudacion(
                 Familia.TRANSITO,
                 LocalDate.of(ejercicio, 1, 1),
@@ -215,12 +214,20 @@ public class ResumenesDeTransitoController {
                 hoy);
     }
 
+    /**
+     * El resumen de papeletas pendientes y pagadas, agrupado.
+     *
+     * <p>Sin {@code agrupadoPor}, por <b>año</b> y no por estado (#398): la pantalla dibuja «Año»
+     * como primera columna, y el agrupador por omisión tiene que ser el que la llena. Con {@code
+     * ESTADO} —lo que este endpoint hacía— la columna se rellenaba con nombres de estado bajo un
+     * rótulo que dice «Año», que es lo que RNF-080 no permite.
+     */
     private ResumenDePapeletas resumenDePapeletasDe(
             @Nullable String desde, @Nullable String hasta, @Nullable String agrupadoPor) {
 
         AgrupacionDelResumen agrupacion =
                 agrupadoPor == null || agrupadoPor.isBlank()
-                        ? AgrupacionDelResumen.ESTADO
+                        ? AgrupacionDelResumen.ANO
                         : PeticionesDeSanciones.enumeradoDe(
                                 AgrupacionDelResumen.class, agrupadoPor, "agrupadoPor");
 
@@ -252,11 +259,8 @@ public class ResumenesDeTransitoController {
     }
 
     /**
-     * El criterio de los tres resúmenes de papeletas, con el rango por omisión.
-     *
-     * <p>Las iniciales entran como {@code prefijoDePlaca}, que el repositorio escribe como rango
-     * con {@code ~&gt;=~} / {@code ~&lt;~}: bajo RLS un {@code LIKE 'AB%'} no llega al índice
-     * (DAT-01 §0, tercer hallazgo).
+     * El criterio de los tres resúmenes, con el rango por omisión (ver {@link
+     * CriteriosDeTransito}).
      */
     private CriterioDePadron criterio(
             @Nullable String desde,
@@ -265,45 +269,7 @@ public class ResumenesDeTransitoController {
             @Nullable String codigo,
             @Nullable String prefijoDePlaca) {
 
-        LocalDate hoy = hoy();
-        LocalDate inicio =
-                desde == null || desde.isBlank()
-                        ? LocalDate.of(hoy.getYear(), 1, 1)
-                        : PeticionesDeSanciones.fechaDe(desde, "desde");
-        LocalDate fin =
-                hasta == null || hasta.isBlank()
-                        ? LocalDate.of(hoy.getYear(), 12, 31)
-                        : PeticionesDeSanciones.fechaDe(hasta, "hasta");
-
-        try {
-            return new CriterioDePadron(
-                    Familia.TRANSITO,
-                    inicio,
-                    fin,
-                    PeticionesDeSanciones.enumeradoSiViene(
-                            EstadoDePapeleta.class, estado, "estado"),
-                    codigo,
-                    null,
-                    prefijoDePlaca,
-                    null,
-                    null,
-                    null,
-                    false);
-        } catch (IllegalArgumentException invalido) {
-            throw PeticionesDeSanciones.invalido(invalido);
-        }
-    }
-
-    private static int ejercicioDe(@Nullable String ano, LocalDate hoy) {
-        if (ano == null || ano.isBlank()) {
-            return hoy.getYear();
-        }
-        try {
-            return Integer.parseInt(ano.strip());
-        } catch (NumberFormatException noEsUnNumero) {
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION, "El ano va como un entero de cuatro cifras: " + ano);
-        }
+        return CriteriosDeTransito.delResumen(hoy(), desde, hasta, estado, codigo, prefijoDePlaca);
     }
 
     private LocalDate hoy() {

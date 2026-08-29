@@ -319,6 +319,10 @@ const DEL_BACKEND = {
       'transito_resumen_placa',
       'adm_padron_notificaciones',
       'adm_resumen_recaudacion',
+      // La hoja informativa de una papeleta sale en los mismos tres formatos que
+      // las otras trece de #53: `HojaDePapeletaController` la dibuja con los
+      // renderizadores de `documentos` cuando llega `formato` (#396).
+      'transito_papeleta_reporte',
     ].map((id) => [id, [FORMATO_DE_REPORTE]]),
   ),
   // Los dos records no dibujan ningun filtro en el prototipo —ni siquiera en
@@ -392,6 +396,25 @@ const DESCRIPCIONES = {
     motivo que la licencia en el record de conductor. Con \`?formato=PDF|XLS|RTF\` sale como
     documento (RF-132).
   `),
+  transito_reportes: bloque(`
+    Emisor de los reportes del módulo de tránsito y entrada de su centro de reportes
+    (ADR-0014 §5, #396). El campo \`reporte\` elige entre \`PADRON\`, \`PADRON_COACTIVA\`,
+    \`PADRON_CONSTANCIAS\`, \`RECORD_CONDUCTOR\`, \`RECORD_VEHICULAR\`, \`RESUMEN_RECAUDACION\`,
+    \`RESUMEN_PAPELETAS\`, \`RESUMEN_CODIGO\` y \`RESUMEN_PLACA\`; con \`formato\` la respuesta es
+    el documento en PDF, hoja de cálculo o texto enriquecido (RF-132), y sin él, el JSON. No
+    hay ninguna consulta nueva detrás: llama a las mismas que los GET. **Un criterio que el
+    reporte elegido no usa se rechaza con 422 nombrándolo**, en vez de ignorarse: pedir el
+    resumen de recaudación «de una placa» devolvería el de todas y nada lo diría.
+  `),
+  transito_papeleta_reporte: bloque(`
+    Hoja informativa de una papeleta de tránsito: el acta con su desglose, el código del
+    catálogo que la sustenta y a quién se le cobra (#396, RF-068). Los seis importes son los
+    **del acta**, congelados al registrarla, y por eso \`actualizadoA\` es la fecha de la
+    infracción y no la de hoy; \`emitidaEl\` es el día en que sale la hoja, con el que se
+    resolvió el domicilio del obligado. **No dice lo que se debe hoy**: esa cifra es del libro
+    y la publica \`transito_estado_cuenta\`. Una papeleta que no existe responde **404**, no
+    una hoja vacía. Con \`?formato=PDF|XLS|RTF\` sale como documento (RF-132).
+  `),
   transito_constancia_libre: bloque(`
     Emite el documento con el que la municipalidad acredita que un vehículo no registra
     papeletas de tránsito pendientes (#53, RF-068). \`verificadaAl\` es el día al que se
@@ -419,14 +442,20 @@ const DESCRIPCIONES = {
     Lo recaudado por papeletas de tránsito, según el **libro de cuenta corriente**: la suma
     exacta de los abonos vivos, desglosada por ejercicio, mes y tipo de cobranza (#53,
     RF-073). No se recompone sumando papeletas pagadas —esa cifra no cuenta los intereses
-    cobrados, cuenta entero un pago parcial y sigue contando un recibo anulado—. El filtro por
-    caja no se sirve aquí: la caja es de tesorería (\`GET /tesoreria/recaudacion/por-area\`).
+    cobrados, cuenta entero un pago parcial y sigue contando un recibo anulado—. Además de
+    \`lineas\`, la respuesta trae \`porMes\`: una entrada por mes con las fases desglosadas y
+    **su total ya sumado en el servidor** (#398), porque recomponerlo en el cliente es lo que
+    RNF-083 prohíbe. El filtro por caja no se sirve aquí: la caja es de tesorería (\`GET
+    /tesoreria/recaudacion/por-area\`).
   `),
   transito_resumen_papeletas: bloque(`
-    Cuántas papeletas hay y por cuánto, agrupadas por estado, código, iniciales de placa o mes
-    (#53, RF-073). Todos los importes son los **de las actas**, no lo cobrado: lo cobrado está
-    en \`transito_resumen_recaudacion\`. Cada línea trae las pendientes y las que están en
-    coactiva en columnas separadas, así que no hace falta pedir el resumen dos veces.
+    Cuántas papeletas hay y por cuánto, agrupadas por **año** —lo que toma por omisión—, mes,
+    estado, código o iniciales de placa (#53, RF-073, #398). Cada línea publica \`ano\` cuando
+    el agrupador lo determina —\`ANO\` y \`MES\`— y nulo cuando no, porque agrupar por estado o
+    por código mezcla años dentro de un grupo. Todos los importes son los **de las actas**, no
+    lo cobrado: lo cobrado está en \`transito_resumen_recaudacion\`. Cada línea trae las
+    pendientes y las que están en coactiva en columnas separadas, así que no hace falta pedir
+    el resumen dos veces.
   `),
   transito_resumen_codigo: bloque(`
     El mismo resumen agrupado por código de infracción, con su descripción (#53, RF-073).
