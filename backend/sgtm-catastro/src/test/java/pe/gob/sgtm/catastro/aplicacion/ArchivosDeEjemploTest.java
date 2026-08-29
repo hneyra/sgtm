@@ -52,7 +52,7 @@ class ArchivosDeEjemploTest {
     }
 
     @Test
-    @DisplayName("los cinco archivos existen donde el README dice")
+    @DisplayName("los ocho archivos de la siembra existen donde el README dice")
     void losArchivosExisten() {
         assertThat(ejemplos()).isDirectory();
         for (String nombre :
@@ -62,9 +62,17 @@ class ArchivosDeEjemploTest {
                         "manzanas.csv",
                         "contribuyentes.csv",
                         "fichas.csv",
-                        "README.md")) {
+                        // Los tres de rentas: aqui solo se comprueba que esten, porque
+                        // `sembrar-demostracion.sh` los nombra y una siembra que descubre
+                        // en el paso 7 que falta el archivo del 8 queda a medias, y a
+                        // medias es el estado que peor se lee. Que se analicen de verdad
+                        // lo comprueba ArchivosDeEjemploDeRentasTest, en sgtm-rentas.
+                        "vehiculos.csv",
+                        "transferencias.csv",
+                        "deuda.csv")) {
             assertThat(ejemplos().resolve(nombre)).as(nombre).isRegularFile();
         }
+        assertThat(ejemplos().getParent().resolve("README.md")).isRegularFile();
     }
 
     @Test
@@ -104,14 +112,19 @@ class ArchivosDeEjemploTest {
                 .as(
                         "cada fila nombra sector, manzana, via y contribuyente: si uno falla, sale aqui")
                 .isEmpty();
-        assertThat(fichas.nuevas()).isEqualTo(fichas.totalFilas()).isGreaterThanOrEqualTo(10);
+        assertThat(fichas.nuevas()).isEqualTo(fichas.totalFilas()).isGreaterThanOrEqualTo(20);
         assertThat(catastro.fichasRegistradas().stream().map(f -> f.tipo()).distinct().toList())
                 .as(
                         "los cuatro tipos de ficha, para que la demostracion muestre las cuatro pantallas")
                 .containsExactlyInAnyOrder(TipoFicha.values());
-        assertThat(catastro.titularidadesRegistradas())
-                .as("cada predio de ejemplo tiene titular")
-                .hasSameSizeAs(catastro.fichasRegistradas());
+        // Uno, y solo uno, sin titular. No es un descuido del archivo: en un levantamiento
+        // catastral es lo normal fichar antes de identificar al propietario, InscribirFicha
+        // lo admite, y es el unico modo de que la conciliacion catastro-rentas (ADR-0015) y
+        // la deteccion de omisos tengan delante el caso que existen para tratar. Se cuenta
+        // en vez de admitirse «alguno»: dos serian un archivo que se esta desmoronando.
+        assertThat(catastro.fichasRegistradas().size() - catastro.titularidadesRegistradas().size())
+                .as("exactamente un predio de ejemplo se ficha sin titular identificado")
+                .isEqualTo(1);
     }
 
     @Test
@@ -164,7 +177,7 @@ class ArchivosDeEjemploTest {
     void losDocumentosSonDeMentira() throws IOException {
         List<FilaCsv> filas = LectorDeFilasCsv.leer(abrir("contribuyentes.csv"));
 
-        assertThat(filas).hasSizeGreaterThanOrEqualTo(8);
+        assertThat(filas).hasSizeGreaterThanOrEqualTo(16);
         assertThat(filas)
                 .allSatisfy(
                         fila -> {
