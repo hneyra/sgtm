@@ -1,8 +1,10 @@
 package pe.gob.sgtm.fiscalizacion.infraestructura.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -14,52 +16,79 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
+import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.fiscalizacion.aplicacion.ConsultaDeProgramas;
 import pe.gob.sgtm.fiscalizacion.aplicacion.RegistrarPrograma;
+import pe.gob.sgtm.fiscalizacion.dominio.CriterioDeProgramas;
+import pe.gob.sgtm.fiscalizacion.dominio.EstadoDePrograma;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacionRepository;
 import pe.gob.sgtm.fiscalizacion.dominio.TipoDePrograma;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
 import pe.gob.sgtm.web.ManejadorDeErrores;
+import pe.gob.sgtm.web.ParametrosDePaginacion;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * #45 — Capa web: se prueba el transporte (forma del JSON, la observacion obligatoria), no la
- * persistencia —eso ya lo verifica {@code ProgramaFiscalizacionRepositoryJdbcTest} contra
- * PostgreSQL real.
+ * #45 y #431 — Capa web: se prueba el transporte (forma del JSON, la observacion obligatoria, de
+ * donde salen los filtros del listado), no la persistencia —eso ya lo verifica {@code
+ * ProgramaFiscalizacionRepositoryJdbcTest} contra PostgreSQL real.
  */
-@DisplayName("Capa web — POST /api/v1/fiscalizacion/programas")
+@DisplayName("Capa web — GET y POST /api/v1/fiscalizacion/programas")
 class ProgramasControllerTest {
 
     private final List<ProgramaFiscalizacion> guardados = new ArrayList<>();
+
+    /**
+     * Un doble que <b>anota lo que le llega</b>: es lo que permite comprobar que los dos filtros
+     * del listado viajan por la consulta y no se pierden por el camino.
+     */
+    private final List<CriterioDeProgramas> criteriosPedidos = new ArrayList<>();
+
+    private final List<Paginacion> paginacionesPedidas = new ArrayList<>();
+
+    private final ProgramaFiscalizacionRepository repositorio =
+            new ProgramaFiscalizacionRepository() {
+                private long siguiente = 1;
+
+                @Override
+                public ProgramaFiscalizacion insertar(ProgramaFiscalizacion programa) {
+                    ProgramaFiscalizacion guardado =
+                            new ProgramaFiscalizacion(
+                                    siguiente++,
+                                    programa.codigo(),
+                                    programa.descripcion(),
+                                    programa.tipo(),
+                                    programa.fechaInicio(),
+                                    programa.fechaFin(),
+                                    programa.estado());
+                    guardados.add(guardado);
+                    return guardado;
+                }
+
+                @Override
+                public Optional<ProgramaFiscalizacion> findById(long id) {
+                    return guardados.stream().filter(p -> p.id() == id).findFirst();
+                }
+
+                @Override
+                public Pagina<ProgramaFiscalizacion> consultar(
+                        CriterioDeProgramas criterio, Paginacion paginacion) {
+                    criteriosPedidos.add(criterio);
+                    paginacionesPedidas.add(paginacion);
+                    return Pagina.de(List.copyOf(guardados), paginacion, guardados.size());
+                }
+            };
+
     private final RegistrarPrograma servicio =
-            new RegistrarPrograma(
-                    new ProgramaFiscalizacionRepository() {
-                        private long siguiente = 1;
-
-                        @Override
-                        public ProgramaFiscalizacion insertar(ProgramaFiscalizacion programa) {
-                            ProgramaFiscalizacion guardado =
-                                    new ProgramaFiscalizacion(
-                                            siguiente++,
-                                            programa.codigo(),
-                                            programa.descripcion(),
-                                            programa.tipo(),
-                                            programa.fechaInicio(),
-                                            programa.fechaFin(),
-                                            programa.estado());
-                            guardados.add(guardado);
-                            return guardado;
-                        }
-
-                        @Override
-                        public Optional<ProgramaFiscalizacion> findById(long id) {
-                            return guardados.stream().filter(p -> p.id() == id).findFirst();
-                        }
-                    },
-                    (RegistroDeAuditoria registro) -> {});
+            new RegistrarPrograma(repositorio, (RegistroDeAuditoria registro) -> {});
 
     private final MockMvc mvc =
-            MockMvcBuilders.standaloneSetup(new ProgramasController(servicio))
+            MockMvcBuilders.standaloneSetup(
+                            new ProgramasController(servicio, new ConsultaDeProgramas(repositorio)))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(
@@ -189,5 +218,144 @@ class ProgramasControllerTest {
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+    }
+
+    /* ── #431: la lectura del programa ─────────────────────────────────── */
+
+    @Test
+    @DisplayName("el listado devuelve los programas en el sobre paginado de siempre")
+    void elListadoDevuelveElSobrePaginado() throws Exception {
+        guardados.add(unPrograma("PF-300", TipoDePrograma.PREDIAL));
+
+        MvcResult resultado = mvc.perform(get("/api/v1/fiscalizacion/programas")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"contenido\"")
+                .contains("\"totalElementos\":1")
+                .contains("\"codigo\":\"PF-300\"")
+                .contains("\"tipo\":\"PREDIAL\"")
+                .contains("\"estado\":\"ABIERTO\"");
+    }
+
+    @Test
+    @DisplayName("los dos filtros viajan por la CONSULTA, no por el cuerpo")
+    void losDosFiltrosViajanPorLaConsulta() throws Exception {
+        mvc.perform(
+                        get("/api/v1/fiscalizacion/programas")
+                                .param("nDePrograma", "PF-300")
+                                .param("ejercicio", "2026"))
+                .andReturn();
+
+        assertThat(criteriosPedidos).hasSize(1);
+        assertThat(criteriosPedidos.get(0).codigo()).isEqualTo("PF-300");
+        assertThat(criteriosPedidos.get(0).ejercicio()).isEqualTo(2026);
+    }
+
+    @Test
+    @DisplayName("sin filtros no inventa ninguno: el criterio llega vacio")
+    void sinFiltrosElCriterioLlegaVacio() throws Exception {
+        mvc.perform(get("/api/v1/fiscalizacion/programas")).andReturn();
+
+        assertThat(criteriosPedidos).hasSize(1);
+        assertThat(criteriosPedidos.get(0).codigo()).isNull();
+        assertThat(criteriosPedidos.get(0).ejercicio()).isNull();
+    }
+
+    @Test
+    @DisplayName("un filtro en blanco no es un filtro")
+    void unFiltroEnBlancoNoEsUnFiltro() throws Exception {
+        mvc.perform(
+                        get("/api/v1/fiscalizacion/programas")
+                                .param("nDePrograma", "   ")
+                                .param("ejercicio", ""))
+                .andReturn();
+
+        assertThat(criteriosPedidos).hasSize(1);
+        assertThat(criteriosPedidos.get(0).codigo()).isNull();
+        assertThat(criteriosPedidos.get(0).ejercicio()).isNull();
+    }
+
+    @Test
+    @DisplayName("con un ejercicio que no es un numero, 422 y no consulta nada")
+    void conUnEjercicioQueNoEsUnNumero422() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                get("/api/v1/fiscalizacion/programas")
+                                        .param("ejercicio", "dos mil veintiseis"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(criteriosPedidos).isEmpty();
+    }
+
+    @Test
+    @DisplayName("el orden por omision es el codigo, que es como se buscan los programas")
+    void elOrdenPorOmisionEsElCodigo() throws Exception {
+        mvc.perform(get("/api/v1/fiscalizacion/programas")).andReturn();
+
+        assertThat(paginacionesPedidas).hasSize(1);
+        assertThat(paginacionesPedidas.get(0).ordenarPor()).isEqualTo("codigo");
+        assertThat(paginacionesPedidas.get(0).pagina()).isZero();
+    }
+
+    @Test
+    @DisplayName("la paginacion de la URL llega tal cual al repositorio")
+    void laPaginacionDeLaUrlLlegaTalCual() throws Exception {
+        mvc.perform(
+                        get("/api/v1/fiscalizacion/programas")
+                                .param("pagina", "2")
+                                .param("tamano", "5")
+                                .param("ordenarPor", "fechaInicio")
+                                .param("direccion", "DESCENDENTE"))
+                .andReturn();
+
+        assertThat(paginacionesPedidas).hasSize(1);
+        assertThat(paginacionesPedidas.get(0).pagina()).isEqualTo(2);
+        assertThat(paginacionesPedidas.get(0).tamano()).isEqualTo(5);
+        assertThat(paginacionesPedidas.get(0).ordenarPor()).isEqualTo("fechaInicio");
+        assertThat(paginacionesPedidas.get(0).direccion())
+                .isEqualTo(Paginacion.Direccion.DESCENDENTE);
+    }
+
+    /**
+     * El listado exige {@code LECTURA}, y la anotacion tiene que estar <b>en el metodo</b>.
+     *
+     * <p>Esta prueba existe porque la rotura obvia —quitarle el {@code @RequiereAcceso} al {@code
+     * GET}— pasa en <b>verde</b>: la regla de ArchUnit exige la anotacion «en la clase o en cada
+     * endpoint», y la clase la declara para poder programar. Sin la del metodo, el {@code GET}
+     * hereda {@code REGISTRO}, de modo que quien solo tiene lectura sobre {@code fisc_programa} no
+     * podria abrir la pantalla y nada lo diria hasta integrar.
+     */
+    @Test
+    @DisplayName("el listado exige LECTURA, no el REGISTRO que la clase declara para programar")
+    void elListadoExigeLectura() throws Exception {
+        RequiereAcceso enElMetodo =
+                ProgramasController.class
+                        .getMethod(
+                                "programas",
+                                String.class,
+                                String.class,
+                                ParametrosDePaginacion.class)
+                        .getAnnotation(RequiereAcceso.class);
+
+        assertThat(enElMetodo)
+                .as("sin la anotacion en el metodo el GET hereda el REGISTRO de la clase")
+                .isNotNull();
+        assertThat(enElMetodo.acceso()).isEqualTo("fisc_programa");
+        assertThat(enElMetodo.privilegio()).isEqualTo(Privilegio.LECTURA);
+    }
+
+    // ------------------------------------------------------------------
+
+    private static ProgramaFiscalizacion unPrograma(String codigo, TipoDePrograma tipo) {
+        return new ProgramaFiscalizacion(
+                1L,
+                codigo,
+                "Muestra de riesgo",
+                tipo,
+                LocalDate.of(2026, 1, 15),
+                null,
+                EstadoDePrograma.ABIERTO);
     }
 }

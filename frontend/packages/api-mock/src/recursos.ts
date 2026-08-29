@@ -2094,6 +2094,54 @@ const ESTADO_DE_LIQUIDACION_DEL_MOCK: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Programas de fiscalizacion (`ProgramaResource`, #45, #431).
+ *
+ * `ProgramasController.programas` publica el sobre paginado de siempre con la
+ * cabecera de cada programa. El prototipo capturo esta pantalla con **un**
+ * programa abierto —«Datos del programa» es singular—, asi que aqui sale una
+ * pagina de uno, compuesta con los mismos valores que dibuja el catalogo.
+ *
+ * **Dos campos se traducen, y conviene decir por que.** `tipo` y `estado` del
+ * prototipo hablan un vocabulario que el dominio no tiene: «PREDIAL
+ * SELECTIVO» donde `TipoDePrograma` solo distingue PREDIAL de VEHICULAR, y «EN
+ * EJECUCIÓN» donde `EstadoDePrograma` dice EN_PROCESO. El proxy publica lo que
+ * publicaria el backend —el nombre del enum— y no el literal del desplegable,
+ * que es justo la diferencia por la que esos dos filtros no viajan (ver
+ * `CriterioDeProgramas`). `descripcion` sale del «Criterio de riesgo», que es
+ * lo unico que el prototipo dibuja y que responde a «que se fiscaliza y por
+ * que»; no se inventa un texto.
+ */
+const programasFiscalizacion = (): Paginado => {
+  const campos = RESPUESTAS['fisc_programa']?.campos ?? {};
+  const texto = (clave: string): string =>
+    typeof campos[clave] === 'string' ? campos[clave] : '';
+
+  const tipoDelPrototipo = texto('tipoDePrograma');
+  const estadoDelPrototipo = texto('estado2');
+  const fechaFin = texto('fechaDeTermino');
+
+  return unaPagina([
+    {
+      id: 1,
+      codigo: texto('nDePrograma2'),
+      descripcion: texto('criterioDeRiesgo'),
+      tipo: tipoDelPrototipo.startsWith('VEHICULAR') ? 'VEHICULAR' : 'PREDIAL',
+      fechaInicio: texto('fechaDeInicio'),
+      fechaFin: fechaFin === '' ? null : fechaFin,
+      estado: ESTADO_DE_PROGRAMA_DEL_MOCK[estadoDelPrototipo] ?? 'ABIERTO',
+    },
+  ]);
+};
+
+/** El desplegable del prototipo → `EstadoDePrograma`, que es lo que publica el recurso. */
+const ESTADO_DE_PROGRAMA_DEL_MOCK: Readonly<Record<string, string>> = {
+  'EN PREPARACIÓN': 'ABIERTO',
+  APROBADO: 'ABIERTO',
+  'EN EJECUCIÓN': 'EN_PROCESO',
+  CERRADO: 'CERRADO',
+};
+
+/**
  * Historico de fiscalizacion predial (`LiquidacionResource.VersionResource`,
  * #49, #80).
  *
@@ -3614,6 +3662,7 @@ function resumenRecaudacionAdministrativa(): Readonly<Record<string, unknown>> {
 /** Por camino del contrato, relativo a `/api/v1`. Casi todas son `GET`: ver `respaldo`. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/fiscalizacion/omisos': omisosFiscalizacion,
+  '/fiscalizacion/programas': programasFiscalizacion,
   '/fiscalizacion/predial/historico': historicoFiscalizacion,
   '/catastro/vias': vias,
   '/tesoreria/convenios': convenios,

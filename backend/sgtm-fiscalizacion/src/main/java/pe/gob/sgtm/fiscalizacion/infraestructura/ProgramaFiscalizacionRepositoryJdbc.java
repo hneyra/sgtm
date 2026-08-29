@@ -2,15 +2,21 @@ package pe.gob.sgtm.fiscalizacion.infraestructura;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.fiscalizacion.dominio.CriterioDeProgramas;
 import pe.gob.sgtm.fiscalizacion.dominio.EstadoDePrograma;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacionRepository;
 import pe.gob.sgtm.fiscalizacion.dominio.TipoDePrograma;
+import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 
 /**
@@ -26,6 +32,9 @@ public class ProgramaFiscalizacionRepositoryJdbc extends RepositorioJdbc
             "id, codigo, descripcion, tipo, fecha_inicio, fecha_fin, estado";
 
     private static final String DESDE = " FROM programa_fiscalizacion";
+
+    private static final OrdenSeguro ORDEN =
+            OrdenSeguro.sobre("codigo", "fecha_inicio", "fecha_fin", "estado", "id");
 
     public ProgramaFiscalizacionRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
@@ -71,6 +80,44 @@ public class ProgramaFiscalizacionRepositoryJdbc extends RepositorioJdbc
                 .param("id", id)
                 .query(ProgramaFiscalizacionRepositoryJdbc::mapear)
                 .optional();
+    }
+
+    /**
+     * La grilla de programas (RF-050, #431), paginada y ordenada por código.
+     *
+     * <p>El «Ejercicio» de la pantalla se resuelve por <b>vigencia</b> y no por el año de {@code
+     * fecha_inicio}: un programa que arranca en diciembre de 2025 y cierra en marzo de 2026 sigue
+     * siendo un programa del ejercicio 2026 para quien lo busca. Un programa sin {@code fecha_fin}
+     * no ha terminado, así que está vigente en todo ejercicio posterior a su inicio.
+     */
+    @Override
+    public Pagina<ProgramaFiscalizacion> consultar(
+            CriterioDeProgramas criterio, Paginacion paginacion) {
+
+        StringBuilder donde = new StringBuilder(" WHERE 1 = 1");
+        Map<String, Object> parametros = new HashMap<>();
+
+        if (criterio.codigo() != null) {
+            donde.append(" AND codigo = :codigo");
+            parametros.put("codigo", criterio.codigo().strip().toUpperCase(Locale.ROOT));
+        }
+        if (criterio.ejercicio() != null) {
+            donde.append(
+                    " AND fecha_inicio <= :finDelEjercicio"
+                            + " AND (fecha_fin IS NULL OR fecha_fin >= :inicioDelEjercicio)");
+            int ejercicio = criterio.ejercicio();
+            parametros.put("inicioDelEjercicio", LocalDate.of(ejercicio, 1, 1));
+            parametros.put("finDelEjercicio", LocalDate.of(ejercicio, 12, 31));
+        }
+
+        String filtro = DESDE + donde;
+        return paginar(
+                "SELECT " + COLUMNAS + filtro,
+                "SELECT count(*)" + filtro,
+                parametros,
+                paginacion,
+                ORDEN,
+                ProgramaFiscalizacionRepositoryJdbc::mapear);
     }
 
     private static ProgramaFiscalizacion mapear(ResultSet fila, int numeroDeFila)

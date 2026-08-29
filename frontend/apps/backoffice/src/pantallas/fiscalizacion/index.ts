@@ -39,41 +39,115 @@ import {
  * aprenda a mostrar mas de una linea por acta.
  *
  * **Las tres escrituras —`fisc_programa`, `fisc_predial`, `fisc_vehicular`—
- * son `ACTOS_SIN_CAMPO`** (`pantallas/actos.ts`), no `ESCRITURAS` sin
- * declarar: a las tres les falta un dato para el que ninguna seccion del
- * catalogo dibuja un campo editable.
+ * siguen siendo `ACTOS_SIN_CAMPO`** (`pantallas/actos.ts`), no `ESCRITURAS`
+ * sin declarar: a las tres les falta un dato para el que ninguna seccion del
+ * catalogo dibuja un campo editable. Lo que #431 cambia no es eso, es de
+ * donde puede salir ese dato.
  *
- *   `fisc_programa`   `ProgramasController` exige `codigo` y `descripcion`.
- *                     La unica seccion de esta pantalla («Datos del
- *                     programa») dibuja `nDePrograma2` de solo lectura y
- *                     ningun campo de descripcion — el prototipo capturo esta
- *                     pantalla como el resultado de generar un programa, no
- *                     como el formulario que lo crea.
+ *   `fisc_programa`   `ProgramasController.programar` exige `codigo` y
+ *                     `descripcion`. La unica seccion de esta pantalla
+ *                     («Datos del programa») dibuja `nDePrograma2` de solo
+ *                     lectura y ningun campo de descripcion — el prototipo
+ *                     capturo esta pantalla como el resultado de generar un
+ *                     programa, no como el formulario que lo crea. **Su
+ *                     LECTURA si esta conectada desde #431** (abajo).
  *   `fisc_predial`    `ActaPredialController` exige `programaId`,
  *                     `contribuyenteId` y `predioId`: tres identificadores
  *                     internos. Las tres columnas que se les parecen —
  *                     `programa`, `contribuyente`, `codigoPredial`— son `"ro"`
  *                     en el catalogo: el acta se abre desde la fila de un
- *                     programa ya generado, y `fisc_programa` no tiene
- *                     todavia ni `Controller` de lectura ni una grilla
- *                     conectada de la que resolverlos (a diferencia de
- *                     `baja_deuda`, que resuelve su fila contra
- *                     `consulta_deuda`).
+ *                     programa ya generado. **`GET /fiscalizacion/programas`
+ *                     ya existe (#431)**, asi que el `programaId` ya tiene de
+ *                     donde salir; lo que falta es el mecanismo del resolutor
+ *                     que lo fije en el cuerpo (#422), y los otros dos
+ *                     identificadores, que ninguna lectura de este modulo
+ *                     publica por fila.
  *   `fisc_vehicular`  `ActaVehicularController` exige los mismos tres
  *                     identificadores, y esta pantalla ni siquiera dibuja
  *                     una seccion de campos: su catalogo es un filtro y una
  *                     grilla de «Vehículos observados» — un panel de
  *                     resultados de un cruce, no el acta que el endpoint
- *                     registra.
+ *                     registra. Espera a #422 por el resolutor y, ademas, a
+ *                     que `hallazgo` viaje por la consulta (#425).
  *
  * Ninguna de las tres esta bloqueada por falta de UI generica: es el mismo
  * hueco que #73 encontro en las transferencias de rentas y que #76 encontro
- * en seis de las ocho escrituras de coactiva, aqui con una tercera forma —el
- * dato no lo dibuja **ninguna** seccion, ni de solo lectura—. Resolverlo pide
- * que `fisc_programa` tenga su propia lectura y su propia grilla conectada
- * antes de que un acta se pueda abrir desde una fila real; es trabajo de otro
- * issue.
+ * en seis de las ocho escrituras de coactiva.
  */
+
+/* ── Programas de fiscalizacion (`fisc_programa`, RF-050, #431) ────────── */
+
+/**
+ * Programacion de fiscalizacion (`ProgramaResource`, RF-050, #431).
+ *
+ * **La lectura llego despues que la escritura.** La opcion declara `POST
+ * /fiscalizacion/programas` como su endpoint, y una operacion que escribe no
+ * se pide al abrir la pantalla (`useDatosDePantalla`): hasta #431 esta
+ * pantalla no pedia **nada**, ni una fila ni un campo. `GET
+ * /fiscalizacion/programas` —operacion `fisc_programas_listado`— es el verbo
+ * aparte que faltaba, el mismo reparto que `certificados_listado` (#79) y
+ * `costas_procesales_listado` (#42).
+ *
+ * **Rellena los campos de «Datos del programa» y NO la grilla, y eso es una
+ * decision.** `ProgramaResource` publica la cabecera de un programa —codigo,
+ * descripcion, tipo, fechas y estado—, y las seis columnas que el catalogo
+ * dibuja bajo «Predios seleccionados» son «Predio», «Contribuyente», «Uso
+ * declarado», «Área decl. m²», «Riesgo» y «Estado»: ninguna de ellas describe
+ * un programa. Poner ahi las filas del listado dejaria un codigo de programa
+ * bajo una columna que dice «Predio» y cinco guiones detras, que es reescribir
+ * el rotulo del catalogo con otro significado (RNF-080) — el mismo motivo por
+ * el que #80 dejo `fisc_resultados` sin conectar. **Y la muestra tampoco esta
+ * en el backend**: `programa_fiscalizacion` no tiene tabla de detalle, y un
+ * `acta_fiscalizacion` nace el dia de la visita con su predio ya resuelto, no
+ * cuando se sortea la muestra. La grilla se queda vacia —como estaba— hasta
+ * que exista de donde llenarla.
+ *
+ * **Los campos solo se rellenan cuando la busqueda deja UN programa.** Con
+ * varios no se elige el primero: «Datos del programa» es singular, y decidir
+ * cual de los cuatro encontrados esta abierto seria inventarlo. Con el filtro
+ * «Nº de programa» puesto siempre hay uno o ninguno — el codigo es unico por
+ * municipalidad (`programa_codigo_uq`, V4).
+ *
+ * **Cuatro campos salen con `SIN_DATO`**: `sector`, `criterioDeRiesgo`,
+ * `fiscalizadorAsignado` y `tamanoDeMuestra` no existen en
+ * `programa_fiscalizacion` ni en `ProgramaResource` (RNF-083). Y los
+ * desplegables «Tipo» y «Estado» del bloque de busqueda **no viajan**: el
+ * contrato no los declara para esta operacion, porque hablan un vocabulario
+ * que el dominio no tiene —seis clases donde `TipoDePrograma` tiene dos,
+ * cuatro situaciones donde `EstadoDePrograma` tiene tres— y mandarlos seria un
+ * filtro que no filtra, o uno que decide en silencio que «PREDIAL MASIVO» es
+ * PREDIAL (ver `CriterioDeProgramas` en el backend).
+ */
+const fisc_programa = definirConexion({
+  operacion: 'fisc_programas_listado',
+  parametros: ({ busqueda }) => parametrosDeBusqueda('fisc_programas_listado', undefined, busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'los programas de fiscalización'),
+  adaptar: (paginado): DatosDePantalla => {
+    // Un solo programa, o ninguno: ver el javadoc.
+    const programas = paginado.contenido.filter(esObjeto);
+    const unico = programas.length === 1 ? programas[0] : undefined;
+    if (unico === undefined) return { fechaCalculo: hoy() };
+
+    return {
+      fechaCalculo: hoy(),
+      campos: {
+        nDePrograma2: texto(unico['codigo']),
+        tipoDePrograma: texto(unico['tipo']),
+        fechaDeInicio: texto(unico['fechaInicio']),
+        fechaDeTermino: texto(unico['fechaFin']),
+        estado2: texto(unico['estado']),
+        // Los cuatro que `ProgramaResource` no publica (RNF-083). `ejercicio2`
+        // tampoco: el programa tiene fechas, no ejercicio, y deducirlo del ano
+        // de inicio diria otra cosa que el filtro de arriba (ver el backend).
+        ejercicio2: SIN_DATO,
+        sector: SIN_DATO,
+        criterioDeRiesgo: SIN_DATO,
+        fiscalizadorAsignado: SIN_DATO,
+        tamanoDeMuestra: SIN_DATO,
+      },
+    };
+  },
+});
 
 /* ── Omisos y subvaluadores (`fisc_omisos`, RF-055) ────────────────────── */
 
@@ -318,6 +392,7 @@ const resolucion_determinacion_fisc = definirConexion({
 });
 
 export const CONEXIONES_DE_FISCALIZACION: Readonly<Record<string, Conexion>> = {
+  fisc_programa,
   fisc_omisos,
   fisc_estado_cuenta,
   fisc_historico,

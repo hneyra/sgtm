@@ -8,8 +8,8 @@ import { montarEnRuta } from '../../pruebas/montar';
 import { SIN_DATO } from '../seguridad/listado';
 
 /**
- * Fiscalizacion, conectado (#80): las cuatro lecturas de ocho, y por que las
- * otras cuatro se quedan sin conectar. Ver el javadoc de
+ * Fiscalizacion, conectado (#80 y #431): cinco lecturas de ocho, y por que las
+ * otras tres se quedan sin conectar. Ver el javadoc de
  * `pantallas/fiscalizacion/index.ts`.
  */
 
@@ -24,16 +24,75 @@ async function esperarFilas(tabla: HTMLElement): Promise<void> {
   await waitFor(() => expect(within(tabla).queryAllByRole('row').length).toBeGreaterThan(1));
 }
 
-describe('las cuatro lecturas de fiscalizacion estan conectadas', () => {
-  it('exactamente estas cuatro, ni una mas', () => {
+describe('las cinco lecturas de fiscalizacion estan conectadas', () => {
+  it('exactamente estas cinco, ni una mas', () => {
     const deFiscalizacion = OPCIONES_CONECTADAS.filter((opcion) => opcion.startsWith('fisc_'));
     expect(deFiscalizacion.sort()).toEqual(
-      ['fisc_omisos', 'fisc_estado_cuenta', 'fisc_historico'].sort(),
+      ['fisc_programa', 'fisc_omisos', 'fisc_estado_cuenta', 'fisc_historico'].sort(),
     );
     // `resolucion_determinacion_fisc` no lleva el prefijo `fisc_`.
     expect(OPCIONES_CONECTADAS).toContain('resolucion_determinacion_fisc');
     // `fisc_resultados` se queda sin conectar (ver el javadoc de la conexion).
     expect(OPCIONES_CONECTADAS).not.toContain('fisc_resultados');
+  });
+
+  /* ── #431: la lectura del programa, que faltaba ───────────────────── */
+
+  it('fisc-programa rellena «Datos del programa» con lo que publica ProgramaResource', async () => {
+    montarEnRuta('/fiscalizacion/fisc-programa?nDePrograma=PF-2026-014');
+    await dibujada();
+
+    // El vocabulario es el del dominio, no el del desplegable del prototipo:
+    // «PREDIAL SELECTIVO» no existe en `TipoDePrograma`.
+    await waitFor(() =>
+      expect((screen.getByLabelText('Tipo de programa') as HTMLSelectElement).value).toBe(
+        'PREDIAL',
+      ),
+    );
+    expect((screen.getByLabelText('Fecha de inicio') as HTMLInputElement).value).toBe('2026-08-17');
+    expect((screen.getByLabelText('Fecha de término') as HTMLInputElement).value).toBe(
+      '2026-09-30',
+    );
+  });
+
+  it('fisc-programa no inventa los cinco atributos que ProgramaResource no publica', async () => {
+    montarEnRuta('/fiscalizacion/fisc-programa?nDePrograma=PF-2026-014');
+    await dibujada();
+
+    // Sector, criterio de riesgo, fiscalizador y tamano de muestra no existen
+    // en `programa_fiscalizacion` (RNF-083); el ejercicio tampoco —un programa
+    // guarda fechas, no ejercicio— y por eso «Ejercicio» de la seccion sale
+    // igual. Las cuatro primeras tienen rotulo unico en la pantalla.
+    await waitFor(() =>
+      expect((screen.getByLabelText('Sector') as HTMLSelectElement).value).toBe(SIN_DATO),
+    );
+    expect((screen.getByLabelText('Criterio de riesgo') as HTMLSelectElement).value).toBe(SIN_DATO);
+    expect((screen.getByLabelText('Fiscalizador asignado') as HTMLSelectElement).value).toBe(
+      SIN_DATO,
+    );
+    expect((screen.getByLabelText('Tamaño de muestra') as HTMLInputElement).value).toBe(SIN_DATO);
+  });
+
+  /**
+   * La grilla «Predios seleccionados» se queda **vacia a proposito**, y esta
+   * prueba lo fija: sus seis columnas describen un predio, y
+   * `ProgramaResource` describe un programa. Ver el javadoc de la conexion.
+   */
+  it('fisc-programa no pinta programas bajo columnas que dicen «Predio»', async () => {
+    montarEnRuta('/fiscalizacion/fisc-programa?nDePrograma=PF-2026-014');
+    await dibujada();
+    // Se espera a que la respuesta llegue —el formulario ya la ensena— antes
+    // de mirar la tabla: si no, estaria vacia por no haber respondido todavia.
+    await waitFor(() =>
+      expect((screen.getByLabelText('Tipo de programa') as HTMLSelectElement).value).toBe(
+        'PREDIAL',
+      ),
+    );
+
+    // Ni una fila: `TablaDePantalla` dibuja su aviso de vacio en lugar de la
+    // tabla, que es exactamente lo que se quiere — un programa no es un predio.
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryAllByText(/ningún resultado para esta búsqueda/i).length).toBeGreaterThan(0);
   });
 
   it('fisc-omisos no inventa las cuatro cifras que OmisoResource nunca publica', async () => {
