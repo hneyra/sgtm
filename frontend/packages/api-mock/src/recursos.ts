@@ -517,6 +517,46 @@ function corridaPredial(cuerpo: unknown): Readonly<Record<string, unknown>> {
   };
 }
 
+/**
+ * Calculo del impuesto vehicular (`CalculoVehicularResource`, #399).
+ *
+ * Las tres filas son las del prototipo —los tres ejercicios en que el vehiculo
+ * permanece afecto—, con su base, su alicuota y su impuesto tal como los
+ * escribe la figura del manual. **Contra el backend de verdad la tabla trae una
+ * fila**: `VehicularController` determina un ejercicio por peticion, y la
+ * proyeccion de los tres es algo que el prototipo dibuja y la operacion no
+ * hace. Aqui se sirven los tres porque la unica fuente de este archivo es la
+ * figura, y la forma —una fila por determinacion, con su `ejercicio`— es la
+ * misma.
+ *
+ * `minimoImponible` sale **vacio**: el prototipo no lo dibuja en ninguna parte
+ * y el proxy no inventa cifras. Es una llave del conjunto sellado
+ * (`VEHICULAR_MINIMO`), y quien la quiera la lee del backend.
+ */
+function calculoVehicular(cuerpo: unknown): Readonly<Record<string, unknown>> {
+  const simulacion = marcaDeSimulacion(cuerpo);
+  const filas = filasDe('vehicular_calculo');
+  // «1.0 %» del prototipo → «1.0», que es como viaja una alicuota (regla 8).
+  const [, , tasaS = ''] = filas[0] ?? [];
+  return {
+    fechaCalculo: `${EL_DIA_DEL_PROTOTIPO}T09:00:00Z`,
+    conjuntoId: 1,
+    conjunto: CONJUNTO_DEL_PROTOTIPO,
+    alicuota: tasaS.replace('%', '').trim(),
+    minimoImponible: '',
+    determinaciones: filas.map(([ejercicio, baseS, , impuestoS], i) => ({
+      id: simulacion ? 0 : i + 1,
+      ejercicio,
+      vehiculoId: 1,
+      placa: campoDelPrototipo('vehicular_calculo', 'placa'),
+      contribuyenteId: 1,
+      valorReferencial: comoImporte(baseS ?? '0.00'),
+      montoDeterminado: comoImporte(impuestoS ?? '0.00'),
+      simulacion,
+    })),
+  };
+}
+
 /** La marca con la que la peticion dice que solo quiere ver la cuenta. */
 const marcaDeSimulacion = (cuerpo: unknown): boolean =>
   typeof cuerpo === 'object' &&
@@ -3343,6 +3383,9 @@ const ESCRITURAS: Readonly<Record<string, (cuerpo: unknown) => Readonly<Record<s
        defecto de #363, la tabla vacia en silencio. */
     'POST /rentas/predial/calculo-individual': determinacionPredial,
     'POST /rentas/predial/calculo-masivo': corridaPredial,
+    /* Y la tercera determinacion, la que llego cuando el contrato y el
+       controlador se pusieron de acuerdo (#399). */
+    'POST /rentas/vehicular/calculo': calculoVehicular,
   };
 
 /** La respuesta de una escritura de seguridad, si el proxy la publica con la forma del backend. */

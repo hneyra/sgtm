@@ -29,7 +29,6 @@ import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.compartido.TenantContext;
-import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
@@ -153,12 +152,13 @@ class RegistrarDeterminacionVehicularTest {
             long auditoriaAntes = contarFilas("auditoria");
 
             Determinacion resultado =
-                    registrar.calcular(
-                            vehiculoId,
-                            EJERCICIO_AFECTO,
-                            Dinero.CERO,
-                            true,
-                            Observacion.de("Simulacion, no debe escribir nada"));
+                    registrar
+                            .calcular(
+                                    vehiculoId,
+                                    EJERCICIO_AFECTO,
+                                    true,
+                                    Observacion.de("Simulacion, no debe escribir nada"))
+                            .determinacion();
 
             assertThat(resultado.esNueva()).as("nunca se guardo: sigue sin id").isTrue();
             assertThat(contarFilas("determinacion")).isEqualTo(filasAntes);
@@ -171,19 +171,21 @@ class RegistrarDeterminacionVehicularTest {
             long vehiculoId = crearVehiculoConValorReferencial("W2B-222", "KIA", "RIO");
 
             Determinacion simulado =
-                    registrar.calcular(
-                            vehiculoId,
-                            EJERCICIO_AFECTO,
-                            Dinero.CERO,
-                            true,
-                            Observacion.de("Simulacion de prueba"));
+                    registrar
+                            .calcular(
+                                    vehiculoId,
+                                    EJERCICIO_AFECTO,
+                                    true,
+                                    Observacion.de("Simulacion de prueba"))
+                            .determinacion();
             Determinacion real =
-                    registrar.calcular(
-                            vehiculoId,
-                            EJERCICIO_AFECTO,
-                            Dinero.CERO,
-                            false,
-                            Observacion.de("Calculo real de prueba"));
+                    registrar
+                            .calcular(
+                                    vehiculoId,
+                                    EJERCICIO_AFECTO,
+                                    false,
+                                    Observacion.de("Calculo real de prueba"))
+                            .determinacion();
 
             assertThat(simulado.montoDeterminado()).isEqualTo(real.montoDeterminado());
         }
@@ -205,7 +207,6 @@ class RegistrarDeterminacionVehicularTest {
                                     registrar.calcular(
                                             vehiculoId,
                                             fueraDePlazo,
-                                            Dinero.CERO,
                                             false,
                                             Observacion.de("No deberia determinarse")))
                     .isInstanceOf(RegistrarDeterminacionVehicular.VehiculoNoAfecto.class);
@@ -221,22 +222,24 @@ class RegistrarDeterminacionVehicularTest {
         void cambiarLaAlicuotaCambiaElMonto() throws SQLException {
             long vehiculoUno = crearVehiculoConValorReferencial("W4D-444", "HYUNDAI", "ACCENT");
             Determinacion primera =
-                    registrar.calcular(
-                            vehiculoUno,
-                            EJERCICIO_AFECTO,
-                            Dinero.CERO,
-                            false,
-                            Observacion.de("Con la alicuota del 1%"));
+                    registrar
+                            .calcular(
+                                    vehiculoUno,
+                                    EJERCICIO_AFECTO,
+                                    false,
+                                    Observacion.de("Con la alicuota del 1%"))
+                            .determinacion();
 
             // Otro vehiculo, ejercicio 2027: sella un conjunto distinto con otra alicuota.
             long vehiculoDos = crearVehiculoConValorReferencial2027("W5E-555", "HYUNDAI", "ACCENT");
             Determinacion segunda =
-                    registrar.calcular(
-                            vehiculoDos,
-                            new Ejercicio(2027),
-                            Dinero.CERO,
-                            false,
-                            Observacion.de("Con otra alicuota"));
+                    registrar
+                            .calcular(
+                                    vehiculoDos,
+                                    new Ejercicio(2027),
+                                    false,
+                                    Observacion.de("Con otra alicuota"))
+                            .determinacion();
 
             assertThat(primera.montoDeterminado())
                     .as("misma base, alicuotas distintas: el importe tiene que diferir")
@@ -302,8 +305,19 @@ class RegistrarDeterminacionVehicularTest {
                 administrarParametros.abrirVersion(ejercicio, Observacion.de("Conjunto de prueba"));
         administrarParametros.agregarParametro(
                 conjunto.id(),
-                parametroDeAlicuota(alicuota),
+                parametroNumerico("ALICUOTA_VEHICULAR", alicuota),
                 Observacion.de("Alicuota vehicular ficticia"));
+        // El minimo imponible del art. 34 y la UIT con que se convierte: desde #399 salen del
+        // conjunto sellado y no del cuerpo de la peticion, asi que sin ellos no hay determinacion
+        // que calcular. Las dos cifras son ficticias, como la alicuota de arriba.
+        administrarParametros.agregarParametro(
+                conjunto.id(),
+                parametroNumerico("VEHICULAR_MINIMO", new BigDecimal("1.5")),
+                Observacion.de("Minimo imponible vehicular ficticio"));
+        administrarParametros.agregarParametro(
+                conjunto.id(),
+                parametroNumerico("UIT", new BigDecimal("100.00")),
+                Observacion.de("UIT ficticia"));
         administrarParametros.agregarParametro(
                 conjunto.id(), edicion, Observacion.de("Cuadro vehicular ficticio"));
         administrarParametros.sellar(conjunto.id(), Observacion.de("Sellado de prueba"));
@@ -348,17 +362,18 @@ class RegistrarDeterminacionVehicularTest {
         }
     }
 
-    private static long parametroDeAlicuota(BigDecimal alicuota) throws SQLException {
+    private static long parametroNumerico(String tipo, BigDecimal valor) throws SQLException {
         try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS);
                 PreparedStatement sentencia =
                         carga.prepareStatement(
                                 "INSERT INTO parametro_tributario (municipalidad_id, tipo, clave,"
                                         + " valor_numerico, vigencia_desde, documento_fuente,"
                                         + " usuario_carga, usuario_aprueba)"
-                                        + " VALUES (NULL, 'ALICUOTA_VEHICULAR', NULL, ?,"
+                                        + " VALUES (NULL, ?, NULL, ?,"
                                         + " DATE '2026-01-01', 'ficticio de prueba, no representa"
                                         + " ninguna norma', 'carga', 'aprueba') RETURNING id")) {
-            sentencia.setBigDecimal(1, alicuota);
+            sentencia.setString(1, tipo);
+            sentencia.setBigDecimal(2, valor);
             try (ResultSet fila = sentencia.executeQuery()) {
                 fila.next();
                 long id = fila.getLong(1);

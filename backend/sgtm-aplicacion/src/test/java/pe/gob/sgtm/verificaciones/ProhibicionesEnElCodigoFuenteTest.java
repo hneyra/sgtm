@@ -926,6 +926,38 @@ class ProhibicionesEnElCodigoFuenteTest {
     }
 
     @Test
+    @DisplayName("el escaner detecta la muestra con el minimo imponible compilado")
+    void elEscanerDetectaLaMuestraDeMinimoImponible() throws IOException {
+        // #399: el minimo imponible del vehicular es el 1.5 % de la UIT (TUO LTM art. 34) y el
+        // del predial el 0.6 % (art. 13). Son cifras de norma y salen del conjunto sellado.
+        // NINGUNA de las veinte palabras anteriores las cazaba -MINIMO_IMPONIBLE_VEHICULAR no
+        // empieza por UIT, ni por ALICUOTA, ni por TASA-, el mismo hueco que #35 destapo con
+        // INTERES_DE_FRACCIONAMIENTO, #42 con COSTA_DE_LA_REC2, #51 con TASA_PANEL y #54 con
+        // VIGENCIA_DEL_CERTIFICADO. Por eso entra MINIMO. Y su consecuencia es propia: un minimo
+        // inventado no cobra de mas en ninguna cifra comparable, eleva el suelo -solo lo pagan
+        // los vehiculos baratos, que son a los que el minimo llega-.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/dominio/MuestraDeMinimoImponibleCompilado.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarValoresTributarios(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las tres constantes, y ninguno de los comentarios que las explican")
+                .hasSize(3);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).contains("MINIMO_IMPONIBLE_VEHICULAR"))
+                .anySatisfy(f -> assertThat(f).contains("MINIMO_DEL_PREDIAL"))
+                .anySatisfy(f -> assertThat(f).contains("MINIMOS_POR_TRIBUTO"));
+    }
+
+    @Test
     @DisplayName("el escaner detecta la muestra que edita una liquidacion de costas")
     void elEscanerDetectaLaMuestraQueEditaUnaLiquidacionDeCostas() throws IOException {
         // #42: liquidacion_costas, costa_procesal y costa_obligacion entran en TABLAS_INMUTABLES.

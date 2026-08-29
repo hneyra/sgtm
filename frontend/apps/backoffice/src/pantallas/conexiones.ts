@@ -241,10 +241,11 @@ export function definirAdaptacion<O extends IdDeOperacion, R>(
  * Las opciones cuyo `POST` devuelve un recurso del dominio, por su
  * identificador del catalogo.
  *
- * Dos hoy, las dos prediales (#395). Las otras tres pantallas de determinacion
- * —arbitrios, calculo vehicular y alcabala— no estan, y no por descuido: la
- * primera es un `GET` y las otras dos siguen contestando la forma comun del
- * proxy, que es la que `useSimulacion` lee cuando no hay adaptacion declarada.
+ * Tres hoy: las dos prediales (#395) y el calculo vehicular (#399). Las otras
+ * dos pantallas de determinacion no estan, y no por descuido: `arbitrios` es un
+ * `GET` —trae sus cifras al abrir y no tiene nada que simular— y `alcabala`
+ * sigue contestando la forma comun del proxy, que es la que `useSimulacion` lee
+ * cuando no hay adaptacion declarada.
  */
 const ADAPTACIONES: Readonly<Record<string, Adaptacion>> = {
   ...ADAPTACIONES_DE_RENTAS,

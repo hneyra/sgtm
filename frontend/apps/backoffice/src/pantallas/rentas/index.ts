@@ -104,20 +104,21 @@ import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
  *   anota y no se puentea (ADR-0010 §4); conectarlas sigue siendo rellenar un formulario, confirmar
  *   un acto irreversible y recibir un 422 por un campo que no se puede escribir.
  *
- * ── Lo que sigue fuera, y por que ───────────────────────────────────────────
+ * ── (#399) El calculo vehicular, que estaba fuera por un desacuerdo de transporte ─
  *
- * - `vehicular_calculo`: **el contrato y el controlador no dicen lo mismo, y eso se anota, no se
- *   puentea** (#333c). `VehicularController.PeticionDeCalculoVehicular` lee `placa`,
- *   `codContribuyente`, `vehiculoId`, `ejercicio`, `minimoImponible` y `simulacion` del **cuerpo**
- *   de la peticion; `sgtm-v1.yaml` declara `placa`, `codContribuyente` y `ejercicio` como
- *   parametros de **consulta**. Los filtros de una pantalla viajan por la URL, nunca por el
- *   cuerpo, asi que hoy la peticion saldria con los tres en la URL y el controlador los leeria
- *   nulos: calcularia sobre el padron entero, o fallaria. Ademas su catalogo no tiene `secciones`,
- *   asi que no hay formulario al que declararle campos —los tres datos que necesita son
- *   `filtros`, y un filtro nunca viaja por el cuerpo (`bloques/Filtros.tsx`)—. Conectarlo es
- *   corregir el contrato o el controlador —una sola verdad—, y esa correccion no cabe en un issue
- *   de interfaz: puentearla desde aqui dejaria dos contratos vivos y el proximo que lea el YAML
- *   creeria el equivocado. `minimoImponible` es, ademas, un valor normativo (D-02a).
+ * - `vehicular_calculo`: **conectado desde #399, y lo que hubo que mover fue el controlador.**
+ *   `VehicularController` leia `placa`, `codContribuyente`, `vehiculoId`, `ejercicio`,
+ *   `minimoImponible` y `simulacion` del **cuerpo**, y `sgtm-v1.yaml` declara los tres primeros
+ *   como parametros de **consulta** (#333c). Los filtros de una pantalla viajan por la URL, nunca
+ *   por el cuerpo (`bloques/Filtros.tsx`), asi que la peticion salia con los tres en la URL y el
+ *   controlador los leia nulos: la operacion figuraba en `IMPLEMENTADAS` y ninguna pantalla podia
+ *   llamarla. Se corrigio el controlador —lee los tres de la consulta y sigue aceptandolos en el
+ *   cuerpo, igual que `PredialController` desde #395— y no el contrato, porque el contrato esta
+ *   derivado del prototipo y los tres salen de sus `filtros` (#312). `minimoImponible` **se fue
+ *   del cuerpo**: es una cifra normativa —el 1.5 % de la UIT del art. 34— y sale del conjunto
+ *   sellado; sin ella la operacion responde 422 nombrando `VEHICULAR_MINIMO`. Su lectura vive en
+ *   `determinaciones.ts` y llena cuatro de las seis columnas de su tabla; las otras dos y la banda
+ *   de totales se quedan en «—», con su motivo escrito ahi.
  *
  * ── (#393) El expediente predial, y por que solo una de sus seis secciones se compone ─
  *

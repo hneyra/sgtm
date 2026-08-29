@@ -113,13 +113,11 @@ const DETERMINACION = { resumen: ResumenDeDeterminacion, resumenSiempre: true } 
  * liquidar (`ACTOS_SIN_CAMPO`, #385) y esta es la misma verdad dicha en el otro
  * boton.
  *
- * Y el vehicular tiene ademas su propio desajuste, que **no se puentea aqui**:
- * su controlador lee `placa`, `codContribuyente` y `ejercicio` del **cuerpo**, y
- * el contrato los declara como parametros de **consulta** (#333c, anotado en
- * `rentas/index.ts`). Contra el backend de verdad los leeria nulos y calcularia
- * sobre lo que no se le pidio; lo unico que su marca garantiza es que no
- * asiente nada mientras tanto. Corregirlo es corregir el contrato o el
- * controlador, y eso no cabe en un issue de interfaz.
+ * El vehicular arrastraba ademas su propio desajuste —su controlador leia
+ * `placa`, `codContribuyente` y `ejercicio` del **cuerpo** y el contrato los
+ * declara de **consulta** (#333c)— y **ya no**: #399 corrigio el controlador,
+ * que es el lado que se movio, y desde entonces la pantalla puede llamar a su
+ * operacion. Su `Adaptacion` esta en `determinaciones.ts`.
  */
 const simula = (accion: string, cuerpo?: Readonly<Record<string, boolean>>) =>
   ({
