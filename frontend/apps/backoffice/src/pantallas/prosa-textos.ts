@@ -325,6 +325,22 @@ export const MOTIVOS_DE_FILTRO: Readonly<Record<string, string>> = {
    */
   'consulta_resumen_predial.palabra':
     'La búsqueda por palabra suelta no se puede resolver: no hay un campo al que apunte, y responderla obligaría a recorrer todo el padrón. Busca por «Cod. Catastral», «Cod. Contribuyente» o «Uso».',
+
+  /**
+   * **Las dos hojas nacionales del cuadro de valuación** (propuesta B, #17/#71).
+   *
+   * Mismo hueco que los dos de arriba con una diferencia que conviene decir en
+   * el propio motivo: aquí el servidor **no rechaza**, ignora. Elegir «SIERRA» o
+   * «INDUSTRIA» devolvería exactamente el mismo cuadro, así que el síntoma de un
+   * filtro vivo no sería un error sino la certeza equivocada de haberlo acotado.
+   * El motivo dice además por dónde se sale: el año, que es lo único que decide
+   * qué cuadro se lee, está arriba.
+   */
+  'valores_unitarios.region':
+    'La región no se puede filtrar: el cuadro no publica a cuál pertenece cada fila y el servidor solo recibe el ejercicio. Lo que decide qué cuadro se lee es el año de trabajo, que está arriba.',
+
+  'depreciacion.uso':
+    'El uso no se puede filtrar: el cuadro no publica el uso de ninguna fila y el servidor solo recibe el ejercicio. Para acotar por material predominante, usa el desplegable que hay sobre la tabla: ese sí elige entre lo que el cuadro trajo.',
 };
 
 /** Los filtros bloqueados que tienen texto. La comprobacion de coherencia los mira. */

@@ -1571,6 +1571,12 @@
   white-space: nowrap;
   border-bottom: 2px solid transparent;
   color: var(--ink-3);
+  /* Las pestanas del territorio son **enlaces**: cambiar de hoja navega a la
+     ruta de la otra opcion (`catastro/Territorio.tsx`). Sin esto salen
+     subrayadas, y una pestana subrayada al lado de otra que no lo esta se lee
+     como si una estuviera activa. Lo activo lo marca el borde inferior, que es
+     lo que marca en las demas pantallas con pestanas. */
+  text-decoration: none;
 }
 
 .sgtm-pestanas__tab[data-activa='1'] {
@@ -2852,5 +2858,302 @@
 
 .sgtm-ficha__accion-nota {
   font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* ── El territorio: carril con el arbol, panel con las dos hojas ────────
+   Mismo reparto que el indice de secciones: un carril de ancho fijo y un panel
+   que se queda con lo que sobra. Con `flex` y no con `grid` por lo mismo que
+   alli: al imprimir, el panel recupera el ancho entero solo.
+
+   330 px es lo que pide el arbol: dos niveles de sangria, un codigo de sector,
+   su denominacion y su conteo en la misma linea. */
+.sgtm-territorio {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.sgtm-territorio__carril {
+  flex: 0 0 330px;
+  position: sticky;
+  top: 78px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.sgtm-territorio__panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sgtm-territorio__alta {
+  display: flex;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.sgtm-territorio__acciones {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sgtm-territorio__vacio,
+.sgtm-territorio__pendiente {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.sgtm-arbol,
+.sgtm-arbol__manzanas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sgtm-arbol {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* El catalogo territorial de una municipalidad son decenas de sectores: el
+     carril se desplaza por dentro en vez de alargar la pagina entera. */
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.sgtm-arbol__nodo {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  /* Sin esto el fondo es el ButtonFace del navegador, que no conoce el tema
+     oscuro (mismo motivo que `.sgtm-indice__entrada`). */
+  background: transparent;
+  border: 0;
+  padding: 7px 8px;
+  border-radius: 7px;
+  text-align: left;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.sgtm-arbol__nodo:hover {
+  background: var(--accent-soft);
+}
+
+/* Lo senalado se marca con fondo **y** con peso: el color solo no vale
+   (FRO-02 §2.1). */
+.sgtm-arbol__nodo[data-senalado='1'] {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.sgtm-arbol__nodo--manzana {
+  padding-left: 26px;
+}
+
+.sgtm-arbol__codigo {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.sgtm-arbol__nombre {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sgtm-arbol__conteo {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.sgtm-arbol__detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 8px 10px 26px;
+}
+
+.sgtm-arbol__nota {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+/* En pantalla estrecha el carril pasa arriba: 330 px de menos sobre 360 no
+   dejarian sitio ni al codigo catastral ni a la tabla de vias. */
+@media (max-width: 900px) {
+  .sgtm-territorio {
+    flex-direction: column;
+  }
+
+  .sgtm-territorio__carril {
+    position: static;
+    flex: 0 0 auto;
+    align-self: stretch;
+  }
+}
+
+/* ── El cuadro de valuacion del ejercicio: banda de procedencia ─────────
+   El selector del ejercicio y el desplegable que acota son tarjetas de una
+   sola fila: el `Campo` del design system trae su propia caja, asi que aqui
+   solo se limita el ancho para que un ano de cuatro digitos no ocupe la
+   pantalla entera. */
+.sgtm-cuadro__ejercicio,
+.sgtm-cuadro__acotar {
+  max-width: 340px;
+}
+
+/* La procedencia se lee **antes** que las cifras: es lo que sostiene una
+   determinacion. Fondo suave y no tarjeta blanca, para que se distinga de las
+   tablas sin competir con ellas. */
+.sgtm-procedencia {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.sgtm-procedencia__ambito,
+.sgtm-procedencia__norma {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+}
+
+.sgtm-procedencia__etiqueta {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sgtm-procedencia__valor {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* Lo que no consta se ve como lo que es: un hueco, no un valor. El texto ya
+   dice «—», asi que el color solo acompana (FRO-02 §2.1). */
+.sgtm-procedencia__hueco {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.sgtm-procedencia__documentos {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.sgtm-procedencia__firmas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+}
+
+.sgtm-procedencia__firmas dd {
+  margin: 2px 0 0;
+}
+
+.sgtm-procedencia__nota {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+/* ── La ficha del predio: el conmutador de modalidad ────────────────────
+
+   Las cuatro fichas del mismo predio, en chips (`catastro/FichaDelPredio.tsx`,
+   propuesta A). Las que se pueden pedir son **enlaces**; la que no —el
+   identificador con que se abrio esta ficha no es un codigo de referencia
+   catastral— se dibuja apagada con su motivo al lado, como «Conciliar
+   seleccionadas» y el desplegable de conciliacion.
+
+   Lo apagado **no se distingue solo por color** (FRO-02 §2.1): lleva borde
+   discontinuo, y el motivo va escrito debajo. */
+
+.sgtm-modalidades {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 11px 14px;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.sgtm-modalidades__rotulo {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sgtm-modalidades__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sgtm-modalidades__chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-card);
+  font-size: 13px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.sgtm-modalidades__chip[data-activa='1'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg-card);
+  font-weight: 500;
+}
+
+.sgtm-modalidades__chip[data-apagada='1'] {
+  border-style: dashed;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.sgtm-modalidades__motivo {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
   color: var(--ink-3);
 }
