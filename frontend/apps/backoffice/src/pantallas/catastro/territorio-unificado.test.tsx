@@ -129,8 +129,11 @@ describe('las dos opciones del territorio caen en la misma superficie', () => {
     const enElCarril = await carril();
     expect(await enElCarril.findByText('CERCADO DE SULLANA')).toBeInTheDocument();
     expect(enElCarril.getByText('EJE CARRETERA PAITA')).toBeInTheDocument();
-    // Y la hoja de sectores: lo señalado y el código que se compone con ello.
-    expect(screen.getByText('Lo señalado en el territorio')).toBeInTheDocument();
+    // Y la hoja de sectores: lo señalado —que desde #391 §4 es la
+    // cabecera-resumen de arriba— y el código que se compone con ello.
+    expect(
+      screen.getByRole('region', { name: 'Lo señalado en el territorio' }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Código de referencia catastral' }),
     ).toBeInTheDocument();

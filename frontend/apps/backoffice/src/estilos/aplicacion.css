@@ -530,6 +530,16 @@
   overflow-wrap: anywhere;
 }
 
+/* La fecha de una cifra de la cabecera (regla 9, RNF-075). Va pegada al numero
+   y no debajo: separada se lee como otro dato, y lo que dice es **de cuando es
+   este**. Mas pequena y en `--ink-3` —5,98:1, verificado en contraste.test.ts—
+   porque acompana a la cifra en vez de competir con ella. */
+.sgtm-resumen__alafecha {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
 /* La linea de lo que el padron no publica todavia (#330). No es un error ni una
    advertencia: es un guion **explicado**, y por eso no lleva tono de aviso. */
 .sgtm-resumen__pendiente {
@@ -3021,11 +3031,12 @@
 }
 
 /* ── El cuadro de valuacion del ejercicio: banda de procedencia ─────────
-   El selector del ejercicio y el desplegable que acota son tarjetas de una
-   sola fila: el `Campo` del design system trae su propia caja, asi que aqui
-   solo se limita el ancho para que un ano de cuatro digitos no ocupe la
-   pantalla entera. */
-.sgtm-cuadro__ejercicio,
+   El desplegable que acota es una tarjeta de una sola fila: el `Campo` del
+   design system trae su propia caja, asi que aqui solo se limita el ancho para
+   que no ocupe la pantalla entera.
+
+   La tarjeta del ejercicio ya no esta: el ejercicio es el identificador de la
+   cabecera-resumen desde #391 §4. */
 .sgtm-cuadro__acotar {
   max-width: 340px;
 }

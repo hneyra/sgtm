@@ -115,15 +115,20 @@ const nodoDe = (nombre: string | RegExp) =>
   screen.findByRole('button', { name: typeof nombre === 'string' ? new RegExp(nombre) : nombre });
 
 /**
- * La tarjeta del detalle, acotada.
+ * El detalle de lo señalado, acotado.
  *
  * `getByLabelText('Sector')` sin acotar encuentra dos: el dato del sector
  * señalado y **el tramo «Sector» del código de referencia catastral**, que está
  * en la misma hoja y se llama igual por el manual. Los dos rótulos son
  * correctos; lo que hay que decir es de cuál de los dos se habla.
+ *
+ * **Desde #391 §4 el detalle es la cabecera-resumen** —subió de la tarjeta de la
+ * derecha a la ranura de arriba, con el lenguaje visual de las otras once— y se
+ * acota por su nombre accesible en vez de por el título de una tarjeta, que ya
+ * no lo tiene: las cabeceras-resumen del sistema no llevan encabezado visible.
+ * Los rótulos que se piden son los mismos, y siguen siendo los del catálogo.
  */
-const enElDetalle = () =>
-  within(screen.getByText('Lo señalado en el territorio').closest('section') as HTMLElement);
+const enElDetalle = () => within(screen.getByRole('region', { name: 'Lo señalado en el territorio' }));
 
 describe('los conteos del sector salen tal como llegan', () => {
   it('manzanas, lotes y predios se pintan sin recomponerse', async () => {

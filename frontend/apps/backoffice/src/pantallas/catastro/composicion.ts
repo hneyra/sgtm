@@ -34,6 +34,72 @@ const AltaDeManzana = lazy(async () => ({ default: (await import('./altas')).Alt
  * `Pantalla`— para una cabecera que solo se dibuja dentro de un trozo perezoso.
  */
 
+/**
+ * **La anatomia de las doce, en un sitio** (#391 §4).
+ *
+ * La anatomia es **el orden y las ranuras**, no los tres bloques repetidos doce
+ * veces: cada superficie llena las que tiene, y donde una no aplica se dice por
+ * que. Forzar los tres en las doce seria uniformidad de adorno, y en alguna
+ * exigiria inventar un dato que el backend no publica (ADR-0010 §4).
+ *
+ * El orden lo impone `Pantalla` (FRO-03 §5) y las tres superficies propias lo
+ * repiten: **aviso → cabecera-resumen → versionado → filtros → tabla → totales →
+ * indice + formulario → barra de acciones**.
+ *
+ * | Opcion | Superficie | Cabecera | Versionado | Indice |
+ * |---|---|---|---|---|
+ * | `ficha_urbana`, `ficha_economica`, `ficha_bienes`, `ficha_rural`, `actualizacion_catastro` | `FichaDelPredio` | si, `ResumenDeFicha` | si | si |
+ * | `sectores` | `Territorio` | si, lo senalado en el arbol | no aplica | no aplica |
+ * | `calles` | `Territorio` | si, lo senalado en el arbol | no aplica | si |
+ * | `aranceles`, `valores_unitarios`, `depreciacion` | `CuadroDeValuacion` | si, el cuadro del ejercicio | no aplica | no aplica |
+ * | `consulta_fichas` | `Pantalla` | **vacia** | no aplica | no aplica |
+ * | `ficha_contribuyente_reporte` | `Pantalla` | **vacia** | no aplica | no aplica |
+ *
+ * Las dos que sirve el renderizador comun no declaran `resumen` ni `indice`, y
+ * **eso es la decision, no un olvido**:
+ *
+ *   consulta_fichas   **es una lista, no un registro abierto.** Su ranura de
+ *                     cabecera queda vacia porque no hay un registro que
+ *                     resumir: lo que hay son cinco filtros y una tabla de
+ *                     predios, y cada uno se abre en su ficha —donde si tiene
+ *                     cabecera—. Resumir «la busqueda» seria contar cuantas
+ *                     filas hay, que ya lo dice el conteo de la tabla. Sin
+ *                     secciones en el catalogo tampoco hay indice: es filtros,
+ *                     tabla y acciones
+ *   ficha_contribuyente_reporte
+ *                     **es una hoja de reporte, y su anatomia es la de la
+ *                     hoja**: `kind: 'report'`, con su cabecera membretada, su
+ *                     cuerpo y su pie de firmas, que dibuja `bloques/Reporte`.
+ *                     No declara filtros, ni secciones, ni acciones, asi que no
+ *                     hay ranura de cabecera-resumen que llenar ni indice que
+ *                     poner: el papel se lee de arriba abajo y su indice es el
+ *                     propio membrete
+ *
+ * Y **ninguna de las doce lleva banda de versionado fuera de la ficha**: lo
+ * unico que el backend versiona en Catastro es la ficha catastral (#18). El
+ * territorio no —`SectorResource` y `ViaResource` publican el registro tal como
+ * esta— y los cuadros tampoco: se sellan por conjunto (ADR-0007), y de eso no
+ * publica nada ni el recurso ni el contrato.
+ *
+ * <h2>Lo que se ve al uniformar y no se toca todavia</h2>
+ *
+ * En la ficha del predio, la apostilla de la cabecera-resumen —«v3 · desde
+ * 12/03/2026 · FISCALIZACION»— y la primera linea de la banda de versionado
+ * dicen **lo mismo**: que version rige, desde cuando y de donde salio. Con las
+ * doce puestas en la misma anatomia eso se ve, y no se quita aqui:
+ *
+ * - lo que la banda tiene y la cabecera no es **el historico con su
+ *   observacion**, que es la mitad util del versionado (`bloques/Versionado`):
+ *   el diff dice que el area paso de 120 a 180 y solo la observacion dice que
+ *   fue una fiscalizacion de campo. Quitar la banda se llevaria eso por delante;
+ * - quitar la apostilla dejaria la cabecera sin fechar la ficha, y **los cuatro
+ *   datos que ensena son de esa version** (regla 9): el titular, el uso y el
+ *   area de terreno son los de la version que rige, no los de hoy.
+ *
+ * Cual de las dos mitades se recorta —y si se recorta— es una decision de
+ * contenido, no de anatomia, y merece su propio diff.
+ */
+
 /** A donde lleva actualizar un predio, con su codigo en la ruta. */
 const ACTO_DE_ACTUALIZAR = {
   etiqueta: 'Actualizar catastro',

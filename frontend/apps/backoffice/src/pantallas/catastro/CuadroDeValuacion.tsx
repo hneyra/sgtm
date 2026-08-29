@@ -8,6 +8,7 @@ import { useCatalogoVisible } from '../../app/sesion/useCatalogoVisible';
 import { composicionDe, filtrosDe } from '../composicion';
 import { PAGINA, conCambio, leerBusqueda, parametrosDeBusqueda } from '../busqueda';
 import { SIN_PERMISO, textoDeError } from '../estados';
+import { CabeceraDeRegistro } from '../bloques/CabeceraDeRegistro';
 import { Filtros } from '../bloques/Filtros';
 import { TablaDePantalla } from '../bloques/TablaDePantalla';
 import { SIN_DATO, hoy, tablaDeLista, texto } from '../seguridad/listado';
@@ -56,6 +57,53 @@ import type { OperacionDeValuacion } from './useTablaDeValuacion';
  * de #332 —ningún acto promete lo que no puede— y el precedente de `sectores`
  * en `Territorio.tsx`: no es que la franja del motivo esté vacía, es que no hay
  * barra de acciones que leer.
+ *
+ * <h2>La anatomía, ranura por ranura (#391 §4)</h2>
+ *
+ * El orden es el que impone el renderizador común (FRO-03 §5): aviso →
+ * cabecera-resumen → versionado → filtros → tabla → totales → índice +
+ * formulario → barra de acciones. Lo que esta superficie llena y lo que no:
+ *
+ *   cabecera-resumen  **la llena, y sustituye a la tarjeta del ejercicio**. El
+ *                     registro abierto es el cuadro de un ejercicio, y cuál de
+ *                     los tres lo dice la hoja activa; eso es exactamente lo que
+ *                     resume {@link CabeceraDeRegistro}, con el mismo lenguaje
+ *                     visual que la ficha del predio y el territorio. El
+ *                     ejercicio pasa de ser un `Campo` de sólo lectura dentro de
+ *                     una tarjeta a ser el identificador de la cabecera, que es
+ *                     lo que de verdad es: **lo único que viaja**
+ *   versionado        **no aplica, y no se inventa**. Los cuadros no se
+ *                     versionan por fecha: se sellan por conjunto (ADR-0007,
+ *                     V9), y de eso la API no publica nada —`ArancelResource`,
+ *                     `ValorUnitarioResource` y `DepreciacionResource` publican
+ *                     `documentoFuente` y ninguno publica versión, vigencia,
+ *                     histórico ni estado del conjunto—. Una banda de
+ *                     versionado aquí tendría que inventarse sus cuatro campos
+ *                     o copiarlos del corpus de valores normativos, y las dos
+ *                     cosas están prohibidas (ADR-0010 §4). Lo que ocupa ese
+ *                     sitio es {@link BandaDeProcedencia}, que **no es una banda
+ *                     de versionado**: dice de dónde sale el cuadro con lo que
+ *                     la respuesta trae, y nombra en «—» los cuatro datos que
+ *                     nadie publica todavía
+ *   documentoFuente   **vive en la banda y sólo ahí**. La cabecera no lo repite:
+ *                     un cuadro cuyas filas citan dos resoluciones distintas se
+ *                     enumera entero en la banda, y una cabecera que pintara
+ *                     «el» documento fuente tendría que elegir uno —que es
+ *                     justo lo que la banda existe para no hacer— o repetir la
+ *                     lista dos veces en la misma pantalla
+ *   filtros           los de la hoja, menos el ejercicio (lo sustituye la
+ *                     cabecera), menos los bloqueados y menos los que acotan en
+ *                     el navegador
+ *   tabla             las tres hojas la llenan: la de aranceles con la tabla del
+ *                     catálogo, y las dos nacionales con sus matrices
+ *   totales           ninguna de las tres los declara, y aquí no se compondría
+ *                     ninguno (RNF-083)
+ *   índice            **no aplica**: las tres opciones son tabla y filtros, sin
+ *                     una sola sección de campos en el catálogo portado. Un
+ *                     índice sin secciones que listar no es un índice
+ *   barra             no aplica, y es el hallazgo de la propuesta B: ninguno de
+ *                     los dos botones que el prototipo dibuja podría escribir
+ *                     nunca. Ver arriba
  */
 
 const ARANCELES = 'aranceles';
@@ -127,20 +175,18 @@ export function CuadroDeValuacion({ estructura }: { readonly estructura: Estruct
 
       <FechaDeCalculo fecha={hoy()} />
 
-      {/* **Un solo selector de ejercicio, arriba de las tres hojas.** Es de solo
-          lectura a propósito: el ejercicio es de la sesión —lo cambia el `PUT`
-          de «Cambiar el año de trabajo» (#13)— y ofrecer aquí un desplegable que
-          lo cambiara sería escribir en la sesión desde una pantalla de consulta,
-          sin observación (regla 10) y sin que el resto de los módulos se
-          enteraran. */}
-      <section className="sgtm-tarjeta sgtm-cuadro__ejercicio" aria-label="Ejercicio del cuadro">
-        <Campo
-          etiqueta="Ejercicio"
-          tipo="ro"
-          valor={String(tabla.ejercicio)}
-          ayuda="El año de trabajo de la sesión, y lo único que se manda al pedir el cuadro: los tres controladores solo reciben «anio». Se cambia en «Cambiar el año de trabajo»."
-        />
-      </section>
+      {/* **Un solo ejercicio, arriba de las tres hojas**, y en la ranura de la
+          cabecera-resumen: es el registro abierto. No hay desplegable que lo
+          cambie a propósito —el ejercicio es de la sesión, lo cambia el `PUT` de
+          «Cambiar el año de trabajo» (#13)—: ofrecer aquí uno sería escribir en
+          la sesión desde una pantalla de consulta, sin observación (regla 10) y
+          sin que el resto de los módulos se enteraran. */}
+      <CabeceraDelCuadro
+        hoja={hoja}
+        ejercicio={tabla.ejercicio}
+        filas={tabla.filas}
+        cargando={tabla.cargando}
+      />
 
       <div className="sgtm-pestanas" role="tablist" aria-label="Hojas del cuadro de valuación">
         {HOJAS.filter((opcion) => catalogo.puedeVer(opcion)).map((opcion) => {
@@ -162,6 +208,10 @@ export function CuadroDeValuacion({ estructura }: { readonly estructura: Estruct
         })}
       </div>
 
+      {/* En el sitio de la banda de versionado, y **no es una banda de
+          versionado**: los cuadros no se versionan por fecha, se sellan por
+          conjunto, y de eso la API no publica nada. Ver el docblock de arriba
+          antes de inventar aquí una versión, una vigencia o un histórico. */}
       <BandaDeProcedencia hoja={hoja} filas={tabla.filas} cargando={tabla.cargando} />
 
       {filtrosDeLaHoja.length > 0 && (
@@ -200,6 +250,70 @@ export function CuadroDeValuacion({ estructura }: { readonly estructura: Estruct
         />
       )}
     </>
+  );
+}
+
+/* ── La cabecera-resumen del cuadro ────────────────────────────────────── */
+
+/**
+ * **Qué cuadro se está mirando**: el ejercicio, la hoja y de qué ámbito es.
+ *
+ * Sustituye a la tarjeta «Ejercicio del cuadro» que había aquí: es lo mismo que
+ * decía —el año de trabajo de la sesión, de sólo lectura, con su explicación—
+ * dicho en la ranura y con el lenguaje visual que comparten las doce opciones de
+ * Catastro (#391 §4). El ejercicio pasa a **identificador** porque es lo que
+ * identifica al cuadro y lo único que viaja: los tres controladores reciben
+ * `@RequestParam int anio` y nada más.
+ *
+ * **No repite el `documentoFuente`**, que es de {@link BandaDeProcedencia} y de
+ * nadie más. Ver el docblock de la pantalla: una cabecera que pintara «el»
+ * documento fuente tendría que elegir uno cuando las filas citan varios, que es
+ * exactamente lo que la banda existe para no hacer.
+ *
+ * **Los dos datos de la rejilla salen de lo que hay, sin componer nada**
+ * (RNF-083): el nombre de la hoja es el rótulo del catálogo (RNF-080) y el
+ * conteo es cuántas filas trajo la respuesta —contar lo recibido, no deducir el
+ * tamaño del cuadro—. Y va **con su fecha** (regla 9): un cuadro que hoy tiene
+ * catorce filas puede tener otras tantas mañana, y la cifra sin el día en que se
+ * leyó no se puede citar.
+ */
+function CabeceraDelCuadro({
+  hoja,
+  ejercicio,
+  filas,
+  cargando,
+}: {
+  readonly hoja: OperacionDeValuacion;
+  readonly ejercicio: number;
+  readonly filas: readonly Readonly<Record<string, unknown>>[];
+  readonly cargando: boolean;
+}) {
+  const situada = opcionPorId(hoja);
+
+  return (
+    <CabeceraDeRegistro
+      rotulo="Resumen del cuadro"
+      identificador={String(ejercicio)}
+      // Municipal o nacional decide **quién** puede cargarlo (ADR-0017), y es
+      // la mitad de por qué esta pantalla no tiene «Guardar».
+      insignias={[{ texto: AMBITO[hoja].toUpperCase(), tono: 'neutro' }]}
+      apostilla="Ejercicio de trabajo de la sesión"
+      datos={[
+        { etiqueta: 'Cuadro', valor: situada?.title ?? SIN_DATO },
+        {
+          etiqueta: 'Filas del cuadro',
+          valor: String(filas.length),
+          cifra: true,
+          aLaFecha: hoy(),
+        },
+      ]}
+      cargando={cargando}
+    >
+      <p className="sgtm-resumen__nota">
+        El ejercicio es el año de trabajo de la sesión, y lo único que se manda al pedir el cuadro:
+        los tres controladores solo reciben «anio». Se cambia en «Cambiar el año de trabajo».
+      </p>
+    </CabeceraDeRegistro>
   );
 }
 
