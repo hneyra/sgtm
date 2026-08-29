@@ -348,9 +348,12 @@ mienta, y una pregunta sin respuesta: cuál de las dos se notifica.
 **No es un `valor` de tipo `RD`, y se comprobó antes de crear la tabla.** Un valor *formaliza* deuda
 ya asentada —`RegistrarValor` (#37) la lee del libro y le mueve la fase de `ORDINARIA` a `VALOR`— y
 esta resolución es el acto que la *asienta*: emitirla como valor exigiría que la deuda existiera
-antes del acto que la determina. Y mientras `D-02a` siga abierta la liquidación sale sin importes
-(#198), así que ningún valor se podría emitir, y con él se caería también la mitad de la
-transferencia que **no** depende de `D-02`: inscribir en catastro la estructura hallada. Las dos
+antes del acto que la determina. Y mientras la liquidación siga saliendo sin importes (#198) ningún
+valor se podría emitir, y con él se caería también la mitad de la transferencia que **no** depende
+de las cifras: inscribir en catastro la estructura hallada. `D-02a` se cerró el 2026-08-25, pero lo
+que #198 sigue esperando son las dos tablas de valuación que todavía no se pueden cargar —el cuadro
+de valores unitarios y la depreciación, H-14 y H-15 de
+[GOB-03](../00-gobierno/plan-de-desbloqueo-D-02.md)— y el `% actualización` de `D-11`. Las dos
 cosas conviven: una vez asentado el cargo, `valores` lo formaliza como RD por el camino ordinario.
 
 `ficha_catastral` **no necesitó ni una columna**: `V1` ya la nació con `origen` —que admite

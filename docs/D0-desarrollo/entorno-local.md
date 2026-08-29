@@ -60,7 +60,7 @@ yarn dev                 # http://localhost:5173
 ```
 
 `@sgtm/api-mock` sustituye `fetch` e intercepta lo que cuelga de `/api/v1`, así que **no hace falta
-ni backend ni base de datos**. Contesta las 134 operaciones del contrato con los datos del
+ni backend ni base de datos**. Contesta las 134 operaciones del catálogo —una por pantalla— con los datos del
 prototipo y con latencia simulada, para que los estados de carga se vean.
 
 Lo que el proxy **no** hace, a propósito: no filtra, no ordena, no pagina, no valida y no persiste.
