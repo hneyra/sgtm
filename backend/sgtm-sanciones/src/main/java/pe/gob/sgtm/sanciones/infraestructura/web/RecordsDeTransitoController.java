@@ -15,13 +15,9 @@ import pe.gob.sgtm.documentos.Campo;
 import pe.gob.sgtm.documentos.GeneradorDeDocumentos;
 import pe.gob.sgtm.sanciones.aplicacion.ConsultaDePadronesDeSanciones;
 import pe.gob.sgtm.sanciones.aplicacion.ModelosDeLosReportesDeSanciones;
-import pe.gob.sgtm.sanciones.dominio.CriterioDePadron;
-import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.sanciones.dominio.PapeletaDelPadron;
 import pe.gob.sgtm.web.Api;
-import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
-import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
@@ -130,57 +126,16 @@ public class RecordsDeTransitoController {
             @Nullable String documento,
             ParametrosDePaginacion paginacion) {
 
-        String licenciaLimpia = PeticionesDeSanciones.vacioEsNulo(licencia);
-        String documentoLimpio = PeticionesDeSanciones.vacioEsNulo(documento);
-        if (licenciaLimpia == null && documentoLimpio == null) {
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION,
-                    "El record de conductor necesita a quien: la licencia de conducir o el"
-                            + " documento del infractor. Sin ninguno de los dos, esto seria el"
-                            + " padron entero con otro titulo");
-        }
-
-        CriterioDePadron criterio =
-                new CriterioDePadron(
-                        Familia.TRANSITO,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        licenciaLimpia,
-                        documentoLimpio,
-                        null,
-                        false);
-        return consulta.papeletas(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION));
+        return consulta.papeletas(
+                CriteriosDeTransito.delConductor(licencia, documento),
+                paginacion.aPaginacion(ORDEN_POR_OMISION));
     }
 
     private Pagina<PapeletaDelPadron> paginaDelVehiculo(
             @Nullable String placa, ParametrosDePaginacion paginacion) {
 
-        String placaLimpia = PeticionesDeSanciones.vacioEsNulo(placa);
-        if (placaLimpia == null) {
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION,
-                    "El record vehicular necesita la placa. Sin ella esto seria el padron entero"
-                            + " con otro titulo");
-        }
-
-        CriterioDePadron criterio =
-                new CriterioDePadron(
-                        Familia.TRANSITO,
-                        null,
-                        null,
-                        null,
-                        null,
-                        placaLimpia,
-                        null,
-                        null,
-                        null,
-                        null,
-                        false);
-        return consulta.papeletas(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION));
+        return consulta.papeletas(
+                CriteriosDeTransito.delVehiculo(placa), paginacion.aPaginacion(ORDEN_POR_OMISION));
     }
 
     private static String texto(@Nullable String valor) {

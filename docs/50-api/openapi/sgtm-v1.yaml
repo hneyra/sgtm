@@ -2874,7 +2874,15 @@ paths:
     post:
       operationId: transito_reportes
       summary: "Reportes de infracción de tránsito"
-      description: "Emisor de los reportes del módulo de tránsito. El tipo de reporte habilita los criterios que corresponden y el destino puede ser pantalla, impresora o Excel."
+      description: >-
+        Emisor de los reportes del módulo de tránsito y entrada de su centro de reportes
+        (ADR-0014 §5, #396). El campo `reporte` elige entre `PADRON`, `PADRON_COACTIVA`,
+        `PADRON_CONSTANCIAS`, `RECORD_CONDUCTOR`, `RECORD_VEHICULAR`, `RESUMEN_RECAUDACION`,
+        `RESUMEN_PAPELETAS`, `RESUMEN_CODIGO` y `RESUMEN_PLACA`; con `formato` la respuesta es
+        el documento en PDF, hoja de cálculo o texto enriquecido (RF-132), y sin él, el JSON. No
+        hay ninguna consulta nueva detrás: llama a las mismas que los GET. **Un criterio que el
+        reporte elegido no usa se rechaza con 422 nombrándolo**, en vez de ignorarse: pedir el
+        resumen de recaudación «de una placa» devolvería el de todas y nada lo diría.
       tags: ["Tránsito"]
       requestBody:
         required: true
@@ -3116,12 +3124,24 @@ paths:
     get:
       operationId: transito_papeleta_reporte
       summary: "Reporte papeleta de infracción"
-      description: "Hoja informativa que resume la información relevante de una papeleta de infracción de tránsito."
+      description: >-
+        Hoja informativa de una papeleta de tránsito: el acta con su desglose, el código del
+        catálogo que la sustenta y a quién se le cobra (#396, RF-068). Los seis importes son los
+        **del acta**, congelados al registrarla, y por eso `actualizadoA` es la fecha de la
+        infracción y no la de hoy; `emitidaEl` es el día en que sale la hoja, con el que se
+        resolvió el domicilio del obligado. **No dice lo que se debe hoy**: esa cifra es del libro
+        y la publica `transito_estado_cuenta`. Una papeleta que no existe responde **404**, no
+        una hoja vacía. Con `?formato=PDF|XLS|RTF` sale como documento (RF-132).
       tags: ["Tránsito"]
       parameters:
         - name: numero
           in: path
           required: true
+          schema: { type: string }
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
           schema: { type: string }
       responses:
         200:
@@ -3353,8 +3373,11 @@ paths:
         Lo recaudado por papeletas de tránsito, según el **libro de cuenta corriente**: la suma
         exacta de los abonos vivos, desglosada por ejercicio, mes y tipo de cobranza (#53,
         RF-073). No se recompone sumando papeletas pagadas —esa cifra no cuenta los intereses
-        cobrados, cuenta entero un pago parcial y sigue contando un recibo anulado—. El filtro por
-        caja no se sirve aquí: la caja es de tesorería (`GET /tesoreria/recaudacion/por-area`).
+        cobrados, cuenta entero un pago parcial y sigue contando un recibo anulado—. Además de
+        `lineas`, la respuesta trae `porMes`: una entrada por mes con las fases desglosadas y
+        **su total ya sumado en el servidor** (#398), porque recomponerlo en el cliente es lo que
+        RNF-083 prohíbe. El filtro por caja no se sirve aquí: la caja es de tesorería (`GET
+        /tesoreria/recaudacion/por-area`).
       tags: ["Tránsito"]
       parameters:
         - name: formato
@@ -3420,10 +3443,13 @@ paths:
       operationId: transito_resumen_papeletas
       summary: "Resumen de papeletas pendientes y pagadas"
       description: >-
-        Cuántas papeletas hay y por cuánto, agrupadas por estado, código, iniciales de placa o mes
-        (#53, RF-073). Todos los importes son los **de las actas**, no lo cobrado: lo cobrado está
-        en `transito_resumen_recaudacion`. Cada línea trae las pendientes y las que están en
-        coactiva en columnas separadas, así que no hace falta pedir el resumen dos veces.
+        Cuántas papeletas hay y por cuánto, agrupadas por **año** —lo que toma por omisión—, mes,
+        estado, código o iniciales de placa (#53, RF-073, #398). Cada línea publica `ano` cuando
+        el agrupador lo determina —`ANO` y `MES`— y nulo cuando no, porque agrupar por estado o
+        por código mezcla años dentro de un grupo. Todos los importes son los **de las actas**, no
+        lo cobrado: lo cobrado está en `transito_resumen_recaudacion`. Cada línea trae las
+        pendientes y las que están en coactiva en columnas separadas, así que no hace falta pedir
+        el resumen dos veces.
       tags: ["Tránsito"]
       parameters:
         - name: formato

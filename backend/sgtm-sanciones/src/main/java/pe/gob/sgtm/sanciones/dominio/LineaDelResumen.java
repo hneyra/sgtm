@@ -21,8 +21,11 @@ import pe.gob.sgtm.dominio.Dinero;
  * porque se parece a la buena. Los nombres de este record existen para que esa confusión no se
  * pueda escribir sin darse cuenta.
  *
- * @param clave el valor por el que se agrupó: el estado, el código, las dos letras o el mes
+ * @param clave el valor por el que se agrupó: el estado, el código, las dos letras, el mes o el año
  * @param descripcion su descripción, cuando el agrupador la tiene —el código la trae—; nula si no
+ * @param ano el año de la línea, cuando el agrupador lo determina —{@code ANO} y {@code MES}—; nulo
+ *     si no. Agrupar por estado, por código o por iniciales mezcla años dentro de un grupo, y
+ *     publicar ahí «el año» sería elegir uno: una cifra plausible y falsa (#398)
  * @param cantidad cuántas papeletas hay en el grupo
  * @param importe la suma de sus importes de acta
  * @param pagadas cuántas constan pagadas
@@ -35,6 +38,7 @@ import pe.gob.sgtm.dominio.Dinero;
 public record LineaDelResumen(
         String clave,
         @Nullable String descripcion,
+        @Nullable Integer ano,
         long cantidad,
         Dinero importe,
         long pagadas,

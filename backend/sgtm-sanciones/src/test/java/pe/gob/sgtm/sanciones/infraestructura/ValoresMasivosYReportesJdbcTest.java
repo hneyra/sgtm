@@ -32,6 +32,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
@@ -88,6 +89,7 @@ import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.sanciones.aplicacion.ConsultaDeLaCorridaDeValores;
+import pe.gob.sgtm.sanciones.aplicacion.ConsultaDeLaHojaDePapeleta;
 import pe.gob.sgtm.sanciones.aplicacion.ConsultaDePadronesDeSanciones;
 import pe.gob.sgtm.sanciones.aplicacion.ConsultaDeResumenesDeSanciones;
 import pe.gob.sgtm.sanciones.aplicacion.EmitirConstanciaLibre;
@@ -112,11 +114,22 @@ import pe.gob.sgtm.sanciones.dominio.Papeleta;
 import pe.gob.sgtm.sanciones.dominio.PapeletaDelPadron;
 import pe.gob.sgtm.sanciones.dominio.ResumenDePapeletas;
 import pe.gob.sgtm.sanciones.dominio.TipoDeResolucionDeGerencia;
+import pe.gob.sgtm.sanciones.infraestructura.web.HojaDePapeletaController;
+import pe.gob.sgtm.sanciones.infraestructura.web.HojaInformativaResource;
+import pe.gob.sgtm.sanciones.infraestructura.web.PapeletaDelPadronResource;
+import pe.gob.sgtm.sanciones.infraestructura.web.PeticionDeReporteDeTransito;
+import pe.gob.sgtm.sanciones.infraestructura.web.RecaudacionDeMultasResource;
+import pe.gob.sgtm.sanciones.infraestructura.web.ReporteDeTransitoResource;
+import pe.gob.sgtm.sanciones.infraestructura.web.ReportesDeTransitoController;
+import pe.gob.sgtm.sanciones.infraestructura.web.ResumenDePapeletasResource;
+import pe.gob.sgtm.sanciones.infraestructura.web.ResumenesDeTransitoController;
 import pe.gob.sgtm.valores.EmisionDeValoresDeMultas;
 import pe.gob.sgtm.valores.aplicacion.EmisionDeValoresDeMultasValores;
 import pe.gob.sgtm.valores.aplicacion.RegistrarValor;
 import pe.gob.sgtm.valores.infraestructura.MovimientoDeValorRepositoryJdbc;
 import pe.gob.sgtm.valores.infraestructura.ValorRepositoryJdbc;
+import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -197,6 +210,10 @@ class ValoresMasivosYReportesJdbcTest {
     private static EmitirConstanciaLibre emitirConstancia;
     private static ConsultaDePadronesDeSanciones consultaDePadrones;
     private static ConsultaDeResumenesDeSanciones consultaDeResumenes;
+    private static ConsultaDeLaHojaDePapeleta consultaDeLaHoja;
+    private static ReportesDeTransitoController emisorDeReportes;
+    private static HojaDePapeletaController hojaDePapeleta;
+    private static ResumenesDeTransitoController resumenesDeTransito;
     private static RegistroDeAbonos abonos;
     private static RegistrarValor registrarValor;
     private static GeneradorDeDocumentos generadorDeDocumentos;
@@ -337,6 +354,15 @@ class ValoresMasivosYReportesJdbcTest {
                                 constancias,
                                 new NotificacionAdministrativaRepositoryJdbc(jdbc)));
         consultaDeResumenes = envolver(new ConsultaDeResumenesDeSanciones(padron, libro));
+        consultaDeLaHoja = envolver(new ConsultaDeLaHojaDePapeleta(papeletas, codigos, directorio));
+        emisorDeReportes =
+                new ReportesDeTransitoController(
+                        consultaDePadrones, consultaDeResumenes, generadorDeDocumentos, RELOJ);
+        hojaDePapeleta =
+                new HojaDePapeletaController(consultaDeLaHoja, generadorDeDocumentos, RELOJ);
+        resumenesDeTransito =
+                new ResumenesDeTransitoController(
+                        consultaDeResumenes, generadorDeDocumentos, RELOJ);
     }
 
     @AfterAll
@@ -1017,6 +1043,367 @@ class ValoresMasivosYReportesJdbcTest {
     }
 
     // ==================================================================
+    //  #396 / #398 — el emisor, la hoja informativa y la agrupacion por ano
+    // ==================================================================
+
+    @Nested
+    @DisplayName("#398 — la agrupacion por ano y el total por mes")
+    class ElAnoYElTotalPorMes {
+
+        @Test
+        @DisplayName("agrupado por ANO, la clave es el ano y la linea publica su ano")
+        void agrupadoPorAno() {
+            papeletaDeTransito("ano1");
+
+            ResumenDePapeletas resumen = resumenAgrupadoPor(AgrupacionDelResumen.ANO);
+            LineaDelResumen linea = lineaDe(resumen, "2026");
+
+            assertThat(linea.ano())
+                    .as("la columna «Ano» de transito_resumen_papeletas se dibuja con esto")
+                    .isEqualTo(2026);
+            assertThat(resumen.lineas()).allSatisfy(l -> assertThat(l.ano()).isNotNull());
+        }
+
+        @Test
+        @DisplayName("agrupado por MES, la linea sigue diciendo de que ano es")
+        void agrupadoPorMes() {
+            papeletaDeTransito("ano2");
+
+            LineaDelResumen linea =
+                    lineaDe(resumenAgrupadoPor(AgrupacionDelResumen.MES), "2026-03");
+
+            assertThat(linea.ano())
+                    .as(
+                            "'YYYY-MM' determina el ano; PostgreSQL no lo deduce, y por eso se"
+                                    + " agrupa tambien por el")
+                    .isEqualTo(2026);
+        }
+
+        @Test
+        @DisplayName("agrupado por estado, codigo o placa el ano va NULO: el grupo mezcla anos")
+        void sinAnoDeterminado() {
+            papeletaDeTransito("ano3");
+
+            for (AgrupacionDelResumen agrupacion :
+                    List.of(
+                            AgrupacionDelResumen.ESTADO,
+                            AgrupacionDelResumen.CODIGO,
+                            AgrupacionDelResumen.PLACA)) {
+
+                assertThat(resumenAgrupadoPor(agrupacion).lineas())
+                        .as("agrupado por " + agrupacion)
+                        .isNotEmpty()
+                        .allSatisfy(linea -> assertThat(linea.ano()).isNull());
+            }
+        }
+
+        @Test
+        @DisplayName("el resumen sigue cuadrando con el total, agrupe por lo que agrupe")
+        void losCincoAgrupadoresCuadran() {
+            papeletaDeTransito("ano4");
+
+            for (AgrupacionDelResumen agrupacion : AgrupacionDelResumen.values()) {
+                ResumenDePapeletas resumen = resumenAgrupadoPor(agrupacion);
+                assertThat(resumen.lineas()).as("agrupado por " + agrupacion).isNotEmpty();
+                assertThat(resumen.total())
+                        .as("las lineas suman el total, sea cual sea el agrupador")
+                        .isEqualTo(
+                                resumen.lineas().stream()
+                                        .mapToLong(LineaDelResumen::cantidad)
+                                        .sum());
+            }
+        }
+
+        @Test
+        @DisplayName("el GET sin «agrupadoPor» agrupa por ANO: es la primera columna de su tabla")
+        void elGetAgrupaPorAnoPorOmision() {
+            papeletaDeTransito("ano5");
+
+            ResumenDePapeletasResource resumen =
+                    enTransaccion(() -> resumenesDeTransito.resumenDePapeletas(null, null, null));
+
+            assertThat(resumen.agrupadoPor())
+                    .as(
+                            "con ESTADO —lo que hacia antes de #398— la columna «Año» se llenaria de"
+                                    + " nombres de estado (RNF-080)")
+                    .isEqualTo("ANO");
+            assertThat(resumen.lineas())
+                    .isNotEmpty()
+                    .allSatisfy(linea -> assertThat(linea.ano()).isNotNull());
+        }
+
+        @Test
+        @DisplayName("la recaudacion publica el total POR MES, sumado en el servidor")
+        void elTotalPorMes() {
+            Papeleta papeleta = papeletaExigible("mes1");
+            cobrarIntegro(papeleta, "RECIBO 001-9200001");
+
+            RecaudacionDeMultasResource recurso =
+                    RecaudacionDeMultasResource.de(recaudacionDe2026());
+
+            assertThat(recurso.porMes())
+                    .as("la pantalla dibuja una fila por mes; sin esto «Total S/» no existe")
+                    .isNotEmpty();
+            for (RecaudacionDeMultasResource.LineaDeUnMes mes : recurso.porMes()) {
+                Dinero suma = Dinero.CERO;
+                for (RecaudacionDeMultasResource.PorFase fase : mes.porFase()) {
+                    suma = suma.mas(fase.recaudado());
+                }
+                assertThat(mes.total())
+                        .as(
+                                "el total del mes es la suma de TODAS sus fases, no de las que se"
+                                        + " dibujan")
+                        .isEqualTo(suma);
+                assertThat(mes.actualizadoA())
+                        .as("toda cifra indica su fecha (RNF-075, regla 9)")
+                        .isEqualTo(LocalDate.of(2026, 4, 20));
+            }
+        }
+
+        @Test
+        @DisplayName("y lo que suman los meses es exactamente el total general del libro")
+        void losMesesSumanElTotalGeneral() {
+            Papeleta papeleta = papeletaExigible("mes2");
+            cobrarIntegro(papeleta, "RECIBO 001-9200002");
+
+            RecaudacionDeMultasResource recurso =
+                    RecaudacionDeMultasResource.de(recaudacionDe2026());
+
+            Dinero suma = Dinero.CERO;
+            for (RecaudacionDeMultasResource.LineaDeUnMes mes : recurso.porMes()) {
+                suma = suma.mas(mes.total());
+            }
+            assertThat(suma)
+                    .as("agrupar por mes no puede perder ni un centimo del total del libro")
+                    .isEqualTo(recurso.total());
+        }
+    }
+
+    @Nested
+    @DisplayName("#396 — el emisor de reportes de transito")
+    class ElEmisorDeReportes {
+
+        @Test
+        @DisplayName("un reporte que no existe se rechaza nombrando los nueve que si")
+        void nombraLosNueve() {
+            assertThatThrownBy(() -> emitir(peticionDelReporte("PADRON_DE_LO_QUE_SEA")))
+                    .isInstanceOf(ProblemaDeNegocio.class)
+                    .hasMessageContaining("PADRON_COACTIVA")
+                    .hasMessageContaining("RECORD_VEHICULAR")
+                    .hasMessageContaining("RESUMEN_PLACA");
+        }
+
+        @Test
+        @DisplayName("un criterio que el reporte no usa se RECHAZA nombrandolo, no se ignora")
+        void elCriterioDeMasSeRechaza() {
+            PeticionDeReporteDeTransito conPlaca =
+                    new PeticionDeReporteDeTransito(
+                            "RESUMEN_RECAUDACION",
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            "P1T-234",
+                            "2026",
+                            null,
+                            null,
+                            null,
+                            null);
+
+            assertThatThrownBy(() -> emitir(conPlaca))
+                    .as(
+                            "pedir la recaudacion «de una placa» devolveria la de todas, y el papel"
+                                    + " no lo diria")
+                    .isInstanceOf(ProblemaDeNegocio.class)
+                    .hasMessageContaining("placa")
+                    .hasMessageContaining("RESUMEN_RECAUDACION");
+        }
+
+        @Test
+        @DisplayName("un criterio en blanco no es una pregunta: la pantalla manda su formulario")
+        void elCriterioEnBlancoNoEstorba() {
+            papeletaDeTransito("emi1");
+
+            PeticionDeReporteDeTransito conBlancos =
+                    new PeticionDeReporteDeTransito(
+                            "RESUMEN_RECAUDACION",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "2026",
+                            "",
+                            "",
+                            "",
+                            null);
+
+            assertThat(cuerpoDe(emitir(conBlancos)).recaudacion()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("el padron sale con las papeletas de esta municipalidad")
+        void elPadron() {
+            Papeleta papeleta = papeletaDeTransito("emi2");
+
+            ReporteDeTransitoResource reporte = cuerpoDe(emitir(peticionDelReporte("PADRON")));
+
+            assertThat(reporte.reporte()).isEqualTo("PADRON");
+            assertThat(reporte.papeletas()).isNotNull();
+            assertThat(
+                            reporte.papeletas().contenido().stream()
+                                    .map(PapeletaDelPadronResource::numero)
+                                    .toList())
+                    .contains(papeleta.numero());
+        }
+
+        @Test
+        @DisplayName("una papeleta de otra municipalidad no se emite: RLS la deja fuera")
+        void elAislamientoDelEmisor() {
+            Papeleta papeleta = papeletaDeTransito("emi3");
+
+            ReporteDeTransitoResource desdeLaVecina =
+                    cuerpoDe(
+                            enTransaccionDe(
+                                    otraMunicipalidad,
+                                    () -> emisorDeReportes.emitir(peticionDelReporte("PADRON")),
+                                    "vecino"));
+
+            assertThat(desdeLaVecina.papeletas()).isNotNull();
+            assertThat(
+                            desdeLaVecina.papeletas().contenido().stream()
+                                    .map(PapeletaDelPadronResource::numero)
+                                    .toList())
+                    .doesNotContain(papeleta.numero());
+        }
+
+        @Test
+        @DisplayName("el resumen de papeletas del emisor agrupa por ANO, como su GET (#398)")
+        void elResumenDelEmisorAgrupaPorAno() {
+            papeletaDeTransito("emi4");
+
+            ReporteDeTransitoResource reporte =
+                    cuerpoDe(emitir(peticionDelReporte("RESUMEN_PAPELETAS")));
+
+            assertThat(reporte.resumenDePapeletas()).isNotNull();
+            assertThat(reporte.resumenDePapeletas().agrupadoPor()).isEqualTo("ANO");
+            assertThat(reporte.resumenDePapeletas().lineas())
+                    .isNotEmpty()
+                    .allSatisfy(linea -> assertThat(linea.ano()).isNotNull());
+        }
+
+        @Test
+        @DisplayName("un record sin sujeto sigue siendo el padron con otro titulo: 422")
+        void elRecordSinSujeto() {
+            assertThatThrownBy(() -> emitir(peticionDelReporte("RECORD_VEHICULAR")))
+                    .isInstanceOf(ProblemaDeNegocio.class)
+                    .hasMessageContaining("necesita la placa");
+        }
+
+        @Test
+        @DisplayName("con formato, el emisor devuelve el documento y no el JSON")
+        void conFormatoSaleElDocumento() {
+            papeletaDeTransito("emi5");
+
+            PeticionDeReporteDeTransito enPdf =
+                    new PeticionDeReporteDeTransito(
+                            "PADRON", null, null, null, null, null, null, null, null, null, null,
+                            null, null, "PDF");
+
+            Object cuerpo = enTransaccion(() -> emisorDeReportes.emitir(enPdf)).getBody();
+            assertThat(cuerpo).isInstanceOf(byte[].class);
+            assertThat((byte[]) cuerpo).isNotEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("#396 — la hoja informativa de una papeleta")
+    class LaHojaInformativa {
+
+        @Test
+        @DisplayName("la hoja trae el acta con su desglose, y su fecha es la de la infraccion")
+        void laHojaDeUnaPapeleta() {
+            Papeleta papeleta = papeletaDeTransito("hoja1");
+
+            HojaInformativaResource hoja =
+                    enTransaccion(() -> hojaDePapeleta.hoja(papeleta.numero()));
+
+            assertThat(hoja.numero()).isEqualTo(papeleta.numero());
+            assertThat(hoja.importeAPagar()).isEqualTo(MULTA);
+            assertThat(hoja.descripcionInfraccion()).isEqualTo("Infraccion de la prueba");
+            assertThat(hoja.obligadoNombre()).isEqualTo("PEÑA GARCÍA, JOSÉ");
+            assertThat(hoja.actualizadoA())
+                    .as("los seis importes son los del acta: su fecha es la de la infraccion")
+                    .isEqualTo(INFRACCION);
+            assertThat(hoja.emitidaEl())
+                    .as("y el dia en que sale la hoja va aparte, del reloj inyectado")
+                    .isEqualTo(LocalDate.of(2026, 4, 20));
+        }
+
+        @Test
+        @DisplayName("una papeleta que no existe responde NO_ENCONTRADO, no una hoja vacia")
+        void laQueNoExiste() {
+            assertThatThrownBy(() -> enTransaccion(() -> hojaDePapeleta.hoja("PT-NO-EXISTE")))
+                    .isInstanceOf(ProblemaDeNegocio.class)
+                    .extracting(problema -> ((ProblemaDeNegocio) problema).codigo())
+                    .isEqualTo(CodigoDeError.NO_ENCONTRADO);
+        }
+
+        @Test
+        @DisplayName("y una de otra municipalidad tampoco se encuentra: RLS la deja fuera")
+        void laDeLaVecina() {
+            Papeleta papeleta = papeletaDeTransito("hoja2");
+
+            assertThatThrownBy(
+                            () ->
+                                    enTransaccionDe(
+                                            otraMunicipalidad,
+                                            () -> hojaDePapeleta.hoja(papeleta.numero()),
+                                            "vecino"))
+                    .isInstanceOf(ProblemaDeNegocio.class)
+                    .extracting(problema -> ((ProblemaDeNegocio) problema).codigo())
+                    .isEqualTo(CodigoDeError.NO_ENCONTRADO);
+        }
+
+        @Test
+        @DisplayName("la hoja sale en los tres formatos, con su pie y su punto de firma")
+        void losTresFormatosDeLaHoja() {
+            Papeleta papeleta = papeletaDeTransito("hoja3");
+
+            for (FormatoDeDocumento formato : FormatoDeDocumento.values()) {
+                byte[] archivo =
+                        enTransaccion(
+                                        () ->
+                                                hojaDePapeleta.hojaComoDocumento(
+                                                        papeleta.numero(), formato.name()))
+                                .getBody();
+                assertThat(archivo).as("RF-132 promete los tres: " + formato).isNotEmpty();
+            }
+
+            String rtf =
+                    new String(
+                            enTransaccion(
+                                            () ->
+                                                    hojaDePapeleta.hojaComoDocumento(
+                                                            papeleta.numero(), "RTF"))
+                                    .getBody(),
+                            StandardCharsets.ISO_8859_1);
+            assertThat(rtf)
+                    .as("la hoja sale de la municipalidad, se firma y se archiva (RNF-084)")
+                    .contains("Unidad responsable");
+            assertThat(rtf)
+                    .as("y dice a que fecha son sus importes")
+                    .contains("Cifras al " + INFRACCION);
+        }
+    }
+
+    // ==================================================================
     //  Ayudas
     // ==================================================================
 
@@ -1045,6 +1432,37 @@ class ValoresMasivosYReportesJdbcTest {
                                         LocalDate.of(2026, 12, 31)),
                                 AgrupacionDelResumen.ESTADO,
                                 LocalDate.of(2026, 4, 20)));
+    }
+
+    private static ResumenDePapeletas resumenAgrupadoPor(AgrupacionDelResumen agrupacion) {
+        return enTransaccion(
+                () ->
+                        consultaDeResumenes.resumir(
+                                CriterioDePadron.de(
+                                        Familia.TRANSITO,
+                                        LocalDate.of(2026, 1, 1),
+                                        LocalDate.of(2026, 12, 31)),
+                                agrupacion,
+                                LocalDate.of(2026, 4, 20)));
+    }
+
+    /** Una peticion del emisor con solo el tipo de reporte: sin ningun criterio. */
+    private static PeticionDeReporteDeTransito peticionDelReporte(String reporte) {
+        return new PeticionDeReporteDeTransito(
+                reporte, null, null, null, null, null, null, null, null, null, null, null, null,
+                null);
+    }
+
+    private static ResponseEntity<?> emitir(PeticionDeReporteDeTransito peticion) {
+        return enTransaccion(() -> emisorDeReportes.emitir(peticion));
+    }
+
+    private static ReporteDeTransitoResource cuerpoDe(ResponseEntity<?> respuesta) {
+        Object cuerpo = respuesta.getBody();
+        assertThat(cuerpo)
+                .as("sin «formato» el emisor devuelve el JSON de la union, no el documento")
+                .isInstanceOf(ReporteDeTransitoResource.class);
+        return (ReporteDeTransitoResource) cuerpo;
     }
 
     private static LineaDelResumen lineaDe(ResumenDePapeletas resumen, String clave) {

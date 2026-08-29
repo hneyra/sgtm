@@ -100,10 +100,11 @@ describe('la respuesta dice con que conjunto se determino', () => {
    * El ejemplo es una que cae en el camino comun de verdad. `contribuyentes`
    * —el candidato obvio— no sirve para esto: su ruta esta en `PAGINADOS` desde
    * #11 y sale por la misma bifurcacion que arbitrios, asi que probar con ella
-   * comprobaria otra vez lo de arriba y no esto.
+   * comprobaria otra vez lo de arriba y no esto. Era
+   * `/transito/reportes/resumen-papeletas` hasta que #398 la conecto.
    */
   it('una pantalla que no determina sale sin el dato, no con el dato vacio', async () => {
-    const datos = await solicitar<DatosDePantalla>('/transito/reportes/resumen-papeletas');
+    const datos = await solicitar<DatosDePantalla>('/fiscalizacion/resultados');
 
     expect(datos.tabla?.filas.length).toBeGreaterThan(0);
     expect(datos.determinacion).toBeUndefined();

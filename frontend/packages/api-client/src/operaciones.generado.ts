@@ -576,7 +576,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/transito/papeletas/{numero}/hoja-informativa',
     parametrosDeRuta: ['numero'],
-    parametrosDeConsulta: [],
+    parametrosDeConsulta: ['formato'],
   },
   /** Resolución de gerencia ordinaria — `POST /transito/resoluciones/ordinaria` */
   transito_rg_ordinaria: {
@@ -1779,6 +1779,7 @@ export interface ParametrosPorOperacion {
   /** `GET /transito/papeletas/{numero}/hoja-informativa` */
   readonly transito_papeleta_reporte: {
     readonly numero: string;
+    readonly formato?: string;
   };
   /** `POST /transito/resoluciones/ordinaria` */
   readonly transito_rg_ordinaria: Readonly<Record<string, never>>;

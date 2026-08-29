@@ -194,6 +194,7 @@ public final class ModelosDeLosReportesDeSanciones {
                     List.of(
                             linea.clave(),
                             texto(linea.descripcion()),
+                            linea.ano() == null ? SIN_DATO : String.valueOf(linea.ano()),
                             String.valueOf(linea.cantidad()),
                             linea.importe().toString(),
                             String.valueOf(linea.pagadas()),
@@ -220,6 +221,7 @@ public final class ModelosDeLosReportesDeSanciones {
                                 List.of(
                                         "Clave",
                                         "Descripcion",
+                                        "Ano",
                                         "Papeletas",
                                         "Importe de las actas",
                                         "Pagadas",
@@ -233,6 +235,86 @@ public final class ModelosDeLosReportesDeSanciones {
                         resumen.aLaFecha(),
                         "Los importes son los de las actas, no lo cobrado: lo cobrado esta en el"
                                 + " resumen de recaudacion, que sale del libro."),
+                null,
+                null);
+    }
+
+    /**
+     * La hoja informativa de una papeleta: una fila por concepto, con su importe (#396, RF-068).
+     *
+     * <p>Es la única de las hojas de sanciones que habla de <b>un</b> registro y no de un listado,
+     * y aun así sale por el mismo camino: cabecera con el criterio, una tabla y el pie con la fecha
+     * y el punto de firma. Una hoja propia con su propia cabecera sería la sexta manera de escribir
+     * la fecha, y el día que alguien mirara dos hojas seguidas no sabría si dicen lo mismo.
+     *
+     * <p>Ninguna celda se recompone: los seis importes son los del acta, y el pie dice a qué fecha
+     * lo son.
+     */
+    public static ModeloDeDocumento deLaHojaDePapeleta(ConsultaDeLaHojaDePapeleta.Hoja hoja) {
+        var papeleta = hoja.papeleta();
+        List<List<String>> filas =
+                List.of(
+                        List.of(
+                                "Codigo de infraccion",
+                                hoja.codigo() == null
+                                        ? SIN_DATO
+                                        : hoja.codigo().codigo()
+                                                + " — "
+                                                + hoja.codigo().descripcion(),
+                                SIN_DATO),
+                        List.of(
+                                "Base imponible",
+                                "UIT aplicada en el acta",
+                                papeleta.baseImponible().toString()),
+                        List.of(
+                                "Porcentaje de la infraccion",
+                                papeleta.porcentajeInfraccion().valor().toPlainString(),
+                                papeleta.importeInfraccion().toString()),
+                        List.of(
+                                "Porcentaje a cobrar",
+                                papeleta.porcentajeACobrar().valor().toPlainString(),
+                                papeleta.importeAPagar().toString()),
+                        List.of(
+                                "Importe con beneficio",
+                                papeleta.importeConBeneficio() == null
+                                        ? "Sin beneficio en el acta"
+                                        : "Descuento registrado en el acta",
+                                papeleta.importeConBeneficio() == null
+                                        ? SIN_DATO
+                                        : papeleta.importeConBeneficio().toString()));
+
+        List<Campo> cabecera =
+                List.of(
+                        Campo.de("N.o de papeleta", papeleta.numero()),
+                        Campo.de("Fecha de la infraccion", papeleta.fechaInfraccion().toString()),
+                        Campo.de(
+                                "Hora",
+                                papeleta.horaInfraccion() == null
+                                        ? SIN_DATO
+                                        : papeleta.horaInfraccion().toString()),
+                        Campo.de("Lugar", papeleta.lugar()),
+                        Campo.de("Placa", texto(papeleta.placa())),
+                        Campo.de("Licencia de conducir", texto(papeleta.licenciaConducir())),
+                        Campo.de(
+                                "Obligado",
+                                hoja.obligado() == null ? SIN_DATO : hoja.obligado().nombre()),
+                        Campo.de(
+                                "Documento",
+                                hoja.obligado() == null ? SIN_DATO : hoja.obligado().documento()),
+                        Campo.de("Domicilio", texto(hoja.domicilioDelObligado())),
+                        Campo.de("Estado", papeleta.estado().name()));
+
+        return new ModeloDeDocumento(
+                "Hoja informativa de papeleta de infraccion",
+                null,
+                hoja.emitidaEl(),
+                cabecera,
+                List.of(Tabla.de("Detalle", List.of("Concepto", "Detalle", "Importe"), filas)),
+                pie(
+                        papeleta.fechaInfraccion(),
+                        "Los importes son los del acta, congelados al registrar la papeleta. Lo"
+                                + " que se debe hoy es otra cifra, y la publica el estado de"
+                                + " cuenta."),
                 null,
                 null);
     }

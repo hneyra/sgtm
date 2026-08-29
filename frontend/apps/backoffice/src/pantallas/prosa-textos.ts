@@ -325,6 +325,34 @@ export const MOTIVOS_DE_FILTRO: Readonly<Record<string, string>> = {
    */
   'consulta_resumen_predial.palabra':
     'La búsqueda por palabra suelta no se puede resolver: no hay un campo al que apunte, y responderla obligaría a recorrer todo el padrón. Busca por «Cod. Catastral», «Cod. Contribuyente» o «Uso».',
+
+  /**
+   * **Los dos resumenes de Transito** (#398). Los cinco son del mismo tipo y
+   * ninguno es una falta que se vaya a corregir sola:
+   *
+   * - los dos «Agrupado por»: la tabla del catalogo **no tiene columna para la
+   *   clave del grupo** —la primera dice «Año» en uno y «Mes» en el otro—, asi
+   *   que agrupar por otra cosa dejaria filas que no se distinguen entre si
+   * - «Cobranza» y «Tipo de cobranza»: la respuesta ya trae las fases en
+   *   columnas separadas, para cada linea; filtrar obligaria a pedir el resumen
+   *   dos veces para ver lo que ya viene junto
+   * - «Caja»: `ResumenesDeTransitoController` la rechaza con 422 porque el
+   *   libro no sabe en que ventanilla se cobro. Ese corte lo sirve tesoreria
+   */
+  'transito_resumen_papeletas.agrupadoPor':
+    'Este resumen se agrupa por año, que es lo que dice su primera columna: la tabla no tiene ninguna otra columna donde poner la clave del grupo, así que agrupar por estado o por código dejaría filas que no se distinguen. Para verlo por código de infracción o por iniciales de placa hay una pantalla propia de cada uno.',
+
+  'transito_resumen_papeletas.cobranza':
+    'No hace falta filtrar por cobranza: cada fila ya trae las pendientes y las que están en cobranza coactiva en columnas separadas.',
+
+  'transito_resumen_recaudacion.agrupadoPor':
+    'Este resumen se agrupa por mes, que es lo que dice su primera columna: la tabla no tiene ninguna otra columna donde poner la clave del grupo.',
+
+  'transito_resumen_recaudacion.tipoDeCobranza':
+    'No hace falta filtrar por tipo de cobranza: cada mes ya trae la ordinaria, la coactiva y los convenios en columnas separadas.',
+
+  'transito_resumen_recaudacion.caja':
+    'El libro no sabe en qué ventanilla se cobró, así que aquí no se puede filtrar por caja: ese corte lo da «Recaudación por área» de Tesorería.',
 };
 
 /** Los filtros bloqueados que tienen texto. La comprobacion de coherencia los mira. */

@@ -115,12 +115,13 @@ describe('la aplicacion pide por HTTP y el proxy contesta', () => {
     instalarProxyDeDatos();
     // Sin conectar: los valores unitarios y la depreciacion ya piden su
     // recurso propio (#71) y salen por el camino que se prueba mas abajo, no
-    // por este. `/transito/papeletas` se conecto en #363 y `/transito/codigos`
-    // con el resto del modulo en #77 —ninguna sirve ya para este ejemplo,
-    // salen con la forma de su `Resource`, no esta—;
-    // `/transito/reportes/resumen-papeletas` sigue sin conectar (ver
-    // `pantallas/transito/index.ts` en el back-office).
-    const datos = await solicitar<DatosDePantalla>('/transito/reportes/resumen-papeletas');
+    // por este. `/transito/papeletas` se conecto en #363, `/transito/codigos`
+    // con el resto del modulo en #77 y `/transito/reportes/resumen-papeletas`
+    // en #398 —ninguna sirve ya para este ejemplo, salen con la forma de su
+    // `Resource`, no esta—. `/fiscalizacion/resultados` sigue sin conectar, y
+    // no por descuido: `LiquidacionResource` no publica las columnas de dinero
+    // que su pantalla dibuja (ver `pantallas/fiscalizacion/index.ts`, #80).
+    const datos = await solicitar<DatosDePantalla>('/fiscalizacion/resultados');
     expect(datos.tabla?.filas.length).toBeGreaterThan(0);
     expect(datos.fechaCalculo).toBe('2026-08-13');
   });
