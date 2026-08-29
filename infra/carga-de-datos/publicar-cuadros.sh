@@ -42,21 +42,15 @@
 # Y ese rol no alcanza nada mas: ni el conjunto, ni su detalle, ni la auditoria. Es la separacion de
 # funciones SoD-1 de REQ-03, escrita en los privilegios.
 #
-#   PENDIENTE DE INFRAESTRUCTURA: rol_carga_parametros se crea NOLOGIN (crear-roles.sql) y
-#   20-asignar-claves.sh lo deja asi a proposito -"todavia no hay nada que"-. Este guion es lo que
-#   hace que ya haya algo. Antes de poder correrlo en un ambiente hacen falta dos cosas que NO estan
-#   en este cambio porque son inventario de secretos (INF-06) y no codigo:
-#
-#     a) ALTER ROLE rol_carga_parametros LOGIN PASSWORD '...' en la inicializacion del motor;
-#     b) el secreto sgtm-<ambiente>-postgres-carga con la clave, generado por
-#        secretos/bootstrap-secretos.sh y listado en el inventario de INF-06.
-#
-#   El guion comprueba que el secreto exista y se para nombrandolo si no: montar el Job con la
-#   credencial de la aplicacion lo dejaria fallar dentro con un error de privilegio, y la salida
-#   comoda ante eso es darle a sgtm_app el INSERT que no debe tener.
+# rol_carga_parametros tiene LOGIN desde 20-asignar-claves.sh y su clave vive en el secreto
+# sgtm-<ambiente>-postgres-carga, generado por secretos/bootstrap-secretos.sh y listado en el
+# inventario de INF-06 (issue #387). El guion comprueba que el secreto exista en ESTE namespace y se
+# para nombrandolo si no: montar el Job con la credencial de la aplicacion lo dejaria fallar dentro
+# con un error de privilegio, y la salida comoda ante eso es darle a sgtm_app el INSERT que no debe
+# tener.
 #
 #   uso: publicar-cuadros.sh --ambiente stg|prod --archivo cuadros-2026.csv \
-#        [--namespace sgtm-stg] [--usuario nombre-del-proceso]
+#        [--namespace sgtm-stg] [--usuario nombre-del-proceso] [--region-s3 us-east-1]
 #
 # Requiere: kubectl con el tunel al API del ambiente ya abierto.
 set -euo pipefail
@@ -71,9 +65,14 @@ while [ $# -gt 0 ]; do
         --archivo) ARCHIVO=${2:?falta el valor de --archivo}; shift 2 ;;
         --namespace) NAMESPACE=${2:?falta el valor de --namespace}; shift 2 ;;
         --usuario) USUARIO=${2:?falta el valor de --usuario}; shift 2 ;;
+        # Solo lo usa el initContainer que descarga de S3 (issue #388), y solo cuando alguna fila
+        # viene de ahi: sin eso, un contenedor sin ~/.aws/config no sabe a que endpoint regional
+        # hablarle. Por omision us-east-1, el mismo que asume un bucket sin region configurada.
+        --region-s3) REGION_S3=${2:?falta el valor de --region-s3}; shift 2 ;;
         *) echo "Opcion desconocida: $1" >&2; exit 2 ;;
     esac
 done
+REGION_S3=${REGION_S3:-us-east-1}
 [ -n "$AMBIENTE" ] || { echo "Falta --ambiente (stg o prod)." >&2; exit 2; }
 [ -n "$ARCHIVO" ] || {
     echo "Falta --archivo: el manifiesto de docs/10-negocio/valores-normativos/publicacion/." >&2
@@ -98,10 +97,10 @@ kubectl -n "$NAMESPACE" get secret "$SECRETO" >/dev/null 2>&1 || {
     cat >&2 <<EOF
 No existe el secreto $SECRETO en $NAMESPACE, y sin el este Job no tiene con que conectarse.
 
-La conexion de rol_carga_parametros todavia no esta provisionada (#247 §4): el rol y sus
-privilegios existen desde V7, pero se crea NOLOGIN y nadie le ha asignado clave. Hacen falta
-  a) ALTER ROLE rol_carga_parametros LOGIN PASSWORD '...' en la inicializacion del motor, y
-  b) el secreto $SECRETO con la clave, en el inventario de INF-06.
+rol_carga_parametros tiene LOGIN desde la inicializacion del motor (issue #387); lo que falta en
+este namespace es el secreto con su clave. Corre, contra este ambiente:
+
+  secretos/bootstrap-secretos.sh --ambiente $AMBIENTE
 
 Lo que NO hay que hacer es montar este Job con la credencial de la aplicacion: sgtm_app solo
 tiene SELECT sobre parametro_tributario, y darle el INSERT que le falta pondria la publicacion
@@ -121,62 +120,213 @@ IMAGEN=$(kubectl -n "$NAMESPACE" get deployment "sgtm-${AMBIENTE}-aplicacion" \
 }
 echo "Imagen desplegada: $IMAGEN"
 
-# EL ARCHIVO DE FILAS NO CABE EN UN ConfigMap, y hay que decirlo antes de intentarlo.
+# EL ARCHIVO DE FILAS, MONTADO DONDE PublicarCuadros LO SABE ENCONTRAR (issue #388).
 #
-# publicar-parametros.sh monta su derivado en un ConfigMap porque son once filas. Un cuadro no:
-# tvr-2026.csv pesa 1,5 MB y el limite de un ConfigMap -en realidad de un objeto de etcd- es 1 MiB.
-# kubectl lo rechazaria con "request entity too large", y la salida comoda ante eso es partir el
-# archivo, que es exactamente lo que no se puede hacer con un derivado cuyo sha256 esta firmado.
+# `edicion.archivoDeFilas()` es la columna `archivo_de_filas` del manifiesto TAL CUAL, y
+# `PublicarCuadros` la resuelve como *sibling* del propio manifiesto
+# (`manifiesto.resolveSibling(...)`: `publicacion/cuadros-2026.csv` nombra
+# `../fuentes/tvr-2026/tvr-2026.csv`). Montar SOLO el manifiesto —lo que este guion hacia hasta
+# ahora— nunca habria funcionado ni con un cuadro pequeno: el archivo de filas no estaria en
+# ninguna parte del volumen. Un initContainer arma el arbol relativo completo en un `emptyDir`
+# ANTES de que el contenedor principal arranque, montando el manifiesto un nivel por debajo de la
+# raiz (`/datos/publicacion/cuadros.csv`) para que esa resolucion de *sibling* caiga DENTRO del
+# volumen —`/datos/fuentes/...`— en vez de fuera de el.
 #
-# Se comprueba aqui, con el numero, para que el fallo diga que hacer en vez de aparecer dentro del
-# Job. Lo que falta es infraestructura, no codigo: montar el archivo de filas desde el bucket de
-# fuentes normativas (s3://sgtm-fuentes-normativas) con un initContainer que compruebe su sha256, o
-# desde un PVC de un solo uso. El proceso no cambia: lee la ruta que el manifiesto nombra.
-LIMITE_CONFIGMAP=$((1024 * 1024))
+# EL MANIFIESTO NO CAMBIA DE FORMA. `archivo_de_filas` sigue siendo la misma ruta relativa de
+# siempre, nunca una URI: es lo que docs/10-negocio/verificar-cuadros.mjs ya comprueba letra por
+# letra contra el corpus, y reescribirla ahi seria reescribir un derivado firmado. Lo que decide
+# de DONDE vienen los bytes de una fila —del propio git, o de S3— es un archivo aparte,
+# `fuentes/derivados-en-s3.csv`, indexado por el MISMO sha256 que la fila ya declara: es la clave
+# que los une, nunca el nombre del archivo ni su ruta.
+#
+# Cada fila se resuelve asi:
+#
+#   1. Si el archivo local (relativo al manifiesto) pesa 1 MiB o menos —el limite practico de un
+#      objeto de etcd—, se usa tal cual: entra a un ConfigMap de ENTRADA y el initContainer lo
+#      copia a su lugar.
+#   2. Si pesa mas, se busca su sha256 en `fuentes/derivados-en-s3.csv`. Si aparece, el
+#      initContainer descarga esa URI y la deja en el MISMO lugar relativo que el manifiesto
+#      declara para esa fila.
+#   3. Si no aparece en ninguna de las dos, el guion se detiene nombrando los dos pasos que faltan
+#      (archivar_derivado.sh, y la fila nueva del registro) — nunca parte el archivo.
+#
+# En los casos 1 y 2 el initContainer vuelve a calcular el sha256 contra el que el manifiesto
+# declara ANTES de que `PublicarCuadros` arranque: es una segunda guarda independiente de la que
+# el propio proceso ya hace (el mismo patron que RLS + GRANT en V55) — un byte distinto, en git o
+# en S3, no llega a publicarse.
+#
+# LA CREDENCIAL DE S3. `derivados-en-s3.csv` vive en el mismo bucket que las fuentes normativas
+# (`sgtm-fuentes-normativas`), y hoy no existe una credencial de solo lectura dedicada a ese
+# prefijo: crearla es infraestructura de AWS, no de este repositorio. El initContainer reutiliza
+# la MISMA credencial que ya usa wal-g para el respaldo continuo
+# (`sgtm-<amb>-postgres-respaldo-credenciales`, lectura/escritura) — si algun dia deja de alcanzar
+# este bucket, hay que apuntar aqui a la que si alcance.
+#
+# `publicar-parametros.sh` no necesita nada de esto: su manifiesto no tiene `archivo_de_filas`,
+# todas las cifras van en la fila.
 DIRECTORIO_DEL_MANIFIESTO=$(cd "$(dirname "$ARCHIVO")" && pwd)
-FALTAN=0
-LISTA_DE_FILAS=$(grep -v '^#' "$ARCHIVO" | tail -n +2 | cut -d, -f7)
-for RELATIVA in $LISTA_DE_FILAS; do
-    FILAS="$DIRECTORIO_DEL_MANIFIESTO/$RELATIVA"
+LIMITE_CONFIGMAP=$((1024 * 1024))
+REGISTRO_S3="$RAIZ/docs/10-negocio/valores-normativos/fuentes/derivados-en-s3.csv"
+
+uriEnRegistro() {
+    # $1: el sha256 a buscar. Vacio si no esta en el registro.
+    [ -f "$REGISTRO_S3" ] || return 0
+    grep -v '^#' "$REGISTRO_S3" | tail -n +2 | awk -F, -v sha="$1" '$1 == sha { print $2; exit }'
+}
+
+# Un elemento por fila del manifiesto: FILAS_CLAVES (la clave del ConfigMap de entrada, vacia
+# cuando la fila viene de S3), FILAS_ORIGEN (la ruta local o la URI s3://, para el mensaje),
+# FILAS_DESTINO (donde debe quedar, relativo al emptyDir) y FILAS_SHA.
+FILAS_CLAVES=()
+FILAS_ORIGEN=()
+FILAS_DESTINO=()
+FILAS_SHA=()
+HAY_FILAS_S3=no
+
+indiceLocal=0
+while IFS=, read -r _cuadro _tipo _clave _desde _hasta _fuente relativa sha _resto; do
+    [ -n "$relativa" ] || continue
+
+    case "$relativa" in
+        ../*) destino=${relativa#../} ;;
+        *)
+            echo "El manifiesto nombra un archivo_de_filas con una forma que este guion no sabe" \
+                 "montar: '$relativa'. Se espera una ruta relativa de exactamente un nivel hacia" \
+                 "arriba (../fuentes/<edicion>/<archivo>, como las de hoy)." >&2
+            exit 1
+            ;;
+    esac
+    case "$destino" in
+        *..*)
+            echo "El manifiesto nombra un archivo_de_filas con mas de un nivel hacia arriba, y" \
+                 "este guion no lo sabe montar: '$relativa'." >&2
+            exit 1
+            ;;
+    esac
+
+    FILAS="$DIRECTORIO_DEL_MANIFIESTO/$relativa"
     [ -f "$FILAS" ] || {
-        echo "El manifiesto nombra un archivo que no existe: $RELATIVA" >&2
+        echo "El manifiesto nombra un archivo que no existe: $relativa" >&2
         exit 1
     }
     TAMANIO=$(wc -c < "$FILAS")
-    if [ "$TAMANIO" -gt "$LIMITE_CONFIGMAP" ]; then
-        echo "$RELATIVA pesa $TAMANIO bytes y un ConfigMap admite $LIMITE_CONFIGMAP." >&2
-        FALTAN=1
+    if [ "$TAMANIO" -le "$LIMITE_CONFIGMAP" ]; then
+        indiceLocal=$((indiceLocal + 1))
+        FILAS_CLAVES+=("filas-$indiceLocal")
+        FILAS_ORIGEN+=("$FILAS")
+        FILAS_DESTINO+=("$destino")
+        FILAS_SHA+=("$sha")
+        continue
     fi
-done
-[ "$FALTAN" -eq 0 ] || {
-    cat >&2 <<'EOF'
 
-El archivo de filas no cabe en un ConfigMap (limite de 1 MiB por objeto de etcd), asi que este
-Job no se puede montar todavia tal como esta escrito. Lo que falta es infraestructura:
+    uri=$(uriEnRegistro "$sha")
+    if [ -n "$uri" ]; then
+        HAY_FILAS_S3=si
+        FILAS_CLAVES+=("")
+        FILAS_ORIGEN+=("$uri")
+        FILAS_DESTINO+=("$destino")
+        FILAS_SHA+=("$sha")
+        continue
+    fi
 
-  a) publicar el archivo de filas en s3://sgtm-fuentes-normativas junto al PDF que lo origina
-     (scripts/valores-normativos/archivar_fuente_normativa.sh ya lo hace para los PDF), y
-  b) un initContainer que lo descargue al volumen del Job y COMPRUEBE su sha256 antes de
-     entregarselo: la misma huella que el manifiesto declara.
+    cat >&2 <<EOF
+
+$relativa pesa $TAMANIO bytes y un ConfigMap admite $LIMITE_CONFIGMAP (limite de un objeto de
+etcd), y su sha256 ($sha) no esta en fuentes/derivados-en-s3.csv. Hacen falta los dos pasos del
+issue #388:
+
+  1. scripts/valores-normativos/archivar_derivado.sh --bucket sgtm-fuentes-normativas \\
+         --ubigeo <UBIGEO> --tipo <tipo-del-cuadro> $FILAS
+
+  2. Agregar, en docs/10-negocio/valores-normativos/fuentes/derivados-en-s3.csv, una fila nueva
+     con ESE MISMO sha256 y la URI que el paso anterior imprime.
+
+El manifiesto ($ARCHIVO) no cambia: su columna archivo_de_filas sigue siendo la misma ruta
+relativa, y el sha256 tampoco -es la clave que une las dos filas-.
 
 Lo que NO hay que hacer es partir el archivo en trozos que quepan: su sha256 esta firmado en el
 corpus, y un cuadro normativo partido deja de poder demostrarse identico a la fuente.
-
-Mientras tanto la carga se puede correr desde una maquina con acceso a la base, con el mismo
-proceso y la misma credencial:
-
-  SPRING_PROFILES_ACTIVE=batch SGTM_DB_USUARIO=rol_carga_parametros \
-  SGTM_PUBLICACIONCUADROS_ARCHIVO=<ruta al manifiesto> java -jar sgtm-aplicacion.jar
 EOF
     exit 1
-}
+done < <(grep -v '^#' "$ARCHIVO" | tail -n +2)
 
 echo "Creando ConfigMap $RECURSO con $ARCHIVO..."
-kubectl -n "$NAMESPACE" create configmap "$RECURSO" --from-file=cuadros.csv="$ARCHIVO"
+ARGS_CONFIGMAP=(--from-file=cuadros.csv="$ARCHIVO")
+for i in "${!FILAS_CLAVES[@]}"; do
+    [ -n "${FILAS_CLAVES[$i]}" ] || continue
+    ARGS_CONFIGMAP+=(--from-file="${FILAS_CLAVES[$i]}=${FILAS_ORIGEN[$i]}")
+done
+kubectl -n "$NAMESPACE" create configmap "$RECURSO" "${ARGS_CONFIGMAP[@]}"
 cleanup() {
     kubectl -n "$NAMESPACE" delete configmap "$RECURSO" --ignore-not-found >/dev/null
 }
 trap cleanup EXIT
+
+# El initContainer que arma /salida: copia lo local desde /entrada (el ConfigMap de arriba,
+# montado de solo lectura) y descarga lo de S3, verificando el sha256 de CADA fila -local o
+# remota- antes de dejarla lista. La comparacion es explicita -sha256sum suelto, no `-c`- para que
+# un fallo nombre las DOS huellas y el origen (issue #388: "nombrando la URI y las dos huellas"),
+# el mismo estilo que ya usa scripts/valores-normativos/archivar_fuente_normativa.sh al verificar
+# su propia subida.
+PASOS_INIT=("set -eu" "mkdir -p /salida/publicacion" "cp /entrada/cuadros.csv /salida/publicacion/cuadros.csv")
+for i in "${!FILAS_DESTINO[@]}"; do
+    directorio="/salida/$(dirname "${FILAS_DESTINO[$i]}")"
+    destinoPod="/salida/${FILAS_DESTINO[$i]}"
+    if [ -n "${FILAS_CLAVES[$i]}" ]; then
+        obtener="cp '/entrada/${FILAS_CLAVES[$i]}' '$destinoPod'"
+    else
+        obtener="aws s3 cp '${FILAS_ORIGEN[$i]}' '$destinoPod'"
+    fi
+    verificar=$(printf 'real=$(sha256sum '\''%s'\'' | cut -d'\'' '\'' -f1); [ "$real" = '\''%s'\'' ] || { echo "FALLO: sha256 distinto para %s (origen: %s): esperado %s, obtenido $real" >&2; exit 1; }' \
+        "$destinoPod" "${FILAS_SHA[$i]}" "$destinoPod" "${FILAS_ORIGEN[$i]}" "${FILAS_SHA[$i]}")
+    PASOS_INIT+=(
+        "mkdir -p '$directorio'"
+        "$obtener"
+        "$verificar"
+    )
+done
+COMANDO_INIT=$(printf '%s && ' "${PASOS_INIT[@]}")
+COMANDO_INIT=${COMANDO_INIT% && }
+# Va dentro de un `args: ["..."]` de YAML: el mensaje de FALLO de arriba lleva comillas dobles
+# propias, y sin escaparlas aqui romperian el YAML mucho antes de llegar a correr -exactamente el
+# defecto que este comentario existe para no repetir, encontrado ejecutando este guion contra la
+# comprobacion de abajo.
+COMANDO_INIT_YAML=${COMANDO_INIT//\\/\\\\}
+COMANDO_INIT_YAML=${COMANDO_INIT_YAML//\"/\\\"}
+
+# Sin AWS de por medio, la imagen de wal-g alcanza -Alpine con curl y sha256sum via busybox, ya
+# verificada en este mismo repositorio-. Con al menos una fila en S3 hace falta aws-cli, y solo
+# entonces se monta la credencial: un manifiesto todo local (el de hoy) no ve ni necesita ningun
+# secreto de AWS.
+if [ "$HAY_FILAS_S3" = "si" ]; then
+    # Version fijada, como el resto de las imagenes de este repositorio (WALG_VERSION,
+    # IMAGEN_DE_POSTGRES_EXPORTER). No se pudo verificar contra el registro real desde este
+    # entorno de desarrollo -sin salida a internet fuera de la lista blanca del proxy-: quien
+    # corra esto por primera vez contra un ambiente real deberia confirmar que la etiqueta sigue
+    # existiendo y, si no, fijar la que si.
+    IMAGEN_INIT="public.ecr.aws/aws-cli/aws-cli:2.17.62"
+    SECRETO_S3="sgtm-${AMBIENTE}-postgres-respaldo-credenciales"
+    # HOME=/tmp: la imagen corre por omision como root y aws-cli escribe su cache en $HOME; con
+    # runAsUser: 65534 mas abajo, ese usuario no es dueño de /root -el mismo tipo de sorpresa que
+    # ya documenta contenedorDeDescargaDeWalg con readOnlyRootFilesystem, aqui evitada dandole un
+    # HOME que cualquier UID puede escribir.
+    ENV_INIT_BLOQUE="
+          env:
+            - name: HOME
+              value: /tmp
+            - name: AWS_DEFAULT_REGION
+              value: $REGION_S3
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: { name: $SECRETO_S3, key: access-key-id }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: $SECRETO_S3, key: secret-access-key }"
+else
+    IMAGEN_INIT="curlimages/curl:8.11.0"
+    # Sin fila en S3, el initContainer no necesita -ni ve- ninguna credencial de AWS.
+    ENV_INIT_BLOQUE=""
+fi
 
 cat <<EOF | kubectl -n "$NAMESPACE" apply -f -
 apiVersion: batch/v1
@@ -223,7 +373,7 @@ spec:
                   name: $SECRETO
                   key: clave-carga
             - name: SGTM_PUBLICACIONCUADROS_ARCHIVO
-              value: /datos/cuadros.csv
+              value: /datos/publicacion/cuadros.csv
             - name: SGTM_PUBLICACIONCUADROS_USUARIODELPROCESO
               value: "$USUARIO"
           volumeMounts:
@@ -238,10 +388,35 @@ spec:
           resources:
             requests: { cpu: "250m", memory: "256Mi" }
             limits: { cpu: "1", memory: "512Mi" }
+      # Arma /datos ANTES de que el contenedor principal arranque: copia lo local desde el
+      # ConfigMap de entrada y descarga lo de S3, verificando el sha256 de cada fila contra el que
+      # declara el manifiesto. Ver el comentario de mas arriba ("EL ARCHIVO DE FILAS...").
+      initContainers:
+        - name: armar-datos
+          image: $IMAGEN_INIT
+          command: ["/bin/sh", "-c"]
+          args: ["$COMANDO_INIT_YAML"]$ENV_INIT_BLOQUE
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 65534
+          volumeMounts:
+            - name: entrada
+              mountPath: /entrada
+              readOnly: true
+            - name: datos
+              mountPath: /salida
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits: { cpu: "500m", memory: "256Mi" }
       volumes:
-        - name: datos
+        - name: entrada
           configMap:
             name: $RECURSO
+        - name: datos
+          emptyDir: {}
 EOF
 
 echo "Esperando a que $RECURSO termine..."
@@ -256,8 +431,10 @@ while true; do
         break
     fi
     if [ "$fallido" = "True" ]; then
-        echo "El Job fallo. Registro:" >&2
-        kubectl -n "$NAMESPACE" logs "job/$RECURSO" --tail=500 >&2
+        echo "El Job fallo. Registro del initContainer (armar-datos), si llego a correr:" >&2
+        kubectl -n "$NAMESPACE" logs "job/$RECURSO" -c armar-datos --tail=500 >&2 || true
+        echo "Registro del contenedor principal, si llego a arrancar:" >&2
+        kubectl -n "$NAMESPACE" logs "job/$RECURSO" -c publicacion-cuadros --tail=500 >&2 || true
         exit 1
     fi
     [ "$SECONDS" -lt "$LIMITE" ] || {
@@ -267,7 +444,7 @@ while true; do
     sleep 3
 done
 
-REGISTRO=$(kubectl -n "$NAMESPACE" logs "job/$RECURSO" --tail=500)
+REGISTRO=$(kubectl -n "$NAMESPACE" logs "job/$RECURSO" -c publicacion-cuadros --tail=500)
 echo "$REGISTRO"
 
 # Las dos cifras que hay que mirar. Rechazadas > 0 no es un fallo del Job -cada fila es su propia

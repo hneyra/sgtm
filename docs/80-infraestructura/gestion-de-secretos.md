@@ -25,15 +25,20 @@ difieren, el código manda: `yarn secretos --ambiente <stg|prod>` lo vuelca a JS
 | Superusuario de PostgreSQL | `sgtm-<amb>-postgres-superusuario` · `clave-superusuario` | Inicialización del motor (el propio contenedor) | **Nunca desde el nodo** — ver §4.4 |
 | `sgtm_owner` | `sgtm-<amb>-postgres-owner` · `clave-owner` | Los dos Jobs: migración e implantación. **Nunca** el `Deployment` de la aplicación | Trimestral |
 | `sgtm_app` | `sgtm-<amb>-postgres-app` · `clave-app` | El `Deployment` de la aplicación, perfiles `web` y `batch` | Semestral |
+| `rol_carga_parametros` | `sgtm-<amb>-postgres-carga` · `clave-carga` | Solo los Jobs de carga de parámetros (`publicar-parametros.sh`, `publicar-cuadros.sh`). **Nunca** el `Deployment` de la aplicación (issue #387) | Trimestral |
 | Administrador de Keycloak | `sgtm-<amb>-keycloak` · `clave-administrador` | El propio Keycloak (arranque), y el Job que reconcilia el realm | Anual |
 | Rol de Keycloak en PostgreSQL | `sgtm-<amb>-keycloak` · `clave-base` | Keycloak, para conectarse a su propia base | Semestral |
+| `sgtm_respaldo` | `sgtm-<amb>-postgres-respaldo` · `clave-respaldo` | El CronJob de respaldo base (issue #155): solo `pg_backup_start`/`pg_backup_stop` | Semestral |
+| Cifrado de respaldo | `sgtm-<amb>-postgres-respaldo` · `clave-cifrado` | El contenedor de PostgreSQL (`archive_command`/`restore_command`) y el CronJob de respaldo | Tras incidente — ver §3.4 |
+| `sgtm_monitor` | `sgtm-<amb>-postgres-monitoreo` · `clave-monitoreo` | `postgres-exporter`, el sidecar del motor (issue #156): solo `pg_monitor` | Semestral |
+| Administrador de Grafana | `sgtm-<amb>-grafana` · `clave-admin` | Grafana (issue #156). Nunca está en una `IngressRoute`: se administra por el túnel SSH | Anual |
 
-Cinco entradas, cuatro `Secret` de Kubernetes —`sgtm-<amb>-keycloak` guarda dos
-claves—, **cinco valores y ninguno repetido**. Es el criterio de aceptación del issue
-dicho con precisión: no «roles distintos», sino «claves distintas, comprobado» —
-`infra/verificaciones/secretos.test.ts` lo exige sobre los metadatos y
-`infra/secretos/verificar-claves-distintas.sh` lo comprueba contra valores reales de un
-clúster (CI, trabajo `secretos`).
+Diez entradas, ocho `Secret` de Kubernetes —`sgtm-<amb>-keycloak` y
+`sgtm-<amb>-postgres-respaldo` guardan dos claves cada uno—, **diez valores y ninguno
+repetido**. Es el criterio de aceptación del issue dicho con precisión: no «roles
+distintos», sino «claves distintas, comprobado» — `infra/verificaciones/secretos.test.ts`
+lo exige sobre los metadatos y `infra/secretos/verificar-claves-distintas.sh` lo
+comprueba contra valores reales de un clúster (CI, trabajo `secretos`).
 
 **El cliente OIDC no tiene fila, y no es un olvido.** Los dos clientes del realm
 —`sgtm-backoffice` y `sgtm-verificacion`— son `publicClient: true` con PKCE: no existe
@@ -140,11 +145,12 @@ guion.
 
 ## 3. Cómo se rotan
 
-### 3.1 Los tres roles de PostgreSQL: `rotar-clave.sh`
+### 3.1 Los roles de PostgreSQL: `rotar-clave.sh`
 
 ```bash
 infra/secretos/rotar-clave.sh --ambiente stg --rol sgtm-app
-# --rol admite: sgtm-app, sgtm-owner, keycloak-base
+# --rol admite: sgtm-app, sgtm-owner, keycloak-base, sgtm-respaldo, sgtm-monitor,
+#               postgres-carga
 ```
 
 Contra la base **en marcha**, sin reiniciar nada:
@@ -170,6 +176,8 @@ necesitar el clúster: usa los mismos guiones de inicialización que
 
 `sgtm-owner` es un caso más simple todavía: solo lo leen los dos Jobs, y un Job **nuevo**
 ya lee el `Secret` actualizado al crearse — no hay ningún pod en marcha que reprogramar.
+`postgres-carga` es el mismo caso: solo lo leen `publicar-parametros.sh` y
+`publicar-cuadros.sh`, Jobs de un solo uso.
 
 ### 3.2 El administrador de Keycloak: procedimiento manual
 
@@ -254,6 +262,7 @@ corre sobre **todo el repositorio**, no solo `infra/`, en cada PR y en cada inte
 | Quitar el `ALTER ROLE` de la rotación | `verificar-rotacion.sh`: una conexión nueva con la clave vieja sigue funcionando, y el guion falla |
 | Apuntar `keycloakSmtpHost` de `prod` a un buzón (`sgtm-prod-correo`, Mailpit), o dejar `keycloakSmtpAuth` en false | `config.test.ts`, «ADR-0012 — el relay SMTP»: `checkInvariants` lo rechaza citando `INF-03` §4 |
 | Quitar del guion el `execute-actions-email` del alta declarativa | `despliegue.yml`, peldaño «3b»: el buzón Mailpit queda vacío y el paso se pone rojo |
+| Quitar el `ALTER ROLE rol_carga_parametros LOGIN` de `20-asignar-claves.sh` (issue #387) | CI, trabajo `motor`: `verificar-el-motor.sh` falla nombrando el rol («rol_carga_parametros no puede conectarse») |
 
 ## 6. Lo que sigue sin verificarse, y por qué
 

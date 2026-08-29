@@ -28,6 +28,9 @@ services:
       # puede asignarlas, y solo existe en este contenedor.
       SGTM_CLAVE_OWNER: ${SGTM_CLAVE_OWNER:?falta SGTM_CLAVE_OWNER en .env}
       SGTM_CLAVE_APP: ${SGTM_CLAVE_APP:?falta SGTM_CLAVE_APP en .env}
+      # rol_carga_parametros (issue #387): la unica credencial de publicar-parametros.sh
+      # y publicar-cuadros.sh. Sin ella el guion de asignacion de claves no arranca.
+      SGTM_CLAVE_CARGA: ${SGTM_CLAVE_CARGA:?falta SGTM_CLAVE_CARGA en .env}
     volumes:
       # Los dos guiones de inicializacion corren en orden alfabetico, una sola vez,
       # cuando el volumen esta vacio. `crear-roles.sql` se monta desde el modulo del

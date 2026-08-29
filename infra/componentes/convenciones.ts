@@ -65,6 +65,14 @@ export interface Secretos {
   monitoreo: string;
   /** Clave del administrador de Grafana (issue #156). Grafana nunca esta en una `IngressRoute`. */
   grafana: string;
+  /**
+   * `rol_carga_parametros` (issue #387): la unica credencial que puede escribir
+   * `parametro_tributario` (V6/V7) y las tres tablas de valuacion nacionales (V55).
+   * Solo la leen los Jobs de un solo uso de `infra/carga-de-datos/` —
+   * `publicar-parametros.sh`, `publicar-cuadros.sh`—; nunca el `Deployment` de la
+   * aplicacion, que solo tiene SELECT sobre esa tabla.
+   */
+  carga: string;
 }
 
 export function secretos(environment: Environment): Secretos {
@@ -76,6 +84,7 @@ export function secretos(environment: Environment): Secretos {
     respaldo: resourceName(environment, "postgres-respaldo"),
     monitoreo: resourceName(environment, "postgres-monitoreo"),
     grafana: resourceName(environment, "grafana"),
+    carga: resourceName(environment, "postgres-carga"),
   };
 }
 
@@ -99,6 +108,8 @@ export const CLAVES = {
   monitoreo: "clave-monitoreo",
   /** Clave del administrador de Grafana. */
   grafana: "clave-admin",
+  /** Clave de `rol_carga_parametros` (issue #387). */
+  carga: "clave-carga",
 } as const;
 
 /**
