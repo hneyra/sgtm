@@ -54,11 +54,18 @@ record FilaDelManifiesto(
     /**
      * Los cuadros que este proceso sabe publicar hoy, y por que falta el tercero.
      *
-     * <p>{@code VALOR_UNITARIO} <b>no</b> esta, y no es que falte escribir el codigo: la R.M. anual
+     * <p>{@code VALOR_UNITARIO} <b>no</b> esta, y no es que falte escribir el codigo. La R.M. anual
      * del MVCS publica <b>un cuadro por region</b> —Costa, Lima/Callao, Sierra y Selva— y {@code
-     * valores-unitarios-2026.md} solo trae Costa; ademas volvio a {@code TRANSCRITO} el 2026-08-28,
-     * cuando el cotejo contra el Anexo I.2 real devolvio tres partidas donde se habian transcrito
-     * siete. Le falta la segunda firma de ADR-0007 y le faltan tres regiones (GOB-03, H-14).
+     * valores-unitarios-2026.md} solo trae Costa. El archivo volvio a {@code TRANSCRITO} el
+     * 2026-08-28, cuando el cotejo contra el Anexo I.2 real devolvio tres partidas donde se habian
+     * transcrito siete, y esta {@code VERIFICADO} otra vez desde el 2026-08-29, con la segunda
+     * firma de ADR-0007 puesta sobre la matriz sustituida. <b>Lo que falta ya no es una firma</b>:
+     * no hay archivo de filas con su sha256, y esas tres partidas conviven con las <b>siete</b> que
+     * declaran {@code valor_unitario_edificacion.partida} (V1), {@code
+     * edificacion_estructura.partida} (V43) y las columnas {@code categoria_*} de {@code
+     * construccion}, de modo que publicar tres dejaria cuatro sin ninguna fila —y una edicion
+     * incompleta no se distingue de una completa hasta que alguien valoriza un predio (GOB-03,
+     * H-14).
      *
      * <p>{@code DEPRECIACION} si esta desde V57, y hasta entonces estuvo fuera por lo mismo que
      * ahora deja de estarlo: {@code depreciacion} no tenia columna de uso, y el Anexo I publica
