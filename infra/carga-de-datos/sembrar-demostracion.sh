@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Siembra ENTERA de la municipalidad de demostracion: los nueve pasos, en el unico orden en
+# Siembra ENTERA de la municipalidad de demostracion: los diez pasos, en el unico orden en
 # que se pueden dar.
 #
 # No hace nada que los nueve guiones no hagan por separado; lo que aporta es el ORDEN, que no
@@ -11,18 +11,26 @@
 #   1. catalogo vial       vias.csv            (estructura; ninguna cifra)
 #   2. sectores            sectores.csv        (estructura)
 #   3. manzanas            manzanas.csv        -> referencia el sector
-#   4. contribuyentes      contribuyentes.csv  (ficticios; exige es_demostracion)
-#   5. fichas y predios    fichas.csv            -> referencia sector, manzana, via y contribuyente
-#   6. detalle de fichas   detalle-de-fichas.csv -> VERSIONA la ficha de cada predio
-#   7. padron vehicular    vehiculos.csv         -> referencia el contribuyente
-#   8. transferencias      transferencias.csv    -> referencia el predio y el vehiculo
-#   9. saldo del libro     deuda.csv             -> referencia contribuyente, predio y vehiculo
+#   4. cajas y areas       cajas.csv           (estructura; sin ellas no se puede cobrar)
+#   5. contribuyentes      contribuyentes.csv  (ficticios; exige es_demostracion)
+#   6. fichas y predios    fichas.csv            -> referencia sector, manzana, via y contribuyente
+#   7. detalle de fichas   detalle-de-fichas.csv -> VERSIONA la ficha de cada predio
+#   8. padron vehicular    vehiculos.csv         -> referencia el contribuyente
+#   9. transferencias      transferencias.csv    -> referencia el predio y el vehiculo
+#  10. saldo del libro     deuda.csv             -> referencia contribuyente, predio y vehiculo
 #
-# LOS PASOS 4 A 9 EXIGEN municipalidad.es_demostracion = true. No es una comprobacion del
+# LOS PASOS 5 A 10 EXIGEN municipalidad.es_demostracion = true. No es una comprobacion del
 # guion sino de cada proceso, contra la base: un --municipalidad-id equivocado en un digito
 # no siembra nada en el padron de una municipalidad que ya opera, y aqui no se borra nada
-# (RNF-051). Los pasos 1 a 3 no la exigen porque un catalogo vial es estructura real, y ese
-# mismo mecanismo es por el que un dia entrara el catalogo de verdad.
+# (RNF-051). Los pasos 1 a 4 no la exigen porque un catalogo vial, un sector y una ventanilla
+# son estructura real, y ese mismo mecanismo es por el que un dia entrara el catalogo de
+# verdad.
+#
+# EL PASO 4 ES EL QUE #430 ANADIO, y no es un adorno: hasta entonces nada creaba una `caja`
+# ni un `area` fuera de las fixtures de prueba, asi que una municipalidad recien sembrada
+# tenia padron, predios y deuda y NO PODIA COBRAR -la primera cobranza del dia fallaba con
+# CajaInexistente-. Va antes que los contribuyentes porque no depende de nadie; el orden
+# entre 1-4 da igual, y el que va detras si importa.
 #
 # LO QUE ESTA SIEMBRA NO PONE, y no por descuido: ninguna cifra normativa. Ni aranceles, ni
 # valores unitarios de edificacion, ni tablas de depreciacion, ni valores referenciales de
@@ -33,7 +41,7 @@
 #   uso: sembrar-demostracion.sh --ambiente stg|prod --municipalidad-id N \
 #        [--directorio ejemplos] [--namespace sgtm-stg] [--desde N]
 #
-#   --desde N  empieza en el paso N (1 a 9), para retomar una siembra interrumpida sin
+#   --desde N  empieza en el paso N (1 a 10), para retomar una siembra interrumpida sin
 #              volver a correr los pasos que ya entraron. Repetir un paso no duplica: las
 #              filas ya cargadas se rechazan una a una por violar su unicidad.
 #
@@ -60,14 +68,15 @@ done
 [ -n "$AMBIENTE" ] || { echo "Falta --ambiente (stg o prod)." >&2; exit 2; }
 [ -n "$MUNICIPALIDAD_ID" ] || { echo "Falta --municipalidad-id." >&2; exit 2; }
 [ -d "$DIRECTORIO" ] || { echo "No existe el directorio: $DIRECTORIO" >&2; exit 2; }
-case "$DESDE" in ''|*[!0-9]*) echo "--desde va de 1 a 9." >&2; exit 2 ;; esac
-[ "$DESDE" -ge 1 ] && [ "$DESDE" -le 9 ] || { echo "--desde va de 1 a 9." >&2; exit 2; }
+case "$DESDE" in ''|*[!0-9]*) echo "--desde va de 1 a 10." >&2; exit 2 ;; esac
+[ "$DESDE" -ge 1 ] && [ "$DESDE" -le 10 ] || { echo "--desde va de 1 a 10." >&2; exit 2; }
 
 # Un solo sitio donde esta escrito el orden, y es el que se ejecuta.
 PASOS=(
     "cargar-catalogo-vial.sh:vias.csv:catalogo vial"
     "cargar-sectores.sh:sectores.csv:sectores"
     "cargar-manzanas.sh:manzanas.csv:manzanas"
+    "cargar-cajas.sh:cajas.csv:cajas y areas"
     "cargar-contribuyentes-demo.sh:contribuyentes.csv:contribuyentes"
     "cargar-fichas-demo.sh:fichas.csv:predios y fichas"
     "cargar-detalle-fichas-demo.sh:detalle-de-fichas.csv:detalle de las fichas"
@@ -76,8 +85,8 @@ PASOS=(
     "cargar-deuda-demo.sh:deuda.csv:saldo inicial del libro"
 )
 
-# Antes de escribir nada: que esten los nueve archivos. Descubrir en el paso 8 que falta el
-# archivo del 9 deja la siembra a medias, y a medias es justo el estado que peor se lee.
+# Antes de escribir nada: que esten los diez archivos. Descubrir en el paso 9 que falta el
+# archivo del 10 deja la siembra a medias, y a medias es justo el estado que peor se lee.
 for paso in "${PASOS[@]}"; do
     archivo=${paso#*:}; archivo=${archivo%%:*}
     [ -f "$DIRECTORIO/$archivo" ] || {
@@ -93,10 +102,10 @@ for paso in "${PASOS[@]}"; do
     resto=${paso#*:}
     archivo=${resto%%:*}
     que=${resto#*:}
-    [ "$numero" -ge "$DESDE" ] || { echo "== $numero/9 $que: omitido (--desde $DESDE)"; continue; }
+    [ "$numero" -ge "$DESDE" ] || { echo "== $numero/10 $que: omitido (--desde $DESDE)"; continue; }
 
     echo
-    echo "== $numero/9 $que  ($guion)"
+    echo "== $numero/10 $que  ($guion)"
     argumentos=(--ambiente "$AMBIENTE" --municipalidad-id "$MUNICIPALIDAD_ID" \
                 --archivo "$DIRECTORIO/$archivo")
     [ -n "$NAMESPACE" ] && argumentos+=(--namespace "$NAMESPACE")

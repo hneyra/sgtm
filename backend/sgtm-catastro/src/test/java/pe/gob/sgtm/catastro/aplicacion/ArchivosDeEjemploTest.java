@@ -56,7 +56,7 @@ class ArchivosDeEjemploTest {
     }
 
     @Test
-    @DisplayName("los nueve archivos de la siembra existen donde el README dice")
+    @DisplayName("los diez archivos de la siembra existen donde el README dice")
     void losArchivosExisten() {
         assertThat(ejemplos()).isDirectory();
         for (String nombre :
@@ -64,6 +64,11 @@ class ArchivosDeEjemploTest {
                         "vias.csv",
                         "sectores.csv",
                         "manzanas.csv",
+                        // El paso 4 (#430): sin una `caja` la ventanilla no se puede abrir, y
+                        // hasta ese issue nada la creaba fuera de las fixtures de prueba. Que
+                        // se analice de verdad lo comprueba AltaDeCajasJdbcTest, en
+                        // sgtm-tesoreria, contra PostgreSQL.
+                        "cajas.csv",
                         "contribuyentes.csv",
                         "fichas.csv",
                         "detalle-de-fichas.csv",
@@ -203,6 +208,11 @@ class ArchivosDeEjemploTest {
                         "vias.csv",
                         "sectores.csv",
                         "manzanas.csv",
+                        // El paso 4 (#430): sin una `caja` la ventanilla no se puede abrir, y
+                        // hasta ese issue nada la creaba fuera de las fixtures de prueba. Que
+                        // se analice de verdad lo comprueba AltaDeCajasJdbcTest, en
+                        // sgtm-tesoreria, contra PostgreSQL.
+                        "cajas.csv",
                         "contribuyentes.csv",
                         "fichas.csv",
                         "detalle-de-fichas.csv")) {
