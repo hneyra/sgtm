@@ -100,6 +100,34 @@ public class RegistrarDeterminacionPredial {
             List<Tramo> tramos,
             Dinero minimoImponible,
             Observacion observacion) {
+        return registrar(
+                ejercicio, contribuyenteId, predios, tramos, minimoImponible, false, observacion);
+    }
+
+    /**
+     * Lo mismo, pero pudiendo <b>no</b> guardar: con {@code simulacion = true} calcula y devuelve
+     * la cabecera sin insertar ninguna fila y sin auditarla, igual que {@code
+     * RegistrarDeterminacionVehicular#calcular} desde #32.
+     *
+     * <p>Es lo que permite que la pantalla tenga un boton «Simular» y otro «Calcular» contra la
+     * <b>misma</b> operacion del contrato sin que pulsar el primero emita deuda (#395): la
+     * diferencia esta en el cuerpo de la peticion, no en la ruta. La determinacion simulada se
+     * reconoce por {@link Determinacion#esNueva()} —no tiene identificador, porque no hay fila que
+     * lo lleve—.
+     *
+     * <p>La observacion se exige igual en los dos caminos: quien simula tambien deja rastro de por
+     * que lo hizo cuando el calculo se asienta, y bifurcar el requisito abriria la puerta a que un
+     * cliente mandara {@code simulacion = true} para saltarse la regla 10.
+     */
+    @Transactional
+    public Determinacion registrar(
+            Ejercicio ejercicio,
+            long contribuyenteId,
+            List<DetalleDeterminacionPredio> predios,
+            List<Tramo> tramos,
+            Dinero minimoImponible,
+            boolean simulacion,
+            Observacion observacion) {
         Objects.requireNonNull(ejercicio, "La determinacion necesita su ejercicio");
         Objects.requireNonNull(predios, "La lista de predios es vacia, no nula");
         if (predios.isEmpty()) {
@@ -131,6 +159,10 @@ public class RegistrarDeterminacionPredial {
                         baseContribuyente,
                         montoDeterminado,
                         List.of(rt011.identificador().valor(), "RT-013", "RT-014"));
+
+        if (simulacion) {
+            return nueva;
+        }
 
         Determinacion guardada = repositorio.insertar(nueva, predios);
         auditar(guardada, observacion);

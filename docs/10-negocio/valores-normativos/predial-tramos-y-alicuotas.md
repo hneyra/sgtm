@@ -29,8 +29,8 @@
 
 | Qué | Dónde |
 |---|---|
-| Tipo | `parametro_tributario` (tipo `TRAMO_PREDIAL`, una fila por tramo) |
-| Clave | El número de orden del tramo (1.ª, 2.ª, 3.ª escala) — el límite superior del tramo en UIT, `TRAMO_PREDIAL-1`, `TRAMO_PREDIAL-2`, `TRAMO_PREDIAL-3` |
+| Tipo | `parametro_tributario`, en **dos** tipos: `TRAMO_PREDIAL` para la alícuota de cada tramo y `TRAMO_PREDIAL_LIMITE` para hasta cuántas UIT llega |
+| Clave | El número de orden del tramo: `1`, `2`, `3`. El último tramo —«Más de 60 UIT»— **no tiene fila de límite**, y esa ausencia es lo que dice que no tiene tope |
 | Ámbito | nacional |
 | Vigencia | 2004–, sin modificación conocida a la fecha de esta transcripción |
 
@@ -41,4 +41,7 @@ verificación de ADR-0007 ocurrió aquí, y la herramienta la transporta.
 
 ## 3. Qué no cabe hoy
 
-Nada.
+Nada. Los dos tipos separan lo que la tabla junta en una celda —«Hasta 15 UIT» es un límite y
+«0.2%» una alícuota— porque `parametro_tributario` tiene un solo `valor_numerico` por fila, y
+meter las dos cifras en una obligaría a interpretarlas al leer. Cada fila lleva su propio texto
+verbatim, y la cifra de cada una se busca en él (#395).

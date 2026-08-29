@@ -42,7 +42,8 @@ public class DeterminacionRepositoryJdbc extends RepositorioJdbc
                     + " d.reglas_aplicadas, d.origen, d.estado, d.usuario_calculo";
 
     private static final String COLUMNAS_DETALLE =
-            "t.id, t.predio_id, t.autovaluo, t.porcentaje_propiedad, t.base_imponible_predio";
+            "t.id, t.predio_id, t.autovaluo, t.valuo_exonerado, t.porcentaje_propiedad,"
+                    + " t.base_imponible_predio";
 
     public DeterminacionRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
@@ -52,6 +53,38 @@ public class DeterminacionRepositoryJdbc extends RepositorioJdbc
     public Optional<Determinacion> findById(long id) {
         return jdbc().sql("SELECT " + COLUMNAS_CABECERA + " FROM determinacion d WHERE d.id = :id")
                 .param("id", id)
+                .query(DeterminacionRepositoryJdbc::mapearCabecera)
+                .optional();
+    }
+
+    @Override
+    public List<Determinacion> ultimasPredialesDe(Ejercicio ejercicio) {
+        // DISTINCT ON se queda con la primera fila de cada grupo del ORDER BY, asi que el orden
+        // «contribuyente, id DESC» entrega exactamente la ultima determinacion de cada uno. La
+        // alternativa —un MAX(id) agrupado y un segundo cruce— lee la tabla dos veces para lo
+        // mismo.
+        return jdbc().sql(
+                        "SELECT DISTINCT ON (d.contribuyente_id) "
+                                + COLUMNAS_CABECERA
+                                + " FROM determinacion d"
+                                + " WHERE d.ejercicio = :ejercicio AND d.tributo = 'PREDIAL'"
+                                + " ORDER BY d.contribuyente_id, d.id DESC")
+                .param("ejercicio", ejercicio.valor())
+                .query(DeterminacionRepositoryJdbc::mapearCabecera)
+                .list();
+    }
+
+    @Override
+    public Optional<Determinacion> ultimaPredialDe(Ejercicio ejercicio, long contribuyenteId) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS_CABECERA
+                                + " FROM determinacion d"
+                                + " WHERE d.ejercicio = :ejercicio AND d.tributo = 'PREDIAL'"
+                                + "   AND d.contribuyente_id = :contribuyenteId"
+                                + " ORDER BY d.id DESC LIMIT 1")
+                .param("ejercicio", ejercicio.valor())
+                .param("contribuyenteId", contribuyenteId)
                 .query(DeterminacionRepositoryJdbc::mapearCabecera)
                 .optional();
     }
@@ -84,15 +117,17 @@ public class DeterminacionRepositoryJdbc extends RepositorioJdbc
             jdbc().sql(
                             "INSERT INTO determinacion_predio_detalle"
                                     + " (municipalidad_id, ejercicio, determinacion_id, predio_id,"
-                                    + "  autovaluo, porcentaje_propiedad, base_imponible_predio)"
+                                    + "  autovaluo, valuo_exonerado, porcentaje_propiedad,"
+                                    + "  base_imponible_predio)"
                                     + " VALUES ("
                                     + MUNICIPALIDAD_ACTUAL
                                     + ", :ejercicio, :determinacionId, :predioId, :autovaluo,"
-                                    + "  :porcentaje, :baseImponiblePredio)")
+                                    + "  :exonerado, :porcentaje, :baseImponiblePredio)")
                     .param("ejercicio", determinacion.ejercicio().valor())
                     .param("determinacionId", id)
                     .param("predioId", fila.predioId())
                     .param("autovaluo", fila.autovaluo().valor())
+                    .param("exonerado", fila.valuoExonerado().valor())
                     .param("porcentaje", fila.porcentajePropiedad().valor())
                     .param("baseImponiblePredio", fila.baseImponiblePredio().valor())
                     .update();
@@ -198,6 +233,7 @@ public class DeterminacionRepositoryJdbc extends RepositorioJdbc
                 fila.getLong("id"),
                 fila.getLong("predio_id"),
                 new Dinero(fila.getBigDecimal("autovaluo")),
+                new Dinero(fila.getBigDecimal("valuo_exonerado")),
                 new Porcentaje(fila.getBigDecimal("porcentaje_propiedad")),
                 new Dinero(fila.getBigDecimal("base_imponible_predio")));
     }

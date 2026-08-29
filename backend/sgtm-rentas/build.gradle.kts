@@ -69,3 +69,12 @@ dependencies {
     testImplementation("org.springframework:spring-test")
     testRuntimeOnly(libs.postgresql)
 }
+
+// La prueba del cuadro del predial lee el derivado publicable del corpus (#395, como #192 en
+// sgtm-valores y sgtm-coactiva). Sin declararlo como entrada, editar el CSV deja `test` en
+// UP-TO-DATE y una rotura del derivado pasa en verde rancio en local.
+tasks.test {
+    inputs
+        .file(rootProject.file("../docs/10-negocio/valores-normativos/publicacion/parametros-2026.csv"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}

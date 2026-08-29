@@ -16,11 +16,17 @@ import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pr
  * nueve formularios que no guardan sin ella, asi que aqui se comprueba sobre las
  * nueve a la vez y no una por una.
  *
- * Conectadas para lectura hay cinco: el padron de contribuyentes (#11), la
- * ficha de vehiculo (#26), la declaracion jurada (#28), los beneficios (#27)
- * y los arbitrios (#31). `alta_deuda` (#24) y `baja_deuda` (#332) fueron las
- * primeras escrituras conectadas del modulo, con su lista blanca en
- * `escrituras.ts` — ver ahi por que `cuotaHasta` no viaja todavia.
+ * Conectadas para lectura hay seis: el padron de contribuyentes (#11), la
+ * ficha de vehiculo (#26), la declaracion jurada (#28), los beneficios (#27),
+ * los arbitrios (#31) y, desde #395, el padron predial de un contribuyente.
+ * `alta_deuda` (#24) y `baja_deuda` (#332) fueron las primeras escrituras
+ * conectadas del modulo, con su lista blanca en `escrituras.ts` — ver ahi por
+ * que `cuotaHasta` no viaja todavia.
+ *
+ * **Y las dos determinaciones prediales van por la otra puerta** (#395): su
+ * operacion es un `POST`, asi que no se pide al abrir la pantalla y no declaran
+ * `Conexion` sino `Adaptacion` —solo el adaptador de la respuesta—. Su bateria
+ * entera esta en `predial-conectado.test.tsx`.
  *
  * **`transferencia_predio` y `transferencia_vehiculo` se suman aqui** (#73):
  * a las dos les faltaba `valorTransferencia`, un dato que ninguna pantalla
@@ -255,9 +261,11 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
     ]);
   });
 
-  it('las nueve restantes siguen sin Conexion propia', () => {
+  it('las que faltan siguen sin Conexion propia, y las prediales van por la otra puerta', () => {
     for (const opcion of [
-      'predios_rentas',
+      // Las dos determinaciones prediales tienen backend desde #395 y **no**
+      // son `Conexion`: su operacion es un `POST`, y una `Conexion` la pediria
+      // al abrir la pantalla. Van por `Adaptacion`, que se comprueba abajo.
       'predial_individual',
       'predial_masivo',
       'transferencia_predio',
@@ -275,6 +283,9 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
       'declaracion_jurada',
       'beneficios',
       'arbitrios',
+      // El padron predial de un contribuyente se suma en #395: es la unica de
+      // las tres del predial cuya operacion es un `GET`.
+      'predios_rentas',
       // `baja_deuda` se suma en #332, y es la unica del sistema cuya conexion
       // **lee otra operacion**: la suya es un `POST`, que no se pide al abrir la
       // pantalla, y la deuda que se da de baja la publica `consulta_deuda` (#22).

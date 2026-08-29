@@ -9,7 +9,8 @@ import {
 } from './index';
 
 /**
- * Lo que el proxy anade a la respuesta de las cinco pantallas que determinan.
+ * Lo que el proxy anade a la respuesta de las pantallas que determinan **y
+ * todavia no tienen controlador**: tres, desde #395.
  *
  * Se pide por HTTP y no llamando a `conLoSimulado` a secas porque lo que hay
  * que defender no es la funcion: es que el dato **llegue a la pantalla**. Entre
@@ -25,44 +26,49 @@ afterEach(() => desinstalarProxyDeDatos());
 
 describe('la respuesta dice con que conjunto se determino', () => {
   /**
-   * Sin el conjunto, «587.44» no se puede volver a obtener (`ARQ-09` §3): la
-   * misma pantalla, el mismo predio y otro conjunto sellado del mismo ejercicio
-   * dan otro importe, y los dos son correctos. Y se comprueba a la vez que los
-   * campos del prototipo **siguen ahi**: anadir el dato es envolver la
-   * respuesta, no sustituirla, y una memoria de calculo sin sus tramos no es
-   * una memoria de calculo.
+   * **Las dos prediales ya no pasan por aqui** (#395), y esta prueba lo fija.
+   *
+   * `PredialController` publica sus dos operaciones, asi que el proxy las
+   * contesta por `recursos.ts` con la forma del backend —el recurso del
+   * dominio— y su conjunto viaja **dentro** del recurso, que es donde el
+   * servidor lo pone. Lo que se comprueba es que no queda ni rastro del dato
+   * inventado: ni `determinacion` colgando de la respuesta, ni los campos del
+   * prototipo, que era la otra mitad de lo que llegaba por el camino comun.
    */
-  it('el calculo individual del predial trae su conjunto, su sujeto y sus tramos', async () => {
-    const datos = await solicitar<DatosDePantalla>('/rentas/predial/calculo-individual', {
-      metodo: 'POST',
-      cuerpo: {},
-    });
+  it('el calculo individual del predial responde su recurso, no la forma comun', async () => {
+    const recurso = await solicitar<Record<string, unknown>>(
+      '/rentas/predial/calculo-individual',
+      { metodo: 'POST', cuerpo: { simulacion: true } },
+    );
 
-    expect(datos.determinacion).toEqual({
-      conjunto: '2026 v1',
-      sujeto: 'SUC. RUFINA MEDINA MEDINA',
-    });
-    expect(datos.campos?.['impuestoInsolutoAnualS']).toBe('587.44');
-    expect(datos.campos?.['tramo1Hasta15Uit02']).toContain('→');
+    // El conjunto va dentro del recurso, con el sujeto que redacto el servidor.
+    expect(recurso['conjunto']).toBe('2026 v1');
+    expect(recurso['sujeto']).toBe('SUC. RUFINA MEDINA MEDINA');
+    // Ya no cuelga de la respuesta como un anadido del proxy.
+    expect(recurso['determinacion']).toBeUndefined();
+    expect(recurso['campos']).toBeUndefined();
+    // Y las cifras salen como las serializa el backend: sin separador de miles.
+    expect(recurso['impuestoInsoluto']).toBe('587.44');
+    expect(recurso['valuoAfecto']).toBe('151406.75');
   });
 
   /**
-   * Y no es una sola: el sujeto de una determinacion masiva **no es un
-   * nombre**. Si la interfaz tuviera que componerlo, aqui escribiria
-   * «Contribuyente: —» encima del padron entero; el servidor lo redacta como lo
-   * que es, un alcance.
+   * Y la corrida masiva igual, con la diferencia que decide su banda: **no
+   * publica ningun sujeto**. El de una corrida no es un registro sino un
+   * alcance, y componerlo en la interfaz es lo que `DatosDeDeterminacion.sujeto`
+   * existe para impedir; por eso el adaptador no dibuja banda en esa pantalla.
    */
-  it('el calculo masivo trae el mismo conjunto y un sujeto que no es una persona', async () => {
-    const datos = await solicitar<DatosDePantalla>('/rentas/predial/calculo-masivo', {
+  it('el calculo masivo responde su corrida, con conjunto y sin sujeto', async () => {
+    const recurso = await solicitar<Record<string, unknown>>('/rentas/predial/calculo-masivo', {
       metodo: 'POST',
-      cuerpo: {},
+      cuerpo: { simulacion: true },
     });
 
-    expect(datos.determinacion).toEqual({
-      conjunto: '2026 v1',
-      sujeto: 'Padrón completo del ejercicio',
-    });
-    expect(datos.campos?.['ejercicioACalcular']).toBe('2026');
+    expect(recurso['conjunto']).toBe('2026 v1');
+    expect(recurso['sujeto']).toBeUndefined();
+    expect(recurso['determinacion']).toBeUndefined();
+    expect(recurso['ejercicio']).toBe('2026');
+    expect(Array.isArray(recurso['etapas'])).toBe(true);
   });
 
   /**
@@ -105,7 +111,7 @@ describe('la respuesta dice con que conjunto se determino', () => {
   });
 
   /** Y lo mismo dicho sobre la funcion, para `contribuyentes` incluida. */
-  it.each(['contribuyentes', 'predios_rentas', 'caja_tributaria'])(
+  it.each(['contribuyentes', 'declaracion_jurada', 'caja_tributaria'])(
     '«%s» no esta declarada y sale intacta',
     (pantalla) => {
       const datos: DatosDePantalla = { fechaCalculo: '2026-08-13', campos: { ano: '2026' } };
@@ -136,17 +142,17 @@ describe('el registro se consulta con Object.hasOwn', () => {
 
 describe('el inventario de lo simulado se puede leer entero', () => {
   /**
-   * Son cinco, y estan enumeradas para que anadir una sexta sea un cambio que
-   * se ve en el diff. `simulados.ts` es el unico sitio del proxy donde se
+   * Eran cinco y son tres desde #395: `predial_individual` y `predial_masivo`
+   * se fueron el dia que su controlador existio, que es la regla del archivo
+   * cumpliendose. Estan enumeradas para que anadir una cuarta —o quitar otra—
+   * sea un cambio que se ve en el diff. `simulados.ts` es el unico sitio del proxy donde se
    * inventa algo (ADR-0010 §4): si crece en silencio, deja de verse de lejos,
    * que es la unica razon por la que esta apartado.
    */
-  it('son exactamente las cinco pantallas que determinan', () => {
+  it('son exactamente las tres que todavia no tienen controlador', () => {
     expect([...PANTALLAS_SIMULADAS].sort()).toEqual([
       'alcabala',
       'arbitrios',
-      'predial_individual',
-      'predial_masivo',
       'vehicular_calculo',
     ]);
   });

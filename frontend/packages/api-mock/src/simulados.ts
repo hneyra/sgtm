@@ -22,6 +22,15 @@ import type { DatosDeDeterminacion, DatosDePantalla } from '@sgtm/api-client';
  * anotada opcion por opcion en `apps/backoffice/src/pantallas/rentas/index.ts`.
  * El dia que esa operacion exista, la entrada se borra de aqui y la pantalla no
  * cambia una linea.
+ *
+ * **Y ese dia llego para dos de las cinco** (#395). `PredialController` publica
+ * ya `POST /rentas/predial/calculo-individual` y `POST /rentas/predial/calculo-
+ * masivo`, y las dos devuelven el conjunto con el que determinaron dentro de su
+ * recurso —`DeterminacionPredialResource.conjunto`, `CorridaPredialResource
+ * .conjunto`—, que es exactamente lo que este archivo inventaba para ellas. Sus
+ * entradas se borraron: el proxy las contesta ahora por `recursos.ts`, con la
+ * forma del backend, y la pantalla las lee de ahi. Quedan tres, y las tres
+ * siguen esperando su controlador.
  */
 
 /**
@@ -36,7 +45,8 @@ import type { DatosDeDeterminacion, DatosDePantalla } from '@sgtm/api-client';
 const CONJUNTO_DEL_PROTOTIPO = '2026 v1';
 
 /**
- * Las cinco pantallas que determinan, y sobre quien lo hacen.
+ * Las pantallas que determinan **y todavia se inventan su conjunto**: tres de
+ * las cinco, desde #395.
  *
  * `sujeto` viene **ya redactado**, como lo redactara el servidor, y no como dos
  * piezas que la interfaz junte: el sujeto de una determinacion masiva no es un
@@ -45,12 +55,10 @@ const CONJUNTO_DEL_PROTOTIPO = '2026 v1';
  * pantalla a elegir cual esta viendo.
  *
  * Las sustituira la capa web de la determinacion (#333b): la operacion que
- * responda estas cinco pantallas traera el conjunto con el que determino,
- * porque es el unico que lo sabe.
+ * responda estas pantallas traera el conjunto con el que determino, porque es
+ * el unico que lo sabe. Es lo que ya paso con las dos prediales (#395).
  */
 const DETERMINACIONES: Readonly<Record<string, DatosDeDeterminacion>> = {
-  predial_individual: { conjunto: CONJUNTO_DEL_PROTOTIPO, sujeto: 'SUC. RUFINA MEDINA MEDINA' },
-  predial_masivo: { conjunto: CONJUNTO_DEL_PROTOTIPO, sujeto: 'Padrón completo del ejercicio' },
   arbitrios: { conjunto: CONJUNTO_DEL_PROTOTIPO, sujeto: 'Predio 02-014-D-14-01' },
   vehicular_calculo: { conjunto: CONJUNTO_DEL_PROTOTIPO, sujeto: 'Placa V2K-841' },
   alcabala: { conjunto: CONJUNTO_DEL_PROTOTIPO, sujeto: 'Transferencia del 12/03/2026' },
@@ -74,5 +82,5 @@ export function conLoSimulado(pantalla: string, datos: DatosDePantalla): DatosDe
   return determinacion ? { ...datos, determinacion } : datos;
 }
 
-/** Las pantallas a las que el proxy les anade algo inventado. Hoy, cinco. */
+/** Las pantallas a las que el proxy les anade algo inventado. Hoy, tres. */
 export const PANTALLAS_SIMULADAS: readonly string[] = Object.keys(DETERMINACIONES);

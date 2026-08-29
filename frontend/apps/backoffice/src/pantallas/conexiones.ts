@@ -5,7 +5,7 @@ import { CONEXIONES_DE_COACTIVA } from './coactiva';
 import { CONEXIONES_DE_CONSULTAS } from './consultas';
 import { CONEXIONES_DE_LICENCIAS } from './licencias';
 import { CONEXIONES_DE_FISCALIZACION } from './fiscalizacion';
-import { CONEXIONES_DE_RENTAS } from './rentas';
+import { ADAPTACIONES_DE_RENTAS, CONEXIONES_DE_RENTAS } from './rentas';
 import { CONEXIONES_DE_SANCIONES } from './sanciones';
 import { CONEXIONES_DE_TESORERIA } from './tesoreria';
 import { CONEXIONES_DE_TRANSITO } from './transito';
@@ -192,6 +192,67 @@ const CONEXIONES: Readonly<Record<string, Conexion>> = {
 };
 
 export const conexionDe = (opcion: string): Conexion | undefined => CONEXIONES[opcion];
+
+/**
+ * La otra mitad de la puerta lateral: **como se lee la respuesta de un `POST`**
+ * cuyo recurso ya no cabe en la forma comun (#395).
+ *
+ * `Conexion` resuelve la lectura de una opcion —que pedir, cuando y como
+ * traducirlo—. Esto resuelve solo la ultima de las tres, y existe porque hay un
+ * caso en que las otras dos no son de la opcion: la **determinacion**. Su
+ * operacion es un `POST`, asi que no se pide al abrir la pantalla —abrir una
+ * pantalla no puede lanzar una determinacion— y quien decide cuando sale es
+ * quien atiende, pulsando la accion que la pide (`useSimulacion`). Lo unico que
+ * falta entonces es traducir lo que vuelve.
+ *
+ * Se separa de `Conexion` en vez de ensancharla porque declarar una `Conexion`
+ * sobre una operacion que escribe la **dispararia al abrir**:
+ * `useDatosDeOperacion` mira los parametros que faltan, no el verbo. Es el
+ * mismo motivo por el que `baja_deuda` conecta `consulta_deuda` y no su propio
+ * `POST`.
+ *
+ * Igual que en `Conexion`, `leer` es la frontera —valida el cuerpo que el
+ * contrato todavia describe como «un objeto»— y `adaptar` es **puro**: trabaja
+ * sobre el recurso del dominio, no sobre el transporte.
+ */
+export interface Adaptacion {
+  readonly operacion: IdDeOperacion;
+  /** Del cuerpo que devolvio la operacion a lo que dibujan los bloques. */
+  readonly deLaRespuesta: (cuerpo: unknown) => DatosDePantalla;
+}
+
+export interface DefinicionDeAdaptacion<O extends IdDeOperacion, R> {
+  readonly operacion: O;
+  readonly leer: (cuerpo: RespuestaDe<O>) => R;
+  readonly adaptar: (recurso: R) => DatosDePantalla;
+}
+
+/** Ata las dos piezas y borra los tipos hacia afuera, como {@link definirConexion}. */
+export function definirAdaptacion<O extends IdDeOperacion, R>(
+  definicion: DefinicionDeAdaptacion<O, R>,
+): Adaptacion {
+  return {
+    operacion: definicion.operacion,
+    deLaRespuesta: (cuerpo) => definicion.adaptar(definicion.leer(cuerpo as RespuestaDe<O>)),
+  };
+}
+
+/**
+ * Las opciones cuyo `POST` devuelve un recurso del dominio, por su
+ * identificador del catalogo.
+ *
+ * Dos hoy, las dos prediales (#395). Las otras tres pantallas de determinacion
+ * —arbitrios, calculo vehicular y alcabala— no estan, y no por descuido: la
+ * primera es un `GET` y las otras dos siguen contestando la forma comun del
+ * proxy, que es la que `useSimulacion` lee cuando no hay adaptacion declarada.
+ */
+const ADAPTACIONES: Readonly<Record<string, Adaptacion>> = {
+  ...ADAPTACIONES_DE_RENTAS,
+};
+
+/** `Object.hasOwn`, como el resto del camino: una opcion llamada `toString` no hereda ninguna. */
+export const adaptacionDe = (opcion: string): Adaptacion | undefined =>
+  Object.hasOwn(ADAPTACIONES, opcion) ? ADAPTACIONES[opcion] : undefined;
 
 /** Cuantas opciones estan conectadas. La prueba de convivencia lo mira. */
 export const OPCIONES_CONECTADAS = Object.keys(CONEXIONES);

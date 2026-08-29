@@ -97,6 +97,15 @@ class ContratoDeApiTest {
                     "POST /rentas/transferencias/predio",
                     "POST /rentas/transferencias/vehiculo",
                     "POST /rentas/vehicular/calculo",
+                    // #395 — la capa web de la determinacion predial. #30 dejo la regla de negocio
+                    // y su prueba; ningun controlador la publicaba, asi que el calculo del predial
+                    // se seguia haciendo fuera del sistema. `predial_individual` y
+                    // `predial_masivo` distinguen simular de asentar por el cuerpo, como
+                    // `vehicular_calculo` desde #32; `predios_rentas` publica el padron predial
+                    // que la pantalla de Rentas · Registro dibuja.
+                    "GET /rentas/predios",
+                    "POST /rentas/predial/calculo-individual",
+                    "POST /rentas/predial/calculo-masivo",
                     "POST /rentas/alcabala",
                     "POST /rentas/espectaculos",
                     "GET /consultas/cuenta-corriente/{codigo}",

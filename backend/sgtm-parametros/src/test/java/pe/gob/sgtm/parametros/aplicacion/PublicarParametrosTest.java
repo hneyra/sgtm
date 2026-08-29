@@ -554,7 +554,7 @@ class PublicarParametrosTest {
     class ElDerivado {
 
         @Test
-        @DisplayName("publica las veinte filas del corpus, con las firmas que el corpus dice")
+        @DisplayName("publica las veintidos filas del corpus, con las firmas que el corpus dice")
         void publicaElDerivadoDelCorpus() throws IOException, SQLException {
             assertThat(DERIVADO)
                     .as("es el archivo que publicar-parametros.sh monta en el Job")
@@ -564,7 +564,7 @@ class PublicarParametrosTest {
 
             // Ninguna cifra escrita aqui: lo que se compara es la base contra el archivo.
             List<String> delArchivo = llavesDe(DERIVADO);
-            assertThat(delArchivo).hasSize(20);
+            assertThat(delArchivo).hasSize(22);
             for (String llave : delArchivo) {
                 String[] partes = llave.split("\\|", -1);
                 assertThat(

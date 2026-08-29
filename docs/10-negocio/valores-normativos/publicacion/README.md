@@ -39,12 +39,13 @@ infra/carga-de-datos/abrir-conjunto-parametros.sh --ambiente stg --municipalidad
     --conjunto-id N --archivo parametros-2026.csv
 ```
 
-## Las veinte filas, y de dónde sale cada una
+## Las veintidós filas, y de dónde sale cada una
 
 | Tipo | Clave | Filas | Archivo del corpus |
 |---|---|---|---|
 | `UIT` | — | 5 (2022–2026) | `uit.md` |
 | `TRAMO_PREDIAL` | `1`, `2`, `3` | 3 | `predial-tramos-y-alicuotas.md` |
+| `TRAMO_PREDIAL_LIMITE` | `1`, `2` | 2 | `predial-tramos-y-alicuotas.md` |
 | `DEDUCCION_PENSIONISTA` | — | 1 | `predial-deducciones.md` |
 | `DEDUCCION_ADULTO_MAYOR` | — | 1 | `predial-deducciones.md` |
 | `PREDIAL_MINIMO` | — | 1 | `predial-minimo.md` |

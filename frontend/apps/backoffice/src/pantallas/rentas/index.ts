@@ -15,12 +15,15 @@ import {
 import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
 
 /**
- * Rentas · Registro, conectado hasta donde llega el backend: **ocho opciones de quince**.
+ * Rentas · Registro, conectado hasta donde llega el backend: **once opciones de quince**.
  *
  * `contribuyentes` (#11), `vehiculos` (#26), `declaracion_jurada` (#28), `beneficios` (#27),
- * `arbitrios` (#31), `alta_deuda` (#24) y `baja_deuda` (#332) ya estaban. Se suman
- * `transferencia_predio` y `transferencia_vehiculo` (#73): las dos escrituras que el backend
- * servia y a las que solo les faltaba un campo que ninguna pantalla del manual dibuja.
+ * `arbitrios` (#31), `alta_deuda` (#24), `baja_deuda` (#332), `transferencia_predio` y
+ * `transferencia_vehiculo` (#73) ya estaban. Se suman las **tres del predial** (#395), que
+ * eran las que #333b anoto como «lo que la capa web de la determinacion tendra que
+ * publicar»: `predios_rentas` por su `Conexion` de siempre, y `predial_individual` y
+ * `predial_masivo` por una `Adaptacion` —la puerta lateral de un `POST`, ver
+ * `determinaciones.ts`—.
  *
  * ── El campo que resuelve, y el que ademas anade (#331, #73) ────────────────
  *
@@ -103,9 +106,6 @@ import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
  *
  * ── Lo que sigue fuera, y por que ───────────────────────────────────────────
  *
- * - `predios_rentas`, `predial_individual`, `predial_masivo`: el backend no publica todavia
- *   ningun `Controller` para `Determinacion` — #30 dejo la regla de negocio y su prueba, no la
- *   capa web. Ver abajo el contrato que esa capa tendria que publicar (#333).
  * - `vehicular_calculo`: **el contrato y el controlador no dicen lo mismo, y eso se anota, no se
  *   puentea** (#333c). `VehicularController.PeticionDeCalculoVehicular` lee `placa`,
  *   `codContribuyente`, `vehiculoId`, `ejercicio`, `minimoImponible` y `simulacion` del **cuerpo**
@@ -138,18 +138,20 @@ import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
  * Las otras cinco no, y ninguna por descuido:
  *
  *   predios        **ya esta en la ficha**, por `consulta_predios`, que es la
- *                  lectura de Consultas que si tiene `Controller`. Anadir
- *                  `predios_rentas` seria una segunda pestaña de lo mismo, y
- *                  ademas vacia: esa opcion no tiene `Controller`, asi que el
- *                  proxy la contesta con la forma comun y la tabla saldria
- *                  vacia **en silencio**, que es el defecto exacto de #363
+ *                  lectura de Consultas que la ficha ya componia. Anadir
+ *                  `predios_rentas` —que desde #395 si tiene `Controller` y si
+ *                  esta conectada— seria una segunda pestaña de lo mismo: las
+ *                  dos leen los predios de un contribuyente, y la de Consultas
+ *                  ademas publica su deuda
  *   `declaracion_jurada`  su ruta lleva el numero de la declaracion en el
  *                  **camino** —`GET /rentas/declaraciones/{djNro}`— y una ficha
  *                  abierta por contribuyente no lo tiene. Sin `djNro` no hay
  *                  peticion que hacer; con uno inventado, se ensenaria la
  *                  declaracion de otro
- *   determinacion  no hay lectura: su operacion es un `POST` y ningun
- *                  controlador la publica (#333b, aqui abajo)
+ *   determinacion  no hay **lectura**: su operacion es un `POST`, y un `POST`
+ *                  no se pide al abrir una ficha. Desde #395 el controlador
+ *                  existe y la pantalla lo pide cuando alguien lo pulsa, que
+ *                  es un gesto y no una composicion
  *   `arbitrios`    su contrato **no tiene filtro por contribuyente**: se
  *                  pregunta por ejercicio, codigo predial, zona y uso. Componer
  *                  por predio exigiria elegir cual de los suyos, que es otra
@@ -162,27 +164,40 @@ import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
  * Lo que falta para las cinco es backend o contrato, no interfaz, y por eso se
  * anota aqui en vez de puentearse.
  *
- * ── (#333b) El contrato que la capa web de la determinacion tendra que publicar ─
+ * ── (#395) El predial, conectado, y lo que de el sigue sin poder dibujarse ─
  *
- * Se anota **como anotacion y no como forma en el proxy**: fingir aqui la derivacion haria que la
- * pantalla se construyera contra una invencion, que es lo que ADR-0010 prohibe. Lo que
- * `predial_individual` necesita, en el orden en que se lee, y todo por **contribuyente y
- * ejercicio**:
+ * Las tres operaciones que #333b pedia existen ya, y las tres estan conectadas. Lo que
+ * **no** llega con ellas, opcion por opcion:
  *
- *   1. los predios que integran la base: por cada uno, su codigo, ubicacion, uso, `%` de
- *      propiedad y su autovaluo. Es `determinacion_predio_detalle` (V20), que ya existe como
- *      tabla y no tiene recurso;
- *   2. la base imponible **del conjunto**, ponderada por el `%` de propiedad de cada predio
- *      (`RT011BaseImponibleDelContribuyente`), con el valuo total, el exonerado y el afecto;
- *   3. los tramos aplicados: para cada uno, su limite en UIT, su alicuota y el importe que
- *      aporta, **con el identificador del conjunto de parametros sellado** que se uso —«2026 v1»,
- *      `determinacion.conjunto_id`—, porque una cifra sin su version no se puede recalcular;
- *   4. las cuotas con sus vencimientos, y el derecho de emision;
- *   5. la fecha a la que todo eso esta calculado (regla 9, RNF-075).
- *
- * Ninguna de las cinco se compone en la interfaz. La 2 y la 3 son literalmente las que RNF-083
- * prohibe recomponer aqui: sumar los autovaluos de la tabla para «adelantar» la base daria una
- * cifra parecida y sin el `%` de propiedad, y el error seria invisible.
+ * - `predios_rentas` (`GET /rentas/predios`). `PredioDeRentasResource` **no publica el
+ *   autovaluo del predio ni su area construida, y es a proposito**: el sistema no sabe
+ *   valorizar un predio todavia (D-11, y los dos cuadros que GOB-03 no puede cargar). Las
+ *   dos columnas que el prototipo dibuja para eso —«Const. m²» y «Autovalúo S/»— salen con
+ *   «—», y componerlas aqui seria inventarse la cifra sobre la que se cobra. Las dos
+ *   secciones de campos de la pantalla —«Datos del predio» y «Valuación»— tampoco se
+ *   llenan: la operacion es un padron paginado, no la ficha de un predio, y el catalogo no
+ *   declara ningun parametro de ruta con el que pedir uno. `sector` viaja como filtro
+ *   —el contrato lo declara y el controlador lo lee— aunque el recurso lo publique nulo
+ *   para todas sus filas en el proxy: filtrar es del servidor (ADR-0010).
+ * - `predial_individual` (`POST /rentas/predial/calculo-individual`). Se conecta como
+ *   **simulacion**, que es la unica mitad de la operacion que la pantalla puede pedir hoy:
+ *   el cuerpo lleva `simulacion: true` y el backend calcula sin asentar nada. Asentar la
+ *   determinacion —`simulacion: false`— exige ademas la observacion del usuario (regla 10)
+ *   y una lista blanca en `escrituras.ts`, y eso es otro issue: la primaria «Calcular»
+ *   sigue apagada con su franja `sin-determinacion`. La seccion «Beneficios aplicados» se
+ *   queda entera en «—»: el recurso no publica la deduccion, ni la resolucion, ni la
+ *   inafectacion, ni el monto deducido.
+ * - `predial_masivo` (`POST /rentas/predial/calculo-masivo`). Lo mismo, y con dos huecos
+ *   propios. El primero: `CorridaPredialResource` **no publica ningun sujeto**, asi que la
+ *   banda de la determinacion no se dibuja en esta pantalla — el sujeto de una corrida
+ *   masiva no es un registro sino un alcance, y redactarlo aqui a partir de `alcance` y
+ *   `ejercicio` es exactamente lo que `DatosDeDeterminacion.sujeto` existe para impedir. El
+ *   segundo: de los ocho campos de «Parámetros del proceso» solo dos vienen en el recurso
+ *   —el ejercicio y el alcance—; `uitDelEjercicioS` es el que mas se echa de menos y el que
+ *   menos se puede componer, porque la UIT de un ejercicio vive en el conjunto sellado y
+ *   esta respuesta trae el **nombre** del conjunto, no su contenido. Y la lista de
+ *   observados, que su tercera accion promete, tampoco: el recurso la publica, pero el
+ *   catalogo no reserva ninguna tabla ni ningun panel donde ensenarla.
  */
 
 /** El registro que abre la ficha o la declaracion. Sin el no hay peticion. */
@@ -264,6 +279,65 @@ const vehiculos = definirConexion({
       nroDeSerie: texto(vehiculo['numeroSerie']),
     },
   }),
+});
+
+/**
+ * Los predios del contribuyente (RF-021, #395).
+ *
+ * `PredioDeRentasResource` es registro de padron: codigo de referencia catastral, tipo,
+ * direccion, uso, sector, area de terreno, `%` de propiedad y condicion. **No publica el
+ * autovaluo del predio ni su area construida, y es a proposito**: el sistema no sabe
+ * valorizar un predio todavia (D-11, GOB-03), asi que las dos columnas que el prototipo
+ * dibuja para eso salen con «—».
+ *
+ * Y son justo las dos que mas se miran, asi que conviene decir por que no se componen:
+ * el area construida esta en `construccion` de la ficha catastral —otro modulo, otra
+ * operacion— y sumarla aqui daria un numero que no es el que uso la determinacion; y el
+ * autovaluo **es** la determinacion, que se pide en la pantalla de al lado y con su
+ * conjunto sellado (RNF-083, `ARQ-09` §3). Un autovaluo compuesto en la interfaz seria una
+ * cifra parecida a la que se cobra y ninguna regla la sostendria.
+ *
+ * `exige` el contribuyente por lo mismo que `baja_deuda`: sin el, `PrediosDeRentasController`
+ * contesta **una pagina vacia**, y una tabla vacia se lee como «este contribuyente no tiene
+ * predios», que es exactamente lo contrario de lo que pasa. Lo que hay que decir ahi es que
+ * se busque a alguien.
+ *
+ * La condicion se dibuja como texto y sin tono: «Afecto», «Inafecto», «Exonerado» y
+ * «Transferido» no se reparten en bueno y malo —un predio exonerado no esta mal— y
+ * pintarlos de colores seria una lectura que el dominio no hace.
+ */
+const predios_rentas = definirConexion({
+  operacion: 'predios_rentas',
+  parametros: ({ ruta, busqueda }) =>
+    parametrosDeBusqueda('predios_rentas', ruta['codigo'], busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'los predios del contribuyente'),
+  exige: [
+    {
+      parametro: 'codContribuyente',
+      titulo: 'Busca un contribuyente para ver sus predios',
+      detalle:
+        'El padrón predial se lee por contribuyente: escribe su código arriba y pulsa «Buscar». Sin él la respuesta vendría vacía, y una tabla vacía aquí se leería como «no tiene predios».',
+    },
+  ],
+  adaptar: (paginado) =>
+    datosDe(
+      tablaDe(
+        paginado,
+        (predio): readonly Celda[] => [
+          { texto: texto(predio['codigoReferenciaCatastral']) },
+          { texto: texto(predio['direccion']) },
+          { texto: texto(predio['uso']) },
+          { texto: texto(predio['areaTerreno']) },
+          // Area construida y autovaluo: ver el doc de arriba. No llegan, y no
+          // se componen.
+          { texto: SIN_DATO },
+          { texto: texto(predio['porcentajePropiedad']) },
+          { texto: SIN_DATO },
+          { texto: texto(predio['condicion']) },
+        ],
+        'predios',
+      ),
+    ),
 });
 
 /**
@@ -542,9 +616,17 @@ const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
 /** Las opciones de Rentas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_RENTAS: Readonly<Record<string, Conexion>> = {
   contribuyentes,
+  predios_rentas,
   vehiculos,
   declaracion_jurada,
   beneficios,
   arbitrios,
   baja_deuda,
 };
+
+/**
+ * Y las dos que no se leen al abrir sino que se **piden**: las determinaciones
+ * prediales (#395). Van por la otra puerta —`Adaptacion`— porque su operacion
+ * es un `POST`: ver `determinaciones.ts`.
+ */
+export { ADAPTACIONES_DE_RENTAS } from './determinaciones';

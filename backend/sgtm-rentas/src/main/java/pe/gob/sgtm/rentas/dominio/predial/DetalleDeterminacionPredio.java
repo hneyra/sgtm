@@ -22,6 +22,7 @@ import pe.gob.sgtm.dominio.Porcentaje;
  * @param id nulo mientras no se ha guardado; lo asigna la base
  * @param predioId el predio que aporta
  * @param autovaluo el autovaluo del predio (RT-010: terreno + construccion + obras)
+ * @param valuoExonerado la parte del autovaluo que no esta afecta (V56); cero si no hay ninguna
  * @param porcentajePropiedad el % de propiedad del contribuyente sobre este predio a la fecha de
  *     calculo
  * @param baseImponiblePredio el aporte de este predio a la base del contribuyente, ya ponderado
@@ -30,6 +31,7 @@ public record DetalleDeterminacionPredio(
         @Nullable Long id,
         long predioId,
         Dinero autovaluo,
+        Dinero valuoExonerado,
         Porcentaje porcentajePropiedad,
         Dinero baseImponiblePredio) {
 
@@ -44,6 +46,18 @@ public record DetalleDeterminacionPredio(
             throw new IllegalArgumentException("El autovaluo no puede ser negativo");
         }
         Objects.requireNonNull(
+                valuoExonerado, "El detalle necesita la parte exonerada, aunque sea cero");
+        if (valuoExonerado.esNegativo()) {
+            throw new IllegalArgumentException("El valuo exonerado no puede ser negativo");
+        }
+        if (valuoExonerado.esMayorQue(autovaluo)) {
+            throw new IllegalArgumentException(
+                    "La parte exonerada es una parte del autovaluo, no otra cifra: "
+                            + valuoExonerado
+                            + " sobre "
+                            + autovaluo);
+        }
+        Objects.requireNonNull(
                 porcentajePropiedad, "El detalle necesita el % de propiedad del contribuyente");
         Objects.requireNonNull(baseImponiblePredio, "El detalle necesita la base que aporta");
         if (baseImponiblePredio.esNegativo()) {
@@ -52,13 +66,33 @@ public record DetalleDeterminacionPredio(
         }
     }
 
-    /** Un detalle nuevo, todavia sin guardar. */
+    /** Un detalle nuevo, todavia sin guardar, de un predio sin ninguna parte exonerada. */
     public static DetalleDeterminacionPredio nuevo(
             long predioId,
             Dinero autovaluo,
             Porcentaje porcentajePropiedad,
             Dinero baseImponiblePredio) {
+        return nuevo(predioId, autovaluo, Dinero.CERO, porcentajePropiedad, baseImponiblePredio);
+    }
+
+    /** Un detalle nuevo, todavia sin guardar, con la parte del autovaluo que no esta afecta. */
+    public static DetalleDeterminacionPredio nuevo(
+            long predioId,
+            Dinero autovaluo,
+            Dinero valuoExonerado,
+            Porcentaje porcentajePropiedad,
+            Dinero baseImponiblePredio) {
         return new DetalleDeterminacionPredio(
-                null, predioId, autovaluo, porcentajePropiedad, baseImponiblePredio);
+                null,
+                predioId,
+                autovaluo,
+                valuoExonerado,
+                porcentajePropiedad,
+                baseImponiblePredio);
+    }
+
+    /** La parte del autovaluo que si esta afecta, antes de ponderar por el % de propiedad. */
+    public Dinero valuoAfecto() {
+        return autovaluo.menos(valuoExonerado);
     }
 }
