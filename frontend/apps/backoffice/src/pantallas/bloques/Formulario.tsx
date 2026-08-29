@@ -253,7 +253,15 @@ export function Formulario({
                       etiqueta={campo.label}
                       tipo={campo.t}
                       valor={typeof valor === 'string' ? valor : ''}
-                      marcado={valor === true}
+                      /* **Una casilla escribible tiene que enseñar lo que se
+                         acaba de pulsar.** Lo que sirve la API es un booleano;
+                         lo que guarda el borrador es la cadena `'si'`
+                         (`design-system/Campo`), asi que comparar solo contra
+                         `true` dejaba la casilla siempre desmarcada por mucho
+                         que se pulsara — y con ella la pantalla diciendo lo
+                         contrario de lo que iba a mandar. Salio al declarar las
+                         dos de «Predial — masivo» (#445). */
+                      marcado={valor === true || valor === 'si'}
                       ph={campo.ph}
                       opciones={campo.opts}
                       ancho={campo.ancho}

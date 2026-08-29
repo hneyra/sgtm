@@ -133,6 +133,18 @@ export interface CampoDelCuerpo {
   /** El backend lo declara entero, no cadena. Nunca para importes. */
   readonly entero?: boolean;
   /**
+   * El backend lo declara **booleano**, no cadena: es un interruptor.
+   *
+   * Una casilla llega al borrador como `'si'` o como cadena vacia
+   * (`design-system/Campo`), y una cadena vacia ya no viaja nunca. Asi que
+   * marcada manda `true` y sin marcar **no manda nada**, que es justo lo que un
+   * `@Nullable Boolean` del backend lee como «no». Mandar `'si'` como texto
+   * dependeria de que el deserializador lo interpretara, y un interruptor que
+   * viaja como cadena es un interruptor que un dia deja de encenderse sin que
+   * nada lo diga.
+   */
+  readonly booleano?: boolean;
+  /**
    * El backend lo lee como importe: viaja **solo** si es una cadena decimal
    * simple (`-?\d+(\.\d+)?`).
    *
@@ -381,6 +393,26 @@ export interface OpcionesDeEscritura {
    * {@link CampoDelCuerpo}.
    */
   readonly delFiltro?: Readonly<Record<string, CampoDelCuerpo>>;
+   * Lo que el cuerpo lleva **siempre** y nadie teclea: la mitad de la operacion
+   * que se esta invocando.
+   *
+   * Existe por una sola forma, y conviene que siga siendo esa: hay operaciones
+   * que son **dos** —`POST /rentas/predial/calculo-masivo` simula o asienta
+   * segun `simulacion`, y el backend exige decirlo—, y esa marca no es un dato
+   * del expediente sino cual de las dos mitades se pide. No hay campo en el
+   * catalogo para ella, asi que por `campos` no puede viajar: `soloDeclarados`
+   * recorre el borrador, y en el borrador solo esta lo que alguien escribio.
+   *
+   * Es el espejo de `SimulacionDeLaPantalla.cuerpo`, que ya hace lo mismo del
+   * otro lado. Y **no es la salida de emergencia**: `cuerpo` sustituye el cuerpo
+   * entero y con el la lista blanca; esto se suma a lo declarado, se lee en el
+   * mismo archivo que la lista blanca y se ve en el mismo diff.
+   *
+   * Se mezcla **antes** que los campos: una constante nunca puede pisar lo que
+   * el operador escribio, y una colision entre las dos es un error de
+   * declaracion que `escrituras.test.ts` pone rojo.
+   */
+  readonly constantes?: Readonly<Record<string, string | number | boolean>>;
   /**
    * Lo que **ademas de la observacion** hace falta para poder guardar, dicho
    * como el motivo por el que todavia no se puede.
@@ -450,6 +482,7 @@ export function useEscritura(
     segunLaAccion = SIN_DISCRIMINADOR,
     delFiltro = SIN_CAMPOS,
     filtros = SIN_FILTRO,
+    constantes,
     exigir,
     alGuardar,
     cuerpo,
@@ -520,6 +553,9 @@ export function useEscritura(
           ...(cuerpo
             ? cuerpo()
             : {
+                // Las constantes van primero: lo declarado y lo escrito manda
+                // sobre ellas. Ver `OpcionesDeEscritura.constantes`.
+                ...constantes,
                 ...soloDeclarados(borrador, campos),
                 ...soloDeclarados(delFiltroDeclarado, delFiltro),
                 ...soloDeclaradas(filas, tablas),
@@ -647,8 +683,8 @@ export function useEscritura(
 function soloDeclarados(
   borrador: Readonly<Record<string, string>>,
   campos: Readonly<Record<string, CampoDelCuerpo>>,
-): Readonly<Record<string, string | number>> {
-  const cuerpo: Record<string, string | number> = {};
+): Readonly<Record<string, string | number | boolean>> {
+  const cuerpo: Record<string, string | number | boolean> = {};
   for (const [campo, valor] of Object.entries(borrador)) {
     // `Object.hasOwn` y no `campos[campo]`: la indexacion resuelve por la cadena
     // de prototipos, asi que un campo llamado `constructor` o `toString` daba un
@@ -674,6 +710,10 @@ function soloDeclarados(
       // Un valor que la traduccion no reconoce no viaja: ver el javadoc de `CampoDelCuerpo`.
       const traducido = declarado.valor(limpio);
       if (traducido !== undefined) cuerpo[declarado.campo] = traducido;
+    } else if (declarado.booleano === true) {
+      // Solo llega aqui lo marcado: la casilla sin marcar vale cadena vacia, y
+      // eso se descarto mas arriba. Ver `CampoDelCuerpo.booleano`.
+      cuerpo[declarado.campo] = true;
     } else if (declarado.entero === true) {
       // Un entero es entero **entero**. `Number.parseInt` se queda con el
       // prefijo, y eso no es una conversion: es una reinterpretacion silenciosa

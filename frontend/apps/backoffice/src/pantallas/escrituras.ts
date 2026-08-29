@@ -53,6 +53,11 @@ export interface EscrituraDeclarada {
    */
   readonly delFiltro?: Readonly<Record<string, CampoDelCuerpo>>;
   /**
+   * Lo que el cuerpo lleva siempre y nadie teclea: cual de las dos mitades de la
+   * operacion se pide. Ver `OpcionesDeEscritura.constantes`.
+   */
+  readonly constantes?: Readonly<Record<string, string | number | boolean>>;
+  /**
    * Lo que **ademas de la observacion** hace falta para poder guardar, dicho
    * como el motivo por el que todavia no se puede. Ver `OpcionesDeEscritura.exigir`.
    */
@@ -753,6 +758,97 @@ function faltaEnLaTransferenciaDePredio(
  * el transferente lo toma de quien figura hoy como titular. Solo el valor de
  * la transferencia necesita el campo que `rentas/composicion.ts` añade.
  */
+/**
+ * Un campo que se **declara para poder verlo**, y que no viaja nunca.
+ *
+ * `soloDeclarados` descarta lo que la traduccion no reconoce, asi que esto lo
+ * descarta siempre. Ver por que hace falta en `predial_masivo`.
+ */
+function nuncaViaja(): undefined {
+  return undefined;
+}
+
+/**
+ * El alcance de la corrida, traducido al que el backend reconoce.
+ *
+ * `DeterminarPredialMasivo` admite **dos**: `TODOS` y `SECTOR`. El desplegable
+ * del manual ofrece **cuatro**, y las otras dos —«POR RANGO DE CÓDIGO» y «SOLO
+ * OBSERVADOS»— no existen todavia en ninguna parte del sistema.
+ *
+ * Lo que no se reconoce **no viaja**, y ademas no se deja pulsar: sin lo segundo,
+ * omitir `alcance` haria que el backend cayera en `TODOS`, y quien pidio «solo
+ * observados» recibiria una emision de **todo el padron** sin que nada se lo
+ * dijera. Ver `faltaEnLaCorridaDelPredial`.
+ */
+function alcanceDeLaCorrida(texto: string): string | undefined {
+  if (texto === 'TODO EL PADRÓN') return 'TODOS';
+  if (texto === 'POR SECTOR') return 'SECTOR';
+  return undefined;
+}
+
+/**
+ * El sector de la corrida. «Todos» **no es un sector**: es la ausencia de uno.
+ *
+ * Mandarlo haria que `enElAlcance` buscara predios del sector literalmente
+ * llamado «Todos», que no es ninguno, y la corrida saldria vacia.
+ */
+function sectorDeLaCorrida(texto: string): string | undefined {
+  return texto === '' || texto === 'Todos' ? undefined : texto;
+}
+
+/**
+ * Lo que le falta a la corrida del predial para poder asentarse (#445).
+ *
+ * Las cinco guardas son las cinco formas que tiene esta pantalla de mandar una
+ * corrida que el backend rechaza o —peor— que acepta queriendo decir otra cosa:
+ *
+ *   ejercicio    `PeticionDeCalculoMasivo` lo exige, y el desplegable de un
+ *                campo escribible abre **en blanco** a proposito (revision de
+ *                #331): un `sel` que enseña su primera opcion sin que nadie la
+ *                elija manda un cuerpo sin ella. Aqui eso seria emitir el
+ *                padron de un año que nadie escogio
+ *   alcance      igual, y ademas con dos de sus cuatro opciones sin sistema
+ *                detras: ver `alcanceDeLaCorrida`
+ *   el sector    con «POR SECTOR» hay que decir cual. El backend lo dice con
+ *                todas las letras: sin el, «solo el sector» y «todo el padron»
+ *                serian la misma corrida
+ *   arbitrios    `PredialController.rechazarLoQueNoHace` devuelve 422. Los
+ *                arbitrios son otro tributo, con su propia determinacion (#37)
+ *   la cuponera  lo mismo: es un documento, y esa capa es #43
+ *
+ * Las dos ultimas son casillas que el manual dibuja y el sistema no hace. Se
+ * podrian haber dejado sin declarar —lo estan— y callar; entonces marcarlas no
+ * haria nada y la corrida saldria sin arbitrios mientras la pantalla enseña
+ * «Incluye arbitrios ✓». Decirlo **antes** de pulsar es lo que #332 pide: ningun
+ * acto promete lo que no puede.
+ */
+function faltaEnLaCorridaDelPredial(
+  borrador: Readonly<Record<string, string>>,
+): string | undefined {
+  const dato = (clave: string): string => (borrador[clave] ?? '').trim();
+
+  if (dato('ejercicioACalcular') === '') {
+    return 'Elige el ejercicio que se va a emitir: el desplegable abre en blanco a propósito, para que la emisión de un año no salga por omisión.';
+  }
+  const alcance = dato('alcance');
+  if (alcance === '') {
+    return 'Elige el alcance de la corrida: si se emite a todo el padrón o solo a un sector.';
+  }
+  if (alcanceDeLaCorrida(alcance) === undefined) {
+    return `El sistema emite a todo el padrón o por sector, y «${alcance}» todavía no. Elige uno de esos dos y avísale a sistemas si necesitas este.`;
+  }
+  if (alcanceDeLaCorrida(alcance) === 'SECTOR' && sectorDeLaCorrida(dato('sector')) === undefined) {
+    return 'Con el alcance por sector hay que decir cuál: sin él, «solo el sector» y «todo el padrón» serían la misma corrida.';
+  }
+  if (dato('incluyeArbitrios') !== '') {
+    return 'Esta corrida determina el impuesto predial. Los arbitrios son otro tributo, con su propia determinación por periodo, y no se emiten aquí: desmarca la casilla y emítelos desde «Arbitrios municipales».';
+  }
+  if (dato('generaCuponeraPdf') !== '') {
+    return 'La cuponera es un documento y todavía no se genera desde aquí: desmarca la casilla para asentar la determinación, y avísale a sistemas que la necesitas.';
+  }
+  return undefined;
+}
+
 function faltaEnLaTransferenciaDeVehiculo(
   borrador: Readonly<Record<string, string>>,
 ): string | undefined {
@@ -1038,6 +1134,58 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
       valorTransferencia: { campo: 'valorTransferencia', importe: true },
     },
     exigir: (borrador) => faltaEnLaTransferenciaDeVehiculo(borrador),
+    nota: true,
+  },
+
+  /**
+   * **La emision anual del predial** (#395, #445): la corrida masiva, asentada.
+   *
+   * Es la primera de las cinco determinaciones que escribe de verdad. Hasta hoy la pantalla
+   * solo podia **simular** —`useSimulacion` manda `simulacion: true` y el backend calcula sin
+   * asentar—, y su primaria «Ejecutar proceso» se quedaba apagada con la franja
+   * `sin-declaracion`: la unica de las cuatro causas que pedia trabajo de este lado.
+   *
+   * Va primero de las cinco porque su cuerpo es **plano**:
+   * `PeticionDeCalculoMasivo(observacion, ejercicio, alcance, sector, modalidad,
+   * recalculaYaEmitidos, simulacion, incluyeArbitrios, generaCuponeraPdf)`. El de
+   * `predial_individual` lleva ademas un arreglo de predios, que la lista blanca todavia no
+   * sabe declarar suelto (el caso de #75 con `contribuyentes` y `hechos`).
+   *
+   * `simulacion: false` va en `constantes` y no en `campos` porque **no es un dato del
+   * expediente**: es cual de las dos mitades de la operacion se pide. El backend lo exige
+   * —`exigirSimulacion` rechaza el nulo— y la observacion de la regla 10 solo se le pide a la
+   * mitad que asienta.
+   *
+   * Lo que **no** viaja, y por que:
+   *
+   * - `uitDelEjercicioS` es `"ro"`: la UIT vive en el conjunto sellado del ejercicio y la pone
+   *   el servidor. Devolversela seria dejar que el cliente proponga una cifra normativa.
+   * - `derechoDeEmisionS`: `PeticionDeCalculoMasivo` no tiene ningun campo para el. Es ademas un
+   *   valor de ordenanza (D-02b), no algo que se teclee por corrida.
+   * - `modalidad`: el catalogo no dibuja ningun campo, y el backend cae en `TRIMESTRAL` cuando
+   *   falta. Declarar aqui una modalidad que nadie eligio seria elegirla nosotros.
+   * - `incluyeArbitrios` y `generaCuponeraPdf`: ver `faltaEnLaCorridaDelPredial`. **No se
+   *   declaran a proposito**, y ademas se bloquea la primaria cuando alguno esta marcado.
+   */
+  predial_masivo: {
+    campos: {
+      ejercicioACalcular: { campo: 'ejercicio' },
+      alcance: { campo: 'alcance', valor: alcanceDeLaCorrida },
+      sector: { campo: 'sector', valor: sectorDeLaCorrida },
+      recalculaYaEmitidos: { campo: 'recalculaYaEmitidos', booleano: true },
+      /* **Declaradas para poder decir que no**, y con una traduccion que nunca
+         acepta nada: asi quedan en el borrador —`fijarCampo` descarta en
+         silencio lo que la opcion no declara— y `faltaEnLaCorridaDelPredial`
+         puede verlas y apagar la primaria con el motivo del backend. Sin
+         declararlas, marcarlas no llegaria a ninguna parte: la corrida saldria
+         sin arbitrios mientras la pantalla enseña «Incluye arbitrios ✓», que es
+         el defecto silencioso que #332 cerro. Y declaradas a secas viajarian, y
+         `rechazarLoQueNoHace` devolveria un 422 despues de pulsar. */
+      incluyeArbitrios: { campo: 'incluyeArbitrios', valor: nuncaViaja },
+      generaCuponeraPdf: { campo: 'generaCuponeraPdf', valor: nuncaViaja },
+    },
+    constantes: { simulacion: false },
+    exigir: (borrador) => faltaEnLaCorridaDelPredial(borrador),
     nota: true,
   },
 

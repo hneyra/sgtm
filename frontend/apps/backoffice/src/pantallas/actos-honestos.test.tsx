@@ -74,7 +74,9 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(impedimentoDelActo('baja_deuda')).toBeUndefined();
 
     // Sin declarar y con verbo de escritura: falta trabajo del sistema.
-    expect(impedimentoDelActo('predial_masivo')?.causa).toBe('sin-declaracion');
+    // Era `predial_masivo` hasta #445, que declaro su escritura; el ejemplo pasa
+    // a la otra determinacion que escribe y todavia no declara.
+    expect(impedimentoDelActo('vehicular_calculo')?.causa).toBe('sin-declaracion');
     /* Y con **un dato que la pantalla no tiene donde escribir** (#73):
        `sin-declaracion` diria que basta con declarar sus campos, y eso no
        arregla nada cuando lo que falta no esta en el formulario del manual.
@@ -102,7 +104,7 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
 
   it('las cuatro causas hablan de la ventanilla, y la tecnica se queda en el `data-`', () => {
     const sinBackend = impedimentoDelActo('contribuyentes')?.detalle ?? '';
-    const sinDeclaracion = impedimentoDelActo('predial_masivo')?.detalle ?? '';
+    const sinDeclaracion = impedimentoDelActo('vehicular_calculo')?.detalle ?? '';
     const sinDeterminacion =
       impedimentoDelActo('predial_individual', ['Buscar', 'Calcular'])?.detalle ?? '';
     const sinCampo = conUnaMuestraDeSinCampo(
@@ -221,7 +223,10 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // que #74 dejo fuera porque `escrituras.ts` no sabia declarar sus cuerpos
       // —un mapa por forma de pago y un discriminador por accion—. Las dos
       // llegan desde `sin-declaracion`, que es donde estaban.
-      declarada: 18,
+      //
+      // **Y una mas con #445**: `predial_masivo`, la primera de las cinco
+      // determinaciones que asienta su corrida en vez de solo simularla.
+      declarada: 19,
       // **Una, y es nueva con #424**: `transito_reportes`. Viene de
       // `sin-declaracion` —su operacion es un `POST` y no declara escritura—, y
       // esa causa decia de ella lo unico que no es cierto: que «la pantalla aún
@@ -279,7 +284,8 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       //
       // **Y dos menos con #423**: las dos de tesoreria que ya declaran su
       // cuerpo. Este numero tampoco se sumo a mano: se recompuso ejecutando.
-      'sin-declaracion': 20,
+      // **Y una menos con #445**: `predial_masivo` se va a `declarada`.
+      'sin-declaracion': 19,
       // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
       // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
       // «Guardar» de una ficha `GET` se cae— y repartir el valor de una
@@ -769,7 +775,7 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
     },
     {
       caso: 'operacion que escribe y opcion sin declarar',
-      ruta: '/rentas-registro/predial-masivo',
+      ruta: '/rentas-registro/vehicular-calculo',
       causa: 'sin-declaracion',
     },
     // La cuarta causa —`sin-campo`— tiene pantalla real desde #385: la
@@ -815,7 +821,7 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
   it.each([
     { caso: 'sin-determinacion', ruta: '/rentas-registro/predial-individual' },
     { caso: 'sin-backend', ruta: '/rentas-registro/contribuyentes' },
-    { caso: 'sin-declaracion', ruta: '/rentas-registro/predial-masivo' },
+    { caso: 'sin-declaracion', ruta: '/rentas-registro/vehicular-calculo' },
   ])('$caso: los secundarios no repiten un motivo que ya no es cierto', async ({ ruta }) => {
     const montada = montarEnRuta(ruta);
     await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
