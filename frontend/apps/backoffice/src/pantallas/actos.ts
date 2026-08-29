@@ -347,24 +347,32 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
   },
 
   /**
-   * Alcabala y espectaculos publicos: el bloqueo doble que #73 documento y #385
-   * dejo registrado como deuda. Sus primarias del catalogo son de salida
-   * («Imprimir liquidacion»), asi que sin esta entrada la causa `DE_SALIDA`
-   * ganaba y el motivo real —la pantalla entera no puede escribir— no llegaba
-   * ni al teclado ni al lector (RNF-082). Desde #385, `ACTOS_SIN_CAMPO`
-   * gana a `DE_SALIDA` tambien aqui, y la franja del motivo se dibuja. El analisis
-   * campo a campo vive en `pantallas/rentas/index.ts`.
+   * Alcabala y espectaculos publicos: el bloqueo doble que #73 documento, #385
+   * dejo registrado como deuda y **#432 contesto por escrito**. Sus primarias
+   * del catalogo son de salida («Imprimir liquidacion»), asi que sin esta
+   * entrada la causa `DE_SALIDA` ganaba y el motivo real —la pantalla entera no
+   * puede escribir— no llegaba ni al teclado ni al lector (RNF-082). Desde #385,
+   * `ACTOS_SIN_CAMPO` gana a `DE_SALIDA` tambien aqui, y la franja se dibuja.
+   *
+   * **Lo que cambia con #432 es lo que la franja dice**, no la casilla: las dos
+   * seguian nombrando dos datos con el mismo tono, y de los cuatro solo **uno**
+   * es un campo que falta. Los otros tres son cosas distintas —una respuesta que
+   * la pantalla ya recibe y no guarda, una cifra que determina el sistema y hoy
+   * no determina nadie, y una multiplicacion que ni la pantalla puede hacer
+   * (RNF-083) ni el servidor hace—, y decirlas igual manda a buscar un campo que
+   * no existe. El analisis campo a campo, con las dos preguntas de #432
+   * contestadas, vive en `pantallas/rentas/index.ts`.
    */
   alcabala: {
-    dato: 'la transferencia ya registrada que la sustenta, y el autovaluo ajustado',
+    dato: 'la transferencia ya registrada sobre la que se liquida',
     porque:
-      'Sin ellos la alcabala no se puede liquidar: el backend exige el identificador de una transferencia que ninguna lectura del contrato publica, y el autovaluo ajustado que esta pantalla dibuja de solo lectura.',
+      'Ninguna consulta del sistema devuelve todavía las transferencias registradas, así que no hay de dónde elegir la que se liquida ni cómo teclearla. Y aunque la hubiera, la liquidación seguiría sin poder calcularse: el autovalúo ajustado que la ley manda comparar con el valor de la transferencia lo determina el sistema —esta pantalla lo enseña como el resultado de multiplicar el autovalúo del predio por el índice del año—, y hoy no lo determina nadie.',
     campos: ['transferenciaId', 'autoavaluoAjustado'],
   },
   espectaculos: {
-    dato: 'el organizador y el ingreso declarado del espectaculo',
+    dato: 'el organizador, identificado contra el padrón, y la recaudación declarada',
     porque:
-      'Sin ellos el impuesto no se puede registrar: el backend exige el ingreso como dato de entrada y esta pantalla lo dibuja de solo lectura, esperando un calculo de aforo por precio que el servidor no compone.',
+      'Aquí el organizador se escribe por su nombre y el registro lo necesita identificado, y no hay ningún control que lo busque en el padrón. La recaudación declarada tampoco se puede poner: esta pantalla la enseña como el resultado de multiplicar las entradas vendidas por el precio promedio, y esa multiplicación no la hace la pantalla —ninguna cifra de dinero se compone aquí— ni el servidor, que la pide ya hecha.',
     campos: ['organizadorId', 'ingresoDeclarado'],
   },
 
