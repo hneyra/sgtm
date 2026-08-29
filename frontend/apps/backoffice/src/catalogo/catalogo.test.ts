@@ -118,15 +118,23 @@ const GRUPOS_POR_TAREA_ESPERADOS: Readonly<
     ['Sesión', ['cambiar_anio', 'cambiar_clave']],
     ['Operación', ['auditoria', 'respaldo']],
   ],
+  // Tres grupos porque tres son las superficies (#391): la ficha del predio, el
+  // cuadro de valuacion y el territorio.
   catastro: [
     [
-      'Fichas del predio',
-      ['actualizacion_catastro', 'ficha_bienes', 'ficha_economica', 'ficha_rural', 'ficha_urbana'],
+      'Predio',
+      [
+        'actualizacion_catastro',
+        'consulta_fichas',
+        'ficha_bienes',
+        'ficha_contribuyente_reporte',
+        'ficha_economica',
+        'ficha_rural',
+        'ficha_urbana',
+      ],
     ],
     ['Territorio', ['calles', 'sectores']],
-    ['Tablas de valuación', ['aranceles', 'depreciacion', 'valores_unitarios']],
-    ['Consultas', ['consulta_fichas']],
-    ['Documentos', ['ficha_contribuyente_reporte']],
+    ['Valuación', ['aranceles', 'depreciacion', 'valores_unitarios']],
   ],
   fiscalizacion: [
     ['Campaña', ['fisc_omisos', 'fisc_programa']],
