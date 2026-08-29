@@ -52,20 +52,21 @@ import {
  *    dibujaba la pestaña; aqui no hay pestaña). Conectar cualquiera de las dos exigiria inventar
  *    una pantalla entera que el prototipo nunca capturo, que es justo lo que «Ningun componente
  *    del design system antes de la pantalla que lo use» prohibe.
- * 2. **`anuncios_reportes` y `licencia_padron` tienen conductor pero apuntan al boton
- *    equivocado.** Las dos declaran el mismo cuarteto de acciones —«Exportar», «Imprimir»,
- *    «Pantalla», «Cancelar»—, y FRO-03 §5 fija la primaria en **la ultima**: aqui es «Cancelar»,
- *    que en el dialogo de reporte del prototipo significa «cerrar sin generar nada», no «guardar».
- *    Declarar la escritura tal cual dejaria un boton que dice «Cancelar» disparando de verdad el
- *    `POST` que emite el padron —la misma clase de defecto que #76 encontro en seis de los ocho
- *    actos de coactiva, con la diferencia de que alli la salida fue documentarlo y aqui, con solo
- *    filtros de busqueda detras (`PeticionDeReporteDeAnuncios`, `PeticionDeReporteDeLicencias`:
- *    contribuyente, direccion, fechas — nada que `ACTOS_SIN_CAMPO` tenga que nombrar), la unica
- *    forma honesta de arreglarlo es un componente propio que sustituya el rotulo de la primaria
- *    por uno que diga lo que hace, como ya hizo `GeneracionMasivaDeValores` con «Generar valores»
- *    (#75). Es trabajo de otro issue: **once opciones, siete conectadas** es lo que #79 pide, y
- *    forzar una quinta y sexta conexion inventando una pantalla no declarada es exactamente el
- *    atajo que ADR-0010 §4 cierra.
+ * 2. **`anuncios_reportes` y `licencia_padron` tenian conductor y apuntaban al boton
+ *    equivocado** —cerrado por #421—. Las dos declaran el mismo cuarteto de acciones
+ *    —«Exportar», «Imprimir», «Pantalla», «Cancelar»—, y FRO-03 §5 fija la primaria en **la
+ *    ultima**: era «Cancelar», que en el dialogo de reporte del prototipo significa «cerrar sin
+ *    generar nada», no «guardar». Declarar la escritura tal cual habria dejado un boton que dice
+ *    «Cancelar» disparando de verdad el `POST` que emite el padron —la misma clase de defecto que
+ *    #76 encontro en seis de los ocho actos de coactiva—. La salida no fue un componente propio
+ *    que reescribiera el rotulo, sino declarar cual de las que ya hay es el acto
+ *    (`LA_QUE_ESCRIBE`, `pantallas/actos.ts`), y esa es **«Pantalla»**: la operacion que el
+ *    catalogo da a estas dos opciones es el `POST` **sin** `formato`, que devuelve el padron para
+ *    dibujarlo (`LicenciaController.padron`), mientras que «Exportar» e «Imprimir» son el mismo
+ *    `POST` con `?formato=`, que en esta interfaz es una descarga (`useDescargaDeArchivo`) y no la
+ *    primaria. Conectar la escritura sigue siendo trabajo del issue de este modulo: **once
+ *    opciones, siete conectadas** es lo que #79 pide, y forzar una octava inventando una pantalla
+ *    no declarada es exactamente el atajo que ADR-0010 §4 cierra.
  *
  * **`certificados` conecta su lectura y se queda sin escritura**, y aqui el bloqueo tiene dos
  * capas en vez de una. `CertificadoController.emitir` exige `nDeRecibo` —el recibo que respalda
@@ -74,15 +75,20 @@ import {
  * `nDeExpediente` de texto, y las cinco restantes (`zonificacion`, `alturaMaximaPermitida`,
  * `areaLibreMinima`, `retiroMunicipal`, `coeficienteDeEdificacion`) son `"ro"`, que `Campo.tsx`
  * bloquea siempre —el mismo hueco que cerro `ACTOS_SIN_CAMPO` para `caja_tributaria` en #74—.
- * Pero declararlo ahi no serviria: la primaria de esta pantalla es «Imprimir certificado»
- * (`acciones: ["Emitir", "Imprimir certificado"]`), y `DE_SALIDA` de `pantallas/actos.ts` la
- * reconoce como salida —empieza por «imprimir»— **antes** de llegar a `ACTOS_SIN_CAMPO`, asi que
- * `impedimentoDelActo` devuelve `undefined` sin mirar la lista. El resultado es seguro —sin
- * escritura declarada el boton se queda `disabled`, y un `disabled` no dispara nada— pero mudo:
- * no hay franja que explique por que. Es la misma clase de defecto que el punto 2, con una
- * variante: alli el boton equivocado se podia pulsar y mandaba un `POST`; aqui ni siquiera eso,
- * porque no hay escritura declarada. Corregirlo de verdad pide lo mismo que el punto 2: un
- * componente propio que sustituya la etiqueta de la primaria por una que diga lo que hace.
+ * Hasta #421, declararlo ahi no habria servido: la primaria de esta pantalla era «Imprimir
+ * certificado» (`acciones: ["Emitir", "Imprimir certificado"]`), y `DE_SALIDA` de
+ * `pantallas/actos.ts` la reconoce como salida —empieza por «imprimir»— **antes** de llegar a
+ * `ACTOS_SIN_CAMPO`, asi que `impedimentoDelActo` devolvia `undefined` sin mirar la lista. El
+ * resultado era seguro —sin escritura declarada el boton se queda `disabled`, y un `disabled` no
+ * dispara nada— pero mudo: ninguna franja explicaba por que.
+ *
+ * **Desde #421 la primaria es «Emitir»**, porque esta opcion declara cual de sus dos acciones es
+ * el acto (`LA_QUE_ESCRIBE`), y esa declaracion gana a `DE_SALIDA` por construccion: al pasar
+ * «Emitir» al final, el filtro de salida ya no ve una primaria de impresion. Con la franja
+ * hablando, lo que queda por decidir es de que causa se trata —hoy `sin-declaracion`—, y si al
+ * conectar el modulo el `nDeRecibo` no encuentra donde escribirse, esta opcion entra en
+ * `ACTOS_SIN_CAMPO` y la franja nombra el dato que falta, como ya hacen `alcabala` y
+ * `espectaculos` desde #385.
  */
 
 /** `EstadoDeLicencia` (V37): VIGENTE, VENCIDA, CANCELADA — el mismo tono que ya usan `estados.ts`. */

@@ -10,6 +10,7 @@ import { useEjercicio } from '../../app/ejercicio';
 import { conexionDe } from '../conexiones';
 import type { Conexion } from '../conexiones';
 import { composicionDe, filtrosDe } from '../composicion';
+import { accionesDeLaBarra } from '../actos';
 import { useDatosDeOperacion } from '../useDatosDeOperacion';
 import { NO_DISPONIBLE, SIN_PERMISO, estadoDePantalla, textoDeError } from '../estados';
 import { avisoDe } from '../prosa';
@@ -108,7 +109,12 @@ import { LONGITUD_DEL_CODIGO, conTramoDelCodigo, normalizarCodigoCatastral } fro
  *   barra             sólo la hoja de vías. La de sectores se quedó sin ella en
  *                     la propuesta C —su «Guardar» era una promesa muerta sobre
  *                     una operación de lectura (#332)— y esta entrega no la
- *                     devuelve
+ *                     devuelve. **Y la de vías se compone desde #421**: pasaba
+ *                     la lista cruda del catálogo, así que «Inactivar» —una baja
+ *                     lógica— era el botón navy de una pantalla que sólo lee. Su
+ *                     «Guardar» era la misma promesa muerta que la de sectores,
+ *                     y los dos se caen por la misma regla; queda «Nuevo», que
+ *                     es el acto que esta hoja sí puede hacer
  */
 
 const SECTORES = 'sectores';
@@ -301,11 +307,7 @@ export function Territorio({ estructura }: { readonly estructura: EstructuraDePa
           </div>
 
           {hoja === SECTORES ? (
-            <HojaDeSectores
-              senalado={senalado}
-              tecleado={tecleado}
-              onTecleado={fijarTecleado}
-            />
+            <HojaDeSectores senalado={senalado} tecleado={tecleado} onTecleado={fijarTecleado} />
           ) : (
             <HojaDeVias
               estructura={estructura}
@@ -553,7 +555,10 @@ function CabeceraDelTerritorio({
     fila === undefined
       ? []
       : [
-          { etiqueta: columnas[COLUMNA.nombre] ?? 'Denominación', valor: celda(fila, COLUMNA.nombre) },
+          {
+            etiqueta: columnas[COLUMNA.nombre] ?? 'Denominación',
+            valor: celda(fila, COLUMNA.nombre),
+          },
           {
             etiqueta: columnas[COLUMNA.manzanas] ?? 'Manzanas',
             valor: celda(fila, COLUMNA.manzanas),
@@ -572,7 +577,10 @@ function CabeceraDelTerritorio({
             cifra: true,
             aLaFecha,
           },
-          { etiqueta: columnas[COLUMNA.zona] ?? 'Zona de arbitrios', valor: celda(fila, COLUMNA.zona) },
+          {
+            etiqueta: columnas[COLUMNA.zona] ?? 'Zona de arbitrios',
+            valor: celda(fila, COLUMNA.zona),
+          },
           { etiqueta: columnas[COLUMNA.estado] ?? 'Estado', valor: celda(fila, COLUMNA.estado) },
         ];
 
@@ -707,6 +715,17 @@ function HojaDeVias({
   const secciones = seccionesDe(estructura, 0);
   const composicion = composicionDe(estructura.id);
   const anclaDe = (indice: number): string => `sgtm-seccion-0-${indice}`;
+  /* **La barra que se dibuja, no la lista cruda del catalogo** (#421). Esta
+     hoja pasaba `estructura.acciones` tal cual, asi que la regla de FRO-03 §5
+     hacia de «Inactivar» el boton navy: una baja logica con el color del acto
+     principal, sobre una operacion de lectura. Con `accionesDeLaBarra` quedan
+     las que esta pantalla puede hacer —hoy «Nuevo», el alta de #321— y el
+     motivo de cada caida esta en el javadoc de `VOCABULARIO_UNIFORME`. */
+  const barra = accionesDeLaBarra(
+    estructura.id,
+    estructura.acciones ?? [],
+    (composicion.altas ?? []).map((alta) => alta.accion),
+  );
 
   return (
     <>
@@ -754,7 +773,7 @@ function HojaDeVias({
           <IndiceDeSecciones
             secciones={secciones}
             anclaDe={anclaDe}
-            haciaLasAcciones={(estructura.acciones ?? []).length > 0}
+            haciaLasAcciones={barra.acciones.length > 0}
             {...(estructura.tabla === undefined
               ? {}
               : { previa: { rotulo: estructura.tabla.title, ancla: ANCLA_DE_LA_TABLA } })}
@@ -774,13 +793,17 @@ function HojaDeVias({
         </div>
       )}
 
-      {estructura.acciones && (
+      {barra.acciones.length > 0 && (
         <BarraDeAcciones
-          acciones={estructura.acciones}
+          acciones={barra.acciones}
           {...(datos?.tabla?.conteo === undefined ? {} : { alcance: datos.tabla.conteo })}
           {...(puedeRegistrar && composicion.altas !== undefined
             ? { altas: Object.fromEntries(composicion.altas.map((alta) => [alta.accion, onAlta])) }
             : {})}
+          /* Ninguna de las que quedan escribe: el alta sigue siendo el acto
+             —`altas` la deja viva y navy—, y sin ella la barra no pinta de navy
+             lo ultimo que quede (#391 §2). */
+          {...(barra.conPrimaria ? {} : { sinPrimaria: true })}
         />
       )}
     </>
