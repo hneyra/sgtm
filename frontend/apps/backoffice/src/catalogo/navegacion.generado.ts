@@ -167,17 +167,17 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M9.5 16.5h3.5"
     ],
     "bloques": [
-      "Padrones",
+      "Padrón",
       "Determinación",
-      "Movimientos",
-      "Tributos y beneficios"
+      "Actos y transferencias",
+      "Beneficios y ajustes"
     ],
     "opciones": [
       {
         "id": "contribuyentes",
         "label": "Contribuyentes",
         "ranura": "contribuyentes",
-        "bloque": "Padrones",
+        "bloque": "Padrón",
         "title": "Contribuyentes",
         "resumen": "Padrón único del contribuyente. Su código enlaza predios, vehículos, licencias, papeletas y la cuenta corriente."
       },
@@ -185,7 +185,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "predios_rentas",
         "label": "Predios",
         "ranura": "predios-rentas",
-        "bloque": "Padrones",
+        "bloque": "Padrón",
         "title": "Predios del contribuyente",
         "resumen": "Padrón predial de rentas. Cada predio guarda su autovalúo, condición de propiedad y la fecha desde la que genera obligación."
       },
@@ -217,7 +217,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "arbitrios",
         "label": "Arbitrios",
         "ranura": "arbitrios",
-        "bloque": "Tributos y beneficios",
+        "bloque": "Determinación",
         "title": "Arbitrios municipales",
         "resumen": "Limpieza pública, parques y jardines y serenazgo. La tasa depende del uso del predio, la zona, la frecuencia del servicio y los metros de frontis declarados en la ficha."
       },
@@ -225,7 +225,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transferencia_predio",
         "label": "Transferencia de predio",
         "ranura": "transferencia-predio",
-        "bloque": "Movimientos",
+        "bloque": "Actos y transferencias",
         "title": "Transferencia de predio",
         "resumen": "Da de baja al transferente y de alta al adquirente desde la fecha del acto. La obligación del vendedor corre hasta el 31 de diciembre del año de la transferencia."
       },
@@ -233,7 +233,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "alcabala",
         "label": "Alcabala",
         "ranura": "alcabala",
-        "bloque": "Tributos y beneficios",
+        "bloque": "Actos y transferencias",
         "title": "Impuesto de alcabala",
         "resumen": "Grava la transferencia de propiedad con el 3 % sobre el exceso de las primeras 10 UIT, tomando como base el mayor valor entre el de transferencia y el autovalúo ajustado por el IPM."
       },
@@ -241,7 +241,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "vehiculos",
         "label": "Vehículos",
         "ranura": "vehiculos",
-        "bloque": "Padrones",
+        "bloque": "Padrón",
         "title": "Ficha de vehículo",
         "resumen": "Registro del vehículo. La afectación corre tres ejercicios desde el año siguiente a la primera inscripción registral."
       },
@@ -257,7 +257,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transferencia_vehiculo",
         "label": "Transferencia de vehículo",
         "ranura": "transferencia-vehiculo",
-        "bloque": "Movimientos",
+        "bloque": "Actos y transferencias",
         "title": "Transferencia de vehículo",
         "resumen": "Registra el cambio de titular. El transferente responde por el impuesto hasta el 31 de diciembre del año en que se produce la venta."
       },
@@ -265,7 +265,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "espectaculos",
         "label": "Espectáculos públicos",
         "ranura": "espectaculos",
-        "bloque": "Tributos y beneficios",
+        "bloque": "Actos y transferencias",
         "title": "Espectáculos públicos no deportivos",
         "resumen": "Grava el monto que se abona por presenciar el espectáculo. La tasa depende del tipo de evento y el organizador actúa como agente perceptor."
       },
@@ -273,7 +273,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "beneficios",
         "label": "Beneficios",
         "ranura": "beneficios",
-        "bloque": "Tributos y beneficios",
+        "bloque": "Beneficios y ajustes",
         "title": "Beneficios y exoneraciones",
         "resumen": "Deducciones, inafectaciones y amnistías. La deducción de 50 UIT para pensionistas y adultos mayores exige predio único destinado a vivienda."
       },
@@ -281,7 +281,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "alta_deuda",
         "label": "Alta de deuda",
         "ranura": "alta-deuda",
-        "bloque": "Movimientos",
+        "bloque": "Beneficios y ajustes",
         "title": "Alta de deuda",
         "resumen": "Incorpora manualmente una obligación a la cuenta corriente cuando no proviene de la emisión masiva: determinaciones de fiscalización, multas o deuda migrada."
       },
@@ -289,7 +289,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "baja_deuda",
         "label": "Baja de deuda",
         "ranura": "baja-deuda",
-        "bloque": "Movimientos",
+        "bloque": "Beneficios y ajustes",
         "title": "Baja de deuda",
         "resumen": "Extingue deuda de la cuenta corriente por prescripción, resolución que la deja sin efecto, error material o compensación. Requiere resolución y queda en la bitácora de auditoría."
       }

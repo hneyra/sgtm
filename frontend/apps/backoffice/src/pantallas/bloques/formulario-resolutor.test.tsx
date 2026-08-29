@@ -51,6 +51,9 @@ const DECLARADO: CampoResolutor = {
 vi.mock('../composicion', () => ({
   resolutorDeCampo: (_opcion: string, campo: string): CampoResolutor | undefined =>
     campo === 'unidadPredioPlaca' ? DECLARADO : undefined,
+  // Esta prueba mira el resolutor, no como se lee la seccion (#393): ninguna
+  // seccion es memoria de calculo aqui, que es lo que declaran 129 de las 134.
+  memoriaDeSeccion: () => undefined,
 }));
 
 const { Formulario } = await import('./Formulario');

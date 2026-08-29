@@ -19,6 +19,10 @@ const ResumenDeVehiculo = lazy(async () => ({
 const ResumenDeDeclaracion = lazy(async () => ({
   default: (await import('./ResumenDeDeclaracion')).ResumenDeDeclaracion,
 }));
+/** La banda de sujeto de las cinco pantallas de determinacion (#393). */
+const ResumenDeDeterminacion = lazy(async () => ({
+  default: (await import('./ResumenDeDeterminacion')).ResumenDeDeterminacion,
+}));
 /**
  * El campo que resuelve la unidad del alta de deuda (#331), tambien perezoso.
  *
@@ -67,7 +71,50 @@ const ResolutorDeValorDeTransferencia = lazy(async () => ({
  *
  * 4. **El calculo individual del predial se lee en el orden del calculo** (#333).
  *    Un indice, y ni una seccion renombrada ni reagrupada: ver abajo.
+ *
+ * 5. **Las cinco determinaciones tienen una sola forma** (#393): sujeto arriba,
+ *    memoria del calculo en medio, acto abajo. Las cinco —predial individual y
+ *    masivo, arbitrios, calculo vehicular y alcabala— hacen lo mismo (fijar un
+ *    sujeto, ensenar como sale la cifra, escribir) y se dibujaban distinto.
+ *    Ninguna etiqueta se reescribe (RNF-080) y ninguna seccion se reordena: lo
+ *    que se uniforma es **como se lee** cada una de las tres partes.
  */
+
+/**
+ * El marco de una pantalla de determinacion: la banda de sujeto arriba.
+ *
+ * Se reparte a las cinco desde una sola constante para que anadir la sexta el
+ * dia que exista sea una linea, y para que no se pueda dar el caso de cuatro
+ * con banda y una sin.
+ */
+const DETERMINACION = { resumen: ResumenDeDeterminacion, resumenSiempre: true } as const;
+
+/**
+ * **La accion que enseña el resultado antes de escribir** (#393).
+ *
+ * La declaran las **cuatro** determinaciones cuya operacion es un `POST`, con la
+ * etiqueta que el catalogo ya dibuja: ninguna se reescribe (RNF-080). Arbitrios
+ * no esta, y no por olvido: su operacion es un `GET`, asi que trae sus cifras al
+ * abrir y no tiene nada que simular.
+ *
+ * `cuerpo` solo lo lleva el calculo vehicular, y es el unico caso en que se sabe
+ * lo que el backend espera: `VehicularController.PeticionDeCalculoVehicular`
+ * declara `simulacion` entre sus campos. Para las otras tres **no hay
+ * controlador todavia**, asi que mandarles una marca inventada seria adivinar la
+ * forma de una peticion que nadie ha escrito.
+ *
+ * Y el vehicular tiene ademas su propio desajuste, que **no se puentea aqui**:
+ * su controlador lee `placa`, `codContribuyente` y `ejercicio` del **cuerpo**, y
+ * el contrato los declara como parametros de **consulta** (#333c, anotado en
+ * `rentas/index.ts`). Contra el backend de verdad los leeria nulos. Da igual
+ * mientras esto solo simule contra el proxy —`useSimulacion` no deja hacer otra
+ * cosa—, y es un motivo mas para que la guarda siga donde esta.
+ */
+const simula = (accion: string, cuerpo?: Readonly<Record<string, boolean>>) =>
+  ({
+    ...DETERMINACION,
+    simulacion: { accion, ...(cuerpo === undefined ? {} : { cuerpo }) },
+  }) as const;
 
 /** Cabecera-resumen mas indice que **sustituye** a las pestanas de la ficha. */
 const FICHA_CON_PESTANAS = { indice: 'en-vez-de-pestanas' } as const;
@@ -143,7 +190,51 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * `'en-vez-de-pestanas'` tampoco: esta pantalla no tiene pestanas que
    * sustituir. Con `true`, `seccionesDe` devuelve sus tres secciones tal cual.
    */
-  predial_individual: { indice: true, indiceConLaTabla: true },
+  predial_individual: {
+    ...simula('Simular'),
+    indice: true,
+    indiceConLaTabla: true,
+    /**
+     * La escala progresiva, leida como la cuenta que es (#393).
+     *
+     * Sus nueve campos son `"ro"` y describen un calculo —valuo total, menos el
+     * exonerado, da el afecto; el afecto repartido en tres tramos, cada uno con
+     * su alicuota, da el insoluto—, y dibujados como nueve cajas con borde
+     * discontinuo esa relacion no se ve en ninguna parte. El resultado es el
+     * impuesto insoluto anual, y **no es el ultimo campo**: detras va el minimo
+     * imponible, que es una comprobacion contra el 0.6 % de la UIT, no lo que
+     * se cobra. Por eso el total se declara y no se deduce.
+     *
+     * Las otras dos secciones —beneficios aplicados, emision y cuotas— se
+     * quedan como estan: la primera tiene campos que se eligen y la segunda es
+     * un calendario, y ninguna de las dos es una cuenta encadenada.
+     */
+    memoria: { 'Escala progresiva acumulativa': { total: 'impuestoInsolutoAnualS' } },
+  },
+  /**
+   * Las otras cuatro determinaciones, con la misma banda (#393).
+   *
+   * Solo `alcabala` declara ademas memoria de calculo, y esa asimetria es del
+   * catalogo, no una decision: es la unica de las cuatro cuya seccion es una
+   * cuenta encadenada —el mayor entre valor de transferencia y autovaluo
+   * ajustado, menos las 10 UIT inafectas, por la tasa—. «Predial — masivo» y
+   * «Cálculo vehicular» no tienen ninguna seccion de solo lectura que encadene
+   * —la del masivo son los **parametros** que se eligen antes de correr el
+   * proceso— y «Arbitrios» no tiene secciones en absoluto: su determinacion es
+   * la tabla por servicio, que ya se lee como tal.
+   */
+  predial_masivo: simula('Simular'),
+  arbitrios: DETERMINACION,
+  vehicular_calculo: simula('Simular', { simulacion: true }),
+  alcabala: {
+    ...simula('Liquidar'),
+    /* La clave va **computada** y no como `Liquidación:` a secas: prettier
+       quita las comillas de una clave que es un identificador valido, y un
+       identificador con tilde es exactamente lo que ESLint prohibe (FRO-04 §2).
+       Entre corchetes es una cadena, que es lo que la etiqueta de una seccion
+       del manual es. */
+    memoria: { ['Liquidación']: { total: 'impuestoDeAlcabalaS' } },
+  },
   /**
    * Transferencia de predio, con su valor y su predio resueltos (#73).
    *

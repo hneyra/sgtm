@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #1F3A5F; } a:hover { color: #2a4d7a; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 980px; box-sizing: border-box; display: flex; background: #f6f4ef; font-family: Inter, -apple-system, 'Segoe UI', sans-serif; color: #1a1612; -webkit-font-smoothing: antialiased;">
+
+  <!-- Barra lateral, reagrupada -->
+  <div style="width: 258px; flex: 0 0 258px; box-sizing: border-box; background: #fbfaf6; border-right: 1px solid #e6e1d6; display: flex; flex-direction: column;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 16px 16px 14px; border-bottom: 1px solid #e6e1d6;">
+      <div style="width: 34px; height: 34px; flex: 0 0 34px; border-radius: 8px; background: #1F3A5F; color: #ffffff; display: grid; place-items: center; font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; font-weight: 600;">S</div>
+      <div style="line-height: 1.2; min-width: 0;">
+        <div style="font-family: 'Source Serif 4', Georgia, serif; font-size: 17px; font-weight: 600; letter-spacing: -0.02em;">SGTM</div>
+        <div style="font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; color: #6b6258; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Mun. Prov. de Sullana</div>
+      </div>
+    </div>
+
+    <div style="padding: 10px 10px 6px;">
+      <div style="display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; border: 1px solid #d8d2c4; border-radius: 7px; padding: 9px 10px; background: #f6f4ef; color: #6b6258;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <span style="flex: 1; font-size: 13px;">Buscar opción</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9a9085; border: 1px solid #d8d2c4; border-radius: 4px; padding: 2px 5px;">⌘K</span>
+      </div>
+    </div>
+
+    <div style="padding: 4px 10px 28px; display: flex; flex-direction: column; gap: 2px;">
+      <div style="display: flex; align-items: center; gap: 7px; padding: 7px 8px; font-size: 12px; color: #6b6258;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        <span>Todos los módulos</span>
+      </div>
+      <p style="margin: 0; padding: 4px 8px 8px; font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; font-weight: 600; letter-spacing: -0.01em;">Rentas · Registro</p>
+
+      <div style="display: flex; align-items: center; gap: 7px; margin: 10px 0 2px; padding: 4px 8px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <span style="flex: 1; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #9a9085;">Padrón</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9a9085;">3</span>
+      </div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Contribuyentes</div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Predios</div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Vehículos</div>
+
+      <div style="display: flex; align-items: center; gap: 7px; margin: 10px 0 2px; padding: 4px 8px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <span style="flex: 1; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #9a9085;">Determinación</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9a9085;">5</span>
+      </div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Declaración jurada</div>
+      <div style="padding: 10px; border-radius: 7px; background: #e7ecf3; color: #0e1f33; font-size: 13.5px; font-weight: 600;">Predial — individual</div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Predial — masivo</div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Arbitrios</div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Cálculo vehicular</div>
+
+      <div style="display: flex; align-items: center; gap: 7px; margin: 10px 0 2px; padding: 4px 8px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <span style="flex: 1; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #9a9085;">Actos y transferencias</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9a9085;">4</span>
+      </div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Transferencia de predio</div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Alcabala</div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Transferencia de vehículo</div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Espectáculos públicos</div>
+
+      <div style="display: flex; align-items: center; gap: 7px; margin: 10px 0 2px; padding: 4px 8px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9a9085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <span style="flex: 1; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #9a9085;">Beneficios y ajustes</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9a9085;">3</span>
+      </div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Beneficios</div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Alta de deuda</div>
+      <div style="padding: 10px; border-radius: 7px; font-size: 13.5px; color: #3d362e;">Baja de deuda</div>
+    </div>
+  </div>
+
+  <!-- Principal -->
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #e6e1d6; background: #f6f4ef;">
+      <div style="min-width: 0; flex: 1;">
+        <p style="margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: #6b6258;">Propuesta A</p>
+        <p style="margin: 2px 0 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 21px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2;">Rentas · Registro, agrupado por el hecho que dispara el trabajo</p>
+      </div>
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b6258; background: #fbfaf6; border: 1px solid #e6e1d6; border-radius: 999px; padding: 5px 11px;">scripts/grupos-por-tarea.mjs</span>
+    </div>
+
+    <div style="padding: 22px 20px; display: flex; flex-direction: column; gap: 18px;">
+      <div style="display: flex; align-items: flex-start; gap: 14px; padding: 20px 22px; background: #ffffff; border: 1px solid #e6e1d6; border-radius: 12px;">
+        <span style="flex: 0 0 44px; width: 44px; height: 44px; border-radius: 10px; background: #e7ecf3; color: #0e1f33; display: grid; place-items: center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7.5l4 4v13h-11.5z"/><path d="M14 3.5v4h4"/><path d="M9.5 12.5h5"/><path d="M9.5 16.5h3.5"/></svg>
+        </span>
+        <div style="min-width: 0; flex: 1;">
+          <h2 style="margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Rentas · Registro</h2>
+          <p style="margin: 4px 0 0; font-size: 13px; color: #6b6258;">15 opciones · 4 grupos · ninguna ruta, etiqueta ni permiso cambia</p>
+        </div>
+        <span style="align-self: center; padding: 3px 9px; border-radius: 999px; background: #e8efe6; color: #2d4a26; font-size: 11px; font-weight: 500;">Solo agrupación</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+
+        <!-- Padron -->
+        <section style="background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #e6e1d6;">
+            <h3 style="margin: 0; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #6b6258;">Padrón</h3>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b6258;">3</span>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <div style="padding: 12px 16px; border-bottom: 1px solid #e6e1d6;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Contribuyentes</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">Quién. El código que enlaza predios, vehículos y cuenta corriente.</span></div>
+            <div style="padding: 12px 16px; border-bottom: 1px solid #e6e1d6;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Predios</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">Qué. Autovalúo, condición de propiedad y desde cuándo es afecto.</span></div>
+            <div style="padding: 12px 16px;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Vehículos</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">Qué. La otra unidad afecta del mismo contribuyente.</span></div>
+          </div>
+          <div style="padding: 11px 16px; border-top: 1px solid #e6e1d6; background: #fbfaf6; font-size: 12px; color: #6b6258;">Sin cambios: era «Padrones».</div>
+        </section>
+
+        <!-- Determinacion -->
+        <section style="background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #e6e1d6;">
+            <h3 style="margin: 0; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #6b6258;">Determinación</h3>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b6258;">5</span>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <div style="padding: 12px 16px; border-bottom: 1px solid #e6e1d6; display: flex; gap: 10px; align-items: flex-start;"><span style="flex: 1; min-width: 0;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Declaración jurada</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">El papel que sustenta el cálculo: abre la secuencia, no la interrumpe.</span></span><span style="padding: 3px 9px; border-radius: 999px; background: #e7ecf3; color: #0e1f33; font-size: 11px;">1.º</span></div>
+            <div style="padding: 12px 16px; border-bottom: 1px solid #e6e1d6;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Predial — individual</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">Escala progresiva sobre el autovalúo acumulado del contribuyente.</span></div>
+            <div style="padding: 12px 16px; border-bottom: 1px solid #e6e1d6;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Predial — masivo</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">La misma determinación, para todo el padrón del ejercicio.</span></div>
+            <div style="padding: 12px 16px; border-bottom: 1px solid #e6e1d6; display: flex; gap: 10px; align-items: flex-start;"><span style="flex: 1; min-width: 0;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Arbitrios</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">También es determinar y emitir cuponera; deja de ser un tributo suelto.</span></span><span style="padding: 3px 9px; border-radius: 999px; background: #f6ecd9; color: #8a6420; font-size: 11px;">se mueve</span></div>
+            <div style="padding: 12px 16px;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Cálculo vehicular</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">Cierra el grupo: la misma forma, sobre la otra unidad.</span></div>
+          </div>
+          <div style="padding: 11px 16px; border-top: 1px solid #e6e1d6; background: #fbfaf6; font-size: 12px; color: #6b6258;">Entra «Arbitrios» (venía de «Tributos y beneficios»). El orden es el del trabajo.</div>
+        </section>
+
+        <!-- Actos y transferencias -->
+        <section style="background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #e6e1d6;">
+            <h3 style="margin: 0; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #6b6258;">Actos y transferencias</h3>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b6258;">4</span>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <div style="padding: 12px 16px; border-bottom: 1px solid #e6e1d6;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Transferencia de predio</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">Baja al transferente, alta al adquirente, y la casilla «Genera alcabala».</span></div>
+            <div style="padding: 12px 16px; border-bottom: 1px solid #e6e1d6; display: flex; gap: 10px; align-items: flex-start;"><span style="flex: 1; min-width: 0;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Alcabala</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">Justo debajo del acto que la genera, que es donde se busca.</span></span><span style="padding: 3px 9px; border-radius: 999px; background: #f6ecd9; color: #8a6420; font-size: 11px;">se mueve</span></div>
+            <div style="padding: 12px 16px; border-bottom: 1px solid #e6e1d6;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Transferencia de vehículo</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">El mismo acto sobre la otra unidad.</span></div>
+            <div style="padding: 12px 16px; display: flex; gap: 10px; align-items: flex-start;"><span style="flex: 1; min-width: 0;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Espectáculos públicos</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">Un hecho que ocurre una vez y se liquida al momento: aquí, no en la emisión anual.</span></span><span style="padding: 3px 9px; border-radius: 999px; background: #f6ecd9; color: #8a6420; font-size: 11px;">se mueve</span></div>
+          </div>
+          <div style="padding: 11px 16px; border-top: 1px solid #e6e1d6; background: #fbfaf6; font-size: 12px; color: #6b6258;">Lo que ocurre una vez y se liquida al momento, frente a la emisión anual.</div>
+        </section>
+
+        <!-- Beneficios y ajustes -->
+        <section style="background: #ffffff; border: 1px solid #e6e1d6; border-radius: 10px; overflow: hidden;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #e6e1d6;">
+            <h3 style="margin: 0; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: #6b6258;">Beneficios y ajustes</h3>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b6258;">3</span>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <div style="padding: 12px 16px; border-bottom: 1px solid #e6e1d6; display: flex; gap: 10px; align-items: flex-start;"><span style="flex: 1; min-width: 0;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Beneficios</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">Deducciones e inafectaciones: lo que baja la base antes de determinar.</span></span><span style="padding: 3px 9px; border-radius: 999px; background: #f6ecd9; color: #8a6420; font-size: 11px;">se mueve</span></div>
+            <div style="padding: 12px 16px; border-bottom: 1px solid #e6e1d6;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Alta de deuda</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">Deuda que no viene de la emisión masiva.</span></div>
+            <div style="padding: 12px 16px;"><span style="display: block; font-size: 13.5px; font-weight: 500;">Baja de deuda</span><span style="display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #6b6258;">Prescripción, resolución, error material o compensación.</span></div>
+          </div>
+          <div style="padding: 11px 16px; border-top: 1px solid #e6e1d6; background: #fbfaf6; font-size: 12px; color: #6b6258;">Las tres formas de tocar lo que se debe fuera de la emisión. Antes, «Movimientos» las mezclaba con las transferencias.</div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

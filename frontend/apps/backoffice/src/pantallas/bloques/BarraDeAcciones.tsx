@@ -61,6 +61,20 @@ export interface BarraDeAccionesProps {
    */
   readonly altas?: Readonly<Record<string, () => void>>;
   /**
+   * La accion que **enseña el resultado sin escribir nada** (#393): su rotulo y
+   * lo que hace al pulsarla.
+   *
+   * Se dibuja como secundaria y encendida, que es lo que es: no guarda nada, asi
+   * que no compite con la primaria ni necesita observacion. Cuando la opcion no
+   * declara ninguna —129 de las 134— aqui no llega nada y la barra se dibuja
+   * exactamente como se dibujaba.
+   */
+  readonly simulacion?: {
+    readonly accion: string;
+    readonly simulando: boolean;
+    readonly onSimular: () => void;
+  };
+  /**
    * Por que la accion primaria **no puede guardar todavia** (#332): la operacion
    * no escribe, o la opcion no ha declarado sus campos (`pantallas/actos.ts`).
    *
@@ -101,6 +115,7 @@ export function BarraDeAcciones({
   altas,
   impedimento,
   contadorDeLaPrimaria,
+  simulacion,
 }: BarraDeAccionesProps) {
   const [porConfirmar, fijarPorConfirmar] = useState<string | null>(null);
   const escribe = escritura?.operacion !== undefined;
@@ -199,6 +214,30 @@ export function BarraDeAcciones({
             // no hay otro: si la pantalla no escribe (es de lectura) y no lleva a
             // otra opcion, la primaria es esta. Con enlace o con escritura propia
             // se queda de secundaria: dos primarias dirian que hay dos actos.
+            /* La accion que simula: viva, secundaria y sin observacion. Va
+               antes que el alta y que la primaria porque es la unica de las
+               tres que **no cambia nada**, y quien atiende tiene que poder
+               pulsarla sin pensarselo. */
+            if (simulacion !== undefined && accion === simulacion.accion) {
+              return (
+                <Boton
+                  key={accion}
+                  variante="secundario"
+                  /* `aria-disabled` y no `disabled` mientras calcula, por lo
+                     mismo que la primaria apagada: un boton `disabled` **pierde
+                     el foco**, y en ventanilla se atiende con el teclado
+                     (RNF-082) — el foco saltaria al cuerpo del documento en
+                     mitad de la peticion y habria que volver a recorrer la
+                     barra. Enfocable y sordo al clic es lo que hace falta. */
+                  aria-disabled={simulacion.simulando}
+                  onClick={() => {
+                    if (!simulacion.simulando) simulacion.onSimular();
+                  }}
+                >
+                  {simulacion.simulando ? `${accion}…` : accion}
+                </Boton>
+              );
+            }
             const abrirAlta = altas?.[accion];
             if (abrirAlta !== undefined) {
               return (

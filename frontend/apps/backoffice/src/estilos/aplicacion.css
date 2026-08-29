@@ -491,6 +491,19 @@
   color: var(--ink-3);
 }
 
+/* Lo que la banda **todavia** no puede decir (#393). Va debajo de la identidad
+   y separada por su filete, para que no se lea como un dato mas de la cabecera. */
+.sgtm-resumen__nota {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
+  max-width: 78ch;
+  text-wrap: pretty;
+}
+
 .sgtm-resumen__datos {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -1599,6 +1612,90 @@
 }
 
 /* —— Bloque 9: hoja de reporte ————————————————————————————————— */
+
+/* ── Memoria de calculo (#393) ──────────────────────────────────────────
+   Una seccion de campos `"ro"` leida como la cuenta que es: etiqueta, la
+   operacion que la produce y su importe, en tres columnas alineadas. Sustituye
+   a `.sgtm-seccion__rejilla` **solo** en las secciones que la opcion declara
+   (`composicion.ts`); las demas no se enteran.
+
+   Las cifras van tabulares y a la derecha, como en toda tabla numerica del
+   sistema: una columna de importes que no alinea la coma no se puede recorrer
+   con la vista. */
+.sgtm-memoria {
+  padding: 6px 16px 14px;
+}
+
+.sgtm-memoria__lineas {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sgtm-memoria__linea {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sgtm-memoria__etiqueta {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+
+.sgtm-memoria__valor {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+/* La operacion es el sustento, no el resultado: se lee, pero no compite. */
+.sgtm-memoria__operacion {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sgtm-memoria__importe {
+  min-width: 92px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* El resultado, separado de los pasos que lo producen. */
+.sgtm-memoria__resultado {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0 2px;
+}
+
+.sgtm-memoria__resultado-etiqueta {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.sgtm-memoria__resultado-valor {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
 
 .sgtm-hoja {
   display: block;

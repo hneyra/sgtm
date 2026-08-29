@@ -49,7 +49,7 @@ const CODIGO = '00000025673';
 const RUTA = `/atencion/${CODIGO}`;
 
 /**
- * El perfil que ve la ficha entera: las seis opciones que compone **y** las que
+ * El perfil que ve la ficha entera: las siete opciones que compone **y** las que
  * sus acciones alcanzan. Los enlaces con contexto llevan a otras de las 134, y
  * cada una tiene su propio permiso.
  */
@@ -61,6 +61,7 @@ const VENTANILLA = {
   papeletas: ['lectura'],
   adm_estado_cuenta: ['lectura'],
   coactiva_expedientes: ['lectura'],
+  beneficios: ['lectura'],
   cuenta_corriente: ['lectura'],
   consulta_deuda: ['lectura'],
   consulta_fichas: ['lectura'],
@@ -464,6 +465,57 @@ describe('las cifras salen tal cual, y con su fecha (regla 9, RNF-083)', () => {
     expect(panel).toHaveTextContent(/Cifras actualizadas al/);
   });
 
+  /**
+   * **Los beneficios de la persona, sin salir de su ficha** (#393).
+   *
+   * La pregunta que decide lo que se le cobra —¿le corre la deduccion de 50
+   * UIT?— exigia salir a otra pantalla y volver a teclear el codigo, que es una
+   * de las ocho que lo volvian a pedir. Se compone por `contribuyente`, el
+   * mismo filtro que el contrato declara para su operacion y el mismo con el que
+   * preguntan la unificada, los predios y los vehiculos.
+   */
+  it('la pestaña de beneficios se compone por contribuyente y trae sus filas', async () => {
+    const usuario = userEvent.setup();
+    entraCon(VENTANILLA);
+    // Sin el espia, `pedidas` se queda vacio y la asercion de abajo no puede
+    // fallar: el mismo descuido que la revision de #297 encontro.
+    espiar();
+    montarEnRuta(RUTA);
+
+    await usuario.click(await screen.findByRole('tab', { name: 'Beneficios y exoneraciones' }));
+    const panel = await screen.findByRole('tabpanel');
+
+    await waitFor(() => expect(within(panel).getAllByRole('row').length).toBeGreaterThan(1));
+    // Preguntada por esta persona, no por el padron entero: `{}` habria traido
+    // los beneficios de cualquiera bajo la ficha de esta.
+    // Preguntada por esta persona, no por el padron entero: `{}` habria traido
+    // los beneficios de cualquiera bajo la ficha de esta.
+    await waitFor(() =>
+      expect(
+        salieron('/rentas/beneficios').filter((url) => url.includes(`contribuyente=${CODIGO}`)),
+      ).toHaveLength(1),
+    );
+  });
+
+  /**
+   * Y **ninguna de sus tres acciones escribe desde aqui**: registrar, aprobar y
+   * denegar son escrituras con su observacion, y ninguna sale de esta ficha
+   * (ADR-0016 §2). Lo que hay es la salida a su opcion, con el contexto puesto.
+   */
+  it('desde los beneficios se sale a su opcion con el contribuyente puesto, y no se aprueba nada', async () => {
+    const usuario = userEvent.setup();
+    entraCon(VENTANILLA);
+    montarEnRuta(RUTA);
+
+    await usuario.click(await screen.findByRole('tab', { name: 'Beneficios y exoneraciones' }));
+    const enlace = await screen.findByRole('link', { name: 'Beneficios y exoneraciones' });
+    expect(enlace).toHaveAttribute('href', `/rentas-registro/beneficios?contribuyente=${CODIGO}`);
+    const panel = await screen.findByRole('tabpanel');
+    for (const acto of ['Registrar', 'Aprobar', 'Denegar']) {
+      expect(within(panel).queryByRole('button', { name: acto })).not.toBeInTheDocument();
+    }
+  });
+
   it('un importe del resumen sin su `actualizadoA` sale con guion, no con la cifra', async () => {
     /* El resumen leia el importe con una funcion propia que **no exigia la
        fecha** —una copia debilitada de `importeDe`, que es la que lee las seis
@@ -565,6 +617,18 @@ describe('la barra de pestañas, con el patron completo (RNF-082)', () => {
     await waitFor(() => expect(salieron('/consultas/predios')).toHaveLength(1));
   });
 
+  /**
+   * «La ultima» se lee de la tabla de composicion y no se escribe aqui: la barra
+   * crece cuando una opcion mas se puede componer —#393 sumo «Beneficios y
+   * exoneraciones»—, y un rotulo escrito a mano convierte ese crecimiento en dos
+   * pruebas rojas que no dicen nada de lo que se probaba, que es Inicio y Fin.
+   */
+  const laUltima = () => {
+    const opcion = PESTANAS[PESTANAS.length - 1]?.opcion ?? '';
+    const titulo = opcionPorId(opcion)?.title ?? '';
+    return screen.getByRole('tab', { name: titulo });
+  };
+
   it('el Espacio tambien activa: es el otro gesto del patron', async () => {
     const usuario = userEvent.setup();
     entraCon(VENTANILLA);
@@ -574,10 +638,7 @@ describe('la barra de pestañas, con el patron completo (RNF-082)', () => {
     await usuario.keyboard('{End}');
     await usuario.keyboard(' ');
 
-    expect(screen.getByRole('tab', { name: 'Expedientes coactivos' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    expect(laUltima()).toHaveAttribute('aria-selected', 'true');
   });
 
   it('la flecha izquierda da la vuelta, y Fin lleva a la ultima', async () => {
@@ -590,12 +651,12 @@ describe('la barra de pestañas, con el patron completo (RNF-082)', () => {
     });
     primera.focus();
     await usuario.keyboard('{ArrowLeft}');
-    expect(screen.getByRole('tab', { name: 'Expedientes coactivos' })).toHaveFocus();
+    expect(laUltima()).toHaveFocus();
 
     await usuario.keyboard('{Home}');
     expect(primera).toHaveFocus();
     await usuario.keyboard('{End}');
-    expect(screen.getByRole('tab', { name: 'Expedientes coactivos' })).toHaveFocus();
+    expect(laUltima()).toHaveFocus();
   });
 
   it('el panel **no** es una parada del tabulador: dentro ya hay donde caer', async () => {
