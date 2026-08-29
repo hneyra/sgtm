@@ -29,9 +29,10 @@
 #      token, que el numero declarado ESTA EN EL PADRON de esa municipalidad (cruce a
 #      tres bandas: archivo, fila de `contribuyente` y atributo de Keycloak), que
 #      reconciliar dos veces no cambia nada, y que **entra al portal y ve su
-#      situacion** de extremo a extremo. Y el peldano que da sentido a lo anterior: un
-#      ciudadano cuyo documento no tiene la forma que su tipo exige recibe **403
-#      SIN_DOCUMENTO**, no una situacion vacia.
+#      situacion** de extremo a extremo. Y los dos peldanos que dan sentido a lo
+#      anterior: un ciudadano cuyo documento no tiene la forma que su tipo exige, y uno
+#      SIN el atributo, reciben **403 SIN_DOCUMENTO** —o no se pueden ni crear—, nunca
+#      una situacion vacia.
 #   4. LA ESCALERA DE IDENTIDAD, peldano a peldano. Cada uno responde con su
 #      codigo del catalogo, y el codigo es lo que hace la asercion precisa —dice
 #      HASTA DONDE llego la peticion, no solo que fallo—:
@@ -457,6 +458,31 @@ jobs:
           ilegible=$(tokenDe "$CIUDADANO" documento-ilegible "$SGTM_CLAVE_VERIFICACION")
           test -n "$ilegible"
           espera "403 SIN_DOCUMENTO" /portal/situacion --header "Authorization: Bearer $ilegible"
+
+          echo "--- y uno SIN el atributo tampoco llega: es la rotura literal de ADR-0020 §4"
+          # «Quitarle el atributo numero_documento». Se ejerce de verdad, y el sistema
+          # puede cerrarla por dos sitios —los dos valen y los dos se aceptan aqui, porque
+          # lo que se afirma es que NO se llega al portal sin documento acreditado, no por
+          # cual de las dos barreras—:
+          #
+          #   a) el perfil del realm declara `numero_documento` requerido para el
+          #      administrador, asi que Keycloak puede negarse a crear la cuenta;
+          #   b) y si la creara, el borde de la aplicacion contesta 403 SIN_DOCUMENTO.
+          #
+          # Lo que no puede pasar, y es lo que esto vigila, es que salga una situacion.
+          if kc create users -r "$CIUDADANO" -s username=sin-documento -s enabled=true \
+               -s firstName=Sin -s lastName=Atributo >/dev/null 2>&1; then
+            echo "  Keycloak admitio la cuenta sin numero_documento; la para el borde"
+            kc set-password -r "$CIUDADANO" --username sin-documento \
+              --new-password "$SGTM_CLAVE_VERIFICACION" >/dev/null
+            sinDocumento=$(tokenDe "$CIUDADANO" sin-documento "$SGTM_CLAVE_VERIFICACION")
+            test -n "$sinDocumento"
+            espera "403 SIN_DOCUMENTO" /portal/situacion --header "Authorization: Bearer $sinDocumento"
+          else
+            echo "  Keycloak NO deja crear un ciudadano sin numero_documento: el realm lo cierra antes"
+            test -z "$(kc get users -r "$CIUDADANO" -q username=sin-documento -q exact=true \
+              --fields id --format csv --noquotes | tr -d '\r')"
+          fi
 
       - name: 4 · La escalera de identidad, peldano a peldano
         run: |
