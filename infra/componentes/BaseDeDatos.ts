@@ -252,6 +252,12 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
                   name: "SGTM_CLAVE_APP",
                   valueFrom: { secretKeyRef: { name: secreto.aplicacion, key: CLAVES.aplicacion } },
                 },
+                // La lee 20-asignar-claves.sh, el mismo guion del compose: es el que le da
+                // LOGIN a rol_carga_parametros (issue #387).
+                {
+                  name: "SGTM_CLAVE_CARGA",
+                  valueFrom: { secretKeyRef: { name: secreto.carga, key: CLAVES.carga } },
+                },
                 {
                   name: "SGTM_CLAVE_IDENTIDAD",
                   valueFrom: {

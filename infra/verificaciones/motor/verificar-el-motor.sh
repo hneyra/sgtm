@@ -6,8 +6,9 @@
 # contra el proceso en marcha lo que el issue #149 exige:
 #
 #   1. Los cuatro roles existen, y ninguno es superusuario ni omite RLS.
-#   2. sgtm_owner y sgtm_app pueden conectarse; sgtm_readonly no.
-#   3. Con las credenciales de la aplicacion, `CREATE TABLE` **falla**.
+#   2. sgtm_owner, sgtm_app y rol_carga_parametros pueden conectarse (issue #387);
+#      sgtm_readonly no.
+#   3. Con las credenciales de la aplicacion o de la carga, `CREATE TABLE` **falla**.
 #   4. Los cuatro roles del SGTM conservan el CONNECT sobre la base del padron.
 #   5. Keycloak tiene base propia, y NO puede conectarse a la del padron.
 #   6. El rol del respaldo puede pg_backup_start/stop y NADA mas (issue #155).
@@ -77,8 +78,13 @@ done
     || { echo "FALLO: sgtm_owner no puede conectarse; el migrador no podria migrar" >&2; exit 1; }
 [ "$(comoSuperusuario "SELECT rolcanlogin FROM pg_roles WHERE rolname='sgtm_app'")" = "t" ] \
     || { echo "FALLO: sgtm_app no puede conectarse; la aplicacion no arrancaria" >&2; exit 1; }
+# rol_carga_parametros SI tiene LOGIN (issue #387): es la unica credencial que
+# publicar-parametros.sh/publicar-cuadros.sh usan, y sin conexion esos Jobs no podrian
+# correr contra ningun ambiente real.
+[ "$(comoSuperusuario "SELECT rolcanlogin FROM pg_roles WHERE rolname='rol_carga_parametros'")" = "t" ] \
+    || { echo "FALLO: rol_carga_parametros no puede conectarse" >&2; exit 1; }
 # Un rol que puede iniciar sesion sin que nadie lo use es una credencial mas que rotar y
-# vigilar: sgtm_readonly y rol_carga_parametros se quedan NOLOGIN hasta que hagan falta.
+# vigilar: sgtm_readonly se queda NOLOGIN hasta que haga falta.
 [ "$(comoSuperusuario "SELECT rolcanlogin FROM pg_roles WHERE rolname='sgtm_readonly'")" = "f" ] \
     || { echo "FALLO: sgtm_readonly puede conectarse, y todavia no lo usa nadie" >&2; exit 1; }
 
@@ -90,20 +96,30 @@ if PGPASSWORD="$CLAVE_APP" psql --username=sgtm_app --dbname=sgtm --quiet \
     exit 1
 fi
 
+# ── 4b. rol_carga_parametros tampoco puede ejecutar DDL ──────────────────────
+#
+# V7 le da INSERT sobre parametro_tributario y nada mas (SoD-1, REQ-03): ni siquiera
+# puede crear una tabla propia. Es la misma separacion de funciones que sgtm_app,
+# comprobada de la misma forma.
+echo "· rol_carga_parametros tampoco puede ejecutar DDL"
+if PGPASSWORD="$CLAVE_CARGA" psql --username=rol_carga_parametros --dbname=sgtm --quiet \
+        --command 'CREATE TABLE intento_de_ddl_carga (id int)' >/dev/null 2>&1; then
+    echo "FALLO: rol_carga_parametros puede crear tablas. Solo debe poder insertar en parametro_tributario" >&2
+    exit 1
+fi
+
 # ── 5. Los cuatro conservan el CONNECT sobre la base del padron ──────────────
 echo "· Los cuatro roles conservan el CONNECT sobre la base del padron"
-for par in "sgtm_owner:$CLAVE_OWNER" "sgtm_app:$CLAVE_APP"; do
+for par in "sgtm_owner:$CLAVE_OWNER" "sgtm_app:$CLAVE_APP" "rol_carga_parametros:$CLAVE_CARGA"; do
     rol=${par%%:*}
     clave=${par#*:}
     PGPASSWORD="$clave" psql --username="$rol" --dbname=sgtm --quiet --command 'SELECT 1' \
         >/dev/null 2>&1 \
         || { echo "FALLO: $rol no puede conectarse a la base del padron: 30-base-de-keycloak.sh revoca el CONNECT de PUBLIC y tiene que volver a concederselo a los cuatro roles" >&2; exit 1; }
 done
-for rol in sgtm_readonly rol_carga_parametros; do
-    # Estos dos no tienen LOGIN, asi que el privilegio se comprueba por el catalogo.
-    [ "$(comoSuperusuario "SELECT has_database_privilege('$rol','sgtm','CONNECT')")" = "t" ] \
-        || { echo "FALLO: $rol perdio el CONNECT sobre la base del padron" >&2; exit 1; }
-done
+# sgtm_readonly no tiene LOGIN, asi que su privilegio se comprueba por el catalogo.
+[ "$(comoSuperusuario "SELECT has_database_privilege('sgtm_readonly','sgtm','CONNECT')")" = "t" ] \
+    || { echo "FALLO: sgtm_readonly perdio el CONNECT sobre la base del padron" >&2; exit 1; }
 
 # ── 6. Keycloak: base propia, y lejos del padron ─────────────────────────────
 echo "· La base de Keycloak"

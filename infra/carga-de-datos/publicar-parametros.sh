@@ -33,18 +33,12 @@
 # Y ese rol no alcanza nada mas: ni el conjunto, ni su detalle, ni la auditoria. Es la separacion de
 # funciones SoD-1 de REQ-03, escrita en los privilegios.
 #
-#   PENDIENTE DE INFRAESTRUCTURA: rol_carga_parametros se crea NOLOGIN (crear-roles.sql) y
-#   20-asignar-claves.sh lo deja asi a proposito -"todavia no hay nada que"-. Este guion es lo que
-#   hace que ya haya algo. Antes de poder correrlo en un ambiente hacen falta dos cosas que NO estan
-#   en este cambio porque son inventario de secretos (INF-06) y no codigo:
-#
-#     a) ALTER ROLE rol_carga_parametros LOGIN PASSWORD '...' en la inicializacion del motor;
-#     b) el secreto sgtm-<ambiente>-postgres-carga con la clave, generado por
-#        secretos/bootstrap-secretos.sh y listado en el inventario de INF-06.
-#
-#   El guion comprueba que el secreto exista y se para nombrandolo si no: montar el Job con la
-#   credencial de la aplicacion lo dejaria fallar dentro con un error de privilegio, y la salida
-#   comoda ante eso es darle a sgtm_app el INSERT que no debe tener.
+# rol_carga_parametros tiene LOGIN desde 20-asignar-claves.sh y su clave vive en el secreto
+# sgtm-<ambiente>-postgres-carga, generado por secretos/bootstrap-secretos.sh y listado en el
+# inventario de INF-06 (issue #387). El guion comprueba que el secreto exista en ESTE namespace y se
+# para nombrandolo si no: montar el Job con la credencial de la aplicacion lo dejaria fallar dentro
+# con un error de privilegio, y la salida comoda ante eso es darle a sgtm_app el INSERT que no debe
+# tener.
 #
 #   uso: publicar-parametros.sh --ambiente stg|prod --archivo parametros-2026.csv \
 #        [--namespace sgtm-stg] [--usuario nombre-del-proceso]
@@ -89,10 +83,10 @@ kubectl -n "$NAMESPACE" get secret "$SECRETO" >/dev/null 2>&1 || {
     cat >&2 <<EOF
 No existe el secreto $SECRETO en $NAMESPACE, y sin el este Job no tiene con que conectarse.
 
-La conexion de rol_carga_parametros todavia no esta provisionada (#247 §4): el rol y sus
-privilegios existen desde V7, pero se crea NOLOGIN y nadie le ha asignado clave. Hacen falta
-  a) ALTER ROLE rol_carga_parametros LOGIN PASSWORD '...' en la inicializacion del motor, y
-  b) el secreto $SECRETO con la clave, en el inventario de INF-06.
+rol_carga_parametros tiene LOGIN desde la inicializacion del motor (issue #387); lo que falta en
+este namespace es el secreto con su clave. Corre, contra este ambiente:
+
+  secretos/bootstrap-secretos.sh --ambiente $AMBIENTE
 
 Lo que NO hay que hacer es montar este Job con la credencial de la aplicacion: sgtm_app solo
 tiene SELECT sobre parametro_tributario, y darle el INSERT que le falta pondria la publicacion

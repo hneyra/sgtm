@@ -59,8 +59,8 @@ export interface EntradaDeSecreto {
 /**
  * El inventario completo de un ambiente.
  *
- * Nueve entradas, siete `Secret` distintos —`sgtm-<amb>-keycloak` y
- * `sgtm-<amb>-postgres-respaldo` guardan dos claves cada uno— con nueve valores,
+ * Diez entradas, ocho `Secret` distintos —`sgtm-<amb>-keycloak` y
+ * `sgtm-<amb>-postgres-respaldo` guardan dos claves cada uno— con diez valores,
  * **ninguno repetido**: es la comprobacion que pide el issue, no solo «roles
  * distintos» sino «claves distintas». La prueba en `verificaciones/secretos.
  * test.ts` lo exige contando entradas unicas por `secreto`+`clave`, y
@@ -170,6 +170,19 @@ export function inventarioDeSecretos(environment: Environment): EntradaDeSecreto
       periodicidad: "anual",
       // No es un rol de PostgreSQL: es la cuenta de administrador de Grafana.
       requiereReinicioDe: servicioDeGrafana(environment),
+    },
+    {
+      rol: "postgres-carga",
+      secreto: nombres.carga,
+      clave: CLAVES.carga,
+      consumidor: "Solo los Jobs de carga de parametros (infra/carga-de-datos/publicar-parametros.sh, " +
+        "publicar-cuadros.sh); nunca el Deployment de la aplicacion",
+      // Credencial privilegiada de escritura sobre parametro_tributario y las tablas
+      // de valuacion nacionales, igual que sgtm-owner: trimestral, no semestral.
+      periodicidad: "trimestral",
+      rolDePostgres: "rol_carga_parametros",
+      // Sin requiereReinicioDe: nadie tiene un pod en marcha leyendo esto. Cada Job
+      // es de un solo uso y lee el Secret fresco al crearse, igual que sgtm-owner.
     },
   ];
 }
