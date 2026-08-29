@@ -2,7 +2,7 @@ import { Suspense, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Aviso, Boton, Campo, Esqueleto, FechaDeCalculo } from '@sgtm/design-system';
-import type { EstructuraDePantalla, SeccionDePantalla } from '../../catalogo';
+import type { CampoDePantalla, EstructuraDePantalla, SeccionDePantalla } from '../../catalogo';
 import { opcionPorId, pantallasDelModulo } from '../../catalogo';
 import { useCatalogoVisible } from '../../app/sesion/useCatalogoVisible';
 import { conexionDe } from '../conexiones';
@@ -13,6 +13,7 @@ import { NO_DISPONIBLE, SIN_PERMISO, estadoDePantalla, textoDeError } from '../e
 import { avisoDe } from '../prosa';
 import { PAGINA, conCambio, leerBusqueda } from '../busqueda';
 import { useEscritura } from '../escritura';
+import { accionesDeLaBarra } from '../actos';
 import { useFocoEnLaAccion } from '../foco';
 import type { Escritura } from '../escritura';
 import { escrituraDe } from '../escrituras';
@@ -111,6 +112,70 @@ import { CONSTRUCCIONES, TablaDePisos, filaDeConstruccionLeida } from './TablaDe
  * salian. Y `FichaResource` publica quince campos donde el prototipo dibuja
  * noventa: el resto sale «—», y que se vea el hueco dice que falta y a quien le
  * toca.
+ *
+ * <h2>Un solo vocabulario de accion (#391 §2)</h2>
+ *
+ * Cinco pantallas del mismo objeto y cinco vocabularios. La regla que las
+ * uniforma vive en `pantallas/actos.ts` —{@link accionesDeLaBarra}— y es de
+ * mecanismo, no de renombrado: **una primaria por pantalla, siempre la ultima y
+ * siempre la que escribe; lo que no escribe es secundario y va a su izquierda;
+ * y una pantalla sin ninguna accion que escriba no tiene primaria**. Los rotulos
+ * se conservan letra por letra (RNF-080). Lo que sale de cada una:
+ *
+ *   ficha_urbana           «Nuevo» (el alta guiada de #320, que es el acto
+ *                          mientras no haya predio abierto) y «Imprimir».
+ *                          «Modificar» y «Deshacer» son modos y se van; su
+ *                          «Guardar» tambien, porque `GET /catastro/fichas/…`
+ *                          no puede guardar ni el dia que llegue el backend.
+ *                          Con predio abierto la primaria es el enlace
+ *                          «Actualizar catastro», como desde #319
+ *   ficha_economica        «Imprimir», y la misma primaria de enlace. Su
+ *                          «Nuevo» **se va**: el alta guiada la declara la
+ *                          modalidad urbana —es la que se abre por el codigo de
+ *                          referencia catastral (`catastro/composicion.ts`)—, y
+ *                          aqui era un boton que no abria ningun formulario
+ *   ficha_bienes           «Distribuir valor», secundaria: ensena un reparto
+ *                          **antes** de escribir, y ese reparto es D-02a —el
+ *                          total de bienes comunes sale «—»—. Ninguna primaria
+ *   ficha_rural            «Calcular» y «Imprimir ficha rural», las dos
+ *                          secundarias. Ninguna primaria: esta era la ficha
+ *                          donde el boton navy imprimia
+ *   actualizacion_catastro «Imprimir» y, al final, «Guardar»: la unica de las
+ *                          cinco que escribe. «Nuevo» se va (su alta es la de la
+ *                          urbana) y «Quitar» tambien —es un modo, y ademas ya
+ *                          existe **por fila** en `TablaDePisos`, con su
+ *                          `aria-label` propio: «Quitar el piso 02»—
+ *
+ * Y **lo que la barra no pierde**: la observacion sigue siendo la condicion de
+ * guardado de la actualizacion (regla 10, RNF-052), con su franja y el
+ * `aria-describedby` de la primaria. Reordenar no adelanta nada.
+ *
+ * <h2>Un solo buscador del predio (#391 §3)</h2>
+ *
+ * **Se busca en un sitio —«Consulta de fichas»—; una ficha se abre por su
+ * ruta.** Las cinco dibujaban cada una su barra de filtros y encima estaba la de
+ * la consulta: seis formas de buscar el mismo predio.
+ *
+ * Lo que queda no es «ninguna barra», porque eso obligaria a un rodeo por otra
+ * pantalla para teclear un numero que ya se tiene en la mano:
+ *
+ * - **sin predio abierto**, el campo que **abre** la ficha y nada mas —el
+ *   compositor de tramos (`CodigoCatastral`) donde la opcion lo declara, y el
+ *   `Campo` del catalogo donde no (ver {@link CAMPO_QUE_ABRE})— con un enlace a
+ *   «Consulta de fichas» para todo lo demas;
+ * - **con predio abierto**, ninguna barra de busqueda: el predio esta en la
+ *   ruta, y volver a preguntarlo encima de la ficha que se esta leyendo es la
+ *   sexta forma de buscar lo mismo.
+ *
+ * **Los filtros que dejan de dibujarse siguen en el catalogo generado y no se
+ * borran** (`catastro.generado.ts` no se edita a mano): `codContribuyenteRentas`,
+ * `nroFicha` y `uso` en la urbana; `contribuyente` y `ciiu` en la economica;
+ * `denominacion` en la de bienes; `contribuyente` y `valleSector` en la rural; y
+ * `nDeFicha`, `sector` y `tipoDeActualizacion` en la actualizacion. Ninguno se
+ * pierde por el camino, porque **ninguno viajaba**: la conexion de las cuatro
+ * fichas manda `codRefCatastral`/`codEdificacion`/`codUnidad` —de la ruta—,
+ * `historico` y `fecha`, y nada mas (`catastro/index.ts`). Lo que si busca por
+ * ellos es «Consulta de fichas», que es a donde lleva el enlace.
  */
 
 const URBANA = 'ficha_urbana';
@@ -444,9 +509,23 @@ export function FichaDelPredio({ estructura }: { readonly estructura: Estructura
 
   const cargando = consulta.isPending && falta === undefined;
   const busquedaActiva = leerBusqueda(busqueda);
-  const filtros = filtrosDe(estructura.id, estructura.filtros);
+  // **Un solo campo de busqueda, y solo sin predio abierto** (#391 §3): el que
+  // abre la ficha. Los demas que el catalogo declara no se dibujan aqui —viven
+  // en «Consulta de fichas», y desde estas cinco pantallas no viajaban nunca—.
+  const abre = CAMPO_QUE_ABRE[estructura.id];
+  const campoQueAbre = (filtrosDe(estructura.id, estructura.filtros) ?? []).filter(
+    (campo) => campo.clave === abre,
+  );
+  const sinPredio = codigo === undefined || codigo === '';
   const aviso = avisoDe(estructura.id);
   const enValorizacion = pestana === 'valorizacion';
+  // La barra con un solo vocabulario (#391 §2). El alta se le pasa **solo si
+  // esta pantalla la declara**: sin ella, «Nuevo» es un boton que no abre nada.
+  const barra = accionesDeLaBarra(
+    estructura.id,
+    estructura.acciones ?? [],
+    composicion.flujo === undefined ? [] : [composicion.flujo.accion],
+  );
 
   const secciones = seccionesDeLaPestana(modalidad, pestana, pantallas.data ?? {});
   const tablaDeLaPestana = enValorizacion ? tablaDeLaModalidad(modalidad, pantallas.data ?? {}) : undefined;
@@ -483,10 +562,10 @@ export function FichaDelPredio({ estructura }: { readonly estructura: Estructura
         />
       )}
 
-      {filtros && (
-        <Filtros
+      {sinPredio && campoQueAbre.length > 0 && (
+        <BuscadorDelPredio
           opcion={estructura.id}
-          campos={filtros}
+          campos={campoQueAbre}
           buscado={busquedaActiva.filtros}
           cargando={consulta.isFetching}
           onBuscar={(valores) => {
@@ -502,7 +581,6 @@ export function FichaDelPredio({ estructura }: { readonly estructura: Estructura
                distinto que el parametro de la ruta —«codigoDeRefCatastral» y
                `codRefCatastral`—, asi que la coincidencia por nombre no casaba y
                «Buscar» no abria nada. */
-            const abre = CAMPO_QUE_ABRE[estructura.id];
             const elegido = abre === undefined ? undefined : valores[abre];
             if (abre !== undefined && elegido !== undefined && elegido !== '') {
               siguiente.delete(abre);
@@ -630,35 +708,105 @@ export function FichaDelPredio({ estructura }: { readonly estructura: Estructura
         </section>
       )}
 
-      {edicion ? (
-        // La actualizacion trae **su** barra de una sola accion: el catalogo
-        // dibuja «Nuevo · Guardar · Imprimir · Quitar», y la ultima es la que el
-        // renderizador comun trataria como primaria (FRO-03 §5).
-        enValorizacion && <BarraDeAcciones acciones={['Guardar']} escritura={escritura} />
-      ) : (
-        estructura.acciones && (
-          <BarraDeAcciones
-            acciones={estructura.acciones}
-            {...(puedeRegistrarAqui && composicion.flujo !== undefined
-              ? { altas: { [composicion.flujo.accion]: () => fijarFlujoAbierto(true) } }
-              : {})}
-            {...(composicion.acto !== undefined && codigo !== undefined && codigo !== ''
-              ? {
-                  enlace: {
-                    etiqueta: composicion.acto.etiqueta,
-                    ruta: composicion.acto.rutaDe(codigo),
-                  },
-                }
-              : {})}
-          />
-        )
-      )}
+      {edicion
+        ? /* La barra de la edicion sale del mismo mecanismo que las otras cuatro:
+             el catalogo dibuja «Nuevo · Guardar · Imprimir · Quitar» y la ultima
+             seria la primaria (FRO-03 §5), o sea «Quitar» —un modo—. Uniformada
+             queda «Imprimir · Guardar», con la que escribe al final. Solo en
+             Valorizacion, que es la pestana que edita. */
+          enValorizacion &&
+          barra.acciones.length > 0 && (
+            <BarraDeAcciones acciones={barra.acciones} escritura={escritura} />
+          )
+        : barra.acciones.length > 0 && (
+            <BarraDeAcciones
+              acciones={barra.acciones}
+              /* Ninguna de las suyas escribe: las cuatro fichas son `GET`. La
+                 primaria, cuando la hay, es el alta o el enlace —los dos llevan
+                 a un sitio donde si se escribe—, nunca un «Imprimir». */
+              {...(barra.conPrimaria ? {} : { sinPrimaria: true as const })}
+              {...(puedeRegistrarAqui && composicion.flujo !== undefined
+                ? { altas: { [composicion.flujo.accion]: () => fijarFlujoAbierto(true) } }
+                : {})}
+              {...(composicion.acto !== undefined && codigo !== undefined && codigo !== ''
+                ? {
+                    enlace: {
+                      etiqueta: composicion.acto.etiqueta,
+                      ruta: composicion.acto.rutaDe(codigo),
+                    },
+                  }
+                : {})}
+            />
+          )}
     </>
   );
 }
 
 /** El ancla de la tabla, para el indice de secciones. Una sola por pestana. */
 const ANCLA_DE_LA_TABLA = 'sgtm-tabla-de-la-pantalla';
+
+/**
+ * **El unico buscador que le queda a la ficha** (#391 §3): el campo que la abre,
+ * y un enlace a donde se busca de verdad.
+ *
+ * No es una barra de filtros recortada: es otra cosa con la misma forma. Los
+ * cuatro o cinco campos del prototipo prometian acotar una ficha —«Uso»,
+ * «Contribuyente», «Nº de ficha»— y ninguno viajaba: la conexion de las cuatro
+ * fichas manda el codigo de la ruta, `historico` y `fecha`. Lo que si abre un
+ * predio es **uno** de esos campos, y es el que se queda.
+ *
+ * Se dibuja con `Filtros` y no con un control propio a proposito: asi el rotulo
+ * sigue siendo el del catalogo (RNF-080) —«Código de Ref. Catastral», «Cod.
+ * Unidad Catastral (UC)»—, el compositor de tramos sigue saliendo de
+ * `widgetsDeFiltro` donde la opcion lo declara, y un enlace compartido con el
+ * codigo en la URL sigue llegando normalizado al campo. Las dos fichas que no
+ * declaran compositor —bienes comunes y rural— dibujan su `Campo` de texto, que
+ * es lo que ya hacian: su identificador no es un codigo de referencia catastral
+ * y troquelarlo en los diez tramos del manual diria de el algo que su pantalla
+ * no dice (`catastro/composicion.ts`).
+ *
+ * **Y el enlace no es un adorno.** Sin el, quien llega sin el codigo en la mano
+ * —que es como se llega casi siempre: con un nombre, una manzana, un lote— se
+ * queda delante de una caja que no puede rellenar. El sitio donde se busca por
+ * eso existe, tiene su permiso y publica su paginacion: «Consulta de fichas».
+ */
+function BuscadorDelPredio({
+  opcion,
+  campos,
+  buscado,
+  cargando,
+  onBuscar,
+}: {
+  readonly opcion: string;
+  readonly campos: readonly CampoDePantalla[];
+  readonly buscado: Readonly<Record<string, string>>;
+  readonly cargando: boolean;
+  readonly onBuscar: (valores: Readonly<Record<string, string>>) => void;
+}) {
+  const consulta = opcionPorId(CONSULTA_DE_FICHAS);
+  return (
+    <>
+      <Filtros
+        opcion={opcion}
+        campos={campos}
+        buscado={buscado}
+        cargando={cargando}
+        onBuscar={onBuscar}
+      />
+      {consulta !== undefined && (
+        <p className="sgtm-buscador__otro">
+          ¿No tienes el código? Se busca por contribuyente, manzana o lote en{' '}
+          {/* El titulo del catalogo como texto del enlace, sin reescribirlo. */}
+          <Link to={consulta.ruta}>{consulta.title}</Link>, que es donde esa búsqueda vive; desde
+          ahí se abre la ficha del predio que elijas.
+        </p>
+      )}
+    </>
+  );
+}
+
+/** Donde se busca un predio cuando no se tiene su codigo. Una sola vez, aqui. */
+const CONSULTA_DE_FICHAS = 'consulta_fichas';
 
 /**
  * El conmutador de modalidad: las cuatro fichas del mismo predio.

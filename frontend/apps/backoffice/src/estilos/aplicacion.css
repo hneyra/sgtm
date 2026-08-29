@@ -2914,6 +2914,16 @@
   color: var(--ink-3);
 }
 
+/* La salida hacia donde se busca de verdad, debajo del campo que abre la ficha
+   (#391 §3). Va pegada al bloque de busqueda: es la otra mitad de la misma
+   respuesta a «como llego a este predio». */
+.sgtm-buscador__otro {
+  margin: -6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
 .sgtm-arbol,
 .sgtm-arbol__manzanas {
   list-style: none;
