@@ -173,14 +173,6 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // Una menos que antes: `transito_valores` se muda a `declarada` (#77).
       salida: 48,
       'sin-backend': 41,
-      // Quince declaran: las trece de la onda 3 mas el cambio de numero de
-      // papeleta y la generacion masiva de valores de transito (#77), con su
-      // componente propio cada una.
-      declarada: 15,
-      // 48: la constancia libre venia de `salida` —su primaria es de
-      // impresion— y `ACTOS_SIN_CAMPO` gana a `DE_SALIDA` al declararla (#77).
-      salida: 48,
-      'sin-backend': 41,
       // Nueve se mudan a `sin-campo` en la onda 4: cuatro de transito (#77),
       // tres de fiscalizacion (#80) — mas las tres de tesoreria y las dos
       // transferencias que ya se habian movido antes; y dos se van a
