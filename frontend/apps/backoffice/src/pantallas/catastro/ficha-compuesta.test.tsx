@@ -6,6 +6,7 @@ import { montarEnRuta } from '../../pruebas/montar';
 import { todasLasPantallas } from '../../catalogo';
 import { composicionDe } from '../composicion';
 import { SIN_DATO } from '../seguridad/listado';
+import { datosDeLaCabecera, sectorYManzana } from './ResumenDeFicha';
 
 /**
  * La ficha catastral, compuesta: cabecera-resumen, indice y acto (#319).
@@ -109,10 +110,175 @@ describe('la cabecera-resumen dice de que ficha es y de cuando', () => {
     montada.unmount();
   });
 
+  /* ── Los dos datos que le faltaban a la cabecera (#413 A3) ───────────── */
+
+  /**
+   * El artboard de la propuesta A ensena **seis** datos y la cabecera publicaba
+   * cuatro. Los dos que faltaban no piden nada al backend, y por motivos
+   * opuestos: uno esta **dentro del identificador** con que se abrio la ficha, y
+   * el otro **no lo tiene nadie**.
+   */
+  it('«Sector · manzana» sale del propio código, sin pedir nada', async () => {
+    montarEnRuta(URBANA);
+    await screen.findByRole('region', { name: 'Versión de la ficha' });
+
+    const cabecera = within(resumen());
+    // `200601010150010101001` reparte 20-06-01-**01**-**015**-001-01-01-00-1: el
+    // sector es el cuarto tramo y la manzana el quinto. No es una peticion mas:
+    // es leer lo que ya esta en la ruta, con el troquel de `codigo.ts`.
+    expect(cabecera.getByText('Sector · manzana').nextElementSibling).toHaveTextContent('01 · 015');
+  });
+
+  /**
+   * **El autovaluo es la cifra que todo el mundo viene a buscar, y no la tiene
+   * nadie** (D-02a). Sale «—», y el guion va con su motivo por lo mismo que la
+   * conciliacion: suelto en la rejilla se leeria como «la ficha no lo trae».
+   */
+  it('«Autovalúo» sale «—», y dice que no lo determina nadie todavía', async () => {
+    montarEnRuta(URBANA);
+    await screen.findByRole('region', { name: 'Versión de la ficha' });
+
+    const cabecera = within(resumen());
+    expect(cabecera.getByText('Autovalúo').nextElementSibling).toHaveTextContent(SIN_DATO);
+    expect(cabecera.getByText(`Autovalúo: ${SIN_DATO}`)).toBeInTheDocument();
+    expect(
+      cabecera.getByText(/todavía no hay ninguna determinación de este ejercicio que lo calcule/),
+    ).toBeInTheDocument();
+    // Y dice la otra mitad: tampoco se compone aqui con lo que se ve (RNF-083).
+    expect(cabecera.getByText(/no se compone aquí con lo que se ve en pantalla/)).toBeInTheDocument();
+  });
+
+  /**
+   * **Y «Área construida» se queda en «—», que no es lo mismo que un olvido.**
+   *
+   * `FichaResource` publica `areaTerreno` y **no** `areaConstruida`: la unica que
+   * la publica es `FichaEncontradaResource` —la del listado de «Consulta de
+   * fichas»— y la trae ya sumada **desde el servidor** (#290). La ficha, en
+   * cambio, carga sus construcciones piso a piso, asi que la suma esta al
+   * alcance de la mano: 118.50 + 46.00. Justo por eso el hueco es una decision y
+   * no una falta de datos —sumarlas seria componer una cifra en la interfaz
+   * (RNF-083)—, y esta prueba mide las dos mitades: que los sumandos estan, y
+   * que el total no.
+   */
+  it('«Área construida» sigue vacía aunque los pisos estén: la interfaz no suma', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta(URBANA);
+    await screen.findByRole('region', { name: 'Versión de la ficha' });
+
+    expect(within(resumen()).getByText('Área construida').nextElementSibling).toHaveTextContent(
+      SIN_DATO,
+    );
+
+    // Los dos sumandos estan en la pantalla, y su suma —164.50— no aparece en
+    // ningun sitio: si alguien la compusiera, esto se pondria rojo.
+    await usuario.click(screen.getByRole('tab', { name: 'Valorización' }));
+    const tabla = await screen.findByRole('region', { name: 'Versiones registradas por piso' });
+    expect(within(tabla).getByText('118.50')).toBeInTheDocument();
+    expect(within(tabla).getByText('46.00')).toBeInTheDocument();
+    expect(screen.queryByText('164.50')).not.toBeInTheDocument();
+  });
+
   it('sin registro abierto no hay resumen: no hay ficha que resumir', async () => {
     montarEnRuta('/catastro/ficha-urbana');
     expect(await screen.findByText(/Elige un predio/)).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Resumen de la ficha' })).not.toBeInTheDocument();
+  });
+});
+
+/* ── La rejilla, sin montar nada (#413 A3) ─────────────────────────────── */
+
+/**
+ * Los seis datos son una funcion pura de (codigo, campos), y se miran de frente.
+ *
+ * Es lo mismo que hace `seccionesDeLaPestana` con el reparto de pestanas: aqui
+ * vive la decision, y comprobarla montando la ficha entera la dejaria escondida
+ * detras de un proxy, un catalogo y cinco pestanas.
+ */
+describe('la rejilla de la cabecera, como funcion', () => {
+  const CAMPOS = { nombreDelContribuyente: 'PEÑA GARCÍA, ROSA E.', uso2: 'Casa habitación' };
+
+  it('los seis del artboard, en su orden', () => {
+    expect(
+      datosDeLaCabecera('200601010150010101001', CAMPOS).map((dato) => dato.etiqueta),
+    ).toEqual([
+      'Titular',
+      'Uso',
+      'Área de terreno',
+      'Área construida',
+      'Sector · manzana',
+      'Autovalúo',
+    ]);
+  });
+
+  /**
+   * **El autovaluo va declarado `cifra` con la fecha en blanco, y a proposito.**
+   *
+   * Asi la regla 9 la sostiene el tipo y no un comentario: el dia que la cifra
+   * llegue, quien la ponga tiene que traer su `aLaFecha` o `CabeceraDeRegistro`
+   * la seguira dibujando «—» (ver `bloques/CabeceraDeRegistro.test.tsx`). Un
+   * valor inventado aqui no llega ni a pintarse; esta prueba caza ademas el
+   * intento, que es lo que un `toHaveTextContent` sobre el DOM no puede.
+   */
+  it('el autovalúo es un hueco declarado como cifra sin fecha, no un texto suelto', () => {
+    const autovaluo = datosDeLaCabecera('200601010150010101001', CAMPOS).find(
+      (dato) => dato.etiqueta === 'Autovalúo',
+    );
+    expect(autovaluo).toEqual({
+      etiqueta: 'Autovalúo',
+      valor: SIN_DATO,
+      cifra: true,
+      aLaFecha: '',
+    });
+  });
+
+  /** Y el area construida sigue siendo el hueco que RNF-083 exige. */
+  it('el área construida es «—» y no una suma', () => {
+    const area = datosDeLaCabecera('200601010150010101001', CAMPOS).find(
+      (dato) => dato.etiqueta === 'Área construida',
+    );
+    expect(area?.valor).toBe(SIN_DATO);
+  });
+});
+
+describe('sectorYManzana lee dos tramos del codigo, y no inventa ninguno', () => {
+  it('con el código completo, los dos tramos tal como están escritos', () => {
+    expect(sectorYManzana('200601010150010101001')).toBe('01 · 015');
+    // El de bienes comunes es el mismo sin el tramo de unidad: los dos tramos
+    // que interesan van antes, asi que sale igual.
+    expect(sectorYManzana('200601010150010101')).toBe('01 · 015');
+  });
+
+  /**
+   * **Un identificador que no es un codigo de referencia catastral sale «—»**, y
+   * es el caso real: la ficha rural se abre por su unidad catastral
+   * —`11024-0418`, con guion—. Repartirla en los diez tramos del manual leeria
+   * «11» como departamento y diria de ella algo que no es cierto.
+   *
+   * **Y hay que medirlo con un identificador largo, no con el corto.** Quitar la
+   * guarda y probar solo con `11024-0418` deja la prueba en VERDE: sus nueve
+   * digitos no llegan a completar la manzana, asi que quien devuelve «—» es la
+   * guarda de longitud y no esta. Con uno que si los complete —los guiones se
+   * caen y quedan quince digitos— la diferencia se ve: sin la guarda saldria
+   * «41 · 801», un sector y una manzana leidos de una numeracion que no es
+   * posicional. La cabecera tiene que decir lo mismo que el conmutador de
+   * modalidades, que apaga sus chips con **este mismo** predicado.
+   */
+  it('un identificador que no es catastral sale «—», aunque tenga dígitos de sobra', () => {
+    expect(sectorYManzana('11024-0418')).toBe(SIN_DATO);
+    expect(sectorYManzana('11024-0418-015-001')).toBe(SIN_DATO);
+    expect(sectorYManzana('')).toBe(SIN_DATO);
+  });
+
+  /**
+   * **Y un codigo a medio componer tampoco.** Escribir un prefijo es una
+   * busqueda legitima (`codigo.ts`), y ahi la manzana llega corta: pintar
+   * «01 · 0» diria que el predio esta en la manzana 0, que es otra manzana.
+   */
+  it('un prefijo que no llega a completar la manzana sale «—»', () => {
+    // 20-06-01-01-0 : el sector esta entero, la manzana lleva un digito de tres.
+    expect(sectorYManzana('200601010')).toBe(SIN_DATO);
+    // Sin llegar siquiera al sector.
+    expect(sectorYManzana('2006')).toBe(SIN_DATO);
   });
 });
 

@@ -107,6 +107,14 @@ import { CONSTRUCCIONES, TablaDePisos, filaDeConstruccionLeida } from './TablaDe
  * observacion del usuario sigue siendo obligatoria** antes de habilitar la
  * primaria (regla 10, RNF-052).
  *
+ * **Y se dice en la pantalla, no solo aqui** (#413). El artboard dibuja sobre la
+ * tabla de pisos el bloque que explica esta fusion, y faltaba: quien abre la
+ * ficha urbana no tenia forma de saber que Valorizacion es donde se edita ni por
+ * que el vocabulario dejo de ser doble, porque eso vivia en este docblock —que
+ * es justo donde no lo lee quien atiende—. Va **solo en la modalidad urbana**
+ * —la que la actualizacion versiona— y **solo fuera del modo edicion**: dentro
+ * ya esta el aviso de que guardar reemplaza la lista de pisos.
+ *
  * **Ninguna cifra de valuacion se compone aqui** (D-02, RNF-083, regla 5):
  * arancel, valor del terreno, autovaluo y valor de obra salen «—», como ya
  * salian. Y `FichaResource` publica quince campos donde el prototipo dibuja
@@ -625,6 +633,26 @@ export function FichaDelPredio({ estructura }: { readonly estructura: Estructura
           existe. */}
       {DEL_PREDIO.has(pestana) && modalidad !== 'urbana' && (
         <Aviso titulo="Sin repetir" detalle={SIN_REPETIR} />
+      )}
+
+      {/* **Donde vive la actualizacion, dicho donde se lee** (#413, propuesta A).
+          El artboard lo dibuja encima de la tabla de pisos y en el codigo no
+          estaba: la fusion que este refactor hizo se explicaba en el docblock,
+          que es exactamente donde no la lee quien atiende.
+
+          **Solo sin editar**: en el modo edicion ya hay un aviso —el de que
+          guardar reemplaza la lista de pisos—, y dos seguidos son ruido; quien
+          esta editando ademas ya sabe donde esta. **Y solo en la urbana**: es la
+          modalidad que `actualizacion_catastro` versiona (`TipoFicha.UNICA`),
+          asi que decirlo en la economica, en bienes comunes o en la rural
+          mandaria a editar una ficha que no es la que se esta mirando. */}
+      {!edicion && enValorizacion && modalidad === 'urbana' && (
+        <Aviso
+          titulo="Aquí se actualiza la ficha"
+          detalle={`Esta pestaña es donde se corrige lo construido${
+            composicion.acto === undefined ? '' : `, con «${composicion.acto.etiqueta}»`
+          }: cada corrección guarda una versión nueva y la anterior queda en el histórico, con quién la hizo y por qué. Antes eso se hacía en otra pantalla, que nombraba de otra manera los materiales y los acabados —«03 — ADOBE» aquí y «03 — ADOBE / TAPIA» allí—; ahora se eligen de una sola lista, la que vale.`}
+        />
       )}
 
       {edicion && enValorizacion && (
