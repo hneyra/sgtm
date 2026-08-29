@@ -104,14 +104,21 @@ lugar de convertirse en una aserción intermitente.
 
 ## 4. Lo que hoy no se prueba, y hay que saberlo
 
-- **No hay pruebas de negocio**, porque no hay negocio: los doce contextos acotados están vacíos.
-- Las reglas de ArchUnit acotadas a `..dominio..` no encuentran ninguna clase todavía. Se admite
-  con `SIN_DOMINIO_TODAVIA`, y hay una aserción que **falla en cuanto aparezca la primera clase de
-  dominio** para obligar a quitar ese permiso. Un recordatorio en un comentario no se lee; esa
-  aserción sí.
-- Un paquete con solo `package-info.java` no es un módulo para Spring Modulith: los doce contextos
-  no se verifican como módulos hasta que tengan su primera clase.
-- El camino del **portal del contribuyente** no está probado porque no está construido (D-07).
+- **Ninguna regla de cálculo se prueba contra cifras reales.** El motor de reglas y el corpus de
+  casos de NEG-05 sí tienen pruebas —puras, sin base ni reloj—, pero las reglas que dependen de
+  los factores sin fuente de D-11 y de los cuadros de GOB-03 no se implementan ni
+  estructuralmente, y ningún conjunto del ejercicio está sellado con cifras reales: no hay
+  todavía una prueba que compare contra un céntimo verdadero.
+- El camino del **portal del contribuyente con sesión propia del ciudadano** no está probado
+  porque no está construido (D-07): el portal de hoy se sirve tras la misma puerta de sesión del
+  funcionario, y la inversión del flujo de tenant que describe ARQ-03 §6 sigue sin componente.
+
+Tres huecos que esta sección declaraba ya se cerraron, y conviene dejarlo dicho para que nadie
+los dé por abiertos: los doce contextos acotados tienen código y pruebas de negocio; el permiso
+`SIN_DOMINIO_TODAVIA` de las reglas acotadas a `..dominio..` se retiró con el dominio compartido
+—y `ArquitecturaTest` tiene la aserción que impide que vuelva a colarse—; y Spring Modulith
+verifica los módulos con código en cada build (`ModulosTest`, que además exige que los esperados
+estén detectados, porque un `verify()` sobre cero módulos pasaría sin comprobar nada).
 
 ## 5. Al agregar código
 

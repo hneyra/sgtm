@@ -36,8 +36,9 @@ sgtm-<contexto>/src/main/java/pe/gob/sgtm/<contexto>/
 
 **Si agregas una regla, agrega la clase de muestra que la viola**, en
 `sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones/muestras/`. Una regla que no puede
-fallar no protege nada: con contextos vacíos, casi cualquier regla mal escrita pasa en verde.
-Por eso existe `ReglasDeArquitecturaMuerdenTest`.
+fallar no protege nada: una regla mal escrita —un predicado que no casa con ninguna clase— pasa
+en verde sin haber revisado nada, y `ArquitecturaTest` solo comprueba que el importador ve
+clases de producción, no que cada regla muerda. Por eso existe `ReglasDeArquitecturaMuerdenTest`.
 
 ## 3. Idioma
 
