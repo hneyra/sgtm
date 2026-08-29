@@ -247,12 +247,21 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // pasan a `sin-declaracion`, que es lo que les toca: su operacion escribe
       // y no han declarado sus campos. Estaban aqui **por el boton equivocado**,
       // asi que ninguna de las seis se leia como lo que es.
-      salida: 41,
+      //
+      // **Y dos mas con #442**: «Contribuyentes» y «Ficha de vehículo». Las dos
+      // declaran el vocabulario uniforme, se les cae el «Guardar» que no podia
+      // guardar sobre un `GET`, y lo que queda de su barra es lo que de verdad
+      // hacen: imprimir y exportar.
+      salida: 43,
       // Dos menos con #391 §2, y las dos son el mismo defecto contado de dos
       // maneras: `ficha_urbana` se va a `salida` y `ficha_bienes` a
       // `sin-determinacion`. Las dos estaban aqui por su «Guardar» del
       // catalogo, que ni existe ni podria existir sobre un `GET`.
-      'sin-backend': 39,
+      // Treinta y siete desde #442: «Contribuyentes» y «Ficha de vehículo»
+      // declaran el vocabulario uniforme, se les cae el «Guardar» que no podia
+      // guardar sobre un `GET`, y con el su impedimento: su barra pasa a ser de
+      // salida —«Imprimir», «Excel»—, que es lo que de verdad hacen.
+      'sin-backend': 37,
       // Nueve se mudan a `sin-campo` en la onda 4: cuatro de transito (#77),
       // tres de fiscalizacion (#80) — mas las tres de tesoreria y las dos
       // transferencias que ya se habian movido antes; y dos se van a
@@ -386,7 +395,7 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
  * `catastro/vocabulario-y-buscador.test.tsx`.
  */
 describe('un solo vocabulario de accion, y solo donde se declara', () => {
-  it('las 117 que no declaran nada reciben su lista del catalogo, intacta', async () => {
+  it('las 113 que no declaran nada reciben su lista del catalogo, intacta', async () => {
     const pantallas = await todasLasPantallas();
     let intactas = 0;
     for (const [opcion, estructura] of Object.entries(pantallas)) {
@@ -401,9 +410,11 @@ describe('un solo vocabulario de accion, y solo donde se declara', () => {
     /* Y **cuantas son**, que es lo que convierte el bucle en una comprobacion.
        Sin esta cifra, meter media docena de opciones en cualquiera de las dos
        listas las sacaria del bucle sin que nada lo dijera: el recorrido pasaria
-       igual, con menos vueltas. 134 − 6 − 12. */
-    expect(intactas).toBe(116);
-    expect(VOCABULARIO_UNIFORME.size).toBe(6);
+       igual, con menos vueltas. 134 − 9 − 12. */
+    expect(intactas).toBe(113);
+    // Seis de catastro y **tres de rentas** desde #442: las tres lecturas del
+    // padron, que son el mismo caso que las cuatro fichas catastrales.
+    expect(VOCABULARIO_UNIFORME.size).toBe(9);
     expect(Object.keys(LA_QUE_ESCRIBE).length).toBe(12);
     // Y las seis que si lo declaran existen de verdad en el catalogo: sin
     // esto, un identificador mal escrito dejaria la regla sin aplicarse a nada
@@ -613,21 +624,35 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
   });
 
   /**
-   * **El renderizador comun no compone ninguna barra del vocabulario uniforme.**
+   * **Ninguna barra del vocabulario uniforme pierde un alta en silencio.**
    *
-   * `Pantalla.tsx` llama a `accionesDeLaBarra` **sin** los rotulos de las altas,
-   * y eso solo es correcto mientras las seis opciones que declaran el vocabulario
-   * tengan componente propio: ese argumento decide si un «Nuevo» se queda en la
-   * barra o se cae, y solo lo lee esa rama. Pasarlo «por si acaso» seria codigo
-   * que nunca se ejecuta; no pasarlo sin esta prueba seria una suposicion que se
-   * rompe en silencio —la barra perderia su alta y nadie sabria por que—.
+   * `Pantalla.tsx` llama a `accionesDeLaBarra` **sin** los rotulos de las altas.
+   * Ese argumento decide si un «Nuevo» se queda en la barra o se cae, asi que no
+   * pasarlo solo es correcto para una opcion **que no tenga ninguna alta que
+   * perder**. Hay dos formas de estarlo, y las dos valen:
+   *
+   *   con componente propio   lo pasa el, desde su propia composicion. Es el caso
+   *                           de las seis de catastro
+   *   sin ninguna alta        no hay nada que pasar. Es el caso de las tres
+   *                           lecturas del padron de rentas (#442): su catalogo
+   *                           dibuja «Nuevo», ninguna declara el formulario que
+   *                           abriria, y por eso ese boton **debe** caerse — que
+   *                           es exactamente lo que #321 cerro para el catalogo
+   *                           vial
+   *
+   * Antes esto exigia componente propio a secas, que era mas estrecho que lo que
+   * de verdad protege: dejaba fuera al caso en que no hay alta ninguna. Lo que no
+   * puede pasar —y es lo que sigue vigilandose— es que una opcion con alta
+   * declarada la dibuje el renderizador comun: ahi el «Nuevo» desapareceria sin
+   * que nadie supiera por que.
    */
-  it('las seis del vocabulario uniforme tienen componente propio', () => {
+  it('ninguna del vocabulario uniforme pierde un alta por el camino comun', () => {
     for (const opcion of VOCABULARIO_UNIFORME) {
+      if (Object.hasOwn(COMPONENTES_PROPIOS, opcion)) continue;
       expect(
-        Object.hasOwn(COMPONENTES_PROPIOS, opcion),
-        `«${opcion}» declara el vocabulario uniforme y la dibuja el renderizador comun`,
-      ).toBe(true);
+        altasDe(opcion),
+        `«${opcion}» declara un alta y la dibuja el renderizador comun, que no la pasa`,
+      ).toEqual([]);
     }
   });
 
@@ -742,7 +767,10 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
   it.each([
     {
       caso: 'operacion de lectura',
-      ruta: '/rentas-registro/contribuyentes',
+      // Era «Contribuyentes» hasta #442, que le quito el «Guardar» de un `GET`
+      // y con el la franja: su barra ya solo imprime. «Arbitrios municipales»
+      // sigue siendo el caso —un `GET` cuya primaria promete emitir cuponera—.
+      ruta: '/rentas-registro/arbitrios',
       causa: 'sin-backend',
     },
     {
@@ -792,7 +820,7 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
    */
   it.each([
     { caso: 'sin-determinacion', ruta: '/rentas-registro/predial-individual' },
-    { caso: 'sin-backend', ruta: '/rentas-registro/contribuyentes' },
+    { caso: 'sin-backend', ruta: '/rentas-registro/arbitrios' },
     { caso: 'sin-declaracion', ruta: '/rentas-registro/vehicular-calculo' },
   ])('$caso: los secundarios no repiten un motivo que ya no es cierto', async ({ ruta }) => {
     const montada = montarEnRuta(ruta);

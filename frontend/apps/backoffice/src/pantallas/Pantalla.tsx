@@ -1053,6 +1053,15 @@ function Bloques({
       {estructura.acciones && (
         <BarraDeAcciones
           acciones={barra.acciones}
+          /* **Y si ninguna de las que quedan escribe, ninguna es la primaria**
+             (#391 §2, #442). Hasta ahora esto solo lo pasaba
+             `catastro/FichaDelPredio`, asi que el camino comun aplicaba media
+             regla: usaba la lista depurada y seguia pintando de navy la ultima,
+             que en una pantalla de consulta es «Imprimir». Es el defecto que la
+             regla existe para cerrar —«quien atiende aprende que el navy es el
+             acto de la pantalla, y en cuatro fichas de consulta el navy
+             imprimia»—, y se colaba por aqui. */
+          {...(barra.conPrimaria ? {} : { sinPrimaria: true as const })}
           escritura={escritura}
           /* Las acciones que el prototipo dibuja y que ahora abren un alta.
              **Solo con privilegio de registro**: sin el se quedan como estaban,
