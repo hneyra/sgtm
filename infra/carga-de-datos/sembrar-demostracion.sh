@@ -2,7 +2,7 @@
 # Siembra ENTERA de la municipalidad de demostracion: los nueve pasos, en el unico orden en
 # que se pueden dar.
 #
-# No hace nada que los ocho guiones no hagan por separado; lo que aporta es el ORDEN, que no
+# No hace nada que los nueve guiones no hagan por separado; lo que aporta es el ORDEN, que no
 # es documentacion sino dependencia real: cada archivo nombra por codigo algo que otro tuvo
 # que escribir antes, y la fila que nombre algo inexistente se rechaza. Ejecutados sueltos y
 # en desorden, el resultado no es un error ruidoso: es una carga que dice "0 nuevas, N

@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
  * para calcular lo asignable. Escribir `cpu=1` en las dos no reserva 1 CPU: reserva 2.
  *
  * Esto no es una hipotesis. Es lo que le paso al nodo de `prod` el 2026-08-23, y esta
- * medido en `INF-02` §4: «CPU 4 → asignable 2; memoria 8 126 500 Ki → asignable
+ * medido en `INF-10` §4: «CPU 4 → asignable 2; memoria 8 126 500 Ki → asignable
  * 6 029 348 Ki. La diferencia es 2 097 152 Ki = 2 Gi exactos, y 2 CPU». `INF-01` §2
  * dimensiona ~1 CPU y ~1 GB; el nodo perdio el doble, se quedo con **2 de sus 4 CPU
  * repartibles**, y desde ese dia no pudo ubicar su propio stack: `aplicar-prod` se
@@ -91,7 +91,7 @@ function sumaDe(config: string): { cpuEnMili: number; memoriaEnMi: number } {
   );
 }
 
-/** El nodo de `prod` (`INF-02` §4): 4 CPU y 8 126 500 Ki de capacidad. */
+/** El nodo de `prod` (`INF-10` §4): 4 CPU y 8 126 500 Ki de capacidad. */
 const CAPACIDAD_DE_PROD = { cpuEnMili: 4000, memoriaEnMi: 8126500 / 1024 };
 
 describe("la reserva del nodo suma lo dimensionado, no el doble", () => {
@@ -116,7 +116,7 @@ describe("la reserva del nodo suma lo dimensionado, no el doble", () => {
     // habia llevado.
     expect(CAPACIDAD_DE_PROD.cpuEnMili - suma.cpuEnMili).toBe(3000);
 
-    // Y lo que NO cambia. La memoria asignable sigue siendo la medida en `INF-02` §4
+    // Y lo que NO cambia. La memoria asignable sigue siendo la medida en `INF-10` §4
     // —6 029 348 Ki, ~5,75 Gi, los «6 GB libres» del nodo—: es el presupuesto con que
     // `Pulumi.prod.yaml` dimensiona el stack, y bajar esta reserva lo habria inflado
     // con memoria que el sistema ya esta usando.

@@ -59,7 +59,7 @@ CONFIG="${SGTM_CONFIG_K3S:-/etc/rancher/k3s/config.yaml}"
 # asignable, asi que poner `cpu=1` en las dos no reserva 1 CPU: reserva 2.
 #
 # Eso es exactamente lo que paso el 2026-08-23 en `vmd120205`, y esta medido en
-# `INF-02` §4: «CPU 4 → asignable 2; memoria 8 126 500 Ki → asignable 6 029 348 Ki. La
+# `INF-10` §4: «CPU 4 → asignable 2; memoria 8 126 500 Ki → asignable 6 029 348 Ki. La
 # diferencia es 2 097 152 Ki = 2 Gi exactos, y 2 CPU» —el doble de los «~1 CPU y ~1 GB»
 # que `INF-01` §2 dimensiona—. El nodo de `prod` perdio asi la MITAD de su CPU
 # repartible, y con ella la posibilidad de desplegar su propio stack: `pulumi up` se

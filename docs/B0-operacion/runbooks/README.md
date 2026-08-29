@@ -53,11 +53,13 @@ petición cruzada.
 
 ## Estado del ensayo, honesto
 
-**El runbook de reconstrucción no está ensayado.** Ensayarlo — la única forma de que un
-RTO deje de ser una aspiración — exige un VPS real, y hoy no existe ninguno: los cinco
-pasos de [`infra/README.md` §«Cómo llegar a un VPS real»](../../../infra/README.md#cómo-llegar-a-un-vps-real)
-siguen sin darse, bloqueados por que D-01 (municipalidad piloto) sigue abierta
-([`decisiones-abiertas.md`](../../00-gobierno/decisiones-abiertas.md)). Cada runbook dice,
+**El runbook de reconstrucción no está ensayado entero.** Los dos VPS —`stg` y `prod`—
+ya existen, con los cinco pasos de
+[`infra/README.md` §«Cómo llegar a un VPS real»](../../../infra/README.md#cómo-llegar-a-un-vps-real)
+dados (`INF-03` §4), y su clúster **y su restauración PITR** ya se reconstruyeron una
+vez (2026-08-24, 359 s medidos). Lo que falta es el ensayo completo —reaprovisionar el
+VPS mismo desde cero y cronometrarlo con volumetría real—, que es la única forma de que
+el RTO deje de ser una aspiración (issue #158). Cada runbook dice,
 en su propia sección de estado, qué parte de su procedimiento **sí** se ejecuta hoy
 contra un sistema real — y cuál no, y por qué. Escribir el procedimiento y marcarlo como
 ensayado sin haberlo corrido sería exactamente el precedente del SRTM que este issue

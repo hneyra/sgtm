@@ -3,8 +3,8 @@
 | Campo | Valor |
 |---|---|
 | Cuándo | Trimestral (`sgtm_app`: semestral, ver inventario), o de inmediato tras un incidente |
-| Roles que cubre | `sgtm-app`, `sgtm-owner`, `keycloak-base` — el administrador de Keycloak y el superusuario son procedimientos aparte, ver «Si no sale bien» |
-| Estado del ensayo | **La mecánica de PostgreSQL está ensayada contra un motor real**, en CI. El camino completo por `kubectl exec`/`kubectl patch`/`kubectl rollout restart` contra un clúster real no lo está — ver «Estado del ensayo» |
+| Roles que cubre | `sgtm-app`, `sgtm-owner`, `keycloak-base`, `sgtm-respaldo`, `sgtm-monitor`, `postgres-carga` — el administrador de Keycloak, el superusuario, la clave de cifrado del respaldo y el administrador de Grafana son procedimientos aparte, ver «Si no sale bien» |
+| Estado del ensayo | **La mecánica de PostgreSQL está ensayada contra un motor real**, con un guion que se corre a mano. El camino completo por `kubectl exec`/`kubectl patch`/`kubectl rollout restart` contra un clúster real no lo está — ver «Estado del ensayo» |
 
 ## Síntoma
 
@@ -14,9 +14,10 @@ incidente donde una clave pudo quedar expuesta.
 
 ## Precondiciones
 
-1. **El rol es uno de los tres que `rotar-clave.sh` acepta**: `sgtm-app`, `sgtm-owner`,
-   `keycloak-base`. Si es el administrador de Keycloak o el superusuario de PostgreSQL,
-   este no es el runbook — ver «Si no sale bien».
+1. **El rol es uno de los seis que `rotar-clave.sh` acepta**: `sgtm-app`, `sgtm-owner`,
+   `keycloak-base`, `sgtm-respaldo`, `sgtm-monitor`, `postgres-carga`. Si es el
+   administrador de Keycloak o el superusuario de PostgreSQL, este no es el runbook —
+   ver «Si no sale bien».
 2. Acceso `kubectl` al ambiente, con permiso para `exec` sobre el pod de PostgreSQL y
    `patch` sobre el `Secret`.
 3. **No hace falta ventana de mantenimiento.** `ALTER ROLE ... PASSWORD` no cierra
@@ -96,8 +97,9 @@ confirmar en un registro que algo cambió.
 
 **Ensayado, contra un motor real:** `infra/secretos/verificar-rotacion.sh` abre una
 sesión como `sgtm_app`, rota la clave, y comprueba las tres cosas de arriba —contra un
-PostgreSQL real, local o en CI, usando los mismos guiones de inicialización que
-`verificar-el-motor.sh` (`INF-06` §3.1). Es lo que demuestra que `ALTER ROLE` no cierra
+PostgreSQL real, corrido a mano (ningún workflow lo invoca todavía), usando los mismos
+guiones de inicialización que `verificar-el-motor.sh`, el del trabajo `motor` de CI
+(`INF-06` §3.1). Es lo que demuestra que `ALTER ROLE` no cierra
 sesiones abiertas, que es el hecho que sostiene todo este runbook.
 
 **Lo que no está ensayado:** el camino completo por `kubectl exec` + `kubectl patch` +
