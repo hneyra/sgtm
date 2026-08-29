@@ -1,7 +1,22 @@
 import { Link, useParams } from 'react-router-dom';
 import { Aviso, Icono, IconoDeModulo } from '@sgtm/design-system';
 import { bloquesDe, rutaDeOpcion } from '../catalogo';
+import type { BloqueDeNavegacion } from '../catalogo';
 import { useCatalogoVisible } from '../app/sesion/useCatalogoVisible';
+
+/**
+ * Que dice la fila de un bloque plegado, que es lo unico que distingue los dos
+ * pliegues en toda la navegacion (ADR-0014 §5).
+ *
+ * **Con carril**, la frase describe el centro de reportes: se elige la hoja a la
+ * izquierda y se emite a la derecha. **Sin carril**, describe lo que de verdad
+ * hay —una sola pantalla con sus pestanas o su conmutador—, y decir lo del
+ * carril ahi seria prometer una lista que esa pantalla no dibuja.
+ */
+const descripcionDelPliegue = (bloque: BloqueDeNavegacion): string =>
+  bloque.carril
+    ? `${bloque.opciones.length} hojas en una pantalla: se elige la hoja a la izquierda y se emite a la derecha.`
+    : `${bloque.opciones.length} opciones en una sola pantalla: se pasa de una a otra sin volver al menú.`;
 
 /** Lo que cabe de la descripcion en una fila del hub, segun el prototipo. */
 const RECORTE = 108;
@@ -52,10 +67,10 @@ export function HubDeModulo() {
 
       <div className="sgtm-hub__rejilla">
         {bloques.map((bloque) => {
-          // Un bloque plegado ensena **una** fila —la que abre el centro de
-          // reportes— con el conteo de las hojas que hay dentro (ADR-0014 §5).
-          // La primera visible es la que abre, igual que en la barra lateral:
-          // no hay ruta de centro, y por tanto no hay permiso que inventar.
+          // Un bloque plegado ensena **una** fila —la que abre su superficie—
+          // con el conteo de las opciones que hay dentro (ADR-0014 §5). La
+          // primera visible es la que abre, igual que en la barra lateral: no
+          // hay ruta del pliegue, y por tanto no hay permiso que inventar.
           const filas = bloque.plegado ? bloque.opciones.slice(0, 1) : bloque.opciones;
           return (
             <section key={bloque.label} className="sgtm-tarjeta">
@@ -75,9 +90,7 @@ export function HubDeModulo() {
                         {bloque.plegado ? bloque.label : opcion.label}
                       </span>
                       <span className="sgtm-hub__fila-desc">
-                        {bloque.plegado
-                          ? `${bloque.opciones.length} hojas en una pantalla: se elige la hoja a la izquierda y se emite a la derecha.`
-                          : recortar(opcion.resumen)}
+                        {bloque.plegado ? descripcionDelPliegue(bloque) : recortar(opcion.resumen)}
                       </span>
                     </span>
                     <Icono nombre="chevronDerecha" tamano={14} />

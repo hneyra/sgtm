@@ -23,23 +23,47 @@
  * anadir una opcion a un modulo tabulado obliga a decidir su grupo en este
  * mismo diff, y ninguna queda huerfana en silencio.
  *
- * Un grupo puede llevar un tercer elemento, `{ centro: true }`: entonces se
- * **pliega en un centro de reportes** (ADR-0014 §5). El menu deja de listar sus
- * opciones una a una y ensena una entrada unica; el centro las lista dentro.
- * Cada hoja conserva su id, su ruta y su permiso —el centro es composicion de
- * navegacion, no una pantalla que las absorba—, y por eso el pliegue se declara
- * **aqui**, en la tabla, y no como una lista de ids cableada en un componente.
- * Que Infracciones administrativas y Autorizaciones y licencias tengan hoy el
- * suyo, despues de que Transito estrenara el mecanismo, no costo mas que una
- * marca en esta tabla y una regeneracion: ni un componente nuevo, ni una lista
- * de ids en ningun `.tsx`.
+ * <h2>Cuando un grupo se pliega, y cuando ademas lleva carril</h2>
  *
- * Un modulo pliega en centro el grupo cuyas hojas **solo se emiten**: si el
+ * Un grupo puede llevar un tercer elemento con una marca de pliegue. **La regla
+ * son dos frases, y la segunda no implica la primera:**
+ *
+ * > Un grupo se pliega en el menu cuando **su superficie ya sabe navegar entre
+ * > sus opciones**. Si ademas sus opciones no tienen otra forma de alcanzarse
+ * > entre si, el pliegue lleva carril (`centro`). Lo primero puede darse varias
+ * > veces en un modulo; lo segundo, una sola —dos carriles serian dos formas de
+ * > navegar lo mismo—.
+ *
+ * De ahi salen las dos marcas:
+ *
+ *   `{ plegado: true }`   el menu deja de listar sus opciones una a una y
+ *                         ensena **una** entrada, que abre la primera que el
+ *                         usuario pueda ver. Nada mas: la pantalla se dibuja
+ *                         como se dibujaba. Se usa donde la superficie ya lleva
+ *                         a todas —el conmutador de modalidad de la ficha del
+ *                         predio, las pestanas del territorio y las del cuadro
+ *                         de valuacion—, y **plegar ahi no esconde nada**
+ *   `{ centro: true }`    pliega igual **y ademas** mete cada hoja en el carril
+ *                         del centro de reportes (ADR-0014 §5), que lista las
+ *                         demas a su izquierda. Es lo que hace falta cuando la
+ *                         superficie **no** existe: las trece hojas de Transito
+ *                         no tienen ninguna otra forma de alcanzarse entre si
+ *
+ * Las dos son excluyentes —`centro` ya pliega— y las dos se declaran **aqui**,
+ * en la tabla, no como una lista de ids cableada en un componente: cada opcion
+ * conserva su id, su ruta y su permiso, porque plegar es composicion de
+ * navegacion y no una pantalla que absorba a otras. Que Infracciones
+ * administrativas y Autorizaciones y licencias tengan hoy su centro, despues de
+ * que Transito estrenara el mecanismo, no costo mas que una marca en esta tabla
+ * y una regeneracion: ni un componente nuevo, ni una lista de ids en ningun
+ * `.tsx`.
+ *
+ * Un modulo pliega **en centro** el grupo cuyas hojas solo se emiten: si el
  * grupo mezclara operaciones con hojas, plegarlo esconderia trabajo detras de
- * una entrada que dice «Reportes». Por eso Catastro, Fiscalizacion, Consultas
- * y Coactiva no plegan ninguno —sus documentos son uno o dos, y una entrada que
- * abre un carril de dos hojas es mas navegacion, no menos— y Tesoreria ni
- * siquiera tiene grupo de documentos que plegar.
+ * una entrada que dice «Reportes». Por eso Fiscalizacion, Consultas y Coactiva
+ * no plegan ninguno —sus documentos son uno o dos, y una entrada que abre un
+ * carril de dos hojas es mas navegacion, no menos— y Tesoreria ni siquiera
+ * tiene grupo de documentos que plegar.
  *
  * Los nombres de las OPCIONES no se reescriben (RNF-080): cambia solo su grupo.
  */
@@ -145,6 +169,33 @@ export const GRUPOS_POR_TAREA = {
     // El orden dentro del grupo es el del trabajo, no el alfabetico: primero se
     // busca el predio, luego se abre su ficha en la modalidad que sea, y al
     // final se actualiza o se imprime.
+    //
+    /* **«Predio» NO se pliega, y no es un olvido** (#391 §5).
+     *
+     * `FichaDelPredio` lleva a cinco de sus siete —las cuatro modalidades por
+     * el conmutador y `actualizacion_catastro` por la primaria «Actualizar
+     * catastro»— y a `consulta_fichas` por el enlace de su buscador, que hoy
+     * solo se dibuja **sin predio abierto**, que es la decision de §3: con el
+     * predio en la ruta no hay barra de busqueda, porque volver a preguntarlo
+     * encima de la ficha que se esta leyendo era la sexta forma de buscar lo
+     * mismo.
+     *
+     * La septima **no la alcanza nada del modulo, y no puede**:
+     * `ficha_contribuyente_reporte` se abre por el codigo del CONTRIBUYENTE
+     * —`GET /catastro/contribuyentes/{codigo}/ficha.pdf`— y ninguna superficie
+     * de Catastro tiene ese codigo en la mano. `FichaResource` no lo publica
+     * (por eso el «Titular» de la cabecera-resumen sale «—») y
+     * `FichaEncontradaResource` publica el **nombre** del titular y no su
+     * codigo, que es exactamente lo que #322 ya decidio que no funda un enlace:
+     * «un enlace armado por nombre abre al homonimo o a nadie».
+     *
+     * Asi que plegar aqui esconderia detras de una entrada una opcion a la que
+     * esa entrada no lleva, y una opcion sin retorno es peor que un menu largo.
+     * Lo que lo desbloquea no es interfaz: que el recurso publique el codigo
+     * del titular —y entonces la ficha enlaza su reporte y el enlace a la
+     * consulta se dibuja tambien con predio abierto—, o que el reporte viva
+     * donde el contribuyente esta. Hasta entonces, las siete siguen en el menu.
+     */
     [
       'Predio',
       [
@@ -157,12 +208,17 @@ export const GRUPOS_POR_TAREA = {
         'ficha_contribuyente_reporte',
       ],
     ],
-    ['Territorio', ['calles', 'sectores']],
+    // Las dos hojas del territorio, plegadas **sin carril**: `Territorio.tsx`
+    // las dibuja como pestanas de una sola superficie, asi que un carril seria
+    // una segunda forma de navegar lo mismo al lado de la primera.
+    ['Territorio', ['calles', 'sectores'], { plegado: true }],
     // Los tres catalogos que ponen precio al territorio. No son «registro y
     // mantenimiento» como una calle: son la tabla con la que se valoriza. El
     // nombre pierde «Tablas de» porque ya no son tres tablas sueltas en el
-    // menu: son las tres hojas de un cuadro.
-    ['Valuación', ['aranceles', 'valores_unitarios', 'depreciacion']],
+    // menu: son las tres hojas de un cuadro. Y por eso mismo se pliegan:
+    // `CuadroDeValuacion.tsx` es la superficie, y sus pestanas llevan a las
+    // tres.
+    ['Valuación', ['aranceles', 'valores_unitarios', 'depreciacion'], { plegado: true }],
   ],
   fiscalizacion: [
     // La campana se programa y se decide a quien alcanza; recien despues se
@@ -315,12 +371,53 @@ export function nombresDeLosGrupos(moduloId, tabla = GRUPOS_POR_TAREA) {
 }
 
 /**
- * El grupo que este modulo pliega en un centro de reportes (ADR-0014 §5), o
- * `null` si no pliega ninguno.
+ * Los grupos que este modulo **pliega en el menu**, en el orden de la tabla;
+ * vacio si no pliega ninguno.
  *
- * Uno como mucho: dos centros en un modulo dejarian la barra lateral con dos
- * entradas homonimas —«Reportes» y «Reportes»— y ninguna forma de saber cual
- * abre cual, asi que se rechaza en el build en vez de dibujarse.
+ * Son los dos casos de la regla: los marcados `{ plegado: true }` y el que
+ * ademas lleva carril, `{ centro: true }`. Aqui no se distinguen, porque en el
+ * menu **se dibujan igual**: una entrada unica en vez de la lista de opciones.
+ * Quien si los distingue es `centroDeReportesDe`, que nombra al del carril.
+ *
+ * Un modulo puede plegar varios: Catastro pliega dos, y lo hace sin carril
+ * porque sus superficies ya navegan entre sus opciones.
+ *
+ * @param moduloId ranura del modulo, como `catastro`.
+ * @param tabla la tabla a aplicar; se inyecta para poder probar la guarda.
+ */
+export function bloquesPlegadosDe(moduloId, tabla = GRUPOS_POR_TAREA) {
+  const grupos = tabla[moduloId];
+  if (!grupos) return [];
+
+  const plegados = [];
+  for (const [nombre, , opciones] of grupos) {
+    // Las dos marcas juntas no dicen nada mas que `centro` sola, y dejarlas
+    // pasar invitaria a leer `plegado` como «pliega ademas», que es lo que no
+    // es: `centro` ya pliega. Se rechaza en el build para que la tabla tenga
+    // una sola forma de decir cada cosa.
+    if (opciones?.plegado === true && opciones?.centro === true) {
+      throw new Error(
+        `El grupo «${nombre}» de ${moduloId} se declara «plegado» y «centro» a la vez: «centro» ya pliega`,
+      );
+    }
+    if (opciones?.plegado === true || opciones?.centro === true) plegados.push(nombre);
+  }
+  return plegados;
+}
+
+/**
+ * El grupo que este modulo pliega **con carril** —su centro de reportes
+ * (ADR-0014 §5)—, o `null` si no pliega ninguno asi.
+ *
+ * Uno como mucho, y el motivo ya no es que dos entradas se llamaran igual —la
+ * barra lateral y el hub dibujan el nombre del bloque, asi que dos carriles
+ * darian dos entradas con nombres distintos—: es que **dos carriles serian dos
+ * formas de navegar lo mismo**. El carril existe para las hojas que no tienen
+ * ninguna otra; un modulo con dos listas de hojas al lado de la pantalla es un
+ * modulo que ya no sabe donde esta. Se rechaza en el build en vez de dibujarse.
+ *
+ * Plegar **sin** carril no cae bajo este limite: eso es `bloquesPlegadosDe`, y
+ * puede darse tantas veces como superficies tenga el modulo.
  *
  * @param moduloId ranura del modulo, como `transito`.
  * @param tabla la tabla a aplicar; se inyecta para poder probar la guarda.
@@ -329,10 +426,10 @@ export function centroDeReportesDe(moduloId, tabla = GRUPOS_POR_TAREA) {
   const grupos = tabla[moduloId];
   if (!grupos) return null;
 
-  const plegados = grupos.filter(([, , opciones]) => opciones?.centro === true);
-  if (plegados.length > 1) {
-    const nombres = plegados.map(([nombre]) => `«${nombre}»`).join(' y ');
+  const conCarril = grupos.filter(([, , opciones]) => opciones?.centro === true);
+  if (conCarril.length > 1) {
+    const nombres = conCarril.map(([nombre]) => `«${nombre}»`).join(' y ');
     throw new Error(`El modulo ${moduloId} pliega dos grupos en centro de reportes: ${nombres}`);
   }
-  return plegados[0]?.[0] ?? null;
+  return conCarril[0]?.[0] ?? null;
 }

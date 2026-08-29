@@ -10,7 +10,15 @@ export type ItemDelPrototipo = readonly [string, string];
 
 /** Lo que un grupo declara ademas de su nombre y sus opciones. */
 export interface OpcionesDeGrupo {
-  /** El grupo se pliega en un centro de reportes (ADR-0014 §5). */
+  /**
+   * El grupo se pliega en el menu: una entrada unica en vez de sus opciones,
+   * porque su superficie ya sabe navegar entre ellas. Sin carril.
+   */
+  readonly plegado?: boolean;
+  /**
+   * El grupo se pliega **y ademas** sus hojas van dentro del carril del centro
+   * de reportes (ADR-0014 §5). Excluyente con `plegado`: `centro` ya pliega.
+   */
   readonly centro?: boolean;
 }
 
@@ -32,5 +40,7 @@ export function asignacionPorTarea(
 ): Map<string, string> | null;
 
 export function nombresDeLosGrupos(moduloId: string, tabla?: TablaDeGrupos): readonly string[];
+
+export function bloquesPlegadosDe(moduloId: string, tabla?: TablaDeGrupos): readonly string[];
 
 export function centroDeReportesDe(moduloId: string, tabla?: TablaDeGrupos): string | null;
