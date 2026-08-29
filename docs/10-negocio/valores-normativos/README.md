@@ -86,13 +86,14 @@ reclamó otro archivo, pone esto en rojo.
 2. **Cómo entra al sistema.** El `tipo` y la `clave` de `parametro_tributario`, o la tabla
    específica. Es lo que convierte el documento en la fila del derivado de [`publicacion/`](publicacion/)
    que el proceso batch publica.
-3. **Qué no cabe hoy.** Donde se anota lo que el esquema todavía no puede guardar. Sigue habiendo
-   dos casos vivos, y los dos salieron de intentar la carga: a `depreciacion` le falta el **uso de
-   la edificación** —el Anexo I publica cuatro tablas— y al cuadro de valores unitarios le faltan la
-   segunda firma y las otras tres regiones (GOB-03, H-14 y H-15). Lo de confirmar sus cifras contra
-   el Anexo I.2 real ya se hizo, el 2026-08-28, y el cotejo cambió el cuadro entero: **la norma tiene
-   3 partidas, no las 7 que el archivo transcribía**. Una sección vacía se escribe «Nada», no se
-   borra: que esté vacía es información.
+3. **Qué no cabe hoy.** Donde se anota lo que el esquema todavía no puede guardar. Queda **un**
+   caso vivo: al cuadro de valores unitarios le faltan la segunda firma y las otras tres regiones
+   (GOB-03, H-14). Lo de confirmar sus cifras contra el Anexo I.2 real ya se hizo, el 2026-08-28, y
+   el cotejo cambió el cuadro entero: **la norma tiene 3 partidas, no las 7 que el archivo
+   transcribía**. El otro caso —a `depreciacion` le faltaba el **uso de la edificación**, y el
+   Anexo I publica cuatro tablas— se cerró el 2026-08-29 con `V57` (H-15), y **cargarlo de verdad
+   midió lo que se temía**: de las 492 filas del Anexo, sin el uso en la clave sobreviven 127.
+   Una sección vacía se escribe «Nada», no se borra: que esté vacía es información.
 
 ## El libro mayor
 

@@ -150,9 +150,10 @@ una tabla vacía no hay ninguna. `VALIDATE CONSTRAINT` después chocaría con lo
 | `V54__declaracion_jurada_correlativo_y_actos.sql` | La declaración jurada como acto: numeración con correlativo propio, unicidad de la rectificatoria y qué columnas puede tocar la aplicación (#365, ADR-0015 §3) |
 | `V55__tablas_de_valuacion_nacionales.sql` | Las tres tablas de valuación pasan a NACIONALES: `municipalidad_id` nulo, se cargan una vez para todas (D-13, ADR-0017, #188) |
 | `V56__determinacion_detalle_valuo_exonerado.sql` | El detalle por predio dice también qué parte del autovalúo **no** está afecta, para que la ponderación se reconstruya (#395) |
+| `V57__depreciacion_por_uso_de_la_edificacion.sql` | La tabla de depreciación son **cuatro** tablas, una por uso de la edificación: `uso` entra en la clave y «más de 50 años» entra sin tope (H-15, #188) |
 
 La numeración salta —no hay `V36`, `V38`, `V40`, `V42`, `V44`, `V46`, `V48`, `V50` ni `V52`— y no
-es un error: hoy, con `V56`, hay **47** migraciones, y la lista viva es el propio directorio
+es un error: hoy, con `V57`, hay **48** migraciones, y la lista viva es el propio directorio
 `backend/sgtm-esquema/src/main/resources/db/migration/`.
 
 Los roles se crean **antes**, con `db/roles/crear-roles.sql`, que no es una migración: las
@@ -181,7 +182,7 @@ clasificar:
 
 | Clase | Cuáles | RLS |
 |---|---|---|
-| **De tenant** | Todas las de negocio (hoy, con `V56`: 113): llevan `municipalidad_id NOT NULL` | Política con `USING` y `WITH CHECK` |
+| **De tenant** | Todas las de negocio (hoy, con `V57`: 113): llevan `municipalidad_id NOT NULL` | Política con `USING` y `WITH CHECK` |
 | **De catálogo** | Seis: `municipalidad`, `parametro_tributario`, `respaldo` (`V8`) y las tres de valuación nacionales de `V55` —`valor_unitario_edificacion`, `depreciacion`, `valor_referencial_vehiculo`—. La lista normativa es `TABLAS_DE_CATALOGO`, en el código de la prueba de aislamiento | Política propia, enumerada en el código de la prueba |
 | **Exenta** | `flyway_schema_history` | Sin RLS; desde `V21`, `sgtm_app` puede leerla |
 
@@ -381,9 +382,9 @@ esta resolución es el acto que la *asienta*: emitirla como valor exigiría que 
 antes del acto que la determina. Y mientras la liquidación siga saliendo sin importes (#198) ningún
 valor se podría emitir, y con él se caería también la mitad de la transferencia que **no** depende
 de las cifras: inscribir en catastro la estructura hallada. `D-02a` se cerró el 2026-08-25, pero lo
-que #198 sigue esperando son las dos tablas de valuación que todavía no se pueden cargar —el cuadro
-de valores unitarios y la depreciación, H-14 y H-15 de
-[GOB-03](../00-gobierno/plan-de-desbloqueo-D-02.md)— y el `% actualización` de `D-11`. Las dos
+que #198 sigue esperando es la tabla de valuación que todavía no se puede cargar —el cuadro de
+valores unitarios, H-14 de [GOB-03](../00-gobierno/plan-de-desbloqueo-D-02.md); la depreciación ya
+se carga desde `V57`— y el `% actualización` de `D-11`. Las dos
 cosas conviven: una vez asentado el cargo, `valores` lo formaliza como RD por el camino ordinario.
 
 `ficha_catastral` **no necesitó ni una columna**: `V1` ya la nació con `origen` —que admite

@@ -14,15 +14,21 @@ import pe.gob.sgtm.parametros.dominio.ParametroTributario;
  * <p>Declara <b>una edicion</b> y de donde salen sus filas. Las once columnas son:
  *
  * <pre>
- * cuadro,tipo,clave,vigencia_desde,vigencia_hasta,documento_fuente,
- * archivo_de_filas,sha256,archivo_del_corpus,transcribio,verifico
+ * tipo,clave,vigencia_desde,vigencia_hasta,documento_fuente,
+ * archivo_de_filas,sha256,archivo_del_corpus,transcribio,verifico,cuadro
  * </pre>
  *
  * <p>Igual que en {@link FilaPublicable}, las <b>tres columnas de la llave</b> —{@code tipo},
- * {@code clave}, {@code vigencia_desde}— salen en el orden que lee {@code
+ * {@code clave}, {@code vigencia_desde}— van primero y en el orden que lee {@code
  * ImportarParametrosDelConjunto}, de modo que el mismo manifiesto sirve para publicar la edicion y
- * para componerla en un conjunto. Ahi la columna {@code cuadro} sobra y se ignora, como sobran las
- * demas.
+ * para componerla en un conjunto. Ahi las demas sobran y se ignoran.
+ *
+ * <p><b>Y {@code cuadro} va al final por eso mismo, no por gusto.</b> Estaba primero, y con el
+ * primero el paso que compone leia {@code tipo = VALOR_REFERENCIAL}, {@code clave =
+ * TABLA_VALORES_REFERENCIALES} y una fecha que decia «2026»: rechazaba la fila y sellaba el
+ * conjunto <b>sin la edicion dentro</b>, que es sellar el nombre del cuadro sin su contenido. Los
+ * consumidores leen por POSICION y no por cabecera —los tres de {@code parametros-2026.csv} y los
+ * tres de este—, y por eso {@code valor_maquina} tambien esta al final alli (#192).
  *
  * <p>Las dos firmas son las del corpus y viajan a {@code usuario_carga} y {@code usuario_aprueba},
  * donde {@code parametro_doble_verificacion_ck} exige que sean distintas. Quien corre el proceso no
@@ -39,21 +45,30 @@ record FilaDelManifiesto(
 
     static final int COLUMNAS = 11;
 
-    /**
-     * El unico cuadro que este proceso sabe publicar hoy, y por que solo uno.
-     *
-     * <p>{@code VALOR_UNITARIO} y {@code DEPRECIACION} <b>no</b> estan, y no es que falte escribir
-     * el codigo: es que sus dos tablas todavia no pueden recibir su cuadro sin perder una
-     * dimension. El de valores unitarios se publica por region —Costa, Lima/Callao, Sierra y
-     * Selva—, y ademas su archivo del corpus dice de si mismo que sus cifras no estan cotejadas
-     * contra el Anexo I.2 de la RM. El de depreciacion son cuatro tablas, una por uso de la
-     * edificacion, y {@code depreciacion} no tiene columna de uso: cargarlas hoy seria colapsar
-     * cuatro tablas de la norma en una y dejar que la unicidad decida cual sobrevive.
-     *
-     * <p>Por eso el manifiesto que las nombre se rechaza nombrando el motivo, en vez de publicar un
-     * cuadro incompleto que nadie distinguiria de uno completo.
-     */
+    /** La tabla de valores referenciales de vehiculos del MEF (R.M. anual EF/15). */
     static final String VEHICULAR = "VALOR_REFERENCIAL";
+
+    /** Las cuatro tablas del Anexo I del Reglamento Nacional de Tasaciones (V57, H-15). */
+    static final String DEPRECIACION = "DEPRECIACION";
+
+    /**
+     * Los cuadros que este proceso sabe publicar hoy, y por que falta el tercero.
+     *
+     * <p>{@code VALOR_UNITARIO} <b>no</b> esta, y no es que falte escribir el codigo: la R.M. anual
+     * del MVCS publica <b>un cuadro por region</b> —Costa, Lima/Callao, Sierra y Selva— y {@code
+     * valores-unitarios-2026.md} solo trae Costa; ademas volvio a {@code TRANSCRITO} el 2026-08-28,
+     * cuando el cotejo contra el Anexo I.2 real devolvio tres partidas donde se habian transcrito
+     * siete. Le falta la segunda firma de ADR-0007 y le faltan tres regiones (GOB-03, H-14).
+     *
+     * <p>{@code DEPRECIACION} si esta desde V57, y hasta entonces estuvo fuera por lo mismo que
+     * ahora deja de estarlo: {@code depreciacion} no tenia columna de uso, y el Anexo I publica
+     * cuatro tablas —una por uso de la edificacion—, de modo que cargarlas habria dejado que la
+     * unicidad se quedara con la primera y descartara tres en silencio.
+     *
+     * <p>Por eso el manifiesto que nombre un cuadro que no este aqui se rechaza <b>nombrando el
+     * motivo</b>, en vez de publicar un cuadro incompleto que nadie distinguiria de uno completo.
+     */
+    static final List<String> CUADROS = List.of(DEPRECIACION, VEHICULAR);
 
     LlaveDeParametro llave() {
         return new LlaveDeParametro(
@@ -85,22 +100,22 @@ record FilaDelManifiesto(
                             + campos.size()
                             + " columna(s) y hacen falta "
                             + COLUMNAS
-                            + ": cuadro, tipo, clave, vigencia_desde, vigencia_hasta,"
+                            + ": tipo, clave, vigencia_desde, vigencia_hasta,"
                             + " documento_fuente, archivo_de_filas, sha256, archivo_del_corpus,"
-                            + " transcribio, verifico");
+                            + " transcribio, verifico, cuadro");
         }
-        String cuadro = campos.get(0).strip();
-        if (!VEHICULAR.equals(cuadro)) {
+        String cuadro = campos.get(10).strip();
+        if (!CUADROS.contains(cuadro)) {
             throw new IllegalArgumentException(
                     "«"
                             + cuadro
-                            + "» no es un cuadro que este proceso sepa publicar todavia. El unico"
-                            + " es "
-                            + VEHICULAR
-                            + ": ver FilaDelManifiesto.VEHICULAR para que falta en los otros dos");
+                            + "» no es un cuadro que este proceso sepa publicar todavia. Los que"
+                            + " si son "
+                            + String.join(", ", CUADROS)
+                            + ": ver FilaDelManifiesto.CUADROS para que le falta al que no esta");
         }
-        String transcribio = campos.get(9).strip();
-        String verifico = campos.get(10).strip();
+        String transcribio = campos.get(8).strip();
+        String verifico = campos.get(9).strip();
         if (transcribio.isEmpty() || verifico.isEmpty()) {
             throw new IllegalArgumentException(
                     "Faltan las dos firmas del corpus: una edicion normativa la lee quien la"
@@ -113,14 +128,14 @@ record FilaDelManifiesto(
                             + "»): releerse a uno mismo no es verificar (RNF-092). La base lo"
                             + " rechaza igual con parametro_doble_verificacion_ck");
         }
-        String sha256 = campos.get(7).strip();
+        String sha256 = campos.get(6).strip();
         if (!sha256.matches("[0-9a-f]{64}")) {
             throw new IllegalArgumentException(
                     "«" + sha256 + "» no es un sha256 en minusculas de 64 digitos hexadecimales");
         }
-        String archivoDeFilas = obligatorio(campos.get(6), "archivo_de_filas");
-        String archivoDelCorpus = obligatorio(campos.get(8), "archivo_del_corpus");
-        String documentoFuente = obligatorio(campos.get(5), "documento_fuente");
+        String archivoDeFilas = obligatorio(campos.get(5), "archivo_de_filas");
+        String archivoDelCorpus = obligatorio(campos.get(7), "archivo_del_corpus");
+        String documentoFuente = obligatorio(campos.get(4), "documento_fuente");
 
         // La cabecera de una edicion no tiene valor numerico —lo tienen sus miles de filas— y
         // `parametro_valor_ck` (V1) exige uno de los dos. El valor de texto es la norma que
@@ -129,13 +144,13 @@ record FilaDelManifiesto(
         ParametroTributario cabecera =
                 new ParametroTributario(
                         null,
-                        obligatorio(campos.get(1), "tipo"),
-                        vacioEsNulo(campos.get(2)),
+                        obligatorio(campos.get(0), "tipo"),
+                        vacioEsNulo(campos.get(1)),
                         null,
                         documentoFuente,
                         new Vigencia(
-                                fecha(campos.get(3), "vigencia_desde"),
-                                fechaOpcional(campos.get(4))),
+                                fecha(campos.get(2), "vigencia_desde"),
+                                fechaOpcional(campos.get(3))),
                         documentoFuente);
 
         return new FilaDelManifiesto(

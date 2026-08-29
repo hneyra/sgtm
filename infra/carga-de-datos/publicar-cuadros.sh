@@ -184,8 +184,23 @@ FILAS_SHA=()
 HAY_FILAS_S3=no
 
 indiceLocal=0
-while IFS=, read -r _cuadro _tipo _clave _desde _hasta _fuente relativa sha _resto; do
+# Se lee por POSICION, como el resto de los consumidores del manifiesto, y por eso `cuadro`
+# esta al final: las tres primeras columnas son las de la llave y las lee tambien el paso que
+# compone la edicion en el conjunto.
+while IFS=, read -r _tipo _clave _desde _hasta fuente relativa sha _resto; do
     [ -n "$relativa" ] || continue
+
+    # `read` con IFS=, no entiende un campo entre comillas: una coma dentro de
+    # `documento_fuente` correria las columnas y este guion montaria el archivo equivocado
+    # sin decir nada. Se para nombrandolo, que es lo unico honesto que puede hacer aqui.
+    case "$fuente$relativa$sha" in
+        *'"'*)
+            echo "El manifiesto trae un campo entre comillas y este guion lee por comas:" \
+                 "'$fuente'. Un documento_fuente con coma corre las columnas en silencio." \
+                 "Escribalo sin comas, o cambie los tres consumidores a la vez." >&2
+            exit 1
+            ;;
+    esac
 
     case "$relativa" in
         ../*) destino=${relativa#../} ;;

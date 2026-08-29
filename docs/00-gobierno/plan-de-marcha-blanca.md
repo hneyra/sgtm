@@ -118,10 +118,11 @@ distintos**, y estado. Y ya no es solo papel: `PublicarParametros` publica los v
 ([#247](https://github.com/hneyra/sgtm/issues/247) §2) abre, compone y sella.
 
 **Lo que sigue en paralelo es lo que quedó detrás de la firma**, y es trabajo, no decisión: la
-segunda firma del cuadro de valores unitarios y las tres regiones que le faltan (H-14), la dimensión
-de uso de la tabla de depreciación (H-15) —`PublicarCuadros` la rechaza a propósito, para que no se
-cargue una de las cuatro y se descarten tres en silencio— y el `% actualización` de D-11, el único
-de los cuatro factores que sigue sin fuente identificada.
+segunda firma del cuadro de valores unitarios y las tres regiones que le faltan (H-14)
+—`PublicarCuadros` lo rechaza a propósito, nombrando el motivo, en vez de publicar un cuadro
+incompleto que nadie distinguiría de uno completo— y el `% actualización` de D-11, el único de los
+cuatro factores que sigue sin fuente identificada. **La tabla de depreciación salió de esa lista el
+2026-08-29**: `V57` le dio su dimensión de uso y sus cuatro tablas ya se publican (H-15).
 
 El PR 13 sirve exactamente a eso: el corpus corre con un conjunto de parámetros vacío y recoge los
 `ParametroAusente`, así que **el inventario de lo que falta deja de escribirse a mano**.
@@ -131,10 +132,9 @@ El PR 13 sirve exactamente a eso: el corpus corre con un conjunto de parámetros
 Conviene que esté escrito antes, y no descubrirlo el día de la demostración:
 
 - **No determinará importes correctos**, y no es un defecto del código. D-02a está cerrada, pero
-  **ningún conjunto del ejercicio está sellado con cifras reales**: faltan dos de los tres cuadros
-  —valores unitarios (H-14) y depreciación (H-15) de
-  [GOB-03](plan-de-desbloqueo-D-02.md)— y el `% actualización` de D-11, que multiplica sobre
-  importes y por eso omitirlo **no es neutro**. Mientras tanto el sistema calcula con parámetros de
+  **ningún conjunto del ejercicio está sellado con cifras reales**: falta uno de los tres cuadros
+  —los valores unitarios (H-14) de [GOB-03](plan-de-desbloqueo-D-02.md)— y el `% actualización` de
+  D-11, que multiplica sobre importes y por eso omitirlo **no es neutro**. Mientras tanto el sistema calcula con parámetros de
   prueba. Por eso [#122](https://github.com/hneyra/sgtm/issues/122).
 - **No cobrará**, y esto ya es solo una decisión de alcance. Cuando se escribió el plan, caja,
   recibos y cierre de caja (#33, #34, #36) y la emisión de valores (#37, #38) no existían; **hoy

@@ -2,6 +2,7 @@ package pe.gob.sgtm.catastro.aplicacion;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -222,10 +223,25 @@ class TablasDeValuacionTest {
 
         List<Depreciacion> depreciaciones =
                 transacciones.execute(estado -> repositorio.depreciacionesDe(conjunto));
+        // El uso viaja: sin el, las dos primeras filas —la misma combinacion en dos tablas del
+        // Anexo I con porcentajes distintos— serian indistinguibles al leerlas (H-15, V57).
         assertThat(depreciaciones)
+                .extracting(
+                        Depreciacion::uso, Depreciacion::material, Depreciacion::antiguedadHasta)
+                .containsExactly(
+                        tuple("01", "CONCRETO", 10),
+                        tuple("01", "CONCRETO", null),
+                        tuple("03", "CONCRETO", 10));
+        assertThat(depreciaciones)
+                .filteredOn(Depreciacion::sinTope)
                 .singleElement()
-                .extracting(Depreciacion::material)
-                .isEqualTo("CONCRETO");
+                .satisfies(
+                        fila ->
+                                assertThat(fila.antiguedadHasta())
+                                        .as(
+                                                "«mas de 50 anios» llega sin tope; leido con getInt"
+                                                        + " seria un tramo «hasta 0» que no cubre nada")
+                                        .isNull());
     }
 
     @Test
@@ -349,17 +365,34 @@ class TablasDeValuacionTest {
         }
     }
 
+    /**
+     * Dos filas: la misma combinacion de material, estado y antiguedad en dos tablas del Anexo I, y
+     * una tercera en el tramo abierto. Es la forma que el cuadro tiene de verdad desde V57 (H-15):
+     * con una sola fila, leer mal el uso pasaria desapercibido.
+     */
     private static void agregarDepreciacion(long edicion) throws SQLException {
         try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS);
                 PreparedStatement sentencia =
                         carga.prepareStatement(
-                                "INSERT INTO depreciacion (publicacion_id, material,"
+                                "INSERT INTO depreciacion (publicacion_id, uso, material,"
                                         + " estado_conservacion, antiguedad_hasta, porcentaje,"
                                         + " documento_fuente)"
-                                        + " VALUES (?, 'CONCRETO', 'BUENO', 10, 1.0000, 'tabla de la"
+                                        + " VALUES (?, ?, 'CONCRETO', 'BUENO', ?, ?, 'tabla de la"
                                         + " prueba, sin valor normativo')")) {
-            sentencia.setLong(1, edicion);
-            sentencia.executeUpdate();
+            for (String[] fila :
+                    new String[][] {
+                        {"01", "10", "1.0000"}, {"03", "10", "2.0000"}, {"01", null, "3.0000"}
+                    }) {
+                sentencia.setLong(1, edicion);
+                sentencia.setString(2, fila[0]);
+                if (fila[1] == null) {
+                    sentencia.setNull(3, java.sql.Types.SMALLINT);
+                } else {
+                    sentencia.setInt(3, Integer.parseInt(fila[1]));
+                }
+                sentencia.setBigDecimal(4, new java.math.BigDecimal(fila[2]));
+                sentencia.executeUpdate();
+            }
             carga.commit();
         }
     }
