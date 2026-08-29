@@ -6,12 +6,7 @@ import { OPCIONES_CONECTADAS } from '../conexiones';
 import { permisosDelClaim, puedeEscribir, puedeVer } from '@sgtm/sesion';
 import { montarEnRuta } from '../../pruebas/montar';
 import { SIN_DATO } from '../seguridad/listado';
-import {
-  motivoDeLaPrimaria,
-  primariaApagada,
-  primariaDeLaPantalla,
-  primariaEncendida,
-} from '../../pruebas/acciones';
+import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pruebas/acciones';
 
 /**
  * Rentas · Registro (#73): el modulo que mas escribe.
@@ -44,6 +39,10 @@ import {
  * controlador —que los lee del cuerpo—. Ninguna de las tres es una entrada
  * mas en la lista blanca: ver el doc de `rentas/index.ts`. Las demas esperan
  * a su backend.
+ *
+ * **Desde #385, `alcabala` y `espectaculos` cuentan ese motivo en pantalla**:
+ * las dos estan en `ACTOS_SIN_CAMPO`, y su franja gana a la primaria de
+ * impresion que hasta entonces las silenciaba.
  */
 
 /**
@@ -80,9 +79,13 @@ const LA_QUE_DETERMINA = 'predial-individual';
  * catalogo —que es la primaria (FRO-03 §5)— imprime. Contarle a quien atiende
  * que «registre el acto por el procedimiento actual» debajo de un boton de
  * imprimir es regañarle por algo que no estaba haciendo, y eso pasaba en 50 de
- * las 134 pantallas. La primaria sigue apagada; lo que se quita es la franja.
+ * las 134 pantallas. Pero estas dos **tienen** algo que contar, y hasta #385
+ * no lo contaban: el backend les exige un dato que la pantalla dibuja de solo
+ * lectura, y ese motivo —declarado en `ACTOS_SIN_CAMPO`— gana ahora al filtro
+ * de salida. El boton apagado con un `title` que nadie puede leer (RNF-082)
+ * pasa a ser una franja con `role="status"`.
  */
-const LAS_DE_SALIDA: readonly string[] = ['alcabala', 'espectaculos'];
+const LAS_DE_SALIDA_CON_MOTIVO: readonly string[] = ['alcabala', 'espectaculos'];
 
 /**
  * Y las cuatro que **si** declaran su lista blanca, y por tanto guardan de
@@ -145,17 +148,22 @@ describe('ningun acto del modulo promete lo que no puede', () => {
     montada.unmount();
   });
 
-  it.each(LAS_DE_SALIDA)(
-    '%s imprime: la primaria esta apagada y **sin** franja',
+  it.each(LAS_DE_SALIDA_CON_MOTIVO)(
+    '%s imprime, pero su franja cuenta el dato que falta (#385)',
     async (ranura) => {
       const montada = montarEnRuta(`/rentas-registro/${ranura}`);
       await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
 
-      // Apagada con `disabled`, no con `aria-disabled`: no hay ningun motivo que
-      // leer al lado, asi que tampoco hace falta que reciba el foco.
-      expect(primariaDeLaPantalla()).toBeDisabled();
-      expect(motivoDeLaPrimaria()).toBeUndefined();
-      expect(document.getElementById('sgtm-motivo-de-la-accion')?.textContent).toBe('');
+      // Apagada con `aria-disabled` y enfocable: hay un motivo que leer al lado.
+      primariaApagada();
+      // La franja nombra lo que falta —no la frase generica de las sin
+      // declarar— y la causa tecnica viaja en el `data-`.
+      expect(motivoDeLaPrimaria()).toMatch(/Falta un dato que esta pantalla no tiene dónde escribir/);
+      expect(motivoDeLaPrimaria()).not.toMatch(/Lo que se escriba aquí/);
+      expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
+        'data-causa',
+        'sin-campo',
+      );
 
       montada.unmount();
     },

@@ -170,8 +170,12 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // `transito_cambio_numero` llega desde `sin-declaracion`, porque su
       // primaria del catalogo («Salir») no pasa ningun filtro de salida.
       declarada: 15,
-      // Una menos que antes: `transito_valores` se muda a `declarada` (#77).
-      salida: 48,
+      // Dos menos que en la onda 4: `alcabala` y `espectaculos` se mudan a
+      // `sin-campo` (#385). Su primaria de impresion las dejaba aqui, con el
+      // boton apagado y el motivo real —los campos que el backend exige y la
+      // pantalla dibuja de solo lectura— silenciado; desde #385
+      // `ACTOS_SIN_CAMPO` gana a `DE_SALIDA` y la franja lo cuenta.
+      salida: 46,
       'sin-backend': 41,
       // Nueve se mudan a `sin-campo` en la onda 4: cuatro de transito (#77),
       // tres de fiscalizacion (#80) — mas las tres de tesoreria y las dos
@@ -179,8 +183,10 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // `declarada` con #77.
       'sin-declaracion': 19,
       'sin-determinacion': 1,
-      // Tesoreria (3, #74) + transito (4, #77) + fiscalizacion (3, #80).
-      'sin-campo': 10,
+      // Tesoreria (3, #74) + transito (4, #77) + fiscalizacion (3, #80) +
+      // las dos de rentas que #385 rescata de `salida` (`alcabala`,
+      // `espectaculos`).
+      'sin-campo': 12,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);
@@ -202,6 +208,15 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     // medio de pago —EFECTIVO/CHEQUE/DEPOSITO/TARJETA/TRANSFERENCIA—, un campo
     // distinto de «Forma de pago» (que en el backend es `tipoDePago`).
     expect(impedimentoDelActo('caja_tributaria', ['Cobrar'])?.causa).toBe('sin-campo');
+    // Y la misma causa **cuando la primaria es de salida** (#385): en
+    // `alcabala` la ultima accion del catalogo es «Imprimir liquidación», y
+    // hasta #385 ese filtro devolvia `undefined` antes de consultar
+    // `ACTOS_SIN_CAMPO` —el boton salia apagado con el motivo real silenciado—.
+    // Este testigo es el que se pone rojo si el orden se invierte de vuelta.
+    expect(
+      impedimentoDelActo('alcabala', ['Liquidar', 'Generar orden de pago', 'Imprimir liquidación'])
+        ?.causa,
+    ).toBe('sin-campo');
     // Y declarada: sin impedimento ninguno.
     expect(impedimentoDelActo('notificacion_valores', ['Registrar notificación'])).toBeUndefined();
     /* «Conciliar seleccionadas» de la consulta de fichas (#322, ADR-0015 §3):
@@ -263,10 +278,16 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
       ruta: '/rentas-registro/predial-masivo',
       causa: 'sin-declaracion',
     },
-    // La cuarta causa —`sin-campo`— no tiene hoy ninguna pantalla real que la
-    // muestre: se prueba a nivel de funcion, con una muestra, arriba. Las dos
-    // transferencias que la usaban tienen su propia bateria en
-    // `rentas/transferencias.test.tsx`, ya conectadas.
+    // La cuarta causa —`sin-campo`— tiene pantalla real desde #385: la
+    // alcabala declara los dos datos que el backend exige y ella dibuja de
+    // solo lectura, y la franja lo cuenta aunque su primaria sea de impresion.
+    // (Las dos transferencias que estrenaron la causa tienen su propia bateria
+    // en `rentas/transferencias.test.tsx`, ya conectadas.)
+    {
+      caso: 'acto con un dato que la pantalla no tiene donde escribir',
+      ruta: '/rentas-registro/alcabala',
+      causa: 'sin-campo',
+    },
   ])('$caso: la accion se queda apagada y la franja lo explica', async ({ ruta, causa }) => {
     const montada = montarEnRuta(ruta);
     await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());

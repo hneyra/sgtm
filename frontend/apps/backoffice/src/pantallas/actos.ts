@@ -263,6 +263,28 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
   },
 
   /**
+   * Alcabala y espectaculos publicos: el bloqueo doble que #73 documento y #385
+   * dejo registrado como deuda. Sus primarias del catalogo son de salida
+   * («Imprimir liquidacion»), asi que sin esta entrada la causa `DE_SALIDA`
+   * ganaba y el motivo real —la pantalla entera no puede escribir— no llegaba
+   * ni al teclado ni al lector (RNF-082). Desde #385, `ACTOS_SIN_CAMPO`
+   * gana a `DE_SALIDA` tambien aqui, y la franja del motivo se dibuja. El analisis
+   * campo a campo vive en `pantallas/rentas/index.ts`.
+   */
+  alcabala: {
+    dato: 'la transferencia ya registrada que la sustenta, y el autovaluo ajustado',
+    porque:
+      'Sin ellos la alcabala no se puede liquidar: el backend exige el identificador de una transferencia que ninguna lectura del contrato publica, y el autovaluo ajustado que esta pantalla dibuja de solo lectura.',
+    campos: ['transferenciaId', 'autoavaluoAjustado'],
+  },
+  espectaculos: {
+    dato: 'el organizador y el ingreso declarado del espectaculo',
+    porque:
+      'Sin ellos el impuesto no se puede registrar: el backend exige el ingreso como dato de entrada y esta pantalla lo dibuja de solo lectura, esperando un calculo de aforo por precio que el servidor no compone.',
+    campos: ['organizadorId', 'ingresoDeclarado'],
+  },
+
+  /**
    * Las tres escrituras de fiscalizacion (#45, #80): a las tres les falta un
    * dato para el que ninguna seccion del catalogo dibuja un campo editable.
    * Ver el javadoc de `pantallas/fiscalizacion/index.ts` para el analisis
@@ -323,10 +345,12 @@ export function impedimentoDelActo(
 ): ImpedimentoDelActo | undefined {
   if (escrituraDe(opcion) !== undefined) return undefined;
   const primaria = acciones[acciones.length - 1];
-  if (primaria !== undefined && DE_SALIDA.test(primaria.trim())) return undefined;
-  /* Antes que ninguna de las otras: es la unica declarada, y las otras dos que
-     podrian alcanzarla —`sin-declaracion` por el verbo del contrato— dirian algo
-     falso sobre la misma pantalla. Ver `ACTOS_SIN_CAMPO`. */
+  /* Antes incluso que `DE_SALIDA` (#385): una pantalla declarada aqui tiene un
+     motivo REAL que contar —no puede escribir lo que el backend exige—, y con
+     el orden anterior una primaria de salida («Imprimir liquidacion» en
+     alcabala y espectaculos) lo silenciaba: el boton salia `disabled` con un
+     `title` que un boton sin foco no puede leer en voz alta (RNF-082). La
+     entrada en `ACTOS_SIN_CAMPO` es deliberada y escasa; cuando existe, gana. */
   const sinCampo = actoSinCampo(opcion);
   if (sinCampo !== undefined) {
     return {
@@ -334,6 +358,7 @@ export function impedimentoDelActo(
       detalle: `Falta un dato que esta pantalla no tiene dónde escribir: ${sinCampo.dato}. ${sinCampo.porque} ${SALIDA}`,
     };
   }
+  if (primaria !== undefined && DE_SALIDA.test(primaria.trim())) return undefined;
   // Antes que el verbo del contrato: una primaria que pide una determinacion no
   // guarda campos, asi que ninguna de las otras dos causas la describe.
   if (primaria !== undefined && DE_CALCULO.test(primaria.trim())) {
