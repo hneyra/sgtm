@@ -91,7 +91,13 @@ public final class DerivadoPublicado {
         Map<String, String> publicados = numerosVigentesEn(ejercicio.valor());
         Map<String, String> elegidos = new LinkedHashMap<>();
         for (String llave : llaves) {
-            String normalizada = llave.contains(":") ? llave.replace(':', '|') : llave + "|";
+            // Solo el PRIMER dos puntos separa el tipo de la clave: la clave puede llevar los
+            // suyos, como `PLAZO:PRESCRIPCION-DECLARACION_PRESENTADA` lleva un guion.
+            int corte = llave.indexOf(':');
+            String normalizada =
+                    corte < 0
+                            ? llave + "|"
+                            : llave.substring(0, corte) + "|" + llave.substring(corte + 1);
             String valor = publicados.get(normalizada);
             if (valor == null) {
                 throw new IllegalArgumentException(

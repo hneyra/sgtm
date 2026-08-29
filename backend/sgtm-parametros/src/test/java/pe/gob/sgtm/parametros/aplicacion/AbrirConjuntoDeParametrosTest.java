@@ -202,9 +202,9 @@ class AbrirConjuntoDeParametrosTest {
             publicarFila("TABLA_VALORES_REFERENCIALES", "2026", LocalDate.of(2026, 1, 1));
             publicarFila("TABLA_DEPRECIACION", "ANEXO-I", LocalDate.of(2016, 7, 23));
 
-            proceso(datos(2036, 0, MANIFIESTO_DE_CUADROS.toString(), false)).run(null);
+            proceso(datos(2040, 0, MANIFIESTO_DE_CUADROS.toString(), false)).run(null);
 
-            long conjunto = ultimoConjuntoDe(2036);
+            long conjunto = ultimoConjuntoDe(2040);
             assertThat(parametrosDe(conjunto))
                     .as(
                             "el conjunto sella la EDICION del cuadro, no sus miles de filas: si el"

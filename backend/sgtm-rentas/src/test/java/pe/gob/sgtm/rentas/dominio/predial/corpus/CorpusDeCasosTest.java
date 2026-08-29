@@ -470,6 +470,10 @@ class CorpusDeCasosTest {
      * lo que otro caso dejo cargado— y declarar una que el corpus no respalda falla nombrandola.
      */
     private Dinero calcularConLoPublicado(CasoDelCorpus caso) {
+        // La rama de EJECUTABLE no la ejercita ningun caso todavia, y no es codigo muerto: es la
+        // que corre el dia que una regla del motor tenga su cifra. Hoy la unica registrada es
+        // RT-001, y su arancel lo fija la ordenanza de cada municipalidad (D-02b), asi que no esta
+        // en el derivado —y por eso su caso no puede llevar importe—.
         if (caso.estado().clase() == EstadoDelCaso.Clase.EJECUTABLE) {
             Corrida corrida = correrCon(caso, conjuntoDelCaso(caso), REDONDEO_DE_ADR_0018);
             Concepto ultimo =
