@@ -97,18 +97,29 @@ const DETERMINACION = { resumen: ResumenDeDeterminacion, resumenSiempre: true } 
  * no esta, y no por olvido: su operacion es un `GET`, asi que trae sus cifras al
  * abrir y no tiene nada que simular.
  *
- * `cuerpo` solo lo lleva el calculo vehicular, y es el unico caso en que se sabe
- * lo que el backend espera: `VehicularController.PeticionDeCalculoVehicular`
- * declara `simulacion` entre sus campos. Para las otras tres **no hay
- * controlador todavia**, asi que mandarles una marca inventada seria adivinar la
- * forma de una peticion que nadie ha escrito.
+ * **`cuerpo` es ahora lo que decide si la accion existe** (#395). Hasta que
+ * `PredialController` aparecio, la marca solo la declaraba el calculo vehicular
+ * —`VehicularController.PeticionDeCalculoVehicular` la lleva entre sus campos— y
+ * lo que hacia segura a las demas era una guarda de entorno: solo se simulaba
+ * mientras contestara el proxy de datos. Esa guarda se retiro, y lo que la
+ * sustituye es esta marca: `useSimulacion` **solo pide** la determinacion de la
+ * opcion cuyo cuerpo declara `simulacion: true`, que es lo unico que el backend
+ * entiende como «calcula y no asientes nada». Ver su docblock, que es donde vive
+ * la justificacion entera.
+ *
+ * De las cuatro, tres la llevan. `alcabala` no, y no por olvido:
+ * `AlcabalaController` no acepta ninguna marca —su `POST` **registra**—, asi que
+ * su «Liquidar» queda declarado y apagado. Su pantalla ya dice por que no puede
+ * liquidar (`ACTOS_SIN_CAMPO`, #385) y esta es la misma verdad dicha en el otro
+ * boton.
  *
  * Y el vehicular tiene ademas su propio desajuste, que **no se puentea aqui**:
  * su controlador lee `placa`, `codContribuyente` y `ejercicio` del **cuerpo**, y
  * el contrato los declara como parametros de **consulta** (#333c, anotado en
- * `rentas/index.ts`). Contra el backend de verdad los leeria nulos. Da igual
- * mientras esto solo simule contra el proxy —`useSimulacion` no deja hacer otra
- * cosa—, y es un motivo mas para que la guarda siga donde esta.
+ * `rentas/index.ts`). Contra el backend de verdad los leeria nulos y calcularia
+ * sobre lo que no se le pidio; lo unico que su marca garantiza es que no
+ * asiente nada mientras tanto. Corregirlo es corregir el contrato o el
+ * controlador, y eso no cabe en un issue de interfaz.
  */
 const simula = (accion: string, cuerpo?: Readonly<Record<string, boolean>>) =>
   ({
@@ -191,7 +202,7 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * sustituir. Con `true`, `seccionesDe` devuelve sus tres secciones tal cual.
    */
   predial_individual: {
-    ...simula('Simular'),
+    ...simula('Simular', { simulacion: true }),
     indice: true,
     indiceConLaTabla: true,
     /**
@@ -223,7 +234,7 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * proceso— y «Arbitrios» no tiene secciones en absoluto: su determinacion es
    * la tabla por servicio, que ya se lee como tal.
    */
-  predial_masivo: simula('Simular'),
+  predial_masivo: simula('Simular', { simulacion: true }),
   arbitrios: DETERMINACION,
   vehicular_calculo: simula('Simular', { simulacion: true }),
   alcabala: {

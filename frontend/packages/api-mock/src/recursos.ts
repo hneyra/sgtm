@@ -30,6 +30,10 @@ import { RESPUESTAS } from './respuestas.generado';
  * estado de cuenta de papeleta administrativa (#47) y los expedientes
  * coactivos (#40) — las tres con `Controller` desde antes de #363, y sin
  * conectar solo por la propia interfaz.
+ * Desde #395 se suman las tres ultimas de Rentas · Registro que tienen
+ * controlador: el padron predial de un contribuyente (`GET /rentas/predios`) y
+ * las dos determinaciones prediales, que son `POST` y contestan por
+ * `ESCRITURAS` porque su respuesta es un recurso del dominio y no un listado.
  * **Esta lista crece cuando crece aquella**, no antes: publicar aqui
  * una forma que el backend todavia no sirve seria inventarsela.
  *
@@ -317,6 +321,207 @@ const valores = (): Paginado =>
       };
     }),
   );
+
+/* ── Rentas: los predios del padron y las dos determinaciones prediales ─── */
+
+/**
+ * Predios del contribuyente (`PredioDeRentasResource`, #395).
+ *
+ * **No publica autovaluo ni area construida, y es a proposito**: el sistema no
+ * sabe valorizar un predio todavia (D-11, GOB-03), asi que el recurso no lleva
+ * las dos columnas que el prototipo dibuja. Aqui no se rellenan con lo que el
+ * prototipo capturo —serian dos cifras con aspecto de determinacion que ninguna
+ * regla sostiene—: se quedan fuera del recurso, y la pantalla las dibuja con
+ * «—», que es lo que distingue «no llego» de «vale cero».
+ *
+ * `tipo` sale «URBANO» para todas, que es lo que dice el campo «Clasificación»
+ * del propio prototipo; su grilla no publica esa columna por fila, asi que
+ * repartirla predio a predio seria inventar el reparto. Es ademas lo que ya
+ * hace `predios` (#222) con el mismo dato. `sector` sale nulo por lo mismo: el
+ * unico «Sector» del prototipo es el **filtro** («Todos»), no el de cada predio.
+ */
+const prediosDeRentas = (): Paginado =>
+  unaPagina(
+    filasDe('predios_rentas').map(
+      ([codigoPredial, ubicacion, uso, terrenoM, , prop, , condicion], i) => ({
+        predioId: i + 1,
+        codigoReferenciaCatastral: codigoPredial,
+        tipo: 'URBANO',
+        direccion: ubicacion,
+        uso: uso === undefined || uso === '' ? null : uso,
+        sector: null,
+        areaTerreno: comoImporte(terrenoM ?? ''),
+        porcentajePropiedad: comoImporte(prop ?? '0.00'),
+        condicion: condicion === undefined || condicion === '' ? null : condicion,
+      }),
+    ),
+  );
+
+/**
+ * El conjunto sellado con el que se determinaron las cifras del prototipo.
+ *
+ * Estaba en `simulados.ts` mientras la determinacion se inventaba entera; ahora
+ * viaja donde el backend lo publica —dentro del recurso, en `conjunto`— porque
+ * es el unico que lo sabe (`ARQ-09` §3). Sigue siendo 2026 porque de 2026 son
+ * las cifras que acompana.
+ */
+const CONJUNTO_DEL_PROTOTIPO = '2026 v1';
+
+/** Un campo del prototipo **tal cual**, con el formato con que lo escribio. */
+const campoCrudo = (pantalla: string, clave: string): string => {
+  const valor = RESPUESTAS[pantalla]?.campos?.[clave];
+  return typeof valor === 'string' ? valor : '';
+};
+
+/** El mismo campo, ya como lo serializa el backend: sin separador de miles. */
+const campoDelPrototipo = (pantalla: string, clave: string): string =>
+  comoImporte(campoCrudo(pantalla, clave));
+
+/** Un total de la banda del prototipo, ya sin «S/» ni separador de miles. */
+const totalDelPrototipo = (pantalla: string, etiqueta: string): string => {
+  const total = (RESPUESTAS[pantalla]?.totales ?? []).find((t) => t.label === etiqueta);
+  return total === undefined ? '' : comoImporte(total.value.replace('S/', '').trim());
+};
+
+/**
+ * Las alicuotas de los tres tramos, **las que el propio rotulo del catalogo
+ * dibuja** —«Tramo 1 — hasta 15 UIT (0.2 %)»—, que es de donde salen todos los
+ * valores de este archivo.
+ *
+ * En el sistema de verdad no salen de aqui ni de ningun otro sitio del codigo:
+ * viven en el conjunto de parametros sellado (#188, regla 5). Esto es el proxy,
+ * y su unica fuente es la figura del manual.
+ */
+const ALICUOTA_DEL_TRAMO: Readonly<Record<number, string>> = { 1: '0.2', 2: '0.6', 3: '1.0' };
+
+/** `S/ 80,250.00 → S/ 160.50` → el tramo con sus dos cifras, ya sin formato. */
+function tramoDelPrototipo(clave: string, orden: number, limiteSuperior: string | null) {
+  const [operacion = '', aporte = ''] = campoCrudo('predial_individual', clave).split('→');
+  const cifra = (parte: string): string => comoImporte(parte.replace('S/', '').trim());
+  return {
+    orden,
+    limiteSuperior,
+    alicuota: ALICUOTA_DEL_TRAMO[orden] ?? '0',
+    porcionGravada: cifra(operacion),
+    aporte: cifra(aporte),
+  };
+}
+
+/**
+ * Determinacion individual del predial (`DeterminacionPredialResource`, #395).
+ *
+ * **`simulacion` sale de la peticion**, no fijo: es lo unico que distingue
+ * mirar la cuenta de asentarla, y una respuesta que dijera siempre `true`
+ * dejaria sin probar la marca que hace segura la accion de la pantalla (ver
+ * `useSimulacion`). `id` es 0 cuando se simula, como en el recurso real: no hay
+ * determinacion asentada a la que apuntar.
+ *
+ * **Solo vienen dos tramos**, y eso tambien es del recurso: el backend publica
+ * los tramos que **aportaron**, y el tercero de este contribuyente no aporta
+ * nada. La pantalla dibuja el tercero con «—», que es lo correcto; un cero ahi
+ * seria una cifra.
+ */
+function determinacionPredial(cuerpo: unknown): Readonly<Record<string, unknown>> {
+  const simulacion = marcaDeSimulacion(cuerpo);
+  const campo = (clave: string): string => campoDelPrototipo('predial_individual', clave);
+  return {
+    id: simulacion ? 0 : 1,
+    simulacion,
+    ejercicio: '2026',
+    codContribuyente: '00000025673',
+    sujeto: 'SUC. RUFINA MEDINA MEDINA',
+    conjuntoId: 1,
+    conjunto: CONJUNTO_DEL_PROTOTIPO,
+    fechaCalculo: `${EL_DIA_DEL_PROTOTIPO}T09:00:00Z`,
+    predios: filasDe('predial_individual').map(
+      ([codigoPredial, ubicacion, uso, prop, valuoTotal, valuoExonerado, valuoAfecto], i) => ({
+        predioId: i + 1,
+        codigoPredial,
+        ubicacion,
+        uso: uso === undefined || uso === '' ? null : uso,
+        porcentajePropiedad: comoImporte(prop ?? '0.00'),
+        autovaluo: comoImporte(valuoTotal ?? '0.00'),
+        valuoExonerado: comoImporte(valuoExonerado ?? '0.00'),
+        valuoAfecto: comoImporte(valuoAfecto ?? '0.00'),
+        // La base de cada predio es su valuo afecto **ya ponderado** por el `%`
+        // de propiedad, y lo pondera el servidor (`RT-011`): el prototipo lo
+        // trae asi en la columna «Valuo Afecto S/» de esta misma tabla.
+        baseImponible: comoImporte(valuoAfecto ?? '0.00'),
+      }),
+    ),
+    valuoTotal: campo('valuoTotalS'),
+    valuoExonerado: campo('valuoExoneradoS'),
+    valuoAfecto: campo('valuoAfectoS'),
+    baseImponible: campo('valuoAfectoS'),
+    uit: campo('uitVigente2026S'),
+    tramos: [
+      tramoDelPrototipo('tramo1Hasta15Uit02', 1, '80250.00'),
+      tramoDelPrototipo('tramo2De15A60Uit06', 2, '321000.00'),
+    ],
+    minimoImponible: campo('minimoImponible06Uit'),
+    impuestoInsoluto: campo('impuestoInsolutoAnualS'),
+    derechoDeEmision: campo('derechoDeEmisionS'),
+    // El total lo publica el servidor ya sumado; aqui se lee de la banda de
+    // totales del prototipo, que es donde el prototipo lo escribio (RNF-083).
+    totalAPagar: totalDelPrototipo('predial_individual', 'Total a pagar'),
+    modalidad: 'FRACCIONADO',
+    cuotas: [
+      { numero: 1, vencimiento: '2026-02-28', importe: campo('cuota1Vence2802') },
+      { numero: 2, vencimiento: '2026-05-31', importe: campo('cuota2Vence3105') },
+      { numero: 3, vencimiento: '2026-08-31', importe: campo('cuota3Vence3108') },
+      { numero: 4, vencimiento: '2026-11-30', importe: campo('cuota4Vence3011') },
+    ],
+    // Las reglas que se aplicaron, como las nombra NEG-05 (`RT-001`…). El
+    // prototipo no las dibuja en ninguna parte y ninguna pantalla las lee.
+    reglasAplicadas: [],
+  };
+}
+
+/**
+ * Como escribe el prototipo el estado de una etapa —«Completa», «Con
+ * observados»— frente a los dos que publica `CorridaPredialResource`: `OK` y
+ * `CON OBSERVACIONES`.
+ */
+const ESTADO_DE_ETAPA_DEL_MOCK: Readonly<Record<string, string>> = {
+  Completa: 'OK',
+  'Con observados': 'CON OBSERVACIONES',
+};
+
+/**
+ * Corrida masiva del predial (`CorridaPredialResource`, #395).
+ *
+ * `monto` sale **cadena vacia** en las etapas que no mueven dinero —leer el
+ * padron, generar cuponeras—, que es como lo publica el recurso: el «—» del
+ * prototipo es la forma de dibujarlo, no la de mandarlo.
+ *
+ * `observados` sale vacia: el prototipo cuenta cuantos hay por etapa y **no
+ * publica ninguna lista** de quienes son. Rellenarla con nombres seria lo unico
+ * de este archivo que no sale de una figura del manual.
+ */
+function corridaPredial(cuerpo: unknown): Readonly<Record<string, unknown>> {
+  return {
+    ejercicio: '2026',
+    // El prototipo dice «TODO EL PADRÓN»; el recurso lo dice con su enum.
+    alcance: 'TODOS',
+    simulacion: marcaDeSimulacion(cuerpo),
+    conjunto: CONJUNTO_DEL_PROTOTIPO,
+    fechaCalculo: `${EL_DIA_DEL_PROTOTIPO}T09:00:00Z`,
+    etapas: filasDe('predial_masivo').map(([etapa, registros, montoS, observados, estado]) => ({
+      etapa,
+      registros: Number(comoImporte(registros ?? '0')) || 0,
+      monto: montoS === undefined || montoS === '—' ? '' : comoImporte(montoS),
+      observados: Number(comoImporte(observados ?? '0')) || 0,
+      estado: ESTADO_DE_ETAPA_DEL_MOCK[estado ?? ''] ?? 'OK',
+    })),
+    observados: [],
+  };
+}
+
+/** La marca con la que la peticion dice que solo quiere ver la cuenta. */
+const marcaDeSimulacion = (cuerpo: unknown): boolean =>
+  typeof cuerpo === 'object' &&
+  cuerpo !== null &&
+  (cuerpo as Record<string, unknown>)['simulacion'] === true;
 
 /* ── Consultas: deuda y constancia ──────────────────────────────────────── */
 
@@ -2992,6 +3197,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/rentas/contribuyentes': contribuyentes,
   '/rentas/beneficios': beneficios,
   '/rentas/arbitrios': arbitrios,
+  '/rentas/predios': prediosDeRentas,
   '/valores': valores,
   '/consultas/cuenta-corriente/{codigo}': cuentaCorriente,
   '/consultas/deuda': consultaDeuda,
@@ -3129,6 +3335,14 @@ const ESCRITURAS: Readonly<Record<string, (cuerpo: unknown) => Readonly<Record<s
   {
     'PUT /seguridad/sesion/ejercicio': sesionConEjercicio,
     'PUT /seguridad/usuarios/{id}/clave': cambioDeClaveIniciado,
+    /* Las dos determinaciones prediales (#395). Son `POST` y su respuesta **no
+       es la forma comun**: es el recurso del dominio —la memoria de calculo con
+       sus tramos y sus cuotas, o las etapas de la corrida—, que es lo que
+       `PredialController` publica. Sin esto seguirian contestando el juego de
+       datos del prototipo, y la pantalla lo leeria como si fuera el recurso: el
+       defecto de #363, la tabla vacia en silencio. */
+    'POST /rentas/predial/calculo-individual': determinacionPredial,
+    'POST /rentas/predial/calculo-masivo': corridaPredial,
   };
 
 /** La respuesta de una escritura de seguridad, si el proxy la publica con la forma del backend. */

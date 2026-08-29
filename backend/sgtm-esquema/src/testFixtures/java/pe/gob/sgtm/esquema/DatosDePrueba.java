@@ -543,10 +543,13 @@ public final class DatosDePrueba {
                         CIEN);
         ejecutar(
                 app,
+                // `valuo_exonerado` en cero, y dicho: desde V56 la columna es NOT NULL sin
+                // valor por omision, para que toda escritura diga que parte del autovaluo no
+                // esta afecta en vez de dejarla suponer (#395).
                 "INSERT INTO determinacion_predio_detalle (municipalidad_id, ejercicio,"
-                        + " determinacion_id, predio_id, autovaluo, porcentaje_propiedad,"
-                        + " base_imponible_predio)"
-                        + " VALUES (?, ?, ?, ?, ?, 100, ?)",
+                        + " determinacion_id, predio_id, autovaluo, valuo_exonerado,"
+                        + " porcentaje_propiedad, base_imponible_predio)"
+                        + " VALUES (?, ?, ?, ?, ?, 0, 100, ?)",
                 muni,
                 EJERCICIO,
                 determinacionId,

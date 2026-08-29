@@ -6,7 +6,9 @@ import { expect, test } from '@playwright/test';
  * «Calculo individual del impuesto predial» es la pantalla en la que se le dice
  * a un contribuyente cuanto debe, y su operacion del contrato es un `POST`: no
  * pide nada al abrir —abrir una pantalla no puede lanzar una determinacion—, asi
- * que sus importes salen con «—» hasta que alguien pulsa «Simular». Ese gesto es
+ * que sus importes salen con «—» hasta que alguien pulsa «Simular». Desde #395
+ * lo que vuelve es el recurso que publica `PredialController`, pedido con
+ * `simulacion: true` en el cuerpo: calcula y no asienta nada. Ese gesto es
  * el que esta prueba recorre entero, y lo recorre **con el teclado**: en
  * ventanilla el raton no se usa, y una cifra que solo se puede pedir con un clic
  * es una cola parada.
@@ -33,6 +35,15 @@ const EJERCICIO = '2026';
 
 /** El resultado de la escala progresiva, tal como lo sirve el servidor. */
 const INSOLUTO_ANUAL = '587.44';
+
+/**
+ * Las dos mitades del primer tramo, **ya con el separador de millares que la
+ * interfaz pone al dibujar** (#395): el recurso manda «80250.00» y «160.50».
+ * El separador es un espacio, no una coma — ver `agruparMiles` en
+ * `@sgtm/dominio`.
+ */
+const BASE_DEL_TRAMO_1 = 'S/ 80 250.00';
+const APORTE_DEL_TRAMO_1 = 'S/ 160.50';
 
 /** Lo que dice la banda mientras nadie ha pedido la cuenta. */
 const SIN_DETERMINACION = /Todavía no hay determinación/;
@@ -126,12 +137,14 @@ test('de los filtros a la memoria del cálculo, solo con el teclado', async ({ p
 
   /* ── 5. La cuenta se llena, y se lee de una pasada ───────────────────────
      Las dos mitades **separadas** son lo que este camino existe para poder
-     ensenar: «S/ 80,250.00 → S/ 160.50» es la base del tramo y lo que ese tramo
-     aporta. Ni una de las dos la compone la interfaz (RNF-083): la flecha la
-     trae el propio valor que sirvio el servidor, y aqui solo se parte por ella. */
+     ensenar: «S/ 80 250.00 → S/ 160.50» es la base del tramo y lo que ese tramo
+     aporta. Ni una de las dos la compone la interfaz (RNF-083): el servidor
+     manda «80250.00» y «160.50» —lo que devuelve `BigDecimal.toPlainString()`—
+     y lo unico que pasa aqui es el separador de millares de `agruparMiles`, que
+     es presentacion y no aritmetica (#395). */
   await expect(resultado).toHaveText(INSOLUTO_ANUAL);
-  await expect(tramo1.locator('.sgtm-memoria__operacion')).toHaveText('S/ 80,250.00');
-  await expect(tramo1.locator('.sgtm-memoria__importe')).toHaveText('S/ 160.50');
+  await expect(tramo1.locator('.sgtm-memoria__operacion')).toHaveText(BASE_DEL_TRAMO_1);
+  await expect(tramo1.locator('.sgtm-memoria__importe')).toHaveText(APORTE_DEL_TRAMO_1);
 
   /* ── 6. Y la banda dice con que se calculo, y sobre quien ────────────────
      El conjunto **sellado**, con la palabra dentro y no solo por color: dos

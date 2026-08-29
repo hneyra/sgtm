@@ -133,4 +133,78 @@ class TramosProgresivosAcumulativosTest {
                 .isInstanceOf(PoliticasDeRedondeo.PuntoSinPolitica.class)
                 .hasMessageContaining("IMPUESTO_POR_TRAMO");
     }
+
+    @org.junit.jupiter.api.Nested
+    @DisplayName("#395 — el desglose, para que la memoria de calculo no se recomponga")
+    class Desglose {
+
+        @Test
+        @DisplayName("cada tramo dice su limite, su alicuota, la porcion que gravo y lo que puso")
+        void cadaTramoDiceLoQueHizo() {
+            List<AporteDeTramo> aportes =
+                    TramosProgresivosAcumulativos.desglosar(Dinero.de(2000), CUADRO_FICTICIO);
+
+            assertThat(aportes).hasSize(2);
+            assertThat(aportes.get(0).orden()).isEqualTo(1);
+            assertThat(aportes.get(0).limiteSuperior()).isEqualTo(Dinero.de(1000));
+            assertThat(aportes.get(0).porcionGravada()).isEqualTo(Dinero.de(1000));
+            assertThat(aportes.get(0).aporte()).isEqualTo(Dinero.de("2.00"));
+            assertThat(aportes.get(1).orden()).isEqualTo(2);
+            assertThat(aportes.get(1).porcionGravada()).isEqualTo(Dinero.de(1000));
+            assertThat(aportes.get(1).aporte()).isEqualTo(Dinero.de("6.00"));
+        }
+
+        @Test
+        @DisplayName("un tramo que no recibio nada de la base no aparece: no aporto")
+        void elTramoQueNoRecibeNoAparece() {
+            List<AporteDeTramo> aportes =
+                    TramosProgresivosAcumulativos.desglosar(Dinero.de(500), CUADRO_FICTICIO);
+
+            assertThat(aportes).hasSize(1);
+            assertThat(aportes.get(0).orden()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("el ultimo tramo no tiene tope, y lo dice")
+        void elUltimoNoTieneTope() {
+            List<AporteDeTramo> aportes =
+                    TramosProgresivosAcumulativos.desglosar(Dinero.de(5000), CUADRO_FICTICIO);
+
+            assertThat(aportes).hasSize(3);
+            assertThat(aportes.get(2).tieneTope()).isFalse();
+            assertThat(aportes.get(2).limiteSuperior()).isNull();
+            assertThat(aportes.get(2).porcionGravada()).isEqualTo(Dinero.de(2000));
+        }
+
+        @Test
+        @DisplayName("el desglose es el mismo calculo: sus aportes suman el impuesto")
+        void elDesgloseEsElMismoCalculo() {
+            Dinero base = Dinero.de(5000);
+
+            Dinero sumaDeAportes = Dinero.CERO;
+            for (AporteDeTramo aporte :
+                    TramosProgresivosAcumulativos.desglosar(base, CUADRO_FICTICIO)) {
+                sumaDeAportes = sumaDeAportes.mas(aporte.aporte());
+            }
+
+            assertThat(sumaDeAportes)
+                    .isEqualTo(
+                            TramosProgresivosAcumulativos.calcular(
+                                    base, CUADRO_FICTICIO, REDONDEO));
+        }
+
+        @Test
+        @DisplayName("los aportes salen SIN redondear: el redondeo es del impuesto, una sola vez")
+        void losAportesNoSeRedondean() {
+            // 0.2 % de 71 156.75 es 142.3135, con cuatro decimales. ADR-0018: los intermedios
+            // corren sin redondear y solo el cierre de la regla redondea. Si el desglose
+            // redondeara cada aporte, la suma de las porciones dejaria de ser el impuesto.
+            List<AporteDeTramo> aportes =
+                    TramosProgresivosAcumulativos.desglosar(
+                            Dinero.de("71156.75"), List.of(Tramo.sinTope(Alicuota.de("0.2"))));
+
+            assertThat(aportes.get(0).aporte().valor().stripTrailingZeros().toPlainString())
+                    .isEqualTo("142.3135");
+        }
+    }
 }

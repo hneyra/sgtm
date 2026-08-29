@@ -1,10 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-/* El unico sitio de la aplicacion que sabe si el proxy contesta. Sustituirlo es
-   la unica forma honesta de montar la pantalla «como si el backend estuviera al
-   otro lado»: ver el docblock de `pantallas/entorno.ts`. */
-const contestando = { valor: true };
-vi.mock('../entorno', () => ({ proxyDeDatosContestando: () => contestando.valor }));
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
@@ -98,7 +92,9 @@ describe('la determinacion la pide quien atiende, no el hecho de abrir la pantal
     const tramo = laMemoria()
       .getByText('Tramo 1 — hasta 15 UIT (0.2 %)')
       .closest('.sgtm-memoria__linea') as HTMLElement;
-    expect(tramo.querySelector('.sgtm-memoria__operacion')?.textContent).toBe('S/ 80,250.00');
+    // Con el separador de millares de `agruparMiles`, que es lo unico que la
+    // interfaz le hace a la cifra: el servidor manda «80250.00».
+    expect(tramo.querySelector('.sgtm-memoria__operacion')?.textContent).toBe('S/ 80 250.00');
     expect(tramo.querySelector('.sgtm-memoria__importe')?.textContent).toBe('S/ 160.50');
   });
 
@@ -154,36 +150,37 @@ describe('la determinacion la pide quien atiende, no el hecho de abrir la pantal
 });
 
 /**
- * **La guarda que hace seguro todo lo demas** (#393).
+ * **La guarda que hace seguro todo lo demas**, y la que la sustituye (#393, #395).
  *
  * El contrato no distingue simular de determinar: las cuatro pantallas tienen
- * **una sola** operacion, y es la misma con la que se asentaria. Hoy no hay
- * controlador, pero el dia que lo haya puede muy bien asentar la determinacion
- * —`RegistrarDeterminacionPredial` existe en el dominio—, y pulsar un boton que
- * dice «Simular» y emitir deuda es el defecto que esto no puede permitirse.
+ * **una sola** operacion, y es la misma con la que se asentaria. Mientras no
+ * habia controlador, lo unico honesto era que el gesto desapareciera al apuntar
+ * al backend de verdad —`proxyDeDatosContestando()`—: nadie sabia lo que el
+ * servidor iba a hacer con la peticion.
  *
- * Por eso la simulacion **solo existe mientras contesta el proxy de datos**: con
- * `VITE_SGTM_PROXY_DE_DATOS=false` —que es como se apunta al backend de verdad—
- * la accion desaparece y la pantalla vuelve exactamente a lo que enseñaba antes.
- * Quien conecte esa capa web decide entonces, con el controlador delante.
+ * Ahora se sabe, y la condicion es mejor: **solo simula la opcion cuyo cuerpo
+ * lleva `simulacion: true`**, que es la marca con la que `PredialController`
+ * calcula sin asentar nada. `alcabala` no la lleva —su `POST` **registra**, y
+ * `AlcabalaController` no acepta ninguna marca—, asi que su «Liquidar» esta
+ * declarado y no dispara nada. Es el caso que esta guarda existe para cubrir, y
+ * el que se comprueba aqui: sin marca, ni una peticion sale.
  */
-describe('con el backend de verdad contestando, aqui no se simula nada', () => {
-  afterEach(() => {
-    contestando.valor = true;
-  });
+describe('sin la marca que el backend entiende, aqui no se pide nada', () => {
+  it('«Liquidar» de alcabala esta declarada y no manda ninguna peticion', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/rentas-registro/alcabala?nDeExpediente=EXP-2026-000418');
+    await screen.findByRole('heading', { name: 'Liquidación' });
 
-  it('sin proxy, la accion no simula y la pantalla vuelve a lo de antes', async () => {
-    contestando.valor = false;
-    montarEnRuta(PREDIAL);
-    await screen.findByRole('navigation', { name: 'Secciones de la pantalla' });
-
-    // «Simular» sigue siendo una accion del catalogo, asi que el boton esta —lo
-    // dibuja la barra como cualquier otra—, pero **no simula**: no es la accion
-    // viva de `useSimulacion`, y pulsarla no manda nada.
-    const simular = screen.getByRole('button', { name: 'Simular' });
-    await userEvent.setup().click(simular);
-    await waitFor(() => expect(document.querySelector('.sgtm-memoria')).not.toBeNull());
-    expect(pedidas.filter((url) => url.startsWith('/rentas/predial/'))).toEqual([]);
+    // La accion esta —el catalogo la dibuja— y **no es la accion viva**: no
+    // lleva el estado de `useSimulacion`, asi que pulsarla no pide nada.
+    const liquidar = screen.getByRole('button', { name: 'Liquidar' });
+    await usuario.click(liquidar);
+    await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+    expect(pedidas.filter((url) => url.startsWith('/rentas/alcabala'))).toEqual([]);
+    // Y la declaracion sigue ahi, con la etiqueta del catalogo: lo que falta no
+    // es la accion, es que el backend sepa distinguir mirar de asentar.
+    expect(simulacionDe('alcabala')?.accion).toBe('Liquidar');
+    expect(simulacionDe('alcabala')?.cuerpo).toBeUndefined();
   });
 });
 
@@ -209,11 +206,14 @@ describe('quien simula y quien no', () => {
   });
 
   it('solo la marca que el backend declara viaja en el cuerpo', () => {
-    // `VehicularController.PeticionDeCalculoVehicular` declara `simulacion`.
+    // Las tres cuyo controlador la lee: `PredialController` en las dos
+    // prediales (#395) y `VehicularController.PeticionDeCalculoVehicular`.
+    expect(simulacionDe('predial_individual')?.cuerpo).toEqual({ simulacion: true });
+    expect(simulacionDe('predial_masivo')?.cuerpo).toEqual({ simulacion: true });
     expect(simulacionDe('vehicular_calculo')?.cuerpo).toEqual({ simulacion: true });
-    // Las otras tres no tienen controlador todavia: inventarles una marca seria
-    // adivinar la forma de una peticion que nadie ha escrito.
-    expect(simulacionDe('predial_individual')?.cuerpo).toBeUndefined();
+    // Y la que no la tiene: `AlcabalaController` no acepta ninguna marca, asi
+    // que inventarsela seria mandar una peticion que **registra** creyendo que
+    // solo mira.
     expect(simulacionDe('alcabala')?.cuerpo).toBeUndefined();
   });
 });

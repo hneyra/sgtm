@@ -1,0 +1,651 @@
+package pe.gob.sgtm.rentas.infraestructura.web;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import pe.gob.sgtm.auditoria.Auditoria;
+import pe.gob.sgtm.auditoria.Origen;
+import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
+import pe.gob.sgtm.autorizacion.ComprobadorDeAcceso;
+import pe.gob.sgtm.autorizacion.GuardiaDeAcceso;
+import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.catastro.CaracteristicasDelPredio;
+import pe.gob.sgtm.catastro.LectorDeCaracteristicas;
+import pe.gob.sgtm.catastro.PredioDelContribuyente;
+import pe.gob.sgtm.catastro.PrediosDelContribuyente;
+import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
+import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
+import pe.gob.sgtm.dominio.Dinero;
+import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.dominio.Porcentaje;
+import pe.gob.sgtm.dominio.ValorNormativo;
+import pe.gob.sgtm.parametros.IdentificadorDeConjunto;
+import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.parametros.ParametrosSellados;
+import pe.gob.sgtm.rentas.aplicacion.CuadroPredialParametrizado;
+import pe.gob.sgtm.rentas.aplicacion.DeterminarPredial;
+import pe.gob.sgtm.rentas.aplicacion.DeterminarPredialMasivo;
+import pe.gob.sgtm.rentas.aplicacion.PadronPredialDelEjercicio;
+import pe.gob.sgtm.rentas.aplicacion.RegistrarDeterminacionPredial;
+import pe.gob.sgtm.rentas.dominio.EstadoDeDeterminacion;
+import pe.gob.sgtm.rentas.dominio.OrigenDeDeterminacion;
+import pe.gob.sgtm.rentas.dominio.predial.DetalleDeterminacionPredio;
+import pe.gob.sgtm.rentas.dominio.predial.Determinacion;
+import pe.gob.sgtm.rentas.dominio.predial.DeterminacionRepository;
+import pe.gob.sgtm.web.ConfiguracionDeJson;
+import pe.gob.sgtm.web.ManejadorDeErrores;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * El transporte de la determinacion predial, por HTTP de verdad y sin base de datos (#395).
+ *
+ * <p>Lo que se verifica aqui es lo que la base no puede decir: <b>quien puede pedirlo, que cruza la
+ * frontera y que se rechaza</b>.
+ *
+ * <ul>
+ *   <li>Simular y determinar son la <b>misma</b> operacion del contrato y se distinguen por el
+ *       cuerpo. Sin decirlo, se rechaza: no hay valor por omision que no sea peligroso en una de
+ *       las dos direcciones.
+ *   <li>La observacion del usuario es obligatoria para asentar y no para simular, porque simular no
+ *       modifica ningun dato (regla 10 gobierna las modificaciones).
+ *   <li>Una cifra del cuadro que el conjunto sellado no trae responde <b>422 nombrando la
+ *       llave</b>, no 500 y no un valor por omision.
+ * </ul>
+ *
+ * <p>El guardia de verdad esta puesto como interceptor: el 403 lo produce {@link GuardiaDeAcceso}
+ * leyendo la anotacion, no la prueba.
+ */
+@DisplayName("Capa web — POST /api/v1/rentas/predial/*")
+class PredialControllerTest {
+
+    private static final Clock RELOJ =
+            Clock.fixed(Instant.parse("2026-08-29T10:00:00Z"), ZoneId.of("America/Lima"));
+
+    private static final Ejercicio EJERCICIO = new Ejercicio(2026);
+
+    private final AuditoriaDePrueba auditoria = new AuditoriaDePrueba();
+    private final ComprobadorDePrueba comprobador = new ComprobadorDePrueba();
+    private final DeterminacionesEnMemoria determinaciones = new DeterminacionesEnMemoria();
+    private final PrediosDePrueba predios = new PrediosDePrueba();
+
+    private MockMvc mvc = montar(cuadroCompleto());
+
+    @BeforeEach
+    void fijarOrigen() {
+        OrigenContext.fijar(new Origen("cajero.ventanilla", "PC-07", "10.0.0.7"));
+    }
+
+    @AfterEach
+    void limpiarOrigen() {
+        OrigenContext.limpiar();
+    }
+
+    @Test
+    @DisplayName("simular devuelve las cinco piezas y no asienta nada")
+    void simularDevuelveLaMemoriaYNoAsienta() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-individual")
+                                        .param("codContribuyente", "C-001")
+                                        .param("ano", "2026")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":true,\"predios\":"
+                                                        + "[{\"predioId\":11,\"autovaluo\":\"100000.00\"}]}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        String json = resultado.getResponse().getContentAsString();
+        // 1. los predios que integran la base
+        assertThat(json)
+                .contains("\"codigoPredial\":\"10001\"")
+                .contains("\"ubicacion\":\"AV. GRAU 100\"");
+        // 2. la base del conjunto, ponderada, con el valuo total, el exonerado y el afecto
+        assertThat(json)
+                .contains("\"baseImponible\":\"100000.00\"")
+                .contains("\"valuoAfecto\":\"100000.00\"");
+        // 3. los tramos, con el conjunto sellado que los produjo
+        assertThat(json).contains("\"conjunto\":\"2026 v1\"").contains("\"conjuntoId\":77");
+        assertThat(json).contains("\"alicuota\":\"0.2\"");
+        // 4. las cuotas con sus vencimientos, y el derecho de emision
+        assertThat(json)
+                .contains("\"vencimiento\":\"2026-02-27\"")
+                .contains("\"derechoDeEmision\":\"4.50\"");
+        // 5. la fecha a la que todo eso esta calculado
+        assertThat(json).contains("\"fechaCalculo\":\"2026-08-29\"");
+        // y no se asento nada
+        assertThat(json).contains("\"simulacion\":true").contains("\"id\":0");
+        assertThat(determinaciones.insertadas).isZero();
+        assertThat(auditoria.registros).isEmpty();
+    }
+
+    @Test
+    @DisplayName("sin decir si simula o determina se rechaza: no hay omision segura")
+    void sinLaMarcaSeRechaza() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-individual")
+                                        .param("codContribuyente", "C-001")
+                                        .param("ano", "2026")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"predios\":[{\"predioId\":11,"
+                                                        + "\"autovaluo\":\"100000.00\"}]}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("simula o determina");
+        assertThat(determinaciones.insertadas).isZero();
+    }
+
+    @Test
+    @DisplayName("asentar sin la observacion del usuario se rechaza (regla 10)")
+    void asentarSinObservacionSeRechaza() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+
+        MvcResult resultado = mvc.perform(asentarSinObservacion()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("observacion");
+        assertThat(determinaciones.insertadas).isZero();
+    }
+
+    @Test
+    @DisplayName("asentar con observacion inserta la determinacion y la audita")
+    void asentarConObservacion() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-individual")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":false,\"codContribuyente\":\"C-001\","
+                                                        + "\"ejercicio\":\"2026\","
+                                                        + "\"observacion\":\"Emision ordinaria del ejercicio\","
+                                                        + "\"predios\":[{\"predioId\":11,"
+                                                        + "\"autovaluo\":\"100000.00\"}]}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"simulacion\":false")
+                .contains("\"id\":901");
+        assertThat(determinaciones.insertadas).isEqualTo(1);
+        assertThat(auditoria.registros).hasSize(1);
+        assertThat(auditoria.registros.get(0).observacion().texto())
+                .isEqualTo("Emision ordinaria del ejercicio");
+    }
+
+    @Test
+    @DisplayName("una cifra del cuadro que el conjunto no trae es 422 y dice cual falta")
+    void laCifraQueFaltaSeNombra() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        mvc = montar(cuadroSinDerechoDeEmision());
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-individual")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":true,\"codContribuyente\":\"C-001\","
+                                                        + "\"ejercicio\":\"2026\",\"predios\":"
+                                                        + "[{\"predioId\":11,\"autovaluo\":\"100000.00\"}]}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("la peticion esta bien y el sistema no esta roto: falta la ordenanza")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("DERECHO_EMISION_PREDIAL");
+    }
+
+    @Test
+    @DisplayName("un predio sin autovaluo declarado es 422 y nombra el predio, no un cero")
+    void elPredioSinAutovaluoSeNombra() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        predios.con(22L, "10002", "JR. LIMA 250", Porcentaje.total());
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-individual")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":true,\"codContribuyente\":\"C-001\","
+                                                        + "\"ejercicio\":\"2026\",\"predios\":"
+                                                        + "[{\"predioId\":11,\"autovaluo\":\"100000.00\"}]}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("10002");
+    }
+
+    @Test
+    @DisplayName("un contribuyente que no esta en el padron es 404, no 422")
+    void contribuyenteInexistenteEs404() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-individual")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":true,\"codContribuyente\":\"NO-EXISTE\","
+                                                        + "\"ejercicio\":\"2026\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(404);
+    }
+
+    @Test
+    @DisplayName("sin el permiso de la opcion es 403, y no llega a calcular nada")
+    void sinPermisoEs403() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        comprobador.autoriza = false;
+
+        MvcResult resultado = mvc.perform(asentarSinObservacion()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(403);
+        assertThat(comprobador.acceso).isEqualTo("predial_individual");
+        assertThat(comprobador.privilegio).isEqualTo(Privilegio.REGISTRO);
+        assertThat(determinaciones.insertadas).isZero();
+    }
+
+    @Test
+    @DisplayName("la corrida masiva simula sin decir el ejercicio, y asienta solo si lo dice")
+    void laCorridaMasiva() throws Exception {
+        MvcResult simulada =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("{\"simulacion\":true}"))
+                        .andReturn();
+
+        assertThat(simulada.getResponse().getStatus()).isEqualTo(201);
+        assertThat(simulada.getResponse().getContentAsString())
+                .contains("\"ejercicio\":\"2026\"")
+                .contains("\"alcance\":\"TODOS\"")
+                .contains("Padrón leído");
+
+        MvcResult asentadaSinEjercicio =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":false,"
+                                                        + "\"observacion\":\"Emision anual del ejercicio\"}"))
+                        .andReturn();
+
+        assertThat(asentadaSinEjercicio.getResponse().getStatus())
+                .as("elegir por el operador que padron se emite es lo que nadie revisa")
+                .isEqualTo(422);
+        assertThat(asentadaSinEjercicio.getResponse().getContentAsString()).contains("ejercicio");
+    }
+
+    @Test
+    @DisplayName("la corrida rechaza los dos interruptores que no hace, en vez de ignorarlos")
+    void laCorridaRechazaLoQueNoHace() throws Exception {
+        MvcResult conArbitrios =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("{\"simulacion\":true,\"incluyeArbitrios\":true}"))
+                        .andReturn();
+        MvcResult conCuponera =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":true,\"generaCuponeraPdf\":true}"))
+                        .andReturn();
+
+        assertThat(conArbitrios.getResponse().getStatus()).isEqualTo(422);
+        assertThat(conArbitrios.getResponse().getContentAsString()).contains("arbitrios");
+        assertThat(conCuponera.getResponse().getStatus()).isEqualTo(422);
+        assertThat(conCuponera.getResponse().getContentAsString()).contains("cuponera");
+    }
+
+    @Test
+    @DisplayName("el alcance por sector sin sector se rechaza: seria la corrida entera")
+    void elAlcanceSinSectorSeRechaza() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("{\"simulacion\":true,\"alcance\":\"SECTOR\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("sector");
+    }
+
+    @Test
+    @DisplayName("la corrida masiva pide su propio permiso, no el del calculo individual")
+    void laCorridaTieneSuPropioPermiso() throws Exception {
+        mvc.perform(
+                        post("/api/v1/rentas/predial/calculo-masivo")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"simulacion\":true}"))
+                .andReturn();
+
+        assertThat(comprobador.acceso).isEqualTo("predial_masivo");
+        assertThat(comprobador.privilegio).isEqualTo(Privilegio.EJECUCION);
+    }
+
+    @Test
+    @DisplayName("un contribuyente ya emitido queda observado con su motivo, salvo que se pida")
+    void elYaEmitidoQuedaObservado() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        determinaciones.sembrarEmitida(
+                EJERCICIO,
+                7L,
+                DetalleDeterminacionPredio.nuevo(
+                        11L,
+                        Dinero.de("100000.00"),
+                        Dinero.CERO,
+                        Porcentaje.total(),
+                        Dinero.de("100000.00")));
+
+        MvcResult sinRecalcular =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("{\"simulacion\":true,\"ejercicio\":\"2026\"}"))
+                        .andReturn();
+
+        assertThat(sinRecalcular.getResponse().getContentAsString())
+                .contains("\"codContribuyente\":\"C-001\"")
+                .contains("EMITIDA");
+
+        MvcResult recalculando =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":true,\"ejercicio\":\"2026\","
+                                                        + "\"recalculaYaEmitidos\":true}"))
+                        .andReturn();
+
+        assertThat(recalculando.getResponse().getContentAsString())
+                .contains("\"observados\":[]")
+                .contains("\"conjunto\":\"2026 v1\"");
+    }
+
+    // ---------------------------------------------------------------- utilidades
+
+    private static org.springframework.test.web.servlet.RequestBuilder asentarSinObservacion() {
+        return post("/api/v1/rentas/predial/calculo-individual")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                        "{\"simulacion\":false,\"codContribuyente\":\"C-001\",\"ejercicio\":\"2026\","
+                                + "\"predios\":[{\"predioId\":11,\"autovaluo\":\"100000.00\"}]}");
+    }
+
+    private MockMvc montar(ParametrosSellados sellados) {
+        LectorDeParametros lector = lector(sellados);
+        CuadroPredialParametrizado cuadro = new CuadroPredialParametrizado(lector);
+        PadronPredialDelEjercicio padron = new PadronPredialDelEjercicio(determinaciones);
+        DeterminarPredial individual =
+                new DeterminarPredial(
+                        padron,
+                        predios,
+                        new SinCaracteristicas(),
+                        new DirectorioDePrueba(),
+                        cuadro,
+                        new RegistrarDeterminacionPredial(
+                                determinaciones, lector, auditoria, RELOJ),
+                        RELOJ);
+        DeterminarPredialMasivo masivo =
+                new DeterminarPredialMasivo(
+                        padron,
+                        individual,
+                        new DirectorioDePrueba(),
+                        new SinCaracteristicas(),
+                        RELOJ);
+        return MockMvcBuilders.standaloneSetup(new PredialController(individual, masivo, RELOJ))
+                .addInterceptors(new GuardiaDeAcceso(comprobador, RELOJ))
+                .setControllerAdvice(new ManejadorDeErrores())
+                .setMessageConverters(
+                        new JacksonJsonHttpMessageConverter(
+                                JsonMapper.builder()
+                                        .addModule(
+                                                new ConfiguracionDeJson().moduloDeObjetosDeValor())
+                                        .build()))
+                .build();
+    }
+
+    private static ParametrosSellados.Constructor conRedondeo(ParametrosSellados.Constructor base) {
+        return base.numero("REDONDEO", "IMPUESTO_POR_TRAMO", ValorNormativo.de("2"))
+                .texto("REDONDEO", "IMPUESTO_POR_TRAMO", "HALF_UP")
+                .numero("REDONDEO", "BASE_DEL_CONTRIBUYENTE", ValorNormativo.de("2"))
+                .texto("REDONDEO", "BASE_DEL_CONTRIBUYENTE", "HALF_UP")
+                .numero("REDONDEO", "BASE_IMPONIBLE_DEL_PREDIO", ValorNormativo.de("2"))
+                .texto("REDONDEO", "BASE_IMPONIBLE_DEL_PREDIO", "HALF_UP")
+                .numero("REDONDEO", "CUOTA", ValorNormativo.de("2"))
+                .texto("REDONDEO", "CUOTA", "HALF_UP");
+    }
+
+    private static ParametrosSellados cuadroCompleto() {
+        return conRedondeo(
+                        ParametrosSellados.de(EJERCICIO, 1)
+                                .numero("UIT", null, ValorNormativo.de("5500.00"))
+                                .numero("TRAMO_PREDIAL", "1", ValorNormativo.de("0.2"))
+                                .numero("TRAMO_PREDIAL_LIMITE", "1", ValorNormativo.de("15"))
+                                .numero("TRAMO_PREDIAL", "2", ValorNormativo.de("0.6"))
+                                .numero("TRAMO_PREDIAL_LIMITE", "2", ValorNormativo.de("60"))
+                                .numero("TRAMO_PREDIAL", "3", ValorNormativo.de("1.0"))
+                                .numero("PREDIAL_MINIMO", null, ValorNormativo.de("0.6"))
+                                .numero("DERECHO_EMISION_PREDIAL", null, ValorNormativo.de("4.50"))
+                                .texto("PREDIAL_VENCIMIENTO", "1", "2026-02-27")
+                                .texto("PREDIAL_VENCIMIENTO", "2", "2026-05-29")
+                                .texto("PREDIAL_VENCIMIENTO", "3", "2026-08-31")
+                                .texto("PREDIAL_VENCIMIENTO", "4", "2026-11-30"))
+                .construir();
+    }
+
+    private static ParametrosSellados cuadroSinDerechoDeEmision() {
+        return conRedondeo(
+                        ParametrosSellados.de(EJERCICIO, 1)
+                                .numero("UIT", null, ValorNormativo.de("5500.00"))
+                                .numero("TRAMO_PREDIAL", "1", ValorNormativo.de("0.2"))
+                                .numero("TRAMO_PREDIAL_LIMITE", "1", ValorNormativo.de("15"))
+                                .numero("TRAMO_PREDIAL", "2", ValorNormativo.de("1.0"))
+                                .numero("PREDIAL_MINIMO", null, ValorNormativo.de("0.6")))
+                .construir();
+    }
+
+    private static LectorDeParametros lector(ParametrosSellados sellados) {
+        return new LectorDeParametros() {
+            @Override
+            public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
+                return sellados;
+            }
+
+            @Override
+            public ParametrosSellados porConjunto(IdentificadorDeConjunto identificador) {
+                return sellados;
+            }
+
+            @Override
+            public IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio) {
+                return IdentificadorDeConjunto.de(77L);
+            }
+        };
+    }
+
+    // ---------------------------------------------------------------- dobles
+
+    private static final class PrediosDePrueba implements PrediosDelContribuyente {
+
+        private final List<PredioDelContribuyente> suyos = new ArrayList<>();
+
+        void con(long predioId, String codigo, String direccion, Porcentaje cuota) {
+            suyos.add(new PredioDelContribuyente(predioId, codigo, "URBANO", direccion, cuota));
+        }
+
+        @Override
+        public List<PredioDelContribuyente> de(long contribuyenteId, LocalDate fecha) {
+            return List.copyOf(suyos);
+        }
+    }
+
+    private static final class SinCaracteristicas implements LectorDeCaracteristicas {
+        @Override
+        public Optional<CaracteristicasDelPredio> de(long predioId, LocalDate fecha) {
+            return Optional.empty();
+        }
+    }
+
+    private static final class DirectorioDePrueba implements DirectorioDeContribuyentes {
+
+        private static final ResumenDeContribuyente UNO =
+                new ResumenDeContribuyente(501L, "C-001", "SUC. RUFINA MEDINA MEDINA", "03593174");
+
+        @Override
+        public List<ResumenDeContribuyente> buscar(String texto, int maximo) {
+            throw new UnsupportedOperationException("La determinacion no busca por texto");
+        }
+
+        @Override
+        public Optional<ResumenDeContribuyente> porCodigo(String codigo) {
+            return "C-001".equals(codigo) ? Optional.of(UNO) : Optional.empty();
+        }
+
+        @Override
+        public Map<Long, ResumenDeContribuyente> porIds(Set<Long> ids) {
+            Map<Long, ResumenDeContribuyente> encontrados = new LinkedHashMap<>();
+            if (ids.contains(UNO.id())) {
+                encontrados.put(UNO.id(), UNO);
+            }
+            return encontrados;
+        }
+
+        @Override
+        public Optional<String> domicilioFiscalDe(long contribuyenteId, LocalDate fecha) {
+            return Optional.empty();
+        }
+    }
+
+    private static final class DeterminacionesEnMemoria implements DeterminacionRepository {
+
+        private int insertadas;
+        private final Map<Long, List<DetalleDeterminacionPredio>> detallePorId =
+                new LinkedHashMap<>();
+        private final List<Determinacion> cabeceras = new ArrayList<>();
+
+        void sembrarEmitida(Ejercicio ejercicio, long id, DetalleDeterminacionPredio... detalle) {
+            cabeceras.add(
+                    new Determinacion(
+                            id,
+                            ejercicio,
+                            "PREDIAL",
+                            null,
+                            501L,
+                            null,
+                            null,
+                            77L,
+                            Dinero.de("100000.00"),
+                            Dinero.de("165.00"),
+                            List.of("RT-011"),
+                            OrigenDeDeterminacion.ORDINARIA,
+                            EstadoDeDeterminacion.EMITIDA,
+                            "siembra"));
+            detallePorId.put(id, List.of(detalle));
+        }
+
+        @Override
+        public Optional<Determinacion> findById(long id) {
+            return cabeceras.stream().filter(c -> Long.valueOf(id).equals(c.id())).findFirst();
+        }
+
+        @Override
+        public List<Determinacion> ultimasPredialesDe(Ejercicio ejercicio) {
+            return List.copyOf(cabeceras);
+        }
+
+        @Override
+        public Optional<Determinacion> ultimaPredialDe(Ejercicio ejercicio, long contribuyenteId) {
+            return cabeceras.stream()
+                    .filter(c -> c.contribuyenteId() == contribuyenteId)
+                    .reduce((primera, segunda) -> segunda);
+        }
+
+        @Override
+        public List<DetalleDeterminacionPredio> detalleDe(long determinacionId) {
+            return detallePorId.getOrDefault(determinacionId, List.of());
+        }
+
+        @Override
+        public Determinacion insertar(
+                Determinacion determinacion, List<DetalleDeterminacionPredio> detalle) {
+            insertadas++;
+            return new Determinacion(
+                    900L + insertadas,
+                    determinacion.ejercicio(),
+                    determinacion.tributo(),
+                    determinacion.periodo(),
+                    determinacion.contribuyenteId(),
+                    determinacion.predioId(),
+                    determinacion.vehiculoId(),
+                    determinacion.conjuntoId(),
+                    determinacion.baseImponible(),
+                    determinacion.montoDeterminado(),
+                    determinacion.reglasAplicadas(),
+                    determinacion.origen(),
+                    determinacion.estado(),
+                    "cajero.ventanilla");
+        }
+
+        @Override
+        public Determinacion insertar(Determinacion determinacion) {
+            throw new UnsupportedOperationException("El predial siempre lleva detalle por predio");
+        }
+    }
+
+    private static final class AuditoriaDePrueba implements Auditoria {
+
+        private final List<RegistroDeAuditoria> registros = new ArrayList<>();
+
+        @Override
+        public void registrar(RegistroDeAuditoria registro) {
+            registros.add(registro);
+        }
+    }
+
+    private static final class ComprobadorDePrueba implements ComprobadorDeAcceso {
+
+        private boolean autoriza = true;
+        private String acceso = "";
+        private Privilegio privilegio = Privilegio.LECTURA;
+
+        @Override
+        public boolean autoriza(
+                String usuario, String acceso, Privilegio privilegio, LocalDate fecha) {
+            this.acceso = acceso;
+            this.privilegio = privilegio;
+            return autoriza;
+        }
+    }
+}

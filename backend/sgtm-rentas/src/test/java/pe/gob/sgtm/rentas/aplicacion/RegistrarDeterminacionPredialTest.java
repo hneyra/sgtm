@@ -237,7 +237,18 @@ class RegistrarDeterminacionPredialTest {
             assertThat(nombresDeMetodo)
                     // "insertar" aparece dos veces: la sobrecarga con detalle (predial) y la de
                     // una sola partida sin detalle (vehicular, alcabala, espectaculos — #32).
-                    .containsExactlyInAnyOrder("findById", "detalleDe", "insertar", "insertar")
+                    // "ultimasPredialesDe" y "ultimaPredialDe" son lecturas de #395: la corrida
+                    // masiva y el recalculo individual necesitan saber que autovaluos se
+                    // declararon ya en el ejercicio, y ninguna de las dos abre camino de
+                    // escritura. La lista es exhaustiva a proposito: un metodo nuevo obliga a
+                    // volver aqui y a decir en el diff que hace.
+                    .containsExactlyInAnyOrder(
+                            "findById",
+                            "detalleDe",
+                            "ultimasPredialesDe",
+                            "ultimaPredialDe",
+                            "insertar",
+                            "insertar")
                     .as("sin actualizar ni eliminar: recalcular solo puede insertar otra fila")
                     .noneMatch(
                             nombre ->

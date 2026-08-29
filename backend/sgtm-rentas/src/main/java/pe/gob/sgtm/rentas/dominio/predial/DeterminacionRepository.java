@@ -2,6 +2,7 @@ package pe.gob.sgtm.rentas.dominio.predial;
 
 import java.util.List;
 import java.util.Optional;
+import pe.gob.sgtm.dominio.Ejercicio;
 
 /**
  * Las determinaciones prediales. Ningun metodo recibe la municipalidad (regla 2).
@@ -16,6 +17,20 @@ import java.util.Optional;
 public interface DeterminacionRepository {
 
     Optional<Determinacion> findById(long id);
+
+    /**
+     * La ultima determinacion predial de cada contribuyente en el ejercicio, en orden de
+     * contribuyente.
+     *
+     * <p>«La ultima» y no «la unica»: recalcular no modifica, crea otra fila (ADR-0007), asi que un
+     * contribuyente puede tener varias del mismo ejercicio y la que describe su situacion es la de
+     * mayor identificador. Es lo que lee la corrida masiva para saber que autovaluos se declararon
+     * ya en ese ejercicio.
+     */
+    List<Determinacion> ultimasPredialesDe(Ejercicio ejercicio);
+
+    /** La ultima determinacion predial de un contribuyente en el ejercicio, si tiene alguna. */
+    Optional<Determinacion> ultimaPredialDe(Ejercicio ejercicio, long contribuyenteId);
 
     /** El detalle por predio de una determinacion, en el orden en que se guardo. */
     List<DetalleDeterminacionPredio> detalleDe(long determinacionId);

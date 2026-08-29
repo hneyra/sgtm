@@ -1,6 +1,7 @@
 package pe.gob.sgtm.rentas.dominio.predial;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import pe.gob.sgtm.dominio.Dinero;
@@ -46,10 +47,33 @@ public final class TramosProgresivosAcumulativos {
      */
     public static Dinero calcular(
             Dinero baseAfecta, List<Tramo> tramos, PoliticasDeRedondeo redondeo) {
-        Objects.requireNonNull(baseAfecta, "El calculo necesita la base afecta");
-        Objects.requireNonNull(tramos, "El calculo necesita el cuadro de tramos");
         Objects.requireNonNull(
                 redondeo, "Las politicas de redondeo se reciben, no se fijan (D-03)");
+        Dinero impuesto = Dinero.CERO;
+        for (AporteDeTramo aporte : desglosar(baseAfecta, tramos)) {
+            impuesto = impuesto.mas(aporte.aporte());
+        }
+        return impuesto.redondeadoEn(PuntoDeRedondeo.IMPUESTO_POR_TRAMO, redondeo);
+    }
+
+    /**
+     * Lo mismo que {@link #calcular}, pero diciendo tramo a tramo que hizo: hasta donde llega, con
+     * que alicuota, sobre que porcion corrio y cuanto puso.
+     *
+     * <p>Es la memoria de calculo del articulo 13, y se publica desde aqui —no se recompone en la
+     * capa web ni en la interfaz (RNF-083)—: quien aplica los tramos es el unico que sabe cuanto de
+     * la base cayo en cada uno, porque depende del limite del tramo anterior.
+     *
+     * <p><b>Sin redondear.</b> Los aportes salen tal como se calcularon (ADR-0018: los intermedios
+     * corren sin redondear); el unico redondeo es el de {@link #calcular}, sobre la suma. Un tramo
+     * que no recibio nada de la base no aparece en la lista: no aporto.
+     *
+     * @param tramos en orden ascendente de limite; el ultimo, sin tope, cierra la lista
+     * @throws IllegalArgumentException si la base es negativa o la lista de tramos esta vacia
+     */
+    public static List<AporteDeTramo> desglosar(Dinero baseAfecta, List<Tramo> tramos) {
+        Objects.requireNonNull(baseAfecta, "El calculo necesita la base afecta");
+        Objects.requireNonNull(tramos, "El calculo necesita el cuadro de tramos");
         if (baseAfecta.esNegativo()) {
             throw new IllegalArgumentException(
                     "La base afecta no puede ser negativa: " + baseAfecta);
@@ -59,11 +83,13 @@ public final class TramosProgresivosAcumulativos {
                     "El cuadro de tramos esta vacio: sin tramos no hay como aplicar el articulo 13");
         }
 
-        Dinero impuesto = Dinero.CERO;
+        List<AporteDeTramo> aportes = new ArrayList<>();
         Dinero baseRestante = baseAfecta;
         Dinero limiteAnterior = Dinero.CERO;
+        int orden = 0;
 
         for (Tramo tramo : tramos) {
+            orden++;
             if (baseRestante.esCero()) {
                 break;
             }
@@ -75,13 +101,19 @@ public final class TramosProgresivosAcumulativos {
                     anchoDelTramo.esMenorQue(baseRestante) ? anchoDelTramo : baseRestante;
 
             BigDecimal fraccion = tramo.alicuota().valor().movePointLeft(2);
-            impuesto = impuesto.mas(porcionEnEsteTramo.por(fraccion));
+            aportes.add(
+                    new AporteDeTramo(
+                            orden,
+                            tramo.limiteSuperior(),
+                            tramo.alicuota(),
+                            porcionEnEsteTramo,
+                            porcionEnEsteTramo.por(fraccion)));
             baseRestante = baseRestante.menos(porcionEnEsteTramo);
             if (tramo.tieneTope()) {
                 limiteAnterior = Objects.requireNonNull(tramo.limiteSuperior());
             }
         }
 
-        return impuesto.redondeadoEn(PuntoDeRedondeo.IMPUESTO_POR_TRAMO, redondeo);
+        return List.copyOf(aportes);
     }
 }
