@@ -101,7 +101,13 @@ export const GRUPOS_POR_TAREA = {
     // determinar y emitir cuponera, no un tributo suelto.
     [
       'Determinación',
-      ['declaracion_jurada', 'predial_individual', 'predial_masivo', 'arbitrios', 'vehicular_calculo'],
+      [
+        'declaracion_jurada',
+        'predial_individual',
+        'predial_masivo',
+        'arbitrios',
+        'vehicular_calculo',
+      ],
     ],
     // Lo que ocurre una vez y se liquida al momento. Alcabala queda **bajo el
     // acto que la genera**: «Transferencia de predio» dibuja una casilla

@@ -52,6 +52,17 @@ export interface ResumenDePantallaProps {
   readonly codigo?: string;
   readonly datos?: DatosDePantalla;
   readonly cargando: boolean;
+  /**
+   * La opcion a la que encabeza, y lo que se pregunto en su bloque de busqueda.
+   *
+   * Las tres cabeceras de ficha no los usan —les basta el registro abierto—, y
+   * la banda de las determinaciones no puede vivir sin ellos: el sujeto de
+   * «Cálculo individual del impuesto predial» es un **filtro** (#393), y esa
+   * pantalla no pide nada al abrir porque su operacion es un `POST` y abrir una
+   * pantalla no puede lanzar una determinacion.
+   */
+  readonly opcion?: string;
+  readonly busqueda?: URLSearchParams;
 }
 
 /**
@@ -293,6 +304,39 @@ export interface SeleccionDeFilas {
   readonly contexto?: (busqueda: URLSearchParams) => Readonly<Record<string, string>>;
 }
 
+/**
+ * Una seccion que se lee **como la memoria de un calculo** y no como una
+ * rejilla de campos de solo lectura (#393).
+ *
+ * Las cinco pantallas de determinacion del modulo —predial individual y
+ * masivo, arbitrios, calculo vehicular y alcabala— tienen entre nueve y trece
+ * campos `"ro"` seguidos, y esos campos **no son un formulario**: son los pasos
+ * de una cuenta. Dibujados como campos, cada linea ocupa una etiqueta, un borde
+ * discontinuo y una caja de 38 px, y la relacion entre ellas —cual multiplica a
+ * cual, cual es el resultado— no se ve en ninguna parte. Es lo que hay que
+ * poder explicarle a alguien en ventanilla cuando pregunta de donde sale su
+ * recibo.
+ *
+ * **No compone ninguna cifra** (RNF-083). Cada linea es el valor que sirvio la
+ * API, tal cual; lo unico que hace la interfaz es partir por la flecha que el
+ * propio valor trae —`S/ 80,250.00 → S/ 160.50`— para poner la operacion y su
+ * resultado en dos columnas. Un valor sin flecha se dibuja entero en la columna
+ * del importe. Ni se suma, ni se redondea, ni se completa lo que falte: lo que
+ * el servidor no manda sigue saliendo con «—».
+ */
+export interface MemoriaDeSeccion {
+  /**
+   * La clave del campo que **es el resultado** de la memoria, si lo hay: se
+   * dibuja destacado y al final, separado de los pasos que lo producen.
+   *
+   * Se declara y no se deduce —«el ultimo campo», «el que diga total»— porque
+   * en las cinco secciones el resultado esta en un sitio distinto: en la escala
+   * progresiva es el penultimo campo, y detras va el minimo imponible, que es
+   * una comprobacion y no el resultado.
+   */
+  readonly total?: string;
+}
+
 export interface ComposicionDeOpcion {
   /**
    * El bloque de busqueda, para una opcion cuyo catalogo **no declara `filtros`**.
@@ -395,6 +439,25 @@ export interface ComposicionDeOpcion {
   readonly flujo?: FlujoGuiado;
   /** La tabla de esta pantalla elige filas, y lo elegido viaja en el cuerpo. */
   readonly seleccion?: SeleccionDeFilas;
+  /**
+   * Secciones que se leen como memoria de calculo, por **etiqueta de seccion**.
+   *
+   * La etiqueta y no el indice: el indice cambia el dia que el prototipo mueva
+   * una seccion, y la etiqueta es lo unico que RNF-080 garantiza estable —no se
+   * reescribe—. Negacion por omision: 129 de las 134 no declaran ninguna y se
+   * dibujan exactamente como se dibujaban.
+   */
+  readonly memoria?: Readonly<Record<string, MemoriaDeSeccion>>;
+  /**
+   * La cabecera-resumen se dibuja **aunque no haya ningun registro abierto**.
+   *
+   * Lo declaran las cinco pantallas de determinacion y solo ellas: su sujeto es
+   * un filtro, no un registro de la ruta, y su tabla trae tantas filas como
+   * predios tenga el contribuyente, asi que ninguna de las tres condiciones de
+   * `hayQueResumir` las alcanzaba. Quien decide si hay algo que ensenar sigue
+   * siendo la cabecera —sin sujeto devuelve `null`—; esto solo la deja intentarlo.
+   */
+  readonly resumenSiempre?: true;
 }
 
 const COMPOSICIONES: Readonly<Record<string, ComposicionDeOpcion>> = {
@@ -437,19 +500,29 @@ export const filtrosDe = (
  * declarara una: el navegador bajaba el trozo para que la cabecera devolviera
  * `null`, y el padron sin nadie abierto es el caso normal de esa pantalla.
  *
- * Las tres condiciones son las que las cabeceras usan por dentro, y por eso la
+ * Las cuatro condiciones son las que las cabeceras usan por dentro, y por eso la
  * pregunta se puede hacer fuera: un registro abierto por la ruta —las fichas—, o
  * por el filtro —el padron de contribuyentes, cuyo contrato declara el codigo
  * como filtro y no como parametro de ruta—, o **una respuesta de una sola fila**,
- * que es «este es el contribuyente que buscabas» (#330, #332). Quien decide que
- * ensena sigue siendo la cabecera; esto solo evita pedirla cuando ninguna de las
- * tres se cumple.
+ * que es «este es el contribuyente que buscabas» (#330, #332), o **una respuesta
+ * que dice con que se determino** (#393). Quien decide que ensena sigue siendo
+ * la cabecera; esto solo evita pedirla cuando ninguna de las cuatro se cumple.
+ *
+ * La cuarta la declara la opcion (`resumenSiempre`), y es la que abre la banda
+ * de sujeto de las pantallas de determinacion: el predial individual no abre
+ * ningun registro por la ruta —su contribuyente es un filtro que no se llama
+ * `codigo`—, su tabla trae tantas filas como predios tenga, y su operacion es un
+ * `POST`, asi que no pide nada al abrir y no hay respuesta a la que preguntar.
+ * Ninguna de las tres anteriores la alcanzaba. La banda decide sola si hay algo
+ * que encabezar: sin sujeto devuelve `null`.
  */
 export function hayQueResumir(
   codigo: string | undefined,
   busqueda: URLSearchParams,
   filas: number,
+  siempre = false,
 ): boolean {
+  if (siempre) return true;
   if (codigo !== undefined && codigo !== '') return true;
   if ((busqueda.get('codigo') ?? '') !== '') return true;
   return filas === 1;
@@ -505,4 +578,18 @@ export const resolutorDeCampo = (opcion: string, campo: string): CampoResolutor 
   const resolutores = composicionDe(opcion).resolutores;
   if (resolutores === undefined || !Object.hasOwn(resolutores, campo)) return undefined;
   return resolutores[campo];
+};
+
+/**
+ * Como se lee esa seccion de esa opcion: memoria de calculo, o nada.
+ *
+ * Misma barrera de `Object.hasOwn` que `resolutorDeCampo` y por el mismo
+ * motivo: una seccion titulada `toString` devolveria una «memoria» heredada del
+ * prototipo de `Object`, y el formulario dibujaria la cuenta en vez de sus
+ * campos.
+ */
+export const memoriaDeSeccion = (opcion: string, seccion: string): MemoriaDeSeccion | undefined => {
+  const memoria = composicionDe(opcion).memoria;
+  if (memoria === undefined || !Object.hasOwn(memoria, seccion)) return undefined;
+  return memoria[seccion];
 };

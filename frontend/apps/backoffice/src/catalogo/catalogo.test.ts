@@ -91,7 +91,13 @@ const GRUPOS_POR_TAREA_ESPERADOS: Readonly<
     ['Padrón', ['contribuyentes', 'predios_rentas', 'vehiculos']],
     [
       'Determinación',
-      ['arbitrios', 'declaracion_jurada', 'predial_individual', 'predial_masivo', 'vehicular_calculo'],
+      [
+        'arbitrios',
+        'declaracion_jurada',
+        'predial_individual',
+        'predial_masivo',
+        'vehicular_calculo',
+      ],
     ],
     [
       'Actos y transferencias',

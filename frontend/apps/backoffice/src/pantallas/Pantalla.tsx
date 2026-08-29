@@ -559,7 +559,12 @@ function Bloques({
   const esVersionada = VERSIONADAS.has(estructura.id);
   const Resumen = composicion.resumen;
   // Si hay algo que resumir, antes de pedir el trozo perezoso. Ver `hayQueResumir`.
-  const hayAlgoQueResumir = hayQueResumir(codigo, busqueda, filasDeLaTabla.length);
+  const hayAlgoQueResumir = hayQueResumir(
+    codigo,
+    busqueda,
+    filasDeLaTabla.length,
+    composicion.resumenSiempre === true,
+  );
   // Cuando el indice **sustituye** a las pestanas (#330), las secciones de todas
   // ellas se apilan en una sola pagina y la barra de pestanas deja de dibujarse:
   // era navegacion, y el indice hace la misma navegacion desplazando. Las otras
@@ -781,6 +786,8 @@ function Bloques({
             {...(codigo === undefined ? {} : { codigo })}
             {...(datos === undefined ? {} : { datos })}
             cargando={cargando}
+            opcion={estructura.id}
+            busqueda={busqueda}
           />
         </Suspense>
       )}
