@@ -43,6 +43,43 @@ export interface DatosDePantalla {
    * explicar por que la determinacion del ejercicio anterior salio distinta.
    */
   readonly versionado?: DatosDeVersionado;
+  /**
+   * Con que version de los parametros salio la cifra que se esta viendo.
+   *
+   * Una cifra tributaria sin la version de los parametros que la produjeron
+   * **no se puede recalcular**. La UIT, los tramos y las alicuotas de un
+   * ejercicio viven en un **conjunto sellado**, y un conjunto sellado no se
+   * edita nunca: si hay que corregir algo se crea otro, con su rango de
+   * vigencia. De modo que dos conjuntos del mismo ejercicio dan dos importes
+   * distintos y los dos son correctos —el de la emision y el del recalculo— y
+   * sin decir con cual se determino, «587.44» es una cifra que nadie puede
+   * volver a obtener (`ARQ-09` §3 y `ADR-0006` de `../srtm`).
+   *
+   * Por eso viaja en la **respuesta** y no lo compone la interfaz: el conjunto
+   * lo elige quien determina, y quien determina es el servidor. Deducirlo aqui
+   * —«el ejercicio es 2026, luego sera el conjunto de 2026»— seria inventarse
+   * la respuesta a la unica pregunta que este dato existe para contestar.
+   */
+  readonly determinacion?: DatosDeDeterminacion;
+}
+
+/**
+ * La version de los parametros con la que el servidor determino, y sobre quien.
+ *
+ * `conjunto` es el nombre del conjunto sellado —«2026 v1»—, no el ejercicio: el
+ * ejercicio no basta porque puede tener mas de una version sellada, y decir
+ * solo «2026» dejaria la cifra igual de irreproducible que no decir nada.
+ *
+ * `sujeto` es el texto **ya redactado por el servidor** —«SUC. RUFINA MEDINA
+ * MEDINA», «Padron completo del ejercicio»—, no las piezas con las que
+ * componerlo. Se redacta alli y no aqui porque el sujeto de una determinacion
+ * masiva **no es un nombre**: es un alcance, y una interfaz que intentara
+ * componerlo a partir del contribuyente acabaria escribiendo «Contribuyente: —»
+ * encima del padron entero.
+ */
+export interface DatosDeDeterminacion {
+  readonly conjunto: string;
+  readonly sujeto?: string;
 }
 
 /** Texto en casi todo; booleano en las casillas. */

@@ -111,13 +111,19 @@ test('la ficha 360° recibe el foco y se recorre con el teclado', async ({ page 
   await expect(segunda).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tabpanel')).toContainText('Fuente: Consultas · Consulta de predios');
 
-  // Fin lleva a la última, que es el expediente coactivo, y Enter la abre.
+  /* Fin lleva a la última —hoy los beneficios del contribuyente, que #393 sumó
+     a la ficha— y Enter la abre. Lo que se prueba es Fin y Enter, no cuál es la
+     última: el rótulo se lee del propio botón enfocado, así que la barra puede
+     crecer sin que esto se ponga rojo por un motivo que no es el que mide. */
   await page.keyboard.press('End');
-  await expect(page.getByRole('tab').last()).toBeFocused();
+  const ultima = page.getByRole('tab').last();
+  await expect(ultima).toBeFocused();
+  const rotulo = (await ultima.textContent())?.trim() ?? '';
+  expect(rotulo).not.toBe('');
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('tabpanel')).toContainText(
-    'Fuente: Coactiva · Expedientes coactivos',
-  );
+  await expect(ultima).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tabpanel')).toContainText(`Fuente: `);
+  await expect(page.getByRole('tabpanel')).toContainText(rotulo);
 });
 
 /**

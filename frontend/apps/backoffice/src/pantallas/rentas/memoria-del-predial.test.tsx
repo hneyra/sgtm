@@ -146,16 +146,30 @@ describe('la memoria de calculo se lee en el orden del calculo', () => {
     await screen.findByRole('navigation', { name: 'Secciones de la pantalla' });
     const formulario = within(elBloque('.sgtm-formulario', 'el formulario'));
 
+    /* La escala se lee como memoria de calculo (#393): sus nueve campos `ro`
+       son los pasos de una cuenta, no nueve cajas. Los rotulos siguen siendo
+       los del manual —el catalogo no se toca— y cada uno lleva su importe. */
+    const memoria = within(elBloque('.sgtm-memoria', 'la memoria del calculo'));
     for (const rotulo of [
       'UIT vigente 2026 (S/)',
       'Tramo 1 — hasta 15 UIT (0.2 %)',
       'Tramo 3 — más de 60 UIT (1.0 %)',
-      'Impuesto insoluto anual (S/)',
-      'Cuota 1 — vence 28/02',
     ]) {
-      // Un campo `ro` sin valor dibuja el guion: no llegó, no vale cero.
-      expect(formulario.getByLabelText(rotulo).textContent).toBe('—');
+      // Un paso sin valor dibuja el guion: no llegó, no vale cero.
+      const linea = memoria.getByText(rotulo).closest('.sgtm-memoria__linea') as HTMLElement;
+      expect(linea.querySelector('.sgtm-memoria__importe')?.textContent).toBe('—');
     }
+    // El resultado de la cuenta va aparte de los pasos que lo producen, y **no
+    // es el ultimo campo de la seccion**: detras va el minimo imponible, que es
+    // una comprobacion y no lo que se cobra.
+    const resultado = elBloque('.sgtm-memoria__resultado', 'el resultado de la memoria');
+    expect(resultado.textContent).toContain('Impuesto insoluto anual (S/)');
+    expect(resultado.querySelector('.sgtm-memoria__resultado-valor')?.textContent).toBe('—');
+    expect(memoria.getByText('Mínimo imponible (0.6 % UIT)')).toBeInTheDocument();
+
+    // Y las secciones que **no** son una cuenta siguen siendo campos: las
+    // cuotas son un calendario, no una operacion encadenada.
+    expect(formulario.getByLabelText('Cuota 1 — vence 28/02').textContent).toBe('—');
   });
 
   /**

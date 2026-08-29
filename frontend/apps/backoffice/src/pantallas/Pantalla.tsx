@@ -34,6 +34,7 @@ import { useEjercicio } from '../app/ejercicio';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
 import { composicionDe, filtrosDe, hayQueResumir } from './composicion';
+import { useSimulacion } from './useSimulacion';
 import type { ComposicionDeOpcion } from './composicion';
 import { PanelDeAlta } from './bloques/PanelDeAlta';
 import type { AltaAbierta } from './bloques/PanelDeAlta';
@@ -503,7 +504,16 @@ function Bloques({
     puedeActuarAqui && !componeSuActo
       ? impedimentoDelActo(estructura.id, estructura.acciones ?? [])
       : undefined;
-  const datos = consulta.data;
+  /* ── Lo que devolvio la simulacion manda sobre lo que hay ────────────────
+     Las cinco pantallas de determinacion (#393) tienen un `POST` por operacion,
+     asi que `useDatosDePantalla` no pide nada al abrir —abrir una pantalla no
+     puede lanzar una determinacion— y `consulta.data` es `undefined`. Cuando
+     alguien pulsa «Simular», la respuesta llega por aqui y es la unica que hay:
+     no se mezcla campo a campo con la anterior, porque no hay anterior, y
+     mezclar dos determinaciones distintas seria enseñar una cuenta que nadie
+     calculo. En las 129 restantes esto es `consulta.data` y nada mas. */
+  const simulacion = useSimulacion(estructura.id, busqueda);
+  const datos = simulacion.datos ?? consulta.data;
 
   /* ── La seleccion de filas, y por que no vive en un efecto ───────────────
      Lo elegido se traslada al cuerpo **en el mismo gesto que lo elige**, no en
@@ -577,7 +587,12 @@ function Bloques({
   const esVersionada = VERSIONADAS.has(estructura.id);
   const Resumen = composicion.resumen;
   // Si hay algo que resumir, antes de pedir el trozo perezoso. Ver `hayQueResumir`.
-  const hayAlgoQueResumir = hayQueResumir(codigo, busqueda, filasDeLaTabla.length);
+  const hayAlgoQueResumir = hayQueResumir(
+    codigo,
+    busqueda,
+    filasDeLaTabla.length,
+    composicion.resumenSiempre === true,
+  );
   // Cuando el indice **sustituye** a las pestanas (#330), las secciones de todas
   // ellas se apilan en una sola pagina y la barra de pestanas deja de dibujarse:
   // era navegacion, y el indice hace la misma navegacion desplazando. Las otras
@@ -799,6 +814,8 @@ function Bloques({
             {...(codigo === undefined ? {} : { codigo })}
             {...(datos === undefined ? {} : { datos })}
             cargando={cargando}
+            opcion={estructura.id}
+            busqueda={busqueda}
           />
         </Suspense>
       )}
@@ -1006,6 +1023,20 @@ function Bloques({
                 enlace: {
                   etiqueta: composicion.acto.etiqueta,
                   ruta: composicion.acto.rutaDe(codigo),
+                },
+              }
+            : {})}
+          /* La accion que enseña el resultado sin escribir nada (#393). Solo
+             cuando la opcion la declara **y** se puede simular: con el backend
+             de verdad contestando, `puedeSimular` es falso y la accion vuelve a
+             quedarse como estaba —ver el docblock de `useSimulacion`, que es
+             donde vive el motivo—. */
+          {...(simulacion.accion !== undefined && simulacion.puedeSimular
+            ? {
+                simulacion: {
+                  accion: simulacion.accion,
+                  simulando: simulacion.simulando,
+                  onSimular: simulacion.simular,
                 },
               }
             : {})}

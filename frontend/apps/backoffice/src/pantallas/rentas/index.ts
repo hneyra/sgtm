@@ -119,6 +119,49 @@ import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
  *   de interfaz: puentearla desde aqui dejaria dos contratos vivos y el proximo que lea el YAML
  *   creeria el equivocado. `minimoImponible` es, ademas, un valor normativo (D-02a).
  *
+ * ── (#393) El expediente predial, y por que solo una de sus seis secciones se compone ─
+ *
+ * La propuesta C de #393 reunia bajo un solo contribuyente las seis secciones que
+ * hoy se abren de una en una: predios, declaracion jurada, determinacion,
+ * arbitrios, beneficios y movimientos de deuda. El sitio donde se compone ya
+ * existe —la **ficha 360°** (ADR-0016 §2), que es composicion de navegacion y no
+ * una pantalla que absorba a las demas: cada seccion conserva su ruta, su
+ * operacion y su permiso—, asi que no hace falta ninguna opcion nueva.
+ *
+ * De las seis, **una** se puede componer por contribuyente hoy, y se compuso:
+ *
+ *   `beneficios`   `GET /rentas/beneficios?contribuyente=` — el filtro esta en
+ *                  el contrato y en el `Resource`. Es ademas la que mas se
+ *                  pregunta en ventanilla de las que faltaban: si le corre la
+ *                  deduccion de 50 UIT decide lo que se le cobra
+ *
+ * Las otras cinco no, y ninguna por descuido:
+ *
+ *   predios        **ya esta en la ficha**, por `consulta_predios`, que es la
+ *                  lectura de Consultas que si tiene `Controller`. Anadir
+ *                  `predios_rentas` seria una segunda pestaña de lo mismo, y
+ *                  ademas vacia: esa opcion no tiene `Controller`, asi que el
+ *                  proxy la contesta con la forma comun y la tabla saldria
+ *                  vacia **en silencio**, que es el defecto exacto de #363
+ *   `declaracion_jurada`  su ruta lleva el numero de la declaracion en el
+ *                  **camino** —`GET /rentas/declaraciones/{djNro}`— y una ficha
+ *                  abierta por contribuyente no lo tiene. Sin `djNro` no hay
+ *                  peticion que hacer; con uno inventado, se ensenaria la
+ *                  declaracion de otro
+ *   determinacion  no hay lectura: su operacion es un `POST` y ningun
+ *                  controlador la publica (#333b, aqui abajo)
+ *   `arbitrios`    su contrato **no tiene filtro por contribuyente**: se
+ *                  pregunta por ejercicio, codigo predial, zona y uso. Componer
+ *                  por predio exigiria elegir cual de los suyos, que es otra
+ *                  pantalla; y declarar un filtro que el backend no tiene seria
+ *                  inventar contrato (ADR-0010 §4)
+ *   altas y bajas  **ya estan en la ficha**, dentro de las seis rejillas de la
+ *                  unificada, y ademas son escrituras: ninguna sale de la ficha
+ *                  (ADR-0016 §2)
+ *
+ * Lo que falta para las cinco es backend o contrato, no interfaz, y por eso se
+ * anota aqui en vez de puentearse.
+ *
  * ── (#333b) El contrato que la capa web de la determinacion tendra que publicar ─
  *
  * Se anota **como anotacion y no como forma en el proxy**: fingir aqui la derivacion haria que la

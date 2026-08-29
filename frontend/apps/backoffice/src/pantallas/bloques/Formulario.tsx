@@ -3,7 +3,8 @@ import { Campo, Esqueleto } from '@sgtm/design-system';
 import type { ValorDeCampo } from '@sgtm/api-client';
 import type { SeccionDePantalla } from '../../catalogo';
 import { arrancaCerrada } from '../../catalogo';
-import { resolutorDeCampo } from '../composicion';
+import { memoriaDeSeccion, resolutorDeCampo } from '../composicion';
+import { MemoriaDeCalculo } from './MemoriaDeCalculo';
 import { Icono } from '@sgtm/design-system';
 
 /**
@@ -103,6 +104,14 @@ export function Formulario({
       {secciones.map((seccion, i) => {
         const clave = `${i}|${pestana}`;
         const cerrada = cerradas[clave] ?? arrancaCerrada(seccion);
+        const memoria = memoriaDeSeccion(opcion, seccion.label);
+        /* Con memoria declarada, la seccion se parte en dos y la rejilla se
+           queda solo con lo que se teclea; sin ella, la rejilla es la seccion
+           entera, como en las otras 129 pantallas. Vacia no se dibuja: un
+           recuadro de 36 px de alto y sin nada dentro se lee como un dato que
+           falta. */
+        const deLaRejilla =
+          memoria === undefined ? seccion.campos : seccion.campos.filter((c) => c.t !== 'ro');
         return (
           <section
             key={clave}
@@ -126,9 +135,26 @@ export function Formulario({
                 <Icono nombre="chevronAbajo" tamano={15} />
               </span>
             </button>
-            {!cerrada && (
+            {!cerrada && memoria !== undefined && (
+              /* La seccion se lee como la memoria de un calculo (#393), y se
+                 parte por el **tipo del catalogo**: los `"ro"` son la cuenta y
+                 van a la memoria; los que se teclean siguen en su rejilla,
+                 debajo. La linea de corte no es «lo que esta pantalla puede
+                 escribir» sino «lo que el catalogo dibuja como campo»: en
+                 «Alcabala» el numero de expediente y la fecha de la
+                 transferencia son entradas aunque hoy nadie pueda mandarlas, y
+                 dibujarlas como texto de una cuenta seria decir que ya estan
+                 decididas. */
+              <MemoriaDeCalculo
+                campos={seccion.campos.filter((campo) => campo.t === 'ro')}
+                valores={valores}
+                cargando={cargando}
+                memoria={memoria}
+              />
+            )}
+            {!cerrada && deLaRejilla.length > 0 && (
               <div className="sgtm-seccion__rejilla">
-                {seccion.campos.map((campo) => {
+                {deLaRejilla.map((campo) => {
                   /* El control propio de un campo que **resuelve**, si la opcion
                      declara uno. Llega en el trozo de su modulo, asi que se
                      dibuja dentro de un `Suspense` con el mismo hueco que

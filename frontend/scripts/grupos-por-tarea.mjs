@@ -81,14 +81,44 @@ export const GRUPOS_POR_TAREA = {
       { centro: true },
     ],
   ],
+  // Reagrupado por **el hecho que dispara el trabajo** (#393). La agrupacion
+  // anterior seguia siendo, en parte, la taxonomia tecnica de FRO-03 §4:
+  // «Movimientos» mezclaba transferencias del padron con altas y bajas de la
+  // cuenta corriente —dos trabajos de dos personas distintas— y «Tributos y
+  // beneficios» era un cajon de sastre con un tributo de emision masiva
+  // (arbitrios), uno de transferencia (alcabala), uno por evento
+  // (espectaculos) y un registro de resoluciones que **baja la base antes de
+  // determinar** (beneficios).
+  //
+  // Lo que se midio sobre el catalogo antes de mover nada: una atencion de
+  // predial —contribuyente, predios, DJ, determinacion, arbitrios,
+  // transferencia, alcabala— cruzaba los CUATRO grupos, y ninguno la reunia.
   'rentas-registro': [
-    ['Padrones', ['contribuyentes', 'predios_rentas', 'vehiculos']],
+    // Quien y que esta inscrito. El unico grupo que no cambia.
+    ['Padrón', ['contribuyentes', 'predios_rentas', 'vehiculos']],
+    // La emision anual sobre el padron, en el orden en que se trabaja: el papel
+    // que la sustenta abre el grupo, y arbitrios entra aqui porque tambien es
+    // determinar y emitir cuponera, no un tributo suelto.
     [
       'Determinación',
-      ['predial_individual', 'predial_masivo', 'vehicular_calculo', 'declaracion_jurada'],
+      [
+        'declaracion_jurada',
+        'predial_individual',
+        'predial_masivo',
+        'arbitrios',
+        'vehicular_calculo',
+      ],
     ],
-    ['Movimientos', ['transferencia_predio', 'transferencia_vehiculo', 'alta_deuda', 'baja_deuda']],
-    ['Tributos y beneficios', ['arbitrios', 'alcabala', 'espectaculos', 'beneficios']],
+    // Lo que ocurre una vez y se liquida al momento. Alcabala queda **bajo el
+    // acto que la genera**: «Transferencia de predio» dibuja una casilla
+    // «Genera alcabala» y la pantalla que la liquidaba vivia dos grupos mas
+    // abajo.
+    [
+      'Actos y transferencias',
+      ['transferencia_predio', 'alcabala', 'transferencia_vehiculo', 'espectaculos'],
+    ],
+    // Las tres formas de tocar lo que se debe fuera de la emision.
+    ['Beneficios y ajustes', ['beneficios', 'alta_deuda', 'baja_deuda']],
   ],
   valores: [
     ['Emisión', ['valores_individual', 'valores_masivo']],
