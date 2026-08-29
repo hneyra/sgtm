@@ -14,8 +14,8 @@ import {
 } from '../seguridad/listado';
 
 /**
- * Infracciones administrativas, conectado hasta donde llega el backend: **siete opciones de
- * trece** (#78, sobre #363).
+ * Infracciones administrativas, conectado hasta donde llega el backend: **ocho opciones de
+ * trece** (#78 y #397, sobre #363).
  *
  * `adm_estado_cuenta` (`GET /infracciones/administrativas/estado-cuenta`,
  * `EstadoDeCuentaAdministrativoController`, #47) es la que la ficha 360° compone (#297,
@@ -29,23 +29,24 @@ import {
  *   `adm_notificaciones_contribuyente` `GET .../reportes/por-contribuyente`
  *   `adm_resumen_recaudacion`         `GET .../reportes/resumen-recaudacion` (objeto suelto)
  *
- * **Las seis que se quedan fuera, con su motivo** (ADR-0010 §4: lo que el backend no publique
+ * Y desde #397 se suma la octava, `infracciones_adm` (`GET /infracciones/actas`), que era la
+ * única que tenía `Controller` y aun así no se podía conectar. Lo que le faltaba no era la
+ * interfaz: **le faltaba un filtro y le sobraba un vocabulario**. El filtro «Estado» de esta
+ * pantalla —`PREVENTIVA`, `CONSTATADA`, `SANCIONADA`, `PAGADA`, `COACTIVA`: el vocabulario del
+ * *procedimiento sancionador*— no tenía parámetro que lo recibiera, y la única columna de estado
+ * que el backend publicaba era el `enum EstadoDePapeleta` —`IMPUESTA`, `NOTIFICADA`, `RESUELTA`…:
+ * el vocabulario de la *deuda*—. Conectarla así habría dejado un filtro que no filtra nada al
+ * lado de una columna que habla otro idioma, y RNF-080 no deja renombrar ninguno de los dos.
+ *
+ * #397 los separó en el backend: `ProcedimientoSancionadorResource` publica `fase` —derivada de
+ * los hechos, no guardada en ninguna columna— **y** `estadoDeLaDeuda`, cada uno con su nombre, y
+ * `estado` pasa a ser el parámetro de la fase. Aquí se dibuja `fase` en la columna «Estado» de la
+ * grilla, que es la que el filtro promete; `estadoDeLaDeuda` no se dibuja porque esta pantalla
+ * del manual no tiene columna para él.
+ *
+ * **Las cinco que se quedan fuera, con su motivo** (ADR-0010 §4: lo que el backend no publique
  * se dice, no se finge):
  *
- *   `infracciones_adm`               `InfraccionesAdministrativasController` sí tiene `Controller`
- *                                    y publica el mismo `PapeletaResource` de `adm_estado_cuenta`,
- *                                    pero el filtro «Estado» de esta pantalla (`PREVENTIVA`,
- *                                    `CONSTATADA`, `SANCIONADA`, `PAGADA`, `COACTIVA`: el
- *                                    vocabulario del *procedimiento*) no tiene parámetro
- *                                    correspondiente en el controlador —solo filtra por
- *                                    `nroDeActa`/`administrado`/`codigoCuis`—, y la columna
- *                                    «Estado» que sí se puede dibujar es el `enum EstadoDePapeleta`
- *                                    (`IMPUESTA`, `NOTIFICADA`, `RESUELTA`…: el vocabulario de la
- *                                    *deuda*). Conectar esta tabla dejaría un filtro que no filtra
- *                                    nada al lado de una columna en otro idioma que el que ese
- *                                    mismo filtro promete — se deja en el camino común hasta que
- *                                    los dos vocabularios se reconcilien (candidato natural para
- *                                    el mismo trabajo que le tocó a #337 con `adm_notificacion`).
  *   `adm_notificacion`               `NotificacionAdministrativaController` exige `numero`,
  *                                    `fecha`, `direccion` y `motivo`, y el catálogo sí dibuja
  *                                    controles para los cuatro — pero la última acción de esta
@@ -369,9 +370,77 @@ const adm_resumen_recaudacion = definirConexion({
   },
 });
 
+/**
+ * «Todos» del desplegable **no viaja** (#397).
+ *
+ * Es la primera opción del filtro «Estado» y significa «sin filtrar por fase»; mandarla tal cual
+ * sería un 422 del backend, que solo admite las cinco palabras del manual —y con razón: un
+ * `estado=Todos` que el servidor tolerase sería un filtro que a veces filtra y a veces no—.
+ * Mismo mecanismo, y mismo motivo, que `faseDe` en `../consultas/index.ts`: lo que no se
+ * reconoce no se manda, y no mandarlo trae todas las fases, que es lo que «Todos» significa.
+ *
+ * No se traduce ninguna palabra, a diferencia de aquella: aquí el desplegable del prototipo y el
+ * `enum FaseDelProcedimiento` dicen exactamente lo mismo, porque el enum se escribió desde el
+ * manual (RNF-080).
+ */
+const TODOS = 'Todos';
+
+/**
+ * Infracción administrativa: la grilla «Procedimientos sancionadores» (#397, RF-071).
+ *
+ * **Las ocho columnas se llenan las ocho**, que es el motivo por el que esta opción no lee
+ * `PapeletaResource` sino `ProcedimientoSancionadorResource`: cuatro de ellas —«Administrado»,
+ * «CUIS», «Infracción» y «Medida complementaria»— salen de cruzar `contribuyente` y
+ * `codigo_infraccion`, y ninguna es columna de `papeleta`.
+ *
+ * «Estado» dibuja `fase`, **no** `estadoDeLaDeuda`: la fase es lo que el filtro de arriba promete
+ * y lo que el subtítulo de la pantalla describe —«notificación preventiva, acta de constatación y
+ * resolución de infracción y sanción»—. El recurso publica los dos con nombres distintos
+ * precisamente para que esta línea sea una elección visible y no un descuido.
+ *
+ * Una fila sin fase sale con {@link SIN_DATO}: un acta anulada o prescrita es un procedimiento que
+ * terminó sin que ninguna de las cinco palabras del manual lo nombre, y el backend manda `null`
+ * antes que la más parecida.
+ *
+ * **Lo que sigue abierto, y no lo abre este issue**: el filtro «Administrado» del manual es un
+ * campo de texto libre y el backend lo lee como el **documento** del administrado —DNI o RUC—,
+ * igual que las otras lecturas de papeletas administrativas desde #47. Quien teclee un nombre no
+ * encuentra nada. No se cambia aquí porque cambiarlo es cambiar el criterio del controlador para
+ * las tres lecturas que lo comparten, y eso es otro issue; queda dicho para que no se descubra
+ * en ventanilla.
+ */
+const infracciones_adm = definirConexion({
+  operacion: 'infracciones_adm',
+  parametros: ({ busqueda }) => {
+    const parametros = parametrosDeBusqueda('infracciones_adm', undefined, busqueda);
+    if (parametros['estado'] !== TODOS) return parametros;
+    const { estado: _todos, ...resto } = parametros;
+    return resto;
+  },
+  leer: (cuerpo) => leerPaginado(cuerpo, 'los procedimientos sancionadores'),
+  adaptar: (paginado): DatosDePantalla =>
+    datosDe(
+      tablaDe(
+        paginado,
+        (fila): readonly Celda[] => [
+          { texto: texto(fila['numeroActa']) },
+          { texto: texto(fila['administrado']) },
+          { texto: texto(fila['codigoCuis']) },
+          { texto: texto(fila['descripcionInfraccion']) },
+          { texto: texto(fila['porcentajeInfraccion']) },
+          { texto: texto(fila['importeAPagar']) },
+          { texto: texto(fila['medidaComplementaria']) },
+          { texto: texto(fila['fase']) },
+        ],
+        'procedimientos sancionadores',
+      ),
+    ),
+});
+
 /** Las opciones de Infracciones administrativas conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_SANCIONES: Readonly<Record<string, Conexion>> = {
   adm_estado_cuenta,
+  infracciones_adm,
   codigos_cuis,
   adm_codigos_reporte,
   adm_padron_notificaciones,

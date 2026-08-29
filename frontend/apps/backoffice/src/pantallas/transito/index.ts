@@ -27,21 +27,39 @@ import {
  * traduce con los nombres del recurso, nunca con los del catalogo del
  * prototipo (RNF-080).
  *
- * **Dos resúmenes se quedan sin conectar, y no por descuido.**
- * `AgrupacionDelResumen` (`backend/sgtm-sanciones/.../dominio/AgrupacionDelResumen.java`)
- * solo agrupa por `ESTADO`, `CODIGO`, `PLACA` o `MES` — no existe una
- * agrupación por año. `transito_resumen_codigo` y `transito_resumen_placa`
- * encajan letra por letra con `CODIGO`/`PLACA`: cada columna del catálogo tiene
- * su campo en `Linea`. Pero `transito_resumen_papeletas` dibuja «Año» como
- * primera columna, y ningún agrupador de `ResumenDePapeletasResource` produce
- * un año — conectarla con `ESTADO` (la opción por omisión del backend)
- * pondría nombres de estado bajo un rótulo que dice «Año», y RNF-080 no lo
- * permite. `transito_resumen_recaudacion` tiene el mismo problema **y** uno
- * peor: sus columnas «Ordinaria S/»/«Coactiva S/»/«Convenios S/» piden pivotar
- * varias `Linea` de `RecaudacionDeMultasResource` en una sola fila por mes —
- * que no suma nada, solo reordena—, pero su columna «Total S/» no tiene de
- * donde salir sin sumarlas (RNF-083): el recurso solo publica el total
- * **general**, no uno por mes. Las dos se quedan como estaban.
+ * **Los dos resúmenes que #77 dejó fuera ya se conectan (#398).** Los dos
+ * huecos eran del backend y los dos se cerraron ahí: `AgrupacionDelResumen`
+ * ganó `ANO` —con su expresión SQL y su prueba—, así que la columna «Año» de
+ * `transito_resumen_papeletas` se dibuja **con un año** (`Linea.ano`, nulo
+ * cuando el agrupador no determina ninguno); y `RecaudacionDeMultasResource`
+ * publica `porMes`, una entrada por mes con las fases desglosadas y **su total
+ * ya sumado en el servidor**, que es de donde sale «Total S/» sin recomponer
+ * nada en el cliente (RNF-083).
+ *
+ * **Y las dos operaciones que no tenían `Controller` ya lo tienen (#396).**
+ * `transito_papeleta_reporte` se conecta como hoja —se abre por el número de
+ * la papeleta en la ruta, igual que `transito_documentos`—.
+ * `transito_reportes` **no se conecta, y no por descuido**: es un `POST` y las
+ * dos únicas puertas que el frontend tiene para uno son `useEscritura` —que
+ * exige observación (regla 10), y este emisor no modifica nada— y
+ * `useSimulacion` —cuya guarda es que el cuerpo declare `simulacion: true`, una
+ * marca que `PeticionDeReporteDeTransito` no puede declarar sin mentir—;
+ * declarar una `Conexion` lo dispararía **al abrir la pantalla** (ver el
+ * docblock de `Adaptacion` en `pantallas/conexiones.ts`), y sin tipo de reporte
+ * elegido el backend contestaría 422. Se suma que su última acción del catálogo
+ * es «Cancelar» —el cuarteto Exportar/Imprimir/Pantalla/Cancelar de #79, donde
+ * el renderizador genérico haría primaria a la que cierra el diálogo— y que su
+ * desplegable ofrece quince reportes de los que el backend sirve nueve. En la
+ * interfaz no se pierde nada: el centro de reportes (ADR-0014 §5) ya lleva a
+ * cada hoja de un clic, y doce de las trece están conectadas.
+ *
+ * **Tres filtros de los dos resúmenes se dibujan y no se mandan**
+ * (`filtrosBloqueados` de `transito/composicion.ts`): el «Agrupado por» de las
+ * dos —su tabla no tiene columna para la clave del grupo, así que agrupar por
+ * otra cosa dejaría filas que no se distinguen—, el «Cobranza» del de
+ * papeletas —la respuesta ya trae pendientes y coactiva en columnas
+ * separadas— y el «Caja» y el «Tipo de cobranza» del de recaudación —la caja
+ * la rechaza el backend con 422—.
  *
  * **Seis escrituras.** `transito_cambio_numero` y `transito_valores` viven en
  * su propio componente (`COMPONENTES_PROPIOS` de `Pantalla.tsx`), por el mismo
@@ -556,6 +574,201 @@ const transito_resumen_placa = definirConexion({
   },
 });
 
+/**
+ * Los meses, como los escribe el prototipo. `RecaudacionDeMultasResource`
+ * publica el mes como número (1 a 12), que es lo que el libro sabe; ponerle
+ * nombre es formato, no vocabulario del dominio —la misma excepción que RNF-080
+ * admite para el recuento de una tabla—.
+ */
+const MESES: readonly string[] = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Setiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+];
+
+function mesDe(cruda: unknown): string {
+  const numero = typeof cruda === 'number' ? cruda : Number(texto(cruda));
+  return MESES[numero - 1] ?? SIN_DATO;
+}
+
+/**
+ * Resumen de papeletas pendientes y pagadas (`transito_resumen_papeletas`,
+ * `ResumenesDeTransitoController#resumenDePapeletas`, #53, #398).
+ *
+ * **Pide siempre `agrupadoPor=ANO`**, y no lo que traiga la URL: la tabla del
+ * catálogo no tiene ninguna columna para la clave del grupo —la primera dice
+ * «Año»—, así que agrupar por estado o por código dejaría filas que no se
+ * pueden distinguir entre sí. El desplegable del prototipo se dibuja bloqueado,
+ * con su motivo (`transito/composicion.ts`), en vez de desaparecer: un filtro
+ * que se va deja a quien lo buscaba pensando que algo se rompió.
+ *
+ * La columna «Año» se dibuja con `linea.ano` y no con `linea.clave`: con `ANO`
+ * las dos coinciden, y ese es justamente el punto —la clave del grupo es el
+ * año—, pero el campo que promete un año es `ano`.
+ */
+const transito_resumen_papeletas = definirConexion({
+  operacion: 'transito_resumen_papeletas',
+  parametros: ({ busqueda }) => ({
+    ...parametrosDeBusqueda('transito_resumen_papeletas', undefined, busqueda),
+    agrupadoPor: 'ANO',
+  }),
+  leer: (cuerpo) => leerObjeto(cuerpo, 'el resumen de papeletas pendientes y pagadas'),
+  adaptar: (resumen): DatosDePantalla => {
+    const lineas = lineasDelResumen(resumen);
+    return {
+      fechaCalculo: fechaDelResumen(resumen),
+      tabla: {
+        filas: lineas.map((linea): readonly Celda[] => [
+          { texto: texto(linea['ano']) },
+          { texto: texto(linea['pendientes']) },
+          { texto: texto(linea['importeDeLasPendientes']) },
+          { texto: texto(linea['pagadas']) },
+          { texto: texto(linea['importeDeLasPagadas']) },
+          { texto: texto(linea['enCoactiva']) },
+          { texto: texto(linea['importeEnCoactiva']) },
+        ]),
+        conteo: `${lineas.length} año(s)`,
+      },
+    };
+  },
+});
+
+/** Lo recaudado de una fase dentro de un mes, o `SIN_DATO` si esa fase no movió nada. */
+function faseDelMes(mes: Readonly<Record<string, unknown>>, fase: string): Celda {
+  const fases = mes['porFase'];
+  if (!Array.isArray(fases)) return { texto: SIN_DATO };
+  const suya = fases.filter(esObjeto).find((linea) => texto(linea['fase']) === fase);
+  return { texto: suya === undefined ? SIN_DATO : texto(suya['recaudado']) };
+}
+
+/**
+ * Resumen de recaudación por papeletas (`transito_resumen_recaudacion`,
+ * `ResumenesDeTransitoController#resumenDeRecaudacion`, #53, #398).
+ *
+ * **Se dibuja desde `porMes`, no desde `lineas`.** `lineas` es lo que devuelve
+ * el libro —una por (tributo, ejercicio, mes, fase)— y la pantalla pide una
+ * fila por mes con las fases en columnas. Pivotarlas aquí no sumaría nada, pero
+ * «Total S/» sí: esa cifra la compone el servidor (`RecaudacionDeMultasResource`)
+ * porque recomponerla en el cliente es lo que RNF-083 prohíbe.
+ *
+ * **«Papeletas pagadas» sale con `SIN_DATO`**, y no con `abonos`: un abono no
+ * es una papeleta —una se puede pagar en varios y un recibo puede abonar
+ * varias—, así que poner ahí el número de asientos sería una cifra parecida y
+ * distinta, la peor clase.
+ *
+ * **El total del mes puede ser mayor que la suma de las tres columnas**: el
+ * libro tiene cuatro fases y el manual dibuja tres —falta `VALOR`, lo cobrado
+ * de una papeleta con su resolución de multa ya emitida—. Repartir esa cifra
+ * entre las tres columnas sería inventar un reparto y dejarla fuera del total
+ * sería publicar menos recaudación de la que hubo; el pie de la tabla lo dice.
+ */
+const transito_resumen_recaudacion = definirConexion({
+  operacion: 'transito_resumen_recaudacion',
+  // Solo el «Año»: los otros tres filtros de la pantalla van bloqueados, y el de
+  // caja lo rechaza el backend con 422 (`ResumenesDeTransitoController`).
+  parametros: ({ busqueda }) => {
+    const ano = busqueda.get('ano') ?? '';
+    return ano === '' ? {} : { ano };
+  },
+  leer: (cuerpo) => leerObjeto(cuerpo, 'el resumen de recaudación por papeletas'),
+  adaptar: (recaudacion): DatosDePantalla => {
+    const meses = recaudacion['porMes'];
+    const filas = Array.isArray(meses) ? meses.filter(esObjeto) : [];
+    return {
+      fechaCalculo: fechaDelResumen(recaudacion),
+      tabla: {
+        filas: filas.map((mes): readonly Celda[] => [
+          { texto: mesDe(mes['mes']) },
+          faseDelMes(mes, 'ORDINARIA'),
+          faseDelMes(mes, 'COACTIVA'),
+          faseDelMes(mes, 'CONVENIO'),
+          // Un abono no es una papeleta: el recurso no publica cuantas se pagaron.
+          { texto: SIN_DATO },
+          { texto: texto(mes['total']) },
+        ]),
+        conteo: `${filas.length} mes(es)`,
+      },
+    };
+  },
+});
+
+/**
+ * Hoja informativa de una papeleta (`transito_papeleta_reporte`,
+ * `HojaDePapeletaController`, #396, RF-068): se abre por el `numero` de la
+ * papeleta en la ruta, igual que `transito_documentos`.
+ *
+ * **La hoja no dice lo que se debe hoy.** Los cinco conceptos son los del acta,
+ * congelados al registrarla, y por eso la fecha de la hoja es la de la
+ * infracción (`actualizadoA`) y no la de hoy; `emitidaEl` va en la cabecera,
+ * aparte. Lo que se debe hoy es del libro y lo publica
+ * `transito_estado_cuenta`.
+ *
+ * **El pie del prototipo no se copia.** Decía «dentro de los cinco días hábiles
+ * de notificada la papeleta», y ese plazo es un parámetro normativo (regla 5,
+ * #192): escribirlo aquí sería compilar una cifra que tiene que salir del
+ * conjunto publicado.
+ */
+const transito_papeleta_reporte = definirConexion({
+  operacion: 'transito_papeleta_reporte',
+  parametros: ({ ruta, busqueda }) => ({
+    numero: ruta['codigo'] ?? '',
+    ...parametrosDeBusqueda('transito_papeleta_reporte', ruta['codigo'], busqueda),
+  }),
+  leer: (cuerpo) => leerObjeto(cuerpo, 'la hoja informativa de la papeleta'),
+  adaptar: (hoja): DatosDePantalla => ({
+    fechaCalculo: texto(hoja['actualizadoA']),
+    reporte: {
+      code: texto(hoja['numero']),
+      date: texto(hoja['emitidaEl']),
+      meta: [
+        { k: 'Nº de papeleta', v: texto(hoja['numero']) },
+        { k: 'Fecha de la infracción', v: texto(hoja['fechaInfraccion']) },
+        { k: 'Hora', v: texto(hoja['horaInfraccion']) },
+        { k: 'Lugar', v: texto(hoja['lugar']) },
+        { k: 'Placa', v: texto(hoja['placa']) },
+        { k: 'Licencia', v: texto(hoja['licenciaConducir']) },
+        { k: 'Obligado', v: texto(hoja['obligadoNombre']) },
+        { k: 'Documento', v: texto(hoja['obligadoDocumento']) },
+        { k: 'Domicilio', v: texto(hoja['obligadoDomicilio']) },
+        { k: 'Estado', v: texto(hoja['estado']) },
+      ],
+      filas: [
+        [
+          'Código de infracción',
+          [texto(hoja['codigoInfraccion']), texto(hoja['descripcionInfraccion'])].join(' — '),
+          SIN_DATO,
+        ],
+        ['Base imponible', 'UIT aplicada en el acta', texto(hoja['baseImponible'])],
+        [
+          'Porcentaje de la infracción',
+          texto(hoja['porcentajeInfraccion']),
+          texto(hoja['importeInfraccion']),
+        ],
+        [
+          'Porcentaje a cobrar',
+          texto(hoja['porcentajeACobrar']),
+          texto(hoja['importeAPagar']),
+        ],
+        [
+          'Importe con beneficio',
+          'Descuento registrado en el acta',
+          texto(hoja['importeConBeneficio']),
+        ],
+      ],
+      footer: `Importes del acta, congelados al registrar la papeleta (${texto(hoja['actualizadoA'])}). Lo que se debe hoy lo publica «Estado de cuenta de infracciones».`,
+    },
+  }),
+});
+
 /** Las opciones de Tránsito conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_TRANSITO: Readonly<Record<string, Conexion>> = {
   papeletas,
@@ -571,4 +784,7 @@ export const CONEXIONES_DE_TRANSITO: Readonly<Record<string, Conexion>> = {
   transito_record_vehicular,
   transito_resumen_codigo,
   transito_resumen_placa,
+  transito_resumen_papeletas,
+  transito_resumen_recaudacion,
+  transito_papeleta_reporte,
 };

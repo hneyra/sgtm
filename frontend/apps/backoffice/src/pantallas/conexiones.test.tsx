@@ -38,16 +38,15 @@ describe('una opcion conectada y una sin conectar conviven', () => {
     expect(await screen.findByText('Recaudado 2026')).toBeInTheDocument();
     conectada.unmount();
 
-    // `papeletas` se conecto en #363, y el resto de Transito con #77: la
-    // muestra de «sin conectar» pasa a `transito_resumen_papeletas`, del
-    // mismo modulo, que todavia sigue el camino comun (ver
-    // `pantallas/transito/index.ts`).
-    const sinConectar = montarEnRuta('/transito/transito-resumen-papeletas', cliente);
-    // Se espera a la tabla, no a un texto suelto: «2026» tambien aparece en la
-    // cabecera con el ejercicio de trabajo.
-    expect(await within(await screen.findByRole('table')).findAllByText('2026')).not.toHaveLength(
-      0,
-    );
+    // `papeletas` se conecto en #363, el resto de Transito con #77 y los dos
+    // resumenes que quedaban con #398: la muestra de «sin conectar» pasa a
+    // `fisc_resultados`, que sigue el camino comun y seguira —
+    // `LiquidacionResource` no publica las columnas de dinero que su pantalla
+    // dibuja (ver `pantallas/fiscalizacion/index.ts`, #80)—.
+    const sinConectar = montarEnRuta('/fiscalizacion/fisc-resultados', cliente);
+    // Se espera a una fila con datos, no a que exista la tabla: la tabla existe
+    // desde el catalogo, con su esqueleto.
+    await within(await screen.findByRole('table')).findByText('ACT-2026-00418');
     sinConectar.unmount();
 
     // Las dos piden por HTTP la ruta que declara el contrato, asi que la URL no
@@ -58,10 +57,10 @@ describe('una opcion conectada y una sin conectar conviven', () => {
       .getAll()
       .map((consulta) => consulta.queryKey);
     expect(claves).toContainEqual(['operacion', 'inicio', {}]);
-    expect(claves).toContainEqual(['pantalla', 'transito_resumen_papeletas', {}]);
+    expect(claves).toContainEqual(['pantalla', 'fisc_resultados', {}]);
 
     expect(alaOperacion('/api/v1/indicadores/recaudacion')).toHaveLength(1);
-    expect(alaOperacion('/api/v1/transito/reportes/resumen-papeletas')).toHaveLength(1);
+    expect(alaOperacion('/api/v1/fiscalizacion/resultados')).toHaveLength(1);
   });
 
   it('el registro dice cuales estan conectadas, y son pocas todavia', () => {
@@ -79,10 +78,13 @@ describe('una opcion conectada y una sin conectar conviven', () => {
     expect(OPCIONES_CONECTADAS).toContain('papeletas');
     expect(OPCIONES_CONECTADAS).toContain('adm_estado_cuenta');
     expect(OPCIONES_CONECTADAS).toContain('coactiva_expedientes');
-    // Veintiuna de las veintitres de Transito estan conectadas desde #77 (ver
-    // `pantallas/transito/index.ts`); las dos que quedan, no.
+    // Veintidos de las veintitres de Transito estan conectadas (#77, #396,
+    // #398, ver `pantallas/transito/index.ts`); la que queda —el emisor de
+    // reportes— es un `POST` y no tiene puerta por la que entrar.
     expect(OPCIONES_CONECTADAS).toContain('codigos_transito');
-    expect(OPCIONES_CONECTADAS).not.toContain('transito_resumen_papeletas');
+    expect(OPCIONES_CONECTADAS).toContain('transito_resumen_papeletas');
+    expect(OPCIONES_CONECTADAS).not.toContain('transito_reportes');
+    expect(OPCIONES_CONECTADAS).not.toContain('fisc_resultados');
   });
 });
 

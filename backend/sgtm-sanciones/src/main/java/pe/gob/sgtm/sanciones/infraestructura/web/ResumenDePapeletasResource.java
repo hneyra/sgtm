@@ -42,10 +42,18 @@ public record ResumenDePapeletasResource(
                         .toList());
     }
 
-    /** Una línea del resumen, con la misma fecha que el resumen entero. */
+    /**
+     * Una línea del resumen, con la misma fecha que el resumen entero.
+     *
+     * <p>{@code ano} sale <b>solo</b> cuando el agrupador lo determina —{@code ANO} y {@code MES}—
+     * y va nulo con los otros tres (#398). La columna «Año» de {@code transito_resumen_papeletas}
+     * se dibuja con este campo y no con {@code clave}: la clave es el estado cuando se agrupa por
+     * estado, y ponerla bajo un rótulo que dice «Año» es lo que RNF-080 no permite.
+     */
     public record Linea(
             String clave,
             @Nullable String descripcion,
+            @Nullable Integer ano,
             long cantidad,
             Dinero importe,
             long pagadas,
@@ -60,6 +68,7 @@ public record ResumenDePapeletasResource(
             return new Linea(
                     linea.clave(),
                     linea.descripcion(),
+                    linea.ano(),
                     linea.cantidad(),
                     linea.importe(),
                     linea.pagadas(),

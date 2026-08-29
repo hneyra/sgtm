@@ -130,25 +130,25 @@ describe('orden y pagina, contra el servidor', () => {
 
     // Sobre una opcion **sin conectar**: aqui se prueba la cache de la forma
     // que comparten las 134 (`depreciacion` ya pide su recurso propio, #71;
-    // `papeletas`, `codigos_transito` y las demas lecturas de tránsito ya no
-    // sirven para este ejemplo, conectadas desde #363/#77 —su `leer` rechaza
-    // un cuerpo sin `contenido`—; `transito_resumen_papeletas` sigue sin
-    // conectar, ver `pantallas/transito/index.ts`).
-    // Se espera a la tabla, no a un texto suelto: «2026» tambien aparece en la
-    // cabecera con el ejercicio de trabajo, y esperar a esa coincidencia
-    // dejaria la consulta todavia en camino cuando se desmonta.
+    // las lecturas de tránsito ya no sirven para este ejemplo, conectadas
+    // desde #363, #77, #396 y #398 —su `leer` rechaza un cuerpo sin
+    // `contenido`—). `fisc_resultados` sigue el camino comun y seguira: ver
+    // `pantallas/fiscalizacion/index.ts` (#80).
+    // Se espera a una fila con datos, no a que exista la tabla: la tabla
+    // existe desde el catalogo, con su esqueleto, y esperar a ella dejaria la
+    // consulta todavia en camino cuando se desmonta.
     const primera = montarEnRuta(
-      '/transito/transito-resumen-papeletas?desde=2026-01-01&pagina=2',
+      '/fiscalizacion/fisc-resultados?estado=DETERMINADO&pagina=2',
       cliente,
     );
-    await within(await screen.findByRole('table')).findAllByText('2026');
+    await within(await screen.findByRole('table')).findByText('ACT-2026-00418');
     primera.unmount();
 
     const segunda = montarEnRuta(
-      '/transito/transito-resumen-papeletas?desde=2025-01-01&pagina=2',
+      '/fiscalizacion/fisc-resultados?estado=NOTIFICADO&pagina=2',
       cliente,
     );
-    await within(await screen.findByRole('table')).findAllByText('2025');
+    await within(await screen.findByRole('table')).findByText('ACT-2026-00418');
     segunda.unmount();
 
     // Solo las de datos: la del catalogo del modulo es otra cosa y se comparte.
@@ -158,8 +158,8 @@ describe('orden y pagina, contra el servidor', () => {
       .map((consulta) => JSON.stringify(consulta.queryKey))
       .filter((clave) => clave.startsWith('["pantalla"'));
     expect(claves).toHaveLength(2);
-    expect(claves.some((clave) => clave.includes('"desde":"2026-01-01"'))).toBe(true);
-    expect(claves.some((clave) => clave.includes('"desde":"2025-01-01"'))).toBe(true);
+    expect(claves.some((clave) => clave.includes('"estado":"DETERMINADO"'))).toBe(true);
+    expect(claves.some((clave) => clave.includes('"estado":"NOTIFICADO"'))).toBe(true);
     // La 2 de la URL es la 1 del backend.
     expect(claves.every((clave) => clave.includes('"pagina":"1"'))).toBe(true);
   });

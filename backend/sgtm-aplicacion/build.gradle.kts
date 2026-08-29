@@ -63,6 +63,20 @@ dependencies {
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
 }
 
+// El contrato vive fuera de este modulo y dos pruebas lo leen del disco:
+// `ContratoDeApiTest` compara sus rutas con las publicadas, y
+// `ParametrosDeLaConsultaTest` compara sus parametros de consulta con lo que cada
+// controlador lee. Sin declararlo como entrada, editar el YAML deja a `test` en
+// UP-TO-DATE y una rotura del contrato pasa en **verde rancio** en local —en CI
+// corre fresco y muerde, que es la peor forma de enterarse—. Es la leccion de
+// #192 punto 2, aplicada al contrato: lo destapo #399 al mutar el YAML y ver la
+// prueba dar BUILD SUCCESSFUL sin haber corrido.
+tasks.test {
+    inputs
+        .file(rootProject.file("../docs/50-api/openapi/sgtm-v1.yaml"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
 // Nombre fijo del artefacto ejecutable. La imagen lo copia por nombre y no por
 // comodin: `*.jar` casaria tambien con el `-plain.jar` que produce el plugin de
 // java-library, y cual de los dos acaba en el contenedor dependeria del orden

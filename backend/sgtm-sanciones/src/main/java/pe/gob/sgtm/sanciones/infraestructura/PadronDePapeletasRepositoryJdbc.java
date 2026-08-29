@@ -142,13 +142,18 @@ public class PadronDePapeletasRepositoryJdbc extends RepositorioJdbc
         String donde = donde(criterio, parametros);
         String descripcion =
                 agrupacion.descripcion() == null ? "CAST(NULL AS text)" : agrupacion.descripcion();
+        // El año solo lo determinan ANO y MES; los otros tres agrupadores mezclan
+        // años dentro de un grupo y la columna sale nula a proposito (#398).
+        String ano = agrupacion.ano() == null ? "CAST(NULL AS int)" : agrupacion.ano();
 
         return jdbc().sql(
                         "SELECT "
                                 + agrupacion.expresion()
                                 + " AS clave, "
                                 + descripcion
-                                + " AS descripcion,"
+                                + " AS descripcion, "
+                                + ano
+                                + " AS ano,"
                                 + " count(*) AS cantidad,"
                                 + " coalesce(sum(p.importe_a_pagar), 0) AS importe,"
                                 + " count(*) FILTER (WHERE p.estado = 'PAGADA') AS pagadas,"
@@ -259,6 +264,7 @@ public class PadronDePapeletasRepositoryJdbc extends RepositorioJdbc
         return new LineaDelResumen(
                 claveDe(fila.getString("clave")),
                 fila.getString("descripcion"),
+                anoDe(fila),
                 fila.getLong("cantidad"),
                 new Dinero(importe(fila.getBigDecimal("importe"))),
                 fila.getLong("pagadas"),
@@ -278,6 +284,17 @@ public class PadronDePapeletasRepositoryJdbc extends RepositorioJdbc
      */
     private static String claveDe(@Nullable String clave) {
         return clave == null || clave.isBlank() ? "(sin dato)" : clave;
+    }
+
+    /**
+     * El año de la línea, o {@code null} cuando el agrupador no determina ninguno (#398).
+     *
+     * <p>{@code getInt} devuelve 0 para un {@code NULL} de SQL, y un «año 0» es exactamente la
+     * clase de cifra que este proyecto no publica: se pregunta por {@code wasNull}.
+     */
+    private static @Nullable Integer anoDe(ResultSet fila) throws SQLException {
+        int ano = fila.getInt("ano");
+        return fila.wasNull() ? null : ano;
     }
 
     /** {@code coalesce(sum(...), 0)} no devuelve nulo, pero {@code Dinero} no admite suponerlo. */
