@@ -68,6 +68,7 @@ cosas donde espera.
 - [Design system](60-frontend/design-system.md) — tokens de Juris PE y componentes por construir
 - [Mapa de pantallas](60-frontend/mapa-de-pantallas.md) — las 134 opciones y las diez plantillas
 - [Estándares de código del frontend](60-frontend/estandares-de-codigo-frontend.md) — prohibiciones y su verificación
+- [FRO-05 — Superficies unificadas](60-frontend/superficies-unificadas.md) — cómo se unifica un módulo cuyas opciones hablan del mismo objeto, y cómo se demuestra que no se perdió nada
 
 ### 80 — Infraestructura
 - [INF-01 — Arquitectura de infraestructura](80-infraestructura/arquitectura-de-infraestructura.md) — un VPS, qué cuesta y qué pasa cuando se cae
