@@ -2901,6 +2901,18 @@ paths:
         entero con otro título. Con `?formato=PDF|XLS|RTF` sale como documento (RF-132).
       tags: ["Tránsito"]
       parameters:
+        - name: licencia
+          in: query
+          required: false
+          description: >-
+            Licencia de conducir del infractor. Uno de los dos —esta o «documento»— es
+            obligatorio: sin ninguno, 422 (RecordsDeTransitoController).
+          schema: { type: string }
+        - name: documento
+          in: query
+          required: false
+          description: "Documento del infractor. Alternativo a «licencia»"
+          schema: { type: string }
         - name: formato
           in: query
           required: false
@@ -2926,6 +2938,11 @@ paths:
         documento (RF-132).
       tags: ["Tránsito"]
       parameters:
+        - name: placa
+          in: query
+          required: false
+          description: "Placa del vehiculo. Obligatoria: sin ella, 422 (RecordsDeTransitoController)"
+          schema: { type: string }
         - name: formato
           in: query
           required: false

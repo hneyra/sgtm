@@ -115,9 +115,12 @@ describe('la aplicacion pide por HTTP y el proxy contesta', () => {
     instalarProxyDeDatos();
     // Sin conectar: los valores unitarios y la depreciacion ya piden su
     // recurso propio (#71) y salen por el camino que se prueba mas abajo, no
-    // por este. `/transito/papeletas` se conecto en #363 y ya no sirve para
-    // este ejemplo — sale con la forma de `PapeletaResource`, no esta.
-    const datos = await solicitar<DatosDePantalla>('/transito/codigos');
+    // por este. `/transito/papeletas` se conecto en #363 y `/transito/codigos`
+    // con el resto del modulo en #77 —ninguna sirve ya para este ejemplo,
+    // salen con la forma de su `Resource`, no esta—;
+    // `/transito/reportes/resumen-papeletas` sigue sin conectar (ver
+    // `pantallas/transito/index.ts` en el back-office).
+    const datos = await solicitar<DatosDePantalla>('/transito/reportes/resumen-papeletas');
     expect(datos.tabla?.filas.length).toBeGreaterThan(0);
     expect(datos.fechaCalculo).toBe('2026-08-13');
   });

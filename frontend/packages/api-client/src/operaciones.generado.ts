@@ -541,14 +541,14 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/transito/reportes/record-conductor',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['formato'],
+    parametrosDeConsulta: ['licencia', 'documento', 'formato'],
   },
   /** Record vehicular — `GET /transito/reportes/record-vehicular` */
   transito_record_vehicular: {
     metodo: 'GET',
     ruta: '/transito/reportes/record-vehicular',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['formato'],
+    parametrosDeConsulta: ['placa', 'formato'],
   },
   /** Constancia libre de infracciones — `POST /transito/constancias-libres` */
   transito_constancia_libre: {
@@ -1742,10 +1742,13 @@ export interface ParametrosPorOperacion {
   readonly transito_reportes: Readonly<Record<string, never>>;
   /** `GET /transito/reportes/record-conductor` */
   readonly transito_record_conductor: {
+    readonly licencia?: string;
+    readonly documento?: string;
     readonly formato?: string;
   };
   /** `GET /transito/reportes/record-vehicular` */
   readonly transito_record_vehicular: {
+    readonly placa?: string;
     readonly formato?: string;
   };
   /** `POST /transito/constancias-libres` */

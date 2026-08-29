@@ -1418,6 +1418,9 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/consultas/deudas-con-beneficio': deudasConBeneficio,
   '/seguridad/sesion/permisos': permisosDeLaSesion,
   '/coactiva/expedientes/{numero}/proceso': procesoCoactivo,
+  '/transito/papeletas/{numero}/actos': expedienteDeLaPapeleta,
+  '/transito/reportes/resumen-por-codigo': resumenPorCodigoDeTransito,
+  '/transito/reportes/resumen-por-placa': resumenPorPlacaDeTransito,
 };
 
 /* ── Una funcion por recurso, con los campos que declara su `Resource` ──── */
@@ -1772,6 +1775,8 @@ const ESTADO_DE_PAPELETA_DEL_MOCK: Readonly<Record<string, string>> = {
   'Con descargo': 'RESUELTA',
   Pagada: 'PAGADA',
   Coactiva: 'COACTIVA',
+  Cancelada: 'PAGADA',
+  'A cuenta': 'IMPUESTA',
 };
 
 /**
@@ -1858,6 +1863,361 @@ const adminEstadoCuenta = (): Paginado => {
   ]);
 };
 
+/**
+ * Búsqueda avanzada de papeletas (`transito_busqueda`, `PapeletaResource`, #77).
+ *
+ * La fila del prototipo trae doce columnas y solo cinco tienen con qué
+ * llenar `PapeletaResource`: «Serie»+«Número» componen el número del acta,
+ * «Placa», «Fecha» y las dos columnas de importe. Las otras siete —A.Coa,
+ * Coact, Fec. Reg., Deuda, Infracción, Conductor— son las que
+ * `BusquedaDePapeletasControllerTest` no publica, y por eso el adaptador de
+ * `pantallas/transito/index.ts` las dibuja con `SIN_DATO`: aquí tampoco se
+ * inventan.
+ */
+const papeletasDeBusqueda = (): Paginado =>
+  unaPagina(
+    filasDe('transito_busqueda').map(
+      ([, , , , serie, numero, placa, fecha, , , importe, aPagar], i) => ({
+        id: i + 1,
+        familia: 'TRANSITO',
+        numero: `${serie ?? ''}${numero ?? ''}`,
+        fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        horaInfraccion: null,
+        lugar: 'VÍA PÚBLICA',
+        placa,
+        vehiculoId: i + 1,
+        infractorId: i + 1,
+        propietarioId: null,
+        contribuyenteId: null,
+        predioId: null,
+        notificacionPreviaId: null,
+        baseImponible: comoImporte(importe ?? '0.00'),
+        porcentajeInfraccion: '0.10',
+        importeInfraccion: comoImporte(importe ?? '0.00'),
+        porcentajeACobrar: '0.10',
+        importeAPagar: comoImporte(aPagar ?? importe ?? '0.00'),
+        importeConBeneficio: null,
+        estado: 'IMPUESTA',
+        usuarioRegistro: 'admin',
+      }),
+    ),
+  );
+
+/**
+ * Estado de cuenta de infracciones (`transito_estado_cuenta`,
+ * `PapeletaResource`, #77): la misma tabla de `papeletas`, ya siempre
+ * pendiente —es lo que `EstadoDeCuentaTransitoController` garantiza con su
+ * propio criterio (`soloPendientes()`)—.
+ */
+const estadoDeCuentaDeTransito = (): Paginado =>
+  unaPagina(
+    filasDe('papeletas').map(([numero, fecha, placa, , , , multaS, estado], i) => ({
+      id: i + 1,
+      familia: 'TRANSITO',
+      numero,
+      fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+      horaInfraccion: null,
+      lugar: 'VÍA PÚBLICA',
+      placa,
+      vehiculoId: i + 1,
+      infractorId: i + 1,
+      propietarioId: null,
+      contribuyenteId: null,
+      predioId: null,
+      notificacionPreviaId: null,
+      baseImponible: '5350.00',
+      porcentajeInfraccion: '0.10',
+      importeInfraccion: comoImporte(multaS ?? '0.00'),
+      porcentajeACobrar: '0.10',
+      importeAPagar: comoImporte(multaS ?? '0.00'),
+      importeConBeneficio: comoImporte(multaS ?? '0.00'),
+      estado: ESTADO_DE_PAPELETA_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',
+      usuarioRegistro: 'admin',
+    })),
+  );
+
+/**
+ * Tabla de códigos de infracción de tránsito (`codigos_transito`,
+ * `CodigoInfraccionResource`, #43, #77).
+ *
+ * «Gravedad» y «Multa S/» del prototipo no tienen columna en el recurso real
+ * —ver el docblock de `pantallas/transito/index.ts`—, así que no se leen de
+ * la fila aunque estén ahí: se ignoran, igual que hace el adaptador.
+ */
+const codigosDeTransito = (): Paginado =>
+  unaPagina(
+    filasDe('codigos_transito').map(([codigo, descripcion, , uit, , puntos, medida], i) => ({
+      id: i + 1,
+      familia: 'TRANSITO',
+      codigo,
+      descripcion,
+      porcentajeUit: (Number((uit ?? '0 %').replace('%', '').trim()) / 100).toFixed(2),
+      medida: medida && medida !== '—' ? medida : null,
+      puntos: Number(puntos) || 0,
+      baseLegal: 'Reglamento Nacional de Tránsito, D.S. N.° 016-2009-MTC',
+      vigenciaDesde: '2026-01-01',
+      vigenciaHasta: null,
+    })),
+  );
+
+/**
+ * Internamiento vehicular (`internamiento`, `InternamientoResource`, #50, #77).
+ *
+ * «Tasa diaria S/» y «Custodia S/» del prototipo no se leen: el recurso real
+ * no las publica —son de la ordenanza y de la caja, según el propio
+ * `InternamientosController`—.
+ */
+const internamientos = (): Paginado =>
+  unaPagina(
+    filasDe('internamiento').map(([placa, papeleta, fechaDeIngreso, dias, , , estado], i) => ({
+      id: i + 1,
+      placa,
+      papeleta,
+      deposito: 'DEPÓSITO MUNICIPAL CENTRAL',
+      fechaDeIngreso: fechaDe(fechaDeIngreso ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+      fechaDeSalida: null,
+      dias: Number(dias) || 0,
+      calculadoA: EL_DIA_DEL_PROTOTIPO,
+      estado: (estado ?? '').toUpperCase() === 'INTERNADO' ? 'INTERNADO' : 'EN_ABANDONO',
+      tasaDeCustodia: 'TC-01',
+      acta: `ACTA-INT-${String(i + 1).padStart(4, '0')}`,
+    })),
+  );
+
+/**
+ * El expediente de una papeleta (`transito_documentos`, `ExpedienteResource`,
+ * #50, #77): un recurso suelto, se abre por el número en la ruta —el proxy no
+ * filtra, igual que `procesoCoactivo()`—.
+ *
+ * `descargos` y `actos` salen vacíos: son las dos secciones que el catálogo
+ * ni siquiera declara con datos editables (ver `pantallas/transito/index.ts`),
+ * y un arreglo con un acto inventado construiría la pantalla contra una
+ * respuesta que el prototipo capturado no tiene de dónde sacar.
+ */
+function expedienteDeLaPapeleta(): Readonly<Record<string, unknown>> {
+  const campos = RESPUESTAS['transito_documentos']?.campos ?? {};
+  const valor = (clave: string): string =>
+    typeof campos[clave] === 'string' ? (campos[clave] as string) : '';
+  return {
+    papeleta: valor('papeletaN2') || valor('papeletaN') || 'C2007005161',
+    familia: 'TRANSITO',
+    estado: 'NOTIFICADA',
+    descargos: [],
+    actos: [],
+  };
+}
+
+/**
+ * Padrón de papeletas de tránsito (`transito_padron`,
+ * `PapeletaDelPadronResource`, #53, #77).
+ *
+ * «Importe S/» del catálogo no tiene con qué llenarse —el recurso solo
+ * publica el importe **a pagar**, no un importe base distinto—, así que la
+ * fila del prototipo se lee saltándose esa columna, igual que el adaptador.
+ */
+const padronDeTransito = (): Paginado =>
+  unaPagina(
+    filasDe('transito_padron').map(
+      ([numero, fecha, placa, conductor, infraccion, , aPagar, estado], i) => ({
+        numero,
+        familia: 'TRANSITO',
+        fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        horaInfraccion: null,
+        lugar: 'VÍA PÚBLICA',
+        placa,
+        licenciaConducir: null,
+        codigoInfraccion: infraccion ?? '',
+        descripcionInfraccion: infraccion ?? '',
+        obligadoCodigo: null,
+        obligadoNombre: conductor ?? null,
+        infractorNombre: conductor ?? null,
+        estado: ESTADO_DE_PAPELETA_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',
+        pendiente: (estado ?? '').toLowerCase() === 'pendiente',
+        importeAPagar: comoImporte(aPagar ?? '0.00'),
+        actualizadoA: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        valorNumero: null,
+        id: i + 1,
+      }),
+    ),
+  );
+
+/**
+ * Padrón de papeletas enviadas a coactiva (`transito_padron_coactiva`,
+ * `PapeletaDelPadronResource`, #53, #77).
+ *
+ * `estado` sale siempre `COACTIVA`: toda fila de este padrón, por definición
+ * de `PadronesDeTransitoController#padronCoactiva`, ya tiene resolución de
+ * multa emitida. «Expediente» y «Fec. pase» del prototipo no se leen —ver el
+ * docblock del adaptador—.
+ */
+const padronCoactivaDeTransito = (): Paginado =>
+  unaPagina(
+    filasDe('transito_padron_coactiva').map(([, papeleta, , placa, obligado, deuda], i) => ({
+      numero: papeleta,
+      familia: 'TRANSITO',
+      fechaInfraccion: EL_DIA_DEL_PROTOTIPO,
+      horaInfraccion: null,
+      lugar: 'VÍA PÚBLICA',
+      placa,
+      licenciaConducir: null,
+      codigoInfraccion: '',
+      descripcionInfraccion: '',
+      obligadoCodigo: null,
+      obligadoNombre: obligado ?? null,
+      infractorNombre: obligado ?? null,
+      estado: 'COACTIVA',
+      pendiente: true,
+      importeAPagar: comoImporte(deuda ?? '0.00'),
+      actualizadoA: EL_DIA_DEL_PROTOTIPO,
+      valorNumero: null,
+      id: i + 1,
+    })),
+  );
+
+/**
+ * Padrón de constancias libres de infracciones (`transito_padron_constancias`,
+ * `ConstanciaLibreResource`, #53, #77).
+ */
+const padronDeConstancias = (): Paginado =>
+  unaPagina(
+    filasDe('transito_padron_constancias').map(([numero, fecha, placa, , , , usuario]) => ({
+      numero,
+      placa,
+      verificadaAl: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+      fechaEmision: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+      usuarioQueEmitio: usuario ?? null,
+      observacion: 'Verificación de papeletas pendientes de tránsito.',
+    })),
+  );
+
+/** Las filas de un reporte del prototipo (`report.filas`), ya como texto suelto. */
+function filasDelReporte(pantalla: string): readonly (readonly string[])[] {
+  return RESPUESTAS[pantalla]?.reporte?.filas ?? [];
+}
+
+/**
+ * Los dos records de tránsito (`transito_record_conductor`,
+ * `transito_record_vehicular`; `PapeletaDelPadronResource`, #53, #77): el
+ * mismo recurso que los padrones, paginado, aunque el catálogo lo dibuje como
+ * hoja de reporte.
+ */
+const ESTADO_DEL_RECORD_DEL_MOCK: Readonly<Record<string, string>> = {
+  Cancelada: 'PAGADA',
+  Pendiente: 'IMPUESTA',
+  Coactiva: 'COACTIVA',
+  'A cuenta': 'IMPUESTA',
+};
+
+const recordDeConductor = (): Paginado =>
+  unaPagina(
+    filasDelReporte('transito_record_conductor').map(
+      ([numero, fecha, placa, infraccion, importe, estado], i) => ({
+        numero,
+        familia: 'TRANSITO',
+        fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        horaInfraccion: null,
+        lugar: 'VÍA PÚBLICA',
+        placa,
+        licenciaConducir: 'Q-44218937',
+        codigoInfraccion: infraccion ?? '',
+        descripcionInfraccion: infraccion ?? '',
+        obligadoCodigo: null,
+        obligadoNombre: null,
+        infractorNombre: 'SERNAQUE VILLEGAS, DORIS',
+        estado: ESTADO_DEL_RECORD_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',
+        pendiente: (estado ?? '').toLowerCase() === 'pendiente',
+        importeAPagar: comoImporte(importe ?? '0.00'),
+        actualizadoA: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        valorNumero: null,
+        id: i + 1,
+      }),
+    ),
+  );
+
+const recordVehicular = (): Paginado =>
+  unaPagina(
+    filasDelReporte('transito_record_vehicular').map(
+      ([numero, fecha, conductor, infraccion, importe, estado], i) => ({
+        numero,
+        familia: 'TRANSITO',
+        fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        horaInfraccion: null,
+        lugar: 'VÍA PÚBLICA',
+        placa: 'NB-21169',
+        licenciaConducir: null,
+        codigoInfraccion: infraccion ?? '',
+        descripcionInfraccion: infraccion ?? '',
+        obligadoCodigo: null,
+        obligadoNombre: conductor ?? null,
+        infractorNombre: conductor ?? null,
+        estado: ESTADO_DEL_RECORD_DEL_MOCK[estado ?? ''] ?? 'IMPUESTA',
+        pendiente: (estado ?? '').toLowerCase() === 'pendiente',
+        importeAPagar: comoImporte(importe ?? '0.00'),
+        actualizadoA: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        valorNumero: null,
+        id: i + 1,
+      }),
+    ),
+  );
+
+/**
+ * Los dos resúmenes de papeletas cuyo agrupador existe de verdad en
+ * `AgrupacionDelResumen` (`transito_resumen_codigo` con `CODIGO`,
+ * `transito_resumen_placa` con `PLACA`; `ResumenDePapeletasResource`, #53,
+ * #77). Es un recurso suelto —no pagina—, así que vive en `SUELTOS`.
+ */
+function resumenPorCodigoDeTransito(): Readonly<Record<string, unknown>> {
+  const filas = filasDe('transito_resumen_codigo');
+  const lineas = filas.map(([codigo, descripcion, pendientes, pendienteS, pagadas, pagadoS]) => ({
+    clave: codigo,
+    descripcion: descripcion ?? null,
+    cantidad: (Number(pendientes) || 0) + (Number(pagadas) || 0),
+    importe: masImporte(comoImporte(pendienteS ?? '0.00'), comoImporte(pagadoS ?? '0.00')),
+    pagadas: Number(pagadas) || 0,
+    importeDeLasPagadas: comoImporte(pagadoS ?? '0.00'),
+    pendientes: Number(pendientes) || 0,
+    importeDeLasPendientes: comoImporte(pendienteS ?? '0.00'),
+    enCoactiva: 0,
+    importeEnCoactiva: '0.00',
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+  }));
+  return {
+    agrupadoPor: 'CODIGO',
+    desde: '2026-01-01',
+    hasta: EL_DIA_DEL_PROTOTIPO,
+    papeletas: lineas.reduce((suma, linea) => suma + linea.cantidad, 0),
+    importeTotal: lineas.reduce((suma, linea) => masImporte(suma, linea.importe), '0.00'),
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    lineas,
+  };
+}
+
+function resumenPorPlacaDeTransito(): Readonly<Record<string, unknown>> {
+  const filas = filasDe('transito_resumen_placa');
+  const lineas = filas.map(([iniciales, cantidad, pendientes, pendienteS, pagadas, pagadoS]) => ({
+    clave: iniciales,
+    descripcion: null,
+    cantidad: Number(cantidad) || 0,
+    importe: masImporte(comoImporte(pendienteS ?? '0.00'), comoImporte(pagadoS ?? '0.00')),
+    pagadas: Number(pagadas) || 0,
+    importeDeLasPagadas: comoImporte(pagadoS ?? '0.00'),
+    pendientes: Number(pendientes) || 0,
+    importeDeLasPendientes: comoImporte(pendienteS ?? '0.00'),
+    enCoactiva: 0,
+    importeEnCoactiva: '0.00',
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+  }));
+  return {
+    agrupadoPor: 'PLACA',
+    desde: '2026-01-01',
+    hasta: EL_DIA_DEL_PROTOTIPO,
+    papeletas: lineas.reduce((suma, linea) => suma + linea.cantidad, 0),
+    importeTotal: lineas.reduce((suma, linea) => masImporte(suma, linea.importe), '0.00'),
+    actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    lineas,
+  };
+}
+
 /* ── Coactiva: expedientes ─────────────────────────────────────────────── */
 
 /**
@@ -1901,6 +2261,15 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/seguridad/parametros': parametros,
   '/seguridad/respaldos': respaldo,
   '/transito/papeletas': papeletasTransito,
+  '/transito/papeletas/busqueda': papeletasDeBusqueda,
+  '/transito/estado-cuenta': estadoDeCuentaDeTransito,
+  '/transito/codigos': codigosDeTransito,
+  '/transito/internamientos': internamientos,
+  '/transito/reportes/padron': padronDeTransito,
+  '/transito/reportes/padron-coactiva': padronCoactivaDeTransito,
+  '/transito/reportes/padron-constancias': padronDeConstancias,
+  '/transito/reportes/record-conductor': recordDeConductor,
+  '/transito/reportes/record-vehicular': recordVehicular,
   '/infracciones/administrativas/estado-cuenta': adminEstadoCuenta,
   '/coactiva/expedientes': expedientesCoactivos,
   '/coactiva/deudas': deudasCoactivas,
