@@ -33,6 +33,7 @@ import { accionesDeLaBarra, impedimentoDelActo } from './actos';
 import { useEjercicio } from '../app/ejercicio';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
+import { cargarAporteDelModulo } from './aportes-de-modulo';
 import { composicionDe, filtrosDe, hayQueResumir } from './composicion';
 import { useSimulacion } from './useSimulacion';
 import type { ComposicionDeOpcion } from './composicion';
@@ -123,9 +124,21 @@ function PantallaDelModulo({
        usan y estaba en el arranque. Aqui no cuesta nada: esta consulta ya
        bloquea el dibujo, asi que la advertencia sigue estando cuando la pantalla
        aparece. Diferirla a un `Suspense` propio la haria llegar tarde, y una
-       advertencia que llega tarde es peor que no tenerla (`prosa.ts`). */
+       advertencia que llega tarde es peor que no tenerla (`prosa.ts`).
+
+       **Y con el, desde #433, lo que el modulo aporta al renderizador**: sus
+       conexiones y su composicion. Van en el mismo `Promise.all` a proposito
+       —tres descargas en paralelo, no una detras de otra— y antes de que este
+       `queryFn` resuelva, que es lo que deja a `conexionDe` y a `composicionDe`
+       respondiendo sincronos mas abajo. Si el trozo no llegara, esta consulta
+       falla: nadie dibuja una pantalla conectada por el camino comun, que es
+       como se ve una tabla vacia sin ningun error (#363). */
     queryFn: async () => {
-      const [pantallas] = await Promise.all([pantallasDelModulo(moduloId), cargarProsa()]);
+      const [pantallas] = await Promise.all([
+        pantallasDelModulo(moduloId),
+        cargarAporteDelModulo(moduloId),
+        cargarProsa(),
+      ]);
       return pantallas;
     },
     staleTime: Infinity,

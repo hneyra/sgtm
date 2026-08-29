@@ -1,17 +1,5 @@
 import type { DatosDePantalla, IdDeOperacion, ParametrosDe, RespuestaDe } from '@sgtm/api-client';
 import { pedirOperacion } from '@sgtm/api-client';
-import { CONEXIONES_DE_CATASTRO } from './catastro';
-import { CONEXIONES_DE_COACTIVA } from './coactiva';
-import { CONEXIONES_DE_CONSULTAS } from './consultas';
-import { CONEXIONES_DE_LICENCIAS } from './licencias';
-import { CONEXIONES_DE_FISCALIZACION } from './fiscalizacion';
-import { ADAPTACIONES_DE_RENTAS, CONEXIONES_DE_RENTAS } from './rentas';
-import { CONEXIONES_DE_SANCIONES } from './sanciones';
-import { CONEXIONES_DE_TESORERIA } from './tesoreria';
-import { CONEXIONES_DE_TRANSITO } from './transito';
-import { CONEXIONES_DE_VALORES } from './valores';
-import { conexionDeRecaudacion } from './inicio/recaudacion';
-import { CONEXIONES_DE_SEGURIDAD } from './seguridad';
 
 /**
  * La puerta lateral: una opcion con operacion tipada y adaptador propios.
@@ -172,26 +160,41 @@ function sinVacios(parametros: object): Readonly<Record<string, string>> {
 /**
  * Las opciones conectadas, por su identificador del catalogo.
  *
- * Empieza con una. Crece opcion por opcion, cuando la operacion de cada una
+ * Empezo con una. Crece opcion por opcion, cuando la operacion de cada una
  * exista de verdad en el backend (FRO-03 §7, paso 4).
+ *
+ * **Ya no se llena aqui** (#433). Hasta este issue este archivo importaba los
+ * doce registros de forma estatica, de modo que el `leer` y el `adaptar` de las
+ * ~55 opciones conectadas —Transito incluido— viajaban en el trozo de arranque
+ * de quien solo iba a abrir Catastro: 13,1 KB comprimidos que pagaban todos. Lo
+ * llena `aportes-de-modulo.ts`, al entrar en cada modulo, y ahi esta escrito por
+ * que eso no puede fallar en silencio.
+ *
+ * Un `Map` y no un objeto: aqui se indexa por un identificador que viene de la
+ * URL, y un objeto resuelve `constructor` o `toString` por la cadena de
+ * prototipos —la misma barrera que `composicionDe` y `escrituraDe` sostienen a
+ * mano con `Object.hasOwn`, que un `Map` da de fabrica—.
  */
-const CONEXIONES: Readonly<Record<string, Conexion>> = {
-  inicio: conexionDeRecaudacion,
-  ...CONEXIONES_DE_SEGURIDAD,
-  ...CONEXIONES_DE_CATASTRO,
-  ...CONEXIONES_DE_CONSULTAS,
-  ...CONEXIONES_DE_FISCALIZACION,
-  ...CONEXIONES_DE_RENTAS,
-  ...CONEXIONES_DE_TESORERIA,
-  ...CONEXIONES_DE_VALORES,
-  ...CONEXIONES_DE_TESORERIA,
-  ...CONEXIONES_DE_TRANSITO,
-  ...CONEXIONES_DE_SANCIONES,
-  ...CONEXIONES_DE_COACTIVA,
-  ...CONEXIONES_DE_LICENCIAS,
-};
+const CONEXIONES = new Map<string, Conexion>();
 
-export const conexionDe = (opcion: string): Conexion | undefined => CONEXIONES[opcion];
+/**
+ * Suma lo que aporta un modulo. Lo llama {@link cargarAporteDelModulo} y nadie mas.
+ *
+ * Registrar dos veces el mismo modulo es inofensivo —vuelve a escribir lo
+ * mismo—, y esta previsto: dos pantallas del mismo modulo comparten la carga,
+ * pero dos montajes en una prueba pueden repetirla.
+ */
+export function registrarConexiones(
+  conexiones: Readonly<Record<string, Conexion>>,
+  adaptaciones: Readonly<Record<string, Adaptacion>> = {},
+): void {
+  for (const [opcion, conexion] of Object.entries(conexiones)) CONEXIONES.set(opcion, conexion);
+  for (const [opcion, adaptacion] of Object.entries(adaptaciones)) {
+    ADAPTACIONES.set(opcion, adaptacion);
+  }
+}
+
+export const conexionDe = (opcion: string): Conexion | undefined => CONEXIONES.get(opcion);
 
 /**
  * La otra mitad de la puerta lateral: **como se lee la respuesta de un `POST`**
@@ -241,19 +244,24 @@ export function definirAdaptacion<O extends IdDeOperacion, R>(
  * Las opciones cuyo `POST` devuelve un recurso del dominio, por su
  * identificador del catalogo.
  *
- * Tres hoy: las dos prediales (#395) y el calculo vehicular (#399). Las otras
- * dos pantallas de determinacion no estan, y no por descuido: `arbitrios` es un
- * `GET` —trae sus cifras al abrir y no tiene nada que simular— y `alcabala`
- * sigue contestando la forma comun del proxy, que es la que `useSimulacion` lee
- * cuando no hay adaptacion declarada.
+ * Tres hoy: las dos prediales (#395) y el calculo vehicular (#399), las tres de
+ * Rentas. Las otras dos pantallas de determinacion no estan, y no por descuido:
+ * `arbitrios` es un `GET` —trae sus cifras al abrir y no tiene nada que
+ * simular— y `alcabala` sigue contestando la forma comun del proxy, que es la
+ * que `useSimulacion` lee cuando no hay adaptacion declarada.
+ *
+ * Llega con el aporte de su modulo, como las conexiones (#433).
  */
-const ADAPTACIONES: Readonly<Record<string, Adaptacion>> = {
-  ...ADAPTACIONES_DE_RENTAS,
-};
+const ADAPTACIONES = new Map<string, Adaptacion>();
 
-/** `Object.hasOwn`, como el resto del camino: una opcion llamada `toString` no hereda ninguna. */
-export const adaptacionDe = (opcion: string): Adaptacion | undefined =>
-  Object.hasOwn(ADAPTACIONES, opcion) ? ADAPTACIONES[opcion] : undefined;
+/** Un `Map`, como {@link CONEXIONES}: una opcion llamada `toString` no hereda ninguna. */
+export const adaptacionDe = (opcion: string): Adaptacion | undefined => ADAPTACIONES.get(opcion);
 
-/** Cuantas opciones estan conectadas. La prueba de convivencia lo mira. */
-export const OPCIONES_CONECTADAS = Object.keys(CONEXIONES);
+/**
+ * Las opciones conectadas **de los modulos ya cargados**.
+ *
+ * Sirve para preguntar, no para censar: quien quiera las de todo el catalogo
+ * tiene que cargarlas antes (`cargarTodosLosAportes`), y eso solo lo hacen las
+ * pruebas.
+ */
+export const opcionesConectadas = (): readonly string[] => [...CONEXIONES.keys()];

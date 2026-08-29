@@ -12,8 +12,36 @@ const raiz = (ruta: string) => fileURLToPath(new URL(ruta, import.meta.url));
  */
 const API = process.env['SGTM_API'] ?? 'http://localhost:8080';
 
+/**
+ * El nombre del trozo, cuando el archivo se llama `index` o `composicion`.
+ *
+ * Rollup nombra cada trozo por su archivo, y desde #433 los doce registros de
+ * modulo se cargan con `import()`: son doce `pantallas/<modulo>/index.ts` y
+ * cinco `pantallas/<modulo>/composicion.ts`, o sea diecisiete trozos llamados
+ * «index» y «composicion». La lista de diferidos que imprime
+ * `scripts/comprobar-compilaciones.mjs` es lo unico que dice **que** se saco del
+ * arranque, y con diecisiete nombres repetidos deja de decirlo: un diagnostico
+ * que no distingue no vale mas que no tenerlo.
+ *
+ * Se antepone la carpeta —`catastro-index`, `rentas-composicion`—, que es el
+ * dato que falta. No cambia como se carga nada: es el nombre del archivo.
+ */
+const nombreDelTrozo = (nombre: string, id: string | undefined): string => {
+  if (id === undefined || !/^(index|composicion)$/.test(nombre)) return nombre;
+  const carpeta = id.split('/').at(-2);
+  return carpeta === undefined ? nombre : `${carpeta}-${nombre}`;
+};
+
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        chunkFileNames: (trozo) =>
+          `assets/${nombreDelTrozo(trozo.name, trozo.facadeModuleId ?? undefined)}-[hash].js`,
+      },
+    },
+  },
   resolve: {
     // El orden importa: la hoja de estilos se resuelve antes que el paquete.
     alias: [

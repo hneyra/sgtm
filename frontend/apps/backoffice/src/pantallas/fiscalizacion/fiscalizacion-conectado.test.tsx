@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
-import { OPCIONES_CONECTADAS } from '../conexiones';
+import { censoDeConectadas } from '../aportes-de-modulo';
 import { escrituraDe } from '../escrituras';
 import { impedimentoDelActo } from '../actos';
 import { montarEnRuta } from '../../pruebas/montar';
 import { SIN_DATO } from '../seguridad/listado';
+
+/* El censo de conectadas del catalogo entero, SIN registrar ninguna: desde #433 las
+   conexiones llegan con el trozo de su modulo, y quien las registra es la espera de
+   `Pantalla`. Registrarlas aqui dejaria a este archivo tapandose a si mismo —sus
+   pantallas encontrarian su conexion aunque el renderizador no la hubiera pedido—. */
+const OPCIONES_CONECTADAS = await censoDeConectadas();
 
 /**
  * Fiscalizacion, conectado (#80 y #431): cinco lecturas de ocho, y por que las

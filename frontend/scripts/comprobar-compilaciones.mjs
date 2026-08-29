@@ -104,15 +104,56 @@ const HUELLAS = [
  * `Suspense` y un esqueleto en cada carga de esas dos pantallas a cambio de una
  * decima.
  *
- * Bajarlo de verdad —decidir que sale del arranque— sigue siendo #433, y este
- * numero es una razon mas para hacerlo: van tres subidas en tres dias.
+ * **Y a 145 el 2026-08-29** (#433), que es la primera vez que este numero BAJA
+ * porque baja lo medido y no porque se herede mejor.
+ *
+ * Lo que salio: **los doce registros de modulo**. `conexiones.ts` y
+ * `composicion.ts` los importaban de forma estatica, asi que el `parametros`, el
+ * `leer` y el `adaptar` de las 79 opciones conectadas —los de Transito
+ * incluidos— viajaban en el arranque de quien solo iba a abrir Catastro. Ahora
+ * llegan con el trozo de su modulo, en la MISMA espera que ya bloqueaba el
+ * dibujo (`pantallas/aportes-de-modulo.ts`): ni un viaje mas, ni un `Suspense`
+ * mas. Medido: **155,7 → 141,3**, o sea **14,4 KB**, repartidos hoy en
+ * `rentas-index` 2,8 · `consultas-index` 2,7 · `transito-index` 2,4 ·
+ * `catastro-index` 1,8 · `tesoreria-index` 1,7 · `fiscalizacion-index` 1,5 ·
+ * `sanciones-index` 1,2 · `licencias-index` 1,1 · `coactiva-index` 1,1 ·
+ * `seguridad-index` 0,8 · `valores-index` 0,5 · `recaudacion` 0,6, mas las cinco
+ * composiciones (1,0 + 1,0 + 0,3 + 0,2 + 0,1).
+ *
+ * **Y el margen ya no se mide igual, que es lo que este issue cambia de
+ * verdad.** Antes cada opcion que se conectaba engordaba el arranque de todos:
+ * 14,4 KB entre 79 opciones son ~0,18 KB por opcion, asi que las seis oleadas
+ * que faltan (#426–#432, unas treinta opciones) valian ~5,4 KB del arranque y no
+ * cabian. Desde aqui valen **cero**: caen en el trozo de su modulo, cuyo
+ * presupuesto propio —11 KB, el mayor va por 8,9— es el que las mide.
+ *
+ * De modo que los 3,7 KB que quedan (141,3 medidos aqui, ~141,6 en CI por la
+ * diferencia de abajo) no son para las conexiones: son para lo que esas
+ * conexiones dejan en el arranque, que es su declaracion de escritura. El mapa
+ * `ESCRITURAS` pesa 5,2 KB comprimidos para 49 opciones —**0,11 KB por opcion
+ * que escribe**—, asi que si la mitad de las treinta escribiera serian ~1,7 KB;
+ * el resto es para un mecanismo transversal mas, de los que costaron 0,2–0,4 KB
+ * a #421, #423 y #442.
+ *
+ * Lo medido y NO sacado, con su numero, para que el proximo no vuelva a medirlo:
+ *
+ *   `ESCRITURAS` (`pantallas/escrituras.ts`)            5,2 KB
+ *   `OPERACIONES` (`@sgtm/api-client`, 176 del contrato) 4,3 KB
+ *
+ * El primero es un mapa plano de 750 lineas cuyo censo —`OPCIONES_QUE_ESCRIBEN`—
+ * lo lee `lecturas-por-post.ts` en produccion, no solo las pruebas: partirlo por
+ * modulo es otro issue, no una linea. El segundo no se puede partir por modulo
+ * porque las operaciones no son de un modulo —«Caja tributaria» lee
+ * `consulta_deuda`, que es de Consultas—, y `descriptorDe` se llama sincrono
+ * dentro de `useDatosDeOperacion`; lo que #298 le quito al **portal** fue no
+ * usarlo, y el back-office si lo usa.
  *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */
 const PRESUPUESTO = {
   /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
-  arranque: 157,
+  arranque: 145,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**

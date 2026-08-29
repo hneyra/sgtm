@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { todasLasPantallas } from '../catalogo';
 import type { CampoDePantalla, EstructuraDePantalla, SeccionDePantalla } from '../catalogo';
-import { CONTROLES_DECLARADOS, controlesDe, controlesDeLaSeccion } from './composicion';
+import { controlesDe, controlesDeLaSeccion, controlesDeclarados } from './composicion';
+import { cargarTodosLosAportes, censoDeAportes } from './aportes-de-modulo';
 import { ACTOS_SIN_CAMPO } from './actos';
 import { escrituraDe } from './escrituras';
+
+/* Los controles declarados llegan con el trozo de su modulo desde #433: el censo se
+   hace sobre lo que los doce aportan, leido sin registrarlo (`censoDeAportes`).
+   Y ademas se registran, porque dos de estas pruebas comprueban las funciones del
+   registro —`controlesDe` y `controlesDeLaSeccion`, las que usa el renderizador—.
+   Este archivo puede hacerlo sin taparse: no monta ninguna pantalla, asi que no
+   hay carga diferida a la que este registro le ahorre el trabajo. */
+await cargarTodosLosAportes();
+const CONTROLES_DECLARADOS = controlesDeclarados((await censoDeAportes()).composiciones);
 
 /**
  * **El censo de los controles declarados** (#422).

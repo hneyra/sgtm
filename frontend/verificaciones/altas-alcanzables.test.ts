@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ALTAS_DECLARADAS } from '../apps/backoffice/src/pantallas/composicion';
+import { altasDeclaradas } from '../apps/backoffice/src/pantallas/composicion';
+import { censoDeAportes } from '../apps/backoffice/src/pantallas/aportes-de-modulo';
+
+/* Las altas declaradas llegan con el trozo de su modulo desde #433, asi que hay que
+   censar los doce —sin registrarlos— antes de recorrerlas con `it.each`. */
+const ALTAS_DECLARADAS = altasDeclaradas((await censoDeAportes()).composiciones);
 
 /**
  * Ningun alta se queda sin boton que la abra.

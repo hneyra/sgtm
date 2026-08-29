@@ -3,14 +3,21 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { agruparMiles } from '@sgtm/dominio';
-import { OPCIONES_CONECTADAS } from '../conexiones';
+import { censoDeAportes, censoDeConectadas } from '../aportes-de-modulo';
 import { OPCIONES_QUE_LEEN_POR_POST } from '../lecturas-por-post';
 import { SIN_DATO, leerPaginado } from '../seguridad/listado';
 import { montarEnRuta } from '../../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada, primariaDeLaPantalla } from '../../pruebas/acciones';
 import { ACTOS_SIN_CAMPO, impedimentoDelActo } from '../actos';
-import { FILTROS_BLOQUEADOS } from '../composicion';
+import { filtrosBloqueados } from '../composicion';
 import { FILTROS_CON_MOTIVO } from '../prosa-textos';
+
+/* El censo de conectadas del catalogo entero, SIN registrar ninguna: desde #433 las
+   conexiones llegan con el trozo de su modulo, y quien las registra es la espera de
+   `Pantalla`. Registrarlas aqui dejaria a este archivo tapandose a si mismo —sus
+   pantallas encontrarian su conexion aunque el renderizador no la hubiera pedido—. */
+const OPCIONES_CONECTADAS = await censoDeConectadas();
+const FILTROS_BLOQUEADOS = filtrosBloqueados((await censoDeAportes()).composiciones);
 
 /**
  * Transito (#77): el modulo mas grande del menu, y **trece reportes**.
