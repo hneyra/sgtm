@@ -8,21 +8,22 @@ import type { Escritura } from '../escritura';
 import { OPCIONES_CONECTADAS } from '../conexiones';
 import { SIN_DATO } from '../seguridad/listado';
 import { montarEnRuta } from '../../pruebas/montar';
-import { primariaApagada } from '../../pruebas/acciones';
+import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
 
 /**
  * Valores (#75): **un valor emitido es un acto administrativo**.
  *
  * Sale de la municipalidad, se notifica y no se corrige: se anula. Sus seis endpoints
- * existen desde #37, #38 y #39, pero solo dos se conectan de verdad todavia:
- * `valores_busqueda`, para lectura (al final de este archivo), y `notificacion_valores`,
- * para escritura (en `escrituras.ts`) — ver `pantallas/valores/index.ts` para por que las
- * otras cuatro no se conectan todavia, y por que una de ellas (`pase_coactiva`) seguiria
- * sin poder conectarse aunque su cuerpo fuera tan simple como el de esta.
+ * existen desde #37, #38 y #39, y las seis opciones estan conectadas: `valores_busqueda`,
+ * para lectura (al final de este archivo, `GET /valores`), `notificacion_valores`, para
+ * escritura plana (declarada en `escrituras.ts`), y las cuatro restantes —
+ * `valores_individual`, `valores_masivo`, `prescripcion`, `pase_coactiva`—, cada una en su
+ * propio componente porque su cuerpo lleva arreglos o su accion primaria no es la ultima
+ * del catalogo (ver el docblock de `pantallas/valores/index.ts`).
  *
- * Lo que se comprueba primero, antes de la conexion, es lo que la interfaz tiene que hacer
- * bien **para las seis**, conectadas o no: sin eso, conectar una no la distinguiria de las
- * que todavia esperan.
+ * Lo que se comprueba primero es lo que la interfaz tiene que hacer bien **para las
+ * seis**: sin borrar, con confirmacion de lo irreversible y sin poder repetir el mismo
+ * acto de un doble golpe. Despues, cada opcion por separado: que cuerpo manda de verdad.
  */
 
 /** Las seis opciones del modulo, por su ranura. */
@@ -36,9 +37,11 @@ const LAS_SEIS: readonly string[] = [
 ];
 
 /**
- * La unica del modulo que **escribe de verdad**: declara su lista blanca en
- * `escrituras.ts` (#39, #75), y por eso su accion primaria llega a habilitarse.
- * Las otras cinco se quedan apagadas diciendo por que (#332).
+ * Escribe de verdad y su cuerpo es plano: declara su lista blanca en
+ * `escrituras.ts` (#39, #75), y por eso su accion primaria llega a habilitarse
+ * con el renderizador generico. Las otras cuatro que escriben tambien lo hacen
+ * —cada una en su propio componente, ver `pantallas/valores/index.ts`— y se
+ * prueban aparte, mas abajo.
  */
 const NOTIFICACION = '/valores/notificacion-valores/OP-2026-004182';
 
@@ -200,9 +203,11 @@ const escrituraDeMentira = (): Escritura => ({
 
 describe('valores_busqueda lee ValorResource, conectado hasta donde llega el backend (#37)', () => {
   it('es la unica leida por una Conexion propia', () => {
-    // notificacion_valores tambien esta conectada, pero para escritura (en
-    // escrituras.ts, ver el describe de mas abajo): una Conexion es solo
-    // para leer (conexiones.ts).
+    // Las otras cinco tambien estan conectadas, pero para escritura: una
+    // `Conexion` es solo para leer (`conexiones.ts`). `notificacion_valores`
+    // la declara en `escrituras.ts`; las otras cuatro, en su propio
+    // componente (ver el docblock de `pantallas/valores/index.ts`), que
+    // tambien lee su lista blanca de `escrituras.ts`.
     expect(OPCIONES_CONECTADAS).toContain('valores_busqueda');
     for (const opcion of [
       'valores_individual',
@@ -351,5 +356,289 @@ describe('notificacion_valores manda solo lo que su lista blanca declara (#39, #
     await waitFor(() => expect(peticiones).toHaveLength(1));
     const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
     expect(cuerpo['resultado']).toBe('NO_UBICADO');
+  });
+});
+
+/** Como `laApiResponde` del describe de notificacion, para los cuatro componentes propios. */
+function unaApiQueRegistraLasPeticiones(
+  cuerpoDeRespuesta: unknown = { id: 1 },
+): { url: string; metodo: string; cuerpo: string }[] {
+  const peticiones: { url: string; metodo: string; cuerpo: string }[] = [];
+  globalThis.fetch = (entrada, opciones) => {
+    peticiones.push({
+      url: typeof entrada === 'string' ? entrada : String(entrada),
+      metodo: opciones?.method ?? 'GET',
+      cuerpo: typeof opciones?.body === 'string' ? opciones.body : '',
+    });
+    return Promise.resolve(
+      new Response(JSON.stringify(cuerpoDeRespuesta), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  };
+  return peticiones;
+}
+
+describe('pase_coactiva vive en su propio componente porque el catalogo no pone su acto al final (#39, #75)', () => {
+  const original = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = original;
+  });
+
+  it('sin numero de valor, pide elegir uno y no dibuja ninguna accion', async () => {
+    montarEnRuta('/valores/pase-coactiva');
+    await screen.findByText('Elige un valor para pasar a coactiva');
+    expect(screen.queryByRole('button', { name: /^Derivar/ })).not.toBeInTheDocument();
+  });
+
+  it('fija PCO y manda solo lo declarado, confirmando que va a pasar', async () => {
+    const usuario = userEvent.setup();
+    const peticiones = unaApiQueRegistraLasPeticiones();
+    montarEnRuta('/valores/pase-coactiva/OP-2026-004182');
+
+    await usuario.type(await observacion(), 'Vencido el plazo de reclamación.');
+    await usuario.click(primaria());
+
+    const aviso = await screen.findByText(/y eso no se deshace/);
+    expect(aviso.textContent).toMatch(/derivar a coactiva/i);
+    expect(peticiones).toHaveLength(0);
+
+    await usuario.click(await screen.findByRole('button', { name: /^Confirmar/ }));
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    expect(peticiones[0]?.metodo).toBe('POST');
+    expect(peticiones[0]?.url).toContain('/valores/OP-2026-004182/movimientos');
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).toEqual({
+      tipoDeMovimiento: 'PCO',
+      observacion: 'Vencido el plazo de reclamación.',
+    });
+  });
+});
+
+describe('valores_individual sincroniza su tributo y su periodo en una obligación de una fila (#37, #75)', () => {
+  const original = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = original;
+  });
+
+  it('la primaria no se habilita hasta que la obligación está completa', async () => {
+    const usuario = userEvent.setup();
+    unaApiQueRegistraLasPeticiones();
+    montarEnRuta('/valores/valores-individual');
+
+    await usuario.type(await observacion(), 'Emisión ordinaria.');
+    // Sin tipo, tributo ni periodo, la primaria sigue apagada: la observación
+    // sola no basta cuando la opción exige algo más (#332).
+    primariaApagada(primaria());
+  });
+
+  it('con tipo y contribuyente pero sin tributo ni periodo, sigue apagada: la obligación no identifica nada', async () => {
+    const usuario = userEvent.setup();
+    unaApiQueRegistraLasPeticiones();
+    montarEnRuta('/valores/valores-individual');
+
+    await usuario.selectOptions(await screen.findByLabelText('Tipo de valor'), 'ORDEN DE PAGO');
+    await usuario.type(screen.getByLabelText('Cod. Contribuyente'), '00000003541');
+    await usuario.type(await observacion(), 'Emisión ordinaria.');
+
+    primariaApagada(primaria());
+    expect(motivoDeLaPrimaria()).toMatch(/Elige el tributo/);
+  });
+
+  it('manda `obligaciones` como un arreglo de un elemento, con el tributo traducido', async () => {
+    const usuario = userEvent.setup();
+    const peticiones = unaApiQueRegistraLasPeticiones();
+    montarEnRuta('/valores/valores-individual');
+
+    await usuario.selectOptions(await screen.findByLabelText('Tipo de valor'), 'ORDEN DE PAGO');
+    await usuario.type(screen.getByLabelText('Cod. Contribuyente'), '00000003541');
+    await usuario.selectOptions(screen.getByLabelText('Tributo'), 'IMPUESTO PREDIAL');
+    await usuario.type(screen.getByLabelText('Periodo'), '2026');
+    await usuario.type(await observacion(), 'Emisión ordinaria del ejercicio.');
+
+    await usuario.click(primaria());
+    await usuario.click(await screen.findByRole('button', { name: /^Confirmar/ }));
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    expect(peticiones[0]?.url).toContain('/valores');
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).toEqual({
+      tipo: 'OP',
+      codContribuyente: '00000003541',
+      obligaciones: [{ tributo: 'PREDIAL', ejercicio: 2026 }],
+      observacion: 'Emisión ordinaria del ejercicio.',
+    });
+  });
+});
+
+describe('valores_masivo son tres etapas reales, no un boton (#38, #75)', () => {
+  const original = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = original;
+  });
+
+  it('preparar los criterios y los códigos, revisarlos, y solo entonces generar', async () => {
+    const usuario = userEvent.setup();
+    const peticiones = unaApiQueRegistraLasPeticiones({
+      id: 9,
+      totalCandidatos: 4182,
+      fechaCriterio: '2026-08-13',
+    });
+    montarEnRuta('/valores/valores-masivo');
+
+    await screen.findByText('Etapa: 1. Preparar');
+    await usuario.selectOptions(screen.getByLabelText('Tipo de valor'), 'ORDEN DE PAGO');
+    await usuario.selectOptions(screen.getByLabelText('Ejercicio desde'), '2023');
+    await usuario.selectOptions(screen.getByLabelText('Ejercicio hasta'), '2025');
+    await usuario.selectOptions(screen.getByLabelText('Tributo'), 'IMPUESTO PREDIAL');
+    fireEvent.change(screen.getByLabelText('Códigos de contribuyente (uno por línea)'), {
+      target: { value: '00000003541\n00000006550' },
+    });
+
+    await usuario.click(screen.getByRole('button', { name: 'Revisar' }));
+    await screen.findByText('Etapa: 2. Revisar');
+    // Antes de confirmar no sale ninguna peticion: revisar es local.
+    expect(peticiones).toHaveLength(0);
+
+    await usuario.type(await observacion(), 'Emisión anual del ejercicio 2026.');
+    await usuario.click(primaria());
+    const aviso = await screen.findByText(/y eso no se deshace/);
+    expect(aviso.textContent).toContain('sobre 2 contribuyente(s) elegido(s)');
+    await usuario.click(await screen.findByRole('button', { name: /^Confirmar/ }));
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    expect(peticiones[0]?.url).toContain('/valores/masivo');
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).toEqual({
+      tipo: 'OP',
+      ejercicioDesde: 2023,
+      ejercicioHasta: 2025,
+      tributo: 'PREDIAL',
+      contribuyentes: ['00000003541', '00000006550'],
+      observacion: 'Emisión anual del ejercicio 2026.',
+    });
+
+    // Y el resultado que enseña es el que devolvió el servidor: el conteo
+    // real, no uno inventado por la pantalla.
+    await screen.findByText(/4182 candidato\(s\)/);
+  });
+
+  it('generar antes de revisar es imposible: la primaria lo dice y no manda nada', async () => {
+    const usuario = userEvent.setup();
+    const peticiones = unaApiQueRegistraLasPeticiones();
+    montarEnRuta('/valores/valores-masivo');
+
+    await usuario.selectOptions(await screen.findByLabelText('Tipo de valor'), 'ORDEN DE PAGO');
+    await usuario.selectOptions(screen.getByLabelText('Ejercicio desde'), '2023');
+    await usuario.selectOptions(screen.getByLabelText('Ejercicio hasta'), '2025');
+    await usuario.type(
+      screen.getByLabelText('Códigos de contribuyente (uno por línea)'),
+      '00000003541',
+    );
+    await usuario.type(await observacion(), 'Intento sin revisar.');
+
+    // Con todo lo demas relleno y sin haber pulsado «Revisar», la primaria
+    // sigue apagada: emitir sin revisar es exactamente lo que #75 prohíbe.
+    primariaApagada(primaria());
+    expect(motivoDeLaPrimaria()).toMatch(/Revisa el criterio/);
+    expect(peticiones).toHaveLength(0);
+  });
+});
+
+describe('prescripcion parte «ejercicios solicitados» en dos campos, y arma su propio hecho (#39, #75)', () => {
+  const original = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = original;
+  });
+
+  it('sin interrupción, `hechos` viaja vacío: no se inventa ninguna', async () => {
+    const usuario = userEvent.setup();
+    const peticiones = unaApiQueRegistraLasPeticiones();
+    montarEnRuta('/valores/prescripcion');
+
+    await usuario.type(await screen.findByLabelText('Cod. Contribuyente'), '00000006550');
+    await usuario.selectOptions(screen.getByLabelText('Tributo'), 'IMPUESTO PREDIAL');
+    await usuario.selectOptions(screen.getByLabelText('Ejercicio desde'), '2021');
+    await usuario.selectOptions(screen.getByLabelText('Ejercicio hasta'), '2022');
+    await usuario.selectOptions(
+      screen.getByLabelText('Plazo aplicable'),
+      '4 AÑOS — DECLARACIÓN PRESENTADA',
+    );
+    await usuario.type(await observacion(), 'Solicitud del contribuyente.');
+
+    await usuario.click(primaria());
+    await usuario.click(await screen.findByRole('button', { name: /^Confirmar/ }));
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    expect(peticiones[0]?.url).toContain('/coactiva/prescripcion');
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo).toEqual({
+      codContribuyente: '00000006550',
+      tributo: 'PREDIAL',
+      ejercicioDesde: 2021,
+      ejercicioHasta: 2022,
+      plazoAplicable: 'DECLARACION_PRESENTADA',
+      observacion: 'Solicitud del contribuyente.',
+      // Una tabla declarada viaja aunque este vacia: un arreglo vacio es la
+      // instruccion «ninguna interrupcion», no una ausencia (ver el javadoc
+      // de `soloDeclaradas`). `hechosDe` del backend lee lo mismo de un
+      // `null` que de una lista vacia.
+      hechos: [],
+    });
+  });
+
+  it('con un acto de interrupción y su fecha, `hechos` lleva un elemento fijo en INTERRUPCION', async () => {
+    const usuario = userEvent.setup();
+    const peticiones = unaApiQueRegistraLasPeticiones();
+    montarEnRuta('/valores/prescripcion');
+
+    await usuario.type(await screen.findByLabelText('Cod. Contribuyente'), '00000006550');
+    await usuario.selectOptions(screen.getByLabelText('Tributo'), 'IMPUESTO PREDIAL');
+    await usuario.selectOptions(screen.getByLabelText('Ejercicio desde'), '2021');
+    await usuario.selectOptions(screen.getByLabelText('Ejercicio hasta'), '2022');
+    await usuario.selectOptions(
+      screen.getByLabelText('Plazo aplicable'),
+      '4 AÑOS — DECLARACIÓN PRESENTADA',
+    );
+    await usuario.selectOptions(
+      screen.getByLabelText('Acto de interrupción'),
+      'NOTIFICACIÓN DE ORDEN DE PAGO',
+    );
+    fireEvent.change(screen.getByLabelText('Fecha del último acto'), {
+      target: { value: '2019-05-12' },
+    });
+    await usuario.type(await observacion(), 'Solicitud del contribuyente.');
+
+    await usuario.click(primaria());
+    await usuario.click(await screen.findByRole('button', { name: /^Confirmar/ }));
+
+    await waitFor(() => expect(peticiones).toHaveLength(1));
+    const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    expect(cuerpo['hechos']).toEqual([
+      {
+        clase: 'INTERRUPCION',
+        causal: 'NOTIFICACIÓN DE ORDEN DE PAGO',
+        fechaDesde: '2019-05-12',
+      },
+    ]);
+  });
+
+  it('elegir un acto sin su fecha apaga la primaria en vez de mandar un hecho a medias', async () => {
+    const usuario = userEvent.setup();
+    unaApiQueRegistraLasPeticiones();
+    montarEnRuta('/valores/prescripcion');
+
+    await usuario.type(await screen.findByLabelText('Cod. Contribuyente'), '00000006550');
+    await usuario.selectOptions(screen.getByLabelText('Tributo'), 'IMPUESTO PREDIAL');
+    await usuario.selectOptions(screen.getByLabelText('Ejercicio desde'), '2021');
+    await usuario.selectOptions(screen.getByLabelText('Ejercicio hasta'), '2022');
+    await usuario.selectOptions(
+      screen.getByLabelText('Plazo aplicable'),
+      '4 AÑOS — DECLARACIÓN PRESENTADA',
+    );
+    await usuario.selectOptions(screen.getByLabelText('Acto de interrupción'), 'PAGO PARCIAL');
+    await usuario.type(await observacion(), 'Solicitud del contribuyente.');
+
+    primariaApagada(primaria());
+    expect(motivoDeLaPrimaria()).toMatch(/Falta la fecha del acto de interrupción/);
   });
 });

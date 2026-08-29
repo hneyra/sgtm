@@ -1,8 +1,10 @@
 import type { ComponentType, ReactElement } from 'react';
 import type { DatosDePantalla } from '@sgtm/api-client';
+import type { CampoDePantalla } from '../catalogo';
 import { COMPOSICION_DE_CATASTRO } from './catastro/composicion';
 import { COMPOSICION_DE_CONSULTAS } from './consultas/composicion';
 import { COMPOSICION_DE_RENTAS } from './rentas/composicion';
+import { COMPOSICION_DE_TESORERIA } from './tesoreria/composicion';
 
 /**
  * Lo que una opcion compone **alrededor** de los diez bloques comunes.
@@ -292,6 +294,30 @@ export interface SeleccionDeFilas {
 }
 
 export interface ComposicionDeOpcion {
+  /**
+   * El bloque de busqueda, para una opcion cuyo catalogo **no declara `filtros`**.
+   *
+   * El hueco que cierra: `caja_tributaria` es un `POST` —`ContenidoConectado`
+   * la lee de `consulta_deuda`, no de su propia operacion (ver
+   * `pantallas/tesoreria/index.ts`)— y el prototipo no le dibuja una barra de
+   * busqueda: su catalogo no tiene `filtros`, solo `secciones` con el
+   * formulario de cobranza. Sin este campo el bloque `Filtros` no se dibuja
+   * nunca —esta gated en `estructura.filtros`, que sigue siendo `undefined`—,
+   * y el campo visible de la pantalla queda de solo lectura para siempre: el
+   * texto describe una accion que no se puede hacer.
+   *
+   * **Nunca se edita el catalogo generado** para esto: `tesoreria.generado.ts`
+   * se regenera de `design/sgtm-data-*.js`, y una fila hecha a mano
+   * desaparece en la siguiente pasada de `yarn portar-catalogo`. Este campo es
+   * la declaracion equivalente, en el mismo espiritu que `widgetsDeFiltro` —un
+   * registro por opcion que el renderizador consulta— para lo que el catalogo
+   * no puede decir.
+   *
+   * `Pantalla.tsx` usa `estructura.filtros ?? filtrosPropios`: una opcion cuyo
+   * catalogo ya trae `filtros` no se ve afectada, y esto solo entra cuando esa
+   * lista esta vacia del todo.
+   */
+  readonly filtrosPropios?: readonly CampoDePantalla[];
   readonly widgetsDeFiltro?: Readonly<Record<string, WidgetDeFiltro>>;
   /**
    * Claves de filtros que la pantalla **dibuja pero no manda**.
@@ -375,6 +401,7 @@ const COMPOSICIONES: Readonly<Record<string, ComposicionDeOpcion>> = {
   ...COMPOSICION_DE_CATASTRO,
   ...COMPOSICION_DE_CONSULTAS,
   ...COMPOSICION_DE_RENTAS,
+  ...COMPOSICION_DE_TESORERIA,
 };
 
 const NINGUNA: ComposicionDeOpcion = {};
@@ -388,6 +415,19 @@ const NINGUNA: ComposicionDeOpcion = {};
  */
 export const composicionDe = (opcion: string): ComposicionDeOpcion =>
   (Object.hasOwn(COMPOSICIONES, opcion) ? COMPOSICIONES[opcion] : undefined) ?? NINGUNA;
+
+/**
+ * Los filtros del bloque de busqueda: los del catalogo, o los que esta opcion
+ * compone cuando el catalogo no trae ninguno (`filtrosPropios`, arriba).
+ *
+ * `undefined` en los dos sitios significa lo mismo que siempre: sin bloque de
+ * busqueda. Una opcion con `filtros: []` en el catalogo —ninguna hoy— tampoco
+ * caeria en `filtrosPropios`: el `??` solo mira `undefined`, no vacio.
+ */
+export const filtrosDe = (
+  opcion: string,
+  declarados: readonly CampoDePantalla[] | undefined,
+): readonly CampoDePantalla[] | undefined => declarados ?? composicionDe(opcion).filtrosPropios;
 
 /**
  * Si hay **algo** que resumir, preguntado antes de pedir el trozo de la cabecera.

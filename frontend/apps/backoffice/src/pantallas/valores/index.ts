@@ -5,69 +5,68 @@ import { parametrosDeBusqueda } from '../busqueda';
 import { SIN_DATO, datosDe, leerPaginado, tablaDe, texto } from '../seguridad/listado';
 
 /**
- * Valores · conectado hasta donde llega el backend: **dos opciones de seis** (#75).
+ * Valores · las seis opciones conectadas (#75).
  *
  * `GET /api/v1/valores` (#37) se conecta aqui para lectura, con paginacion y filtro de
- * verdad contra el servidor (#63). `notificacion_valores`, que tambien tiene `Controller`
- * desde #39, se conecta para **escritura** en `escrituras.ts`, no aqui: su cuerpo
- * (`PeticionDeNotificacion`) es plano, y eso es exactamente lo que ese archivo sabe
- * declarar. Las cuatro restantes quedan fuera de este PR, y no por descuido:
+ * verdad contra el servidor (#63). Las otras cinco escriben, y ninguna cabe en el
+ * formulario plano de campo-a-campo que dibuja el renderizador generico:
+ * `notificacion_valores` (`PeticionDeNotificacion`, un cuerpo plano) se declara en
+ * `escrituras.ts` y se dibuja con `Pantalla.tsx`. Las cuatro restantes tienen **cuerpo
+ * con arreglos, o una accion primaria que el catalogo no pone al final**, y viven en su
+ * propio componente (`COMPONENTES_PROPIOS` de `Pantalla.tsx`), leyendo su lista blanca de
+ * `escrituras.ts` igual que `ActualizacionDeCatastro`:
  *
- * - `pase_coactiva` (`POST /valores/{numero}/movimientos`, #39 ya tiene su `Controller`):
- *   su cuerpo (`PeticionDeMovimiento`) es tan plano como el de `notificacion_valores` —
- *   `tipoDeMovimiento`, `fechaDelMovimiento`, `observacion`—, pero el catalogo dibuja las
- *   acciones de esta pantalla como `["Nuevo", "Modificar", "Generar", "Inactivar",
- *   "Imprimir"]`, y `BarraDeAcciones` trata **la ultima** como la primaria que escribe y
- *   pide confirmacion solo si `esIrreversible` reconoce su etiqueta. Aqui la ultima es
- *   «Imprimir», que ni escribe de verdad en ninguna otra pantalla ni es irreversible: si
- *   se declarara esta escritura, pulsar «Imprimir» pasaria el valor a coactiva **sin
- *   ninguna confirmacion**, justo lo que #75 pide evitar ("se confirma diciendo que se va
- *   a hacer... no con un «¿esta seguro?»" — y menos con nada). Conectarla de verdad
- *   necesita antes que el catalogo (o un adaptador de acciones) ponga la accion que
- *   escribe al final, no que se declare en `escrituras.ts` tal como esta.
- * - `prescripcion` (`POST /coactiva/prescripcion`, #39 ya tiene su `Controller` — vive en
- *   `sgtm-valores`, no en `sgtm-coactiva`, aunque su ruta diga `coactiva`): dos huecos de
- *   forma, no uno. `PeticionDePrescripcion` pide `ejercicioDesde`/`ejercicioHasta` como
- *   dos enteros separados, y el catalogo dibuja un unico campo de texto libre
- *   («Ejercicios solicitados»): partir «2021-2026» en dos numeros no es una traduccion de
- *   valor (`CampoDelCuerpo.valor` devuelve una cadena, no dos campos). Y `actoDeInterrupcion`
- *   /`fechaDelUltimoActo` solo pueden viajar como un elemento de `hechos` —un arreglo,
- *   igual que `obligaciones` en `valores_individual`—, aunque aqui sea opcional (una
- *   prescripcion sin interrupciones ni suspensiones es una peticion valida: `hechos:
- *   List.of()` por omision).
- * - `valores_individual` (`POST /valores`, #37 ya tiene su `Controller`): el cuerpo que
- *   `RegistrarValor` exige es `{ tipo, codContribuyente, obligaciones: [{ tributo,
- *   ejercicio, predioId?, vehiculoId? }], observacion }` — `obligaciones` es un arreglo,
- *   aunque sea de un solo elemento. La pantalla que dibuja el catalogo es un formulario
- *   **plano** (un `tributo`, un `periodo`), y `escrituras.ts` solo sabe declarar campos
- *   sueltos hacia el cuerpo (`CampoDelCuerpo`): no hay forma de expresar ahi «estos tres
- *   campos son el unico elemento de un arreglo». `alta_deuda` (#24, #73) resolvio el mismo
- *   problema de raiz distinta —su backend acepta una `cuota` entera, no un arreglo— asi
- *   que su solucion (una entrada mas en la lista blanca) no sirve aqui. Conectarla de
- *   verdad es la misma pieza que le falta a `permisos`/`actualizacion_catastro`: un
- *   `cuerpo` a medida, pero esas dos se escriben con su propio componente, y
- *   `valores_individual` todavia se dibuja con el renderizador generico
- *   (`Pantalla.tsx`), que no pasa ningun `cuerpo` — solo `campos`.
- * - `valores_masivo` (`POST /valores/masivo`, #38 ya tiene su `Controller`): el mismo
- *   problema de forma, mas uno de fondo. `IniciarCorridaMasiva` solo acepta **seleccion
- *   explicita** (`contribuyentes: string[]`) o **archivo importado** (`archivoCsv`,
- *   base64) — nunca un filtro amplio. El catalogo dibuja «Criterios de seleccion» como si
- *   fuera eso: tributo, sector, monto minimo de emision, exclusiones — ninguno de los
- *   cuales `IniciarCorridaMasiva` sabe leer. Y aunque se resolviera la forma, **no hay
- *   tercera etapa que conectar todavia**: `ValorMasivoResource` (la respuesta de este
- *   mismo `POST`) lo dice en su propio javadoc — "no trae los valores emitidos [...] lo
- *   que hasta ahi se emite se consulta con valores_busqueda" —, y `valores_busqueda` no
- *   tiene ningun filtro por corrida. No existe todavia un `GET` que deje **revisar antes
- *   de emitir**: la unica forma de saber cuantos candidatos hay es haber registrado ya el
- *   criterio, que es exactamente el paso que #75 pide poder deshacer con «Cancelar».
- *   Construir las «tres etapas» sobre esto seria simular una revision que el backend
- *   todavia no ofrece.
+ * - `valores_individual` (`GeneracionIndividualDeValores.tsx`): `RegistrarValor` exige
+ *   `obligaciones: [{ tributo, ejercicio, predioId?, vehiculoId? }]` —un arreglo, aunque
+ *   sea de un solo elemento—, y el catalogo dibuja un formulario plano (un tributo, un
+ *   periodo). El componente mantiene esos dos campos en su propio estado y los
+ *   sincroniza en una tabla de una fila (`OBLIGACION_UNICA`) cada vez que cambian.
+ *   `predioId`/`vehiculoId` no viajan todavia: no hay resolutor que traduzca un codigo
+ *   catastral o una placa a su identificador interno para esta pantalla (el de #331 es
+ *   de `alta_deuda`, con su propio componente).
+ * - `valores_masivo` (`GeneracionMasivaDeValores.tsx`): mismo problema de forma —
+ *   `IniciarCorridaMasiva` exige `contribuyentes: string[]`, un codigo por elemento, no
+ *   objetos—, resuelto con `TablaDelCuerpo.columnaUnica` (nuevo en `escritura.ts`): una
+ *   tabla de una columna cuyo cuerpo es el arreglo de esos valores sueltos. Las «tres
+ *   etapas» que #75 pide son preparar (los campos, sin ninguna peticion), revisar (un
+ *   resumen de lo escrito, sin consultar al servidor) y emitir (el unico `POST`, que
+ *   registra el criterio): `ValorMasivoResource` no trae candidatos porque la
+ *   generacion corre aparte, en el perfil batch, asi que "revisar" no simula una
+ *   consulta que el backend no publica —solo relee lo que se acaba de teclear—.
+ *   `sector`, el monto minimo de emision y las dos exclusiones del catalogo no viajan:
+ *   `PeticionDeValorMasivo` no tiene campo para ellos. La importacion de hoja de calculo
+ *   (`archivoCsv`) tampoco se conecta: ninguna pantalla del sistema tiene todavia un
+ *   control de archivo, y anadir uno aqui seria un componente escrito antes de que otra
+ *   pantalla lo pida.
+ * - `prescripcion` (`PrescripcionDeLaDeuda.tsx`): dos huecos de forma. `ejercicioDesde`/
+ *   `ejercicioHasta` son dos enteros, y el catalogo dibuja un unico campo de texto libre
+ *   («Ejercicios solicitados») que ningun `CampoDelCuerpo.valor` puede partir en dos
+ *   campos; el componente dibuja dos selectores de ejercicio en su lugar.
+ *   `actoDeInterrupcion`/`fechaDelUltimoActo` solo pueden viajar como el unico elemento
+ *   de `hechos`, un arreglo (`HECHO_DE_INTERRUPCION`), aunque sea opcional: elegir
+ *   «NINGUNO» sincroniza la tabla vacia, no `hechos: [{}]`.
+ * - `pase_coactiva` (`PaseACoactiva.tsx`): su cuerpo (`PeticionDeMovimiento`) es tan
+ *   plano como el de `notificacion_valores`, pero el catalogo dibuja sus acciones como
+ *   `["Nuevo", "Modificar", "Generar", "Inactivar", "Imprimir"]` —la ultima es
+ *   «Imprimir», que ni escribe ni es irreversible—, y el renderizador generico trata
+ *   siempre la ultima accion como la primaria. Con una barra propia de una sola accion
+ *   —«Derivar a coactiva», siempre la primaria y siempre irreversible— la confirmacion
+ *   de #75 protege el acto de verdad. `tipoDeMovimiento` se fija en `PCO` sin preguntar:
+ *   `ValoresController.mover` rechaza cualquier otro codigo desde esta ruta.
  *
- * Ninguna de las cuatro esta bloqueada por falta de UI generica: el renderizador comun ya
- * cumple lo que #75 pide de todas ellas —sin boton de borrar, confirmacion diciendo que
- * va a pasar y sobre cuantos, una tanda que no se puede emitir dos veces sin nueva
- * observacion— y eso ya lo prueba `valores.test.tsx` contra las seis, conectadas o no.
+ * `valores.test.tsx` prueba las seis: que ninguna ofrece borrar, que las cinco que
+ * escriben confirman lo irreversible diciendo que va a pasar y sobre cuantos, que
+ * emitir/generar/declarar/derivar dos veces es imposible sin una observacion nueva, y el
+ * cuerpo exacto que cada una manda.
  */
+
+/**
+ * Los ejercicios del desplegable de `valores_masivo`, tal como el catalogo los dibuja
+ * (2026 a 2020). `prescripcion` no tiene su propia lista —su unico campo del manual es
+ * el texto libre «Ejercicios solicitados» (ver `PrescripcionDeLaDeuda.tsx`)— y comparte
+ * esta para que sus dos selectores de ejercicio no inventen un rango distinto.
+ */
+export const EJERCICIOS_DEL_DESPLEGABLE = ['2026', '2025', '2024', '2023', '2022', '2021', '2020'];
 
 /**
  * Como escribe el catalogo el tipo de valor en el filtro de busqueda —«ORDEN DE PAGO»,

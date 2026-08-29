@@ -11,7 +11,7 @@ backend/buildSrc/.kotlin/
 *.iml
 
 # Frontend
-node_modules/
+node_modules
 dist/
 *.tsbuildinfo
 

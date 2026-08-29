@@ -1,4 +1,5 @@
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
+import type { ComponentType } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Aviso, Boton, Esqueleto, FechaDeCalculo } from '@sgtm/design-system';
@@ -32,7 +33,7 @@ import { impedimentoDelActo } from './actos';
 import { useEjercicio } from '../app/ejercicio';
 import { conexionDe } from './conexiones';
 import type { Conexion } from './conexiones';
-import { composicionDe, hayQueResumir } from './composicion';
+import { composicionDe, filtrosDe, hayQueResumir } from './composicion';
 import type { ComposicionDeOpcion } from './composicion';
 import { PanelLateral } from './bloques/PanelLateral';
 import { useDatosDeOperacion } from './useDatosDeOperacion';
@@ -45,9 +46,6 @@ import { Portal } from './bloques/Portal';
 import { Reporte } from './bloques/Reporte';
 import { useDescargaDeArchivo } from './useDescargaDeArchivo';
 import type { DescargaDeArchivo } from './useDescargaDeArchivo';
-import { ActualizacionDeCatastro } from './catastro/ActualizacionDeCatastro';
-import { ValoresUnitarios } from './catastro/ValoresUnitarios';
-import { Depreciacion } from './catastro/Depreciacion';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
 import { IndiceDeSecciones } from './bloques/IndiceDeSecciones';
 import { Versionado } from './bloques/Versionado';
@@ -166,6 +164,40 @@ type Estructura = EstructuraDePantalla;
  */
 const ANCLA_DE_LA_TABLA = 'sgtm-tabla-de-la-pantalla';
 
+/**
+ * Siete pantallas propias, cargadas con quien las abre y no en el arranque
+ * (#379, esta pasada; mismo patron que `rentas/composicion.ts`).
+ *
+ * Las tres de valores catastrales —`ActualizacionDeCatastro` con `TablaDePisos`
+ * y `CodigoCatastral`, las otras dos con `useTablaDeValuacion`— y las cuatro
+ * de `Valores` (RF-093 a RF-096, #75): `GeneracionIndividualDeValores`,
+ * `GeneracionMasivaDeValores`, `PrescripcionDeLaDeuda` y `PaseACoactiva`.
+ * Ninguna de las 127 pantallas que no son estas siete la necesita nunca.
+ * Medido: el arranque bajo de 150,2 a 148,0 KB comprimidos al sacarlas del
+ * trozo comun (`yarn comprobar-compilaciones`).
+ */
+const ActualizacionDeCatastro = lazy(async () => ({
+  default: (await import('./catastro/ActualizacionDeCatastro')).ActualizacionDeCatastro,
+}));
+const ValoresUnitarios = lazy(async () => ({
+  default: (await import('./catastro/ValoresUnitarios')).ValoresUnitarios,
+}));
+const Depreciacion = lazy(async () => ({
+  default: (await import('./catastro/Depreciacion')).Depreciacion,
+}));
+const GeneracionIndividualDeValores = lazy(async () => ({
+  default: (await import('./valores/GeneracionIndividualDeValores')).GeneracionIndividualDeValores,
+}));
+const GeneracionMasivaDeValores = lazy(async () => ({
+  default: (await import('./valores/GeneracionMasivaDeValores')).GeneracionMasivaDeValores,
+}));
+const PrescripcionDeLaDeuda = lazy(async () => ({
+  default: (await import('./valores/PrescripcionDeLaDeuda')).PrescripcionDeLaDeuda,
+}));
+const PaseACoactiva = lazy(async () => ({
+  default: (await import('./valores/PaseACoactiva')).PaseACoactiva,
+}));
+
 /** Las pantallas cuyo recurso trae version y vigencia. Hoy, las cuatro fichas. */
 const VERSIONADAS: ReadonlySet<string> = new Set([
   'ficha_urbana',
@@ -212,12 +244,23 @@ const VERSIONADAS: ReadonlySet<string> = new Set([
  *                            adaptador de los que ya existen, y las dos
  *                            siguen bloqueadas por D-02a en su contenido,
  *                            no en su forma.
+ *   valores_individual,      (#75) sus cuerpos llevan arreglos —una
+ *   valores_masivo,          obligacion, una lista de contribuyentes, un
+ *   prescripcion             hecho de interrupcion— que `CampoDelCuerpo`
+ *                            no declara suelto, o piden partir un campo
+ *                            del catalogo en dos (`prescripcion`). Ver el
+ *                            docblock de `pantallas/valores/index.ts`.
+ *   pase_coactiva            (#75) el catalogo dibuja sus acciones sin la
+ *                            que escribe al final, y el renderizador
+ *                            comun siempre trata la ultima como la
+ *                            primaria: conectada tal cual, pasaria un
+ *                            valor a coactiva sin confirmacion.
  *
  * Viven en su propio componente en vez de forzar al renderizador comun a
  * saber de listas, de booleanos o de un verbo que miente.
  */
 const COMPONENTES_PROPIOS: Readonly<
-  Record<string, (props: { readonly estructura: Estructura }) => React.JSX.Element>
+  Record<string, ComponentType<{ readonly estructura: Estructura }>>
 > = {
   permisos: PermisosMatrix,
   miembros: MiembrosDeGrupo,
@@ -225,12 +268,24 @@ const COMPONENTES_PROPIOS: Readonly<
   actualizacion_catastro: ActualizacionDeCatastro,
   valores_unitarios: ValoresUnitarios,
   depreciacion: Depreciacion,
+  valores_individual: GeneracionIndividualDeValores,
+  valores_masivo: GeneracionMasivaDeValores,
+  prescripcion: PrescripcionDeLaDeuda,
+  pase_coactiva: PaseACoactiva,
 };
 
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
   const Propio = COMPONENTES_PROPIOS[estructura.id];
   if (Propio !== undefined) {
-    return <Propio estructura={estructura} />;
+    // El `Suspense` es de las siete perezosas de catastro y valores; las de
+    // seguridad no suspenden nunca —viajan en el trozo comun—, y envolverlas
+    // igual no cuesta nada: sin promesa pendiente, `Suspense` no dibuja su
+    // `fallback`.
+    return (
+      <Suspense fallback={<Esqueleto alto={320} />}>
+        <Propio estructura={estructura} />
+      </Suspense>
+    );
   }
   const conexion = conexionDe(estructura.id);
   return conexion === undefined ? (
@@ -335,6 +390,9 @@ function Bloques({
   const { moduloId = '', ranura = '', codigo } = useParams();
 
   const busquedaActiva = leerBusqueda(busqueda);
+  // El bloque de busqueda: el del catalogo, o el que esta opcion compone
+  // cuando el catalogo no trae ninguno (`filtrosPropios`, ver `composicion.ts`).
+  const filtrosDeLaPantalla = filtrosDe(estructura.id, estructura.filtros);
   const operacion = operacionDe(estructura.id);
   // Una operacion que escribe no se pide al abrir la pantalla: abrir «Copias de
   // seguridad» no puede lanzar un respaldo. La pantalla se dibuja de su catalogo
@@ -733,11 +791,11 @@ function Bloques({
         />
       )}
 
-      {estructura.filtros && (
+      {filtrosDeLaPantalla && (
         <div ref={refDeBusqueda}>
           <Filtros
             opcion={estructura.id}
-            campos={estructura.filtros}
+            campos={filtrosDeLaPantalla}
             buscado={busquedaActiva.filtros}
             cargando={consulta.isFetching}
             // Buscar reescribe la URL: es donde vive lo buscado. Y devuelve a la

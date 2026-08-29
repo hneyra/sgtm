@@ -1177,6 +1177,232 @@ function deudasConBeneficio(): Readonly<Record<string, unknown>> {
   };
 }
 
+/* ── Coactiva: expedientes, su proceso y la deuda en cobranza (#76) ─────── */
+
+/**
+ * Prototipo → `EstadoDelExpediente` (V33, `coactiva/dominio/EstadoDelExpediente.java`).
+ *
+ * Los seis codigos del manual —`011` a `051`— mas `INICIADO` (`000`), que es con
+ * lo que nace el expediente al importar y no se elige en ningun desplegable. El
+ * prototipo escribe solo tres de esos siete en la grilla de expedientes
+ * («Iniciado», «Con medida», «Concluido»): las demas filas del padron real caen
+ * en algun punto intermedio, y aqui no se inventa uno — se usa `INICIADO` como
+ * el que menos compromete cuando la etiqueta del prototipo no es ninguna de las
+ * tres reconocidas.
+ */
+const ESTADO_DEL_EXPEDIENTE_DEL_MOCK: Readonly<
+  Record<string, { readonly estado: string; readonly estadoCodigo: string }>
+> = {
+  Iniciado: { estado: 'INICIADO', estadoCodigo: '000' },
+  'Con medida': { estado: 'MEDIDA CAUTELAR', estadoCodigo: '031' },
+  Concluido: { estado: 'CONCLUIDO', estadoCodigo: '051' },
+};
+
+const estadoDelExpedienteDe = (
+  cruda: string,
+): { readonly estado: string; readonly estadoCodigo: string } =>
+  ESTADO_DEL_EXPEDIENTE_DEL_MOCK[cruda] ?? ESTADO_DEL_EXPEDIENTE_DEL_MOCK['Iniciado']!;
+
+/** El importe de una cifra con otro sumado, sin perder la representacion decimal simple. */
+const masImporte = (a: string, b: string): string =>
+  (Number(comoImporte(a)) + Number(comoImporte(b))).toFixed(2);
+
+/**
+ * Expedientes coactivos (`ExpedienteResource`, #40, RF-100).
+ *
+ * `ExpedienteResource` **no publica el nombre del contribuyente**, solo su
+ * `codContribuyente` — el nombre vive en `ResumenDeContribuyente`, que
+ * `ExpedienteController` resuelve aparte y no expone en esta grilla (RF-100). La
+ * columna «Contribuyente» del prototipo sale con un codigo, no con el nombre
+ * que dibuja la captura: es lo que el recurso real tiene para dar.
+ *
+ * «Medida cautelar» tampoco esta en `ExpedienteResource` — la medida es del
+ * acto que la trabo (`ActoResource.medida`), no del expediente, y esta grilla no
+ * trae actuaciones (`valores=[]`, `historial=[]`: «una pagina de veinte no puede
+ * costar veinte lecturas de detalle», segun el propio controlador). Sale con
+ * `SIN_DATO`.
+ */
+function expedientesCoactivos(): Paginado {
+  return unaPagina(
+    filasDe('coactiva_expedientes').map(
+      ([numero, , valoresTexto, deudaS, costasS, , estadoCrudo], i) => {
+        const { estado, estadoCodigo } = estadoDelExpedienteDe(estadoCrudo ?? '');
+        const deuda = comoImporte(deudaS ?? '0.00');
+        const costas = comoImporte(costasS ?? '0.00');
+        return {
+          numero,
+          ejercicio: Number((numero ?? '').split('-')[1]) || new Date().getFullYear(),
+          correlativo: i + 1,
+          codContribuyente: `C-COACT-${String(i + 1).padStart(4, '0')}`,
+          ejecutor: 'R. MENDOZA CRUZ',
+          auxiliar: null,
+          fechaDeApertura: '2026-01-05',
+          asunto: null,
+          direccionReferencial: null,
+          estado,
+          estadoCodigo,
+          valores: Number(valoresTexto) || 0,
+          insoluto: deuda,
+          reajuste: '0.00',
+          interes: '0.00',
+          gastos: '0.00',
+          deudaMateriaDeCobranza: deuda,
+          costas,
+          totalExigible: masImporte(deuda, costas),
+          deudaAlDia: EL_DIA_DEL_PROTOTIPO,
+          valoresImportados: [],
+          historial: [],
+        };
+      },
+    ),
+  );
+}
+
+/**
+ * El seguimiento de un expediente (`ProcesoResource`, #41, RF-101):
+ * `{ expediente: ExpedienteResource, actuaciones: ActoResource[] }`.
+ *
+ * Es un recurso suelto —se abre por su `numero` en la ruta, como una ficha
+ * catastral— y no un listado: por eso vive en `SUELTOS` y no en `PAGINADOS`. El
+ * proxy no filtra (arriba, en `proxy.ts`): el mismo expediente sale sin
+ * importar el numero que se pida, igual que ya hace `vehiculo()` con la placa.
+ *
+ * `actuaciones` sale vacia: los actos del proceso (REC, embargos, sus
+ * diligencias) no tienen fila propia en el prototipo capturado —esta pantalla
+ * solo dibuja «Medida cautelar — REC 2» como un formulario suelto, no como una
+ * lista de actuaciones—, y un arreglo con un acto inventado seria construir la
+ * pantalla contra una respuesta que el proxy no tiene de donde sacar.
+ */
+function procesoCoactivo(): Readonly<Record<string, unknown>> {
+  const campos = RESPUESTAS['proceso_coactivo']?.campos ?? {};
+  const valor = (clave: string): string =>
+    typeof campos[clave] === 'string' ? (campos[clave] as string) : '';
+  const insoluto = comoImporte(valor('insolutoS') || '0.00');
+  const reajuste = comoImporte(valor('reajusteS') || '0.00');
+  const interes = comoImporte(valor('interesS') || '0.00');
+  const gastos = comoImporte(valor('gastosS') || '0.00');
+  const materiaDeCobranza = [insoluto, reajuste, interes, gastos].reduce(
+    (suma, parte) => masImporte(suma, parte),
+    '0.00',
+  );
+
+  const expediente = {
+    numero: valor('numero') || '0000001201',
+    ejercicio: Number(valor('ano')) || new Date().getFullYear(),
+    correlativo: 1,
+    codContribuyente: valor('contribuyente') || '00000003542',
+    // `ejecutor` no es `@Nullable` en `ExpedienteResource`: siempre lleva un
+    // valor, aunque sea «no especificado» — el prototipo lo dibuja como una
+    // opcion mas del desplegable, no como una ausencia.
+    ejecutor: valor('ejecutor') || 'NO ESPECIFICADO',
+    auxiliar: valor('auxiliar') || null,
+    fechaDeApertura: valor('fechaDeCreacion') || '2022-10-01',
+    asunto: valor('asunto') === '.' ? null : valor('asunto') || null,
+    direccionReferencial: null,
+    estado: 'REC 01 EMITIDO',
+    estadoCodigo: '011',
+    valores: 1,
+    insoluto,
+    reajuste,
+    interes,
+    gastos,
+    deudaMateriaDeCobranza: materiaDeCobranza,
+    costas: '0.00',
+    totalExigible: comoImporte(valor('totalS') || materiaDeCobranza),
+    deudaAlDia: valor('proyectadaAl') || EL_DIA_DEL_PROTOTIPO,
+    valoresImportados: [],
+    historial: [],
+  };
+
+  return { expediente, actuaciones: [] };
+}
+
+/**
+ * Deuda en cobranza coactiva (`DeudaCoactivaResource`, #42, RF-107): la base
+ * comun de `coactiva_consulta_deudas` y `coactiva_deudas_beneficio`.
+ *
+ * **El estado que publica el recurso es uno de los seis del manual**
+ * (`EstadoDelExpediente.etiqueta()`); «Fraccionado», que el prototipo dibuja en
+ * la primera pantalla, no es ninguno de ellos —`DeudaCoactivaController` lo
+ * rechaza explicitamente si se pide como filtro, porque fraccionar mueve la
+ * deuda a la fase `CONVENIO` del libro y no el estado del procedimiento— y se
+ * traduce aqui al mas cercano, `SUSPENDIDO`, documentandolo en vez de
+ * inventar un septimo estado que el backend no tiene.
+ */
+const ESTADO_DE_DEUDA_DEL_MOCK: Readonly<Record<string, string>> = {
+  'REC 01 emitido': 'REC 01 EMITIDO',
+  Notificado: 'REC 01 NOTIFICADA',
+  'Medida cautelar': 'MEDIDA CAUTELAR',
+  Fraccionado: 'SUSPENDIDO',
+};
+
+/**
+ * Consulta de deudas en coactiva (`coactiva_consulta_deudas`, #42, RF-107).
+ *
+ * `contribuyente` sale del propio nombre que dibuja el prototipo —esta grilla
+ * si lo publica, a diferencia de `expedientesCoactivos()`—, y el estado se
+ * traduce con `ESTADO_DE_DEUDA_DEL_MOCK`.
+ */
+const deudasCoactivas = (): Paginado =>
+  unaPagina(
+    filasDe('coactiva_consulta_deudas').map(
+      ([expediente, ano, contribuyente, tributo, deudaS, costasS, , estadoCrudo], i) => {
+        const deuda = comoImporte(deudaS ?? '0.00');
+        const costas = comoImporte(costasS ?? '0.00');
+        return {
+          expediente,
+          ano: Number(ano) || new Date().getFullYear(),
+          codContribuyente: `C-COACT-${String(i + 1).padStart(4, '0')}`,
+          contribuyente,
+          tributos: (tributo ?? '')
+            .split(',')
+            .map((t) => t.trim())
+            .filter((t) => t !== ''),
+          deudaS: deuda,
+          costasS: costas,
+          totalS: masImporte(deuda, costas),
+          aLaFecha: EL_DIA_DEL_PROTOTIPO,
+          estado: ESTADO_DE_DEUDA_DEL_MOCK[estadoCrudo ?? ''] ?? 'INICIADO',
+          ultimaActuacion: null,
+          beneficios: null,
+        };
+      },
+    ),
+  );
+
+/**
+ * Deuda acogible a un beneficio, en coactiva (`coactiva_deudas_beneficio`, #42, RF-107).
+ *
+ * `DeudaCoactivaResource` **no desglosa** insoluto, reajuste ni interes por
+ * separado — solo la deuda materia de cobranza, las costas y el total—, asi
+ * que las columnas «Insoluto S/» e «Interés S/» del prototipo salen con
+ * `SIN_DATO`: desglosarlas aqui seria inventar una particion que el recurso
+ * real no tiene. Y **sin ninguna cifra «con beneficio»**, por lo mismo que dice
+ * el javadoc de `DeudaCoactivaResource.de(DeudaConBeneficio, ...)`: el efecto
+ * de un beneficio sobre el importe es D-02b (#191).
+ */
+function deudasCoactivasBeneficio(): Paginado {
+  return unaPagina(
+    filasDe('coactiva_deudas_beneficio').map(([expediente, ano, tributo, , , , totalS], i) => {
+      const total = comoImporte(totalS ?? '0.00');
+      return {
+        expediente,
+        ano: Number(ano) || new Date().getFullYear(),
+        codContribuyente: `C-COACT-${String(i + 1).padStart(4, '0')}`,
+        contribuyente: '',
+        tributos: [tributo ?? ''].filter((t) => t !== ''),
+        deudaS: total,
+        costasS: '0.00',
+        totalS: total,
+        aLaFecha: EL_DIA_DEL_PROTOTIPO,
+        estado: 'INICIADO',
+        ultimaActuacion: null,
+        beneficios: [],
+      };
+    }),
+  );
+}
+
 const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>> = {
   '/catastro/fichas/urbana/{codRefCatastral}': urbana,
   '/catastro/fichas/economica/{codRefCatastral}': economica,
@@ -1184,10 +1410,14 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/catastro/fichas/rural/{codUnidad}': rural,
   '/rentas/vehiculos/{placa}': vehiculo,
   '/rentas/declaraciones/{djNro}': declaracionJurada,
+  '/tesoreria/recibos/{nro}/duplicado': duplicadoRecibo,
+  '/tesoreria/recaudacion/avance': avanceRecaudacion,
+  '/tesoreria/recaudacion/por-area': recaudacionPorArea,
   '/consultas/constancias/no-adeudo': constanciaDeNoAdeudo,
   '/consultas/unificada': consultaUnificada,
   '/consultas/deudas-con-beneficio': deudasConBeneficio,
   '/seguridad/sesion/permisos': permisosDeLaSesion,
+  '/coactiva/expedientes/{numero}/proceso': procesoCoactivo,
 };
 
 /* ── Una funcion por recurso, con los campos que declara su `Resource` ──── */
@@ -1330,6 +1560,204 @@ const respaldo = (): Paginado =>
     },
   ]);
 
+/* ── Tesoreria: convenios, recibos y recaudacion ──────────────────────────── */
+
+/**
+ * Convenios de fraccionamiento, listado (`ConvenioResource.FilaResource`,
+ * #35, #74).
+ *
+ * Las claves del prototipo ya coinciden letra por letra con los campos del
+ * recurso real —`nroConvenio`, `contribuyente`, `fecha`, `deudaAcogidaS`,
+ * `cuotas`, `pagadas`, `vencidas`, `saldoS`, `estado`—, asi que aqui no se
+ * reescribe ninguna: se copian con el nombre que publica el backend.
+ * `fechaCorte` no la dibuja el prototipo por separado: se repite la de
+ * suscripcion, que es lo unico que hay. `motivo`, `cronograma`,
+ * `deudaOriginal` y `movimientos` son el detalle de **un** convenio abierto
+ * (`GET .../convenios?nroDeConvenio=...`, cuando la pagina trae una sola
+ * fila): la lista los deja `null`, sin inventar ninguno.
+ */
+const convenios = (): Paginado =>
+  unaPagina(
+    filasDe('consulta_convenios').map(
+      ([numero, contribuyente, suscrito, acogida, cuotas, pagadas, vencidas, saldo, estado]) => {
+        const fecha = fechaDe(suscrito ?? '') ?? EL_DIA_DEL_PROTOTIPO;
+        return {
+          nroConvenio: numero,
+          contribuyente,
+          fecha,
+          fechaCorte: fecha,
+          deudaAcogidaS: comoImporte(acogida ?? '0.00'),
+          cuotas: Number(cuotas) || 0,
+          pagadas: Number(pagadas) || 0,
+          vencidas: Number(vencidas) || 0,
+          saldoS: comoImporte(saldo ?? '0.00'),
+          saldoALaFecha: EL_DIA_DEL_PROTOTIPO,
+          estado: (estado ?? '').toUpperCase(),
+          motivo: null,
+          cronograma: null,
+          deudaOriginal: null,
+          movimientos: null,
+        };
+      },
+    ),
+  );
+
+/**
+ * La vista previa de un recibo (`DuplicadoResource`, #34, #74).
+ *
+ * `GET .../recibos/{nro}/duplicado` trae **uno**, igual que `vehiculo()` y
+ * `declaracionJurada()`: se sirve la primera fila de «Recibos localizados»
+ * del prototipo con esa forma. El recurso real no publica el nombre del
+ * contribuyente en `ReciboResource` —ni en ningun otro sitio de este
+ * endpoint—, asi que la columna «Contribuyente» del prototipo no tiene con
+ * que llenarse y no se inventa.
+ */
+function duplicadoRecibo(): Readonly<Record<string, unknown>> {
+  const [fila] = RESPUESTAS['duplicado_recibo']?.tabla?.filas ?? [];
+  const [numero, fecha, hora, , concepto, importeS, duplicados, estado] = (fila ?? []).map(
+    (c) => c.texto,
+  );
+  const fechaIso = fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO;
+  const horaIso = hora && hora !== '—' ? hora : '00:00';
+  const total = comoImporte(importeS ?? '0.00');
+  const [serie = '001', correlativoTexto = '1'] = (numero ?? '001-0000001').split('-');
+  const correlativo = Number(correlativoTexto) || 1;
+  const anulado = (estado ?? '').toUpperCase() === 'ANULADO';
+  const importe = (valor: string) => ({ importe: valor, actualizadoA: fechaIso });
+  return {
+    estado: anulado ? 'ANULADO' : 'EMITIDO',
+    duplicados: Number(duplicados) || 0,
+    anulacion: anulado
+      ? { fecha: fechaIso, motivo: 'Anulación registrada en ventanilla', usuario: null }
+      : null,
+    recibo: {
+      numero: numero || `${serie}-${String(correlativo).padStart(7, '0')}`,
+      serie,
+      correlativo,
+      cajero: 'admin',
+      formaDePago: 'EFECTIVO',
+      tipoDePago: 'NORMAL_TRIBUTARIO',
+      beneficioDeclarado: null,
+      emitidoEn: `${fechaIso}T${horaIso}:00Z`,
+      total: importe(total),
+      lineas: [
+        {
+          tributo: concepto || 'IMPUESTO PREDIAL',
+          concepto: 'PAGO',
+          ejercicio: null,
+          predioId: null,
+          vehiculoId: null,
+          cantidad: null,
+          precioUnitario: null,
+          insoluto: importe(total),
+          reajuste: importe('0.00'),
+          interes: importe('0.00'),
+          gasto: importe('0.00'),
+          monto: importe(total),
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * El avance de recaudacion por tributo (`RecaudacionResource.Avance`, #36, #74).
+ *
+ * **Sin «Emitido», «Saldo», «% avance», «Meta» ni «% de meta»**: son las
+ * columnas que dibuja el prototipo y que `RecaudacionController` no publica
+ * —la meta no tiene tabla, y lo emitido son cargos del libro, que este
+ * contexto no lee (javadoc de `RecaudacionResource.Avance`)—. Inventar un
+ * numero ahi seria mostrar un avance que nadie calculo. Lo unico que el
+ * recurso real trae por fila es `cobrado`/`anulado`/`neto`: el prototipo solo
+ * distingue un importe, «Recaudado S/», que es el que mas se parece a `neto`
+ * —lo que de verdad entro—; sin dato de anulaciones en el prototipo, se
+ * publica en cero y no se inventa un reparto.
+ */
+function avanceRecaudacion(): Readonly<Record<string, unknown>> {
+  const filas = filasDe('avance_recaudacion').map(([tributo, , recaudadoS]) => {
+    const neto = comoImporte(recaudadoS ?? '0.00');
+    return { tributo, cobrado: neto, anulado: '0.00', neto };
+  });
+  const totalNeto = sumaDeImportes(filas.map((f) => f.neto));
+  const aLaFecha = EL_DIA_DEL_PROTOTIPO;
+  const importe = (valor: string) => ({ importe: valor, actualizadoA: aLaFecha });
+  return {
+    desde: `${aLaFecha.slice(0, 4)}-01-01`,
+    hasta: aLaFecha,
+    aLaFecha,
+    filas: filas.map((f) => ({
+      tributo: f.tributo,
+      cobrado: importe(f.cobrado),
+      anulado: importe(f.anulado),
+      neto: importe(f.neto),
+    })),
+    cobrado: importe(totalNeto),
+    anulado: importe('0.00'),
+    neto: importe(totalNeto),
+    turno: null,
+  };
+}
+
+/**
+ * La recaudacion por area generadora y partida (`RecaudacionResource.Distribucion`,
+ * #36, #74).
+ *
+ * El prototipo dibuja «Partida», «Descripción» y «Monto S/» —una fila por
+ * partida, sin la unidad organica ni el tributo aparte—, y el recurso real
+ * agrupa por (area, partida, tributo). Sin esos dos datos por separado en el
+ * prototipo, `area` y `areaNombre` salen nulos —lo mismo que publica el
+ * recurso para la parte tributaria, que no tiene area (javadoc de
+ * `RecaudacionResource.FilaDePartida`)— y `tributo` se llena con la
+ * descripcion de la partida, que es lo unico que la fila trae para nombrarla.
+ */
+function recaudacionPorArea(): Readonly<Record<string, unknown>> {
+  const aLaFecha = EL_DIA_DEL_PROTOTIPO;
+  const importe = (valor: string) => ({ importe: valor, actualizadoA: aLaFecha });
+  const filas = filasDe('recaudacion_area').map(([partida, descripcion, montoS]) => {
+    const monto = comoImporte(montoS ?? '0.00');
+    return {
+      area: null,
+      // `FilaDePartida.areaNombre` es el unico texto explicativo que el
+      // recurso trae para esta fila (javadoc del backend): se llena con la
+      // «Descripción» del prototipo, que es la partida en prosa.
+      // Nulo a proposito: el backend documenta que `areaNombre` sale nulo en lo
+      // tributario, y un nombre inventado —reusar la descripcion de la partida—
+      // se copia a un reporte presupuestal sin que nadie lo note.
+      areaNombre: null,
+      partida: partida && partida !== '—' ? partida : null,
+      tributo: descripcion || 'SIN PARTIDA',
+      cobrado: importe(monto),
+      anulado: importe('0.00'),
+      neto: importe(monto),
+    };
+  });
+  const totalNeto = sumaDeImportes(filas.map((f) => f.neto.importe));
+  return {
+    desde: `${aLaFecha.slice(0, 4)}-01-01`,
+    hasta: aLaFecha,
+    aLaFecha,
+    filas,
+    neto: importe(totalNeto),
+    netoSinPartida: importe('0.00'),
+  };
+}
+
+/** Suma exacta de importes en texto plano, sin pasar por coma flotante (regla 1). */
+function sumaDeImportes(valores: readonly string[]): string {
+  let centavos = 0n;
+  for (const valor of valores) {
+    const [entero = '0', decimal = '00'] = valor.split('.');
+    const signo = entero.startsWith('-') ? -1n : 1n;
+    const enteroAbs = entero.replace('-', '') || '0';
+    centavos += signo * (BigInt(enteroAbs) * 100n + BigInt(decimal.padEnd(2, '0').slice(0, 2)));
+  }
+  const negativo = centavos < 0n;
+  const absoluto = negativo ? -centavos : centavos;
+  const texto = absoluto.toString().padStart(3, '0');
+  const resultado = `${texto.slice(0, -2)}.${texto.slice(-2)}`;
+  return negativo ? `-${resultado}` : resultado;
+}
+
 /* ── Papeletas: transito e infracciones administrativas ──────────────────── */
 
 /**
@@ -1367,7 +1795,6 @@ const papeletasTransito = (): Paginado =>
       lugar: 'VÍA PÚBLICA',
       placa,
       vehiculoId: i + 1,
-      licenciaConducir: null,
       infractorId: i + 1,
       propietarioId: null,
       contribuyenteId: null,
@@ -1414,7 +1841,6 @@ const adminEstadoCuenta = (): Paginado => {
       lugar: 'INSPECCIÓN MUNICIPAL',
       placa: null,
       vehiculoId: null,
-      licenciaConducir: null,
       infractorId: null,
       propietarioId: null,
       contribuyenteId: 1,
@@ -1435,17 +1861,6 @@ const adminEstadoCuenta = (): Paginado => {
 /* ── Coactiva: expedientes ─────────────────────────────────────────────── */
 
 /**
- * Como escribe el prototipo el estado de un expediente coactivo, frente a la
- * etiqueta real de `EstadoDelExpediente` (V33): «Con medida» → `MEDIDA
- * CAUTELAR`, «Iniciado» → `INICIADO`, «Concluido» → `CONCLUIDO` (#363).
- */
-const ESTADO_DE_EXPEDIENTE_DEL_MOCK: Readonly<Record<string, string>> = {
-  'Con medida': 'MEDIDA CAUTELAR',
-  Iniciado: 'INICIADO',
-  Concluido: 'CONCLUIDO',
-};
-
-/**
  * Expedientes coactivos (`ExpedienteResource`, #40, #363).
  *
  * `Contribuyente` sale de `codContribuyente`, que en el recurso real es el
@@ -1460,46 +1875,10 @@ const ESTADO_DE_EXPEDIENTE_DEL_MOCK: Readonly<Record<string, string>> = {
  * inventar un reparto, con el mismo criterio que ya usa
  * `constanciaDeNoAdeudo` para las cifras que su recurso no distingue.
  */
-const coactivaExpedientes = (): Paginado =>
-  unaPagina(
-    filasDe('coactiva_expedientes').map(
-      ([numero, contribuyente, valores, deudaS, costasS, , estado], i) => {
-        const partes = (numero ?? '').split('-');
-        const ejercicio = Number(partes[1]) || new Date().getFullYear();
-        const correlativo = Number(partes[2]) || i + 1;
-        const deuda = comoImporte(deudaS ?? '0.00');
-        const costas = comoImporte(costasS ?? '0.00');
-        return {
-          numero,
-          ejercicio,
-          correlativo,
-          codContribuyente: contribuyente,
-          ejecutor: 'R. MENDOZA CRUZ',
-          auxiliar: null,
-          fechaDeApertura: EL_DIA_DEL_PROTOTIPO,
-          asunto: null,
-          direccionReferencial: null,
-          estado: ESTADO_DE_EXPEDIENTE_DEL_MOCK[estado ?? ''] ?? 'INICIADO',
-          estadoCodigo: '000',
-          valores: Number(valores) || 0,
-          insoluto: deuda,
-          reajuste: '0.00',
-          interes: '0.00',
-          gastos: '0.00',
-          deudaMateriaDeCobranza: deuda,
-          costas,
-          totalExigible: deuda,
-          deudaAlDia: EL_DIA_DEL_PROTOTIPO,
-          valoresImportados: [],
-          historial: [],
-        };
-      },
-    ),
-  );
-
 /** Por camino del contrato, relativo a `/api/v1`. Casi todas son `GET`: ver `respaldo`. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/catastro/vias': vias,
+  '/tesoreria/convenios': convenios,
   '/rentas/contribuyentes': contribuyentes,
   '/rentas/beneficios': beneficios,
   '/rentas/arbitrios': arbitrios,
@@ -1523,7 +1902,9 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/seguridad/respaldos': respaldo,
   '/transito/papeletas': papeletasTransito,
   '/infracciones/administrativas/estado-cuenta': adminEstadoCuenta,
-  '/coactiva/expedientes': coactivaExpedientes,
+  '/coactiva/expedientes': expedientesCoactivos,
+  '/coactiva/deudas': deudasCoactivas,
+  '/coactiva/deudas-en-beneficio': deudasCoactivasBeneficio,
 };
 
 /**
