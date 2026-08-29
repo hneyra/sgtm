@@ -29,16 +29,27 @@ const HOJAS: readonly string[] = ['adm-resolucion-gerencia', 'adm-notificacion-r
 /**
  * Las que escriben **y cuya primaria es un acto**.
  *
- * `adm-notificacion` y `adm-valores` salieron de aqui en #337: escriben en el
- * contrato, pero la ultima accion de su catalogo —que es la primaria (FRO-03
- * §5)— es «Imprimir». Contarle a quien atiende que «registre el acto por el
- * procedimiento actual» debajo de un boton de imprimir es reganarle por algo que
- * no estaba haciendo. Su primaria sigue apagada, sin franja: ver abajo.
+ * `adm-notificacion` y `adm-valores` salieron de aqui en #337 y **vuelven con
+ * #421**, que es la historia entera del defecto: escriben en el contrato, pero
+ * la ultima accion de su catalogo —la primaria de FRO-03 §5— es «Imprimir», y
+ * contarle a quien atiende que «registre el acto por el procedimiento actual»
+ * debajo de un boton de imprimir era reganarle por algo que no estaba haciendo.
+ * La respuesta de #337 fue callar; la de #421 es **poner de primaria la accion
+ * que de verdad escribe** —«Guardar» y «Procesar», las que el catalogo dibuja
+ * antes de «Imprimir»—, y entonces la franja vuelve a decir la verdad: la
+ * operacion escribe y esta opcion no ha declarado sus campos.
  */
-const ESCRIBEN: readonly string[] = ['adm-reportes'];
+const ESCRIBEN: readonly string[] = ['adm-reportes', 'adm-notificacion', 'adm-valores'];
 
-/** Y las dos cuya primaria imprime: apagadas, y **sin** franja (#337). */
-const DE_SALIDA: readonly string[] = ['adm-notificacion', 'adm-valores'];
+/**
+ * Y una cuya primaria si imprime de verdad: apagada, y **sin** franja (#337).
+ *
+ * `adm-codigos-reporte` es «Imprimir · Excel» sobre un `GET`: no hay ningun acto
+ * pendiente que registrar por el procedimiento actual, y una advertencia donde
+ * no hay nada que advertir es la forma mas rapida de que dejen de leerse las que
+ * si dicen algo.
+ */
+const DE_SALIDA: readonly string[] = ['adm-codigos-reporte'];
 
 beforeEach(() => instalarProxyDeDatos({ latencia: false }));
 afterEach(() => desinstalarProxyDeDatos());

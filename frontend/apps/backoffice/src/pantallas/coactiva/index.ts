@@ -29,11 +29,14 @@ import {
  * este repositorio (`pase_coactiva`, `valores_individual`, `valores_masivo` en
  * `pantallas/valores/index.ts`):
  *
- * 1. **La primaria no es la accion que guarda** (FRO-03 §5: «la ultima accion
- *    es la primaria», y asi la dibuja `BarraDeAcciones`). El prototipo capturo
- *    estas pantallas como barras de herramientas de escritorio —Nuevo,
+ * 1. **La primaria no era la accion que guarda** —cerrado por #421, y aqui se
+ *    deja el censo porque es el que aquel issue uso—. FRO-03 §5 fija la primaria
+ *    en la ultima accion, y asi la dibujaba `BarraDeAcciones`; el prototipo
+ *    capturo estas pantallas como barras de herramientas de escritorio —Nuevo,
  *    Modificar, Guardar, Imprimir…— y en **seis de las ocho** la ultima no es
- *    «Guardar»:
+ *    «Guardar». Desde #421 las seis declaran cual escribe en
+ *    `LA_QUE_ESCRIBE` (`pantallas/actos.ts`), esa pasa al final de la barra y es
+ *    la que lleva el color del acto; lo que sigue faltando es lo del punto 2:
  *
  *      `importacion_valores`      última: «Limpiar campos» (la que importa,
  *                                 «Importar valores», es la **primera**)
@@ -47,11 +50,14 @@ import {
  *      `actos_coactivos`          última: «Padrón» (un reporte, no un guardado)
  *      `notificaciones_coactivas` última: «Resol. consentida»
  *
- *    Declarar la escritura ahi habilitaria la primaria equivocada: pulsar
+ *    Declarar la escritura ahi habilitaba la primaria equivocada: pulsar
  *    «Limpiar campos» en `importacion_valores` importaria valores a coactiva
  *    —irreversible, RF-100— cuando quien atiende solo queria borrar el
- *    formulario. No hay forma de decirle a `BarraDeAcciones` cual boton es el
- *    que guarda sin tocar la convencion que valen las otras 133 pantallas.
+ *    formulario. Lo que faltaba era una forma de decirle a `BarraDeAcciones`
+ *    cual boton guarda cuando no es el ultimo **sin** tocar la convencion que
+ *    vale para las otras 123 pantallas, y eso es lo que #421 anadio: una
+ *    declaracion opt-in por opcion, por el **rotulo** que el catalogo dibuja.
+ *    Aqui las seis lo declaran; ninguna conecta su escritura todavia.
  *
  * 2. **Un campo que el backend exige no tiene donde escribirse.** De las dos
  *    que si tienen el boton correcto en su sitio:
@@ -84,12 +90,12 @@ import {
  * Ninguna de las ocho esta bloqueada por falta de UI generica: el renderizador
  * comun ya cumple lo que #76 pide de todas ellas —sin boton de editar ni
  * quitar un acto asentado (regla 4), insignia con texto ademas de color— y eso
- * ya lo prueba `coactiva.test.tsx` contra las doce, conectadas o no. Conectar
- * las ocho escrituras de verdad necesita, segun el caso, que el catalogo del
- * prototipo aprenda a marcar cual boton guarda cuando no es el ultimo, o que
- * la pantalla resuelva su identidad con un componente propio —como
- * `ResolutorDeUnidad`— en vez de con la lista blanca generica de
- * `escrituras.ts`. Es trabajo de otro issue, no de este.
+ * ya lo prueba `coactiva.test.tsx` contra las doce, conectadas o no. De las dos
+ * cosas que faltaban para conectar las ocho escrituras, **la primera ya esta**:
+ * marcar cual boton guarda cuando no es el ultimo (#421). Queda la segunda —que
+ * la pantalla resuelva su identidad con un componente propio, como
+ * `ResolutorDeUnidad`, en vez de con la lista blanca generica de
+ * `escrituras.ts`—, y es trabajo del issue de conexion de este modulo.
  */
 
 /**

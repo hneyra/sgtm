@@ -362,3 +362,50 @@ describe('el código se compone con lo señalado en el árbol', () => {
     );
   });
 });
+
+/* ── 6. La barra de la hoja de vías **la fija esta prueba** ────────────── */
+
+/**
+ * **«Inactivar» no es el acto de una pantalla que sólo lee** (#421).
+ *
+ * El catálogo de `calles` dibuja «Nuevo · Guardar · Inactivar» y su operación es
+ * `GET /catastro/vias`. La regla de FRO-03 §5 —«la última es la primaria»—
+ * convertía «Inactivar» en el botón navy: una baja lógica con el color del acto
+ * principal, que es exactamente lo que el vocabulario uniforme vino a corregir.
+ * Se le escapó a #391 §4 porque esta superficie pasaba la lista **cruda** del
+ * catálogo en vez de la de `accionesDeLaBarra`.
+ *
+ * Y la advertencia que vale más que el hallazgo: al medirlo (PR #420),
+ * **ninguna de las 266 pruebas del módulo se puso roja** al cambiar ese
+ * comportamiento. Esta es la que lo fija, y por eso nombra la opción.
+ *
+ * Los dos verbos **se caen** en vez de quedarse apagados con su motivo (#332):
+ * ya estaban apagados y mudos —`calles` no declara escritura—, así que no se
+ * pierde nada que se pudiera pulsar; y un motivo aquí no lo leería nadie, porque
+ * la primaria de esta hoja es el alta, que no lo referencia con
+ * `aria-describedby`. El día que se conecte `editar_via` —`PUT
+ * /catastro/vias/{codigo}`, que ya existe en el contrato— la opción declarará su
+ * escritura y los dos volverán por la misma regla.
+ */
+describe('la barra de la hoja de vías', () => {
+  const barra = () => document.querySelector('.sgtm-acciones') as HTMLElement;
+  const rotulos = (): string[] =>
+    [...barra().querySelectorAll('.sgtm-boton')].map((boton) => boton.textContent ?? '');
+  const navy = (): string[] =>
+    [...barra().querySelectorAll('.sgtm-boton--primario')].map((boton) => boton.textContent ?? '');
+
+  it('«calles» deja sólo el alta, y el navy no da de baja nada', async () => {
+    montarEnRuta('/catastro/calles');
+    await screen.findByRole('tab', { name: HOJA_DE_VIAS });
+    await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+    // El acto de esta hoja es el alta de #321, y es el único que puede hacer.
+    expect(rotulos(), '«calles» dibuja más acciones de las que puede hacer').toEqual(['Nuevo']);
+    expect(navy(), 'el botón navy de «calles» no es su alta').toEqual(['Nuevo']);
+    expect(screen.getByRole('button', { name: 'Nuevo' })).toBeEnabled();
+
+    // Los dos que prometían escribir sobre una operación de lectura, fuera.
+    expect(screen.queryByRole('button', { name: 'Inactivar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument();
+  });
+});
