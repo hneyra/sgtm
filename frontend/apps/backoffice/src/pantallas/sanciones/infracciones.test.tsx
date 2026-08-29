@@ -80,12 +80,13 @@ describe('adm_estado_cuenta lee PapeletaResource, conectada desde #363', () => {
     ]) {
       expect(OPCIONES_CONECTADAS, opcion).toContain(opcion);
     }
-    // `infracciones_adm` tiene `Controller` (#78 lo verifico), pero su filtro
-    // «Estado» no tiene parametro en el backend y su columna «Estado» hablaria
-    // otro vocabulario que ese filtro: se queda en el camino comun (ver
-    // `pantallas/sanciones/index.ts`). `adm_valores` no cabe en la lista blanca
-    // declarativa y su primaria del catalogo es «Imprimir», no «Guardar».
-    expect(OPCIONES_CONECTADAS).not.toContain('infracciones_adm');
+    // Y desde #397, la octava: `infracciones_adm` ya no lee por el camino
+    // comun. Lo que le faltaba no era interfaz —tenia `Controller` desde
+    // siempre—: era el parametro del filtro «Estado» y un vocabulario que no
+    // fuera el de la deuda (ver `pantallas/sanciones/index.ts`).
+    expect(OPCIONES_CONECTADAS).toContain('infracciones_adm');
+    // `adm_valores` no cabe en la lista blanca declarativa y su primaria del
+    // catalogo es «Imprimir», no «Guardar».
     expect(OPCIONES_CONECTADAS).not.toContain('adm_valores');
   });
 
@@ -216,7 +217,7 @@ describe('las seis lecturas de #78, celda por celda (RNF-080)', () => {
       'C-101',
       SIN_DATO,
       'Funcionar sin licencia municipal de funcionamiento',
-      '0.50',
+      '50.00',
       SIN_DATO,
       'Clausura temporal',
     ]);
@@ -235,7 +236,7 @@ describe('las seis lecturas de #78, celda por celda (RNF-080)', () => {
       'A-005',
       'Ocupar la vía pública sin autorización',
       'UIT',
-      '0.10',
+      '10.00',
       SIN_DATO,
       'Retiro de bienes',
       SIN_DATO,
@@ -373,6 +374,88 @@ describe('las seis lecturas de #78, celda por celda (RNF-080)', () => {
     expect(() => leerPaginado({ desde: '2026-01-01', lineas: [] }, 'el resumen')).toThrow(
       /no trae un listado paginado/,
     );
+  });
+});
+
+/**
+ * `infracciones_adm`, la octava conectada (#397).
+ *
+ * Es la unica del modulo que tenia `Controller` desde el principio y aun asi no se podia
+ * conectar: le faltaba el parametro del filtro «Estado» y le sobraba el vocabulario de la deuda
+ * en la unica columna de estado que el backend publicaba. Lo que se comprueba aqui es lo que ese
+ * arreglo tiene que producir en pantalla: las ocho columnas llenas, la columna «Estado» con la
+ * **fase** y no con el estado de la deuda, y «Todos» sin viajar.
+ */
+describe('infracciones_adm lee ProcedimientoSancionadorResource (#397)', () => {
+  it('las ocho columnas del manual se llenan las ocho: ninguna sale SIN_DATO', async () => {
+    const montada = montarEnRuta('/infracciones-administrativas/infracciones-adm');
+    await dibujada('table');
+
+    const tabla = await screen.findByRole('table');
+    const primera = within(tabla).getAllByRole('row')[1] as HTMLElement;
+    const celdas = within(primera).getAllByRole('cell');
+    expect(celdas.map((c) => c.textContent)).toEqual([
+      'AC-2026-0912',
+      'NOBLECILLA ARISMENDIZ SAC',
+      'C-101',
+      'Funcionar sin licencia municipal',
+      // Una alicuota va en tanto por ciento (0..100): el «50 %» del prototipo
+      // es 50.00, y la tabla agrupa los millares al dibujar (#342).
+      '50.00',
+      '2 675.00',
+      'Clausura temporal',
+      'SANCIONADA',
+    ]);
+    expect(celdas.map((c) => c.textContent)).not.toContain(SIN_DATO);
+
+    montada.unmount();
+  });
+
+  it('«Estado» dibuja la FASE del procedimiento, no el estado de la deuda (RNF-080)', async () => {
+    const montada = montarEnRuta('/infracciones-administrativas/infracciones-adm');
+    await dibujada('table');
+
+    const tabla = await screen.findByRole('table');
+    const estados = within(tabla)
+      .getAllByRole('row')
+      .slice(1)
+      .map((fila) => within(fila as HTMLElement).getAllByRole('cell')[7]?.textContent);
+
+    // Las cinco palabras del manual, no las siete de `EstadoDePapeleta`. La
+    // primera fila es la prueba: su fase es SANCIONADA y su `estadoDeLaDeuda`
+    // es IMPUESTA, asi que dibujar el campo equivocado se ve aqui.
+    expect(estados).toEqual(['SANCIONADA', 'CONSTATADA', 'PREVENTIVA', 'COACTIVA']);
+    expect(estados).not.toContain('IMPUESTA');
+
+    montada.unmount();
+  });
+
+  it('«Todos» no viaja, y una fase concreta si (ADR-0010)', async () => {
+    const peticiones: string[] = [];
+    const proxy = globalThis.fetch;
+    globalThis.fetch = (entrada, opciones) => {
+      peticiones.push(typeof entrada === 'string' ? entrada : String(entrada));
+      return proxy(entrada, opciones);
+    };
+    const suyas = (): string[] => peticiones.filter((u) => u.includes('/infracciones/actas'));
+
+    const conTodos = montarEnRuta('/infracciones-administrativas/infracciones-adm?estado=Todos');
+    await dibujada('table');
+    expect(suyas()).toHaveLength(1);
+    // `estado=Todos` es un 422 contra el backend real: solo admite las cinco
+    // fases. No filtrar por fase es NO mandar el parametro.
+    expect(suyas()[0]).not.toContain('estado=');
+    conTodos.unmount();
+
+    peticiones.length = 0;
+    const conFase = montarEnRuta(
+      '/infracciones-administrativas/infracciones-adm?estado=SANCIONADA',
+    );
+    await dibujada('table');
+    expect(suyas()[0]).toContain('estado=SANCIONADA');
+    conFase.unmount();
+
+    globalThis.fetch = proxy;
   });
 });
 

@@ -217,7 +217,9 @@ describe('codigos_transito lee CodigoInfraccionResource (#43, #77)', () => {
       'M-02',
       'Conducir con presencia de alcohol en la sangre',
       SIN_DATO,
-      '0.10',
+      // `porcentajeUit` es una `Alicuota`, y una alicuota va en tanto por
+      // ciento (0..100): el «10 %» del prototipo es 10.00, no 0.10 (#397).
+      '10.00',
       SIN_DATO,
       '50',
       'Retención de licencia',

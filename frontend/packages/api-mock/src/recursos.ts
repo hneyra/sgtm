@@ -2637,7 +2637,7 @@ const codigosDeTransito = (): Paginado =>
       familia: 'TRANSITO',
       codigo,
       descripcion,
-      porcentajeUit: (Number((uit ?? '0 %').replace('%', '').trim()) / 100).toFixed(2),
+      porcentajeUit: porcentajeDeUit(uit ?? '0 %'),
       medida: medida && medida !== '—' ? medida : null,
       puntos: Number(puntos) || 0,
       baseLegal: 'Reglamento Nacional de Tránsito, D.S. N.° 016-2009-MTC',
@@ -2911,13 +2911,79 @@ const importeDelMock = comoImporte;
 const LUGAR_DE_LA_INSPECCION = 'INSPECCIÓN MUNICIPAL';
 
 /**
+ * Como escribe el prototipo la fase del procedimiento sancionador (columna
+ * «Estado» de `infracciones_adm`) frente al `enum FaseDelProcedimiento` que
+ * `ProcedimientoSancionadorResource.fase` publica de verdad (#397).
+ *
+ * Son **las cinco palabras del manual**, que el prototipo dibuja capitalizadas
+ * y el recurso publica en mayusculas: no hay traduccion de vocabulario aqui
+ * —eso es lo que distingue esta tabla de `ESTADO_DE_DEUDA_ADMINISTRATIVA_DEL_MOCK`,
+ * que si traduce del idioma de cobranza del prototipo al `enum EstadoDePapeleta`—.
+ */
+const FASE_DEL_PROCEDIMIENTO_DEL_MOCK: Readonly<Record<string, string>> = {
+  Preventiva: 'PREVENTIVA',
+  Constatada: 'CONSTATADA',
+  Sancionada: 'SANCIONADA',
+  Pagada: 'PAGADA',
+  Coactiva: 'COACTIVA',
+};
+
+/**
+ * Lo que la fase implica sobre el estado de la DEUDA, que es el otro
+ * vocabulario (#397).
+ *
+ * No se inventa: `FaseDelProcedimiento` deriva `PAGADA` y `COACTIVA` **de**
+ * `papeleta.estado`, asi que una fila cuya fase es una de esas dos solo puede
+ * tener ese estado de deuda. Las tres de la cabeza —preventiva, constatada,
+ * sancionada— no dicen nada de la deuda mas alla de que no esta pagada ni en
+ * coactiva ni anulada, y `IMPUESTA` es el estado con el que nace toda papeleta
+ * (`Papeleta.nuevaAdministrativa`).
+ */
+const ESTADO_DE_DEUDA_SEGUN_LA_FASE: Readonly<Record<string, string>> = {
+  PAGADA: 'PAGADA',
+  COACTIVA: 'COACTIVA',
+};
+
+/**
+ * Procedimientos sancionadores (`ProcedimientoSancionadorResource`, #397): `GET
+ * /infracciones/actas`.
+ *
+ * **Las ocho columnas del prototipo se llenan las ocho**, y no es casualidad:
+ * es el motivo por el que #397 le dio a esta opcion su propio recurso en vez de
+ * seguir sirviendo `PapeletaResource` —que no publica ni el nombre del
+ * administrado, ni el codigo del CUIS, ni su descripcion, ni la medida
+ * complementaria—.
+ *
+ * `faseAlDia` es el dia del prototipo y no «hoy»: el proxy no tiene reloj de
+ * negocio, y una fecha movil aqui haria que la misma fila dijera otra cosa en
+ * cada corrida de las pruebas.
+ */
+const procedimientosSancionadores = (): Paginado =>
+  unaPagina(
+    filasDe('infracciones_adm').map(
+      ([acta, administrado, cuis, infraccion, uit, multa, medida, estado], i) => {
+        const fase = FASE_DEL_PROCEDIMIENTO_DEL_MOCK[estado ?? ''] ?? null;
+        return {
+          id: i + 1,
+          numeroActa: acta,
+          administrado,
+          codigoCuis: cuis,
+          descripcionInfraccion: infraccion,
+          porcentajeInfraccion: porcentajeDeUit(uit ?? '0'),
+          importeAPagar: importeDelMock(multa ?? '0.00'),
+          actualizadoA: EL_DIA_DEL_PROTOTIPO,
+          medidaComplementaria: medida && medida !== '—' ? medida : null,
+          fase,
+          faseAlDia: EL_DIA_DEL_PROTOTIPO,
+          estadoDeLaDeuda: ESTADO_DE_DEUDA_SEGUN_LA_FASE[fase ?? ''] ?? 'IMPUESTA',
+        };
+      },
+    ),
+  );
+
+/**
  * Papeletas administrativas por contribuyente (`PapeletaResource`, misma
  * familia, #47, #78): `GET .../reportes/por-contribuyente`.
- *
- * `infracciones_adm` (`GET /infracciones/actas`, el mismo `PapeletaResource`) se queda sin
- * conectar por este issue —ver `pantallas/sanciones/index.ts`—, así que no tiene su propia
- * función aquí: nada la registra en `PAGINADOS`, y la ruta sigue respondiendo el juego de datos
- * del prototipo tal cual, como el resto del camino común.
  *
  * `fechaInfraccion` se compone del año y el mes que dibuja el prototipo —no
  * publica el dia— con el primero del mes: es una composicion de presentacion
@@ -2983,10 +3049,19 @@ const MES_DEL_PROTOTIPO: Readonly<Record<string, string>> = {
   Diciembre: '12',
 };
 
-/** `50 %` o `10` → `0.50`/`0.10`, como serializa `porcentajeUit` (`BigDecimal.toPlainString()`). */
-function fraccionDeUit(texto: string): string {
+/**
+ * `50 %` o `50` → `50.00`, como serializa `porcentajeUit` (`Alicuota`, `BigDecimal.toPlainString()`).
+ *
+ * **En tanto por ciento, no en tanto por uno** (#397). `Alicuota` lo dice en su
+ * javadoc —«a partir de su representacion decimal en texto, en tanto por
+ * ciento»— y su rango es 0..100; el `50 %` del prototipo es `50.0000` en
+ * `codigo_infraccion.porcentaje_uit`, no `0.50`. Hasta #397 esta funcion dividia
+ * entre cien y publicaba `0.50`, que es una cifra plausible y equivocada: la
+ * misma columna, leida como alicuota, dice medio por ciento.
+ */
+function porcentajeDeUit(texto: string): string {
   const numero = Number(texto.replace('%', '').trim());
-  return Number.isFinite(numero) ? (numero / 100).toFixed(2) : '0.00';
+  return Number.isFinite(numero) ? numero.toFixed(2) : '0.00';
 }
 
 /**
@@ -3007,7 +3082,7 @@ const codigosCuis = (): Paginado =>
       familia: 'ADMINISTRATIVA',
       codigo,
       descripcion,
-      porcentajeUit: fraccionDeUit(uit ?? '0'),
+      porcentajeUit: porcentajeDeUit(uit ?? '0'),
       medida: medida && medida !== '—' ? medida : null,
       puntos: null,
       baseLegal: 'Ordenanza que aprueba el CUIS vigente',
@@ -3037,7 +3112,7 @@ const codigosDeReporteAdministrativo = (): Paginado =>
       familia: 'ADMINISTRATIVA',
       codigo,
       descripcion: infraccion,
-      porcentajeUit: fraccionDeUit(uit ?? '0'),
+      porcentajeUit: porcentajeDeUit(uit ?? '0'),
       medida: medida && medida !== '—' ? medida : null,
       puntos: null,
       baseLegal: base && base !== '' ? base : 'Ordenanza que aprueba el CUIS vigente',
@@ -3226,6 +3301,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/transito/reportes/padron-constancias': padronDeConstancias,
   '/transito/reportes/record-conductor': recordDeConductor,
   '/transito/reportes/record-vehicular': recordVehicular,
+  '/infracciones/actas': procedimientosSancionadores,
   '/infracciones/administrativas/estado-cuenta': adminEstadoCuenta,
   '/infracciones/cuis': codigosCuis,
   '/infracciones/administrativas/codigos/reporte': codigosDeReporteAdministrativo,
