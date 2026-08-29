@@ -39,6 +39,7 @@ import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.ResultadoDeNotificacion;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.FiltroDeLaConsulta;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
@@ -106,17 +107,32 @@ public class ActoCoactivoController {
      * <p>Responde <b>201</b> cuando alguna salio y <b>200</b> cuando ninguna: la peticion estaba
      * bien formada y el informe explica, expediente por expediente, por que no. Un 422 sin detalle
      * dejaria a quien opera adivinando cual de los veinte fallo.
+     *
+     * <p><b>{@code proyectarInteresAl} tambien viaja por la consulta</b> (#425). Es el filtro
+     * «Proyectar interes al» de la pantalla, el contrato lo declara {@code in: query}, y decide la
+     * cifra que se imprime en el papel que el obligado se lleva (regla 9): leerlo solo del cuerpo
+     * dejaba a la pantalla emitiendo la REC con la deuda de hoy en vez de la del dia elegido. Se
+     * sigue aceptando en el cuerpo, y ahi gana: ver {@link FiltroDeLaConsulta}.
+     *
+     * @param proyectarInteresAl a que dia se proyecta la deuda que se imprime; si falta, la fecha
+     *     del acto
      */
     @PostMapping("/rec/impresion")
     @RequiereAcceso(acceso = ACCESO_REC, privilegio = Privilegio.REGISTRO)
-    public ResponseEntity<ImpresionDeRecResource> emitirRec(@RequestBody PeticionDeRec peticion) {
+    public ResponseEntity<ImpresionDeRecResource> emitirRec(
+            @RequestParam(required = false) @Nullable String proyectarInteresAl,
+            @RequestBody PeticionDeRec peticion) {
 
         Observacion observacion = observacionDe(peticion.observacion());
         FormatoDeDocumento formato = formatoDe(peticion.formato());
         TipoDeActoCoactivo tipo = recDe(peticion.rec());
         LocalDate fecha = fechaOpcional(peticion.fecha(), "fecha", LocalDate.now(reloj));
         LocalDate proyeccion =
-                fechaOpcional(peticion.proyectarInteresAl(), "proyectarInteresAl", fecha);
+                fechaOpcional(
+                        FiltroDeLaConsulta.primeroNoVacio(
+                                peticion.proyectarInteresAl(), proyectarInteresAl),
+                        "proyectarInteresAl",
+                        fecha);
         List<String> expedientes =
                 peticion.expedientes() == null ? List.of() : peticion.expedientes();
         if (expedientes.isEmpty()) {

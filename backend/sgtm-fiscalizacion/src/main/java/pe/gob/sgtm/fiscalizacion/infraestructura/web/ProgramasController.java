@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
@@ -17,6 +18,7 @@ import pe.gob.sgtm.fiscalizacion.aplicacion.RegistrarPrograma;
 import pe.gob.sgtm.fiscalizacion.dominio.TipoDePrograma;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.FiltroDeLaConsulta;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
@@ -24,6 +26,12 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *
  * <p>Reprogramar es registrar otro programa: no hay ruta de edición. El cuerpo es una <b>lista
  * blanca</b>, mismo patrón que {@code TransferenciaPredioController}.
+ *
+ * <p><b>{@code tipo} también viaja por la consulta</b> (#425). Es el filtro «Tipo» que la pantalla
+ * dibuja y el contrato lo declara {@code in: query}; leerlo solo del cuerpo dejaba la operación
+ * publicada y sin ninguna pantalla que pudiera llamarla —el 422 diría «Falta el campo 'tipo'»
+ * mientras la pantalla lo estaba mandando—. Se sigue aceptando en el cuerpo, y ahí gana: ver {@link
+ * FiltroDeLaConsulta}.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/fiscalizacion/programas")
@@ -38,7 +46,9 @@ public class ProgramasController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ProgramaResource programar(@RequestBody PeticionDePrograma peticion) {
+    public ProgramaResource programar(
+            @RequestParam(required = false) @Nullable String tipo,
+            @RequestBody PeticionDePrograma peticion) {
         Observacion observacion = observacionDe(peticion.observacion());
 
         try {
@@ -46,7 +56,7 @@ public class ProgramasController {
                     programas.registrar(
                             exigir(peticion.codigo(), "codigo"),
                             exigir(peticion.descripcion(), "descripcion"),
-                            tipoDe(peticion.tipo()),
+                            tipoDe(FiltroDeLaConsulta.primeroNoVacio(peticion.tipo(), tipo)),
                             fechaDe(peticion.fechaInicio(), "fechaInicio"),
                             fechaOpcionalDe(peticion.fechaFin()),
                             observacion));

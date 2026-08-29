@@ -20,6 +20,7 @@ import pe.gob.sgtm.fiscalizacion.aplicacion.RegistrarActaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacionRepository;
 import pe.gob.sgtm.fiscalizacion.dominio.EstadoDePrograma;
+import pe.gob.sgtm.fiscalizacion.dominio.Hallazgo;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacionRepository;
 import pe.gob.sgtm.fiscalizacion.dominio.TipoDePrograma;
@@ -143,6 +144,75 @@ class ActaVehicularControllerTest {
                 .contains("\"fichaId\":null")
                 .contains("\"vehiculoId\":30")
                 .contains("\"hallazgo\":\"OMISO\"");
+    }
+
+    @Test
+    @DisplayName("el filtro «hallazgo» viaja por la consulta y llega al acta guardada (#425)")
+    void elHallazgoViajaPorLaConsulta() throws Exception {
+        String sinHallazgo =
+                "{\"observacion\":\"Se fiscaliza para la prueba\",\"programaId\":2,"
+                        + "\"contribuyenteId\":10,\"vehiculoId\":30,\"fechaVisita\":\"2026-03-15\","
+                        + "\"fiscalizador\":\"J. Perez\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/fiscalizacion/vehicular")
+                                        .param("hallazgo", "SUBVALUADOR")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(sinHallazgo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(guardadas)
+                .as(
+                        "no basta con que responda 201: sin leer la consulta el acta quedaba"
+                                + " guardada SIN hallazgo, que es una inspeccion sin conclusion")
+                .singleElement()
+                .satisfies(acta -> assertThat(acta.hallazgo()).isEqualTo(Hallazgo.SUBVALUADOR));
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"hallazgo\":\"SUBVALUADOR\"");
+    }
+
+    @Test
+    @DisplayName("y si viene en los dos sitios gana el cuerpo: el cliente viejo sigue igual")
+    void elCuerpoGanaALaConsulta() throws Exception {
+        String conHallazgo =
+                "{\"observacion\":\"Se fiscaliza para la prueba\",\"programaId\":2,"
+                        + "\"contribuyenteId\":10,\"vehiculoId\":30,\"fechaVisita\":\"2026-03-15\","
+                        + "\"fiscalizador\":\"J. Perez\",\"hallazgo\":\"OMISO\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/fiscalizacion/vehicular")
+                                        .param("hallazgo", "SUBVALUADOR")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(conHallazgo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(guardadas)
+                .singleElement()
+                .satisfies(acta -> assertThat(acta.hallazgo()).isEqualTo(Hallazgo.OMISO));
+    }
+
+    @Test
+    @DisplayName("un hallazgo desconocido en la consulta, 422 y no guarda nada")
+    void unHallazgoDesconocidoEnLaConsulta422() throws Exception {
+        String sinHallazgo =
+                "{\"observacion\":\"Se fiscaliza para la prueba\",\"programaId\":2,"
+                        + "\"contribuyenteId\":10,\"vehiculoId\":30,\"fechaVisita\":\"2026-03-15\","
+                        + "\"fiscalizador\":\"J. Perez\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/fiscalizacion/vehicular")
+                                        .param("hallazgo", "INVENTADO")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(sinHallazgo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(guardadas).isEmpty();
     }
 
     @Test

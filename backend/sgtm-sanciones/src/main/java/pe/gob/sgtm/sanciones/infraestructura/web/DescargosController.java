@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
@@ -17,6 +18,7 @@ import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.sanciones.dominio.TipoDeRecurso;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.FiltroDeLaConsulta;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
@@ -29,6 +31,12 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * <p>Ningún {@code PUT} ni {@code PATCH}: un descargo es el escrito que alguien firmó y presentó,
  * no el estado de un trámite. Resolverlo es dictar una resolución de gerencia, y {@code descargo}
  * no admite {@code UPDATE} desde V41.
+ *
+ * <p><b>{@code nDeExpediente} y {@code papeleta} también viajan por la consulta</b> (#425). Son los
+ * dos filtros que la pantalla dibuja —«Nº de expediente» y «Papeleta»— y el contrato los declara
+ * {@code in: query}; leerlos solo del cuerpo dejaba la operación publicada y sin ninguna pantalla
+ * que pudiera llamarla. Se siguen aceptando en el cuerpo, y ahí ganan: ver {@link
+ * FiltroDeLaConsulta}.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/transito/descargos")
@@ -43,7 +51,10 @@ public class DescargosController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public DescargoResource registrar(@RequestBody PeticionDeDescargo peticion) {
+    public DescargoResource registrar(
+            @RequestParam(required = false) @Nullable String nDeExpediente,
+            @RequestParam(required = false) @Nullable String papeleta,
+            @RequestBody PeticionDeDescargo peticion) {
         Observacion observacion = PeticionesDeSanciones.observacionDe(peticion.observacion());
         Familia familia =
                 peticion.familia() == null
@@ -55,10 +66,15 @@ public class DescargosController {
             RegistrarDescargo.Registrado registrado =
                     servicio.registrar(
                             familia,
-                            PeticionesDeSanciones.exigir(peticion.papeleta(), "papeleta"),
+                            PeticionesDeSanciones.exigir(
+                                    FiltroDeLaConsulta.primeroNoVacio(
+                                            peticion.papeleta(), papeleta),
+                                    "papeleta"),
                             new RegistrarDescargo.Peticion(
                                     PeticionesDeSanciones.exigir(
-                                            peticion.nDeExpediente(), "nDeExpediente"),
+                                            FiltroDeLaConsulta.primeroNoVacio(
+                                                    peticion.nDeExpediente(), nDeExpediente),
+                                            "nDeExpediente"),
                                     PeticionesDeSanciones.fechaDe(
                                             peticion.fechaDePresentacion(), "fechaDePresentacion"),
                                     PeticionesDeSanciones.enumeradoDe(
