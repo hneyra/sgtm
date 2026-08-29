@@ -8,6 +8,7 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
+import pe.gob.sgtm.plataforma.tenant.DocumentoCiudadanoContextFilter;
 import pe.gob.sgtm.plataforma.tenant.OrigenContextFilter;
 import pe.gob.sgtm.plataforma.tenant.TenantConnectionGuard;
 import pe.gob.sgtm.plataforma.tenant.TenantContextFilter;
@@ -75,6 +76,27 @@ public class ConfiguracionDeTenant {
     FilterRegistrationBean<TenantContextFilter> filtroDeContextoDeTenant() {
         FilterRegistrationBean<TenantContextFilter> registro =
                 new FilterRegistrationBean<>(new TenantContextFilter());
+        registro.setOrder(ORDEN_DESPUES_DE_SEGURIDAD);
+        return registro;
+    }
+
+    /**
+     * El del ciudadano, el otro medio del par (ADR-0020).
+     *
+     * <p>Los dos se registran, y los dos se excluyen por camino: bajo {@code /api/v1/portal/**}
+     * corre este y no el de tenant; fuera, al reves. Registrarlos asi —y no con un {@code if}
+     * dentro de uno de los dos— es lo que hace que la exclusion se lea en una linea y que ninguna
+     * peticion pueda acabar con los dos sujetos puestos a la vez.
+     *
+     * <p>Mismo orden que el de tenant: nunca coinciden, asi que no hay ninguna precedencia que
+     * fijar entre ellos. Lo que si importa es que los dos corran <b>dentro</b> de la cadena de
+     * seguridad y <b>antes</b> que el de origen.
+     */
+    @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    FilterRegistrationBean<DocumentoCiudadanoContextFilter> filtroDelCiudadano() {
+        FilterRegistrationBean<DocumentoCiudadanoContextFilter> registro =
+                new FilterRegistrationBean<>(new DocumentoCiudadanoContextFilter());
         registro.setOrder(ORDEN_DESPUES_DE_SEGURIDAD);
         return registro;
     }

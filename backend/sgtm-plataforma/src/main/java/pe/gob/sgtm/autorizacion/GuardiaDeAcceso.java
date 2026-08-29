@@ -8,6 +8,7 @@ import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.compartido.CiudadanoContext;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
@@ -29,9 +30,16 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * <p>Se exceptua lo que no es un metodo de controlador: recursos estaticos, el manejador de errores
  * y las rutas del propio contenedor.
  *
- * <p>Y se exceptua, <b>declarandolo</b>, la lectura de la sesion propia: un endpoint anotado
- * {@code @RequiereAcceso(acceso = SESION_PROPIA, …)} pasa con solo un token valido, sin comprobar
- * el catalogo. Es lo que permite que la interfaz sepa que puede dibujar (ADR-0013).
+ * <p>Y se exceptuan, <b>declarandolos</b>, los dos centinelas:
+ *
+ * <ul>
+ *   <li>{@code SESION_PROPIA}: la lectura de la sesion propia pasa con solo un token valido, sin
+ *       comprobar el catalogo. Es lo que permite que la interfaz sepa que puede dibujar (ADR-0013).
+ *   <li>{@code CIUDADANO}: la operacion es del portal del contribuyente, que no esta en el catalogo
+ *       de permisos porque el ciudadano no tiene fila en {@code usuario} (ADR-0020). Este si lleva
+ *       una comprobacion propia —que la peticion venga de la cadena del ciudadano—, porque sin ella
+ *       el centinela seria la forma de servir cualquier endpoint sin privilegio.
+ * </ul>
  */
 public class GuardiaDeAcceso implements HandlerInterceptor {
 
@@ -63,6 +71,22 @@ public class GuardiaDeAcceso implements HandlerInterceptor {
             throw new ProblemaDeNegocio(
                     CodigoDeError.SIN_PRIVILEGIO,
                     "La operacion no declara que acceso exige, asi que no se autoriza");
+        }
+
+        if (RequiereAcceso.CIUDADANO.equals(requisito.acceso())) {
+            // El ciudadano no tiene fila en `usuario` y no hay privilegio que comprobar
+            // (ADR-0020). Lo que SI se comprueba es que la peticion venga de verdad de la
+            // cadena del ciudadano: `CiudadanoContext` lo fija DocumentoCiudadanoContextFilter,
+            // que solo corre bajo /api/v1/portal y solo con un token del realm del ciudadano
+            // ya validado. Sin esta comprobacion, el centinela seria una forma de servir un
+            // endpoint del catalogo sin ningun privilegio.
+            if (CiudadanoContext.actualSiHay().isEmpty()) {
+                throw new ProblemaDeNegocio(
+                        CodigoDeError.SIN_PRIVILEGIO,
+                        "Esta operacion es del portal del contribuyente y esta peticion no viene"
+                                + " de una sesion de ciudadano");
+            }
+            return true;
         }
 
         if (RequiereAcceso.SESION_PROPIA.equals(requisito.acceso())) {

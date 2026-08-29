@@ -43,6 +43,29 @@ public @interface RequiereAcceso {
      */
     String SESION_PROPIA = "__sesion_propia__";
 
+    /**
+     * Segundo centinela para {@link #acceso()}: la operacion la pide el <b>ciudadano</b> desde el
+     * portal, y el ciudadano no esta en el catalogo de permisos (ADR-0020).
+     *
+     * <p>El precedente exacto es {@link #SESION_PROPIA}, y el motivo es del mismo tipo: no hay
+     * ningun privilegio que comprobar. Un ciudadano <b>no tiene fila en {@code usuario}</b> —no es
+     * personal de ninguna municipalidad, no pertenece a ningun grupo y nadie le configura una
+     * matriz—, asi que preguntarle al catalogo por sus privilegios devolveria siempre que no tiene
+     * ninguno y el portal seria un 403 permanente.
+     *
+     * <p>Lo que <b>si</b> se comprueba, y es lo que distingue este centinela del anterior: que la
+     * peticion haya llegado por la <b>cadena del ciudadano</b>. Sin esa comprobacion, anotar un
+     * endpoint con este centinela seria la forma de saltarse el catalogo de permisos entero —«pon
+     * CIUDADANO y ya no hace falta privilegio»—, que es exactamente lo que no puede poder hacerse.
+     * Ver {@code GuardiaDeAcceso}.
+     *
+     * <p>Y hay una tercera barrera, en el build: un endpoint <b>del catalogo</b> —cualquiera que no
+     * cuelgue de {@code /api/v1/portal}— anotado con este centinela rompe {@code
+     * verificarArquitectura}. Es la regla {@code EL_CENTINELA_DEL_CIUDADANO_SOLO_SIRVE_AL_PORTAL},
+     * con su clase de muestra.
+     */
+    String CIUDADANO = "__ciudadano__";
+
     /** Id de la opcion en el catalogo de pantallas (NEG-03), tal como esta en {@code acceso}. */
     String acceso();
 

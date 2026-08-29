@@ -14,6 +14,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.filter.OncePerRequestFilter;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.dominio.MunicipalidadId;
+import pe.gob.sgtm.plataforma.SeguridadWeb;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.RespuestaDeError;
 
@@ -52,10 +53,16 @@ import pe.gob.sgtm.web.RespuestaDeError;
  *   <li>El token de un usuario con acceso a varias municipalidades llevara la lista de autorizadas
  *       ademas de la activa. Verificar que la activa esta en la lista es una defensa barata, pero
  *       el nombre de ese claim no esta fijado todavia: es la decision D-06.
- *   <li>El portal del contribuyente no pasa por aqui. Su token no lleva municipalidad y el contexto
- *       tiene que salir del objeto consultado, tras verificar pertenencia. Ese camino es el punto
- *       debil declarado del diseno (D-07) y necesita su propio componente y sus propias pruebas.
  * </ul>
+ *
+ * <h2>El portal del contribuyente no pasa por aqui (D-07 cerrada, ADR-0020)</h2>
+ *
+ * <p>Y no porque su contexto salga del objeto consultado —esa era la premisa que mantuvo D-07
+ * abierta, y la que fijaba el {@code SET LOCAL} con un dato del cliente—, sino porque el ciudadano
+ * <b>no pertenece a ninguna municipalidad</b>. Su token lleva su documento, no un tenant, y bajo
+ * {@code /api/v1/portal/**} corre {@link DocumentoCiudadanoContextFilter} en lugar de este. Quien
+ * mueve el contexto en esa peticion es {@code RecorridoPorMunicipalidades}, una municipalidad a la
+ * vez y con su propia transaccion.
  */
 public final class TenantContextFilter extends OncePerRequestFilter {
 
@@ -63,6 +70,19 @@ public final class TenantContextFilter extends OncePerRequestFilter {
     public static final String CLAIM = "municipalidad_id";
 
     private static final Logger log = LoggerFactory.getLogger(TenantContextFilter.class);
+
+    /**
+     * Bajo el portal no corre, y lo que corre en su lugar es {@link
+     * DocumentoCiudadanoContextFilter}.
+     *
+     * <p>La consecuencia esta declarada en ADR-0020 y es ruidosa a proposito: un endpoint de
+     * funcionario servido bajo {@code /portal/} correria sin contexto de tenant y toda consulta
+     * suya fallaria en la base. Es preferible a una lectura por la municipalidad equivocada.
+     */
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest peticion) {
+        return SeguridadWeb.esDelPortal(peticion.getRequestURI());
+    }
 
     @Override
     protected void doFilterInternal(

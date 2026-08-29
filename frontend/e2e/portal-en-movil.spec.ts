@@ -1,28 +1,33 @@
 import { devices, expect, test } from '@playwright/test';
 
 /**
- * La consulta del portal, en un movil de 360 px (FRO-03 §6).
+ * La situacion del contribuyente, en un movil de 360 px (FRO-03 §6, ADR-0020).
  *
  * El contribuyente entra desde su telefono o no entra: es el unico flujo del
  * sistema que no usa alguien de la municipalidad. Lo que se comprueba es que
  * quepa —que no haya que desplazarse en horizontal para leer una deuda— y que
- * el camino entero se recorra: elegir el documento, teclearlo, consultar, y ver
- * la cifra **con su fecha**.
+ * lo que hay dentro sea lo que #57 promete: **las municipalidades donde figura,
+ * cada una con su codigo y su deuda, y un total con su fecha**.
+ *
+ * ── Lo que ya no se recorre, y es la mitad del cambio (#57) ────────────────
+ *
+ * La caja de documento. Hasta ADR-0020 esta prueba elegia el tipo, tecleaba
+ * ocho digitos y pulsaba «Consultar»: era el camino de un endpoint que contesta
+ * por cualquiera a quien los teclee. Ahora el sujeto llega firmado en el token y
+ * aqui no hay nada que escribir; contra el proxy de datos —que no autentica— la
+ * pantalla se dibuja igual, con la situacion que el proxy compone.
  *
  * ── Contra `apps/portal`, no contra el back-office (#298, ADR-0016 §3) ─────
  *
- * Hasta #298 esta prueba abria `/inicio/portal`, que es la opcion del catalogo
- * dibujada dentro del shell: barra lateral, cabecera y las 134 opciones detras.
- * Esa opcion **sigue existiendo** —es la vista del funcionario y conserva su
- * cobertura en `todas-las-pantallas.test.tsx`—, pero lo que el ciudadano
- * descarga ya no es eso: es su propia aplicacion, servida en `/portal/` del
- * mismo origen, y es la que hay que recorrer. Su servidor de vista previa es el
- * segundo de `playwright.config.ts`.
+ * Lo que el ciudadano descarga es su propia aplicacion, servida en `/portal/`
+ * del mismo origen. Su servidor de vista previa es el segundo de
+ * `playwright.config.ts`.
  */
 const PORTAL = 'http://localhost:4174/portal/';
 
-/** La primera persona del padron del prototipo, la misma con la que se prueba la ficha. */
-const DNI = '03593174';
+/** Las dos municipalidades que el proxy compone: la del manual y la del piloto. */
+const SULLANA = 'MUNICIPALIDAD PROVINCIAL DE SULLANA';
+const CATACAOS = 'MUNICIPALIDAD DISTRITAL DE CATACAOS';
 
 test.use({ ...devices['Pixel 5'], viewport: { width: 360, height: 740 } });
 
@@ -44,39 +49,63 @@ async function cabeEnLaPantalla(pagina: import('@playwright/test').Page): Promis
   return ancho > 0 && contenido <= ancho + 1;
 }
 
-test('el portal se consulta entero en un viewport de 360 px', async ({ page }) => {
+test('el ciudadano ve sus dos municipalidades en un viewport de 360 px', async ({ page }) => {
   await page.goto(PORTAL);
 
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   // El punto de referencia de la pagina, en el navegador de verdad: sin `main`
   // no hay a donde saltar desde la cabecera.
   await expect(page.getByRole('main')).toBeVisible();
-  // Lo que la pantalla dice antes de que nadie teclee: de aqui no sale un pago.
+  // Lo que la pantalla dice antes de nada: de aqui no sale un pago.
   await expect(page.getByText('Aquí solo se consulta')).toBeVisible();
-  expect(await cabeEnLaPantalla(page)).toBe(true);
 
-  // El camino del ciudadano: elige su documento, lo teclea y consulta.
-  await page.getByLabel('Tipo de documento').selectOption('DNI');
-  await page.getByLabel('Número de documento').fill(DNI);
-  await page.getByRole('button', { name: 'Consultar' }).click();
+  // **Y no hay documento que teclear**: es lo que ADR-0020 retira.
+  await expect(page.getByLabel('Número de documento')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Consultar' })).toHaveCount(0);
 
-  // Quien es, y lo que debe: la cifra **con su fecha** (regla 9, RNF-075).
-  await expect(page.getByRole('heading', { name: 'SUC. RUFINA MEDINA MEDINA' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Lo que debes' })).toBeVisible();
+  // El total de todo, sumado por el servidor y **con su fecha** (regla 9, RNF-075).
+  await expect(page.getByRole('heading', { name: 'Lo que debes en total' })).toBeVisible();
   await expect(page.getByText(/Cifras actualizadas al/).first()).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Deudas Pendientes' })).toBeVisible();
 
-  // Y con la deuda entera dibujada tampoco se sale: es donde se salia, porque
+  // Las dos municipalidades donde figura, cada una con lo suyo.
+  await expect(page.getByRole('heading', { name: SULLANA })).toBeVisible();
+  await expect(page.getByRole('heading', { name: CATACAOS })).toBeVisible();
+  const sullana = page.getByRole('heading', { name: SULLANA }).locator('..');
+  await expect(sullana.getByText('Tu código de contribuyente')).toBeVisible();
+  await expect(sullana.getByText('Deuda S/')).toBeVisible();
+
+  // Y con las dos dibujadas enteras tampoco se sale: es donde se salia, porque
   // la rejilla del back-office tiene siete columnas.
   expect(await cabeEnLaPantalla(page)).toBe(true);
 });
 
-test('el ciudadano no descarga el catalogo de navegacion', async ({ page }) => {
+test('el ciudadano no descarga el catalogo, y no manda ningun documento', async ({ page }) => {
   const pedidos: string[] = [];
   page.on('request', (peticion) => pedidos.push(peticion.url()));
 
   await page.goto(PORTAL);
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: SULLANA })).toBeVisible();
+
+  /* **Ni un documento en la URL** (#57, ADR-0020) — y aqui se comprueba solo la
+     mitad que el navegador puede ver.
+
+     Contra la vista previa, el proxy de datos **sustituye `globalThis.fetch`**
+     (ADR-0010), asi que las peticiones a la API no llegan a salir a la red y
+     `page.on('request')` no las ve: exigir aqui que ninguna lleve `?doc=` seria
+     una comprobacion que pasa por vacia. Lo que si se ve, y es lo que se exige,
+     es que **ninguna peticion de red lleve un documento** —ni la del paquete, ni
+     la de un recurso—, que es lo que quedaria si alguien devolviera la caja y
+     construyera la URL a mano.
+
+     La comprobacion de verdad esta donde puede hacerse: el escaner de fuentes
+     (`verificaciones/portal-separado.test.ts`, «no manda ningun documento como
+     parametro») y la pantalla montada (`portal.test.tsx`, «pregunta **una**
+     ruta, sin un solo parametro»), que intercepta el `fetch` de dentro. */
+  for (const url of pedidos) {
+    expect(url, `la peticion ${url} lleva un documento`).not.toMatch(
+      /[?&](doc|dni|dNI|ruc|rUC|numeroDocumento)=/i,
+    );
+  }
 
   /* Los doce trozos del catalogo llevan «.generado» en el nombre del archivo
      (`comprobar-compilaciones` cuenta con ello). Ninguno se pide aqui: el

@@ -158,14 +158,54 @@ Solo dos, y ninguna desactiva RLS:
 Toda tabla nueva es de tenant, de catálogo o exenta, y la lista de exentas tiene **una** entrada:
 `flyway_schema_history`. La prueba falla si aparece una tabla sin clasificar.
 
-## 6. El punto débil declarado
+## 6. El punto débil declarado, y cómo dejó de serlo
 
-**El portal del contribuyente.** Su usuario no pertenece a una municipalidad: es un ciudadano que
-consulta su deuda. El contexto tiene que salir del objeto consultado —el predio, la papeleta— y
-eso invierte el flujo: primero se resuelve la municipalidad, después se verifica la pertenencia.
+**Era el portal del contribuyente.** Su usuario no pertenece a una municipalidad: es un ciudadano
+que consulta su deuda. Este documento decía que el contexto tendría que salir **del objeto
+consultado** —el predio, la papeleta—, lo que invierte el flujo de §2 y fija el `SET LOCAL` con un
+dato que elige quien pregunta. Era la decisión D-07, y se cerró el 2026-08-29 con
+[ADR-0020](adr/ADR-0020-la-sesion-del-ciudadano.md) **cambiando la premisa**, no resolviéndola:
 
-Ese camino **no está implementado** y necesita componente y pruebas propias. Es la decisión D-07.
-Mientras tanto, el portal no expone datos de tenant.
+> **No es una consulta multi-municipalidad; son *N* consultas de una municipalidad cuya unión se
+> filtra a un documento firmado.**
+
+El ciudadano tiene **realm propio** con **emisor distinto** (`sgtm-ciudadano`), y su token lleva
+`tipo_documento` y `numero_documento` como claims firmados. El sujeto deja de ser un parámetro y
+pasa a ser un claim validado, exactamente como `municipalidad_id` lo es para el funcionario (§3.1).
+El contexto no sale del objeto consultado: sale del **registro de municipalidades**, una a la vez.
+
+```
+token del ciudadano  →  claims tipo_documento + numero_documento
+  → por cada municipalidad ACTIVA del registro:
+        transacción propia → SET LOCAL app.municipalidad_id = N → RLS
+```
+
+Cada rama queda sujeta a la misma política que cualquier consulta de ventanilla, y la base sigue
+sin poder cruzar municipalidades. Lo único nuevo es que el proceso **recorre** el registro, que es
+la excepción 1 de §5 y lo que ya hace todo proceso masivo del perfil `batch`.
+
+Lo que sostiene ese recorrido, y se verifica:
+
+1. **Un solo componente lo hace.** `RecorridoPorMunicipalidades` (`sgtm-plataforma`) es el único
+   componente del perfil `web` autorizado a mover `TenantContext` dentro de una petición. Es regla
+   de ArchUnit, con su clase de muestra que la viola: hasta entonces el invariante existía —los
+   demás llamadores son todos `@Profile("batch")`— y no lo comprobaba nadie.
+2. **El contexto se limpia entre ramas, aunque la rama falle.** Sin eso, la rama siguiente devuelve
+   datos **reales** de la municipalidad anterior bajo la etiqueta de otra. Es la fuga que no se ve.
+3. **Ninguna transacción envolvente**, y por tanto ninguna conexión vuelve al pool con
+   `app.municipalidad_id` puesto: lo comprueba el guardia del pool, igual que para cualquier
+   petición.
+4. **Dos cadenas de seguridad, no una con excepciones.** `/api/v1/portal/**` valida solo contra el
+   emisor del ciudadano y la cadena general solo contra el de funcionarios: un token de funcionario
+   no autentica en el portal, y uno de ciudadano no autentica en ninguna otra ruta.
+
+**El agujero que esto abre está declarado y es ruidoso**: bajo `/api/v1/portal/**` no corre
+`TenantContextFilter` sino `DocumentoCiudadanoContextFilter`, así que un endpoint de funcionario
+servido ahí por descuido correría **sin contexto de tenant** y toda consulta fallaría en la base
+(§3.3), que es el comportamiento correcto.
+
+Quién acredita que ese documento es de quien lo presenta es **D-15**, decidida el mismo día:
+enrolamiento en ventanilla (ADR-0020 §4).
 
 ## 7. Qué hacer al agregar una tabla
 

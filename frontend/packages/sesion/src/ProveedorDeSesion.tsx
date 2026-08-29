@@ -13,6 +13,7 @@ import {
   canjearSiVuelve,
   cerrarSesion,
   configuracionDeIdentidad,
+  configuracionDelCiudadano,
   configurarRenovacion,
   irAAutenticar,
   leerToken,
@@ -43,6 +44,15 @@ import type { PermisosEfectivos } from './permisos';
  *    (`olvidos.ts`). Ni cerrar sesion —sin `finDeSesion` configurado— ni cambiar
  *    de municipalidad recargan la pagina, asi que una variable de modulo
  *    sobrevive a los dos y se lleva al operador siguiente lo del anterior.
+ *
+ * ── Las dos poblaciones, y por que las atiende el mismo proveedor ──────────
+ *
+ * Desde ADR-0020 hay **dos realms**: el del funcionario y el del ciudadano, con
+ * emisores distintos. El ciclo de la sesion —PKCE, canje, renovacion que no
+ * desmonta nada— es exactamente el mismo para los dos, y copiarlo habria
+ * duplicado las tres cosas que, duplicadas, divergen sin que nada se ponga rojo.
+ * Lo que cambia es de **que** proveedor sale la configuracion y **si se piden
+ * permisos**, y las dos cosas caben en una prop.
  */
 
 export type EstadoDeSesion = 'sin-proveedor' | 'anonima' | 'entrando' | 'abierta';
@@ -69,8 +79,27 @@ const Contexto = createContext<Sesion | null>(null);
 /** Se avisa un minuto antes; se renueva cuando queda un cuarto de la vida del token. */
 const AVISO_ANTES_MS = 60_000;
 
-export function ProveedorDeSesion({ children }: { readonly children: ReactNode }) {
-  const configuracion = useMemo(() => configuracionDeIdentidad(), []);
+/**
+ * A quien autentica esta sesion.
+ *
+ * `funcionario` es lo de siempre y el valor por omision: el back-office. El
+ * `ciudadano` es el portal (ADR-0020), y no es una variante cosmetica —usa otro
+ * realm, otro emisor y otra vuelta— sino la otra mitad de una separacion que el
+ * backend hace estructural con dos cadenas de seguridad.
+ */
+export type QuienEntra = 'funcionario' | 'ciudadano';
+
+export function ProveedorDeSesion({
+  children,
+  quienEntra = 'funcionario',
+}: {
+  readonly children: ReactNode;
+  readonly quienEntra?: QuienEntra;
+}) {
+  const configuracion = useMemo(
+    () => (quienEntra === 'ciudadano' ? configuracionDelCiudadano() : configuracionDeIdentidad()),
+    [quienEntra],
+  );
   const clientes = useQueryClient();
   const [estado, fijarEstado] = useState<EstadoDeSesion>(
     configuracion === null ? 'sin-proveedor' : 'entrando',
@@ -147,8 +176,15 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
   // el arranque, y `pedirOperacion` arrastra el mapa de las 136 operaciones al
   // paquete inicial (se pasaba del presupuesto por 0,1 KB). El contrato lo
   // sigue guardando la prueba del backend.
+  //
+  // **Y no se piden para el ciudadano** (ADR-0020): `GET /seguridad/sesion/permisos`
+  // es un endpoint de funcionario, y el token del ciudadano no autentica en el
+  // —la cadena general valida contra el otro emisor—. Pedirlo seria una peticion
+  // que siempre da 401, en cada arranque del portal, para acabar en la misma
+  // matriz vacia que ya se fija aqui. El ciudadano no tiene fila en `usuario`ni
+  // matriz que aplicar: lo que puede ver lo decide su documento, no un permiso.
   useEffect(() => {
-    if (configuracion === null || datos === null) {
+    if (configuracion === null || datos === null || quienEntra === 'ciudadano') {
       fijarMatriz(NINGUNO);
       return;
     }
@@ -164,7 +200,7 @@ export function ProveedorDeSesion({ children }: { readonly children: ReactNode }
     return () => {
       vivo = false;
     };
-  }, [configuracion, datos]);
+  }, [configuracion, datos, quienEntra]);
 
   const permisos: PermisosEfectivos = useMemo(() => {
     if (configuracion === null) return SIN_PROVEEDOR;

@@ -102,6 +102,18 @@ export function realmSgtmJson(): string {
   return leer(join(raizDelRepositorio(), "despliegue/identidad/realm-sgtm.json"));
 }
 
+/**
+ * El realm del **ciudadano**, versionado igual que el de funcionarios (ADR-0020).
+ *
+ * Son dos archivos y no dos secciones de uno porque son **dos emisores**: es lo
+ * que separa a las dos poblaciones estructuralmente —el backend monta dos cadenas
+ * de seguridad, cada una validando contra uno— y lo que hace que un token de
+ * funcionario no autentique en `/portal/**` ni al reves.
+ */
+export function realmCiudadanoJson(): string {
+  return leer(join(raizDelRepositorio(), "despliegue/identidad/realm-sgtm-ciudadano.json"));
+}
+
 /** El guion que reconcilia el realm contra Keycloak. Vive en `infra/`. */
 export function reconciliarRealmSh(): string {
   return leer(join(raizDeInfra(), "componentes/identidad/reconciliar-realm.sh"));

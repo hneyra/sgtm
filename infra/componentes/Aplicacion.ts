@@ -13,6 +13,7 @@ import {
   urlDelPadron,
 } from "./convenciones";
 import { nginxConf } from "./fuentes";
+import { realmDelCiudadano } from "./Identidad";
 import { esperaDeImplantacion } from "./Migracion";
 import type { ConfigMap, CronJob, Deployment, Manifiesto, Service } from "./tipos";
 
@@ -134,6 +135,23 @@ export function manifiestosDeAplicacion(args: AplicacionArgs): Manifiesto[] {
                 // Las claves: direccion de red interna. No sale al ingreso para volver
                 // a entrar.
                 { name: "SGTM_OIDC_JWKS", value: jwksInterno(environment, realm) },
+                // Y los del realm del CIUDADANO (ADR-0020), con el mismo reparto:
+                // el emisor es una identidad —es lo que se compara con el `iss` y
+                // lo que hace que un token de funcionario no valga en el portal— y
+                // el JWKS es una direccion de red interna.
+                //
+                // A diferencia del de arriba, este **si puede faltar**: una
+                // instalacion sin portal del contribuyente es legitima, y entonces
+                // la cadena de `/api/v1/portal/**` lo niega todo. Aqui se declara
+                // porque el realm se reconcilia en el mismo Job que el otro.
+                {
+                  name: "SGTM_PORTAL_OIDC_EMISOR",
+                  value: emisorPublico(domain, realmDelCiudadano(realm)),
+                },
+                {
+                  name: "SGTM_PORTAL_OIDC_JWKS",
+                  value: jwksInterno(environment, realmDelCiudadano(realm)),
+                },
                 ...credencialesDeLaBase,
               ],
               // `USER 10001` en el Dockerfile (issue #157): sin root desde antes de

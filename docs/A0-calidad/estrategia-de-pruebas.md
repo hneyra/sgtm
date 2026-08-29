@@ -109,16 +109,20 @@ lugar de convertirse en una aserción intermitente.
   los factores sin fuente de D-11 y de los cuadros de GOB-03 no se implementan ni
   estructuralmente, y ningún conjunto del ejercicio está sellado con cifras reales: no hay
   todavía una prueba que compare contra un céntimo verdadero.
-- El camino del **portal del contribuyente con sesión propia del ciudadano** no está probado
-  porque no está construido (D-07): el portal de hoy se sirve tras la misma puerta de sesión del
-  funcionario, y la inversión del flujo de tenant que describe ARQ-03 §6 sigue sin componente.
+- El **enrolamiento del ciudadano en ventanilla** no está probado porque no está construido
+  (D-15, camino B; issue #415): hoy una cuenta del realm `sgtm-ciudadano` solo se crea a mano
+  contra Keycloak.
 
-Tres huecos que esta sección declaraba ya se cerraron, y conviene dejarlo dicho para que nadie
+Cuatro huecos que esta sección declaraba ya se cerraron, y conviene dejarlo dicho para que nadie
 los dé por abiertos: los doce contextos acotados tienen código y pruebas de negocio; el permiso
 `SIN_DOMINIO_TODAVIA` de las reglas acotadas a `..dominio..` se retiró con el dominio compartido
 —y `ArquitecturaTest` tiene la aserción que impide que vuelva a colarse—; y Spring Modulith
 verifica los módulos con código en cada build (`ModulosTest`, que además exige que los esperados
-estén detectados, porque un `verify()` sobre cero módulos pasaría sin comprobar nada).
+estén detectados, porque un `verify()` sobre cero módulos pasaría sin comprobar nada). Y el
+cuarto, con #57: el **camino del portal del contribuyente** sí está probado —las dos cadenas de
+identidad con dos emisores de verdad (`CadenaDelPortalTest`), el recorrido por municipalidades
+contra PostgreSQL (`SituacionDelCiudadanoJdbcTest`) y los 360 px en Chromium
+(`portal-en-movil.spec.ts`)—, y D-07 se cerró con ADR-0020.
 
 ## 5. Al agregar código
 

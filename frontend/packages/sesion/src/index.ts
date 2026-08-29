@@ -17,7 +17,12 @@
  */
 
 export { ProveedorDeSesion, useSesion } from './ProveedorDeSesion';
-export type { EstadoDeSesion, Sesion, ConfiguracionDeIdentidad } from './ProveedorDeSesion';
+export type {
+  EstadoDeSesion,
+  QuienEntra,
+  Sesion,
+  ConfiguracionDeIdentidad,
+} from './ProveedorDeSesion';
 export { PuertaDeSesion } from './PuertaDeSesion';
 export type { PuertaDeSesionProps } from './PuertaDeSesion';
 export { alOlvidarLaSesion, olvidarLoDeLaSesion } from './olvidos';

@@ -37,8 +37,12 @@ parámetro, un encabezado, el cuerpo o la sesión. Un token sin el claim recibe 
 - El catálogo de accesos se siembra desde el catálogo de opciones, de modo que **una opción nueva
   aparece como acceso configurable**, tal como promete el manual.
 - Queda pendiente el nombre del claim con la lista de municipalidades autorizadas de un usuario
-  con acceso a varias (**D-06**), y el camino del portal del contribuyente, cuyo token no lleva
-  municipalidad (**D-07**).
+  con acceso a varias (**D-06**).
+- El **portal del contribuyente** ya no es una excepción de este ADR sino su gemelo:
+  [ADR-0020](ADR-0020-la-sesion-del-ciudadano.md) le da **realm y emisor propios**, y su token
+  lleva `numero_documento` donde el del funcionario lleva `municipalidad_id`. La regla es la misma
+  —el sujeto sale exclusivamente del token validado—; lo que cambia es cuál es el sujeto. Con eso
+  se cerró **D-07** el 2026-08-29.
 
 ## Alternativas consideradas
 

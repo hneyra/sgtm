@@ -187,4 +187,6 @@ Detalle del esquema: [`sgtm-esquema/README.md`](sgtm-esquema/README.md) y
 - El mecanismo que escribe la auditoría (disparadores o aspecto). Se decide con el primer caso de
   uso de escritura; ver [DAT-02 §4](../docs/40-datos/auditoria-e-historico.md).
 - Las particiones de los ejercicios siguientes a 2027, y su automatización.
-- El camino del portal del contribuyente (D-07).
+- El acto de **enrolamiento del ciudadano en ventanilla** (D-15, camino B): el realm
+  `sgtm-ciudadano` existe y se reconcilia, y las cuentas se declaran como las de los funcionarios
+  (ADR-0012). Lo que falta es el acto del back-office que las da de alta con el documento delante.

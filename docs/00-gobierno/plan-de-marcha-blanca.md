@@ -49,7 +49,7 @@ Contado por la etiqueta `onda:n`, el 2026-08-29:
 | **Onda 2** — libro, cuenta corriente y rentas | 19 | 4 | Las tres mitades de cifras (#188, #189, #190) y un defecto del vehicular (#399) |
 | **Onda 3** — caja, valores y coactiva | 16 | 2 | Dos mitades de cifras (#191, #193) |
 | **Onda 4** — sanciones, licencias y fiscalización | 27 | 11 | Seis mitades de cifras (#194…#199) y cinco defectos o huecos del backend (#351, #358, #396, #397, #398) |
-| **Onda 5** — transversal | 3 | 1 | [#57](https://github.com/hneyra/sgtm/issues/57), el portal con sesión propia, **bloqueado por D-07** |
+| **Onda 5** — transversal | 3 | 1 | [#57](https://github.com/hneyra/sgtm/issues/57) construido: **D-07 cerrada** por [ADR-0020](../30-arquitectura/adr/ADR-0020-la-sesion-del-ciudadano.md) y D-15 decidida (camino B). Queda [#415](https://github.com/hneyra/sgtm/issues/415), el enrolamiento del ciudadano en ventanilla, sin el cual el portal está construido y nadie puede entrar por él |
 | **Frontend** | #70…#81 | **0** | Las 134 pantallas dibujadas; **72 lecturas** con conexión propia y tipada contra el contrato. Retirar el proxy de datos es [#400](https://github.com/hneyra/sgtm/issues/400) |
 
 Es decir: **lo que este plan llamaba «la determinación no está empezada» está construido**, y lo que
@@ -181,8 +181,8 @@ Conviene que esté escrito antes, y no descubrirlo el día de la demostración:
 - [#58 — Hoja de ruta del backend](https://github.com/hneyra/sgtm/issues/58), de la que esto es un recorte.
 - [#116 — Plan de desbloqueo de D-02](https://github.com/hneyra/sgtm/issues/116) (cerrado), paquetes E-3, E-5 y E-6; su estado de ejecución vive en [GOB-03](plan-de-desbloqueo-D-02.md) §0.
 - [GOB-02 — Decisiones abiertas](decisiones-abiertas.md). Las que tocan a este plan: D-01 (el
-  validador funcional), D-02b, D-02c, D-04, D-05, D-07 y D-11. D-02a, D-03a/b/c, D-12 y D-13 ya se
-  cerraron.
+  validador funcional), D-02b, D-02c, D-04, D-05 y D-11. D-02a, D-03a/b/c, **D-07**, D-12 y D-13 ya
+  se cerraron, y D-15 nació decidida con ADR-0020.
 - [`despliegue/README.md`](../../despliegue/README.md): las piezas, su orden y con qué rol se conecta cada una.
 - [ARQ-03 — Estrategia multi-tenant](../30-arquitectura/estrategia-multitenant.md) §4, que es por qué la aplicación no migra.
 - [ADR-0003 — Monolito modular](../30-arquitectura/adr/ADR-0003-monolito-modular.md): un artefacto, dos perfiles.

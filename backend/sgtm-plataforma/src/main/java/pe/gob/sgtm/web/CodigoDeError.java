@@ -29,6 +29,13 @@ public enum CodigoDeError {
      */
     SIN_MUNICIPALIDAD(HttpStatus.FORBIDDEN, "El token no identifica una municipalidad"),
 
+    /**
+     * El token del ciudadano no identifica un documento (ADR-0020). Gemelo exacto de {@link
+     * #SIN_MUNICIPALIDAD} para la otra poblacion: tampoco hay valor por omision ni modo sin
+     * documento, porque un recorrido sin sujeto es una consulta por cualquiera.
+     */
+    SIN_DOCUMENTO(HttpStatus.FORBIDDEN, "El token no identifica un documento de identidad"),
+
     /** El usuario no tiene el privilegio que la operacion exige (RF-121). */
     SIN_PRIVILEGIO(HttpStatus.FORBIDDEN, "No tiene el privilegio necesario para esta operacion"),
 

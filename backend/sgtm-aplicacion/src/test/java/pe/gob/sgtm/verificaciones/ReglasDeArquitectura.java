@@ -406,6 +406,61 @@ public final class ReglasDeArquitectura {
                                     + " el criterio del libro y recorreria el padron en cada carga"
                                     + " de la pantalla de inicio (#56, AC 3 y AC 4)");
 
+    /**
+     * En el perfil {@code web}, <b>solo el recorrido</b> mueve el contexto de municipalidad (#57,
+     * ADR-0020 §2).
+     *
+     * <p>Hasta aqui el invariante era «en {@code web}, el contexto lo fija el filtro y nadie mas»:
+     * los demas llamadores de {@code TenantContext.fijar} son todos procesos del perfil {@code
+     * batch} —cargas de demostracion, implantacion, apertura de conjuntos— que iteran municipalidad
+     * por municipalidad sin atender ninguna peticion. Nadie lo comprobaba, y se perdia en silencio
+     * en cuanto alguien lo moviera desde un controlador o un caso de uso.
+     *
+     * <p>Que se perderia: el contexto de una peticion en curso cambiado a mitad de camino. No falla
+     * —las consultas siguen devolviendo filas—, y lo que devuelven son <b>datos reales de la
+     * municipalidad equivocada</b>. Es la fuga que no se ve.
+     *
+     * <p>Con el portal del contribuyente hay, por primera vez, un motivo legitimo para moverlo en
+     * {@code web}: recorrer el registro de tenants. Se concentra en <b>un</b> componente —{@code
+     * RecorridoPorMunicipalidades}, que limpia entre ramas pase lo que pase y se niega a correr si
+     * ya hay contexto— y se prohibe en todos los demas.
+     *
+     * <p>Los tres nombrados en {@link SoloElRecorridoMueveElContexto#PUEDEN_MOVERLO} son el filtro
+     * del borde, el recorrido y el propio {@code TenantContext}. Todo lo demas tiene que declarar
+     * {@code @Profile("batch")}, y entonces no existe en el proceso que atiende HTTP.
+     */
+    public static final ArchRule SOLO_EL_RECORRIDO_MUEVE_EL_CONTEXTO_EN_WEB =
+            ArchRuleDefinition.classes()
+                    .that(new MuevenElContextoDeTenant())
+                    .should(new SoloElRecorridoMueveElContexto())
+                    .because(
+                            "cambiar el contexto a mitad de una peticion no falla: devuelve datos"
+                                    + " reales de la municipalidad equivocada (#57, ADR-0020 §2)");
+
+    /**
+     * El centinela {@code CIUDADANO} solo sirve al portal (#57, ADR-0020).
+     *
+     * <p>{@code @RequiereAcceso(acceso = CIUDADANO, …)} le dice al guardia que <b>no hay privilegio
+     * que comprobar</b>, porque el ciudadano no tiene fila en {@code usuario}. Puesto en un
+     * endpoint del catalogo, eso deja de ser una excepcion razonada y pasa a ser la forma de servir
+     * una opcion de las 134 <b>sin autorizacion ninguna</b>: basta escribir el centinela en vez del
+     * id de la opcion.
+     *
+     * <p>El guardia ya comprueba en ejecucion que la peticion venga de la cadena del ciudadano, asi
+     * que ese endpoint no seria alcanzable por un funcionario; pero seria un endpoint del catalogo
+     * que nadie puede usar y cuya autorizacion nadie configura, y eso no se descubre revisando. La
+     * regla lo rompe en el build: un controlador anotado con el centinela tiene que colgar de
+     * {@code /api/v1/portal}.
+     */
+    public static final ArchRule EL_CENTINELA_DEL_CIUDADANO_SOLO_SIRVE_AL_PORTAL =
+            ArchRuleDefinition.classes()
+                    .that(new EsControlador())
+                    .should(new ConElCentinelaDelCiudadanoSoloEnElPortal())
+                    .because(
+                            "el centinela dice «no hay privilegio que comprobar»; fuera del portal"
+                                    + " eso es servir una opcion del catalogo sin autorizacion"
+                                    + " (ADR-0020)");
+
     public static List<ArchRule> todas() {
         return List.of(
                 EL_DOMINIO_NO_CONOCE_FRAMEWORKS,
@@ -422,7 +477,9 @@ public final class ReglasDeArquitectura {
                 TODO_COMPONENTE_DECLARA_QUE_CONSTRUCTOR_INYECTAR,
                 TODA_SIEMBRA_CORRE_SOLO_EN_EL_PERFIL_BATCH,
                 SOLO_LA_TRANSFERENCIA_ESCRIBE_FUERA_DE_FISCALIZACION,
-                EL_PANEL_NO_HABLA_CON_LA_BASE);
+                EL_PANEL_NO_HABLA_CON_LA_BASE,
+                SOLO_EL_RECORRIDO_MUEVE_EL_CONTEXTO_EN_WEB,
+                EL_CENTINELA_DEL_CIUDADANO_SOLO_SIRVE_AL_PORTAL);
     }
 
     /** Clases del sistema, sin las de prueba ni las de fixtures. */
@@ -865,7 +922,19 @@ public final class ReglasDeArquitectura {
                         // devolvieron el codigo de una persona.
                         PAQUETE_RAIZ
                                 + ".rentas.aplicacion.ConsultaDeTitulares.resolver(long,"
-                                + " java.time.LocalDate)");
+                                + " java.time.LocalDate)",
+                        // La rama del portal del contribuyente (ADR-0020, #57). Misma forma que
+                        // las dos anteriores y un motivo mas fuerte: es una CONSULTA —no modifica
+                        // ningun dato—, y aqui el usuario ni siquiera es un funcionario. Es el
+                        // ciudadano mirando su propia deuda, y nadie escribe un motivo para eso;
+                        // la observacion la compone el sistema y dice a que fecha se consulto y
+                        // cuantas obligaciones y predios salieron. Es transaccional de escritura
+                        // solo para que su fila de ACCESO caiga dentro de la misma transaccion que
+                        // la lectura: sin eso quedaria constancia de las consultas que fallaron y
+                        // no de las que si devolvieron la deuda de una persona. Y la municipalidad
+                        // donde no figura no recibe ninguna fila, porque ahi no se lee nada.
+                        PAQUETE_RAIZ
+                                + ".rentas.aplicacion.RamaDelCiudadano.leer(java.time.LocalDate)");
 
         ConObservacionEnLasEscrituras() {
             super("exigir una Observacion en todo metodo transaccional de escritura");
@@ -1077,6 +1146,155 @@ public final class ReglasDeArquitectura {
                                             + " recibe el identificador de municipalidad"));
                 }
             }
+        }
+    }
+
+    /** Las clases que llaman a {@code TenantContext.fijar}, sean de donde sean. */
+    private static final class MuevenElContextoDeTenant extends DescribedPredicate<JavaClass> {
+
+        private static final String TENANT_CONTEXT = PAQUETE_RAIZ + ".compartido.TenantContext";
+        private static final String FIJAR = "fijar";
+
+        MuevenElContextoDeTenant() {
+            super("mueven el contexto de municipalidad");
+        }
+
+        @Override
+        public boolean test(JavaClass clase) {
+            // Por las llamadas del bytecode y no por los `import`: un `import` sin uso no deja
+            // rastro y una llamada por nombre completo no deja `import`.
+            return clase.getMethodCallsFromSelf().stream()
+                    .anyMatch(
+                            llamada ->
+                                    TENANT_CONTEXT.equals(llamada.getTargetOwner().getFullName())
+                                            && FIJAR.equals(llamada.getName()));
+        }
+    }
+
+    private static final class SoloElRecorridoMueveElContexto extends ArchCondition<JavaClass> {
+
+        private static final String PROFILE = "org.springframework.context.annotation.Profile";
+        private static final String BATCH = "batch";
+
+        /**
+         * Los tres que pueden moverlo en el proceso que atiende HTTP, y por que cada uno.
+         *
+         * <ul>
+         *   <li>{@code TenantContextFilter}: es el borde. Lo fija una vez, desde el claim del token
+         *       ya validado, y lo limpia al salir. Es el camino de ARQ-03 §2.
+         *   <li>{@code RecorridoPorMunicipalidades}: el recorrido del portal. Lo mueve una vez por
+         *       municipalidad activa, limpia entre ramas aunque la rama lance, y se niega a correr
+         *       si ya hay contexto puesto.
+         *   <li>{@code TenantContext}: la propia clase, que se llama a si misma.
+         * </ul>
+         *
+         * <p>Que cueste una linea es deliberado, igual que en {@code SIN_USUARIO_QUE_OBSERVE}: el
+         * diff dice quien mas puede mover lo que sostiene el aislamiento entero.
+         */
+        private static final Set<String> PUEDEN_MOVERLO =
+                Set.of(
+                        PAQUETE_RAIZ + ".plataforma.tenant.TenantContextFilter",
+                        PAQUETE_RAIZ + ".plataforma.RecorridoPorMunicipalidades",
+                        PAQUETE_RAIZ + ".compartido.TenantContext");
+
+        SoloElRecorridoMueveElContexto() {
+            super(
+                    "mover el contexto de municipalidad solo desde el borde o desde el recorrido,"
+                            + " o correr solo en el perfil batch");
+        }
+
+        @Override
+        public void check(JavaClass clase, ConditionEvents eventos) {
+            if (PUEDEN_MOVERLO.contains(clase.getName()) || esDelPerfilBatch(clase)) {
+                return;
+            }
+            eventos.add(
+                    SimpleConditionEvent.violated(
+                            clase,
+                            clase.getName()
+                                    + " mueve TenantContext y ni es el borde, ni es el recorrido"
+                                    + " del portal, ni declara @Profile(\"batch\"): en el proceso"
+                                    + " web eso cambia el contexto de una peticion en curso, y"
+                                    + " entonces se devuelven datos reales de otra municipalidad"));
+        }
+
+        private static boolean esDelPerfilBatch(JavaClass clase) {
+            return clase.getAnnotations().stream()
+                    .filter(a -> PROFILE.equals(a.getRawType().getName()))
+                    .anyMatch(
+                            a -> {
+                                Object valor = a.getProperties().get("value");
+                                List<String> perfiles =
+                                        valor instanceof Object[] varios
+                                                ? java.util.Arrays.stream(varios)
+                                                        .map(String::valueOf)
+                                                        .toList()
+                                                : List.of(String.valueOf(valor));
+                                return perfiles.contains(BATCH);
+                            });
+        }
+    }
+
+    private static final class ConElCentinelaDelCiudadanoSoloEnElPortal
+            extends ArchCondition<JavaClass> {
+
+        private static final String REQUIERE_ACCESO = PAQUETE_RAIZ + ".autorizacion.RequiereAcceso";
+        private static final String REQUEST_MAPPING =
+                "org.springframework.web.bind.annotation.RequestMapping";
+
+        /** El valor de {@code RequiereAcceso.CIUDADANO}, copiado a proposito. */
+        private static final String CENTINELA = "__ciudadano__";
+
+        /** La raiz que sirve la cadena del ciudadano, igual que {@code SeguridadWeb}. */
+        private static final String RAIZ_DEL_PORTAL = "/api/v1/portal";
+
+        ConElCentinelaDelCiudadanoSoloEnElPortal() {
+            super("usar el centinela CIUDADANO solo en controladores que cuelgan del portal");
+        }
+
+        @Override
+        public void check(JavaClass clase, ConditionEvents eventos) {
+            boolean loUsa =
+                    declaraElCentinela(clase.getAnnotations())
+                            || clase.getMethods().stream()
+                                    .anyMatch(
+                                            metodo -> declaraElCentinela(metodo.getAnnotations()));
+            if (!loUsa || cuelgaDelPortal(clase)) {
+                return;
+            }
+            eventos.add(
+                    SimpleConditionEvent.violated(
+                            clase,
+                            clase.getName()
+                                    + " declara @RequiereAcceso(acceso = CIUDADANO) y no cuelga de "
+                                    + RAIZ_DEL_PORTAL
+                                    + ": el centinela dice que no hay privilegio que comprobar, y"
+                                    + " fuera del portal eso es servir una opcion del catalogo sin"
+                                    + " autorizacion ninguna (ADR-0020)"));
+        }
+
+        private static boolean declaraElCentinela(
+                Set<? extends com.tngtech.archunit.core.domain.JavaAnnotation<?>> anotaciones) {
+            return anotaciones.stream()
+                    .filter(a -> REQUIERE_ACCESO.equals(a.getRawType().getName()))
+                    .anyMatch(
+                            a -> CENTINELA.equals(String.valueOf(a.getProperties().get("acceso"))));
+        }
+
+        private static boolean cuelgaDelPortal(JavaClass clase) {
+            return clase.getAnnotations().stream()
+                    .filter(a -> REQUEST_MAPPING.equals(a.getRawType().getName()))
+                    .anyMatch(
+                            a -> {
+                                Object valor = a.getProperties().get("value");
+                                Object[] rutas =
+                                        valor instanceof Object[] varias
+                                                ? varias
+                                                : new Object[] {valor};
+                                return java.util.Arrays.stream(rutas)
+                                        .map(String::valueOf)
+                                        .allMatch(ruta -> ruta.startsWith(RAIZ_DEL_PORTAL));
+                            });
         }
     }
 }

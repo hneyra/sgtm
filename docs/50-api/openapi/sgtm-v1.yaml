@@ -80,11 +80,6 @@ paths:
       description: "Flujo público de autoconsulta: el contribuyente identifica su deuda, elige qué pagar y descarga su constancia sin acudir a la municipalidad."
       tags: ["Inicio"]
       parameters:
-        - name: doc
-          in: query
-          required: false
-          schema: { type: string }
-          example: "44218937"
         - name: pagina
           in: query
           required: false
@@ -118,6 +113,40 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/portal/situacion":
+    get:
+      operationId: portal_mi_situacion
+      summary: "Mi situación en todas las municipalidades"
+      description: |
+        Lo que el ciudadano autenticado debe y tiene **en todas las municipalidades del
+        sistema donde figure**, a **una sola** fecha de corte.
+
+        **Sin ningún parámetro, y eso es la decisión.** El sujeto sale del claim
+        `numero_documento` del token del realm del ciudadano —emisor distinto del de
+        funcionarios—, validado criptográficamente por la cadena que sirve
+        `/api/v1/portal/**`. Sustituye a `GET /portal/deuda?doc=…`, que contestaba
+        «quién es esta persona y cuánto debe» a quien tecleara ocho dígitos.
+
+        El servidor **recorre** el registro de municipalidades activas —una transacción y
+        un `SET LOCAL` por rama, RLS en cada una—, compone y suma (RNF-083). No es una
+        consulta multi-municipalidad: son *N* consultas de una municipalidad cuya unión se
+        filtra a un documento firmado.
+
+        `totalConsolidado` es `null` cuando alguna municipalidad no se pudo leer, y
+        entonces `notaDelTotal` dice cuáles faltan: un total al que le falta una
+        municipalidad es un importe plausible y equivocado.
+
+        Un token de **funcionario** no autentica aquí (401); uno de ciudadano no autentica
+        en ninguna otra ruta de la API.
+      tags: ["Inicio"]
+      responses:
+        200:
+          description: "La situación del ciudadano, municipalidad por municipalidad"
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinDocumentoAcreditado"
   "/catastro/fichas/urbana/{codRefCatastral}":
     get:
       operationId: ficha_urbana
@@ -7580,8 +7609,16 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        Token OIDC validado. Debe traer el claim `municipalidad_id`; sin el, la
-        peticion recibe 403 y no llega al controlador (ADR-0005, RNF-032).
+        Token OIDC validado, de **uno de los dos emisores** (ADR-0005, ADR-0020).
+
+        - Realm de **funcionarios**: debe traer el claim `municipalidad_id`; sin
+          el, la peticion recibe 403 y no llega al controlador (RNF-032). Vale
+          para toda la API **salvo** `/portal/**`.
+        - Realm del **ciudadano**: debe traer `numero_documento` y no lleva
+          municipalidad. Vale **solo** para `/portal/**`.
+
+        Son dos cadenas de seguridad con dos decodificadores, cada uno apuntando
+        a un solo emisor: un token de una poblacion no autentica en la otra.
   schemas:
     Importe:
       type: string
@@ -7602,6 +7639,13 @@ components:
       description: |
         El token no identifica una municipalidad. No hay valor por omision ni
         modo sin municipalidad.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    SinDocumentoAcreditado:
+      description: |
+        El token del ciudadano no identifica un documento. No hay valor por
+        omision ni modo sin documento (ADR-0020).
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

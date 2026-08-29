@@ -120,6 +120,13 @@ class ContratoDeApiTest {
                     "GET /consultas/valores",
                     "GET /consultas/resumen-predial",
                     "GET /consultas/unificada",
+                    // #57 — ADR-0020: la unica operacion del portal del contribuyente, y la
+                    // unica de toda la API que se sirve con el token del realm del ciudadano.
+                    // Sustituye a `GET /portal/deuda?doc=…`, que el mismo issue retira del
+                    // contrato: el documento deja de ser un parametro y pasa a ser un claim
+                    // firmado. Sin parametros a proposito —el servidor recorre, compone y suma
+                    // en una sola ida y vuelta (RNF-083)—.
+                    "GET /portal/situacion",
                     // #72: la ultima opcion de Consultas. Simula el acogimiento de la deuda a una
                     // campana de beneficio; las campanas y lo que descuentan son dato del conjunto
                     // sellado (D-02b, D-02c), no un enum.

@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.compartido.CiudadanoContext;
+import pe.gob.sgtm.dominio.DocumentoIdentidad;
 import pe.gob.sgtm.web.ManejadorDeErrores;
 
 /**
@@ -40,7 +42,8 @@ class GuardiaDeAccesoTest {
             MockMvcBuilders.standaloneSetup(
                             new ControladorDePrueba(),
                             new ControladorSinDeclarar(),
-                            new ControladorDeSesionPropia())
+                            new ControladorDeSesionPropia(),
+                            new ControladorDelCiudadano())
                     .addInterceptors(new GuardiaDeAcceso(comprobador, RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .build();
@@ -111,6 +114,42 @@ class GuardiaDeAccesoTest {
     }
 
     @Test
+    @DisplayName("CIUDADANO pasa **solo si la peticion viene de la cadena del ciudadano**")
+    void ciudadanoPasaSoloDesdeSuCadena() throws Exception {
+        comprobador.autoriza = false;
+        // Lo que hace `DocumentoCiudadanoContextFilter` bajo /api/v1/portal, y solo alli.
+        CiudadanoContext.fijar(DocumentoIdentidad.dni("03593174"));
+        try {
+            MvcResult resultado = mvc.perform(get("/api/v1/portal/prueba")).andReturn();
+
+            assertThat(resultado.getResponse().getStatus())
+                    .as("el ciudadano no tiene fila en `usuario`: no hay privilegio que comprobar")
+                    .isEqualTo(200);
+            assertThat(comprobador.preguntas)
+                    .as("no se le pregunta al catalogo por alguien que no esta en el")
+                    .isEmpty();
+        } finally {
+            CiudadanoContext.limpiar();
+        }
+    }
+
+    @Test
+    @DisplayName("y **sin** sesion de ciudadano, el mismo centinela deniega")
+    void ciudadanoSinSuCadenaSeDeniega() throws Exception {
+        /* Es lo que impide que el centinela sea la forma de servir cualquier endpoint
+        sin privilegio: puesto en una opcion del catalogo —lo que ademas rompe el
+        build por la regla de ArchUnit—, una peticion de funcionario no lo cruza. */
+        comprobador.autoriza = true;
+
+        MvcResult resultado = mvc.perform(get("/api/v1/portal/prueba")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(403);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"codigo\":\"SIN_PRIVILEGIO\"");
+        assertThat(comprobador.preguntas).isEmpty();
+    }
+
+    @Test
     @DisplayName("un endpoint sin acceso declarado se deniega; no se deja pasar por omision")
     void sinAccesoDeclaradoSeDeniega() throws Exception {
         comprobador.autoriza = true;
@@ -160,6 +199,22 @@ class GuardiaDeAccesoTest {
 
         @GetMapping("/api/v1/prueba/sesion")
         String sesion() {
+            return "ok";
+        }
+    }
+
+    /**
+     * Declara {@link RequiereAcceso#CIUDADANO}: el portal del contribuyente (ADR-0020).
+     *
+     * <p>Cuelga de {@code /api/v1/portal} porque la regla de ArchUnit no admite el centinela en
+     * ninguna otra ruta: fuera de ahi seria servir una opcion del catalogo sin autorizacion.
+     */
+    @RestController
+    @RequiereAcceso(acceso = RequiereAcceso.CIUDADANO, privilegio = Privilegio.LECTURA)
+    static class ControladorDelCiudadano {
+
+        @GetMapping("/api/v1/portal/prueba")
+        String situacion() {
             return "ok";
         }
     }

@@ -6,6 +6,7 @@ import { construirManifiestos } from "../componentes";
 import {
   manifiestosDeIdentidad,
   documentosDelRealm,
+  realmDelCiudadano,
   documentosDeIdentidades,
   RUTA_DE_IDENTIDAD,
   PUERTO_DE_LA_CONSOLA,
@@ -14,7 +15,7 @@ import { nginxDelCluster } from "../componentes/Aplicacion";
 import { valoresDeTraefik } from "../componentes/Ingreso";
 import { manifiestosDeObservabilidad } from "../componentes/Observabilidad";
 import { PRIORIDADES, nombreDePrioridad, secretos } from "../componentes/convenciones";
-import { raizDelRepositorio } from "../componentes/fuentes";
+import { raizDelRepositorio, realmCiudadanoJson } from "../componentes/fuentes";
 import {
   contenedoresDe,
   podsDe,
@@ -428,6 +429,115 @@ describe("#151 · identidad", () => {
     expect(documentos.perfilDeUsuario).toContain("municipalidad_id");
   });
 
+  /**
+   * **El realm del ciudadano** (#57, ADR-0020).
+   *
+   * Todo el portal se sostiene sobre que `numero_documento` sea de quien lo
+   * presenta. Si el ciudadano pudiera editarlo —o registrarse solo—, la
+   * enumeracion del padron que este issue retira volveria en su peor forma: en
+   * vez de teclear el documento ajeno en una caja, lo teclearia una vez al
+   * registrarse y el sistema se lo creeria para siempre, **firmado**.
+   */
+  describe("el realm del ciudadano", () => {
+    const delCiudadano = () =>
+      documentosDelRealm({
+        domain: "sgtm.example.pe",
+        realm: "sgtm-ciudadano",
+        clienteDeVerificacion: false,
+        smtp: SMTP_DE_PRUEBA,
+        fuente: realmCiudadanoJson(),
+      });
+
+    it("declara `numero_documento` **no editable por el usuario**", () => {
+      const perfil = JSON.parse(delCiudadano().perfilDeUsuario) as {
+        attributes: { name: string; permissions?: { edit?: string[] } }[];
+      };
+      const documento = perfil.attributes.find((a) => a.name === "numero_documento");
+
+      expect(documento, "el perfil no declara numero_documento").toBeDefined();
+      // `admin` y nadie mas. Con `user` en la lista, el ciudadano se cambia el
+      // documento desde la consola de cuenta y pasa a preguntar por otra persona.
+      expect(documento?.permissions?.edit).toEqual(["admin"]);
+      expect(documento?.permissions?.edit).not.toContain("user");
+    });
+
+    it("y `tipo_documento` tampoco: el par identifica, no solo el numero", () => {
+      const perfil = JSON.parse(delCiudadano().perfilDeUsuario) as {
+        attributes: { name: string; permissions?: { edit?: string[] } }[];
+      };
+      expect(
+        perfil.attributes.find((a) => a.name === "tipo_documento")?.permissions?.edit,
+      ).toEqual(["admin"]);
+    });
+
+    it("no admite autorregistro", () => {
+      // D-15 se decidio por el camino B —enrolamiento en ventanilla—, y esto es
+      // lo que lo hace cierto en el realm y no solo en el ADR.
+      expect(JSON.parse(delCiudadano().realm).registrationAllowed).toBe(false);
+    });
+
+    it("su cliente lleva los dos mapeadores, y ninguno de municipalidad", () => {
+      const clientes = clientesDe(delCiudadano().clientes);
+      expect(clientes.map((c) => c.clientId)).toEqual(["sgtm-portal"]);
+      const claims = (clientes[0]?.protocolMappers ?? []).map((m) => m.config["claim.name"]);
+
+      expect(claims).toContain("numero_documento");
+      expect(claims).toContain("tipo_documento");
+      // El ciudadano **no pertenece a ninguna municipalidad**: un claim de
+      // municipalidad aqui seria un tenant elegido por quien no tiene ninguno.
+      expect(claims).not.toContain("municipalidad_id");
+    });
+
+    it("su redireccion vuelve al portal, no a la raiz del origen", () => {
+      const clientes = clientesDe(delCiudadano().clientes);
+      const uris = clientes[0]?.redirectUris ?? [];
+
+      expect(uris.length).toBeGreaterThan(0);
+      for (const uri of uris) {
+        expect(uri, "una redireccion a localhost en el clúster").not.toContain("localhost");
+        // El camino se conserva: con `https://<dominio>/*` el ciudadano podria
+        // acabar en la aplicacion del funcionario tras autenticarse.
+        expect(uri).toBe("https://sgtm.example.pe/portal/*");
+      }
+    });
+
+    it("va en el mismo ConfigMap y lo aplica el mismo Job, en segundo lugar", () => {
+      const configuracion = buscar(ms, "ConfigMap", "realm") as { data: Record<string, string> };
+      expect(configuracion.data["realm-ciudadano.json"]).toBeDefined();
+      expect(configuracion.data["perfil-de-usuario-ciudadano.json"]).toContain("numero_documento");
+      expect(configuracion.data["clientes-ciudadano.json"]).toContain("sgtm-portal");
+
+      const job = buscar(ms, "Job", "realm") as {
+        spec: { template: { spec: { containers: Contenedor[] } } };
+      };
+      const contenedor = job.spec.template.spec.containers[0] as Contenedor;
+      const mandato = (contenedor.command ?? []).join(" ");
+      // Despues del de funcionarios: si el portal fallara, la municipalidad
+      // sigue pudiendo trabajar.
+      expect(mandato).toContain("/realm/reconciliar-realm.sh ciudadano");
+      expect(mandato.indexOf("reconciliar-realm.sh ciudadano")).toBeGreaterThan(
+        mandato.indexOf("reconciliar-identidades.sh"),
+      );
+
+      const variables = variablesDe(contenedor);
+      expect(variables.get("KC_REALM_CIUDADANO")).toBe(
+        realmDelCiudadano(invariantesDe(AMBIENTE).identity.realm),
+      );
+      expect(variables.get("KC_CLIENTES_CIUDADANO")).toBe("sgtm-portal");
+    });
+
+    it("un cambio suyo crea un Job nuevo", () => {
+      // Sin esto, el realm del ciudadano se versionaria y **no llegaria nunca al
+      // clúster**: el Job conserva su nombre y `pulumi up` no crea ninguno.
+      const antes = buscar(ms, "Job", "realm").metadata.name;
+      const documentos = delCiudadano();
+      const huella = documentos.realm + documentos.perfilDeUsuario + documentos.clientes;
+
+      expect(huella).toContain("numero_documento");
+      expect(antes).toMatch(/^sgtm-.*-realm-[0-9a-f]{10}$/);
+    });
+  });
+
   it("la pantalla de acceso no dice «marcha blanca»", () => {
     const configuracion = buscar(ms, "ConfigMap", "realm") as { data: Record<string, string> };
     expect(configuracion.data["realm.json"]).not.toContain("marcha blanca");
@@ -783,6 +893,8 @@ function valorDe(
 interface ClienteLeido {
   clientId: string;
   protocolMappers?: { config: Record<string, string> }[];
+  /** A donde puede volver quien se autentica. Lo mira el realm del ciudadano (ADR-0020). */
+  redirectUris?: string[];
 }
 
 function clientesDe(carga: string): ClienteLeido[] {
