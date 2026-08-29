@@ -8,6 +8,9 @@ import {
   documentosDelRealm,
   realmDelCiudadano,
   documentosDeIdentidades,
+  cuentaDelCiudadano,
+  huellaDeIdentidad,
+  TIPOS_DE_DOCUMENTO,
   RUTA_DE_IDENTIDAD,
   PUERTO_DE_LA_CONSOLA,
 } from "../componentes/Identidad";
@@ -15,7 +18,12 @@ import { nginxDelCluster } from "../componentes/Aplicacion";
 import { valoresDeTraefik } from "../componentes/Ingreso";
 import { manifiestosDeObservabilidad } from "../componentes/Observabilidad";
 import { PRIORIDADES, nombreDePrioridad, secretos } from "../componentes/convenciones";
-import { raizDelRepositorio, realmCiudadanoJson } from "../componentes/fuentes";
+import {
+  ciudadanosJson,
+  raizDelRepositorio,
+  realmCiudadanoJson,
+  reconciliarIdentidadesSh,
+} from "../componentes/fuentes";
 import {
   contenedoresDe,
   podsDe,
@@ -478,6 +486,10 @@ describe("#151 · identidad", () => {
 
     it("su cliente lleva los dos mapeadores, y ninguno de municipalidad", () => {
       const clientes = clientesDe(delCiudadano().clientes);
+      // Exactamente uno. El archivo versionado trae ademas un `sgtm-verificacion` —el
+      // que deja a la escalera del compose pedir un token de ciudadano sin navegador
+      // (#415)— y al clúster NO llega: el del ciudadano es el realm de cara al publico,
+      // y una concesion directa de credenciales ahi es una puerta que nadie necesita.
       expect(clientes.map((c) => c.clientId)).toEqual(["sgtm-portal"]);
       const claims = (clientes[0]?.protocolMappers ?? []).map((m) => m.config["claim.name"]);
 
@@ -824,6 +836,320 @@ describe("ADR-0012 · alta declarativa de usuarios", () => {
     ).env ?? [];
     expect(envStg.some((e) => e.name === "SIN_CORREO")).toBe(false);
     expect(envStg.some((e) => e.name === "KC_SMTP_USUARIO")).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #415 / ADR-0020 §5 — el enrolamiento del ciudadano en ventanilla (D-15, camino B)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Enrolar no es «dar de alta a un usuario»: es **fijar una identidad**.
+ *
+ * Todo el portal se sostiene sobre que `numero_documento` del token sea de quien lo
+ * presenta —`GET /portal/situacion` no tiene ni un parametro y el sujeto sale de ese
+ * claim—. Si la acreditacion se hace mal no se rompe una pantalla: la enumeracion por
+ * parametro que ADR-0020 retiro vuelve convertida en una **enumeracion firmada, y para
+ * siempre**.
+ */
+describe("#415 · enrolamiento del ciudadano", () => {
+  const ms = manifiestosDe(AMBIENTE);
+  const realmCm = buscar(ms, "ConfigMap", "realm") as { data: Record<string, string> };
+
+  /** Un `ciudadanos/<ubigeo>.json` de laboratorio, sobre el que ejercer cada prohibicion. */
+  function fuente(over: Record<string, unknown> = {}): { ubigeo: string; contenido: string }[] {
+    const base = {
+      ubigeo: "200105",
+      ciudadanos: [
+        {
+          nombre: "Rosa",
+          apellido: "Chero Zapata",
+          tipoDocumento: "DNI",
+          numeroDocumento: "70123456",
+          correo: "rosa.chero@ejemplo.pe",
+        },
+      ],
+      ...over,
+    };
+    return [{ ubigeo: "200105", contenido: JSON.stringify(base) }];
+  }
+
+  function derivar(over: Record<string, unknown> = {}) {
+    return documentosDeIdentidades({
+      municipalidades: [
+        {
+          ubigeo: "200105",
+          contenido: JSON.stringify({
+            ubigeo: "200105",
+            municipalidadId: 1,
+            grupo: "200105 - Municipalidad Distrital de Catacaos",
+            usuarios: [
+              {
+                cuenta: "administrador",
+                nombre: "Administrador",
+                apellido: "del Sistema",
+                correo: "administrador@catacaos.gob.pe",
+                administrador: true,
+              },
+            ],
+          }),
+        },
+      ],
+      ciudadanos: fuente(over),
+      ubigeo: "200105",
+      administrador: "administrador",
+    });
+  }
+
+  it("la cuenta se DERIVA del documento, con el tipo delante", () => {
+    // No es cosmetica. `CE 12345678` y `DNI 12345678` son **dos personas distintas** y
+    // las dos formas son validas: con la cuenta llamada solo por el numero, la segunda
+    // declaracion actualizaria la cuenta de la primera y le cambiaria el tipo, y a
+    // partir de ahi una de las dos leeria el padron de la otra, firmado.
+    expect(cuentaDelCiudadano("DNI", "12345678")).toBe("dni-12345678");
+    expect(cuentaDelCiudadano("CE", "12345678")).toBe("ce-12345678");
+    expect(cuentaDelCiudadano("DNI", "12345678")).not.toBe(cuentaDelCiudadano("CE", "12345678"));
+
+    expect(derivar().ciudadanos).toContain("CIUDADANO\tdni-70123456\t");
+    expect(derivar().enrolados).toEqual(["dni-70123456"]);
+  });
+
+  it("rechaza el archivo que declare una clave, nombrandolo", () => {
+    // ADR-0012 §2: un archivo versionado con contrasenas es la forma mas comoda de que
+    // una contrasena acabe en produccion.
+    expect(() =>
+      derivar({
+        ciudadanos: [
+          {
+            nombre: "Rosa",
+            apellido: "Chero Zapata",
+            tipoDocumento: "DNI",
+            numeroDocumento: "70123456",
+            credentials: [{ type: "password", value: "s3creta" }],
+          },
+        ],
+      }),
+    ).toThrow(/ciudadanos\/200105\.json: declara «credentials»/);
+  });
+
+  it("rechaza el archivo que declare la cuenta", () => {
+    expect(() =>
+      derivar({
+        ciudadanos: [
+          {
+            cuenta: "rosa",
+            nombre: "Rosa",
+            apellido: "Chero Zapata",
+            tipoDocumento: "DNI",
+            numeroDocumento: "70123456",
+          },
+        ],
+      }),
+    ).toThrow(/declara la cuenta/);
+  });
+
+  it("exige la forma que el tipo de documento impone", () => {
+    // Un numero que el dominio no puede leer se enrolaria sin protestar y el portal
+    // contestaria 403 SIN_DOCUMENTO a alguien correctamente enrolado.
+    expect(() =>
+      derivar({
+        ciudadanos: [
+          { nombre: "R", apellido: "C", tipoDocumento: "DNI", numeroDocumento: "123" },
+        ],
+      }),
+    ).toThrow(/un DNI tiene de 8 a 8 caracteres/);
+
+    expect(() =>
+      derivar({
+        ciudadanos: [
+          { nombre: "R", apellido: "C", tipoDocumento: "DNI", numeroDocumento: "7012345A" },
+        ],
+      }),
+    ).toThrow(/un DNI es solo digitos/);
+
+    expect(() =>
+      derivar({
+        ciudadanos: [
+          { nombre: "R", apellido: "C", tipoDocumento: "LIBRETA", numeroDocumento: "70123456" },
+        ],
+      }),
+    ).toThrow(/no es un tipo de documento conocido/);
+  });
+
+  it("dos declaraciones del mismo documento tienen que decir lo mismo", () => {
+    // Quien enrola afirma, en nombre del sistema, que esta persona es esta persona. Dos
+    // afirmaciones distintas del mismo documento no se resuelven por orden de aparicion.
+    const dosVeces = (apellido: string) => [
+      {
+        nombre: "Rosa",
+        apellido: "Chero Zapata",
+        tipoDocumento: "DNI",
+        numeroDocumento: "70123456",
+      },
+      { nombre: "Rosa", apellido, tipoDocumento: "DNI", numeroDocumento: "70123456" },
+    ];
+
+    expect(() => derivar({ ciudadanos: dosVeces("Otra Cosa") })).toThrow(/con datos\s+distintos/);
+    // La misma persona declarada dos veces —dos ventanillas, el mismo documento— pasa,
+    // y produce UNA sola cuenta.
+    expect(derivar({ ciudadanos: dosVeces("Chero Zapata") }).enrolados).toEqual(["dni-70123456"]);
+  });
+
+  it("una municipalidad sin nadie enrolado no rompe el despliegue", () => {
+    // Es el estado de partida de TODAS: el portal existe y hasta que alguien pase por
+    // ventanilla no entra nadie por el. Un despliegue que se niega a subir por eso seria
+    // un despliegue que exige que alguien haya ido a la municipalidad.
+    expect(derivar({ ciudadanos: [] }).ciudadanos).toBe("");
+    expect(
+      documentosDeIdentidades({
+        municipalidades: [
+          {
+            ubigeo: "200105",
+            contenido: JSON.stringify({
+              ubigeo: "200105",
+              municipalidadId: 1,
+              grupo: "g",
+              usuarios: [
+                {
+                  cuenta: "administrador",
+                  nombre: "A",
+                  apellido: "B",
+                  correo: "a@b.pe",
+                  administrador: true,
+                },
+              ],
+            }),
+          },
+        ],
+        ubigeo: "200105",
+        administrador: "administrador",
+      }).ciudadanos,
+    ).toBe("");
+  });
+
+  it("el ciudadano no lleva municipalidad, ni grupo, ni clave", () => {
+    const tsv = derivar().ciudadanos;
+    // El ciudadano **no pertenece a ninguna municipalidad**: lo que ve sale de recorrer
+    // el registro, una municipalidad a la vez (ADR-0020 §2).
+    expect(tsv).not.toContain("municipalidad_id");
+    expect(tsv).not.toContain("GRUPO");
+    expect(tsv.toLowerCase()).not.toContain("password");
+    expect(tsv.toLowerCase()).not.toContain("clave");
+  });
+
+  it("el ConfigMap monta su TSV y el Job lo aplica DESPUES del realm del ciudadano", () => {
+    expect(realmCm.data["ciudadanos.tsv"]).toBeDefined();
+
+    const job = buscar(ms, "Job", "realm") as {
+      spec: { template: { spec: { containers: Contenedor[] } } };
+    };
+    const mandato = ((job.spec.template.spec.containers[0] as Contenedor).command ?? []).join(" ");
+    expect(mandato).toContain("/realm/reconciliar-identidades.sh ciudadanos");
+    // El realm del ciudadano lo crea la pasada anterior: enrolar antes seria crear
+    // cuentas en un realm que todavia no existe.
+    expect(mandato.indexOf("reconciliar-identidades.sh ciudadanos")).toBeGreaterThan(
+      mandato.indexOf("reconciliar-realm.sh ciudadano"),
+    );
+  });
+
+  it("el TSV de ciudadanos entra en la huella: enrolar crea un Job nuevo", () => {
+    // Sin esto, el ciudadano se declara en el repositorio y **no puede entrar**: el Job
+    // conserva su nombre, `pulumi up` no crea ninguno y el alta no llega al clúster.
+    //
+    // La huella se **recompone desde los manifiestos**, con las mismas partes y en el
+    // mismo orden. Si una deja de entrar —quitar `identidades.ciudadanos` de la lista de
+    // `manifiestosDeIdentidad`, por ejemplo—, el nombre del Job y esta cuenta dejan de
+    // coincidir.
+    const job = buscar(ms, "Job", "realm");
+    const plantilla = (job as { spec: { template: { spec: EspecificacionDePod } } }).spec.template
+      .spec;
+    const d = realmCm.data;
+    const recompuesta = huellaDeIdentidad([
+      d["realm.json"] ?? "",
+      d["perfil-de-usuario.json"] ?? "",
+      d["clientes.json"] ?? "",
+      d["realm-ciudadano.json"] ?? "",
+      d["perfil-de-usuario-ciudadano.json"] ?? "",
+      d["clientes-ciudadano.json"] ?? "",
+      d["identidades.tsv"] ?? "",
+      d["ciudadanos.tsv"] ?? "",
+      d["reconciliar-identidades.sh"] ?? "",
+      JSON.stringify(plantilla),
+    ]);
+
+    expect(job.metadata.name).toBe(`${resourceName(AMBIENTE, "realm")}-${recompuesta}`);
+    // Y que la parte que este issue anade cambie de verdad la huella cuando cambia.
+    expect(huellaDeIdentidad([derivar().ciudadanos])).not.toBe(
+      huellaDeIdentidad([derivar({ ciudadanos: [] }).ciudadanos]),
+    );
+  });
+
+  it("la tabla de formas de documento es la del enumerado del dominio", () => {
+    // No se copia: se contrasta. Un tipo nuevo en `TipoDocumento` sin declararlo aqui
+    // pone esto rojo, y al reves. Precedente: #192 con `UnidadDePlazo`.
+    const java = readFileSync(
+      join(
+        raizDelRepositorio(),
+        "backend/sgtm-dominio-compartido/src/main/java/pe/gob/sgtm/dominio/TipoDocumento.java",
+      ),
+      "utf8",
+    );
+    const delEnumerado: Record<string, [number, number, boolean]> = {};
+    for (const linea of java.split("\n")) {
+      const m = /^\s{4}([A-Z]+)\((\d+),\s*(\d+),\s*(true|false)\)/.exec(linea);
+      if (m !== null) {
+        delEnumerado[m[1] as string] = [Number(m[2]), Number(m[3]), m[4] === "true"];
+      }
+    }
+
+    expect(Object.keys(delEnumerado).length).toBeGreaterThan(0);
+    expect(delEnumerado).toEqual(TIPOS_DE_DOCUMENTO);
+  });
+
+  it("y el guion, que valida lo mismo en modo compose, dice esa misma tabla", () => {
+    // La imagen de Keycloak no trae con que analizar JSON, asi que la validacion existe
+    // dos veces —TypeScript para el clúster, python para el compose—. Lo que no puede
+    // pasar es que las dos copias se separen.
+    const guion = reconciliarIdentidadesSh();
+    for (const [tipo, [minimo, maximo, digitos]] of Object.entries(TIPOS_DE_DOCUMENTO)) {
+      expect(guion).toContain(
+        `"${tipo}": (${minimo}, ${maximo}, ${digitos ? "True" : "False"})`,
+      );
+    }
+    expect(guion).toContain("reconciliar-identidades.sh ciudadanos");
+  });
+
+  it("los archivos versionados del repositorio pasan sus propias reglas", () => {
+    // Los de verdad, no los de laboratorio: un `ciudadanos/<ubigeo>.json` mal escrito no
+    // se descubre en el despliegue.
+    for (const c of ciudadanosJson()) {
+      expect(() =>
+        documentosDeIdentidades({
+          municipalidades: [
+            {
+              ubigeo: c.ubigeo,
+              contenido: JSON.stringify({
+                ubigeo: c.ubigeo,
+                municipalidadId: 1,
+                grupo: "g",
+                usuarios: [
+                  {
+                    cuenta: "a",
+                    nombre: "A",
+                    apellido: "B",
+                    correo: "a@b.pe",
+                    administrador: true,
+                  },
+                ],
+              }),
+            },
+          ],
+          ciudadanos: ciudadanosJson(),
+          ubigeo: c.ubigeo,
+          administrador: "a",
+        }),
+      ).not.toThrow();
+    }
   });
 });
 

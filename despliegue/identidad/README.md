@@ -53,6 +53,19 @@ docker compose up --wait aplicacion interfaz correo
 ./identidad/reconciliar-identidades.sh
 ```
 
+Y lo mismo, contra el **otro realm**, con los ciudadanos que cada municipalidad enroló en
+ventanilla —[`ciudadanos/<ubigeo>.json`](ciudadanos/README.md), ADR-0020 §5—:
+
+```bash
+./identidad/reconciliar-identidades.sh ciudadanos
+```
+
+Un guion y dos modos, como `reconciliar-realm.sh` es uno para los dos realms: lo que
+cambia son el archivo, el realm y qué se comprueba al terminar; el procedimiento —crear
+lo que falta, actualizar lo declarado, **no tocar la clave de quien ya existía**, y
+comprobar— es idéntico, y una copia del último paso es una que un día deja de comprobar
+lo suyo.
+
 El usuario nuevo se crea **sin credenciales** y con `UPDATE_PASSWORD` pendiente;
 Keycloak le manda un enlace de un solo uso —que en la marcha blanca cae en el buzón
 `correo`, <http://localhost:8025>— y **fija su clave al entrar**. Nadie llega a ver una
@@ -81,6 +94,17 @@ kc set-password -r sgtm --username <cuenta> --new-password "$(openssl rand -base
 
 Un usuario **ya establecido** que olvidó su clave no necesita nada de esto: usa el enlace
 «¿Olvidó su contraseña?» de la pantalla de acceso (`resetPasswordAllowed` está activo).
+
+Lo mismo vale para un **ciudadano** enrolado, cambiando el realm por `sgtm-ciudadano` y la
+cuenta por la derivada de su documento (`dni-70123456`). El caso B —clave temporal entregada
+fuera de banda— es además el camino normal de quien no declaró correo.
+
+El realm del ciudadano ([`realm-sgtm-ciudadano.json`](realm-sgtm-ciudadano.json)) trae su
+propio `sgtm-verificacion` por lo mismo, y **solo llega hasta aquí**: `Identidad.ts` lo filtra
+al derivar los documentos del clúster, porque el del ciudadano es el realm de cara al público y
+una concesión directa de credenciales ahí es una puerta que nadie necesita. Lo comprueba
+`infra/verificaciones/componentes.test.ts`: los clientes que llegan son exactamente
+`["sgtm-portal"]`.
 
 `crear-usuario.sh` sigue aquí para los usuarios `verificacion` de CI, que necesitan una
 clave conocida para el *direct grant*:

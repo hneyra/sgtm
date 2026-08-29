@@ -6,7 +6,7 @@
 | Fecha | 2026-08-29 |
 | Decide | Dirección del proyecto |
 | Cierra | **D-07** (GOB-02). Abre y decide **D-15** |
-| Referencias | [ARQ-03 §6](../estrategia-multitenant.md), [ADR-0005](ADR-0005-identidad-y-acceso.md), [ADR-0009 §1 y §2](ADR-0009-plataforma-frontend.md), [ADR-0012](ADR-0012-usuarios-y-grupos-declarativos.md), [ADR-0013](ADR-0013-permisos-de-la-sesion.md), [ADR-0016 §3](ADR-0016-el-inicio-pregunta-la-ficha-compone.md), issue [#57](https://github.com/hneyra/sgtm/issues/57) |
+| Referencias | [ARQ-03 §6](../estrategia-multitenant.md), [ADR-0005](ADR-0005-identidad-y-acceso.md), [ADR-0009 §1 y §2](ADR-0009-plataforma-frontend.md), [ADR-0012](ADR-0012-usuarios-y-grupos-declarativos.md), [ADR-0013](ADR-0013-permisos-de-la-sesion.md), [ADR-0016 §3](ADR-0016-el-inicio-pregunta-la-ficha-compone.md), issues [#57](https://github.com/hneyra/sgtm/issues/57) y [#415](https://github.com/hneyra/sgtm/issues/415) |
 
 ## Contexto
 
@@ -124,6 +124,48 @@ consulta— y esa clase de acto es exactamente la que ADR-0012 sacó del navegad
 versionado que trae usuarios con contraseña es la forma más cómoda de que esa contraseña acabe en
 producción». Enrolar por el mismo camino hereda de ADR-0012 sus tres propiedades: es reproducible,
 es idempotente y **nadie llega a ver una clave**.
+
+### 6. Confirmada y construida: cómo es el acto (#415)
+
+§5 se **confirma** —el enrolamiento no añade una pantalla 135— y se construye con el mismo guion
+que ADR-0012, en un segundo modo:
+
+```bash
+./identidad/reconciliar-identidades.sh              # funcionarios, realm `sgtm`
+./identidad/reconciliar-identidades.sh ciudadanos   # enrolados,   realm `sgtm-ciudadano`
+```
+
+Un archivo por municipalidad, [`despliegue/identidad/ciudadanos/<ubigeo>.json`](../../../despliegue/identidad/ciudadanos/README.md),
+hermano del de personas. Tres cosas quedaron decididas al construirlo, y las tres son de identidad
+y no de empaquetado:
+
+- **La cuenta se deriva del documento, y lleva el tipo delante**: `dni-70123456`. Derivada, porque
+  una cuenta declarable se puede declarar *distinta* del documento, y entonces la fila `ACCESO` que
+  cada rama deja en la bitácora —que lleva el `preferred_username`— deja de identificar a nadie. Y
+  con el tipo delante porque **`CE 12345678` y `DNI 12345678` son dos personas distintas** y las dos
+  formas son válidas (`TipoDocumento`): con la cuenta llamada solo por el número, la segunda
+  declaración actualizaría la cuenta de la primera y le cambiaría el `tipo_documento` —a partir de
+  ahí una de las dos leería el padrón de la otra, firmado—.
+
+- **El número declarado tiene que estar en el padrón de esa municipalidad.** Es lo único que impide
+  enrolar a alguien que ningún padrón conoce, y se cruza a tres bandas contra la base: archivo ↔
+  fila de `contribuyente` de ese ubigeo ↔ atributo en Keycloak. Ese cruce es también lo que explica
+  por qué el archivo es **por municipalidad** cuando el realm del ciudadano es uno solo: el archivo
+  registra **quién acreditó**.
+
+- **El correo es opcional.** Con él, Keycloak manda el enlace de un solo uso; sin él la cuenta nace
+  igual —con `UPDATE_PASSWORD` pendiente— y la clave se entrega fuera de banda. Un padrón real tiene
+  mucha gente sin correo, y exigirlo dejaría fuera del portal justo a quien va a ventanilla.
+
+Y lo que **no** cambia: ni una clave en el archivo (el guion rechaza `credentials`, `password`,
+`secret` o `clave` nombrando el archivo), ningún grupo y ningún `municipalidad_id` —el ciudadano no
+pertenece a ninguna—, y las **134 siguen siendo 134**.
+
+El costo de §5 se paga y se dice: **el ciudadano que va a ventanilla no sale enrolado, sale
+esperando el despliegue.** Es lo que se compra a cambio de que el acto que fija una identidad tenga
+diff, revisor y corrida reproducible. Si algún día eso no fuera aceptable operativamente, lo que hay
+que reescribir es §5, no el mecanismo.
+
 
 ## Consecuencias
 

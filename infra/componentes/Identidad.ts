@@ -14,6 +14,7 @@ import {
   sondaHttp,
 } from "./convenciones";
 import {
+  ciudadanosJson,
   municipalidadesJson,
   realmCiudadanoJson,
   realmSgtmJson,
@@ -307,6 +308,84 @@ interface MunicipalidadVersionada {
   usuarios: UsuarioVersionado[];
 }
 
+/**
+ * Un ciudadano enrolado en ventanilla (ADR-0020 §5, #415).
+ *
+ * **No declara cuenta.** Se deriva del documento: ver {@link cuentaDelCiudadano}.
+ */
+interface CiudadanoVersionado {
+  nombre: string;
+  apellido: string;
+  tipoDocumento: string;
+  numeroDocumento: string;
+  /** Opcional: sin el, la cuenta nace igual y la clave se entrega fuera de banda. */
+  correo?: string;
+}
+
+interface CiudadanosVersionados {
+  ubigeo: string;
+  ciudadanos: CiudadanoVersionado[];
+}
+
+/**
+ * La forma que exige cada tipo de documento, la MISMA que `TipoDocumento` del dominio.
+ *
+ * Se comprueba contra el enumerado en `componentes.test.ts` en vez de fiarse de que las
+ * dos copias no se separen: un numero que el dominio no puede leer se enrola sin
+ * protestar, produce un token con un claim que `DocumentoIdentidad` rechaza, y el portal
+ * contesta `403 SIN_DOCUMENTO` a alguien correctamente enrolado —un 403 que no dice por
+ * que—. El precedente es #192: las unidades de plazo no se copian en el verificador.
+ *
+ * `[longitudMinima, longitudMaxima, soloDigitos]`.
+ */
+export const TIPOS_DE_DOCUMENTO: Readonly<Record<string, readonly [number, number, boolean]>> = {
+  DNI: [8, 8, true],
+  RUC: [11, 11, true],
+  CE: [6, 20, false],
+  PASAPORTE: [6, 20, false],
+  PARTIDA: [1, 20, false],
+  OTRO: [1, 20, false],
+};
+
+/**
+ * Como se llama la cuenta de un ciudadano: **derivada del documento, nunca declarada**.
+ *
+ * `dni-70123456`. Dos motivos, y los dos son de identidad y no de estilo:
+ *
+ * 1. La fila `ACCESO` que el portal deja en la bitacora de cada municipalidad lleva el
+ *    `preferred_username` del token, asi que con este nombre identifica al ciudadano
+ *    **por su documento** —y ese documento ya esta en el padron de esa municipalidad, de
+ *    modo que la fila no publica alli nada que alli no se supiera— (ADR-0020 §5). Una
+ *    cuenta declarable se puede declarar distinta del documento, y entonces la bitacora
+ *    deja de identificar a nadie.
+ * 2. Lleva el **tipo delante**, no solo el numero: `CE 12345678` y `DNI 12345678` son dos
+ *    personas distintas y las dos formas son validas (`TipoDocumento`). Con la cuenta
+ *    llamada solo por el numero, la segunda declaracion **actualizaria la cuenta de la
+ *    primera** y le cambiaria el `tipo_documento`; a partir de ahi una de las dos leeria
+ *    el padron de la otra, firmado.
+ */
+export function cuentaDelCiudadano(tipo: string, numero: string): string {
+  return `${tipo.toLowerCase()}-${numero.toLowerCase()}`;
+}
+
+/**
+ * La huella que da nombre al Job de reconciliacion.
+ *
+ * Exportada, y no calculada en linea, para que `componentes.test.ts` pueda
+ * **recomponerla desde los manifiestos**: si una de las partes deja de entrar —el TSV de
+ * ciudadanos, por ejemplo—, el nombre del Job y la huella recompuesta dejan de coincidir
+ * y la prueba lo dice. Con el calculo en linea, olvidarse de una parte no se nota hasta
+ * que un cambio versionado no llega al clúster, que es el defecto que este Job existe
+ * para no repetir.
+ */
+export function huellaDeIdentidad(partes: readonly string[]): string {
+  const acumulador = createHash("sha256");
+  for (const parte of partes) {
+    acumulador.update(parte);
+  }
+  return acumulador.digest("hex").slice(0, 10);
+}
+
 /** El TSV de identidades y lo que el Job comprueba, derivado del archivo versionado. */
 export interface DocumentosDeIdentidades {
   /**
@@ -317,10 +396,24 @@ export interface DocumentosDeIdentidades {
    *   USUARIO <cuenta> <nombre> <apellido> <correo> <municipalidadId> <grupo>
    */
   tsv: string;
+  /**
+   * El TSV de los CIUDADANOS enrolados, para la segunda pasada del mismo guion
+   * (`reconciliar-identidades.sh ciudadanos`, ADR-0020 §5).
+   *
+   *   CIUDADANO <cuenta> <nombre> <apellido> <tipoDocumento> <numeroDocumento> <correo>
+   *
+   * Puede venir **vacio**, y es el estado de partida de toda municipalidad: nadie
+   * enrolado todavia. Un TSV vacio hace que el guion no cree ninguna cuenta y termine en
+   * verde, que es lo correcto —lo contrario seria un despliegue que se niega a subir
+   * porque nadie fue a ventanilla—.
+   */
+  ciudadanos: string;
   /** El grupo que el Job crea. */
   grupo: string;
   /** Las cuentas que el Job comprueba al terminar. */
   cuentas: string[];
+  /** Las cuentas de ciudadano, ya derivadas del documento. */
+  enrolados: string[];
 }
 
 /**
@@ -334,6 +427,11 @@ export interface DocumentosDeIdentidades {
  */
 export function documentosDeIdentidades(args: {
   municipalidades: { ubigeo: string; contenido: string }[];
+  /**
+   * Los `ciudadanos/<ubigeo>.json`. Omitirlo es «esta instalacion no enrola a nadie», no
+   * un error: la carpeta puede existir sin archivo para el ubigeo implantado.
+   */
+  ciudadanos?: { ubigeo: string; contenido: string }[];
   ubigeo: string;
   administrador: string;
 }): DocumentosDeIdentidades {
@@ -402,11 +500,138 @@ export function documentosDeIdentidades(args: {
     );
   }
 
+  const enrolados = filasDeCiudadanos(args.ciudadanos ?? [], args.ubigeo);
+
   return {
     tsv: `${filas.join("\n")}\n`,
+    // Sin salto final cuando no hay nadie: un archivo de un solo `\n` y uno vacio se
+    // leen igual, pero solo el segundo dice en el `ConfigMap` que no hay nada que aplicar.
+    ciudadanos: enrolados.filas.length === 0 ? "" : `${enrolados.filas.join("\n")}\n`,
     grupo: m.grupo,
     cuentas: m.usuarios.map((u) => u.cuenta),
+    enrolados: enrolados.cuentas,
   };
+}
+
+/**
+ * Las filas `CIUDADANO` del ubigeo implantado, validadas (ADR-0020 §5, #415).
+ *
+ * Las mismas comprobaciones que hace el python del guion en modo compose, y por el mismo
+ * motivo por el que ya se duplican las de la municipalidad: la imagen de Keycloak no trae
+ * con que analizar JSON. Lo que **no** se duplica es la tabla de formas de documento, que
+ * sale de {@link TIPOS_DE_DOCUMENTO} y se contrasta con el enumerado del dominio.
+ */
+function filasDeCiudadanos(
+  fuentes: { ubigeo: string; contenido: string }[],
+  ubigeo: string,
+): { filas: string[]; cuentas: string[] } {
+  const fuente = fuentes.find((c) => c.ubigeo === ubigeo);
+  if (fuente === undefined) {
+    // Nadie enrolado todavia. Es el estado de partida de toda municipalidad y no un
+    // despliegue mal armado: el portal existe y hasta que alguien pase por ventanilla
+    // no entra nadie por el, que es exactamente lo que D-15 decidio (camino B).
+    return { filas: [], cuentas: [] };
+  }
+
+  const archivo = `ciudadanos/${ubigeo}.json`;
+  // Ni una clave, nunca (ADR-0012 §2). Se mira el TEXTO y no el objeto ya analizado: lo
+  // que no puede estar es la palabra, este donde este —tambien dentro de un ciudadano—.
+  const prohibida = /"(credentials|password|secret|clave)"\s*:/i.exec(fuente.contenido);
+  if (prohibida !== null) {
+    throw new Error(
+      `${archivo}: declara «${prohibida[1]}». Aqui no entra ninguna clave (ADR-0012 §2): ` +
+        "un archivo versionado con contrasenas es la forma mas comoda de que una " +
+        "contrasena acabe en produccion. La clave la fija el ciudadano en su primer acceso.",
+    );
+  }
+  if (/"(cuenta|username)"\s*:/i.test(fuente.contenido)) {
+    throw new Error(
+      `${archivo}: declara la cuenta. La cuenta se DERIVA del documento (ADR-0020 §5): ` +
+        "declararla permite declararla distinta del documento, y entonces la fila ACCESO " +
+        "de la bitacora deja de identificar a nadie.",
+    );
+  }
+
+  const c = JSON.parse(fuente.contenido) as CiudadanosVersionados;
+  if (c.ubigeo !== ubigeo) {
+    throw new Error(
+      `${archivo}: declara ubigeo «${c.ubigeo}»: el nombre del archivo y el ubigeo de ` +
+        "dentro tienen que coincidir. Es quien acredita el documento.",
+    );
+  }
+  if (!Array.isArray(c.ciudadanos)) {
+    throw new Error(
+      `${archivo}: «ciudadanos» es una lista, aunque este vacia. Una municipalidad que ` +
+        "todavia no enrolo a nadie declara `[]`, y eso es distinto de no traer el campo.",
+    );
+  }
+
+  const filas: string[] = [];
+  const cuentas: string[] = [];
+  const declarado = new Map<string, string>();
+  for (const u of c.ciudadanos) {
+    for (const [campo, valor] of Object.entries({
+      nombre: u.nombre,
+      apellido: u.apellido,
+      tipoDocumento: u.tipoDocumento,
+      numeroDocumento: u.numeroDocumento,
+    })) {
+      if (typeof valor !== "string" || valor.trim() === "" || valor.includes("\t")) {
+        throw new Error(`${archivo}: un ciudadano sin «${campo}» valido.`);
+      }
+    }
+    const tipo = u.tipoDocumento.trim().toUpperCase();
+    const forma = TIPOS_DE_DOCUMENTO[tipo];
+    if (forma === undefined) {
+      throw new Error(
+        `${archivo}: «${tipo}» no es un tipo de documento conocido. Son ` +
+          `${Object.keys(TIPOS_DE_DOCUMENTO).join(", ")}, los mismos que admite ` +
+          "`contribuyente.tipo_documento`.",
+      );
+    }
+    const numero = u.numeroDocumento.trim().toUpperCase();
+    const [minimo, maximo, soloDigitos] = forma;
+    if (!/^[0-9A-Z]+$/.test(numero)) {
+      throw new Error(
+        `${archivo}: el documento «${numero}» lleva algo que no es digito ni letra.`,
+      );
+    }
+    if (numero.length < minimo || numero.length > maximo) {
+      throw new Error(
+        `${archivo}: un ${tipo} tiene de ${minimo} a ${maximo} caracteres, y «${numero}» ` +
+          `tiene ${numero.length}. Es la forma que exige DocumentoIdentidad: un numero ` +
+          "que el dominio no puede leer produce un token que el portal rechaza con 403.",
+      );
+    }
+    if (soloDigitos && !/^[0-9]+$/.test(numero)) {
+      throw new Error(`${archivo}: un ${tipo} es solo digitos, y «${numero}» no lo es.`);
+    }
+    const correo = (u.correo ?? "").trim();
+    if (correo.includes("\t")) {
+      throw new Error(`${archivo}: el correo de «${numero}» lleva un tabulador.`);
+    }
+
+    const cuenta = cuentaDelCiudadano(tipo, numero);
+    const firma = [u.nombre.trim(), u.apellido.trim(), tipo, numero, correo].join("\u0000");
+    const anterior = declarado.get(cuenta);
+    if (anterior !== undefined) {
+      if (anterior !== firma) {
+        throw new Error(
+          `${archivo}: declara dos veces el documento ${tipo} ${numero} con datos ` +
+            "distintos. Quien enrola afirma, en nombre del sistema, que esta persona es " +
+            "esta persona: dos afirmaciones distintas del mismo documento no se resuelven " +
+            "por orden de aparicion.",
+        );
+      }
+      continue;
+    }
+    declarado.set(cuenta, firma);
+    cuentas.push(cuenta);
+    filas.push(
+      ["CIUDADANO", cuenta, u.nombre.trim(), u.apellido.trim(), tipo, numero, correo].join("\t"),
+    );
+  }
+  return { filas, cuentas };
 }
 
 export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
@@ -435,15 +660,22 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
   const documentosDelCiudadano = documentosDelRealm({
     domain,
     realm: realmDelCiudadano(realm),
-    // El cliente de verificacion es del realm de funcionarios: es el que CI usa
-    // para conseguir un token sin navegador. Aqui no existe ninguno, asi que la
-    // bandera no aplica y va en `false` para que el filtro no busque nada.
+    // `false` SIEMPRE, tambien en `stg`, y a diferencia del realm de funcionarios.
+    // El archivo versionado si trae un `sgtm-verificacion` —es como la escalera del
+    // compose consigue un token de ciudadano sin abrir un navegador (#415)—, y aqui se
+    // filtra: el del ciudadano es el realm de cara al publico, y un cliente con
+    // concesion directa de credenciales ahi es una puerta que nadie necesita en el
+    // clúster. Lo comprueba `componentes.test.ts`: los clientes que llegan son
+    // exactamente `["sgtm-portal"]`.
     clienteDeVerificacion: false,
     ...(smtp === undefined ? {} : { smtp }),
     fuente: realmCiudadanoJson(),
   });
   const identidades = documentosDeIdentidades({
     municipalidades: municipalidadesJson(),
+    // Los ciudadanos que ESTA municipalidad enrolo en ventanilla (ADR-0020 §5, #415).
+    // Puede no haber ninguno, y es el estado de partida de todas.
+    ciudadanos: ciudadanosJson(),
     ubigeo,
     administrador,
   });
@@ -466,6 +698,9 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
       // TSV que `documentosDeIdentidades` deriva del archivo versionado.
       "reconciliar-identidades.sh": reconciliarIdentidadesSh(),
       "identidades.tsv": identidades.tsv,
+      // Y el enrolamiento del ciudadano (ADR-0020 §5, #415), en el mismo ConfigMap y con
+      // el mismo guion: el realm es otro y la poblacion es otra, el procedimiento no.
+      "ciudadanos.tsv": identidades.ciudadanos,
     },
   };
 
@@ -634,7 +869,8 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
           "/bin/bash",
           "-c",
           "/realm/reconciliar-realm.sh && /realm/reconciliar-identidades.sh" +
-            " && /realm/reconciliar-realm.sh ciudadano",
+            " && /realm/reconciliar-realm.sh ciudadano" +
+            " && /realm/reconciliar-identidades.sh ciudadanos",
         ],
         env: [
           { name: "KC_SERVIDOR", value: `http://${nombre}:8080${RUTA_DE_IDENTIDAD}` },
@@ -696,22 +932,24 @@ export function manifiestosDeIdentidad(args: IdentidadArgs): Manifiesto[] {
     ],
   };
 
-  const huella = createHash("sha256")
-    .update(documentos.realm)
-    .update(documentos.perfilDeUsuario)
-    .update(documentos.clientes)
+  const huella = huellaDeIdentidad([
+    documentos.realm,
+    documentos.perfilDeUsuario,
+    documentos.clientes,
     // Y los del ciudadano: un cambio suyo tiene que crear un Job nuevo, o el
     // realm versionado no llegaria nunca al clúster (que es el defecto que este
     // Job existe para no repetir).
-    .update(documentosDelCiudadano.realm)
-    .update(documentosDelCiudadano.perfilDeUsuario)
-    .update(documentosDelCiudadano.clientes)
-    .update(identidades.tsv)
-    .update(reconciliarIdentidadesSh())
+    documentosDelCiudadano.realm,
+    documentosDelCiudadano.perfilDeUsuario,
+    documentosDelCiudadano.clientes,
+    identidades.tsv,
+    // Y el enrolamiento: enrolar a alguien tiene que crear un Job nuevo, o el ciudadano
+    // se declara en el repositorio y **no puede entrar** —el alta no llega al clúster—.
+    identidades.ciudadanos,
+    reconciliarIdentidadesSh(),
     // Y el pod que los aplica, no solo lo que aplica. Ver el docstring de arriba.
-    .update(JSON.stringify(plantillaDeReconciliacion))
-    .digest("hex")
-    .slice(0, 10);
+    JSON.stringify(plantillaDeReconciliacion),
+  ]);
 
   const reconciliacion: Job = {
     apiVersion: "batch/v1",

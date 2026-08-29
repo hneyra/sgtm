@@ -76,6 +76,17 @@ on:
       - 'backend/sgtm-esquema/src/main/resources/db/roles/**'
       - 'despliegue/inicializacion-del-motor/**'
       - 'despliegue/identidad/realm-sgtm.json'
+      # Lo demas que `Identidad.ts` monta o deriva: el realm del ciudadano, el guion de
+      # identidades y las dos fuentes versionadas de personas. Faltaban, y es la leccion
+      # de #192 §2 otra vez: un archivo que las pruebas LEEN y el filtro no nombra cambia
+      # sin que corra quien lo mira —verde rancio, no verde—.
+      - 'despliegue/identidad/realm-sgtm-ciudadano.json'
+      - 'despliegue/identidad/reconciliar-identidades.sh'
+      - 'despliegue/identidad/municipalidades/**'
+      - 'despliegue/identidad/ciudadanos/**'
+      # Y el enumerado del dominio contra el que se contrasta la tabla de formas de
+      # documento (#415): un tipo nuevo ahi tiene que poner roja la tabla de `infra/`.
+      - 'backend/sgtm-dominio-compartido/src/main/java/pe/gob/sgtm/dominio/TipoDocumento.java'
       - 'frontend/nginx.conf'
   push:
     branches: [main]
