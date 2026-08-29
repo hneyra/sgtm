@@ -9,6 +9,38 @@ norma nacional— fila a fila del mapa de [NEG-02 §2](../marco-normativo.md).
 Lo comprueba `node docs/10-negocio/verificar-valores-normativos.mjs`, que corre en CI. **No es
 documentación: es una comprobación que se pone roja.**
 
+## Los archivos
+
+Uno por norma. El **estado** (`TRANSCRITO`/`VERIFICADO`) vive en la cabecera de cada archivo y lo
+reporta el verificador; no se repite aquí para que este índice no pueda mentir.
+
+| Archivo | Qué fija |
+|---|---|
+| [`uit.md`](uit.md) | UIT del ejercicio |
+| [`predial-tramos-y-alicuotas.md`](predial-tramos-y-alicuotas.md) | Tramos del autovalúo en UIT y alícuota de cada tramo |
+| [`predial-minimo.md`](predial-minimo.md) | Impuesto mínimo del predial |
+| [`predial-deducciones.md`](predial-deducciones.md) | Deducciones: pensionista y adulto mayor no pensionista |
+| [`predial-deduccion-amazonia.md`](predial-deduccion-amazonia.md) | Deducción del predio en la Amazonía |
+| [`predial-plazos-y-reajuste.md`](predial-plazos-y-reajuste.md) | Vencimientos del predial y reajuste por IPM |
+| [`valores-unitarios-2026.md`](valores-unitarios-2026.md) | Valores unitarios oficiales de edificación, 2026 |
+| [`obras-complementarias-y-oficializacion-2026.md`](obras-complementarias-y-oficializacion-2026.md) | Obras complementarias y factor de oficialización, 2026 |
+| [`depreciacion.md`](depreciacion.md) | Tabla de depreciación por material, antigüedad y estado |
+| [`aranceles-2026.md`](aranceles-2026.md) | Aranceles de terreno por vía, 2026 |
+| [`vehicular-valores-referenciales-2026.md`](vehicular-valores-referenciales-2026.md) | Patrimonio vehicular: alícuota, años afectos y valores referenciales, 2026 |
+| [`alcabala.md`](alcabala.md) | Alcabala: alícuota, tramo inafecto y exoneraciones |
+| [`espectaculos.md`](espectaculos.md) | Espectáculos públicos no deportivos: alícuotas por tipo |
+| [`multa-tributaria.md`](multa-tributaria.md) | Multa tributaria por declarar fuera de plazo |
+| [`prescripcion-y-plazos.md`](prescripcion-y-plazos.md) | Prescripción y plazos de notificación y cobranza coactiva |
+| [`prescripcion-inicio-del-computo.md`](prescripcion-inicio-del-computo.md) | Inicio del cómputo de la prescripción |
+| [`valores-plazos-de-reclamacion.md`](valores-plazos-de-reclamacion.md) | Plazos de reclamación de valores y exigibilidad coactiva |
+| [`transito-tabla-de-infracciones.md`](transito-tabla-de-infracciones.md) | Tabla de infracciones de tránsito |
+| [`derecho-tramite-licencia-edificacion-catacaos-2023.md`](derecho-tramite-licencia-edificacion-catacaos-2023.md) | Derecho de trámite del TUPA para la licencia de edificación (Catacaos) |
+
+Y lo que no es una norma: [`_plantilla.md`](_plantilla.md) (la forma de un archivo nuevo),
+[`_muestras/`](_muestras/) (los archivos rotos a propósito con que se demuestra que el verificador
+muerde), [`fuentes/`](fuentes/) (los PDF archivados de los que se transcribe) y
+[`publicacion/`](publicacion/) (el derivado publicable que consume el batch de #188).
+
 ## Por qué un archivo antes que una fila en la base
 
 La doble verificación de [ADR-0007](../../30-arquitectura/adr/ADR-0007-parametros-versionados.md)

@@ -21,7 +21,7 @@
 | Más de 15 UIT y hasta 60 UIT | 0.6% |
 | Más de 60 UIT | 1.0% |
 
-> RNF-05 / NEG-05 exigen que la base sea **por contribuyente**, no por predio: los tramos se
+> NEG-05 (`../srtm`) exige que la base sea **por contribuyente**, no por predio: los tramos se
 > aplican al valor acumulado de todos sus predios. Ese comportamiento ya está resuelto en NEG-05
 > §1 y no se repite aquí — este archivo solo transcribe los tramos y la alícuota de cada uno.
 

@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | Aceptada |
+| Estado | Aceptado |
 | Fecha | 2026-08-28 |
 | Decide | Dirección del proyecto |
 | Cierra | **D-03a**, **D-03b** y **D-03c** (GOB-02). **No cierra D-03d** (el redondeo del cierre de caja), que sigue en GOB-02 |

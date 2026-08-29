@@ -1,6 +1,6 @@
 # ADR-0015 — La conciliación catastro↔rentas: un derivado que publica rentas, no un estado que guarda catastro
 
-**Estado:** aceptada · 2026-08-28
+**Estado:** Aceptado · 2026-08-28
 **Decide:** el contrato de la conciliación que #322 exige diseñar antes de cablear pantalla alguna.
 
 ## Contexto

@@ -41,3 +41,7 @@ Decisiones **pendientes**: [GOB-02](../../00-gobierno/decisiones-abiertas.md).
 ## Consecuencias
 ## Alternativas consideradas
 ```
+
+El estado también puede ir como fila de una tabla de metadatos (`| Estado | Aceptado |`), que es
+la forma de ADR-0017 en adelante; lo que no cambia es el vocabulario: **Propuesto**, **Aceptado**
+u **Obsoleto**, siempre con esa letra.
