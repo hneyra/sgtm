@@ -19,7 +19,7 @@ import type { IdDeOperacion } from '@sgtm/api-client';
  * ── Por que una tabla y no `pedirOperacion` ────────────────────────────────
  *
  * `pedirOperacion` resuelve la ruta y el verbo leyendo `OPERACIONES`, que es el
- * mapa de las **175 operaciones del contrato** —84 de ellas de escritura— con su
+ * mapa de las **176 operaciones del contrato** —84 de ellas de escritura— con su
  * camino y sus parametros. Es lo correcto en el back-office, que sirve las 134
  * opciones; aqui arrastraba al paquete del ciudadano el **inventario completo de
  * la API**, que ademas describe ruta por ruta todo lo que el sistema expone. El

@@ -30,7 +30,7 @@ import { MODULOS, OPCIONES, opcionPorId } from '../apps/backoffice/src/catalogo'
  *      ancha, porque el portal no puede escribir **de ninguna manera**.
  *   3. **Solo pregunta las rutas que declara, y todas son lecturas del
  *      contrato.** El portal no usa `pedirOperacion`: eso arrastraria al paquete
- *      del ciudadano el mapa de las 175 operaciones —84 de escritura—, que es el
+ *      del ciudadano el mapa de las 176 operaciones —84 de escritura—, que es el
  *      inventario completo de la API en la aplicacion destinada a ser publica.
  *      Declara `LECTURAS` y llama con `solicitar()`, y la comprobacion contra el
  *      contrato se hace **aqui**: cada entrada tiene que cuadrar con
@@ -257,7 +257,7 @@ describe('del portal no se escribe', () => {
     expect(OPERACIONES['portal_mi_situacion'].parametrosDeConsulta).toEqual([]);
   });
 
-  it('y no lleva dentro el mapa de las 175 operaciones', () => {
+  it('y no lleva dentro el mapa de las 176 operaciones', () => {
     /* **Lista blanca, no lista negra.** La primera version prohibia cuatro
        nombres (`pedirOperacion`, `enviarOperacion`, `descargarOperacion`,
        `OPERACIONES`) y dejaba pasar los otros cinco exportados de

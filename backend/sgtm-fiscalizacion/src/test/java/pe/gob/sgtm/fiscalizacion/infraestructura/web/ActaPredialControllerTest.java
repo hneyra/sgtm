@@ -16,9 +16,12 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.catastro.LectorDeFichas;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.fiscalizacion.aplicacion.RegistrarActaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacionRepository;
+import pe.gob.sgtm.fiscalizacion.dominio.CriterioDeProgramas;
 import pe.gob.sgtm.fiscalizacion.dominio.EstadoDePrograma;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacionRepository;
@@ -96,6 +99,13 @@ class ActaPredialControllerTest {
                                                     null,
                                                     EstadoDePrograma.ABIERTO))
                                     : Optional.empty();
+                        }
+
+                        @Override
+                        public Pagina<ProgramaFiscalizacion> consultar(
+                                CriterioDeProgramas criterio, Paginacion paginacion) {
+                            throw new UnsupportedOperationException(
+                                    "esta prueba no consulta la grilla de programas");
                         }
                     },
                     new LectorDeFichas() {

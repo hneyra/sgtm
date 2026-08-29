@@ -1995,6 +1995,55 @@ paths:
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
   "/fiscalizacion/programas":
+    get:
+      operationId: fisc_programas_listado
+      summary: "Programas de fiscalización"
+      description: "La grilla de programas de fiscalización de la pantalla `fisc_programa`, que declara el POST —programar— como su endpoint y necesita un verbo aparte para listar. Agregada por #431: sin ella un programa se registraba y no se podía volver a encontrar, y las actas predial y vehicular —que exigen el `programaId` de un programa ya generado— no tenían ninguna fila real de la que resolverlo. «Ejercicio» filtra por VIGENCIA y no por el año de inicio: un programa que arranca en diciembre y cierra en marzo es un programa del ejercicio siguiente para quien lo busca. Los otros dos desplegables de la pantalla —«Tipo» y «Estado»— no viajan: nombran clases y situaciones que el sistema no registra."
+      tags: ["Fiscalización"]
+      parameters:
+        - name: nDePrograma
+          in: query
+          required: false
+          description: "Filtro «Nº de programa» de la pantalla; es el codigo del programa, exacto"
+          schema: { type: string }
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Filtro «Ejercicio» de la pantalla: los programas VIGENTES en ese ejercicio"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
     post:
       operationId: fisc_programa
       summary: "Programación de fiscalización"

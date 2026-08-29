@@ -225,9 +225,11 @@ export interface ActoSinCampo {
  *   2. **Es un identificador interno que hay que resolver contra una lista.**
  *      `fisc_predial` y `fisc_vehicular` piden `programaId`/`contribuyenteId`/
  *      `predioId`, y sin una grilla conectada de la que sacarlos —como
- *      `baja_deuda` los saca de `consulta_deuda`— no hay control que valga:
- *      `fisc_programa` ni siquiera tiene operacion de lectura en el contrato.
- *      Lo que falta ahi es mitad backend, y va en el issue de su modulo.
+ *      `baja_deuda` los saca de `consulta_deuda`— no hay control que valga. La
+ *      mitad de backend que faltaba ya esta: `GET /fiscalizacion/programas`
+ *      existe desde #431, asi que el `programaId` tiene de donde salir. Los
+ *      otros dos siguen sin publicarlos ninguna lectura de fiscalizacion, y por
+ *      eso las dos actas se quedan aqui.
  *   3. **Lo determina el sistema, y hoy no lo determina nadie.** El autovaluo
  *      ajustado de `alcabala` (D-11, D-02a) y el ingreso declarado de
  *      `espectaculos`. Ahi **quedarse aqui es la respuesta correcta**: declararle
@@ -540,6 +542,26 @@ export const VOCABULARIO_UNIFORME: ReadonlySet<string> = new Set([
   'ficha_rural',
   'actualizacion_catastro',
   'calles',
+  /* **Las tres lecturas del padron de Rentas · Registro** (#442).
+     Son el mismo caso que las cuatro fichas catastrales y por el mismo motivo:
+     su operacion es un `GET`, ninguna declara escritura, y entre las tres
+     dibujan **ocho** botones que no son actos —tres «Guardar» que no podrian
+     guardar ni el dia que se conectara el backend, tres «Nuevo» que no abren
+     ningun alta y dos «Modificar», que es un modo—.
+     Con `predios_rentas` se cierra ademas un defecto que no se veia: su primaria
+     «Ver ficha catastral» cae en `DE_SALIDA`, asi que `impedimentoDelActo`
+     devolvia `undefined` y la pantalla prometia un guardado **sin franja que lo
+     desmintiera**. Es el mismo hueco que #385 cerro en `alcabala` y
+     `espectaculos`, en otra pantalla del mismo modulo.
+     **Las otras doce del modulo se quedan fuera, y no por descuido**: aplicar la
+     regla a las quince borraria nueve actos reales del manual —«Ejecutar
+     proceso», las dos «Emitir cuponera», «Vista previa», «Generar orden de
+     pago», «Registrar»— y dejaria a `beneficios` con la barra vacia, porque sus
+     tres acciones escriben y ninguna esta declarada. La regla se escribio para
+     cuatro fichas de consulta; rentas es un modulo que escribe. Ver #442. */
+  'contribuyentes',
+  'predios_rentas',
+  'vehiculos',
 ]);
 
 /**

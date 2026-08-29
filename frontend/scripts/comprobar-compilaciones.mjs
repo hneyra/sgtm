@@ -87,12 +87,32 @@ const HUELLAS = [
  * obliga a tocarlo en el proximo cambio transversal, y uno con 2,9 deja de
  * medir. Bajarlo de verdad —decidir que sale del arranque— es #433.
  *
+ * **Y a 157 el 2026-08-29** (#442), con dos cosas que conviene dejar escritas.
+ *
+ * La primera: **CI mide mas que esta maquina**. Lo mismo daba 155,9 en local y
+ * **156,2** en el runner —0,3 KB de diferencia, que a esta granularidad es mas
+ * que el margen que quedaba—. De modo que un umbral con 0,1 KB de holgura no es
+ * un umbral apretado: es uno que decide en verde o rojo segun donde se compile.
+ * Lo que se mide de verdad es lo que corre en CI.
+ *
+ * La segunda: **el margen ya se lo habia comido #445**, no este cambio. Con la
+ * corrida del predial declarada, CI dejaba el arranque en ~155,9 de 156; lo que
+ * anade #442 —la tira de hojas de una superficie, las tres entradas del
+ * vocabulario uniforme y su hoja de estilos— son 0,3. Se intento devolverlo
+ * sacando la tira del arranque con `lazy()`, el movimiento de #379 y #424, y
+ * **solo dio 0,1**: el peso no esta ahi. Se revirtio en vez de dejar un
+ * `Suspense` y un esqueleto en cada carga de esas dos pantallas a cambio de una
+ * decima.
+ *
+ * Bajarlo de verdad —decidir que sale del arranque— sigue siendo #433, y este
+ * numero es una razon mas para hacerlo: van tres subidas en tres dias.
+ *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */
 const PRESUPUESTO = {
   /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
-  arranque: 156,
+  arranque: 157,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**
