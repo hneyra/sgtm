@@ -99,7 +99,7 @@ config:
   #
   #   yarn --silent manifiestos --ambiente prod | grep migracion
   #   # con 0eee58e: Job/sgtm-prod-migracion-0eee58e43e04
-  #   # con 9511f99: Job/sgtm-prod-migracion-9511f999c2b7
+  #   # con 5fc02f3: Job/sgtm-prod-migracion-5fc02f3a4493
   #
   # Por eso el orden del runbook de liberación —primero el Job de migración, después la
   # imagen— no es una recomendación: es lo que esta línea dispara sola.
@@ -120,10 +120,10 @@ config:
   #   gh run list --workflow publicar-imagenes.yml --limit 5 \
   #     --json headSha,conclusion,createdAt
   #
-  # `9511f99` (2026-08-29T20:01Z, `success` en los tres jobs de imagen) trae los runners
+  # `5fc02f3` (2026-08-29T20:51Z, `success` en los tres jobs de imagen) trae los runners
   # batch de catálogo vial y arancel —ya estaban en `1ec6bd6`, su ancestro— y además
   # `V28`…`V57`, `PublicarCuadros` y `PublicarParametros`.
-  sgtm:applicationBootstrapVersion: 9511f999c2b7fa8cdef0a0f337ba781a5b0d1aaa
+  sgtm:applicationBootstrapVersion: 5fc02f3a44931d69ac3012e55b17f02dc616eac8
   # La municipalidad que se implanta. D-01 —municipalidad piloto— se decidió el
   # 2026-08-24: Municipalidad Distrital de Catacaos (`decisiones-abiertas.md`), en
   # reemplazo de la Municipalidad Distrital de Chala que se había decidido un día antes.

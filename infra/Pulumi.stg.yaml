@@ -65,7 +65,7 @@ config:
   #
   # Ver el comentario largo de `Pulumi.prod.yaml`: subir esta línea CREA un Job de
   # migración nuevo —lleva la versión en el nombre— y vuelve a implantar la municipalidad.
-  sgtm:applicationBootstrapVersion: 9511f999c2b7fa8cdef0a0f337ba781a5b0d1aaa
+  sgtm:applicationBootstrapVersion: 5fc02f3a44931d69ac3012e55b17f02dc616eac8
   sgtm:webReplicas: "1"
   # La municipalidad de ensayo. El ubigeo es el de Catacaos, igual que en prod (D-01,
   # 2026-08-24), porque stg restaura los respaldos de prod anonimizados (INF-03 §2 y
