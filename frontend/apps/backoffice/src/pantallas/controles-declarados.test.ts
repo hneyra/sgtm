@@ -149,7 +149,7 @@ describe('cada control declarado nombra algo que existe', () => {
  * **Generalizar el mecanismo no borra ninguna franja** (AC 4 de #422).
  *
  * Es la mitad del issue que no se ve en ninguna pantalla nueva, y la que más
- * fácil se pierde: teniendo el mecanismo delante, la salida cómoda para las once
+ * fácil se pierde: teniendo el mecanismo delante, la salida cómoda para las trece
  * que quedan en `ACTOS_SIN_CAMPO` es declararles un control y darlas por
  * cerradas. Para las de la tercera forma —`alcabala` con su autovalúo ajustado,
  * `espectaculos` con su ingreso declarado— eso sería darle a quien atiende una
@@ -178,7 +178,13 @@ describe('las que siguen sin campo siguen sin campo', () => {
     expect(escrituraDe('alcabala')).toBeUndefined();
   });
 
-  it('las once que quedan son las once que quedan', () => {
+  it('las trece que quedan son las trece que quedan', () => {
+    /* La lista se **nombra**, no se cuenta, y por eso avisa cuando cambia por
+       otro sitio: al integrar `main` aparecieron dos que este issue no habia
+       visto —las dos hojas de resolucion de licencias, que FRO-06 (#427) trajo
+       desde `sin-declaracion`—, y la prueba se puso roja diciendo cuales. Un
+       `toHaveLength(11)` habria pasado igual de rojo sin decir nada, y un
+       recuento recalculado no se habria enterado. */
     expect(Object.keys(ACTOS_SIN_CAMPO).sort()).toEqual([
       'alcabala',
       'caja_tasas',
@@ -188,6 +194,8 @@ describe('las que siguen sin campo siguen sin campo', () => {
       'fisc_programa',
       'fisc_vehicular',
       'fraccionamiento',
+      'licencia_resolucion_cancelacion',
+      'licencia_resolucion_duplicado',
       'transito_constancia_libre',
       'transito_rg_ordinaria',
       'transito_rg_sancionadora',
