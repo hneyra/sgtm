@@ -1596,6 +1596,28 @@
   font-weight: 600;
 }
 
+/* ── La superficie: el objeto del que hablan varias hojas (#442) ────────
+   La tira va **encima** de la descripcion de la hoja, porque dice de que se
+   esta hablando antes que de cual de sus caras. El titulo se lee como el
+   antetitulo que es —mayusculas pequenas, tinta terciaria—, no como un h1 mas:
+   el h1 de la pantalla sigue siendo el de la hoja abierta, que es lo que la
+   barra lateral y el historial del navegador dicen. */
+.sgtm-superficie {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.sgtm-superficie__titulo {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+}
+
 /* —— Bloque 8: formulario —————————————————————————————————————— */
 
 .sgtm-formulario {

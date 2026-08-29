@@ -42,6 +42,7 @@ import { useDatosDeOperacion } from './useDatosDeOperacion';
 import { useDatosDePantalla } from './useDatosDePantalla';
 import { BarraDeAcciones } from './bloques/BarraDeAcciones';
 import { Filtros } from './bloques/Filtros';
+import { HojasDeSuperficie } from './bloques/HojasDeSuperficie';
 import { Formulario } from './bloques/Formulario';
 import { Indicadores } from './bloques/Indicadores';
 import { Portal } from './bloques/Portal';
@@ -851,6 +852,17 @@ function Bloques({
 
   return (
     <>
+      {/* La tira de hojas, cuando esta opcion es una de una superficie (#442).
+          Va lo primero: es navegacion, y dice de que objeto se esta hablando
+          antes que la descripcion de la hoja concreta. */}
+      {composicion.superficie !== undefined && (
+        <HojasDeSuperficie
+          titulo={composicion.superficie.titulo}
+          hojas={composicion.superficie.hojas}
+          activa={estructura.id}
+        />
+      )}
+
       {estructura.desc && <p className="sgtm-descripcion">{estructura.desc}</p>}
 
       {/* A que fecha estan los datos que vienen debajo. Va aqui y no dentro de
@@ -1053,6 +1065,15 @@ function Bloques({
       {estructura.acciones && (
         <BarraDeAcciones
           acciones={barra.acciones}
+          /* **Y si ninguna de las que quedan escribe, ninguna es la primaria**
+             (#391 §2, #442). Hasta ahora esto solo lo pasaba
+             `catastro/FichaDelPredio`, asi que el camino comun aplicaba media
+             regla: usaba la lista depurada y seguia pintando de navy la ultima,
+             que en una pantalla de consulta es «Imprimir». Es el defecto que la
+             regla existe para cerrar —«quien atiende aprende que el navy es el
+             acto de la pantalla, y en cuatro fichas de consulta el navy
+             imprimia»—, y se colaba por aqui. */
+          {...(barra.conPrimaria ? {} : { sinPrimaria: true as const })}
           escritura={escritura}
           /* Las acciones que el prototipo dibuja y que ahora abren un alta.
              **Solo con privilegio de registro**: sin el se quedan como estaban,
