@@ -541,7 +541,13 @@ public final class RevisorDeCodigoFuente {
             Pattern.compile(
                     "\\b(UIT|TRAMO|ALICUOTA|ARANCEL|DEPRECIACION|VALOR_UNITARIO|DEDUCCION"
                             + "|INTERES|REAJUSTE|PLAZO|PRESCRIPCION|CUOTAS|COSTA|TASA|TARIFA"
-                            + "|MULTA|VIGENCIA|BENEFICIO|DESCUENTO|CONDONACION|MINIMO)"
+                            + "|MULTA|VIGENCIA|BENEFICIO|DESCUENTO|CONDONACION|MINIMO"
+                            // #437 (D-11): el `% actualizacion` multiplica el autovaluo, y su
+                            // valor «obvio» es 1 —o sea, ninguno—. Escribirlo no se siente como
+                            // inventar un dato, se siente como no aplicar ninguno; y es lo mismo:
+                            // afirma que el factor vale 1 en todo ejercicio y toda municipalidad.
+                            // Octava vez que el hueco se abre por el mismo sitio.
+                            + "|ACTUALIZACION|FACTOR)"
                             + "\\w*\\s*=\\s*[^;\\n]*[0-9]");
 
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
