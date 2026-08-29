@@ -204,6 +204,23 @@ La secuencia de un ejercicio, en cuatro pasos y en este orden:
   --archivo ../../docs/10-negocio/valores-normativos/publicacion/parametros-2026.csv --sellar
 ```
 
+**El paso 4 tiene una lista antes**, y no es burocracia: `conjunto_sellado_uq` admite **un solo**
+conjunto sellado por ejercicio y municipalidad, y el disparador de `V9` no deja añadirle una cifra
+más. Un sello prematuro no se corrige: obliga a rehacer el ejercicio entero, y mientras tanto nadie
+lee nada, porque la lectura exige `estado = 'SELLADO'`. La lista está en
+[`publicacion/README.md` §«Antes de sellar»](../../docs/10-negocio/valores-normativos/publicacion/README.md).
+
+**Y hoy la respuesta de esa lista es que no.** Los pasos 1 a 3 se corrieron de verdad contra `stg`
+el 2026-08-29 —`PUBLICADAS=22 RECHAZADAS=0` de parámetros y `PUBLICADAS=492 RECHAZADAS=0` de la
+depreciación—, y el 4 **no**: al conjunto de 2026 le faltan los valores unitarios (H-14, sin camino
+de carga), el `% actualización` (D-11, sin fuente) y todo lo de ordenanza local (D-02b).
+
+**Antes del paso 2, en un ambiente que ya existía**, hay además un paso operativo que no está en esta
+secuencia porque no es de carga: `secretos/asignar-claves.sh --ambiente stg`. La credencial de
+`rol_carga_parametros` la asigna `20-asignar-claves.sh` **al inicializar el motor**, así que en un
+clúster creado antes de que ese rol existiera el `Secret` está y la base no sabe nada. Los dos
+guiones de publicación lo comprueban y se paran nombrando el remedio (#435).
+
 Los pasos 2 y 4 llevan **el mismo archivo**, y no es comodidad: con dos, el día que alguien añade
 una fila a uno y se olvida del otro, el conjunto se sella sin ese valor y nadie lo nota hasta que
 una regla lo pide. Y ese archivo **no se escribe a mano**: es el derivado del corpus, y
