@@ -134,18 +134,35 @@ export const GRUPOS_POR_TAREA = {
     ['Operación', ['auditoria', 'respaldo']],
   ],
   catastro: [
-    // El objeto de trabajo de Catastro es la ficha del predio, y las cuatro
-    // fichas mas la actualizacion masiva son lo mismo visto de cuatro maneras.
+    // Tres grupos, y no cinco, porque **tres son las superficies** (#391): desde
+    // que las cinco opciones de la ficha caen en `FichaDelPredio`, las tres de
+    // valuacion en `CuadroDeValuacion` y las dos del territorio en `Territorio`,
+    // un menu de cinco grupos describe una organizacion que la interfaz ya no
+    // tiene. «Consultas» y «Documentos» eran ademas dos grupos de una opcion
+    // cada uno: un grupo de uno no agrupa nada, y separaba del predio la
+    // busqueda con la que se le llega.
+    //
+    // El orden dentro del grupo es el del trabajo, no el alfabetico: primero se
+    // busca el predio, luego se abre su ficha en la modalidad que sea, y al
+    // final se actualiza o se imprime.
     [
-      'Fichas del predio',
-      ['ficha_urbana', 'ficha_economica', 'ficha_bienes', 'ficha_rural', 'actualizacion_catastro'],
+      'Predio',
+      [
+        'consulta_fichas',
+        'ficha_urbana',
+        'ficha_economica',
+        'ficha_bienes',
+        'ficha_rural',
+        'actualizacion_catastro',
+        'ficha_contribuyente_reporte',
+      ],
     ],
     ['Territorio', ['calles', 'sectores']],
     // Los tres catalogos que ponen precio al territorio. No son «registro y
-    // mantenimiento» como una calle: son la tabla con la que se valoriza.
-    ['Tablas de valuación', ['aranceles', 'valores_unitarios', 'depreciacion']],
-    ['Consultas', ['consulta_fichas']],
-    ['Documentos', ['ficha_contribuyente_reporte']],
+    // mantenimiento» como una calle: son la tabla con la que se valoriza. El
+    // nombre pierde «Tablas de» porque ya no son tres tablas sueltas en el
+    // menu: son las tres hojas de un cuadro.
+    ['Valuación', ['aranceles', 'valores_unitarios', 'depreciacion']],
   ],
   fiscalizacion: [
     // La campana se programa y se decide a quien alcanza; recien despues se
