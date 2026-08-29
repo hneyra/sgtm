@@ -75,6 +75,16 @@ public class ExpedienteController {
 
     static final String ACCESO_DIRECCION = "cambiar_direccion_ref";
 
+    /**
+     * La lectura por obligacion la pide la pantalla que fracciona (#426).
+     *
+     * <p>Su acceso es el de <b>esa</b> opcion y no el de {@code coactiva_consulta_deudas}:
+     * quien fracciona tiene que poder ver las filas que va a acoger sin necesitar ademas el
+     * permiso de otra pantalla, y quien solo consulta deudas no necesita esta granularidad
+     —la suya la publica {@code DeudaCoactivaController}, por expediente—.
+     */
+    static final String ACCESO_FRACCIONAMIENTO = "fraccionamiento_coactivo";
+
     private static final String ORDEN_POR_OMISION = "numero";
 
     private final ImportarValoresACoactiva importar;
@@ -149,6 +159,48 @@ public class ExpedienteController {
                         ExpedienteResource.de(
                                 fila,
                                 codigoDe(padron, fila.fila().expediente().contribuyenteId())));
+    }
+
+    /**
+     * La deuda del expediente <b>obligación por obligación</b>, a la fecha que se pida (#426).
+     *
+     * <p><b>El hueco que cierra.</b> {@code POST /coactiva/convenios} exige {@code obligaciones[]}
+     * con {@code tributo}, {@code ejercicio} y {@code predioId}/{@code vehiculoId} por fila, y este
+     * módulo no publicaba ninguna lectura con esa granularidad: {@code DeudaCoactivaResource} es
+     * por expediente y ni siquiera desglosa insoluto de interés. Sin esto, la columna de selección
+     * de {@code fraccionamiento_coactivo} no tenía sobre qué actuar — exactamente como estaba
+     * {@code baja_deuda} antes de #332.
+     *
+     * <p>{@code fechaDeCalculo} decide a qué día se actualizan <b>todas</b> las cifras, y viaja de
+     * vuelta en la respuesta: sin él, quien la lea mañana leería otra cosa bajo la misma etiqueta
+     * (regla 9). Es el mismo parámetro que el fraccionamiento llama {@code fechaDeCorte}, y por eso
+     * la pantalla puede pedir la grilla a la misma fecha con la que va a acoger.
+     */
+    @GetMapping("/expedientes/{numero}/deuda")
+    @RequiereAcceso(acceso = ACCESO_FRACCIONAMIENTO, privilegio = Privilegio.LECTURA)
+    public DeudaPorObligacionResource deudaDelExpediente(
+            @PathVariable String numero,
+            @RequestParam(required = false) @Nullable String fechaDeCalculo) {
+
+        LocalDate aLaFecha =
+                fechaOpcional(fechaDeCalculo, "fechaDeCalculo", LocalDate.now(reloj));
+        ConsultaDeExpedientes.DeudaPorObligacion deuda =
+                consulta.obligacionesDe(numero, aLaFecha)
+                        .orElseThrow(
+                                () ->
+                                        new ProblemaDeNegocio(
+                                                CodigoDeError.NO_ENCONTRADO,
+                                                "No hay ningun expediente coactivo con el numero '"
+                                                        + numero
+                                                        + "'"));
+
+        long contribuyenteId = deuda.expediente().contribuyenteId();
+        ResumenDeContribuyente delPadron =
+                contribuyentes.porIds(Set.of(contribuyenteId)).get(contribuyenteId);
+        return DeudaPorObligacionResource.de(
+                deuda,
+                delPadron == null ? String.valueOf(contribuyenteId) : delPadron.codigo(),
+                delPadron == null ? "" : delPadron.nombre());
     }
 
     /**

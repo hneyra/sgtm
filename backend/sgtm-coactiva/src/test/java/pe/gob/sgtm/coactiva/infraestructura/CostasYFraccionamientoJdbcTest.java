@@ -64,6 +64,7 @@ import pe.gob.sgtm.coactiva.dominio.EstadoDelExpediente;
 import pe.gob.sgtm.coactiva.dominio.LiquidacionDeCostas;
 import pe.gob.sgtm.coactiva.dominio.LiquidacionDeCostasRepository;
 import pe.gob.sgtm.coactiva.dominio.MovimientoDelExpediente;
+import pe.gob.sgtm.coactiva.dominio.ObligacionDelExpediente;
 import pe.gob.sgtm.coactiva.dominio.PlantillaDeNumeroDeExpediente;
 import pe.gob.sgtm.coactiva.dominio.TipoDeActoCoactivo;
 import pe.gob.sgtm.coactiva.dominio.TipoDeMedidaCautelar;
@@ -636,6 +637,178 @@ class CostasYFraccionamientoJdbcTest {
         }
     }
 
+    /**
+     * #426 — La deuda del expediente <b>obligación por obligación</b>.
+     *
+     * <p>Es la lectura de la que {@code fraccionamiento_coactivo} saca sus filas: su cuerpo pide
+     * {@code tributo}, {@code ejercicio} y {@code predioId}/{@code vehiculoId} una a una, y una
+     * suma no los tiene. Lo que estas pruebas fijan es que sale de la <b>misma</b> composición que
+     * el total —si divergen, la grilla y la REC-2 dicen cifras distintas de la misma carpeta—.
+     */
+    @Nested
+    @DisplayName("#426 — La deuda, obligacion por obligacion")
+    class PorObligacion {
+
+        @Test
+        @DisplayName("una fila por obligacion, con la unidad que el fraccionamiento pide")
+        void unaFilaPorObligacion() {
+            String expediente = expedienteConRec1("OBLIG-1");
+
+            ConsultaDeExpedientes.DeudaPorObligacion deuda = obligacionesDe(expediente);
+
+            assertThat(deuda.obligaciones())
+                    .as("el expediente tiene una sola obligacion de tributo")
+                    .hasSize(1);
+            ObligacionDelExpediente unica = deuda.obligaciones().get(0);
+            assertThat(unica.tributo()).isEqualTo("PREDIAL");
+            assertThat(unica.ejercicio().valor()).isEqualTo(2026);
+            assertThat(unica.predioId())
+                    .as("este escenario asienta la deuda SIN unidad, y la fila lo dice tal cual")
+                    .isNull();
+            assertThat(unica.esCosta()).isFalse();
+            assertThat(unica.total()).isEqualTo(PREDIAL);
+            assertThat(unica.actualizadaA()).isEqualTo(LIQUIDACION);
+        }
+
+        /**
+         * El total no es una segunda cuenta: es la suma de las filas que se publican.
+         *
+         * <p>Lo que se compara es cifra a cifra contra {@link ConsultaDeExpedientes#deudaDe}, que es
+         * lo que imprime la REC-2. Si las dos lecturas se compusieran por separado, esta prueba es
+         * la que lo diría.
+         */
+        @Test
+        @DisplayName("el total es exactamente la suma de las filas, y coincide con el de la REC-2")
+        void elTotalEsLaSumaDeLasFilas() {
+            String expediente = expedienteConRec1("OBLIG-2");
+            liquidarTodo(expediente);
+
+            ConsultaDeExpedientes.DeudaPorObligacion porObligacion = obligacionesDe(expediente);
+            DeudaDelExpediente delExpediente = deudaDe(expediente, LIQUIDACION);
+
+            assertThat(porObligacion.total().materiaDeCobranza())
+                    .isEqualTo(delExpediente.materiaDeCobranza());
+            assertThat(porObligacion.total().costas()).isEqualTo(delExpediente.costas());
+            assertThat(porObligacion.total().total()).isEqualTo(delExpediente.total());
+
+            Dinero sumaDeLasFilas =
+                    porObligacion.obligaciones().stream()
+                            .map(ObligacionDelExpediente::total)
+                            .reduce(Dinero.de("0.00"), Dinero::mas);
+            assertThat(sumaDeLasFilas)
+                    .as("sumar lo publicado da el total publicado: no hay dos cuentas")
+                    .isEqualTo(delExpediente.total());
+        }
+
+        /**
+         * La costa viaja marcada, no escondida.
+         *
+         * <p>Se cobra igual, pero no se acoge a un fraccionamiento como una cuota más del predial:
+         * quien lee la grilla tiene que poder distinguirla, y quien la marca tiene que saber qué
+         * marcó.
+         */
+        @Test
+        @DisplayName("la costa aparece como fila propia y marcada, no sumada al tributo")
+        void laCostaApareceMarcada() {
+            String expediente = expedienteConRec1("OBLIG-3");
+            liquidarTodo(expediente);
+
+            ConsultaDeExpedientes.DeudaPorObligacion deuda = obligacionesDe(expediente);
+
+            assertThat(deuda.obligaciones()).hasSize(2);
+            ObligacionDelExpediente costa =
+                    deuda.obligaciones().stream()
+                            .filter(ObligacionDelExpediente::esCosta)
+                            .findFirst()
+                            .orElseThrow();
+            assertThat(costa.total()).isEqualTo(ARANCEL_REC1);
+            assertThat(costa.predioId())
+                    .as("una costa no es de un predio: es del procedimiento")
+                    .isNull();
+            assertThat(costa.vehiculoId()).isNull();
+
+            ObligacionDelExpediente tributo =
+                    deuda.obligaciones().stream()
+                            .filter(fila -> !fila.esCosta())
+                            .findFirst()
+                            .orElseThrow();
+            assertThat(tributo.total())
+                    .as("y no se cuela en las cuatro partes del tributo")
+                    .isEqualTo(PREDIAL);
+        }
+
+        @Test
+        @DisplayName("las cifras salen a la fecha que se pida, no a hoy")
+        void lasCifrasSalenALaFechaQueSePida() {
+            String expediente = expedienteConRec1("OBLIG-4");
+            liquidarTodo(expediente);
+
+            ConsultaDeExpedientes.DeudaPorObligacion antes =
+                    enTransaccion(
+                            () -> consulta.obligacionesDe(expediente, LIQUIDACION.minusDays(1)))
+                            .orElseThrow();
+
+            assertThat(antes.aLaFecha()).isEqualTo(LIQUIDACION.minusDays(1));
+            assertThat(antes.total().costas())
+                    .as("la costa se liquido al dia siguiente: ese dia no sumaba nada")
+                    .isEqualTo(Dinero.de("0.00"));
+            assertThat(antes.obligaciones())
+                    .filteredOn(ObligacionDelExpediente::esCosta)
+                    .allSatisfy(
+                            fila ->
+                                    assertThat(fila.total())
+                                            .as("y si su obligacion ya figura, figura en cero")
+                                            .isEqualTo(Dinero.de("0.00")));
+        }
+
+        @Test
+        @DisplayName("un expediente que no existe no devuelve una deuda vacia: no devuelve nada")
+        void unExpedienteQueNoExisteNoDevuelveNada() {
+            assertThat(enTransaccion(() -> consulta.obligacionesDe("EXP-2026-999999", LIQUIDACION)))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("desde otra municipalidad el expediente no existe (RLS)")
+        void desdeOtraMunicipalidadNoExiste() {
+            String expediente = expedienteConRec1("OBLIG-5");
+
+            assertThat(
+                            enTransaccionDe(
+                                    otraMunicipalidad,
+                                    () -> consulta.obligacionesDe(expediente, LIQUIDACION)))
+                    .isEmpty();
+        }
+
+        /**
+         * El caso que este issue existe para servir: la fila trae la unidad.
+         *
+         * <p>{@code PeticionDeObligacionAcogida} pide {@code predioId}/{@code vehiculoId} por fila,
+         * y sin esta lectura la pantalla no tenía de dónde sacarlos. La unidad va en los dos sitios
+         * del escenario —el asiento del libro y el detalle del valor—, que es como llega a existir
+         * una obligación con unidad de verdad.
+         */
+        @Test
+        @DisplayName("cuando la obligacion tiene unidad, la fila la trae: es lo que se acoge")
+        void laUnidadViajaCuandoLaObligacionLaTiene() {
+            String expediente = expedienteConRec1("OBLIG-6", 7777L);
+
+            ConsultaDeExpedientes.DeudaPorObligacion deuda = obligacionesDe(expediente);
+
+            assertThat(deuda.obligaciones()).hasSize(1);
+            ObligacionDelExpediente unica = deuda.obligaciones().get(0);
+            assertThat(unica.predioId()).isEqualTo(7777L);
+            assertThat(unica.vehiculoId()).isNull();
+            assertThat(unica.tributo()).isEqualTo("PREDIAL");
+            assertThat(unica.total()).isEqualTo(PREDIAL);
+        }
+
+        private ConsultaDeExpedientes.DeudaPorObligacion obligacionesDe(String expediente) {
+            return enTransaccion(() -> consulta.obligacionesDe(expediente, LIQUIDACION))
+                    .orElseThrow();
+        }
+    }
+
     @Nested
     @DisplayName("Lo que decide la base, y no un if")
     class DeLaBase {
@@ -1156,8 +1329,12 @@ class CostasYFraccionamientoJdbcTest {
 
     /** Un expediente con su REC-1 dictada, sobre un contribuyente nuevo. */
     private static String expedienteConRec1(String sufijo) {
-        long titular = contribuyenteConDeuda(sufijo);
-        String expediente = expedienteDe(titular, sufijo);
+        return expedienteConRec1(sufijo, null);
+    }
+
+    private static String expedienteConRec1(String sufijo, @Nullable Long predioId) {
+        long titular = contribuyenteConDeuda(sufijo, predioId);
+        String expediente = expedienteDe(titular, sufijo, predioId);
         dictarActo(expediente, TipoDeActoCoactivo.REC1, REC1, null);
         return expediente;
     }
@@ -1198,7 +1375,12 @@ class CostasYFraccionamientoJdbcTest {
     }
 
     private static String expedienteDe(long titular, String sufijoDelValor) {
-        Valor valor = emitir(titular, "OP-" + sufijoDelValor);
+        return expedienteDe(titular, sufijoDelValor, null);
+    }
+
+    private static String expedienteDe(
+            long titular, String sufijoDelValor, @Nullable Long predioId) {
+        Valor valor = emitir(titular, "OP-" + sufijoDelValor, predioId);
         pasarACoactiva(valor);
         return importar.importar(
                         new ImportarValoresACoactiva.Peticion(
@@ -1325,12 +1507,28 @@ class CostasYFraccionamientoJdbcTest {
 
     /** Un contribuyente con su cargo de predial ya asentado, todavia en fase VALOR. */
     private static long contribuyenteConDeuda(String sufijo) {
+        return contribuyenteConDeuda(sufijo, null);
+    }
+
+    /**
+     * El mismo contribuyente con deuda, pero <b>con su unidad</b> cuando se le pide.
+     *
+     * <p>La unidad tiene que ir en los DOS sitios —el asiento del libro y el detalle del valor—,
+     * porque la deuda del expediente se compone cruzando lo que el valor formaliza con lo que el
+     * libro dice, y la clave de ese cruce incluye {@code predioId} (#426).
+     */
+    private static long contribuyenteConDeuda(String sufijo, @Nullable Long predioId) {
         long id = crearContribuyente(sufijo);
-        asentarCargo(id, "PREDIAL", PREDIAL, Fase.VALOR);
+        asentarCargo(id, "PREDIAL", PREDIAL, Fase.VALOR, predioId);
         return id;
     }
 
     private static void asentarCargo(long titular, String tributo, Dinero monto, Fase fase) {
+        asentarCargo(titular, tributo, monto, fase, null);
+    }
+
+    private static void asentarCargo(
+            long titular, String tributo, Dinero monto, Fase fase, @Nullable Long predioId) {
         enTransaccion(
                 () ->
                         registrarAsiento.asentar(
@@ -1342,7 +1540,7 @@ class CostasYFraccionamientoJdbcTest {
                                         TipoAsiento.CARGO,
                                         fase,
                                         null,
-                                        null,
+                                        predioId,
                                         null,
                                         null,
                                         monto,
@@ -1442,6 +1640,10 @@ class CostasYFraccionamientoJdbcTest {
     }
 
     private static Valor emitir(long contribuyenteId, String numero) {
+        return emitir(contribuyenteId, numero, null);
+    }
+
+    private static Valor emitir(long contribuyenteId, String numero, @Nullable Long predioId) {
         return enTransaccion(
                 () ->
                         valores.insertar(
@@ -1466,7 +1668,7 @@ class CostasYFraccionamientoJdbcTest {
                                                 "PREDIAL",
                                                 EJERCICIO,
                                                 null,
-                                                null,
+                                                predioId,
                                                 null,
                                                 null,
                                                 PREDIAL,
