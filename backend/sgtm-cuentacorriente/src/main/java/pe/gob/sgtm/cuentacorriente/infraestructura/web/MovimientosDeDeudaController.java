@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
@@ -25,6 +26,7 @@ import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.FiltroDeLaConsulta;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
@@ -41,6 +43,25 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *
  * <p>El cuerpo es una <b>lista blanca</b>: un campo que la opcion no declara no entra, aunque
  * llegue en el JSON.
+ *
+ * <h2>La baja lee sus tres datos tambien de la consulta (#425)</h2>
+ *
+ * <p>El contrato declara {@code codContribuyente}, {@code tributo} y {@code ano} <b>de consulta</b>
+ * en {@code POST /rentas/deuda/bajas} —son los tres filtros que la pantalla {@code baja_deuda}
+ * dibuja—, y hasta #425 el controlador los leia solo del cuerpo. De las nueve operaciones con ese
+ * desajuste esta era <b>la unica conectada</b>, y funcionaba porque en #332 fue la interfaz la que
+ * se adapto: {@code escrituras.ts} los manda dentro de la tabla {@code cuotas}, aplanada.
+ *
+ * <p>Por eso la correccion <b>no toca la pantalla</b>: gana el cuerpo, asi que la peticion que
+ * {@code baja_deuda} manda hoy sigue produciendo exactamente el mismo movimiento. Lo que cambia es
+ * que ahora tambien se puede llamar como el contrato promete. La alternativa —mover los tres a la
+ * URL en la interfaz— habria roto la unica cosa que ya funcionaba para arreglar lo que solo paga
+ * quien lee el YAML.
+ *
+ * <p>El alta <b>no</b> cambia: {@code POST /rentas/deuda/altas} no declara ningun parametro de
+ * consulta en el contrato, porque su pantalla no dibuja filtros. Es el mismo cuerpo y el mismo
+ * metodo privado, y por eso los tres entran hasta {@link #registrar} como argumentos y no leidos
+ * dos veces.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/rentas/deuda")
@@ -61,23 +82,48 @@ public class MovimientosDeDeudaController {
     @ResponseStatus(HttpStatus.CREATED)
     @RequiereAcceso(acceso = "alta_deuda", privilegio = Privilegio.REGISTRO)
     public MovimientoDeDeudaResource alta(@RequestBody PeticionDeMovimiento peticion) {
-        return registrar(SentidoDelMovimiento.ALTA, peticion);
+        return registrar(SentidoDelMovimiento.ALTA, peticion, DeLaConsulta.NINGUNO);
     }
 
     @PostMapping("/bajas")
     @ResponseStatus(HttpStatus.CREATED)
     @RequiereAcceso(acceso = "baja_deuda", privilegio = Privilegio.REGISTRO)
-    public MovimientoDeDeudaResource baja(@RequestBody PeticionDeMovimiento peticion) {
-        return registrar(SentidoDelMovimiento.BAJA, peticion);
+    public MovimientoDeDeudaResource baja(
+            @RequestParam(required = false) @Nullable String codContribuyente,
+            @RequestParam(required = false) @Nullable String tributo,
+            @RequestParam(required = false) @Nullable String ano,
+            @RequestBody PeticionDeMovimiento peticion) {
+        return registrar(
+                SentidoDelMovimiento.BAJA,
+                peticion,
+                new DeLaConsulta(codContribuyente, tributo, ano));
     }
 
     // ------------------------------------------------------------------
 
+    /**
+     * Los tres datos que la consulta puede traer, ya reunidos.
+     *
+     * <p>El alta pasa {@link #NINGUNO} porque su operacion no los declara en el contrato: asi el
+     * metodo comun no tiene que preguntarse de que ruta viene.
+     */
+    private record DeLaConsulta(
+            @Nullable String codContribuyente, @Nullable String tributo, @Nullable String ano) {
+
+        static final DeLaConsulta NINGUNO = new DeLaConsulta(null, null, null);
+    }
+
     private MovimientoDeDeudaResource registrar(
-            SentidoDelMovimiento sentido, PeticionDeMovimiento peticion) {
+            SentidoDelMovimiento sentido,
+            PeticionDeMovimiento peticion,
+            DeLaConsulta deLaConsulta) {
 
         Observacion observacion = observacionDe(peticion.observacion());
-        String codigoContribuyente = exigir(peticion.codContribuyente(), "codContribuyente");
+        String codigoContribuyente =
+                exigir(
+                        FiltroDeLaConsulta.primeroNoVacio(
+                                peticion.codContribuyente(), deLaConsulta.codContribuyente()),
+                        "codContribuyente");
         long contribuyenteId = contribuyenteDe(codigoContribuyente);
 
         MovimientoDeDeuda movimiento;
@@ -87,8 +133,15 @@ public class MovimientosDeDeudaController {
                             sentido,
                             new ClaveDeSaldo(
                                     contribuyenteId,
-                                    exigir(peticion.tributo(), "tributo"),
-                                    new Ejercicio(entero(peticion.ano(), "ano")),
+                                    exigir(
+                                            FiltroDeLaConsulta.primeroNoVacio(
+                                                    peticion.tributo(), deLaConsulta.tributo()),
+                                            "tributo"),
+                                    new Ejercicio(
+                                            entero(
+                                                    FiltroDeLaConsulta.primeroNoVacio(
+                                                            peticion.ano(), deLaConsulta.ano()),
+                                                    "ano")),
                                     peticion.cuota() == null ? 0 : peticion.cuota(),
                                     peticion.predioId(),
                                     peticion.vehiculoId()),

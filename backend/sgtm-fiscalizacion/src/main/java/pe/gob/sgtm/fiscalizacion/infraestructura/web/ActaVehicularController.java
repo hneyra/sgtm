@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
@@ -17,6 +18,7 @@ import pe.gob.sgtm.fiscalizacion.aplicacion.RegistrarActaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.Hallazgo;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.FiltroDeLaConsulta;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
@@ -24,6 +26,13 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *
  * <p>Trabaja sobre una copia: no toca ninguna fila de {@code rentas} (AC de #45). Nunca lleva ficha
  * ni área —esas dos son del acta predial—. El cuerpo es una <b>lista blanca</b>.
+ *
+ * <p><b>{@code hallazgo} también viaja por la consulta</b> (#425). Es el filtro «Hallazgo» que la
+ * pantalla dibuja y el contrato lo declara {@code in: query}. Aquí el desajuste no producía un 422
+ * sino algo peor: {@code hallazgo} es opcional, así que la petición que la interfaz sabe construir
+ * entraba con <b>201</b> y el acta quedaba guardada <b>sin hallazgo</b> —una inspección sin
+ * conclusión, indistinguible de la que de verdad no encontró nada—. Se sigue aceptando en el
+ * cuerpo, y ahí gana: ver {@link FiltroDeLaConsulta}.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/fiscalizacion/vehicular")
@@ -38,7 +47,9 @@ public class ActaVehicularController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ActaFiscalizacionResource registrar(@RequestBody PeticionDeActaVehicular peticion) {
+    public ActaFiscalizacionResource registrar(
+            @RequestParam(required = false) @Nullable String hallazgo,
+            @RequestBody PeticionDeActaVehicular peticion) {
         Observacion observacion = observacionDe(peticion.observacion());
 
         try {
@@ -49,7 +60,9 @@ public class ActaVehicularController {
                             exigirId(peticion.vehiculoId(), "vehiculoId"),
                             fechaDe(peticion.fechaVisita()),
                             exigir(peticion.fiscalizador(), "fiscalizador"),
-                            hallazgoDe(peticion.hallazgo()),
+                            hallazgoDe(
+                                    FiltroDeLaConsulta.primeroNoVacio(
+                                            peticion.hallazgo(), hallazgo)),
                             peticion.detalle(),
                             observacion));
         } catch (RegistrarActaFiscalizacion.ProgramaInexistente

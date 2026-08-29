@@ -95,12 +95,57 @@ class NotificacionAdministrativaControllerTest {
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
     }
 
+    @Test
+    @DisplayName("el filtro «numero» viaja por la consulta y es el que se registra (#425)")
+    void elNumeroViajaPorLaConsulta() throws Exception {
+        String sinNumero =
+                "{\"observacion\":\"prueba\",\"fecha\":\"2026-03-01\",\"direccion\":\"Av. Grau"
+                        + " 123\",\"motivo\":\"Falta administrativa\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/infracciones/administrativas/notificaciones")
+                                        .param("numero", "NA-0100")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(sinNumero))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(repositorio.ultimoNumero)
+                .as("no basta con que se acepte: la notificacion se registra con ESE numero")
+                .isEqualTo("NA-0100");
+        assertThat(resultado.getResponse().getContentAsString()).contains("\"numero\":\"NA-0100\"");
+    }
+
+    @Test
+    @DisplayName("y si viene en los dos sitios gana el cuerpo: el cliente viejo sigue igual")
+    void elCuerpoGanaALaConsulta() throws Exception {
+        String conNumero =
+                "{\"observacion\":\"prueba\",\"numero\":\"NA-0101\",\"fecha\":\"2026-03-01\","
+                        + "\"direccion\":\"Av. Grau 123\",\"motivo\":\"Falta administrativa\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/infracciones/administrativas/notificaciones")
+                                        .param("numero", "NA-0100")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(conNumero))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(repositorio.ultimoNumero).isEqualTo("NA-0101");
+    }
+
     private static final class RepositorioDeMentira
             implements NotificacionAdministrativaRepository {
         private long siguiente = 1;
 
+        /** Con que numero se guardo de verdad la ultima: lo que #425 tiene que poder mirar. */
+        private @org.jspecify.annotations.Nullable String ultimoNumero;
+
         @Override
         public NotificacionAdministrativa insertar(NotificacionAdministrativa notificacion) {
+            ultimoNumero = notificacion.numero();
             return new NotificacionAdministrativa(
                     siguiente++,
                     notificacion.numero(),
