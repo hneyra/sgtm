@@ -133,9 +133,9 @@
     </div>
 
     <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 16px; border-top: 1px solid #e6e1d6; background: #fbfaf6;">
-      <span style="font-size: 12px; color: #6b6258; flex: 1 1 260px;">Toda modificación exige observación del usuario (regla 10).</span>
+      <span style="font-size: 12px; color: #6b6258; flex: 1 1 260px;">Las cuatro fichas son de consulta: <strong style="font-weight: 600;">ninguna primaria</strong>. Quien escribe es «Actualizar catastro», y exige su observación (regla 10).</span>
+      <button type="button" style="display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 6px; font-size: 13.5px; font-weight: 500; border: 1px solid #d8d2c4; padding: 10px 18px; background: #ffffff; color: #1a1612;">Nuevo</button>
       <button type="button" style="display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 6px; font-size: 13.5px; font-weight: 500; border: 1px solid #d8d2c4; padding: 10px 18px; background: #ffffff; color: #1a1612;">Imprimir</button>
-      <button type="button" style="display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 6px; font-size: 13.5px; font-weight: 500; border: 0; padding: 10px 22px; background: #1F3A5F; color: #ffffff;">Guardar</button>
     </div>
   </section>
 
@@ -344,13 +344,13 @@ const fila = (celdas) => ({ celdas: celdas.map((texto, i) => ({
 })) });
 
 const TABLA_PISOS = {
-  titulo: 'Pisos declarados',
+  titulo: 'Versiones registradas por piso',
   conteo: '3 pisos declarados',
-  cols: ['Nº Piso', 'Mes / Año', 'MEP', 'ECS', 'ECC', 'Categorías', 'Área declarada m²', 'Área verificada m²'],
+  cols: ['Nº Piso', 'Mes', 'Año', 'MEP', 'ECS', 'ECC', 'Muro', 'Tech', 'Piso', 'Puer', 'Rev', 'Bañ', 'InstEle', 'Área decl. m²', 'Área verif. m²', 'UCA'],
   filas: [
-    fila(['01', '06 / 2004', '01 — CONCRETO', '02 — BUENO', '03 — TERMINADO', 'C C C D D D C', '96.00', '96.00']),
-    fila(['02', '11 / 2013', '02 — LADRILLO', '02 — BUENO', '03 — TERMINADO', 'C D D D D D D', '96.00', '96.00']),
-    fila(['03', '03 / 2026', '02 — LADRILLO', '01 — MUY BUENO', '02 — INCONCLUSO', 'D D E E E E D', '22.50', '37.00']),
+    fila(['01', '—', '2004', '01 — CONCRETO', '02 — BUENO', '—', 'C', 'C', 'C', 'D', 'D', 'D', 'C', '96.00', '—', '—']),
+    fila(['02', '—', '2013', '02 — LADRILLO', '02 — BUENO', '—', 'C', 'D', 'D', 'D', 'D', 'D', 'D', '96.00', '—', '—']),
+    fila(['03', '—', '2026', '02 — LADRILLO', '01 — MUY BUENO', '—', 'D', 'D', 'E', 'E', 'E', 'E', 'D', '22.50', '—', '—']),
   ],
 };
 
@@ -386,7 +386,7 @@ const NOTA_COMUN = 'Identificación, ubicación y titularidad son las del predio
 class Component extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { ficha: 'urbana', pestana: 'valorizacion' };
+    this.state = { ficha: 'urbana', pestana: 'identificacion' };
   }
 
   seccionesDe(ficha, pestana) {
