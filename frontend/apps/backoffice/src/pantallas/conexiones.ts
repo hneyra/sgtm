@@ -3,6 +3,7 @@ import { pedirOperacion } from '@sgtm/api-client';
 import { CONEXIONES_DE_CATASTRO } from './catastro';
 import { CONEXIONES_DE_COACTIVA } from './coactiva';
 import { CONEXIONES_DE_CONSULTAS } from './consultas';
+import { CONEXIONES_DE_LICENCIAS } from './licencias';
 import { CONEXIONES_DE_RENTAS } from './rentas';
 import { CONEXIONES_DE_SANCIONES } from './sanciones';
 import { CONEXIONES_DE_TESORERIA } from './tesoreria';
@@ -185,6 +186,7 @@ const CONEXIONES: Readonly<Record<string, Conexion>> = {
   ...CONEXIONES_DE_TRANSITO,
   ...CONEXIONES_DE_SANCIONES,
   ...CONEXIONES_DE_COACTIVA,
+  ...CONEXIONES_DE_LICENCIAS,
 };
 
 export const conexionDe = (opcion: string): Conexion | undefined => CONEXIONES[opcion];

@@ -1403,6 +1403,276 @@ function deudasCoactivasBeneficio(): Paginado {
   );
 }
 
+/* ── Autorizaciones y licencias (#79) ────────────────────────────────────
+ * `AnuncioResource`, `LicenciaResource`, `FueResource`, `ReporteDeEdificacionResource`,
+ * `CiiuResource`, `CertificadoResource` y `ResumenAnualResource`: la misma regla de siempre, las
+ * filas del prototipo con el nombre de campo que declara cada `Resource`. Ningun dato inventado;
+ * lo que la fila no distingue —`ejecutor` en el coactivo de arriba, aqui `tipoDeLicencia`,
+ * `giroPrincipal`— sale del `campos` de la ficha demo del propio catalogo, reutilizado por fila
+ * por la misma razon que ya lo hace `expedientesCoactivos`.
+ */
+
+/** `EstadoDeLicencia` (V37): el desplegable del prototipo tiene mas letras que el backend. */
+const ESTADO_DE_LICENCIA_DEL_MOCK: Readonly<Record<string, string>> = {
+  A: 'VIGENTE',
+  P: 'VIGENTE',
+  C: 'CANCELADA',
+  S: 'CANCELADA',
+  X: 'CANCELADA',
+};
+const estadoDeLicenciaDe = (letra: string): string =>
+  ESTADO_DE_LICENCIA_DEL_MOCK[letra] ?? 'VIGENTE';
+
+/** `EstadoDelAnuncio` (V45): el prototipo solo dibuja «A» y variantes en su columna «Est.». */
+const ESTADO_DE_ANUNCIO_DEL_MOCK: Readonly<Record<string, string>> = {
+  A: 'VIGENTE',
+  I: 'CESADO',
+  P: 'VIGENTE',
+  X: 'CESADO',
+};
+const estadoDeAnuncioDe = (letra: string): string => ESTADO_DE_ANUNCIO_DEL_MOCK[letra] ?? 'VIGENTE';
+
+/** `EstadoDelFue` (V43): el reporte del prototipo escribe la etiqueta del trámite, no el enum. */
+const ESTADO_DEL_FUE_DEL_MOCK: Readonly<Record<string, string>> = {
+  Aprobada: 'VIGENTE',
+  'Conforme de obra': 'VIGENTE',
+  Observada: 'EN_TRAMITE',
+  Denegada: 'ANULADA',
+};
+const estadoDelFueDe = (etiqueta: string): string =>
+  ESTADO_DEL_FUE_DEL_MOCK[etiqueta] ?? 'EN_TRAMITE';
+
+/** `RiesgoItse`: «Bajo/Medio/Alto» del prototipo, en mayúsculas como lo publica el backend. */
+const riesgoItseDe = (etiqueta: string): string | null =>
+  etiqueta === '' ? null : etiqueta.toUpperCase();
+
+/** Anuncio y propaganda (`AnuncioResource`, #51). */
+function anuncios(): Paginado {
+  const campos = RESPUESTAS['anuncios']?.campos ?? {};
+  const claseAnuncio = typeof campos['claseAnuncio'] === 'string' ? campos['claseAnuncio'] : '';
+  const tipoAnuncio = typeof campos['tipoAnuncio'] === 'string' ? campos['tipoAnuncio'] : '';
+  return unaPagina(
+    filasDe('anuncios').map(
+      (
+        [estadoLetra, nroAutorizacion, nroExpediente, contribuyente, dni, , direccion, tasaS],
+        i,
+      ) => ({
+        nroAutorizacion,
+        est: estadoLetra || 'V',
+        estado: estadoDeAnuncioDe(estadoLetra ?? ''),
+        estadoALaFecha: EL_DIA_DEL_PROTOTIPO,
+        contribuyente,
+        codContribuyente: `C-ANU-${String(i + 1).padStart(4, '0')}`,
+        documentoDelTitular: dni,
+        nroLicencia: null,
+        claseAnuncio: claseAnuncio.replace(/\s+/g, '_') || 'LETRERO',
+        tipoAnuncio: tipoAnuncio.replace(/\s+/g, '_') || 'AVISO_SIMPLE',
+        ubicacion: null,
+        forma: null,
+        denominacion: null,
+        direccion,
+        area: '0.00',
+        nroLados: 1,
+        cantidad: 1,
+        fecInicio: EL_DIA_DEL_PROTOTIPO,
+        fecVenc: null,
+        nroDeExpediente: nroExpediente,
+        fechaExp: null,
+        tasaDevengada: {
+          importe: comoImporte(tasaS ?? '0.00'),
+          actualizadoA: EL_DIA_DEL_PROTOTIPO,
+        },
+        historial: [],
+      }),
+    ),
+  );
+}
+
+/** Licencia de funcionamiento (`LicenciaResource`, #44). */
+function licenciaFuncionamiento(): Paginado {
+  const campos = RESPUESTAS['licencia_funcionamiento']?.campos ?? {};
+  const tipoDeLicencia =
+    typeof campos['tipoDeLicencia'] === 'string' ? campos['tipoDeLicencia'] : 'DEFINITIVA';
+  return unaPagina(
+    filasDe('licencia_funcionamiento').map(
+      (
+        [estadoLetra, nroLicencia, contribuyente, nExpediente, denominacionComercial, direccion],
+        i,
+      ) => ({
+        nroLicencia,
+        est: estadoLetra || 'A',
+        estado: estadoDeLicenciaDe(estadoLetra ?? ''),
+        estadoALaFecha: EL_DIA_DEL_PROTOTIPO,
+        contribuyente,
+        codContribuyente: `C-LIC-${String(i + 1).padStart(4, '0')}`,
+        denominacionComercial,
+        direccion,
+        tipoDeLicencia,
+        areaDelEstablecimiento: '0.00',
+        zonificacion: null,
+        aforo: null,
+        fechaDeEmision: EL_DIA_DEL_PROTOTIPO,
+        fechaDeVencimiento: null,
+        nExpediente,
+        fechaDeExpediente: null,
+        fichaEconomica: null,
+        giros: [],
+        historial: [],
+        duplicados: [],
+      }),
+    ),
+  );
+}
+
+/** Resumen de licencias por año (`ResumenAnualResource`, #54): sin sobre paginado. */
+function resumenAnualDeLicencias(): Readonly<Record<string, unknown>> {
+  return {
+    aLaFecha: EL_DIA_DEL_PROTOTIPO,
+    filas: filasDe('licencia_resumen_anual').map(
+      ([ano, emitidas, canceladas, duplicados, vigentesAlCierre, derechoS]) => ({
+        ano: Number(ano) || new Date().getFullYear(),
+        emitidas: Number(comoImporte(emitidas ?? '0')) || 0,
+        canceladas: Number(comoImporte(canceladas ?? '0')) || 0,
+        duplicados: Number(comoImporte(duplicados ?? '0')) || 0,
+        vigentesAlCierre: Number(comoImporte(vigentesAlCierre ?? '0')) || 0,
+        derechoDeTramiteS: {
+          importe: comoImporte(derechoS ?? '0.00'),
+          actualizadoA: EL_DIA_DEL_PROTOTIPO,
+        },
+        derechoNoDisponible: null,
+        alCierre: EL_DIA_DEL_PROTOTIPO,
+      }),
+    ),
+  };
+}
+
+/** El formulario único de edificación, solo su grilla (`FueResource`, #48). */
+function fueEdificacion(): Paginado {
+  const campos = RESPUESTAS['fue_edificacion']?.campos ?? {};
+  const solicitantePropietario = campos['solicitante'] === 'PROPIETARIO';
+  return unaPagina(
+    filasDe('fue_edificacion').map(
+      ([
+        nroExpediente,
+        contribuyente,
+        nombreContribuyente,
+        tipoTramite,
+        nroLicencia,
+        modalidadEtiqueta,
+      ]) => ({
+        nroExpediente,
+        fechaDeclaracion: EL_DIA_DEL_PROTOTIPO,
+        nroLicencia: nroLicencia === '000000' ? null : nroLicencia,
+        est: 'V',
+        estado: 'VIGENTE',
+        estadoALaFecha: EL_DIA_DEL_PROTOTIPO,
+        contribuyente,
+        nombreContribuyente,
+        tipoTramite: (tipoTramite ?? '').replace(/\s+/g, '_'),
+        obra: 'EDIFICACION_NUEVA',
+        modalidad: (modalidadEtiqueta ?? '').replace(/^APROBACI[ÓO]N\s+/i, '').charAt(0) || 'A',
+        revision: null,
+        nroExpedienteAnterior: null,
+        solicitanteEsPropietario: solicitantePropietario,
+        representanteLegal: null,
+        terreno: null,
+        proyecto: null,
+        valorizacion: [],
+        valorDeObra: null,
+        valorDeObraNoDisponible: 'D-02a: sin cuadro de valores unitarios sellado (#48)',
+        llaveQueFalta: null,
+        profesionales: [],
+        documentos: [],
+        historial: [],
+        vigencias: [],
+        seccionesFaltantes: [],
+        completo: false,
+      }),
+    ),
+  );
+}
+
+/** Reporte general de licencias de edificación (`ReporteDeEdificacionResource`, #48). */
+function edificacionReporte(): Paginado {
+  return unaPagina(
+    filasDe('edificacion_reporte').map(
+      ([
+        nLicencia,
+        expediente,
+        fecha,
+        administrado,
+        predio,
+        modalidad,
+        areaM,
+        valorObraS,
+        estadoEtiqueta,
+      ]) => ({
+        nLicencia,
+        expediente,
+        fecha: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        administrado,
+        predio,
+        modalidad,
+        areaAConstruirM: areaM,
+        valorDeObraS: {
+          importe: comoImporte(valorObraS ?? '0.00'),
+          actualizadoA: EL_DIA_DEL_PROTOTIPO,
+        },
+        valorDeObraNoDisponible: null,
+        estado: estadoDelFueDe(estadoEtiqueta ?? ''),
+        estadoALaFecha: EL_DIA_DEL_PROTOTIPO,
+      }),
+    ),
+  );
+}
+
+/** Catálogo CIIU de giros (`CiiuResource`, #44). Cientos de filas de verdad; aquí, seis. */
+function ciiu(): Paginado {
+  return unaPagina(
+    filasDe('ciiu').map(
+      ([codigo, descripcion, seccion, riesgo, zonificacion, requiereSectorial]) => ({
+        codigo,
+        descripcion,
+        seccion,
+        riesgoItse: riesgoItseDe(riesgo ?? ''),
+        zonificacionCompatible: zonificacion,
+        requiereSectorial: (requiereSectorial ?? '').startsWith('S'),
+        extendido: false,
+        activo: true,
+      }),
+    ),
+  );
+}
+
+/** Certificados de numeración y zonificación (`CertificadoResource`, #54): solo su grilla. */
+function certificadosDeNumeracion(): Paginado {
+  return unaPagina(
+    filasDe('certificados').map(
+      ([nCertificado, tipoEtiqueta, predio, solicitante, fecha, derechoS, estado], i) => ({
+        nCertificado,
+        tipo: (tipoEtiqueta ?? '').replace(/\s+Y\s+/g, '_').replace(/\s+/g, '_'),
+        tipoEtiqueta,
+        predio,
+        direccion: '',
+        solicitante,
+        codContribuyente: `C-CERT-${String(i + 1).padStart(4, '0')}`,
+        fecha: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+        vigenciaHasta: EL_DIA_DEL_PROTOTIPO,
+        derechoS: { importe: comoImporte(derechoS ?? '0.00'), actualizadoA: EL_DIA_DEL_PROTOTIPO },
+        estado: (estado ?? '').toUpperCase(),
+        estadoALaFecha: EL_DIA_DEL_PROTOTIPO,
+        nExpediente: null,
+        documento: nCertificado,
+        zonificacion: null,
+        alturaMaximaPermitida: null,
+        areaLibreMinima: null,
+        retiroMunicipal: null,
+        coeficienteDeEdificacion: null,
+      }),
+    ),
+  );
+}
+
 const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>> = {
   '/catastro/fichas/urbana/{codRefCatastral}': urbana,
   '/catastro/fichas/economica/{codRefCatastral}': economica,
@@ -1418,6 +1688,7 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/consultas/deudas-con-beneficio': deudasConBeneficio,
   '/seguridad/sesion/permisos': permisosDeLaSesion,
   '/coactiva/expedientes/{numero}/proceso': procesoCoactivo,
+  '/licencias/funcionamiento/reportes/resumen-anual': resumenAnualDeLicencias,
   '/infracciones/administrativas/reportes/resumen-recaudacion': resumenRecaudacionAdministrativa,
   '/transito/papeletas/{numero}/actos': expedienteDeLaPapeleta,
   '/transito/reportes/resumen-por-codigo': resumenPorCodigoDeTransito,
@@ -2547,6 +2818,12 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/coactiva/expedientes': expedientesCoactivos,
   '/coactiva/deudas': deudasCoactivas,
   '/coactiva/deudas-en-beneficio': deudasCoactivasBeneficio,
+  '/autorizaciones/anuncios': anuncios,
+  '/licencias/funcionamiento': licenciaFuncionamiento,
+  '/licencias/edificacion': fueEdificacion,
+  '/licencias/edificacion/reportes/general': edificacionReporte,
+  '/licencias/ciiu': ciiu,
+  '/licencias/certificados': certificadosDeNumeracion,
 };
 
 /**
