@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GRUPOS_POR_TAREA,
   asignacionPorTarea,
+  bloquesPlegadosDe,
   centroDeReportesDe,
   nombresDeLosGrupos,
 } from '../scripts/grupos-por-tarea.mjs';
@@ -131,6 +132,60 @@ describe('toda guarda de la tabla tiene una tabla que la viola', () => {
 });
 
 /**
+ * **Plegar y llevar carril son dos cosas** (#391 §5).
+ *
+ * `{ plegado: true }` quita las opciones del menu y deja una entrada; `{ centro:
+ * true }` hace eso **y ademas** mete cada hoja en el carril del centro de
+ * reportes. La primera puede darse varias veces en un modulo —Catastro pliega
+ * dos grupos, y sus superficies ya navegan entre sus opciones—; la segunda una
+ * sola, porque dos carriles serian dos formas de navegar lo mismo.
+ */
+describe('los dos pliegues salen de la tabla, y se distinguen', () => {
+  it('Catastro pliega dos grupos y ninguno lleva carril', () => {
+    expect(bloquesPlegadosDe('catastro', GRUPOS_POR_TAREA)).toEqual(['Territorio', 'Valuación']);
+    expect(centroDeReportesDe('catastro', GRUPOS_POR_TAREA)).toBeNull();
+    // «Predio» no se pliega: `ficha_contribuyente_reporte` se abre por el
+    // codigo del contribuyente y ninguna superficie del modulo lo tiene.
+    expect(bloquesPlegadosDe('catastro', GRUPOS_POR_TAREA)).not.toContain('Predio');
+  });
+
+  it('un grupo con carril cuenta tambien como plegado', () => {
+    for (const moduloId of [
+      'transito',
+      'infracciones-administrativas',
+      'autorizaciones-y-licencias',
+    ]) {
+      expect(bloquesPlegadosDe(moduloId, GRUPOS_POR_TAREA), moduloId).toEqual(['Reportes']);
+      expect(centroDeReportesDe(moduloId, GRUPOS_POR_TAREA), moduloId).toBe('Reportes');
+    }
+  });
+
+  it('un modulo sin ninguna marca no pliega nada, y uno que no esta en la tabla tampoco', () => {
+    expect(bloquesPlegadosDe('seguridad', GRUPOS_POR_TAREA)).toEqual([]);
+    expect(bloquesPlegadosDe('inicio', GRUPOS_POR_TAREA)).toEqual([]);
+  });
+
+  it('dos grupos plegados sin carril en el mismo modulo se admiten: es el caso de Catastro', () => {
+    expect(
+      bloquesPlegadosDe('catastro', {
+        catastro: [
+          ['Predio', ['ficha_urbana'], { plegado: true }],
+          ['Territorio', ['calles'], { plegado: true }],
+        ],
+      }),
+    ).toEqual(['Predio', 'Territorio']);
+  });
+
+  it('las dos marcas a la vez se rechazan en el build: «centro» ya pliega', () => {
+    expect(() =>
+      bloquesPlegadosDe('transito', {
+        transito: [['Reportes', ['transito_padron'], { plegado: true, centro: true }]],
+      }),
+    ).toThrow(/El grupo «Reportes» de transito se declara «plegado» y «centro» a la vez/);
+  });
+});
+
+/**
  * El pliegue en centro de reportes (ADR-0014 §5) es **una marca de la tabla**,
  * no una lista de ids en un componente: el dia que Infracciones o Consultas
  * quieran el suyo, se marca su grupo y se regenera. Lo que se prueba aqui es
@@ -164,8 +219,12 @@ describe('un grupo se pliega en centro de reportes marcandolo en la tabla', () =
   });
 
   it('dos grupos marcados en el mismo modulo se rechazan en el build', () => {
-    // Dos centros dejarian la barra lateral con dos entradas y ninguna forma de
-    // saber cual abre cual.
+    /* **El limite sobrevive a la generalizacion de #391 §5**, y su motivo
+       cambio: ya no es que dos entradas se llamaran «Reportes» y «Reportes»
+       —la barra lateral y el hub dibujan el nombre del bloque, asi que dos
+       carriles darian dos entradas con nombres distintos—, sino que **dos
+       carriles serian dos formas de navegar lo mismo**. Plegar sin carril si
+       puede darse varias veces, y Catastro lo hace. */
     expect(() =>
       centroDeReportesDe('transito', {
         transito: [

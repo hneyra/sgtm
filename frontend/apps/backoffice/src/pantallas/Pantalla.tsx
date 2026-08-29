@@ -36,7 +36,8 @@ import type { Conexion } from './conexiones';
 import { composicionDe, filtrosDe, hayQueResumir } from './composicion';
 import { useSimulacion } from './useSimulacion';
 import type { ComposicionDeOpcion } from './composicion';
-import { PanelLateral } from './bloques/PanelLateral';
+import { PanelDeAlta } from './bloques/PanelDeAlta';
+import type { AltaAbierta } from './bloques/PanelDeAlta';
 import { useDatosDeOperacion } from './useDatosDeOperacion';
 import { useDatosDePantalla } from './useDatosDePantalla';
 import { BarraDeAcciones } from './bloques/BarraDeAcciones';
@@ -49,7 +50,6 @@ import { useDescargaDeArchivo } from './useDescargaDeArchivo';
 import type { DescargaDeArchivo } from './useDescargaDeArchivo';
 import { TablaDePantalla } from './bloques/TablaDePantalla';
 import { IndiceDeSecciones } from './bloques/IndiceDeSecciones';
-import { Versionado } from './bloques/Versionado';
 import { Totales } from './bloques/Totales';
 import { PermisosMatrix } from './seguridad/PermisosMatrix';
 import { MiembrosDeGrupo } from './seguridad/MiembrosDeGrupo';
@@ -166,25 +166,27 @@ type Estructura = EstructuraDePantalla;
 const ANCLA_DE_LA_TABLA = 'sgtm-tabla-de-la-pantalla';
 
 /**
- * Siete pantallas propias, cargadas con quien las abre y no en el arranque
- * (#379, esta pasada; mismo patron que `rentas/composicion.ts`).
+ * Las pantallas propias, cargadas con quien las abre y no en el arranque
+ * (#379; mismo patron que `rentas/composicion.ts`).
  *
- * Las tres de valores catastrales —`ActualizacionDeCatastro` con `TablaDePisos`
- * y `CodigoCatastral`, las otras dos con `useTablaDeValuacion`— y las cuatro
+ * Las de catastro —`FichaDelPredio` con `TablaDePisos` y `ResumenDeFicha`, que
+ * sirve las cuatro fichas y su actualizacion, y `CuadroDeValuacion` con
+ * `useTablaDeValuacion`, que sirve las tres hojas del cuadro—, las cuatro
  * de `Valores` (RF-093 a RF-096, #75): `GeneracionIndividualDeValores`,
- * `GeneracionMasivaDeValores`, `PrescripcionDeLaDeuda` y `PaseACoactiva`.
- * Ninguna de las 127 pantallas que no son estas siete la necesita nunca.
+ * `GeneracionMasivaDeValores`, `PrescripcionDeLaDeuda` y `PaseACoactiva`, las
+ * dos de Transito (#77) y `Territorio`, que es la superficie unica de
+ * `sectores` y `calles`. Ninguna de las demas pantallas las necesita nunca.
  * Medido: el arranque bajo de 150,2 a 148,0 KB comprimidos al sacarlas del
  * trozo comun (`yarn comprobar-compilaciones`).
  */
-const ActualizacionDeCatastro = lazy(async () => ({
-  default: (await import('./catastro/ActualizacionDeCatastro')).ActualizacionDeCatastro,
+const FichaDelPredio = lazy(async () => ({
+  default: (await import('./catastro/FichaDelPredio')).FichaDelPredio,
 }));
-const ValoresUnitarios = lazy(async () => ({
-  default: (await import('./catastro/ValoresUnitarios')).ValoresUnitarios,
+const CuadroDeValuacion = lazy(async () => ({
+  default: (await import('./catastro/CuadroDeValuacion')).CuadroDeValuacion,
 }));
-const Depreciacion = lazy(async () => ({
-  default: (await import('./catastro/Depreciacion')).Depreciacion,
+const Territorio = lazy(async () => ({
+  default: (await import('./catastro/Territorio')).Territorio,
 }));
 const GeneracionIndividualDeValores = lazy(async () => ({
   default: (await import('./valores/GeneracionIndividualDeValores')).GeneracionIndividualDeValores,
@@ -206,13 +208,14 @@ const GeneracionMasivaDeValoresDeTransito = lazy(async () => ({
     .GeneracionMasivaDeValoresDeTransito,
 }));
 
-/** Las pantallas cuyo recurso trae version y vigencia. Hoy, las cuatro fichas. */
-const VERSIONADAS: ReadonlySet<string> = new Set([
-  'ficha_urbana',
-  'ficha_economica',
-  'ficha_bienes',
-  'ficha_rural',
-]);
+/*
+ * Aqui vivia `VERSIONADAS`, la lista de las pantallas cuyo recurso trae version
+ * y vigencia. Eran **las cuatro fichas catastrales y nadie mas**, y desde la
+ * propuesta A las cuatro las dibuja `catastro/FichaDelPredio.tsx`, que trae su
+ * propio bloque de versionado. Una lista vacia de hecho —y el bloque que la
+ * consultaba— es exactamente lo que hay que quitar: dejarla diria que este
+ * renderizador dibuja versiones, y ya no dibuja ninguna.
+ */
 
 /**
  * Los dos caminos, y por que hay dos.
@@ -242,16 +245,36 @@ const VERSIONADAS: ReadonlySet<string> = new Set([
  *                            botones se quedan deshabilitados en vez de
  *                            conectarse a una escritura que no hace lo que
  *                            dice.
- *   actualizacion_catastro   (#71) guarda una lista de construcciones, no
- *                            campos planos, y necesita el `GET` de
- *                            `ficha_urbana` para no borrar pisos que no se
- *                            estan tocando.
- *   valores_unitarios,       (#71) el backend publica una fila por
- *   depreciacion             partida/estado y tramo; el prototipo dibuja
- *                            una matriz. Agrupar y cruzar eso no es un
- *                            adaptador de los que ya existen, y las dos
- *                            siguen bloqueadas por D-02a en su contenido,
- *                            no en su forma.
+ *   ficha_urbana,            las cinco caen en la **misma** superficie: «Una
+ *   ficha_economica,         sola ficha del predio» (propuesta A de
+ *   ficha_bienes,            `design/propuestas/catastro`). Cuatro fichas del
+ *   ficha_rural,             mismo objeto con cuatro formas —once pestanas una,
+ *   actualizacion_catastro   una seccion plana otra— y una quinta pantalla que
+ *                            repetia dos pestanas de la primera **con otro
+ *                            vocabulario**. Aqui son cinco pestanas
+ *                            constantes, y la actualizacion es el modo de
+ *                            edicion de una de ellas: con eso el vocabulario
+ *                            divergente muere por construccion. Las cinco
+ *                            rutas, su id, su permiso y su entrada de menu
+ *                            siguen intactos; la ruta decide la modalidad que
+ *                            llega abierta, y cambiar de modalidad **navega**.
+ *                            Ver el docblock de `catastro/FichaDelPredio.tsx`,
+ *                            que es donde vive la decision del identificador.
+ *   aranceles,               las tres caen en la **misma** superficie: «El
+ *   valores_unitarios,       cuadro de valuacion del ejercicio» (propuesta B
+ *   depreciacion             de `design/propuestas/catastro`). Responden la
+ *                            misma pregunta —que valores rigen este ano— y
+ *                            sus tres controladores reciben un solo
+ *                            parametro, `anio`: el ejercicio deja de ser
+ *                            tres selectores y pasa a ser uno, el de la
+ *                            sesion. De las dos nacionales, ademas, el
+ *                            backend publica una fila por partida/estado y
+ *                            tramo donde el prototipo dibuja una matriz, y
+ *                            la cabecera se construye con lo que venga en la
+ *                            respuesta —no con las siete partidas fijas del
+ *                            prototipo, que ponian cifras bajo la cabecera
+ *                            de otra partida—. Las tres rutas, su permiso y
+ *                            su entrada de menu siguen intactos.
  *   valores_individual,      (#75) sus cuerpos llevan arreglos —una
  *   valores_masivo,          obligacion, una lista de contribuyentes, un
  *   prescripcion             hecho de interrupcion— que `CampoDelCuerpo`
@@ -268,6 +291,17 @@ const VERSIONADAS: ReadonlySet<string> = new Set([
  *                            una y «Imprimir» en la otra, ninguna de las
  *                            dos escribe. Cada una trae su barra de una
  *                            sola accion.
+ *   sectores, calles         las dos caen en la **misma** superficie: un
+ *                            carril con el arbol territorial —sector →
+ *                            manzana— y un panel con las dos hojas como
+ *                            pestanas. No es que su cuerpo no quepa en los
+ *                            bloques comunes: es que las dos describen **un
+ *                            solo territorio** y separarlas obligaba a
+ *                            volver al menu para pasar de la manzana a la
+ *                            via que la limita. Las dos rutas, su permiso y
+ *                            su entrada de menu siguen intactos: lo unico
+ *                            que decide la ruta es que hoja llega abierta,
+ *                            y cambiar de pestana **navega**.
  *
  * Viven en su propio componente en vez de forzar al renderizador comun a
  * saber de listas, de booleanos o de un verbo que miente.
@@ -278,15 +312,22 @@ const COMPONENTES_PROPIOS: Readonly<
   permisos: PermisosMatrix,
   miembros: MiembrosDeGrupo,
   respaldo: Respaldos,
-  actualizacion_catastro: ActualizacionDeCatastro,
-  valores_unitarios: ValoresUnitarios,
-  depreciacion: Depreciacion,
+  ficha_urbana: FichaDelPredio,
+  ficha_economica: FichaDelPredio,
+  ficha_bienes: FichaDelPredio,
+  ficha_rural: FichaDelPredio,
+  actualizacion_catastro: FichaDelPredio,
+  aranceles: CuadroDeValuacion,
+  valores_unitarios: CuadroDeValuacion,
+  depreciacion: CuadroDeValuacion,
   valores_individual: GeneracionIndividualDeValores,
   valores_masivo: GeneracionMasivaDeValores,
   prescripcion: PrescripcionDeLaDeuda,
   pase_coactiva: PaseACoactiva,
   transito_cambio_numero: CambioDeNumeroDePapeleta,
   transito_valores: GeneracionMasivaDeValoresDeTransito,
+  sectores: Territorio,
+  calles: Territorio,
 };
 
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
@@ -563,10 +604,6 @@ function Bloques({
   // siempre, porque su consulta nunca deja de estar pendiente.
   const cargando = pide && consulta.isPending && sinPedir === undefined;
   const valores: Readonly<Record<string, ValorDeCampo>> = datos?.campos ?? {};
-  // Las cuatro fichas: su backend versiona y nunca sobrescribe (#18). Se sabe
-  // aqui y no por el catalogo porque es una propiedad de la operacion, no del
-  // dibujo —el prototipo no tiene forma de expresarla—.
-  const esVersionada = VERSIONADAS.has(estructura.id);
   const Resumen = composicion.resumen;
   // Si hay algo que resumir, antes de pedir el trozo perezoso. Ver `hayQueResumir`.
   const hayAlgoQueResumir = hayQueResumir(
@@ -800,16 +837,6 @@ function Bloques({
             busqueda={busqueda}
           />
         </Suspense>
-      )}
-
-      {/* Que version se esta viendo va **antes** que sus datos: es lo que dice
-          de cuando son los numeros que vienen debajo. Solo lo traen las
-          pantallas cuyo backend no sobrescribe. */}
-      {(datos?.versionado !== undefined || (cargando && esVersionada)) && (
-        <Versionado
-          {...(datos?.versionado ? { datos: datos.versionado } : {})}
-          cargando={cargando}
-        />
       )}
 
       {estado === 'sin-registro' && (
@@ -1080,53 +1107,6 @@ function altasDeLaBarra(
   }
   for (const alta of composicion.altas ?? []) acciones[alta.accion] = () => abrir(alta.accion);
   return acciones;
-}
-
-/** Cual de las altas de la opcion esta abierta, y de que fila cuelga. */
-type AltaAbierta =
-  | { readonly indice: number; readonly deFila?: false; readonly contexto?: undefined }
-  | { readonly deFila: true; readonly contexto: string; readonly indice?: undefined };
-
-/**
- * El panel de la alta abierta.
- *
- * Vive en su propio componente y no en linea porque el formulario de dentro
- * llama a `useEscritura`, y un hook no se llama a veces: montarlo solo cuando el
- * panel esta abierto es lo que evita que la escritura exista mientras nadie la
- * pidio.
- */
-function PanelDeAlta({
-  composicion,
-  abierta,
-  onCerrar,
-}: {
-  readonly composicion: ComposicionDeOpcion;
-  readonly abierta: AltaAbierta;
-  readonly onCerrar: () => void;
-}) {
-  const alta =
-    abierta.deFila === true ? composicion.altaDeFila : composicion.altas?.[abierta.indice];
-  if (alta === undefined) return null;
-  const Formulario = alta.Formulario;
-
-  return (
-    // El `Suspense` envuelve al panel **entero** y no a su contenido: el panel
-    // lleva el foco a su primer control al montarse, y montarlo alrededor de un
-    // hueco que todavia se esta cargando dejaria el foco en el boton de cerrar
-    // y no lo volveria a mover cuando llegara el formulario.
-    <Suspense fallback={null}>
-      <PanelLateral
-        titulo={alta.titulo}
-        {...(alta.descripcion === undefined ? {} : { descripcion: alta.descripcion })}
-        onCerrar={onCerrar}
-      >
-        <Formulario
-          {...(abierta.contexto === undefined ? {} : { contexto: abierta.contexto })}
-          onCerrar={onCerrar}
-        />
-      </PanelLateral>
-    </Suspense>
-  );
 }
 
 /**

@@ -26,7 +26,12 @@
 import { createContext, runInContext } from 'node:vm';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { asignacionPorTarea, centroDeReportesDe, nombresDeLosGrupos } from './grupos-por-tarea.mjs';
+import {
+  asignacionPorTarea,
+  bloquesPlegadosDe,
+  centroDeReportesDe,
+  nombresDeLosGrupos,
+} from './grupos-por-tarea.mjs';
 
 const raiz = new URL('../../', import.meta.url);
 const origen = new URL('design/', raiz);
@@ -306,10 +311,15 @@ const modulos = NAV.map((grupo) => {
     title: PANTALLAS[id]?.title ?? label,
     resumen: PANTALLAS[id]?.desc ?? '',
   }));
-  // El grupo que se pliega en un centro de reportes, si la tabla lo marca
-  // (ADR-0014 §5). Viaja con la navegacion: lo necesitan la barra lateral, el
-  // hub y el propio centro, y ninguno de los tres deberia llevar la lista de
-  // hojas cableada.
+  /* Que bloques se pliegan en el menu y cual de ellos lleva ademas carril, si
+     la tabla los marca (ADR-0014 §5). Viajan con la navegacion: los necesitan
+     la barra lateral, el hub y el propio centro, y ninguno de los tres deberia
+     llevar la lista de opciones cableada.
+
+     Son **dos** datos y no uno porque son dos decisiones: plegar puede darse
+     varias veces en un modulo —Catastro pliega dos grupos— y el carril una
+     sola. `centroDeReportes` es siempre uno de `bloquesPlegados`. */
+  const plegados = asignacion ? bloquesPlegadosDe(moduloId) : [];
   const centro = asignacion ? centroDeReportesDe(moduloId) : null;
   return {
     id: moduloId,
@@ -320,6 +330,7 @@ const modulos = NAV.map((grupo) => {
     bloques: asignacion
       ? nombresDeLosGrupos(moduloId)
       : BLOQUES.filter((b) => opciones.some((o) => o.bloque === b)),
+    ...(plegados.length === 0 ? {} : { bloquesPlegados: plegados }),
     ...(centro === null ? {} : { centroDeReportes: centro }),
     opciones,
   };
@@ -361,7 +372,7 @@ mkdirSync(fileURLToPath(simulada), { recursive: true });
 writeFileSync(
   fileURLToPath(new URL('navegacion.generado.ts', catalogo)),
   `${cabecera(
-    'Los 12 modulos del manual y sus 134 opciones, con el bloque de cada una ya\n * clasificado en el build: grupos por tarea donde el modulo esta disenado\n * (ADR-0014 §4) y los bloques de FRO-03 §4 en los demas. `centroDeReportes`\n * nombra el bloque que el modulo pliega en su centro de reportes (ADR-0014 §5).',
+    'Los 12 modulos del manual y sus 134 opciones, con el bloque de cada una ya\n * clasificado en el build: grupos por tarea donde el modulo esta disenado\n * (ADR-0014 §4) y los bloques de FRO-03 §4 en los demas. `bloquesPlegados`\n * nombra los que el menu ensena como una entrada unica, y `centroDeReportes`\n * el unico de ellos que ademas lleva carril (ADR-0014 §5).',
     'Los nombres vienen del manual y no se reescriben (RNF-080).',
   )}
 import type { ModuloDelCatalogo } from './tipos';

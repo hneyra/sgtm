@@ -112,3 +112,25 @@ export function leerFicha(cuerpo: unknown, que: string): Ficha {
 /** Un campo del formulario, salvo cuando el recurso no lo publica. */
 export const campo = (valor: string | undefined): ValorDeCampo =>
   valor === undefined || valor === '' ? SIN_DATO : valor;
+
+/**
+ * Las siete categorias de una construccion, **una por letra**.
+ *
+ * Llegan como texto y en dos formas —`[BCCBCBB]` en el backend, `C B C C B C B`
+ * en el juego de datos del prototipo—, y las dos se admiten. Un guion es un
+ * hueco declarado, no una letra.
+ *
+ * Vive aqui y no en la tabla de pisos porque la leen **los dos lados**: la tabla
+ * editable de la actualizacion y el adaptador de la ficha, que la reparte en las
+ * siete columnas del prototipo. Y `catastro/index.ts` no puede arrastrarse React
+ * detras —hay una verificacion que lo nota—, asi que no puede importarla de un
+ * `.tsx`.
+ */
+export function letrasDeCategorias(categorias: string): readonly string[] {
+  const limpio = categorias.replace(/[[\]]/g, '').trim();
+  const letras = limpio === '' ? [] : limpio.includes(' ') ? limpio.split(/\s+/) : [...limpio];
+  return Array.from({ length: 7 }, (_, indice) => {
+    const caracter = letras[indice];
+    return caracter === undefined || caracter === '-' ? '' : caracter;
+  });
+}

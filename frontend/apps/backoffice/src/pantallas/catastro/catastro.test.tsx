@@ -18,10 +18,12 @@ import { SIN_DATO as SIN_CIFRA } from '../seguridad/listado';
  *   pantalla no lo cuenta—;
  * - que lo que el recurso no publica sale vacio, y en particular **ninguna
  *   cifra de valuacion se compone aqui** (D-02);
- * - que los aranceles leen un arreglo suelto, sin sobre de paginacion;
- * - que valores unitarios y depreciacion tienen su propio componente, porque
- *   el recurso es una fila por partida y el prototipo dibuja una matriz
- *   (`ValoresUnitarios.test.tsx`, `Depreciacion.test.tsx`).
+ * - que los aranceles leen un arreglo suelto, sin sobre de paginacion —lo
+ *   dibuje quien lo dibuje: desde la propuesta B esa hoja vive en
+ *   `CuadroDeValuacion`, y sus columnas y sus huecos no han cambiado—;
+ * - que las tres tablas de valuacion caen en una sola superficie, y por que
+ *   ninguna de las tres se conecta por `definirConexion`
+ *   (`cuadro-de-valuacion.test.tsx`).
  */
 
 let peticiones: string[] = [];
@@ -106,7 +108,7 @@ describe('los aranceles leen ArancelResource, sin sobre de paginacion', () => {
 });
 
 describe('las conexiones de catastro, por su mecanismo', () => {
-  it('las ocho de forma comun (lectura simple) estan en el registro de conexiones', () => {
+  it('las siete de forma comun (lectura simple) estan en el registro de conexiones', () => {
     for (const opcion of [
       'calles',
       'sectores',
@@ -115,18 +117,22 @@ describe('las conexiones de catastro, por su mecanismo', () => {
       'ficha_economica',
       'ficha_bienes',
       'ficha_rural',
-      'aranceles',
     ]) {
       expect(OPCIONES_CONECTADAS).toContain(opcion);
     }
-    // Las otras cuatro tienen endpoint y no se conectan por `definirConexion`:
-    // cada una tiene un componente propio, en `Pantalla.tsx` (#71).
-    //   actualizacion_catastro   escribe una lista de construcciones
-    //   valores_unitarios,       el recurso es una fila por partida/estado y
-    //   depreciacion             el prototipo dibuja una matriz
+    // Las otras cinco tienen endpoint y no se conectan por `definirConexion`:
+    // cada una cae en un componente propio, en `Pantalla.tsx`.
+    //   actualizacion_catastro   escribe una lista de construcciones (#71)
+    //   aranceles,               las tres son el mismo cuadro del ejercicio y
+    //   valores_unitarios,       caen en una sola superficie
+    //   depreciacion             (`CuadroDeValuacion.tsx`, propuesta B). La
+    //                            banda de procedencia necesita la **fila
+    //                            cruda** —`documentoFuente`—, que un adaptador
+    //                            de celdas tira por el camino
     //   ficha_contribuyente_reporte   devuelve un archivo, no un recurso
     for (const opcion of [
       'actualizacion_catastro',
+      'aranceles',
       'valores_unitarios',
       'depreciacion',
       'ficha_contribuyente_reporte',
@@ -184,7 +190,7 @@ describe('la ficha ensena de cuando es lo que muestra', () => {
   it('sin el codigo del predio no se pide ninguna ficha', async () => {
     montarEnRuta('/catastro/ficha-urbana');
 
-    expect(await screen.findByText(/Elige un registro/)).toBeInTheDocument();
+    expect(await screen.findByText(/Elige un predio/)).toBeInTheDocument();
     // Ni una peticion: antes se pedia con un codigo de relleno y la pantalla
     // parecia funcionar mostrando un predio que no era de nadie.
     expect(peticiones.filter((u) => u.includes('/catastro/fichas/urbana/'))).toHaveLength(0);
@@ -195,18 +201,40 @@ describe('la ficha ensena de cuando es lo que muestra', () => {
 
 describe('las construcciones salen con sus categorias, nunca con importes', () => {
   it('la tabla de la ficha urbana lleva categorias y area, y ningun sol', async () => {
+    const usuario = userEvent.setup();
     montarEnRuta('/catastro/ficha-urbana/200601010150010101001');
 
-    const fila = (await screen.findByText('C B C C B C B')).closest('tr');
+    // Las construcciones viven en **Valorizacion** desde que las cuatro fichas
+    // y la actualizacion caen en una sola superficie: la ficha abre en su
+    // primera pestana, no en la del cuadro de pisos. La propiedad que esta
+    // prueba defiende no cambia —categorias si, soles no—, solo el sitio.
+    await usuario.click(await screen.findByRole('tab', { name: 'Valorización' }));
+
+    const fila = (await screen.findByText('118.50')).closest('tr');
     expect(fila).not.toBeNull();
     const celdas = within(fila as HTMLElement).getAllByRole('cell');
+    // Las siete categorias van **una por columna**, bajo «Muro», «Tech», «Piso»…
+    // Antes viajaban juntas en una celda —«C B C C B C B»— y se dibujaban bajo
+    // las cabeceras de la tabla de **direcciones** del predio, que es la que
+    // `ficha_urbana` declara en el catalogo y que `FichaResource` no publica.
+    // Cabeceras de una cosa y datos de otra: eso es lo que dejo de pasar.
     expect(celdas.map((celda) => celda.textContent)).toEqual([
       '01',
+      SIN_CIFRA, // Mes: el recurso publica el ano, no el mes
       '1998',
       'NOBLE',
       'BUENO',
-      'C B C C B C B',
+      SIN_CIFRA, // ECC
+      'C',
+      'B',
+      'C',
+      'C',
+      'B',
+      'C',
+      'B',
       '118.50',
+      SIN_CIFRA, // area verificada
+      SIN_CIFRA, // UCA
     ]);
     // Cuanto vale cada categoria es D-02a y vive en datos versionados (regla 5).
     expect(within(fila as HTMLElement).queryByText(/S\//)).not.toBeInTheDocument();

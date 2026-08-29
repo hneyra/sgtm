@@ -1,11 +1,20 @@
-import { Esqueleto, Insignia } from '@sgtm/design-system';
 import { formatearFecha } from '@sgtm/dominio';
 import type { ResumenDePantallaProps } from '../composicion';
+import { CabeceraDeRegistro } from '../bloques/CabeceraDeRegistro';
+import type { DatoDeCabecera } from '../bloques/CabeceraDeRegistro';
 import { SIN_DATO } from '../seguridad/listado';
 import { formatearCodigoCatastral } from './codigo';
 
 /**
  * La cabecera-resumen de una ficha catastral (#319).
+ *
+ * **El lenguaje visual ya no vive aqui**: lo pone {@link CabeceraDeRegistro},
+ * en `pantallas/bloques/` (#391 §4). Lo que queda en este archivo es lo que si
+ * es de catastro —que el identificador es el codigo de referencia catastral y se
+ * troquela en tramos, que la insignia dice si la version rige, y que la
+ * conciliacion con rentas es un guion con motivo—. El territorio y el cuadro de
+ * valuacion usan el mismo bloque con otro contenido, que es lo que demuestra que
+ * la cabecera no era de este modulo.
  *
  * Una ficha son entre una y once pestanas de campos; quien la abre necesita
  * antes que nada saber **cual ficha esta viendo y de cuando es**. Eso ya estaba
@@ -33,38 +42,42 @@ export function ResumenDeFicha({ codigo, datos, cargando }: ResumenDePantallaPro
   // renderizador porque «cual es el registro» no es igual en todas: en catastro
   // es el parametro de la ruta y en el padron de contribuyentes es el filtro.
   if (codigo === undefined || codigo === '') return null;
-  if (cargando) return <Esqueleto alto={72} />;
 
   const campos = datos?.campos ?? {};
   const version = datos?.versionado?.actual;
+  const datosDeLaFicha: readonly DatoDeCabecera[] = [
+    { etiqueta: 'Titular', valor: texto(campos['nombreDelContribuyente']) },
+    { etiqueta: 'Uso', valor: texto(campos['uso2']) },
+    { etiqueta: 'Área de terreno', valor: texto(campos['areaTotalHa']) },
+    // La suma de las areas por piso la haria el backend o no la hace nadie.
+    { etiqueta: 'Área construida', valor: SIN_DATO },
+  ];
 
   return (
-    <section className="sgtm-resumen" aria-label="Resumen de la ficha">
-      <div className="sgtm-resumen__identidad">
-        <p className="sgtm-resumen__codigo">{formatearCodigoCatastral(codigo ?? '')}</p>
-        {version !== undefined && (
-          <p className="sgtm-resumen__vigencia">
-            {/* El estado nunca solo por color, y nunca una cifra sin su fecha:
-                la version que rige va con desde cuando y de donde salio. */}
-            <Insignia tono={version.vigente ? 'ok' : 'neutro'}>
-              {version.vigente ? 'VIGENTE' : 'HISTÓRICA'}
-            </Insignia>
-            <span>
-              v{version.version} · desde {formatearFecha(version.vigenciaDesde)} ·{' '}
-              {version.origen === '' ? SIN_DATO : version.origen}
-            </span>
-          </p>
-        )}
-      </div>
-      <dl className="sgtm-resumen__datos">
-        <Dato etiqueta="Titular" valor={texto(campos['nombreDelContribuyente'])} />
-        <Dato etiqueta="Uso" valor={texto(campos['uso2'])} />
-        <Dato etiqueta="Área de terreno" valor={texto(campos['areaTotalHa'])} />
-        {/* La suma de las areas por piso la haria el backend o no la hace nadie. */}
-        <Dato etiqueta="Área construida" valor={SIN_DATO} />
-      </dl>
+    <CabeceraDeRegistro
+      rotulo="Resumen de la ficha"
+      identificador={formatearCodigoCatastral(codigo)}
+      /* El estado nunca solo por color, y la version que rige va con desde
+         cuando y de donde salio: esa apostilla **fecha la ficha entera**, que es
+         por que ninguno de los cuatro datos de abajo lleva fecha propia. */
+      {...(version === undefined
+        ? {}
+        : {
+            insignias: [
+              {
+                texto: version.vigente ? 'VIGENTE' : 'HISTÓRICA',
+                tono: version.vigente ? ('ok' as const) : ('neutro' as const),
+              },
+            ],
+            apostilla: `v${version.version} · desde ${formatearFecha(version.vigenciaDesde)} · ${
+              version.origen === '' ? SIN_DATO : version.origen
+            }`,
+          })}
+      datos={datosDeLaFicha}
+      cargando={cargando}
+    >
       <LineaDeConciliacion />
-    </section>
+    </CabeceraDeRegistro>
   );
 }
 
@@ -115,15 +128,6 @@ function LineaDeConciliacion() {
       <strong>Conciliación con rentas: {SIN_DATO}</strong> · rentas no publica todavía si reconoce
       este predio.
     </p>
-  );
-}
-
-function Dato({ etiqueta, valor }: { readonly etiqueta: string; readonly valor: string }) {
-  return (
-    <div className="sgtm-resumen__dato">
-      <dt>{etiqueta}</dt>
-      <dd>{valor}</dd>
-    </div>
   );
 }
 

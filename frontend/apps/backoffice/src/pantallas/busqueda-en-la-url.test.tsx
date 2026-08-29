@@ -45,7 +45,7 @@ describe('el registro abierto vive en la ruta', () => {
     // La pantalla se dibuja entera —el catalogo la conoce— y dice que falta
     // elegir un registro, en vez de pedir uno de relleno.
     expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument();
-    expect(await screen.findByText(/Elige un registro/)).toBeInTheDocument();
+    expect(await screen.findByText(/Elige un predio/)).toBeInTheDocument();
     expect(aCatastro()).toEqual([]);
   });
 
@@ -57,7 +57,7 @@ describe('el registro abierto vive en la ruta', () => {
     expect(await screen.findByText('Versión 3')).toBeInTheDocument();
     expect(aCatastro()).toHaveLength(1);
     expect(aCatastro()[0]).toContain('/api/v1/catastro/fichas/urbana/200601010150010101001');
-    expect(screen.queryByText(/Elige un registro/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Elige un predio/)).not.toBeInTheDocument();
   });
 
   it('buscar por el identificador abre el registro: la placa en la mano', async () => {

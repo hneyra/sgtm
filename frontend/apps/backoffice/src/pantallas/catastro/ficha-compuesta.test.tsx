@@ -3,7 +3,6 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { montarEnRuta } from '../../pruebas/montar';
-import { seccionesDe } from '../../catalogo';
 import { todasLasPantallas } from '../../catalogo';
 import { composicionDe } from '../composicion';
 import { SIN_DATO } from '../seguridad/listado';
@@ -112,7 +111,7 @@ describe('la cabecera-resumen dice de que ficha es y de cuando', () => {
 
   it('sin registro abierto no hay resumen: no hay ficha que resumir', async () => {
     montarEnRuta('/catastro/ficha-urbana');
-    expect(await screen.findByText(/Elige un registro/)).toBeInTheDocument();
+    expect(await screen.findByText(/Elige un predio/)).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Resumen de la ficha' })).not.toBeInTheDocument();
   });
 });
@@ -122,11 +121,15 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
     montarEnRuta(URBANA);
     await screen.findByRole('region', { name: 'Versión de la ficha' });
 
-    const pantallas = await todasLasPantallas();
-    const estructura = pantallas['ficha_urbana'];
-    expect(estructura).toBeDefined();
-    if (!estructura) return;
-    const declaradas = seccionesDe(estructura, 0).map((seccion) => seccion.label);
+    // Las secciones del catalogo **se conservan letra por letra** (RNF-080): lo
+    // que cambia es en que pestana caen. «Identificación» recoge las tres que la
+    // ficha urbana declaraba repartidas entre «Datos Generales», «Inf.
+    // Complementaria» y «Observaciones».
+    const declaradas = [
+      'Ficha catastral urbana individual',
+      'Información complementaria',
+      'Notas de la ficha',
+    ];
 
     const entradas = within(indice())
       .getAllByRole('button')
@@ -135,7 +138,7 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
     // acciones, que es lo que faltaba para no tener que tabular por los 55
     // controles de la ficha para llegar al acto (#332).
     expect(entradas).toEqual([...declaradas, 'Ir a las acciones']);
-    expect(within(indice()).getByText('2 secciones')).toBeInTheDocument();
+    expect(within(indice()).getByText('3 secciones')).toBeInTheDocument();
   });
 
   it('cada entrada lleva al ancla de su seccion, y la pulsada queda marcada', async () => {
@@ -146,17 +149,15 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
     // Por su nombre accesible, que **no** es el rotulo a secas: la cabecera
     // plegable de la seccion es otro boton y se llama igual (#337).
     const segunda = within(indice()).getByRole('button', {
-      name: 'Ir a Ubicación del predio catastral',
+      name: 'Ir a Información complementaria',
     });
     await usuario.click(segunda);
 
     // El ancla existe y es la seccion que dice: sin el `id`, la entrada seria un
     // enlace a ninguna parte y nadie lo notaria.
-    const ancla = document.getElementById('sgtm-seccion-0-1');
+    const encabezado = screen.getByRole('heading', { level: 2, name: 'Información complementaria' });
+    const ancla = encabezado.closest('[id^="sgtm-seccion-"]');
     expect(ancla).not.toBeNull();
-    expect(within(ancla as HTMLElement).getByRole('heading', { level: 2 })).toHaveTextContent(
-      'Ubicación del predio catastral',
-    );
     expect(segunda).toHaveAttribute('data-activa', '1');
   });
 
@@ -165,12 +166,15 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
     montarEnRuta(URBANA);
     await screen.findByRole('region', { name: 'Versión de la ficha' });
 
-    await usuario.click(screen.getByRole('tab', { name: 'Construcción' }));
+    await usuario.click(screen.getByRole('tab', { name: 'Valorización' }));
     const entradas = within(indice())
       .getAllByRole('button')
       .map((boton) => boton.textContent);
+    // La primera entrada es la **tabla** de la pestana, con el rotulo que le da
+    // su catalogo; despues, sus secciones.
     expect(entradas).toEqual([
-      'Características de construcción — piso 01',
+      'Versiones registradas por piso',
+      'Obras complementarias',
       'Áreas legal y física',
       'Ir a las acciones',
     ]);
@@ -195,17 +199,16 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
         .filter((opcion) => composicionDe(opcion).indice === valor)
         .sort();
 
-    // `true` conserva la barra de pestanas y indexa la activa: las once de la
-    // ficha urbana siguen siendo once. Y sirve tambien para una pantalla **sin**
-    // pestanas: `predial_individual` (#333), donde lo que el indice recorre es
-    // la memoria de calculo —base, escala, beneficios y cuotas—.
-    expect(declarado(true)).toEqual([
-      'ficha_bienes',
-      'ficha_economica',
-      'ficha_rural',
-      'ficha_urbana',
-      'predial_individual',
-    ]);
+    // `true` conserva la barra de pestanas y indexa la activa. Las cuatro fichas
+    // **ya no lo declaran aqui**: desde que las cinco opciones del predio caen
+    // en una sola superficie, el indice lo dibuja `FichaDelPredio` con las
+    // secciones de su pestana activa, que son las cinco suyas y no las once del
+    // catalogo. La declaracion sigue viva para lo que la sigue necesitando:
+    // `predial_individual` (#333), una pantalla **sin** pestanas donde lo que el
+    // indice recorre es la memoria de calculo —base, escala, beneficios y
+    // cuotas—. Que el opt-in siga siendo opt-in lo comprueba la prueba de
+    // arriba, con una pantalla con secciones que no lo declara.
+    expect(declarado(true)).toEqual(['predial_individual']);
     // `'en-vez-de-pestanas'` las sustituye (#330): nueve pestanas de
     // contribuyentes y seis de la ficha de vehiculo pasan a una sola pagina.
     expect(declarado('en-vez-de-pestanas')).toEqual(['contribuyentes', 'vehiculos']);
@@ -222,12 +225,22 @@ describe('el acto de la ficha es alcanzable', () => {
     expect(acto).toHaveClass('sgtm-boton--primario');
     expect(acto).toHaveAttribute('href', '/catastro/actualizacion-catastro/200601010150010101001');
 
-    // Y las del prototipo que siguen sin acto se quedan como estaban: visibles y
-    // apagadas. Dos primarias en la misma barra dirian que hay dos actos.
-    for (const etiqueta of ['Modificar', 'Deshacer', 'Imprimir', 'Guardar']) {
-      const boton = screen.getByRole('button', { name: etiqueta });
-      expect(boton).toBeDisabled();
-      expect(boton).not.toHaveClass('sgtm-boton--primario');
+    /* Y la del prototipo que sigue sin acto se queda como estaba: visible y
+       apagada. Dos primarias en la misma barra dirian que hay dos actos.
+
+       **Son una, y no cuatro, desde #391 §2**: «Modificar» y «Deshacer» son
+       modos y salen de la barra, y «Guardar» tambien —la ficha es un `GET`, asi
+       que ese boton no podia guardar ni el dia que llegara el backend—. Lo que
+       queda de las cinco del catalogo es «Nuevo», que abre el alta guiada, y
+       «Imprimir». */
+    const imprimir = screen.getByRole('button', { name: 'Imprimir' });
+    expect(imprimir).toBeDisabled();
+    expect(imprimir).not.toHaveClass('sgtm-boton--primario');
+    for (const etiqueta of ['Modificar', 'Deshacer', 'Guardar']) {
+      expect(
+        screen.queryByRole('button', { name: etiqueta }),
+        `«${etiqueta}» sigue en la barra de la ficha`,
+      ).not.toBeInTheDocument();
     }
 
     // «Nuevo» si tiene acto desde #320 —abre el alta guiada—, y aun asi **no es
@@ -243,7 +256,7 @@ describe('el acto de la ficha es alcanzable', () => {
 
   it('sin registro abierto no hay acto: no hay predio que actualizar', async () => {
     montarEnRuta('/catastro/ficha-urbana');
-    expect(await screen.findByText(/Elige un registro/)).toBeInTheDocument();
+    expect(await screen.findByText(/Elige un predio/)).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Actualizar catastro' })).not.toBeInTheDocument();
   });
 
@@ -263,7 +276,7 @@ describe('el acto de la ficha es alcanzable', () => {
     await screen.findByText(/Elige un predio/);
     await usuario.click(screen.getByLabelText('Cod. Ref. Catastral · Depto.'));
     await usuario.paste('200601010150010101001');
-    await usuario.click(screen.getByRole('button', { name: 'Abrir predio' }));
+    await usuario.click(screen.getByRole('button', { name: 'Buscar' }));
 
     expect(await screen.findByText('Pisos declarados en la nueva versión')).toBeInTheDocument();
   });
