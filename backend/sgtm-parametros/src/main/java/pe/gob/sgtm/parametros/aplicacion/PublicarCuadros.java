@@ -543,6 +543,7 @@ public class PublicarCuadros implements ApplicationRunner {
             }
         }
     }
+
     /**
      * No hay conexion: eso <b>no es una fila rechazada</b> (issue #435).
      *
@@ -556,10 +557,10 @@ public class PublicarCuadros implements ApplicationRunner {
     private static IllegalStateException sinConexion(Exception causa) {
         return new IllegalStateException(
                 "No se pudo abrir una conexion contra la base. Esto NO es una fila rechazada: sin"
-                    + " conexion no se publica ninguna. Comprobar que la credencial de"
-                    + " rol_carga_parametros sirve de verdad contra este ambiente —el secreto puede"
-                    + " existir y el rol seguir sin LOGIN— con infra/secretos/asignar-claves.sh"
-                    + " --ambiente <amb> --comprobar",
+                        + " conexion no se publica ninguna. Comprobar que la credencial de"
+                        + " rol_carga_parametros sirve de verdad contra este ambiente —el secreto puede"
+                        + " existir y el rol seguir sin LOGIN— con infra/secretos/asignar-claves.sh"
+                        + " --ambiente <amb> --comprobar",
                 causa);
     }
 }

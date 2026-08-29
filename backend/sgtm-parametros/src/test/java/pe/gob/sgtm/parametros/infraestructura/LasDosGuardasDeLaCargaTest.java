@@ -32,10 +32,10 @@ import pe.gob.sgtm.parametros.dominio.PublicacionDeCuadros;
  *
  * <h2>Por que hace falta una prueba propia, teniendo ya las negativas</h2>
  *
- * <p>Cuando #380 midio la guarda salio el matiz que este archivo existe para conservar:
- * devolverle el {@code INSERT} a {@code sgtm_app} deja las pruebas <b>en verde</b>, porque quien lo
- * para no es el privilegio sino que la politica de RLS nombra solo a {@code rol_carga_parametros}.
- * RLS y {@code GRANT} son dos guardas independientes, <b>basta una</b>, y <b>las dos dan {@code
+ * <p>Cuando #380 midio la guarda salio el matiz que este archivo existe para conservar: devolverle
+ * el {@code INSERT} a {@code sgtm_app} deja las pruebas <b>en verde</b>, porque quien lo para no es
+ * el privilegio sino que la politica de RLS nombra solo a {@code rol_carga_parametros}. RLS y
+ * {@code GRANT} son dos guardas independientes, <b>basta una</b>, y <b>las dos dan {@code
  * 42501}</b>: el sintoma no distingue cual actuo.
  *
  * <p>Una prueba que solo comprueba «el {@code INSERT} falla» pasa igual con una guarda que con dos,
@@ -130,7 +130,8 @@ class LasDosGuardasDeLaCargaTest {
 
     /**
      * La cabecera de la edicion la escribe quien puede: sin ella, el {@code publicacion_id} de las
-     * filas del cuadro no referenciaria nada y el rechazo seria de la clave foranea, no de la guarda.
+     * filas del cuadro no referenciaria nada y el rechazo seria de la clave foranea, no de la
+     * guarda.
      */
     private static long abrirUnaEdicionComoRolDeCarga() {
         return puertoDeCuadros(BaseDeDatosDePrueba.CARGA_PARAMETROS)
@@ -182,15 +183,16 @@ class LasDosGuardasDeLaCargaTest {
             assertThat(conPrivilegioDeMas)
                     .as(
                             "la primera guarda es el GRANT. V55 se lo retiro a sgtm_app sobre las"
-                                + " tres tablas de valuacion, y V7 nunca se lo dio sobre"
-                                + " parametro_tributario: una peticion HTTP no puede tener el"
-                                + " camino mas corto hasta el cuadro de valores unitarios de todas"
-                                + " las municipalidades del pais")
+                                    + " tres tablas de valuacion, y V7 nunca se lo dio sobre"
+                                    + " parametro_tributario: una peticion HTTP no puede tener el"
+                                    + " camino mas corto hasta el cuadro de valores unitarios de todas"
+                                    + " las municipalidades del pais")
                     .isEmpty();
         }
 
         @Test
-        @DisplayName("la politica de escritura de las cuatro nombra a rol_carga_parametros, y a nadie mas")
+        @DisplayName(
+                "la politica de escritura de las cuatro nombra a rol_carga_parametros, y a nadie mas")
         void laPoliticaDeEscrituraNombraSoloAlRolDeCarga() throws SQLException {
             for (String tabla : TABLAS) {
                 String roles =
@@ -203,8 +205,8 @@ class LasDosGuardasDeLaCargaTest {
                 assertThat(roles)
                         .as(
                                 "la segunda guarda es la politica de RLS de %s. Es independiente del"
-                                    + " GRANT —basta una para dar 42501— y por eso hay que mirarla"
-                                    + " aparte",
+                                        + " GRANT —basta una para dar 42501— y por eso hay que mirarla"
+                                        + " aparte",
                                 tabla)
                         .isEqualTo(ROL_DE_CARGA);
             }
@@ -237,9 +239,9 @@ class LasDosGuardasDeLaCargaTest {
             String escribibles =
                     consultar(
                             "SELECT coalesce(string_agg(c.relname, ',' ORDER BY c.relname), '')"
-                                + " FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
-                                + " WHERE n.nspname = 'public' AND c.relkind IN ('r','p') AND"
-                                + " (has_table_privilege('"
+                                    + " FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
+                                    + " WHERE n.nspname = 'public' AND c.relkind IN ('r','p') AND"
+                                    + " (has_table_privilege('"
                                     + ROL_DE_CARGA
                                     + "', c.oid, 'INSERT') OR has_table_privilege('"
                                     + ROL_DE_CARGA
@@ -249,10 +251,10 @@ class LasDosGuardasDeLaCargaTest {
             assertThat(List.of(escribibles.split(",")))
                     .as(
                             "la leccion de sgtm_respaldo (#155) aplicada al otro rol privilegiado:"
-                                + " sus privilegios son los minimos que la carga necesita, y se"
-                                + " comprueban ENUMERANDOLOS. Ni el conjunto, ni su detalle, ni la"
-                                + " auditoria: es la separacion de funciones SoD-1 de REQ-03"
-                                + " escrita en los privilegios")
+                                    + " sus privilegios son los minimos que la carga necesita, y se"
+                                    + " comprueban ENUMERANDOLOS. Ni el conjunto, ni su detalle, ni la"
+                                    + " auditoria: es la separacion de funciones SoD-1 de REQ-03"
+                                    + " escrita en los privilegios")
                     .containsExactlyInAnyOrderElementsOf(TABLAS);
         }
 
@@ -262,14 +264,15 @@ class LasDosGuardasDeLaCargaTest {
             String conBorrado =
                     consultar(
                             "SELECT coalesce(string_agg(c.relname, ',' ORDER BY c.relname), '')"
-                                + " FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
-                                + " WHERE n.nspname = 'public' AND c.relkind IN ('r','p') AND"
-                                + " has_table_privilege('"
+                                    + " FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
+                                    + " WHERE n.nspname = 'public' AND c.relkind IN ('r','p') AND"
+                                    + " has_table_privilege('"
                                     + ROL_DE_CARGA
                                     + "', c.oid, 'DELETE')");
             assertThat(conBorrado)
-                    .as("regla 4 de CLAUDE.md: en el corpus normativo no se borra, se republica con"
-                            + " otra vigencia")
+                    .as(
+                            "regla 4 de CLAUDE.md: en el corpus normativo no se borra, se republica con"
+                                    + " otra vigencia")
                     .isEmpty();
         }
 
@@ -286,8 +289,8 @@ class LasDosGuardasDeLaCargaTest {
             assertThat(List.of(delCatalogo.split(",")))
                     .as(
                             "una tabla normativa nueva cuya politica nombre al rol de carga y que"
-                                + " nadie anada a TABLAS quedaria sin las comprobaciones de arriba,"
-                                + " y esta prueba seguiria en verde vigilando cuatro")
+                                    + " nadie anada a TABLAS quedaria sin las comprobaciones de arriba,"
+                                    + " y esta prueba seguiria en verde vigilando cuatro")
                     .containsExactlyInAnyOrderElementsOf(TABLAS);
         }
     }
@@ -309,7 +312,8 @@ class LasDosGuardasDeLaCargaTest {
         }
 
         @Test
-        @DisplayName("ni las dos tablas de cuadro que tienen escritor: depreciacion y valor_referencial_vehiculo")
+        @DisplayName(
+                "ni las dos tablas de cuadro que tienen escritor: depreciacion y valor_referencial_vehiculo")
         void laAplicacionNoPuedeEscribirLosCuadros() throws SQLException {
             long edicion = abrirUnaEdicionComoRolDeCarga();
             PublicacionDeCuadros conLaApp = puertoDeCuadros(BaseDeDatosDePrueba.APP);
@@ -326,8 +330,8 @@ class LasDosGuardasDeLaCargaTest {
                                             "prueba de las dos guardas"))
                     .as(
                             "depreciacion no tenia ninguna prueba negativa antes de #435: la unica"
-                                + " que existia era la de valor_unitario_edificacion, en"
-                                + " sgtm-catastro")
+                                    + " que existia era la de valor_unitario_edificacion, en"
+                                    + " sgtm-catastro")
                     .isInstanceOf(org.springframework.dao.DataAccessException.class);
 
             assertThatThrownBy(
@@ -348,8 +352,7 @@ class LasDosGuardasDeLaCargaTest {
         @Test
         @DisplayName("devolverle el GRANT no abre nada, y el codigo de error es EL MISMO: 42501")
         void elSintomaNoDistingueCualDeLasDosGuardasActuo() throws SQLException {
-            comoSuperusuario(
-                    "GRANT INSERT ON parametro_tributario TO " + BaseDeDatosDePrueba.APP);
+            comoSuperusuario("GRANT INSERT ON parametro_tributario TO " + BaseDeDatosDePrueba.APP);
             try {
                 assertThat(
                                 consultar(
@@ -363,9 +366,9 @@ class LasDosGuardasDeLaCargaTest {
                     assertThatThrownBy(() -> insertar(conexion, "app-con-grant"))
                             .as(
                                     "y el sintoma no: con el privilegio devuelto, la politica de RLS"
-                                        + " sigue parandolo con el mismo 42501 de antes. Es"
-                                        + " exactamente el matiz que #380 midio, y el motivo por el"
-                                        + " que una prueba de sintoma no puede vigilar dos guardas")
+                                            + " sigue parandolo con el mismo 42501 de antes. Es"
+                                            + " exactamente el matiz que #380 midio, y el motivo por el"
+                                            + " que una prueba de sintoma no puede vigilar dos guardas")
                             .isInstanceOf(SQLException.class)
                             .extracting(e -> ((SQLException) e).getSQLState())
                             .isEqualTo(PRIVILEGIO_INSUFICIENTE);
@@ -379,8 +382,7 @@ class LasDosGuardasDeLaCargaTest {
         @Test
         @DisplayName("y hay que quitar LAS DOS para que entre: es lo que «basta una» significa")
         void quitarLasDosAbreLaPuerta() throws SQLException {
-            comoSuperusuario(
-                    "GRANT INSERT ON parametro_tributario TO " + BaseDeDatosDePrueba.APP);
+            comoSuperusuario("GRANT INSERT ON parametro_tributario TO " + BaseDeDatosDePrueba.APP);
             comoSuperusuario(
                     "CREATE POLICY parametro_escritura_de_prueba ON parametro_tributario"
                             + " FOR ALL TO "
@@ -390,12 +392,13 @@ class LasDosGuardasDeLaCargaTest {
                 assertThatCode(() -> insertar(conexion, "app-con-las-dos-fuera"))
                         .as(
                                 "con el GRANT y una politica que nombre a sgtm_app, la aplicacion"
-                                    + " publica un valor normativo. Es el estado que las dos guardas"
-                                    + " existen para impedir, y la unica forma de demostrar que las"
-                                    + " dos hacen falta")
+                                        + " publica un valor normativo. Es el estado que las dos guardas"
+                                        + " existen para impedir, y la unica forma de demostrar que las"
+                                        + " dos hacen falta")
                         .doesNotThrowAnyException();
             } finally {
-                comoSuperusuario("DROP POLICY parametro_escritura_de_prueba ON parametro_tributario");
+                comoSuperusuario(
+                        "DROP POLICY parametro_escritura_de_prueba ON parametro_tributario");
                 comoSuperusuario(
                         "REVOKE INSERT ON parametro_tributario FROM " + BaseDeDatosDePrueba.APP);
             }
@@ -404,13 +407,12 @@ class LasDosGuardasDeLaCargaTest {
         @Test
         @DisplayName("el rol de carga si escribe: lo que para a sgtm_app no es un CHECK")
         void elRolDeCargaSiEscribe() throws SQLException {
-            try (Connection conexion =
-                    base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS)) {
+            try (Connection conexion = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS)) {
                 assertThatCode(() -> insertar(conexion, "carga-si-entra"))
                         .as(
                                 "sin esto, las tres pruebas de arriba podrian estar pasando en verde"
-                                    + " porque la fila viola una restriccion y no porque una guarda"
-                                    + " la pare")
+                                        + " porque la fila viola una restriccion y no porque una guarda"
+                                        + " la pare")
                         .doesNotThrowAnyException();
             }
         }

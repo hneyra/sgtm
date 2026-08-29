@@ -791,6 +791,7 @@ class PublicarParametrosTest {
             return resultado.getString(1);
         }
     }
+
     @Nested
     @DisplayName("Sin conexion no hay filas rechazadas: hay una corrida fallida (#435)")
     class SinConexion {
@@ -807,7 +808,8 @@ class PublicarParametrosTest {
          * aparecia en ninguna linea de la salida.
          */
         @Test
-        @DisplayName("una credencial que no conecta corta la corrida y nombra la causa, no las firmas")
+        @DisplayName(
+                "una credencial que no conecta corta la corrida y nombra la causa, no las firmas")
         void unaCredencialQueNoConectaCortaLaCorrida() {
             PublicacionDeParametros sinPoderConectarse =
                     new PublicacionDeParametros() {
@@ -819,7 +821,9 @@ class PublicarParametrosTest {
 
                         @Override
                         public long publicar(
-                                ParametroTributario parametro, String transcribio, String verifico) {
+                                ParametroTributario parametro,
+                                String transcribio,
+                                String verifico) {
                             throw new org.springframework.jdbc.CannotGetJdbcConnectionException(
                                     "FATAL: role \"rol_carga_parametros\" is not permitted to log in");
                         }
@@ -838,8 +842,8 @@ class PublicarParametrosTest {
             assertThatThrownBy(() -> proceso.publicar(new java.io.StringReader(csv)))
                     .as(
                             "sin conexion no hay «2 filas rechazadas»: hay una corrida que no pudo"
-                                + " empezar. Contarlo como rechazo por fila produce un diagnostico"
-                                + " plausible y equivocado —y con codigo de salida 0—")
+                                    + " empezar. Contarlo como rechazo por fila produce un diagnostico"
+                                    + " plausible y equivocado —y con codigo de salida 0—")
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("NO es una fila rechazada")
                     .hasMessageContaining("asignar-claves.sh");
