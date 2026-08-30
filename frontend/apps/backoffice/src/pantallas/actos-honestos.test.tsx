@@ -17,7 +17,7 @@ import {
 import type { ActoSinCampo } from './actos';
 import { operacionDe } from './busqueda';
 import { ALTAS_DECLARADAS } from './composicion';
-import { OPCIONES_QUE_ESCRIBEN } from './escrituras';
+import { OPCIONES_QUE_ESCRIBEN, escrituraDe } from './escrituras';
 import { OPCIONES_QUE_LEEN_POR_POST } from './lecturas-por-post';
 
 /**
@@ -226,7 +226,14 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       //
       // **Y una mas con #445**: `predial_masivo`, la primera de las cinco
       // determinaciones que asienta su corrida en vez de solo simularla.
-      declarada: 19,
+      //
+      // **Y una mas con #427**: `certificados`. Llega desde `sin-declaracion`
+      // —donde #421 la habia dejado al poner «Emitir» de primaria— y necesita a
+      // la vez las dos formas del resolutor de #422: el control anadido del
+      // `nDeRecibo` que el backend exige y ninguna seccion dibuja, y el
+      // resolutor del `solicitante`, que es un codigo y la pantalla teclea como
+      // nombre.
+      declarada: 20,
       // **Una, y es nueva con #424**: `transito_reportes`. Viene de
       // `sin-declaracion` —su operacion es un `POST` y no declara escritura—, y
       // esa causa decia de ella lo unico que no es cierto: que «la pantalla aún
@@ -237,7 +244,12 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // el mismo camino y por el mismo motivo, con una diferencia que era la que
       // la tenia fuera: su desplegable ofrecia diez tipos de reporte y el
       // backend implementa tres.
-      lectura: 2,
+      //
+      // **Y dos mas con #427**: `anuncios_reportes` y `licencia_padron`, los dos
+      // padrones de Autorizaciones y licencias. Mismo camino y mismo motivo:
+      // `POST` que no escribe, cuyos criterios no caben en una URL y cuya
+      // respuesta publica sus filas bajo `filas`, no bajo `contenido`.
+      lectura: 4,
       // Dos menos que en la onda 4: `alcabala` y `espectaculos` se mudan a
       // `sin-campo` (#385). Su primaria de impresion las dejaba aqui, con el
       // boton apagado y el motivo real —los campos que el backend exige y la
@@ -306,7 +318,11 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // que `hojas-sin-superficie` computa del catalogo estan **todas** alli—, y
       // `adm_reportes` se va a `lectura`: su `POST` no escribe, y lo que la
       // tenia fuera de la tercera puerta era su desplegable.
-      'sin-declaracion': 16,
+      //
+      // **Y tres menos con #427**: `anuncios_reportes` y `licencia_padron` se
+      // van a `lectura` y `certificados` a `declarada`. El numero no se sumo a
+      // mano: se recompuso ejecutando el censo.
+      'sin-declaracion': 13,
       // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
       // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
       // «Guardar» de una ficha `GET` se cae— y repartir el valor de una
@@ -719,19 +735,24 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
    * ya no ve una primaria de impresion. Por eso la rotura que lo mide es
    * devolver el orden, no quitar un `if`.
    */
-  it('certificados: con el orden del catalogo no hay franja; con el compuesto, si', async () => {
+  it('certificados: la que emite es «Emitir», y desde #427 emite de verdad', async () => {
     const pantallas = await todasLasPantallas();
     const acciones = pantallas['certificados']?.acciones ?? [];
 
-    // Como estaba: «Imprimir certificado» de primaria, y el filtro de salida
-    // devolvia `undefined` sin llegar a preguntar por que no se puede guardar.
+    // Como el catalogo la dibuja: la ultima —la primaria de FRO-03 §5— imprime.
     expect(acciones[acciones.length - 1]).toBe('Imprimir certificado');
-    expect(impedimentoDelActo('certificados', acciones)).toBeUndefined();
-
-    // Con la barra compuesta, la primaria es «Emitir» y la franja lo cuenta.
+    // Con la barra compuesta, la primaria es la que emite.
     const barra = accionesDeLaBarra('certificados', acciones, altasDe('certificados')).acciones;
     expect(barra[barra.length - 1]).toBe('Emitir');
-    expect(impedimentoDelActo('certificados', barra)?.causa).toBe('sin-declaracion');
+
+    /* **Y lo que esta declaracion sostiene desde #427 es mas que un color.**
+       `certificados` declara su escritura, asi que la primaria **dispara el
+       `POST`**: sin `LA_QUE_ESCRIBE`, quien lo dispararia es un boton que dice
+       «Imprimir certificado» —consumiendo un correlativo y cobrando un derecho
+       al pulsar lo que parece una reimpresion—. Por eso ya no hay impedimento
+       que contar: lo que apaga la primaria es `exigir`, no una franja. */
+    expect(escrituraDe('certificados')).toBeDefined();
+    expect(impedimentoDelActo('certificados', barra)).toBeUndefined();
   });
 
   /**
@@ -743,7 +764,7 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
    * y eso tambien se afirma aqui: si se movieran, el censo cuadraria por otro
    * camino y nadie se enteraria.
    */
-  it('las seis que se mudan de casilla lo hacen por su barra, no por su catalogo', async () => {
+  it('las cinco que se mudan de casilla lo hacen por su barra, no por su catalogo', async () => {
     const pantallas = await todasLasPantallas();
     const causaDe = (opcion: string, acciones: readonly string[]) =>
       impedimentoDelActo(opcion, acciones)?.causa ?? 'ninguna';
@@ -751,30 +772,34 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
     const deLaBarra = (opcion: string) =>
       accionesDeLaBarra(opcion, delCatalogo(opcion), altasDe(opcion)).acciones;
 
+    /* Cinco desde #427, no seis: `certificados` ya declara su escritura, asi
+       que su casilla no es `sin-declaracion` sino ninguna —lo que la apaga es
+       `exigir`—, y lo suyo lo mide la prueba de arriba. */
     for (const opcion of [
       'importacion_valores',
       'expediente_historial',
       'costas_procesales',
       'adm_notificacion',
       'adm_valores',
-      'certificados',
     ]) {
       // Con la lista cruda: una primaria de salida, y ninguna franja.
       expect(causaDe(opcion, delCatalogo(opcion)), `«${opcion}» del catalogo`).toBe('ninguna');
       // Con la barra: la operacion escribe y la opcion no ha declarado sus campos.
       expect(causaDe(opcion, deLaBarra(opcion)), `«${opcion}» compuesta`).toBe('sin-declaracion');
     }
-    for (const opcion of [
-      'rec_impresion',
-      'actos_coactivos',
-      'notificaciones_coactivas',
-      'anuncios_reportes',
-      'licencia_padron',
-    ]) {
+    for (const opcion of ['rec_impresion', 'actos_coactivos', 'notificaciones_coactivas']) {
       expect(causaDe(opcion, delCatalogo(opcion)), `«${opcion}» del catalogo`).toBe(
         'sin-declaracion',
       );
       expect(causaDe(opcion, deLaBarra(opcion)), `«${opcion}» compuesta`).toBe('sin-declaracion');
+    }
+    /* Y las dos de licencias que #427 lleva a la tercera puerta: su acto
+       funciona y no guarda nada, asi que no tienen casilla ni con la lista del
+       catalogo ni con la compuesta. Antes las dos decian `sin-declaracion`. */
+    for (const opcion of ['anuncios_reportes', 'licencia_padron']) {
+      expect(causaDe(opcion, delCatalogo(opcion)), `«${opcion}» del catalogo`).toBe('ninguna');
+      expect(causaDe(opcion, deLaBarra(opcion)), `«${opcion}» compuesta`).toBe('ninguna');
+      expect(OPCIONES_QUE_LEEN_POR_POST, `«${opcion}» lee por POST`).toContain(opcion);
     }
   });
 
@@ -947,11 +972,14 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
    *                          coactiva, irreversible (RF-100)
    *   `certificados`         el que ademas **estrena la franja**: su ultima es
    *                          «Imprimir certificado», asi que `DE_SALIDA` la
-   *                          silenciaba antes de mirar nada mas
+   *                          silenciaba antes de mirar nada mas. Desde #427 es
+   *                          ademas el que demuestra por que el color importa:
+   *                          esa primaria **emite de verdad**
    *
-   * Y las dos siguen apagadas: aqui no se conecta ninguna escritura. Lo que
-   * cambia es cual esta apagada y que ahora dice por que, en una franja que se
-   * lee (RNF-082) en vez de un `title` sobre un boton `disabled`.
+   * Y las dos siguen apagadas, por motivos que ya no son el mismo: la primera
+   * porque su modulo no ha declarado su escritura —franja `sin-declaracion`—, y
+   * la segunda porque la ha declarado y `exigir` nombra lo que falta rellenar.
+   * Las dos donde se lee (RNF-082), no en un `title` sobre un boton `disabled`.
    */
   it.each([
     {
@@ -959,16 +987,20 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
       ruta: '/coactiva/importacion-valores',
       escribe: 'Importar valores',
       ultimaDelCatalogo: 'Limpiar campos',
+      motivo: /Registra el acto por el procedimiento actual/,
+      causa: 'sin-declaracion',
     },
     {
       caso: 'el certificado, que ademas estrena franja',
       ruta: '/autorizaciones-y-licencias/certificados',
       escribe: 'Emitir',
       ultimaDelCatalogo: 'Imprimir certificado',
+      motivo: /Falta el tipo de certificado/,
+      causa: undefined,
     },
   ])(
     '$caso: la primaria es «$escribe», no «$ultimaDelCatalogo»',
-    async ({ ruta, escribe, ultimaDelCatalogo }) => {
+    async ({ ruta, escribe, ultimaDelCatalogo, motivo, causa }) => {
       const montada = montarEnRuta(ruta);
       await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
 
@@ -981,15 +1013,18 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
         'sgtm-boton--secundario',
       );
 
-      /* Sigue sin poder guardar —la escritura la declara el issue de su modulo—
-         y ahora lo dice donde se lee: apagada con `aria-disabled`, enfocable, y
-         con la franja que su `aria-describedby` señala. */
+      /* Apagada con `aria-disabled`, enfocable, y con la franja que su
+         `aria-describedby` señala. */
       primariaApagada();
-      expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
-      expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
-        'data-causa',
-        'sin-declaracion',
-      );
+      expect(motivoDeLaPrimaria()).toMatch(motivo);
+      const franja = document.getElementById('sgtm-motivo-de-la-accion');
+      if (causa === undefined) {
+        /* La que ya declara su escritura **no** tiene causa: no hay impedimento
+           que contar, lo que la apaga es lo que le falta al formulario. */
+        expect(franja).not.toHaveAttribute('data-causa');
+      } else {
+        expect(franja).toHaveAttribute('data-causa', causa);
+      }
 
       montada.unmount();
     },

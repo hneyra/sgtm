@@ -107,12 +107,28 @@ const HUELLAS = [
  * Bajarlo de verdad —decidir que sale del arranque— sigue siendo #433, y este
  * numero es una razon mas para hacerlo: van tres subidas en tres dias.
  *
+ * **Y a 158 el 2026-08-30** (#427), con la leccion de #442 aplicada al pie de la
+ * letra: lo medido en esta maquina es **156,9**, y CI mide ~0,3 mas, asi que con
+ * 157 este cambio decidiria en verde o rojo segun donde se compile. Lo que lo
+ * pide es lo mismo que subio el numero las veces anteriores y por el mismo
+ * diseno: **`escrituras.ts` esta en el arranque a proposito** —el camino de
+ * escritura lo necesita entero y sincrono—, y `certificados` le anade su lista
+ * blanca, su tabla de traduccion del tipo y lo que su `exigir` dice; los dos
+ * padrones anaden sus dos lineas a `lecturas-por-post.ts`. Son 0,8 KB entre las
+ * tres. La alternativa medida no es «no gastar»: los dos emisores y el resolutor
+ * del solicitante **ya van en `lazy()`** —3,8 KB fuera del arranque— y la prosa
+ * de los mensajes se recorto antes de tocar este numero, sin mover la decima.
+ *
+ * Se sube a 158 y no a 157,5 porque el margen tiene que aguantar lo que queda de
+ * la via B (#428 y #432 anaden declaraciones del mismo tipo); si al cerrarla
+ * sobra, se baja, como hizo #424.
+ *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */
 const PRESUPUESTO = {
   /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
-  arranque: 157,
+  arranque: 158,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**

@@ -1859,6 +1859,62 @@ function licenciaFuncionamiento(): Paginado {
   );
 }
 
+/**
+ * El padrón de anuncios (`PadronDeAnunciosResource`, #51, #427).
+ *
+ * **No es un sobre paginado**: sus filas viajan bajo `filas`, con la fecha de
+ * corte y el resumen al lado. Las filas son las mismas que ya publica el `GET`
+ * de `anuncios` —aquí no se inventa ni un dato—, y los dos agregados se calculan
+ * sobre ellas, que es lo que hace el motor con un agregado.
+ */
+function padronDeAnuncios(): Readonly<Record<string, unknown>> {
+  const filas = anuncios().contenido;
+  return {
+    aLaFecha: EL_DIA_DEL_PROTOTIPO,
+    autorizaciones: filas.length,
+    devengado: {
+      importe: filas.reduce(
+        (suma, fila) => masImporte(suma, importeDeLaTasa(fila['tasaDevengada'])),
+        '0.00',
+      ),
+      actualizadoA: EL_DIA_DEL_PROTOTIPO,
+    },
+    pagina: 0,
+    tamano: filas.length,
+    filas,
+  };
+}
+
+/** El importe de un `ImporteActualizado` del propio mock, o cero. */
+function importeDeLaTasa(valor: unknown): string {
+  if (valor === null || typeof valor !== 'object') return '0.00';
+  const importe = (valor as Readonly<Record<string, unknown>>)['importe'];
+  return typeof importe === 'string' ? importe : '0.00';
+}
+
+/**
+ * El padrón de licencias (`PadronDeLicenciasResource`, #54, #427).
+ *
+ * Mismo reparto que el de anuncios: las filas son las del `GET` de
+ * `licencia_funcionamiento` y los cuatro recuentos salen de contarlas por su
+ * estado derivado, como los cuenta el motor sobre **todo** el criterio.
+ */
+function padronDeLicencias(): Readonly<Record<string, unknown>> {
+  const filas = licenciaFuncionamiento().contenido;
+  const conEstado = (estado: string): number =>
+    filas.filter((fila) => fila['estado'] === estado).length;
+  return {
+    aLaFecha: EL_DIA_DEL_PROTOTIPO,
+    licencias: filas.length,
+    vigentes: conEstado('VIGENTE'),
+    vencidas: conEstado('VENCIDA'),
+    canceladas: conEstado('CANCELADA'),
+    pagina: 0,
+    tamano: filas.length,
+    filas,
+  };
+}
+
 /** Resumen de licencias por año (`ResumenAnualResource`, #54): sin sobre paginado. */
 function resumenAnualDeLicencias(): Readonly<Record<string, unknown>> {
   return {
@@ -2113,8 +2169,7 @@ const ESTADO_DE_LIQUIDACION_DEL_MOCK: Readonly<Record<string, string>> = {
  */
 const programasFiscalizacion = (): Paginado => {
   const campos = RESPUESTAS['fisc_programa']?.campos ?? {};
-  const texto = (clave: string): string =>
-    typeof campos[clave] === 'string' ? campos[clave] : '';
+  const texto = (clave: string): string => (typeof campos[clave] === 'string' ? campos[clave] : '');
 
   const tipoDelPrototipo = texto('tipoDePrograma');
   const estadoDelPrototipo = texto('estado2');
@@ -3940,6 +3995,11 @@ const ESCRITURAS: Readonly<Record<string, (cuerpo: unknown) => Readonly<Record<s
        motivo: es un `POST` que no escribe, y su respuesta es la union de
        `ReporteAdministrativoResource`. */
     'POST /infracciones/administrativas/reportes': reporteAdministrativo,
+    /* Y los dos padrones de Autorizaciones y licencias (#427). Mismo motivo que
+       los dos emisores: `POST` que no escribe, y una respuesta que publica sus
+       filas bajo `filas` en vez de bajo `contenido`. */
+    'POST /autorizaciones/anuncios/reportes': padronDeAnuncios,
+    'POST /licencias/funcionamiento/reportes/padron': padronDeLicencias,
   };
 
 /** La respuesta de una escritura de seguridad, si el proxy la publica con la forma del backend. */

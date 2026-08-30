@@ -919,6 +919,78 @@ function faltaEnElDescargo(borrador: Readonly<Record<string, string>>): string |
   return undefined;
 }
 
+/**
+ * «Tipo de certificado» del catalogo de `certificados` → `TipoDeCertificado` (V51).
+ *
+ * Los cuatro son los mismos cuatro y en el mismo orden; lo que cambia son las
+ * tildes y el «Y» que el enumerado escribe con guion bajo. Igual que
+ * `TIPO_DE_RECURSO_DEL_BACKEND`: con una tabla, no quitando tildes con una
+ * funcion —eso convertiria cualquier texto en un valor «traducido»—.
+ */
+const TIPO_DE_CERTIFICADO_DEL_BACKEND: Readonly<Record<string, string>> = {
+  // Entrecomilladas por lo mismo que `CEDULÓN`: sin las comillas son
+  // identificadores validos de JavaScript, y uno con tilde es lo que ESLint
+  // prohibe (FRO-04 §2).
+  'NUMERACIÓN': 'NUMERACION',
+  'ZONIFICACIÓN Y VÍAS': 'ZONIFICACION_VIAS',
+  'PARÁMETROS URBANÍSTICOS': 'PARAMETROS_URBANISTICOS',
+  'JURISDICCIÓN': 'JURISDICCION',
+};
+
+const tipoDeCertificadoDe = (texto: string): string | undefined =>
+  TIPO_DE_CERTIFICADO_DEL_BACKEND[texto];
+
+/**
+ * Los dos tipos cuyo papel **consigna parametros urbanisticos**, por su rotulo
+ * del desplegable.
+ *
+ * `ModeloDelCertificado.tablaDeParametros` imprime, cuando los cinco vienen
+ * vacios, la fila «— | Este certificado no consigna parametros urbanisticos»; y
+ * los cinco campos son `"ro"` en el catalogo, asi que esta pantalla no puede
+ * llenarlos. Emitir desde aqui una zonificacion o unos parametros urbanisticos
+ * produciria **papel oficial que no certifica nada**, con su correlativo
+ * consumido, su derecho cobrado y su SHA-256 sellado para siempre (un
+ * certificado no se corrige: V51 no admite `UPDATE`).
+ *
+ * Los otros dos **si** se emiten enteros: `ParametrosUrbanisticos` dice que un
+ * certificado de numeracion «no dice nada de la altura maxima» y que uno de
+ * jurisdiccion «solo dice que el predio esta dentro del distrito».
+ */
+const CERTIFICADOS_QUE_CONSIGNAN_PARAMETROS: readonly string[] = [
+  'ZONIFICACIÓN Y VÍAS',
+  'PARÁMETROS URBANÍSTICOS',
+];
+
+/**
+ * Que le falta al certificado para poder emitirse (#54, #427).
+ *
+ * Los cuatro que `CertificadoController` pasa por `exigido`/`tipoDe` —el tipo,
+ * el codigo predial, el solicitante y el numero de recibo—, en el orden en que
+ * se rellenan; y una quinta condicion que no es un campo que falte sino una
+ * clase de papel que esta pantalla no puede emitir honestamente.
+ */
+const SALIDA_DEL_CERTIFICADO = 'Emítelo por el procedimiento actual y avísale a sistemas.';
+
+function faltaEnElCertificado(borrador: Readonly<Record<string, string>>): string | undefined {
+  const dato = (clave: string): string => (borrador[clave] ?? '').trim();
+
+  const tipo = dato('tipoDeCertificado');
+  if (tipo === '') {
+    return 'Falta el tipo de certificado: numeración, zonificación y vías, parámetros urbanísticos o jurisdicción.';
+  }
+  if (CERTIFICADOS_QUE_CONSIGNAN_PARAMETROS.includes(tipo)) {
+    return `Este certificado consigna la zonificación, la altura máxima, el área libre mínima, el retiro municipal y el coeficiente de edificación, y esta pantalla los dibuja de solo lectura: no hay dónde transcribirlos del plano, y emitido así saldría sin ninguno y con su número ya gastado. Los de numeración y jurisdicción sí salen de aquí. ${SALIDA_DEL_CERTIFICADO}`;
+  }
+  if (dato('codigoPredial') === '') return 'Falta el código predial: se certifica sobre un predio.';
+  if (dato('solicitante') === '') {
+    return 'Falta el solicitante: elígelo en el padrón, porque el certificado se emite a su nombre.';
+  }
+  if (dato('nDeRecibo') === '') {
+    return 'Falta el número del recibo del derecho de trámite: el sistema comprueba contra él antes de emitir.';
+  }
+  return undefined;
+}
+
 const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   /**
    * Cambiar el año de trabajo.
@@ -1644,6 +1716,45 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
    * «Vencimiento», «Oficina»— tampoco: `PeticionDeCorridaDeValores` no tiene ningún campo
    * para ellas, y `GeneracionMasivaDeValoresController` no las lee.
    */
+  /**
+   * Certificados de numeración y zonificación (`POST /licencias/certificados`, #54, #427).
+   *
+   * Necesita las **tres** declaraciones de esta onda a la vez, y ninguna sobra:
+   *
+   *   `LA_QUE_ESCRIBE` (#421)   la última acción del catálogo es «Imprimir
+   *                             certificado», que `DE_SALIDA` reconocía **antes**
+   *                             de llegar a `ACTOS_SIN_CAMPO`; la que emite es
+   *                             «Emitir»
+   *   `controles` (#422)        el `nDeRecibo` que el backend exige y ninguna
+   *                             sección dibuja
+   *   `resolutores` (#422)      el `solicitante`, que es un **código** y la
+   *                             pantalla teclea como nombre
+   *
+   * **Los cinco parámetros urbanísticos no se declaran**, y esa ausencia es la
+   * decisión de este issue: son `"ro"` en el catálogo, `Campo.tsx` los bloquea
+   * siempre, y el backend espera que los teclee quien atiende leyéndolos del
+   * plano de zonificación. Abrirlos sería volver editable lo que el manual
+   * dibuja de solo lectura (RNF-080) sin que nadie lo haya decidido; dejarlos
+   * cerrados y emitir igual produciría un papel que dice «Este certificado no
+   * consigna parámetros urbanísticos» con su correlativo gastado. Así que la
+   * pantalla emite los dos tipos que no los llevan y **dice** por qué no emite
+   * los otros dos: ver `faltaEnElCertificado`.
+   *
+   * `fechaDeEmision` tampoco: el catálogo no dibuja ningún campo para ella y el
+   * controlador la resuelve con el reloj inyectado. Y `formato` menos aún —la
+   * descarga del papel es otra ruta, `POST .../{numero}/impresion`—.
+   */
+  certificados: {
+    campos: {
+      tipoDeCertificado: { campo: 'tipoDeCertificado', valor: tipoDeCertificadoDe },
+      codigoPredial: { campo: 'codigoPredial' },
+      solicitante: { campo: 'solicitante' },
+      nDeExpediente: { campo: 'nDeExpediente' },
+      nDeRecibo: { campo: 'nDeRecibo' },
+    },
+    exigir: (borrador) => faltaEnElCertificado(borrador),
+  },
+
   transito_valores: {
     campos: {
       fecInicio: { campo: 'desde' },
