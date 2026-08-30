@@ -209,7 +209,7 @@ public class FichaController {
     /** Los datos del predio. Solo se usan si hay que darlo de alta; el codigo, siempre. */
     private InscribirFicha.DatosDelPredio predioDeclarado(PeticionDeAlta peticion) {
         return new InscribirFicha.DatosDelPredio(
-                referenciaDe(
+                DeclaracionDeFicha.referenciaDe(
                         DeclaracionDeFicha.exigir(peticion.codRefCatastral(), "codRefCatastral")),
                 tipoDePredio(peticion.tipoPredio()),
                 DeclaracionDeFicha.exigir(peticion.direccion(), "direccion"),
@@ -260,14 +260,6 @@ public class FichaController {
         } catch (IllegalArgumentException desconocido) {
             throw new ProblemaDeNegocio(
                     CodigoDeError.VALIDACION, "Tipo de predio desconocido: '" + texto + "'");
-        }
-    }
-
-    private static CodigoReferenciaCatastral referenciaDe(String codigo) {
-        try {
-            return CodigoReferenciaCatastral.de(codigo);
-        } catch (IllegalArgumentException invalido) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
     }
 

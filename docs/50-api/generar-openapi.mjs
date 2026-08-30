@@ -1028,6 +1028,38 @@ const OPERACIONES_ADICIONALES = {
         ' reemplaza.',
     },
     {
+      operationId: 'dar_de_baja_predio',
+      metodo: 'post',
+      ruta: '/api/v1/catastro/predios/{predioId}/baja',
+      titulo: 'Baja del predio en el padrón',
+      descripcion:
+        'Retira el predio del padrón. **No borra nada** (regla 4, RNF-051): sus fichas, su' +
+        ' titularidad y las determinaciones que se apoyaron en él quedan como estaban, y el' +
+        ' predio deja de admitir fichas nuevas. Exige privilegio de ELIMINACIÓN sobre' +
+        ' `actualizacion_catastro` —no el de modificación— porque saca la unidad de toda emisión' +
+        ' futura. El cuerpo lleva solo la observación del usuario, obligatoria (RNF-052): el' +
+        ' predio y el estado al que se va los dice la ruta. Un predio que ya está dado de baja' +
+        ' es 409, no un segundo acto sin efecto.',
+      descripcionesDeRuta: {
+        predioId: 'El predio, por el `predioId` que publica cada fila de la consulta de fichas',
+      },
+    },
+    {
+      operationId: 'reactivar_predio',
+      metodo: 'post',
+      ruta: '/api/v1/catastro/predios/{predioId}/reactivacion',
+      titulo: 'Reactivación del predio',
+      descripcion:
+        'Devuelve al padrón un predio retirado. Existe porque sin ella la baja sería una puerta' +
+        ' de un solo sentido: el alta de ficha rechaza a propósito inscribir sobre un predio dado' +
+        ' de baja —«reactivarlo es otro acto, con su propia observación»— y ese otro acto no' +
+        ' existía. Exige MODIFICACIÓN y no ELIMINACIÓN: restituir no es retirar. El cuerpo lleva' +
+        ' solo la observación, obligatoria. Un predio que ya está activo es 409.',
+      descripcionesDeRuta: {
+        predioId: 'El predio, por el `predioId` que publica cada fila de la consulta de fichas',
+      },
+    },
+    {
       operationId: 'actualizar_ficha_rural',
       metodo: 'put',
       ruta: '/api/v1/catastro/fichas/rural/{codUnidad}/actualizacion',

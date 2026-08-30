@@ -28,6 +28,7 @@ import pe.gob.sgtm.catastro.dominio.Riego;
 import pe.gob.sgtm.catastro.dominio.TierraRural;
 import pe.gob.sgtm.catastro.dominio.TipoFicha;
 import pe.gob.sgtm.dominio.AreaM2;
+import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Medida;
 import pe.gob.sgtm.dominio.Observacion;
@@ -193,6 +194,20 @@ public final class DeclaracionDeFicha {
 
     public static @Nullable String vacioANulo(@Nullable String valor) {
         return valor == null || valor.isBlank() ? null : valor.strip();
+    }
+
+    /**
+     * El codigo de referencia catastral, con su composicion validada tramo por tramo.
+     *
+     * <p>Vive aqui porque lo analizan los tres controladores de ficha —el alta, la actualizacion y
+     * la baja del predio— y un codigo mal compuesto tiene que responder lo mismo en los tres.
+     */
+    public static CodigoReferenciaCatastral referenciaDe(String codigo) {
+        try {
+            return CodigoReferenciaCatastral.de(codigo);
+        } catch (IllegalArgumentException invalido) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
+        }
     }
 
     /**

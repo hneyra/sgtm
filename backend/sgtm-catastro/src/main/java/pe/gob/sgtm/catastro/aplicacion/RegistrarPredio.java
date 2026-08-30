@@ -65,6 +65,23 @@ public class RegistrarPredio {
         return baja;
     }
 
+    /**
+     * Devuelve al padron un predio retirado. Se audita como {@link Operacion#MODIFICACION} y no
+     * como un alta: el predio no nace aqui, vuelve.
+     */
+    @Transactional
+    public Predio reactivar(Predio predio, Observacion observacion) {
+        Predio activo = repositorio.guardar(predio.reactivado());
+        auditar(
+                "predio",
+                activo.id(),
+                Operacion.MODIFICACION,
+                observacion,
+                descripcion(predio),
+                descripcion(activo));
+        return activo;
+    }
+
     @Transactional
     public Titularidad registrarTitularidad(Titularidad titularidad, Observacion observacion) {
         Titularidad guardada = repositorio.guardar(titularidad);

@@ -712,6 +712,60 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/predios/{predioId}/baja":
+    post:
+      operationId: dar_de_baja_predio
+      summary: "Baja del predio en el padrón"
+      description: "Retira el predio del padrón. **No borra nada** (regla 4, RNF-051): sus fichas, su titularidad y las determinaciones que se apoyaron en él quedan como estaban, y el predio deja de admitir fichas nuevas. Exige privilegio de ELIMINACIÓN sobre `actualizacion_catastro` —no el de modificación— porque saca la unidad de toda emisión futura. El cuerpo lleva solo la observación del usuario, obligatoria (RNF-052): el predio y el estado al que se va los dice la ruta. Un predio que ya está dado de baja es 409, no un segundo acto sin efecto."
+      tags: ["Catastro"]
+      parameters:
+        - name: predioId
+          in: path
+          required: true
+          description: "El predio, por el `predioId` que publica cada fila de la consulta de fichas"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/predios/{predioId}/reactivacion":
+    post:
+      operationId: reactivar_predio
+      summary: "Reactivación del predio"
+      description: "Devuelve al padrón un predio retirado. Existe porque sin ella la baja sería una puerta de un solo sentido: el alta de ficha rechaza a propósito inscribir sobre un predio dado de baja —«reactivarlo es otro acto, con su propia observación»— y ese otro acto no existía. Exige MODIFICACIÓN y no ELIMINACIÓN: restituir no es retirar. El cuerpo lleva solo la observación, obligatoria. Un predio que ya está activo es 409."
+      tags: ["Catastro"]
+      parameters:
+        - name: predioId
+          in: path
+          required: true
+          description: "El predio, por el `predioId` que publica cada fila de la consulta de fichas"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/catastro/fichas/rural/{codUnidad}/actualizacion":
     put:
       operationId: actualizar_ficha_rural
