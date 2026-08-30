@@ -18,7 +18,7 @@ import pe.gob.sgtm.dominio.ValorNormativo;
  * tipo de Java: es el {@code CHECK} de la columna, que V1 escribe una vez y V43 repite en {@code
  * edificacion_estructura} palabra por palabra.
  *
- * @param partida MUROS, TECHOS, PISOS, PUERTAS, REVESTIMIENTOS, BANIOS o INSTALACIONES
+ * @param partida MUROS, TECHOS o PUERTAS: las tres partidas de apreciacion exterior del cuadro
  * @param categoria la letra, de A a I
  * @param anioConstruccionDesde extremo inferior del rango de anios de construccion al que aplica
  * @param anioConstruccionHasta extremo superior; nulo cuando la tabla no le pone tope

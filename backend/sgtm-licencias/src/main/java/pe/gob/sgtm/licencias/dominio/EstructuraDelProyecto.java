@@ -33,7 +33,11 @@ public record EstructuraDelProyecto(
         AreaM2 area) {
 
     private static final char CATEGORIA_MINIMA = 'A';
-    private static final char CATEGORIA_MAXIMA = 'I';
+    // Hasta la J desde #436: el Anexo I.4 (Selva) tiene diez categorias. V58 lo amplio en la
+    // ficha y en el cuadro y se dejo esto en la I, con lo que una municipalidad de la Selva podia
+    // fichar una construccion de categoria J y publicarla en el cuadro, pero no declararla en su
+    // FUE. V59 lo cierra.
+    private static final char CATEGORIA_MAXIMA = 'J';
 
     public EstructuraDelProyecto {
         Objects.requireNonNull(partida, "La linea de valorizacion dice de que partida es");

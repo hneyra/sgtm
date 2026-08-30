@@ -683,8 +683,8 @@ public class EdificacionController {
         } catch (IllegalArgumentException noExiste) {
             throw new ProblemaDeNegocio(
                     CodigoDeError.VALIDACION,
-                    "La partida va entre MUROS, TECHOS, PISOS, PUERTAS, REVESTIMIENTOS, BANIOS e"
-                            + " INSTALACIONES, como en el cuadro de valores unitarios: '"
+                    "La partida va entre MUROS, TECHOS y PUERTAS, que son las tres del cuadro de"
+                            + " valores unitarios: '"
                             + partida
                             + "'");
         }
@@ -695,7 +695,7 @@ public class EdificacionController {
         if (texto.length() != 1) {
             throw new ProblemaDeNegocio(
                     CodigoDeError.VALIDACION,
-                    "La categoria es una sola letra, de A a I: '" + categoria + "'");
+                    "La categoria es una sola letra, de A a J: '" + categoria + "'");
         }
         return texto.charAt(0);
     }

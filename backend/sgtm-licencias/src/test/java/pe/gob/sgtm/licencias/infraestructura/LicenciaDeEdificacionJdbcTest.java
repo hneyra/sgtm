@@ -523,7 +523,7 @@ class LicenciaDeEdificacionJdbcTest {
                     presentarFue(TipoDeTramiteDeEdificacion.LICENCIA_DE_OBRA, null, HOY);
             enContexto(() -> completar.completarTerreno(expediente, terreno("C", "1"), PORQUE));
             enContexto(() -> completar.completarProyecto(expediente, proyecto(), PORQUE));
-            // PISOS categoria I no esta sembrada en el cuadro de 2026.
+            // PUERTAS categoria I no esta sembrada en el cuadro de 2026.
             enContexto(
                     () ->
                             completar.completarValorizacion(
@@ -531,7 +531,7 @@ class LicenciaDeEdificacionJdbcTest {
                                     List.of(
                                             new CompletarSeccionDelFue.Estructura(
                                                     1,
-                                                    PartidaDeEdificacion.PISOS,
+                                                    PartidaDeEdificacion.PUERTAS,
                                                     'I',
                                                     new AreaM2(new BigDecimal("10.00")))),
                                     PORQUE));
@@ -540,8 +540,8 @@ class LicenciaDeEdificacionJdbcTest {
                     enContexto(() -> consulta.porExpediente(expediente, HOY).orElseThrow());
 
             assertThat(ficha.valorizacion().estaDisponible()).isFalse();
-            assertThat(ficha.valorizacion().llaveQueFalta()).isEqualTo("PISOS:I");
-            assertThat(ficha.valorizacion().motivo()).contains("PISOS:I");
+            assertThat(ficha.valorizacion().llaveQueFalta()).isEqualTo("PUERTAS:I");
+            assertThat(ficha.valorizacion().motivo()).contains("PUERTAS:I");
         }
 
         @Test
@@ -1397,7 +1397,7 @@ class LicenciaDeEdificacionJdbcTest {
             }
             sembrarCelda(carga, edicion, "MUROS", "A", "120.000000");
             sembrarCelda(carga, edicion, "TECHOS", "B", "80.000000");
-            sembrarCelda(carga, edicion, "PISOS", "C", "40.000000");
+            sembrarCelda(carga, edicion, "PUERTAS", "C", "40.000000");
             carga.commit();
             return edicion;
         }
