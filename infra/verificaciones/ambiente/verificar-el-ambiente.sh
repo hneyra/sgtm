@@ -175,12 +175,30 @@ else
     #    credenciales. La aplicacion tiene que ver cero; el superusuario, todas. Si las
     #    dos ven lo mismo, la comprobacion no esta midiendo el aislamiento.
     MUNI=$(comoSuperusuario "SELECT id FROM municipalidad ORDER BY id LIMIT 1")
-    # La tabla de la medida tiene que cumplir tres cosas, y las tres por un motivo:
+    # La tabla de la medida tiene que cumplir CUATRO cosas, y las cuatro por un motivo:
     # tener filas (si no, «cero filas» no distingue el aislamiento de una tabla vacia),
     # que `sgtm_app` tenga SELECT sobre ella (si no, el error es de privilegio y no de
-    # politica), y **no ser una particion**: a las particiones no se les concede ningun
-    # privilegio a proposito —el acceso directo a una evade la politica del padre, que
-    # es el segundo hallazgo de RLS de DAT-01 §0—.
+    # politica), **no ser una particion** —a las particiones no se les concede ningun
+    # privilegio a proposito: el acceso directo a una evade la politica del padre, que es
+    # el segundo hallazgo de RLS de DAT-01 §0—, y que su `municipalidad_id` sea **NOT
+    # NULL**.
+    #
+    # LA CUARTA SE PAGO. Sin ella, la primera corrida de este guion en CI —despues de que
+    # #438 publicara 492 filas de `depreciacion` en `stg`— eligio esa tabla, que es la
+    # que mas filas tenia, y dio CUATRO comprobaciones en rojo: «sgtm_app no filtra por
+    # municipalidad: propias=492, ajenas=492».
+    #
+    # Y `sgtm_app` filtraba perfectamente. `depreciacion` es un **catalogo nacional**
+    # (D-13, ADR-0017): su `municipalidad_id` es nulo y su politica de lectura dice
+    # `municipalidad_id IS NULL OR municipalidad_id = current_setting(...)`, de modo que
+    # todo contexto ve sus 492 filas — que es exactamente lo que un catalogo nacional
+    # tiene que hacer. El guion estaba midiendo el aislamiento sobre la unica clase de
+    # tabla que, por diseño, no aisla.
+    #
+    # `municipalidad_id NOT NULL` es el mismo criterio con que la prueba de aislamiento
+    # del esquema separa las tablas de tenant de los catalogos (CLAUDE.md: «si lleva
+    # `municipalidad_id NOT NULL`, la prueba le exige RLS sola»). Aqui sirve para lo
+    # mismo: solo una tabla de tenant puede decir algo sobre el aislamiento.
     TABLA=$(comoSuperusuario "
         SELECT c.relname FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -189,12 +207,14 @@ else
           AND has_table_privilege('sgtm_app', c.oid, 'SELECT')
           AND EXISTS (SELECT 1 FROM pg_attribute a
                       WHERE a.attrelid = c.oid AND a.attname = 'municipalidad_id'
-                        AND NOT a.attisdropped AND a.attnum > 0)
+                        AND NOT a.attisdropped AND a.attnum > 0
+                        AND a.attnotnull)
           AND c.reltuples > 0
         ORDER BY c.reltuples DESC LIMIT 1")
     if [ -z "${MUNI:-}" ] || [ -z "${TABLA:-}" ]; then
-        mal "no hay municipalidad implantada o ninguna tabla con RLS tiene filas: sin eso"
-        mal "el aislamiento no se puede medir, solo suponer"
+        mal "no hay municipalidad implantada, o ninguna tabla DE TENANT con RLS tiene"
+        mal "filas: sin eso el aislamiento no se puede medir, solo suponer. Un catalogo"
+        mal "nacional no sirve: por diseño lo ve todo contexto"
     else
         OTRA=$((MUNI + 1000000))
         conElContexto() {
