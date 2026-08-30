@@ -168,12 +168,24 @@ Contra la base **en marcha**, sin reiniciar nada:
 **Por qué no exige parar la base.** `ALTER ROLE ... PASSWORD` no cierra las sesiones que
 ya estaban abiertas con la clave vieja — lo único que deja de funcionar es una conexión
 **nueva** con la clave vieja. Es lo que demuestra, contra un motor real,
-`infra/secretos/verificar-rotacion.sh`: abre una sesión como `sgtm_app`, rota la clave, y
+`infra/secretos/verificar-rotacion.sh`: abre una sesión con el rol, rota la clave, y
 comprueba que esa misma sesión sigue respondiendo mientras una conexión nueva con la
-clave vieja falla y una con la clave nueva funciona. Se corre a mano —ningún workflow
-lo invoca todavía— y sin necesitar el clúster: usa los mismos guiones de inicialización
-que `verificar-el-motor.sh` —el que sí corre en CI, trabajo `motor`—, vía
-`lib-motor-local.sh`.
+clave vieja falla y una con la clave nueva funciona. No necesita el clúster: usa los
+mismos guiones de inicialización que `verificar-el-motor.sh`, vía `lib-motor-local.sh`.
+
+**Corre en CI desde el issue #435, y para los dos roles que rotan** (`--rol sgtm_app` y
+`--rol rol_carga_parametros`), en el trabajo `motor` de `infra.yml`. Antes no lo invocaba
+ningún workflow —este documento lo decía— y eso es lo que la nota anterior daba por
+suficiente: **una verificación escrita que nunca se ejecuta no protege nada**, la misma
+lección que `verificar-cuadros.mjs` dejó en #188.
+
+**Y correr la rotura de verdad encontró un defecto en el propio verificador.** Sin el
+`ALTER ROLE`, el guion salía con código 1 —CI se habría puesto rojo— pero **sin una sola
+línea que dijera por qué**: `exec {fd}>&- 2>/dev/null` aplica sus redirecciones al shell
+entero y de forma permanente, así que silenciaba el `stderr` del guion de ahí en
+adelante, y los dos mensajes de FALLO de las dos comprobaciones que de verdad miden la
+rotación se escribían en `/dev/null`. Con la redirección acotada a un grupo, el motivo
+vuelve.
 
 `sgtm-owner` es un caso más simple todavía: solo lo leen los dos Jobs, y un Job **nuevo**
 ya lee el `Secret` actualizado al crearse — no hay ningún pod en marcha que reprogramar.
@@ -260,20 +272,63 @@ corre sobre **todo el repositorio**, no solo `infra/`, en cada PR y en cada inte
 | Poner la misma clave para `sgtm_owner` y `sgtm_app` | CI, trabajo `secretos`: `verificar-claves-distintas.sh` la encuentra, ejecutado contra un clúster real (no simulado) |
 | Que `completar-secreto.ts` genere un valor repetido | `verificaciones/completar-secreto.test.ts`, con un generador roto a propósito |
 | Reintroducir `keycloakAdminPassword` en `SECRETOS_DE_ARRANQUE` | `verificaciones/secretos.test.ts`: las dos listas no pueden compartir una clave |
-| Quitar el `ALTER ROLE` de la rotación | `verificar-rotacion.sh`, corrido a mano (no está en CI): una conexión nueva con la clave vieja sigue funcionando, y el guion falla |
+| Quitar el `ALTER ROLE` de la rotación | CI, trabajo `motor`: `verificar-rotacion.sh` (desde #435, para `sgtm_app` **y** `rol_carga_parametros`) — una conexión nueva con la clave vieja sigue funcionando, y el guion falla **nombrando el motivo** |
+| Poner la misma clave para `sgtm_owner` y `rol_carga_parametros` | CI, trabajo `secretos`: la demostración se fuerza sobre `postgres-carga` desde #435 — es el rol que publica cifras normativas y la última entrada del inventario |
+| Que `bootstrap-secretos.sh` regenere **cualquier** clave ya existente | CI, trabajo `secretos`: desde #435 se comparan las huellas de **todas** las entradas de `yarn secretos`, no solo la de `clave-app` — una entrada nueva que se regenerara en cada corrida pasaba sin ruido |
+| Dar `CONNECT` sobre la base de Keycloak a `rol_carga_parametros` | CI, trabajo `motor`: `verificar-el-motor.sh` lo rechaza — es la comprobación simétrica de la que ya existía para el rol de Keycloak sobre el padrón (la lección de `sgtm_respaldo`, #155) |
+| Devolverle a `sgtm_app` el `GRANT` sobre una de las cuatro tablas normativas | `LasDosGuardasDeLaCargaTest` (sgtm-parametros), contra PostgreSQL real. **Y solo esa**: las pruebas de síntoma siguen en verde, porque la política de RLS lo para igual y da el mismo `42501` |
 | Apuntar `keycloakSmtpHost` de `prod` a un buzón (`sgtm-prod-correo`, Mailpit), o dejar `keycloakSmtpAuth` en false | `config.test.ts`, «ADR-0012 — el relay SMTP»: `checkInvariants` lo rechaza citando `INF-03` §4 |
 | Quitar del guion el `execute-actions-email` del alta declarativa | `despliegue.yml`, peldaño «3b»: el buzón Mailpit queda vacío y el paso se pone rojo |
 | Quitar el `ALTER ROLE rol_carga_parametros LOGIN` de `20-asignar-claves.sh` (issue #387) | CI, trabajo `motor`: `verificar-el-motor.sh` falla nombrando el rol («rol_carga_parametros no puede conectarse») |
 
 ## 6. Lo que sigue sin verificarse, y por qué
 
-**Rotar `sgtm_app` en `stg` de verdad, con el `Secret` real y el `rollout restart` del
+**Rotar un rol en `stg` de verdad, con el `Secret` real y el `rollout restart` del
 `Deployment`.** `verificar-rotacion.sh` demuestra la mecánica de PostgreSQL —que
-`ALTER ROLE` no cierra sesiones abiertas— contra un motor real, local o en CI. Lo que no
-demuestra es el camino completo por `kubectl exec` + `kubectl patch` +
-`kubectl rollout restart` contra un clúster que además tiene una aplicación real
-sirviendo peticiones. Eso necesita el VPS, y es honesto decirlo así en vez de darlo por
-probado.
+`ALTER ROLE` no cierra sesiones abiertas— contra un motor real, local o en CI, para los
+dos roles que rotan. Lo que no demuestra es el camino completo por `kubectl exec` +
+`kubectl patch` + `kubectl rollout restart` contra un clúster que además tiene una
+aplicación real sirviendo peticiones. Eso necesita el VPS, y es honesto decirlo así en
+vez de darlo por probado.
+
+### 3.2 Llevar al motor una credencial que se añadió después (issue #435)
+
+`bootstrap-secretos.sh` genera el `Secret`. Quien lo lleva **a la base** es
+`20-asignar-claves.sh`, y ese guion corre **una sola vez**: desde
+`/docker-entrypoint-initdb.d`, con el volumen de datos vacío. En un clúster que ya
+existe no vuelve a ejecutarse nunca.
+
+**Consecuencia, medida contra `stg` el 2026-08-29:** el issue #387 le dio `LOGIN` a
+`rol_carga_parametros` en ese guion, `bootstrap-secretos.sh` creó su `Secret`, el
+manifiesto lo declara… y en la base el rol seguía `NOLOGIN` y sin clave, porque el motor
+se había inicializado días antes. El síntoma no se pareció a la causa: `publicar-parametros.sh`
+terminó con `PUBLICADAS=0 RECHAZADAS=22`, **código de salida 0**, y un aviso por fila que
+decía «revise que las dos firmas sean distintas». Las firmas estaban bien.
+
+```bash
+cd infra
+secretos/asignar-claves.sh --ambiente stg --comprobar   # ¿sirven? no cambia nada
+secretos/asignar-claves.sh --ambiente stg               # y si no, las lleva
+```
+
+Por cada entrada del inventario con `rolDePostgres`, ejecuta `ALTER ROLE :"rol" LOGIN
+PASSWORD :'clave'` leyendo la clave **del `Secret` que ya existe** —no genera ninguna, eso
+es de `bootstrap-secretos.sh`; no rota ninguna, eso es de `rotar-clave.sh`— y después
+**comprueba que la credencial sirva de verdad**. Es idempotente.
+
+**La base de cada rol es dato del inventario, no `sgtm` por omisión.** El primer sondeo
+las probó todas contra el padrón y dio rojo en `sgtm_respaldo` y `keycloak`, que **a
+propósito** no llegan ahí (`INF-08`, `30-base-de-keycloak.sh`). Ese rojo falso era
+indistinguible del de un rol sin `LOGIN`, así que `baseDeDatos` entró a
+`EntradaDeSecreto`.
+
+**Y publicar de punta a punta con `rol_carga_parametros` en un ambiente real.**
+**Hecho el 2026-08-29**, después de que #434 subiera `stg` de 25 a 48 migraciones y de
+que `asignar-claves.sh` llevara la credencial al motor: `PUBLICADAS=22 RECHAZADAS=0` de
+parámetros y `PUBLICADAS=492 RECHAZADAS=0` de la tabla de depreciación, contra `stg`
+real. Lo que sigue sin poder correrse es la **edición vehicular**: su archivo de filas
+pesa 1,55 MB y un `ConfigMap` admite 1 MiB, así que necesita los dos pasos de S3 del
+issue #388 —el guion lo dice y se para nombrándolos, que es lo correcto—.
 
 ## 7. Documentos relacionados
 

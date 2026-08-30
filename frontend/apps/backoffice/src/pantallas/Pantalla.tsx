@@ -249,6 +249,12 @@ const EmisorDeReportesAdministrativos = lazy(async () => ({
   default: (await import('./sanciones/EmisorDeReportesAdministrativos'))
     .EmisorDeReportesAdministrativos,
 }));
+const EmisorDelPadronDeAnuncios = lazy(async () => ({
+  default: (await import('./licencias/EmisorDePadron')).EmisorDelPadronDeAnuncios,
+}));
+const EmisorDelPadronDeLicencias = lazy(async () => ({
+  default: (await import('./licencias/EmisorDePadron')).EmisorDelPadronDeLicencias,
+}));
 /* Las tres de seguridad **tambien son perezosas desde #424**, y el motivo es el
    presupuesto: eran las unicas pantallas propias que seguian viajando en el
    arranque, y el arranque no tenia margen —156,2 KB de 156 al conectar el
@@ -356,6 +362,12 @@ const Respaldos = lazy(async () => ({
  *                            catalogo es «Cancelar», y los criterios que
  *                            viajan dependen del reporte: el backend rechaza
  *                            con 422 el que esa hoja no usa.
+ *   anuncios_reportes,       (#427) los dos padrones de licencias, por lo
+ *   licencia_padron          mismo que los dos emisores de arriba: `POST` que
+ *                            solo lee, ultima accion «Cancelar», y una
+ *                            respuesta que publica sus filas bajo `filas` —no
+ *                            bajo `contenido`—. Ademas dibujan bloqueado, con
+ *                            su motivo, el criterio que el backend no admite.
  *   sectores, calles         las dos caen en la **misma** superficie: un
  *                            carril con el arbol territorial —sector →
  *                            manzana— y un panel con las dos hojas como
@@ -401,6 +413,8 @@ export const COMPONENTES_PROPIOS: Readonly<
   transito_valores: GeneracionMasivaDeValoresDeTransito,
   transito_reportes: EmisorDeReportes,
   adm_reportes: EmisorDeReportesAdministrativos,
+  anuncios_reportes: EmisorDelPadronDeAnuncios,
+  licencia_padron: EmisorDelPadronDeLicencias,
   sectores: Territorio,
   calles: Territorio,
 };

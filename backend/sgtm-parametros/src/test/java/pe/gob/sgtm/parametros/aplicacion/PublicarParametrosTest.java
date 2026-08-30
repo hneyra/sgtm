@@ -43,6 +43,9 @@ import pe.gob.sgtm.dominio.Plazo;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.parametros.dominio.ConjuntoDeParametros;
+import pe.gob.sgtm.parametros.dominio.LlaveDeParametro;
+import pe.gob.sgtm.parametros.dominio.ParametroTributario;
+import pe.gob.sgtm.parametros.dominio.PublicacionDeParametros;
 import pe.gob.sgtm.parametros.infraestructura.ParametrosRepositoryJdbc;
 import pe.gob.sgtm.parametros.infraestructura.PublicacionDeParametrosJdbc;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
@@ -786,6 +789,64 @@ class PublicarParametrosTest {
                 ResultSet resultado = sentencia.executeQuery()) {
             resultado.next();
             return resultado.getString(1);
+        }
+    }
+
+    @Nested
+    @DisplayName("Sin conexion no hay filas rechazadas: hay una corrida fallida (#435)")
+    class SinConexion {
+
+        /**
+         * El defecto que este caso fija, medido contra {@code stg} el 2026-08-29.
+         *
+         * <p>{@code rol_carga_parametros} seguia {@code NOLOGIN} —{@code 20-asignar-claves.sh} solo
+         * corre al inicializar el motor, y ese cluster se habia creado antes del issue #387—, y
+         * como {@code CannotGetJdbcConnectionException} es una {@code DataAccessException}, el
+         * {@code catch} generico la contaba como un rechazo de fila: la corrida termino con {@code
+         * PUBLICADAS=0 RECHAZADAS=22}, un aviso por fila que <b>culpaba a las firmas</b>, y codigo
+         * de salida 0. La causa real —«role "rol_carga_parametros" is not permitted to log in»— no
+         * aparecia en ninguna linea de la salida.
+         */
+        @Test
+        @DisplayName(
+                "una credencial que no conecta corta la corrida y nombra la causa, no las firmas")
+        void unaCredencialQueNoConectaCortaLaCorrida() {
+            PublicacionDeParametros sinPoderConectarse =
+                    new PublicacionDeParametros() {
+                        @Override
+                        public java.util.List<ParametroTributario> publicados(
+                                LlaveDeParametro llave) {
+                            return java.util.List.of();
+                        }
+
+                        @Override
+                        public long publicar(
+                                ParametroTributario parametro,
+                                String transcribio,
+                                String verifico) {
+                            throw new org.springframework.jdbc.CannotGetJdbcConnectionException(
+                                    "FATAL: role \"rol_carga_parametros\" is not permitted to log in");
+                        }
+                    };
+            PublicarParametros proceso =
+                    new PublicarParametros(
+                            sinPoderConectarse,
+                            new DatosDeLaPublicacion("/no/importa.csv", "prueba"));
+
+            String csv =
+                    "tipo,clave,vigencia_desde,vigencia_hasta,valor_numerico,valor_texto,"
+                            + "documento_fuente,archivo_del_corpus,transcribio,verifico,valor_maquina\n"
+                            + "FICTICIO_SIN_CONEXION,,2026-01-01,,1,,fuente de la prueba,uit.md,JNA,HNA,\n"
+                            + "FICTICIO_SIN_CONEXION,OTRA,2026-01-01,,2,,fuente de la prueba,uit.md,JNA,HNA,\n";
+
+            assertThatThrownBy(() -> proceso.publicar(new java.io.StringReader(csv)))
+                    .as(
+                            "sin conexion no hay «2 filas rechazadas»: hay una corrida que no pudo"
+                                    + " empezar. Contarlo como rechazo por fila produce un diagnostico"
+                                    + " plausible y equivocado —y con codigo de salida 0—")
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("NO es una fila rechazada")
+                    .hasMessageContaining("asignar-claves.sh");
         }
     }
 }

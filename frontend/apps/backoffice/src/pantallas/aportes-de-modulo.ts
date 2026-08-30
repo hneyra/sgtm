@@ -138,6 +138,10 @@ const CARGADORES: Readonly<Record<string, () => Promise<AporteDeModulo>>> = {
   coactiva: async () => ({ conexiones: (await import('./coactiva')).CONEXIONES_DE_COACTIVA }),
   'autorizaciones-y-licencias': async () => ({
     conexiones: (await import('./licencias')).CONEXIONES_DE_LICENCIAS,
+    /* La sexta composicion, llegada con #427 A mientras este issue se escribia:
+       se declara aqui por lo mismo que las otras cinco, y no en el registro
+       estatico que este issue retira. */
+    composiciones: (await import('./licencias/composicion')).COMPOSICION_DE_LICENCIAS,
   }),
   seguridad: async () => ({ conexiones: (await import('./seguridad')).CONEXIONES_DE_SEGURIDAD }),
 };

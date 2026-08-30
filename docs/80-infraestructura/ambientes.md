@@ -151,11 +151,13 @@ entera ni la espera de la aprobación, que depende de cuándo mira una persona.
 | 2026-08-27 20:07 → 20:09 | El que dejó el estado que duró: `migracion` e `implantacion` de `0eee58e4`, 23 s y 28 s | 2 m 04 s | ídem |
 | 2026-08-28 08:54 → 08:55 | Sin cambios de versión | 65 s | ídem |
 | 2026-08-28 20:40 → 20:41 | El último en verde antes de este registro | 73 s | ídem |
+| **2026-08-29 21:34 → 21:50** | **El primero que movió `applicationBootstrapVersion`** (#434): de `0eee58e4` a `5fc02f3a`. Aplicó `V28`…`V57` a la base de producción, creó los dos Jobs de arranque de la versión nueva y reconcilió el realm | **15 m 26 s** | `gh run view 33275603200` |
+| 2026-08-29 22:28 → 22:30 | El siguiente, ya sin cambio de versión | 78 s | ídem |
 
 Nueve corridas de `aplicar-prod` en verde entre el 27 y el 28 de agosto, **mediana 73 s**,
 y ninguna se acercó al `timeout-minutes: 20`.
 
-**Lo que ese registro no dice, y es lo que importaba medir:** ninguna de esas nueve
+**Lo que ese registro no decía, y era lo que importaba medir:** ninguna de esas nueve
 cambió `applicationBootstrapVersion`. El 2026-08-29, con `prod` «corriendo» y nueve
 despliegues en verde, su base tenía **27 migraciones aplicadas de las 48 que declara
 `main`** — de `V28` a `V57` — porque la versión de arranque seguía en `0eee58e4`
@@ -163,6 +165,41 @@ despliegues en verde, su base tenía **27 migraciones aplicadas de las 48 que de
 del sistema; el `Deployment` `Ready` no lo distingue, y por eso la comprobación es
 [`verificar-el-ambiente.sh`](../../infra/verificaciones/ambiente/verificar-el-ambiente.sh)
 y no un código 200.
+
+**El despliegue del 2026-08-29 21:34 lo cerró**, y la diferencia de duración lo dice sola:
+**15 m 26 s frente a los 73 s de mediana** de los nueve anteriores. Eso es lo que cuesta
+aplicar veintiuna migraciones y volver a implantar, y es la señal de que esta vez el
+`pulumi up` sí hizo algo. Antes y después, medido con el mismo guion:
+
+```
+$ verificar-el-ambiente.sh --ambiente prod          # antes
+  migraciones aplicadas: 27 · las que trae la version declarada: 48
+  MAL  la base va POR DETRAS de la version declarada (27 < 48).
+
+$ verificar-el-ambiente.sh --ambiente prod          # despues
+  migraciones aplicadas: 48 · las que trae la version declarada: 48
+  OK   el esquema esta al dia con la version declarada
+```
+
+### 5.1.1 La escalera de comprobaciones de `prod`, corrida el 2026-08-29
+
+| Comprobación | Resultado |
+|---|---|
+| La versión declarada, la desplegada y el esquema | 48 = 48. El `Deployment` corre `5fc02f3a`, el mismo `sha` declarado |
+| Lo que la implantación sembró (#120) | `municipalidad` 1 · `grupo` 2 · `usuario` 1 · `miembro` 1 · **`permiso` 145** |
+| **El aislamiento, como `sgtm_app`** | Con su contexto ve **145** filas; con el de otra municipalidad, **0**. El superusuario, con **el mismo** contexto ajeno, las ve **145** — que es lo que demuestra que la medida está hecha con la credencial sujeta a la política, y no con una que la omite |
+| La escalera de identidad, peldaños 1 y 2 | Sin token → `401 NO_AUTENTICADO`. Token que este emisor no firmó → `401 NO_AUTENTICADO` |
+| Los peldaños 3 y 4, y la deuda con su fecha | **Sin comprobar**: exigen un token del realm de `prod`, y `prod` va sin relay SMTP a propósito (§5.2) |
+| **Los puertos, desde fuera** | `22` abierto · `80` abierto · `443` abierto · `5432` cerrado · `6443` cerrado · `10250` cerrado. Medido **desde el clúster de `stg`**, que es otro VPS: desde el propio nodo el tráfico no atraviesa el cortafuegos y la comprobación pasaría en verde con `ufw` apagado |
+
+**Y quedó una cosa por hacer en `prod`, que este despliegue no arregla** (#435):
+`rol_carga_parametros` sigue sin `LOGIN` ahí, porque `20-asignar-claves.sh` corre **solo al
+inicializar el motor** y el de `prod` se creó antes de que ese rol existiera. No urge —nada
+publica valores normativos en `prod` todavía— pero está medido y el remedio es una línea:
+
+```bash
+cd infra && secretos/asignar-claves.sh --ambiente prod
+```
 
 ### 5.2 Qué queda a mano, y por qué
 

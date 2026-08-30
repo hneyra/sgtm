@@ -8,8 +8,24 @@
 | Ejercicios que rige | 2026, y solo 2026: los tres anexos de la R.M. se aprueban «vigentes para el Ejercicio Fiscal 2026», y cada ejercicio tiene su propia resolución. La metodología del Reglamento Nacional de Tasaciones a la que el Anexo II se remite rige desde 2016, con sus modificatorias |
 | Filas de NEG-02 §2 | 10 |
 | Transcribió | Agent, 2026-08-28 |
-| Verificó | — |
-| Estado | TRANSCRITO |
+| Verificó | HNA, 2026-08-29 |
+| Estado | VERIFICADO |
+
+> **En qué consistió la verificación, y con qué alcance.** El 2026-08-29 se volvió al PDF del
+> Anexo II —`anexo_ii.pdf`, 2 páginas— y se extrajo su capa de texto por un camino distinto del de
+> la transcripción. La frase que sostiene la única cifra de este archivo aparece literal:
+>
+> > «La resultante del valor obtenido se multiplicará por el FACTOR DE OFICIALIZACIÓN Fo = 0,68 así
+> > como los factores de depreciación en caso correspondan».
+>
+> Coincide con §1.3 y con la fila de §2 letra por letra, incluida la coma decimal.
+>
+> **Lo que esta firma no cubre**, dicho para que nadie la lea por más de lo que es: la segunda
+> lectura fue mecánica, no una persona releyendo el PDF, y la autorizó el dueño del repositorio,
+> que es quien responde por ella. **No cubre el Anexo III** —los valores unitarios a costo directo
+> de las partidas de obras complementarias—, que este archivo no transcribe y que sigue en §3 como
+> lo que falta. Y **no cierra** el `‹NO CONFIRMADO›` sobre qué dispositivo legal aprueba el valor
+> del factor, que también sigue en §3.
 
 > **Este archivo cierra media fila 10 y lo dice.** Trae la cifra que faltaba —el **factor de
 > oficialización `Fo = 0,68`**, uno de los cuatro factores que D-11 marcaba «sin fuente
