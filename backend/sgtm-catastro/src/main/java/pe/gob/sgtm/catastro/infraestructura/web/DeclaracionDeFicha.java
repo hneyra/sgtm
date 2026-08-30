@@ -201,6 +201,9 @@ public final class DeclaracionDeFicha {
      *
      * <p>Vive aqui porque lo analizan los tres controladores de ficha —el alta, la actualizacion y
      * la baja del predio— y un codigo mal compuesto tiene que responder lo mismo en los tres.
+     *
+     * <p>Valida <b>sin tocar la base</b>. Desde #486 la usa tambien la lectura: la consulta del
+     * predio vive en {@code ConsultaDeLaFichaVigente}, dentro de su transaccion.
      */
     public static CodigoReferenciaCatastral referenciaDe(String codigo) {
         try {
