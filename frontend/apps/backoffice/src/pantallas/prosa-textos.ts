@@ -50,6 +50,34 @@ export const AVISOS: Readonly<Record<string, AvisoDePantalla>> = {
       'Estas diferencias son las que el proceso determinó. Mientras no se transfieran, la deuda del contribuyente y su declaración siguen siendo las que había antes.',
   },
   /**
+   * La pantalla del portal es **la vista del funcionario**, y aqui no se cobra
+   * (#400 AC-F, ADR-0016 §3, ADR-0020).
+   *
+   * Es la unica de las 134 cuya operacion —`GET /portal/deuda`— **no la sirve
+   * ningun controlador y ninguno va a servirla**, y eso no esta pendiente: esta
+   * decidido. ADR-0016 §3 la deja donde esta —«es la vista del funcionario, con
+   * su id, su ruta y su permiso, y quitarla seria reescribir el catalogo del
+   * manual por un motivo de empaquetado»— y ADR-0020 le dio al ciudadano su
+   * propia aplicacion, con realm propio y `GET /portal/situacion`, donde no
+   * teclea ningun documento.
+   *
+   * Lo que esta pantalla dibuja no es una consulta: es el **flujo de pago en
+   * linea** —medio de pago, correo del comprobante, celular, aceptacion de
+   * terminos y un «Pagar S/ 640.06»—, y el pago del ciudadano esta aparcado en
+   * #449 con D-14 y D-15 abiertas. Sin esta linea, quien la abre lee un
+   * formulario de pago completo con el boton apagado y concluye lo que
+   * concluiria cualquiera: que el pago en linea existe y hoy falla.
+   *
+   * El aviso **no cita el issue**: quien atiende no lo puede abrir. Dice lo que
+   * si puede hacer —cobrar en ventanilla— y donde esta lo que esta pantalla
+   * previsualiza.
+   */
+  portal: {
+    titulo: 'Aquí no se cobra: es la vista de lo que verá el contribuyente',
+    detalle:
+      'El pago en línea todavía no está disponible por ningún canal: esta pantalla enseña cómo quedará, y su botón de pago no cobra nada. Mientras tanto se cobra en ventanilla, por Caja. El contribuyente que entra a su portal ve su situación sin teclear ningún documento —entra con su propia cuenta—, y ahí tampoco paga todavía.',
+  },
+  /**
    * Los conteos del catalogo territorial no cuadran con el padron, y **esta
    * bien** (#309, #321).
    *
