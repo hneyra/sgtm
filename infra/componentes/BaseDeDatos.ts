@@ -286,16 +286,27 @@ export function manifiestosDeBaseDeDatos(args: BaseDeDatosArgs): Manifiesto[] {
               // El arranque de un motor con un padron grande no es instantaneo, y
               // recuperarse de un corte lo es menos. `startupProbe` con 60 intentos da
               // hasta cinco minutos ANTES de que la sonda de vida empiece a contar.
+              // `--host=127.0.0.1` en las tres, y no es un detalle: sin el,
+              // `pg_isready` pregunta por el socket unix, y durante la fase de
+              // inicializacion del entrypoint el motor arranca con
+              // `listen_addresses=''` -escucha por socket y NO por TCP-. El pod se
+              // declara Ready mientras todavia corren los guiones de initdb, y el
+              // Job de migracion, que entra por TCP, muere con «Connection
+              // refused». Es una carrera que gana el socket cuando el arranque es
+              // corto y pierde siempre cuando se alarga -PostGIS crea
+              // `template_postgis` y le carga las extensiones (ADR-0021)-, y se
+              // destapo en la marcha blanca del PR #487. Una sonda tiene que
+              // comprobar lo que sus dependientes necesitan.
               startupProbe: sondaExec(
-                ["pg_isready", "--username=postgres", `--dbname=${BASE_DEL_PADRON}`],
+                ["pg_isready", "--host=127.0.0.1", "--username=postgres", `--dbname=${BASE_DEL_PADRON}`],
                 { periodSeconds: 5, failureThreshold: 60 },
               ),
               readinessProbe: sondaExec(
-                ["pg_isready", "--username=postgres", `--dbname=${BASE_DEL_PADRON}`],
+                ["pg_isready", "--host=127.0.0.1", "--username=postgres", `--dbname=${BASE_DEL_PADRON}`],
                 { periodSeconds: 10, failureThreshold: 3 },
               ),
               livenessProbe: sondaExec(
-                ["pg_isready", "--username=postgres", `--dbname=${BASE_DEL_PADRON}`],
+                ["pg_isready", "--host=127.0.0.1", "--username=postgres", `--dbname=${BASE_DEL_PADRON}`],
                 { periodSeconds: 20, failureThreshold: 5 },
               ),
             },
