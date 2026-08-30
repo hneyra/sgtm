@@ -38,6 +38,40 @@ import {
  * Se queda como esta hasta que D-02a resuelva el importe o el catalogo
  * aprenda a mostrar mas de una linea por acta.
  *
+ * **Y #431 le encuentra dos cosas mas, las dos vivas.** La primera es lo que su
+ * franja decia: `impedimentoDelActo` la clasificaba `sin-backend` —«aquí todavía
+ * no se puede guardar nada: lo que hay es de consulta»— porque la operacion que
+ * el catalogo le da es un `GET`. Las dos mitades eran falsas: su accion primaria,
+ * «Emitir resoluciones de determinación», **tiene backend desde #52**
+ * —`POST /fiscalizacion/transferencias`, que `ResolucionController` declara con
+ * `@RequiereAcceso(acceso = "fisc_resultados")` y su javadoc llama literalmente
+ * «la accion de `fisc_resultados`»—, y esta es la frontera mas delicada del
+ * sistema: el unico camino por el que un dato de fiscalizacion pasa a ser el dato
+ * oficial del padron. Lo que de verdad le falta son los cuatro datos que esa
+ * transferencia exige —`nLiquidacion`, `documentoSustento`, `sustento`,
+ * `baseLegal`— y que su catalogo no dibuja en ninguna parte: no declara **ni una
+ * seccion**, solo filtros, tabla y totales. Desde #431 esta en `ACTOS_SIN_CAMPO`
+ * y su franja los nombra.
+ *
+ * La segunda son **sus tres filtros, que contestan 422 en cuanto se tocan**:
+ * «Programa» ofrece codigos —«PF-2026-014»— y `LiquidacionController` pide el
+ * identificador interno, sin siquiera una opcion «Todos»; dos de las cuatro
+ * opciones de «Hallazgo» no son `CondicionFiscalizada`; y las cuatro de «Estado»
+ * tampoco son el estado que el backend guarda. Se bloquean con su motivo
+ * (`fiscalizacion/composicion.ts`). De los tres, el unico que **cambio** con este
+ * issue es «Programa»: su identificador ya tiene de donde salir
+ * (`ProgramaResource.id`), asi que es el unico que un dia se podra resolver.
+ *
+ * **Y queda una advertencia de integracion que conviene no perder.**
+ * `fisc_resultados` es la unica opcion del modulo con `Controller` publicado y
+ * sin `Conexion` declarada. Hoy no se nota porque el proxy de datos no tiene ruta
+ * `/fiscalizacion/resultados` y sirve el juego del prototipo; el dia que se
+ * apague (ADR-0010: «conectar el backend es apagarlo»), esa misma peticion
+ * devolvera `RespuestaPaginada<LiquidacionResource>`, el camino comun buscara
+ * `tabla.filas`, no lo encontrara y **no fallara nada**: la tabla saldra con sus
+ * siete cabeceras y cero filas, sin un mensaje. Es el defecto de #363, #397 y
+ * #399, aqui **latente**, sobre la pantalla desde la que se transfiere al padron.
+ *
  * **Las tres escrituras —`fisc_programa`, `fisc_predial`, `fisc_vehicular`—
  * siguen siendo `ACTOS_SIN_CAMPO`** (`pantallas/actos.ts`), no `ESCRITURAS`
  * sin declarar: a las tres les falta un dato para el que ninguna seccion del
@@ -51,24 +85,49 @@ import {
  *                     capturo esta pantalla como el resultado de generar un
  *                     programa, no como el formulario que lo crea. **Su
  *                     LECTURA si esta conectada desde #431** (abajo).
- *   `fisc_predial`    `ActaPredialController` exige `programaId`,
- *                     `contribuyenteId` y `predioId`: tres identificadores
- *                     internos. Las tres columnas que se les parecen —
- *                     `programa`, `contribuyente`, `codigoPredial`— son `"ro"`
- *                     en el catalogo: el acta se abre desde la fila de un
- *                     programa ya generado. **`GET /fiscalizacion/programas`
- *                     ya existe (#431)**, asi que el `programaId` ya tiene de
- *                     donde salir; lo que falta es el mecanismo del resolutor
- *                     que lo fije en el cuerpo (#422), y los otros dos
- *                     identificadores, que ninguna lectura de este modulo
- *                     publica por fila.
+ *   `fisc_predial`    **Los tres identificadores ya tienen fuente publicada**,
+ *                     y esa es la respuesta a la pregunta de #431: de la fila
+ *                     del programa sale **uno** —`ProgramaResource` publica
+ *                     `id`, `codigo`, `descripcion`, `tipo`, las dos fechas y
+ *                     el estado, y nada mas—, y los otros dos salen de otros
+ *                     modulos, que es legitimo (`ResolutorDeUnidad` de
+ *                     `alta_deuda` ya cruza catastro y rentas): `predioId` de
+ *                     `consulta_fichas` y `contribuyenteId` del padron. Lo que
+ *                     **sigue cerrado** es otra cosa, y son dos: el
+ *                     `fiscalizador`, que el controlador pasa por `exigir` y el
+ *                     catalogo dibuja `"ro"`; y el **hallazgo**, del que se
+ *                     habla abajo.
  *   `fisc_vehicular`  `ActaVehicularController` exige los mismos tres
- *                     identificadores, y esta pantalla ni siquiera dibuja
- *                     una seccion de campos: su catalogo es un filtro y una
- *                     grilla de «Vehículos observados» — un panel de
- *                     resultados de un cruce, no el acta que el endpoint
- *                     registra. Espera a #422 por el resolutor y, ademas, a
- *                     que `hallazgo` viaje por la consulta (#425).
+ *                     identificadores **mas la fecha de la visita y el
+ *                     fiscalizador**, y esta pantalla no dibuja ninguna
+ *                     seccion de campos: su catalogo es un filtro y una grilla
+ *                     de «Vehículos observados» — un panel de resultados de un
+ *                     cruce, no el acta que el endpoint registra. `hallazgo` ya
+ *                     viaja por la consulta (#425, cerrado), asi que esa espera
+ *                     termino; lo que falta es la pantalla, y ademas la lectura
+ *                     que llene esa grilla, que no existe.
+ *
+ * ── (#431) El hallazgo, que es lo que de verdad para al acta predial ───────
+ *
+ * `Hallazgo` declara **cuatro** valores —CONFORME, OMISO, SUBVALUADOR,
+ * NO_UBICADO— y el desplegable «Hallazgo principal» del manual ofrece **seis**:
+ * SIN OBSERVACIONES, AMPLIACIÓN NO DECLARADA, USO DISTINTO AL DECLARADO, OMISO A
+ * LA DECLARACIÓN, PREDIO SUBVALUADO, PREDIO INEXISTENTE. **Ninguna de las seis es
+ * ninguno de los cuatro, letra por letra**, y el campo es opcional: declararlo
+ * tal cual dejaria el acta entrando con 201 y **sin hallazgo**.
+ *
+ * Lo que eso cuesta hay que decirlo con precision, porque no es lo mismo en las
+ * dos actas. En la **vehicular**, `LiquidarFiscalizacion.condicionVehicular` lee
+ * `hallazgo == null` como CONFORME: un acta de un vehiculo no declarado se
+ * liquidaria como conforme. En la **predial** la condicion no sale del hallazgo
+ * sino de comparar lo hallado con lo declarado, asi que lo que se pierde es
+ * `NO_UBICADO`: un «PREDIO INEXISTENTE» se compararia por area como si el predio
+ * se hubiera encontrado.
+ *
+ * Aqui **no se traduce ninguno**, por lo mismo que #427 no tradujo «ACTIVA» a
+ * VIGENTE: parecerse no es serlo, y estas seis palabras deciden si una
+ * fiscalizacion produce deuda. Ampliar el enumerado —o decidir por escrito el
+ * mapeo de las seis— es del dominio de fiscalizacion, no de la interfaz.
  *
  * Ninguna de las tres esta bloqueada por falta de UI generica: es el mismo
  * hueco que #73 encontro en las transferencias de rentas y que #76 encontro
@@ -116,7 +175,18 @@ import {
  * que el dominio no tiene —seis clases donde `TipoDePrograma` tiene dos,
  * cuatro situaciones donde `EstadoDePrograma` tiene tres— y mandarlos seria un
  * filtro que no filtra, o uno que decide en silencio que «PREDIAL MASIVO» es
- * PREDIAL (ver `CriterioDeProgramas` en el backend).
+ * PREDIAL (ver `CriterioDeProgramas` en el backend). **Desde #431 se dibujan
+ * bloqueados con su motivo** (`fiscalizacion/composicion.ts`): hasta entonces se
+ * tecleaban y se caian en silencio, porque `parametrosDeBusqueda` descarta lo que
+ * el contrato no declara y nadie lo decia.
+ *
+ * **Y su escritura sigue sin conectar por algo que no es un campo**: `POST
+ * /fiscalizacion/programas` **registra** un programa, y las tres acciones que el
+ * catalogo dibuja nombran otros tres actos —«Generar muestra» promete una muestra
+ * que el backend no produce, y «Asignar fiscalizador» y «Aprobar programa»
+ * prometen transiciones que `EstadoDePrograma` no tiene—. Declarar cualquiera de
+ * las tres en `LA_QUE_ESCRIBE` pintaria de navy un boton que dice una cosa y hace
+ * otra, que es justo lo que #421 y RNF-080 existen para impedir.
  */
 const fisc_programa = definirConexion({
   operacion: 'fisc_programas_listado',

@@ -98,9 +98,18 @@ const CARGADORES: Readonly<Record<string, () => Promise<AporteDeModulo>>> = {
       composiciones: composicion.COMPOSICION_DE_RENTAS,
     };
   },
-  fiscalizacion: async () => ({
-    conexiones: (await import('./fiscalizacion')).CONEXIONES_DE_FISCALIZACION,
-  }),
+  fiscalizacion: async () => {
+    /* La octava composicion, con #431: cinco filtros que se dibujan y no
+       filtran, en dos pantallas del modulo. */
+    const [registro, composicion] = await Promise.all([
+      import('./fiscalizacion'),
+      import('./fiscalizacion/composicion'),
+    ]);
+    return {
+      conexiones: registro.CONEXIONES_DE_FISCALIZACION,
+      composiciones: composicion.COMPOSICION_DE_FISCALIZACION,
+    };
+  },
   transito: async () => {
     const [registro, composicion] = await Promise.all([
       import('./transito'),

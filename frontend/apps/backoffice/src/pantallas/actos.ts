@@ -430,28 +430,58 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
   },
 
   /**
-   * Las tres escrituras de fiscalizacion (#45, #80): a las tres les falta un
-   * dato para el que ninguna seccion del catalogo dibuja un campo editable.
+   * Las **cuatro** de fiscalizacion (#45, #49, #80, #431): a las cuatro les falta
+   * un dato para el que ninguna seccion del catalogo dibuja un campo editable.
    * Ver el javadoc de `pantallas/fiscalizacion/index.ts` para el analisis
    * completo, opcion por opcion.
+   *
+   * **Las tres listas de `campos` estaban cortas hasta #431**, y esa clase de
+   * error es la que este mecanismo existe para no cometer: `campos` es lo que
+   * quien mantiene lee para saber que falta sin abrir el controlador, y las tres
+   * omitian el `fiscalizador` —`ActaPredialController` y `ActaVehicularController`
+   * lo pasan por `exigir`, y el catalogo de la predial lo dibuja `"ro"`—.
    */
   fisc_programa: {
     dato: 'el código y la descripción del programa',
     porque:
-      'Sin ellos el programa no se puede registrar: el backend los exige, y la única sección de esta pantalla dibuja el número de programa de solo lectura y ningún campo de descripción — el catálogo capturó el resultado de generar un programa, no el formulario que lo crea.',
+      'Sin ellos el programa no se puede registrar: el backend los exige, y la única sección de esta pantalla dibuja el número de programa de solo lectura y ningún campo de descripción — el catálogo capturó el resultado de generar un programa, no el formulario que lo crea. Y ninguno de los tres botones registra un programa: generar la muestra, asignar fiscalizador y aprobar son actos que el sistema todavía no hace.',
     campos: ['codigo', 'descripcion'],
   },
   fisc_predial: {
-    dato: 'el programa, el contribuyente y el predio de la visita',
+    dato: 'quién fiscaliza, y con qué palabra se anota lo que encontró',
     porque:
-      'Sin ellos el acta no se puede registrar: el backend exige los tres identificadores internos, y las columnas que se les parecen en esta pantalla son de solo lectura, a la espera de abrirse desde la fila de un programa generado que todavía no existe.',
-    campos: ['programaId', 'contribuyenteId', 'predioId'],
+      'El programa, el contribuyente y el predio ya se pueden resolver —el programa desde su propio listado, y los otros dos desde el padrón y desde el catastro—, pero el nombre de quien suscribe el acta se dibuja de solo lectura, y de las seis opciones de «Hallazgo principal» ninguna es una de las cuatro que el sistema distingue: un acta registrada así entraría sin decir qué se encontró, y la liquidación posterior la compararía como si el predio se hubiera hallado.',
+    campos: ['fiscalizador', 'hallazgo'],
   },
   fisc_vehicular: {
-    dato: 'el programa, el contribuyente y el vehículo de la visita',
+    dato: 'la visita entera: su fecha, quién fiscaliza y el vehículo inspeccionado',
     porque:
-      'Sin ellos el acta no se puede registrar: el backend exige los tres identificadores internos, y esta pantalla no dibuja ninguna sección de campos — su catálogo es un filtro y una grilla de vehículos observados, no el acta que el endpoint registra.',
-    campos: ['programaId', 'contribuyenteId', 'vehiculoId'],
+      'Esta pantalla no declara ninguna sección de campos — su catálogo es un filtro y una grilla de vehículos observados, no el acta que el endpoint registra. El prototipo capturó el resultado de un cruce, no la inspección: no hay dónde escribir la fecha, ni el fiscalizador, ni de qué fila sacar el vehículo, porque esa grilla tampoco tiene lectura que la llene.',
+    campos: ['programaId', 'contribuyenteId', 'vehiculoId', 'fechaVisita', 'fiscalizador'],
+  },
+
+  /**
+   * Y la cuarta, que hasta #431 se leia como una consulta y **no lo es**.
+   *
+   * `impedimentoDelActo` la clasificaba `sin-backend` —«aquí todavía no se puede
+   * guardar nada: lo que hay es de consulta»— porque la operacion que el catalogo
+   * le da es un `GET`. Las dos mitades de esa frase son falsas: su accion
+   * primaria, «Emitir resoluciones de determinación», **tiene backend desde
+   * #52** —`POST /fiscalizacion/transferencias`, que `ResolucionController`
+   * declara con `@RequiereAcceso(acceso = "fisc_resultados")` y su javadoc llama
+   * literalmente «la accion de `fisc_resultados`»—, y es ademas la frontera mas
+   * delicada del sistema: es el unico camino por el que un dato de fiscalizacion
+   * pasa a ser el dato oficial del padron.
+   *
+   * Lo que de verdad le falta son los cuatro datos que esa transferencia exige y
+   * que su catalogo no dibuja en ninguna parte: no declara **ni una seccion**,
+   * solo filtros, tabla y totales.
+   */
+  fisc_resultados: {
+    dato: 'la liquidación que se transfiere, con su documento de sustento, el sustento y la base legal',
+    porque:
+      'Sin ellos no se puede emitir la resolución: el backend los exige, y esta pantalla no declara ninguna sección con campos — es la relación de actas con diferencia, no el formulario del acto que las lleva al padrón.',
+    campos: ['nLiquidacion', 'documentoSustento', 'sustento', 'baseLegal'],
   },
 };
 

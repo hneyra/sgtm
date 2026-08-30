@@ -188,7 +188,7 @@ describe('las que siguen sin campo siguen sin campo', () => {
     expect(escrituraDe('alcabala')).toBeUndefined();
   });
 
-  it('las quince que quedan son las quince que quedan', () => {
+  it('las dieciseis que quedan son las dieciseis que quedan', () => {
     /* La lista se **nombra**, no se cuenta, y por eso avisa cuando cambia por
        otro sitio: al integrar `main` aparecieron dos que este issue no habia
        visto —las dos hojas de resolucion de licencias, que FRO-06 (#427) trajo
@@ -200,7 +200,12 @@ describe('las que siguen sin campo siguen sin campo', () => {
        hojas de resolucion de infracciones administrativas llegan por el mismo
        camino que las de licencias, y con ellas **las siete hojas sin superficie
        que `hojas-sin-superficie.test.ts` computa del catalogo estan todas
-       aqui**. */
+       aqui**.
+
+       Y una tercera vez con #431, que es la que mejor lo demuestra: la lista se
+       puso roja **en CI y no en local**, nombrando `fisc_resultados` —la pantalla
+       desde la que se transfiere al padron, que hasta entonces se clasificaba
+       `sin-backend` sobre un acto que si tiene backend—. */
     expect(Object.keys(ACTOS_SIN_CAMPO).sort()).toEqual([
       'adm_notificacion_resolucion',
       'adm_resolucion_gerencia',
@@ -210,6 +215,7 @@ describe('las que siguen sin campo siguen sin campo', () => {
       'espectaculos',
       'fisc_predial',
       'fisc_programa',
+      'fisc_resultados',
       'fisc_vehicular',
       'fraccionamiento',
       'licencia_resolucion_cancelacion',
