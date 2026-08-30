@@ -127,6 +127,23 @@ else
     bien "el esquema esta al dia con la version declarada"
 fi
 
+# Las extensiones que `crear-roles.sql` declara, contra las que la base tiene. Corren
+# desde `/docker-entrypoint-initdb.d` y por tanto SOLO con el volumen vacio: una
+# extension anadida despues de crear el cluster no llega sola, y la migracion que la
+# necesita se cae con «type ... does not exist». Es el mismo hueco que #435 encontro con
+# el LOGIN de rol_carga_parametros, y aqui se ve antes de desplegar en vez de despues.
+DECLARADAS=$(grep -oiE 'CREATE EXTENSION( IF NOT EXISTS)? +[a-z_0-9]+' \
+    "$RAIZ/backend/sgtm-esquema/src/main/resources/db/roles/crear-roles.sql" \
+    | awk '{print $NF}' | sort -u)
+for extension in $DECLARADAS; do
+    if [ "$(comoSuperusuario "SELECT count(*) FROM pg_extension WHERE extname = '$extension'")" = "1" ]; then
+        bien "extension $extension: creada"
+    else
+        mal "extension $extension: NO esta, y crear-roles.sql la declara."
+        mal "Remedio: despliegue/crear-extensiones.sh --ambiente ${AMBIENTE}"
+    fi
+done
+
 echo
 echo "== 2. Lo que la implantacion sembro (#120) =="
 # `municipalidad` no lleva `municipalidad_id`: es el registro de tenants, y por eso se

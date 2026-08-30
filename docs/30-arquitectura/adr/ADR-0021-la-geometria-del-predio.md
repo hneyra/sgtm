@@ -56,8 +56,28 @@ de una ficha en una tarea de gabinete.
 
 - **La imagen del motor cambia en los tres ambientes.** `postgis/postgis:16-3.4-alpine` es la misma
   PostgreSQL 16 con extensiones añadidas: el volumen de datos es compatible y no hay migración de
-  datos. Aun así es un cambio de imagen sobre una base en servicio, así que se declara aquí y se
-  aplica cuando la dirección lo decida, no como efecto secundario de un despliegue.
+  datos. Se declara aquí y se aplica cuando la dirección lo decida, no como efecto secundario de un
+  despliegue.
+
+  **Hoy `stg` y `prod` sólo tienen datos de prueba** —confirmado por la dirección el 2026-08-30—,
+  así que el camino más simple y mejor probado es **rehacer el volumen**: con el directorio de datos
+  vacío, `crear-roles.sql` vuelve a correr entero y crea la extensión por el mismo camino que CI
+  ejercita en cada PR. Eso deja de valer en cuanto haya un padrón real, y para ese día está lo que
+  dice el punto siguiente.
+- **Sobre un volumen que se conserva, la extensión no llega sola y la migración se cae.**
+  `crear-roles.sql` corre desde `/docker-entrypoint-initdb.d`, o sea **una sola vez y con
+  el volumen vacío**. En `stg` y `prod` no volverá a ejecutarse, así que `postgis` no
+  estará creada y `V61` fallará con `type "geography" does not exist`. Y no lo arregla el
+  migrador: `postgis` **no es una extensión *trusted*** —`SELECT trusted FROM
+  pg_available_extension_versions WHERE name='postgis'` da `f`—, de modo que crearla
+  exige un superusuario y `sgtm_owner` a propósito no lo es. CI nunca lo ve porque
+  siempre parte de un volumen vacío, así que sale verde en todas partes y rojo la primera
+  vez que alguien despliegue conservando los datos. Para eso está
+  [`despliegue/crear-extensiones.sh`](../../../despliegue/crear-extensiones.sh), que lleva
+  al motor en marcha lo que el archivo declara y es idempotente —mismo hueco y misma
+  forma que `asignar-claves.sh` en #435—. **Mientras haya sólo datos de prueba no hace
+  falta: rehacer el volumen es más simple.** Lo que sí conviene correr siempre es
+  `verificar-el-ambiente.sh`, que dice en cuál de las dos situaciones está el ambiente.
 - **`spatial_ref_sys` aparece en el esquema `public`.** La crea la extensión y es un catálogo de
   sistemas de coordenadas: no lleva ni puede llevar dato municipal. Entra en `TABLAS_EXENTAS` de la
   prueba de aislamiento, que es donde tiene que verse.
