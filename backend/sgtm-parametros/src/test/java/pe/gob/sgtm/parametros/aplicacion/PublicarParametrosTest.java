@@ -557,7 +557,8 @@ class PublicarParametrosTest {
     class ElDerivado {
 
         @Test
-        @DisplayName("publica las veintidos filas del corpus, con las firmas que el corpus dice")
+        @DisplayName(
+                "publica las treinta y dos filas del corpus, con las firmas que el corpus dice")
         void publicaElDerivadoDelCorpus() throws IOException, SQLException {
             assertThat(DERIVADO)
                     .as("es el archivo que publicar-parametros.sh monta en el Job")
@@ -567,7 +568,12 @@ class PublicarParametrosTest {
 
             // Ninguna cifra escrita aqui: lo que se compara es la base contra el archivo.
             List<String> delArchivo = llavesDe(DERIVADO);
-            assertThat(delArchivo).hasSize(22);
+            // El censo va escrito, y a proposito: anadir una cifra normativa al conjunto de un
+            // ejercicio tiene que ser un acto deliberado, no algo que se cuele en un diff. Fueron
+            // 22 hasta el 2026-08-30, cuando entraron las diez que ya estaban firmadas en el corpus
+            // y nadie habia pasado al derivado —alcabala, espectaculos y el factor de
+            // oficializacion— (#438).
+            assertThat(delArchivo).hasSize(32);
             for (String llave : delArchivo) {
                 String[] partes = llave.split("\\|", -1);
                 assertThat(

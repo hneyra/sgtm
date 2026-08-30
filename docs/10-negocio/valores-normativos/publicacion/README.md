@@ -39,7 +39,7 @@ infra/carga-de-datos/abrir-conjunto-parametros.sh --ambiente stg --municipalidad
     --conjunto-id N --archivo parametros-2026.csv
 ```
 
-## Las veintidós filas, y de dónde sale cada una
+## Las treinta y dos filas, y de dónde sale cada una
 
 | Tipo | Clave | Filas | Archivo del corpus |
 |---|---|---|---|
@@ -53,6 +53,10 @@ infra/carga-de-datos/abrir-conjunto-parametros.sh --ambiente stg --municipalidad
 | `PLAZO` | `REC1_CUMPLIMIENTO` | 1 | `prescripcion-y-plazos.md` |
 | `PLAZO` | `NOTIFICACION_VALOR-RD`, `NOTIFICACION_VALOR-RM`, `NOTIFICACION_VALOR-OP` | 3 | `valores-plazos-de-reclamacion.md` |
 | `PLAZO` | `PRESCRIPCION_INICIO-PREDIAL`, `PRESCRIPCION_INICIO-VEHICULAR` | 2 | `prescripcion-inicio-del-computo.md` |
+| `ALCABALA_ALICUOTA` | — | 1 | `alcabala.md` |
+| `ALCABALA_TRAMO_INAFECTO_UIT` | — | 1 | `alcabala.md` |
+| `ESPECTACULO_ALICUOTA` | `TAURINO-SUPERIOR-0.5-UIT`, `TAURINO-RESTO`, `CARRERAS-CABALLOS`, `CINEMATOGRAFICO`, `MUSICA-GENERAL`, `FOLCLOR-TEATRO-ZARZUELA-OPERA-BALLET-CIRCO`, `OTROS` | 7 | `espectaculos.md` |
+| `FACTOR_OFICIALIZACION` | — | 1 (solo 2026) | `obras-complementarias-y-oficializacion-2026.md` |
 
 La **UIT no lleva clave**: es la forma del tipo con un solo valor, y las cinco filas se distinguen
 por `vigencia_desde`, como describe `LlaveDeParametro`. Cada una vale sólo su ejercicio
@@ -137,6 +141,40 @@ Por eso su `valor_texto` combina el fragmento de la norma con la **frase de deri
 archivo del corpus** —«el desfase publicado es de cero (0) días hábiles», «desfase de un año
 respecto del ejercicio»—: la cifra derivada nace en ese §2, con las dos firmas del archivo, y el
 verificador la exige verbatim ahí igual que exige la letra de la norma en §1.
+
+### Las diez que faltaban, y solo una por una decisión
+
+`alcabala.md` y `espectaculos.md` están `VERIFICADO` desde el 2026-08-28, son de **norma nacional**,
+sus dos firmas están, y su §2 dice de sí mismos —los dos, con la misma frase— «**No se carga con
+este archivo. Se carga con el derivado de `publicacion/`**». Y no tenían ninguna fila aquí.
+
+No había un motivo escrito en ninguna parte: simplemente nadie las había pasado. Se añadieron el
+2026-08-30 y publican de verdad —nueve filas sobre las 22 que ya estaban, medido contra `stg`—.
+
+**Y con ellas entró la décima, que sí esperaba a algo:** `FACTOR_OFICIALIZACION`. Su archivo decía
+«en cuanto una segunda persona vuelva a la fuente y firme, es una fila de `parametros-2026.csv` como
+cualquier otra»; la firma llegó el 2026-08-30 (#436) y la fila entró detrás. Con eso, **uno de los
+cuatro factores de D-11 deja de estar solo transcrito y pasa a estar publicado**: la regla que
+valorice obras complementarias ya no tiene que fallar nombrando `FACTOR_OFICIALIZACION`, porque el
+`0,68` está en el conjunto.
+
+El conjunto del ejercicio pasa así de 22 filas a **32**.
+
+Es la clase de hueco que este verificador no podía ver: `verificar-publicacion.mjs` comprueba que
+**lo que está aquí** esté en el corpus, no que **lo que está en el corpus** esté aquí. Lo que sí lo
+delataba era su propio recuento final —«VERIFICADO y sin publicar»—, que baja de once archivos a
+**ocho**. De esos ocho: cinco son cuadros y van por el otro archivo (`aranceles-2026.md`,
+`depreciacion.md`, `transito-tabla-de-infracciones.md`, `valores-unitarios-2026.md`,
+`vehicular-valores-referenciales-2026.md`), uno es de ordenanza local y espera a D-02b
+(`derecho-tramite-licencia-edificacion-catacaos-2023.md`), uno no puede resolverse
+(`predial-plazos-y-reajuste.md`, abajo) y queda `multa-tributaria.md`.
+
+**`multa-tributaria.md` no se publica, y conviene decir por qué.** Sus sanciones no son cifras sino
+**alternativas**: «30% de la UIT **o** 0.6% de los IN», «0.6% de los I **o cierre**». Y cuál de las
+tres Tablas se aplica no lo decide quién cobra el tributo sino **qué es el contribuyente infractor**
+—su régimen del impuesto a la renta—, que es lo que el propio archivo investigó y dejó escrito.
+Publicar una fila por numeral obligaría a elegir una Tabla y una de las dos ramas de cada
+alternativa: dos decisiones que la norma no toma y que este derivado no puede tomar por ella.
 
 ## Lo que hoy no se publica, y por qué
 
