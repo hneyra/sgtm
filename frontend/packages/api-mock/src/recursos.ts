@@ -1436,10 +1436,12 @@ const bienesComunes = (): Readonly<Record<string, unknown>> =>
           estadoConservacion: 'BUENO',
         },
       ],
-      participaciones: filasDe('ficha_bienes').map(([unidad, , , porcentaje], i) => ({
+      /* `ParticipacionResource` publica dos campos, y la unidad no es uno: el
+         predio se identifica por su `predioId`. Publicar tambien su rotulo daria
+         una columna que al encender la ruta se queda vacia. */
+      participaciones: filasDe('ficha_bienes').map(([, , , porcentaje], i) => ({
         predioId: i + 1,
         porcentaje,
-        unidad,
       })),
       areaComunTotal: '124.00',
     },
@@ -3168,7 +3170,7 @@ function expedienteDeLaPapeleta(): Readonly<Record<string, unknown>> {
 const padronDeTransito = (): Paginado =>
   unaPagina(
     filasDe('transito_padron').map(
-      ([numero, fecha, placa, conductor, infraccion, , aPagar, estado], i) => ({
+      ([numero, fecha, placa, conductor, infraccion, , aPagar, estado]) => ({
         numero,
         familia: 'TRANSITO',
         fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
@@ -3186,7 +3188,6 @@ const padronDeTransito = (): Paginado =>
         importeAPagar: comoImporte(aPagar ?? '0.00'),
         actualizadoA: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
         valorNumero: null,
-        id: i + 1,
       }),
     ),
   );
@@ -3202,7 +3203,7 @@ const padronDeTransito = (): Paginado =>
  */
 const padronCoactivaDeTransito = (): Paginado =>
   unaPagina(
-    filasDe('transito_padron_coactiva').map(([, papeleta, , placa, obligado, deuda], i) => ({
+    filasDe('transito_padron_coactiva').map(([, papeleta, , placa, obligado, deuda]) => ({
       numero: papeleta,
       familia: 'TRANSITO',
       fechaInfraccion: EL_DIA_DEL_PROTOTIPO,
@@ -3220,7 +3221,6 @@ const padronCoactivaDeTransito = (): Paginado =>
       importeAPagar: comoImporte(deuda ?? '0.00'),
       actualizadoA: EL_DIA_DEL_PROTOTIPO,
       valorNumero: null,
-      id: i + 1,
     })),
   );
 
@@ -3261,7 +3261,7 @@ const ESTADO_DEL_RECORD_DEL_MOCK: Readonly<Record<string, string>> = {
 const recordDeConductor = (): Paginado =>
   unaPagina(
     filasDelReporte('transito_record_conductor').map(
-      ([numero, fecha, placa, infraccion, importe, estado], i) => ({
+      ([numero, fecha, placa, infraccion, importe, estado]) => ({
         numero,
         familia: 'TRANSITO',
         fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
@@ -3279,7 +3279,6 @@ const recordDeConductor = (): Paginado =>
         importeAPagar: comoImporte(importe ?? '0.00'),
         actualizadoA: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
         valorNumero: null,
-        id: i + 1,
       }),
     ),
   );
@@ -3287,7 +3286,7 @@ const recordDeConductor = (): Paginado =>
 const recordVehicular = (): Paginado =>
   unaPagina(
     filasDelReporte('transito_record_vehicular').map(
-      ([numero, fecha, conductor, infraccion, importe, estado], i) => ({
+      ([numero, fecha, conductor, infraccion, importe, estado]) => ({
         numero,
         familia: 'TRANSITO',
         fechaInfraccion: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
@@ -3305,7 +3304,6 @@ const recordVehicular = (): Paginado =>
         importeAPagar: comoImporte(importe ?? '0.00'),
         actualizadoA: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
         valorNumero: null,
-        id: i + 1,
       }),
     ),
   );
@@ -3812,10 +3810,9 @@ const codigosDeReporteAdministrativo = (): Paginado =>
 const padronDeNotificaciones = (): Paginado =>
   unaPagina(
     filasDe('adm_padron_notificaciones').map(
-      ([numero, fecha, , infraccion, , , papeleta, deudaS], i) => {
+      ([numero, fecha, , infraccion, , , papeleta, deudaS]) => {
         const tienePapeleta = (papeleta ?? '—') !== '—';
         return {
-          id: i + 1,
           numero,
           fecha: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
           direccion: LUGAR_DE_LA_INSPECCION,
@@ -4135,7 +4132,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
  * las 134 opciones del catalogo — aqui hay una, a proposito.
  */
 const permisosDeGrupo = (): readonly Readonly<Record<string, unknown>>[] => [
-  { id: 1, acceso: 'calles', grupoId: 1, usuarioId: null, privilegios: ['LECTURA'] },
+  { id: 1, acceso: 'calles', grupoId: 1, privilegios: ['LECTURA'] },
 ];
 
 /**

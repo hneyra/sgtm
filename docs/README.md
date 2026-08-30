@@ -69,6 +69,10 @@ MEF, aún planeada allí) y los **RNF** menores de 030 (p. ej. RNF-020, latencia
 - [`openapi/sgtm-v1.yaml`](50-api/openapi/sgtm-v1.yaml) — contrato derivado del prototipo de interfaz
 - [`generar-openapi.mjs`](50-api/generar-openapi.mjs) — lo deriva, y `--comprobar` exige en CI que
   el archivo comprometido siga siendo lo que produce (#312)
+- [`formas-de-la-api.json`](50-api/formas-de-la-api.json) — **qué devuelve** cada operación, campo a
+  campo. Lo deriva `FormasDeLaApiTest` del tipo de retorno de cada controlador y lo lee el frontend
+  para comprobar que su proxy de datos publica la forma que el backend publica (#400). Tampoco se
+  edita a mano: se regenera con `-Dsgtm.formas.regenerar=true`
 
 ### 60 — Frontend
 - [Arquitectura frontend](60-frontend/arquitectura-frontend.md) — monorepo, paquetes y qué existe hoy

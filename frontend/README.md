@@ -760,6 +760,13 @@ trabajo.
 En el mismo archivo está el censo —cuántas se pueden encender hoy y cuántas necesitan trabajo
 antes—, con sus cifras fijadas: moverlas es una línea del diff.
 
+**Y la forma no se compara a ojo.** `recursos.ts` copia a mano la forma de cada `Resource`, así que
+el backend la **deriva** de sus controladores a `docs/50-api/formas-de-la-api.json` y
+`verificaciones/formas-del-backend.test.ts` compara las dos. Un campo que el proxy publica y el
+`Resource` no tiene es rojo —al encender la ruta, la columna que lo dibuje se queda vacía—; uno que
+el backend manda y el proxy no publica se cuenta, porque no rompe nada y sí dice que el proxy
+describe un recurso más pobre que el real.
+
 ### Los dos procesos, juntos
 
 ```bash
