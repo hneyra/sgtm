@@ -350,6 +350,21 @@ export const PIES: Readonly<Record<string, string | null>> = {
    * linea tiene ni siquiera el total.
    */
   fisc_estado_cuenta: null,
+
+  /**
+   * **`fraccionamiento_coactivo`: suprimido** (#426).
+   *
+   * Su pie del prototipo es «Deuda total 1,848.66 · acogida 1,848.66 · con
+   * beneficio 1,845.51»: la tercera cifra congelada de la captura del manual que
+   * aparece en este catalogo, tras las de #72 y #80. Las tres las dibuja ademas
+   * «Resultado del convenio», donde el servidor las devuelve y cambian con el
+   * expediente; abajo no cambiaban nunca.
+   *
+   * Y aqui la segunda tiene una vuelta de tuerca propia: «acogida» **depende de
+   * lo que se marque en la tabla**, asi que un pie que la afirme antes de marcar
+   * nada no es una cifra vieja, es una cifra que no puede existir.
+   */
+  fraccionamiento_coactivo: null,
 };
 
 /** Las opciones cuyo pie de tabla corrige la prosa. La comprobacion de coherencia las mira. */
@@ -488,6 +503,34 @@ export const MOTIVOS_DE_FILTRO: Readonly<Record<string, string>> = {
 
   'depreciacion.uso':
     'El uso no se puede filtrar: el cuadro no publica el uso de ninguna fila y el servidor solo recibe el ejercicio. Para acotar por material predominante, usa el desplegable que hay sobre la tabla: ese sí elige entre lo que el cuadro trajo.',
+
+  /**
+   * **`costas_procesales.estado`** (#42, #426): de los cuatro valores del
+   * desplegable el sistema solo sabe calcular dos, y los dos que faltan no son
+   * una columna que nadie llene sino **dos actos que nadie registra todavia**
+   * —«NOTIFICADA» exige diligenciar la liquidacion con su acuse, «ANULADA» exige
+   * reversar su cargo con su motivo—. `EstadoDeLaLiquidacion` los rechaza
+   * nombrandolos, asi que elegir cualquiera de los dos deja la busqueda en 422.
+   *
+   * Se bloquea el filtro **entero** y no la mitad: dejarlo vivo con dos valores
+   * buenos y dos malos es peor que decir que no se puede, porque quien elige
+   * «Anuladas» y ve una lista no tiene forma de saber si es la suya.
+   */
+  /**
+   * **Los dos de `rec_impresion`** (#426). La grilla la llena la misma lectura
+   * que «Expedientes coactivos» —`GET /coactiva/expedientes`—, que acepta numero,
+   * contribuyente, ejecutor y estado. Ni el tipo de deuda ni el año estan entre
+   * ellos, y un filtro que se teclea y no filtra es lo que #397 cerro en
+   * Infracciones.
+   */
+  'rec_impresion.tipoDeDeuda':
+    'El tipo de deuda no se puede filtrar: la lista de expedientes que llena esta tabla se busca por número, contribuyente, ejecutor y estado, y el tipo de deuda no está entre ellos. Un expediente coactivo puede además agrupar valores de más de un tipo.',
+
+  'rec_impresion.ano':
+    'El año no se puede filtrar: la lista de expedientes se busca por número, contribuyente, ejecutor y estado. El año de cada uno sí se ve, en la segunda columna de la tabla.',
+
+  'costas_procesales.estado':
+    'El estado no se puede filtrar todavía: de los cuatro que ofrece, el sistema deriva del libro «activa» y «cancelada» —y los muestra en la última columna de la tabla—, pero «notificada» y «anulada» son actos que aún no se registran: notificar la liquidación y reversar su cargo. Filtrar por ellos devolvería una lista bajo una etiqueta que el sistema no sabe calcular.',
 };
 
 /** Los filtros bloqueados que tienen texto. La comprobacion de coherencia los mira. */
@@ -511,6 +554,32 @@ export const NOTAS: Readonly<Record<string, string>> = {
 
   alta_deuda:
     'Solo se admiten los tributos con código en el libro: predial, arbitrios, vehicular, alcabala y multa administrativa. La unidad se busca por código catastral o por placa y lo que se guarda es el registro encontrado, no lo tecleado; los arbitrios, la alcabala y el vehicular la exigen, y el predial no la admite —se determina por contribuyente, sobre el conjunto de sus predios—. El rango de cuotas todavía no viaja: el alta registra una sola cuota.',
+
+  /* ── Coactiva: las ocho escrituras del módulo (#426) ─────────────────── */
+
+  importacion_valores:
+    'La importación abre el expediente del contribuyente que se busque arriba, y su número lo pone el sistema: «Número» y «Año» no viajan. Sin marcar nada se importan todos sus valores que tengan pase a coactiva, que es lo que el backend hace con la lista vacía —la columna «Seleccione» todavía no trae filas—. «Detalle de recaudos» es de solo lectura, y «Expedientes libres» y «Rechazar recaudo» no tienen operación detrás todavía. El ejecutor es obligatorio: es quien dirige el procedimiento.',
+
+  rec_impresion:
+    'Aquí se emite la REC 1 de los expedientes que se marquen, con la deuda proyectada al día del filtro. «Carátula» y «REC 2» no emiten: la carátula no es un acto propio del sistema —mandarla dictaría otra vez la REC 1—, y la REC 2 exige además la forma de la medida cautelar, que esta pantalla no pregunta. La columna «Nombre» sale con «—» porque la lista de expedientes publica el código del contribuyente, no su razón social; los cuatro importes de «Carga de deudas» y los datos del expediente son de solo lectura.',
+
+  expediente_historial:
+    'El expediente se abre por su número en la dirección, así que el enlace se puede compartir. Se guarda el estado nuevo con su motivo y, si consta, el documento que lo respalda. La casilla «Activo» no viaja: el estado que rige es el último del historial y eso lo deriva el sistema. «Nuevo», «Modificar» y «Quitar» no hacen nada: el historial no se sobrescribe ni se borra, se le añade un movimiento.',
+
+  cambiar_direccion_ref:
+    'Se cambia la dirección a la que se notificará el expediente, con el motivo del cambio. «Hab. Urbana» y «Vía» no viajan: son ayudas para componer la dirección que se escribe debajo. La dirección anterior no se borra —queda en el historial—, porque es la que explica a dónde fueron las notificaciones anteriores. El domicilio fiscal es el del padrón y no se toca aquí.',
+
+  costas_procesales:
+    'La liquidación se hace sobre el expediente que se busque arriba, y los importes los pone el arancel de costas aprobado: «Monto» y «Total» no viajan, y mientras la ordenanza no esté cargada el sistema lo dice nombrando la tarifa que falta. El tributo tampoco se elige: la costa se imputa siempre a costas procesales. Sin marcar actos se liquidan todos los pendientes que el arancel tarife. El filtro «Estado» está bloqueado: de sus cuatro valores el sistema solo sabe calcular dos.',
+
+  actos_coactivos:
+    'Se registra el acto del procedimiento que se dicta, con su glosa —que es lo que se imprime en el documento—. «Documento» es el papel con el que se materializa y no viaja: una resolución coactiva puede ser una suspensión, un levantamiento o una conclusión, y traducir una cosa en la otra sería inventarlo. La sección «Medida cautelar» entera tampoco viaja: el sistema guarda la forma del embargo, no su número ni su monto ni la entidad. La REC se emite desde su propia pantalla.',
+
+  notificaciones_coactivas:
+    'Se registra la diligencia de un acto coactivo, identificado por el número de su documento —«Valor Nº» de arriba es el del valor, que es otra cosa—. «Recibido por» dice cómo se diligenció y «Tipo de notificación» con qué resultado: de esos dos sale lo que se guarda. La serie y el número de la notificación los pone el sistema, «Nro. visita» es informativo y «Vence» se deriva del plazo: ninguno viaja. Tampoco el representante, la firma, las características de la vivienda ni los testigos.',
+
+  fraccionamiento_coactivo:
+    'El convenio se suscribe sobre las obligaciones que se marquen en la tabla, que son las del expediente que se escriba arriba y se leen a su fecha de corte. La cuota inicial se pide en porcentaje de lo acogido, de 0 a 100: «Pago inicial (S/)» es el importe que dibuja el prototipo y no viaja —el soles lo calcula el servidor—. «Forma de pago» y «Benef. aplicable» tampoco: qué descuenta un beneficio es una ordenanza que todavía no está cargada, y la clase de convenio la decide el propio expediente. Las seis cifras de «Resultado del convenio» las devuelve el servidor: aquí no se suma ninguna columna.',
 
   baja_deuda:
     'La baja registra una obligación por acto: se elige su cuota en la tabla y se repite para las demás. La causal no tiene campo propio en el backend —va en la observación, que es donde queda auditada— y el total a extinguir lo calcula el servidor: aquí no se suma ninguna columna. Una fila cuya cuota agrupa varias («1 - 4») no se puede dar de baja todavía: el backend registra una cuota o el año completo, y no hay forma de decirle «de la 1 a la 4».',

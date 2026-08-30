@@ -147,7 +147,19 @@ const CARGADORES: Readonly<Record<string, () => Promise<AporteDeModulo>>> = {
     };
   },
   valores: async () => ({ conexiones: (await import('./valores')).CONEXIONES_DE_VALORES }),
-  coactiva: async () => ({ conexiones: (await import('./coactiva')).CONEXIONES_DE_COACTIVA }),
+  coactiva: async () => {
+    /* La octava composicion, llegada con #426: cinco controles anadidos, dos
+       tablas que eligen filas y el filtro que la liquidacion de costas no puede
+       usar. Por el mismo camino que las otras siete. */
+    const [registro, composicion] = await Promise.all([
+      import('./coactiva'),
+      import('./coactiva/composicion'),
+    ]);
+    return {
+      conexiones: registro.CONEXIONES_DE_COACTIVA,
+      composiciones: composicion.COMPOSICION_DE_COACTIVA,
+    };
+  },
   'autorizaciones-y-licencias': async () => ({
     conexiones: (await import('./licencias')).CONEXIONES_DE_LICENCIAS,
     /* La sexta composicion, llegada con #427 A mientras este issue se escribia:
@@ -250,7 +262,10 @@ export interface CensoDeAportes {
 export async function censoDeAportes(): Promise<CensoDeAportes> {
   const aportes = await Promise.all(MODULOS.map((modulo) => aporteDelModulo(modulo.id)));
   return {
-    conexiones: Object.assign({}, ...aportes.map((a) => a.conexiones)) as CensoDeAportes['conexiones'],
+    conexiones: Object.assign(
+      {},
+      ...aportes.map((a) => a.conexiones),
+    ) as CensoDeAportes['conexiones'],
     adaptaciones: Object.assign(
       {},
       ...aportes.map((a) => a.adaptaciones ?? {}),

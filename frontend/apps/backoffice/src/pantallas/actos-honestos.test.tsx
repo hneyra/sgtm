@@ -247,7 +247,17 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // `Familia`—; la primera necesito ademas un resolutor, porque el manual
       // teclea el numero en tres campos y `notif_adm_numero_uq` (V4) lo guarda
       // en uno.
-      declarada: 22,
+      //
+      // **Y ocho mas con #426**: las ocho de Coactiva, de golpe. Las doce
+      // opciones del modulo tenian `Controller` desde #40-#42 y ninguna
+      // escritura declaraba: lo que faltaba eran las tres cosas que los tres
+      // issues anteriores fueron dejando —cual boton guarda (#421), donde se
+      // escribe un campo que el manual no dibuja (#422, cinco controles aqui) y
+      // de donde salen las filas que se marcan (#332, con una lectura nueva del
+      // backend para la que fracciona)—. Las ocho llegan desde
+      // `sin-declaracion`, que es donde las seis de #421 se habian quedado y
+      // donde las otras dos ya estaban.
+      declarada: 30,
       // **Una, y es nueva con #424**: `transito_reportes`. Viene de
       // `sin-declaracion` —su operacion es un `POST` y no declara escritura—, y
       // esa causa decia de ella lo unico que no es cierto: que «la pantalla aún
@@ -347,7 +357,15 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       //
       // **Y dos menos con #428**: `adm_notificacion` y `adm_valores`, las dos a
       // `declarada`. Tampoco se sumo a mano.
-      'sin-declaracion': 11,
+      //
+      // **Y ocho menos con #426**, que es el modulo de Coactiva entero: las seis
+      // que #421 dejo aqui con el boton ya correcto y sin nada que mandar, mas
+      // `cambiar_direccion_ref` y `fraccionamiento_coactivo`, que nunca
+      // necesitaron #421 —su ultima accion del catalogo ya era la que escribe—.
+      // Las ocho pasan a `declarada`, y con ellas **se vacia la casilla de
+      // Coactiva**: de las doce opciones del modulo, ninguna queda con
+      // impedimento.
+      'sin-declaracion': 3,
       // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
       // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
       // «Guardar» de una ficha `GET` se cae— y repartir el valor de una
@@ -385,11 +403,24 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
     expect(impedimentoDelActo('cuenta_corriente', ['Exportar', 'Registrar pago'])?.causa).toBe(
       'sin-backend',
     );
-    /* Escribe en el contrato y no ha declarado su cuerpo: `costas_procesales`
-       (#42, #76). El testigo era `cierre_caja` hasta #423, que le enseño a
-       `escrituras.ts` a declarar un mapa por forma de pago y la saco de esta
-       casilla; se comprueba tambien lo segundo, que es lo que convierte el
-       cambio de testigo en una afirmacion y no en un apaño. */
+    /* Escribe en el contrato y no ha declarado su cuerpo: `respaldo` (#13). Es
+       el **tercer** testigo de esta casilla, y el cambio se lee como la historia
+       de las tres ondas de conexion: era `cierre_caja` hasta #423, que le enseño
+       a `escrituras.ts` a declarar un mapa por forma de pago, y
+       `costas_procesales` hasta #426, que conecto el modulo de Coactiva entero.
+       De los dos anteriores se comprueba **tambien** que ya no estan aqui, que es
+       lo que convierte cada cambio de testigo en una afirmacion y no en un apaño:
+       el anterior sale de la casilla porque declara, no porque se le haya dejado
+       de mirar.
+
+       Y de la casilla quedan tres: `respaldo`, `permisos` y `vehicular_calculo`
+       —las tres fuera de las doce ondas de modulo—. */
+    expect(impedimentoDelActo('respaldo', ['Restaurar', 'Ejecutar respaldo'])?.causa).toBe(
+      'sin-declaracion',
+    );
+    expect(
+      impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja']),
+    ).toBeUndefined();
     expect(
       impedimentoDelActo('costas_procesales', [
         'Nuevo',
@@ -397,10 +428,7 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
         'Anular',
         'Imprimir',
         'Guardar',
-      ])?.causa,
-    ).toBe('sin-declaracion');
-    expect(
-      impedimentoDelActo('cierre_caja', ['Cuadrar', 'Imprimir arqueo', 'Cerrar caja']),
+      ]),
     ).toBeUndefined();
     // Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
     // no tiene donde escribir** (#33, #74): a `caja_tributaria` le falta el
@@ -792,8 +820,17 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
    * casilla —su primaria del catalogo tampoco pasaba ningun filtro de salida—,
    * y eso tambien se afirma aqui: si se movieran, el censo cuadraria por otro
    * camino y nadie se enteraria.
+   *
+   * **Cuatro de las once ya no llegan a `sin-declaracion`, y ese es el trabajo
+   * de #426**: las cuatro de coactiva declaran su escritura, asi que
+   * `impedimentoDelActo` devuelve `undefined` antes de mirar ninguna otra cosa.
+   * Lo que sigue afirmandose de ellas es lo mismo de siempre, y es lo unico que
+   * la barra decide: **su primaria compuesta es la que guarda**, no la de
+   * salida que el prototipo dejo la ultima. Sin `LA_QUE_ESCRIBE`, declarar la
+   * escritura habria encendido «Limpiar campos» —y pulsarlo habria importado
+   * valores a coactiva—.
    */
-  it('las tres que se mudan de casilla lo hacen por su barra, no por su catalogo', async () => {
+  it('las ocho que se mudaron de casilla lo hicieron por su barra, no por su catalogo', async () => {
     const pantallas = await todasLasPantallas();
     const causaDe = (opcion: string, acciones: readonly string[]) =>
       impedimentoDelActo(opcion, acciones)?.causa ?? 'ninguna';
@@ -801,31 +838,36 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
     const deLaBarra = (opcion: string) =>
       accionesDeLaBarra(opcion, delCatalogo(opcion), altasDe(opcion)).acciones;
 
-    /* Tres desde #428, no seis: `certificados` (#427), `adm_notificacion` y
-       `adm_valores` (#428) ya declaran su escritura, asi que su casilla no es
-       `sin-declaracion` sino ninguna —lo que las apaga es `exigir`—. Lo que
-       siguen demostrando las tres que quedan es lo mismo: con la lista cruda
-       del catalogo su primaria es de salida y no hay franja; con la compuesta,
-       la operacion escribe y la opcion no ha declarado sus campos. */
-    for (const opcion of ['importacion_valores', 'expediente_historial', 'costas_procesales']) {
-      // Con la lista cruda: una primaria de salida, y ninguna franja.
-      expect(causaDe(opcion, delCatalogo(opcion)), `«${opcion}» del catalogo`).toBe('ninguna');
-      // Con la barra: la operacion escribe y la opcion no ha declarado sus campos.
-      expect(causaDe(opcion, deLaBarra(opcion)), `«${opcion}» compuesta`).toBe('sin-declaracion');
-    }
-    for (const opcion of ['rec_impresion', 'actos_coactivos', 'notificaciones_coactivas']) {
-      expect(causaDe(opcion, delCatalogo(opcion)), `«${opcion}» del catalogo`).toBe(
-        'sin-declaracion',
-      );
-      expect(causaDe(opcion, deLaBarra(opcion)), `«${opcion}» compuesta`).toBe('sin-declaracion');
-    }
-    /* Y las dos de licencias que #427 lleva a la tercera puerta: su acto
+    /* **Ninguna de las once queda ya en la casilla `sin-declaracion`**, y eso lo
+       cerro #426: las tres de licencias e infracciones declararon con #427 y
+       #428, y las seis de coactiva con este. Asi que lo que se afirma de todas
+       ya no es su casilla sino **lo que la barra hace con ellas**, que es de lo
+       que dependia que declarar la escritura no fuera peligroso: sin
+       `LA_QUE_ESCRIBE` la primaria seria la de salida que el prototipo dejo la
+       ultima, y en `importacion_valores` pulsarla habria importado valores a
+       coactiva —irreversible, RF-100—. */
+    /* Las dos de licencias que #427 lleva a la tercera puerta: su acto
        funciona y no guarda nada, asi que no tienen casilla ni con la lista del
        catalogo ni con la compuesta. Antes las dos decian `sin-declaracion`. */
     for (const opcion of ['anuncios_reportes', 'licencia_padron']) {
       expect(causaDe(opcion, delCatalogo(opcion)), `«${opcion}» del catalogo`).toBe('ninguna');
       expect(causaDe(opcion, deLaBarra(opcion)), `«${opcion}» compuesta`).toBe('ninguna');
       expect(OPCIONES_QUE_LEEN_POR_POST, `«${opcion}» lee por POST`).toContain(opcion);
+    }
+    /* Y las seis de coactiva que #421 marco: de cada una, que la primaria
+       compuesta es la que guarda y que la del catalogo **no** lo era. */
+    for (const [opcion, guarda] of [
+      ['importacion_valores', 'Importar valores'],
+      ['rec_impresion', 'Generar'],
+      ['expediente_historial', 'Guardar cambios'],
+      ['costas_procesales', 'Guardar'],
+      ['actos_coactivos', 'Guardar'],
+      ['notificaciones_coactivas', 'Grabar'],
+    ] as const) {
+      const barra = deLaBarra(opcion);
+      expect(barra[barra.length - 1], `«${opcion}» primaria compuesta`).toBe(guarda);
+      expect(delCatalogo(opcion).at(-1), `«${opcion}» primaria del catalogo`).not.toBe(guarda);
+      expect(causaDe(opcion, barra), `«${opcion}» compuesta`).toBe('ninguna');
     }
   });
 
@@ -1002,10 +1044,12 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
    *                          ademas el que demuestra por que el color importa:
    *                          esa primaria **emite de verdad**
    *
-   * Y las dos siguen apagadas, por motivos que ya no son el mismo: la primera
-   * porque su modulo no ha declarado su escritura —franja `sin-declaracion`—, y
-   * la segunda porque la ha declarado y `exigir` nombra lo que falta rellenar.
-   * Las dos donde se lee (RNF-082), no en un `title` sobre un boton `disabled`.
+   * Y las dos siguen apagadas, y **ninguna de las dos por la casilla**: las dos
+   * declaran ya su escritura —`certificados` con #427, `importacion_valores` con
+   * #426—, asi que lo que las apaga es lo que a cada formulario le falta, dicho
+   * por su propia `exigir` y **sin** `data-causa`: ahi ya no hay ningun
+   * impedimento estructural que contar. Y dicho donde se lee (RNF-082), no en un
+   * `title` sobre un boton `disabled`.
    */
   it.each([
     {
@@ -1013,8 +1057,8 @@ describe('la franja aparece en la pantalla, y la primaria la referencia', () => 
       ruta: '/coactiva/importacion-valores',
       escribe: 'Importar valores',
       ultimaDelCatalogo: 'Limpiar campos',
-      motivo: /Registra el acto por el procedimiento actual/,
-      causa: 'sin-declaracion',
+      motivo: /Busca al contribuyente arriba/,
+      causa: undefined,
     },
     {
       caso: 'el certificado, que ademas estrena franja',

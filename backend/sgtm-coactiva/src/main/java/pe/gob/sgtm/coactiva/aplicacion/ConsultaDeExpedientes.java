@@ -1,6 +1,7 @@
 package pe.gob.sgtm.coactiva.aplicacion;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -21,6 +22,7 @@ import pe.gob.sgtm.coactiva.dominio.LiquidacionDeCostasRepository;
 import pe.gob.sgtm.coactiva.dominio.MovimientoDelExpediente;
 import pe.gob.sgtm.coactiva.dominio.MovimientoDelExpedienteRepository;
 import pe.gob.sgtm.coactiva.dominio.ObligacionDeCostas;
+import pe.gob.sgtm.coactiva.dominio.ObligacionDelExpediente;
 import pe.gob.sgtm.coactiva.dominio.ValorDelExpediente;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
@@ -120,6 +122,36 @@ public class ConsultaDeExpedientes {
         return deudaDe(expediente, aLaFecha, new HashMap<>(), new HashMap<>());
     }
 
+    /**
+     * La misma deuda, <b>obligación por obligación</b> (#426).
+     *
+     * <p>Es la lectura de la que {@code fraccionamiento_coactivo} saca sus filas: {@code
+     * PeticionDeConvenioCoactivo.obligaciones[]} pide {@code tributo}, {@code ejercicio} y {@code
+     * predioId}/{@code vehiculoId} por fila, y una suma no los tiene. Sale de la <b>misma</b>
+     * composición que {@link #deudaDe} y a la misma fecha, así que la grilla y el total no pueden
+     * discrepar: el total se calcula sumando exactamente estas filas.
+     *
+     * @return vacío si no hay ningún expediente con ese número
+     */
+    @Transactional(readOnly = true)
+    public Optional<DeudaPorObligacion> obligacionesDe(String numero, LocalDate aLaFecha) {
+        return expedientes
+                .porNumero(numero)
+                .map(
+                        expediente -> {
+                            Composicion composicion =
+                                    componerDeuda(
+                                            expediente, aLaFecha, new HashMap<>(), new HashMap<>());
+                            return new DeudaPorObligacion(
+                                    expediente,
+                                    EstadoDelExpediente.delHistorial(
+                                            movimientos.deExpediente(expediente.identificador())),
+                                    composicion.lineas(),
+                                    composicion.total(),
+                                    aLaFecha);
+                        });
+    }
+
     // ------------------------------------------------------------------
 
     private FichaDelExpediente fichaDe(ExpedienteCoactivo expediente, LocalDate aLaFecha) {
@@ -143,6 +175,24 @@ public class ConsultaDeExpedientes {
     }
 
     private DeudaDelExpediente deudaDe(
+            ExpedienteCoactivo expediente,
+            LocalDate aLaFecha,
+            Map<Long, List<ObligacionPublica>> obligacionesPorContribuyente,
+            Map<Long, List<ValorParaCoactiva>> valoresPorContribuyente) {
+        return componerDeuda(
+                        expediente, aLaFecha, obligacionesPorContribuyente, valoresPorContribuyente)
+                .total();
+    }
+
+    /**
+     * La composición completa: las filas y su suma, en <b>un solo recorrido</b>.
+     *
+     * <p>Las dos salen de aquí y no de dos métodos, y eso es la decisión: el total se calcula
+     * sumando exactamente las filas que se publican. Componerlos por separado sería tener dos
+     * definiciones de «la deuda del expediente», y la que se lea en la grilla podría no ser la que
+     * imprime la REC-2 (RNF-083).
+     */
+    private Composicion componerDeuda(
             ExpedienteCoactivo expediente,
             LocalDate aLaFecha,
             Map<Long, List<ObligacionPublica>> obligacionesPorContribuyente,
@@ -179,13 +229,14 @@ public class ConsultaDeExpedientes {
         }
 
         if (claves.isEmpty() && deCostas.isEmpty()) {
-            return DeudaDelExpediente.ninguna(aLaFecha);
+            return new Composicion(List.of(), DeudaDelExpediente.ninguna(aLaFecha));
         }
 
         List<ObligacionPublica> obligaciones =
                 obligacionesPorContribuyente.computeIfAbsent(
                         contribuyente, id -> deuda.deTodoElContribuyente(id, aLaFecha));
 
+        List<ObligacionDelExpediente> lineas = new ArrayList<>();
         DeudaDelExpediente acumulada = DeudaDelExpediente.ninguna(aLaFecha);
         Dinero delProcedimiento = Dinero.de("0.00");
         Set<ClaveDeObligacion> contadas = new HashSet<>();
@@ -199,6 +250,7 @@ public class ConsultaDeExpedientes {
                 // porque el cargo se asento con concepto GASTO y no devenga insoluto ni interes.
                 // Contarlas ademas en `gasto` las sumaria dos veces al total.
                 delProcedimiento = delProcedimiento.mas(obligacion.total());
+                lineas.add(lineaDe(obligacion, true, aLaFecha));
                 continue;
             }
             if (!claves.contains(clave)) {
@@ -210,9 +262,28 @@ public class ConsultaDeExpedientes {
                             obligacion.reajuste(),
                             obligacion.interes(),
                             obligacion.gasto());
+            lineas.add(lineaDe(obligacion, false, aLaFecha));
         }
-        return acumulada.conCostas(delProcedimiento);
+        return new Composicion(List.copyOf(lineas), acumulada.conCostas(delProcedimiento));
     }
+
+    private static ObligacionDelExpediente lineaDe(
+            ObligacionPublica obligacion, boolean esCosta, LocalDate aLaFecha) {
+        return new ObligacionDelExpediente(
+                obligacion.tributo(),
+                obligacion.ejercicio(),
+                obligacion.predioId(),
+                obligacion.vehiculoId(),
+                obligacion.insoluto(),
+                obligacion.reajuste(),
+                obligacion.interes(),
+                obligacion.gasto(),
+                esCosta,
+                aLaFecha);
+    }
+
+    /** Las filas del expediente y su suma, compuestas de una vez. */
+    private record Composicion(List<ObligacionDelExpediente> lineas, DeudaDelExpediente total) {}
 
     /**
      * La clave con la que se cruzan las obligaciones que un valor formaliza y las que el libro
@@ -250,6 +321,31 @@ public class ConsultaDeExpedientes {
                     obligacion.ejercicio().valor(),
                     null,
                     null);
+        }
+    }
+
+    /**
+     * La deuda de un expediente, obligación por obligación y con su suma (#426).
+     *
+     * @param expediente la cabecera, para poder decir de quién es la deuda
+     * @param estado en qué punto está el procedimiento
+     * @param obligaciones una fila por obligación, sin sumar nada
+     * @param total la suma de esas filas, con sus costas aparte
+     * @param aLaFecha el día al que están todas las cifras (regla 9)
+     */
+    public record DeudaPorObligacion(
+            ExpedienteCoactivo expediente,
+            EstadoDelExpediente estado,
+            List<ObligacionDelExpediente> obligaciones,
+            DeudaDelExpediente total,
+            LocalDate aLaFecha) {
+
+        public DeudaPorObligacion {
+            Objects.requireNonNull(expediente, "La deuda es la de un expediente");
+            Objects.requireNonNull(estado, "El estado se deriva, pero nunca falta");
+            obligaciones = List.copyOf(obligaciones);
+            Objects.requireNonNull(total, "Toda cifra viaja con su fecha (regla 9)");
+            Objects.requireNonNull(aLaFecha, "Toda cifra viaja con su fecha (regla 9)");
         }
     }
 

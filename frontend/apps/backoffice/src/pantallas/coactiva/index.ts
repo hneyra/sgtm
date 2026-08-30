@@ -1,4 +1,4 @@
-import type { Celda, TonoDeCelda } from '@sgtm/api-client';
+import type { Celda, DatosDePantalla, TonoDeCelda } from '@sgtm/api-client';
 import { definirConexion } from '../conexiones';
 import type { Conexion } from '../conexiones';
 import { parametrosDeBusqueda } from '../busqueda';
@@ -13,89 +13,78 @@ import {
 } from '../seguridad/listado';
 
 /**
- * Coactiva, conectado hasta donde llega el backend con seguridad: **las
- * cuatro lecturas de doce** (#76).
+ * Coactiva, conectado entero: **las doce opciones del modulo** (#76, #426).
  *
- * `coactiva_expedientes` (#40), `proceso_coactivo` (#41), `coactiva_consulta_deudas`
- * y `coactiva_deudas_beneficio` (#42) tienen `Controller` y se conectan aqui, con el
- * patron de siempre: `leer` abre el sobre del contrato, `adaptar` traduce el
- * recurso del dominio a lo que dibuja el renderizador. Ninguna cifra se
- * compone (RNF-083): lo que el recurso no publica sale con {@link SIN_DATO}.
+ * Las cuatro lecturas llegaron con #76 —`coactiva_expedientes` (#40),
+ * `proceso_coactivo` (#41), `coactiva_consulta_deudas` y
+ * `coactiva_deudas_beneficio` (#42)— y las **ocho escrituras** con #426. Ninguna
+ * cifra se compone (RNF-083): lo que el recurso no publica sale con
+ * {@link SIN_DATO}.
  *
- * **Las otras ocho —todas escrituras— se quedan sin conectar, y no por
- * descuido.** Las doce tienen `Controller` en `sgtm-coactiva` (ver
- * `backend/sgtm-coactiva/.../infraestructura/web`), pero conectarlas de verdad
- * chocaba con dos problemas estructurales que ya bloquearon otras opciones en
- * este repositorio (`pase_coactiva`, `valores_individual`, `valores_masivo` en
- * `pantallas/valores/index.ts`):
+ * <h2>Que las tenia paradas, y con que se solto cada una</h2>
  *
- * 1. **La primaria no era la accion que guarda** —cerrado por #421, y aqui se
- *    deja el censo porque es el que aquel issue uso—. FRO-03 §5 fija la primaria
- *    en la ultima accion, y asi la dibujaba `BarraDeAcciones`; el prototipo
- *    capturo estas pantallas como barras de herramientas de escritorio —Nuevo,
- *    Modificar, Guardar, Imprimir…— y en **seis de las ocho** la ultima no es
- *    «Guardar». Desde #421 las seis declaran cual escribe en
- *    `LA_QUE_ESCRIBE` (`pantallas/actos.ts`), esa pasa al final de la barra y es
- *    la que lleva el color del acto; lo que sigue faltando es lo del punto 2:
+ * Las doce tenian `Controller` en `sgtm-coactiva` desde #40–#42: **no faltaba
+ * backend**. Lo que faltaba eran tres cosas distintas, y por eso hicieron falta
+ * tres issues:
  *
- *      `importacion_valores`      última: «Limpiar campos» (la que importa,
- *                                 «Importar valores», es la **primera**)
- *      `rec_impresion`            última: «REC 2» (un boton de las dos
- *                                 resoluciones, no un guardado generico —
- *                                 `PeticionDeRec.rec` no tiene de donde salir)
- *      `expediente_historial`     última: «Limpiar» (la que guarda,
- *                                 «Guardar cambios», es la penultima)
- *      `costas_procesales`        última: «Imprimir» (la que liquida,
- *                                 «Guardar», es la penultima)
- *      `actos_coactivos`          última: «Padrón» (un reporte, no un guardado)
- *      `notificaciones_coactivas` última: «Resol. consentida»
- *
- *    Declarar la escritura ahi habilitaba la primaria equivocada: pulsar
- *    «Limpiar campos» en `importacion_valores` importaria valores a coactiva
+ * 1. **La primaria no era la accion que guarda** (#421). FRO-03 §5 fija la
+ *    primaria en la ultima accion; el prototipo capturo estas pantallas como
+ *    barras de herramientas de escritorio —Nuevo, Modificar, Guardar, Imprimir…—
+ *    y en **seis de las ocho** la ultima no es la que guarda. Declarar la
+ *    escritura sin resolver eso encendia el boton equivocado: pulsar «Limpiar
+ *    campos» en «Importacion de valores» habria importado valores a coactiva
  *    —irreversible, RF-100— cuando quien atiende solo queria borrar el
- *    formulario. Lo que faltaba era una forma de decirle a `BarraDeAcciones`
- *    cual boton guarda cuando no es el ultimo **sin** tocar la convencion que
- *    vale para las otras 123 pantallas, y eso es lo que #421 anadio: una
- *    declaracion opt-in por opcion, por el **rotulo** que el catalogo dibuja.
- *    Aqui las seis lo declaran; ninguna conecta su escritura todavia.
+ *    formulario. `LA_QUE_ESCRIBE` (`pantallas/actos.ts`) lo dice por el **rotulo**
+ *    del catalogo, opcion por opcion.
+ * 2. **Un campo que el backend exige y ninguna seccion dibuja** (#422). Son
+ *    cinco, todos en `coactiva/composicion.ts` y cada uno con su etiqueta propia
+ *    (RNF-080): el acto que se dicta, el que se diligencia, el motivo del cambio
+ *    de direccion, el expediente que se fracciona y su cuota inicial. Y dos que
+ *    **no** hicieron falta porque el filtro ya los preguntaba —el contribuyente
+ *    de la importacion y el expediente de las costas—: esos pasan del filtro al
+ *    cuerpo con `delFiltro`, el mecanismo de `cierre_caja` (#423).
+ * 3. **Filas que marcar** (#332, y aqui backend nuevo). «Fraccionamiento
+ *    coactivo» es la que el issue titula «el caso que no se resuelve con los
+ *    mecanismos»: su cuerpo pide `obligaciones[]` con `tributo`, `ejercicio` y
+ *    `predioId`/`vehiculoId` **fila a fila**, y ninguna lectura del modulo tenia
+ *    esa granularidad. La trae `GET /coactiva/expedientes/{numero}/deuda`, que
+ *    sale de la **misma** composicion que la deuda que imprime la REC-2 —si
+ *    divergieran, la grilla y el papel dirian cifras distintas de la misma
+ *    carpeta—. «Impresion de REC» tenia el mismo hueco y se resolvio sin backend:
+ *    su tabla es la de expedientes, leida bajo su clave.
  *
- * 2. **Un campo que el backend exige no tiene donde escribirse.** De las dos
- *    que si tienen el boton correcto en su sitio:
+ * <h2>Lo que se queda fuera, y por que</h2>
  *
- *      `cambiar_direccion_ref`    `PeticionDeDireccionReferencial.motivo` es
- *                                 obligatorio (`exigir(peticion.motivo(),
- *                                 "motivo")`) y la seccion «Nueva dirección»
- *                                 del prototipo no dibuja ningun campo para
- *                                 el —solo «Hab. Urbana», «Vía» y la propia
- *                                 direccion—.
- *      `fraccionamiento_coactivo` `PeticionDeConvenioCoactivo.nroExpedCoact`
- *                                 es obligatorio y solo existe como filtro de
- *                                 busqueda («Nro. Exped. Coact.» no esta en la
- *                                 seccion que se escribe); `obligaciones[]`
- *                                 pide `predioId`/`vehiculoId` por fila, y esta
- *                                 pantalla no tiene una tabla conectada de la
- *                                 que sacarlos —a diferencia de `baja_deuda`,
- *                                 que los toma de `consulta_deuda`, aqui no hay
- *                                 ningun listado por obligacion con esa
- *                                 granularidad conectado todavia—.
+ * **«Caratula» y «REC 2», en `rec_impresion`.** No son dos formatos del mismo
+ * papel: son dos cosas distintas y ninguna se puede mandar hoy.
  *
- *    Y las dos que quedan de las seis con boton equivocado tienen **ademas**
- *    este segundo problema, asi que resolver el primero no bastaria:
- *    `costas_procesales`/`nroExpedCoact` y `notificaciones_coactivas`/`acto`
- *    (el numero del documento que se notifica, que no es «Valor Nº» del
- *    filtro) son igual de inalcanzables. Solo `importacion_valores`
- *    (`codContribuyente`, sin campo propio: la pantalla solo tiene el filtro
- *    «Contribuyente») se suma a la lista de identidades sin donde escribirse.
+ * - **«Caratula» no tiene acto propio.** `ActoCoactivoController.recDe` acepta
+ *   la palabra y la mapea a `REC1` —en `TipoDeActoCoactivo` no existe ninguna
+ *   constante para ella—, asi que un boton con ese rotulo **dictaria la REC-1**:
+ *   `RegistrarActoCoactivo.dictar` asienta el acto, emite su documento y mueve el
+ *   expediente a `REC1_EMITIDA`, y si ya habia una responde 409. Es el mismo
+ *   defecto de clase que #421 nombra —un boton que hace algo que su rotulo no
+ *   promete—, y por eso la accion se queda secundaria y apagada.
+ * - **«REC 2» exige `medida`**, la forma del embargo del art. 33 —retencion,
+ *   inscripcion, deposito, intervencion—, y ninguna seccion de esta pantalla la
+ *   dibuja: el desplegable esta en «Proceso coactivo», que es otra opcion.
+ *   Mandarla sin ella es un 422 despues de confirmar.
  *
- * Ninguna de las ocho esta bloqueada por falta de UI generica: el renderizador
- * comun ya cumple lo que #76 pide de todas ellas —sin boton de editar ni
- * quitar un acto asentado (regla 4), insignia con texto ademas de color— y eso
- * ya lo prueba `coactiva.test.tsx` contra las doce, conectadas o no. De las dos
- * cosas que faltaban para conectar las ocho escrituras, **la primera ya esta**:
- * marcar cual boton guarda cuando no es el ultimo (#421). Queda la segunda —que
- * la pantalla resuelva su identidad con un componente propio, como
- * `ResolutorDeUnidad`, en vez de con la lista blanca generica de
- * `escrituras.ts`—, y es trabajo del issue de conexion de este modulo.
+ * **«Expedientes libres» y «Rechazar recaudo»** (`importacion_valores`) no tienen
+ * ninguna operacion en el contrato. **«Nuevo», «Modificar», «Quitar» y
+ * «Deshacer»** no hacen nada aqui, y no por falta de conexion: el historial de un
+ * expediente no se sobrescribe (regla 4) y `expediente_coactivo` no admite
+ * `UPDATE` desde V33.
+ *
+ * <h2>La puerta que sigue faltando, y es de navegacion</h2>
+ *
+ * Tres de las ocho —«Historial del expediente», «Registro de actos coactivos» y
+ * «Cambiar direccion referencial»— se abren **por el numero del expediente en la
+ * direccion**, porque asi lo declara su ruta. Desde «Proceso coactivo» se llega
+ * al historial con `composicion.acto`; a las otras dos, hoy solo pegando el
+ * enlace. `ComposicionDeOpcion.acto` admite **un** destino por opcion, y aqui
+ * harian falta tres: ampliarlo es trabajo de la superficie del modulo (FRO-05),
+ * no de la conexion.
  */
 
 /**
@@ -301,9 +290,234 @@ const coactiva_deudas_beneficio = definirConexion({
   }),
 });
 
+/* ── Las tres lecturas que dan filas a una escritura (#426) ────────────── */
+
+/**
+ * Los expedientes sobre los que se emite la REC (`rec_impresion`, #41, RF-101).
+ *
+ * **Es la misma lectura que dibuja la grilla de «Expedientes coactivos»**, leida
+ * bajo la clave de otra opcion — el patron de `baja_deuda`, que lee
+ * `consulta_deuda` para poder elegir las cuotas que da de baja. Sin ella la
+ * tabla de esta pantalla no tenia ninguna fila que marcar: su operacion es un
+ * `POST`, y una operacion que escribe no se pide al abrir la pantalla.
+ *
+ * **La primera celda va vacia a proposito**: es la columna «Seleccione», y la
+ * dibuja `TablaDePantalla` cuando la opcion declara seleccion
+ * (`coactiva/composicion.ts`). Con seis celdas en vez de siete, cada dato caeria
+ * una columna a la izquierda.
+ *
+ * **«Nombre» sale con `SIN_DATO`**, y no es un descuido: `ExpedienteResource`
+ * publica `codContribuyente` y no la razon social —el nombre vive en
+ * `ResumenDeContribuyente`, que `ExpedienteController` resuelve aparte y no
+ * expone en esta grilla—. Componerlo aqui seria inventarlo.
+ */
+const rec_impresion = definirConexion({
+  operacion: 'coactiva_expedientes',
+  /* **El «Contribuyente» del filtro es el `codContribuyente` de la lectura.**
+     Los dos vocabularios se llaman distinto y `parametrosDeBusqueda` filtra por
+     el nombre que el contrato declara, asi que sin traducirlo el filtro se
+     quedaba dibujado y **sin filtrar nada**, que es lo que #397 condeno. Los
+     otros dos —«Tipo de deuda» y «Año»— no tienen a donde ir y se bloquean con
+     su motivo (`coactiva/composicion.ts`); «Proyectar interes al» no es un filtro
+     de esta grilla sino un parametro de la emision, y viaja con ella (#425). */
+  parametros: ({ busqueda }) => {
+    const contribuyente = (busqueda.get('contribuyente') ?? '').trim();
+    return {
+      ...parametrosDeBusqueda('coactiva_expedientes', undefined, busqueda),
+      ...(contribuyente === '' ? {} : { codContribuyente: contribuyente }),
+    };
+  },
+  leer: (cuerpo) => leerPaginado(cuerpo, 'los expedientes pendientes de pago'),
+  sinPermiso: {
+    titulo: 'Falta el permiso de lectura de «Expedientes coactivos»',
+    detalle:
+      'Para elegir sobre qué expedientes se emite la REC hace falta lectura de «Expedientes coactivos»: la tabla de aquí es esa misma lista. Pídesela al administrador del sistema de tu municipalidad.',
+  },
+  adaptar: (paginado): DatosDePantalla => ({
+    fechaCalculo: hoy(),
+    tabla: tablaDe(
+      paginado,
+      (expediente): readonly Celda[] => [
+        { texto: '' },
+        { texto: texto(expediente['numero']) },
+        { texto: texto(expediente['ejercicio']) },
+        { texto: texto(expediente['codContribuyente']) },
+        { texto: SIN_DATO },
+        estadoDeExpediente(expediente['estado']),
+        { texto: texto(expediente['asunto']) },
+      ],
+      'expedientes',
+      // Lo unico que `PeticionDeRec.expedientes` pide de cada uno: su numero
+      // impreso. La celda lo dibuja igual, pero lo que viaja sale de aqui.
+      (expediente) => ({ numero: texto(expediente['numero']) }),
+    ),
+  }),
+});
+
+/**
+ * Las liquidaciones de costas ya registradas (`costas_procesales`, #42, RF-104).
+ *
+ * La grilla «Liquidaciones encontradas» la sirve el `GET` hermano del `POST` que
+ * esta pantalla escribe —`costas_procesales_listado`, que #42 anadio al contrato
+ * con los mismos filtros que la opcion ya declaraba—. No da filas que marcar:
+ * da el historial, que es lo que la pantalla lista mientras se compone una nueva.
+ *
+ * **«Cod. Contrib.» sale con `SIN_DATO`**: `LiquidacionResource` no publica ni el
+ * codigo ni el nombre del contribuyente —lo identifica el expediente, que si
+ * viaja—. Componerlo aqui seria inventarlo (RNF-083).
+ *
+ * El filtro «Estado» **no viaja**: esta bloqueado en `coactiva/composicion.ts`,
+ * y ahi esta escrito por que.
+ */
+const costas_procesales = definirConexion({
+  operacion: 'costas_procesales_listado',
+  parametros: ({ busqueda }) =>
+    parametrosDeBusqueda('costas_procesales_listado', undefined, busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'las liquidaciones de costas'),
+  adaptar: (paginado): DatosDePantalla => ({
+    // `aLaFecha` es a que dia esta el pendiente del que se deriva el estado
+    // (regla 9, RNF-075). `fecha` es otra cosa: el dia en que se liquido.
+    fechaCalculo: fechaDeLaConsulta(paginado.contenido),
+    tabla: tablaDe(
+      paginado,
+      (liquidacion): readonly Celda[] => [
+        { texto: texto(liquidacion['nroLiquidacion']) },
+        { texto: SIN_DATO },
+        { texto: texto(liquidacion['fecha']) },
+        { texto: texto(liquidacion['expedCoact']) },
+        { texto: texto(liquidacion['observacion']) },
+        { texto: texto(liquidacion['estado']) },
+      ],
+      'liquidaciones',
+    ),
+  }),
+});
+
+/**
+ * La deuda del expediente, **obligacion por obligacion**
+ * (`DeudaPorObligacionResource`, #426, RF-105).
+ *
+ * **Es la lectura que le faltaba al modulo, y por eso la columna de seleccion de
+ * «Fraccionamiento coactivo» no tenia sobre que actuar.**
+ * `PeticionDeConvenioCoactivo` pide `obligaciones[]` con `tributo`, `ejercicio` y
+ * `predioId`/`vehiculoId` **por fila**, y ninguna lectura tenia esa granularidad:
+ * `coactiva_consulta_deudas` es por expediente y ni siquiera desglosa insoluto de
+ * interes. Es el mismo hueco que #332 cerro en rentas, y la salida es la misma.
+ *
+ * **El expediente sale del control que la pantalla pregunta**
+ * (`coactiva/composicion.ts`), leido del borrador — el mismo mecanismo con que
+ * `baja_deuda` lee la deuda a la fecha del acto. De ahi salen **las dos cosas**:
+ * la deuda que se ve y el `nroExpedCoact` que viaja en el cuerpo. Un solo sitio,
+ * asi que la grilla y el convenio no pueden discrepar.
+ *
+ * **Seis de las trece columnas salen con `SIN_DATO`**, y ninguna es un descuido.
+ * «Cuota», «Nom. Trib.», «Fase», «Conc.» y «Est.» no las publica el recurso —la
+ * lectura es por obligacion, no por cuota, y la fase no viaja porque una
+ * obligacion de un expediente coactivo esta, por definicion, en el
+ * procedimiento—. Y **«Unidad» tampoco**, que es la que mas dice: el recurso
+ * publica `predioId`/`vehiculoId`, que es un **identificador interno**, y el
+ * prototipo dibuja ahi un codigo de referencia catastral de veintidos
+ * caracteres; pintar el primero bajo ese rotulo seria ensenar otra cosa, que es
+ * exactamente lo que `baja_deuda` decidio en #332 para la misma columna.
+ *
+ * La **costa** si se distingue sin inventar nada: su `tributo` es el de las
+ * costas procesales, que es lo que la columna «Trib.» dibuja.
+ *
+ * **Y publica `valores`**: `tributo`, `ejercicio` y los dos identificadores viajan
+ * crudos junto a la fila, porque son lo que el cuerpo necesita y **ninguna celda
+ * los dibuja**.
+ */
+const fraccionamiento_coactivo = definirConexion({
+  operacion: 'coactiva_deuda_del_expediente',
+  parametros: ({ borrador }) => ({ numero: (borrador['nroExpedCoact'] ?? '').trim() }),
+  leer: (cuerpo) => leerObjeto(cuerpo, 'la deuda del expediente coactivo'),
+  /* Sin expediente no hay deuda que leer, y lo que hay que decir no es
+     «elige un registro»: aqui el expediente no va en la direccion, se
+     pregunta arriba. `faltaFiltro` gana al mensaje de `faltaRegistro`. */
+  exige: [
+    {
+      parametro: 'numero',
+      titulo: 'Escribe el expediente coactivo que se va a fraccionar',
+      detalle:
+        'El convenio se suscribe sobre una carpeta concreta: escribe su número en «Nº del expediente coactivo que se fracciona». Hasta entonces no hay ninguna obligación que acoger.',
+    },
+  ],
+  adaptar: (deuda): DatosDePantalla => {
+    const obligaciones = Array.isArray(deuda['obligaciones'])
+      ? deuda['obligaciones'].filter(esObjeto)
+      : [];
+    const aLaFecha = texto(deuda['aLaFecha']);
+
+    return {
+      fechaCalculo: aLaFecha === SIN_DATO ? hoy() : (aLaFecha as DatosDePantalla['fechaCalculo']),
+      campos: {
+        nombre: texto(deuda['contribuyente']),
+        // Los tres totales VIENEN CALCULADOS del servidor: sumar las filas aqui
+        // es lo que RNF-083 prohibe. Los otros cinco campos «ro» de «Resultado
+        // del convenio» —acogida, con beneficio, registros, tasa y beneficio—
+        // dependen de lo que se elija y de un beneficio que es D-02b: no los
+        // publica nadie, y salen como el catalogo los dibuje.
+        deudaTotalS: texto(deuda['totalS']),
+      },
+      tabla: {
+        filas: obligaciones.map((fila): readonly Celda[] => [
+          { texto: texto(fila['ejercicio']) },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: texto(fila['tributo']) },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: SIN_DATO },
+          { texto: texto(fila['insolutoS']) },
+          { texto: texto(fila['reajusteS']) },
+          { texto: texto(fila['interesS']) },
+          { texto: texto(fila['gastosS']) },
+          { texto: texto(fila['totalS']) },
+        ]),
+        valores: obligaciones.map((fila) => ({
+          tributo: texto(fila['tributo']),
+          ano: texto(fila['ejercicio']),
+          predioId: identificadorDeUnidad(fila['predioId']),
+          vehiculoId: identificadorDeUnidad(fila['vehiculoId']),
+        })),
+        conteo: `${obligaciones.length} obligación(es) en el expediente`,
+      },
+    };
+  },
+});
+
+/**
+ * El identificador interno de la unidad como texto, o vacio si no lo trae.
+ *
+ * Vacio y no `SIN_DATO`: esto no se dibuja en ninguna parte, y un campo vacio es
+ * lo que la lista blanca ya sabe no mandar. Una obligacion que no cuelga de
+ * ninguna unidad —una costa del procedimiento— es un caso legitimo, y su fila
+ * lleva los dos identificadores nulos.
+ */
+const identificadorDeUnidad = (valor: unknown): string =>
+  typeof valor === 'number' ? String(valor) : typeof valor === 'string' ? valor : '';
+
+/**
+ * La fecha a la que se respondio el pendiente de las liquidaciones.
+ *
+ * Sale de la primera fila y no del reloj: `aLaFecha` es lo que el backend
+ * devolvio con esas cifras, y la cabecera de la tabla tiene que decir esa (regla
+ * 9). Una pagina vacia no tiene fecha que ensenar, y ahi vale la de hoy porque no
+ * hay ninguna cifra que fechar.
+ */
+function fechaDeLaConsulta(contenido: readonly unknown[]): DatosDePantalla['fechaCalculo'] {
+  const primera = contenido.find(esObjeto);
+  const fecha = primera === undefined ? SIN_DATO : texto(primera['aLaFecha']);
+  return fecha === SIN_DATO ? hoy() : (fecha as DatosDePantalla['fechaCalculo']);
+}
+
 export const CONEXIONES_DE_COACTIVA: Readonly<Record<string, Conexion>> = {
   coactiva_expedientes,
   proceso_coactivo,
+  rec_impresion,
+  costas_procesales,
+  fraccionamiento_coactivo,
   coactiva_consulta_deudas,
   coactiva_deudas_beneficio,
 };

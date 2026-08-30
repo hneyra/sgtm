@@ -164,6 +164,15 @@ const HUELLAS = [
  * la via B (#428 y #432 anaden declaraciones del mismo tipo); si al cerrarla
  * sobra, se baja, como hizo #424.
  *
+ * **Y #426 no lo toca, que es la noticia**: conectar el modulo de Coactiva
+ * entero —ocho escrituras, cinco controles anadidos y tres conexiones— cuesta
+ * **1,4 KB** del arranque (142,6 → 144,0 medidos aqui), y no los 2,5 que habria
+ * costado antes de este reparto: las composiciones y las conexiones se van con
+ * el trozo de su modulo, y lo unico que sigue pagando todo el mundo son los ocho
+ * cuerpos de `escrituras.ts`, que estan en el arranque por diseno —el camino de
+ * escritura los necesita enteros y sincronos—. Quedan 1,0 KB de los 2,4 que este
+ * numero traia: la via B de arriba sigue siendo lo que decide si sobra o falta.
+ *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */

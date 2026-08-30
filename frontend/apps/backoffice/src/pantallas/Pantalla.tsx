@@ -1055,6 +1055,7 @@ function Bloques({
                   una: seleccionable.una,
                   varias: seleccionable.varias,
                   genero: seleccionable.genero,
+                  ...(seleccionable.columnaPropia === true ? { columnaPropia: true as const } : {}),
                 },
               })}
           {...(composicion.altaDeFila !== undefined && puedeRegistrarAqui

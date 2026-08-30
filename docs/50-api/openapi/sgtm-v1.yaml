@@ -6056,6 +6056,33 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/coactiva/expedientes/{numero}/deuda":
+    get:
+      operationId: coactiva_deuda_del_expediente
+      summary: "Deuda del expediente coactivo, obligación por obligación"
+      description: "La deuda de un expediente **desglosada por obligación**: una fila por tributo, ejercicio y unidad, con su insoluto, reajuste, interés y gastos. Es la lectura de la que «Fraccionamiento coactivo» saca las filas que se acogen —su cuerpo las pide una a una, y una suma no las tiene—. Sale de la MISMA composición y a la misma fecha que la deuda del expediente que imprime la REC-2, así que la grilla y el papel no pueden discrepar. Las costas del procedimiento viajan marcadas (`esCosta`) y no escondidas: se cobran igual, pero no se acogen como una cuota más. Los tres totales vienen calculados del servidor (RNF-083)."
+      tags: ["Coactiva"]
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          description: "El numero del expediente coactivo, tal como esta impreso"
+          schema: { type: string }
+        - name: fechaDeCalculo
+          in: query
+          required: false
+          description: "A que dia se actualizan TODAS las cifras. Sin el, hoy; y viaja de vuelta en la respuesta (regla 9)"
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/coactiva/convenios":
     post:
       operationId: fraccionamiento_coactivo

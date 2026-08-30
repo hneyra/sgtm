@@ -896,8 +896,24 @@ function erroresPorCampo(error: unknown): Readonly<Record<string, string>> {
  * caja`, que es el unico «cerrar» del catalogo que escribe (el otro es «Cerrar
  * acta»): un cierre no se corrige, se reversa con otro acta, y reversar exige
  * ademas el privilegio de ELIMINACION (`CierreController`).
+ *
+ * **Y con #426, los dos verbos de coactiva que se conectan ahi.**
+ *
+ * - `importar valor`, que es lo que el AC 2 de aquel issue pide por su nombre.
+ *   No estaba: `coactiva` ya cazaba «Pase de valores a coactiva», pero el boton
+ *   de «Importacion de valores a coactiva» se rotula «Importar valores», sin esa
+ *   palabra. Y lo que hace no admite vuelta: `ImportarValoresACoactiva` abre el
+ *   expediente, le pone su numero definitivo —`PlantillaDeNumeroDeExpediente`
+ *   sobre el correlativo, D-09— y mueve los valores a fase COACTIVA.
+ * - `generar`, que hasta ahora solo se cazaba con `valor` detras. La REC-1 se
+ *   dicta con un boton rotulado «Generar» a secas, y dictarla es asentar el acto,
+ *   emitir su documento y mover el expediente a `REC1_EMITIDA` — un papel que se
+ *   notifica al obligado y desde el que corre el plazo del art. 117. Ensanchar el
+ *   patron no toca a ninguna pantalla de calculo: `esIrreversible` solo se
+ *   consulta sobre **el boton que escribe** (`BarraDeAcciones`), y las que
+ *   calculan no escriben ninguna.
  */
 const IRREVERSIBLES =
-  /anular|anulaci|dar de baja|baja de|emitir|emisi|generar valor|notificar|notificaci|coactiva|reversar|quiebre|quebrar|cerrar caja|prescri|transferir|transferencia|cambiar n[uú]mero/i;
+  /anular|anulaci|dar de baja|baja de|emitir|emisi|generar|importar valor|notificar|notificaci|coactiva|reversar|quiebre|quebrar|cerrar caja|prescri|transferir|transferencia|cambiar n[uú]mero/i;
 
 export const esIrreversible = (accion: string): boolean => IRREVERSIBLES.test(accion);

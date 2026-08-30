@@ -428,6 +428,31 @@ const CUOTAS_DE_LA_BAJA: TablaDelCuerpo = {
 };
 
 /**
+ * Las obligaciones que se acogen a un convenio coactivo (#426, RF-105).
+ *
+ * `plana` porque `PeticionDeObligacionAcogida` es exactamente esto: cuatro
+ * campos que **identifican** la obligación y ninguno que la valore. El importe
+ * no viaja a propósito —lo relee el backend a la fecha de corte, que es lo que
+ * impide acoger una cifra que ya no es la que se debe (regla 9)—.
+ *
+ * `predioId` y `vehiculoId` van `entero: true` porque el `record` los declara
+ * `Long`, y a lo sumo uno de los dos tiene valor: una obligación cuelga de un
+ * predio, de un vehículo o de ninguno —una costa del procedimiento no cuelga de
+ * nada—. Llegan por `DatosDeTabla.valores`, no de una celda: la columna
+ * «Unidad» dibuja el identificador para que se lea, y el cuerpo lo quiere como
+ * número.
+ */
+const OBLIGACIONES_DEL_CONVENIO: TablaDelCuerpo = {
+  campo: 'obligaciones',
+  columnas: {
+    tributo: { campo: 'tributo' },
+    ano: { campo: 'ejercicio', entero: true },
+    predioId: { campo: 'predioId', entero: true },
+    vehiculoId: { campo: 'vehiculoId', entero: true },
+  },
+};
+
+/**
  * **El arqueo del cierre de caja, medio de pago por medio de pago** (#36, #423).
  *
  * `PeticionDeCierre.declarado` es un `Map<String, String>` cuyas claves son las
@@ -1017,6 +1042,81 @@ function faltaEnElCertificado(borrador: Readonly<Record<string, string>>): strin
   }
   return undefined;
 }
+
+/**
+ * ── El vocabulario de la diligencia coactiva ────────────────────────────
+ *
+ * Dos tablas y no una, porque son **dos ejes** y el prototipo los pregunta con
+ * dos desplegables: como se diligencio y con que resultado termino. Es el mismo
+ * reparto que `notificacion_valores` hace con las suyas, y por eso no se
+ * fusionan con aquellas: las palabras del prototipo son otras —esta pantalla es
+ * la del procedimiento coactivo, aquella la de los valores— y fusionarlas
+ * obligaria a que las dos capturas del manual dijeran lo mismo para siempre.
+ *
+ * **Una opcion que ninguna tabla reconozca no viaja**, y eso es deliberado:
+ * `CampoDelCuerpo.valor` que devuelve `undefined` deja el campo sin poner, el
+ * backend responde 422 nombrandolo y `exigir` lo dice antes, apagando el boton.
+ * La alternativa —mandar la palabra mas parecida— es una diligencia registrada
+ * con una modalidad que nadie eligio.
+ */
+
+/**
+ * «Recibido por» del prototipo → `ModalidadDeNotificacion` (V3, art. 104 del
+ * Codigo Tributario).
+ *
+ * Seis opciones en tres, y el corte no es arbitrario: las cuatro primeras dicen
+ * **quien** recibio y las tres son entrega personal —al obligado, a su
+ * representante o a quien estuviera en el domicilio—; «NEGATIVA A RECIBIR» y
+ * «CEDULÓN» ya no dicen quien sino **como**, que es lo que el enum pregunta.
+ *
+ * `'CEDULÓN'` va entrecomillada a proposito, por lo mismo que la de
+ * `notificacion_valores`: sin las comillas es un identificador valido de
+ * JavaScript con tilde, que es justo lo que ESLint prohibe (FRO-04 §2), y
+ * **Prettier se las quita si se le deja** —`quoteProps` resuelve a «as-needed»—.
+ * Correr `yarn format` sobre este archivo las pierde y el lint lo caza.
+ */
+const MODALIDAD_COACTIVA_DEL_BACKEND: Readonly<Record<string, string>> = {
+  CONTRIBUYENTE: 'PERSONAL',
+  REPRESENTANTE: 'PERSONAL',
+  FAMILIAR: 'PERSONAL',
+  DEPENDIENTE: 'PERSONAL',
+  'NEGATIVA A RECIBIR': 'NEGATIVA',
+  'CEDULÓN': 'CEDULON',
+};
+
+const modalidadCoactivaDe = (texto: string): string | undefined =>
+  MODALIDAD_COACTIVA_DEL_BACKEND[texto];
+
+/**
+ * «Tipo de notificación» del prototipo → `ResultadoDeNotificacion` (V28), que
+ * solo admite tres valores.
+ *
+ * Las dos ultimas son las que sostienen el cedulon del art. 104 f) y el
+ * reintento de #39: «DIRECCIÓN NO EXISTE» y «DESTINATARIO DESCONOCIDO» son dos
+ * formas de no haber ubicado a nadie, y sin ellas una diligencia `NO_UBICADO` no
+ * se podria registrar desde esta pantalla.
+ */
+const RESULTADO_COACTIVO_DEL_BACKEND: Readonly<Record<string, string>> = {
+  'NOTIFICACIÓN CON ÉXITO': 'NOTIFICADO',
+  'NOTIFICACIÓN POR CEDULÓN': 'NOTIFICADO',
+  'NOTIFICACIÓN NEGATIVA': 'RECHAZADO',
+  'DIRECCIÓN NO EXISTE': 'NO_UBICADO',
+  'DESTINATARIO DESCONOCIDO': 'NO_UBICADO',
+};
+
+const resultadoCoactivoDe = (texto: string): string | undefined =>
+  RESULTADO_COACTIVO_DEL_BACKEND[texto];
+
+/**
+ * La opcion del desplegable de encargados que **no elige a nadie**.
+ *
+ * El prototipo la ofrece en «Auxiliar» y en «Ejecutor», y para el auxiliar es
+ * legitima —`PeticionDeImportacion.auxiliar` es opcional—. Para el ejecutor no:
+ * es quien dirige el procedimiento, el backend lo exige, y guardar la cadena
+ * «NO ESPECIFICADO» como su nombre dejaria un expediente coactivo cuyo titular
+ * es un rotulo de pantalla.
+ */
+const NO_ESPECIFICADO = 'NO ESPECIFICADO';
 
 const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
   /**
@@ -1869,6 +1969,359 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
       }
       return undefined;
     },
+  },
+
+  /* ── Coactiva: las ocho escrituras del módulo (#426) ────────────────────
+     Las doce opciones tenían `Controller` desde #40–#42 y ninguna de las ocho
+     escribía. Lo que faltaba no era backend sino tres cosas distintas, y por eso
+     hicieron falta tres issues: cuál botón guarda (#421), dónde se escribe un
+     campo que el manual no dibuja (#422, y aquí son cinco controles) y de dónde
+     salen las filas que se marcan (#332, con una lectura nueva). El motivo
+     opción por opción está en `pantallas/coactiva/index.ts`. */
+
+  /**
+   * Importación de valores a coactiva (`POST /coactiva/expedientes/importacion`,
+   * #40, RF-100).
+   *
+   * **Abre el expediente del contribuyente que se buscó arriba.** `codContribuyente`
+   * es obligatorio y ninguna sección lo dibuja: la pantalla lo pregunta una sola
+   * vez, en el filtro «Contribuyente», y de ahí pasa al cuerpo (`delFiltro`, el
+   * mecanismo de `cierre_caja`). Declararlo también como campo daría dos cajas
+   * para el mismo dato y ninguna forma de decidir cuál manda.
+   *
+   * **Lo que no viaja, y por qué.** `numero` y `ano` son el número del expediente,
+   * y **lo compone el servidor** sobre su correlativo (`PlantillaDeNumeroDeExpediente`,
+   * D-09): dejar teclearlo sería dejar elegir el número de una carpeta oficial.
+   * `observaciones` es la observación de la regla 10, que `useEscritura` ya pide.
+   * Los cuatro campos de «Detalle de Recaudos» son `"ro"`.
+   *
+   * `valores` **tampoco se declara**, y ahí no falta nada: `PeticionDeImportacion`
+   * lo admite vacío, y vacío significa «todos los del contribuyente que tengan
+   * pase a coactiva» —que es lo que `ImportarValoresACoactiva.candidatos` busca—.
+   * La nota lo dice, porque la columna «Seleccione» de la tabla sigue sin filas.
+   */
+  importacion_valores: {
+    campos: {
+      ejecutor: { campo: 'ejecutor' },
+      auxiliar: { campo: 'auxiliar' },
+      asunto: { campo: 'asunto' },
+      direccionReferencialDelContribuyente: { campo: 'direccionReferencialDelContribuyente' },
+    },
+    delFiltro: { contribuyente: { campo: 'codContribuyente' } },
+    exigir: (borrador, _filas, delFiltro) => {
+      if ((delFiltro['contribuyente'] ?? '').trim() === '') {
+        return 'Busca al contribuyente arriba: la importación abre SU expediente, y sin él el backend no sabe de quién.';
+      }
+      if ((borrador['ejecutor'] ?? '').trim() === '' || borrador['ejecutor'] === NO_ESPECIFICADO) {
+        return 'Elige el ejecutor coactivo: es quien dirige el procedimiento, y el expediente no se abre sin él.';
+      }
+      return undefined;
+    },
+    nota: true,
+  },
+
+  /**
+   * Impresión de la resolución de ejecución coactiva
+   * (`POST /coactiva/rec/impresion`, #41, RF-101).
+   *
+   * La tabla la llena `coactiva_expedientes` (ver la conexión) y lo marcado viaja
+   * en `expedientes[]` por su número impreso: `columnaUnica`, porque
+   * `PeticionDeRec.expedientes` es una `List<String>` y no una lista de objetos.
+   *
+   * **`rec` va como constante y no como campo**, y es lo que impide el defecto que
+   * este issue encontró: `ActoCoactivoController.recDe` acepta `«CARATULA»` y la
+   * mapea a `REC1` —en `TipoDeActoCoactivo` no existe ninguna constante para la
+   * carátula—, así que un botón rotulado «Carátula» que mandara ese valor
+   * **dictaría la REC-1**: un acto irreversible que se notifica al obligado, bajo
+   * un rótulo que promete un papel. Esta pantalla emite la REC-1 y punto; ver la
+   * nota y `coactiva/index.ts` para lo que se queda fuera y por qué.
+   *
+   * **`proyectarInteresAl` no se declara**, y es deliberado (#425): es un filtro
+   * del catálogo que el contrato declara `in: query`, así que `parametrosDeBusqueda`
+   * lo manda solo por la consulta. Ponerlo además en el cuerpo es lo que el AC
+   * pide no hacer.
+   */
+  rec_impresion: {
+    // Ningun campo del formulario viaja: los doce que el catalogo dibuja son
+    // «ro» o son el filtro. Lo que se manda son los expedientes marcados.
+    campos: {},
+    tablas: {
+      expedientes: {
+        campo: 'expedientes',
+        columnaUnica: 'numero',
+        columnas: { numero: { campo: 'numero' } },
+      },
+    },
+    constantes: { rec: 'REC1' },
+    exigir: (_borrador, filas) =>
+      (filas['expedientes'] ?? []).length === 0
+        ? 'Marca al menos un expediente: la REC se emite sobre los que elijas, y sin ninguno el backend responde que no se marcó ninguno.'
+        : undefined,
+    nota: true,
+  },
+
+  /**
+   * Historial del expediente (`PATCH /coactiva/expedientes/{numero}/estados`,
+   * #40, RF-100).
+   *
+   * **La única de las ocho que se conecta con `escrituras.ts` a secas**: todos los
+   * campos que el cuerpo exige los dibuja el catálogo, y lo único que hacía falta
+   * era que la primaria fuera «Guardar cambios» y no «Limpiar» (#421).
+   *
+   * `nuevoEstado` viaja tal cual, sin tabla de traducción, y no por comodidad:
+   * `EstadoDelExpediente.porNombre` reconoce «011 — REC 01 EMITIDO» tal como lo
+   * manda el desplegable —se queda con el código— además del nombre del enum y de
+   * la etiqueta del manual. Traducirlo aquí sería una segunda tabla que habría
+   * que mantener en dos sitios.
+   *
+   * Ojo con las dos claves parecidas: `motivo2` es la de la sección «Nuevo estado»
+   * y `motivo` a secas es la del historial, que es `"ro"`.
+   *
+   * **`activo2` no se declara, y el `record` explica por qué**: el movimiento que
+   * rige es el último y eso se **deriva**. Admitirlo dejaría marcar como vigente un
+   * estado que no es el último. `observaciones2` es la observación de la regla 10.
+   *
+   * **El expediente sale de la dirección** (`{numero}` en la ruta), como el recibo
+   * de `anulacion_recibo`: declararlo dejaría dos sitios para el mismo número y
+   * ninguna forma de decidir cuál manda cuando no coincidan.
+   */
+  expediente_historial: {
+    campos: {
+      nuevoEstado: { campo: 'nuevoEstado' },
+      motivo2: { campo: 'motivo' },
+      documentoDeRespaldoFecha: { campo: 'documentoDeRespaldoFecha' },
+      documentoDeRespaldoNumero: { campo: 'documentoDeRespaldoNumero' },
+    },
+    exigir: (borrador) => {
+      if ((borrador['nuevoEstado'] ?? '').trim() === '') {
+        return 'Elige el estado al que pasa el expediente: es lo que el historial registra.';
+      }
+      if ((borrador['motivo2'] ?? '').trim() === '') {
+        return 'Falta el motivo del cambio: el backend lo exige, y es lo que explica el paso en el historial (RNF-052).';
+      }
+      return undefined;
+    },
+    nota: true,
+  },
+
+  /**
+   * Cambio de dirección referencial
+   * (`PATCH /coactiva/expedientes/{numero}/direccion-referencial`, #40, RF-100).
+   *
+   * `motivo` lo llena el control declarado en `coactiva/composicion.ts` (#422): la
+   * sección «Nueva dirección» dibuja tres campos y ninguno es él.
+   *
+   * **«Hab. Urbana» y «Vía» no viajan.** `PeticionDeDireccionReferencial` no tiene
+   * ningún campo para ellas: son ayudas para componer la dirección que se escribe
+   * debajo, y mandarlas sería inventarse dos columnas. El domicilio fiscal y la
+   * dirección referencial actual son `"ro"` a propósito —lo dice el javadoc del
+   * `record`—: la anterior no se borra, porque es la que explica a dónde fueron
+   * las notificaciones anteriores.
+   */
+  cambiar_direccion_ref: {
+    campos: {
+      nuevaDireccionReferencial: { campo: 'nuevaDireccionReferencial' },
+      motivoDelCambio: { campo: 'motivo' },
+    },
+    exigir: (borrador) => {
+      if ((borrador['nuevaDireccionReferencial'] ?? '').trim() === '') {
+        return 'Escribe la dirección nueva: es a donde irán las notificaciones del expediente a partir de ahora.';
+      }
+      if ((borrador['motivoDelCambio'] ?? '').trim() === '') {
+        return 'Falta el motivo del cambio: el backend lo exige, y queda en el historial del expediente (RNF-052).';
+      }
+      return undefined;
+    },
+    nota: true,
+  },
+
+  /**
+   * Liquidación de costas procesales (`POST /coactiva/liquidaciones-costas`,
+   * #42, RF-104).
+   *
+   * **`nroExpedCoact` sale del filtro**, que es donde el catálogo ya lo dibuja, y
+   * viaja por los dos sitios a la vez: `parametrosDeBusqueda` lo manda por la
+   * consulta —el contrato lo declara `in: query` desde #425— y `delFiltro` lo pone
+   * además en el cuerpo. **No incumple el AC de #425**: el javadoc de
+   * `ParametrosDeLaConsultaTest.POR_LA_CONSULTA` dice que aceptarlo también en el
+   * cuerpo no es un incumplimiento, y `FiltroDeLaConsulta.primeroNoVacio` deja
+   * claro cuál gana. Lo que se gana declarándolo es lo único que apaga la
+   * primaria: `Conexion.exige` apaga **la lectura**, no el botón, así que sin esto
+   * «Guardar» se encendería con solo la observación y el `POST` saldría sin
+   * expediente —un 422 después de rellenar y confirmar, que es exactamente el 422
+   * tardío que `exigir` existe para impedir—.
+   *
+   * **Ningún importe viaja, y no falta ninguno.** `montoS` y `totalS` los pone el
+   * **arancel de costas** (regla 5, D-02c): con la ordenanza sin cargar el backend
+   * responde 422 nombrando la llave, que es lo correcto. `tributo` tampoco: la
+   * costa se imputa siempre a COSTAS PROCESALES —`LiquidacionDeCostas#TRIBUTO`— y
+   * «GASTOS DE EJECUCIÓN» se queda fuera a propósito.
+   *
+   * `actos` **no se declara**: vacío significa «todos los actos pendientes que el
+   * arancel tarife», que es lo que la pantalla ofrece.
+   */
+  costas_procesales: {
+    campos: { fecha: { campo: 'fecha' } },
+    delFiltro: { nroExpedCoact: { campo: 'nroExpedCoact' } },
+    exigir: (_borrador, _filas, delFiltro) =>
+      (delFiltro['nroExpedCoact'] ?? '').trim() === ''
+        ? 'Escribe arriba el Nro. de expediente coactivo cuyas costas se liquidan: sin él la liquidación no señala a ningún procedimiento.'
+        : undefined,
+    nota: true,
+  },
+
+  /**
+   * Registro de actos coactivos (`POST /coactiva/expedientes/{numero}/actos`,
+   * #41, RF-102).
+   *
+   * `tipo` lo llena el control de `coactiva/composicion.ts` (#422), y ahí está
+   * escrito por qué no puede salir del desplegable «Documento».
+   *
+   * Ojo con las dos claves parecidas: `glosaDelActo` es la de la sección «Actos
+   * administrativos» —la que el documento imprime— y `glosa` a secas es el área de
+   * «Medida cautelar». Declararla mal es exactamente la mutación con la que #76
+   * demostró que la barra cambiaba de botón.
+   *
+   * **La sección «Medida cautelar» entera no viaja**, y no es un olvido:
+   * `PeticionDeActoCoactivo` no tiene ningún campo para el número del embargo, su
+   * fecha, su monto, su domicilio, el bien, lo retenido ni la entidad financiera.
+   * Su único campo `medida` es la **forma** del embargo —retención, inscripción,
+   * depósito, intervención—, que no es ninguna de esas siete y que solo la REC-2
+   * exige. `referencia`, `nDoc` y `nombreDeArchivo` tampoco tienen destino.
+   */
+  actos_coactivos: {
+    campos: {
+      tipoDeActoCoactivo: { campo: 'tipo' },
+      glosaDelActo: { campo: 'glosa' },
+      fecDoc: { campo: 'fecha' },
+    },
+    exigir: (borrador) => {
+      if ((borrador['tipoDeActoCoactivo'] ?? '').trim() === '') {
+        return 'Elige qué acto del procedimiento se dicta: el backend lo exige, y no se deduce del tipo de documento.';
+      }
+      if ((borrador['glosaDelActo'] ?? '').trim() === '') {
+        return 'Falta la glosa del acto: es el texto que se imprime en el documento que se emite.';
+      }
+      return undefined;
+    },
+    nota: true,
+  },
+
+  /**
+   * Emisión de notificaciones coactivas (`POST /coactiva/notificaciones`,
+   * #41, RF-103).
+   *
+   * **Dos desplegables, dos campos del cuerpo, dos tablas de traducción.** Es el
+   * mismo reparto que `notificacion_valores` y por el mismo motivo: `recibidoPor`
+   * responde **cómo** se diligenció y `tipoDeNotificacion` responde **con qué
+   * resultado**, que son los dos ejes que `ModalidadDeNotificacion` y
+   * `ResultadoDeNotificacion` separan. Cada tabla colapsa su desplegable en las
+   * palabras del enum, y una opción que ninguna reconozca no viaja: eso deja el
+   * campo sin poner y el backend lo dice nombrándolo, que es mejor que mandar la
+   * palabra más parecida.
+   *
+   * `acto` lo llena el control de `coactiva/composicion.ts` (#422).
+   *
+   * **`vinculo` no viaja aunque el prototipo lo sepa**: el vínculo del receptor
+   * —«FAMILIAR», «DEPENDIENTE»— sale del mismo desplegable que ya responde la
+   * modalidad, y un campo del catálogo llena un campo del cuerpo. El nombre y el
+   * documento de quien recibió sí viajan, que es lo que sostiene el acuse.
+   *
+   * **Lo que no tiene destino**: la serie y el número de la notificación los
+   * **numera el servidor**; `nroVisita` es informativo —el intento lo pone el
+   * sistema, y `notificacion_intento_uq` existe para que nadie lo repita—; `vence`
+   * se **deriva** del plazo parametrizado y del calendario de días hábiles, y
+   * admitirlo sería dejar que la petición decidiera desde cuándo se puede
+   * embargar; y `representante`, «Con firma», las características de la vivienda y
+   * los seis campos de testigos no tienen ningún campo en el `record`.
+   */
+  notificaciones_coactivas: {
+    campos: {
+      numeroDelActoNotificado: { campo: 'acto' },
+      fecha: { campo: 'fecha' },
+      notificador: { campo: 'notificador' },
+      domicilio: { campo: 'domicilio' },
+      nombreDelReceptor: { campo: 'receptor' },
+      dNIDelReceptor: { campo: 'documentoReceptor' },
+      recibidoPor: { campo: 'modalidad', valor: modalidadCoactivaDe },
+      tipoDeNotificacion: { campo: 'resultado', valor: resultadoCoactivoDe },
+    },
+    exigir: (borrador) => {
+      if ((borrador['numeroDelActoNotificado'] ?? '').trim() === '') {
+        return 'Falta el número del acto coactivo que se diligencia: es el documento que se notifica, y sin él la diligencia no cuelga de ninguno.';
+      }
+      if (modalidadCoactivaDe(borrador['recibidoPor'] ?? '') === undefined) {
+        return 'Elige quién recibió la notificación: de ahí sale la modalidad con la que se diligenció.';
+      }
+      if (resultadoCoactivoDe(borrador['tipoDeNotificacion'] ?? '') === undefined) {
+        return 'Elige el tipo de notificación: de ahí sale el resultado de la diligencia, que es lo que sostiene el plazo.';
+      }
+      if ((borrador['notificador'] ?? '').trim() === '') {
+        return 'Falta el notificador: es quien llevó la diligencia, y el acuse lo nombra.';
+      }
+      return undefined;
+    },
+    nota: true,
+  },
+
+  /**
+   * Fraccionamiento coactivo (`POST /coactiva/convenios`, #35, #42, RF-105).
+   *
+   * **La única de las ocho que no se resolvía con un mecanismo**, y por eso fue la
+   * que exigió backend: su cuerpo pide `obligaciones[]` con `tributo`, `ejercicio`
+   * y `predioId`/`vehiculoId` **por fila**, y el módulo no publicaba ninguna
+   * lectura con esa granularidad —`coactiva_consulta_deudas` es por expediente y ni
+   * siquiera desglosa insoluto de interés—. La trae
+   * `GET /coactiva/expedientes/{numero}/deuda`, y la tabla la elige con el
+   * mecanismo de #332.
+   *
+   * `nroExpedCoact` y la cuota inicial los llenan los dos controles de
+   * `coactiva/composicion.ts` (#422). El primero es además de donde la conexión
+   * saca el expediente cuya deuda lee: **un solo sitio**, así que la grilla y el
+   * cuerpo no pueden discrepar.
+   *
+   * **`pagoInicialS` no viaja, y ahí está el defecto que este issue evitó**: el
+   * prototipo lo rotula «Pago inicial (S/)» —soles— y `PeticionDeConvenioCoactivo.cuotaInicial`
+   * es un **porcentaje** (`Alicuota.de`, 0..100). Atarlos convertiría «20» soles en
+   * un 20 % de cuota inicial, una cifra plausible y equivocada que sale impresa en
+   * el cronograma que el contribuyente firma.
+   *
+   * **Lo que tampoco viaja.** «Forma de pago» y «Benef. aplicable» son filtros del
+   * prototipo y el `record` no tiene campo para ninguno —el efecto de un beneficio
+   * sobre el importe es D-02b (#191), y admitirlo haría creer que se aplica—. Los
+   * seis campos `"ro"` de «Resultado del convenio» son el **resultado** que
+   * devuelve el servidor, no una entrada: mandarlos sería dejar que quien atiende
+   * escriba la cifra que se va a fraccionar. Y los ocho de «Filtros de deuda»
+   * filtran la grilla del prototipo, no el convenio.
+   *
+   * `simular` **no se declara**: la pantalla tiene una sola acción que escribe y el
+   * camino de escritura registra —no simula—. Simular pide su propia puerta
+   * (`useSimulacion`), cuya guarda es además la clave literal `simulacion`, que
+   * este controlador llama `simular`.
+   */
+  fraccionamiento_coactivo: {
+    campos: {
+      nroExpedCoact: { campo: 'nroExpedCoact' },
+      cuotaInicialPorcentaje: { campo: 'cuotaInicial' },
+      nDeCuotas: { campo: 'nroDeCuotas', entero: true },
+    },
+    tablas: { obligaciones: OBLIGACIONES_DEL_CONVENIO },
+    exigir: (borrador, filas) => {
+      if ((borrador['nroExpedCoact'] ?? '').trim() === '') {
+        return 'Escribe el Nº del expediente coactivo: el convenio se suscribe sobre una carpeta concreta, y de ahí sale además la deuda que se puede acoger.';
+      }
+      if ((filas['obligaciones'] ?? []).length === 0) {
+        return 'Marca en la tabla las obligaciones que se acogen: un convenio fracciona deuda concreta, no la carpeta entera.';
+      }
+      if ((borrador['nDeCuotas'] ?? '').trim() === '') {
+        return 'Elige el número de cuotas: es lo que define el cronograma que el contribuyente firma.';
+      }
+      if ((borrador['cuotaInicialPorcentaje'] ?? '').trim() === '') {
+        return 'Falta la cuota inicial: el backend la pide como porcentaje de lo acogido, de 0 a 100.';
+      }
+      return undefined;
+    },
+    nota: true,
   },
 };
 

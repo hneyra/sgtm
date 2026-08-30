@@ -1267,6 +1267,44 @@ const OPERACIONES_ADICIONALES = {
         ' certificado» de la pantalla.',
     },
   ],
+  // `fraccionamiento_coactivo` declara «POST /coactiva/convenios» —fraccionar—
+  // como su unico endpoint, y su cuerpo pide `obligaciones[]` con tributo,
+  // ejercicio y predioId/vehiculoId POR FILA. Ninguna lectura del modulo tenia
+  // esa granularidad: `coactiva_consulta_deudas` es por expediente y ni siquiera
+  // desglosa insoluto de interes. Sin esto, la columna de seleccion de la
+  // pantalla no tiene sobre que actuar -exactamente como estaba `baja_deuda`
+  // antes de #332, que saca sus filas de `consulta_deuda`-.
+  //
+  // No cuelga de la ruta de la pantalla sino del expediente, que es de quien es
+  // la deuda; y es un GET aparte y no el mismo POST por lo de siempre: si
+  // fraccionar devolviera tambien la grilla, abrir la pantalla fraccionaria.
+  fraccionamiento_coactivo: [
+    {
+      operationId: 'coactiva_deuda_del_expediente',
+      metodo: 'get',
+      antes: true,
+      ruta: '/api/v1/coactiva/expedientes/{numero}/deuda',
+      descripcionesDeRuta: { numero: 'El numero del expediente coactivo, tal como esta impreso' },
+      parametros: [
+        {
+          nombre: 'fechaDeCalculo',
+          descripcion:
+            'A que dia se actualizan TODAS las cifras. Sin el, hoy; y viaja de vuelta en la' +
+            ' respuesta (regla 9)',
+        },
+      ],
+      titulo: 'Deuda del expediente coactivo, obligación por obligación',
+      descripcion:
+        'La deuda de un expediente **desglosada por obligación**: una fila por tributo, ejercicio' +
+        ' y unidad, con su insoluto, reajuste, interés y gastos. Es la lectura de la que' +
+        ' «Fraccionamiento coactivo» saca las filas que se acogen —su cuerpo las pide una a una, y' +
+        ' una suma no las tiene—. Sale de la MISMA composición y a la misma fecha que la deuda del' +
+        ' expediente que imprime la REC-2, así que la grilla y el papel no pueden discrepar. Las' +
+        ' costas del procedimiento viajan marcadas (`esCosta`) y no escondidas: se cobran igual,' +
+        ' pero no se acogen como una cuota más. Los tres totales vienen calculados del servidor' +
+        ' (RNF-083).',
+    },
+  ],
   // `costas_procesales` declara «POST /coactiva/liquidaciones-costas» como su
   // endpoint —liquidar—; su grilla «Liquidaciones encontradas» necesita verbo
   // propio (#42). Mismo reparto que `certificados`: si el POST devolviera

@@ -38,7 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
  *       explicito de lo que ya existe: no se puede publicar un endpoint sin anotarlo ahi, ni
  *       retirarlo sin quitarlo. Las operaciones restantes del contrato estan pendientes, y no se
  *       pueden exigir todavia sin dejar el build en rojo permanente —que es la forma segura de que
- *       nadie vuelva a mirar esta prueba—. Hoy quedan <b>tres</b> de las 176: {@code GET
+ *       nadie vuelva a mirar esta prueba—. Hoy quedan <b>tres</b> de las 177: {@code GET
  *       /portal/deuda}, {@code POST /transito/reportes} y {@code GET
  *       /transito/papeletas/{numero}/hoja-informativa}.
  * </ul>
@@ -203,6 +203,12 @@ class ContratoDeApiTest {
                     "GET /tesoreria/recaudacion/avance",
                     "GET /tesoreria/recaudacion/por-area",
                     "GET /coactiva/expedientes",
+                    // #426: la deuda del expediente OBLIGACION POR OBLIGACION. Es la
+                    // lectura de la que `fraccionamiento_coactivo` saca sus filas —su
+                    // cuerpo pide tributo, ejercicio y predioId/vehiculoId una a una, y
+                    // ninguna lectura del modulo tenia esa granularidad—. Sale de la
+                    // MISMA composicion que la deuda que imprime la REC-2.
+                    "GET /coactiva/expedientes/{numero}/deuda",
                     "POST /coactiva/expedientes/importacion",
                     "PATCH /coactiva/expedientes/{numero}/estados",
                     "PATCH /coactiva/expedientes/{numero}/direccion-referencial",
