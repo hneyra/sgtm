@@ -3,6 +3,7 @@ import type { DatosDePantalla } from '@sgtm/api-client';
 import type { CampoDePantalla } from '../catalogo';
 import { COMPOSICION_DE_CATASTRO } from './catastro/composicion';
 import { COMPOSICION_DE_CONSULTAS } from './consultas/composicion';
+import { COMPOSICION_DE_LICENCIAS } from './licencias/composicion';
 import { COMPOSICION_DE_RENTAS } from './rentas/composicion';
 import { COMPOSICION_DE_TESORERIA } from './tesoreria/composicion';
 import { COMPOSICION_DE_TRANSITO } from './transito/composicion';
@@ -622,6 +623,7 @@ export interface ComposicionDeOpcion {
 const COMPOSICIONES: Readonly<Record<string, ComposicionDeOpcion>> = {
   ...COMPOSICION_DE_CATASTRO,
   ...COMPOSICION_DE_CONSULTAS,
+  ...COMPOSICION_DE_LICENCIAS,
   ...COMPOSICION_DE_RENTAS,
   ...COMPOSICION_DE_TESORERIA,
   ...COMPOSICION_DE_TRANSITO,

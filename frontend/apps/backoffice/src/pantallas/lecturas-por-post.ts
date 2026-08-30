@@ -97,6 +97,19 @@ const LECTURAS_POR_POST: Readonly<Record<string, LecturaPorPost>> = {
    * con donde estan.
    */
   adm_reportes: { operacion: 'adm_reportes', ruta: '/infracciones/administrativas/reportes' },
+  /**
+   * Los dos padrones de Autorizaciones y licencias (#51, #54, #427). Mismo
+   * caso: un `POST` que solo lee —`ConsultaDeAnuncios.padron` y
+   * `ConsultaDeLicencias.padron`—, con doce criterios en el cuerpo y una
+   * respuesta que no es un sobre paginado. Ver
+   * `licencias/EmisorDePadron.tsx`.
+   */
+
+  anuncios_reportes: { operacion: 'anuncios_reportes', ruta: '/autorizaciones/anuncios/reportes' },
+  licencia_padron: {
+    operacion: 'licencia_padron',
+    ruta: '/licencias/funcionamiento/reportes/padron',
+  },
 };
 
 /** Lo que declara esa opcion, o nada. `Object.hasOwn`, como el resto del camino. */

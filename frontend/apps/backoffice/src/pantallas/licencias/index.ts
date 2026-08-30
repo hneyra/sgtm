@@ -15,8 +15,9 @@ import {
 } from '../seguridad/listado';
 
 /**
- * Autorizaciones y licencias, conectado hasta donde llega el backend con seguridad: **siete
- * lecturas de once** (#79).
+ * Autorizaciones y licencias, conectado: **siete lecturas de once por el camino comun** (#79),
+ * **dos padrones por la tercera puerta** y **una escritura** (#427). Sin conectar quedan las dos
+ * hojas de resolucion, y eso ya esta decidido (FRO-06).
  *
  * `anuncios`, `licencia_funcionamiento`, `licencia_resumen_anual`, `fue_edificacion`,
  * `edificacion_reporte` y `ciiu` tienen `Controller` en `sgtm-licencias` y se conectan aqui, con
@@ -62,43 +63,80 @@ import {
  *    pedia declarar campos que no existen— y **lo dicen en la pantalla** con su aviso permanente
  *    (`AVISOS` de `prosa-textos.ts`), que es el unico bloque que se dibuja sin acciones. Antes la
  *    hoja salia muda: la causa se calculaba, entraba en el censo y no la leia nadie (RNF-082).
- * 2. **`anuncios_reportes` y `licencia_padron` tenian conductor y apuntaban al boton
- *    equivocado** —cerrado por #421—. Las dos declaran el mismo cuarteto de acciones
- *    —«Exportar», «Imprimir», «Pantalla», «Cancelar»—, y FRO-03 §5 fija la primaria en **la
- *    ultima**: era «Cancelar», que en el dialogo de reporte del prototipo significa «cerrar sin
- *    generar nada», no «guardar». Declarar la escritura tal cual habria dejado un boton que dice
- *    «Cancelar» disparando de verdad el `POST` que emite el padron —la misma clase de defecto que
- *    #76 encontro en seis de los ocho actos de coactiva—. La salida no fue un componente propio
- *    que reescribiera el rotulo, sino declarar cual de las que ya hay es el acto
- *    (`LA_QUE_ESCRIBE`, `pantallas/actos.ts`), y esa es **«Pantalla»**: la operacion que el
+ * 2. **`anuncios_reportes` y `licencia_padron` ya emiten, por la tercera puerta** (#427).
+ *    Las dos declaran el mismo cuarteto de acciones —«Exportar», «Imprimir», «Pantalla»,
+ *    «Cancelar»—, y FRO-03 §5 fija la primaria en **la ultima**: era «Cancelar», que en el
+ *    dialogo de reporte del prototipo significa «cerrar sin generar nada», no «guardar». #421
+ *    declaro cual de las que ya hay es el acto (`LA_QUE_ESCRIBE` = «Pantalla»: la operacion que el
  *    catalogo da a estas dos opciones es el `POST` **sin** `formato`, que devuelve el padron para
- *    dibujarlo (`LicenciaController.padron`), mientras que «Exportar» e «Imprimir» son el mismo
- *    `POST` con `?formato=`, que en esta interfaz es una descarga (`useDescargaDeArchivo`) y no la
- *    primaria. Conectar la escritura sigue siendo trabajo del issue de este modulo: **once
- *    opciones, siete conectadas** es lo que #79 pide, y forzar una octava inventando una pantalla
- *    no declarada es exactamente el atajo que ADR-0010 §4 cierra.
+ *    dibujarlo, mientras que «Exportar» e «Imprimir» son el mismo `POST` con `?formato=`), y #427
+ *    conecta lo que faltaba: son **lecturas por `POST`** (`lecturas-por-post.ts`, #424), no
+ *    escrituras —`ConsultaDeAnuncios.padron` y `ConsultaDeLicencias.padron` no guardan nada, asi
+ *    que pedir observacion seria mentir sobre lo que hacen (regla 10)—, y su respuesta publica sus
+ *    filas bajo `filas`, no bajo `contenido`: leidas por el camino comun la tabla saldria vacia y
+ *    en silencio (#363). Viven en `EmisorDePadron.tsx`, con la barra de una sola accion.
  *
- * **`certificados` conecta su lectura y se queda sin escritura**, y aqui el bloqueo tiene dos
- * capas en vez de una. `CertificadoController.emitir` exige `nDeRecibo` —el recibo que respalda
- * el derecho de tramite— y ninguna seccion de esta pantalla dibuja un campo para el: la unica,
- * «Datos del certificado», tiene `tipoDeCertificado`, `codigoPredial`, `solicitante` y
- * `nDeExpediente` de texto, y las cinco restantes (`zonificacion`, `alturaMaximaPermitida`,
- * `areaLibreMinima`, `retiroMunicipal`, `coeficienteDeEdificacion`) son `"ro"`, que `Campo.tsx`
- * bloquea siempre —el mismo hueco que cerro `ACTOS_SIN_CAMPO` para `caja_tributaria` en #74—.
- * Hasta #421, declararlo ahi no habria servido: la primaria de esta pantalla era «Imprimir
- * certificado» (`acciones: ["Emitir", "Imprimir certificado"]`), y `DE_SALIDA` de
- * `pantallas/actos.ts` la reconoce como salida —empieza por «imprimir»— **antes** de llegar a
- * `ACTOS_SIN_CAMPO`, asi que `impedimentoDelActo` devolvia `undefined` sin mirar la lista. El
- * resultado era seguro —sin escritura declarada el boton se queda `disabled`, y un `disabled` no
- * dispara nada— pero mudo: ninguna franja explicaba por que.
+ *    **Y ahi esta lo que este issue tuvo que decidir.** Los nombres de los ocho criterios de
+ *    «Filtrado por» mapean 1:1 contra `PeticionDeReporteDeLicencias`, pero **los valores no**:
+ *    `licencia_padron.estado` ofrece ACTIVA / CANCELADA / DUPLICADA / VENCIDA / TODAS y
+ *    `EstadoDeLicencia` (V37) solo declara VIGENTE, VENCIDA y CANCELADA; `licencia_padron.tipoLic`
+ *    ofrece (TODOS) / INDETERMINADA / TEMPORAL / CESIONARIO / MERCADO y `TipoDeLicencia` solo
+ *    DEFINITIVA, TEMPORAL y CESIONARIA. Son **cinco de diez** que
+ *    `LicenciaController.estadoOpcional`/`.tipoOpcional` rechazan con 422 despues de rellenar el
+ *    formulario, y es el mismo cruce de vocabularios que dejo `infracciones_adm` sin conectar en
+ *    #78 hasta que #397 lo resolvio en el backend.
  *
- * **Desde #421 la primaria es «Emitir»**, porque esta opcion declara cual de sus dos acciones es
- * el acto (`LA_QUE_ESCRIBE`), y esa declaracion gana a `DE_SALIDA` por construccion: al pasar
- * «Emitir» al final, el filtro de salida ya no ve una primaria de impresion. Con la franja
- * hablando, lo que queda por decidir es de que causa se trata —hoy `sin-declaracion`—, y si al
- * conectar el modulo el `nDeRecibo` no encuentra donde escribirse, esta opcion entra en
- * `ACTOS_SIN_CAMPO` y la franja nombra el dato que falta, como ya hacen `alcabala` y
- * `espectaculos` desde #385.
+ *    **Aqui no se traduce ninguno**: «ACTIVA» se parece a VIGENTE e «INDETERMINADA» a DEFINITIVA,
+ *    y parecerse no es serlo —una licencia «activa» podria querer decir «no cancelada», que
+ *    incluye a las vencidas—; una equivalencia decidida en la interfaz cambiaria en silencio lo
+ *    que se pregunta, que es peor que no poder preguntarlo. El desplegable ofrece **solo los
+ *    valores que el enumerado tiene letra por letra**, la lista se computa del catalogo y la ayuda
+ *    nombra los cinco que quedan fuera. Cerrar el hueco es de quien decida el vocabulario:
+ *    o el backend admite los rotulos del manual, o el prototipo escribe los del dominio.
+ *
+ *    Lo mismo, en su otra forma, en `anuncios_reportes`: «Estado» y «Nº anuncio — serie/numero»
+ *    **no tienen destino** —`PeticionDeReporteDeAnuncios` no publica ninguno de los tres, y el
+ *    controlador pasa `null` por los dos huecos de `CriterioDeAnuncios`—, asi que se dibujan
+ *    bloqueados con su motivo, como el «Estado» del emisor de transito. Y **los siete campos de
+ *    agrupacion, subagrupacion y orden de `licencia_padron` no se dibujan**: el controlador
+ *    construye `new ParametrosDePaginacion(pagina, tamano, null, null)` con `ORDEN_POR_OMISION`
+ *    fijo, asi que no hay nada que elegir; el aviso de la pantalla lo dice.
+ *
+ *    Lo que queda pendiente, y es del backend: `claseAnuncio` (LETRERO, PANEL, TOLDO…) y
+ *    `nombreDelContribuyente` **si** viajan en las dos peticiones y ninguna seccion del catalogo
+ *    dibuja un campo para ellos —inventarlo seria inventar un desplegable (ADR-0010 §4)—; y
+ *    «Exportar»/«Imprimir» necesitan una sexta forma que no existe: `LicenciaController` publica
+ *    `padronComoDocumento` con `params="formato"`, `AnuncioController` no publica ninguna, el
+ *    contrato no declara `formato` para ninguna de las dos, y `descargarOperacion` rechaza todo lo
+ *    que no sea `GET` (`operaciones.ts`).
+ * 3. **`certificados` emite desde #427**, y necesitaba las **tres** declaraciones de esta onda a
+ *    la vez. `CertificadoController.emitir` exige `tipoDeCertificado`, `codigoPredial`,
+ *    `solicitante`, `nDeRecibo` y la observacion (regla 10):
+ *
+ *    - `LA_QUE_ESCRIBE` (#421): la ultima accion del catalogo es «Imprimir certificado», que
+ *      `DE_SALIDA` reconoce como salida **antes** de llegar a `ACTOS_SIN_CAMPO`; la que emite es
+ *      «Emitir». Con la escritura declarada eso deja de ser cosmetico: sin la declaracion, quien
+ *      dispararia el `POST` —consumiendo un correlativo y cobrando un derecho— seria un boton que
+ *      dice «Imprimir certificado».
+ *    - `ComposicionDeOpcion.controles` (#422): el `nDeRecibo` del derecho de tramite, que ninguna
+ *      seccion dibuja. Con su propia etiqueta, nunca la de otro campo (RNF-080).
+ *    - `ComposicionDeOpcion.resolutores` (#422): **`solicitante` es la misma clave para dos cosas
+ *      distintas**. `CertificadoResource.solicitante` es el NOMBRE —lo que la grilla ya pinta— y
+ *      `PeticionDeCertificado.solicitante` es el CODIGO, que `EmitirCertificado` resuelve con
+ *      `contribuyentes.porCodigo(...)`; el prototipo teclea ahi un nombre. Declararlo tal cual
+ *      compila, pasa la lista blanca y pasa el lint, y lo que llega a ventanilla es un **404 sobre
+ *      una persona que si esta en el padron**. Lo cierra `ResolutorDelSolicitante`, contra
+ *      `GET /rentas/contribuyentes`, que publica `codigo` y filtra por `nombreRazonSocial`.
+ *
+ *    **Y lo que se decidio no hacer**: los cinco parametros urbanisticos son `"ro"` en el catalogo
+ *    y `Campo.tsx` los bloquea siempre, mientras el backend espera que los teclee quien atiende
+ *    —«lo que el operador transcribio del plano de zonificacion ese dia»—. Abrirlos seria volver
+ *    editable lo que el manual dibuja de solo lectura (RNF-080) sin que nadie lo haya decidido;
+ *    emitir igual produciria un papel que dice «Este certificado no consigna parametros
+ *    urbanisticos» con su correlativo gastado, su derecho cobrado y su SHA-256 sellado —y un
+ *    certificado no se corrige: V51 no admite `UPDATE`—. Asi que la pantalla emite **numeracion y
+ *    jurisdiccion**, que `ParametrosUrbanisticos` dice que no los llevan, y de los otros dos
+ *    tipos **dice por que no**: ver `faltaEnElCertificado` en `escrituras.ts`.
  */
 
 /** `EstadoDeLicencia` (V37): VIGENTE, VENCIDA, CANCELADA — el mismo tono que ya usan `estados.ts`. */
