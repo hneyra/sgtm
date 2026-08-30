@@ -1,0 +1,436 @@
+package pe.gob.sgtm.catastro.infraestructura.web;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
+import org.springframework.transaction.interceptor.TransactionInterceptor;
+import pe.gob.sgtm.auditoria.AuditoriaJdbc;
+import pe.gob.sgtm.auditoria.Origen;
+import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.catastro.aplicacion.ActualizarCatastro;
+import pe.gob.sgtm.catastro.aplicacion.ActualizarFichaCatastral;
+import pe.gob.sgtm.catastro.aplicacion.ConsultaDePredios;
+import pe.gob.sgtm.catastro.aplicacion.InscribirFicha;
+import pe.gob.sgtm.catastro.aplicacion.RegistrarPredio;
+import pe.gob.sgtm.catastro.infraestructura.CatastroRepositoryJdbc;
+import pe.gob.sgtm.catastro.infraestructura.FichaCatastralRepositoryJdbc;
+import pe.gob.sgtm.catastro.infraestructura.ViaRepositoryJdbc;
+import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
+import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
+import pe.gob.sgtm.dominio.MunicipalidadId;
+import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
+import pe.gob.sgtm.esquema.ContextoDeTenant;
+import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
+import pe.gob.sgtm.web.ConfiguracionDeJson;
+import pe.gob.sgtm.web.ManejadorDeErrores;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * El alta del predio, de HTTP a PostgreSQL y sin un doble por el camino (#489).
+ *
+ * <h2>Por que va hasta la base</h2>
+ *
+ * <p>Porque las tres cosas que este issue tiene que demostrar no se pueden demostrar de otro modo.
+ * La <b>unicidad del codigo</b> la sostiene {@code predio_codigo_uq}, no un {@code if} de Java, y
+ * medirla exige hilos de verdad. La <b>resolucion de sector, manzana y via</b> es una consulta, y
+ * una consulta fuera de transaccion corre sin el {@code SET LOCAL} que RLS exige (#486). Y el
+ * <b>aislamiento</b> entre municipalidades lo sostiene la politica de RLS, que un doble no tiene.
+ *
+ * <p>La conexion es la de {@code sgtm_app}. Un superusuario omite RLS incluso con {@code FORCE ROW
+ * LEVEL SECURITY}, asi que una prueba escrita sobre el no verificaria ningun aislamiento.
+ */
+@DisplayName("RF-001 — El alta del predio, de HTTP a PostgreSQL (#489)")
+class AltaDePredioFronteraTest {
+
+    private static final Clock RELOJ =
+            Clock.fixed(Instant.parse("2026-08-30T12:00:00Z"), ZoneOffset.UTC);
+
+    /** Veintitres posiciones, la plantilla del manual (D-10 sigue abierta y no se decide aqui). */
+    private static final String CODIGO = "24010100010001000100001";
+
+    private static BaseDeDatosDePrueba base;
+    private static long municipalidadA;
+    private static long municipalidadB;
+    private static MockMvc mvc;
+
+    @BeforeAll
+    static void provisionar() throws SQLException, IOException {
+        base = BaseDeDatosDePrueba.provisionar();
+        municipalidadA = crearMunicipalidad("240101", "Municipalidad que inscribe");
+        municipalidadB = crearMunicipalidad("240102", "Municipalidad vecina");
+        crearSector(municipalidadA, "SC-1", "Sector uno");
+        crearSector(municipalidadB, "SC-1", "Sector uno de la vecina");
+
+        DriverManagerDataSource pool = new DriverManagerDataSource();
+        pool.setUrl(base.url());
+        pool.setUsername(BaseDeDatosDePrueba.APP);
+        pool.setPassword(base.clave(BaseDeDatosDePrueba.APP));
+
+        JdbcClient jdbc = JdbcClient.create(pool);
+        TenantTransactionManager gestor = new TenantTransactionManager(pool);
+        CatastroRepositoryJdbc catastro = new CatastroRepositoryJdbc(jdbc);
+        ViaRepositoryJdbc vias = new ViaRepositoryJdbc(jdbc);
+        AuditoriaJdbc auditoria = new AuditoriaJdbc(jdbc, RELOJ);
+        RegistrarPredio registrar = new RegistrarPredio(catastro, auditoria, RELOJ);
+        ActualizarFichaCatastral fichas =
+                new ActualizarFichaCatastral(
+                        new FichaCatastralRepositoryJdbc(jdbc), auditoria, RELOJ);
+
+        InscribirFicha inscribir =
+                envolver(
+                        new InscribirFicha(catastro, vias, PADRON_VACIO, registrar, fichas),
+                        gestor);
+
+        mvc =
+                MockMvcBuilders.standaloneSetup(
+                                new PredioController(
+                                        envolver(
+                                                new ActualizarCatastro(
+                                                        catastro, vias, registrar, fichas),
+                                                gestor),
+                                        envolver(new ConsultaDePredios(catastro), gestor),
+                                        inscribir))
+                        .setControllerAdvice(new ManejadorDeErrores())
+                        .setMessageConverters(
+                                new JacksonJsonHttpMessageConverter(
+                                        JsonMapper.builder()
+                                                .addModule(
+                                                        new ConfiguracionDeJson()
+                                                                .moduloDeObjetosDeValor())
+                                                .build()))
+                        .build();
+    }
+
+    /**
+     * El padron no se toca aqui: el alta del predio no lleva titular, y ese es el punto —el predio
+     * se identifica antes de saber de quien es (DAT-01 §4.2)—.
+     */
+    private static final DirectorioDeContribuyentes PADRON_VACIO =
+            new DirectorioDeContribuyentes() {
+                @Override
+                public List<ResumenDeContribuyente> buscar(String texto, int tope) {
+                    return List.of();
+                }
+
+                @Override
+                public java.util.Optional<ResumenDeContribuyente> porCodigo(String codigo) {
+                    return java.util.Optional.empty();
+                }
+
+                @Override
+                public java.util.Map<Long, ResumenDeContribuyente> porIds(java.util.Set<Long> ids) {
+                    return java.util.Map.of();
+                }
+
+                @Override
+                public java.util.Optional<String> domicilioFiscalDe(
+                        long contribuyenteId, java.time.LocalDate fecha) {
+                    return java.util.Optional.empty();
+                }
+            };
+
+    @AfterAll
+    static void cerrar() {
+        if (base != null) {
+            base.close();
+        }
+    }
+
+    @BeforeEach
+    void contexto() {
+        TenantContext.fijar(new MunicipalidadId(municipalidadA));
+        OrigenContext.fijar(new Origen("tecnico.catastro", "PC-03", "10.0.0.3"));
+    }
+
+    @AfterEach
+    void limpiar() {
+        TenantContext.limpiar();
+        OrigenContext.limpiar();
+    }
+
+    @Test
+    @DisplayName("un predio nace SIN ficha y sale en la cola de saneamiento")
+    void naceSinFicha() throws Exception {
+        MvcResult creado = inscribir(CODIGO, "AV. GRAU 100", "SC-1");
+
+        assertThat(creado.getResponse().getStatus())
+                .as(
+                        "resolviendo el sector fuera de transaccion, RLS falla con «invalid input"
+                                + " syntax for type bigint: \"\"» y esto seria 500")
+                .isEqualTo(201);
+        assertThat(creado.getResponse().getContentAsString())
+                .contains(CODIGO)
+                .contains("\"estado\":\"ACTIVO\"");
+
+        MvcResult cola =
+                mvc.perform(get("/api/v1/catastro/predios").param("fichado", "false")).andReturn();
+
+        assertThat(cola.getResponse().getStatus()).isEqualTo(200);
+        assertThat(cola.getResponse().getContentAsString())
+                .as("el predio recien inscrito es exactamente lo que hay que fichar despues")
+                .contains(CODIGO);
+    }
+
+    @Test
+    @DisplayName("un codigo ya inscrito es 409, y sigue habiendo un solo predio")
+    void elCodigoRepetidoEs409() throws Exception {
+        String codigo = "24010100010001000100002";
+        inscribir(codigo, "JR. LIMA 250", "SC-1");
+
+        MvcResult otra = inscribir(codigo, "OTRA DIRECCION 1", "SC-1");
+
+        assertThat(otra.getResponse().getStatus()).isEqualTo(409);
+        assertThat(otra.getResponse().getContentAsString())
+                .as(
+                        "y NOMBRA el codigo repetido, que es lo unico que aporta la comprobacion"
+                                + " previa: medido, quitarla deja el 409 en pie —lo sostiene"
+                                + " predio_codigo_uq, no el «if»— pero el mensaje pasa a ser generico,"
+                                + " y quien atiende no sabe cual de los codigos que tecleo esta tomado")
+                .contains(codigo);
+        assertThat(cuantosPredios(codigo, municipalidadA)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("diez hilos con el mismo codigo dejan UN predio, no diez")
+    void diezHilosDejanUnPredio() throws Exception {
+        String codigo = "24010100010001000100003";
+        int hilos = 10;
+        CountDownLatch salida = new CountDownLatch(1);
+        List<Callable<Integer>> tareas = new ArrayList<>();
+        for (int i = 0; i < hilos; i++) {
+            tareas.add(
+                    () -> {
+                        // TenantContext y OrigenContext son ThreadLocal: cada hilo del pool
+                        // empieza sin ellos, igual que empezaria una peticion.
+                        TenantContext.fijar(new MunicipalidadId(municipalidadA));
+                        OrigenContext.fijar(new Origen("tecnico.catastro", null, null));
+                        salida.await(10, TimeUnit.SECONDS);
+                        try {
+                            return inscribir(codigo, "AV. CONCURRENTE 1", "SC-1")
+                                    .getResponse()
+                                    .getStatus();
+                        } finally {
+                            TenantContext.limpiar();
+                            OrigenContext.limpiar();
+                        }
+                    });
+        }
+
+        ExecutorService ejecutor = Executors.newFixedThreadPool(hilos);
+        int creados = 0;
+        try {
+            List<Future<Integer>> futuros = new ArrayList<>();
+            for (Callable<Integer> tarea : tareas) {
+                futuros.add(ejecutor.submit(tarea));
+            }
+            salida.countDown();
+            for (Future<Integer> futuro : futuros) {
+                if (futuro.get(60, TimeUnit.SECONDS) == 201) {
+                    creados++;
+                }
+            }
+        } finally {
+            ejecutor.shutdownNow();
+        }
+
+        assertThat(cuantosPredios(codigo, municipalidadA))
+                .as(
+                        "la unicidad la sostiene predio_codigo_uq; con el indice degradado salen"
+                                + " diez predios con el mismo codigo, y ninguna consulta del"
+                                + " sistema sabria cual es el bueno")
+                .isEqualTo(1);
+        assertThat(creados).as("y solo una peticion puede decir que lo creo").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("sin observacion no se inscribe: 422, y no queda fila")
+    void sinObservacionNoSeInscribe() throws Exception {
+        String codigo = "24010100010001000100004";
+        MvcResult rechazado =
+                mvc.perform(
+                                post("/api/v1/catastro/predios")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                """
+                                                {"codRefCatastral":"%s","direccion":"AV. SIN NADA 1"}
+                                                """
+                                                        .formatted(codigo)))
+                        .andReturn();
+
+        assertThat(rechazado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(rechazado.getResponse().getContentAsString()).contains("observacion");
+        assertThat(cuantosPredios(codigo, municipalidadA)).isZero();
+    }
+
+    @Test
+    @DisplayName("un sector que no existe es 404 nombrandolo, no un predio a medias")
+    void elSectorInexistenteEs404() throws Exception {
+        String codigo = "24010100010001000100005";
+        MvcResult rechazado = inscribir(codigo, "AV. SIN SECTOR 1", "SC-99");
+
+        assertThat(rechazado.getResponse().getStatus()).isEqualTo(404);
+        assertThat(rechazado.getResponse().getContentAsString()).contains("SC-99");
+        assertThat(cuantosPredios(codigo, municipalidadA))
+                .as("la transaccion del caso de uso deshace lo que hubiera empezado")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("el mismo codigo existe en dos municipalidades sin chocar, y no se ven")
+    void elAislamientoSeSostiene() throws Exception {
+        String codigo = "24010100010001000100006";
+        inscribir(codigo, "AV. DE LA A 1", "SC-1");
+
+        TenantContext.limpiar();
+        TenantContext.fijar(new MunicipalidadId(municipalidadB));
+        MvcResult enLaVecina = inscribir(codigo, "AV. DE LA B 1", "SC-1");
+
+        assertThat(enLaVecina.getResponse().getStatus())
+                .as("la unicidad del codigo es POR municipalidad, no global")
+                .isEqualTo(201);
+
+        MvcResult listadoDeB =
+                mvc.perform(get("/api/v1/catastro/predios").param("codRefCatastral", codigo))
+                        .andReturn();
+
+        assertThat(listadoDeB.getResponse().getContentAsString())
+                .as(
+                        "con el pool conectado como superusuario saldrian los dos, y la vecina"
+                                + " veria un predio que no es suyo")
+                .contains("AV. DE LA B 1")
+                .doesNotContain("AV. DE LA A 1");
+    }
+
+    @Test
+    @DisplayName("el alta exige REGISTRO, y no hereda el MODIFICACION de la clase")
+    void elAltaExigeRegistro() throws Exception {
+        // La regla de ArchUnit pide `@RequiereAcceso` «en la clase o en cada endpoint», asi que
+        // quitarsela a este metodo la deja en VERDE: el alta pasaria a exigir el MODIFICACION de
+        // la clase, y quien puede corregir un predio podria crearlos. Medido, y por eso esto se
+        // comprueba aqui y no alli: alli no se puede.
+        assertThat(
+                        PredioController.class
+                                .getMethod(
+                                        "inscribir",
+                                        PredioController.PeticionDeInscripcionDePredio.class)
+                                .getAnnotation(pe.gob.sgtm.autorizacion.RequiereAcceso.class)
+                                .privilegio())
+                .isEqualTo(pe.gob.sgtm.autorizacion.Privilegio.REGISTRO);
+    }
+
+    // ------------------------------------------------------------------
+
+    private static MvcResult inscribir(String codigo, String direccion, String sector)
+            throws Exception {
+        return mvc.perform(
+                        post("/api/v1/catastro/predios")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {"observacion":"Alta del lote segun plano de habilitacion",
+                                         "codRefCatastral":"%s","direccion":"%s",
+                                         "codigoDeSector":"%s","lote":"1","ubigeo":"240101"}
+                                        """
+                                                .formatted(codigo, direccion, sector)))
+                .andReturn();
+    }
+
+    private static long cuantosPredios(String codigo, long municipalidadId) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidadId);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "SELECT count(*) FROM predio WHERE codigo_ref_catastral = ?")) {
+                sentencia.setString(1, codigo);
+                try (ResultSet resultado = sentencia.executeQuery()) {
+                    resultado.next();
+                    return resultado.getLong(1);
+                }
+            }
+        }
+    }
+
+    private static long crearMunicipalidad(String ubigeo, String nombre) throws SQLException {
+        try (Connection owner = base.conexion(BaseDeDatosDePrueba.OWNER);
+                PreparedStatement sentencia =
+                        owner.prepareStatement(
+                                "INSERT INTO municipalidad (ubigeo, nombre, tipo)"
+                                        + " VALUES (?, ?, 'DISTRITAL') RETURNING id")) {
+            sentencia.setString(1, ubigeo);
+            sentencia.setString(2, nombre);
+            try (ResultSet resultado = sentencia.executeQuery()) {
+                resultado.next();
+                long id = resultado.getLong(1);
+                owner.commit();
+                return id;
+            }
+        }
+    }
+
+    private static void crearSector(long municipalidadId, String codigo, String nombre)
+            throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidadId);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO sector (municipalidad_id, codigo, nombre)"
+                                    + " VALUES (?, ?, ?)")) {
+                sentencia.setLong(1, municipalidadId);
+                sentencia.setString(2, codigo);
+                sentencia.setString(3, nombre);
+                sentencia.executeUpdate();
+            }
+            app.commit();
+        }
+    }
+
+    /**
+     * El proxy que obedece a la anotacion, como el contenedor.
+     *
+     * <p>Es lo que convierte esta prueba en una medida y no en un montaje: quitarle el
+     * {@code @Transactional} a {@code InscribirFicha.inscribirPredio} deja al proxy sin nada que
+     * hacer, y el alta se cae con el error de RLS de verdad. Un {@code TransactionTemplate}
+     * incondicional la habria dejado pasando con la anotacion quitada.
+     */
+    @SuppressWarnings("unchecked")
+    private static <T> T envolver(T objetivo, TenantTransactionManager gestor) {
+        ProxyFactory fabrica = new ProxyFactory(objetivo);
+        fabrica.setProxyTargetClass(true);
+        fabrica.addAdvice(
+                new TransactionInterceptor(gestor, new AnnotationTransactionAttributeSource()));
+        return (T) fabrica.getProxy();
+    }
+}

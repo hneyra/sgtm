@@ -70,6 +70,10 @@ class ContratoDeApiTest {
                     "PUT /catastro/fichas/bienes-comunes/{codEdificacion}/actualizacion",
                     "PUT /catastro/fichas/rural/{codUnidad}/actualizacion",
                     "GET /catastro/predios",
+                    // #489 — el alta del predio, sin ficha. `RegistrarPredio.registrar` existia
+                    // desde #16 y ningun endpoint la llamaba: un predio solo nacia como efecto
+                    // secundario de inscribir su ficha, o por la carga cartografica de #487.
+                    "POST /catastro/predios",
                     "POST /catastro/predios/{predioId}/baja",
                     "POST /catastro/predios/{predioId}/reactivacion",
                     "GET /catastro/tablas/aranceles",

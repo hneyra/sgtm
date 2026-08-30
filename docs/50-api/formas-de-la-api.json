@@ -3986,6 +3986,16 @@
       }
     ]
   },
+  "POST /catastro/predios": {
+    "predioId": "entero",
+    "codRefCatastral": "texto",
+    "tipo": "texto",
+    "direccion": "texto",
+    "numeroMunicipal": "texto",
+    "lote": "texto",
+    "ubigeo": "texto",
+    "estado": "texto"
+  },
   "POST /catastro/predios/{predioId}/baja": {
     "predioId": "entero",
     "codRefCatastral": "texto",

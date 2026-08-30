@@ -713,6 +713,44 @@ paths:
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
   "/catastro/predios":
+    post:
+      operationId: inscribir_predio
+      summary: "Alta de predio, sin ficha"
+      description: >-
+        Da de alta un predio **sin levantarle ficha** (#489, RF-001), que es el orden natural de
+        ventanilla: primero se identifica el predio —su código de referencia catastral, su
+        ubicación, su tipo— y después se le levanta la ficha.
+
+        Hasta aquí un predio sólo podía nacer como **efecto secundario** de
+        `POST /catastro/fichas/…` —que lo crea si no existe— o por la carga cartográfica del
+        perfil `batch`, así que registrar un lote recién numerado obligaba a inventarle una
+        ficha. El predio entra con `fichado=false` en `GET /catastro/predios`, que es
+        justamente la cola de saneamiento.
+
+        Vía, sector y manzana entran por **código** —lo mismo que recibe la corrección del
+        predio—, y se resuelven **dentro de la transacción**: una referencia que no existe es 404
+        nombrándola, no un predio guardado a medias. Un código ya inscrito es **409**; la unicidad
+        la sostiene `predio_codigo_uq`.
+
+        Exige `REGISTRO` sobre `actualizacion_catastro`, y la observación del usuario es
+        obligatoria (RNF-052). Ni un importe y ni un titular: el valor sale del cuadro de valores
+        unitarios (D-02a) y la titularidad es otro acto.
+      tags: ["Catastro"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
     get:
       operationId: listado_de_predios
       summary: "Padrón de predios del catastro"

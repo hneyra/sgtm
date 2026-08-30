@@ -118,6 +118,39 @@ public class InscribirFicha {
         return ficha;
     }
 
+    /**
+     * Inscribe <b>solo el predio</b>, sin ficha (#489, RF-001).
+     *
+     * <p>Es el orden natural de ventanilla, que es el contrario del que {@link #inscribir} atiende:
+     * primero se identifica el predio —su codigo de referencia catastral, su ubicacion, su tipo— y
+     * despues se le levanta la ficha. Hasta aqui un predio solo podia nacer como efecto secundario
+     * de inscribir una ficha, o por la carga cartografica del perfil {@code batch}, asi que
+     * registrar un lote recien numerado obligaba a inventarle una ficha.
+     *
+     * <p>Vive en esta clase y no en {@link RegistrarPredio} porque lo que hace falta no es guardar
+     * un {@code Predio} ya formado —eso ya lo hace aquel— sino <b>resolver sector, manzana y via
+     * por su codigo dentro de la transaccion</b>, que es exactamente lo que {@link #nuevo} hace y
+     * lo que un controlador no puede hacer: leerlos es una consulta, y una consulta fuera de
+     * transaccion corre sin el {@code SET LOCAL} que RLS exige (#486).
+     *
+     * <p><b>Un codigo que ya existe es un conflicto, no un no-op.</b> {@link #inscribir} devuelve
+     * el predio que ya estaba —tiene sentido: quien inscribe una ficha quiere la ficha, y el predio
+     * es el medio—, pero quien pide dar de alta un predio esta afirmando que no existe.
+     *
+     * <p><b>Y esta comprobacion no es la que lo impide</b>: quitarla deja el {@code 409} en pie,
+     * porque {@code predio_codigo_uq} rechaza la fila y el controlador traduce el choque. Se midio.
+     * Lo unico que aporta es <b>nombrar el codigo repetido</b>: sin ella el mensaje es generico, y
+     * quien atiende no sabe cual de los codigos que tecleo esta tomado. Se deja dicho aqui en vez
+     * de fingir que la guarda protege algo (la leccion de #188).
+     */
+    @Transactional
+    public Predio inscribirPredio(DatosDelPredio datos, Observacion observacion) {
+        if (catastro.predioPorCodigo(datos.codigo()).isPresent()) {
+            throw new PredioYaInscrito(datos.codigo());
+        }
+        return predios.registrar(nuevo(datos), observacion);
+    }
+
     // ------------------------------------------------------------------
 
     /** El predio que ya esta, o el que nace en este mismo acto. */
@@ -334,6 +367,22 @@ public class InscribirFicha {
 
         public String codigo() {
             return codigo;
+        }
+    }
+
+    /**
+     * Ya hay un predio con ese codigo de referencia catastral.
+     *
+     * <p>No dice donde esta ni de quien es: solo que el codigo esta tomado en esta municipalidad.
+     */
+    public static final class PredioYaInscrito extends RuntimeException {
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        PredioYaInscrito(CodigoReferenciaCatastral codigo) {
+            super(
+                    "Ya hay un predio con el codigo de referencia catastral "
+                            + codigo.valor()
+                            + " en esta municipalidad");
         }
     }
 
