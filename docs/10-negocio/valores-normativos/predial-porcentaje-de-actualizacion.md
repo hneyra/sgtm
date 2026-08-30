@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Norma | **Ninguna identificada todavía.** Se transcriben aquí los dos artículos del TUO de la Ley de Tributación Municipal (D.S. N.° 156-2004-EF) que podrían darle origen —el que actualiza la base imponible del año anterior por Decreto Supremo cuando no se publican los valores, y el art. 14, que es la actualización de valores de la emisión mecanizada— y se dice cuál de los dos quedó descartado y por qué |
-| Artículo | Del TUO LTM: el párrafo de actualización por Decreto Supremo (§1.1, con su número **sin confirmar**, ver §1.3) y el art. 14 (§1.2) |
+| Artículo | Del TUO LTM: el párrafo de actualización por Decreto Supremo (§1.1, con su número **sin confirmar**, ver §1.4) y el art. 14 (§1.2) |
 | Publicada | 2004-11-15, fecha del D.S. N.° 156-2004-EF que aprueba el TUO |
 | Ejercicios que rige | No aplica: este archivo **no publica ninguna cifra** |
 | Filas de NEG-02 §2 | 33 |
@@ -75,20 +75,132 @@ determinación que el SRTM imprime va: `VALOR UNIT. M2 · INCREMENTO 5% · DEPRE
 UNITARIO DEPRECIADO · ÁREA CONSTRUIDA · ÁREA COMÚN · AUTOAVALUO · CONDOMINIO-COPROPIEDAD % ·
 DEDUCCIÓN · AUTOAVALUO AFECTO`. Sin ninguna columna de actualización.
 
-### 1.3 Lo que no se pudo comprobar de este PDF, y por qué
+### 1.3 Una determinación real del SRTM, con sus cifras
 
-**El número de artículo del párrafo de §1.1 no está confirmado.** El PDF del TUO LTM tiene capa de
-texto, pero **sus rótulos de artículo aparecen intercalados** con el cuerpo y con los bloques de
-concordancias: en la extracción, el párrafo de §1.1 sale **antes** del rótulo «Artículo 12.-», y la
-línea siguiente mezcla el cuerpo del 13 con su propio rótulo. Atribuirlo por posición sería
-adivinar.
+El 2026-08-30 se leyó el manual `M02-1-020` —el mismo que solo nombra la columna en un
+encabezado— **como imagen**, y su captura de la pestaña «Datos» trae una determinación completa. Es
+la primera vez que hay cifras.
 
-Y **no se pudo cotejar leyendo la página renderizada**, que es lo que el método de este corpus exige
-para casos así: las fuentes del PDF no se resuelven con el visor disponible en esta máquina y la
-página sale en blanco. Se deja dicho en vez de firmar una atribución que no se comprobó.
+| | |
+|---|---|
+| Autovalúo | `171,179.42` |
+| **% actualización** | **`0.00 %`** |
+| % propiedad | `80.00` |
+| Base imponible | `136,943.54` |
+| Base exonerada | `136,943.54` · Base afecta `0.00` · Impuesto `0.00` |
 
-`‹NO CONFIRMADO EN FUENTE OFICIAL: el número del artículo que contiene el párrafo de §1.1. Su texto
-sí está comprobado, extraído del PDF oficial del TUO LTM›`.
+**La aritmética descarta una lectura y fija otra.** `171 179,42 × 0,80 = 136 943,54`, que es
+exactamente la base imponible. Es decir:
+
+- **el `% actualización` no multiplica como factor.** Si la secuencia fuera literalmente
+  `autovalúo × % actualización × % propiedad` —como la describe NEG-05 §0.1— con `0,00` la base
+  sería **cero**, y no lo es;
+- **es un incremento, y su valor neutro es `0`, no `100`.** La base sale de
+  `autovalúo × (1 + % actualización) × % propiedad`, o su equivalente
+  `(autovalúo + % actualización × autovalúo) × % propiedad`: con `0,00 %` las dos dan lo mismo, y
+  las dos coinciden con la captura.
+
+**Y eso cambia cuál es el valor peligroso.** Este archivo decía —y la muestra de la regla 5 con
+él— que el valor «obvio» era `1`, o sea 100 %. **No lo es: es `0`.** Y `0` es peor, porque
+`BigDecimal.ZERO` en un campo llamado «porcentaje de actualización» se lee como «no aplica ninguno»
+incluso más que un `1`.
+
+**Lo que esta captura NO prueba**, y hay que decirlo porque es una sola:
+
+- **qué pasa cuando no es cero.** Con `0,00 %`, `× (1 + p)` y `+ p × autovalúo` son
+  indistinguibles, y también lo sería cualquier otra forma que se anule en cero;
+- **quién lo fija, ni cuándo deja de ser cero.** El manual no lo dice en ninguna parte de su
+  texto, y los dos manuales de «Parámetros» del SRTM —el de la CF2 y el de la CF4— tampoco: el de
+  la CF2 configura la emisión masiva (año, tipo de lote, concepto y formato por lote) y el de la
+  CF4, catálogos del buzón electrónico. **Ninguno tiene una pantalla para este porcentaje.**
+
+De paso, la misma captura confirma dos cosas que ya estaban: los tramos se expresan en soles del
+ejercicio —`> 0 y <= 77,250` y `> 77,250 y <= 309,000`, que son 15 y 60 UIT de 2024 (5 150)— y el
+resumen lleva «Cuotas 4».
+
+### 1.4 El artículo, ya confirmado: es el **12**
+
+**Resuelto el 2026-08-30, mirando la página.** El párrafo de §1.1 es el **artículo 12 del TUO de la
+Ley de Tributación Municipal**, y lo confirma la página 5 del PDF oficial renderizada como imagen:
+tras el bloque de concordancias del artículo anterior se lee, con su rótulo delante,
+
+> «**Artículo 12.-** Cuando en determinado ejercicio no se publique los aranceles de terrenos o los
+> precios unitarios oficiales de construcción, por Decreto Supremo se actualizará el valor de la base
+> imponible del año anterior como máximo en el mismo porcentaje en que se incremente la Unidad
+> Impositiva Tributaria (UIT).»
+
+y a renglón seguido «Artículo 13.- El impuesto se calcula aplicando a la base imponible la escala
+progresiva acumulativa».
+
+**Por qué la primera vez salió mal, que es lo que hay que recordar.** La extracción anterior leyó el
+PDF *sin conservar la disposición del texto*, y con las dos columnas de las concordancias
+entremezcladas el rótulo del artículo caía **después** de su propio cuerpo. Extraído conservando la
+disposición, el rótulo vuelve a su sitio. La lección no es sobre este PDF: es que **la posición
+relativa de un rótulo en una extracción plana no es evidencia de nada**, y por eso el método exige
+la página renderizada. Lo que faltaba no era una fuente distinta, era poder dibujarla —el visor no
+estaba instalado en la máquina, y ahora sí—.
+
+El sha256 del PDF leído es
+`31ac1e01e0a8a5f2cd29ad838b4f6aef3e48bf08cbb772a1207e82d8b92f64fd`, el mismo que
+[`fuentes/README.md`](fuentes/README.md) declara para
+`DS-156-2004-EF-TUO-Ley-Tributacion-Municipal.pdf`: se descargó del archivo de S3 y se comparó, de
+modo que lo que se miró es el ejemplar archivado y no otra copia de internet.
+
+### 1.5 El inventario completo de parámetros del SRTM no tiene ninguno que se llame así
+
+**Y ese silencio es un dato.** Los dos manuales de «Parámetros» que se habían leído —el de la CF2 y
+el de la CF4— no lo definían, pero eran dos de **cinco**: el módulo M21 tiene un manual por fase, y
+el de la **CF1** (`M21-1-003-Parámetros`, 506 páginas) es el que administra los parámetros del
+predial y los generales. Se leyó entero su índice. Los submenús que publica son:
+
+- **Parámetros Predial** — VUO Construcción · VUO Obras Complementarias · Depreciación · Uso de
+  Predio Pensionista · **Tasa Predial** · Arancel Urbano · Arancel Rústico
+- **Parámetros** — Catálogo · **IPC/IPM** · Municipalidad · Tipo de Cambio · Tipo de Cambio Promedio
+  · **UIT** · Concepto de Recaudación · Feriados · Distrito · Interés Moratorio · Tipo de Operación ·
+  Vencimiento · Vías · Áreas Organizacionales · Zona Urbana · Sub Zona Urbana · Doc. Sustento ·
+  Plazo de Presentación de Tributo · Uso Predio · Uso Predio – Depreciación · Notaría · Agencia ·
+  Base legal (y otros de catálogo)
+- **Infracción Tributaria**, **Configuración**, **Arbitrios** (Nivel de Afluencia · Grupo de Uso ·
+  Tasa Serenazgo · Barrido de Calles · Residuos Sólidos · Parques y Jardines) y **Promedio
+  Habitantes**
+
+**Ninguno es el `% actualización`.** No hay pantalla donde teclearlo, ni por ejercicio ni por
+municipalidad. Y el sistema que enseña esa columna en M02 es el mismo cuyo módulo de parámetros es
+este: si fuera un valor que alguien fija, tendría que estar aquí.
+
+Lo que sí hay es **UIT**, y eso encaja con el artículo 12: el porcentaje que ese artículo autoriza
+es «el mismo porcentaje en que se incremente la UIT», que **se calcula** a partir de dos filas de un
+parámetro que el módulo sí tiene. Un valor derivado no necesita pantalla.
+
+`‹HIPÓTESIS, NO LECTURA: que M02 calcule el «% actualización» como la variación de la UIT del
+artículo 12. Lo confirmado es (a) que el módulo de parámetros del SRTM no tiene ninguno con ese
+nombre, y (b) que sí tiene la UIT. Falta una determinación con el porcentaje distinto de cero, que
+es lo único que puede distinguir una fórmula de otra›`.
+
+#### 1.5.1 El `IPC/IPM`, que es otra cosa y conviene no confundir
+
+El módulo **sí** tiene un parámetro de índices financieros, y a primera vista parece el candidato.
+Su pantalla —«MANTENIMIENTO DE PARÁMETROS - ÍNDICES FINANCIEROS»— la administra el **Administrador
+MEF**, o sea es nacional, y guarda por fila: `Año Afectación`, `Mes`, `Índice Financiero`, `Índice`,
+`Variación Mensual`, `Variación Acumulado`, `Tipo Base Legal`, `Base Legal` y `Fecha Base Legal`.
+Las filas que el manual enseña son reales:
+
+| Año | Mes | Índice financiero | Índice | Var. mensual | Var. acumulada | Base legal |
+|---|---|---|---|---|---|---|
+| 2018 | 1 | ÍNDICE DE PRECIOS AL POR MAYOR (IPM) | 105.740105 | 0.260000 | 0.260000 | RESOLUCIÓN JEFATURAL INEI |
+| 2018 | 1 | ÍNDICE DE PRECIOS AL CONSUMIDOR (IPC) | 88.590000 | 0.130000 | 0.130000 | RESOLUCIÓN JEFATURAL INEI |
+| 2018 | 2 | ÍNDICE DE PRECIOS AL POR MAYOR (IPM) | 106.137559 | 0.380000 | 0.630000 | RESOLUCIÓN JEFATURAL INEI |
+
+**Pero no es este campo, y lo dice dónde está cada cosa.** El IPM del artículo 15 del TUO LTM
+reajusta las **cuotas** —«las cuotas restantes serán reajustadas de acuerdo a la variación acumulada
+del Índice de Precios al Por Mayor»—, y el `% actualización` de M02 no vive en el resumen de cuotas:
+vive en la grilla **por predio**, entre el autovalúo y el `% propiedad`. Son dos actualizaciones
+distintas, en dos momentos distintos del cálculo, y llamarlas la misma sería el error que este
+archivo existe para no cometer.
+
+Queda anotado aquí porque el sistema lo necesitará igual —el reajuste de cuotas del artículo 15 es
+una cifra que hoy tampoco está—, y porque quien retome D-11 va a tropezar con esta pantalla y
+merece encontrarse ya hecha la distinción.
 
 ## 2. Cómo entra al sistema
 

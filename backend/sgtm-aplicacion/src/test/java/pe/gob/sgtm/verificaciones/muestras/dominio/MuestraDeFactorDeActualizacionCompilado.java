@@ -34,8 +34,11 @@ import java.math.BigDecimal;
 @SuppressWarnings("unused")
 public final class MuestraDeFactorDeActualizacionCompilado {
 
-    /** El «no aplicar ninguno» que en realidad afirma que el factor vale 1 siempre. */
-    private static final BigDecimal FACTOR_ACTUALIZACION = new BigDecimal("1.00");
+    /**
+     * El «no aplicar ninguno» que en realidad afirma que el incremento es cero en todo ejercicio y
+     * toda municipalidad. Es el valor que la captura del SRTM muestra, y por eso el mas creible.
+     */
+    private static final BigDecimal FACTOR_ACTUALIZACION = new BigDecimal("0.00");
 
     /**
      * El mismo dato escrito como porcentaje — y <b>este el escaner NO lo caza</b>, a proposito.
@@ -55,7 +58,7 @@ public final class MuestraDeFactorDeActualizacionCompilado {
     private static final BigDecimal PORCENTAJE_DE_ACTUALIZACION = new BigDecimal("100");
 
     /** Y como cuadro por ejercicio, que es donde acaba cuando alguien intenta «parametrizarlo». */
-    private static final String ACTUALIZACION_POR_EJERCICIO = "2025=1.00;2026=1.00";
+    private static final String ACTUALIZACION_POR_EJERCICIO = "2025=0.00;2026=0.00";
 
     /**
      * Y aqui se usa, que es donde el defecto se vuelve invisible: la firma no dice que haya ninguna
@@ -63,7 +66,7 @@ public final class MuestraDeFactorDeActualizacionCompilado {
      * multiplicar.
      */
     private BigDecimal baseActualizada(BigDecimal autovaluo) {
-        return autovaluo.multiply(FACTOR_ACTUALIZACION);
+        return autovaluo.multiply(BigDecimal.ONE.add(FACTOR_ACTUALIZACION.movePointLeft(2)));
     }
 
     private MuestraDeFactorDeActualizacionCompilado() {}
