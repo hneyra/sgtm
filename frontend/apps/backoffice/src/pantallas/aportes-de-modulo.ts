@@ -253,7 +253,10 @@ export interface CensoDeAportes {
 export async function censoDeAportes(): Promise<CensoDeAportes> {
   const aportes = await Promise.all(MODULOS.map((modulo) => aporteDelModulo(modulo.id)));
   return {
-    conexiones: Object.assign({}, ...aportes.map((a) => a.conexiones)) as CensoDeAportes['conexiones'],
+    conexiones: Object.assign(
+      {},
+      ...aportes.map((a) => a.conexiones),
+    ) as CensoDeAportes['conexiones'],
     adaptaciones: Object.assign(
       {},
       ...aportes.map((a) => a.adaptaciones ?? {}),

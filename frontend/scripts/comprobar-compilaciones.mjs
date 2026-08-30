@@ -164,29 +164,14 @@ const HUELLAS = [
  * la via B (#428 y #432 anaden declaraciones del mismo tipo); si al cerrarla
  * sobra, se baja, como hizo #424.
  *
- * **Y a 160 el 2026-08-30** (#426), que es la cuarta. Lo medido: **156,1 con la
- * rama recien sacada de `main` y 158,6 con las ocho escrituras de Coactiva
- * puestas**, o sea 2,5 KB comprimidos por conectar un modulo entero. Se dice de
- * donde salen, porque el reparto es el argumento:
- *
- * - los **ocho cuerpos declarados** de `escrituras.ts`, con sus dos tablas de
- *   traduccion del vocabulario de la diligencia coactiva y los mensajes de
- *   `exigir` que apagan cada primaria diciendo que falta
- * - los **cinco controles anadidos** de `coactiva/composicion.ts` (#422), con su
- *   etiqueta propia y su ayuda
- * - las **tres conexiones** que dan filas a tres de esas ocho
- *
- * Los tres viven en el arranque **por diseno y no por descuido**: `escrituras.ts`
- * y `conexiones.ts` son quienes deciden que puede hacer cada pantalla, y eso se
- * decide antes de dibujarla. Se probo el movimiento de #379 —sacar del arranque
- * lo que se pudiera— y aqui no aplica: no hay ningun componente que mover, es
- * todo declaracion.
- *
- * Se sube a 160 y no a 159 por lo que #442 dejo escrito dos parrafos mas arriba:
- * CI mide ~0,3 KB mas que esta maquina, asi que un umbral a 159 tendria 0,1 de
- * holgura real y volveria a decidir en verde o rojo segun donde se compile. Con
- * 160 quedan 1,1 KB medidos en local, que es margen para un cambio transversal y
- * no para crecer sin mirar.
+ * **Y #426 no lo toca, que es la noticia**: conectar el modulo de Coactiva
+ * entero —ocho escrituras, cinco controles anadidos y tres conexiones— cuesta
+ * **1,4 KB** del arranque (142,6 → 144,0 medidos aqui), y no los 2,5 que habria
+ * costado antes de este reparto: las composiciones y las conexiones se van con
+ * el trozo de su modulo, y lo unico que sigue pagando todo el mundo son los ocho
+ * cuerpos de `escrituras.ts`, que estan en el arranque por diseno —el camino de
+ * escritura los necesita enteros y sincronos—. Quedan 1,0 KB de los 2,4 que este
+ * numero traia: la via B de arriba sigue siendo lo que decide si sobra o falta.
  *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
