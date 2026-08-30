@@ -8,6 +8,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -23,8 +26,10 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
+import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.contribuyentes.aplicacion.ConsultaDelPadron;
+import pe.gob.sgtm.contribuyentes.aplicacion.RegistrarContribuyente;
 import pe.gob.sgtm.contribuyentes.infraestructura.ContribuyenteRepositoryJdbc;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
@@ -68,6 +73,11 @@ import tools.jackson.databind.json.JsonMapper;
 @DisplayName("RF-011 — El padron, de HTTP a PostgreSQL (#486)")
 class ContribuyenteControllerFronteraTest {
 
+    private static final Clock RELOJ =
+            Clock.fixed(
+                    LocalDate.of(2026, 8, 30).atStartOfDay(ZoneOffset.UTC).toInstant(),
+                    ZoneOffset.UTC);
+
     private static BaseDeDatosDePrueba base;
     private static long municipalidadA;
     private static long municipalidadB;
@@ -89,14 +99,27 @@ class ContribuyenteControllerFronteraTest {
         pool.setUsername(BaseDeDatosDePrueba.APP);
         pool.setPassword(base.clave(BaseDeDatosDePrueba.APP));
 
+        JdbcClient jdbc = JdbcClient.create(pool);
+        TenantTransactionManager gestor = new TenantTransactionManager(pool);
+        ContribuyenteRepositoryJdbc repositorio = new ContribuyenteRepositoryJdbc(jdbc);
         ConsultaDelPadron consulta =
-                conLaTransaccionQueDiceLaAnotacion(
-                        new ConsultaDelPadron(
-                                new ContribuyenteRepositoryJdbc(JdbcClient.create(pool))),
-                        new TenantTransactionManager(pool));
+                conLaTransaccionQueDiceLaAnotacion(new ConsultaDelPadron(repositorio), gestor);
 
         mvc =
-                MockMvcBuilders.standaloneSetup(new ContribuyenteController(consulta))
+                MockMvcBuilders.standaloneSetup(
+                                new ContribuyenteController(
+                                        consulta,
+                                        // Esta prueba mide la LECTURA (#486); lo que el mismo
+                                        // controlador escribe desde #488 lo mide
+                                        // EscrituraDelPadronControllerTest. Los colaboradores de
+                                        // escritura se construyen igualmente —ninguna prueba de
+                                        // aqui los llama— porque un `null` en un paquete
+                                        // `@NullMarked` es una promesa rota que el dia que alguien
+                                        // anada un caso de escritura aqui sale como un NPE.
+                                        new RegistrarContribuyente(
+                                                repositorio, new AuditoriaJdbc(jdbc, RELOJ), RELOJ),
+                                        (usuario, acceso, privilegio, fecha) -> true,
+                                        RELOJ))
                         .setControllerAdvice(new ManejadorDeErrores())
                         .setMessageConverters(
                                 new JacksonJsonHttpMessageConverter(

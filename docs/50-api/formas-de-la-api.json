@@ -2344,6 +2344,73 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /rentas/contribuyentes/{id}/ficha": {
+    "contribuyente": {
+      "id": "entero",
+      "codigo": "texto",
+      "tipoDocumento": "texto",
+      "numeroDocumento": "texto",
+      "tipoPersona": "texto",
+      "nombreRazonSocial": "texto",
+      "condicionEspecial": "texto",
+      "activo": "booleano"
+    },
+    "aLaFecha": "fecha",
+    "domicilioFiscal": {
+      "id": "entero",
+      "tipo": "texto",
+      "direccion": "texto",
+      "referencia": "texto",
+      "ubigeo": "texto",
+      "vigenciaDesde": "fecha",
+      "vigenciaHasta": "fecha",
+      "documentoOrigen": "texto"
+    },
+    "domicilioProcesal": {
+      "id": "entero",
+      "tipo": "texto",
+      "direccion": "texto",
+      "referencia": "texto",
+      "ubigeo": "texto",
+      "vigenciaDesde": "fecha",
+      "vigenciaHasta": "fecha",
+      "documentoOrigen": "texto"
+    },
+    "historialDeDomicilios": [
+      {
+        "id": "entero",
+        "tipo": "texto",
+        "direccion": "texto",
+        "referencia": "texto",
+        "ubigeo": "texto",
+        "vigenciaDesde": "fecha",
+        "vigenciaHasta": "fecha",
+        "documentoOrigen": "texto"
+      }
+    ],
+    "contactos": [
+      {
+        "id": "entero",
+        "tipo": "texto",
+        "valor": "texto",
+        "nombre": "texto",
+        "documento": "texto",
+        "observacion": "texto",
+        "vigente": "booleano"
+      }
+    ],
+    "responsables": [
+      {
+        "id": "entero",
+        "responsableId": "entero",
+        "vinculo": "texto",
+        "porcentaje": "texto",
+        "vigenciaDesde": "fecha",
+        "vigenciaHasta": "fecha",
+        "documentoOrigen": "texto"
+      }
+    ]
+  },
   "GET /rentas/declaraciones/{djNro}": {
     "id": "entero",
     "numero": "texto",
@@ -4851,6 +4918,44 @@
     "baseImponible": "texto",
     "montoDeterminado": "texto"
   },
+  "POST /rentas/contribuyentes": {
+    "id": "entero",
+    "codigo": "texto",
+    "tipoDocumento": "texto",
+    "numeroDocumento": "texto",
+    "tipoPersona": "texto",
+    "nombreRazonSocial": "texto",
+    "condicionEspecial": "texto",
+    "activo": "booleano"
+  },
+  "POST /rentas/contribuyentes/{id}/contactos": {
+    "id": "entero",
+    "tipo": "texto",
+    "valor": "texto",
+    "nombre": "texto",
+    "documento": "texto",
+    "observacion": "texto",
+    "vigente": "booleano"
+  },
+  "POST /rentas/contribuyentes/{id}/domicilios": {
+    "id": "entero",
+    "tipo": "texto",
+    "direccion": "texto",
+    "referencia": "texto",
+    "ubigeo": "texto",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha",
+    "documentoOrigen": "texto"
+  },
+  "POST /rentas/contribuyentes/{id}/responsables": {
+    "id": "entero",
+    "responsableId": "entero",
+    "vinculo": "texto",
+    "porcentaje": "texto",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha",
+    "documentoOrigen": "texto"
+  },
   "POST /rentas/declaraciones": {
     "id": "entero",
     "numero": "texto",
@@ -6049,6 +6154,34 @@
     "nombre": "texto",
     "ubigeo": "texto",
     "activa": "booleano"
+  },
+  "PUT /rentas/contribuyentes/{id}": {
+    "id": "entero",
+    "codigo": "texto",
+    "tipoDocumento": "texto",
+    "numeroDocumento": "texto",
+    "tipoPersona": "texto",
+    "nombreRazonSocial": "texto",
+    "condicionEspecial": "texto",
+    "activo": "booleano"
+  },
+  "PUT /rentas/contribuyentes/{id}/contactos/{contactoId}": {
+    "id": "entero",
+    "tipo": "texto",
+    "valor": "texto",
+    "nombre": "texto",
+    "documento": "texto",
+    "observacion": "texto",
+    "vigente": "booleano"
+  },
+  "PUT /rentas/contribuyentes/{id}/responsables/{responsableId}": {
+    "id": "entero",
+    "responsableId": "entero",
+    "vinculo": "texto",
+    "porcentaje": "texto",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha",
+    "documentoOrigen": "texto"
   },
   "PUT /seguridad/grupos/{id}/permisos": [
     {

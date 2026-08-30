@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas cuarenta y ocho operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas cincuenta y seis operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -167,8 +167,18 @@ describe('las operaciones generadas son las del contrato', () => {
     //     entra por una carga cartografica. La reactivacion existe porque sin
     //     ella la baja seria una puerta de un solo sentido: el alta rechaza a
     //     proposito fichar un predio retirado.
+    //   - Las ocho del padron (#488): `registrar_contribuyente`,
+    //     `modificar_contribuyente`, `ficha_del_contribuyente`,
+    //     `mudar_contribuyente`, `registrar_contacto`, `modificar_contacto`,
+    //     `registrar_responsable_solidario` y `cerrar_responsable_solidario`. La
+    //     pantalla `contribuyentes` declara UN endpoint —el GET de la grilla— y
+    //     el alta, la correccion, la baja y toda la ficha que cuelga del
+    //     contribuyente necesitan verbo propio. Hasta #488 los casos de uso
+    //     existian desde #11 y #15 y ningun controlador los publicaba: una
+    //     municipalidad recien implantada no podia registrar a su primer
+    //     contribuyente sino por el proceso batch de importacion.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(182);
+    expect(Object.keys(OPERACIONES)).toHaveLength(190);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {
