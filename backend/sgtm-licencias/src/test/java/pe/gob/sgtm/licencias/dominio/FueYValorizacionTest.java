@@ -88,11 +88,12 @@ class FueYValorizacionTest {
         @DisplayName("no redondea: D-03 sigue abierta en sus tres partes")
         void noRedondea() {
             TablaDeValoresUnitarios tabla =
-                    TablaDeValoresUnitarios.de(List.of(celda("PISOS", 'C', "33.333333")), 2026);
+                    TablaDeValoresUnitarios.de(List.of(celda("PUERTAS", 'C', "33.333333")), 2026);
 
             ValorizacionDeObra.Valorizacion obra =
                     ValorizacionDeObra.valorizar(
-                            List.of(estructura(2, PartidaDeEdificacion.PISOS, 'C', "3.33")), tabla);
+                            List.of(estructura(2, PartidaDeEdificacion.PUERTAS, 'C', "3.33")),
+                            tabla);
 
             assertThat(obra.total().valor().scale())
                     .as("el producto trae mas decimales que los operandos, y salen enteros")
@@ -178,11 +179,35 @@ class FueYValorizacionTest {
         }
 
         @Test
+        @DisplayName("el FUE declara las TRES partidas del cuadro, no las siete del manual")
+        void lasTresDelCuadro() {
+            // #436, V59. Eran siete, y las cuatro que se fueron no venian de ninguna resolucion:
+            // venian del formulario del manual, que sigue teniendo siete en la ficha catastral.
+            // Aqui son tres porque esto es lo que se valoriza CONTRA el cuadro de la norma, y el
+            // Cuadro vigente publica tres partidas de apreciacion exterior. Anadir una cuarta
+            // dejaria al proyectista declarar algo a lo que el cuadro nunca podra ponerle precio:
+            // la valorizacion quedaria imposible para siempre y el mensaje de error mentiria,
+            // diciendo «falta la celda» donde la verdad es «esa partida no existe en la norma».
+            assertThat(java.util.Arrays.stream(PartidaDeEdificacion.values()).map(Enum::name))
+                    .containsExactly("MUROS", "TECHOS", "PUERTAS");
+        }
+
+        @Test
         @DisplayName("una categoria fuera del cuadro no se puede ni declarar")
         void categoriaFueraDelCuadro() {
             assertThatThrownBy(() -> estructura(1, PartidaDeEdificacion.MUROS, 'Z', "10.00"))
                     .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("de A a I");
+                    .hasMessageContaining("de A a J");
+        }
+
+        @Test
+        @DisplayName("y la J de la Selva SI se declara: el FUE se habia quedado en la I")
+        void laDecimaCategoriaEnElFue() {
+            // V58 amplio a A..J la ficha y el cuadro, y dejo el FUE en A..I. Con eso, una
+            // municipalidad de la Selva podia fichar una construccion de categoria J y
+            // publicarla en el cuadro, pero no declararla en su FUE. V59 lo cierra.
+            assertThat(estructura(1, PartidaDeEdificacion.MUROS, 'J', "10.00").categoria())
+                    .isEqualTo('J');
         }
 
         @Test

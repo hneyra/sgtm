@@ -204,9 +204,20 @@ Es la exigencia del manual (cap. 2 §Actualización del Catastro), y aquí es el
 - `ficha_catastral` lleva `version`, `vigencia_desde/hasta`, `origen`, `documento_origen`,
   `usuario_registro` y **`observacion NOT NULL`**.
 - Un índice parcial garantiza **una sola ficha vigente** por predio y tipo.
-- `construccion` guarda las categorías A–I por partida (muros, techos, pisos, puertas,
-  revestimientos, baños, instalaciones); **el valor de cada letra no está aquí**, sino en
-  `valor_unitario_edificacion`, versionado por ejercicio.
+- `construccion` guarda las categorías **A–J** por cada una de las **siete** características del
+  formulario del manual (muros, techos, pisos, puertas, revestimientos, baños, instalaciones);
+  **el valor de cada letra no está aquí**, sino en `valor_unitario_edificacion`, versionado por
+  ejercicio.
+
+  **Y las siete de la ficha no son las del cuadro** (`V59`, #436). El Cuadro de Valores Unitarios
+  vigente publica **tres** partidas de apreciación exterior —muros y columnas, techos, y puertas y
+  ventanas—, así que `valor_unitario_edificacion.partida` y `edificacion_estructura.partida` admiten
+  esas tres. Las siete de `construccion` vienen del **formulario del manual** (`V1`: «manual,
+  cap. 2 §Caract. Construccion»), describen una edificación y no le ponen precio; un catastro puede
+  registrar más características de las que la valorización usa. Lo que `V1` afirmaba —«son las dos
+  mitades de la misma matriz»— resultó no ser cierto.
+
+  La **`J`** llegó con `V58`: el Anexo I.4 (Selva) tiene diez categorías, no nueve.
 
 `titularidad` tiene un **trigger diferido** que exige que los porcentajes vigentes de un predio
 **no excedan** 100 —no que sumen exactamente 100—. Diferido porque una transferencia cierra una

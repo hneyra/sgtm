@@ -500,11 +500,30 @@ Aparte de H-4:
   salen del Anexo I.2 y no de un tercero (§1.4), y llevan las dos firmas de ADR-0007 desde el
   2026-08-29. Que este archivo esté `VERIFICADO` **no lo hace publicable**: los cuatro pasos que
   faltan están en §2, y ninguno es una firma.
+- ~~**El vocabulario de partidas: siete en el esquema, tres en la norma.**~~ **Decidido el
+  2026-08-30 (`V59`, #436): son dos vocabularios distintos, y se separan.** El de la **norma** —
+  `valor_unitario_edificacion.partida` y `edificacion_estructura.partida`, que es lo que el FUE
+  declara para valorizarse contra ese cuadro— baja a las **tres** partidas de apreciación exterior.
+  El de la **ficha catastral** —las siete columnas `categoria_*` de `construccion`— **se queda
+  entero**: es el formulario del manual (`V1` lo cita: «manual, cap. 2 §Caract. Construccion»),
+  describe una edificación y no le pone precio.
+
+  Lo que decidió no fue una preferencia sino de dónde viene cada uno: **las siete no salen de
+  ninguna resolución**. NEG-05 §RT-002 las clasifica bajo «Confirmado por los **manuales**», y el
+  prototipo del manual del SGTM las dibuja en dos pantallas de ficha. Las tres sí salen de la norma.
+  Y leer los cuatro anexos regionales confirmó que **ninguna región publica las otras cuatro**.
+
+  Un catastro puede registrar más características de las que la valorización usa; lo que no puede es
+  ponerle precio a una partida que la norma no publica. Lo que `V1` afirmaba —«son las dos mitades
+  de la misma matriz»— resultó no ser cierto, y `V59` deshace esa confusión.
 - **La `J` de la Selva no cabe en el esquema.** `valor_unitario_edificacion.categoria` es
   `char(1) CHECK (categoria ~ '^[A-I]$')` (`V1`), así que la décima categoría del Anexo I.4 —«CAÑA
   GUAYAQUIL PONA O PINTOC», 16.43 en muros— **se rechazaría al cargarla**. Es el quinto punto de la
   lista de §2, y el mismo tipo de hallazgo que la carga vehicular destapó ejecutando (#188): una
   clave dimensionada para lo que se había visto, no para lo que la norma publica.
+  **Corregido el 2026-08-30 con `V58`** —en las ocho restricciones del esquema, en el dominio y en
+  la caja de la pantalla— y **rematado con `V59`**, que amplió la que `V58` se había dejado: la del
+  FUE, que hacía que una construcción de la Selva se pudiera fichar y publicar pero no declarar.
 - **El incremento del 5 % del quinto piso ya tiene mecánica**, y está en §1.6: es **único**, no
   acumulativo, se aplica **antes** de la depreciación, y su umbral y su porcentaje son **parámetros
   del conjunto**, no constantes —el propio SRTM los trata como datos cargados del Cuadro—. La prueba
