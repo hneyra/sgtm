@@ -78,6 +78,10 @@ class RegistrarPredioTest {
 
     private static TransactionTemplate transaccion;
     private static CatastroRepositoryJdbc repositorio;
+
+    /** Para mirar columnas que ningun puerto publica, como el area del poligono. */
+    private static JdbcClient jdbcDePrueba;
+
     private static RegistrarPredio registrar;
 
     @BeforeAll
@@ -95,6 +99,7 @@ class RegistrarPredioTest {
         pool.setPassword(base.clave(BaseDeDatosDePrueba.APP));
 
         JdbcClient jdbc = JdbcClient.create(pool);
+        jdbcDePrueba = jdbc;
         TenantTransactionManager gestor = new TenantTransactionManager(pool);
         transaccion = new TransactionTemplate(gestor);
         repositorio = new CatastroRepositoryJdbc(jdbc);
@@ -919,6 +924,119 @@ class RegistrarPredioTest {
                                             Paginacion.de(0, 50, "codRefCatastral")));
             assertThat(desdeLaVecina.contenido()).isEmpty();
             assertThat(desdeLaVecina.totalElementos()).isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("Geometria del predio (ADR-0021, V61): PostGIS de verdad")
+    class Geometria {
+
+        /** Una manzana de Catacaos, aproximada. Lo que importa es que sea un poligono valido. */
+        private static final String LOTE =
+                "MULTIPOLYGON(((-80.6800 -5.2700, -80.6799 -5.2700,"
+                        + " -80.6799 -5.2701, -80.6800 -5.2701, -80.6800 -5.2700)))";
+
+        @Test
+        @DisplayName("se guarda y se vuelve a leer como el poligono que es")
+        void seGuardaYSeLee() {
+            long predioId = predioNuevo("20010100100100102010001", "AV. CON PLANO 1");
+
+            transaccion.executeWithoutResult(
+                    estado -> repositorio.asignarGeometria(predioId, LOTE));
+
+            Optional<String> leido =
+                    transaccion.execute(estado -> repositorio.geometriaDe(predioId));
+            assertThat(leido).isPresent();
+            assertThat(leido.orElseThrow()).startsWith("MULTIPOLYGON(((");
+        }
+
+        @Test
+        @DisplayName("un predio sin plano no tiene geometria, y eso es lo normal")
+        void sinPlanoNoHayGeometria() {
+            long predioId = predioNuevo("20010100100100102010002", "AV. SIN PLANO 2");
+
+            Optional<String> sinPlano =
+                    transaccion.execute(estado -> repositorio.geometriaDe(predioId));
+            assertThat(sinPlano)
+                    .as("un predio declarado en ventanilla no trae plano, y no por eso es invalido")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("la columna solo admite MULTIPOLYGON: un punto no entra")
+        void unPuntoNoEntra() {
+            long predioId = predioNuevo("20010100100100102010003", "AV. MAL TIPADA 3");
+
+            assertThatThrownBy(
+                            () ->
+                                    transaccion.executeWithoutResult(
+                                            estado ->
+                                                    repositorio.asignarGeometria(
+                                                            predioId, "POINT(-80.68 -5.27)")))
+                    .as(
+                            "el tipo de la columna es la validacion; una comprobacion en Java se"
+                                    + " desincronizaria de ella")
+                    .isInstanceOf(org.springframework.dao.DataAccessException.class);
+        }
+
+        @Test
+        @DisplayName("un predio de otra municipalidad no se puede geometrizar desde aqui")
+        void noSePuedeGeometrizarLoAjeno() {
+            long predioId = predioNuevo("20010100100100102010004", "AV. AJENA 4");
+
+            TenantContext.limpiar();
+            TenantContext.fijar(new MunicipalidadId(otraMunicipalidad));
+
+            assertThatThrownBy(
+                            () ->
+                                    transaccion.executeWithoutResult(
+                                            estado -> repositorio.asignarGeometria(predioId, LOTE)))
+                    .as("RLS no lo deja ver, asi que el UPDATE no toca ninguna fila")
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("el area del poligono NO es el area imponible, y esa es la mitad del ADR")
+        void elAreaDelPoligonoNoEsLaImponible() throws SQLException {
+            long predioId = predioNuevo("20010100100100102010005", "AV. DOS AREAS 5");
+            sembrarFicha(municipalidad, predioId);
+            transaccion.executeWithoutResult(
+                    estado -> repositorio.asignarGeometria(predioId, LOTE));
+
+            double areaDelPoligono =
+                    transaccion.execute(
+                            estado ->
+                                    java.util.Objects.requireNonNull(
+                                            jdbcDePrueba
+                                                    .sql(
+                                                            "SELECT ST_Area(geometria) FROM predio"
+                                                                    + " WHERE id = :id")
+                                                    .param("id", predioId)
+                                                    .query(Double.class)
+                                                    .single()));
+            java.math.BigDecimal areaDeLaFicha =
+                    transaccion.execute(
+                            estado ->
+                                    jdbcDePrueba
+                                            .sql(
+                                                    "SELECT area_terreno FROM ficha_catastral"
+                                                            + " WHERE predio_id = :id")
+                                            .param("id", predioId)
+                                            .query(java.math.BigDecimal.class)
+                                            .single());
+
+            assertThat(areaDelPoligono > 0.0)
+                    .as("el poligono mide en metros sobre el elipsoide y da una cifra propia")
+                    .isTrue();
+            assertThat(areaDeLaFicha)
+                    .as(
+                            "y la ficha sigue diciendo lo que midio el tecnico. Derivar una de la"
+                                    + " otra cambiaria el autovaluo de todo el padron sin que nadie lo"
+                                    + " decidiera, y el error seria invisible: un area es"
+                                    + " indistinguible de otra al leerla")
+                    .isEqualByComparingTo("120.00");
+            assertThat(java.math.BigDecimal.valueOf(areaDelPoligono))
+                    .isNotEqualByComparingTo(areaDeLaFicha);
         }
     }
 

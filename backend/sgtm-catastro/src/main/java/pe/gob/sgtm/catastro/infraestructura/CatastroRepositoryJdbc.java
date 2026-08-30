@@ -451,6 +451,34 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
     }
 
     @Override
+    public void asignarGeometria(long predioId, String wkt) {
+        // ST_GeogFromText interpreta el WKT como WGS84, que es el SRID de la columna. Si el texto
+        // no es un MULTIPOLYGON valido, falla aqui y no guarda medio poligono.
+        int filas =
+                jdbc().sql(
+                                "UPDATE predio SET geometria = ST_GeogFromText(:wkt)"
+                                        + " WHERE id = :id")
+                        .param("wkt", wkt)
+                        .param("id", predioId)
+                        .update();
+        if (filas == 0) {
+            throw new IllegalArgumentException(
+                    "No hay ningun predio con el identificador "
+                            + predioId
+                            + " en esta"
+                            + " municipalidad");
+        }
+    }
+
+    @Override
+    public Optional<String> geometriaDe(long predioId) {
+        return jdbc().sql("SELECT ST_AsText(geometria) FROM predio WHERE id = :id")
+                .param("id", predioId)
+                .query(String.class)
+                .optional();
+    }
+
+    @Override
     public Predio guardar(Predio predio) {
         if (predio.esNuevo()) {
             Long id =

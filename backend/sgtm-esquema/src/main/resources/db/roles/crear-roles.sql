@@ -54,5 +54,12 @@ GRANT USAGE           ON SCHEMA public TO sgtm_app, sgtm_readonly, rol_carga_par
 --
 -- Las dos son trusted desde PostgreSQL 13, asi que en un ambiente donde
 -- sgtm_owner sea dueño de la base tampoco harian falta privilegios especiales.
+--   postgis   la geometria del predio (ADR-0021, V61). A diferencia de las dos
+--             anteriores NO es trusted, asi que hace falta un superusuario: no
+--             hay forma de que la instale la migracion, que corre como
+--             sgtm_owner. Trae consigo la tabla `spatial_ref_sys`, un catalogo
+--             de sistemas de coordenadas sin dato municipal, que por eso figura
+--             entre las TABLAS_EXENTAS de la prueba de aislamiento.
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS unaccent;
+CREATE EXTENSION IF NOT EXISTS postgis;

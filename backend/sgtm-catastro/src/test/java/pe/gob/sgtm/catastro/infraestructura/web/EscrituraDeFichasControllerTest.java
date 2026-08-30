@@ -1969,6 +1969,16 @@ class EscrituraDeFichasControllerTest {
         }
 
         @Override
+        public void asignarGeometria(long predioId, String wkt) {
+            throw new UnsupportedOperationException("La escritura de fichas no dibuja planos");
+        }
+
+        @Override
+        public Optional<String> geometriaDe(long predioId) {
+            return Optional.empty();
+        }
+
+        @Override
         public List<Titularidad> titularesDe(long predioId, LocalDate fecha) {
             throw new UnsupportedOperationException("La escritura de fichas no lee titulares");
         }

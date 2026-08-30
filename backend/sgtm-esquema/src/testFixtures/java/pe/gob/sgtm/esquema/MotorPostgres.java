@@ -22,7 +22,12 @@ import org.testcontainers.utility.DockerImageName;
  */
 public final class MotorPostgres implements AutoCloseable {
 
-    private static final String IMAGEN_POR_OMISION = "postgres:16-alpine";
+    /**
+     * La misma PostgreSQL 16 con PostGIS dentro (ADR-0021): {@code crear-roles.sql} instala la
+     * extension antes de la primera migracion, y {@code postgres:16-alpine} no la trae, asi que con
+     * esa imagen el aprovisionamiento falla con «extension "postgis" is not available».
+     */
+    private static final String IMAGEN_POR_OMISION = "postgis/postgis:16-3.4-alpine";
 
     private final PostgreSQLContainer<?> contenedor;
     private final String url;

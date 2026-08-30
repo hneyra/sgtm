@@ -57,7 +57,7 @@ config:
   sgtm:acmeEmail: operaciones@example.pe
   # Versiones fijadas. Una etiqueta móvil convierte cualquier reinicio del VPS en una
   # actualización no planificada, y en un solo nodo eso pasa en cada mantenimiento.
-  sgtm:postgresImage: postgres:16.4-alpine
+  sgtm:postgresImage: postgis/postgis:16-3.4-alpine
   sgtm:postgresStorageSize: 100Gi
   sgtm:keycloakImage: quay.io/keycloak/keycloak:26.0
   sgtm:keycloakRealm: sgtm

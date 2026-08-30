@@ -848,6 +848,16 @@ class SectorControllerTest {
         }
 
         @Override
+        public void asignarGeometria(long predioId, String wkt) {
+            throw new UnsupportedOperationException("SectorController no dibuja planos");
+        }
+
+        @Override
+        public Optional<String> geometriaDe(long predioId) {
+            return Optional.empty();
+        }
+
+        @Override
         public Predio guardar(Predio predio) {
             throw new UnsupportedOperationException("SectorController no escribe predios");
         }

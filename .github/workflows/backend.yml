@@ -94,7 +94,7 @@ jobs:
             echo "::error::Sin Docker no hay prueba de aislamiento. La salida documentada es apuntar a un PostgreSQL existente con -Dsgtm.pruebas.postgres.url (backend/README.md); omitir la prueba no lo es."
             exit 1
           fi
-          docker pull postgres:16-alpine
+          docker pull postgis/postgis:16-3.4-alpine
 
       - name: Aislamiento multi-tenant
         run: ./gradlew verificarAislamiento --no-daemon

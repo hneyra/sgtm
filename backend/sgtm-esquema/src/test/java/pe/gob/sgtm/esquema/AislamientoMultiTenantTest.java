@@ -38,8 +38,15 @@ class AislamientoMultiTenantTest {
      * Tablas que legitimamente no llevan RLS. Es deliberadamente corta: agregar una entrada aqui
      * tiene que doler y verse en el diff. {@code flyway_schema_history} la crea y la usa solo
      * {@code sgtm_owner}; la aplicacion no tiene ningun privilegio sobre ella.
+     *
+     * <p>{@code spatial_ref_sys} la crea la extension PostGIS (ADR-0021, V61) y es un catalogo de
+     * sistemas de coordenadas: unos miles de filas que describen proyecciones, iguales en toda
+     * instalacion del mundo. No lleva dato municipal y no puede llevarlo, asi que no hay nada que
+     * aislar. Entra aqui y no en {@code TABLAS_DE_CATALOGO} porque aquellas si llevan RLS con
+     * politica propia, y esta no la lleva: la instala la extension y no es nuestra.
      */
-    private static final Set<String> TABLAS_EXENTAS = Set.of("flyway_schema_history");
+    private static final Set<String> TABLAS_EXENTAS =
+            Set.of("flyway_schema_history", "spatial_ref_sys");
 
     /**
      * Catalogos: no llevan {@code municipalidad_id NOT NULL}, pero si RLS con politica propia

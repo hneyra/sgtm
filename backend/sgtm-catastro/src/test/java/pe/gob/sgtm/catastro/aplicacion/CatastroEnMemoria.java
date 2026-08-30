@@ -182,6 +182,16 @@ final class CatastroEnMemoria
     }
 
     @Override
+    public void asignarGeometria(long predioId, String wkt) {
+        throw new UnsupportedOperationException("Esta carga no trae geometria");
+    }
+
+    @Override
+    public Optional<String> geometriaDe(long predioId) {
+        return Optional.empty();
+    }
+
+    @Override
     public Predio guardar(Predio predio) {
         long id = predio.id() == null ? siguienteId++ : predio.id();
         Predio guardado =

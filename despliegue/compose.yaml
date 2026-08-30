@@ -19,7 +19,11 @@ name: sgtm
 
 services:
   base:
-    image: postgres:16-alpine
+    # La misma PostgreSQL 16 con PostGIS dentro (ADR-0021): `crear-roles.sql`
+    # instala la extension antes de la primera migracion, y la imagen oficial no
+    # la trae —con ella el arranque falla con «extension "postgis" is not
+    # available»—. Mismo volumen de datos, ninguna migracion de por medio.
+    image: postgis/postgis:16-3.4-alpine
     environment:
       POSTGRES_DB: sgtm
       POSTGRES_USER: postgres
