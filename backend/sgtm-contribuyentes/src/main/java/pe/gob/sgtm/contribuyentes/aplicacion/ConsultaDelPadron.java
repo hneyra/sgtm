@@ -47,4 +47,19 @@ public class ConsultaDelPadron {
     public Pagina<Contribuyente> buscar(CriterioDeBusqueda criterio, Paginacion paginacion) {
         return padron.buscar(criterio, paginacion);
     }
+
+    /**
+     * Uno solo, por su identificador.
+     *
+     * <p>Lo usa la edicion para leer lo que ya hay antes de cambiarlo, y lleva su propia
+     * transaccion por lo mismo que {@link #buscar}: {@code findById} tambien consulta una tabla con
+     * RLS, y fuera de transaccion no hay {@code SET LOCAL} que valga.
+     *
+     * <p>Vacio no distingue «no existe» de «es de otra municipalidad», y esa es la respuesta
+     * correcta: la politica RLS ya hizo que las dos cosas sean la misma para quien pregunta.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<Contribuyente> porId(long id) {
+        return padron.findById(id);
+    }
 }

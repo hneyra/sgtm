@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 179 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 187 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 179 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 187 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 179 operaciones del contrato, por su `operationId`.
+ * Las 187 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 179 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 187 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -249,12 +249,68 @@ export const OPERACIONES = {
     parametrosDeRuta: [],
     parametrosDeConsulta: ['codigo', 'nombreRazonSocial', 'dNI', 'rUC', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
+  /** Alta de contribuyente — `POST /rentas/contribuyentes` */
+  registrar_contribuyente: {
+    metodo: 'POST',
+    ruta: '/rentas/contribuyentes',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: [],
+  },
   /** Titulares del predio, con su código de contribuyente — `GET /catastro/predios/{predioId}/titulares` */
   titulares_del_predio: {
     metodo: 'GET',
     ruta: '/catastro/predios/{predioId}/titulares',
     parametrosDeRuta: ['predioId'],
     parametrosDeConsulta: ['vigenteA'],
+  },
+  /** Corrección o baja del contribuyente — `PUT /rentas/contribuyentes/{id}` */
+  modificar_contribuyente: {
+    metodo: 'PUT',
+    ruta: '/rentas/contribuyentes/{id}',
+    parametrosDeRuta: ['id'],
+    parametrosDeConsulta: [],
+  },
+  /** Ficha del contribuyente a una fecha — `GET /rentas/contribuyentes/{id}/ficha` */
+  ficha_del_contribuyente: {
+    metodo: 'GET',
+    ruta: '/rentas/contribuyentes/{id}/ficha',
+    parametrosDeRuta: ['id'],
+    parametrosDeConsulta: ['fecha'],
+  },
+  /** Mudanza: cierra el domicilio anterior y abre el nuevo — `POST /rentas/contribuyentes/{id}/domicilios` */
+  mudar_contribuyente: {
+    metodo: 'POST',
+    ruta: '/rentas/contribuyentes/{id}/domicilios',
+    parametrosDeRuta: ['id'],
+    parametrosDeConsulta: [],
+  },
+  /** Alta de contacto del contribuyente — `POST /rentas/contribuyentes/{id}/contactos` */
+  registrar_contacto: {
+    metodo: 'POST',
+    ruta: '/rentas/contribuyentes/{id}/contactos',
+    parametrosDeRuta: ['id'],
+    parametrosDeConsulta: [],
+  },
+  /** Corrección o baja de un contacto — `PUT /rentas/contribuyentes/{id}/contactos/{contactoId}` */
+  modificar_contacto: {
+    metodo: 'PUT',
+    ruta: '/rentas/contribuyentes/{id}/contactos/{contactoId}',
+    parametrosDeRuta: ['id', 'contactoId'],
+    parametrosDeConsulta: [],
+  },
+  /** Alta de responsable solidario — `POST /rentas/contribuyentes/{id}/responsables` */
+  registrar_responsable_solidario: {
+    metodo: 'POST',
+    ruta: '/rentas/contribuyentes/{id}/responsables',
+    parametrosDeRuta: ['id'],
+    parametrosDeConsulta: [],
+  },
+  /** Cierre del vínculo de responsabilidad solidaria — `PUT /rentas/contribuyentes/{id}/responsables/{responsableId}` */
+  cerrar_responsable_solidario: {
+    metodo: 'PUT',
+    ruta: '/rentas/contribuyentes/{id}/responsables/{responsableId}',
+    parametrosDeRuta: ['id', 'responsableId'],
+    parametrosDeConsulta: [],
   },
   /** Predios del contribuyente — `GET /rentas/predios` */
   predios_rentas: {
@@ -1301,7 +1357,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 179 operaciones. */
+/** El `operationId` de una de las 187 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1507,10 +1563,43 @@ export interface ParametrosPorOperacion {
     readonly ordenarPor?: string;
     readonly direccion?: string;
   };
+  /** `POST /rentas/contribuyentes` */
+  readonly registrar_contribuyente: Readonly<Record<string, never>>;
   /** `GET /catastro/predios/{predioId}/titulares` */
   readonly titulares_del_predio: {
     readonly predioId: string;
     readonly vigenteA?: string;
+  };
+  /** `PUT /rentas/contribuyentes/{id}` */
+  readonly modificar_contribuyente: {
+    readonly id: string;
+  };
+  /** `GET /rentas/contribuyentes/{id}/ficha` */
+  readonly ficha_del_contribuyente: {
+    readonly id: string;
+    readonly fecha?: string;
+  };
+  /** `POST /rentas/contribuyentes/{id}/domicilios` */
+  readonly mudar_contribuyente: {
+    readonly id: string;
+  };
+  /** `POST /rentas/contribuyentes/{id}/contactos` */
+  readonly registrar_contacto: {
+    readonly id: string;
+  };
+  /** `PUT /rentas/contribuyentes/{id}/contactos/{contactoId}` */
+  readonly modificar_contacto: {
+    readonly id: string;
+    readonly contactoId: string;
+  };
+  /** `POST /rentas/contribuyentes/{id}/responsables` */
+  readonly registrar_responsable_solidario: {
+    readonly id: string;
+  };
+  /** `PUT /rentas/contribuyentes/{id}/responsables/{responsableId}` */
+  readonly cerrar_responsable_solidario: {
+    readonly id: string;
+    readonly responsableId: string;
   };
   /** `GET /rentas/predios` */
   readonly predios_rentas: {
@@ -2621,7 +2710,15 @@ export interface CuerpoPorOperacion {
   readonly valores_unitarios: undefined;
   readonly depreciacion: undefined;
   readonly contribuyentes: undefined;
+  readonly registrar_contribuyente: CuerpoSinEsquema;
   readonly titulares_del_predio: undefined;
+  readonly modificar_contribuyente: CuerpoSinEsquema;
+  readonly ficha_del_contribuyente: undefined;
+  readonly mudar_contribuyente: CuerpoSinEsquema;
+  readonly registrar_contacto: CuerpoSinEsquema;
+  readonly modificar_contacto: CuerpoSinEsquema;
+  readonly registrar_responsable_solidario: CuerpoSinEsquema;
+  readonly cerrar_responsable_solidario: CuerpoSinEsquema;
   readonly predios_rentas: undefined;
   readonly predial_individual: CuerpoSinEsquema;
   readonly predial_masivo: CuerpoSinEsquema;
@@ -2804,7 +2901,15 @@ export interface RespuestaPorOperacion {
   readonly valores_unitarios: CuerpoSinEsquema;
   readonly depreciacion: CuerpoSinEsquema;
   readonly contribuyentes: CuerpoSinEsquema;
+  readonly registrar_contribuyente: CuerpoSinEsquema;
   readonly titulares_del_predio: CuerpoSinEsquema;
+  readonly modificar_contribuyente: CuerpoSinEsquema;
+  readonly ficha_del_contribuyente: CuerpoSinEsquema;
+  readonly mudar_contribuyente: CuerpoSinEsquema;
+  readonly registrar_contacto: CuerpoSinEsquema;
+  readonly modificar_contacto: CuerpoSinEsquema;
+  readonly registrar_responsable_solidario: CuerpoSinEsquema;
+  readonly cerrar_responsable_solidario: CuerpoSinEsquema;
   readonly predios_rentas: CuerpoSinEsquema;
   readonly predial_individual: CuerpoSinEsquema;
   readonly predial_masivo: CuerpoSinEsquema;

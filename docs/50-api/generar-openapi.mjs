@@ -966,6 +966,166 @@ const OPERACIONES_ADICIONALES = {
         },
       ],
     },
+  // #488 — el padron se leia y no se escribia. `contribuyentes` declara UN endpoint
+    // —el `GET` de la grilla de busqueda— y su alta, su correccion, su baja y toda la
+    // ficha que cuelga de el (domicilios, contactos, responsables solidarios) necesitan
+    // verbo propio. Hasta aqui los casos de uso existian desde #11 y #15 y ningun
+    // controlador los publicaba: una municipalidad recien implantada no podia registrar
+    // a su primer contribuyente desde la aplicacion, solo por el proceso de importacion
+    // por lotes del perfil `batch`.
+    //
+    // POR QUE CUELGAN DE `/rentas/` Y NO ESTRENAN `/contribuyentes/`. El prefijo de una
+    // ruta de este contrato nombra EL MODULO DEL MANUAL al que pertenece la pantalla, no
+    // el contexto acotado que la sirve: `/catastro/contribuyentes/{codigo}/ficha.pdf` lo
+    // sirve catastro y `/rentas/contribuyentes` lo sirve el contexto `contribuyentes`, y
+    // las dos hablan de contribuyentes. Con esa convencion ya fijada, `/contribuyentes/`
+    // no seria «mas coherente con el contexto»: seria una SEGUNDA convencion conviviendo
+    // con la primera en el mismo archivo, y la ruta dejaria de decir en que modulo del
+    // manual esta la pantalla sin empezar a decir nada mas fiable —el contexto que sirve
+    // una ruta no se lee de la ruta, se lee del controlador—. Ademas, todas las
+    // escrituras del contrato siguen a su pantalla: `calles` lee en `/catastro/vias` y
+    // edita en `/catastro/vias/{codigo}`; `declaracion_jurada` lee en
+    // `/rentas/declaraciones/{djNro}` y presenta en `/rentas/declaraciones`. Estrenar el
+    // prefijo haria de esta la unica excepcion. El criterio de la casa es que el contrato
+    // esta derivado del prototipo (#312); la pantalla del padron vive en «Rentas ·
+    // Registro», y ahi se queda.
+    {
+      operationId: 'registrar_contribuyente',
+      metodo: 'post',
+      titulo: 'Alta de contribuyente',
+      descripcion: bloque(`
+        Da de alta a un contribuyente en el padrón (#488, RF-013). El cuerpo lleva el código,
+        el tipo y número de documento, el tipo de persona, el nombre o razón social, la
+        condición especial si la hay, y la observación del usuario, obligatoria (RNF-052).
+
+        El código o el documento repetidos salen como **409**. La unicidad la exige la base
+        —es la única que puede—, pero el caso de uso comprueba antes para poder decir *cuál de
+        los dos* se repitió; el mensaje del documento repetido **no dice con quién**, que sería
+        revelar que una persona está en el padrón a quien sólo teclea documentos.
+
+        No entran la fecha de nacimiento, el estado civil ni el cónyuge, que la tabla sí
+        guarda: la lectura del padrón no los publica —lo que no se publica no se filtra—, y un
+        campo que se puede escribir y nunca leer de vuelta es una trampa.
+      `),
+    },
+    {
+      operationId: 'modificar_contribuyente',
+      metodo: 'put',
+      ruta: '/api/v1/rentas/contribuyentes/{id}',
+      titulo: 'Corrección o baja del contribuyente',
+      descripcion: bloque(`
+        Corrige el nombre o la condición especial de un contribuyente ya registrado, o lo da de
+        baja (#488). **Lo que no viene, no cambia**; para *quitar* la condición especial se manda
+        la cadena vacía, que es una instrucción y no una omisión.
+
+        **El código y el documento no se corrigen por aquí.** Son la identidad: el código enlaza
+        sus predios, sus recibos y sus asientos, y el documento es con lo que se le acredita.
+        Cambiar cualquiera de los dos no es corregir una ficha sino decidir que dos filas eran
+        la misma persona, y eso es otro acto.
+
+        \`activo = false\` es la baja y **no borra** (RNF-051): el código aparece en recibos ya
+        emitidos y en asientos del libro. Exige además el privilegio \`ELIMINACION\`.
+      `),
+    },
+    {
+      operationId: 'ficha_del_contribuyente',
+      metodo: 'get',
+      ruta: '/api/v1/rentas/contribuyentes/{id}/ficha',
+      titulo: 'Ficha del contribuyente a una fecha',
+      parametros: [
+        {
+          nombre: 'fecha',
+          descripcion:
+            'Fecha de corte. Ausente, hoy. Lo vigente se resuelve A ESA FECHA, no «lo ultimo».',
+        },
+      ],
+      descripcion: bloque(`
+        Dónde está, cómo se le ubica y quién responde con él: domicilio fiscal y procesal
+        **vigentes a la fecha**, el historial completo de domicilios, los contactos y los
+        responsables solidarios (#488).
+
+        Existe por dos motivos. Las escrituras de la ficha necesitan identificadores que
+        ninguna lectura publicaba —dar de baja un contacto exige decir cuál—; y las cuatro
+        consultas van en **una sola** transacción (#486): cuatro por separado dejarían sitio
+        entre medias a una mudanza, y la ficha saldría diciendo que el contribuyente vive en
+        dos sitios y en ninguno.
+
+        \`domicilioFiscal\` puede ser nulo: un contribuyente recién dado de alta todavía no
+        tiene ninguno, y decirlo es más honesto que devolver el último que hubo (regla 9).
+      `),
+    },
+    {
+      operationId: 'mudar_contribuyente',
+      metodo: 'post',
+      ruta: '/api/v1/rentas/contribuyentes/{id}/domicilios',
+      titulo: 'Mudanza: cierra el domicilio anterior y abre el nuevo',
+      descripcion: bloque(`
+        Muda al contribuyente (#488, RF-014). **Es un \`POST\` y no un \`PUT\` porque no
+        reemplaza nada**: agrega un tramo de vigencia y cierra el anterior *el día antes* de que
+        empiece el nuevo, en la misma transacción. Si fuera una edición, la dirección vieja
+        desaparecería y con ella la única prueba de por qué se notificó donde se notificó.
+
+        Que los dos no rijan el mismo día es deliberado: si lo hicieran, preguntar «dónde vivía
+        ese día» tendría dos respuestas.
+
+        El índice parcial \`domicilio_fiscal_vigente_uq\` impide que queden dos vigentes aunque
+        el código se equivoque; lo que no puede exigir es que quede uno, y de eso se encarga la
+        transacción. \`vigenciaDesde\` ausente es hoy.
+      `),
+    },
+    {
+      operationId: 'registrar_contacto',
+      metodo: 'post',
+      ruta: '/api/v1/rentas/contribuyentes/{id}/contactos',
+      titulo: 'Alta de contacto del contribuyente',
+      descripcion: bloque(`
+        Un teléfono, un celular, un correo o un gestor (#488, RF-015). \`nota\` es la observación
+        *del contacto* —«llamar después de las 6»— y \`observacion\` es la del usuario que guarda
+        (RNF-052): se llaman distinto a propósito, porque la tabla las tiene con el mismo nombre
+        y un cuerpo con dos \`observacion\` acabaría escribiendo una en el sitio de la otra.
+      `),
+    },
+    {
+      operationId: 'modificar_contacto',
+      metodo: 'put',
+      ruta: '/api/v1/rentas/contribuyentes/{id}/contactos/{contactoId}',
+      titulo: 'Corrección o baja de un contacto',
+      descripcion: bloque(`
+        Corrige un contacto o lo da de baja (#488). **Lo que no viene, no cambia.**
+        \`vigente = false\` es la baja y **no borra** (regla 4): un gestor que ya no lo es aparece
+        en notificaciones anteriores, y explicar por qué se le notificó exige que su ficha siga
+        ahí. La baja exige además el privilegio \`ELIMINACION\`.
+      `),
+    },
+    {
+      operationId: 'registrar_responsable_solidario',
+      metodo: 'post',
+      ruta: '/api/v1/rentas/contribuyentes/{id}/responsables',
+      titulo: 'Alta de responsable solidario',
+      descripcion: bloque(`
+        Quién responde con el contribuyente y desde cuándo (#488, RF-016). \`responsableId\` es
+        **otro contribuyente del mismo padrón**, no un nombre suelto: para notificarle hace falta
+        su domicilio, y el domicilio cuelga del padrón.
+
+        \`porcentaje\` viaja como **texto** y sólo lo admiten los vínculos que reparten; en los
+        demás, mandarlo es 422 y no un campo ignorado en silencio. Como texto porque un número
+        del JSON perdería escala antes de que nadie lo mire (regla 1).
+      `),
+    },
+    {
+      operationId: 'cerrar_responsable_solidario',
+      metodo: 'put',
+      ruta: '/api/v1/rentas/contribuyentes/{id}/responsables/{responsableId}',
+      titulo: 'Cierre del vínculo de responsabilidad solidaria',
+      descripcion: bloque(`
+        Cierra el vínculo en una fecha (#488). **No lo borra** (regla 4): la deuda anterior sigue
+        siendo suya, y una notificación de entonces se defiende enseñando que el vínculo regía.
+
+        Sólo se cierra uno vigente hoy; uno ya cerrado sale como 404, que es lo que es —no hay
+        tal vínculo abierto que cerrar—. \`vigenciaHasta\` ausente es hoy. Exige además el
+        privilegio \`ELIMINACION\`.
+      `),
+    },
   ],
   // Las cuatro pantallas de ficha declaran «GET /catastro/fichas/…/{codigo}»
   // como su endpoint —la lectura de la ficha de un predio—; darla de alta
@@ -1455,6 +1615,54 @@ const OPERACIONES_ADICIONALES = {
     },
   ],
 };
+
+/**
+ * Ninguna tabla de este archivo declara dos veces la misma clave.
+ *
+ * <p>Nace de un defecto que se cometio escribiendo #488: las ocho operaciones nuevas
+ * del padron se declararon en un `contribuyentes: [...]` propio, y ya habia otro mas
+ * abajo con `titulares_del_predio` (#366). Un objeto literal de JavaScript se queda
+ * **con el ultimo**, sin aviso: el generador corrio, dijo «OpenAPI generado» y el YAML
+ * no cambio ni una linea. El sintoma de «lo declare y no salio» es exactamente el mismo
+ * que el de «no lo declare», y `--comprobar` habria seguido en verde porque el contrato
+ * y el generador coincidian —en no tenerlas—.
+ *
+ * No se puede comprobar sobre el objeto ya construido: para entonces la clave repetida
+ * ya se perdio. Se lee el codigo fuente, que es donde todavia estan las dos.
+ *
+ * Las claves de estas tablas van a dos espacios y el contenido de las descripciones a
+ * ocho o mas, asi que la sangria las distingue sin analizar JavaScript.
+ */
+function clavesRepetidas(fuente, tabla) {
+  const inicio = fuente.indexOf(`const ${tabla} = {`);
+  if (inicio < 0) throw new Error(`No existe la tabla ${tabla}`);
+  const fin = fuente.indexOf('\n};\n', inicio);
+  const vistas = new Set();
+  const repetidas = [];
+  for (const linea of fuente.slice(inicio, fin).split('\n')) {
+    const clave = /^ {2}([A-Za-z_][\w]*):/.exec(linea);
+    if (!clave) continue;
+    if (vistas.has(clave[1])) repetidas.push(clave[1]);
+    vistas.add(clave[1]);
+  }
+  return repetidas;
+}
+
+{
+  const fuente = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+  const tablas = ['SUPRIMIDOS', 'DEL_BACKEND', 'DESCRIPCIONES', 'OPERACIONES_ADICIONALES'];
+  const repetidas = tablas.flatMap((tabla) =>
+    clavesRepetidas(fuente, tabla).map((clave) => `${tabla}.${clave}`),
+  );
+  if (repetidas.length) {
+    console.error(
+      `Clave declarada dos veces, y la segunda se come a la primera sin avisar: ${repetidas.join(
+        ', ',
+      )}`,
+    );
+    process.exit(1);
+  }
+}
 
 /**
  * Respuestas que el contrato describe y este generador no sabria inventar.

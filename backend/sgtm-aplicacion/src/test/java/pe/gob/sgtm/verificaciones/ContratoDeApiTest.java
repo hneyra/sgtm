@@ -73,6 +73,21 @@ class ContratoDeApiTest {
                     "GET /catastro/tablas/valores-unitarios",
                     "GET /catastro/tablas/depreciacion",
                     "GET /rentas/contribuyentes",
+                    // #488 — el padron se leia y no se escribia: `RegistrarContribuyente` y
+                    // `ActualizarFicha` existian desde #11 y #15 y ningun controlador los
+                    // publicaba, asi que una municipalidad recien implantada no podia registrar a
+                    // su primer contribuyente sino por el proceso batch de importacion. Las ocho
+                    // cuelgan de `/rentas/` y no estrenan `/contribuyentes/`: el prefijo de este
+                    // contrato nombra el modulo del manual de la pantalla, no el contexto que la
+                    // sirve, y toda escritura sigue a su pantalla (razonado en el generador).
+                    "POST /rentas/contribuyentes",
+                    "PUT /rentas/contribuyentes/{id}",
+                    "GET /rentas/contribuyentes/{id}/ficha",
+                    "POST /rentas/contribuyentes/{id}/domicilios",
+                    "POST /rentas/contribuyentes/{id}/contactos",
+                    "PUT /rentas/contribuyentes/{id}/contactos/{contactoId}",
+                    "POST /rentas/contribuyentes/{id}/responsables",
+                    "PUT /rentas/contribuyentes/{id}/responsables/{responsableId}",
                     "GET /rentas/beneficios",
                     "GET /rentas/arbitrios",
                     "GET /rentas/declaraciones/{djNro}",
