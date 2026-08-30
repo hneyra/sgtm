@@ -30,6 +30,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.carga.InformeDeImportacion;
 import pe.gob.sgtm.catastro.dominio.CondicionDeTitularidad;
 import pe.gob.sgtm.catastro.dominio.EstadoPredio;
 import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
@@ -42,6 +43,7 @@ import pe.gob.sgtm.catastro.dominio.SectorConConteos;
 import pe.gob.sgtm.catastro.dominio.TipoPredio;
 import pe.gob.sgtm.catastro.dominio.Titularidad;
 import pe.gob.sgtm.catastro.infraestructura.CatastroRepositoryJdbc;
+import pe.gob.sgtm.catastro.infraestructura.ViaRepositoryJdbc;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.compartido.TenantContext;
@@ -83,6 +85,7 @@ class RegistrarPredioTest {
     private static JdbcClient jdbcDePrueba;
 
     private static RegistrarPredio registrar;
+    private static ImportarPrediosDelPlano importarDelPlano;
 
     @BeforeAll
     static void provisionar() throws SQLException, IOException {
@@ -106,6 +109,16 @@ class RegistrarPredioTest {
         registrar =
                 envolver(
                         new RegistrarPredio(repositorio, new AuditoriaJdbc(jdbc, RELOJ), RELOJ),
+                        gestor);
+        importarDelPlano =
+                envolver(
+                        new ImportarPrediosDelPlano(
+                                envolver(
+                                        new InscribirPredioDelPlano(
+                                                repositorio,
+                                                new ViaRepositoryJdbc(jdbc),
+                                                registrar),
+                                        gestor)),
                         gestor);
     }
 
@@ -924,6 +937,170 @@ class RegistrarPredioTest {
                                             Paginacion.de(0, 50, "codRefCatastral")));
             assertThat(desdeLaVecina.contenido()).isEmpty();
             assertThat(desdeLaVecina.totalElementos()).isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("Carga del plano (#400): el camino por el que un catastro real se puebla")
+    class CargaDelPlano {
+
+        /**
+         * Entre comillas porque un WKT lleva comas: sin ellas el CSV lo parte en columnas y la fila
+         * entera pierde el sentido. {@code csv.writer} del guion las pone sola.
+         */
+        private static final String LOTE =
+                "\"MULTIPOLYGON(((-80.6700 -5.2600, -80.6699 -5.2600,"
+                        + " -80.6699 -5.2601, -80.6700 -5.2601, -80.6700 -5.2600)))\"";
+
+        private static final String CABECERA =
+                "departamento,provincia,distrito,sector,manzana,lote,edificacion,entrada,piso,"
+                        + "unidad,tipoPredio,direccion,codigoVia,numeroMunicipal,codigoSector,"
+                        + "codigoManzana,loteTexto,geometria";
+
+        private InformeDeImportacion cargar(String... filas) {
+            String archivo = CABECERA + "\n" + String.join("\n", filas) + "\n";
+            return importarDelPlano.importar(
+                    new java.io.StringReader(archivo),
+                    Observacion.de("Carga del plano catastral del distrito"));
+        }
+
+        /** Los diez tramos del codigo del manual, con la unidad como ultimo. */
+        private static String tramos(String unidad) {
+            return "20,01,01,01,001,001,01,01,01," + unidad;
+        }
+
+        @Test
+        @DisplayName("un lote nace SIN ficha y con su poligono: es la cola de saneamiento")
+        void unLoteNaceSinFicha() {
+            InformeDeImportacion informe =
+                    cargar(tramos("501") + ",URBANO,CALLE DEL PLANO 1,,,,,," + LOTE);
+
+            assertThat(informe.rechazadas()).isEmpty();
+            assertThat(informe.nuevas()).isEqualTo(1);
+
+            Pagina<PredioDelCatastro> sinFichar =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.predios(
+                                            new FiltroDePredios(
+                                                    "20010101001001010101", null, null, false),
+                                            Paginacion.de(0, 50, "codRefCatastral")));
+            assertThat(sinFichar.contenido())
+                    .as(
+                            "el plano da el lote y no la ficha: el area construida, el uso y el"
+                                    + " titular los levanta alguien despues, y hasta entonces el predio"
+                                    + " es cola de saneamiento")
+                    .isNotEmpty();
+            long predioId = sinFichar.contenido().getFirst().predioId();
+            Optional<String> poligono =
+                    transaccion.execute(estado -> repositorio.geometriaDe(predioId));
+            assertThat(poligono).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("sobre un predio que ya existe SOLO pone el poligono, sin pisar la direccion")
+        void sobreUnPredioExistenteSoloPoneElPoligono() {
+            Predio existente =
+                    registrar.registrar(
+                            Predio.urbano(
+                                    CodigoReferenciaCatastral.de("20010101001001010101502"),
+                                    "DIRECCION DE VENTANILLA"),
+                            Observacion.de("Alta en ventanilla, antes del plano"));
+
+            InformeDeImportacion informe =
+                    cargar(tramos("502") + ",URBANO,LO QUE DICE EL PLANO,,,,,," + LOTE);
+
+            assertThat(informe.rechazadas()).isEmpty();
+            assertThat(informe.nuevas()).as("no nacio ningun predio: ya estaba").isZero();
+
+            Predio despues =
+                    transaccion.execute(estado -> repositorio.predio(existente.id())).orElseThrow();
+            assertThat(despues.direccion())
+                    .as(
+                            "lo corrigio alguien en ventanilla con su observacion, y un archivo"
+                                    + " cartografico que lo pisara borraria ese trabajo")
+                    .isEqualTo("DIRECCION DE VENTANILLA");
+            Optional<String> poligono =
+                    transaccion.execute(estado -> repositorio.geometriaDe(existente.id()));
+            assertThat(poligono)
+                    .as("y lo unico que el plano sabe mejor que nadie SI se escribe")
+                    .isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("sobre un predio dado de baja no escribe: reactivarlo es otro acto")
+        void sobreUnPredioDeBajaNoEscribe() {
+            Predio predio =
+                    registrar.registrar(
+                            Predio.urbano(
+                                    CodigoReferenciaCatastral.de("20010101001001010101503"),
+                                    "AV. RETIRADA DEL PLANO"),
+                            Observacion.de("Alta para la prueba del plano"));
+            registrar.darDeBaja(predio, Observacion.de("Se demolio"));
+
+            InformeDeImportacion informe =
+                    cargar(tramos("503") + ",URBANO,LO QUE DICE EL PLANO,,,,,," + LOTE);
+
+            assertThat(informe.rechazadas()).hasSize(1);
+            Optional<String> poligono =
+                    transaccion.execute(estado -> repositorio.geometriaDe(predio.id()));
+            assertThat(poligono).isEmpty();
+        }
+
+        @Test
+        @DisplayName("una fila mala se rechaza SOLA y la siguiente entra")
+        void unaFilaMalaNoSeLlevaALaSiguiente() {
+            InformeDeImportacion informe =
+                    cargar(
+                            tramos("504") + ",URBANO,CON SECTOR INEXISTENTE,,,SC-NADA,,," + LOTE,
+                            tramos("505") + ",URBANO,LA QUE SIGUE ENTRA,,,,,," + LOTE);
+
+            assertThat(informe.rechazadas())
+                    .as("envolver el bucle en una transaccion se llevaria las dos por delante")
+                    .hasSize(1);
+            assertThat(informe.nuevas()).isEqualTo(1);
+            assertThat(informe.rechazadas().getFirst().motivo()).contains("SC-NADA");
+        }
+
+        @Test
+        @DisplayName(
+                "un lote sin geometria se rechaza: esto no es un alta masiva de predios vacios")
+        void unLoteSinGeometriaSeRechaza() {
+            InformeDeImportacion informe = cargar(tramos("506") + ",URBANO,SIN POLIGONO,,,,,,");
+
+            assertThat(informe.rechazadas()).hasSize(1);
+            assertThat(informe.nuevas()).isZero();
+            assertThat(informe.rechazadas().getFirst().motivo())
+                    .as(
+                            "el motivo tiene que decir que FALTA la geometria. Sin esta"
+                                    + " comprobacion, quitar la guarda pasa en verde: el motor rechaza"
+                                    + " igual la cadena vacia, y la fila se cuenta como rechazada por"
+                                    + " un motivo que no es el suyo")
+                    .contains("necesita su geometria");
+        }
+
+        @Test
+        @DisplayName("una geometria que el motor rechaza NO deja el predio suelto")
+        void unaGeometriaInvalidaNoDejaElPredioSuelto() {
+            InformeDeImportacion informe =
+                    cargar(tramos("507") + ",URBANO,CON UN PUNTO,,,,,,\"POINT(-80.67 -5.26)\"");
+
+            assertThat(informe.rechazadas()).hasSize(1);
+            assertThat(informe.rechazadas().getFirst().motivo()).contains("MULTIPOLYGON");
+
+            Pagina<PredioDelCatastro> ninguno =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.predios(
+                                            new FiltroDePredios(
+                                                    "20010101001001010101507", null, null, null),
+                                            Paginacion.de(0, 50, "codRefCatastral")));
+            assertThat(ninguno.contenido())
+                    .as(
+                            "el predio se escribe antes que su poligono y se deshace con el: sin"
+                                    + " una transaccion por fila quedaria un predio sin geometria que"
+                                    + " nadie pidio")
+                    .isEmpty();
         }
     }
 
