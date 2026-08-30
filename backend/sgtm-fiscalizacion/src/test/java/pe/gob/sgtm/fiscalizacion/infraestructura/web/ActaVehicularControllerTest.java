@@ -76,8 +76,25 @@ class ActaVehicularControllerTest {
                         }
 
                         @Override
-                        public int siguienteVersion(long programaId, long contribuyenteId) {
+                        public int siguienteVersion(
+                                long programaId,
+                                long contribuyenteId,
+                                @org.jspecify.annotations.Nullable Long predioId,
+                                @org.jspecify.annotations.Nullable Long vehiculoId) {
                             return 1;
+                        }
+
+                        @Override
+                        public java.util.Set<Long> prediosConActaEnElPrograma(
+                                long programaId, java.util.Set<Long> predios) {
+                            return java.util.Set.of();
+                        }
+
+                        @Override
+                        public java.util.Set<Long> prediosConActaEnElEjercicio(
+                                pe.gob.sgtm.dominio.Ejercicio ejercicio,
+                                java.util.Set<Long> predios) {
+                            return java.util.Set.of();
                         }
                     },
                     new ProgramaFiscalizacionRepository() {
@@ -154,6 +171,30 @@ class ActaVehicularControllerTest {
                 .contains("\"fichaId\":null")
                 .contains("\"vehiculoId\":30")
                 .contains("\"hallazgo\":\"OMISO\"");
+    }
+
+    @Test
+    @DisplayName("sin hallazgo, 422 y no guarda nada: el 201 de antes liquidaba CONFORME (D-16)")
+    void sinHallazgoNoSeRegistra() throws Exception {
+        String cuerpo =
+                "{\"observacion\":\"Se fiscaliza para la prueba\",\"programaId\":2,"
+                        + "\"contribuyenteId\":10,\"vehiculoId\":30,\"fechaVisita\":\"2026-03-15\","
+                        + "\"fiscalizador\":\"J. Perez\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/fiscalizacion/vehicular")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "hasta #481 esto respondia 201, y `LiquidarFiscalizacion` leia el nulo como"
+                                + " CONFORME: un vehiculo que nadie inspecciono, declarado en regla")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("hallazgo");
+        assertThat(guardadas).isEmpty();
     }
 
     @Test

@@ -1286,6 +1286,24 @@ public final class DatosDePrueba {
                         muni,
                         "PF-" + sufijo,
                         VIGENCIA);
+        // La muestra sorteada del programa (#481): un predio, con la condicion que la deteccion
+        // concluyo el dia del sorteo. La lleva `programa_muestra`, que es de tenant y por eso la
+        // prueba de aislamiento le exige RLS sola.
+        insertar(
+                app,
+                "INSERT INTO programa_muestra (municipalidad_id, programa_id, predio_id,"
+                        + " cod_ref_catastral, contribuyente_id, condicion, area_catastral,"
+                        + " area_declarada, sector_codigo, fecha_sorteo, observacion,"
+                        + " usuario_registro, fecha_registro)"
+                        + " VALUES (?, ?, ?, (SELECT codigo_ref_catastral FROM predio WHERE id = ?),"
+                        + "         ?, 'OMISO', 300.00, 120.00, NULL, ?, 'muestra de prueba',"
+                        + "         'prueba', now()) RETURNING id",
+                muni,
+                programaId,
+                predioId,
+                predioId,
+                titular,
+                VIGENCIA);
         long actaId =
                 insertar(
                         app,

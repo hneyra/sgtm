@@ -1081,6 +1081,57 @@ const OPERACIONES_ADICIONALES = {
         ' ejercicio siguiente para quien lo busca. Los otros dos desplegables de la pantalla' +
         ' —«Tipo» y «Estado»— no viajan: nombran clases y situaciones que el sistema no registra.',
     },
+    // La muestra sorteada, que es la grilla «Predios seleccionados» de esta
+    // pantalla Y la fila de la que `fisc_predial` resuelve sus tres
+    // identificadores (#481, AC 2 de #431). Las dos mitades del AC son la misma
+    // pieza: el acta no declara ni filtros ni tabla y dibuja sus tres campos de
+    // solo lectura, asi que solo se puede abrir desde una fila ya resuelta.
+    {
+      operationId: 'fisc_programa_muestra',
+      metodo: 'get',
+      ruta: '/api/v1/fiscalizacion/programas/{id}/muestra',
+      parametros: [
+        {
+          nombre: 'id',
+          en: 'path',
+          descripcion: 'El programa cuya muestra se lee',
+        },
+        {
+          nombre: 'predio',
+          descripcion:
+            'Acota la muestra a un predio: es como el acta de inspeccion pide su propia fila',
+        },
+      ],
+      paginacion: true,
+      titulo: 'Muestra sorteada del programa',
+      descripcion:
+        'Los predios que el programa sorteó para inspeccionar, con la condición que la detección' +
+        ' concluyó el día del sorteo y las dos superficies que comparó. Es la grilla «Predios' +
+        ' seleccionados» de la pantalla y también de donde el acta de inspección resuelve sus tres' +
+        ' identificadores —programa, contribuyente y predio—, que su catálogo dibuja de solo' +
+        ' lectura. La columna «Estado» se DERIVA de si el predio ya tiene acta en el programa: no' +
+        ' es una columna de la fila, porque guardarla dejaría dos verdades sobre lo mismo.',
+    },
+    {
+      operationId: 'fisc_programa_generar_muestra',
+      metodo: 'post',
+      ruta: '/api/v1/fiscalizacion/programas/{id}/muestra',
+      parametros: [
+        {
+          nombre: 'id',
+          en: 'path',
+          descripcion: 'El programa que sortea su muestra',
+        },
+      ],
+      titulo: 'Generar la muestra del programa',
+      descripcion:
+        'Sortea los predios que el programa va a inspeccionar, aplicando sobre el padrón el' +
+        ' ejercicio, el sector y el criterio de riesgo que el propio programa declara. No sortea' +
+        ' un predio que otro programa abierto ya se llevó ni uno ya fiscalizado en el ejercicio,' +
+        ' así que la muestra depende del orden: el primer programa que se genere se lleva los' +
+        ' predios. Responde 409 si el programa ya la sorteó — una muestra es un acto y no se' +
+        ' regenera, porque hay actas levantadas sobre ella.',
+    },
   ],
   // «Resultados y determinaciones» declara «GET /fiscalizacion/resultados» como
   // su endpoint —la grilla—; emitir la liquidación de un acta y reliquidarla
@@ -1499,6 +1550,19 @@ for (const grupo of NAV) {
   for (const [id, etiqueta] of grupo.items) {
     for (const extra of OPERACIONES_ADICIONALES[id] ?? []) {
       if (!extra.tras) continue;
+      // `tras` nombra una PANTALLA, no otra operacion adicional. Sin esta guarda,
+      // nombrar cualquier otra cosa deja la operacion FUERA del contrato **en
+      // silencio**: `ESPERAN` la guarda bajo una clave que ningun bucle visita, y
+      // el generador informa un total menor sin decir que perdio nada. Encontrado
+      // escribiendo #481, cuya segunda adicional nombraba a la primera.
+      if (!PANTALLAS[extra.tras]) {
+        throw new Error(
+          `OPERACIONES_ADICIONALES['${id}'].${extra.operationId} declara «tras: ${extra.tras}»,` +
+            ' que no es ninguna de las 134 pantallas. `tras` ordena una adicional detras de la' +
+            ' operacion de OTRA pantalla; para ordenarla dentro de su propio grupo basta el orden' +
+            ' del arreglo.',
+        );
+      }
       if (!ESPERAN.has(extra.tras)) ESPERAN.set(extra.tras, []);
       ESPERAN.get(extra.tras).push({ id, etiqueta, modulo: grupo.label, extra });
     }

@@ -2,6 +2,7 @@ package pe.gob.sgtm.fiscalizacion.infraestructura;
 
 import java.util.HashMap;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.auditoria.OrigenContext;
@@ -116,19 +117,94 @@ public class ActaFiscalizacionRepositoryJdbc extends RepositorioJdbc
                 pe.gob.sgtm.dominio.Observacion.de(fila.getString("observacion")));
     }
 
+    /**
+     * La versión siguiente de un acta, llaveada por la <b>unidad</b> y no sólo por el
+     * contribuyente.
+     *
+     * <p>Hasta {@code V60} resolvía {@code max(version)} por (programa, contribuyente), que es como
+     * estaba escrita la unicidad. Con la muestra por predio eso produce un defecto silencioso: un
+     * contribuyente con dos predios sorteados recibiría versión 2 en la <b>primera</b> acta de su
+     * segundo predio, y el papel diría que es una reinspección que nunca ocurrió.
+     *
+     * <p>{@code IS NOT DISTINCT FROM} y no {@code =} por lo mismo que {@code V60} declara {@code
+     * NULLS NOT DISTINCT}: el acta predial deja {@code vehiculo_id} en nulo y la vehicular {@code
+     * predio_id}, y con la igualdad ninguna de las dos se encontraría a sí misma.
+     */
     @Override
-    public int siguienteVersion(long programaId, long contribuyenteId) {
+    public int siguienteVersion(
+            long programaId,
+            long contribuyenteId,
+            @Nullable Long predioId,
+            @Nullable Long vehiculoId) {
+        Map<String, Object> campos = new HashMap<>();
+        campos.put("programaId", programaId);
+        campos.put("contribuyenteId", contribuyenteId);
+        campos.put("predioId", predioId);
+        campos.put("vehiculoId", vehiculoId);
+
         Integer maxima =
                 jdbc().sql(
                                 "SELECT max(version)"
                                         + DESDE
                                         + " WHERE programa_id = :programaId"
-                                        + "   AND contribuyente_id = :contribuyenteId")
-                        .param("programaId", programaId)
-                        .param("contribuyenteId", contribuyenteId)
+                                        + "   AND contribuyente_id = :contribuyenteId"
+                                        + "   AND predio_id IS NOT DISTINCT FROM :predioId"
+                                        + "   AND vehiculo_id IS NOT DISTINCT FROM :vehiculoId")
+                        .params(campos)
                         .query(Integer.class)
                         .optional()
                         .orElse(null);
         return maxima == null ? 1 : maxima + 1;
+    }
+
+    /**
+     * Los predios de {@code predios} que ya tienen acta en ese programa: es de donde la grilla de
+     * la muestra deriva su columna «Estado» sin guardarla (#481).
+     */
+    @Override
+    public java.util.Set<Long> prediosConActaEnElPrograma(
+            long programaId, java.util.Set<Long> predios) {
+        if (predios.isEmpty()) {
+            return java.util.Set.of();
+        }
+        return new java.util.HashSet<>(
+                jdbc().sql(
+                                "SELECT DISTINCT predio_id"
+                                        + DESDE
+                                        + " WHERE programa_id = :programaId"
+                                        + "   AND predio_id IN (:predios)"
+                                        + "   AND estado <> 'ANULADA'")
+                        .param("programaId", programaId)
+                        .param("predios", predios)
+                        .query(Long.class)
+                        .list());
+    }
+
+    /**
+     * Los predios de {@code predios} ya fiscalizados dentro de ese ejercicio, por la fecha de la
+     * visita: la segunda mitad de la exclusión de #481. Un acta anulada no cuenta — anularla es
+     * justamente decir que esa visita no vale.
+     */
+    @Override
+    public java.util.Set<Long> prediosConActaEnElEjercicio(
+            pe.gob.sgtm.dominio.Ejercicio ejercicio, java.util.Set<Long> predios) {
+        if (predios.isEmpty()) {
+            return java.util.Set.of();
+        }
+        Map<String, Object> campos = new HashMap<>();
+        campos.put("desde", java.time.LocalDate.of(ejercicio.valor(), 1, 1));
+        campos.put("hasta", java.time.LocalDate.of(ejercicio.valor(), 12, 31));
+        campos.put("predios", predios);
+
+        return new java.util.HashSet<>(
+                jdbc().sql(
+                                "SELECT DISTINCT predio_id"
+                                        + DESDE
+                                        + " WHERE predio_id IN (:predios)"
+                                        + "   AND fecha_visita BETWEEN :desde AND :hasta"
+                                        + "   AND estado <> 'ANULADA'")
+                        .params(campos)
+                        .query(Long.class)
+                        .list());
     }
 }

@@ -11,7 +11,11 @@ public record ProgramaResource(
         String tipo,
         String fechaInicio,
         @Nullable String fechaFin,
-        String estado) {
+        String estado,
+        @Nullable String ejercicio,
+        @Nullable String sector,
+        @Nullable String criterio,
+        @Nullable String fiscalizador) {
 
     public static ProgramaResource de(ProgramaFiscalizacion programa) {
         return new ProgramaResource(
@@ -21,6 +25,10 @@ public record ProgramaResource(
                 programa.tipo().name(),
                 programa.fechaInicio().toString(),
                 programa.fechaFin() == null ? null : programa.fechaFin().toString(),
-                programa.estado().name());
+                programa.estado().name(),
+                programa.ejercicio() == null ? null : String.valueOf(programa.ejercicio().valor()),
+                programa.sectorCodigo(),
+                programa.criterio() == null ? null : programa.criterio().name(),
+                programa.fiscalizador());
     }
 }

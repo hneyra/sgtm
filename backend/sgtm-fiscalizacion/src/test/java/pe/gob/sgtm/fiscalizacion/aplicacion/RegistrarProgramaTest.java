@@ -66,6 +66,10 @@ class RegistrarProgramaTest {
                         TipoDePrograma.PREDIAL,
                         LocalDate.of(2026, 4, 1),
                         null,
+                        new pe.gob.sgtm.dominio.Ejercicio(2026),
+                        "01",
+                        pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada.OMISO,
+                        "R. MENDOZA CRUZ",
                         Observacion.de("Se programa para la prueba"));
 
         assertThat(guardado.id()).isNotNull();
