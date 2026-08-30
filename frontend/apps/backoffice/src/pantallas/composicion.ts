@@ -5,6 +5,7 @@ import { COMPOSICION_DE_CATASTRO } from './catastro/composicion';
 import { COMPOSICION_DE_CONSULTAS } from './consultas/composicion';
 import { COMPOSICION_DE_LICENCIAS } from './licencias/composicion';
 import { COMPOSICION_DE_RENTAS } from './rentas/composicion';
+import { COMPOSICION_DE_SANCIONES } from './sanciones/composicion';
 import { COMPOSICION_DE_TESORERIA } from './tesoreria/composicion';
 import { COMPOSICION_DE_TRANSITO } from './transito/composicion';
 
@@ -625,6 +626,7 @@ const COMPOSICIONES: Readonly<Record<string, ComposicionDeOpcion>> = {
   ...COMPOSICION_DE_CONSULTAS,
   ...COMPOSICION_DE_LICENCIAS,
   ...COMPOSICION_DE_RENTAS,
+  ...COMPOSICION_DE_SANCIONES,
   ...COMPOSICION_DE_TESORERIA,
   ...COMPOSICION_DE_TRANSITO,
 };

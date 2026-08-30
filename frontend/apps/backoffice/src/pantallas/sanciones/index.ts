@@ -14,8 +14,8 @@ import {
 } from '../seguridad/listado';
 
 /**
- * Infracciones administrativas, conectado hasta donde llega el backend: **nueve opciones de
- * trece** (#78, #397 y #428, sobre #363).
+ * Infracciones administrativas, conectado hasta donde llega el backend: **once opciones de
+ * trece** (#78, #397 y #428, sobre #363) — nueve lecturas y **dos escrituras**.
  *
  * `adm_estado_cuenta` (`GET /infracciones/administrativas/estado-cuenta`,
  * `EstadoDeCuentaAdministrativoController`, #47) es la que la ficha 360° compone (#297,
@@ -44,29 +44,45 @@ import {
  * grilla, que es la que el filtro promete; `estadoDeLaDeuda` no se dibuja porque esta pantalla
  * del manual no tiene columna para él.
  *
- * **Las cinco que se quedan fuera, con su motivo** (ADR-0010 §4: lo que el backend no publique
- * se dice, no se finge):
+ * **Las dos escrituras, conectadas por #428**:
  *
  *   `adm_notificacion`               `NotificacionAdministrativaController` exige `numero`,
- *                                    `fecha`, `direccion` y `motivo`, y el catálogo sí dibuja
- *                                    controles para los cuatro. Lo que faltaba era el botón: la
- *                                    última acción de esta opción es «Imprimir», no «Guardar»
- *                                    (`["Nuevo","Modificar","Guardar","Anular","Imprimir"]`), y el
- *                                    renderizador genérico trata siempre la **última** como la
- *                                    primaria (FRO-03 §5), así que con el camino común pulsar
- *                                    «Imprimir» habría registrado la notificación sin decirlo.
- *                                    **#421 lo cerró sin componente propio**: la opción declara
- *                                    «Guardar» en `LA_QUE_ESCRIBE` (`pantallas/actos.ts`) y esa
- *                                    pasa al final de la barra. Conectar la escritura —declarar
- *                                    sus cuatro campos— sigue siendo trabajo del issue de este
- *                                    módulo.
- *   `adm_valores`                    Su primaria ya está en su sitio por lo mismo —declara
- *                                    «Procesar», que es la que lanza la corrida—, pero además
- *                                    `PeticionDeCorridaDeValores` exige **uno** de `papeletas`
- *                                    (una lista) o `desde`/`hasta` (un rango), que el catálogo de
- *                                    esta opción no dibuja —sus campos son «Código de criterio»,
- *                                    «Tipo de recaudo», «Oficina»…, del todo ajenos al cuerpo
- *                                    real—.
+ *                                    `fecha`, `direccion` y `motivo`, y el catálogo dibuja los
+ *                                    cuatro. Lo que faltaba era el botón —la última acción de
+ *                                    esta opción es «Imprimir», no «Guardar», y el renderizador
+ *                                    trata siempre la última como la primaria (FRO-03 §5)—, y eso
+ *                                    lo cerró #421 declarando «Guardar» en `LA_QUE_ESCRIBE`.
+ *
+ *                                    **Y una cosa más, que el censo del módulo no había visto**:
+ *                                    el manual teclea el número en **tres** campos —Serie, Año y
+ *                                    Número— y `NotificacionAdministrativa.numero` es **uno**,
+ *                                    con `notif_adm_numero_uq UNIQUE (municipalidad_id, numero)`
+ *                                    encima (V4). Declarar sólo «Número» dejaría la serie
+ *                                    tecleada y sin viajar —el defecto de #331—, y aquí además
+ *                                    **choca**: `001-004183` y `002-004183` se guardarían los dos
+ *                                    como `004183`. Lo compone `ResolutorDelNumeroDeNotificacion`
+ *                                    (#422), y el separador no se inventa: es el que el propio
+ *                                    manual imprime en su columna «Serie-Nº». El año no entra.
+ *
+ *                                    Los otros ocho campos del catálogo no se declaran, así que
+ *                                    se dibujan bloqueados: `PeticionDeNotificacion` no tiene
+ *                                    ninguno, y `contribuyenteId`/`predioId` son identificadores
+ *                                    internos que ninguna lectura de esta pantalla publica.
+ *   `adm_valores`                    Declaración pura: es la **gemela exacta** de
+ *                                    `transito_valores` —el mismo caso de uso con otra `Familia`,
+ *                                    en el mismo `GeneracionMasivaDeValoresController`— y declara
+ *                                    lo mismo, sólo «por rango» (`fecInicio`→`desde`,
+ *                                    `fecFin`→`hasta`). El otro modo del contrato, `papeletas[]`,
+ *                                    exigiría una lista o una selección múltiple que el catálogo
+ *                                    no dibuja —«Papeleta» es un único campo de texto—, y
+ *                                    `IniciarCorridaDeValores` rechaza con 422 si llegan los dos
+ *                                    modos o ninguno. **Y a diferencia de su gemela no necesita
+ *                                    componente propio**: `transito_valores` vive en
+ *                                    `COMPONENTES_PROPIOS` porque #77 es anterior a #421.
+ *
+ * **Las dos que se quedan fuera, con su motivo** (ADR-0010 §4: lo que el backend no publique
+ * se dice, no se finge):
+ *
  *   `adm_resolucion_gerencia`        Una **hoja sin superficie**, y desde #428 clasificada como
  *                                    tal: ver [FRO-06](../../../../../docs/60-frontend/hojas-sin-superficie.md).
  *                                    `ResolucionesDeGerenciaController.administrativa` exige

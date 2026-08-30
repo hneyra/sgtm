@@ -969,6 +969,33 @@ const CERTIFICADOS_QUE_CONSIGNAN_PARAMETROS: readonly string[] = [
  * se rellenan; y una quinta condicion que no es un campo que falte sino una
  * clase de papel que esta pantalla no puede emitir honestamente.
  */
+/**
+ * Que le falta a la notificacion administrativa para poder registrarse (#47, #428).
+ *
+ * Los cuatro que `NotificacionAdministrativaController` pasa por `exigir` —el
+ * numero, la fecha, la direccion y el motivo—, en el orden en que se rellenan.
+ * El numero se compone de la serie y el numero (ver
+ * `ResolutorDelNumeroDeNotificacion`), asi que su falta se dice nombrando las
+ * dos mitades y no la clave del cuerpo.
+ */
+function faltaEnLaNotificacion(borrador: Readonly<Record<string, string>>): string | undefined {
+  const dato = (clave: string): string => (borrador[clave] ?? '').trim();
+
+  if (dato('numeroCompuesto') === '') {
+    return 'Falta el número de la notificación: hacen falta su serie y su número, que se guardan juntos.';
+  }
+  if (dato('fechaDeNotificacion') === '') {
+    return 'Falta la fecha de la notificación: de ella sale cuándo vence el plazo.';
+  }
+  if (dato('direccionDelPredio') === '') {
+    return 'Falta la dirección del predio: es dónde se notificó, y va impresa en la cédula.';
+  }
+  if (dato('codigoDeInfraccion') === '') {
+    return 'Falta el código de infracción: es el motivo por el que se notifica.';
+  }
+  return undefined;
+}
+
 const SALIDA_DEL_CERTIFICADO = 'Emítelo por el procedimiento actual y avísale a sistemas.';
 
 function faltaEnElCertificado(borrador: Readonly<Record<string, string>>): string | undefined {
@@ -1753,6 +1780,82 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
       nDeRecibo: { campo: 'nDeRecibo' },
     },
     exigir: (borrador) => faltaEnElCertificado(borrador),
+  },
+
+  /**
+   * Notificación administrativa previa (`POST /infracciones/administrativas/notificaciones`,
+   * #47, #428, RF-070).
+   *
+   * `NotificacionAdministrativaController` exige cuatro cosas —`numero`, `fecha`, `direccion` y
+   * `motivo`— y la observación (regla 10); `contribuyenteId`, `predioId` y `plazoDias` son
+   * opcionales. Aquí viajan cinco claves y ninguna más:
+   *
+   *   `numeroCompuesto`      la serie y el número juntos, como el manual los imprime. Lo compone
+   *                          `ResolutorDelNumeroDeNotificacion` (#422), y no se puede hacer con
+   *                          una traducción: `CampoDelCuerpo.valor` traduce **un** campo
+   *   `fechaDeNotificacion`  → `fecha`
+   *   `direccionDelPredio`   → `direccion`
+   *   `codigoDeInfraccion`   → `motivo`, que es «por qué se notifica». Es lo mismo que el padrón
+   *                          publica bajo esa clave, y la «Descripción» de al lado es `"ro"`
+   *                          —la deriva el sistema del código, no la teclea nadie—
+   *   `plazoDiasHabiles`     → `plazoDias`, entero. Sin él la notificación **no vence nunca**
+   *                          (#47 AC3), y eso es una decisión de quien notifica, no un olvido
+   *
+   * `serie2` entra en `presentacion` —se teclea y **no viaja**: lo que viaja es el compuesto— y
+   * `numeroDeLaNotificacion` también, que es lo que el control recuerda de lo tecleado.
+   *
+   * **Los otros ocho campos del catálogo no se declaran**, así que se dibujan bloqueados: el
+   * año —que no entra en el número—, la hora, el infractor, el CIIU, la licencia, el
+   * fiscalizador, quién recibió y su documento. `PeticionDeNotificacion` no tiene ni un campo
+   * para ellos, y `contribuyenteId`/`predioId` son identificadores internos que ninguna lectura
+   * de esta pantalla publica —el «Infractor — código» del manual es el código del padrón, no el
+   * `id`—.
+   */
+  adm_notificacion: {
+    campos: {
+      numeroCompuesto: { campo: 'numero' },
+      fechaDeNotificacion: { campo: 'fecha' },
+      direccionDelPredio: { campo: 'direccion' },
+      codigoDeInfraccion: { campo: 'motivo' },
+      plazoDiasHabiles: { campo: 'plazoDias', entero: true },
+    },
+    presentacion: ['serie2', 'numeroDeLaNotificacion'],
+    exigir: (borrador) => faltaEnLaNotificacion(borrador),
+    nota: true,
+  },
+
+  /**
+   * Generación masiva de valores administrativa
+   * (`POST /infracciones/administrativas/valores/generacion-masiva`, #53, #428, RF-073).
+   *
+   * La gemela exacta de `transito_valores` —el mismo caso de uso con otra `Familia`, en el mismo
+   * `GeneracionMasivaDeValoresController`— y por eso declara lo mismo: sólo «por rango»
+   * (`desde`/`hasta`). El catálogo no dibuja ninguna lista ni ninguna selección múltiple de
+   * papeletas —«Papeleta» es un único campo de texto—, que es lo que el otro modo del contrato
+   * (`papeletas[]`) exigiría, y `IniciarCorridaDeValores` rechaza con 422 si llegan los dos modos
+   * o ninguno.
+   *
+   * **Y a diferencia de su gemela, ésta no necesita componente propio**: la última acción del
+   * catálogo es «Imprimir», pero desde #421 `LA_QUE_ESCRIBE` declara «Procesar» —la que lanza la
+   * corrida— y la pasa al final. `transito_valores` vive en `COMPONENTES_PROPIOS` porque #77 es
+   * anterior a ese mecanismo.
+   *
+   * Las demás secciones del catálogo no se declaran: `PeticionDeCorridaDeValores` no tiene ningún
+   * campo para el código de criterio, el tipo de recaudo, el vencimiento ni la oficina, y
+   * `fechaCriterio` —la fecha a la que se evalúa la deuda— la resuelve el servidor con su reloj
+   * cuando no viene.
+   */
+  adm_valores: {
+    campos: {
+      fecInicio: { campo: 'desde' },
+      fecFin: { campo: 'hasta' },
+    },
+    exigir: (borrador) => {
+      if ((borrador['fecInicio'] ?? '').trim() === '' || (borrador['fecFin'] ?? '').trim() === '') {
+        return 'Elige la fecha de inicio y la fecha de fin del rango de papeletas.';
+      }
+      return undefined;
+    },
   },
 
   transito_valores: {

@@ -491,6 +491,9 @@ export const NOTAS: Readonly<Record<string, string>> = {
 
   anulacion_convenio:
     'Las dos acciones escriben y mandan cosas distintas: «Anular» deja el convenio sin efecto y «Quebrar» lo da por incumplido; las dos devuelven la deuda acogida a la fase de la que salió, y ninguna de las dos se deshace. «Reformar» todavía no se puede: exige el convenio nuevo que sustituye al anterior, con su deuda acogida, y esta pantalla no tiene dónde elegirla. El número del convenio se toma del que abrió esta pantalla, no del campo «Num. Conv.», y el responsable y el número de anulación los pone el sistema.',
+  adm_notificacion:
+    'El número se guarda con su serie —«001-004183», como el manual lo imprime— y el año no entra en él. De esta pantalla viajan cuatro datos y el plazo: el número, la fecha, la dirección del predio y el código de infracción, que es el motivo por el que se notifica. El infractor, el CIIU, la licencia, la hora, el fiscalizador y quién recibió no se guardan todavía: el registro previo se toma sobre la vivienda o el negocio inspeccionado, sin haber resuelto aún quién responde. Y sin plazo la notificación no vence nunca.',
+
   transito_descargos:
     'Aquí se registra el escrito que el administrado presentó, y nada más: la sección «Evaluación y resolución» no viaja, porque resolver un descargo es dictar una resolución de gerencia, que es otro acto y otro papel. «Dentro del plazo» tampoco se manda —lo calcula el servidor con el plazo vigente, a partir de la fecha de presentación—, y el «Nº de expediente» de arriba es el del descargo que se está consultando: el del escrito nuevo se pide al final de «Solicitud», con su propia etiqueta.',
 };
