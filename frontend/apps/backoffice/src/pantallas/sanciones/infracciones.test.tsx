@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { permisosDelClaim, puedeVer } from '@sgtm/sesion';
 import { censoDeConectadas } from '../aportes-de-modulo';
+import { OPCIONES_QUE_ESCRIBEN } from '../escrituras';
 import { SIN_DATO, leerPaginado } from '../seguridad/listado';
 import { montarEnRuta } from '../../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada, primariaDeLaPantalla } from '../../pruebas/acciones';
@@ -34,17 +35,17 @@ const OPCIONES_CONECTADAS = await censoDeConectadas();
 const HOJAS: readonly string[] = ['adm-resolucion-gerencia', 'adm-notificacion-resolucion'];
 
 /**
- * Las que escriben **y cuya primaria es un acto**.
+ * Las que escriben, **y desde #428 escriben de verdad**.
  *
- * `adm-notificacion` y `adm-valores` salieron de aqui en #337 y **vuelven con
- * #421**, que es la historia entera del defecto: escriben en el contrato, pero
+ * `adm-notificacion` y `adm-valores` salieron de esta lista en #337 y volvieron
+ * con #421, que es la historia entera del defecto: escriben en el contrato, pero
  * la ultima accion de su catalogo —la primaria de FRO-03 §5— es «Imprimir», y
  * contarle a quien atiende que «registre el acto por el procedimiento actual»
  * debajo de un boton de imprimir era reganarle por algo que no estaba haciendo.
- * La respuesta de #337 fue callar; la de #421 es **poner de primaria la accion
- * que de verdad escribe** —«Guardar» y «Procesar», las que el catalogo dibuja
- * antes de «Imprimir»—, y entonces la franja vuelve a decir la verdad: la
- * operacion escribe y esta opcion no ha declarado sus campos.
+ * La respuesta de #337 fue callar; la de #421, **poner de primaria la accion que
+ * de verdad escribe** —«Guardar» y «Procesar»—; y la de #428, declarar sus
+ * campos, de modo que la primaria ya no lleva franja de impedimento sino la de
+ * su propio formulario: lo que falta por rellenar.
  */
 const ESCRIBEN: readonly string[] = ['adm-notificacion', 'adm-valores'];
 
@@ -115,9 +116,13 @@ describe('adm_estado_cuenta lee PapeletaResource, conectada desde #363', () => {
     // siempre—: era el parametro del filtro «Estado» y un vocabulario que no
     // fuera el de la deuda (ver `pantallas/sanciones/index.ts`).
     expect(OPCIONES_CONECTADAS).toContain('infracciones_adm');
-    // `adm_valores` no cabe en la lista blanca declarativa y su primaria del
-    // catalogo es «Imprimir», no «Guardar».
+    /* `adm_valores` **escribe** desde #428 —declara su rango en `escrituras.ts`,
+       como su gemela de transito— y por eso no es una conexion de lectura: su
+       operacion es el `POST` que registra la corrida, y una operacion que
+       escribe no se pide al abrir la pantalla. */
     expect(OPCIONES_CONECTADAS).not.toContain('adm_valores');
+    expect(OPCIONES_QUE_ESCRIBEN).toContain('adm_valores');
+    expect(OPCIONES_QUE_ESCRIBEN).toContain('adm_notificacion');
   });
 
   it('la fila es la papeleta que publica el recurso, y lo que no publica sale vacio', async () => {
@@ -181,23 +186,27 @@ describe('adm_estado_cuenta lee PapeletaResource, conectada desde #363', () => {
  * pueden recorrer el camino entero.
  */
 describe('ningun acto de este modulo promete lo que no puede', () => {
-  it.each(ESCRIBEN)('%s deja su primaria apagada, y la franja dice por que', async (ranura) => {
-    const montada = montarEnRuta(`/infracciones-administrativas/${ranura}`);
-    await dibujada('.sgtm-acciones');
+  it.each(ESCRIBEN)(
+    '%s declara su escritura: pide observacion y su franja dice que falta rellenar',
+    async (ranura) => {
+      const montada = montarEnRuta(`/infracciones-administrativas/${ranura}`);
+      await dibujada('.sgtm-acciones');
 
-    primariaApagada();
+      // Apagada, pero por otra cosa: hay a donde escribir, y lo que falta es el
+      // formulario. Con la escritura declarada la caja de observacion **si** se
+      // dibuja, porque sin ella no se guarda (regla 10, RNF-052).
+      primariaApagada();
+      expect(screen.getByRole('region', { name: 'Observación del usuario' })).toBeInTheDocument();
 
-    // Sin declaracion no hay a donde escribir, asi que tampoco hay caja de
-    // observacion: pedirla seria pedirla para nada.
-    expect(
-      screen.queryByRole('region', { name: 'Observación del usuario' }),
-    ).not.toBeInTheDocument();
+      expect(motivoDeLaPrimaria()).not.toMatch(/Registra el acto por el procedimiento actual/);
+      // Y sin `data-causa`: no hay impedimento que contar (#332).
+      expect(document.getElementById('sgtm-motivo-de-la-accion')).not.toHaveAttribute(
+        'data-causa',
+      );
 
-    expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
-    expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute('data-causa');
-
-    montada.unmount();
-  });
+      montada.unmount();
+    },
+  );
 
   /**
    * **El desplegable ofrece solo lo que el backend sirve** (#428).
@@ -575,3 +584,144 @@ describe('el operador de licencias no ve este modulo', () => {
     expect(puedeVer(LICENCIAS, 'licencia_funcionamiento')).toBe(true);
   });
 });
+
+/**
+ * **Las dos escrituras del módulo, conectadas** (#428, sobre #421 y #422).
+ *
+ * `adm_valores` es declaración pura —la gemela de `transito_valores`, el mismo
+ * caso de uso con otra `Familia`—, y `adm_notificacion` necesitó además un
+ * control: el manual teclea el número en tres campos y `notif_adm_numero_uq`
+ * (V4) lo guarda en uno.
+ */
+describe('las dos escrituras de infracciones administrativas mandan lo declarado (#428)', () => {
+  const original = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = original;
+  });
+
+  const laObservacion = async (): Promise<HTMLElement> =>
+    within(await screen.findByRole('region', { name: 'Observación del usuario' })).getByLabelText(
+      'Observación',
+    );
+
+  it('el número se guarda con su serie, y lo dice antes de mandarlo', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/infracciones-administrativas/adm-notificacion');
+    await dibujada('.sgtm-acciones');
+
+    // Sin ninguno de los dos, la franja pide los dos.
+    expect(motivoDeLaPrimaria()).toMatch(/hacen falta su serie y su número/i);
+
+    const datos = laSeccion('Datos de la notificación');
+    await usuario.type(datos.getByLabelText('Serie'), '001');
+    await usuario.type(datos.getByLabelText('Número'), '004183');
+
+    // Y la pantalla enseña lo que va a guardar, que es lo que el manual imprime
+    // en su columna «Serie-Nº».
+    await screen.findByText('Se guardará como «001-004183».');
+  });
+
+  it('lo que viaja son las cinco claves declaradas, con el número ya compuesto', async () => {
+    const usuario = userEvent.setup();
+    const peticiones = unaApiQueRegistraLaEscritura();
+    montarEnRuta('/infracciones-administrativas/adm-notificacion');
+    await dibujada('.sgtm-acciones');
+
+    const datos = laSeccion('Datos de la notificación');
+    await usuario.type(datos.getByLabelText('Serie'), '001');
+    await usuario.type(datos.getByLabelText('Número'), '004183');
+    fireEvent.change(datos.getByLabelText('Fecha de notificación'), {
+      target: { value: '2026-08-04' },
+    });
+    await usuario.type(datos.getByLabelText('Plazo (días hábiles)'), '10');
+    await usuario.type(screen.getByLabelText('Dirección del predio'), 'CALLE LAMA 482');
+    await usuario.type(screen.getByLabelText('Código de infracción'), 'A-021');
+    await usuario.type(await laObservacion(), 'Acta levantada en la inspección del 4 de agosto.');
+
+    await usuario.click(primariaDeLaPantalla());
+
+    await waitFor(() => expect(peticiones.length).toBeGreaterThan(0));
+    expect(peticiones[0]?.url).toContain('/infracciones/administrativas/notificaciones');
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).toEqual({
+      // La serie **no viaja suelta**: viaja dentro del número, que es lo que
+      // `notif_adm_numero_uq` hace único.
+      numero: '001-004183',
+      fecha: '2026-08-04',
+      direccion: 'CALLE LAMA 482',
+      // «por qué se notifica», que es lo que el padrón publica bajo `motivo`.
+      motivo: 'A-021',
+      plazoDias: 10,
+      observacion: 'Acta levantada en la inspección del 4 de agosto.',
+    });
+  });
+
+  it('los ocho campos que el backend no pide se dibujan bloqueados, no tragándose lo tecleado', async () => {
+    montarEnRuta('/infracciones-administrativas/adm-notificacion');
+    await dibujada('.sgtm-acciones');
+
+    const datos = laSeccion('Datos de la notificación');
+    // Un `sel` bloqueado se dibuja `disabled`; un `text`, `readOnly`.
+    expect(datos.getByLabelText('Año')).toBeDisabled();
+    expect(datos.getByLabelText('Hora')).toHaveAttribute('readonly');
+    for (const etiqueta of ['CIIU', 'Licencia de funcionamiento']) {
+      expect(screen.getByLabelText(etiqueta), `«${etiqueta}» bloqueado`).toHaveAttribute(
+        'readonly',
+      );
+    }
+  });
+
+  it('adm_valores manda su rango, y sin él la primaria dice qué falta', async () => {
+    const usuario = userEvent.setup();
+    const peticiones = unaApiQueRegistraLaEscritura();
+    montarEnRuta('/infracciones-administrativas/adm-valores');
+    await dibujada('.sgtm-acciones');
+
+    await usuario.type(await laObservacion(), 'Corrida del mes de agosto.');
+    primariaApagada();
+    expect(motivoDeLaPrimaria()).toMatch(/fecha de inicio y la fecha de fin/i);
+
+    fireEvent.change(screen.getByLabelText('Fec. inicio'), { target: { value: '2026-08-01' } });
+    fireEvent.change(screen.getByLabelText('Fec. fin'), { target: { value: '2026-08-31' } });
+
+    await usuario.click(primariaDeLaPantalla());
+
+    await waitFor(() => expect(peticiones.length).toBeGreaterThan(0));
+    expect(peticiones[0]?.url).toContain(
+      '/infracciones/administrativas/valores/generacion-masiva',
+    );
+    expect(JSON.parse(peticiones[0]?.cuerpo ?? '{}')).toEqual({
+      desde: '2026-08-01',
+      hasta: '2026-08-31',
+      observacion: 'Corrida del mes de agosto.',
+    });
+  });
+});
+
+/** La sección del formulario con ese título: sus campos y los del filtro se llaman igual. */
+function laSeccion(titulo: string): ReturnType<typeof within> {
+  const seccion = screen.getByRole('heading', { name: titulo }).closest('section');
+  expect(seccion).not.toBeNull();
+  return within(seccion as HTMLElement);
+}
+
+/** Registra sólo la escritura: las lecturas siguen yendo al proxy de datos. */
+function unaApiQueRegistraLaEscritura(): { url: string; metodo: string; cuerpo: string }[] {
+  const peticiones: { url: string; metodo: string; cuerpo: string }[] = [];
+  const anterior = globalThis.fetch;
+  globalThis.fetch = (entrada, opciones) => {
+    const metodo = opciones?.method ?? 'GET';
+    if (metodo === 'GET') return anterior(entrada, opciones);
+    peticiones.push({
+      url: typeof entrada === 'string' ? entrada : String(entrada),
+      metodo,
+      cuerpo: typeof opciones?.body === 'string' ? opciones.body : '',
+    });
+    return Promise.resolve(
+      new Response(JSON.stringify({ id: 1 }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  };
+  return peticiones;
+}

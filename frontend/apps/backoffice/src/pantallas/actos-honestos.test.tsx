@@ -239,7 +239,15 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // `nDeRecibo` que el backend exige y ninguna seccion dibuja, y el
       // resolutor del `solicitante`, que es un codigo y la pantalla teclea como
       // nombre.
-      declarada: 20,
+      //
+      // **Y dos mas con #428**: `adm_notificacion` y `adm_valores`. Las dos
+      // llegan de `sin-declaracion`, donde #421 las habia dejado al poner de
+      // primaria la accion que de verdad escribe. La segunda es declaracion
+      // pura —la gemela de `transito_valores`, el mismo caso de uso con otra
+      // `Familia`—; la primera necesito ademas un resolutor, porque el manual
+      // teclea el numero en tres campos y `notif_adm_numero_uq` (V4) lo guarda
+      // en uno.
+      declarada: 22,
       // **Una, y es nueva con #424**: `transito_reportes`. Viene de
       // `sin-declaracion` —su operacion es un `POST` y no declara escritura—, y
       // esa causa decia de ella lo unico que no es cierto: que «la pantalla aún
@@ -328,7 +336,10 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // **Y tres menos con #427**: `anuncios_reportes` y `licencia_padron` se
       // van a `lectura` y `certificados` a `declarada`. El numero no se sumo a
       // mano: se recompuso ejecutando el censo.
-      'sin-declaracion': 13,
+      //
+      // **Y dos menos con #428**: `adm_notificacion` y `adm_valores`, las dos a
+      // `declarada`. Tampoco se sumo a mano.
+      'sin-declaracion': 11,
       // Dos desde #391 §2: `predial_individual` y `ficha_bienes`. La segunda
       // llega porque su barra uniforme deja «Distribuir valor» de ultima —el
       // «Guardar» de una ficha `GET` se cae— y repartir el valor de una
@@ -770,7 +781,7 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
    * y eso tambien se afirma aqui: si se movieran, el censo cuadraria por otro
    * camino y nadie se enteraria.
    */
-  it('las cinco que se mudan de casilla lo hacen por su barra, no por su catalogo', async () => {
+  it('las tres que se mudan de casilla lo hacen por su barra, no por su catalogo', async () => {
     const pantallas = await todasLasPantallas();
     const causaDe = (opcion: string, acciones: readonly string[]) =>
       impedimentoDelActo(opcion, acciones)?.causa ?? 'ninguna';
@@ -778,16 +789,13 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
     const deLaBarra = (opcion: string) =>
       accionesDeLaBarra(opcion, delCatalogo(opcion), altasDe(opcion)).acciones;
 
-    /* Cinco desde #427, no seis: `certificados` ya declara su escritura, asi
-       que su casilla no es `sin-declaracion` sino ninguna —lo que la apaga es
-       `exigir`—, y lo suyo lo mide la prueba de arriba. */
-    for (const opcion of [
-      'importacion_valores',
-      'expediente_historial',
-      'costas_procesales',
-      'adm_notificacion',
-      'adm_valores',
-    ]) {
+    /* Tres desde #428, no seis: `certificados` (#427), `adm_notificacion` y
+       `adm_valores` (#428) ya declaran su escritura, asi que su casilla no es
+       `sin-declaracion` sino ninguna —lo que las apaga es `exigir`—. Lo que
+       siguen demostrando las tres que quedan es lo mismo: con la lista cruda
+       del catalogo su primaria es de salida y no hay franja; con la compuesta,
+       la operacion escribe y la opcion no ha declarado sus campos. */
+    for (const opcion of ['importacion_valores', 'expediente_historial', 'costas_procesales']) {
       // Con la lista cruda: una primaria de salida, y ninguna franja.
       expect(causaDe(opcion, delCatalogo(opcion)), `«${opcion}» del catalogo`).toBe('ninguna');
       // Con la barra: la operacion escribe y la opcion no ha declarado sus campos.

@@ -113,6 +113,9 @@ const CARGADORES: Readonly<Record<string, () => Promise<AporteDeModulo>>> = {
   },
   'infracciones-administrativas': async () => ({
     conexiones: (await import('./sanciones')).CONEXIONES_DE_SANCIONES,
+    /* La septima composicion, llegada con #428 mientras este issue se escribia,
+       por el mismo camino que la de licencias. */
+    composiciones: (await import('./sanciones/composicion')).COMPOSICION_DE_SANCIONES,
   }),
   tesoreria: async () => {
     const [registro, composicion] = await Promise.all([
