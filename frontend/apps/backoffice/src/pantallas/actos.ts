@@ -282,7 +282,7 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
   caja_tasas: {
     dato: 'los conceptos del TUPA que se cobran, el medio de pago, la caja y el cajero',
     porque:
-      'Sin ellos el cobro no se puede registrar: el backend exige al menos un concepto marcado, y ninguna consulta del sistema publica todavía el catálogo del TUPA con su tarifa vigente, así que no hay de dónde elegirlo. El medio de pago, la caja y el cajero tampoco tienen campo en esta pantalla.',
+      'Sin ellos el cobro no se puede registrar: el backend exige al menos un concepto marcado y su tarifa la pone el sistema, no quien atiende — y el tarifario del TUPA de esta municipalidad no está cargado todavía, así que no hay de dónde elegir el concepto. El medio de pago, la caja y el cajero tampoco tienen campo en esta pantalla.',
     campos: ['conceptos', 'formaDePago', 'caja', 'cajero'],
   },
 
