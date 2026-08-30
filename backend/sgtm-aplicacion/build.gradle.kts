@@ -75,6 +75,20 @@ tasks.test {
     inputs
         .file(rootProject.file("../docs/50-api/openapi/sgtm-v1.yaml"))
         .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // Lo mismo para el archivo de formas de la respuesta, que `FormasDeLaApiTest`
+    // compara contra lo que producen los controladores (#400): editarlo a mano sin
+    // declararlo aqui dejaria la prueba en UP-TO-DATE y la edicion pasaria en verde.
+    inputs
+        .file(rootProject.file("../docs/50-api/formas-de-la-api.json"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // Gradle no propaga las propiedades de sistema del build al proceso de prueba
+    // (lo mismo que hace `sgtm.pruebas-postgres` con las suyas). Sin esto,
+    // `-Dsgtm.formas.regenerar=true` no llega y el archivo no se puede regenerar.
+    providers.systemProperty("sgtm.formas.regenerar").orNull?.let {
+        systemProperty("sgtm.formas.regenerar", it)
+    }
 }
 
 // Nombre fijo del artefacto ejecutable. La imagen lo copia por nombre y no por

@@ -2,13 +2,10 @@ package pe.gob.sgtm.verificaciones;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.tngtech.archunit.core.domain.JavaClass;
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -16,10 +13,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.core.annotation.AnnotatedElementUtils;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Lo que el backend publica y lo que el contrato promete tienen que ser lo mismo.
@@ -45,9 +38,6 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @DisplayName("Contrato de la API (docs/50-api)")
 class ContratoDeApiTest {
-
-    /** Raiz declarada en {@code servers.url} del contrato. */
-    private static final String RAIZ = "/api/v1";
 
     /**
      * Las operaciones del contrato que ya estan implementadas.
@@ -414,48 +404,17 @@ class ContratoDeApiTest {
         return operaciones;
     }
 
+    /**
+     * Las operaciones que los controladores publican.
+     *
+     * <p>El recorrido vive en {@link EndpointsPublicados} porque lo miran dos pruebas: esta compara
+     * <b>que rutas</b> hay contra el contrato y {@link FormasDeLaApiTest} compara <b>que
+     * devuelve</b> cada una. Escrito dos veces, los dos empiezan iguales y acaban discrepando en el
+     * caso raro —un metodo sin verbo, dos mapeos sobre la misma ruta—, y entonces una de las dos
+     * mide algo que la otra no ve.
+     */
     private static Set<String> operacionesPublicadas() {
-        Set<String> operaciones = new TreeSet<>();
-        for (JavaClass clase : ReglasDeArquitectura.clasesDeProduccion()) {
-            Class<?> tipo = clase.reflect();
-            if (!AnnotatedElementUtils.hasAnnotation(tipo, RestController.class)) {
-                continue;
-            }
-            RequestMapping deLaClase =
-                    AnnotatedElementUtils.findMergedAnnotation(tipo, RequestMapping.class);
-            String base = deLaClase == null ? "" : primero(deLaClase.path());
-
-            for (Method metodo : tipo.getDeclaredMethods()) {
-                RequestMapping mapeo =
-                        AnnotatedElementUtils.findMergedAnnotation(metodo, RequestMapping.class);
-                if (mapeo == null) {
-                    continue;
-                }
-                String ruta = base + primero(mapeo.path());
-                for (RequestMethod verbo : verbos(mapeo)) {
-                    operaciones.add(verbo.name() + " " + sinRaiz(ruta));
-                }
-            }
-        }
-        return operaciones;
-    }
-
-    private static Set<RequestMethod> verbos(RequestMapping mapeo) {
-        Set<RequestMethod> verbos = new LinkedHashSet<>(java.util.List.of(mapeo.method()));
-        if (verbos.isEmpty()) {
-            // Un mapeo sin verbo responde a todos; en el contrato eso no existe, y
-            // dejarlo pasar en silencio esconderia un endpoint mal declarado.
-            verbos.add(RequestMethod.GET);
-        }
-        return verbos;
-    }
-
-    private static String primero(String[] rutas) {
-        return rutas.length == 0 ? "" : rutas[0];
-    }
-
-    private static String sinRaiz(String ruta) {
-        return ruta.startsWith(RAIZ) ? ruta.substring(RAIZ.length()) : ruta;
+        return EndpointsPublicados.operaciones();
     }
 
     /** El contrato vive en docs/, fuera del build de Gradle. */
