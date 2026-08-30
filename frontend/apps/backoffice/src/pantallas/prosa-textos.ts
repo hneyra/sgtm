@@ -434,6 +434,32 @@ export const MOTIVOS_DE_FILTRO: Readonly<Record<string, string>> = {
    *
    * Se bloquean y no se quitan, como los siete de arriba (RNF-080).
    */
+  /**
+   * **Los cinco de Fiscalizacion** (#431), en dos pantallas y por dos motivos.
+   *
+   * Los dos del programa **no llegan**: la lectura que #431 publico acota por
+   * numero de programa y por ejercicio, y `parametrosDeBusqueda` descarta lo que
+   * el contrato no declara, asi que se tecleaban y se caian en silencio.
+   *
+   * Los tres de los resultados **llegan y se rechazan**: los tres desplegables
+   * hablan un vocabulario que el controlador no conoce, y ninguno tiene siquiera
+   * opcion «Todos» en el caso del programa.
+   */
+  'fisc_programa.tipo':
+    'El listado de programas no se acota por tipo: se busca por número de programa o por ejercicio. Además, aquí el sistema sólo distingue programas prediales y vehiculares, y este desplegable ofrece seis clases.',
+
+  'fisc_programa.estado':
+    'Tampoco se acota por estado, y por lo mismo: el listado se busca por número de programa o por ejercicio.',
+
+  'fisc_resultados.programa':
+    'Este desplegable ofrece códigos de programa —«PF-2026-014»— y la consulta pide el registro del programa, no su código. Acota por las otras columnas mientras tanto.',
+
+  'fisc_resultados.hallazgo':
+    'Dos de estas cuatro opciones —«AMPLIACIÓN NO DECLARADA» y «SUBVALUACIÓN»— no son ninguna de las condiciones que el sistema distingue, así que la búsqueda las rechazaría. La condición de cada acta sale en su columna.',
+
+  'fisc_resultados.estado':
+    'Ninguno de estos cuatro estados es el que el sistema guarda de una liquidación, así que la búsqueda los rechazaría. El estado de cada fila sale en su columna.',
+
   'espectaculos.nDeExpediente':
     'Todavía no hay ninguna consulta de espectáculos declarados, así que aquí no se puede buscar por expediente: esta pantalla registra uno nuevo, y la tabla de abajo sale vacía.',
 

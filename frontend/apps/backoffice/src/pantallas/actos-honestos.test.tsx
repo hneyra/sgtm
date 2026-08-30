@@ -298,7 +298,15 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // declaran el vocabulario uniforme, se les cae el «Guardar» que no podia
       // guardar sobre un `GET`, y con el su impedimento: su barra pasa a ser de
       // salida —«Imprimir», «Excel»—, que es lo que de verdad hacen.
-      'sin-backend': 37,
+      //
+      // **Uno menos con #431**: `fisc_resultados`. Su franja decia «aquí todavía
+      // no se puede guardar nada: lo que hay es de consulta», y las dos mitades
+      // eran falsas — su primaria, «Emitir resoluciones de determinación», tiene
+      // backend desde #52 (`POST /fiscalizacion/transferencias`, que
+      // `ResolucionController` declara con el acceso de esta opcion). Lo que le
+      // falta son los cuatro datos de esa transferencia, que su catalogo no
+      // dibuja: `sin-campo`.
+      'sin-backend': 36,
       // Nueve se mudan a `sin-campo` en la onda 4: cuatro de transito (#77),
       // tres de fiscalizacion (#80) — mas las tres de tesoreria y las dos
       // transferencias que ya se habian movido antes; y dos se van a
@@ -362,7 +370,11 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // **Dos mas con #428**: las dos hojas de resolucion de infracciones
       // administrativas, que llegan de `sin-declaracion` por lo mismo que las de
       // licencias en #427 (FRO-06 §1.4).
-      'sin-campo': 15,
+      //
+      // **Y uno mas con #431**: `fisc_resultados`, que llega de `sin-backend`
+      // por el mismo movimiento. El numero no se sumo a mano: se recompuso
+      // ejecutando el censo.
+      'sin-campo': 16,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);
