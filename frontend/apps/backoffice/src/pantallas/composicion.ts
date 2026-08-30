@@ -1,12 +1,6 @@
 import type { ComponentType, ReactElement } from 'react';
 import type { DatosDePantalla } from '@sgtm/api-client';
 import type { CampoDePantalla } from '../catalogo';
-import { COMPOSICION_DE_CATASTRO } from './catastro/composicion';
-import { COMPOSICION_DE_CONSULTAS } from './consultas/composicion';
-import { COMPOSICION_DE_LICENCIAS } from './licencias/composicion';
-import { COMPOSICION_DE_RENTAS } from './rentas/composicion';
-import { COMPOSICION_DE_TESORERIA } from './tesoreria/composicion';
-import { COMPOSICION_DE_TRANSITO } from './transito/composicion';
 
 /**
  * Lo que una opcion compone **alrededor** de los diez bloques comunes.
@@ -620,26 +614,38 @@ export interface ComposicionDeOpcion {
   readonly simulacion?: SimulacionDeLaPantalla;
 }
 
-const COMPOSICIONES: Readonly<Record<string, ComposicionDeOpcion>> = {
-  ...COMPOSICION_DE_CATASTRO,
-  ...COMPOSICION_DE_CONSULTAS,
-  ...COMPOSICION_DE_LICENCIAS,
-  ...COMPOSICION_DE_RENTAS,
-  ...COMPOSICION_DE_TESORERIA,
-  ...COMPOSICION_DE_TRANSITO,
-};
+/**
+ * Lo que compone cada opcion, **llenado al entrar en su modulo** (#433).
+ *
+ * Cinco modulos declaran composicion, y hasta este issue los cinco archivos
+ * viajaban en el arranque: **2,6 KB comprimidos** de widgets, resolutores y
+ * cabeceras que solo mira quien abre esas pantallas, medidos vaciando este
+ * registro. Con los de `conexiones.ts` suman 15,7 sueltos y **14,4 juntos**: la
+ * diferencia es lo que los dos compartian con el arranque y se queda ahi. Ahora llegan con el aporte
+ * de su modulo (`aportes-de-modulo.ts`), en la misma espera que ya bloqueaba el
+ * dibujo, asi que `composicionDe` sigue respondiendo sincrono cuando se le
+ * pregunta.
+ *
+ * Un `Map` y no un objeto por lo mismo que en `conexiones.ts`: la opcion viene
+ * de la URL, y un objeto resolveria `constructor` o `toString` por la cadena de
+ * prototipos y devolveria una «composicion» que no declaro nadie.
+ */
+const COMPOSICIONES = new Map<string, ComposicionDeOpcion>();
+
+/** Suma lo que compone un modulo. Lo llama `cargarAporteDelModulo` y nadie mas. */
+export function registrarComposiciones(
+  composiciones: Readonly<Record<string, ComposicionDeOpcion>> = {},
+): void {
+  for (const [opcion, composicion] of Object.entries(composiciones)) {
+    COMPOSICIONES.set(opcion, composicion);
+  }
+}
 
 const NINGUNA: ComposicionDeOpcion = {};
 
-/**
- * Lo que compone esta opcion; vacio —y por tanto nada— si no declara nada.
- *
- * `Object.hasOwn` y no la indexacion cruda: esta resuelve por la cadena de prototipos, asi
- * que una opcion llamada `constructor` o `toString` devolveria una «composicion» que no
- * declaro nadie. Es la misma barrera que `escrituras.ts` y `escritura.ts`.
- */
+/** Lo que compone esta opcion; vacio —y por tanto nada— si no declara nada. */
 export const composicionDe = (opcion: string): ComposicionDeOpcion =>
-  (Object.hasOwn(COMPOSICIONES, opcion) ? COMPOSICIONES[opcion] : undefined) ?? NINGUNA;
+  COMPOSICIONES.get(opcion) ?? NINGUNA;
 
 /**
  * Los filtros del bloque de busqueda: los del catalogo, o los que esta opcion
@@ -699,9 +705,22 @@ export function hayQueResumir(
  * que `actos-inalcanzables.test.ts` vigila para el acto de una pantalla.
  *
  * Las de fila no entran: no salen del catalogo, se rotulan ellas mismas.
+ *
+ * **Una funcion sobre lo que se le pase, y no una constante, desde #433**: la
+ * composicion llega con el trozo de su modulo, asi que un censo calculado al
+ * importar este archivo saldria vacio. Y toma el censo por parametro en vez de
+ * leer el registro **a proposito**: quien censa el catalogo entero es una prueba,
+ * y una prueba que ademas registrase los doce se taparia a si misma —dejaria de
+ * poder ver que `Pantalla` no pidio el aporte de su modulo—. Lo produce
+ * `censoDeAportes`, que carga sin registrar.
  */
-export const ALTAS_DECLARADAS: readonly { readonly opcion: string; readonly accion: string }[] =
-  Object.entries(COMPOSICIONES).flatMap(([opcion, composicion]) => [
+export const altasDeclaradas = (
+  composiciones: Readonly<Record<string, ComposicionDeOpcion>>,
+): readonly {
+  readonly opcion: string;
+  readonly accion: string;
+}[] =>
+  Object.entries(composiciones).flatMap(([opcion, composicion]) => [
     ...(composicion.flujo === undefined ? [] : [{ opcion, accion: composicion.flujo.accion }]),
     ...(composicion.altas ?? []).map((alta) => ({ opcion, accion: alta.accion })),
   ]);
@@ -723,9 +742,18 @@ export const widgetDeFiltro = (opcion: string, campo: string): WidgetDeFiltro | 
 export const filtroBloqueado = (opcion: string, campo: string): boolean =>
   composicionDe(opcion).filtrosBloqueados?.includes(campo) === true;
 
-/** Cada filtro bloqueado, con su opcion. `prosa.test.ts` exige que todos tengan motivo. */
-export const FILTROS_BLOQUEADOS: readonly { readonly opcion: string; readonly campo: string }[] =
-  Object.entries(COMPOSICIONES).flatMap(([opcion, composicion]) =>
+/**
+ * Cada filtro bloqueado, con su opcion. `prosa.test.ts` exige que todos tengan motivo.
+ *
+ * Funcion sobre el censo que se le pase, como {@link altasDeclaradas}.
+ */
+export const filtrosBloqueados = (
+  composiciones: Readonly<Record<string, ComposicionDeOpcion>>,
+): readonly {
+  readonly opcion: string;
+  readonly campo: string;
+}[] =>
+  Object.entries(composiciones).flatMap(([opcion, composicion]) =>
     (composicion.filtrosBloqueados ?? []).map((campo) => ({ opcion, campo })),
   );
 
@@ -767,13 +795,20 @@ export const controlesDeLaSeccion = (
   return suyos.length === 0 ? SIN_CONTROLES : suyos;
 };
 
-/** Cada control declarado, con su opcion. El censo de #422 los recorre todos. */
-export const CONTROLES_DECLARADOS: readonly {
+/**
+ * Cada control declarado, con su opcion. El censo de #422 los recorre todos.
+ *
+ * Funcion sobre el censo que se le pase, como {@link altasDeclaradas}.
+ */
+export const controlesDeclarados = (
+  composiciones: Readonly<Record<string, ComposicionDeOpcion>>,
+): readonly {
   readonly opcion: string;
   readonly control: ControlDeclarado;
-}[] = Object.entries(COMPOSICIONES).flatMap(([opcion, composicion]) =>
-  (composicion.controles ?? []).map((control) => ({ opcion, control })),
-);
+}[] =>
+  Object.entries(composiciones).flatMap(([opcion, composicion]) =>
+    (composicion.controles ?? []).map((control) => ({ opcion, control })),
+  );
 
 /**
  * Como se lee esa seccion de esa opcion: memoria de calculo, o nada.

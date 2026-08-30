@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
-import { OPCIONES_CONECTADAS } from '../conexiones';
+import { censoDeConectadas } from '../aportes-de-modulo';
 import { escrituraDe } from '../escrituras';
-import { impedimentoDelActo } from '../actos';
+import { ACTOS_SIN_CAMPO, impedimentoDelActo } from '../actos';
 import { montarEnRuta } from '../../pruebas/montar';
+import { motivoDeLaPrimaria, primariaApagada } from '../../pruebas/acciones';
 import { SIN_DATO } from '../seguridad/listado';
+
+/* El censo de conectadas del catalogo entero, SIN registrar ninguna: desde #433 las
+   conexiones llegan con el trozo de su modulo, y quien las registra es la espera de
+   `Pantalla`. Registrarlas aqui dejaria a este archivo tapandose a si mismo —sus
+   pantallas encontrarian su conexion aunque el renderizador no la hubiera pedido—. */
+const OPCIONES_CONECTADAS = await censoDeConectadas();
 
 /**
  * Fiscalizacion, conectado (#80 y #431): cinco lecturas de ocho, y por que las
@@ -177,4 +184,122 @@ it('las tres escrituras de fiscalizacion son sin-campo, no sin-declaracion', () 
     const impedimento = impedimentoDelActo(opcion, ['Guardar borrador', 'Guardar']);
     expect(impedimento?.causa).toBe('sin-campo');
   }
+});
+
+/**
+ * **Los cinco filtros de Fiscalización que no filtran** (#431).
+ *
+ * Dos pantallas y dos motivos: los del programa **no llegan** —la lectura acota
+ * por número de programa y por ejercicio, y `parametrosDeBusqueda` descarta lo
+ * que el contrato no declara— y los de los resultados **llegan y se rechazan**,
+ * porque sus tres desplegables hablan un vocabulario que el controlador no
+ * conoce. Estaban vivos los cinco.
+ */
+describe('los cinco filtros de fiscalizacion se dibujan bloqueados, con su motivo (#431)', () => {
+  const LOS_CINCO: readonly (readonly [string, string, RegExp])[] = [
+    ['fisc-programa', 'Tipo', /no se acota por tipo/i],
+    ['fisc-programa', 'Estado', /tampoco se acota por estado/i],
+    ['fisc-resultados', 'Programa', /códigos de programa/i],
+    ['fisc-resultados', 'Hallazgo', /no son ninguna de las condiciones/i],
+    ['fisc-resultados', 'Estado', /ninguno de estos cuatro estados/i],
+  ];
+
+  it.each(LOS_CINCO)('%s · «%s» no se escribe, y dice por qué', async (ranura, etiqueta, motivo) => {
+    const montada = montarEnRuta(`/fiscalizacion/${ranura}`);
+    await screen.findByRole('heading', { level: 1 });
+
+    const busqueda = within(await screen.findByRole('region', { name: 'Búsqueda' }));
+    // Un `sel` bloqueado se dibuja `disabled`; los cinco lo son.
+    expect(busqueda.getByLabelText(etiqueta)).toBeDisabled();
+    expect(document.body.textContent, `«${etiqueta}» sin motivo`).toMatch(motivo);
+
+    montada.unmount();
+  });
+
+  /**
+   * **Y los dos que sí llegan siguen escribiéndose**, que es el contraste que
+   * hace falta: sin él, una declaración que bloqueara los cuatro filtros del
+   * programa pasaría las pruebas de arriba.
+   */
+  it('el número de programa y el ejercicio siguen siendo del operador', async () => {
+    const montada = montarEnRuta('/fiscalizacion/fisc-programa');
+    await screen.findByRole('heading', { level: 1 });
+
+    const busqueda = within(await screen.findByRole('region', { name: 'Búsqueda' }));
+    expect(busqueda.getByLabelText('Nº de programa')).not.toHaveAttribute('readonly');
+    expect(busqueda.getByLabelText('Ejercicio')).not.toBeDisabled();
+
+    montada.unmount();
+  });
+});
+
+/**
+ * **`fisc_resultados` deja de leerse como una consulta** (#431).
+ *
+ * Su franja decía «aquí todavía no se puede guardar nada: lo que hay es de
+ * consulta», y las dos mitades eran falsas: su primaria, «Emitir resoluciones de
+ * determinación», tiene backend desde #52 —`POST /fiscalizacion/transferencias`,
+ * que `ResolucionController` declara con `@RequiereAcceso(acceso =
+ * "fisc_resultados")` y su javadoc llama «la acción de `fisc_resultados`»—. Y es
+ * la frontera más delicada del sistema: el único camino por el que un dato de
+ * fiscalización pasa a ser el dato oficial del padrón.
+ */
+describe('fisc_resultados: su acto tiene backend, y la franja lo dice (#431)', () => {
+  it('la causa es «sin-campo» y nombra los cuatro datos de la transferencia', () => {
+    expect(ACTOS_SIN_CAMPO['fisc_resultados']?.campos).toEqual([
+      'nLiquidacion',
+      'documentoSustento',
+      'sustento',
+      'baseLegal',
+    ]);
+    const impedimento = impedimentoDelActo('fisc_resultados', [
+      'Exportar Excel',
+      'Emitir resoluciones de determinación',
+    ]);
+    expect(impedimento?.causa).toBe('sin-campo');
+    // Y ya no dice que aquí sólo se consulta, que era lo falso.
+    expect(impedimento?.detalle).not.toMatch(/lo que hay es de consulta/i);
+    expect(impedimento?.detalle).toMatch(/base legal/i);
+  });
+
+  it('en la pantalla, la franja lo cuenta donde se lee', async () => {
+    const montada = montarEnRuta('/fiscalizacion/fisc-resultados');
+    await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+
+    primariaApagada();
+    expect(motivoDeLaPrimaria()).toMatch(/base legal/i);
+    expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
+      'data-causa',
+      'sin-campo',
+    );
+
+    montada.unmount();
+  });
+});
+
+/**
+ * **Las tres actas siguen sin conectar, y sus listas ya no están cortas** (#431).
+ *
+ * `campos` es lo que quien mantiene lee para saber qué falta sin abrir el
+ * controlador, y las tres omitían el `fiscalizador` —los dos controladores lo
+ * pasan por `exigir`, y el catálogo de la predial lo dibuja `"ro"`—.
+ */
+describe('las tres actas nombran los datos que de verdad les faltan (#431)', () => {
+  it('la predial ya no nombra los tres identificadores: nombra lo que sigue cerrado', () => {
+    /* Los tres ids **ya tienen fuente publicada**: el programa desde su propio
+       listado (`GET /fiscalizacion/programas`, la lectura que trajo #431), el
+       predio desde `consulta_fichas` y el contribuyente desde el padrón. Lo que
+       queda cerrado es otra cosa. */
+    expect(ACTOS_SIN_CAMPO['fisc_predial']?.campos).toEqual(['fiscalizador', 'hallazgo']);
+    expect(impedimentoDelActo('fisc_predial', ['Cerrar acta'])?.causa).toBe('sin-campo');
+  });
+
+  it('la vehicular nombra también la fecha y el fiscalizador, que su catálogo no dibuja', () => {
+    expect(ACTOS_SIN_CAMPO['fisc_vehicular']?.campos).toContain('fechaVisita');
+    expect(ACTOS_SIN_CAMPO['fisc_vehicular']?.campos).toContain('fiscalizador');
+  });
+
+  it('y el programa dice además que ninguno de sus tres botones lo registra', () => {
+    expect(ACTOS_SIN_CAMPO['fisc_programa']?.porque).toMatch(/ninguno de los tres botones/i);
+  });
 });

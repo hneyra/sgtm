@@ -23,6 +23,7 @@ import type { OpcionSituada } from '../../catalogo';
 import { useCatalogoVisible } from '../../app/sesion/useCatalogoVisible';
 import type { CatalogoVisible } from '../../app/sesion/useCatalogoVisible';
 import { conexionDe } from '../conexiones';
+import { cargarConexionesDeLaOpcion } from '../aportes-de-modulo';
 import { operacionDe } from '../busqueda';
 import { TablaDePantalla } from '../bloques/TablaDePantalla';
 import { anotarAtencion } from '../inicio/atenciones';
@@ -708,12 +709,22 @@ function PanelDeUnaOpcion({
  * Con conexión, la suya: es lo que evita escribir aquí una segunda lectura del
  * mismo recurso —dos lecturas del mismo cuerpo acaban leyendo campos distintos, y
  * una de las dos, mal—. Sin conexión, el camino común de las 134.
+ *
+ * **Y hay que pedir su módulo antes de preguntar por ella** (#433): desde que
+ * las conexiones viajan con el trozo de su módulo, quien las registra es la
+ * espera de `Pantalla`, y esta ficha no pasa por ninguna —vive en
+ * `/atencion/:codigo`, y sus pestañas son de cuatro módulos distintos—. Sin este
+ * `await`, `conexionDe` devolvería `undefined` para las cinco y las cinco caerían
+ * al camino común: la tabla vacía en silencio que el comentario de abajo
+ * describe. `cargarConexionesDeLaOpcion` falla nombrando la opción si no está en
+ * el catálogo, así que tampoco eso puede pasar callando.
  */
-function cargarLaOpcion(
+async function cargarLaOpcion(
   opcion: string,
   parametros: Readonly<Record<string, string>>,
   senal: AbortSignal,
 ): Promise<DatosDePantalla> {
+  await cargarConexionesDeLaOpcion(opcion);
   const conexion = conexionDe(opcion);
   if (conexion !== undefined) return conexion.cargar(parametros, senal);
   /* **Las cinco pestañas de esta ficha declaran ya su `definirConexion`**

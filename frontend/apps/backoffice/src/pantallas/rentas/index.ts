@@ -190,6 +190,51 @@ import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
  * las dos se quedan en `ACTOS_SIN_CAMPO` con su motivo, y lo que #432 cambia es **lo que la franja
  * cuenta**: el dato, dicho para quien atiende, y no el nombre del campo del backend.
  *
+ * **Y quien tiene que componer la recaudacion declarada, que era lo que quedaba por decidir.**
+ * No la interfaz, y no por comodidad: una cifra de dinero no se compone en la pantalla (RNF-083,
+ * con su regla de ESLint), y aunque se pudiera, esa multiplicacion **es la base imponible del
+ * art. 56**, que trae ademas su propio minimo —«cuando el valor de la entrada incluye otros
+ * servicios, la base imponible no podra ser inferior al 50 % de ese valor total»
+ * (`valores-normativos/espectaculos.md` §1)—. Una regla tributaria no vive en un componente de
+ * React (regla 6).
+ *
+ * Le toca al **backend**, y con la forma que #399 ya dejo probada para `minimoImponible`: la
+ * peticion recibe los **dos operandos** —las entradas vendidas y el valor de la entrada— y el
+ * dominio compone la base, con el minimo del art. 56 aplicado donde se puede comprobar. Hoy
+ * `PeticionDeEspectaculo` **no tiene ni campo para las entradas vendidas** y
+ * `RegistrarEspectaculo.registrar` recibe `ingresoDeclarado` ya hecho, asi que esto es trabajo de
+ * backend y de la decision normativa que lo acompana, no de esta pantalla.
+ *
+ * ── (#432) Y una tercera cosa, que no estaba en el issue y bloquea igual ────
+ *
+ * **La alicuota del espectaculo tiene tres vocabularios para lo mismo**, y es el hueco de #192
+ * —publicar bajo un nombre que nadie pide se ve igual que no publicar— multiplicado por tres:
+ *
+ *   el desplegable   CONCIERTO DE MÚSICA POPULAR · ESPECTÁCULO TAURINO · CARRERA DE CABALLOS ·
+ *   del prototipo    DISCOTECA · CINE · TEATRO · FOLCLORE NACIONAL
+ *   el corpus        `ESPECTACULO_ALICUOTA-<codigo>`: `TAURINO-SUPERIOR-0.5-UIT`,
+ *   (VERIFICADO)     `TAURINO-RESTO`, `CARRERAS-CABALLOS`, `CINEMATOGRAFICO`, `MUSICA-GENERAL`,
+ *                    `FOLCLOR-TEATRO-ZARZUELA-OPERA-BALLET-CIRCO`, `OTROS`
+ *   el backend       `ALICUOTA_ESPECTACULO:<el literal del desplegable en mayusculas>`
+ *
+ * Y dos de las diferencias **no se arreglan traduciendo**: «DISCOTECA» no es ninguna de las siete
+ * categorias del art. 57 —seria «otros espectaculos», 10 %, y eso es una **calificacion**, no una
+ * equivalencia—; y el espectaculo taurino tiene **dos** alicuotas segun si el valor promedio
+ * ponderado de la entrada supera el 0.5 % de la UIT, condicion que `RegistrarEspectaculo` no puede
+ * expresar porque lee **una** llave por tipo. `espectaculos.md` §3 ya lo dice: «decidir cual de las
+ * dos aplica exige conocer el precio de sus entradas — eso es logica de liquidacion, no un valor
+ * transcribible». Ninguna fila de `publicacion/parametros-2026.csv` publica todavia esta alicuota.
+ *
+ * ── (#432) Lo unico que si se pudo cerrar aqui: los cuatro filtros ──────────
+ *
+ * `espectaculos` dibuja cuatro filtros —«Nº de expediente», «Organizador», «Desde», «Hasta»— que
+ * **no filtran nada**: su unica operacion es el `POST` que registra, el controlador no lee ninguno
+ * de los cuatro, y ninguna lectura del contrato lista los espectaculos declarados, asi que la
+ * tabla que el prototipo dibuja debajo no se llena con nada. Estaban **vivos**: elegir cualquiera
+ * cambiaba la URL y no cambiaba nada mas. Se bloquean con su motivo
+ * (`rentas/composicion.ts` + `prosa-textos.ts`), como los de `consulta_fichas` (#322) y los de los
+ * dos resumenes de transito (#398). `alcabala` no necesita lo mismo: su catalogo no dibuja ninguno.
+ *
  * ── (#399) El calculo vehicular, que estaba fuera por un desacuerdo de transporte ─
  *
  * - `vehicular_calculo`: **conectado desde #399, y lo que hubo que mover fue el controlador.**

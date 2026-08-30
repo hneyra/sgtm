@@ -422,6 +422,57 @@ export const MOTIVOS_DE_FILTRO: Readonly<Record<string, string>> = {
     'El libro no sabe en qué ventanilla se cobró, así que aquí no se puede filtrar por caja: ese corte lo da «Recaudación por área» de Tesorería.',
 
   /**
+   * **Los cuatro de «Espectáculos públicos no deportivos»** (#432).
+   *
+   * Aqui el motivo no es que el servidor los rechace: es que **no hay a quien
+   * preguntarle**. La unica operacion de esta opcion es el `POST` que registra
+   * el evento, `EspectaculoController` no lee ninguno de los cuatro —ni del
+   * cuerpo ni de la consulta— y **ninguna lectura del contrato lista los
+   * espectaculos declarados**, asi que la tabla que el prototipo dibuja debajo
+   * no se llena con nada. Un filtro sobre una tabla que no existe cambia la URL
+   * y no cambia nada mas, que es la forma mas silenciosa de este defecto.
+   *
+   * Se bloquean y no se quitan, como los siete de arriba (RNF-080).
+   */
+  /**
+   * **Los cinco de Fiscalizacion** (#431), en dos pantallas y por dos motivos.
+   *
+   * Los dos del programa **no llegan**: la lectura que #431 publico acota por
+   * numero de programa y por ejercicio, y `parametrosDeBusqueda` descarta lo que
+   * el contrato no declara, asi que se tecleaban y se caian en silencio.
+   *
+   * Los tres de los resultados **llegan y se rechazan**: los tres desplegables
+   * hablan un vocabulario que el controlador no conoce, y ninguno tiene siquiera
+   * opcion «Todos» en el caso del programa.
+   */
+  'fisc_programa.tipo':
+    'El listado de programas no se acota por tipo: se busca por número de programa o por ejercicio. Además, aquí el sistema sólo distingue programas prediales y vehiculares, y este desplegable ofrece seis clases.',
+
+  'fisc_programa.estado':
+    'Tampoco se acota por estado, y por lo mismo: el listado se busca por número de programa o por ejercicio.',
+
+  'fisc_resultados.programa':
+    'Este desplegable ofrece códigos de programa —«PF-2026-014»— y la consulta pide el registro del programa, no su código. Acota por las otras columnas mientras tanto.',
+
+  'fisc_resultados.hallazgo':
+    'Dos de estas cuatro opciones —«AMPLIACIÓN NO DECLARADA» y «SUBVALUACIÓN»— no son ninguna de las condiciones que el sistema distingue, así que la búsqueda las rechazaría. La condición de cada acta sale en su columna.',
+
+  'fisc_resultados.estado':
+    'Ninguno de estos cuatro estados es el que el sistema guarda de una liquidación, así que la búsqueda los rechazaría. El estado de cada fila sale en su columna.',
+
+  'espectaculos.nDeExpediente':
+    'Todavía no hay ninguna consulta de espectáculos declarados, así que aquí no se puede buscar por expediente: esta pantalla registra uno nuevo, y la tabla de abajo sale vacía.',
+
+  'espectaculos.organizador':
+    'Tampoco se puede buscar por organizador, y por lo mismo: no hay ninguna consulta de espectáculos declarados. Los datos del organizador de este evento se escriben en la declaración.',
+
+  'espectaculos.desde':
+    'El rango de fechas no acota nada: no hay ninguna consulta de espectáculos declarados que recorrer.',
+
+  'espectaculos.hasta':
+    'El rango de fechas no acota nada, por lo mismo que «Desde».',
+
+  /**
    * **Las dos hojas nacionales del cuadro de valuación** (propuesta B, #17/#71).
    *
    * Mismo hueco que `consulta_fichas.conciliadaConRentas` y que
@@ -491,6 +542,9 @@ export const NOTAS: Readonly<Record<string, string>> = {
 
   anulacion_convenio:
     'Las dos acciones escriben y mandan cosas distintas: «Anular» deja el convenio sin efecto y «Quebrar» lo da por incumplido; las dos devuelven la deuda acogida a la fase de la que salió, y ninguna de las dos se deshace. «Reformar» todavía no se puede: exige el convenio nuevo que sustituye al anterior, con su deuda acogida, y esta pantalla no tiene dónde elegirla. El número del convenio se toma del que abrió esta pantalla, no del campo «Num. Conv.», y el responsable y el número de anulación los pone el sistema.',
+  adm_notificacion:
+    'El número se guarda con su serie —«001-004183», como el manual lo imprime— y el año no entra en él. De esta pantalla viajan cuatro datos y el plazo: el número, la fecha, la dirección del predio y el código de infracción, que es el motivo por el que se notifica. El infractor, el CIIU, la licencia, la hora, el fiscalizador y quién recibió no se guardan todavía: el registro previo se toma sobre la vivienda o el negocio inspeccionado, sin haber resuelto aún quién responde. Y sin plazo la notificación no vence nunca.',
+
   transito_descargos:
     'Aquí se registra el escrito que el administrado presentó, y nada más: la sección «Evaluación y resolución» no viaja, porque resolver un descargo es dictar una resolución de gerencia, que es otro acto y otro papel. «Dentro del plazo» tampoco se manda —lo calcula el servidor con el plazo vigente, a partir de la fecha de presentación—, y el «Nº de expediente» de arriba es el del descargo que se está consultando: el del escrito nuevo se pide al final de «Solicitud», con su propia etiqueta.',
 };

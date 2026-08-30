@@ -2,11 +2,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
-import { OPCIONES_CONECTADAS } from '../conexiones';
+import { censoDeConectadas } from '../aportes-de-modulo';
+import { ACTOS_SIN_CAMPO, impedimentoDelActo } from '../actos';
 import { permisosDelClaim, puedeEscribir, puedeVer } from '@sgtm/sesion';
 import { montarEnRuta } from '../../pruebas/montar';
 import { SIN_DATO } from '../seguridad/listado';
 import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pruebas/acciones';
+
+/* El censo de conectadas del catalogo entero, SIN registrar ninguna: desde #433 las
+   conexiones llegan con el trozo de su modulo, y quien las registra es la espera de
+   `Pantalla`. Registrarlas aqui dejaria a este archivo tapandose a si mismo —sus
+   pantallas encontrarian su conexion aunque el renderizador no la hubiera pedido—. */
+const OPCIONES_CONECTADAS = await censoDeConectadas();
 
 /**
  * Rentas · Registro (#73): el modulo que mas escribe.
@@ -586,5 +593,62 @@ describe('alta_deuda manda solo lo que su lista blanca declara', () => {
     await waitFor(() => expect(peticiones).toHaveLength(1));
     const cuerpo = JSON.parse(peticiones[0]?.cuerpo ?? '{}') as Record<string, unknown>;
     expect(cuerpo['tributo']).toBe('MULTA_ADMINISTRATIVA');
+  });
+});
+
+/**
+ * **Los cuatro filtros de «Espectáculos» que no filtran nada** (#432).
+ *
+ * Estaban **vivos**: elegir cualquiera cambiaba la URL y no cambiaba nada más.
+ * La única operación de esta opción es el `POST` que registra el evento,
+ * `EspectaculoController` no lee ninguno de los cuatro —ni del cuerpo ni de la
+ * consulta— y ninguna lectura del contrato lista los espectáculos declarados,
+ * así que la tabla que el prototipo dibuja debajo no se llena con nada.
+ *
+ * Se bloquean y no se quitan (RNF-080), como los de `consulta_fichas` (#322) y
+ * los de los dos resúmenes de tránsito (#398).
+ */
+describe('espectaculos: los cuatro filtros se dibujan bloqueados, con su motivo (#432)', () => {
+  const LOS_CUATRO: readonly (readonly [string, RegExp])[] = [
+    ['Nº de expediente', /no se puede buscar por expediente/i],
+    ['Organizador', /Tampoco se puede buscar por organizador/i],
+    ['Desde', /no acota nada/i],
+    ['Hasta', /no acota nada/i],
+  ];
+
+  it.each(LOS_CUATRO)('«%s» no se escribe, y dice por qué', async (etiqueta, motivo) => {
+    const montada = montarEnRuta('/rentas-registro/espectaculos');
+    await screen.findByRole('heading', { level: 1 });
+
+    // La búsqueda y la sección repiten dos rótulos —«Nº de expediente» y
+    // «Organizador»—, así que se busca dentro del bloque de búsqueda.
+    const busqueda = within(await screen.findByRole('region', { name: 'Búsqueda' }));
+    const filtro = busqueda.getByLabelText(etiqueta);
+    // Un `text` bloqueado va `readOnly` y un `date` también: los dos siguen
+    // enfocables, que es la mitad que hace legible el motivo (FRO-04 §6).
+    expect(filtro).toHaveAttribute('readonly');
+    expect(document.body.textContent, `«${etiqueta}» sin motivo`).toMatch(motivo);
+
+    montada.unmount();
+  });
+
+  /**
+   * **Y el acto sigue sin poder registrarse**, que es la respuesta de #432 y no
+   * un olvido: `EspectaculoController` exige `ingresoDeclarado` —la base
+   * imponible del art. 56— y esa cifra no la compone nadie. Resolver sólo el
+   * organizador no desbloquearía nada, así que no se construye el resolutor
+   * mientras el otro campo siga cerrado.
+   */
+  it('sigue en ACTOS_SIN_CAMPO, y su franja nombra la recaudación declarada', async () => {
+    expect(ACTOS_SIN_CAMPO['espectaculos']).toBeDefined();
+    expect(ACTOS_SIN_CAMPO['espectaculos']?.campos).toContain('ingresoDeclarado');
+    expect(impedimentoDelActo('espectaculos', ['Liquidar', 'Registrar', 'Imprimir liquidación'])?.causa).toBe(
+      'sin-campo',
+    );
+
+    const montada = montarEnRuta('/rentas-registro/espectaculos');
+    await waitFor(() => expect(document.querySelector('.sgtm-acciones')).not.toBeNull());
+    expect(motivoDeLaPrimaria()).toMatch(/recaudación declarada/i);
+    montada.unmount();
   });
 });
