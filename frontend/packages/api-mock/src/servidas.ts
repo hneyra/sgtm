@@ -15,16 +15,20 @@
  * y este archivo se borra. El modo intermedio es transitorio, y su final es
  * parte del trabajo, no un pendiente que se queda.
  *
- * Sigue vacia aunque el backend ya sirva 171 de las 174 operaciones del
+ * Sigue vacia aunque el backend sirva ya 178 de las 179 operaciones del
  * contrato, y eso es deliberado: una ruta aqui que el backend no conteste
  * **falla ruidosamente**, y las pruebas y la compilacion del frontend corren sin
  * ningun Spring Boot al lado. Encenderlas es cosa de quien tiene los dos
  * procesos levantados —ver «Los dos procesos, juntos» en `frontend/README.md`—.
  *
- * Lo que si esta hecho es lo que hacia falta para poder encenderlas: las
- * pantallas de seguridad **ya leen el recurso que publica el backend**, y el
- * proxy lo publica con esa misma forma (`seguridad.ts`). El dia que se muevan
- * aqui no cambia ni una linea de la interfaz.
+ * **Anadir una linea aqui no es configurar: es afirmar algo**, y desde #400 hay
+ * quien lo comprueba. `verificaciones/rutas-encendidas.test.ts` exige de cada
+ * entrada que sea una operacion del contrato letra por letra —una errata no
+ * casa con nada, no deja pasar nada y **deja la integracion parada con aspecto
+ * de estar hecha**—, que alguna pantalla declare como consumirla, y que si la
+ * interfaz lee lo que vuelve, el proxy se lo de ya con la forma del backend.
+ * Alli mismo esta el censo: cuantas se pueden encender hoy y cuantas necesitan
+ * trabajo antes.
  */
 export interface OperacionServida {
   readonly metodo: string;

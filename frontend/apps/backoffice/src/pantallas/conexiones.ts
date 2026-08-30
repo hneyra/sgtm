@@ -109,6 +109,17 @@ export interface Conexion {
   readonly sinPermiso?: AvisoDeSinPermiso;
   /** Ver {@link FiltroExigido}. Sin uno de estos, la lectura no se dispara. */
   readonly exige?: readonly FiltroExigido[];
+  /**
+   * La segunda operacion, cuando la conexion es encadenada.
+   *
+   * No la usa el renderizador —{@link definirConexionEncadenada} ya la pide
+   * dentro de `cargar`—: la lee el censo de #400, que es quien decide si una
+   * ruta se puede encender. Sin exponerla, `/fiscalizacion/programas/{id}/muestra`
+   * seria una ruta que la interfaz **si** consume y el censo veria como
+   * consumida por nadie, y el sintoma de ese hueco es el comodo: la ruta no se
+   * deja encender y se lee como «esa todavia no».
+   */
+  readonly encadenada?: IdDeOperacion;
 }
 
 export interface DefinicionDeConexion<O extends IdDeOperacion, R> {
@@ -164,6 +175,7 @@ export function definirConexionEncadenada<
 >(definicion: DefinicionEncadenada<O1, O2, R>): Conexion {
   return {
     operacion: definicion.operacion,
+    encadenada: definicion.segunda,
     ...(definicion.sinPermiso === undefined ? {} : { sinPermiso: definicion.sinPermiso }),
     ...(definicion.exige === undefined ? {} : { exige: definicion.exige }),
     parametros: (contexto) => sinVacios(definicion.parametros(contexto)),

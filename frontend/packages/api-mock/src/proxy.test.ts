@@ -6,7 +6,6 @@ import {
   PAGINADOS,
   RESPUESTAS,
   RUTAS,
-  YA_SERVIDAS,
   desinstalarProxyDeDatos,
   instalarProxyDeDatos,
   proxyDeDatosInstalado,
@@ -251,7 +250,10 @@ describe('el proxy se apaga operacion por operacion', () => {
     expect(alBackend).toEqual(['/api/v1/rentas/vehiculos/ABC-123']);
   });
 
-  it('hoy la lista esta vacia: el backend todavia no sirve ninguna operacion', () => {
-    expect(YA_SERVIDAS).toEqual([]);
-  });
+  /* Cuantas hay encendidas, y si cada una se puede encender sin romper su
+     pantalla, lo cuenta y lo exige `verificaciones/rutas-encendidas.test.ts`
+     (#400): alli estan el contrato y los registros de la interfaz, que es lo que
+     hace falta para saberlo y lo que este paquete no puede importar. Aqui se
+     prueba el mecanismo —que la lista deja pasar y que un desajuste suena—, no
+     su contenido. */
 });

@@ -114,6 +114,62 @@ function origen(texto = ''): { equipo: string | null; ip: string | null } {
   return { equipo: equipo === '' ? null : equipo, ip: ip === '' ? null : ip };
 }
 
+/* ── Inicio: el panel de recaudacion ───────────────────────────────────── */
+
+/**
+ * El panel de recaudacion (`PanelResource`, #56).
+ *
+ * Es el caso al reves de todos los demas de este archivo, y por eso vale la
+ * pena decirlo: aqui **la forma la fijo la pantalla y el backend la adopto**.
+ * `pantallas/inicio/recaudacion.ts` valida `fechaCalculo`, `kpis` con
+ * `label`/`value`/`note` y `paneles` con `title`/`note`/`rows` desde antes de
+ * que hubiera controlador, y `PanelResource` lo dice con todas las letras en su
+ * javadoc: cambiar esos nombres «romperia las 134 pantallas para arreglar una».
+ *
+ * De modo que el juego de datos del prototipo ya trae la forma buena, y lo unico
+ * que faltaba era **decirlo aqui**. Sin esta entrada la ruta se lee como una de
+ * las que todavia contestan `DatosDePantalla`, y el censo de #400 la daria por
+ * no encendible cuando es de las que menos trabajo cuesta encender.
+ *
+ * Lo que se anade son los tres campos que el recurso publica y el prototipo no
+ * tiene: `ejercicio` y `calculadoEn` —dos lecturas del mismo dia dan cifras
+ * distintas y sin la hora no se distinguen (AC 2 de #56)— y `avanceConocido`,
+ * que separa el 0 medido del 0 que no se pudo medir. Aqui es siempre `true`
+ * porque todas las filas del prototipo traen su `pct`.
+ *
+ * `importe` va nulo en las diez filas y en los cuatro indicadores: el recurso lo
+ * publica **solo cuando la cifra es un importe**, y el prototipo escribe «S/
+ * 8.42 M» y «1,284» sin distinguir cuales lo son. Componerlo seria inventar una
+ * cifra de dinero con su fecha, que es lo que este archivo no hace.
+ */
+function panelDeRecaudacion(): Readonly<Record<string, unknown>> {
+  const panel = RESPUESTAS['inicio'];
+  const fechaCalculo = panel?.fechaCalculo ?? EL_DIA_DEL_PROTOTIPO;
+  return {
+    ejercicio: Number(fechaCalculo.slice(0, 4)),
+    fechaCalculo,
+    calculadoEn: `${fechaCalculo}T00:00:00Z`,
+    kpis: (panel?.kpis ?? []).map((indicador) => ({
+      label: indicador.label,
+      value: indicador.value,
+      note: indicador.note,
+      importe: null,
+    })),
+    paneles: (panel?.paneles ?? []).map((bloque) => ({
+      title: bloque.title,
+      note: bloque.note,
+      rows: bloque.rows.map((fila) => ({
+        label: fila.label,
+        sub: fila.sub,
+        value: fila.value,
+        pct: fila.pct,
+        avanceConocido: true,
+        importe: null,
+      })),
+    })),
+  };
+}
+
 /* ── Rentas: el padron de contribuyentes ───────────────────────────────── */
 
 const contribuyentes = (): Paginado =>
@@ -2466,6 +2522,7 @@ const resolucionDeterminacionFiscalizacion = (): Readonly<Record<string, unknown
 };
 
 const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>> = {
+  '/indicadores/recaudacion': panelDeRecaudacion,
   '/catastro/fichas/urbana/{codRefCatastral}': urbana,
   '/catastro/fichas/economica/{codRefCatastral}': economica,
   '/catastro/fichas/bienes-comunes/{codEdificacion}': bienesComunes,
@@ -3997,6 +4054,19 @@ function reporteAdministrativo(cuerpo: unknown): Readonly<Record<string, unknown
  * inventar un reparto, con el mismo criterio que ya usa
  * `constanciaDeNoAdeudo` para las cifras que su recurso no distingue.
  */
+/**
+ * El unico listado que viaja por `POST` (RF-126, #70).
+ *
+ * Lo fijo el contrato del prototipo, y el controlador solo consulta —la
+ * aplicacion no puede ejecutar copias de seguridad (ARQ-03 §4)—. Vive en una
+ * constante porque lo miran dos: {@link paginadoDe}, que decide si contesta, y
+ * {@link laPublicaConLaFormaDelBackend}, que decide si la ruta se puede
+ * encender. Escrito dos veces, una de las dos se quedaria atras y la que se
+ * quedara atras seria la segunda: su sintoma es una ruta que no se deja
+ * encender, y eso se lee como «todavia no toca».
+ */
+const PAGINADO_QUE_VIAJA_POR_POST = '/seguridad/respaldos';
+
 /** Por camino del contrato, relativo a `/api/v1`. Casi todas son `GET`: ver `respaldo`. */
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/fiscalizacion/omisos': omisosFiscalizacion,
@@ -4216,7 +4286,7 @@ function patron(ruta: string): RegExp {
  */
 export function paginadoDe(metodo: string, camino: string): Paginado | null {
   const verbo = metodo.toUpperCase();
-  if (verbo !== 'GET' && !(verbo === 'POST' && camino.endsWith('/seguridad/respaldos'))) {
+  if (verbo !== 'GET' && !(verbo === 'POST' && camino.endsWith(PAGINADO_QUE_VIAJA_POR_POST))) {
     return null;
   }
   const relativo = camino.replace(/^\/api\/v1/, '');
@@ -4319,3 +4389,49 @@ export function archivoDe(
     nombreDeArchivo: `${reporte.base}.${formato.toLowerCase()}`,
   };
 }
+
+/* ── El censo: que rutas habla ya este archivo con la forma del backend ──── */
+
+/** `/consultas/cuenta-corriente/{codigo}` → `/consultas/cuenta-corriente/{}`. */
+const sinNombresDeParametro = (ruta: string): string => ruta.replace(/\{\w+\}/g, '{}');
+
+const conVerbo = (verbo: string, rutas: readonly string[]): readonly string[] =>
+  rutas.map((ruta) => `${verbo} ${sinNombresDeParametro(ruta)}`);
+
+/**
+ * Las rutas que este archivo publica **con la forma del backend**, como
+ * `«METODO /ruta»` y sin los nombres de los parametros.
+ *
+ * Es el censo que faltaba para poder encender una ruta sin romperla (#400).
+ * Encender significa que el proxy la deja pasar y contesta el backend; lo que
+ * decide si eso es seguro **no es que el backend exista**, sino que la pantalla
+ * ya este leyendo la forma que el backend publica. Y eso es exactamente lo que
+ * dice esta lista: para las rutas que estan aqui, el proxy contesta el recurso
+ * del dominio —el sobre paginado, la ficha suelta, el arreglo, la respuesta de
+ * la escritura—, asi que la pantalla lleva tiempo hablando ese idioma y el
+ * relevo no le cambia nada. Para las que no estan, contesta `DatosDePantalla`,
+ * y encenderlas deja **la tabla vacia en silencio**: el defecto que #363
+ * documento en transito y coactiva, que #397 volvio a medir en infracciones, y
+ * que aqui no puede aparecer sin que la guarda lo diga.
+ *
+ * **Los archivos se quedan fuera a proposito.** `GET
+ * /catastro/contribuyentes/{codigo}/ficha.pdf` sale por `archivoDe` cuando trae
+ * `?formato=`, pero **sin el sigue contestando la forma comun**, que es la que
+ * su pantalla lee (`Pantalla.tsx`, `descargasDelReporte`). Contarla aqui diria
+ * que se puede encender, y encenderla dejaria esa pantalla leyendo un
+ * `ReporteResource` como si fuera `DatosDePantalla`.
+ */
+export const EN_LA_FORMA_DEL_BACKEND: readonly string[] = [
+  ...conVerbo('GET', Object.keys(PAGINADOS)),
+  ...conVerbo('POST', [PAGINADO_QUE_VIAJA_POR_POST]),
+  ...conVerbo('GET', Object.keys(SUELTOS)),
+  ...conVerbo('GET', Object.keys(LISTAS)),
+  ...Object.keys(ESCRITURAS).map((clave) => {
+    const [verbo = '', ruta = ''] = clave.split(' ');
+    return `${verbo} ${sinNombresDeParametro(ruta)}`;
+  }),
+];
+
+/** Si esta operacion del contrato la publica ya el proxy con la forma del backend. */
+export const laPublicaConLaFormaDelBackend = (metodo: string, ruta: string): boolean =>
+  EN_LA_FORMA_DEL_BACKEND.includes(`${metodo.toUpperCase()} ${sinNombresDeParametro(ruta)}`);

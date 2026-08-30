@@ -748,6 +748,18 @@ La lista **crece hasta cubrir las 134 y entonces desaparece**: con el backend si
 apaga el proxy y se borra el archivo. El modo intermedio es transitorio y su final es parte del
 trabajo.
 
+**Añadir una línea ahí no es configurar: es afirmar algo, y hay quien lo comprueba** (#400,
+`verificaciones/rutas-encendidas.test.ts`). De cada entrada se exige:
+
+| Se exige                                                                            | Porque si no                                                                                                                 |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Que sea una operación del contrato, letra por letra                                 | Una errata no casa con nada: no deja pasar nada, no dispara el `502` y deja la integración parada con aspecto de estar hecha |
+| Que alguna pantalla declare cómo consumirla                                         | El camino común pide `DatosDePantalla`, la forma que el backend no sirve: la tabla saldría **vacía en silencio** (#363)      |
+| Que si la interfaz lee lo que vuelve, el proxy se lo dé ya con la forma del backend | Lo mismo, medido en la mitad que importa: sólo se rompe por la forma quien mira la respuesta                                 |
+
+En el mismo archivo está el censo —cuántas se pueden encender hoy y cuántas necesitan trabajo
+antes—, con sus cifras fijadas: moverlas es una línea del diff.
+
 ### Los dos procesos, juntos
 
 ```bash
