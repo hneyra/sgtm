@@ -332,6 +332,65 @@ class ExpedienteControllerTest {
         assertThat(cuerpo).contains("\"deudaAlDia\":\"2026-06-15\"");
     }
 
+    /**
+     * #426 — La deuda del expediente <b>obligación por obligación</b>, por HTTP.
+     *
+     * <p>Lo que se fija aquí son los <b>nombres de campo</b> del recurso, que es lo único que la
+     * pantalla que fracciona lee: su adaptador saca de cada fila {@code tributo}, {@code
+     * ejercicio}, {@code predioId} y {@code vehiculoId} —los cuatro que {@code
+     * PeticionDeObligacionAcogida} pide— y de la cabecera {@code aLaFecha}, sin la cual ninguna de
+     * las cifras se puede fechar (regla 9). Un renombre aquí deja la grilla vacía en silencio.
+     */
+    @Test
+    @DisplayName("#426 — la deuda por obligacion trae los cuatro campos que el convenio pide")
+    void laDeudaPorObligacionTraeLoQueElConvenioPide() throws Exception {
+        importar(cuerpoDeImportacion("Se importa la cartera vencida"));
+
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.get(
+                                        "/api/v1/coactiva/expedientes/{numero}/deuda",
+                                        "EXP-2026-000001"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("\"expediente\":\"EXP-2026-000001\"");
+        assertThat(cuerpo).contains("\"codContribuyente\":\"C-0007\"");
+        assertThat(cuerpo).contains("\"contribuyente\":\"TITULAR, PRUEBA\"");
+        assertThat(cuerpo)
+                .as("toda cifra con su fecha, y una sola para todas las filas (regla 9)")
+                .contains("\"aLaFecha\":\"2026-06-15\"");
+        assertThat(cuerpo)
+                .as("los cuatro campos con que el convenio identifica lo que se acoge")
+                .contains("\"tributo\":\"PREDIAL\"")
+                .contains("\"ejercicio\":2026")
+                .contains("\"predioId\":null")
+                .contains("\"vehiculoId\":null");
+        assertThat(cuerpo)
+                .as("y la costa se distingue de la deuda materia de cobranza")
+                .contains("\"esCosta\":false")
+                .contains("\"costasS\":\"0.00\"");
+        assertThat(cuerpo)
+                .as("el total lo publica el servidor: la pantalla no suma columnas (RNF-083)")
+                .contains("\"totalS\":\"535.50\"");
+    }
+
+    @Test
+    @DisplayName("#426 — un expediente que no existe, 404: no una deuda de cero")
+    void laDeudaDeUnExpedienteQueNoExisteEs404() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.get(
+                                        "/api/v1/coactiva/expedientes/{numero}/deuda",
+                                        "EXP-2026-999999"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("una deuda de cero es una respuesta; «ese expediente no esta» es otra")
+                .isEqualTo(404);
+    }
+
     @Test
     @DisplayName("un estado que la pantalla no ofrece, 422: no se traduce a algo parecido")
     void elEstadoDesconocidoRechaza() throws Exception {

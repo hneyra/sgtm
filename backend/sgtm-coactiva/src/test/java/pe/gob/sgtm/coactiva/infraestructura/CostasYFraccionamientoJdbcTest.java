@@ -673,9 +673,9 @@ class CostasYFraccionamientoJdbcTest {
         /**
          * El total no es una segunda cuenta: es la suma de las filas que se publican.
          *
-         * <p>Lo que se compara es cifra a cifra contra {@link ConsultaDeExpedientes#deudaDe}, que es
-         * lo que imprime la REC-2. Si las dos lecturas se compusieran por separado, esta prueba es
-         * la que lo diría.
+         * <p>Lo que se compara es cifra a cifra contra {@link ConsultaDeExpedientes#deudaDe}, que
+         * es lo que imprime la REC-2. Si las dos lecturas se compusieran por separado, esta prueba
+         * es la que lo diría.
          */
         @Test
         @DisplayName("el total es exactamente la suma de las filas, y coincide con el de la REC-2")
@@ -745,7 +745,9 @@ class CostasYFraccionamientoJdbcTest {
 
             ConsultaDeExpedientes.DeudaPorObligacion antes =
                     enTransaccion(
-                            () -> consulta.obligacionesDe(expediente, LIQUIDACION.minusDays(1)))
+                                    () ->
+                                            consulta.obligacionesDe(
+                                                    expediente, LIQUIDACION.minusDays(1)))
                             .orElseThrow();
 
             assertThat(antes.aLaFecha()).isEqualTo(LIQUIDACION.minusDays(1));

@@ -392,6 +392,22 @@ export interface SeleccionDeFilas {
    * misma lista blanca por columna que el resto de la fila.
    */
   readonly contexto?: (busqueda: URLSearchParams) => Readonly<Record<string, string>>;
+  /**
+   * La casilla **anade su propia columna** a la tabla, en vez de ocupar la
+   * primera del catalogo.
+   *
+   * Por omision ocupa la primera, que es lo que el prototipo dibuja donde
+   * capturo una pantalla que elige: `baja_deuda` la trae sin rotulo (`""`) y las
+   * dos de coactiva como «Seleccione». «Deudas acogidas» —la del fraccionamiento
+   * coactivo— **no dibuja ninguna**: sus trece columnas empiezan en «Año», y
+   * ocupar la primera se llevaria por delante el ejercicio, que es uno de los
+   * cuatro datos con los que se identifica la obligacion que se acoge (#426).
+   *
+   * Se declara en vez de deducirse del rotulo: «si `cols[0]` esta vacio o dice
+   * “Seleccione”» seria una heuristica sobre el texto del prototipo, y el dia que
+   * una pantalla rotulara esa columna de otra forma perderia una en silencio.
+   */
+  readonly columnaPropia?: true;
 }
 
 /**

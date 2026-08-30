@@ -143,8 +143,14 @@ describe('las operaciones generadas son las del contrato', () => {
     //     podia volver a encontrar: ni por su pantalla, cuya operacion del
     //     catalogo es ese POST y no se pide al abrirla, ni por las dos actas,
     //     que exigen el `programaId` de un programa ya generado.
+    //   - `coactiva_deuda_del_expediente` (#426): la deuda del expediente
+    //     **obligacion por obligacion**. Es la lectura de la que
+    //     `fraccionamiento_coactivo` saca sus filas —su cuerpo pide `tributo`,
+    //     `ejercicio` y `predioId`/`vehiculoId` una a una— y ninguna lectura del
+    //     modulo tenia esa granularidad: la deuda del expediente es una suma, y
+    //     un convenio no se fracciona sobre una suma.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(176);
+    expect(Object.keys(OPERACIONES)).toHaveLength(177);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

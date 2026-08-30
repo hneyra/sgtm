@@ -78,10 +78,10 @@ public class ExpedienteController {
     /**
      * La lectura por obligacion la pide la pantalla que fracciona (#426).
      *
-     * <p>Su acceso es el de <b>esa</b> opcion y no el de {@code coactiva_consulta_deudas}:
-     * quien fracciona tiene que poder ver las filas que va a acoger sin necesitar ademas el
-     * permiso de otra pantalla, y quien solo consulta deudas no necesita esta granularidad
-     —la suya la publica {@code DeudaCoactivaController}, por expediente—.
+     * <p>Su acceso es el de <b>esa</b> opcion y no el de {@code coactiva_consulta_deudas}: quien
+     * fracciona tiene que poder ver las filas que va a acoger sin necesitar ademas el permiso de
+     * otra pantalla, y quien solo consulta deudas no necesita esta granularidad: la suya la publica
+     * {@code DeudaCoactivaController}, por expediente.
      */
     static final String ACCESO_FRACCIONAMIENTO = "fraccionamiento_coactivo";
 
@@ -182,8 +182,7 @@ public class ExpedienteController {
             @PathVariable String numero,
             @RequestParam(required = false) @Nullable String fechaDeCalculo) {
 
-        LocalDate aLaFecha =
-                fechaOpcional(fechaDeCalculo, "fechaDeCalculo", LocalDate.now(reloj));
+        LocalDate aLaFecha = fechaOpcional(fechaDeCalculo, "fechaDeCalculo", LocalDate.now(reloj));
         ConsultaDeExpedientes.DeudaPorObligacion deuda =
                 consulta.obligacionesDe(numero, aLaFecha)
                         .orElseThrow(

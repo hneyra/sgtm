@@ -1706,6 +1706,107 @@ const deudasCoactivas = (): Paginado =>
   );
 
 /**
+ * La deuda de un expediente **obligacion por obligacion** (`DeudaPorObligacionResource`, #426).
+ *
+ * Es la lectura de la que `fraccionamiento_coactivo` saca sus filas: su cuerpo
+ * pide `tributo`, `ejercicio` y `predioId`/`vehiculoId` una a una, y la deuda por
+ * expediente —`DeudaCoactivaResource`— no los tiene.
+ *
+ * Las filas salen de la grilla «Deudas acogidas» que el prototipo dibuja en esa
+ * misma pantalla, con sus cifras tal cual: aqui no se inventa ningun importe. Lo
+ * que se compone son los **tres totales**, porque el recurso real los publica
+ * calculados del servidor (RNF-083) y la interfaz no puede sumarlos.
+ *
+ * `predioId` va por el ordinal de la fila, como ya hacen `predios`, `vehiculos` y
+ * la propia `consulta_deuda` de la que sale `baja_deuda`: es un identificador
+ * interno, no se dibuja en ninguna columna y el prototipo no lo trae —su
+ * «Unidad» es un codigo de referencia catastral de 22 caracteres, que es otra
+ * cosa—.
+ *
+ * La costa se marca por el **codigo de su tributo**, que es lo unico que la fila
+ * del prototipo dice: `00101` es «COSTAS PROCESALES» en el propio desplegable de
+ * esa pantalla.
+ */
+const deudaDelExpedienteCoactivo = (): Readonly<Record<string, unknown>> => {
+  const campos = RESPUESTAS['fraccionamiento_coactivo']?.campos ?? {};
+  const texto = (clave: string): string => (typeof campos[clave] === 'string' ? campos[clave] : '');
+
+  const obligaciones = filasDe('fraccionamiento_coactivo').map(
+    ([ano, , , trib, , , , , insoluto, reajuste, interes, gastos, total], i) => {
+      const tributo = (trib ?? '').trim();
+      return {
+        tributo,
+        ejercicio: Number(ano) || new Date().getFullYear(),
+        predioId: i + 1,
+        vehiculoId: null,
+        esCosta: tributo.startsWith('00101'),
+        insolutoS: comoImporte(insoluto ?? '0.00'),
+        reajusteS: comoImporte(reajuste ?? '0.00'),
+        interesS: comoImporte(interes ?? '0.00'),
+        gastosS: comoImporte(gastos ?? '0.00'),
+        totalS: comoImporte(total ?? '0.00'),
+      };
+    },
+  );
+
+  const suma = (cuales: (fila: (typeof obligaciones)[number]) => boolean): string =>
+    obligaciones
+      .filter(cuales)
+      .reduce((acumulado, fila) => masImporte(acumulado, fila.totalS), '0.00');
+
+  return {
+    expediente: '0000001096',
+    codContribuyente: texto('contribuyente') || 'C-COACT-0001',
+    contribuyente: texto('nombre'),
+    estado: 'REC 01 NOTIFICADA',
+    aLaFecha: EL_DIA_DEL_PROTOTIPO,
+    obligaciones,
+    deudaMateriaDeCobranzaS: suma((fila) => !fila.esCosta),
+    costasS: suma((fila) => fila.esCosta),
+    totalS: suma(() => true),
+  };
+};
+
+/**
+ * Las liquidaciones de costas ya registradas (`LiquidacionResource`, #42, RF-104).
+ *
+ * `LiquidacionResource` **no publica ni el codigo ni el nombre del
+ * contribuyente**: la liquidacion la identifica su expediente, que si viaja. La
+ * columna «Cod. Contrib.» del prototipo sale con `SIN_DATO` en el adaptador, y
+ * aqui no se sirve ningun campo para ella.
+ *
+ * El **estado se deriva del pendiente** (`EstadoDeLaLiquidacion.segunLoPendiente`)
+ * y por eso viaja con su fecha: `aLaFecha` es a que dia se respondio
+ * `pendienteS`, que no es la fecha en que se liquido. El prototipo escribe en esa
+ * columna las cuatro letras de su desplegable —«A», «N», «C», «X»— y aqui salen
+ * las dos que el sistema sabe calcular: lo que no es «A» se responde `CANCELADA`,
+ * porque su pendiente esta en cero.
+ */
+const liquidacionesDeCostas = (): Paginado =>
+  unaPagina(
+    filasDe('costas_procesales').map(
+      ([nroLiquidacion, , fecha, expedCoact, observacion, estado]) => {
+        const activa = (estado ?? '').trim().toUpperCase().startsWith('A');
+        return {
+          nroLiquidacion,
+          expedCoact,
+          ejercicio: Number((fecha ?? '').slice(-4)) || new Date().getFullYear(),
+          fecha: fechaDe(fecha ?? '') ?? EL_DIA_DEL_PROTOTIPO,
+          tributo: '00101',
+          totalS: '17.75',
+          pendienteS: activa ? '17.75' : '0.00',
+          aLaFecha: EL_DIA_DEL_PROTOTIPO,
+          estado: activa ? 'ACTIVA' : 'CANCELADA',
+          conjuntoDeParametros: 1,
+          observacion,
+          usuarioRegistro: null,
+          costas: [],
+        };
+      },
+    ),
+  );
+
+/**
  * Deuda acogible a un beneficio, en coactiva (`coactiva_deudas_beneficio`, #42, RF-107).
  *
  * `DeudaCoactivaResource` **no desglosa** insoluto, reajuste ni interes por
@@ -2312,6 +2413,7 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/consultas/deudas-con-beneficio': deudasConBeneficio,
   '/seguridad/sesion/permisos': permisosDeLaSesion,
   '/coactiva/expedientes/{numero}/proceso': procesoCoactivo,
+  '/coactiva/expedientes/{numero}/deuda': deudaDelExpedienteCoactivo,
   '/fiscalizacion/estado-cuenta': estadoCuentaFiscalizacion,
   '/fiscalizacion/resoluciones/{numero}': resolucionDeterminacionFiscalizacion,
   '/licencias/funcionamiento/reportes/resumen-anual': resumenAnualDeLicencias,
@@ -3874,6 +3976,7 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/infracciones/administrativas/reportes/vencidas': notificacionesVencidasAdministrativas,
   '/infracciones/administrativas/reportes/por-contribuyente': notificacionesPorContribuyente,
   '/coactiva/expedientes': expedientesCoactivos,
+  '/coactiva/liquidaciones-costas': liquidacionesDeCostas,
   '/coactiva/deudas': deudasCoactivas,
   '/coactiva/deudas-en-beneficio': deudasCoactivasBeneficio,
   '/autorizaciones/anuncios': anuncios,

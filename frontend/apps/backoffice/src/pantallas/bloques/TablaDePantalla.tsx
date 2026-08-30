@@ -100,6 +100,23 @@ export interface TablaDePantallaProps {
     readonly varias: string;
     /** Para que el participio de la banda concuerde. Ver `SeleccionDeFilas.genero`. */
     readonly genero: 'femenino' | 'masculino';
+    /**
+     * La casilla **anade su propia columna** en vez de ocupar la primera.
+     *
+     * Por omision ocupa la primera, porque es lo que el prototipo dibuja en las
+     * pantallas que eligen: `baja_deuda` la trae como una columna sin rotulo
+     * (`""`) y las dos de coactiva como «Seleccione». Pero «Deudas acogidas»
+     * —la grilla del fraccionamiento coactivo— **no dibuja ninguna**: sus trece
+     * columnas empiezan en «Año», y ocupar la primera se llevaria por delante el
+     * ejercicio, que es justo uno de los cuatro datos que identifican la
+     * obligacion que se acoge (#426).
+     *
+     * Se declara en vez de deducirse del rotulo por lo mismo que todo lo demas
+     * de este repositorio: «si `cols[0]` esta vacio o dice “Seleccione”» seria
+     * una heuristica sobre el texto del prototipo, y el dia que una pantalla
+     * rotulara su columna de otra forma perderia una columna en silencio.
+     */
+    readonly columnaPropia?: true;
   };
 }
 
@@ -192,11 +209,18 @@ export function TablaDePantalla({
                     <span className="sgtm-portal__oculto">Desplegar</span>
                   </th>
                 )}
+                {seleccion?.columnaPropia === true && (
+                  <th className="sgtm-tabla__elegir">
+                    <span className="sgtm-portal__oculto">Elegir</span>
+                  </th>
+                )}
                 {estructura.cols.map((columna, i) => {
                   // La primera columna del catalogo es la de la casilla cuando
                   // la opcion declara seleccion: se rotula, para que la columna
                   // tenga cabecera y el lector de pantalla pueda anunciarla.
-                  if (seleccion !== undefined && i === 0) {
+                  // Salvo que la casilla traiga la suya: entonces las trece del
+                  // catalogo se dibujan las trece.
+                  if (seleccion !== undefined && seleccion.columnaPropia !== true && i === 0) {
                     return (
                       <th key={columna} className="sgtm-tabla__elegir">
                         <span className="sgtm-portal__oculto">Elegir</span>
@@ -268,18 +292,36 @@ export function TablaDePantalla({
                               )}
                             </td>
                           )}
+                          {seleccion?.columnaPropia === true && (
+                            <td className="sgtm-tabla__elegir">
+                              <Casilla
+                                elegida={seleccion.elegidas.has(seleccion.claveDe(f))}
+                                onAlternar={() => seleccion.onAlternar(f)}
+                                etiqueta={etiquetaDeFila(
+                                  fila,
+                                  seleccion.una,
+                                  seleccion.genero,
+                                  true,
+                                )}
+                              />
+                            </td>
+                          )}
                           {fila.map((celda, c) => (
                             <td
                               key={estructura.cols[c] ?? c}
                               className={
-                                seleccion !== undefined && c === 0
+                                seleccion !== undefined &&
+                                seleccion.columnaPropia !== true &&
+                                c === 0
                                   ? 'sgtm-tabla__elegir'
                                   : numericas.has(c)
                                     ? 'sgtm-tabla--numerica'
                                     : undefined
                               }
                             >
-                              {seleccion !== undefined && c === 0 ? (
+                              {seleccion !== undefined &&
+                              seleccion.columnaPropia !== true &&
+                              c === 0 ? (
                                 <Casilla
                                   elegida={seleccion.elegidas.has(seleccion.claveDe(f))}
                                   onAlternar={() => seleccion.onAlternar(f)}
@@ -287,7 +329,7 @@ export function TablaDePantalla({
                                   // «fila 3»: quien la oye tiene que saber que
                                   // esta marcando, y eso son sus dos primeras
                                   // columnas con dato.
-                                  etiqueta={etiquetaDeFila(fila, seleccion.una)}
+                                  etiqueta={etiquetaDeFila(fila, seleccion.una, seleccion.genero)}
                                 />
                               ) : celda.tono ? (
                                 <Insignia tono={TONO_DE_INSIGNIA[celda.tono]}>
@@ -406,14 +448,27 @@ function Casilla({
  * primeras celdas con contenido eran «2026 · — · 1 - 4» y **el tributo se
  * quedaba fuera** del nombre accesible: quien elige de oido no oia lo unico que
  * separa la cuota del predial de la de arbitrios, en un acto que no se deshace.
+ *
+ * **Y el articulo concuerda** (#426). Decia «la» siempre, y no se notaba porque
+ * la unica tabla que elegia nombraba sus filas «cuota»: la primera masculina
+ * —«Elegir la expediente EC-2026-00412»— lo destapo. `SeleccionDeFilas.genero`
+ * existe desde #332 y era obligatorio a proposito, pero solo lo miraba la banda
+ * de seleccion; el nombre accesible de cada casilla, que es lo que oye quien
+ * elige sin ver la tabla, se lo saltaba.
  */
-function etiquetaDeFila(fila: readonly { readonly texto: string }[], una: string): string {
+function etiquetaDeFila(
+  fila: readonly { readonly texto: string }[],
+  una: string,
+  genero: 'femenino' | 'masculino',
+  /** La casilla trae columna propia, asi que la primera celda **es un dato**. */
+  columnaPropia = false,
+): string {
   const datos = fila
-    .slice(1)
+    .slice(columnaPropia ? 0 : 1)
     .map((celda) => celda.texto)
     .filter((texto) => texto !== '' && texto !== SIN_DATO)
     .slice(0, 3);
-  return `Elegir la ${una} ${datos.join(' · ')}`.trimEnd();
+  return `Elegir ${genero === 'femenino' ? 'la' : 'el'} ${una} ${datos.join(' · ')}`.trimEnd();
 }
 
 /**
