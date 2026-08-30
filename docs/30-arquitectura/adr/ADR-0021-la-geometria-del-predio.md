@@ -58,6 +58,18 @@ de una ficha en una tarea de gabinete.
   PostgreSQL 16 con extensiones añadidas: el volumen de datos es compatible y no hay migración de
   datos. Aun así es un cambio de imagen sobre una base en servicio, así que se declara aquí y se
   aplica cuando la dirección lo decida, no como efecto secundario de un despliegue.
+- **En un ambiente que YA existe, la extensión no llega sola, y la migración se cae.**
+  `crear-roles.sql` corre desde `/docker-entrypoint-initdb.d`, o sea **una sola vez y con
+  el volumen vacío**. En `stg` y `prod` no volverá a ejecutarse, así que `postgis` no
+  estará creada y `V61` fallará con `type "geography" does not exist`. Y no lo arregla el
+  migrador: `postgis` **no es una extensión *trusted*** —`SELECT trusted FROM
+  pg_available_extension_versions WHERE name='postgis'` da `f`—, de modo que crearla
+  exige un superusuario y `sgtm_owner` a propósito no lo es. CI nunca lo ve porque
+  siempre parte de un volumen vacío. El paso que falta es
+  [`despliegue/crear-extensiones.sh`](../../../despliegue/crear-extensiones.sh), que lleva
+  al motor en marcha lo que el archivo declara y es idempotente —mismo hueco y misma
+  forma que `asignar-claves.sh` en #435—, y `verificar-el-ambiente.sh` lo comprueba antes
+  de desplegar.
 - **`spatial_ref_sys` aparece en el esquema `public`.** La crea la extensión y es un catálogo de
   sistemas de coordenadas: no lleva ni puede llevar dato municipal. Entra en `TABLAS_EXENTAS` de la
   prueba de aislamiento, que es donde tiene que verse.
