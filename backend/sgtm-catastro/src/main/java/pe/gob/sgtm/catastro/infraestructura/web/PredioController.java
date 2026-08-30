@@ -1,18 +1,26 @@
 package pe.gob.sgtm.catastro.infraestructura.web;
 
+import java.util.Locale;
 import org.jspecify.annotations.Nullable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.catastro.aplicacion.ActualizarCatastro;
+import pe.gob.sgtm.catastro.aplicacion.ConsultaDePredios;
+import pe.gob.sgtm.catastro.dominio.EstadoPredio;
+import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
+import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
  * El predio como recurso propio: {@code POST /api/v1/catastro/predios/{predioId}/baja} y {@code
@@ -49,10 +57,40 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 @RequiereAcceso(acceso = "actualizacion_catastro", privilegio = Privilegio.MODIFICACION)
 public class PredioController {
 
-    private final ActualizarCatastro catastro;
+    /** El codigo ordena por omision: es como se recorre un sector al sanearlo. */
+    private static final String ORDEN_POR_OMISION = "codRefCatastral";
 
-    public PredioController(ActualizarCatastro catastro) {
+    private final ActualizarCatastro catastro;
+    private final ConsultaDePredios consulta;
+
+    public PredioController(ActualizarCatastro catastro, ConsultaDePredios consulta) {
         this.catastro = catastro;
+        this.consulta = consulta;
+    }
+
+    /**
+     * El padron de predios, con sus filtros.
+     *
+     * <p>Exige {@code LECTURA} y no {@code MODIFICACION}: encontrar el predio es el paso previo de
+     * los dos actos de esta pantalla, y pedir para leer el permiso de escribir dejaria sin poder
+     * mirar a quien solo puede mirar.
+     */
+    @GetMapping
+    @RequiereAcceso(acceso = "actualizacion_catastro", privilegio = Privilegio.LECTURA)
+    public RespuestaPaginada<PredioDelCatastroResource> listar(
+            @RequestParam(required = false) @Nullable String codRefCatastral,
+            @RequestParam(required = false) @Nullable String codigoDeSector,
+            @RequestParam(required = false) @Nullable String estado,
+            @RequestParam(required = false) @Nullable String fichado,
+            ParametrosDePaginacion paginacion) {
+
+        FiltroDePredios filtro =
+                new FiltroDePredios(
+                        codRefCatastral, codigoDeSector, estadoDe(estado), fichadoDe(fichado));
+
+        return RespuestaPaginada.de(
+                consulta.buscar(filtro, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                PredioDelCatastroResource::de);
     }
 
     /** Retira el predio del padron. No lo borra. */
@@ -96,4 +134,41 @@ public class PredioController {
      * ACTIVO} en el cuerpo, y habria que decidir cual gana; asi no hay nada que decidir.
      */
     public record PeticionDeCambioDeEstado(@Nullable String observacion) {}
+
+    // ------------------------------------------------------------------
+
+    private static @Nullable EstadoPredio estadoDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            return null;
+        }
+        try {
+            return EstadoPredio.valueOf(texto.strip().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException desconocido) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION, "Estado de predio desconocido: '" + texto + "'");
+        }
+    }
+
+    /**
+     * {@code true}/{@code false}, y nada mas.
+     *
+     * <p>No se usa {@code Boolean.parseBoolean}, que lee cualquier cosa que no sea «true» como
+     * {@code false}: con el, un {@code fichado=si} devolveria la cola de saneamiento entera cuando
+     * lo que se pedia era lo contrario, sin un solo mensaje.
+     */
+    private static @Nullable Boolean fichadoDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            return null;
+        }
+        String valor = texto.strip().toLowerCase(Locale.ROOT);
+        if (valor.equals("true")) {
+            return Boolean.TRUE;
+        }
+        if (valor.equals("false")) {
+            return Boolean.FALSE;
+        }
+        throw new ProblemaDeNegocio(
+                CodigoDeError.VALIDACION,
+                "El filtro 'fichado' admite 'true' o 'false': llego '" + texto + "'");
+    }
 }

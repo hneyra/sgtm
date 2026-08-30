@@ -3,6 +3,8 @@ package pe.gob.sgtm.catastro.infraestructura;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -13,9 +15,11 @@ import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.CondicionDeTitularidad;
 import pe.gob.sgtm.catastro.dominio.EstadoPredio;
+import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.Predio;
+import pe.gob.sgtm.catastro.dominio.PredioDelCatastro;
 import pe.gob.sgtm.catastro.dominio.Sector;
 import pe.gob.sgtm.catastro.dominio.SectorConConteos;
 import pe.gob.sgtm.catastro.dominio.TipoPredio;
@@ -102,8 +106,47 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
              WHERE s.id IN (:sectores)
             """;
 
-    private static final OrdenSeguro ORDEN_PREDIO =
-            OrdenSeguro.sobre("codigo_ref_catastral", "direccion", "tipo", "id");
+    /**
+     * El padron del catastro: el predio con su ubicacion resuelta a codigos y si llego a ficharse.
+     *
+     * <p>Los cuatro {@code JOIN} son externos, y no es una precaucion de estilo: un predio sin via,
+     * sin sector, sin manzana o <b>sin ficha</b> es exactamente lo que esta consulta existe para
+     * encontrar. Con {@code JOIN} interno, la cola de saneamiento se esconderia de si misma.
+     *
+     * <p>Cada uno cruza tambien por {@code municipalidad_id}, como el resto del repositorio: RLS ya
+     * acota lo visible, y repetirlo en el {@code ON} hace que el plan use la clave primaria
+     * compuesta en vez de descartar filas despues.
+     *
+     * <p>{@code fichado} se resuelve con {@code EXISTS} y no contando fichas: la pregunta es «se
+     * levanto la ficha», que no lleva fecha, y una cuenta invitaria a leerla como «fichas vigentes
+     * hoy», que si la llevaria (regla 9).
+     */
+    private static final String CATASTRO_DESDE =
+            """
+             FROM predio p
+             LEFT JOIN via v
+               ON v.municipalidad_id = p.municipalidad_id
+              AND v.id = p.via_id
+             LEFT JOIN sector s
+               ON s.municipalidad_id = p.municipalidad_id
+              AND s.id = p.sector_id
+             LEFT JOIN manzana m
+               ON m.municipalidad_id = p.municipalidad_id
+              AND m.id = p.manzana_id
+            """;
+
+    private static final String COLUMNAS_CATASTRO =
+            "p.id AS predio_id, p.codigo_ref_catastral AS cod_ref_catastral, p.tipo,"
+                    + " p.direccion, p.numero_municipal,"
+                    + " v.codigo AS via_codigo, v.nombre AS via_nombre,"
+                    + " s.codigo AS sector_codigo, m.codigo AS manzana_codigo,"
+                    + " p.lote, p.ubigeo, p.estado,"
+                    + " EXISTS (SELECT 1 FROM ficha_catastral f"
+                    + " WHERE f.municipalidad_id = p.municipalidad_id"
+                    + " AND f.predio_id = p.id) AS fichado";
+
+    private static final OrdenSeguro ORDEN_CATASTRO =
+            OrdenSeguro.sobre("cod_ref_catastral", "direccion", "predio_id");
 
     /**
      * El padron con su titular y su ficha vigentes (#49, RF-055).
@@ -318,14 +361,69 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
     }
 
     @Override
-    public Pagina<Predio> predios(Paginacion paginacion) {
+    public Pagina<PredioDelCatastro> predios(FiltroDePredios filtro, Paginacion paginacion) {
+        List<String> condiciones = new ArrayList<>();
+        Map<String, Object> parametros = new HashMap<>();
+
+        if (filtro.codRefCatastral() != null) {
+            // Por RANGO, no por LIKE: bajo RLS un LIKE 'prefijo%' no llega nunca al indice, porque
+            // textlike no es leakproof y PostgreSQL no lo evalua antes de la politica (DAT-01 §0).
+            String desde = filtro.codRefCatastral();
+            String hasta = FichaCatastralRepositoryJdbc.siguienteAlPrefijo(desde);
+            if (hasta == null) {
+                condiciones.add("p.codigo_ref_catastral LIKE :codigo || '%'");
+                parametros.put("codigo", desde);
+            } else {
+                condiciones.add(
+                        "p.codigo_ref_catastral ~>=~ :codigoDesde"
+                                + " AND p.codigo_ref_catastral ~<~ :codigoHasta");
+                parametros.put("codigoDesde", desde);
+                parametros.put("codigoHasta", hasta);
+            }
+        }
+        if (filtro.codigoDeSector() != null) {
+            condiciones.add("s.codigo = :sector");
+            parametros.put("sector", filtro.codigoDeSector());
+        }
+        if (filtro.estado() != null) {
+            condiciones.add("p.estado = :estado");
+            parametros.put("estado", filtro.estado().name());
+        }
+        if (filtro.fichado() != null) {
+            condiciones.add(
+                    (filtro.fichado() ? "" : "NOT ")
+                            + "EXISTS (SELECT 1 FROM ficha_catastral fx"
+                            + " WHERE fx.municipalidad_id = p.municipalidad_id"
+                            + " AND fx.predio_id = p.id)");
+        }
+
+        String donde = condiciones.isEmpty() ? "" : " WHERE " + String.join(" AND ", condiciones);
+
         return paginar(
-                "SELECT " + COLUMNAS_PREDIO + " FROM predio",
-                "SELECT count(*) FROM predio",
-                Map.of(),
+                "SELECT " + COLUMNAS_CATASTRO + CATASTRO_DESDE + donde,
+                "SELECT count(*)" + CATASTRO_DESDE + donde,
+                parametros,
                 paginacion,
-                ORDEN_PREDIO,
-                CatastroRepositoryJdbc::mapearPredio);
+                ORDEN_CATASTRO,
+                CatastroRepositoryJdbc::mapearPredioDelCatastro);
+    }
+
+    private static PredioDelCatastro mapearPredioDelCatastro(ResultSet fila, int numeroDeFila)
+            throws SQLException {
+        return new PredioDelCatastro(
+                fila.getLong("predio_id"),
+                CodigoReferenciaCatastral.de(fila.getString("cod_ref_catastral")),
+                TipoPredio.valueOf(fila.getString("tipo")),
+                fila.getString("direccion"),
+                fila.getString("numero_municipal"),
+                fila.getString("via_codigo"),
+                fila.getString("via_nombre"),
+                fila.getString("sector_codigo"),
+                fila.getString("manzana_codigo"),
+                fila.getString("lote"),
+                fila.getString("ubigeo"),
+                EstadoPredio.valueOf(fila.getString("estado")),
+                fila.getBoolean("fichado"));
     }
 
     @Override

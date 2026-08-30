@@ -40,6 +40,7 @@ import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.catastro.aplicacion.ActualizarCatastro;
 import pe.gob.sgtm.catastro.aplicacion.ActualizarFichaCatastral;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDeFichas;
+import pe.gob.sgtm.catastro.aplicacion.ConsultaDePredios;
 import pe.gob.sgtm.catastro.aplicacion.InscribirFicha;
 import pe.gob.sgtm.catastro.aplicacion.RegistrarPredio;
 import pe.gob.sgtm.catastro.dominio.ActividadEconomica;
@@ -57,12 +58,14 @@ import pe.gob.sgtm.catastro.dominio.FichaCatastral;
 import pe.gob.sgtm.catastro.dominio.FichaCatastralRepository;
 import pe.gob.sgtm.catastro.dominio.FichaEncontrada;
 import pe.gob.sgtm.catastro.dominio.FiltroDeFichas;
+import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.MaterialEstructural;
 import pe.gob.sgtm.catastro.dominio.OrigenDeLaFicha;
 import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
 import pe.gob.sgtm.catastro.dominio.Predio;
+import pe.gob.sgtm.catastro.dominio.PredioDelCatastro;
 import pe.gob.sgtm.catastro.dominio.Riego;
 import pe.gob.sgtm.catastro.dominio.Sector;
 import pe.gob.sgtm.catastro.dominio.SectorConConteos;
@@ -155,7 +158,8 @@ class EscrituraDeFichasControllerTest {
                                     predios,
                                     reloj),
                             new ActualizacionController(actualizarCatastro, reloj),
-                            new PredioController(actualizarCatastro))
+                            new PredioController(
+                                    actualizarCatastro, envolver(new ConsultaDePredios(predios))))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(
@@ -1242,6 +1246,68 @@ class EscrituraDeFichasControllerTest {
     }
 
     @Nested
+    @DisplayName("Listado de predios (GET): los filtros que la capa web compone")
+    class ListadoDePredios {
+
+        @Test
+        @DisplayName("los cuatro filtros viajan tal como se declaran")
+        void losCuatroFiltrosViajan() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    get("/api/v1/catastro/predios")
+                                            .param("codRefCatastral", "2501010010")
+                                            .param("codigoDeSector", "SC-1")
+                                            .param("estado", "DADO_DE_BAJA")
+                                            .param("fichado", "false"))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+            FiltroDePredios filtro = Objects.requireNonNull(predios.ultimoFiltro);
+            assertThat(filtro.codRefCatastral()).isEqualTo("2501010010");
+            assertThat(filtro.codigoDeSector()).isEqualTo("SC-1");
+            assertThat(filtro.estado()).isEqualTo(EstadoPredio.DADO_DE_BAJA);
+            assertThat(filtro.fichado()).isFalse();
+        }
+
+        @Test
+        @DisplayName("sin filtros, ninguno viaja: el padron entero es una pregunta legitima")
+        void sinFiltrosNingunoViaja() throws Exception {
+            mvc.perform(get("/api/v1/catastro/predios")).andReturn();
+
+            FiltroDePredios filtro = Objects.requireNonNull(predios.ultimoFiltro);
+            assertThat(filtro.codRefCatastral()).isNull();
+            assertThat(filtro.codigoDeSector()).isNull();
+            assertThat(filtro.estado()).isNull();
+            assertThat(filtro.fichado()).isNull();
+        }
+
+        @Test
+        @DisplayName("un 'fichado' que no es true ni false es 422, no un false en silencio")
+        void unFichadoQueNoEsBooleanoEs422() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(get("/api/v1/catastro/predios").param("fichado", "si")).andReturn();
+
+            assertThat(resultado.getResponse().getStatus())
+                    .as(
+                            "con parseBoolean, 'si' devolveria la cola de saneamiento entera"
+                                    + " cuando se pedia lo contrario, y sin un solo mensaje")
+                    .isEqualTo(422);
+            assertThat(resultado.getResponse().getContentAsString()).contains("fichado");
+        }
+
+        @Test
+        @DisplayName("un estado desconocido es 422 y dice cual llego")
+        void unEstadoDesconocidoEs422() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(get("/api/v1/catastro/predios").param("estado", "ANULADO"))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+            assertThat(resultado.getResponse().getContentAsString()).contains("ANULADO");
+        }
+    }
+
+    @Nested
     @DisplayName("Baja y reactivacion del predio (POST): retirar no es borrar")
     class BajaDelPredio {
 
@@ -1768,6 +1834,9 @@ class EscrituraDeFichasControllerTest {
         /** Cuando esta puesto, el {@code INSERT} choca aunque la lectura previa no viera nada. */
         private boolean simularCarrera;
 
+        /** El ultimo filtro recibido: lo que la capa web compuso a partir de la consulta. */
+        private @Nullable FiltroDePredios ultimoFiltro;
+
         private long siguientePredio = 10L;
         private long siguienteTitularidad = 1L;
 
@@ -1894,8 +1963,9 @@ class EscrituraDeFichasControllerTest {
         }
 
         @Override
-        public Pagina<Predio> predios(Paginacion paginacion) {
-            throw new UnsupportedOperationException("La escritura de fichas no lista predios");
+        public Pagina<PredioDelCatastro> predios(FiltroDePredios filtro, Paginacion paginacion) {
+            ultimoFiltro = filtro;
+            return Pagina.vacia(paginacion);
         }
 
         @Override

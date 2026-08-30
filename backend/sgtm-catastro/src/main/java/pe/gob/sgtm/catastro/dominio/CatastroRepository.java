@@ -46,7 +46,15 @@ public interface CatastroRepository {
 
     Optional<Predio> predioPorCodigo(CodigoReferenciaCatastral codigo);
 
-    Pagina<Predio> predios(Paginacion paginacion);
+    /**
+     * El padron de predios del catastro, con su ubicacion resuelta a codigos y si estan fichados.
+     *
+     * <p>Sustituye al listado sin filtros que habia hasta #400 y que no llamaba nadie: la pantalla
+     * de saneamiento necesita acotar por sector, por prefijo de codigo y por estado, y sobre todo
+     * necesita poder pedir <b>los que no tienen ficha</b>, que es lo que ninguna consulta del
+     * sistema sabia responder.
+     */
+    Pagina<PredioDelCatastro> predios(FiltroDePredios filtro, Paginacion paginacion);
 
     /**
      * El padron activo con el titular y la ficha vigentes a la fecha, para {@link

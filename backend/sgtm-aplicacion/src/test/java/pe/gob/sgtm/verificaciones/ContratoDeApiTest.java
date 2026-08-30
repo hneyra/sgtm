@@ -69,6 +69,7 @@ class ContratoDeApiTest {
                     "PUT /catastro/fichas/economica/{codRefCatastral}/actualizacion",
                     "PUT /catastro/fichas/bienes-comunes/{codEdificacion}/actualizacion",
                     "PUT /catastro/fichas/rural/{codUnidad}/actualizacion",
+                    "GET /catastro/predios",
                     "POST /catastro/predios/{predioId}/baja",
                     "POST /catastro/predios/{predioId}/reactivacion",
                     "GET /catastro/tablas/aranceles",

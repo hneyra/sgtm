@@ -1028,6 +1028,54 @@ const OPERACIONES_ADICIONALES = {
         ' reemplaza.',
     },
     {
+      operationId: 'listado_de_predios',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/predios',
+      titulo: 'Padrón de predios del catastro',
+      descripcion:
+        'Los predios del catastro con su ubicación resuelta a **códigos** —los mismos que la' +
+        ' corrección del predio recibe, para que la interfaz no tenga que traducir entre lo que' +
+        ' lee y lo que manda—, incluidos **los que nadie ha fichado y los que están dados de' +
+        ' baja**. No es la consulta de fichas con otro nombre: aquella lista fichas vigentes a' +
+        ' una fecha, así que un predio sale en ella solo si alguien levantó su ficha. Con' +
+        ' `fichado=false` da la cola de saneamiento —lo que entra por una carga cartográfica y' +
+        ' todavía no tiene ficha—, que ninguna consulta del sistema sabía responder. `fichado`' +
+        ' dice si se levantó la ficha alguna vez, no si sigue vigente hoy: eso llevaría fecha' +
+        ' (regla 9). Ni un importe y ni un titular: quién es el propietario se resuelve al clic' +
+        ' en `/catastro/predios/{predioId}/titulares` (ADR-0015 §2.4). Exige privilegio de' +
+        ' LECTURA sobre `actualizacion_catastro`: encontrar el predio es el paso previo de los' +
+        ' dos actos de esa pantalla, y pedir el de escribir dejaría sin mirar a quien solo mira.',
+      parametros: [
+        {
+          nombre: 'codRefCatastral',
+          ejemplo: '2501010010',
+          descripcion:
+            'Prefijo del código de referencia catastral, no una igualdad: el código se compone' +
+            ' de sector, manzana, lote y unidad, así que preguntar por un sector entero es lo' +
+            ' que se hace al sanear una zona',
+        },
+        {
+          nombre: 'codigoDeSector',
+          ejemplo: 'SC-1',
+          descripcion: 'El sector, por su código; el mismo que la corrección del predio recibe',
+        },
+        {
+          nombre: 'estado',
+          ejemplo: 'ACTIVO',
+          descripcion:
+            'ACTIVO o DADO_DE_BAJA. Si falta, salen los dos: este listado es el del catastro y' +
+            ' no el de la emisión, y esconder los retirados sería esconder lo que hay que revisar',
+        },
+        {
+          nombre: 'fichado',
+          ejemplo: 'false',
+          descripcion:
+            '`true` o `false`, y nada más —cualquier otro valor es 422, no un false silencioso—.' +
+            ' Si falta, salen los dos',
+        },
+      ],
+    },
+    {
       operationId: 'dar_de_baja_predio',
       metodo: 'post',
       ruta: '/api/v1/catastro/predios/{predioId}/baja',

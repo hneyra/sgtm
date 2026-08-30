@@ -32,9 +32,11 @@ import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.catastro.dominio.CondicionDeTitularidad;
 import pe.gob.sgtm.catastro.dominio.EstadoPredio;
+import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.Predio;
+import pe.gob.sgtm.catastro.dominio.PredioDelCatastro;
 import pe.gob.sgtm.catastro.dominio.Sector;
 import pe.gob.sgtm.catastro.dominio.SectorConConteos;
 import pe.gob.sgtm.catastro.dominio.TipoPredio;
@@ -728,7 +730,224 @@ class RegistrarPredioTest {
         }
     }
 
+    @Nested
+    @DisplayName("Padron del catastro (#400): el listado que ve tambien lo que falta")
+    class PadronDelCatastro {
+
+        /** Un sector propio para no depender del orden de las demas pruebas. */
+        private long sectorDeListado() {
+            Sector sector =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.guardar(
+                                            new Sector(
+                                                    null, "SL-9", "Sector listado", "Z9", true)));
+            return java.util.Objects.requireNonNull(sector).id();
+        }
+
+        @Test
+        @DisplayName("el prefijo del codigo acota, y no por LIKE: filtra un sector entero")
+        void elPrefijoAcota() {
+            predioNuevo("20010100100100109010001", "AV. PREFIJO 1");
+            predioNuevo("20010100100100109010002", "AV. PREFIJO 2");
+            predioNuevo("20010100100100108010001", "AV. OTRA RAMA 1");
+
+            Pagina<PredioDelCatastro> pagina =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.predios(
+                                            new FiltroDePredios(
+                                                    "2001010010010010901", null, null, null),
+                                            Paginacion.de(0, 50, "codRefCatastral")));
+
+            assertThat(pagina.contenido())
+                    .extracting(fila -> fila.codigo().valor())
+                    .containsExactly("20010100100100109010001", "20010100100100109010002");
+        }
+
+        @Test
+        @DisplayName("fichado=false es la cola de saneamiento: lo que entro y nadie ficho")
+        void laColaDeSaneamiento() throws SQLException {
+            long conFicha = predioNuevo("20010100100100107010001", "AV. FICHADA 1");
+            long sinFicha = predioNuevo("20010100100100107010002", "AV. SIN FICHAR 2");
+            sembrarFicha(municipalidad, conFicha);
+
+            Pagina<PredioDelCatastro> pendientes =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.predios(
+                                            new FiltroDePredios(
+                                                    "2001010010010010701", null, null, false),
+                                            Paginacion.de(0, 50, "codRefCatastral")));
+
+            assertThat(pendientes.contenido())
+                    .as(
+                            "es lo unico que encuentra lo que entra por una carga cartografica y"
+                                    + " todavia no tiene ficha; la consulta de fichas no lo ve porque"
+                                    + " lista fichas")
+                    .extracting(PredioDelCatastro::predioId)
+                    .containsExactly(sinFicha);
+
+            Pagina<PredioDelCatastro> fichados =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.predios(
+                                            new FiltroDePredios(
+                                                    "2001010010010010701", null, null, true),
+                                            Paginacion.de(0, 50, "codRefCatastral")));
+            assertThat(fichados.contenido())
+                    .extracting(PredioDelCatastro::predioId)
+                    .containsExactly(conFicha);
+            assertThat(fichados.contenido().getFirst().fichado()).isTrue();
+        }
+
+        @Test
+        @DisplayName("sin filtro de estado salen tambien los dados de baja: es lo que hay que ver")
+        void losDadosDeBajaSalen() {
+            long activo = predioNuevo("20010100100100106010001", "AV. VIVA 1");
+            Predio retirado =
+                    registrar.registrar(
+                            Predio.urbano(
+                                    CodigoReferenciaCatastral.de("20010100100100106010002"),
+                                    "AV. RETIRADA 2"),
+                            Observacion.de("Alta para la prueba del listado"));
+            registrar.darDeBaja(retirado, Observacion.de("Se demolio"));
+
+            Pagina<PredioDelCatastro> todos =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.predios(
+                                            new FiltroDePredios(
+                                                    "2001010010010010601", null, null, null),
+                                            Paginacion.de(0, 50, "codRefCatastral")));
+            assertThat(todos.contenido())
+                    .as(
+                            "el listado del catastro no es el de la emision: esconder los retirados"
+                                    + " seria esconder lo que hay que revisar")
+                    .hasSize(2);
+
+            Pagina<PredioDelCatastro> soloActivos =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.predios(
+                                            new FiltroDePredios(
+                                                    "2001010010010010601",
+                                                    null,
+                                                    EstadoPredio.ACTIVO,
+                                                    null),
+                                            Paginacion.de(0, 50, "codRefCatastral")));
+            assertThat(soloActivos.contenido())
+                    .extracting(PredioDelCatastro::predioId)
+                    .containsExactly(activo);
+        }
+
+        @Test
+        @DisplayName(
+                "la via, el sector y la manzana salen por CODIGO, que es lo que se vuelve a mandar")
+        void laUbicacionSalePorCodigo() {
+            long sectorId = sectorDeListado();
+            Manzana manzana =
+                    transaccion.execute(
+                            estado -> repositorio.guardar(new Manzana(null, sectorId, "M9")));
+
+            Predio predio =
+                    registrar.registrar(
+                            Predio.urbano(
+                                            CodigoReferenciaCatastral.de("20010100100100105010001"),
+                                            "AV. UBICADA 1")
+                                    .ubicadoEn(
+                                            sectorId,
+                                            java.util.Objects.requireNonNull(manzana).id(),
+                                            "L9"),
+                            Observacion.de("Alta ubicada para el listado"));
+
+            PredioDelCatastro fila =
+                    transaccion
+                            .execute(
+                                    estado ->
+                                            repositorio.predios(
+                                                    new FiltroDePredios(null, "SL-9", null, null),
+                                                    Paginacion.de(0, 50, "codRefCatastral")))
+                            .contenido()
+                            .getFirst();
+
+            assertThat(fila.predioId()).isEqualTo(predio.id());
+            assertThat(fila.codigoDeSector())
+                    .as("la correccion del predio recibe codigos, no identificadores internos")
+                    .isEqualTo("SL-9");
+            assertThat(fila.codigoDeManzana()).isEqualTo("M9");
+            assertThat(fila.lote()).isEqualTo("L9");
+        }
+
+        @Test
+        @DisplayName("un predio sin via, sin sector y sin ficha SALE: los JOIN son externos")
+        void elPredioPeladoSale() {
+            long pelado = predioNuevo("20010100100100104010001", "AV. PELADA 1");
+
+            Pagina<PredioDelCatastro> pagina =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.predios(
+                                            new FiltroDePredios(
+                                                    "2001010010010010401", null, null, null),
+                                            Paginacion.de(0, 50, "codRefCatastral")));
+
+            assertThat(pagina.contenido())
+                    .as("con JOIN interno, la cola de saneamiento se esconderia de si misma")
+                    .extracting(PredioDelCatastro::predioId)
+                    .containsExactly(pelado);
+            PredioDelCatastro fila = pagina.contenido().getFirst();
+            assertThat(fila.codigoDeVia()).isNull();
+            assertThat(fila.codigoDeSector()).isNull();
+            assertThat(fila.fichado()).isFalse();
+        }
+
+        @Test
+        @DisplayName("el listado es de esta municipalidad: desde la vecina no sale ninguno")
+        void elListadoNoCruzaMunicipalidades() {
+            predioNuevo("20010100100100103010001", "AV. AISLADA 1");
+
+            TenantContext.limpiar();
+            TenantContext.fijar(new MunicipalidadId(otraMunicipalidad));
+
+            Pagina<PredioDelCatastro> desdeLaVecina =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.predios(
+                                            new FiltroDePredios(
+                                                    "2001010010010010301", null, null, null),
+                                            Paginacion.de(0, 50, "codRefCatastral")));
+            assertThat(desdeLaVecina.contenido()).isEmpty();
+            assertThat(desdeLaVecina.totalElementos()).isZero();
+        }
+    }
+
     // ------------------------------------------------------------------
+
+    /**
+     * Una ficha minima por SQL directo: lo unico que esta prueba necesita de ella es que exista,
+     * para que {@code fichado} tenga algo que encontrar.
+     */
+    private static void sembrarFicha(long muni, long predioId) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            // Con el contexto fijado, como cualquier escritura: `ficha_catastral` lleva RLS con
+            // FORCE, asi que ni siquiera el propietario de la tabla entra sin el.
+            ContextoDeTenant.fijar(app, muni);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO ficha_catastral (municipalidad_id, predio_id, tipo,"
+                                    + " version, area_terreno, uso, vigencia_desde, origen,"
+                                    + " documento_origen, observacion, usuario_registro)"
+                                    + " VALUES (?, ?, 'UNICA', 1, 120.00, 'CASA HABITACION',"
+                                    + " DATE '2026-01-01', 'DECLARACION_JURADA', 'DJ 1-2026',"
+                                    + " 'Siembra de la prueba', 'catastro.tecnico')")) {
+                sentencia.setLong(1, muni);
+                sentencia.setLong(2, predioId);
+                sentencia.executeUpdate();
+                app.commit();
+            }
+        }
+    }
 
     private static long predioNuevo(String codigo, String direccion) {
         Predio predio =
