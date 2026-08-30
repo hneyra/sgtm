@@ -422,6 +422,31 @@ export const MOTIVOS_DE_FILTRO: Readonly<Record<string, string>> = {
     'El libro no sabe en qué ventanilla se cobró, así que aquí no se puede filtrar por caja: ese corte lo da «Recaudación por área» de Tesorería.',
 
   /**
+   * **Los cuatro de «Espectáculos públicos no deportivos»** (#432).
+   *
+   * Aqui el motivo no es que el servidor los rechace: es que **no hay a quien
+   * preguntarle**. La unica operacion de esta opcion es el `POST` que registra
+   * el evento, `EspectaculoController` no lee ninguno de los cuatro —ni del
+   * cuerpo ni de la consulta— y **ninguna lectura del contrato lista los
+   * espectaculos declarados**, asi que la tabla que el prototipo dibuja debajo
+   * no se llena con nada. Un filtro sobre una tabla que no existe cambia la URL
+   * y no cambia nada mas, que es la forma mas silenciosa de este defecto.
+   *
+   * Se bloquean y no se quitan, como los siete de arriba (RNF-080).
+   */
+  'espectaculos.nDeExpediente':
+    'Todavía no hay ninguna consulta de espectáculos declarados, así que aquí no se puede buscar por expediente: esta pantalla registra uno nuevo, y la tabla de abajo sale vacía.',
+
+  'espectaculos.organizador':
+    'Tampoco se puede buscar por organizador, y por lo mismo: no hay ninguna consulta de espectáculos declarados. Los datos del organizador de este evento se escriben en la declaración.',
+
+  'espectaculos.desde':
+    'El rango de fechas no acota nada: no hay ninguna consulta de espectáculos declarados que recorrer.',
+
+  'espectaculos.hasta':
+    'El rango de fechas no acota nada, por lo mismo que «Desde».',
+
+  /**
    * **Las dos hojas nacionales del cuadro de valuación** (propuesta B, #17/#71).
    *
    * Mismo hueco que `consulta_fichas.conciliadaConRentas` y que

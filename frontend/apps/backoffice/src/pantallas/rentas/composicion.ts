@@ -298,6 +298,29 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
       },
     },
   },
+  /**
+   * Espectaculos publicos no deportivos: **los cuatro filtros que no filtran**
+   * (#432).
+   *
+   * La unica operacion de esta opcion es el `POST` que registra el evento;
+   * `EspectaculoController` no lee ninguno de los cuatro —ni del cuerpo ni de
+   * la consulta— y **ninguna lectura del contrato lista los espectaculos
+   * declarados**, asi que la tabla que el prototipo dibuja debajo no se llena
+   * con nada. Elegir cualquiera de los cuatro cambiaba la URL y no cambiaba
+   * nada mas, que es la forma mas silenciosa de este defecto.
+   *
+   * Se bloquean y no se quitan, como los de `consulta_fichas` (#322) y los de
+   * los dos resumenes de transito (#398): el rotulo del prototipo se conserva
+   * (RNF-080), y un filtro que desaparece deja a quien lo buscaba pensando que
+   * algo se ha roto. La redaccion del motivo vive en `prosa-textos.ts`, y
+   * `prosa.test.ts` exige que las dos listas digan lo mismo.
+   *
+   * **El acto sigue sin poder registrarse**, y eso no lo cambia este issue: ver
+   * `pantallas/rentas/index.ts` para las dos preguntas de #432 contestadas.
+   */
+  espectaculos: {
+    filtrosBloqueados: ['nDeExpediente', 'organizador', 'desde', 'hasta'],
+  },
   baja_deuda: {
     superficie: MOVIMIENTOS_DE_DEUDA,
     seleccion: {
