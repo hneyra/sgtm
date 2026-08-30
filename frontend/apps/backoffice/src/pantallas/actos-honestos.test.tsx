@@ -257,7 +257,12 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // backend para la que fracciona)—. Las ocho llegan desde
       // `sin-declaracion`, que es donde las seis de #421 se habian quedado y
       // donde las otras dos ya estaban.
-      declarada: 30,
+      //
+      // **Y una mas con #430**: `caja_tributaria`, la primera pantalla del
+      // sistema desde la que entra dinero. Llega de `sin-campo`, y necesito tres
+      // controles anadidos —el medio de pago, la caja y el cajero— mas la
+      // seleccion de filas de #332 sobre la grilla que ya leia.
+      declarada: 31,
       // **Una, y es nueva con #424**: `transito_reportes`. Viene de
       // `sin-declaracion` —su operacion es un `POST` y no declara escritura—, y
       // esa causa decia de ella lo unico que no es cierto: que «la pantalla aún
@@ -392,7 +397,10 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
       // **Y uno mas con #431**: `fisc_resultados`, que llega de `sin-backend`
       // por el mismo movimiento. El numero no se sumo a mano: se recompuso
       // ejecutando el censo.
-      'sin-campo': 16,
+      //
+      // **Y uno menos con #430**: `caja_tributaria` se va a `declarada`. El
+      // numero no se sumo a mano: se recompuso ejecutando el censo.
+      'sin-campo': 15,
     });
     const total = Object.values(porCausa).reduce((a, b) => a + b, 0);
     expect(total).toBe(Object.keys(pantallas).length);
@@ -430,11 +438,17 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
         'Guardar',
       ]),
     ).toBeUndefined();
-    // Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
-    // no tiene donde escribir** (#33, #74): a `caja_tributaria` le falta el
-    // medio de pago —EFECTIVO/CHEQUE/DEPOSITO/TARJETA/TRANSFERENCIA—, un campo
-    // distinto de «Forma de pago» (que en el backend es `tipoDePago`).
-    expect(impedimentoDelActo('caja_tributaria', ['Cobrar'])?.causa).toBe('sin-campo');
+    /* Y sin declarar, con verbo de escritura, pero con **un dato que la pantalla
+       no tiene donde escribir** (#33, #74): a `caja_tasas` le faltan los
+       conceptos del TUPA —ninguna consulta publica todavia su tarifa vigente— y,
+       con ellos, el medio de pago, la caja y el cajero.
+
+       El testigo era `caja_tributaria` hasta #430, que la conecto: ahora declara
+       su escritura, y lo que la apaga es `exigir`. Su gemela sigue aqui, y sirve
+       igual de testigo porque su hueco es el mismo con un dato mas. */
+    expect(impedimentoDelActo('caja_tasas', ['Limpiar', 'Cobrar y emitir recibo'])?.causa).toBe(
+      'sin-campo',
+    );
     // Y la misma causa **cuando la primaria es de salida** (#385): en
     // `alcabala` la ultima accion del catalogo es «Imprimir liquidación», y
     // hasta #385 ese filtro devolvia `undefined` antes de consultar

@@ -188,7 +188,7 @@ describe('las que siguen sin campo siguen sin campo', () => {
     expect(escrituraDe('alcabala')).toBeUndefined();
   });
 
-  it('las dieciseis que quedan son las dieciseis que quedan', () => {
+  it('las quince que quedan son las quince que quedan', () => {
     /* La lista se **nombra**, no se cuenta, y por eso avisa cuando cambia por
        otro sitio: al integrar `main` aparecieron dos que este issue no habia
        visto —las dos hojas de resolucion de licencias, que FRO-06 (#427) trajo
@@ -211,7 +211,6 @@ describe('las que siguen sin campo siguen sin campo', () => {
       'adm_resolucion_gerencia',
       'alcabala',
       'caja_tasas',
-      'caja_tributaria',
       'espectaculos',
       'fisc_predial',
       'fisc_programa',

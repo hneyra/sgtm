@@ -1021,6 +1021,38 @@ function faltaEnLaNotificacion(borrador: Readonly<Record<string, string>>): stri
   return undefined;
 }
 
+/**
+ * Que le falta a la cobranza para poder registrarse (#33, #430).
+ *
+ * Lo que `CajaController.cobranza` pasa por `exigir`, en el orden en que se
+ * rellena la pantalla: el contribuyente —que aqui viene del filtro—, al menos
+ * una deuda marcada, el medio de pago, la caja y el cajero.
+ */
+function faltaEnLaCobranza(
+  borrador: Readonly<Record<string, string>>,
+  filas: Readonly<Record<string, readonly Readonly<Record<string, string>>[]>>,
+  delFiltro: Readonly<Record<string, string>>,
+): string | undefined {
+  const dato = (clave: string): string => (borrador[clave] ?? '').trim();
+
+  if ((delFiltro['codContribuyente'] ?? '').trim() === '') {
+    return 'Busca primero al contribuyente: la caja cobra sobre su cuenta corriente.';
+  }
+  if ((filas['obligaciones'] ?? []).length === 0) {
+    return 'Marca al menos una deuda de la tabla: es lo que se cobra.';
+  }
+  if (dato('medioDePago') === '') {
+    return 'Falta el medio de pago: con qué entra el dinero (efectivo, cheque, depósito, tarjeta o transferencia).';
+  }
+  if (dato('caja') === '') {
+    return 'Falta la caja: el recibo se numera con la serie de esa ventanilla.';
+  }
+  if (dato('cajero') === '') {
+    return 'Falta el cajero: el turno que se abre es el suyo.';
+  }
+  return undefined;
+}
+
 const SALIDA_DEL_CERTIFICADO = 'Emítelo por el procedimiento actual y avísale a sistemas.';
 
 function faltaEnElCertificado(borrador: Readonly<Record<string, string>>): string | undefined {
@@ -1956,6 +1988,63 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
       }
       return undefined;
     },
+  },
+
+  /**
+   * La caja tributaria (`POST /tesoreria/caja/cobranza`, #33, #430, RF-080).
+   *
+   * **Es la primera pantalla del sistema desde la que entra dinero**, y por eso lo que NO
+   * declara importa tanto como lo que declara. Viajan cinco cosas y ninguna más:
+   *
+   *   `medioDePago`      → `formaDePago`. Es el control añadido de `tesoreria/composicion.ts`,
+   *                        no el campo homónimo del catálogo: ver allí
+   *   `caja`, `cajero`   los dos controles que identifican el turno
+   *   `codContribuyente` **del filtro**, que es donde la pantalla lo pregunta
+   *   `obligaciones`     las filas marcadas, con las cuatro claves que
+   *                      `PeticionDeObligacion` declara. `ejercicio`, `predioId` y `vehiculoId`
+   *                      van `entero: true`: son `Integer`/`Long` en el cuerpo, y #73 ya midió
+   *                      lo que cuesta mandar un identificador como cadena
+   *
+   * **Y los trece campos que el catálogo dibuja y no se declaran se dibujan bloqueados**, que
+   * es lo que `Formulario` hace con lo que no está en la lista blanca. Dos de ellos merecen
+   * decirse porque parecen justo lo que no son:
+   *
+   *   «Forma de pago»       es el `tipoDePago` del backend, no el medio. De sus nueve opciones
+   *                         sólo dos llegarían a cobrar —NORMAL TRIBUTARIO y PRECONVENIO—: «A
+   *                         CUENTA» ni siquiera existe con ese nombre en el enumerado
+   *                         (`A_CUENTA`), y las otras seis tampoco. Mandarlo sería un 422
+   *                         después de confirmar un cobro
+   *   «Beneficio aplicable» sus cuatro campañas son **ordenanzas que el prototipo inventó**, y
+   *                         el campo se guarda verbatim en `recibo.campania_beneficio`, que es
+   *                         papel firmado. Su efecto sobre el importe está bloqueado por D-02b
+   *
+   * Los once de «Filtros de deuda» tampoco: `consulta_deuda` sólo acepta `codContribuyente`,
+   * `fechaDeCorte`, `fase` e `incluyeConvenios`.
+   *
+   * `tipoDePago` no se declara y **por omisión el backend usa NORMAL**, que es el cobro
+   * corriente de ventanilla; `fechaDePago` tampoco, y la resuelve el reloj del servidor
+   * (regla 9: la deuda se relee a esa fecha, no a la de este navegador).
+   */
+  caja_tributaria: {
+    campos: {
+      medioDePago: { campo: 'formaDePago' },
+      caja: { campo: 'caja' },
+      cajero: { campo: 'cajero' },
+    },
+    delFiltro: { codContribuyente: { campo: 'codContribuyente' } },
+    tablas: {
+      obligaciones: {
+        campo: 'obligaciones',
+        columnas: {
+          tributo: { campo: 'tributo' },
+          ano: { campo: 'ejercicio', entero: true },
+          predioId: { campo: 'predioId', entero: true },
+          vehiculoId: { campo: 'vehiculoId', entero: true },
+        },
+      },
+    },
+    exigir: (borrador, filas, delFiltro) => faltaEnLaCobranza(borrador, filas, delFiltro),
+    nota: true,
   },
 
   transito_valores: {

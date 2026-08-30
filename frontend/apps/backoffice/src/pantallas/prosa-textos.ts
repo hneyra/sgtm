@@ -614,6 +614,9 @@ export const NOTAS: Readonly<Record<string, string>> = {
   adm_notificacion:
     'El número se guarda con su serie —«001-004183», como el manual lo imprime— y el año no entra en él. De esta pantalla viajan cuatro datos y el plazo: el número, la fecha, la dirección del predio y el código de infracción, que es el motivo por el que se notifica. El infractor, el CIIU, la licencia, la hora, el fiscalizador y quién recibió no se guardan todavía: el registro previo se toma sobre la vivienda o el negocio inspeccionado, sin haber resuelto aún quién responde. Y sin plazo la notificación no vence nunca.',
 
+  caja_tributaria:
+    'De esta pantalla viajan cinco cosas: el contribuyente que se buscó arriba, las deudas marcadas en la tabla, el medio de pago, la caja y el cajero. «Forma de pago» y «Beneficio aplicable» no viajan y por eso salen bloqueados: el primero es el tipo de cobranza —y de sus nueve opciones el sistema sólo entiende dos— y las cuatro campañas del segundo no corresponden a ninguna ordenanza cargada. Los once campos de «Filtros de deuda» tampoco: la búsqueda es por contribuyente. El importe no se manda desde aquí —lo relee el sistema a la fecha del pago— y el recibo se numera con la serie de la caja.',
+
   transito_descargos:
     'Aquí se registra el escrito que el administrado presentó, y nada más: la sección «Evaluación y resolución» no viaja, porque resolver un descargo es dictar una resolución de gerencia, que es otro acto y otro papel. «Dentro del plazo» tampoco se manda —lo calcula el servidor con el plazo vigente, a partir de la fecha de presentación—, y el «Nº de expediente» de arriba es el del descargo que se está consultando: el del escrito nuevo se pide al final de «Solicitud», con su propia etiqueta.',
 };
