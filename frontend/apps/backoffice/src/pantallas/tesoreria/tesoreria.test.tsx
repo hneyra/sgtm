@@ -5,6 +5,7 @@ import { censoDeConectadas } from '../aportes-de-modulo';
 import { permisosDelClaim, puedeVer } from '@sgtm/sesion';
 import { montarEnRuta } from '../../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pruebas/acciones';
+import { ACTOS_SIN_CAMPO } from '../actos';
 
 /* El censo de conectadas del catalogo entero, SIN registrar ninguna: desde #433 las
    conexiones llegan con el trozo de su modulo, y quien las registra es la espera de
@@ -38,8 +39,19 @@ afterEach(() => {
 
 /* ── Lo que sigue apagado, y ahora dice por qué exactamente ─────────────── */
 
-describe('la caja no puede cobrar: le falta el medio de pago, no la declaración', () => {
-  it('caja tributaria lo dice nombrando el dato, con la causa «sin-campo»', async () => {
+describe('la caja de tasas no puede cobrar: le faltan los conceptos, no la declaración', () => {
+  /**
+   * **`caja_tributaria` ya no está aquí** (#430): declara su escritura, y lo que
+   * la apaga es lo que le falta al formulario, no un impedimento. Ver el
+   * `describe` de abajo, «la caja cobra».
+   *
+   * Su gemela sigue, y con el hueco más grande de las dos: además del medio de
+   * pago, la caja y el cajero, le faltan **los conceptos del TUPA**, y ninguna
+   * consulta del sistema publica todavía ese catálogo con su tarifa vigente
+   * —`TasaRepository` tiene un solo método, `vigenteA(codigo, fecha)`, y el
+   * contrato no declara ningún `GET /tesoreria/tasas`—.
+   */
+  it('caja de tasas lo dice nombrando el dato, con la causa «sin-campo»', async () => {
     const usuario = userEvent.setup();
     globalThis.fetch = async () =>
       new Response(JSON.stringify({ contenido: [], totalElementos: 0 }), {
@@ -47,16 +59,15 @@ describe('la caja no puede cobrar: le falta el medio de pago, no la declaración
         headers: { 'content-type': 'application/json' },
       });
 
-    montarEnRuta('/tesoreria/caja-tributaria');
+    montarEnRuta('/tesoreria/caja-tasas');
     await screen.findByRole('button', { name: /Cobrar/ });
 
     primariaApagada();
-    expect(motivoDeLaPrimaria()).toMatch(/el medio de pago/);
+    expect(motivoDeLaPrimaria()).toMatch(/conceptos del TUPA/);
     expect(motivoDeLaPrimaria()).toMatch(/Registra el acto por el procedimiento actual/);
     // La causa no se pinta: es para quien mantiene el sistema, no para quien
-    // atiende (`ImpedimentoDelActo.causa`). Que ya no sea «sin-declaracion»
-    // demuestra que el diagnóstico es el correcto: no falta declarar la lista
-    // blanca, falta un campo que la pantalla no dibuja.
+    // atiende (`ImpedimentoDelActo.causa`). Que sea «sin-campo» y no
+    // «sin-declaracion» dice cuál de las dos cosas falta.
     expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
       'data-causa',
       'sin-campo',
@@ -70,17 +81,15 @@ describe('la caja no puede cobrar: le falta el medio de pago, no la declaración
     ).not.toBeInTheDocument();
   });
 
-  it('caja de tasas dice lo mismo, con su propio endpoint nombrado', async () => {
-    globalThis.fetch = async () => new Response('{}', { status: 404 });
-    montarEnRuta('/tesoreria/caja-tasas');
-    await screen.findByRole('button', { name: /Cobrar/ });
-
-    primariaApagada();
-    expect(motivoDeLaPrimaria()).toMatch(/el medio de pago/);
-    expect(document.getElementById('sgtm-motivo-de-la-accion')).toHaveAttribute(
-      'data-causa',
-      'sin-campo',
-    );
+  it('y nombra los cuatro datos que le faltan, no solo el medio de pago', () => {
+    /* La lista es lo que quien mantiene lee para saber que falta sin abrir el
+       controlador, y hasta #430 nombraba **uno** de los cuatro. */
+    expect(ACTOS_SIN_CAMPO['caja_tasas']?.campos).toEqual([
+      'conceptos',
+      'formaDePago',
+      'caja',
+      'cajero',
+    ]);
   });
 
   it('fraccionamiento dice que le falta la grilla de deuda, no un campo suelto', async () => {

@@ -262,17 +262,28 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
    * traduciendo esas opciones no arregla nada: el cuerpo saldría igual sin el medio de pago, y lo
    * que llegaría a ventanilla es un 422 después de rellenar la grilla y de confirmar un cobro.
    */
-  caja_tributaria: {
-    dato: 'el medio de pago (efectivo, cheque, depósito, tarjeta o transferencia)',
-    porque:
-      'Sin él el cobro no se puede registrar: es un campo distinto de «Forma de pago» —que aquí es el tipo de cobranza, NORMAL/A CUENTA/PRECONVENIO…—, y ninguna sección de esta pantalla tiene dónde escribirlo.',
-    campos: ['formaDePago'],
-  },
+  /*
+   * `caja_tributaria` **estaba aqui, y ya no** (#430).
+   *
+   * Era la primera de las tres formas del hueco —los datos los teclea quien
+   * atiende y solo faltaban los controles—, con un agravante: eran **tres**, no
+   * uno. La entrada nombraba solo el medio de pago, y `CajaController.cobranza`
+   * pasa por `exigir` ademas la caja y el cajero, y exige al menos una
+   * obligacion marcada. Desde #430 los tres controles los declara
+   * `tesoreria/composicion.ts` —con la etiqueta «Medio de pago», nunca «Forma de
+   * pago», que en esta pantalla es el tipo de cobranza (RNF-080)— y las
+   * obligaciones salen de la grilla que ya lee `consulta_deuda`, con el patron
+   * de seleccion de #332.
+   *
+   * Se deja anotado y no se borra en silencio: es el precedente de que un acto
+   * puede necesitar **varios** datos que ninguna seccion dibuja, y de que
+   * nombrarlos de menos deja a quien lo lea creyendo que falta uno.
+   */
   caja_tasas: {
-    dato: 'el medio de pago (efectivo, cheque, depósito, tarjeta o transferencia)',
+    dato: 'los conceptos del TUPA que se cobran, el medio de pago, la caja y el cajero',
     porque:
-      'Sin él el cobro no se puede registrar, por el mismo motivo que en caja tributaria: el cuerpo lo exige y esta pantalla no dibuja ningún campo para él.',
-    campos: ['formaDePago'],
+      'Sin ellos el cobro no se puede registrar: el backend exige al menos un concepto marcado, y ninguna consulta del sistema publica todavía el catálogo del TUPA con su tarifa vigente, así que no hay de dónde elegirlo. El medio de pago, la caja y el cajero tampoco tienen campo en esta pantalla.',
+    campos: ['conceptos', 'formaDePago', 'caja', 'cajero'],
   },
 
   /**
@@ -288,7 +299,7 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
   fraccionamiento: {
     dato: 'las deudas que se acogen al convenio, elegidas en una grilla',
     porque:
-      'Sin ellas el convenio no se puede registrar: el backend exige al menos una obligación marcada, y esta pantalla no dibuja ninguna tabla de deuda donde elegirla.',
+      'Sin ellas el convenio no se puede registrar: el backend exige al menos una obligación marcada, y esta pantalla no dibuja ninguna tabla de deuda donde elegirla — la única que tiene, «Detalle cuotas», es el cronograma que sale de simular, no una grilla de entrada.',
     campos: ['obligaciones'],
   },
 

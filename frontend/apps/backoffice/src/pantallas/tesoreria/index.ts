@@ -28,23 +28,50 @@ import {
  * por la URL, con el número impreso del recibo o del convenio. Las que se quedan fuera son
  * `caja_tasas` y `fraccionamiento`, con su motivo anotado.
  *
- * ── Por qué la caja no puede cobrar todavía, aunque el backend ya cobre ──────
+ * ── La caja **cobra** desde #430, y lo que hizo falta fueron cuatro cosas ────
  *
- * `CajaController.cobranza` y `.tasas` exigen `formaDePago` en el cuerpo —EFECTIVO, CHEQUE,
- * DEPOSITO, TARJETA o TRANSFERENCIA, el medio con que entra el dinero— y **ninguna sección de
- * ninguna de las dos pantallas dibuja un campo para él**. Lo que el prototipo llama «Forma de
- * pago» en `caja_tributaria` es, en el backend, `tipoDePago` —NORMAL TRIBUTARIO, A CUENTA,
- * PRECONVENIO…—, un campo distinto y opcional (por omisión, NORMAL). Es el mismo tipo de
- * hallazgo que `rentas/index.ts` documenta para `alcabala`/`transferencia_predio`: el dato no
- * es inventable desde aquí, y las dos formas de salir —añadir el campo al prototipo, o que el
- * backend deje de exigirlo— son decisiones de diseño que no caben en este issue. Se anota en
- * `pantallas/actos.ts` (`ACTOS_SIN_CAMPO`), que es lo que hace que la primaria diga **qué**
- * falta en vez de fingir un cobro que el servidor rechazaría con 422.
+ * `CajaController.cobranza` exige `formaDePago` en el cuerpo —EFECTIVO, CHEQUE, DEPOSITO,
+ * TARJETA o TRANSFERENCIA, el medio con que entra el dinero— y **ninguna sección de la
+ * pantalla dibuja un campo para él**: lo que el prototipo llama «Forma de pago» es, en el
+ * backend, `tipoDePago` —NORMAL TRIBUTARIO, A CUENTA, PRECONVENIO…—, un campo distinto y
+ * opcional. Y exige además la `caja`, el `cajero` y al menos una obligación marcada, para los
+ * que tampoco hay campo. **Eran cuatro huecos y la entrada de `ACTOS_SIN_CAMPO` nombraba uno**,
+ * que es de menos: quien la leyera creería que falta un control cuando faltan tres y una grilla.
+ *
+ * Los tres primeros los declara `tesoreria/composicion.ts` con el mecanismo de #422 —el del
+ * medio de pago con **su propia etiqueta**, «Medio de pago», porque dos cosas distintas no se
+ * llaman igual en la misma pantalla (RNF-080)— y el cuarto sale de la grilla que esta pantalla
+ * ya leía, con la selección de filas de #332: la misma lectura (`consulta_deuda`) y el mismo
+ * patrón que `baja_deuda`.
+ *
+ * **Y lo que no se declara se dibuja bloqueado**, que es lo que `Formulario` hace con lo que no
+ * está en la lista blanca. Dos campos merecen decirse porque parecen justo lo que no son:
+ * «Forma de pago» —de sus nueve opciones sólo dos llegarían a cobrar; «A CUENTA» ni siquiera
+ * existe con ese nombre en el enumerado (`A_CUENTA`)— y «Beneficio aplicable», cuyas cuatro
+ * campañas son **ordenanzas que el prototipo inventó** y que se guardarían verbatim en
+ * `recibo.campania_beneficio`, que es papel firmado (D-02b).
+ *
+ * ── `caja_tasas` y `fraccionamiento` se quedan, y ya no por el mismo motivo ──
+ *
+ * `caja_tasas` tiene el hueco de su gemela **más uno que la separa**: `PeticionDeCobroDeTasas`
+ * exige al menos un concepto del TUPA marcado, y **ninguna consulta del sistema publica ese
+ * catálogo** —`TasaRepository` tiene un solo método, `vigenteA(codigo, fecha)`, y el contrato no
+ * declara ningún `GET /tesoreria/tasas`—. Sin la lista no hay de dónde elegir, así que su
+ * entrada de `ACTOS_SIN_CAMPO` nombra los cuatro: los conceptos, el medio de pago, la caja y el
+ * cajero.
  *
  * `fraccionamiento` tiene el mismo problema con otra forma: `PeticionDeFraccionamiento` exige
  * al menos una obligación marcada, y el catálogo de esta pantalla no declara ninguna tabla de
  * deuda que elegir —la única `tabla` que dibuja, «Detalle cuotas», es el cronograma de
  * **salida** de la simulación, no una grilla de entrada—. También va a `ACTOS_SIN_CAMPO`.
+ *
+ * **Y su primaria no se declara**, aunque el catálogo dibuje tres verbos —«Fraccionar»,
+ * «Imprimir simulación», «Aceptar»—: lo único que el código atribuye a un botón concreto es la
+ * simulación (`ConvenioController.fraccionar` dice «es el boton «Imprimir simulacion» de la
+ * pantalla»), y **nada dice cuál de las otras dos registra**. «Fraccionar» = calcular el
+ * cronograma con «Aceptar» = confirmar se lee igual de bien que al revés, y en ese caso la
+ * última del catálogo ya es la correcta. Declarar el rótulo equivocado en `LA_QUE_ESCRIBE` es
+ * exactamente el defecto que esa lista existe para impedir.
  *
  * ── Las dos formas de cuerpo que faltaban, y que ya no faltan (#423) ────────
  *
@@ -61,6 +88,16 @@ import {
  * entero, con al menos una obligación acogida—, y esta pantalla no dibuja ninguna grilla de
  * deuda: es el mismo hueco por el que `fraccionamiento` está en `ACTOS_SIN_CAMPO`.
  */
+
+/**
+ * El identificador interno como texto, o vacio si el recurso no lo trajo.
+ *
+ * Gemelo del de `rentas/index.ts`, y se duplica a proposito: son dos modulos que
+ * llegan en dos trozos distintos (#433), y exportarlo de uno ataria el paquete
+ * de Tesoreria al de Rentas por tres lineas.
+ */
+const identificador = (valor: unknown): string =>
+  typeof valor === 'number' ? String(valor) : typeof valor === 'string' ? valor : '';
 
 /** El registro que abre un recibo o un convenio: su número impreso. Sin él no hay petición. */
 const registro = ({ ruta }: ContextoDePantalla): string => ruta['codigo'] ?? '';
@@ -116,6 +153,24 @@ const caja_tributaria = definirConexion({
         ];
       },
       'deudas',
+      /* Lo que identifica la obligacion, **leido del cuerpo y no de la celda**
+         (#332, #430). Las claves son las de las columnas del catalogo, salvo
+         `predioId` y `vehiculoId`, que ninguna columna dibuja: son el
+         identificador interno con que `ClaveDeSaldo` compara, y ensenarlo bajo
+         «Unidad» seria ensenar otra cosa con ese rotulo.
+
+         Aqui **no viaja la fase**, y esa es la diferencia con la baja: cobrar no
+         mueve ninguna obligacion de fase —`CobrarDeuda` abona sobre la que hay—,
+         mientras que una baja sin fase la devolvia a ORDINARIA sin decirlo. */
+      (obligacion) => {
+        const leida = obligacionDeDeuda(obligacion);
+        return {
+          ano: leida.ejercicio,
+          tributo: leida.tributo,
+          predioId: identificador(obligacion['predioId']),
+          vehiculoId: identificador(obligacion['vehiculoId']),
+        };
+      },
     ),
   }),
 });

@@ -129,20 +129,76 @@ test('sin observación, ni con el teclado se consigue registrar', async ({ page 
   await expect(page.getByText(/Guardado, con tu observación/)).toBeVisible();
 });
 
-test('la caja dice por que todavia no puede cobrar, en vez de prometerlo', async ({ page }) => {
-  await page.goto('/tesoreria/caja-tributaria');
+test('la caja de tasas dice por que todavia no puede cobrar, en vez de prometerlo', async ({
+  page,
+}) => {
+  await page.goto('/tesoreria/caja-tasas');
   const cobrar = page.getByRole('button', { name: /Cobrar/i }).last();
   // Apagada con `aria-disabled`, no con `disabled`: es lo que la deja enfocable
   // para que su motivo se lea (FRO-04 §6).
   await expect(cobrar).toHaveAttribute('aria-disabled', 'true');
 
   // Y el motivo se **ve**, en la lengua del mostrador y con la salida puesta.
-  // Desde #74 nombra el dato exacto que falta —el medio de pago, no la lista
-  // blanca—: `caja_tributaria` esta en `ACTOS_SIN_CAMPO`, no en «sin-declaracion».
-  await expect(page.getByText(/el medio de pago/i)).toBeVisible();
+  // Desde #430 nombra los cuatro datos que le faltan, y el primero es el que la
+  // separa de su gemela: ninguna consulta publica todavia el catalogo del TUPA.
+  // La franja, no la descripcion de la pantalla: las dos hablan del TUPA.
+  await expect(page.locator("#sgtm-motivo-de-la-accion")).toContainText(/conceptos del TUPA/i);
   await expect(page.getByText(/Registra el acto por el procedimiento actual/i)).toBeVisible();
   // Sin escritura declarada no hay ni caja de observacion: no hay a donde escribir.
   await expect(page.getByRole('textbox', { name: 'Observación' })).toHaveCount(0);
+});
+
+/**
+ * **Cobrar en ventanilla, sin tocar el raton** (#430, #33, RF-080, FRO-03 §6).
+ *
+ * Es el camino que mas veces se recorre al dia en una municipalidad, y el unico
+ * por el que entra dinero. Hasta #430 no se podia recorrer entero: faltaban el
+ * medio de pago, la caja, el cajero y la grilla de la que elegir la deuda.
+ *
+ * Lo que este camino demuestra, y no una prueba de componente: que las cuatro
+ * cosas se pueden **poner con el teclado** —la casilla de la fila con espacio,
+ * los dos controles anadidos tecleando, el desplegable con las flechas— y que la
+ * primaria no se enciende hasta que esta la observacion (regla 10).
+ */
+test('cobrar en ventanilla: elegir la deuda, el medio de pago y el turno, sin raton', async ({
+  page,
+}) => {
+  await page.goto('/tesoreria/caja-tributaria?codContribuyente=00000006550');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(/Caja/i);
+
+  const cobrar = page.getByRole('button', { name: /^Cobrar deuda/ });
+  await expect(cobrar).toHaveAttribute('aria-disabled', 'true');
+
+  // La deuda se elige en la grilla, con la barra espaciadora sobre su casilla.
+  const casilla = page.locator('.sgtm-tabla__casilla input').first();
+  await casilla.focus();
+  await page.keyboard.press('Space');
+  await expect(casilla).toBeChecked();
+  // Y la banda lo cuenta **sin sumar ninguna cifra** (RNF-083).
+  await expect(page.locator('.sgtm-seleccion')).toContainText(/1 deuda elegida/);
+
+  // El medio de pago: un `select` se opera con las flechas.
+  const medio = page.getByLabel('Medio de pago');
+  await medio.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(medio).not.toHaveValue('');
+
+  // Y el turno, tecleando. Los dos son controles anadidos (#422): el manual no
+  // los dibuja, y llevan su propia etiqueta.
+  await page.getByLabel('Caja', { exact: true }).focus();
+  await page.keyboard.type('C01');
+  await page.getByLabel('Cajero', { exact: true }).focus();
+  await page.keyboard.type('jperez');
+
+  // Con todo puesto y sin observacion, sigue apagada: la regla 10 no se negocia.
+  await expect(cobrar).toHaveAttribute('aria-disabled', 'true');
+
+  const observacion = page.getByRole('textbox', { name: 'Observación' });
+  await observacion.focus();
+  await page.keyboard.type('Cobro en ventanilla, turno de la mañana.');
+
+  // Y entonces, y solo entonces, se enciende.
+  await expect(cobrar).not.toHaveAttribute('aria-disabled', 'true');
 });
 
 /**
