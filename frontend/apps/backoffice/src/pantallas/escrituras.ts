@@ -148,8 +148,8 @@ const MODALIDAD_DE_NOTIFICACION_DEL_BACKEND: Readonly<Record<string, string>> = 
   // Entrecomilladas a proposito: sin las comillas, la regla de tildes en
   // identificadores las señala —son claves validas de JavaScript, y Prettier las
   // desentrecomilla si se le deja—.
-  CEDULÓN: 'CEDULON',
-  PUBLICACIÓN: 'PUBLICACION',
+  'CEDULÓN': 'CEDULON',
+  'PUBLICACIÓN': 'PUBLICACION',
   'BUZÓN ELECTRÓNICO': 'CORREO',
 };
 
@@ -214,8 +214,8 @@ const TIPO_DE_RECURSO_DEL_BACKEND: Readonly<Record<string, string>> = {
   // Entrecomilladas por lo mismo que `CEDULÓN` mas arriba: sin las comillas son
   // identificadores validos de JavaScript, y un identificador con tilde es lo
   // que ESLint prohibe (FRO-04 §2).
-  RECONSIDERACIÓN: 'RECONSIDERACION',
-  APELACIÓN: 'APELACION',
+  'RECONSIDERACIÓN': 'RECONSIDERACION',
+  'APELACIÓN': 'APELACION',
   NULIDAD: 'NULIDAD',
 };
 
@@ -1069,9 +1069,11 @@ function faltaEnElCertificado(borrador: Readonly<Record<string, string>>): strin
  * representante o a quien estuviera en el domicilio—; «NEGATIVA A RECIBIR» y
  * «CEDULÓN» ya no dicen quien sino **como**, que es lo que el enum pregunta.
  *
- * Entrecomilladas a proposito las dos con tilde y con Ñ: sin las comillas, la
- * regla de tildes en identificadores las señala —son claves validas de
- * JavaScript, y Prettier las desentrecomilla si se le deja—.
+ * `'CEDULÓN'` va entrecomillada a proposito, por lo mismo que la de
+ * `notificacion_valores`: sin las comillas es un identificador valido de
+ * JavaScript con tilde, que es justo lo que ESLint prohibe (FRO-04 §2), y
+ * **Prettier se las quita si se le deja** —`quoteProps` resuelve a «as-needed»—.
+ * Correr `yarn format` sobre este archivo las pierde y el lint lo caza.
  */
 const MODALIDAD_COACTIVA_DEL_BACKEND: Readonly<Record<string, string>> = {
   CONTRIBUYENTE: 'PERSONAL',
@@ -1079,7 +1081,7 @@ const MODALIDAD_COACTIVA_DEL_BACKEND: Readonly<Record<string, string>> = {
   FAMILIAR: 'PERSONAL',
   DEPENDIENTE: 'PERSONAL',
   'NEGATIVA A RECIBIR': 'NEGATIVA',
-  CEDULÓN: 'CEDULON',
+  'CEDULÓN': 'CEDULON',
 };
 
 const modalidadCoactivaDe = (texto: string): string | undefined =>
