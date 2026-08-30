@@ -17,8 +17,19 @@
 # —`SELECT trusted FROM pg_available_extension_versions WHERE name='postgis'` da `f`—,
 # asi que crearla exige un superusuario, y `sgtm_owner` a proposito no lo es.
 #
-# CI nunca lo ve porque CI siempre parte de un volumen vacio. Este guion es el paso que
-# falta antes del primer despliegue de `V61` sobre un ambiente que ya tiene datos.
+# CI nunca lo ve porque CI siempre parte de un volumen vacio.
+#
+# ## Cuando NO hace falta este guion
+#
+# Cuando el volumen se puede rehacer. Con el directorio de datos vacio, `crear-roles.sql`
+# vuelve a correr entero y crea la extension por el mismo camino que CI ejercita en cada
+# PR: mas simple, y mejor probado que esto. A dia de hoy (2026-08-30) `stg` y `prod` solo
+# tienen datos de prueba, asi que ese es el camino recomendado para el primer despliegue
+# de `V61`.
+#
+# Este guion es para el dia en que haya un padron que conservar — que llegara, y entonces
+# «borra el volumen» deja de ser una respuesta. `verificar-el-ambiente.sh` dice en cual de
+# las dos situaciones esta el ambiente.
 #
 # ## Que hace, exactamente
 #
