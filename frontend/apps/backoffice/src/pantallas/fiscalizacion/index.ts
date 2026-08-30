@@ -1,5 +1,5 @@
 import type { Celda, DatosDePantalla, TonoDeCelda } from '@sgtm/api-client';
-import { definirConexion } from '../conexiones';
+import { definirConexion, definirConexionEncadenada } from '../conexiones';
 import type { Conexion } from '../conexiones';
 import { parametrosDeBusqueda } from '../busqueda';
 import {
@@ -147,19 +147,31 @@ import {
  * aparte que faltaba, el mismo reparto que `certificados_listado` (#79) y
  * `costas_procesales_listado` (#42).
  *
- * **Rellena los campos de «Datos del programa» y NO la grilla, y eso es una
- * decision.** `ProgramaResource` publica la cabecera de un programa —codigo,
- * descripcion, tipo, fechas y estado—, y las seis columnas que el catalogo
- * dibuja bajo «Predios seleccionados» son «Predio», «Contribuyente», «Uso
- * declarado», «Área decl. m²», «Riesgo» y «Estado»: ninguna de ellas describe
- * un programa. Poner ahi las filas del listado dejaria un codigo de programa
- * bajo una columna que dice «Predio» y cinco guiones detras, que es reescribir
- * el rotulo del catalogo con otro significado (RNF-080) — el mismo motivo por
- * el que #80 dejo `fisc_resultados` sin conectar. **Y la muestra tampoco esta
- * en el backend**: `programa_fiscalizacion` no tiene tabla de detalle, y un
- * `acta_fiscalizacion` nace el dia de la visita con su predio ya resuelto, no
- * cuando se sortea la muestra. La grilla se queda vacia —como estaba— hasta
- * que exista de donde llenarla.
+ * **Y desde #481 rellena tambien la grilla, que es la MUESTRA del programa.**
+ * Hasta entonces se quedaba vacia a proposito: `ProgramaResource` describe un
+ * programa y las seis columnas de «Predios seleccionados» describen un predio,
+ * asi que poner ahi las filas del listado dejaria un codigo de programa bajo
+ * una columna que dice «Predio» (RNF-080) — el mismo motivo por el que #80 dejo
+ * `fisc_resultados` sin conectar. Lo que faltaba no era interfaz: era que
+ * `programa_fiscalizacion` no tenia tabla de detalle. `V60` le dio
+ * `programa_muestra` y `GET /fiscalizacion/programas/{id}/muestra`, y con ella
+ * **las dos mitades del AC 2 de #431 resultaron ser la misma pieza**: es la
+ * grilla, y es tambien la fila de la que el acta predial resuelve sus tres
+ * identificadores.
+ *
+ * **Son dos lecturas encadenadas**, y por eso usa `definirConexionEncadenada`:
+ * la muestra se pide por el IDENTIFICADOR del programa, que solo se conoce
+ * despues de encontrarlo por su codigo. Sin exactamente un programa no sale
+ * ninguna segunda peticion — no es una lectura vacia, es una lectura que no se
+ * hace.
+ *
+ * De las seis columnas, dos siguen sin origen y lo dicen: **«Uso declarado»**
+ * sale `SIN_DATO` porque `DeteccionDeOmisos` deja el uso en nulo por los dos
+ * lados de la comparacion, y el uso que si publica el padron es el que el
+ * CATASTRO tiene inscrito —bajo una cabecera que dice «declarado» diria otra
+ * cosa—; y **«Estado»** se DERIVA de si el predio ya tiene acta en el programa,
+ * porque guardarlo en la fila dejaria dos verdades sobre lo mismo (V60 §2, la
+ * leccion de #397).
  *
  * **Los campos solo se rellenan cuando la busqueda deja UN programa.** Con
  * varios no se elige el primero: «Datos del programa» es singular, y decidir
@@ -167,9 +179,16 @@ import {
  * «Nº de programa» puesto siempre hay uno o ninguno — el codigo es unico por
  * municipalidad (`programa_codigo_uq`, V4).
  *
- * **Cuatro campos salen con `SIN_DATO`**: `sector`, `criterioDeRiesgo`,
- * `fiscalizadorAsignado` y `tamanoDeMuestra` no existen en
- * `programa_fiscalizacion` ni en `ProgramaResource` (RNF-083). Y los
+ * **Los cuatro campos que salian con `SIN_DATO` ya no**: `sector`,
+ * `criterioDeRiesgo`, `fiscalizadorAsignado` y `tamanoDeMuestra` los gano
+ * `programa_fiscalizacion` con `V60` —los tres primeros son los parametros con
+ * los que el programa sortea, y el cuarto es CUANTAS filas tiene la muestra, no
+ * un tope—. El «Criterio de riesgo» puede salir `SIN_DATO` igual, y eso es
+ * honesto: de los cinco rotulos del desplegable, «SUBVALUACIÓN PROBABLE» y
+ * «DEUDA ALTA» no son ninguna `CondicionFiscalizada` —el primero exige
+ * valorizar (D-02a, H-14) y el segundo un umbral en soles que ninguna ordenanza
+ * da—, y traducirlos al valor mas parecido diria que el programa busca otra
+ * cosa. Y los
  * desplegables «Tipo» y «Estado» del bloque de busqueda **no viajan**: el
  * contrato no los declara para esta operacion, porque hablan un vocabulario
  * que el dominio no tiene —seis clases donde `TipoDePrograma` tiene dos,
@@ -188,16 +207,35 @@ import {
  * las tres en `LA_QUE_ESCRIBE` pintaria de navy un boton que dice una cosa y hace
  * otra, que es justo lo que #421 y RNF-080 existen para impedir.
  */
-const fisc_programa = definirConexion({
+const fisc_programa = definirConexionEncadenada({
   operacion: 'fisc_programas_listado',
   parametros: ({ busqueda }) => parametrosDeBusqueda('fisc_programas_listado', undefined, busqueda),
-  leer: (cuerpo) => leerPaginado(cuerpo, 'los programas de fiscalización'),
-  adaptar: (paginado): DatosDePantalla => {
+  segunda: 'fisc_programa_muestra',
+  // La muestra se pide por el IDENTIFICADOR del programa, y el identificador
+  // solo se conoce despues de encontrarlo por su codigo. Sin un unico programa
+  // no hay a que encadenar y no sale ninguna peticion: ver `definirConexionEncadenada`.
+  encadenar: (cuerpo) => {
+    const programas = leerPaginado(cuerpo, 'los programas de fiscalización').contenido.filter(
+      esObjeto,
+    );
+    const unico = programas.length === 1 ? programas[0] : undefined;
+    if (unico === undefined) return undefined;
+    const id = texto(unico['id']);
+    return id === SIN_DATO ? undefined : { id, pagina: '0', tamano: '50' };
+  },
+  leer: (primera, segunda) => ({
+    programas: leerPaginado(primera, 'los programas de fiscalización').contenido.filter(esObjeto),
+    muestra:
+      segunda === undefined
+        ? undefined
+        : leerPaginado(segunda, 'la muestra del programa').contenido.filter(esObjeto),
+  }),
+  adaptar: ({ programas, muestra }): DatosDePantalla => {
     // Un solo programa, o ninguno: ver el javadoc.
-    const programas = paginado.contenido.filter(esObjeto);
     const unico = programas.length === 1 ? programas[0] : undefined;
     if (unico === undefined) return { fechaCalculo: hoy() };
 
+    const filas = muestra ?? [];
     return {
       fechaCalculo: hoy(),
       campos: {
@@ -206,14 +244,35 @@ const fisc_programa = definirConexion({
         fechaDeInicio: texto(unico['fechaInicio']),
         fechaDeTermino: texto(unico['fechaFin']),
         estado2: texto(unico['estado']),
-        // Los cuatro que `ProgramaResource` no publica (RNF-083). `ejercicio2`
-        // tampoco: el programa tiene fechas, no ejercicio, y deducirlo del ano
-        // de inicio diria otra cosa que el filtro de arriba (ver el backend).
-        ejercicio2: SIN_DATO,
-        sector: SIN_DATO,
-        criterioDeRiesgo: SIN_DATO,
-        fiscalizadorAsignado: SIN_DATO,
-        tamanoDeMuestra: SIN_DATO,
+        // Los cuatro que `programa_fiscalizacion` gano con `V60` (#481) y que
+        // hasta entonces salian con `SIN_DATO`.
+        ejercicio2: texto(unico['ejercicio']),
+        sector: texto(unico['sector']),
+        criterioDeRiesgo: texto(unico['criterio']),
+        fiscalizadorAsignado: texto(unico['fiscalizador']),
+        // El tamano de la muestra es CUANTAS filas tiene, no un tope: un tope
+        // exigiria un orden por riesgo, y `CondicionFiscalizada` es una
+        // etiqueta y no una escala (V60 §2).
+        tamanoDeMuestra: muestra === undefined ? SIN_DATO : String(filas.length),
+      },
+      tabla: {
+        filas: filas.map((fila): readonly Celda[] => {
+          const condicion = texto(fila['condicion']);
+          return [
+            { texto: texto(fila['codRefCatastral']) },
+            { texto: texto(fila['titular']) },
+            // «Uso declarado»: `DeteccionDeOmisos` pasa el uso en nulo por los
+            // dos lados, y el que si publica el padron es el que el CATASTRO
+            // tiene inscrito. Bajo esta cabecera diria otra cosa (RNF-080).
+            { texto: SIN_DATO },
+            { texto: texto(fila['areaDeclarada']) },
+            condicion === SIN_DATO
+              ? { texto: SIN_DATO }
+              : { texto: condicion, tono: TONO_DE_CONDICION_FISCALIZADA[condicion] },
+            { texto: fila['visitado'] === true ? 'VISITADO' : 'PENDIENTE' },
+          ];
+        }),
+        conteo: `${filas.length} predios seleccionados`,
       },
     };
   },

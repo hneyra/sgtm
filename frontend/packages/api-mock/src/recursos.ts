@@ -2285,8 +2285,76 @@ const programasFiscalizacion = (): Paginado => {
       fechaInicio: texto('fechaDeInicio'),
       fechaFin: fechaFin === '' ? null : fechaFin,
       estado: ESTADO_DE_PROGRAMA_DEL_MOCK[estadoDelPrototipo] ?? 'ABIERTO',
+      ejercicio: texto('ejercicio2'),
+      sector: texto('sector'),
+      criterio: CRITERIO_DEL_MOCK[texto('criterioDeRiesgo')] ?? null,
+      fiscalizador: texto('fiscalizadorAsignado'),
     },
   ]);
+};
+
+/**
+ * El «Criterio de riesgo» del prototipo → `CondicionFiscalizada`, que es lo que
+ * el programa guarda desde `V60` (#481).
+ *
+ * De los cinco rotulos del desplegable, **dos no se traducen y por eso no estan
+ * aqui**: «SUBVALUACIÓN PROBABLE» exige valorizar —D-02a, H-14— y «DEUDA ALTA»
+ * un umbral en soles que ninguna ordenanza da. Salen `null`, y la pantalla los
+ * dibuja con `SIN_DATO`.
+ *
+ * **Caer al valor por omision seria peor que no traducir**: un programa cuyo
+ * criterio es «subvaluacion probable» apareceria como si buscara OMISOS, que es
+ * otra cosa y produce otra muestra. Es el mismo motivo por el que #427 no
+ * tradujo «ACTIVA» a VIGENTE.
+ */
+const CRITERIO_DEL_MOCK: Readonly<Record<string, string>> = {
+  'OMISO A LA DECLARACIÓN': 'OMISO',
+  'AMPLIACIÓN NO DECLARADA': 'SUBVALUADOR',
+  'USO DISTINTO AL DECLARADO': 'USO_DISTINTO',
+};
+
+/**
+ * La muestra sorteada de un programa (`MuestraResource`, #481).
+ *
+ * Es la grilla «Predios seleccionados» de `fisc_programa` **y** la fila de la
+ * que `fisc_predial` resuelve sus tres identificadores. Sale del juego de datos
+ * que el prototipo dibuja bajo esa grilla, con los identificadores internos que
+ * el backend si publica y el prototipo no tiene: sin ellos el acta no se puede
+ * abrir desde la fila, que es exactamente lo que este recurso existe para
+ * permitir.
+ *
+ * `visitado` va en `false`: el prototipo dibuja la columna «Estado» con el
+ * estado del PREDIO en el programa, y ninguna de sus filas es una visita hecha.
+ *
+ * **El proxy no filtra por `?predio=`** (ADR-0010): devuelve la muestra entera
+ * venga el predio que venga, como ya hace `recursoDe` con la ficha catastral.
+ * Por eso el acta comprueba que la fila que recibe es la que pidio — es la misma
+ * guarda que #298 encontro que le faltaba al portal.
+ */
+const muestraDelPrograma = (): Paginado =>
+  unaPagina(
+    filasDe('fisc_programa').map((fila, indice) => ({
+      programaId: 1,
+      predioId: indice + 1,
+      codRefCatastral: fila[0] ?? '',
+      contribuyenteId: 100 + indice + 1,
+      codContribuyente: `C-${String(indice + 1).padStart(5, '0')}`,
+      titular: fila[1] ?? '',
+      sector: null,
+      condicion: CONDICION_DE_LA_MUESTRA_DEL_MOCK[fila[4] ?? ''] ?? 'OMISO',
+      areaCatastral: null,
+      areaDeclarada: fila[3] ?? null,
+      diferenciaDeArea: null,
+      visitado: false,
+      fechaSorteo: EL_DIA_DEL_PROTOTIPO,
+    })),
+  );
+
+/** El «Riesgo» del prototipo → `CondicionFiscalizada`. Mismo criterio que arriba. */
+const CONDICION_DE_LA_MUESTRA_DEL_MOCK: Readonly<Record<string, string>> = {
+  ALTO: 'SUBVALUADOR',
+  MEDIO: 'OMISO',
+  BAJO: 'CONFORME',
 };
 
 /** El desplegable del prototipo → `EstadoDePrograma`, que es lo que publica el recurso. */
@@ -3933,6 +4001,7 @@ function reporteAdministrativo(cuerpo: unknown): Readonly<Record<string, unknown
 export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/fiscalizacion/omisos': omisosFiscalizacion,
   '/fiscalizacion/programas': programasFiscalizacion,
+  '/fiscalizacion/programas/{id}/muestra': muestraDelPrograma,
   '/fiscalizacion/predial/historico': historicoFiscalizacion,
   '/catastro/vias': vias,
   '/tesoreria/convenios': convenios,

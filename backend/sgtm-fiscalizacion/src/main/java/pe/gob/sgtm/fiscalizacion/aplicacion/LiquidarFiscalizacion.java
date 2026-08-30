@@ -289,7 +289,11 @@ public class LiquidarFiscalizacion {
     private static CondicionFiscalizada condicionVehicular(ActaFiscalizacion acta) {
         Hallazgo hallazgo = acta.hallazgo();
         if (hallazgo == null) {
-            return CondicionFiscalizada.CONFORME;
+            // Hasta #481 esta rama devolvia CONFORME, y era el defecto que D-16 nombraba: un acta
+            // sin hallazgo -que el endpoint admitia con 201- se liquidaba como si la visita no
+            // hubiera encontrado nada. `RegistrarActaFiscalizacion` ya no deja registrar ninguna;
+            // las historicas, si las hay, fallan aqui en vez de mentir.
+            throw new ActaSinHallazgo(acta);
         }
         return switch (hallazgo) {
             case CONFORME -> CondicionFiscalizada.CONFORME;
@@ -332,6 +336,25 @@ public class LiquidarFiscalizacion {
 
         ActaInexistente(long id) {
             super("No hay ninguna acta de fiscalizacion con identificador " + id);
+        }
+    }
+
+    /**
+     * El acta no dice qué encontró la visita, y sin eso no se puede liquidar.
+     *
+     * <p>Sólo puede alcanzarla un acta anterior a #481: desde ahí {@code
+     * RegistrarActaFiscalizacion} exige el hallazgo. Antes, el nulo se leía como {@code CONFORME} y
+     * liquidaba en regla un vehículo que nadie inspeccionó (D-16).
+     */
+    public static final class ActaSinHallazgo extends RuntimeException {
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        ActaSinHallazgo(ActaFiscalizacion acta) {
+            super(
+                    "El acta "
+                            + acta.id()
+                            + " no anota ningun hallazgo, y sin el no se puede decir que encontro"
+                            + " la visita: leer el nulo como CONFORME seria declararla en regla");
         }
     }
 

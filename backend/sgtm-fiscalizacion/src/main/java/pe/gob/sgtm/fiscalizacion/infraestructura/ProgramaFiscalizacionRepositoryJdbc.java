@@ -11,6 +11,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
 import pe.gob.sgtm.fiscalizacion.dominio.CriterioDeProgramas;
 import pe.gob.sgtm.fiscalizacion.dominio.EstadoDePrograma;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacion;
@@ -29,7 +31,8 @@ public class ProgramaFiscalizacionRepositoryJdbc extends RepositorioJdbc
         implements ProgramaFiscalizacionRepository {
 
     private static final String COLUMNAS =
-            "id, codigo, descripcion, tipo, fecha_inicio, fecha_fin, estado";
+            "id, codigo, descripcion, tipo, fecha_inicio, fecha_fin, estado,"
+                    + " ejercicio, sector_codigo, criterio, fiscalizador";
 
     private static final String DESDE = " FROM programa_fiscalizacion";
 
@@ -49,16 +52,22 @@ public class ProgramaFiscalizacionRepositoryJdbc extends RepositorioJdbc
         campos.put("fechaInicio", programa.fechaInicio());
         campos.put("fechaFin", programa.fechaFin());
         campos.put("estado", programa.estado().name());
+        campos.put("ejercicio", programa.ejercicio() == null ? null : programa.ejercicio().valor());
+        campos.put("sectorCodigo", programa.sectorCodigo());
+        campos.put("criterio", programa.criterio() == null ? null : programa.criterio().name());
+        campos.put("fiscalizador", programa.fiscalizador());
 
         Long id =
                 jdbc().sql(
                                 "INSERT INTO programa_fiscalizacion"
                                         + " (municipalidad_id, codigo, descripcion, tipo, fecha_inicio,"
-                                        + "  fecha_fin, estado)"
+                                        + "  fecha_fin, estado, ejercicio, sector_codigo, criterio,"
+                                        + "  fiscalizador)"
                                         + " VALUES ("
                                         + MUNICIPALIDAD_ACTUAL
                                         + ", :codigo, :descripcion, :tipo, :fechaInicio, :fechaFin,"
-                                        + "  :estado)"
+                                        + "  :estado, :ejercicio, :sectorCodigo, :criterio,"
+                                        + "  :fiscalizador)"
                                         + " RETURNING id")
                         .params(campos)
                         .query(Long.class)
@@ -71,7 +80,11 @@ public class ProgramaFiscalizacionRepositoryJdbc extends RepositorioJdbc
                 programa.tipo(),
                 programa.fechaInicio(),
                 programa.fechaFin(),
-                programa.estado());
+                programa.estado(),
+                programa.ejercicio(),
+                programa.sectorCodigo(),
+                programa.criterio(),
+                programa.fiscalizador());
     }
 
     @Override
@@ -123,6 +136,11 @@ public class ProgramaFiscalizacionRepositoryJdbc extends RepositorioJdbc
     private static ProgramaFiscalizacion mapear(ResultSet fila, int numeroDeFila)
             throws SQLException {
         java.sql.Date fechaFin = fila.getDate("fecha_fin");
+        // getInt devuelve 0 cuando la columna es NULL, y el ejercicio 0 no existe: hay que
+        // preguntarle a wasNull. Es el mismo cuidado que V57 obligo a tener con el tramo abierto.
+        int anio = fila.getInt("ejercicio");
+        Ejercicio ejercicio = fila.wasNull() ? null : new Ejercicio(anio);
+        String criterio = fila.getString("criterio");
         return new ProgramaFiscalizacion(
                 fila.getLong("id"),
                 fila.getString("codigo"),
@@ -130,6 +148,10 @@ public class ProgramaFiscalizacionRepositoryJdbc extends RepositorioJdbc
                 TipoDePrograma.valueOf(fila.getString("tipo")),
                 fila.getDate("fecha_inicio").toLocalDate(),
                 fechaFin == null ? null : fechaFin.toLocalDate(),
-                EstadoDePrograma.valueOf(fila.getString("estado")));
+                EstadoDePrograma.valueOf(fila.getString("estado")),
+                ejercicio,
+                fila.getString("sector_codigo"),
+                criterio == null ? null : CondicionFiscalizada.valueOf(criterio),
+                fila.getString("fiscalizador"));
     }
 }

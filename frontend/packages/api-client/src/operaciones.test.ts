@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas cuarenta operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas cuarenta y cinco operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -149,8 +149,14 @@ describe('las operaciones generadas son las del contrato', () => {
     //     `ejercicio` y `predioId`/`vehiculoId` una a una— y ninguna lectura del
     //     modulo tenia esa granularidad: la deuda del expediente es una suma, y
     //     un convenio no se fracciona sobre una suma.
+    //   - `fisc_programa_muestra` y `fisc_programa_generar_muestra` (#481): la
+    //     muestra sorteada de un programa y el acto que la sortea. Es la grilla
+    //     «Predios seleccionados» de `fisc_programa` y **la misma fila** de la
+    //     que el acta predial resuelve sus tres identificadores —su catalogo los
+    //     dibuja de solo lectura y no declara ni filtros ni tabla, asi que solo
+    //     se puede abrir desde una fila ya resuelta.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(177);
+    expect(Object.keys(OPERACIONES)).toHaveLength(179);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

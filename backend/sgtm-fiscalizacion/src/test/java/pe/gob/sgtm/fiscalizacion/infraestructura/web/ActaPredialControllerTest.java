@@ -75,8 +75,25 @@ class ActaPredialControllerTest {
                         }
 
                         @Override
-                        public int siguienteVersion(long programaId, long contribuyenteId) {
+                        public int siguienteVersion(
+                                long programaId,
+                                long contribuyenteId,
+                                @org.jspecify.annotations.Nullable Long predioId,
+                                @org.jspecify.annotations.Nullable Long vehiculoId) {
                             return 1;
+                        }
+
+                        @Override
+                        public java.util.Set<Long> prediosConActaEnElPrograma(
+                                long programaId, java.util.Set<Long> predios) {
+                            return java.util.Set.of();
+                        }
+
+                        @Override
+                        public java.util.Set<Long> prediosConActaEnElEjercicio(
+                                pe.gob.sgtm.dominio.Ejercicio ejercicio,
+                                java.util.Set<Long> predios) {
+                            return java.util.Set.of();
                         }
                     },
                     new ProgramaFiscalizacionRepository() {
@@ -154,6 +171,31 @@ class ActaPredialControllerTest {
                 .contains("\"fichaId\":700")
                 .contains("\"hallazgo\":\"CONFORME\"")
                 .contains("\"predioId\":20");
+    }
+
+    @Test
+    @DisplayName("sin hallazgo, 422 y no guarda nada: lo que se perdia era NO_UBICADO (D-16)")
+    void sinHallazgoNoSeRegistra() throws Exception {
+        String cuerpo =
+                "{\"observacion\":\"Se fiscaliza para la prueba\",\"programaId\":1,"
+                        + "\"contribuyenteId\":10,\"predioId\":20,\"fechaVisita\":\"2026-03-15\","
+                        + "\"fiscalizador\":\"J. Perez\",\"areaHallada\":\"120.50\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/fiscalizacion/predial/actas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "en la predial la condicion sale de comparar superficies, asi que un acta"
+                                + " sin hallazgo compara un PREDIO INEXISTENTE por area como si se"
+                                + " hubiera hallado")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("hallazgo");
+        assertThat(guardadas).isEmpty();
     }
 
     @Test

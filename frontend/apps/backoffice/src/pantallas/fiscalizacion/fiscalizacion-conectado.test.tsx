@@ -62,44 +62,66 @@ describe('las cinco lecturas de fiscalizacion estan conectadas', () => {
     );
   });
 
-  it('fisc-programa no inventa los cinco atributos que ProgramaResource no publica', async () => {
+  /**
+   * Los cuatro que `programa_fiscalizacion` gano con `V60` (#481). Hasta
+   * entonces salian con `SIN_DATO` porque la tabla no los tenia: no era la
+   * pantalla la que los omitia, era el esquema.
+   */
+  it('fisc-programa rellena los cuatro parametros que V60 le dio al programa', async () => {
     montarEnRuta('/fiscalizacion/fisc-programa?nDePrograma=PF-2026-014');
     await dibujada();
 
-    // Sector, criterio de riesgo, fiscalizador y tamano de muestra no existen
-    // en `programa_fiscalizacion` (RNF-083); el ejercicio tampoco —un programa
-    // guarda fechas, no ejercicio— y por eso «Ejercicio» de la seccion sale
-    // igual. Las cuatro primeras tienen rotulo unico en la pantalla.
     await waitFor(() =>
-      expect((screen.getByLabelText('Sector') as HTMLSelectElement).value).toBe(SIN_DATO),
+      expect((screen.getByLabelText('Fiscalizador asignado') as HTMLSelectElement).value).toBe(
+        'R. MENDOZA CRUZ',
+      ),
     );
-    expect((screen.getByLabelText('Criterio de riesgo') as HTMLSelectElement).value).toBe(SIN_DATO);
-    expect((screen.getByLabelText('Fiscalizador asignado') as HTMLSelectElement).value).toBe(
+    expect((screen.getByLabelText('Sector') as HTMLSelectElement).value).toBe('02');
+    // El vocabulario es el del dominio: «AMPLIACIÓN NO DECLARADA» del
+    // desplegable es `SUBVALUADOR` en `CondicionFiscalizada`.
+    expect((screen.getByLabelText('Criterio de riesgo') as HTMLSelectElement).value).toBe(
       SIN_DATO,
     );
-    expect((screen.getByLabelText('Tamaño de muestra') as HTMLInputElement).value).toBe(SIN_DATO);
   });
 
   /**
-   * La grilla «Predios seleccionados» se queda **vacia a proposito**, y esta
-   * prueba lo fija: sus seis columnas describen un predio, y
-   * `ProgramaResource` describe un programa. Ver el javadoc de la conexion.
+   * La grilla «Predios seleccionados» es la MUESTRA del programa (#481), y esa
+   * lectura no existia: hasta ahora la tabla salia vacia a proposito porque
+   * `ProgramaResource` describe un programa y sus seis columnas describen un
+   * predio. Con `GET /fiscalizacion/programas/{id}/muestra` ya hay de donde.
    */
-  it('fisc-programa no pinta programas bajo columnas que dicen «Predio»', async () => {
+  it('fisc-programa dibuja su muestra, con el predio y su titular de cada fila', async () => {
     montarEnRuta('/fiscalizacion/fisc-programa?nDePrograma=PF-2026-014');
     await dibujada();
-    // Se espera a que la respuesta llegue —el formulario ya la ensena— antes
-    // de mirar la tabla: si no, estaria vacia por no haber respondido todavia.
-    await waitFor(() =>
-      expect((screen.getByLabelText('Tipo de programa') as HTMLSelectElement).value).toBe(
-        'PREDIAL',
-      ),
-    );
 
-    // Ni una fila: `TablaDePantalla` dibuja su aviso de vacio en lugar de la
-    // tabla, que es exactamente lo que se quiere — un programa no es un predio.
-    expect(screen.queryByRole('table')).toBeNull();
-    expect(screen.queryAllByText(/ningún resultado para esta búsqueda/i).length).toBeGreaterThan(0);
+    const tabla = await screen.findByRole('table');
+    await esperarFilas(tabla);
+    const filas = within(tabla).getAllByRole('row').slice(1);
+    expect(filas.length).toBeGreaterThan(0);
+
+    const celdas = within(filas[0]!).getAllByRole('cell').map((celda) => celda.textContent);
+    // «Uso declarado» sale `SIN_DATO`: `DeteccionDeOmisos` deja el uso en nulo
+    // por los dos lados, y el que si publica el padron es el del CATASTRO —bajo
+    // una cabecera que dice «declarado» diria otra cosa (RNF-080).
+    expect(celdas[2]).toBe(SIN_DATO);
+    // Y el «Estado» de la fila se DERIVA de si el predio ya tiene acta: no es
+    // una columna de `programa_muestra` (V60 §2).
+    expect(celdas[5]).toBe('PENDIENTE');
+  });
+
+  it('fisc-programa cuenta el tamano de la muestra, y no lo inventa', async () => {
+    montarEnRuta('/fiscalizacion/fisc-programa?nDePrograma=PF-2026-014');
+    await dibujada();
+
+    const tabla = await screen.findByRole('table');
+    await esperarFilas(tabla);
+    const filas = within(tabla).getAllByRole('row').slice(1);
+
+    // El tamano es CUANTAS filas hay, no un tope: un tope exigiria un orden por
+    // riesgo, y `CondicionFiscalizada` es una etiqueta, no una escala.
+    expect((screen.getByLabelText('Tamaño de muestra') as HTMLInputElement).value).toBe(
+      String(filas.length),
+    );
   });
 
   it('fisc-omisos no inventa las cuatro cifras que OmisoResource nunca publica', async () => {

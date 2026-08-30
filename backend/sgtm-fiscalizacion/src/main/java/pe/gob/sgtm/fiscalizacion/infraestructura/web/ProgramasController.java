@@ -14,9 +14,11 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.fiscalizacion.aplicacion.ConsultaDeProgramas;
 import pe.gob.sgtm.fiscalizacion.aplicacion.RegistrarPrograma;
+import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
 import pe.gob.sgtm.fiscalizacion.dominio.CriterioDeProgramas;
 import pe.gob.sgtm.fiscalizacion.dominio.TipoDePrograma;
 import pe.gob.sgtm.web.Api;
@@ -33,11 +35,12 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * <p>Reprogramar es registrar otro programa: no hay ruta de edición. El cuerpo es una <b>lista
  * blanca</b>, mismo patrón que {@code TransferenciaPredioController}.
  *
- * <p><b>{@code tipo} también viaja por la consulta</b> (#425). Es el filtro «Tipo» que la pantalla
- * dibuja y el contrato lo declara {@code in: query}; leerlo solo del cuerpo dejaba la operación
- * publicada y sin ninguna pantalla que pudiera llamarla —el 422 diría «Falta el campo 'tipo'»
- * mientras la pantalla lo estaba mandando—. Se sigue aceptando en el cuerpo, y ahí gana: ver {@link
- * FiltroDeLaConsulta}.
+ * <p><b>{@code tipo} y {@code ejercicio} también viajan por la consulta</b> (#425). Son dos de los
+ * cuatro filtros que la pantalla dibuja y el contrato los declara {@code in: query}; leerlos solo
+ * del cuerpo dejaba la operación publicada y sin ninguna pantalla que pudiera llamarla —el 422
+ * diría «Falta el campo 'tipo'» mientras la pantalla lo estaba mandando—. Se siguen aceptando en el
+ * cuerpo, y ahí ganan: ver {@link FiltroDeLaConsulta}. {@code ejercicio} entra en ese reparto con
+ * #481, que es cuando el programa empieza a guardarlo: hasta entonces el cuerpo no lo leía.
  *
  * <p><b>La lectura llegó después que la escritura</b> (#431), y hasta entonces un programa se podía
  * registrar y no se podía volver a encontrar: la pantalla {@code fisc_programa} declaraba el {@code
@@ -90,6 +93,7 @@ public class ProgramasController {
     @ResponseStatus(HttpStatus.CREATED)
     public ProgramaResource programar(
             @RequestParam(required = false) @Nullable String tipo,
+            @RequestParam(required = false) @Nullable String ejercicio,
             @RequestBody PeticionDePrograma peticion) {
         Observacion observacion = observacionDe(peticion.observacion());
 
@@ -101,6 +105,12 @@ public class ProgramasController {
                             tipoDe(FiltroDeLaConsulta.primeroNoVacio(peticion.tipo(), tipo)),
                             fechaDe(peticion.fechaInicio(), "fechaInicio"),
                             fechaOpcionalDe(peticion.fechaFin()),
+                            ejercicioDeLaMuestra(
+                                    FiltroDeLaConsulta.primeroNoVacio(
+                                            peticion.ejercicio(), ejercicio)),
+                            vacioAnulo(peticion.sector()),
+                            criterioDe(peticion.criterio()),
+                            vacioAnulo(peticion.fiscalizador()),
                             observacion));
         } catch (IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
@@ -180,12 +190,48 @@ public class ProgramasController {
         return mensaje == null ? "El valor recibido no es valido" : mensaje;
     }
 
-    /** El cuerpo de una programación. <b>Lista blanca</b>: lo que no está aquí no entra. */
+    private static @Nullable Ejercicio ejercicioDeLaMuestra(@Nullable String texto) {
+        Integer anio = ejercicioOpcional(texto);
+        if (anio == null) {
+            return null;
+        }
+        try {
+            return new Ejercicio(anio);
+        } catch (IllegalArgumentException fueraDeRango) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(fueraDeRango));
+        }
+    }
+
+    private static @Nullable CondicionFiscalizada criterioDe(@Nullable String texto) {
+        String valor = vacioAnulo(texto);
+        if (valor == null) {
+            return null;
+        }
+        try {
+            return CondicionFiscalizada.valueOf(valor.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException desconocido) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION, "Criterio de riesgo desconocido: '" + texto + "'");
+        }
+    }
+
+    /**
+     * El cuerpo de una programación. <b>Lista blanca</b>: lo que no está aquí no entra.
+     *
+     * <p>Los cuatro últimos son los parámetros con los que el programa sortea su muestra ({@code
+     * V60}). Son opcionales en el cuerpo y no en el acto: un programa sin ellos se registra —los
+     * anteriores a {@code V60} están así en la base— pero no puede generar muestra, y {@link
+     * GenerarMuestra} falla nombrando el que falte.
+     */
     public record PeticionDePrograma(
             @Nullable String observacion,
             @Nullable String codigo,
             @Nullable String descripcion,
             @Nullable String tipo,
             @Nullable String fechaInicio,
-            @Nullable String fechaFin) {}
+            @Nullable String fechaFin,
+            @Nullable String ejercicio,
+            @Nullable String sector,
+            @Nullable String criterio,
+            @Nullable String fiscalizador) {}
 }

@@ -64,7 +64,14 @@ class ProgramasControllerTest {
                                     programa.tipo(),
                                     programa.fechaInicio(),
                                     programa.fechaFin(),
-                                    programa.estado());
+                                    programa.estado(),
+                                    // Los cuatro parametros de la muestra tienen que sobrevivir al
+                                    // doble: si los perdiera, la prueba de que viajan pasaria en
+                                    // verde contra un repositorio que los tira.
+                                    programa.ejercicio(),
+                                    programa.sectorCodigo(),
+                                    programa.criterio(),
+                                    programa.fiscalizador());
                     guardados.add(guardado);
                     return guardado;
                 }

@@ -144,6 +144,59 @@ export function definirConexion<O extends IdDeOperacion, R>(
 }
 
 /**
+ * Lo mismo, cuando la pantalla necesita <b>dos</b> lecturas y la segunda no se puede pedir hasta
+ * saber lo que devolvió la primera (#481).
+ *
+ * El caso que la trajo es `fisc_programa`: la grilla «Predios seleccionados» es la muestra de un
+ * programa, y la muestra se pide por el <b>identificador</b> del programa, que sólo se conoce
+ * después de buscarlo por su código. Con {@link definirConexion} no cabe —envuelve una operación—,
+ * y un componente propio costaría volver a dibujar a mano el bloque de filtros que el catálogo ya
+ * publica, con su sincronización con la URL.
+ *
+ * **La segunda es opcional a propósito.** `encadenar` devuelve `undefined` cuando no hay a qué
+ * encadenar —una búsqueda que no deja exactamente un programa—, y entonces <b>no sale ninguna
+ * petición</b>: no es una lectura que devuelve vacío, es una lectura que no se hace.
+ */
+export function definirConexionEncadenada<
+  O1 extends IdDeOperacion,
+  O2 extends IdDeOperacion,
+  R,
+>(definicion: DefinicionEncadenada<O1, O2, R>): Conexion {
+  return {
+    operacion: definicion.operacion,
+    ...(definicion.sinPermiso === undefined ? {} : { sinPermiso: definicion.sinPermiso }),
+    ...(definicion.exige === undefined ? {} : { exige: definicion.exige }),
+    parametros: (contexto) => sinVacios(definicion.parametros(contexto)),
+    cargar: async (parametros, senal) => {
+      const tipados = parametros as ParametrosDe<O1>;
+      const primera = await pedirOperacion(definicion.operacion, tipados, senal);
+      const siguientes = definicion.encadenar(primera);
+      const segunda =
+        siguientes === undefined
+          ? undefined
+          : await pedirOperacion(definicion.segunda, siguientes, senal);
+      return definicion.adaptar(definicion.leer(primera, segunda));
+    },
+  };
+}
+
+export interface DefinicionEncadenada<
+  O1 extends IdDeOperacion,
+  O2 extends IdDeOperacion,
+  R,
+> {
+  readonly operacion: O1;
+  readonly parametros: (contexto: ContextoDePantalla) => ParametrosDe<O1>;
+  /** La segunda operación, y sus parámetros a partir de la primera. */
+  readonly segunda: O2;
+  readonly encadenar: (cuerpo: RespuestaDe<O1>) => ParametrosDe<O2> | undefined;
+  readonly leer: (primera: RespuestaDe<O1>, segunda: RespuestaDe<O2> | undefined) => R;
+  readonly adaptar: (recurso: R) => DatosDePantalla;
+  readonly sinPermiso?: AvisoDeSinPermiso;
+  readonly exige?: readonly FiltroExigido[];
+}
+
+/**
  * Un parametro sin valor no entra en la clave de cache ni en la URL.
  *
  * Si entrara, `{ ejercicio: undefined }` y `{}` serian dos claves distintas para

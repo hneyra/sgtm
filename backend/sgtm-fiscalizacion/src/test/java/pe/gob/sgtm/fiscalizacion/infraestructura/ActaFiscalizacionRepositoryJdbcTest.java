@@ -195,7 +195,9 @@ class ActaFiscalizacionRepositoryJdbcTest {
 
             int primera =
                     transaccion.execute(
-                            estado -> repositorio.siguienteVersion(programaId, titular));
+                            estado ->
+                                    repositorio.siguienteVersion(
+                                            programaId, titular, null, vehiculoId));
             transaccion.execute(
                     estado ->
                             repositorio.insertar(
@@ -211,11 +213,105 @@ class ActaFiscalizacionRepositoryJdbcTest {
                                             OBSERVACION)));
             int segunda =
                     transaccion.execute(
-                            estado -> repositorio.siguienteVersion(programaId, titular));
+                            estado ->
+                                    repositorio.siguienteVersion(
+                                            programaId, titular, null, vehiculoId));
 
             assertThat(primera).isEqualTo(1);
             assertThat(segunda).isEqualTo(2);
         }
+
+        @Test
+        @DisplayName(
+                "un contribuyente con DOS predios en la muestra tiene dos actas en version 1"
+                        + " (V60)")
+        void dosPrediosDelMismoTitularSonDosActasEnVersionUno() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "F-0010", "60100010");
+            long uno = crearPredio(municipalidadA, "F-0010a");
+            long otro = crearPredio(municipalidadA, "F-0010b");
+            long programaId = crearPrograma(municipalidadA, "PF-0010", "PREDIAL");
+
+            int versionDelPrimero =
+                    transaccion.execute(
+                            estado -> repositorio.siguienteVersion(programaId, titular, uno, null));
+            transaccion.execute(
+                    estado -> repositorio.insertar(actaSobre(programaId, titular, uno, 1)));
+
+            int versionDelSegundo =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.siguienteVersion(programaId, titular, otro, null));
+
+            assertThat(versionDelPrimero).isEqualTo(1);
+            assertThat(versionDelSegundo)
+                    .as(
+                            "llaveada solo por contribuyente daria 2, y el papel diria que es una"
+                                    + " reinspeccion que nunca ocurrio")
+                    .isEqualTo(1);
+            // Y la base lo admite: con la unicidad anterior, esta segunda insercion chocaba.
+            transaccion.execute(
+                    estado -> repositorio.insertar(actaSobre(programaId, titular, otro, 1)));
+        }
+
+        @Test
+        @DisplayName("dos actas vehiculares iguales chocan: NULLS NOT DISTINCT (V60)")
+        void dosActasVehicularesIgualesChocan() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "F-0011", "60100011");
+            long vehiculoId = crearVehiculo(municipalidadA, titular, "F11");
+            long programaId = crearPrograma(municipalidadA, "PF-0011", "VEHICULAR");
+
+            transaccion.execute(
+                    estado ->
+                            repositorio.insertar(
+                                    ActaFiscalizacion.nuevaVehicular(
+                                            programaId,
+                                            1,
+                                            titular,
+                                            vehiculoId,
+                                            VISITA,
+                                            "J. Perez",
+                                            Hallazgo.OMISO,
+                                            null,
+                                            OBSERVACION)));
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(
+                            () ->
+                                    transaccion.execute(
+                                            estado ->
+                                                    repositorio.insertar(
+                                                            ActaFiscalizacion.nuevaVehicular(
+                                                                    programaId,
+                                                                    1,
+                                                                    titular,
+                                                                    vehiculoId,
+                                                                    VISITA,
+                                                                    "J. Perez",
+                                                                    Hallazgo.OMISO,
+                                                                    null,
+                                                                    OBSERVACION))))
+                    .as(
+                            "un acta vehicular deja predio_id en NULL: sin NULLS NOT DISTINCT la"
+                                    + " unicidad no protegeria nada en el caso que ocurre siempre")
+                    .hasMessageContaining("acta_fisc_version_uq");
+        }
+    }
+
+    private static ActaFiscalizacion actaSobre(
+            long programaId, long titular, long predioId, int version) {
+        return ActaFiscalizacion.nuevaPredial(
+                programaId,
+                version,
+                titular,
+                predioId,
+                null,
+                VISITA,
+                "J. Perez",
+                Hallazgo.CONFORME,
+                null,
+                null,
+                OBSERVACION);
     }
 
     // ------------------------------------------------------------------

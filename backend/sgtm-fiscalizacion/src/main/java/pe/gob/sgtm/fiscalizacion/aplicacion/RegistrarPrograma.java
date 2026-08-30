@@ -7,7 +7,9 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.auditoria.Auditoria;
 import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
+import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacionRepository;
 import pe.gob.sgtm.fiscalizacion.dominio.TipoDePrograma;
@@ -33,6 +35,14 @@ public class RegistrarPrograma {
         this.auditoria = auditoria;
     }
 
+    /**
+     * @param ejercicio qué ejercicio examina; con {@code criterio} y {@code fiscalizador}, uno de
+     *     los tres parámetros sin los cuales el programa no puede sortear su muestra ({@code V60}).
+     *     Van opcionales porque los programas anteriores a esa migración están así en la base, y
+     *     {@code GenerarMuestra} falla nombrando el que falte
+     * @param sectorCodigo sobre qué sector se sortea; su nulo significa «todo el distrito», que es
+     *     una respuesta y no una falta
+     */
     @Transactional
     public ProgramaFiscalizacion registrar(
             String codigo,
@@ -40,12 +50,24 @@ public class RegistrarPrograma {
             TipoDePrograma tipo,
             LocalDate fechaInicio,
             @Nullable LocalDate fechaFin,
+            @Nullable Ejercicio ejercicio,
+            @Nullable String sectorCodigo,
+            @Nullable CondicionFiscalizada criterio,
+            @Nullable String fiscalizador,
             Observacion observacion) {
 
         ProgramaFiscalizacion guardado =
                 repositorio.insertar(
                         ProgramaFiscalizacion.nuevo(
-                                codigo, descripcion, tipo, fechaInicio, fechaFin));
+                                codigo,
+                                descripcion,
+                                tipo,
+                                fechaInicio,
+                                fechaFin,
+                                ejercicio,
+                                sectorCodigo,
+                                criterio,
+                                fiscalizador));
 
         auditoria.registrar(
                 RegistroDeAuditoria.enLaFechaDe(

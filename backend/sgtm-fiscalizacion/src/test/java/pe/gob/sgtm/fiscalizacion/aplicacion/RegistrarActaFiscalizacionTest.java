@@ -237,9 +237,38 @@ class RegistrarActaFiscalizacionTest {
         }
 
         @Override
-        public int siguienteVersion(long programaId, long contribuyenteId) {
-            String clave = programaId + ":" + contribuyenteId;
+        public int siguienteVersion(
+                long programaId,
+                long contribuyenteId,
+                @org.jspecify.annotations.Nullable Long predioId,
+                @org.jspecify.annotations.Nullable Long vehiculoId) {
+            // La unidad entra en la clave desde V60: sin ella, la primera acta del segundo predio
+            // de un mismo contribuyente naceria en version 2.
+            String clave = programaId + ":" + contribuyenteId + ":" + predioId + ":" + vehiculoId;
             return versiones.merge(clave, 1, Integer::sum);
+        }
+
+        @Override
+        public java.util.Set<Long> prediosConActaEnElPrograma(
+                long programaId, java.util.Set<Long> predios) {
+            return filas.stream()
+                    .filter(acta -> acta.programaId() == programaId && acta.predioId() != null)
+                    .map(ActaFiscalizacion::predioId)
+                    .filter(predios::contains)
+                    .collect(java.util.stream.Collectors.toSet());
+        }
+
+        @Override
+        public java.util.Set<Long> prediosConActaEnElEjercicio(
+                pe.gob.sgtm.dominio.Ejercicio ejercicio, java.util.Set<Long> predios) {
+            return filas.stream()
+                    .filter(
+                            acta ->
+                                    acta.predioId() != null
+                                            && acta.fechaVisita().getYear() == ejercicio.valor())
+                    .map(ActaFiscalizacion::predioId)
+                    .filter(predios::contains)
+                    .collect(java.util.stream.Collectors.toSet());
         }
     }
 }

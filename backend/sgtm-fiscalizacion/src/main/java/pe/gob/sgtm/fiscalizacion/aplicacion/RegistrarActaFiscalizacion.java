@@ -66,12 +66,13 @@ public class RegistrarActaFiscalizacion {
             Observacion observacion) {
 
         exigirPrograma(programaId, TipoDePrograma.PREDIAL);
+        exigirHallazgo(hallazgo);
         Long fichaId = fichas.fichaVigenteEn(predioId, fechaVisita).orElse(null);
 
         return guardar(
                 ActaFiscalizacion.nuevaPredial(
                         programaId,
-                        actas.siguienteVersion(programaId, contribuyenteId),
+                        actas.siguienteVersion(programaId, contribuyenteId, predioId, null),
                         contribuyenteId,
                         predioId,
                         fichaId,
@@ -95,11 +96,12 @@ public class RegistrarActaFiscalizacion {
             Observacion observacion) {
 
         exigirPrograma(programaId, TipoDePrograma.VEHICULAR);
+        exigirHallazgo(hallazgo);
 
         return guardar(
                 ActaFiscalizacion.nuevaVehicular(
                         programaId,
-                        actas.siguienteVersion(programaId, contribuyenteId),
+                        actas.siguienteVersion(programaId, contribuyenteId, null, vehiculoId),
                         contribuyenteId,
                         vehiculoId,
                         fechaVisita,
@@ -110,6 +112,32 @@ public class RegistrarActaFiscalizacion {
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * Un acta sin hallazgo no se registra, y esto es lo que hacía daño hoy (D-16, #481).
+     *
+     * <p>La columna admite nulos ({@code V4}) y {@link LiquidarFiscalizacion} leía el nulo como
+     * {@code CONFORME}: {@code POST /fiscalizacion/vehicular} sin hallazgo respondía <b>201</b> y
+     * esa acta se liquidaba conforme — un vehículo que nadie inspeccionó, declarado en regla. En la
+     * predial la condición sale de comparar superficies, así que lo que se perdía era {@code
+     * NO_UBICADO}: un predio inexistente se comparaba por área como si se hubiera hallado.
+     *
+     * <p>La guarda va aquí y no en un {@code CHECK} porque la columna tiene que seguir admitiendo
+     * nulos: no se puede afirmar que no haya actas históricas sin hallazgo, y este es el sitio
+     * donde se puede decir <b>por qué</b> falla. Es el patrón de #51, #72 y #399.
+     *
+     * <p>Cerrarlo <b>no</b> decide con qué vocabulario se anota, que es la pregunta de D-16: esta
+     * guarda sólo exige que se anote <b>alguno</b> de los valores que el dominio ya distingue. Es
+     * la mitad de D-16 que su propio registro señala como desbloqueada, y por eso se cierra aquí
+     * sin esperar a la otra.
+     */
+    private static void exigirHallazgo(@Nullable Hallazgo hallazgo) {
+        if (hallazgo == null) {
+            throw new IllegalArgumentException(
+                    "Falta el campo 'hallazgo': un acta sin el se liquidaria como CONFORME, que es"
+                            + " decir que la visita no encontro nada");
+        }
+    }
 
     private void exigirPrograma(long programaId, TipoDePrograma tipoEsperado) {
         ProgramaFiscalizacion programa =

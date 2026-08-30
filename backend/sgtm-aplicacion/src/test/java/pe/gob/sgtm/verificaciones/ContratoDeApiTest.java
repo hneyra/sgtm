@@ -157,6 +157,12 @@ class ContratoDeApiTest {
                     // OPERACIONES_ADICIONALES del generador del contrato.
                     "GET /fiscalizacion/programas",
                     "POST /fiscalizacion/programas",
+                    // #481: la muestra sorteada, que es la grilla «Predios seleccionados» de
+                    // `fisc_programa` y tambien la fila de la que el acta predial resuelve sus
+                    // tres identificadores -su catalogo los dibuja de solo lectura y no declara
+                    // ni filtros ni tabla, asi que solo se puede abrir desde una fila ya resuelta.
+                    "GET /fiscalizacion/programas/{id}/muestra",
+                    "POST /fiscalizacion/programas/{id}/muestra",
                     "POST /fiscalizacion/predial/actas",
                     "POST /fiscalizacion/vehicular",
                     // #49: la liquidacion, su reliquidacion y su estado, mas las cuatro
