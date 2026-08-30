@@ -36,7 +36,25 @@ export interface OperacionServida {
   readonly ruta: string;
 }
 
-export const YA_SERVIDAS: readonly OperacionServida[] = [];
+export const YA_SERVIDAS: readonly OperacionServida[] = [
+  /* ── Catastro: el territorio y la consulta de fichas ──────────────────
+     Las tres primeras encendidas, y las tres vistas leer del backend con los
+     dos procesos levantados: PostgreSQL con el padron de la municipalidad
+     sembrada, la aplicacion en el perfil `web` y un emisor OIDC contestando el
+     JWKS. No se encendieron «porque el backend las tiene»: se encendieron
+     habiendo mirado lo que contestan.
+
+     Las cuatro fichas individuales —`/catastro/fichas/{tipo}/{codigo}`— NO
+     estan, y no por olvido: contestan 500. `FichaController.predioDe` resuelve
+     el predio **desde el controlador**, fuera de transaccion, asi que corre sin
+     el `SET LOCAL app.municipalidad_id` y la politica RLS rechaza la consulta
+     con «invalid input syntax for type bigint: ""». Es el defecto que el javadoc
+     de `InscribirFicha` advierte con todas las letras y el que `ConsultaDeVias`
+     ya cerro una vez. */
+  { metodo: 'GET', ruta: '/catastro/vias' },
+  { metodo: 'GET', ruta: '/catastro/sectores' },
+  { metodo: 'GET', ruta: '/catastro/fichas' },
+];
 
 /** `/rentas/vehiculos/{placa}` → `^/api/v1/rentas/vehiculos/[^/]+$`. */
 function compilar(ruta: string): RegExp {

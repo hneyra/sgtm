@@ -1028,6 +1028,86 @@ const OPERACIONES_ADICIONALES = {
         ' reemplaza.',
     },
     {
+      operationId: 'listado_de_predios',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/predios',
+      titulo: 'Padrón de predios del catastro',
+      descripcion:
+        'Los predios del catastro con su ubicación resuelta a **códigos** —los mismos que la' +
+        ' corrección del predio recibe, para que la interfaz no tenga que traducir entre lo que' +
+        ' lee y lo que manda—, incluidos **los que nadie ha fichado y los que están dados de' +
+        ' baja**. No es la consulta de fichas con otro nombre: aquella lista fichas vigentes a' +
+        ' una fecha, así que un predio sale en ella solo si alguien levantó su ficha. Con' +
+        ' `fichado=false` da la cola de saneamiento —lo que entra por una carga cartográfica y' +
+        ' todavía no tiene ficha—, que ninguna consulta del sistema sabía responder. `fichado`' +
+        ' dice si se levantó la ficha alguna vez, no si sigue vigente hoy: eso llevaría fecha' +
+        ' (regla 9). Ni un importe y ni un titular: quién es el propietario se resuelve al clic' +
+        ' en `/catastro/predios/{predioId}/titulares` (ADR-0015 §2.4). Exige privilegio de' +
+        ' LECTURA sobre `actualizacion_catastro`: encontrar el predio es el paso previo de los' +
+        ' dos actos de esa pantalla, y pedir el de escribir dejaría sin mirar a quien solo mira.',
+      parametros: [
+        {
+          nombre: 'codRefCatastral',
+          ejemplo: '2501010010',
+          descripcion:
+            'Prefijo del código de referencia catastral, no una igualdad: el código se compone' +
+            ' de sector, manzana, lote y unidad, así que preguntar por un sector entero es lo' +
+            ' que se hace al sanear una zona',
+        },
+        {
+          nombre: 'codigoDeSector',
+          ejemplo: 'SC-1',
+          descripcion: 'El sector, por su código; el mismo que la corrección del predio recibe',
+        },
+        {
+          nombre: 'estado',
+          ejemplo: 'ACTIVO',
+          descripcion:
+            'ACTIVO o DADO_DE_BAJA. Si falta, salen los dos: este listado es el del catastro y' +
+            ' no el de la emisión, y esconder los retirados sería esconder lo que hay que revisar',
+        },
+        {
+          nombre: 'fichado',
+          ejemplo: 'false',
+          descripcion:
+            '`true` o `false`, y nada más —cualquier otro valor es 422, no un false silencioso—.' +
+            ' Si falta, salen los dos',
+        },
+      ],
+    },
+    {
+      operationId: 'dar_de_baja_predio',
+      metodo: 'post',
+      ruta: '/api/v1/catastro/predios/{predioId}/baja',
+      titulo: 'Baja del predio en el padrón',
+      descripcion:
+        'Retira el predio del padrón. **No borra nada** (regla 4, RNF-051): sus fichas, su' +
+        ' titularidad y las determinaciones que se apoyaron en él quedan como estaban, y el' +
+        ' predio deja de admitir fichas nuevas. Exige privilegio de ELIMINACIÓN sobre' +
+        ' `actualizacion_catastro` —no el de modificación— porque saca la unidad de toda emisión' +
+        ' futura. El cuerpo lleva solo la observación del usuario, obligatoria (RNF-052): el' +
+        ' predio y el estado al que se va los dice la ruta. Un predio que ya está dado de baja' +
+        ' es 409, no un segundo acto sin efecto.',
+      descripcionesDeRuta: {
+        predioId: 'El predio, por el `predioId` que publica cada fila de la consulta de fichas',
+      },
+    },
+    {
+      operationId: 'reactivar_predio',
+      metodo: 'post',
+      ruta: '/api/v1/catastro/predios/{predioId}/reactivacion',
+      titulo: 'Reactivación del predio',
+      descripcion:
+        'Devuelve al padrón un predio retirado. Existe porque sin ella la baja sería una puerta' +
+        ' de un solo sentido: el alta de ficha rechaza a propósito inscribir sobre un predio dado' +
+        ' de baja —«reactivarlo es otro acto, con su propia observación»— y ese otro acto no' +
+        ' existía. Exige MODIFICACIÓN y no ELIMINACIÓN: restituir no es retirar. El cuerpo lleva' +
+        ' solo la observación, obligatoria. Un predio que ya está activo es 409.',
+      descripcionesDeRuta: {
+        predioId: 'El predio, por el `predioId` que publica cada fila de la consulta de fichas',
+      },
+    },
+    {
       operationId: 'actualizar_ficha_rural',
       metodo: 'put',
       ruta: '/api/v1/catastro/fichas/rural/{codUnidad}/actualizacion',

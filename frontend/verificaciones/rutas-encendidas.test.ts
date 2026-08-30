@@ -294,20 +294,20 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
   );
   const pendientes = DEL_CONTRATO.filter(([, metodo, ruta]) => loQueFalta(metodo, ruta).length > 0);
 
-  it('el contrato publica 179 operaciones', () => {
-    expect(DEL_CONTRATO.length).toBe(179);
+  it('el contrato publica 182 operaciones', () => {
+    expect(DEL_CONTRATO.length).toBe(182);
   });
 
-  it('encendidas: 0', () => {
-    expect(YA_SERVIDAS.length).toBe(0);
+  it('encendidas: 3', () => {
+    expect(YA_SERVIDAS.length).toBe(3);
   });
 
-  it('listas para encender: 127', () => {
-    expect(listas.length).toBe(127);
+  it('listas para encender: 124', () => {
+    expect(listas.length).toBe(124);
   });
 
-  it('pendientes: 52', () => {
-    expect(pendientes.length).toBe(52);
+  it('pendientes: 55', () => {
+    expect(pendientes.length).toBe(55);
   });
 
   it('las tres cifras cubren el contrato entero', () => {

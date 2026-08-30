@@ -1280,6 +1280,26 @@ describe("#152 · la aplicacion y la interfaz", () => {
     }
   });
 
+  it("las sondas de `pg_isready` preguntan por TCP, que es lo que sus dependientes usan", () => {
+    // Sin `--host`, `pg_isready` pregunta por el socket unix. Durante la fase de
+    // inicializacion del entrypoint, el motor arranca con `listen_addresses=''`:
+    // escucha por socket y NO por TCP. El pod se declara Ready mientras todavia
+    // corren los guiones de initdb, y el Job de migracion muere con «Connection
+    // refused». Es una carrera que gana el socket cuando el arranque es corto y
+    // pierde SIEMPRE cuando se alarga -PostGIS crea `template_postgis` y le carga
+    // las extensiones (ADR-0021)-, y se destapo asi en la marcha blanca.
+    const sondas = contenedoresDeTodo(ms).flatMap(({ donde, c }) =>
+      [c.startupProbe, c.readinessProbe, c.livenessProbe]
+        .filter((s) => s !== undefined)
+        .map((s) => ({ donde, orden: s.exec?.command ?? [] })),
+    );
+    const dePostgres = sondas.filter((s) => s.orden[0] === "pg_isready");
+    expect(dePostgres.length, "ninguna sonda de pg_isready: la prueba no mide nada").toBe(3);
+    for (const s of dePostgres) {
+      expect(s.orden, s.donde).toContain("--host=127.0.0.1");
+    }
+  });
+
   it("la JVM tiene su `startupProbe`, para que la sonda de vida no la mate arrancando", () => {
     const aplicacion = buscar(ms, "Deployment", "aplicacion") as {
       spec: { template: { spec: { containers: Contenedor[] } } };

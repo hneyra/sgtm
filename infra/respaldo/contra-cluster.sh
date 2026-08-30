@@ -142,7 +142,11 @@ spec:
   restartPolicy: Never
   containers:
   - name: restaurar
-    image: postgres:16.4-alpine
+    # La MISMA imagen que el motor (ADR-0021). Un PITR restaura el directorio de
+    # datos tal cual, y ese directorio trae los objetos de PostGIS en el catalogo:
+    # arrancarlo con una imagen sin la biblioteca deja el motor levantado y
+    # cualquier consulta que toque un objeto de la extension falla al cargarla.
+    image: postgis/postgis:16-3.4-alpine
     command: ["/bin/sh", "-c", "sleep 3600"]
     env:
     - {name: WALG_S3_PREFIX, value: "$walgPrefix"}

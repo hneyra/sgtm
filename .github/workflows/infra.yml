@@ -238,6 +238,14 @@ jobs:
       # arrancar otro proceso sobre lo restaurado, y contra un contenedor de la imagen
       # oficial eso no se puede sin reimplementar medio entrypoint. El runner trae
       # PostgreSQL instalado, y `SGTM_MOTOR_MODO=local` es lo que el guion pide.
+      # PostGIS lo instala `crear-roles.sql` desde ADR-0021, y el PostgreSQL que trae
+      # el runner no lo incluye: sin este paso el simulacro muere en su primer guion
+      # con «extension "postgis" is not available», que no se parece a su causa. El
+      # motor del manifiesto SI la trae —es `postgis/postgis`—; el de aqui es el nativo
+      # del runner, y hay que completarlo a mano.
+      - name: PostGIS en el motor local del runner
+        run: sudo apt-get install -y -qq postgresql-16-postgis-3
+
       - name: simulacro-de-restauracion.sh
         run: infra/respaldo/simulacro-de-restauracion.sh --ambiente stg
 

@@ -236,7 +236,7 @@ sin publicarlas a ningún registro, y las escanea con Trivy. El resultado —CRI
 publica en el resumen del trabajo, visible desde el PR sin abrir un log.
 
 Bloqueante solo en CRITICAL. HIGH se reporta pero no rompe el flujo: las imágenes base
-(`postgres:16-alpine`, `nginx:1.31.4-alpine`, la base de `eclipse-temurin`) acumulan hallazgos HIGH
+(`postgis/postgis:16-3.4-alpine`, `nginx:1.31.4-alpine`, la base de `eclipse-temurin`) acumulan hallazgos HIGH
 que este repositorio no puede corregir sin esperar a la propia base — un flujo bloqueante ahí es
 un flujo que termina ignorado. CRITICAL sí bloquea, y no es hipotético: la primera corrida real
 encontró `CVE-2026-31789` (desbordamiento de buffer en OpenSSL, CRITICAL) en `libssl3`/`libcrypto3`

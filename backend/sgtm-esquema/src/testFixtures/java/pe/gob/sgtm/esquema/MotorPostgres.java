@@ -22,7 +22,12 @@ import org.testcontainers.utility.DockerImageName;
  */
 public final class MotorPostgres implements AutoCloseable {
 
-    private static final String IMAGEN_POR_OMISION = "postgres:16-alpine";
+    /**
+     * La misma PostgreSQL 16 con PostGIS dentro (ADR-0021): {@code crear-roles.sql} instala la
+     * extension antes de la primera migracion, y {@code postgres:16-alpine} no la trae, asi que con
+     * esa imagen el aprovisionamiento falla con «extension "postgis" is not available».
+     */
+    private static final String IMAGEN_POR_OMISION = "postgis/postgis:16-3.4-alpine";
 
     private final PostgreSQLContainer<?> contenedor;
     private final String url;
@@ -50,7 +55,7 @@ public final class MotorPostgres implements AutoCloseable {
         String imagen = ajuste("sgtm.pruebas.postgres.imagen");
         PostgreSQLContainer<?> contenedor =
                 new PostgreSQLContainer<>(
-                        DockerImageName.parse(
+                        nombreDeImagen(
                                 imagen == null || imagen.isBlank() ? IMAGEN_POR_OMISION : imagen));
         contenedor.start();
         return new MotorPostgres(
@@ -58,6 +63,27 @@ public final class MotorPostgres implements AutoCloseable {
                 contenedor.getJdbcUrl(),
                 contenedor.getUsername(),
                 contenedor.getPassword());
+    }
+
+    /**
+     * El nombre de la imagen, declarando la compatibilidad de PostGIS con {@code postgres}.
+     *
+     * <p>{@code PostgreSQLContainer} exige que la imagen se llame {@code postgres} o que se declare
+     * sustituta suya, y {@code postgis/postgis} no se llama asi: sin esto, cada prueba de base
+     * muere en su {@code @BeforeAll} con «Failed to verify that image … is a compatible substitute
+     * for 'postgres'», que no se parece en nada a su causa.
+     *
+     * <p>La declaracion es <b>solo para las imagenes de PostGIS</b>, y no un {@code
+     * asCompatibleSubstituteFor} indiscriminado: la comprobacion de Testcontainers existe para
+     * atrapar una imagen que no es PostgreSQL, y desactivarla del todo cambiaria un fallo claro por
+     * uno raro. {@code postgis/postgis} SI es la PostgreSQL oficial con extensiones encima, que es
+     * exactamente el caso que Testcontainers pide declarar.
+     */
+    private static DockerImageName nombreDeImagen(String imagen) {
+        DockerImageName nombre = DockerImageName.parse(imagen);
+        return imagen.startsWith("postgis/postgis")
+                ? nombre.asCompatibleSubstituteFor("postgres")
+                : nombre;
     }
 
     public String url() {

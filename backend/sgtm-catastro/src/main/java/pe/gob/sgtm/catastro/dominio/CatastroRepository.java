@@ -46,7 +46,15 @@ public interface CatastroRepository {
 
     Optional<Predio> predioPorCodigo(CodigoReferenciaCatastral codigo);
 
-    Pagina<Predio> predios(Paginacion paginacion);
+    /**
+     * El padron de predios del catastro, con su ubicacion resuelta a codigos y si estan fichados.
+     *
+     * <p>Sustituye al listado sin filtros que habia hasta #400 y que no llamaba nadie: la pantalla
+     * de saneamiento necesita acotar por sector, por prefijo de codigo y por estado, y sobre todo
+     * necesita poder pedir <b>los que no tienen ficha</b>, que es lo que ninguna consulta del
+     * sistema sabia responder.
+     */
+    Pagina<PredioDelCatastro> predios(FiltroDePredios filtro, Paginacion paginacion);
 
     /**
      * El padron activo con el titular y la ficha vigentes a la fecha, para {@link
@@ -70,6 +78,25 @@ public interface CatastroRepository {
             Paginacion paginacion);
 
     Predio guardar(Predio predio);
+
+    /**
+     * Guarda el poligono del lote, en WKT y en WGS84 (ADR-0021, V61).
+     *
+     * <p>Va aparte de {@link #guardar(Predio)} y no como un campo mas de {@link Predio}, y no es
+     * comodidad: la geometria no entra por ninguna operacion del contrato —entra por la carga
+     * cartografica— y meterla en el record obligaria a arrastrarla por los treinta sitios donde se
+     * construye un predio, casi todos con un {@code null} que no significa nada.
+     *
+     * <p>Es un {@code UPDATE} sobre {@code predio}: la geometria se corrige cuando el plano se
+     * corrige, y de eso no queda version. Lo que se versiona es la ficha, no el lote.
+     *
+     * @param wkt un {@code MULTIPOLYGON(...)}; el motor rechaza cualquier otra cosa por el tipo de
+     *     la columna, asi que no hay una validacion aqui que pueda desincronizarse de aquella
+     */
+    void asignarGeometria(long predioId, String wkt);
+
+    /** El poligono del predio en WKT, o vacio si no tiene: la mayoria no lo tendra nunca. */
+    Optional<String> geometriaDe(long predioId);
 
     // ---------- Titularidad ----------
 

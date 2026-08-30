@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas cuarenta y cinco operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas cuarenta y ocho operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -155,8 +155,20 @@ describe('las operaciones generadas son las del contrato', () => {
     //     que el acta predial resuelve sus tres identificadores —su catalogo los
     //     dibuja de solo lectura y no declara ni filtros ni tabla, asi que solo
     //     se puede abrir desde una fila ya resuelta.
+    //   - `listado_de_predios`, `dar_de_baja_predio` y `reactivar_predio`
+    //     (#400): el predio como recurso propio. Los datos PROPIOS del predio
+    //     —direccion, via, numero municipal, sector, manzana, lote, ubigeo y
+    //     tipo— solo se podian escribir al inscribirlo, asi que una direccion
+    //     mal tecleada al fichar era para siempre; y `RegistrarPredio.darDeBaja`
+    //     existia desde #290 sin que ningun endpoint la llamara. El listado no
+    //     es la consulta de fichas con otro nombre: aquella lista fichas
+    //     vigentes a una fecha, y esta lista predios —incluidos **los que nadie
+    //     ficho** y los dados de baja—, que es lo unico que encuentra lo que
+    //     entra por una carga cartografica. La reactivacion existe porque sin
+    //     ella la baja seria una puerta de un solo sentido: el alta rechaza a
+    //     proposito fichar un predio retirado.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(179);
+    expect(Object.keys(OPERACIONES)).toHaveLength(182);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

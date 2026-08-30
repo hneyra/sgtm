@@ -567,6 +567,30 @@
       }
     ]
   },
+  "GET /catastro/predios": {
+    "contenido": [
+      {
+        "predioId": "entero",
+        "codRefCatastral": "texto",
+        "tipo": "texto",
+        "direccion": "texto",
+        "numeroMunicipal": "texto",
+        "codigoDeVia": "texto",
+        "via": "texto",
+        "codigoDeSector": "texto",
+        "codigoDeManzana": "texto",
+        "lote": "texto",
+        "ubigeo": "texto",
+        "estado": "texto",
+        "fichado": "booleano"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
   "GET /catastro/predios/{predioId}/titulares": {
     "predioId": "entero",
     "vigenteA": "texto",
@@ -3894,6 +3918,26 @@
         "registradaEn": "texto"
       }
     ]
+  },
+  "POST /catastro/predios/{predioId}/baja": {
+    "predioId": "entero",
+    "codRefCatastral": "texto",
+    "tipo": "texto",
+    "direccion": "texto",
+    "numeroMunicipal": "texto",
+    "lote": "texto",
+    "ubigeo": "texto",
+    "estado": "texto"
+  },
+  "POST /catastro/predios/{predioId}/reactivacion": {
+    "predioId": "entero",
+    "codRefCatastral": "texto",
+    "tipo": "texto",
+    "direccion": "texto",
+    "numeroMunicipal": "texto",
+    "lote": "texto",
+    "ubigeo": "texto",
+    "estado": "texto"
   },
   "POST /catastro/sectores": {
     "id": "entero",

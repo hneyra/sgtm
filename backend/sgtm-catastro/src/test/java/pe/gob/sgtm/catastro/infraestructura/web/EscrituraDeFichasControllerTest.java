@@ -37,9 +37,11 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
+import pe.gob.sgtm.catastro.aplicacion.ActualizarCatastro;
 import pe.gob.sgtm.catastro.aplicacion.ActualizarFichaCatastral;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDeFichas;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDeLaFichaVigente;
+import pe.gob.sgtm.catastro.aplicacion.ConsultaDePredios;
 import pe.gob.sgtm.catastro.aplicacion.InscribirFicha;
 import pe.gob.sgtm.catastro.aplicacion.RegistrarPredio;
 import pe.gob.sgtm.catastro.dominio.ActividadEconomica;
@@ -57,12 +59,14 @@ import pe.gob.sgtm.catastro.dominio.FichaCatastral;
 import pe.gob.sgtm.catastro.dominio.FichaCatastralRepository;
 import pe.gob.sgtm.catastro.dominio.FichaEncontrada;
 import pe.gob.sgtm.catastro.dominio.FiltroDeFichas;
+import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.MaterialEstructural;
 import pe.gob.sgtm.catastro.dominio.OrigenDeLaFicha;
 import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
 import pe.gob.sgtm.catastro.dominio.Predio;
+import pe.gob.sgtm.catastro.dominio.PredioDelCatastro;
 import pe.gob.sgtm.catastro.dominio.Riego;
 import pe.gob.sgtm.catastro.dominio.Sector;
 import pe.gob.sgtm.catastro.dominio.SectorConConteos;
@@ -143,6 +147,9 @@ class EscrituraDeFichasControllerTest {
     private final InscribirFicha inscribirFicha =
             envolver(new InscribirFicha(predios, vias, padron, registrarPredio, actualizarFicha));
 
+    private final ActualizarCatastro actualizarCatastro =
+            envolver(new ActualizarCatastro(predios, vias, registrarPredio, actualizarFicha));
+
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
                             new FichaController(
@@ -151,7 +158,9 @@ class EscrituraDeFichasControllerTest {
                                     inscribirFicha,
                                     envolver(new ConsultaDeLaFichaVigente(predios, fichas)),
                                     reloj),
-                            new ActualizacionController(actualizarFicha, predios, reloj))
+                            new ActualizacionController(actualizarCatastro, reloj),
+                            new PredioController(
+                                    actualizarCatastro, envolver(new ConsultaDePredios(predios))))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(
@@ -992,6 +1001,457 @@ class EscrituraDeFichasControllerTest {
         }
     }
 
+    // ── La correccion del predio, y su baja ────────────────────────────
+
+    @Nested
+    @DisplayName("Correccion del predio (PUT): los datos que hasta ahora solo se escribian al alta")
+    class CorreccionDelPredio {
+
+        @Test
+        @DisplayName("corrige el predio y versiona la ficha en UN acto, con una sola observacion")
+        void corrigeYVersionaEnUnActo() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    put("/api/v1/catastro/fichas/"
+                                                    + PREDIO_CON_FICHA
+                                                    + "/actualizacion")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    """
+                                                    {"documentoOrigen":"Acta 700-2026",
+                                                     "observacion":"Corregir la direccion mal tecleada al fichar",
+                                                     "predio":{"direccion":"AV. SANCHEZ CERRO 250",
+                                                               "numeroMunicipal":"250"}}
+                                                    """))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+
+            Predio corregido = predios.porCodigo(PREDIO_CON_FICHA).orElseThrow();
+            assertThat(corregido.direccion()).isEqualTo("AV. SANCHEZ CERRO 250");
+            assertThat(corregido.numeroMunicipal()).isEqualTo("250");
+            assertThat(vigenteDe(PREDIO_CON_FICHA, TipoFicha.UNICA).version()).isEqualTo(2);
+
+            assertThat(transacciones.abiertas)
+                    .as(
+                            "corregir el predio y versionar su ficha son un acto: dos casos de uso"
+                                    + " encadenados desde el controlador dejarian el predio movido"
+                                    + " cuando la ficha falla, y nada lo diria")
+                    .isEqualTo(1);
+            assertThat(asentado)
+                    .extracting(RegistroDeAuditoria::observacion)
+                    .as("un acto, una observacion (regla 10)")
+                    .containsOnly(Observacion.de("Corregir la direccion mal tecleada al fichar"));
+            assertThat(asentado)
+                    .extracting(RegistroDeAuditoria::tabla)
+                    .as("el predio se corrige una vez; la ficha asienta el cierre y la apertura")
+                    .containsExactly("predio", "ficha_catastral", "ficha_catastral");
+        }
+
+        @Test
+        @DisplayName("lo que el bloque no manda, no cambia")
+        void loQueNoMandaNoCambia() throws Exception {
+            predios.reemplazar(
+                    predios.porCodigo(PREDIO_CON_FICHA)
+                            .orElseThrow()
+                            .enLaVia(1L, "200")
+                            .ubicadoEn(1L, 1L, "12"));
+
+            mvc.perform(
+                            put("/api/v1/catastro/fichas/" + PREDIO_CON_FICHA + "/actualizacion")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(
+                                            """
+                                            {"documentoOrigen":"Acta 701-2026",
+                                             "observacion":"Solo la direccion",
+                                             "predio":{"direccion":"CALLE NUEVA 10"}}
+                                            """))
+                    .andReturn();
+
+            Predio corregido = predios.porCodigo(PREDIO_CON_FICHA).orElseThrow();
+            assertThat(corregido.direccion()).isEqualTo("CALLE NUEVA 10");
+            assertThat(corregido.numeroMunicipal())
+                    .as("mandar el bloque para arreglar la direccion no borra lo demas")
+                    .isEqualTo("200");
+            assertThat(corregido.lote()).isEqualTo("12");
+            assertThat(corregido.viaId()).isEqualTo(1L);
+            assertThat(corregido.sectorId()).isEqualTo(1L);
+            assertThat(corregido.manzanaId()).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("la cadena vacia SI borra: es una instruccion, no una omision")
+        void laCadenaVaciaBorra() throws Exception {
+            predios.reemplazar(
+                    predios.porCodigo(PREDIO_CON_FICHA).orElseThrow().enLaVia(1L, "200"));
+
+            mvc.perform(
+                            put("/api/v1/catastro/fichas/" + PREDIO_CON_FICHA + "/actualizacion")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(
+                                            """
+                                            {"documentoOrigen":"Acta 702-2026",
+                                             "observacion":"El predio no tiene numero municipal",
+                                             "predio":{"numeroMunicipal":""}}
+                                            """))
+                    .andReturn();
+
+            assertThat(predios.porCodigo(PREDIO_CON_FICHA).orElseThrow().numeroMunicipal())
+                    .as("sin la vacia, un numero municipal equivocado no se podria quitar nunca")
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("si la ficha falla, la correccion del predio NO sobrevive")
+        void siLaFichaFallaLaCorreccionNoSobrevive() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    put("/api/v1/catastro/fichas/"
+                                                    + PREDIO_SIN_FICHA
+                                                    + "/actualizacion")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    """
+                                                    {"documentoOrigen":"Acta 703-2026",
+                                                     "observacion":"Corregir un predio sin ficha vigente",
+                                                     "predio":{"direccion":"CALLE FANTASMA 1"}}
+                                                    """))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(404);
+            assertThat(predios.porCodigo(PREDIO_SIN_FICHA).orElseThrow().direccion())
+                    .as("el predio se corrige antes que la ficha, y se deshace con ella")
+                    .isEqualTo("AV. SIN FICHA 300");
+            assertThat(asentado).as("no queda constancia de algo que no paso").isEmpty();
+        }
+
+        @Test
+        @DisplayName("un sector que no existe es 404 y no deja el predio a medio mover")
+        void unSectorInexistenteEnLaCorreccionEs404() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    put("/api/v1/catastro/fichas/"
+                                                    + PREDIO_CON_FICHA
+                                                    + "/actualizacion")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    """
+                                                    {"documentoOrigen":"Acta 704-2026",
+                                                     "observacion":"Mover a un sector inexistente",
+                                                     "predio":{"direccion":"CALLE OTRA 5",
+                                                               "codigoDeSector":"SC-NADA"}}
+                                                    """))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(404);
+            assertThat(resultado.getResponse().getContentAsString())
+                    .contains("\"codigo\":\"NO_ENCONTRADO\"")
+                    .contains("sector")
+                    .contains("SC-NADA");
+            assertThat(predios.porCodigo(PREDIO_CON_FICHA).orElseThrow().direccion())
+                    .isEqualTo("AV. SANCHEZ CERRO 200");
+        }
+
+        @Test
+        @DisplayName("cambiar de sector conservando la manzana del anterior es 422, no un arrastre")
+        void cambiarDeSectorConservandoLaManzanaEs422() throws Exception {
+            predios.reemplazar(
+                    predios.porCodigo(PREDIO_CON_FICHA).orElseThrow().ubicadoEn(1L, 1L, "12"));
+
+            MvcResult resultado =
+                    mvc.perform(
+                                    put("/api/v1/catastro/fichas/"
+                                                    + PREDIO_CON_FICHA
+                                                    + "/actualizacion")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    """
+                                                    {"documentoOrigen":"Acta 705-2026",
+                                                     "observacion":"Mover el predio de sector",
+                                                     "predio":{"codigoDeSector":"SC-2"}}
+                                                    """))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus())
+                    .as(
+                            "arrastrar la manzana 001 del sector 1 al sector 2 dejaria el predio"
+                                    + " colgando de una manzana que no es de su sector")
+                    .isEqualTo(422);
+            assertThat(resultado.getResponse().getContentAsString()).contains("manzana");
+            assertThat(predios.porCodigo(PREDIO_CON_FICHA).orElseThrow().sectorId()).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("declarando la manzana nueva, el cambio de sector si entra")
+        void conLaManzanaNuevaElCambioDeSectorEntra() throws Exception {
+            predios.reemplazar(
+                    predios.porCodigo(PREDIO_CON_FICHA).orElseThrow().ubicadoEn(1L, 1L, "12"));
+
+            mvc.perform(
+                            put("/api/v1/catastro/fichas/" + PREDIO_CON_FICHA + "/actualizacion")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(
+                                            """
+                                            {"documentoOrigen":"Acta 706-2026",
+                                             "observacion":"Mover el predio al sector norte",
+                                             "predio":{"codigoDeSector":"SC-2","codigoDeManzana":"002"}}
+                                            """))
+                    .andReturn();
+
+            Predio movido = predios.porCodigo(PREDIO_CON_FICHA).orElseThrow();
+            assertThat(movido.sectorId()).isEqualTo(2L);
+            assertThat(movido.manzanaId()).isEqualTo(2L);
+        }
+
+        @Test
+        @DisplayName("el codigo de referencia catastral no se puede cambiar: identifica al predio")
+        void elCodigoNoSeCambia() throws Exception {
+            mvc.perform(
+                            put("/api/v1/catastro/fichas/" + PREDIO_CON_FICHA + "/actualizacion")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(
+                                            """
+                                            {"documentoOrigen":"Acta 707-2026",
+                                             "observacion":"Intentar renombrar el predio",
+                                             "predio":{"codRefCatastral":"25010100100100101010777",
+                                                       "direccion":"AV. RENOMBRADA 1"}}
+                                            """))
+                    .andReturn();
+
+            assertThat(predios.porCodigo(PREDIO_CON_FICHA))
+                    .as("cambiar el codigo no es corregir un predio, es declarar otro")
+                    .isPresent();
+            assertThat(predios.porCodigo("25010100100100101010777")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("sin bloque de predio, el predio no se toca ni deja asiento")
+        void sinBloqueElPredioNoSeToca() throws Exception {
+            mvc.perform(
+                            put("/api/v1/catastro/fichas/" + PREDIO_CON_FICHA + "/actualizacion")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(
+                                            """
+                                            {"documentoOrigen":"Acta 708-2026",
+                                             "observacion":"Solo versionar la ficha"}
+                                            """))
+                    .andReturn();
+
+            assertThat(predios.porCodigo(PREDIO_CON_FICHA).orElseThrow().direccion())
+                    .isEqualTo("AV. SANCHEZ CERRO 200");
+            assertThat(asentado)
+                    .extracting(RegistroDeAuditoria::tabla)
+                    .as("el acto corriente sigue siendo versionar la ficha, y solo eso")
+                    .containsOnly("ficha_catastral");
+        }
+    }
+
+    @Nested
+    @DisplayName("Listado de predios (GET): los filtros que la capa web compone")
+    class ListadoDePredios {
+
+        @Test
+        @DisplayName("los cuatro filtros viajan tal como se declaran")
+        void losCuatroFiltrosViajan() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    get("/api/v1/catastro/predios")
+                                            .param("codRefCatastral", "2501010010")
+                                            .param("codigoDeSector", "SC-1")
+                                            .param("estado", "DADO_DE_BAJA")
+                                            .param("fichado", "false"))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+            FiltroDePredios filtro = Objects.requireNonNull(predios.ultimoFiltro);
+            assertThat(filtro.codRefCatastral()).isEqualTo("2501010010");
+            assertThat(filtro.codigoDeSector()).isEqualTo("SC-1");
+            assertThat(filtro.estado()).isEqualTo(EstadoPredio.DADO_DE_BAJA);
+            assertThat(filtro.fichado()).isFalse();
+        }
+
+        @Test
+        @DisplayName("sin filtros, ninguno viaja: el padron entero es una pregunta legitima")
+        void sinFiltrosNingunoViaja() throws Exception {
+            mvc.perform(get("/api/v1/catastro/predios")).andReturn();
+
+            FiltroDePredios filtro = Objects.requireNonNull(predios.ultimoFiltro);
+            assertThat(filtro.codRefCatastral()).isNull();
+            assertThat(filtro.codigoDeSector()).isNull();
+            assertThat(filtro.estado()).isNull();
+            assertThat(filtro.fichado()).isNull();
+        }
+
+        @Test
+        @DisplayName("un 'fichado' que no es true ni false es 422, no un false en silencio")
+        void unFichadoQueNoEsBooleanoEs422() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(get("/api/v1/catastro/predios").param("fichado", "si")).andReturn();
+
+            assertThat(resultado.getResponse().getStatus())
+                    .as(
+                            "con parseBoolean, 'si' devolveria la cola de saneamiento entera"
+                                    + " cuando se pedia lo contrario, y sin un solo mensaje")
+                    .isEqualTo(422);
+            assertThat(resultado.getResponse().getContentAsString()).contains("fichado");
+        }
+
+        @Test
+        @DisplayName("un estado desconocido es 422 y dice cual llego")
+        void unEstadoDesconocidoEs422() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(get("/api/v1/catastro/predios").param("estado", "ANULADO"))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+            assertThat(resultado.getResponse().getContentAsString()).contains("ANULADO");
+        }
+    }
+
+    @Nested
+    @DisplayName("Baja y reactivacion del predio (POST): retirar no es borrar")
+    class BajaDelPredio {
+
+        @Test
+        @DisplayName("la baja retira el predio del padron y lo asienta, sin borrar su ficha")
+        void laBajaRetiraElPredio() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    post("/api/v1/catastro/predios/"
+                                                    + predios.idDe(PREDIO_CON_FICHA)
+                                                    + "/baja")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    """
+                                                    {"observacion":"Predio demolido segun acta 900-2026"}
+                                                    """))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+            assertThat(resultado.getResponse().getContentAsString())
+                    .contains("\"estado\":\"DADO_DE_BAJA\"");
+            assertThat(predios.porCodigo(PREDIO_CON_FICHA).orElseThrow().estaActivo()).isFalse();
+            assertThat(fichas.delPredio(PREDIO_CON_FICHA, predios))
+                    .as("se retira, no se borra: la ficha aparece en determinaciones ya emitidas")
+                    .hasSize(1);
+            assertThat(asentado)
+                    .singleElement()
+                    .extracting(RegistroDeAuditoria::operacion)
+                    .isEqualTo(Operacion.BAJA);
+        }
+
+        @Test
+        @DisplayName("un predio ya dado de baja es 409, no un segundo acto sin efecto")
+        void unPredioYaDadoDeBajaEs409() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    post("/api/v1/catastro/predios/"
+                                                    + predios.idDe(PREDIO_DE_BAJA)
+                                                    + "/baja")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    """
+                                                    {"observacion":"Volver a retirar lo retirado"}
+                                                    """))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(409);
+            assertThat(asentado).isEmpty();
+        }
+
+        @Test
+        @DisplayName("una baja sin observacion es 422: sin ella no se guarda (regla 10)")
+        void unaBajaSinObservacionEs422() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    post("/api/v1/catastro/predios/"
+                                                    + predios.idDe(PREDIO_CON_FICHA)
+                                                    + "/baja")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content("{}"))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+            assertThat(predios.porCodigo(PREDIO_CON_FICHA).orElseThrow().estaActivo()).isTrue();
+        }
+
+        @Test
+        @DisplayName("un predio que no existe es 404")
+        void unPredioInexistenteEs404() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    post("/api/v1/catastro/predios/99999/baja")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    """
+                                                    {"observacion":"Retirar lo que no esta"}
+                                                    """))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("la reactivacion devuelve el predio al padron y le vuelve a admitir ficha")
+        void laReactivacionDevuelveElPredio() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    post("/api/v1/catastro/predios/"
+                                                    + predios.idDe(PREDIO_DE_BAJA)
+                                                    + "/reactivacion")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    """
+                                                    {"observacion":"La baja fue un error de captura"}
+                                                    """))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+            assertThat(resultado.getResponse().getContentAsString())
+                    .contains("\"estado\":\"ACTIVO\"");
+
+            MvcResult conFicha =
+                    mvc.perform(
+                                    post("/api/v1/catastro/fichas/urbana")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    """
+                                                    {"codRefCatastral":"25010100100100101010004",
+                                                     "direccion":"AV. RETIRADA 400",
+                                                     "areaTerreno":"120.00",
+                                                     "uso":"CASA HABITACION",
+                                                     "documentoOrigen":"DJ 900-2026",
+                                                     "observacion":"Fichar el predio reactivado"}
+                                                    """))
+                            .andReturn();
+
+            assertThat(conFicha.getResponse().getStatus())
+                    .as(
+                            "sin la reactivacion, la baja seria una puerta de un solo sentido: el"
+                                    + " alta rechaza a proposito fichar un predio retirado")
+                    .isEqualTo(201);
+        }
+
+        @Test
+        @DisplayName("reactivar un predio que ya esta activo es 409")
+        void reactivarUnoActivoEs409() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    post("/api/v1/catastro/predios/"
+                                                    + predios.idDe(PREDIO_CON_FICHA)
+                                                    + "/reactivacion")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    """
+                                                    {"observacion":"Reactivar lo que nunca se retiro"}
+                                                    """))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(409);
+            assertThat(asentado).isEmpty();
+        }
+    }
+
     // ------------------------------------------------------------------
 
     private FichaCatastral vigenteDe(String codigoDePredio, TipoFicha tipo) {
@@ -1344,9 +1804,13 @@ class EscrituraDeFichasControllerTest {
         }
 
         private final List<Sector> sectores =
-                new ArrayList<>(List.of(new Sector(1L, "SC-1", "Sector Centro", "Zona A", true)));
+                new ArrayList<>(
+                        List.of(
+                                new Sector(1L, "SC-1", "Sector Centro", "Zona A", true),
+                                new Sector(2L, "SC-2", "Sector Norte", "Zona B", true)));
 
-        private final List<Manzana> manzanas = new ArrayList<>(List.of(new Manzana(1L, 1L, "001")));
+        private final List<Manzana> manzanas =
+                new ArrayList<>(List.of(new Manzana(1L, 1L, "001"), new Manzana(2L, 2L, "002")));
 
         private final List<Predio> predios =
                 new ArrayList<>(
@@ -1370,6 +1834,9 @@ class EscrituraDeFichasControllerTest {
 
         /** Cuando esta puesto, el {@code INSERT} choca aunque la lectura previa no viera nada. */
         private boolean simularCarrera;
+
+        /** El ultimo filtro recibido: lo que la capa web compuso a partir de la consulta. */
+        private @Nullable FiltroDePredios ultimoFiltro;
 
         private long siguientePredio = 10L;
         private long siguienteTitularidad = 1L;
@@ -1395,6 +1862,11 @@ class EscrituraDeFichasControllerTest {
 
         Optional<Predio> porCodigo(String codigo) {
             return predioPorCodigo(CodigoReferenciaCatastral.de(codigo));
+        }
+
+        /** Cambia una fila sembrada sin pasar por el caso de uso ni contar transacciones. */
+        void reemplazar(Predio predio) {
+            predios.replaceAll(fila -> Objects.equals(fila.id(), predio.id()) ? predio : fila);
         }
 
         long idDe(String codigo) {
@@ -1488,12 +1960,23 @@ class EscrituraDeFichasControllerTest {
 
         @Override
         public Optional<Predio> predio(long id) {
-            throw new UnsupportedOperationException("El predio se resuelve por su codigo");
+            return predios.stream().filter(fila -> Objects.equals(fila.id(), id)).findFirst();
         }
 
         @Override
-        public Pagina<Predio> predios(Paginacion paginacion) {
-            throw new UnsupportedOperationException("La escritura de fichas no lista predios");
+        public Pagina<PredioDelCatastro> predios(FiltroDePredios filtro, Paginacion paginacion) {
+            ultimoFiltro = filtro;
+            return Pagina.vacia(paginacion);
+        }
+
+        @Override
+        public void asignarGeometria(long predioId, String wkt) {
+            throw new UnsupportedOperationException("La escritura de fichas no dibuja planos");
+        }
+
+        @Override
+        public Optional<String> geometriaDe(long predioId) {
+            return Optional.empty();
         }
 
         @Override

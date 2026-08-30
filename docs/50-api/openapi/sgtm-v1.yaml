@@ -712,6 +712,101 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/predios":
+    get:
+      operationId: listado_de_predios
+      summary: "Padrón de predios del catastro"
+      description: "Los predios del catastro con su ubicación resuelta a **códigos** —los mismos que la corrección del predio recibe, para que la interfaz no tenga que traducir entre lo que lee y lo que manda—, incluidos **los que nadie ha fichado y los que están dados de baja**. No es la consulta de fichas con otro nombre: aquella lista fichas vigentes a una fecha, así que un predio sale en ella solo si alguien levantó su ficha. Con `fichado=false` da la cola de saneamiento —lo que entra por una carga cartográfica y todavía no tiene ficha—, que ninguna consulta del sistema sabía responder. `fichado` dice si se levantó la ficha alguna vez, no si sigue vigente hoy: eso llevaría fecha (regla 9). Ni un importe y ni un titular: quién es el propietario se resuelve al clic en `/catastro/predios/{predioId}/titulares` (ADR-0015 §2.4). Exige privilegio de LECTURA sobre `actualizacion_catastro`: encontrar el predio es el paso previo de los dos actos de esa pantalla, y pedir el de escribir dejaría sin mirar a quien solo mira."
+      tags: ["Catastro"]
+      parameters:
+        - name: codRefCatastral
+          in: query
+          required: false
+          description: "Prefijo del código de referencia catastral, no una igualdad: el código se compone de sector, manzana, lote y unidad, así que preguntar por un sector entero es lo que se hace al sanear una zona"
+          schema: { type: string }
+          example: "2501010010"
+        - name: codigoDeSector
+          in: query
+          required: false
+          description: "El sector, por su código; el mismo que la corrección del predio recibe"
+          schema: { type: string }
+          example: "SC-1"
+        - name: estado
+          in: query
+          required: false
+          description: "ACTIVO o DADO_DE_BAJA. Si falta, salen los dos: este listado es el del catastro y no el de la emisión, y esconder los retirados sería esconder lo que hay que revisar"
+          schema: { type: string }
+          example: "ACTIVO"
+        - name: fichado
+          in: query
+          required: false
+          description: "`true` o `false`, y nada más —cualquier otro valor es 422, no un false silencioso—. Si falta, salen los dos"
+          schema: { type: string }
+          example: "false"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/predios/{predioId}/baja":
+    post:
+      operationId: dar_de_baja_predio
+      summary: "Baja del predio en el padrón"
+      description: "Retira el predio del padrón. **No borra nada** (regla 4, RNF-051): sus fichas, su titularidad y las determinaciones que se apoyaron en él quedan como estaban, y el predio deja de admitir fichas nuevas. Exige privilegio de ELIMINACIÓN sobre `actualizacion_catastro` —no el de modificación— porque saca la unidad de toda emisión futura. El cuerpo lleva solo la observación del usuario, obligatoria (RNF-052): el predio y el estado al que se va los dice la ruta. Un predio que ya está dado de baja es 409, no un segundo acto sin efecto."
+      tags: ["Catastro"]
+      parameters:
+        - name: predioId
+          in: path
+          required: true
+          description: "El predio, por el `predioId` que publica cada fila de la consulta de fichas"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/predios/{predioId}/reactivacion":
+    post:
+      operationId: reactivar_predio
+      summary: "Reactivación del predio"
+      description: "Devuelve al padrón un predio retirado. Existe porque sin ella la baja sería una puerta de un solo sentido: el alta de ficha rechaza a propósito inscribir sobre un predio dado de baja —«reactivarlo es otro acto, con su propia observación»— y ese otro acto no existía. Exige MODIFICACIÓN y no ELIMINACIÓN: restituir no es retirar. El cuerpo lleva solo la observación, obligatoria. Un predio que ya está activo es 409."
+      tags: ["Catastro"]
+      parameters:
+        - name: predioId
+          in: path
+          required: true
+          description: "El predio, por el `predioId` que publica cada fila de la consulta de fichas"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/catastro/fichas/rural/{codUnidad}/actualizacion":
     put:
       operationId: actualizar_ficha_rural

@@ -14,10 +14,12 @@ import pe.gob.sgtm.catastro.dominio.FichaCatastral;
 import pe.gob.sgtm.catastro.dominio.FichaCatastralRepository;
 import pe.gob.sgtm.catastro.dominio.FichaEncontrada;
 import pe.gob.sgtm.catastro.dominio.FiltroDeFichas;
+import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
 import pe.gob.sgtm.catastro.dominio.Predio;
+import pe.gob.sgtm.catastro.dominio.PredioDelCatastro;
 import pe.gob.sgtm.catastro.dominio.Sector;
 import pe.gob.sgtm.catastro.dominio.SectorConConteos;
 import pe.gob.sgtm.catastro.dominio.TipoFicha;
@@ -175,8 +177,18 @@ final class CatastroEnMemoria
     }
 
     @Override
-    public Pagina<Predio> predios(Paginacion paginacion) {
+    public Pagina<PredioDelCatastro> predios(FiltroDePredios filtro, Paginacion paginacion) {
         throw new UnsupportedOperationException("La carga desde archivo no pagina predios");
+    }
+
+    @Override
+    public void asignarGeometria(long predioId, String wkt) {
+        throw new UnsupportedOperationException("Esta carga no trae geometria");
+    }
+
+    @Override
+    public Optional<String> geometriaDe(long predioId) {
+        return Optional.empty();
     }
 
     @Override
