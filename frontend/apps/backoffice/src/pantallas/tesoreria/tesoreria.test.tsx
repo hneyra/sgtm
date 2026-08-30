@@ -6,6 +6,7 @@ import { permisosDelClaim, puedeVer } from '@sgtm/sesion';
 import { montarEnRuta } from '../../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pruebas/acciones';
 import { ACTOS_SIN_CAMPO } from '../actos';
+import { OPERACIONES } from '@sgtm/api-client';
 
 /* El censo de conectadas del catalogo entero, SIN registrar ninguna: desde #433 las
    conexiones llegan con el trozo de su modulo, y quien las registra es la espera de
@@ -90,6 +91,33 @@ describe('la caja de tasas no puede cobrar: le faltan los conceptos, no la decla
       'caja',
       'cajero',
     ]);
+  });
+
+  /**
+   * **El censo de la deuda: el catalogo del TUPA no lo publica nadie** (#430).
+   *
+   * De los cuatro datos que le faltan a `caja_tasas`, tres son controles que se
+   * teclean —el medio de pago, la caja, el cajero, exactamente como en
+   * `caja_tributaria`— y el cuarto **no se puede teclear**: `PeticionDeConcepto`
+   * lleva el **codigo** del concepto y su cantidad, y la tarifa la resuelve el
+   * servidor con `TasaRepository.vigenteA(codigo, fecha)`. Sin una lectura que
+   * publique el catalogo no hay de donde elegir el codigo.
+   *
+   * Esta prueba es el censo de esa deuda, con la forma de
+   * `EL_MISMO_DESAJUSTE_TODAVIA_ABIERTO` del backend: **se acorta, nunca se
+   * alarga sin decir por que**. El dia que la lectura exista se pone roja, y lo
+   * que hay que revisar entonces esta escrito en `pantallas/tesoreria/index.ts`
+   * —porque publicarla no basta: hace falta que la tabla `tasa` tenga filas, y
+   * eso es D-02b fila 29 (#197), no interfaz—.
+   */
+  it('ninguna operacion del contrato publica el catalogo del TUPA', () => {
+    const conTasas = Object.entries(OPERACIONES).filter(([, descriptor]) =>
+      descriptor.ruta.includes('tasas'),
+    );
+
+    // Una sola, y es el `POST` que **cobra**: no hay ningun `GET` del catalogo.
+    expect(conTasas.map(([id]) => id)).toEqual(['caja_tasas']);
+    expect(conTasas[0]?.[1].metodo).toBe('POST');
   });
 
   it('fraccionamiento dice que le falta la grilla de deuda, no un campo suelto', async () => {

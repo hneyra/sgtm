@@ -56,9 +56,42 @@ import {
  * `caja_tasas` tiene el hueco de su gemela **más uno que la separa**: `PeticionDeCobroDeTasas`
  * exige al menos un concepto del TUPA marcado, y **ninguna consulta del sistema publica ese
  * catálogo** —`TasaRepository` tiene un solo método, `vigenteA(codigo, fecha)`, y el contrato no
- * declara ningún `GET /tesoreria/tasas`—. Sin la lista no hay de dónde elegir, así que su
- * entrada de `ACTOS_SIN_CAMPO` nombra los cuatro: los conceptos, el medio de pago, la caja y el
- * cajero.
+ * declara ningún `GET /tesoreria/tasas`; `tesoreria.test.tsx` lo censa—. Sin la lista no hay de
+ * dónde elegir, así que su entrada de `ACTOS_SIN_CAMPO` nombra los cuatro: los conceptos, el medio
+ * de pago, la caja y el cajero.
+ *
+ * ── Y publicar esa lectura **no desbloquearía nada**, que es el hallazgo ────
+ *
+ * Se miró para hacerlo, y lo que falta no es la lectura: es el **cuadro**.
+ *
+ * 1. **La tarifa nunca la manda el cliente.** `PeticionDeConcepto` lleva el `conceptoTupa` y la
+ *    cantidad, y el importe lo resuelve el servidor con `TasaRepository.vigenteA(codigo, fecha)`
+ *    —a la fecha del cobro, no la última—, con `TasaSinTarifaVigente` y `TarifaEnCero` como sus
+ *    dos negativas. Está bien así: es lo que impide que la ventanilla decida cuánto cuesta un
+ *    trámite.
+ * 2. **Nada en producción escribe la tabla `tasa`.** Los únicos `INSERT INTO tasa` del
+ *    repositorio están en fixtures de prueba —es exactamente la situación que `area` y `caja`
+ *    tenían antes de #460—, así que una lectura publicada hoy devolvería una lista vacía en toda
+ *    instalación real, y conectar la pantalla sobre ella cambiaría una franja que **nombra lo que
+ *    falta** por una grilla vacía que se lee como «esta municipalidad no cobra tasas».
+ * 3. **Y sus cifras son D-02b, fila 29**: «derecho de trámite del TUPA», con su acuerdo de
+ *    ratificación provincial. No es una tabla que se siembre a mano (regla 5). El corpus ya
+ *    tiene **una** transcripción verificada a doble firma —
+ *    `valores-normativos/derecho-tramite-licencia-edificacion-catacaos-2023.md`, la del piloto—,
+ *    y ese archivo dice tres cosas que cierran la puerta: **«No se carga con este archivo»**, que
+ *    va a `parametro_tributario` con el derivado de `publicacion/` **cuando #197 resuelva cómo
+ *    modelar una tarifa por modalidad en vez de una alícuota simple**, y que la **ratificación
+ *    provincial sigue sin confirmarse**. Además cubre sólo la licencia de edificación: el resto
+ *    del TUPA de Catacaos —incluida su sección de tributación— está en páginas que no se han
+ *    transcrito.
+ * 4. **Y la tabla pide dos datos que el corpus no tiene**: `partida_presupuestal` y `area_id`, los
+ *    dos `NOT NULL` (V3). Ni el uno ni el otro salen de una ordenanza: son de la contabilidad y de
+ *    la organización de cada municipalidad.
+ *
+ * Así que la lectura no se publica todavía —publicarla sería ofrecer una puerta a una habitación
+ * vacía— y **el catálogo del TUPA es un issue de gobierno**: D-02b, fila 29, #197. El día que
+ * exista, esta pantalla se conecta como su gemela: tres controles declarados y una grilla con su
+ * selección de filas.
  *
  * `fraccionamiento` tiene el mismo problema con otra forma: `PeticionDeFraccionamiento` exige
  * al menos una obligación marcada, y el catálogo de esta pantalla no declara ninguna tabla de
