@@ -342,6 +342,52 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
  * valuacion, cuyos nombres viven en el tipo `OperacionDeValuacion` y no en
  * ninguna llamada: la operacion les llega como parametro.
  */
+/**
+ * **La operacion que ningun controlador sirve, y ninguno va a servir.**
+ *
+ * `docs/50-api/formas-de-la-api.json` lo deriva el backend de sus propios
+ * controladores (#400), asi que restarlo del contrato dice exactamente que
+ * operacion no publica nadie. Hoy es una, y no esta pendiente: esta decidida en
+ * contra —ADR-0016 §3 deja la opcion `portal` como esta, «la vista del
+ * funcionario, con su id, su ruta y su permiso», y ADR-0020 le dio al ciudadano
+ * `GET /portal/situacion` en su lugar—.
+ *
+ * Lo que su pantalla dibuja no es una consulta de deuda: es el **flujo de pago
+ * en linea** —medio de pago, correo del comprobante, aceptacion de terminos y un
+ * «Pagar S/ 640.06»—, y el pago del ciudadano esta aparcado en #449 con sus dos
+ * decisiones abiertas (D-14, D-15).
+ *
+ * Se nombra aqui porque es **lo que impide apagar el proxy del todo**: cuando las
+ * demas esten encendidas, esta pantalla se quedaria sin nadie que le conteste. El
+ * dia que se decida —servirla, reapuntarla o retirarla del contrato— esta prueba
+ * se pone roja y hay que venir a borrar la excepcion.
+ */
+const SIN_CONTROLADOR_Y_DECIDIDA_ASI: readonly string[] = ['GET /portal/deuda'];
+
+describe('lo que ningun controlador sirve esta nombrado (#400)', () => {
+  const publicadas = new Set(
+    Object.keys(
+      JSON.parse(
+        readFileSync(resolve(process.cwd(), '../docs/50-api/formas-de-la-api.json'), 'utf8'),
+      ) as Readonly<Record<string, unknown>>,
+    ).filter((clave) => clave !== '_'),
+  );
+
+  it('el backend publica todas las operaciones del contrato menos las nombradas', () => {
+    const sinControlador = DEL_CONTRATO.filter(
+      ([, metodo, ruta]) => !publicadas.has(`${metodo} ${ruta}`),
+    ).map(([, metodo, ruta]) => `${metodo} ${ruta}`);
+
+    expect(sinControlador.sort()).toEqual([...SIN_CONTROLADOR_Y_DECIDIDA_ASI].sort());
+  });
+
+  it('y mientras siga ahi, el proxy no se puede apagar del todo', () => {
+    // No es una guarda de estilo: es la unica pantalla de las 134 que, con todo
+    // lo demas encendido, se quedaria sin backend al que preguntar.
+    expect(SIN_CONTROLADOR_Y_DECIDIDA_ASI.length).toBeGreaterThan(0);
+  });
+});
+
 describe('lo declarado a mano no esta rancio', () => {
   const fuenteDe = (archivo: string): string =>
     readFileSync(resolve(process.cwd(), archivo), 'utf8');

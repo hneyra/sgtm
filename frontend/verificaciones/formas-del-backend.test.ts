@@ -211,8 +211,11 @@ describe('el proxy publica la forma que el backend publica (#400)', () => {
     // Un `Resource` cambiado por `ResponseEntity<?>` deja de comprobarse aqui, y
     // el sintoma seria que esta lista crece sin que nadie lo mire.
     expect(sinForma.sort()).toEqual(
-      [...SIN_FORMA_QUE_COMPARAR, 'POST /licencias/certificados/{numero}/impresion',
-       'POST /transito/constancias-libres'].sort(),
+      [
+        ...SIN_FORMA_QUE_COMPARAR,
+        'POST /licencias/certificados/{numero}/impresion',
+        'POST /transito/constancias-libres',
+      ].sort(),
     );
   });
 });
