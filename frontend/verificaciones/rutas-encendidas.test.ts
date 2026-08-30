@@ -269,6 +269,22 @@ describe('las rutas encendidas: lo que se mueve a YA_SERVIDAS (#400)', () => {
  * **encendidas**, las **listas** —cumplen las dos condiciones, y lo unico que
  * les falta es que alguien las vea funcionando con los dos procesos levantados—
  * y las **pendientes**, que necesitan trabajo antes.
+ *
+ * De las pendientes, **tres lo son porque la interfaz lee su respuesta y el
+ * proxy no se la da con la forma del backend**, y conviene decir por que no se
+ * cierran con dos lineas en `recursos.ts`:
+ *
+ *   `valores_masivo` y `transito_valores` devuelven `totalCandidatos`, que es un
+ *   conteo **que calcula el servidor** sobre datos que el proxy no tiene. Se
+ *   podria sumar la columna «Contribuyentes» del prototipo, y saldria una cifra
+ *   plausible y equivocada —cuenta dos veces a quien debe dos tributos—, que es
+ *   justo lo que este archivo no hace: aqui no se inventa ni un dato. Su forma
+ *   se publicara cuando haya de donde sacar la cifra, o no se publicara.
+ *
+ *   `ficha_contribuyente_reporte` descarga su papel por `archivoDe` cuando trae
+ *   `?formato=`, pero **sin el sigue leyendo la forma comun**, que es como su
+ *   pantalla se dibuja. Lo que le falta no es una entrada en el proxy: es que su
+ *   pantalla lea `ReporteResource`, y eso es trabajo del modulo.
  */
 describe('cuanto falta para poder apagar el proxy (#400)', () => {
   const yaEncendida = (metodo: string, ruta: string): boolean =>
