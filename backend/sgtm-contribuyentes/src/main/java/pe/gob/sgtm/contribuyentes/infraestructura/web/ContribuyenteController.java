@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
-import pe.gob.sgtm.contribuyentes.dominio.ContribuyenteRepository;
+import pe.gob.sgtm.contribuyentes.aplicacion.ConsultaDelPadron;
 import pe.gob.sgtm.contribuyentes.dominio.CriterioDeBusqueda;
 import pe.gob.sgtm.dominio.TipoDocumento;
 import pe.gob.sgtm.web.Api;
@@ -34,10 +34,10 @@ public class ContribuyenteController {
     /** Por codigo: es como se lee un padron cuando no se busca nada en concreto. */
     private static final String ORDEN_POR_OMISION = "codigo_contribuyente";
 
-    private final ContribuyenteRepository repositorio;
+    private final ConsultaDelPadron consulta;
 
-    public ContribuyenteController(ContribuyenteRepository repositorio) {
-        this.repositorio = repositorio;
+    public ContribuyenteController(ConsultaDelPadron consulta) {
+        this.consulta = consulta;
     }
 
     @GetMapping
@@ -57,7 +57,7 @@ public class ContribuyenteController {
                         false);
 
         return RespuestaPaginada.de(
-                repositorio.buscar(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                consulta.buscar(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
                 ContribuyenteResource::de);
     }
 

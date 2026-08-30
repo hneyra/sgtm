@@ -39,6 +39,7 @@ import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.catastro.aplicacion.ActualizarFichaCatastral;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDeFichas;
+import pe.gob.sgtm.catastro.aplicacion.ConsultaDeLaFichaVigente;
 import pe.gob.sgtm.catastro.aplicacion.InscribirFicha;
 import pe.gob.sgtm.catastro.aplicacion.RegistrarPredio;
 import pe.gob.sgtm.catastro.dominio.ActividadEconomica;
@@ -148,7 +149,7 @@ class EscrituraDeFichasControllerTest {
                                     actualizarFicha,
                                     new ConsultaDeFichas(fichas, padron),
                                     inscribirFicha,
-                                    predios,
+                                    envolver(new ConsultaDeLaFichaVigente(predios, fichas)),
                                     reloj),
                             new ActualizacionController(actualizarFicha, predios, reloj))
                     .setControllerAdvice(new ManejadorDeErrores())

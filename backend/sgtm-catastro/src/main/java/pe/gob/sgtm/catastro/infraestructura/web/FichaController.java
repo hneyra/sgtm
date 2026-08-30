@@ -18,14 +18,14 @@ import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.catastro.aplicacion.ActualizarFichaCatastral;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDeFichas;
+import pe.gob.sgtm.catastro.aplicacion.ConsultaDeLaFichaVigente;
 import pe.gob.sgtm.catastro.aplicacion.InscribirFicha;
-import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.Construccion;
 import pe.gob.sgtm.catastro.dominio.FichaCatastral;
 import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
-import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.TipoFicha;
 import pe.gob.sgtm.catastro.dominio.TipoPredio;
+import pe.gob.sgtm.catastro.dominio.VersionDeLaFicha;
 import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -78,19 +78,19 @@ public class FichaController {
     private final ActualizarFichaCatastral fichas;
     private final ConsultaDeFichas consulta;
     private final InscribirFicha inscribir;
-    private final CatastroRepository catastro;
+    private final ConsultaDeLaFichaVigente fichaVigente;
     private final Clock reloj;
 
     public FichaController(
             ActualizarFichaCatastral fichas,
             ConsultaDeFichas consulta,
             InscribirFicha inscribir,
-            CatastroRepository catastro,
+            ConsultaDeLaFichaVigente fichaVigente,
             Clock reloj) {
         this.fichas = fichas;
         this.consulta = consulta;
         this.inscribir = inscribir;
-        this.catastro = catastro;
+        this.fichaVigente = fichaVigente;
         this.reloj = reloj;
     }
 
@@ -263,6 +263,10 @@ public class FichaController {
         }
     }
 
+    /**
+     * El codigo, validado y <b>sin tocar la base</b>. Desde #486 la usa tambien la lectura: la
+     * consulta del predio vive en {@link ConsultaDeLaFichaVigente}, dentro de su transaccion.
+     */
     private static CodigoReferenciaCatastral referenciaDe(String codigo) {
         try {
             return CodigoReferenciaCatastral.de(codigo);
@@ -287,43 +291,33 @@ public class FichaController {
             String comoSeLlama,
             boolean historico) {
 
-        Predio predio = predioDe(codigo);
         LocalDate cuando = fecha == null || fecha.isBlank() ? LocalDate.now(reloj) : parsear(fecha);
 
-        long predioId = java.util.Objects.requireNonNull(predio.id(), "El predio leido tiene id");
-        FichaCatastral ficha =
-                fichas.vigenteA(predioId, tipo, cuando)
+        // Las tres consultas —el predio, su ficha y su historial— van en **una** transaccion, que
+        // es lo que emite el `SET LOCAL` que RLS exige y lo que hace la respuesta coherente consigo
+        // misma. Resolver el predio aqui costaba un 500 en las cuatro rutas (#486).
+        ConsultaDeLaFichaVigente.Encontrada encontrada =
+                fichaVigente
+                        .porCodigo(referenciaDe(codigo), tipo, cuando, historico)
                         .orElseThrow(
                                 () ->
                                         new ProblemaDeNegocio(
                                                 CodigoDeError.NO_ENCONTRADO,
-                                                "El predio no tiene ficha "
-                                                        + comoSeLlama
-                                                        + " vigente al "
-                                                        + cuando));
+                                                "No hay ningun predio con ese codigo de referencia"
+                                                        + " catastral"));
+
+        FichaCatastral ficha = encontrada.ficha();
+        if (ficha == null) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.NO_ENCONTRADO,
+                    "El predio no tiene ficha " + comoSeLlama + " vigente al " + cuando);
+        }
 
         // El historico no viaja siempre: son todas las versiones de la ficha, y la pantalla que
         // solo pinta la vigente no tiene por que pagarlas. Cuando no se pide, el campo sale nulo
         // —no una lista vacia—, que es la diferencia entre «no lo pediste» y «no hay ninguna».
-        return historico
-                ? FichaResource.con(ficha, consulta.historial(predioId, tipo))
-                : FichaResource.de(ficha);
-    }
-
-    private Predio predioDe(String codigo) {
-        CodigoReferenciaCatastral referencia;
-        try {
-            referencia = CodigoReferenciaCatastral.de(codigo);
-        } catch (IllegalArgumentException invalido) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
-        }
-        return catastro.predioPorCodigo(referencia)
-                .orElseThrow(
-                        () ->
-                                new ProblemaDeNegocio(
-                                        CodigoDeError.NO_ENCONTRADO,
-                                        "No hay ningun predio con ese codigo de referencia"
-                                                + " catastral"));
+        List<VersionDeLaFicha> historial = encontrada.historial();
+        return historial == null ? FichaResource.de(ficha) : FichaResource.con(ficha, historial);
     }
 
     private static LocalDate parsear(String fecha) {
