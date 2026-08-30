@@ -100,19 +100,30 @@ if git -C "$RAIZ" cat-file -e "${DECLARADA}^{commit}" 2>/dev/null; then
     ESPERADAS=$(git -C "$RAIZ" ls-tree --name-only "$DECLARADA" \
         backend/sgtm-esquema/src/main/resources/db/migration/ | grep -c '\.sql$' || true)
 else
-    aviso "el sha declarado no esta en este clon (checkout superficial): las migraciones"
-    aviso "esperadas se cuentan sobre el arbol de trabajo, que puede ser otra version"
-    ESPERADAS=$(find "$RAIZ/backend/sgtm-esquema/src/main/resources/db/migration" \
-        -name '*.sql' | wc -l)
+    # NO se cuenta sobre el arbol de trabajo. Seria comparar contra OTRA version: si el
+    # arbol tiene una migracion mas que la version declarada —lo normal en cuanto alguien
+    # anade una despues del ultimo despliegue—, la comparacion daria un rojo por un motivo
+    # que no es el que se mide. Un numero plausible y equivocado es peor que ninguno.
+    aviso "el sha declarado no esta en este clon: no se puede saber cuantas migraciones"
+    aviso "trae, asi que esta comprobacion NO se hace (no pasa: no se hace)."
+    # Sin acentos graves: dentro de comillas dobles, bash los ejecuta como orden. Se
+    # descubrio corriendo la rotura —el guion intento un «git fetch» de un sha inventado—,
+    # que es justo lo que un mensaje de diagnostico no debe hacer.
+    aviso "En CI, con actions/checkout, es fetch-depth: 0; en local:"
+    aviso "  git fetch origin $DECLARADA"
+    ESPERADAS=""
 fi
 
 APLICADAS=$(comoSuperusuario "SELECT count(*) FROM flyway_schema_history WHERE success")
-echo "  migraciones aplicadas: $APLICADAS · las que trae la version declarada: $ESPERADAS"
-if [ "$APLICADAS" -lt "$ESPERADAS" ]; then
+if [ -z "$ESPERADAS" ]; then
+    echo "  migraciones aplicadas: $APLICADAS · las que trae la version declarada: —"
+elif [ "$APLICADAS" -lt "$ESPERADAS" ]; then
+    echo "  migraciones aplicadas: $APLICADAS · las que trae la version declarada: $ESPERADAS"
     mal "la base va POR DETRAS de la version declarada ($APLICADAS < $ESPERADAS)."
     mal "El Job sgtm-${AMBIENTE}-migracion-${DECLARADA:0:12} no ha corrido, o fallo."
     mal "Sintoma tipico: una carga batch termina en verde y no escribe ninguna fila."
 else
+    echo "  migraciones aplicadas: $APLICADAS · las que trae la version declarada: $ESPERADAS"
     bien "el esquema esta al dia con la version declarada"
 fi
 

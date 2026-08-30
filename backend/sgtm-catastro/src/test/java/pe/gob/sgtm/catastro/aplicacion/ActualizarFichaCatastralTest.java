@@ -333,11 +333,24 @@ class ActualizarFichaCatastralTest {
         }
 
         @Test
-        @DisplayName("una categoria fuera de la A-I se rechaza")
+        @DisplayName("una categoria fuera de la A-J se rechaza")
         void unaCategoriaFueraDeRango() {
             assertThatThrownBy(() -> CategoriasConstructivas.todas('Z'))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("A");
+        }
+
+        @Test
+        @DisplayName("y la J de la Selva SI se admite: el rango llegaba hasta la I y la norma no")
+        void laDecimaCategoriaDeLaSelva() {
+            // #436: el cuadro de la Costa —el unico transcrito hasta entonces— tiene nueve
+            // categorias, y de ahi salio el rango. El Anexo I.4, para la Selva, tiene diez:
+            // la J es «CAÑA GUAYAQUIL PONA O PINTOC». Con A..I, una municipalidad de la
+            // Selva no podia fichar una construccion de ese material — y eso no esperaba a
+            // que se cargara ningun cuadro.
+            assertThat(CategoriasConstructivas.todas('J').muros())
+                    .as("la decima categoria del Anexo I.4, que el rango A..I rechazaba")
+                    .isEqualTo('J');
         }
 
         @Test

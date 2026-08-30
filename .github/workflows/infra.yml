@@ -789,6 +789,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Historial completo: `verificar-el-ambiente.sh` compara las migraciones que
+          # tiene la base con las que trae el `sha` que `Pulumi.stg.yaml` declara, y para
+          # contarlas necesita ese commit en el clon. Con el checkout superficial no esta,
+          # y el guion **no concluye** en vez de contar las del arbol de trabajo — que
+          # seria otra version, y un numero plausible y equivocado.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -909,6 +916,26 @@ jobs:
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
 
+      # El ambiente que acaba de aplicarse, comprobado CONTRA SI MISMO (#434).
+      #
+      # `pulumi up` en verde dice que los recursos existen, no que el sistema sirva. La
+      # trampa concreta que este paso caza: subir `applicationBootstrapVersion` crea un
+      # Job de migracion nuevo, y si ese Job no corre —o corre y falla— el `Deployment`
+      # queda `Ready` igual, sobre una base que va por detras del esquema que su version
+      # declara. El sintoma de eso no es un error: es una carga batch que termina en
+      # verde y no escribe ninguna fila (PR #244).
+      #
+      # Va DESPUES del `pulumi up`, con el tunel y el kubeconfig que ese trabajo ya
+      # abrio, porque no hay otra forma: es la unica comprobacion del repositorio que
+      # necesita el ambiente real y no un cluster efimero.
+      #
+      # **Y entra aqui porque si no, no lo corre nadie** — que es el defecto que este
+      # mismo issue #435 encontro en `verificar-rotacion.sh`, escrito en #154 y sin
+      # ejecutar desde entonces. Una verificacion que nunca se ejecuta no protege nada.
+      - name: El ambiente aplicado se comprueba a si mismo (#434)
+        if: steps.credenciales.outputs.hay == 'si'
+        run: infra/verificaciones/ambiente/verificar-el-ambiente.sh --ambiente stg
+
       - name: Qué quedó a medias, si algo falló
         if: failure() && steps.credenciales.outputs.hay == 'si'
         run: .github/diagnostico-del-namespace.sh sgtm-stg
@@ -943,6 +970,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Historial completo: `verificar-el-ambiente.sh` compara las migraciones que
+          # tiene la base con las que trae el `sha` que `Pulumi.prod.yaml` declara, y para
+          # contarlas necesita ese commit en el clon. Con el checkout superficial no esta,
+          # y el guion **no concluye** en vez de contar las del arbol de trabajo — que
+          # seria otra version, y un numero plausible y equivocado.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -1021,6 +1055,27 @@ jobs:
           work-dir: infra
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      # El ambiente que acaba de aplicarse, comprobado CONTRA SI MISMO (#434).
+      #
+      # `pulumi up` en verde dice que los recursos existen, no que el sistema sirva. La
+      # trampa concreta que este paso caza: subir `applicationBootstrapVersion` crea un
+      # Job de migracion nuevo, y si ese Job no corre —o corre y falla— el `Deployment`
+      # queda `Ready` igual, sobre una base que va por detras del esquema que su version
+      # declara. El sintoma de eso no es un error: es una carga batch que termina en
+      # verde y no escribe ninguna fila (PR #244).
+      #
+      # Sin `if` de credenciales: el propio trabajo ya exige que las haya.
+      #
+      # Va DESPUES del `pulumi up`, con el tunel y el kubeconfig que ese trabajo ya
+      # abrio, porque no hay otra forma: es la unica comprobacion del repositorio que
+      # necesita el ambiente real y no un cluster efimero.
+      #
+      # **Y entra aqui porque si no, no lo corre nadie** — que es el defecto que este
+      # mismo issue #435 encontro en `verificar-rotacion.sh`, escrito en #154 y sin
+      # ejecutar desde entonces. Una verificacion que nunca se ejecuta no protege nada.
+      - name: El ambiente aplicado se comprueba a si mismo (#434)
+        run: infra/verificaciones/ambiente/verificar-el-ambiente.sh --ambiente prod
 
       - name: Qué quedó a medias, si algo falló
         if: failure()
