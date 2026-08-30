@@ -105,16 +105,43 @@ Lo que sí está decidido es **cómo se comporta el sistema mientras tanto**, y 
 ## 3. Qué no cabe hoy
 
 - **La fuente.** Es lo que falta, y este archivo existe para que la próxima búsqueda no repita las
-  anteriores. Dos caminos, en orden de valor:
-  1. **Leer el manual donde la columna se vio**: `M02-1-020 «Determinación de Deuda» v1.4`
-     (12-12-2025), del SRTM moderno. **No está en el corpus de PDF disponible** —los trece que hay
-     son del linaje 2007–2016— y sin él no se puede ver el contexto de la columna, sus valores en
-     los ejemplos, ni si el propio manual la define.
-  2. **Perseguir el párrafo de §1.1**: si esa es la fuente, la pregunta deja de ser «¿qué norma crea
+  anteriores.
+
+  **Y lo primero que hay que decir es lo que NO va a funcionar.** Parecía que el camino era
+  conseguir el manual donde la columna se vio —`M02-1-020 «Determinación de Deuda» v1.4`,
+  12-12-2025, del SRTM moderno—. **Ese manual ya se leyó, entero**: es el único de los 74 del corpus
+  del SRTM cuya cobertura NEG-00 §1 declara «Completa», y todo lo que aportó sobre esta columna es
+  **su nombre en el encabezado de una grilla**:
+
+  > «Detalle de los predios (dentro de una determinación): código · ubicación · autovalúo ·
+  > **% actualización** · % propiedad · base imponible · base exonerada · uso.
+  > **Concepto nuevo: `% actualización`.** Un factor aplicado al autovalúo antes de la base
+  > imponible. ⚠ Sin identificar; probablemente el reajuste de valores del ejercicio.»
+  > — *`../srtm`, `referencia-srtm-mef.md` §5b.2*
+
+  Ese «probablemente» es conjetura del lector, marcada con su aviso, no una lectura. **El manual no
+  define la columna**, y los otros cuatro conceptos nuevos de la misma sección —la deducción de
+  Amazonía, el incremento del 5 %, el factor de oficialización y el metrado redondeado— salieron
+  igual: nombres de columna sin definición. Volver a ese PDF no desbloquearía nada.
+
+  Los caminos que quedan, en orden de valor:
+  1. **El módulo `M21 Parámetros`** (38 MB, sin leer). Si el `% actualización` es configurable, se
+     configura ahí y no en la pantalla de determinación. Es la pregunta que M02 no podía contestar
+     por ser el manual del consumidor y no el del parámetro.
+  2. **Una determinación real del SRTM con su desarrollo intermedio y sus cifras.** Contesta «cuánto
+     vale» aunque nadie diga «qué es», y es exactamente lo que
+     [`observaciones-srtm-mef/`](../observaciones-srtm-mef/) pide.
+  3. **Perseguir el párrafo de §1.1**: si esa es la fuente, la pregunta deja de ser «¿qué norma crea
      el porcentaje?» y pasa a ser «¿qué Decretos Supremos se han dictado al amparo de ese párrafo, y
      en qué ejercicios?». Y el factor no sería un valor anual sino **excepcional**: neutro cuando
      hay valores publicados, el del D.S. cuando no los hay. Lo fija el Gobierno nacional, así que
      sería `D-02a` y no ordenanza local.
+
+  **Lo que NO se puede concluir de los trece PDF públicos del MEF**, y conviene decirlo porque
+  invita a un error: buscar «% actualiz» en su capa de texto da **cero coincidencias**, y eso no
+  refuta nada. Esos manuales son casi todos capturas de pantalla —de uno de 8,2 MB salen 49 530
+  caracteres, y «depreciación», «valor unitario» y «arancel» dan cero en un manual que describe la
+  determinación predial—. **Una columna que viva dentro de una captura es invisible a ese método.**
 - **Dos cosas que NO son este factor**, y conviene dejarlas deslindadas porque se le parecen y están
   por todo el corpus:
   - el **ajuste por IPM de la alcabala** (TUO LTM art. 24), que es el campo «IPM aplicado» de la
