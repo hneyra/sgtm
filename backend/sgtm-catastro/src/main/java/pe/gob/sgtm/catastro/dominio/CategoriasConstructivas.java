@@ -11,8 +11,16 @@ import org.jspecify.annotations.Nullable;
  * en datos versionados (regla 5). Copiar aqui el importe convertiria la ficha en una foto de los
  * valores del dia en que se registro, y recalcular el pasado dejaria de ser posible.
  *
- * <p>Las letras van de la A a la I. Cuales existen y que valen es D-02a; que sean letras y no
- * cifras es estructura, y eso si esta decidido.
+ * <p>Las letras van de la <b>A a la J</b>, y la J no estaba hasta #436. El cuadro de la Costa —el
+ * unico transcrito hasta entonces— tiene nueve categorias, y de ahi salio el rango original; leer
+ * los otros tres anexos de la R.M. 277-2025-VIVIENDA mostro que el de la <b>Selva</b> tiene
+ * <b>diez</b>: la J es «CAÑA GUAYAQUIL PONA O PINTOC». Con A..I, una municipalidad de la Selva no
+ * podia fichar una construccion de ese material — y eso no esperaba a que se cargara ningun cuadro.
+ *
+ * <p>El rango es <b>unico</b> y no por region a proposito: este tipo no sabe donde esta el predio,
+ * y la comprobacion es de forma —ataja una errata de teclado, una Z o un digito—, no de norma. Que
+ * fila del cuadro le toca a un predio lo decide la valorizacion, que todavia no existe. Cuales
+ * existen y que valen es D-02a; que sean letras y no cifras es estructura, y eso si esta decidido.
  */
 public record CategoriasConstructivas(
         @Nullable Character muros,
@@ -24,7 +32,7 @@ public record CategoriasConstructivas(
         @Nullable Character instalaciones) {
 
     private static final char PRIMERA = 'A';
-    private static final char ULTIMA = 'I';
+    private static final char ULTIMA = 'J';
 
     public CategoriasConstructivas {
         validar("muros", muros);

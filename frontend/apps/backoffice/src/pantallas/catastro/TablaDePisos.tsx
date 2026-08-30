@@ -78,8 +78,15 @@ const CATEGORIAS: ReadonlyArray<{
   { clave: 'categoriaInstalaciones', etiqueta: 'Instalaciones' },
 ];
 
-/** Una letra de A a I, o vacío: ninguna categoría es tan válida como declarar las siete. */
-const LETRA_VALIDA = /^[A-I]?$/;
+/**
+ * Una letra de A a J, o vacío: ninguna categoría es tan válida como declarar las siete.
+ *
+ * **Hasta la J desde #436**, no hasta la I: el cuadro de valores unitarios de la Selva
+ * (Anexo I.4 de la R.M. 277-2025-VIVIENDA) tiene diez categorías, una más que el de la
+ * Costa. Con `A-I` esta caja rechazaba, en la pantalla, una categoría que la norma
+ * publica — y el `CHECK` de la base hacía lo mismo (`V58`).
+ */
+const LETRA_VALIDA = /^[A-J]?$/;
 
 export function TablaDePisos({
   escritura,
