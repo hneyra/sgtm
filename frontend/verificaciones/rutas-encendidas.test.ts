@@ -298,12 +298,12 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
     expect(DEL_CONTRATO.length).toBe(179);
   });
 
-  it('encendidas: 0', () => {
-    expect(YA_SERVIDAS.length).toBe(0);
+  it('encendidas: 3', () => {
+    expect(YA_SERVIDAS.length).toBe(3);
   });
 
-  it('listas para encender: 127', () => {
-    expect(listas.length).toBe(127);
+  it('listas para encender: 124', () => {
+    expect(listas.length).toBe(124);
   });
 
   it('pendientes: 52', () => {

@@ -6,6 +6,7 @@ import {
   PAGINADOS,
   RESPUESTAS,
   RUTAS,
+  YA_SERVIDAS,
   desinstalarProxyDeDatos,
   instalarProxyDeDatos,
   proxyDeDatosInstalado,
@@ -125,16 +126,23 @@ describe('la aplicacion pide por HTTP y el proxy contesta', () => {
     expect(datos.fechaCalculo).toBe('2026-08-13');
   });
 
-  it('y las doce que el backend ya sirve salen con **su** forma, no con esa', async () => {
+  it('y las que el backend ya sirve salen con **su** forma, no con esa', async () => {
     instalarProxyDeDatos();
     // El sobre de `RespuestaPaginada`, con la pagina contada desde 0. Sin esto,
     // la pantalla se estaria construyendo contra una forma que el servidor no
     // usa, y el dia de la integracion habria que rehacerla.
-    const vias = await solicitar<Record<string, unknown>>('/catastro/vias');
-    expect(Array.isArray(vias['contenido'])).toBe(true);
-    expect(vias['pagina']).toBe(0);
-    expect(vias['totalElementos']).toBeGreaterThan(0);
-    expect(vias['tabla']).toBeUndefined();
+    //
+    // **El ejemplo era `/catastro/vias` y dejo de servir cuando esa ruta se
+    // encendio** (#400): una entrada de `YA_SERVIDAS` no la contesta el proxy,
+    // la deja pasar, y aqui no hay backend detras. Lo que se prueba es la forma
+    // que el proxy publica, asi que el ejemplo tiene que ser una ruta que el
+    // proxy siga contestando — el mismo movimiento que hizo #363 al conectar
+    // transito y coactiva.
+    const contribuyentes = await solicitar<Record<string, unknown>>('/rentas/contribuyentes');
+    expect(Array.isArray(contribuyentes['contenido'])).toBe(true);
+    expect(contribuyentes['pagina']).toBe(0);
+    expect(contribuyentes['totalElementos']).toBeGreaterThan(0);
+    expect(contribuyentes['tabla']).toBeUndefined();
   });
 
   it('resuelve rutas con parametro, venga el valor que venga', async () => {
@@ -248,6 +256,20 @@ describe('el proxy se apaga operacion por operacion', () => {
 
     await solicitar('/rentas/vehiculos/ABC-123');
     expect(alBackend).toEqual(['/api/v1/rentas/vehiculos/ABC-123']);
+  });
+
+  it('bajo el corredor de pruebas no deja pasar nada, aunque la lista tenga rutas', async () => {
+    // El criterio de aceptacion de #400: «las pruebas del frontend siguen
+    // corriendo SIN ningun Spring Boot al lado». `servidas.ts` ya tiene tres
+    // rutas encendidas, y sin esta regla cada pantalla de catastro que las pide
+    // saldria a una red que aqui no existe — 69 pruebas rojas en 12 archivos,
+    // ninguna por un defecto de la interfaz.
+    expect(YA_SERVIDAS.length).toBeGreaterThan(0);
+    instalarProxyDeDatos({ latencia: false });
+
+    const vias = await solicitar<Record<string, unknown>>('/catastro/vias');
+    // La contesta el proxy: si hubiera salido a la red, esto no seria un sobre.
+    expect(Array.isArray(vias['contenido'])).toBe(true);
   });
 
   /* Cuantas hay encendidas, y si cada una se puede encender sin romper su
