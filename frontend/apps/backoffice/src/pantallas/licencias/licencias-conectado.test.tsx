@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
-import { OPCIONES_CONECTADAS } from '../conexiones';
+import { censoDeConectadas } from '../aportes-de-modulo';
 import { impedimentoDelActo } from '../actos';
 import { OPCIONES_QUE_LEEN_POR_POST } from '../lecturas-por-post';
 import { escrituraDe } from '../escrituras';
@@ -14,6 +14,12 @@ import {
   primariaEncendida,
 } from '../../pruebas/acciones';
 import { SIN_DATO } from '../seguridad/listado';
+
+/* El censo de conectadas del catalogo entero, SIN registrar ninguna: desde #433 las
+   conexiones llegan con el trozo de su modulo, y quien las registra es la espera de
+   `Pantalla`. Registrarlas aqui dejaria a este archivo tapandose a si mismo —sus
+   pantallas encontrarian su conexion aunque el renderizador no la hubiera pedido—. */
+const OPCIONES_CONECTADAS = await censoDeConectadas();
 
 /**
  * Autorizaciones y licencias, conectado (#79): siete lecturas de once, y por qué las cuatro

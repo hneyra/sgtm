@@ -16,9 +16,15 @@ import {
 } from './actos';
 import type { ActoSinCampo } from './actos';
 import { operacionDe } from './busqueda';
-import { ALTAS_DECLARADAS } from './composicion';
+import { altasDeclaradas } from './composicion';
+import { censoDeAportes } from './aportes-de-modulo';
 import { OPCIONES_QUE_ESCRIBEN, escrituraDe } from './escrituras';
 import { OPCIONES_QUE_LEEN_POR_POST } from './lecturas-por-post';
+
+/* Las altas declaradas llegan con el trozo de su modulo desde #433: el censo se hace
+   sobre lo que los doce aportan, leido **sin registrarlo** —este archivo monta
+   pantallas, y registrarlas aqui lo dejaria tapandose a si mismo—. */
+const ALTAS_DECLARADAS = altasDeclaradas((await censoDeAportes()).composiciones);
 
 /**
  * `ACTOS_SIN_CAMPO` esta vacia desde #73: las dos transferencias que la

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { resolutorDeCampo, widgetDeFiltro } from './composicion';
+import { cargarTodosLosAportes } from './aportes-de-modulo';
+
+/* Lo que se prueba aqui es **el registro mismo** —que `widgetDeFiltro` y
+   `resolutorDeCampo` no resuelvan por la cadena de prototipos—, asi que hay que
+   llenarlo. Es el unico archivo que registra los doce y puede hacerlo sin
+   taparse: no monta ninguna pantalla, de modo que no hay carga diferida a la que
+   este registro le pueda ahorrar el trabajo (#433). */
+await cargarTodosLosAportes();
 
 /**
  * `Object.hasOwn` en `widgetDeFiltro` y `resolutorDeCampo` (#342, nit 2).

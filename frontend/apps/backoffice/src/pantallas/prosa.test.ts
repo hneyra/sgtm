@@ -10,8 +10,13 @@ import {
   PIES,
 } from './prosa-textos';
 import { OPCIONES_QUE_ESCRIBEN, escrituraDe } from './escrituras';
-import { FILTROS_BLOQUEADOS } from './composicion';
+import { filtrosBloqueados } from './composicion';
+import { censoDeAportes } from './aportes-de-modulo';
 import { todasLasPantallas } from '../catalogo';
+
+/* Los cinco modulos que componen algo llegan con su trozo desde #433: el censo se
+   hace sobre lo que los doce aportan, leido sin registrarlo (`censoDeAportes`). */
+const FILTROS_BLOQUEADOS = filtrosBloqueados((await censoDeAportes()).composiciones);
 
 /**
  * La prosa fija de las pantallas, separada de quien la declara (#332).

@@ -10,10 +10,15 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { clienteDePruebas, montarEnRuta } from '../../pruebas/montar';
 import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pruebas/acciones';
 import type { SeccionDePantalla } from '../../catalogo';
-import { composicionDe } from '../composicion';
+import { censoDeAportes } from '../aportes-de-modulo';
 import { CODIGOS_DE_TRIBUTO, unidadDelTributo } from '../escrituras';
 import { Formulario, soloSusCampos } from '../bloques/Formulario';
 import { cruceDelTitular, esNoEncontrado, esSinPermiso } from './ResolutorDeUnidad';
+
+/* La composicion llega con el trozo de su modulo desde #433, y este archivo monta
+   pantallas: se lee el censo **sin registrarlo**, para que lo que las pantallas
+   encuentren siga siendo solo lo que `Pantalla` pidio. */
+const COMPOSICIONES = (await censoDeAportes()).composiciones;
 
 /**
  * **El campo que resuelve** (#331): de un código catastral o una placa al
@@ -51,7 +56,7 @@ afterEach(() => desinstalarProxyDeDatos());
 
 describe('el resolutor es un opt-in de la composicion, no una bifurcacion del renderizador', () => {
   it('solo `alta_deuda` lo declara, y declara los dos campos que llena', () => {
-    expect(composicionDe('alta_deuda').resolutores?.['unidadPredioPlaca']?.campos).toEqual([
+    expect(COMPOSICIONES['alta_deuda']?.resolutores?.['unidadPredioPlaca']?.campos).toEqual([
       'predioId',
       'vehiculoId',
     ]);
@@ -60,9 +65,9 @@ describe('el resolutor es un opt-in de la composicion, no una bifurcacion del re
     // resuelve el predio y añade el valor de la transferencia, no la unidad—:
     // se comprueba en `ResolutorDeTransferencia`, no aquí.
     for (const opcion of ['baja_deuda', 'contribuyentes']) {
-      expect(composicionDe(opcion).resolutores).toBeUndefined();
+      expect(COMPOSICIONES[opcion]?.resolutores).toBeUndefined();
     }
-    expect(composicionDe('transferencia_predio').resolutores?.['codigoPredial']?.campos).toEqual([
+    expect(COMPOSICIONES['transferencia_predio']?.resolutores?.['codigoPredial']?.campos).toEqual([
       'predioId',
       'valorTransferencia',
     ]);
@@ -721,7 +726,7 @@ describe('onCampo se acota a los campos del resolutor', () => {
   });
 
   it('la composicion declara exactamente lo que este resolutor toca', () => {
-    const declarado = composicionDe('alta_deuda').resolutores?.['unidadPredioPlaca'];
+    const declarado = COMPOSICIONES['alta_deuda']?.resolutores?.['unidadPredioPlaca'];
     expect(declarado?.campos).toEqual(['predioId', 'vehiculoId']);
     // Lo que guarda para enseñarlo, y que no viaja.
     expect(declarado?.memoria).toEqual(['unidadResuelta']);

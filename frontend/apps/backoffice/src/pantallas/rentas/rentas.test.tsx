@@ -2,11 +2,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
-import { OPCIONES_CONECTADAS } from '../conexiones';
+import { censoDeConectadas } from '../aportes-de-modulo';
 import { permisosDelClaim, puedeEscribir, puedeVer } from '@sgtm/sesion';
 import { montarEnRuta } from '../../pruebas/montar';
 import { SIN_DATO } from '../seguridad/listado';
 import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pruebas/acciones';
+
+/* El censo de conectadas del catalogo entero, SIN registrar ninguna: desde #433 las
+   conexiones llegan con el trozo de su modulo, y quien las registra es la espera de
+   `Pantalla`. Registrarlas aqui dejaria a este archivo tapandose a si mismo —sus
+   pantallas encontrarian su conexion aunque el renderizador no la hubiera pedido—. */
+const OPCIONES_CONECTADAS = await censoDeConectadas();
 
 /**
  * Rentas · Registro (#73): el modulo que mas escribe.

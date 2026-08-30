@@ -4,9 +4,14 @@ import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { montarEnRuta } from '../../pruebas/montar';
 import { todasLasPantallas } from '../../catalogo';
-import { composicionDe } from '../composicion';
+import { censoDeAportes } from '../aportes-de-modulo';
 import { SIN_DATO } from '../seguridad/listado';
 import { datosDeLaCabecera, sectorYManzana } from './ResumenDeFicha';
+
+/* La composicion llega con el trozo de su modulo desde #433, y este archivo monta
+   pantallas: se lee el censo **sin registrarlo**, para que lo que las pantallas
+   encuentren siga siendo solo lo que `Pantalla` pidio. */
+const COMPOSICIONES = (await censoDeAportes()).composiciones;
 
 /**
  * La ficha catastral, compuesta: cabecera-resumen, indice y acto (#319).
@@ -145,7 +150,9 @@ describe('la cabecera-resumen dice de que ficha es y de cuando', () => {
       cabecera.getByText(/todavía no hay ninguna determinación de este ejercicio que lo calcule/),
     ).toBeInTheDocument();
     // Y dice la otra mitad: tampoco se compone aqui con lo que se ve (RNF-083).
-    expect(cabecera.getByText(/no se compone aquí con lo que se ve en pantalla/)).toBeInTheDocument();
+    expect(
+      cabecera.getByText(/no se compone aquí con lo que se ve en pantalla/),
+    ).toBeInTheDocument();
   });
 
   /**
@@ -198,16 +205,9 @@ describe('la rejilla de la cabecera, como funcion', () => {
   const CAMPOS = { nombreDelContribuyente: 'PEÑA GARCÍA, ROSA E.', uso2: 'Casa habitación' };
 
   it('los seis del artboard, en su orden', () => {
-    expect(
-      datosDeLaCabecera('200601010150010101001', CAMPOS).map((dato) => dato.etiqueta),
-    ).toEqual([
-      'Titular',
-      'Uso',
-      'Área de terreno',
-      'Área construida',
-      'Sector · manzana',
-      'Autovalúo',
-    ]);
+    expect(datosDeLaCabecera('200601010150010101001', CAMPOS).map((dato) => dato.etiqueta)).toEqual(
+      ['Titular', 'Uso', 'Área de terreno', 'Área construida', 'Sector · manzana', 'Autovalúo'],
+    );
   });
 
   /**
@@ -321,7 +321,10 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
 
     // El ancla existe y es la seccion que dice: sin el `id`, la entrada seria un
     // enlace a ninguna parte y nadie lo notaria.
-    const encabezado = screen.getByRole('heading', { level: 2, name: 'Información complementaria' });
+    const encabezado = screen.getByRole('heading', {
+      level: 2,
+      name: 'Información complementaria',
+    });
     const ancla = encabezado.closest('[id^="sgtm-seccion-"]');
     expect(ancla).not.toBeNull();
     expect(segunda).toHaveAttribute('data-activa', '1');
@@ -350,7 +353,7 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
     // Una pantalla con secciones que no lo declara sigue dibujandose igual.
     // Era «vehiculos» hasta que #330 le dio indice a la ficha de vehiculo; se
     // usa otra que sigue sin declararlo, que es lo que la prueba comprueba.
-    expect(composicionDe('transferencia_predio').indice).toBeUndefined();
+    expect(COMPOSICIONES['transferencia_predio']?.indice).toBeUndefined();
     montarEnRuta('/rentas-registro/transferencia-predio');
     await screen.findByRole('heading', { level: 1 });
     expect(
@@ -359,10 +362,15 @@ describe('el indice lista las secciones declaradas, y solo esas', () => {
   });
 
   it('las cuatro fichas lo declaran con pestanas, y las dos de rentas en vez de ellas', async () => {
+    /* Recorre las 134, asi que necesita la composicion de los doce modulos: desde
+       #433 llega con el trozo de cada uno. Se lee **sin registrarla**
+       (`censoDeAportes`), porque este archivo tambien monta pantallas y
+       registrarla lo dejaria tapandose a si mismo. */
+    const composiciones = (await censoDeAportes()).composiciones;
     const pantallas = await todasLasPantallas();
     const declarado = (valor: unknown): readonly string[] =>
       Object.keys(pantallas)
-        .filter((opcion) => composicionDe(opcion).indice === valor)
+        .filter((opcion) => composiciones[opcion]?.indice === valor)
         .sort();
 
     // `true` conserva la barra de pestanas y indexa la activa. Las cuatro fichas
@@ -430,9 +438,9 @@ describe('el acto de la ficha es alcanzable', () => {
     // `codEdificacion` y `codUnidad` no son codigos de referencia catastral, y
     // «Actualización del catastro» abre su predio pidiendo `ficha_urbana` por
     // `codRefCatastral`: el boton llevaria a un 404.
-    expect(composicionDe('ficha_bienes').acto).toBeUndefined();
-    expect(composicionDe('ficha_rural').acto).toBeUndefined();
-    expect(composicionDe('ficha_urbana').acto).toBeDefined();
+    expect(COMPOSICIONES['ficha_bienes']?.acto).toBeUndefined();
+    expect(COMPOSICIONES['ficha_rural']?.acto).toBeUndefined();
+    expect(COMPOSICIONES['ficha_urbana']?.acto).toBeDefined();
   });
 
   it('y la pantalla de actualizacion se abre componiendo el codigo', async () => {
