@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Norma | **Ninguna identificada todavía.** Se transcriben aquí los dos artículos del TUO de la Ley de Tributación Municipal (D.S. N.° 156-2004-EF) que podrían darle origen —el que actualiza la base imponible del año anterior por Decreto Supremo cuando no se publican los valores, y el art. 14, que es la actualización de valores de la emisión mecanizada— y se dice cuál de los dos quedó descartado y por qué |
-| Artículo | Del TUO LTM: el párrafo de actualización por Decreto Supremo (§1.1, con su número **sin confirmar**, ver §1.3) y el art. 14 (§1.2) |
+| Artículo | Del TUO LTM: el párrafo de actualización por Decreto Supremo (§1.1, con su número **sin confirmar**, ver §1.4) y el art. 14 (§1.2) |
 | Publicada | 2004-11-15, fecha del D.S. N.° 156-2004-EF que aprueba el TUO |
 | Ejercicios que rige | No aplica: este archivo **no publica ninguna cifra** |
 | Filas de NEG-02 §2 | 33 |
@@ -75,7 +75,50 @@ determinación que el SRTM imprime va: `VALOR UNIT. M2 · INCREMENTO 5% · DEPRE
 UNITARIO DEPRECIADO · ÁREA CONSTRUIDA · ÁREA COMÚN · AUTOAVALUO · CONDOMINIO-COPROPIEDAD % ·
 DEDUCCIÓN · AUTOAVALUO AFECTO`. Sin ninguna columna de actualización.
 
-### 1.3 Lo que no se pudo comprobar de este PDF, y por qué
+### 1.3 Una determinación real del SRTM, con sus cifras
+
+El 2026-08-30 se leyó el manual `M02-1-020` —el mismo que solo nombra la columna en un
+encabezado— **como imagen**, y su captura de la pestaña «Datos» trae una determinación completa. Es
+la primera vez que hay cifras.
+
+| | |
+|---|---|
+| Autovalúo | `171,179.42` |
+| **% actualización** | **`0.00 %`** |
+| % propiedad | `80.00` |
+| Base imponible | `136,943.54` |
+| Base exonerada | `136,943.54` · Base afecta `0.00` · Impuesto `0.00` |
+
+**La aritmética descarta una lectura y fija otra.** `171 179,42 × 0,80 = 136 943,54`, que es
+exactamente la base imponible. Es decir:
+
+- **el `% actualización` no multiplica como factor.** Si la secuencia fuera literalmente
+  `autovalúo × % actualización × % propiedad` —como la describe NEG-05 §0.1— con `0,00` la base
+  sería **cero**, y no lo es;
+- **es un incremento, y su valor neutro es `0`, no `100`.** La base sale de
+  `autovalúo × (1 + % actualización) × % propiedad`, o su equivalente
+  `(autovalúo + % actualización × autovalúo) × % propiedad`: con `0,00 %` las dos dan lo mismo, y
+  las dos coinciden con la captura.
+
+**Y eso cambia cuál es el valor peligroso.** Este archivo decía —y la muestra de la regla 5 con
+él— que el valor «obvio» era `1`, o sea 100 %. **No lo es: es `0`.** Y `0` es peor, porque
+`BigDecimal.ZERO` en un campo llamado «porcentaje de actualización» se lee como «no aplica ninguno»
+incluso más que un `1`.
+
+**Lo que esta captura NO prueba**, y hay que decirlo porque es una sola:
+
+- **qué pasa cuando no es cero.** Con `0,00 %`, `× (1 + p)` y `+ p × autovalúo` son
+  indistinguibles, y también lo sería cualquier otra forma que se anule en cero;
+- **quién lo fija, ni cuándo deja de ser cero.** El manual no lo dice en ninguna parte de su
+  texto, y los dos manuales de «Parámetros» del SRTM —el de la CF2 y el de la CF4— tampoco: el de
+  la CF2 configura la emisión masiva (año, tipo de lote, concepto y formato por lote) y el de la
+  CF4, catálogos del buzón electrónico. **Ninguno tiene una pantalla para este porcentaje.**
+
+De paso, la misma captura confirma dos cosas que ya estaban: los tramos se expresan en soles del
+ejercicio —`> 0 y <= 77,250` y `> 77,250 y <= 309,000`, que son 15 y 60 UIT de 2024 (5 150)— y el
+resumen lleva «Cuotas 4».
+
+### 1.4 Lo que no se pudo comprobar del PDF del TUO, y por qué
 
 **El número de artículo del párrafo de §1.1 no está confirmado.** El PDF del TUO LTM tiene capa de
 texto, pero **sus rótulos de artículo aparecen intercalados** con el cuerpo y con los bloques de
