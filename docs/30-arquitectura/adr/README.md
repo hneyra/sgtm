@@ -26,6 +26,7 @@ historial de por qué se hizo algo vale más que la coherencia del documento.
 | [0018](ADR-0018-el-redondeo-decidido.md) | El redondeo, decidido: escala de cálculo ratificada y `HALF_UP` cuando la norma no ordene otra cosa; cierra D-03a/b/c | Aceptado |
 | [0019](ADR-0019-titularidad-parcial.md) | La porción de un predio sin titular identificado no se determina a nadie: no se le inventa un deudor | Aceptado |
 | [0020](ADR-0020-la-sesion-del-ciudadano.md) | El ciudadano tiene sesión propia —realm y emisor distintos— y su consulta recorre el registro de municipalidades, una a la vez | Aceptado |
+| [0021](ADR-0021-la-geometria-del-predio.md) | La base modela la geometría del predio, en `geography(MultiPolygon, 4326)` porque una instalación atiende zonas UTM distintas — y esa geometría **no** valoriza | Aceptado |
 
 Decisiones **pendientes**: [GOB-02](../../00-gobierno/decisiones-abiertas.md).
 

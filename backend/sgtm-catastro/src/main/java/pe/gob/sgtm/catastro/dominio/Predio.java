@@ -120,6 +120,27 @@ public record Predio(
                 EstadoPredio.DADO_DE_BAJA);
     }
 
+    /**
+     * Vuelve a poner el predio en el padron.
+     *
+     * <p>Es la vuelta de {@link #dadoDeBaja()}, y existe porque sin ella la baja es una puerta de
+     * un solo sentido: nada vuelve a admitir una ficha sobre un predio retirado por error.
+     */
+    public Predio reactivado() {
+        return new Predio(
+                id,
+                codigo,
+                tipo,
+                viaId,
+                numeroMunicipal,
+                direccion,
+                sectorId,
+                manzanaId,
+                lote,
+                ubigeo,
+                EstadoPredio.ACTIVO);
+    }
+
     public Predio ubicadoEn(long sectorId, @Nullable Long manzanaId, @Nullable String lote) {
         return new Predio(
                 id,

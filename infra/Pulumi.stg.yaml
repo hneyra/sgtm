@@ -36,7 +36,7 @@ config:
   # gastar el límite de tasa. En prod está prohibido, porque ese certificado no lo
   # acepta ningún navegador (RNF-074).
   sgtm:acmeStaging: "true"
-  sgtm:postgresImage: postgres:16.4-alpine
+  sgtm:postgresImage: postgis/postgis:16-3.4-alpine
   sgtm:postgresStorageSize: 20Gi
   sgtm:keycloakImage: quay.io/keycloak/keycloak:26.0
   sgtm:keycloakRealm: sgtm

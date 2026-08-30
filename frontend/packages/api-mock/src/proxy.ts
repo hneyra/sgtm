@@ -138,9 +138,31 @@ export interface OpcionesDelProxy {
    * medio minuto de espera que no prueba nada.
    */
   readonly latencia?: boolean;
-  /** Las que ya sirve el backend. Por omision, las de `servidas.ts`. */
+  /**
+   * Las que ya sirve el backend. Por omision, las de `servidas.ts` — **salvo
+   * bajo el corredor de pruebas, donde la lista por omision es vacia**.
+   *
+   * No es una comodidad: es un criterio de aceptacion de #400. «Las pruebas del
+   * frontend siguen corriendo **sin** ningun Spring Boot al lado: lo que se
+   * apaga es el proxy en el navegador, no la posibilidad de probar la interfaz
+   * sola.» Una entrada en `servidas.ts` dice que el backend la sirve **en el
+   * entorno donde corre la aplicacion**, y en una prueba no corre ninguno: dejar
+   * que la peticion salga a la red convierte cada pantalla conectada de ese
+   * modulo en un fallo de conexion. Medido al encender las tres primeras: **69
+   * pruebas rojas en 12 archivos**, ninguna por un defecto de la interfaz.
+   *
+   * Quien quiera probar el mecanismo —que la lista deja pasar, que un desajuste
+   * suena— pasa su propia lista, como hace `proxy.test.ts`.
+   */
   readonly yaServidas?: readonly OperacionServida[];
 }
+
+/**
+ * Lo que sirve el backend **en este entorno**: las declaradas, o ninguna si
+ * quien corre es el corredor de pruebas.
+ */
+const LAS_DE_ESTE_ENTORNO: readonly OperacionServida[] =
+  import.meta.env['VITEST'] === undefined ? YA_SERVIDAS : [];
 
 /**
  * Sustituye `fetch` por el proxy. Devuelve la funcion que lo desinstala.
@@ -150,7 +172,7 @@ export interface OpcionesDelProxy {
  */
 export function instalarProxyDeDatos({
   latencia = true,
-  yaServidas = YA_SERVIDAS,
+  yaServidas = LAS_DE_ESTE_ENTORNO,
 }: OpcionesDelProxy = {}): () => void {
   latenciaActiva = latencia;
   if (original) return desinstalarProxyDeDatos;

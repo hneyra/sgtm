@@ -5,11 +5,12 @@ se prueban. Todos corren el **mismo artefacto** que la aplicación, en el perfil
 Job de un solo uso (ADR-0003): no hay un binario de carga aparte que pueda divergir del que
 atiende peticiones.
 
-Hay dos familias, y la diferencia no es de forma sino de **qué se puede afirmar del dato**:
+Hay tres familias, y la diferencia no es de forma sino de **qué se puede afirmar del dato**:
 
 | Familia | Qué escribe | Guarda |
 |---|---|---|
 | **Valores normativos** — `publicar-parametros.sh`, `publicar-cuadros.sh`, `abrir-conjunto-parametros.sh`, `cargar-arancel-vial.sh` | Cifras que la ley o la ordenanza fijan | Doble firma del corpus (ADR-0007), rol `rol_carga_parametros`, conjunto sellado |
+| **Padrón real de una municipalidad** — `cargar-catalogo-vial.sh`, `cargar-sectores.sh`, `cargar-manzanas.sh`, `cargar-cajas.sh`, `cargar-predios.sh` | Su territorio, su ventanilla y **sus lotes**, que son datos suyos | Ninguna marca de demostración: no hay nada inventado que impedir. La guarda es el propio archivo, que la municipalidad aporta |
 | **Municipalidad de demostración** — `sembrar-demostracion.sh` y los diez `cargar-*` que orquesta | Personas, predios, vehículos y saldos **inventados** | `municipalidad.es_demostracion = true`, comprobado contra la base antes de leer una fila |
 
 **Ninguna cifra normativa entra por la segunda familia**, y es lo único que no se negocia en este
@@ -48,6 +49,43 @@ un dígito no siembra ocho personas que no existen en el padrón de una municipa
 aquí no se borra nada (RNF-051). Los pasos 1 a 4 no la exigen: un catálogo vial, un sector y una
 ventanilla son estructura real, y ese mismo mecanismo es por el que un día entrará el catálogo de
 verdad.
+
+### Cómo entra el padrón de una municipalidad de verdad (ADR-0021, #400)
+
+```bash
+# 1. Del GeoPackage del plano al CSV, y leer el resumen ANTES de cargar nada
+python3 ../../scripts/catastro/importar_predios_gpkg.py PLANO.gpkg --listar
+python3 ../../scripts/catastro/importar_predios_gpkg.py PLANO.gpkg \
+    --tramos UBIGEO,SECTOR,MANZANA,LOTE,EDIF,ENTRADA,PISO,UNIDAD \
+    --direccion DIRECCION --tipo-fijo URBANO \
+    --sector SECTOR --manzana MANZANA --lote LOTE --salida ./carga
+cat ./carga/resumen.txt
+
+# 2. Cargarlo
+./cargar-predios.sh --ambiente stg --municipalidad-id 4 --archivo ./carga/predios.csv
+```
+
+**Esto no existía, y su ausencia era del mismo tipo que la de la `caja`.** `ImportarFichas` sabe
+cargar predios desde un archivo desde #290, y el único proceso que lo llamaba era
+`CargarFichasDeDemostracion`, que exige `es_demostracion = true`: una instalación real **no tenía
+por dónde poblar su catastro**. El caso de uso estaba y no había quien lo llamara.
+
+Tres cosas de este camino que conviene entender:
+
+- **Los lotes entran sin ficha, y está bien.** El plano da el lote —su código, su ubicación y su
+  polígono— y no dice el área construida, ni el uso, ni las categorías, ni quién es el titular:
+  eso lo levanta un técnico en campo o lo declara el contribuyente después. Esos predios son la
+  **cola de saneamiento**, y se ven en `GET /catastro/predios?fichado=false`.
+- **Sobre un predio que ya existe, el plano solo pone el polígono.** No reescribe la dirección ni
+  la ubicación: eso lo corrigió alguien en ventanilla con su observación, y un archivo que lo
+  pisara borraría ese trabajo. Reimportar el plano es el caso corriente, no el raro.
+- **El área del polígono no es el área imponible** (ADR-0021). La imponible es la de la ficha, la
+  que midió el técnico. Que no coincidan es un hallazgo que se informa, no una corrección que se
+  aplica.
+
+El guión de conversión **se comprueba a sí mismo** (`--autoprueba`) y esa comprobación corre en CI,
+que es lo que su hermano de aranceles no tiene: una verificación escrita que nunca se ejecuta no
+protege nada (#188).
 
 ### Cómo nace un `area` y una `caja` (#430)
 

@@ -26,7 +26,6 @@ import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
 import pe.gob.sgtm.catastro.dominio.TipoFicha;
 import pe.gob.sgtm.catastro.dominio.TipoPredio;
 import pe.gob.sgtm.catastro.dominio.VersionDeLaFicha;
-import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
@@ -209,7 +208,7 @@ public class FichaController {
     /** Los datos del predio. Solo se usan si hay que darlo de alta; el codigo, siempre. */
     private InscribirFicha.DatosDelPredio predioDeclarado(PeticionDeAlta peticion) {
         return new InscribirFicha.DatosDelPredio(
-                referenciaDe(
+                DeclaracionDeFicha.referenciaDe(
                         DeclaracionDeFicha.exigir(peticion.codRefCatastral(), "codRefCatastral")),
                 tipoDePredio(peticion.tipoPredio()),
                 DeclaracionDeFicha.exigir(peticion.direccion(), "direccion"),
@@ -263,18 +262,6 @@ public class FichaController {
         }
     }
 
-    /**
-     * El codigo, validado y <b>sin tocar la base</b>. Desde #486 la usa tambien la lectura: la
-     * consulta del predio vive en {@link ConsultaDeLaFichaVigente}, dentro de su transaccion.
-     */
-    private static CodigoReferenciaCatastral referenciaDe(String codigo) {
-        try {
-            return CodigoReferenciaCatastral.de(codigo);
-        } catch (IllegalArgumentException invalido) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
-        }
-    }
-
     // ── Lectura ────────────────────────────────────────────────────────
 
     /**
@@ -298,7 +285,7 @@ public class FichaController {
         // misma. Resolver el predio aqui costaba un 500 en las cuatro rutas (#486).
         ConsultaDeLaFichaVigente.Encontrada encontrada =
                 fichaVigente
-                        .porCodigo(referenciaDe(codigo), tipo, cuando, historico)
+                        .porCodigo(DeclaracionDeFicha.referenciaDe(codigo), tipo, cuando, historico)
                         .orElseThrow(
                                 () ->
                                         new ProblemaDeNegocio(

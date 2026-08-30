@@ -35,9 +35,11 @@ import pe.gob.sgtm.catastro.aplicacion.ConsultaDeSectores;
 import pe.gob.sgtm.catastro.aplicacion.RegistrarManzana;
 import pe.gob.sgtm.catastro.aplicacion.RegistrarSector;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
+import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.Predio;
+import pe.gob.sgtm.catastro.dominio.PredioDelCatastro;
 import pe.gob.sgtm.catastro.dominio.Sector;
 import pe.gob.sgtm.catastro.dominio.SectorConConteos;
 import pe.gob.sgtm.catastro.dominio.Titularidad;
@@ -841,8 +843,18 @@ class SectorControllerTest {
         }
 
         @Override
-        public Pagina<Predio> predios(Paginacion paginacion) {
+        public Pagina<PredioDelCatastro> predios(FiltroDePredios filtro, Paginacion paginacion) {
             throw new UnsupportedOperationException("SectorController no lee predios");
+        }
+
+        @Override
+        public void asignarGeometria(long predioId, String wkt) {
+            throw new UnsupportedOperationException("SectorController no dibuja planos");
+        }
+
+        @Override
+        public Optional<String> geometriaDe(long predioId) {
+            return Optional.empty();
         }
 
         @Override

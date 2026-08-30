@@ -61,7 +61,8 @@ Hoy son casi todos: con V56, 14 de los 17 módulos. Una base en memoria no tiene
 Security y daría falsos verdes (CAL-01 §2).
 
 Por omisión levantan un contenedor con Testcontainers, así que hacen falta Docker y la imagen
-`postgres:16-alpine`.
+`postgis/postgis:16-3.4-alpine` (ADR-0021: `crear-roles.sql` instala PostGIS y la
+imagen oficial no la trae).
 
 **Sin Docker** hay una salida documentada —apuntar a un PostgreSQL existente—, y ninguna que omita
 la prueba:
@@ -100,7 +101,7 @@ se disfrace de fallo del código:
 |---|---|
 | La distribución de Gradle se descarga con reintentos | Que un 502 de `services.gradle.org` salga como build rojo, y que relanzar se vuelva la respuesta a cualquier rojo |
 | `gradle.properties` declara Java 25 | Que CI verifique en silencio una versión de Java distinta de la que se despliega |
-| Hay Docker y `postgres:16-alpine` se descarga | Que un runner sin Docker se confunda con un fallo de aislamiento, que es el rojo que menos puede confundirse con otra cosa |
+| Hay Docker y `postgis/postgis:16-3.4-alpine` se descarga | Que un runner sin Docker se confunda con un fallo de aislamiento, que es el rojo que menos puede confundirse con otra cosa |
 
 Ninguna de las tres omite nada: sin Docker el job **falla**. La salida documentada es apuntar a un
 PostgreSQL existente, no saltarse la prueba.

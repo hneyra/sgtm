@@ -3,7 +3,6 @@ package pe.gob.sgtm.catastro.infraestructura.web;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -12,12 +11,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.catastro.aplicacion.ActualizarCatastro;
 import pe.gob.sgtm.catastro.aplicacion.ActualizarFichaCatastral;
-import pe.gob.sgtm.catastro.dominio.CatastroRepository;
+import pe.gob.sgtm.catastro.aplicacion.InscribirFicha;
 import pe.gob.sgtm.catastro.dominio.FichaCatastral;
-import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.TipoFicha;
-import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
+import pe.gob.sgtm.catastro.dominio.TipoPredio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -67,13 +66,10 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 @RequiereAcceso(acceso = "actualizacion_catastro", privilegio = Privilegio.MODIFICACION)
 public class ActualizacionController {
 
-    private final ActualizarFichaCatastral fichas;
-    private final CatastroRepository catastro;
+    private final ActualizarCatastro catastro;
     private final Clock reloj;
 
-    public ActualizacionController(
-            ActualizarFichaCatastral fichas, CatastroRepository catastro, Clock reloj) {
-        this.fichas = fichas;
+    public ActualizacionController(ActualizarCatastro catastro, Clock reloj) {
         this.catastro = catastro;
         this.reloj = reloj;
     }
@@ -114,32 +110,41 @@ public class ActualizacionController {
             String codigo, TipoFicha tipo, PeticionDeActualizacion peticion) {
 
         Observacion observacion = DeclaracionDeFicha.observacionDe(peticion.observacion());
-        Predio predio = predioDe(codigo);
-        long predioId = Objects.requireNonNull(predio.id(), "El predio leido tiene identificador");
 
         LocalDate desde =
                 peticion.vigenciaDesde() == null
                         ? LocalDate.now(reloj)
                         : DeclaracionDeFicha.fechaDe(peticion.vigenciaDesde(), "vigenciaDesde");
 
+        var version =
+                new ActualizarCatastro.DatosDeLaVersion(
+                        desde,
+                        DeclaracionDeFicha.origenDe(peticion.origen()),
+                        DeclaracionDeFicha.exigir(peticion.documentoOrigen(), "documentoOrigen"),
+                        DeclaracionDeFicha.construccionesDe(peticion.construcciones()),
+                        DeclaracionDeFicha.instalacionesDe(peticion.instalaciones()),
+                        DeclaracionDeFicha.detalleDe(
+                                tipo,
+                                peticion.economico(),
+                                peticion.bienesComunes(),
+                                peticion.rural()));
+
         try {
             FichaCatastral nueva =
-                    fichas.actualizar(
-                            predioId,
+                    catastro.actualizar(
+                            DeclaracionDeFicha.referenciaDe(codigo),
                             tipo,
-                            desde,
-                            DeclaracionDeFicha.origenDe(peticion.origen()),
-                            DeclaracionDeFicha.exigir(
-                                    peticion.documentoOrigen(), "documentoOrigen"),
-                            DeclaracionDeFicha.construccionesDe(peticion.construcciones()),
-                            DeclaracionDeFicha.instalacionesDe(peticion.instalaciones()),
-                            DeclaracionDeFicha.detalleDe(
-                                    tipo,
-                                    peticion.economico(),
-                                    peticion.bienesComunes(),
-                                    peticion.rural()),
+                            version,
+                            correccionDe(peticion.predio()),
                             observacion);
             return FichaResource.de(nueva);
+        } catch (ActualizarCatastro.PredioInexistente noExiste) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.NO_ENCONTRADO, DeclaracionDeFicha.mensajeDe(noExiste));
+        } catch (InscribirFicha.ReferenciaInexistente noExiste) {
+            // Sector, manzana o via declarados en la correccion y que no estan en el catastro.
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.NO_ENCONTRADO, DeclaracionDeFicha.mensajeDe(noExiste));
         } catch (ActualizarFichaCatastral.SinFichaVigente sinFicha) {
             // Lo que falta es la primera version, y esa se registra. Un 500 aqui diria que el
             // sistema fallo, cuando lo que pasa es que el recurso no esta.
@@ -149,21 +154,41 @@ public class ActualizacionController {
         }
     }
 
-    private Predio predioDe(String codigo) {
-        CodigoReferenciaCatastral referencia;
-        try {
-            referencia = CodigoReferenciaCatastral.de(codigo);
-        } catch (IllegalArgumentException invalido) {
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION, DeclaracionDeFicha.mensajeDe(invalido));
+    /**
+     * La correccion del predio, o {@code null} si el cuerpo no trae el bloque.
+     *
+     * <p><b>Aqui no se llama a {@code vacioANulo}</b>, y es lo unico que hay que mirar de este
+     * metodo: en el alta la cadena vacia y la ausencia significan lo mismo —«no lo declaro»—, y en
+     * una correccion no, porque la vacia es la unica forma de decir «borralo». Pasarlas por el
+     * mismo tamiz dejaria un numero municipal equivocado sin manera de quitarlo.
+     */
+    private static ActualizarCatastro.@Nullable CorreccionDelPredio correccionDe(
+            @Nullable PredioCorregido declarado) {
+        if (declarado == null) {
+            return null;
         }
-        return catastro.predioPorCodigo(referencia)
-                .orElseThrow(
-                        () ->
-                                new ProblemaDeNegocio(
-                                        CodigoDeError.NO_ENCONTRADO,
-                                        "No hay ningun predio con ese codigo de referencia"
-                                                + " catastral"));
+        return new ActualizarCatastro.CorreccionDelPredio(
+                tipoDePredio(declarado.tipoPredio()),
+                declarado.direccion(),
+                declarado.codigoDeVia(),
+                declarado.numeroMunicipal(),
+                declarado.codigoDeSector(),
+                declarado.codigoDeManzana(),
+                declarado.lote(),
+                declarado.ubigeo());
+    }
+
+    /** Nulo es «no cambia»; en el alta, en cambio, la ausencia resuelve a URBANO. */
+    private static @Nullable TipoPredio tipoDePredio(@Nullable String texto) {
+        if (texto == null) {
+            return null;
+        }
+        try {
+            return TipoPredio.valueOf(texto.strip().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException desconocido) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION, "Tipo de predio desconocido: '" + texto + "'");
+        }
     }
 
     /**
@@ -184,5 +209,28 @@ public class ActualizacionController {
             @Nullable List<DeclaracionDeFicha.InstalacionDeclarada> instalaciones,
             DeclaracionDeFicha.@Nullable EconomicoDeclarado economico,
             DeclaracionDeFicha.@Nullable BienesComunesDeclarados bienesComunes,
-            DeclaracionDeFicha.@Nullable RuralDeclarado rural) {}
+            DeclaracionDeFicha.@Nullable RuralDeclarado rural,
+            @Nullable PredioCorregido predio) {}
+
+    /**
+     * Los datos <b>del predio</b>, no los de su ficha: lo que hasta ahora solo se podia escribir al
+     * inscribirlo.
+     *
+     * <p>El bloque es opcional —el acto corriente solo versiona la ficha— y <b>trivaluado</b>:
+     * {@code null} es «no cambia» y la cadena vacia es «se borra». Sin esa distincion, un cliente
+     * que manda el bloque para arreglar la direccion borraria el numero municipal, el lote y el
+     * ubigeo sin enterarse.
+     *
+     * <p>El codigo de referencia catastral no esta: identifica al predio, y cambiarlo no es
+     * corregirlo sino declarar otro.
+     */
+    public record PredioCorregido(
+            @Nullable String tipoPredio,
+            @Nullable String direccion,
+            @Nullable String codigoDeVia,
+            @Nullable String numeroMunicipal,
+            @Nullable String codigoDeSector,
+            @Nullable String codigoDeManzana,
+            @Nullable String lote,
+            @Nullable String ubigeo) {}
 }

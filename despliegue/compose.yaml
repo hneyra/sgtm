@@ -19,7 +19,11 @@ name: sgtm
 
 services:
   base:
-    image: postgres:16-alpine
+    # La misma PostgreSQL 16 con PostGIS dentro (ADR-0021): `crear-roles.sql`
+    # instala la extension antes de la primera migracion, y la imagen oficial no
+    # la trae —con ella el arranque falla con «extension "postgis" is not
+    # available»—. Mismo volumen de datos, ninguna migracion de por medio.
+    image: postgis/postgis:16-3.4-alpine
     environment:
       POSTGRES_DB: sgtm
       POSTGRES_USER: postgres
@@ -40,7 +44,16 @@ services:
       - ./inicializacion-del-motor/20-asignar-claves.sh:/docker-entrypoint-initdb.d/20-asignar-claves.sh:ro
       - datos:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready --username=postgres --dbname=sgtm"]
+      # `--host=127.0.0.1` NO es decorativo: sin el, `pg_isready` pregunta por el
+      # socket unix, y durante la fase de inicializacion del entrypoint el motor
+      # arranca con `listen_addresses=''` —escucha por socket y NO por TCP—. Asi que
+      # el contenedor se declaraba sano mientras todavia corrian los guiones de
+      # initdb, y `migraciones`, que entra por TCP, se estrellaba con «Connection
+      # refused». Era una carrera latente que gano el socket hasta que PostGIS
+      # alargo el arranque —crea `template_postgis` y le carga las extensiones— y
+      # entonces la perdio siempre. La sonda tiene que comprobar lo que sus
+      # dependientes necesitan, no otra cosa parecida.
+      test: ["CMD-SHELL", "pg_isready --host=127.0.0.1 --username=postgres --dbname=sgtm"]
       interval: 2s
       timeout: 3s
       retries: 40

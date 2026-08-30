@@ -120,3 +120,9 @@ jobs:
       # Las tres lo ponen rojo, con la línea y las dos versiones.
       - name: El contrato de la API es el que su generador produce
         run: node docs/50-api/generar-openapi.mjs --comprobar
+
+      # Corre aqui por lo que #188 encontro con `verificar-cuadros.mjs`: una
+      # verificacion escrita que nunca se ejecuta no protege nada. Su hermano de
+      # aranceles no tiene autoprueba y no lo corre nadie.
+      - name: El guion que importa el plano catastral hace lo que dice
+        run: python3 scripts/catastro/importar_predios_gpkg.py --autoprueba

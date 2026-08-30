@@ -38,7 +38,7 @@ function baseline(environment: Environment = "prod"): Invariants {
       publishedNodePorts: [],
     },
     database: {
-      image: "postgres:16.4-alpine",
+      image: "postgis/postgis:16-3.4-alpine",
       storageSize: isStg ? "20Gi" : "100Gi",
       generateRolePasswords: false,
     },
@@ -345,7 +345,7 @@ const VALORES_MINIMOS = {
   nodeAllocatableMemory: "16Gi",
   domain: "sgtm.example.pe",
   acmeEmail: "operaciones@example.pe",
-  postgresImage: "postgres:16.4-alpine",
+  postgresImage: "postgis/postgis:16-3.4-alpine",
   postgresStorageSize: "100Gi",
   backupEndpoint: "https://s3.us-east-1.amazonaws.com",
   backupRegion: "us-east-1",
