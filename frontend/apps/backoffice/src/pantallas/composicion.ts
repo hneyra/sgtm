@@ -591,7 +591,59 @@ export interface ComposicionDeOpcion {
     readonly parametros: (
       valores: Readonly<Record<string, string>>,
     ) => Readonly<Record<string, string>> | undefined;
+    /**
+     * El **registro** que la fila abre, cuando el destino se abre por la ruta y
+     * no por un filtro.
+     *
+     * `parametros` compone una busqueda —`?programa=…&predio=…`— y eso es lo que
+     * necesita un acto que llega con contexto. Abrir una ficha es otra cosa: el
+     * registro va en la ruta, que es de donde `Pantalla` lo lee (`:codigo`) y lo
+     * que hace que la pantalla sepa que hay uno abierto. Con filtro seria una
+     * lista de una fila, que no es lo mismo ni se dibuja igual.
+     *
+     * Declarado, la ruta es `${'${ruta}/${registro}'}` y los parametros se anaden detras
+     * si los hay. Vacio o `undefined` es «esta fila no lo trae»: sin registro no
+     * hay enlace, igual que sin parametros.
+     */
+    readonly registro?: (valores: Readonly<Record<string, string>>) => string | undefined;
+    /**
+     * **Como se llama esa fila**, para el nombre accesible del enlace.
+     *
+     * Sin esto, la tabla lo compone con la primera celda que no este vacia, y en
+     * el padron de contribuyentes esa celda es **la insignia de estado**: el
+     * enlace se anunciaba «Abrir el expediente: A». Una letra no identifica a
+     * nadie, y once enlaces que dicen lo mismo no se distinguen entre si — que
+     * es justo lo que ese nombre existe para evitar.
+     *
+     * Sale de los valores crudos y no del texto dibujado, por lo mismo que
+     * {@link registro}.
+     */
+    readonly nombraCon?: (valores: Readonly<Record<string, string>>) => string | undefined;
   };
+  /**
+   * **La lista y el expediente no se dibujan a la vez** (#503).
+   *
+   * El padron de contribuyentes dibujaba las dos cosas a la vez: la tabla de
+   * busqueda **y** el expediente entero debajo, siempre, con un registro abierto
+   * o sin ninguno — doce secciones en blanco al lado de cuatro filas que no se
+   * podian pulsar, y un formulario que no colgaba de nadie. El rediseno las
+   * separa —se busca, se elige, y entonces se ve el expediente— y es lo que hace
+   * que la pantalla diga que se esta mirando.
+   *
+   * Son las dos mitades y hace falta declarar una sola: con registro, la lista y
+   * su buscador dan paso; sin registro, el expediente espera.
+   *
+   * Es la misma decision que #391 §3 tomo para la ficha del predio: «con el
+   * predio en la ruta no hay barra de busqueda, porque volver a preguntarlo
+   * encima de la ficha que se esta leyendo era la sexta forma de buscar lo
+   * mismo». Alli vivia dentro de un componente propio; aqui es opt-in del
+   * renderizador comun, para la unica que hoy lo necesita.
+   *
+   * **Solo con vuelta.** Quitar la lista sin dejar como volver a ella deja a
+   * quien atiende encerrado en un registro; el camino de vuelta lo pone la
+   * cabecera-resumen de la opcion, y hay una prueba que lo exige.
+   */
+  readonly listaOExpediente?: true;
   /**
    * El bloque de busqueda, para una opcion cuyo catalogo **no declara `filtros`**.
    *

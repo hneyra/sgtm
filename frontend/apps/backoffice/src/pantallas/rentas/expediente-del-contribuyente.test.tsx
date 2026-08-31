@@ -26,7 +26,9 @@ import { COMPOSICION_DE_RENTAS } from './composicion';
  */
 
 const CONTRIBUYENTE = '00000025673';
-const PADRON = `/rentas-registro/contribuyentes?codigo=${CONTRIBUYENTE}`;
+/* El registro va en la **ruta**: `?codigo=` es un filtro —una lista de una
+   fila— y desde #503 la lista y el expediente no se dibujan a la vez. */
+const PADRON = `/rentas-registro/contribuyentes/${CONTRIBUYENTE}`;
 
 beforeEach(() => instalarProxyDeDatos({ latencia: false }));
 afterEach(() => desinstalarProxyDeDatos());
@@ -155,5 +157,68 @@ describe('el indice del padron de contribuyentes', () => {
    */
   it('la ficha de vehiculo sigue con su indice de secciones', () => {
     expect(COMPOSICION_DE_RENTAS['vehiculos']?.gruposDelIndice).toBeUndefined();
+  });
+});
+
+/**
+ * **Se busca, se elige, y entonces se ve el expediente** (#503).
+ *
+ * La pantalla dibujaba las dos cosas a la vez —la tabla de búsqueda y el
+ * expediente entero debajo, con un contribuyente abierto o sin ninguno— y la
+ * fila **no abría nada**: quien atendía veía doce secciones en blanco al lado de
+ * cuatro filas que no se podían pulsar, y un formulario que no colgaba de nadie.
+ *
+ * Es la misma decisión que #391 §3 tomó para la ficha del predio: «volver a
+ * preguntarlo encima de la ficha que se está leyendo era la sexta forma de
+ * buscar lo mismo».
+ */
+describe('la lista y el expediente no se dibujan a la vez', () => {
+  const LISTA = '/rentas-registro/contribuyentes';
+
+  it('sin nadie abierto se ve la lista y su buscador, y ninguna sección', async () => {
+    montarEnRuta(LISTA);
+    await waitFor(() =>
+      expect(document.querySelectorAll('.sgtm-tabla tbody tr').length).toBeGreaterThan(0),
+    );
+
+    expect(document.querySelector('.sgtm-filtros')).not.toBeNull();
+    expect(
+      document.querySelectorAll('.sgtm-seccion__cabecera'),
+      'el expediente espera: un formulario que no cuelga de nadie no dice nada',
+    ).toHaveLength(0);
+  });
+
+  it('la fila abre el expediente por su ruta, no por un filtro', async () => {
+    montarEnRuta(LISTA);
+    const abrir = await screen.findByRole('link', {
+      name: `Abrir el expediente: SUC. RUFINA MEDINA MEDINA`,
+    });
+
+    /* En la **ruta**: es de donde `Pantalla` lee el registro, y lo que hace que
+       la pantalla sepa que hay uno abierto. Con filtro sería una lista de una
+       fila, que no es lo mismo ni se dibuja igual. */
+    expect(abrir).toHaveAttribute('href', `/rentas-registro/contribuyentes/${CONTRIBUYENTE}`);
+  });
+
+  it('con uno abierto, la lista y el buscador dan paso al expediente', async () => {
+    montarEnRuta(PADRON);
+    await indice();
+
+    expect(document.querySelector('.sgtm-filtros')).toBeNull();
+    expect(document.querySelectorAll('.sgtm-tabla tbody tr')).toHaveLength(0);
+    expect(document.querySelectorAll('.sgtm-seccion__cabecera').length).toBe(12);
+  });
+
+  /**
+   * **Y hay por dónde volver.** Quitar la lista sin dejar cómo volver a ella
+   * deja a quien atiende encerrado en un registro: es la mitad que hace que la
+   * otra sea aceptable, y por eso se mide aquí y no en la cabecera.
+   */
+  it('el expediente abierto tiene vuelta al padrón', async () => {
+    montarEnRuta(PADRON);
+    await indice();
+
+    const volver = await screen.findByRole('link', { name: 'Padrón' });
+    expect(volver).toBeInTheDocument();
   });
 });

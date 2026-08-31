@@ -37,7 +37,8 @@ async function abrirLasUnidades(usuario: ReturnType<typeof userEvent.setup>): Pr
 }
 
 const CONTRIBUYENTE = '00000025673';
-const PADRON = `/rentas-registro/contribuyentes?codigo=${CONTRIBUYENTE}`;
+/* En la ruta, no en el filtro: el expediente se abre por el registro (#503). */
+const PADRON = `/rentas-registro/contribuyentes/${CONTRIBUYENTE}`;
 
 let pedidas: string[] = [];
 
