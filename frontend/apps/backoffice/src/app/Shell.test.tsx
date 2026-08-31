@@ -109,6 +109,37 @@ describe('la barra lateral de dos niveles', () => {
     expect(within(panel).getByRole('link', { name: /Caja tributaria/ })).toBeInTheDocument();
   });
 
+  /**
+   * **La accion primaria del modulo** (#498 F2): lo primero del panel, porque es
+   * con lo que se empieza a trabajar. Sale del catalogo y no de la composicion
+   * del modulo —que llega en su propio trozo (#433)— y lleva `?nuevo=1` porque
+   * el alta guiada vive desde ahora en la URL: sin eso el boton solo podria
+   * dejar al usuario en la pantalla y que la abriera el mismo.
+   */
+  it('el panel de Catastro ofrece «Registrar predio», y abre el alta guiada', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta('/catastro/consulta-fichas');
+    await screen.findByRole('heading', { level: 1 });
+
+    const boton = screen.getByRole('link', { name: 'Registrar predio' });
+    expect(boton).toHaveAttribute('href', '/catastro/ficha-urbana?nuevo=1');
+
+    // Y abre el asistente de verdad, no deja al usuario en la pantalla.
+    await usuario.click(boton);
+    expect(
+      await screen.findByRole('region', { name: /Alta de ficha catastral/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('un módulo que no declara acción primaria no dibuja ningún botón', () => {
+    montarEnRuta('/tesoreria/caja-tributaria');
+
+    const panel = screen
+      .getByRole('navigation', { name: 'Opciones de Tesorería' })
+      .closest('.sgtm-nav') as HTMLElement;
+    expect(panel.querySelector('.sgtm-nav__primaria')).toBeNull();
+  });
+
   it('anota en «Recientes» la opcion visitada, y los enseña en la portada', async () => {
     const usuario = userEvent.setup();
     montarEnRuta('/tesoreria/caja-tributaria');

@@ -10,6 +10,18 @@
  * manual y no se reescriben (FRO-03 §2, RNF-080).
  */
 
+/**
+ * La accion primaria de un modulo: el acto con el que se empieza a trabajar en
+ * el, que el panel lateral ensena como boton destacado encima de los destinos
+ * (#498 F2).
+ */
+export interface AccionPrimariaDeModulo {
+  /** La opcion que la abre. Trae su id y **su permiso**. */
+  readonly opcion: string;
+  /** Lo que hace el acto, no como se llama la pantalla que lo aloja. */
+  readonly label: string;
+}
+
 export interface ModuloDelCatalogo {
   /** Segmento de la ruta: `rentas-registro`. */
   readonly id: string;
@@ -45,6 +57,15 @@ export interface ModuloDelCatalogo {
    * ficha— basta con plegar.
    */
   readonly centroDeReportes?: string;
+  /**
+   * El acto con el que se empieza a trabajar en este modulo, si lo declara.
+   *
+   * Sale de la tabla del portador y **no de la composicion del modulo**: la
+   * barra lateral vive en el arranque y la composicion llega en el trozo de su
+   * modulo (#433), asi que leer de alli que boton dibujar traeria ese trozo al
+   * arranque de los doce. Un modulo sin ella no dibuja boton.
+   */
+  readonly accionPrimaria?: AccionPrimariaDeModulo;
   readonly opciones: readonly OpcionDelCatalogo[];
 }
 

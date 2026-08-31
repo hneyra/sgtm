@@ -196,6 +196,25 @@
   text-overflow: ellipsis;
 }
 
+/* La accion primaria del modulo (#498 F2): lo primero que se ve del panel,
+   porque es con lo que se empieza a trabajar. Va encima del buscador, que es
+   como se llega a lo que ya existe.
+
+   El boton **es** `.sgtm-boton--primario` del design system: aqui solo va lo
+   que el design system no puede saber —el hueco en el panel y que ocupe su
+   ancho—. Escribirlo entero era repetir seis declaraciones que ya existen, y
+   una de ellas —`--accent-contraste`— es la que sostiene el tema oscuro. */
+.sgtm-nav__primaria {
+  padding: 12px 12px 0;
+}
+
+.sgtm-nav__primaria .sgtm-boton {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+
 .sgtm-nav__buscador {
   padding: 10px 10px 6px;
 }

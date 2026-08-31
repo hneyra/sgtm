@@ -27,6 +27,7 @@ import { createContext, runInContext } from 'node:vm';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
+  accionPrimariaDe,
   asignacionPorTarea,
   bloquesPlegadosDe,
   centroDeReportesDe,
@@ -321,6 +322,7 @@ const modulos = NAV.map((grupo) => {
      sola. `centroDeReportes` es siempre uno de `bloquesPlegados`. */
   const plegados = asignacion ? bloquesPlegadosDe(moduloId) : [];
   const centro = asignacion ? centroDeReportesDe(moduloId) : null;
+  const primaria = accionPrimariaDe(moduloId);
   return {
     id: moduloId,
     label: grupo.label,
@@ -332,6 +334,7 @@ const modulos = NAV.map((grupo) => {
       : BLOQUES.filter((b) => opciones.some((o) => o.bloque === b)),
     ...(plegados.length === 0 ? {} : { bloquesPlegados: plegados }),
     ...(centro === null ? {} : { centroDeReportes: centro }),
+    ...(primaria === null ? {} : { accionPrimaria: primaria }),
     opciones,
   };
 });

@@ -180,21 +180,31 @@ export const GRUPOS_POR_TAREA = {
      * encima de la ficha que se esta leyendo era la sexta forma de buscar lo
      * mismo.
      *
-     * La septima **no la alcanza nada del modulo, y no puede**:
-     * `ficha_contribuyente_reporte` se abre por el codigo del CONTRIBUYENTE
-     * —`GET /catastro/contribuyentes/{codigo}/ficha.pdf`— y ninguna superficie
-     * de Catastro tiene ese codigo en la mano. `FichaResource` no lo publica
-     * (por eso el «Titular» de la cabecera-resumen sale «—») y
-     * `FichaEncontradaResource` publica el **nombre** del titular y no su
-     * codigo, que es exactamente lo que #322 ya decidio que no funda un enlace:
-     * «un enlace armado por nombre abre al homonimo o a nadie».
+     * Con #498 F2 el reporte se fue a «Documentos», asi que la razon de #391
+     * —que `ficha_contribuyente_reporte` se abre por el codigo del
+     * CONTRIBUYENTE y ninguna superficie de Catastro lo tiene— **ya no aplica
+     * a este grupo**. Y aun asi no se pliega, por una razon distinta que hubo
+     * que MEDIR, porque el docblock de `FichaDelPredio` sugiere lo contrario
+     * («si el identificador es un codigo de referencia catastral, las cuatro
+     * modalidades se ofrecen con ese mismo codigo»):
+     *
+     * **`ficha_rural` no la alcanza ninguna superficie, y no puede.** El
+     * conmutador la dibuja siempre APAGADA cuando se llega por un codigo de
+     * referencia catastral, y es deliberado: `Conmutador` calcula
+     * `derivaDe = (una) => catastral && una !== 'rural'`, porque del codigo de
+     * referencia salen `codRefCatastral` y `codEdificacion` pero **no**
+     * `codUnidad`, que es lo que la rural pide y que ni siquiera es un codigo
+     * catastral —`11024-0418`, con guion—. Ofrecerla seria un enlace a un 404,
+     * que es lo que #391 arreglo. Se comprobo montando la ficha urbana con el
+     * predio de muestra y listando lo que enlaza: urbana, economica, bienes y
+     * la actualizacion. Cuatro de seis.
      *
      * Asi que plegar aqui esconderia detras de una entrada una opcion a la que
      * esa entrada no lleva, y una opcion sin retorno es peor que un menu largo.
-     * Lo que lo desbloquea no es interfaz: que el recurso publique el codigo
-     * del titular —y entonces la ficha enlaza su reporte y el enlace a la
-     * consulta se dibuja tambien con predio abierto—, o que el reporte viva
-     * donde el contribuyente esta. Hasta entonces, las siete siguen en el menu.
+     * Lo que lo desbloquea tampoco es interfaz: que el padron publique el
+     * `codUnidad` del predio, o que la rural se abra por el codigo de
+     * referencia como las otras tres. Hasta entonces, las seis siguen en el
+     * menu.
      */
     [
       'Predio',
@@ -205,9 +215,15 @@ export const GRUPOS_POR_TAREA = {
         'ficha_bienes',
         'ficha_rural',
         'actualizacion_catastro',
-        'ficha_contribuyente_reporte',
       ],
     ],
+    // El reporte sale del grupo del predio y pasa a «Documentos», que es lo que
+    // el rediseño pide (#498 F2) y lo que es: no es una pantalla del predio, es
+    // un papel del contribuyente, y se abre por el codigo de EL, no por el del
+    // predio. Un grupo de uno agrupa poco, pero aqui separa dos cosas que se
+    // abren con identificadores distintos, que es la confusion que lo tenia
+    // debajo de las fichas.
+    ['Documentos', ['ficha_contribuyente_reporte']],
     // Las dos hojas del territorio, plegadas **sin carril**: `Territorio.tsx`
     // las dibuja como pestanas de una sola superficie, asi que un carril seria
     // una segunda forma de navegar lo mismo al lado de la primera.
@@ -363,6 +379,39 @@ export function asignacionPorTarea(moduloId, items, tabla = GRUPOS_POR_TAREA) {
     }
   }
   return asignacion;
+}
+
+/**
+ * La accion primaria de un modulo: el acto con el que se empieza a trabajar en
+ * el, que el panel lateral ensena como boton destacado encima de los destinos
+ * (#498 F2).
+ *
+ * **Es un dato del catalogo y no una lista cableada en la barra**, por lo mismo
+ * que `bloquesPlegados`: la barra lateral vive en el arranque y la composicion
+ * de cada modulo llega en su propio trozo (#433). Que la barra leyera el
+ * `flujo` de `catastro/composicion.ts` para saber que boton dibujar traeria ese
+ * trozo al arranque de los doce modulos.
+ *
+ * `opcion` es la que abre —con su id y **su permiso**, que la barra comprueba
+ * con `puedeRegistrar` antes de dibujarlo—, y `label` el rotulo. No se inventa:
+ * dice lo que el acto hace, no como se llama la pantalla que lo aloja.
+ *
+ * Solo Catastro declara la suya: es el modulo del rediseño, y las de los otros
+ * once se declaran cuando a cada uno le toque. Un modulo sin ella no dibuja
+ * boton, que es lo que hacen hoy los doce.
+ */
+export const ACCION_PRIMARIA = {
+  // «Registrar predio» y no «Nueva ficha urbana»: quien atiende no viene a
+  // crear una ficha, viene a meter un predio en el padron. El alta guiada de
+  // cuatro pasos (#320) cuelga de `ficha_urbana` porque es la unica opcion que
+  // se abre por el codigo de referencia catastral, que es lo que el paso 2
+  // compone y comprueba.
+  catastro: { opcion: 'ficha_urbana', label: 'Registrar predio' },
+};
+
+/** La accion primaria de un modulo, o `null` si no declara ninguna. */
+export function accionPrimariaDe(moduloId, tabla = ACCION_PRIMARIA) {
+  return tabla[moduloId] ?? null;
 }
 
 /** Los nombres de los grupos de un modulo, en el orden de la tabla. */

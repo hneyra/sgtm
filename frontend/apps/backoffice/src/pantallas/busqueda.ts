@@ -28,6 +28,21 @@ export const ORDEN = 'ordenarPor';
 export const SENTIDO = 'direccion';
 export const PAGINA = 'pagina';
 
+/**
+ * El alta guiada abierta, en la URL y no en el estado del componente (#498 F2).
+ *
+ * Estaba en un `useState` de `Pantalla`, y eso hacia tres cosas mal: recargar
+ * perdia el asistente a medias, el enlace de lo que se estaba haciendo no lo
+ * llevaba, y **nada fuera de la pantalla podia abrirlo** —que es lo que el
+ * boton «Registrar predio» del panel lateral necesita, porque vive en el shell
+ * y no dentro de la pantalla que aloja el flujo—.
+ *
+ * No es un filtro: `parametrosDeBusqueda` solo manda lo que el contrato
+ * declara, asi que este parametro se queda en la barra de direcciones y no
+ * viaja a ninguna peticion.
+ */
+export const NUEVO = 'nuevo';
+
 export type Sentido = 'ASCENDENTE' | 'DESCENDENTE';
 
 export interface EstadoDeBusqueda {
