@@ -124,8 +124,12 @@ const GRUPOS_POR_TAREA_ESPERADOS: Readonly<
   // Tres grupos porque tres son las superficies (#391): la ficha del predio, el
   // cuadro de valuacion y el territorio.
   catastro: [
+    /* Los cuatro destinos del artboard, en su orden (#498 F2b). «Predios»
+       absorbe las cuatro modalidades, la consulta y la actualizacion; el
+       reporte del contribuyente se va a «Documentos» porque se abre por el
+       codigo de LA PERSONA y no por el del predio, y ese grupo va al pie. */
     [
-      'Predio',
+      'Predios',
       [
         'actualizacion_catastro',
         'consulta_fichas',
@@ -135,12 +139,9 @@ const GRUPOS_POR_TAREA_ESPERADOS: Readonly<
         'ficha_urbana',
       ],
     ],
-    // #498 F2: el reporte del contribuyente no es una pantalla del predio. Se
-    // abre por el codigo de LA PERSONA y no por el del predio, y esa diferencia
-    // —dos identificadores en el mismo grupo— es la que lo tenia mal puesto.
-    ['Documentos', ['ficha_contribuyente_reporte']],
     ['Territorio', ['calles', 'sectores']],
-    ['Valuación', ['aranceles', 'depreciacion', 'valores_unitarios']],
+    ['Valores del ejercicio', ['aranceles', 'depreciacion', 'valores_unitarios']],
+    ['Documentos', ['ficha_contribuyente_reporte']],
   ],
   /* Los cinco destinos del embudo (#506 F5): se detecta, se programa, se
      inspecciona, se determina. «Campaña» juntaba la programación con los omisos
@@ -442,7 +443,7 @@ describe('el centro de reportes se declara en el catalogo, no en el componente',
       m.centroDeReportes ?? null,
     ]);
     expect(plegados).toEqual([
-      ['catastro', ['Territorio', 'Valuación'], null],
+      ['catastro', ['Predios', 'Territorio', 'Valores del ejercicio'], null],
       /* El cuarto pliegue sin carril, y **sólo se pudo desde #506 F1**: las tres
          opciones de «Resultados» son una superficie de tres hojas, y su tira
          lleva de cualquiera a las otras dos. Antes de la superficie, plegarlas
@@ -455,7 +456,7 @@ describe('el centro de reportes se declara en el catalogo, no en el componente',
     ]);
   });
 
-  it('los dos bloques plegados de Catastro no son hojas de ningun centro', () => {
+  it('los tres bloques plegados de Catastro no son hojas de ningun centro', () => {
     const catastro = MODULOS.find((m) => m.id === 'catastro');
     expect(catastro?.centroDeReportes).toBeUndefined();
     expect(catastro && hojasDelCentro(catastro)).toEqual([]);
@@ -466,8 +467,12 @@ describe('el centro de reportes se declara en el catalogo, no en el componente',
           .filter((b) => b.plegado)
           .map((b) => [b.label, b.carril]),
     ).toEqual([
+      // Tres desde #498 F2b: «Predios» se pliega porque la chip de modalidad
+      // que no deriva del codigo dejo de estar apagada y lleva a su propia
+      // busqueda, asi que la superficie alcanza las seis.
+      ['Predios', false],
       ['Territorio', false],
-      ['Valuación', false],
+      ['Valores del ejercicio', false],
     ]);
   });
 });

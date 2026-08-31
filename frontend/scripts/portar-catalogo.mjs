@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 import {
   accionPrimariaDe,
   asignacionPorTarea,
+  destinosDe,
   bloquesPlegadosDe,
   centroDeReportesDe,
   nombresDeLosGrupos,
@@ -323,6 +324,7 @@ const modulos = NAV.map((grupo) => {
   const plegados = asignacion ? bloquesPlegadosDe(moduloId) : [];
   const centro = asignacion ? centroDeReportesDe(moduloId) : null;
   const primaria = accionPrimariaDe(moduloId);
+  const destinos = destinosDe(moduloId);
   return {
     id: moduloId,
     label: grupo.label,
@@ -335,6 +337,7 @@ const modulos = NAV.map((grupo) => {
     ...(plegados.length === 0 ? {} : { bloquesPlegados: plegados }),
     ...(centro === null ? {} : { centroDeReportes: centro }),
     ...(primaria === null ? {} : { accionPrimaria: primaria }),
+    ...(destinos === null ? {} : { destinos }),
     opciones,
   };
 });

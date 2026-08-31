@@ -238,6 +238,19 @@ const HUELLAS = [
  * se compile**, que es exactamente lo que #442 enseño y este archivo ya ha
  * aprendido tres veces.
  *
+ * **Y #498 F2b gasta 0,6 de ese margen** —no vuelve a subir el numero—: es la
+ * reagrupacion de Catastro conforme al artboard, donde el panel deja de listar
+ * opciones y pasa a dibujar **destinos** (icono, rotulo y la nota que dice de
+ * que va). Lo medido: 146,3 antes y 146,9 despues, repartidos en los trazos de
+ * los cuatro iconos y sus notas dentro de `navegacion.generado.ts`, el
+ * componente `Destino` y su bloque de estilos.
+ *
+ * Lo que se intento antes: reusar los estilos del modulo del riel no vale —el
+ * riel es solo icono, sin texto ni nota— y las clases equivalentes de la barra
+ * vieja (`.sgtm-nav__modulo*`) las borro #498 F1 precisamente porque nada las
+ * usaba. No habia de donde reusar. Y sacarlo del arranque tampoco: la barra se
+ * dibuja en la primera pantalla y en todas.
+ *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */

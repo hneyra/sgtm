@@ -937,17 +937,25 @@ function Conmutador({
               </Link>
             );
           }
+          /* **No se apaga: lleva a su propia busqueda** (#498 F2b).
+             Apagada, la chip decia «búscala en Consulta de fichas» y dejaba a
+             `ficha_rural` sin que **ninguna** superficie del modulo la
+             alcanzara —que es lo que impedia plegar el grupo del predio como el
+             diseno lo agrupa—. El enlace no lleva a un 404: lleva a la pantalla
+             de esa modalidad **sin registro**, que es donde se teclea el
+             identificador con el que si se abre. Sigue sin llevar el codigo,
+             porque de el no se deriva; lo que cambia es que el camino existe en
+             vez de estar contado en un parrafo. */
           return (
-            <span
+            <Link
               key={una}
+              to={situada.ruta}
               className="sgtm-modalidades__chip"
-              data-apagada="1"
-              aria-disabled="true"
-              role="link"
-              aria-label={situada.title}
+              data-otro-codigo="1"
+              aria-label={`${situada.title} — se abre con su propio identificador`}
             >
               {ROTULO_DE[una]}
-            </span>
+            </Link>
           );
         })}
       </div>

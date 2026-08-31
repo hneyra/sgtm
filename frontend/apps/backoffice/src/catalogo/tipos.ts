@@ -22,6 +22,31 @@ export interface AccionPrimariaDeModulo {
   readonly label: string;
 }
 
+/**
+ * Como se ensena un destino del modulo en el panel lateral (#498 F2b): su
+ * icono y una nota que dice de que va.
+ *
+ * La clave es el rotulo del bloque, salvo `panel`, que no es un bloque sino la
+ * portada del modulo —`/:modulo`—: el diseño la dibuja como un destino mas y
+ * por eso se declara igual.
+ */
+export interface DestinoDeModulo {
+  /** Solo cuando el destino se rotula distinto que su bloque. */
+  readonly label?: string;
+  /**
+   * Que opcion abre, cuando no es la primera del grupo.
+   *
+   * El orden dentro de un grupo lo pone el prototipo, y no siempre empieza por
+   * donde se empieza a trabajar: el grupo del predio arranca por la ficha
+   * urbana y el destino del artboard es la busqueda. Si este perfil no puede
+   * ver la declarada, se cae a la primera que si (REQ-03 §5).
+   */
+  readonly entrada?: string;
+  readonly nota: string;
+  /** Trazos del icono de linea, viewBox 24x24. Salen del artboard. */
+  readonly icono: readonly string[];
+}
+
 export interface ModuloDelCatalogo {
   /** Segmento de la ruta: `rentas-registro`. */
   readonly id: string;
@@ -66,6 +91,11 @@ export interface ModuloDelCatalogo {
    * arranque de los doce. Un modulo sin ella no dibuja boton.
    */
   readonly accionPrimaria?: AccionPrimariaDeModulo;
+  /**
+   * Como se dibuja cada grupo en el panel: icono y nota (#498 F2b). Un grupo
+   * sin destino se dibuja como se dibujaba, con su rotulo y sus opciones.
+   */
+  readonly destinos?: Readonly<Record<string, DestinoDeModulo>>;
   readonly opciones: readonly OpcionDelCatalogo[];
 }
 

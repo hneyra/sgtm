@@ -154,12 +154,14 @@ describe('el botón de la acción primaria pide registro, no lectura', () => {
        verde sin ejercitar nada —se comprobo quitando la guarda de
        `puedeRegistrar`, y las quince seguian verdes—. */
     const menu = screen.getByRole('navigation', { name: 'Opciones de Catastro' });
+    /* Desde #498 F2b el grupo del predio esta plegado: sus seis opciones no se
+       listan una a una, y lo que hay es el destino «Predios». Se espera a el,
+       que es igual de dependiente del permiso —solo aparece si queda alguna
+       opcion suya visible— y por tanto sigue probando que la matriz llego. */
     await waitFor(() => {
-      expect(
-        within(menu).getByRole('link', { name: 'Ficha urbana individual' }),
-      ).toBeInTheDocument();
+      expect(within(menu).getByRole('link', { name: /^Predios/ })).toBeInTheDocument();
     });
-    // Con las opciones ya dibujadas, que el boton no este significa algo.
+    // Con el destino ya dibujado, que el boton no este significa algo.
     expect(screen.queryByRole('link', { name: 'Registrar predio' })).not.toBeInTheDocument();
   });
 

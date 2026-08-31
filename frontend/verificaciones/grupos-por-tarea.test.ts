@@ -141,12 +141,17 @@ describe('toda guarda de la tabla tiene una tabla que la viola', () => {
  * sola, porque dos carriles serian dos formas de navegar lo mismo.
  */
 describe('los dos pliegues salen de la tabla, y se distinguen', () => {
-  it('Catastro pliega dos grupos y ninguno lleva carril', () => {
-    expect(bloquesPlegadosDe('catastro', GRUPOS_POR_TAREA)).toEqual(['Territorio', 'Valuación']);
+  it('Catastro pliega tres grupos y ninguno lleva carril', () => {
+    expect(bloquesPlegadosDe('catastro', GRUPOS_POR_TAREA)).toEqual([
+      'Predios',
+      'Territorio',
+      'Valores del ejercicio',
+    ]);
     expect(centroDeReportesDe('catastro', GRUPOS_POR_TAREA)).toBeNull();
-    // «Predio» no se pliega: `ficha_contribuyente_reporte` se abre por el
-    // codigo del contribuyente y ninguna superficie del modulo lo tiene.
-    expect(bloquesPlegadosDe('catastro', GRUPOS_POR_TAREA)).not.toContain('Predio');
+    /* «Documentos» **no** se pliega, y no es un olvido: es un grupo de uno, y
+       plegarlo seria una entrada que abre la unica opcion que esconde. Va al
+       pie del panel, que es donde el artboard lo pone. */
+    expect(bloquesPlegadosDe('catastro', GRUPOS_POR_TAREA)).not.toContain('Documentos');
   });
 
   it('un grupo con carril cuenta tambien como plegado', () => {

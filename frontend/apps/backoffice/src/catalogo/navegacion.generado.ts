@@ -53,25 +53,63 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M15 6.6v13.2"
     ],
     "bloques": [
-      "Predio",
-      "Documentos",
+      "Predios",
       "Territorio",
-      "Valuación"
+      "Valores del ejercicio",
+      "Documentos"
     ],
     "bloquesPlegados": [
+      "Predios",
       "Territorio",
-      "Valuación"
+      "Valores del ejercicio"
     ],
     "accionPrimaria": {
       "opcion": "ficha_urbana",
       "label": "Registrar predio"
+    },
+    "destinos": {
+      "panel": {
+        "label": "Panel del módulo",
+        "nota": "Lo que te toca hoy",
+        "icono": [
+          "M3 10.6 12 3.5l9 7.1",
+          "M5.6 9.6V20.5h12.8V9.6"
+        ]
+      },
+      "Predios": {
+        "entrada": "consulta_fichas",
+        "nota": "El padrón y sus fichas",
+        "icono": [
+          "M17.4 11a6.4 6.4 0 1 1-12.8 0 6.4 6.4 0 0 1 12.8 0",
+          "M15.8 15.8 20.6 20.6"
+        ]
+      },
+      "Territorio": {
+        "nota": "Sectores, manzanas y vías",
+        "icono": [
+          "M4 4.5h6.5v6.5H4z",
+          "M13.5 4.5H20v6.5h-6.5z",
+          "M4 13.5h6.5V20H4z",
+          "M13.5 13.5H20V20h-6.5z"
+        ]
+      },
+      "Valores del ejercicio": {
+        "nota": "Aranceles y depreciación",
+        "icono": [
+          "M4 19.5h16",
+          "M6.5 19.5V9",
+          "M11 19.5V5.5",
+          "M15.5 19.5v-7",
+          "M20 19.5v-11"
+        ]
+      }
     },
     "opciones": [
       {
         "id": "ficha_urbana",
         "label": "Ficha urbana individual",
         "ranura": "ficha-urbana",
-        "bloque": "Predio",
+        "bloque": "Predios",
         "title": "Ficha catastral urbana individual",
         "resumen": "Ficha del predio urbano. El código de referencia catastral se compone de sector, manzana, lote, edificación, entrada, piso y unidad; su cambio obliga a recalcular el autovalúo."
       },
@@ -79,7 +117,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ficha_economica",
         "label": "Ficha económica",
         "ranura": "ficha-economica",
-        "bloque": "Predio",
+        "bloque": "Predios",
         "title": "Ficha catastral económica",
         "resumen": "Actividad económica que se desarrolla en la unidad catastral, usada para verificar licencias y determinar el uso real del predio."
       },
@@ -87,7 +125,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ficha_bienes",
         "label": "Bienes comunes",
         "ranura": "ficha-bienes",
-        "bloque": "Predio",
+        "bloque": "Predios",
         "title": "Ficha de bienes comunes",
         "resumen": "Áreas comunes de una edificación en régimen de propiedad exclusiva y común, cuyo valor se distribuye entre las unidades según su porcentaje de participación."
       },
@@ -95,7 +133,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ficha_rural",
         "label": "Ficha rural",
         "ranura": "ficha-rural",
-        "bloque": "Predio",
+        "bloque": "Predios",
         "title": "Ficha catastral rural",
         "resumen": "Predio rústico valorizado por hectárea según el arancel rural, el tipo de tierra y la disponibilidad de riego."
       },
@@ -103,7 +141,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "consulta_fichas",
         "label": "Consulta de fichas",
         "ranura": "consulta-fichas",
-        "bloque": "Predio",
+        "bloque": "Predios",
         "title": "Consulta de fichas catastrales",
         "resumen": "Búsqueda transversal de fichas por código, titular o ubicación, con el estado de conciliación entre catastro y el padrón de rentas."
       },
@@ -111,7 +149,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "actualizacion_catastro",
         "label": "Actualización del catastro",
         "ranura": "actualizacion-catastro",
-        "bloque": "Predio",
+        "bloque": "Predios",
         "title": "Actualización del catastro",
         "resumen": "Actualiza construcciones y otras instalaciones de una ficha ya registrada. El sistema conserva cada versión declarada y verificada por piso, con su MEP, ECS, ECC y estado de conservación."
       },
@@ -143,7 +181,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "aranceles",
         "label": "Aranceles",
         "ranura": "aranceles",
-        "bloque": "Valuación",
+        "bloque": "Valores del ejercicio",
         "title": "Aranceles de terreno",
         "resumen": "Valor oficial del metro cuadrado de terreno por vía y tramo, publicado anualmente. Es el multiplicador del área de terreno en el autovalúo."
       },
@@ -151,7 +189,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "valores_unitarios",
         "label": "Valores unitarios",
         "ranura": "valores-unitarios",
-        "bloque": "Valuación",
+        "bloque": "Valores del ejercicio",
         "title": "Valores unitarios de edificación",
         "resumen": "Tabla oficial por categoría constructiva. El sistema suma las siete partidas declaradas en la ficha y les aplica la depreciación correspondiente."
       },
@@ -159,7 +197,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "depreciacion",
         "label": "Depreciación",
         "ranura": "depreciacion",
-        "bloque": "Valuación",
+        "bloque": "Valores del ejercicio",
         "title": "Tabla de depreciación",
         "resumen": "Porcentaje que se descuenta del valor de edificación según antigüedad, material predominante (MEP) y estado de conservación (ECS)."
       }

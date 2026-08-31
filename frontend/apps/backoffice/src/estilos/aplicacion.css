@@ -185,15 +185,16 @@
   line-height: 1.2;
 }
 
+/* La municipalidad, como el artboard la escribe: caja baja y entera.
+   Venia en mayusculas y con `text-overflow`, herencia de la barra de 258 px, y
+   en las 246 del rediseño se leia «MUNICIPALIDAD PROVINCIAL DE …» — que de las
+   dos cosas que dice el nombre se comia justo la que distingue una
+   municipalidad de otra. */
 .sgtm-nav__entidad {
   margin: 5px 0 0;
-  font-size: 10px;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
+  font-size: 11.5px;
+  line-height: 1.35;
   color: var(--ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* La accion primaria del modulo (#498 F2): lo primero que se ve del panel,
@@ -297,6 +298,79 @@
   text-wrap: pretty;
 }
 
+/* —— Los destinos del panel (#498 F2b) ————————————————————————
+   La fila que el rediseño dibuja en vez de una lista de opciones: icono en su
+   caja, rotulo, y debajo la nota que dice de que va. Medidas del artboard
+   `Catastro.dc.html`. */
+
+.sgtm-nav__destino {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.sgtm-nav__destino:hover {
+  background: var(--accent-soft);
+}
+
+.sgtm-nav__destino[data-dentro='1'] {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.sgtm-nav__destino[data-dentro='1'] .sgtm-nav__destino-etiqueta {
+  font-weight: 600;
+}
+
+.sgtm-nav__destino-icono {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-2);
+  background: var(--bg-card);
+  color: var(--ink-3);
+}
+
+.sgtm-nav__destino[data-dentro='1'] .sgtm-nav__destino-icono {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contraste);
+}
+
+.sgtm-nav__destino-texto {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.sgtm-nav__destino-etiqueta {
+  display: block;
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La nota: de que va el destino. No lleva cifras —la barra se dibuja en todas
+   las pantallas, y una cifra viva aqui es una peticion por pantalla abierta—. */
+.sgtm-nav__destino-nota {
+  display: block;
+  margin-top: 1px;
+  font-size: 10.5px;
+  color: var(--ink-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Los grupos ya no se pliegan: el rotulo se queda, el acordeon se va. Lo que
    los separa es aire, no una linea mas. */
 .sgtm-nav__grupo {
@@ -353,11 +427,15 @@
   font-weight: 600;
 }
 
+/* Envuelve en vez de truncarse. Los rotulos son los del manual y no se
+   acortan (RNF-080): «Reporte de ficha del contribuyente» no cabe en una linea
+   de 246 px, y cortado —«Reporte de ficha del contribu…»— deja de decir de
+   quien es la ficha. Dos lineas cuestan altura; un rotulo cortado cuesta el
+   dato. */
 .sgtm-nav__opcion-etiqueta {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  text-wrap: pretty;
 }
 
 /* La entrada unica de un bloque plegado (ADR-0014 §5): se separa del bloque
@@ -3278,11 +3356,15 @@
   font-weight: 500;
 }
 
-.sgtm-modalidades__chip[data-apagada='1'] {
+/* La modalidad que **no se abre con este codigo** (#498 F2b). Sigue
+   distinguiendose del resto —borde discontinuo, tinta mas floja—, pero es un
+   enlace: lleva a su propia pantalla, donde se teclea el identificador con el
+   que si se abre. Apagada dejaba a `ficha_rural` sin que ninguna superficie la
+   alcanzara. */
+.sgtm-modalidades__chip[data-otro-codigo='1'] {
   border-style: dashed;
   background: transparent;
   color: var(--ink-3);
-  cursor: not-allowed;
 }
 
 .sgtm-modalidades__motivo {

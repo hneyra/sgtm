@@ -170,7 +170,15 @@ describe('la paleta de comandos', () => {
     const usuario = userEvent.setup();
     montarEnRuta('/inicio/inicio');
 
-    await usuario.click(screen.getByRole('button', { name: 'Buscar en el sistema' }));
+    /* **Acotado a la cabecera**: los dos buscadores —el de la cabecera y el del
+       panel— abren la misma paleta y desde #498 F2b se llaman igual. Antes no
+       colisionaban por accidente: el del panel rotulaba «Buscar en el sistema»
+       y el `Ctrl K` de al lado entraba en su nombre calculado, asi que la
+       cadena exacta solo casaba con el de la cabecera. Ahora el panel dice
+       «Buscar» —como el artboard— y lleva el nombre completo en `aria-label`,
+       que es lo correcto y hace que sean dos. Se elige uno a proposito. */
+    const cabecera = screen.getByRole('banner');
+    await usuario.click(within(cabecera).getByRole('button', { name: 'Buscar en el sistema' }));
     const paleta = screen.getByRole('dialog');
     expect(within(paleta).getByText('10 de 134 opciones')).toBeInTheDocument();
 

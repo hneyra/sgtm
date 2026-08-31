@@ -74,15 +74,6 @@ const REGISTRO_DE_MUESTRA: Readonly<Record<string, string>> = {
   actualizacion_catastro: PREDIO,
 };
 
-const rutaDeMuestra = (modulo: ModuloDelCatalogo, opcion: { readonly id: string }): string => {
-  const situada = modulo.opciones.find((o) => o.id === opcion.id);
-  if (situada === undefined) throw new Error(`«${opcion.id}» no es una opcion de ${modulo.id}`);
-  const registro = REGISTRO_DE_MUESTRA[opcion.id];
-  return registro === undefined
-    ? rutaDeOpcion(modulo, situada)
-    : `${rutaDeOpcion(modulo, situada)}/${registro}`;
-};
-
 /**
  * Las opciones del modulo a las que **enlaza** lo que hay dibujado ahora mismo,
  * fuera de la barra lateral.
@@ -122,28 +113,57 @@ async function alcanzablesDesdeLaSuperficie(
   if (entrada === undefined) return new Set();
 
   const vistas = new Set<string>([entrada.id]);
+  /* **Cada opcion se visita en sus dos estados, y hace falta.** Una ficha
+     abierta ensena el conmutador de modalidad y **no** el enlace al buscador
+     —volver a preguntar el predio encima del que se esta leyendo era la sexta
+     forma de buscar lo mismo—; sin predio abierto pasa justo lo contrario. Las
+     dos son estados reales de la misma pantalla, y el menu enlaza a la de
+     **sin registro**: `EntradaPlegada` usa `rutaDeOpcion`, sin codigo.
+     Recorrer solo con registro daba `consulta_fichas` por inalcanzable siendo
+     el enlace que el usuario ve nada mas entrar. */
   const porVisitar = [entrada.id];
   while (porVisitar.length > 0) {
     const id = porVisitar.shift() as string;
-    const montada = montarEnRuta(rutaDeMuestra(modulo, { id }));
-    /* Se espera a que aparezca **la navegacion de la superficie**, que es lo
+    for (const ruta of rutasDeLosDosEstados(modulo, id)) {
+      const montada = montarEnRuta(ruta);
+      /* Se espera a que aparezca **la navegacion de la superficie**, que es lo
        que se esta midiendo: el conmutador de modalidad y las pestanas de las
        hojas se dibujan las dos con `role="tablist"`. Y hay que esperarla de
        verdad: las tres superficies de Catastro llegan en su propio trozo
        (`lazy`), asi que contar enlaces en cuanto hay un `<h1>` —que lo dibuja
        la cabecera del shell, antes de que el trozo baje— contaria cero sin
        decir por que. */
-    await screen.findByRole('heading', { level: 1 });
-    await waitFor(() => expect(document.querySelector('[role="tablist"]')).not.toBeNull());
-    for (const alcanzada of opcionesEnlazadasDesdeLaPantalla(modulo.id)) {
-      if (!bloque.opciones.some((o) => o.id === alcanzada)) continue;
-      if (vistas.has(alcanzada)) continue;
-      vistas.add(alcanzada);
-      porVisitar.push(alcanzada);
+      await screen.findByRole('heading', { level: 1 });
+      /* Se espera a que **el trozo del modulo haya bajado**, no a las pestanas:
+         las superficies de ficha las dibujan, y la consulta de fichas —que es
+         una lista— no tiene ninguna. Esperar solo por `tablist` daba por
+         colgada la pantalla que no las lleva. Sirve cualquiera de las dos
+         piezas que el trozo trae: el conmutador o el bloque de busqueda. */
+      await waitFor(() =>
+        expect(document.querySelector('[role="tablist"], [aria-label="Búsqueda"]')).not.toBeNull(),
+      );
+      for (const alcanzada of opcionesEnlazadasDesdeLaPantalla(modulo.id)) {
+        if (!bloque.opciones.some((o) => o.id === alcanzada)) continue;
+        if (vistas.has(alcanzada)) continue;
+        vistas.add(alcanzada);
+        porVisitar.push(alcanzada);
+      }
+      montada.unmount();
     }
-    montada.unmount();
   }
   return vistas;
+}
+
+/**
+ * Las rutas de una opcion en sus dos estados: sin registro —la que el menu
+ * enlaza— y con el de muestra, si su ruta admite uno.
+ */
+function rutasDeLosDosEstados(modulo: ModuloDelCatalogo, id: string): readonly string[] {
+  const situada = modulo.opciones.find((o) => o.id === id);
+  if (situada === undefined) throw new Error(`«${id}» no es una opcion de ${modulo.id}`);
+  const sinRegistro = rutaDeOpcion(modulo, situada);
+  const registro = REGISTRO_DE_MUESTRA[id];
+  return registro === undefined ? [sinRegistro] : [sinRegistro, `${sinRegistro}/${registro}`];
 }
 
 beforeEach(() => {
@@ -157,17 +177,16 @@ afterEach(() => {
 });
 
 describe('la tabla decide que se pliega, y si lleva carril', () => {
-  it('Catastro pliega dos bloques y ninguno lleva carril', () => {
-    expect(CATASTRO.bloquesPlegados).toEqual(['Territorio', 'Valuación']);
+  it('Catastro pliega tres bloques y ninguno lleva carril', () => {
+    expect(CATASTRO.bloquesPlegados).toEqual(['Predios', 'Territorio', 'Valores del ejercicio']);
     expect(CATASTRO.centroDeReportes).toBeUndefined();
     expect(bloquesDe(CATASTRO).map((b) => [b.label, b.plegado, b.carril])).toEqual([
-      ['Predio', false, false],
-      // «Documentos» es de #498 F2: el reporte del contribuyente sale del grupo
-      // del predio porque no se abre con el codigo del predio, sino con el de
-      // la persona. Un grupo de uno, y separa dos identificadores distintos.
-      ['Documentos', false, false],
+      // Los cuatro destinos del artboard, en su orden (#498 F2b). Tres se
+      // pliegan; «Documentos» no, porque es uno solo y va al pie.
+      ['Predios', true, false],
       ['Territorio', true, false],
-      ['Valuación', true, false],
+      ['Valores del ejercicio', true, false],
+      ['Documentos', false, false],
     ]);
   });
 
@@ -194,43 +213,60 @@ describe('la tabla decide que se pliega, y si lleva carril', () => {
   });
 });
 
-describe('el menu de Catastro pasa de doce entradas a nueve', () => {
+describe('el menu de Catastro pasa de doce entradas a cinco', () => {
   /**
-   * Nueve y no tres, y la razon **cambio con #498 F2**: el reporte se fue a su
-   * propio grupo, asi que ya no es el que impide plegar «Predio». Lo que lo
-   * impide ahora es `ficha_rural`, y se midio en vez de suponerse: montada la
-   * ficha urbana con el predio de muestra, lo que enlaza son urbana, economica,
-   * bienes y la actualizacion —cuatro de seis—, porque `Conmutador` dibuja la
-   * rural apagada a proposito (`derivaDe = catastral && una !== 'rural'`): del
-   * codigo de referencia no sale `codUnidad`, y ofrecerla seria un enlace a un
-   * 404. La cuenta de entradas no se mueve —seis y una donde habia siete—, pero
-   * lo que cada una agrupa si.
+   * **Cinco, que son los destinos del artboard** (#498 F2b): la portada del
+   * modulo, «Predios», «Territorio», «Valores del ejercicio» y —al pie— el
+   * documento. Falta «Mapa catastral», que no se dibuja porque no tiene
+   * operacion ni geometria servida (#500).
+   *
+   * «Predios» se pudo plegar cuando la chip de la modalidad que **no** deriva
+   * del codigo dejo de estar apagada y paso a llevar a su propia busqueda: sin
+   * eso, `ficha_rural` no la alcanzaba ninguna superficie y plegar habria
+   * escondido una opcion sin retorno. Se midio, no se supuso.
    */
-  it('seis de «Predio» y una de «Documentos», mas «Territorio» y «Valuación» plegadas', async () => {
+  it('los cuatro destinos y el documento, y ni una opcion suelta', async () => {
     montarEnRuta('/catastro/consulta-fichas');
     await screen.findByRole('heading', { level: 1 });
 
     const entradas = within(menuDeCatastro()).getAllByRole('link');
-    expect(entradas).toHaveLength(9);
-    expect(entradas.filter((e) => e.textContent?.startsWith('Territorio'))).toHaveLength(1);
-    expect(entradas.filter((e) => e.textContent?.startsWith('Valuación'))).toHaveLength(1);
-    // Y las cinco del territorio y del cuadro ya no se listan una a una.
-    for (const rotulo of ['Vías y calles', 'Sectores y manzanas', 'Aranceles', 'Depreciación']) {
+    expect(entradas).toHaveLength(5);
+    expect(entradas.map((e) => e.textContent)).toEqual([
+      expect.stringContaining('Panel del módulo'),
+      expect.stringContaining('Predios'),
+      expect.stringContaining('Territorio'),
+      expect.stringContaining('Valores del ejercicio'),
+      'Reporte de ficha del contribuyente',
+    ]);
+    // Y las once que absorben los tres pliegues ya no se listan una a una.
+    for (const rotulo of [
+      'Ficha urbana individual',
+      'Consulta de fichas',
+      'Vías y calles',
+      'Sectores y manzanas',
+      'Aranceles',
+      'Depreciación',
+    ]) {
       expect(within(menuDeCatastro()).queryByText(rotulo)).not.toBeInTheDocument();
     }
   });
 
-  it('cada entrada plegada dice cuantas hay dentro y abre la primera', async () => {
+  it('cada destino dice cuantas hay dentro, de que va, y abre la primera', async () => {
     montarEnRuta('/catastro/consulta-fichas');
     await screen.findByRole('heading', { level: 1 });
 
+    const predios = within(menuDeCatastro()).getByRole('link', { name: /^Predios/ });
+    expect(predios).toHaveTextContent('El padrón y sus fichas');
+    expect(predios).toHaveTextContent('6');
+    expect(predios).toHaveAttribute('href', '/catastro/consulta-fichas');
+
     const territorio = within(menuDeCatastro()).getByRole('link', { name: /^Territorio/ });
-    expect(territorio).toHaveTextContent('Territorio2');
+    expect(territorio).toHaveTextContent('Sectores, manzanas y vías');
     expect(territorio).toHaveAttribute('href', '/catastro/calles');
 
-    const valuacion = within(menuDeCatastro()).getByRole('link', { name: /^Valuación/ });
-    expect(valuacion).toHaveTextContent('Valuación3');
-    expect(valuacion).toHaveAttribute('href', '/catastro/aranceles');
+    const valores = within(menuDeCatastro()).getByRole('link', { name: /^Valores del ejercicio/ });
+    expect(valores).toHaveTextContent('Aranceles y depreciación');
+    expect(valores).toHaveAttribute('href', '/catastro/aranceles');
   });
 
   it('la entrada abre la primera que el perfil puede ver, no la primera del catalogo', async () => {
@@ -243,7 +279,7 @@ describe('el menu de Catastro pasa de doce entradas a nueve', () => {
 
     await waitFor(() => {
       const entrada = within(menuDeCatastro()).getByRole('link', { name: /^Territorio/ });
-      expect(entrada).toHaveTextContent('Territorio1');
+      expect(entrada).toHaveTextContent('1');
       expect(entrada).toHaveAttribute('href', '/catastro/sectores');
     });
   });
@@ -254,10 +290,15 @@ describe('el menu de Catastro pasa de doce entradas a nueve', () => {
     await screen.findByRole('heading', { level: 1 });
 
     await waitFor(() => {
-      expect(within(menuDeCatastro()).getAllByRole('link')).toHaveLength(1);
+      // Dos: la portada del modulo —que se dibuja porque queda algo visible en
+      // el— y «Predios», que es donde vive la unica opcion que este perfil ve.
+      expect(within(menuDeCatastro()).getAllByRole('link')).toHaveLength(2);
     });
     expect(within(menuDeCatastro()).queryByText(/^Territorio/)).not.toBeInTheDocument();
-    expect(within(menuDeCatastro()).queryByText(/^Valuación/)).not.toBeInTheDocument();
+    expect(within(menuDeCatastro()).queryByText(/^Valores del ejercicio/)).not.toBeInTheDocument();
+    expect(
+      within(menuDeCatastro()).queryByText('Reporte de ficha del contribuyente'),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -280,9 +321,9 @@ describe('plegar sin carril no dibuja ningun carril', () => {
   it('el hub distingue las dos frases: carril y sin carril', async () => {
     montarEnRuta('/catastro');
 
-    const tarjeta = (await screen.findByRole('heading', { level: 3, name: 'Valuación' })).closest(
-      'section',
-    ) as HTMLElement;
+    const tarjeta = (
+      await screen.findByRole('heading', { level: 3, name: 'Valores del ejercicio' })
+    ).closest('section') as HTMLElement;
     const filas = within(tarjeta).getAllByRole('link');
     expect(filas).toHaveLength(1);
     expect(filas[0]).toHaveAttribute('href', '/catastro/aranceles');
@@ -325,7 +366,12 @@ describe('las doce opciones de Catastro siguen alcanzables', () => {
       [...(await alcanzablesDesdeLaSuperficie(CATASTRO, bloqueDeCatastro('Territorio')))].sort(),
     ).toEqual(['calles', 'sectores']);
     expect(
-      [...(await alcanzablesDesdeLaSuperficie(CATASTRO, bloqueDeCatastro('Valuación')))].sort(),
+      [
+        ...(await alcanzablesDesdeLaSuperficie(
+          CATASTRO,
+          bloqueDeCatastro('Valores del ejercicio'),
+        )),
+      ].sort(),
     ).toEqual(['aranceles', 'depreciacion', 'valores_unitarios']);
   });
 });

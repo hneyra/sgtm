@@ -62,3 +62,24 @@ export function accionPrimariaDe(
   moduloId: string,
   tabla?: TablaDeAccionesPrimarias,
 ): AccionPrimaria | null;
+
+/**
+ * Como se ensena un grupo en el panel lateral: su icono, y una nota que dice de
+ * que va. `panel` no es un grupo del catalogo sino la portada del modulo.
+ */
+export interface DestinoDeModulo {
+  readonly label?: string;
+  /** Que opcion abre, si no es la primera del grupo. Cae a la primera visible. */
+  readonly entrada?: string;
+  readonly nota: string;
+  readonly icono: readonly string[];
+}
+
+export type TablaDeDestinos = Readonly<Record<string, Readonly<Record<string, DestinoDeModulo>>>>;
+
+export const DESTINOS: TablaDeDestinos;
+
+export function destinosDe(
+  moduloId: string,
+  tabla?: TablaDeDestinos,
+): Readonly<Record<string, DestinoDeModulo>> | null;
