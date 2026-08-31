@@ -644,8 +644,7 @@ function Bloques({
             if (declaradaDeFila.registro !== undefined && (registro === undefined || registro === ''))
               return undefined;
             const base =
-              registro === undefined || registro === ''
-                ? destinoDeFila.ruta
+              registro === undefined || registro === ''                ? destinoDeFila.ruta
                 : `${destinoDeFila.ruta}/${encodeURIComponent(registro)}`;
             const consulta = new URLSearchParams(parametros).toString();
             return consulta === '' ? base : `${base}?${consulta}`;
@@ -687,7 +686,8 @@ function Bloques({
      Catastro y no haria nada en Rentas, **sin decirlo**. Se abre el primero
      declarado porque un modulo declara una accion primaria, no dos. */
   const flujoAbierto = nuevoEnLaUrl && composicion.flujo !== undefined;
-  const altaPorLaUrl = nuevoEnLaUrl && composicion.flujo === undefined && (composicion.altas ?? []).length > 0;
+  const altaPorLaUrl =
+    nuevoEnLaUrl && composicion.flujo === undefined && (composicion.altas ?? []).length > 0;
 
   /* **Con un registro abierto, la lista y su buscador dan paso** (#503). Es la
      decision de #391 §3 —«volver a preguntarlo encima de la ficha que se esta
@@ -1034,7 +1034,11 @@ function Bloques({
 
       {/* Y lo que hay que saber **de lo que se esta mirando**: que es una copia
           de trabajo y el padron todavia no la recoge (#80). */}
-      {aviso !== undefined && <Aviso titulo={aviso.titulo} detalle={aviso.detalle} />}
+      {/* La nota permanente de esta opcion: `tipo="nota"`, que es una franja
+          compacta y no el bloque centrado del vacio. Con la forma del vacio,
+          las veinte notas del sistema se dibujaban como si la pantalla no
+          tuviera nada que ensenar, encima justo de lo que si tenia. */}
+      {aviso !== undefined && <Aviso tipo="nota" titulo={aviso.titulo} detalle={aviso.detalle} />}
 
       {estructura.kind === 'dash' && (
         <Suspense fallback={<Esqueleto alto={240} />}>

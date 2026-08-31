@@ -239,7 +239,11 @@ export function Territorio({ estructura }: { readonly estructura: EstructuraDePa
 
       <FechaDeCalculo {...(datos?.fechaCalculo ? { fecha: datos.fechaCalculo } : {})} />
 
-      {aviso !== undefined && <Aviso titulo={aviso.titulo} detalle={aviso.detalle} />}
+      {/* La nota permanente de esta opcion: `tipo="nota"`, que es una franja
+          compacta y no el bloque centrado del vacio. Con la forma del vacio,
+          las veinte notas del sistema se dibujaban como si la pantalla no
+          tuviera nada que ensenar, encima justo de lo que si tenia. */}
+      {aviso !== undefined && <Aviso tipo="nota" titulo={aviso.titulo} detalle={aviso.detalle} />}
 
       {/* La cabecera-resumen del territorio, en la ranura que le toca: arriba
           del todo, a lo ancho y antes de cualquier filtro. Sin permiso sobre

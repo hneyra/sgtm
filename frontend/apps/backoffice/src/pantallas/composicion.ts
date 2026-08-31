@@ -618,8 +618,7 @@ export interface ComposicionDeOpcion {
      * Sale de los valores crudos y no del texto dibujado, por lo mismo que
      * {@link registro}.
      */
-    readonly nombraCon?: (valores: Readonly<Record<string, string>>) => string | undefined;
-  };
+    readonly nombraCon?: (valores: Readonly<Record<string, string>>) => string | undefined;  };
   /**
    * **La lista y el expediente no se dibujan a la vez** (#503).
    *

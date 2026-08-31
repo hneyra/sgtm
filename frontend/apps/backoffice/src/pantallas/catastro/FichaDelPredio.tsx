@@ -574,7 +574,11 @@ export function FichaDelPredio({ estructura }: { readonly estructura: Estructura
 
       <FechaDeCalculo {...(datos?.fechaCalculo ? { fecha: datos.fechaCalculo } : {})} />
 
-      {aviso !== undefined && <Aviso titulo={aviso.titulo} detalle={aviso.detalle} />}
+      {/* La nota permanente de esta opcion: `tipo="nota"`, que es una franja
+          compacta y no el bloque centrado del vacio. Con la forma del vacio,
+          las veinte notas del sistema se dibujaban como si la pantalla no
+          tuviera nada que ensenar, encima justo de lo que si tenia. */}
+      {aviso !== undefined && <Aviso tipo="nota" titulo={aviso.titulo} detalle={aviso.detalle} />}
 
       <ResumenDeFicha
         {...(codigo === undefined ? {} : { codigo })}

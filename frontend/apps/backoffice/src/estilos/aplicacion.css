@@ -1670,6 +1670,20 @@
   align-items: end;
 }
 
+/* Plegada, la busqueda es una sola fila: el control y su boton al lado (#498).
+   En rejilla el boton caia en una celda propia debajo, y la caja con la que se
+   busca quedaba separada de lo que la manda. */
+.sgtm-filtros__rejilla[data-una-fila='1'] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.sgtm-filtros__rejilla[data-una-fila='1'] > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .sgtm-filtros__rejilla .sgtm-boton--primario {
   height: 38px;
 }

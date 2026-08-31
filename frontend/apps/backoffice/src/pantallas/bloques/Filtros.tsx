@@ -108,7 +108,10 @@ export function Filtros({
           Limpiar
         </Boton>
       </div>
-      <div className="sgtm-filtros__rejilla">
+      {/* Con el panel plegado la fila es **[control · Buscar]**, como el
+          artboard: el boton al lado de la caja y no debajo. Desplegado vuelve a
+          ser rejilla, porque entonces hay cuatro controles que repartir. */}
+      <div className="sgtm-filtros__rejilla" data-una-fila={pliega && !abierto ? '1' : '0'}>
         {visibles.map((campo) => {
           const cambiar = (valor: string): void =>
             fijarBorrador((previos) => ({ ...previos, [campo.clave]: valor }));
