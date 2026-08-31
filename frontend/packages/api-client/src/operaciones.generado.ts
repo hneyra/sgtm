@@ -340,6 +340,13 @@ export const OPERACIONES = {
     parametrosDeRuta: ['id'],
     parametrosDeConsulta: ['fecha'],
   },
+  /** Vehiculos de un contribuyente — `GET /rentas/vehiculos` */
+  vehiculos_del_contribuyente: {
+    metodo: 'GET',
+    ruta: '/rentas/vehiculos',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: ['contribuyente', 'fecha'],
+  },
   /** Mudanza: cierra el domicilio anterior y abre el nuevo — `POST /rentas/contribuyentes/{id}/domicilios` */
   mudar_contribuyente: {
     metodo: 'POST',
@@ -1684,6 +1691,11 @@ export interface ParametrosPorOperacion {
     readonly id: string;
     readonly fecha?: string;
   };
+  /** `GET /rentas/vehiculos` */
+  readonly vehiculos_del_contribuyente: {
+    readonly contribuyente?: string;
+    readonly fecha?: string;
+  };
   /** `POST /rentas/contribuyentes/{id}/domicilios` */
   readonly mudar_contribuyente: {
     readonly id: string;
@@ -2828,6 +2840,7 @@ export interface CuerpoPorOperacion {
   readonly registrar_contribuyente: CuerpoSinEsquema;
   readonly modificar_contribuyente: CuerpoSinEsquema;
   readonly ficha_del_contribuyente: undefined;
+  readonly vehiculos_del_contribuyente: undefined;
   readonly mudar_contribuyente: CuerpoSinEsquema;
   readonly registrar_contacto: CuerpoSinEsquema;
   readonly modificar_contacto: CuerpoSinEsquema;
@@ -3028,6 +3041,7 @@ export interface RespuestaPorOperacion {
   readonly registrar_contribuyente: CuerpoSinEsquema;
   readonly modificar_contribuyente: CuerpoSinEsquema;
   readonly ficha_del_contribuyente: CuerpoSinEsquema;
+  readonly vehiculos_del_contribuyente: CuerpoSinEsquema;
   readonly mudar_contribuyente: CuerpoSinEsquema;
   readonly registrar_contacto: CuerpoSinEsquema;
   readonly modificar_contacto: CuerpoSinEsquema;

@@ -1702,6 +1702,48 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/vehiculos":
+    get:
+      operationId: vehiculos_del_contribuyente
+      summary: "Vehiculos de un contribuyente"
+      description: >-
+        Los vehículos de un contribuyente, con su deuda a la fecha (#524).
+
+        **La consulta ya existía y la sirve este mismo contexto** —ConsultaVehiculosController,
+        GET /consultas/vehiculos—, pero bajo la opción del módulo **Consultas** y su permiso. El
+        expediente del contribuyente de Rentas (#503 F2) no puede tomarla prestada de ahí: las
+        conexiones de la interfaz llegan con el trozo de su módulo (#433), y quien tenga Rentas y
+        no Consultas vería un aviso de permiso ajeno dentro de su propio expediente.
+
+        Va detrás del permiso de la opción «Ficha de vehículo» —la de Rentas que ya existe— y
+        **exige el contribuyente**: sin él, quien sólo tiene ese permiso pasaría de necesitar la
+        placa para ver una ficha a poder listar el padrón vehicular entero.
+
+        La fila es la misma que publica /consultas/vehiculos: dos formas distintas de la misma
+        lectura dirían dos cosas del mismo vehículo, y la que se leyera en el expediente sería la
+        que nadie compara.
+      tags: ["Rentas · Registro"]
+      parameters:
+        - name: contribuyente
+          in: query
+          required: false
+          description: "Codigo del contribuyente. OBLIGATORIO: sin el, esto seria una segunda puerta al padron vehicular entero detras de un permiso mas estrecho que el de Consultas."
+          schema: { type: string }
+        - name: fecha
+          in: query
+          required: false
+          description: "Fecha de corte de la deuda (regla 9). Ausente, hoy."
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/rentas/contribuyentes/{id}/domicilios":
     post:
       operationId: mudar_contribuyente

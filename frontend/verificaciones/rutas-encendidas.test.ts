@@ -331,8 +331,11 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
   /* 125 desde #503 F7: `registrar_contribuyente` deja de estar pendiente al
      declarar su lista blanca en `escrituras.ts`. Es el alta del padron de
      Rentas, que hasta ahora no tenia formulario que la mandara. */
-  it('listas para encender: 125', () => {
-    expect(listas.length).toBe(125);
+  /* 126 desde #524: `vehiculos_del_contribuyente` nace lista —tiene controlador,
+     conexion y adaptador el mismo dia—. Es la coleccion que el expediente del
+     contribuyente necesitaba y que solo existia bajo la opcion de Consultas. */
+  it('listas para encender: 126', () => {
+    expect(listas.length).toBe(126);
   });
 
   /* 68 desde #500: `plano_catastral` entra pendiente y no lista, aunque su lado
