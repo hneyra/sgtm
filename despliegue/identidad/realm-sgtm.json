@@ -27,11 +27,13 @@
       "serviceAccountsEnabled": false,
       "redirectUris": [
         "http://localhost:5173/*",
-        "http://localhost:8081/*"
+        "http://localhost:8081/*",
+        "https://vmd205066.contaboserver.net/*"
       ],
       "webOrigins": [
         "http://localhost:5173",
-        "http://localhost:8081"
+        "http://localhost:8081",
+        "https://vmd205066.contaboserver.net"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
