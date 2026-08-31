@@ -1,5 +1,10 @@
 -- Las tres capas del plano que no tenian geometria (issue #527).
 --
+-- Nacio como V62 y se renumero: #523 tomo ese hueco con la corrida de emision
+-- predial mientras esto se escribia. Dos migraciones con el mismo numero no
+-- fallan al escribirlas —Flyway las rechaza al aplicarlas—, asi que conviene
+-- mirar el hueco libre justo antes de empujar y no justo despues de empezar.
+--
 -- `V61` se la dio a `predio` y su ADR lo dijo con todas las letras: «lo que hay
 -- es una columna, su indice y el camino que la llena». El artboard del visor
 -- pide cinco capas y solo esa podia dibujarse; las otras tres —vias, manzanas y
