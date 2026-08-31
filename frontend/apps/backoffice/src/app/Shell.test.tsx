@@ -39,7 +39,9 @@ describe('la barra lateral de dos niveles', () => {
        municipalidad, y el otro sitio donde se lee —el chip de la cabecera— esta
        dentro de un boton que tambien lo tapa con su `aria-label`. Quedaba en
        ninguna parte. `aria-describedby` lo devuelve: primero a donde lleva el
-       enlace, y despues donde se esta. */
+       enlace, y despues donde se esta. Desde el rediseño la marca vive en el
+       riel y la municipalidad en la cabecera del panel; la descripcion cruza
+       los dos, que es justo lo que `aria-describedby` sabe hacer. */
     montarEnRuta('/tesoreria/caja-tributaria');
 
     const marca = await screen.findByRole('link', { name: 'Inicio: a quién atiendes' });
@@ -51,50 +53,73 @@ describe('la barra lateral de dos niveles', () => {
     montarEnRuta('/tesoreria/caja-tributaria');
 
     const navegacion = screen.getByRole('navigation', { name: 'Opciones de Tesorería' });
-    expect(within(navegacion).getByText('Tesorería')).toBeInTheDocument();
     expect(within(navegacion).getByRole('link', { current: 'page' })).toHaveTextContent(
       'Caja tributaria',
     );
+    // Y la cabecera del panel dice de que modulo son.
+    const panel = navegacion.closest('.sgtm-nav') as HTMLElement;
+    expect(within(panel).getByText('Módulo')).toBeInTheDocument();
+    expect(within(panel).getByText('Tesorería')).toBeInTheDocument();
   });
 
-  it('«Todos los módulos» devuelve al nivel raiz sin cambiar de pantalla', async () => {
-    const usuario = userEvent.setup();
+  /**
+   * **Los dos niveles se dibujan a la vez**, que es el cambio del rediseño de
+   * Catastro: el riel de los doce modulos junto al panel del abierto. Ya no hay
+   * «Todos los modulos» porque no hay nada que conmutar, y cambiar de modulo
+   * pasa de dos pulsaciones a una.
+   */
+  it('el riel enseña los doce módulos junto al panel, con el abierto marcado', () => {
     montarEnRuta('/tesoreria/caja-tributaria');
 
-    await usuario.click(screen.getByRole('button', { name: /Todos los módulos/ }));
-
-    const navegacion = screen.getByRole('navigation', { name: 'Módulos del sistema' });
-    expect(within(navegacion).getByText('Coactiva')).toBeInTheDocument();
-    // La pantalla no se ha movido: solo cambio el nivel de la navegacion.
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Caja tributaria');
-  });
-
-  it('los bloques del modulo se pliegan uno a uno', async () => {
-    const usuario = userEvent.setup();
-    montarEnRuta('/tesoreria/caja-tributaria');
-
-    // Los bloques de Tesoreria son sus grupos por tarea (ADR-0014 §4): «Cobro
-    // en caja», «Convenios», «Recibos» y «Cierre y control».
-    const bloque = screen.getByRole('button', { name: /Cobro en caja/ });
-    expect(bloque).toHaveAttribute('aria-expanded', 'true');
-    await usuario.click(bloque);
-    expect(bloque).toHaveAttribute('aria-expanded', 'false');
-
-    // El de al lado sigue como estaba: el colapso es por bloque, no global.
-    expect(screen.getByRole('button', { name: /Convenios/ })).toHaveAttribute(
-      'aria-expanded',
-      'true',
+    const riel = screen.getByRole('navigation', { name: 'Módulos del sistema' });
+    // Doce modulos, mas la marca que vuelve al inicio (#296).
+    expect(within(riel).getAllByRole('link')).toHaveLength(13);
+    // Un modulo cualquiera que no es el abierto: se llega en una pulsacion.
+    expect(within(riel).getByRole('link', { name: 'Coactiva' })).toHaveAttribute(
+      'href',
+      '/coactiva',
     );
+    // El abierto se senala con `aria-current="true"`, no con `"page"`: la
+    // pagina es la opcion, y la marca el panel.
+    const actual = within(riel).getByRole('link', { name: 'Tesorería' });
+    expect(actual).toHaveAttribute('aria-current', 'true');
+    expect(actual).toHaveAttribute('data-activo', '1');
+
+    // Y el panel del modulo sigue ahi al mismo tiempo: los dos niveles a la vez
+    // es justo lo que el rediseño cambia.
+    expect(screen.getByRole('navigation', { name: 'Opciones de Tesorería' })).toBeInTheDocument();
   });
 
-  it('anota en «Recientes» la opcion visitada', async () => {
+  it('los bloques del módulo son rótulos, no acordeones', () => {
+    montarEnRuta('/tesoreria/caja-tributaria');
+
+    /* Plegar servia para que las opciones cupieran junto a los doce modulos en
+       la misma columna. Con los modulos en el riel, el panel es del modulo
+       entero: un acordeon que nunca hace falta cerrar solo anade una pulsacion
+       antes de cada opcion. Los bloques de Tesoreria son sus grupos por tarea
+       (ADR-0014 §4). */
+    const panel = screen.getByRole('navigation', { name: 'Opciones de Tesorería' });
+    const rotulos = [...panel.querySelectorAll('.sgtm-nav__eyebrow')].map((r) => r.textContent);
+    expect(rotulos).toContain('Cobro en caja');
+    expect(rotulos).toContain('Convenios');
+    // Ningun rotulo es pulsable: el acordeon se fue entero.
+    expect(within(panel).queryAllByRole('button')).toHaveLength(0);
+
+    // Y las opciones estan a la vista sin desplegar nada.
+    expect(within(panel).getByRole('link', { name: /Caja tributaria/ })).toBeInTheDocument();
+  });
+
+  it('anota en «Recientes» la opcion visitada, y los enseña en la portada', async () => {
     const usuario = userEvent.setup();
     montarEnRuta('/tesoreria/caja-tributaria');
 
-    await usuario.click(screen.getByRole('button', { name: /Todos los módulos/ }));
-    const navegacion = screen.getByRole('navigation', { name: 'Módulos del sistema' });
-    expect(within(navegacion).getByText('Recientes')).toBeInTheDocument();
-    expect(within(navegacion).getByText('Caja tributaria')).toBeInTheDocument();
+    /* Sin nivel raiz que los albergara, los recientes viven en el panel cuando
+       la ruta no esta en ningun modulo: la portada. */
+    await usuario.click(screen.getByRole('link', { name: 'Inicio: a quién atiendes' }));
+
+    const panel = screen.getByRole('navigation', { name: 'Lo último que abriste' });
+    expect(within(panel).getByText('Recientes')).toBeInTheDocument();
+    expect(within(panel).getByText('Caja tributaria')).toBeInTheDocument();
   });
 });
 

@@ -277,8 +277,8 @@ describe('la vuelta al inicio se ve que se puede pulsar', () => {
   const APLICACION = HOJAS[1] ?? '';
 
   it.each([
-    ['el puntero encima', '.sgtm-nav__cabecera:hover'],
-    ['el foco del teclado', '.sgtm-nav__cabecera:focus-visible'],
+    ['el puntero encima', '.sgtm-modulos__marca:hover'],
+    ['el foco del teclado', '.sgtm-modulos__marca:focus-visible'],
   ])('la marca responde a %s', (_que, selector) => {
     const desde = APLICACION.indexOf(`${selector} {`);
     expect(desde, `«${selector}» no existe en la hoja de la aplicacion`).toBeGreaterThanOrEqual(0);

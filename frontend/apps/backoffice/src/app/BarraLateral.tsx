@@ -1,28 +1,43 @@
-import { useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Icono, IconoDeModulo } from '@sgtm/design-system';
-import { bloquesDe, conteoDeOpciones, rutaDeModulo, rutaDeOpcion } from '../catalogo';
+import { Icono } from '@sgtm/design-system';
+import { bloquesDe, rutaDeOpcion } from '../catalogo';
 import { useCatalogoVisible } from './sesion/useCatalogoVisible';
 import type { BloqueDeNavegacion, ModuloDelCatalogo } from '../catalogo';
 import { usePreferencias } from './preferencias';
+import { RielDeModulos } from './RielDeModulos';
 
 /**
- * Barra lateral de dos niveles (FRO-03 §3).
+ * Barra lateral de dos niveles **a la vez** (FRO-03 §3, rediseño de Catastro).
  *
- * **Nivel raiz:** los recientes y los doce modulos.
- * **Nivel modulo:** vuelta a «Todos los modulos» y las opciones del modulo
- * abierto, repartidas en sus bloques colapsables —salvo los que el modulo
- * pliega (ADR-0014 §5), que son una entrada unica cada uno—.
+ * **Riel:** los doce modulos, siempre visibles, con el abierto marcado.
+ * **Panel:** el modulo abierto y sus opciones, repartidas en sus bloques —salvo
+ * los que el modulo pliega (ADR-0014 §5), que son una entrada unica cada uno—.
  *
- * El colapso se guarda por clave `modulo|bloque` para que cada bloque conserve
- * su estado con independencia de los demas, como en el prototipo.
+ * Lo que cambia respecto de la barra de un nivel, y por que:
+ *
+ * - **Se va «Todos los modulos».** Era el conmutador entre los dos niveles, y
+ *   con los dos dibujados no conmuta nada. Cambiar de modulo pasa de dos
+ *   pulsaciones a una, y deja de haber un estado —el nivel raiz— en el que la
+ *   navegacion no dice en que modulo se esta.
+ * - **Los bloques dejan de plegarse.** Plegar servia para que las opciones del
+ *   modulo cupieran junto a los doce modulos en la misma columna; con los
+ *   modulos en el riel, el panel es del modulo entero y su bloque mas largo son
+ *   siete entradas. Un acordeon que nunca hace falta cerrar es una pulsacion
+ *   antes de cada opcion. El bloque se queda como **rotulo** del grupo, que es
+ *   lo que aportaba: decir de que va lo que viene debajo.
+ *
+ *   Esto **no** toca el pliegue de ADR-0014 §5, que es otra cosa con nombre
+ *   parecido: aquel esconde las opciones de un grupo detras de una entrada
+ *   porque su superficie ya sabe navegar entre ellas, y sigue igual.
+ * - **Los recientes se quedan en el panel** cuando la ruta no esta en ningun
+ *   modulo. Sin nivel raiz que los albergara, el sitio natural es el panel de
+ *   la portada.
  */
 export interface BarraLateralProps {
-  /** Modulo abierto, o `null` en el nivel raiz. */
+  /** Modulo abierto, o `null` si la ruta no esta en ninguno. */
   readonly modulo: ModuloDelCatalogo | null;
   readonly recientes: readonly string[];
   readonly abierta: boolean;
-  readonly onVolverARaiz: () => void;
   readonly onNavegar: () => void;
   readonly onAbrirPaleta: () => void;
 }
@@ -31,12 +46,10 @@ export function BarraLateral({
   modulo,
   recientes,
   abierta,
-  onVolverARaiz,
   onNavegar,
   onAbrirPaleta,
 }: BarraLateralProps) {
   const { preferencias } = usePreferencias();
-  const [cerrados, fijarCerrados] = useState<Readonly<Record<string, boolean>>>({});
   const navegar = useNavigate();
   const catalogo = useCatalogoVisible();
 
@@ -47,7 +60,7 @@ export function BarraLateral({
     .map((id) => catalogo.opciones.find((o) => o.id === id))
     .filter((o): o is NonNullable<typeof o> => o !== undefined);
 
-  /* El nivel modulo lista **el modulo que este usuario ve**, no el del catalogo
+  /* El panel lista **el modulo que este usuario ve**, no el del catalogo
      entero: la ruta se resuelve contra las 134 —es la que da el titulo de la
      cabecera—, y dibujar sus opciones sin filtrar delataba las que sus permisos
      niegan al entrar por la URL (REQ-03 §5). Si de este modulo no ve ninguna,
@@ -62,130 +75,88 @@ export function BarraLateral({
         });
 
   return (
-    <aside className="sgtm-nav" data-abierta={abierta ? '1' : '0'}>
-      {/* La marca es **la vuelta al inicio** (#296). Desde que `/` dejo de ser
-          un desvio al panel de recaudacion y pasa a ser la pregunta de a quien
-          se atiende, hacia falta un camino de vuelta: no es una opcion del
-          catalogo, asi que ni el menu ni el lanzador ni la paleta llegan a ella.
-          El de siempre —la marca de arriba a la izquierda— es el que no hay que
-          explicarle a nadie.
+    <>
+      <RielDeModulos
+        moduloActivo={abierto?.id ?? null}
+        entidad={preferencias.entidad}
+        onNavegar={onNavegar}
+      />
 
-          El `aria-label` **sustituye** al contenido en el arbol accesible, y con
-          el se iba de ahi el nombre de la municipalidad: la cabecera de la
-          aplicacion tampoco lo deja —su boton lleva `aria-label={«Menú de …»}`,
-          que tapa el chip donde se lee—, asi que el dato no se anunciaba en
-          ninguna parte. `aria-describedby` lo devuelve como descripcion del
-          enlace: primero a donde lleva, y despues donde se esta. */}
-      <Link
-        className="sgtm-nav__cabecera"
-        to="/"
-        onClick={onNavegar}
-        aria-label="Inicio: a quién atiendes"
-        aria-describedby="sgtm-nav-entidad"
-      >
-        <div className="sgtm-nav__marca" aria-hidden="true">
-          S
-        </div>
-        <div className="sgtm-nav__identidad">
-          <div className="sgtm-nav__producto">SGTM</div>
-          <div className="sgtm-nav__entidad" id="sgtm-nav-entidad" title={preferencias.entidad}>
+      <aside className="sgtm-nav" data-abierta={abierta ? '1' : '0'}>
+        {/* La cabecera del panel dice **donde se esta**, y es la unica del shell
+            que nombra la municipalidad: la marca del riel lleva `aria-label`, que
+            sustituye a su contenido, y el chip de la cabecera de la aplicacion
+            vive dentro de un boton que tambien lo tapa con el suyo. De aqui lo
+            toma el `aria-describedby` de la marca. */}
+        <div className="sgtm-nav__cabecera">
+          <p className="sgtm-nav__eyebrow sgtm-nav__eyebrow--cabecera">
+            {abierto === null ? 'Sistema' : 'Módulo'}
+          </p>
+          <p className="sgtm-nav__titulo">{abierto?.label ?? 'SGTM'}</p>
+          <p className="sgtm-nav__entidad" id="sgtm-nav-entidad" title={preferencias.entidad}>
             {preferencias.entidad}
-          </div>
+          </p>
         </div>
-      </Link>
 
-      <div className="sgtm-nav__buscador">
-        <button type="button" onClick={onAbrirPaleta}>
-          <Icono nombre="lupa" tamano={15} />
-          <span>Buscar en el sistema</span>
-          <kbd>Ctrl K</kbd>
-        </button>
-      </div>
-
-      {abierto === null ? (
-        <nav className="sgtm-nav__lista" aria-label="Módulos del sistema">
-          {visitados.length > 0 && (
-            <>
-              <p className="sgtm-nav__eyebrow">Recientes</p>
-              {visitados.map((opcion) => (
-                <button
-                  key={opcion.id}
-                  type="button"
-                  className="sgtm-nav__reciente"
-                  onClick={() => {
-                    navegar(opcion.ruta);
-                    onNavegar();
-                  }}
-                >
-                  <span className="sgtm-nav__reciente-etiqueta">{opcion.label}</span>
-                  <span className="sgtm-nav__reciente-modulo">{opcion.modulo.label}</span>
-                </button>
-              ))}
-              <hr className="sgtm-nav__divisor" />
-            </>
-          )}
-          <p className="sgtm-nav__eyebrow">Módulos</p>
-          {catalogo.modulos.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              className="sgtm-nav__modulo"
-              onClick={() => {
-                navegar(rutaDeModulo(m));
-                onNavegar();
-              }}
-            >
-              <span className="sgtm-nav__icono">
-                <IconoDeModulo trazos={m.icono} tamano={16} />
-              </span>
-              <span className="sgtm-nav__modulo-texto">
-                <span className="sgtm-nav__modulo-etiqueta">{m.label}</span>
-                <span className="sgtm-nav__modulo-conteo">{conteoDeOpciones(m)}</span>
-              </span>
-              <Icono nombre="chevronDerecha" tamano={14} />
-            </button>
-          ))}
-        </nav>
-      ) : (
-        <nav className="sgtm-nav__lista" aria-label={`Opciones de ${abierto.label}`}>
-          <button type="button" className="sgtm-nav__volver" onClick={onVolverARaiz}>
-            <Icono nombre="chevronIzquierda" tamano={14} />
-            Todos los módulos
+        <div className="sgtm-nav__buscador">
+          <button type="button" onClick={onAbrirPaleta}>
+            <Icono nombre="lupa" tamano={15} />
+            <span>Buscar en el sistema</span>
+            <kbd>Ctrl K</kbd>
           </button>
-          <p className="sgtm-nav__modulo-actual">{abierto.label}</p>
-          {bloquesDe(abierto).map((bloque) => {
-            // Las opciones de un bloque plegado no se listan: son **una**
-            // entrada que abre su superficie (ADR-0014 §5). Que esa superficie
-            // sea un carril de hojas o las pestanas de una pantalla es cosa de
-            // la pantalla, no del menu: aqui los dos se dibujan igual.
-            if (bloque.plegado) {
+        </div>
+
+        {abierto === null ? (
+          <nav className="sgtm-nav__lista" aria-label="Lo último que abriste">
+            {visitados.length > 0 ? (
+              <>
+                <p className="sgtm-nav__eyebrow">Recientes</p>
+                {visitados.map((opcion) => (
+                  <button
+                    key={opcion.id}
+                    type="button"
+                    className="sgtm-nav__reciente"
+                    onClick={() => {
+                      navegar(opcion.ruta);
+                      onNavegar();
+                    }}
+                  >
+                    <span className="sgtm-nav__reciente-etiqueta">{opcion.label}</span>
+                    <span className="sgtm-nav__reciente-modulo">{opcion.modulo.label}</span>
+                  </button>
+                ))}
+              </>
+            ) : (
+              /* El vacio dice la causa y la salida, como los demas de este
+                 rediseño: aqui la salida son los doce iconos de al lado. */
+              <p className="sgtm-nav__vacio">
+                Elige un módulo en la columna de la izquierda, o busca con Ctrl K. Lo que abras
+                quedará aquí.
+              </p>
+            )}
+          </nav>
+        ) : (
+          <nav className="sgtm-nav__lista" aria-label={`Opciones de ${abierto.label}`}>
+            {bloquesDe(abierto).map((bloque) => {
+              // Las opciones de un bloque plegado no se listan: son **una**
+              // entrada que abre su superficie (ADR-0014 §5). Que esa superficie
+              // sea un carril de hojas o las pestanas de una pantalla es cosa de
+              // la pantalla, no del menu: aqui los dos se dibujan igual. Y no
+              // lleva rotulo de grupo encima porque el rotulo **es** la entrada.
+              if (bloque.plegado) {
+                return (
+                  <EntradaPlegada
+                    key={bloque.label}
+                    modulo={abierto}
+                    bloque={bloque}
+                    onNavegar={onNavegar}
+                  />
+                );
+              }
               return (
-                <EntradaPlegada
-                  key={bloque.label}
-                  modulo={abierto}
-                  bloque={bloque}
-                  onNavegar={onNavegar}
-                />
-              );
-            }
-            const clave = `${abierto.id}|${bloque.label}`;
-            const cerrado = cerrados[clave] === true;
-            return (
-              <div key={bloque.label}>
-                <button
-                  type="button"
-                  className="sgtm-nav__bloque"
-                  aria-expanded={!cerrado}
-                  onClick={() => fijarCerrados((previos) => ({ ...previos, [clave]: !cerrado }))}
-                >
-                  <span className="sgtm-nav__caret" data-cerrado={cerrado ? '1' : '0'}>
-                    <Icono nombre="chevronAbajo" tamano={12} />
-                  </span>
-                  <span className="sgtm-nav__bloque-etiqueta">{bloque.label}</span>
-                  <span className="sgtm-nav__bloque-conteo">{bloque.opciones.length}</span>
-                </button>
-                {!cerrado &&
-                  bloque.opciones.map((opcion) => (
+                <div key={bloque.label} className="sgtm-nav__grupo">
+                  <p className="sgtm-nav__eyebrow">{bloque.label}</p>
+                  {bloque.opciones.map((opcion) => (
                     <NavLink
                       key={opcion.id}
                       to={rutaDeOpcion(abierto, opcion)}
@@ -200,12 +171,13 @@ export function BarraLateral({
                       )}
                     </NavLink>
                   ))}
-              </div>
-            );
-          })}
-        </nav>
-      )}
-    </aside>
+                </div>
+              );
+            })}
+          </nav>
+        )}
+      </aside>
+    </>
   );
 }
 

@@ -47,13 +47,111 @@
   background: rgba(26, 22, 18, 0.34);
 }
 
-/* —— Barra lateral ————————————————————————————————————————————
-   `--nav-alto` lo fija la densidad elegida: 8 | 10 | 13 px. Un cajero trabaja
-   en compacta ocho horas al dia. */
+/* —— Riel de modulos ——————————————————————————————————————————
+   El primero de los dos niveles: 68 px de acento que no se van nunca. Medidas
+   del artboard `Catastro.dc.html`.
+
+   Lo que va **encima** del acento sale de `--accent-contraste` y no de `#fff`:
+   en tema oscuro el acento se aclara —`colors.css` lo razona— y un blanco a
+   mano dejaria el riel entero a 1,98:1. Las translucidas se componen del mismo
+   token con `color-mix`, asi que el riel sigue al tema sin una sola regla en
+   `[data-theme='dark']`. */
+
+.sgtm-modulos {
+  flex: 0 0 68px;
+  width: 68px;
+  background: var(--accent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 0 16px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 61;
+}
+
+.sgtm-modulos__marca {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent-contraste) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-contraste) 20%, transparent);
+  color: var(--accent-contraste);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-bottom: 12px;
+}
+
+.sgtm-modulos__marca:hover {
+  background: color-mix(in srgb, var(--accent-contraste) 26%, transparent);
+}
+
+/* Los dos anillos van sueltos y no agrupados a proposito: `contraste.test.ts`
+   busca el bloque de la marca por su selector exacto —la vuelta al inicio tiene
+   que verse que se pulsa (#296), y eso solo se comprueba leyendo la hoja—.
+   Agrupado, el selector queda seguido de una coma y la comprobacion dejaria de
+   encontrarlo sin que nada se hubiera roto de verdad. */
+.sgtm-modulos__marca:focus-visible {
+  outline: 2px solid var(--accent-contraste);
+  outline-offset: 2px;
+}
+
+.sgtm-modulos__modulo:focus-visible {
+  outline: 2px solid var(--accent-contraste);
+  outline-offset: 2px;
+}
+
+.sgtm-modulos__modulo {
+  width: 44px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  /* 62 % del contraste sobre el acento: el icono inactivo se lee sin competir
+     con el del modulo abierto, que va al 100 %. */
+  color: color-mix(in srgb, var(--accent-contraste) 62%, transparent);
+}
+
+.sgtm-modulos__modulo:hover {
+  background: color-mix(in srgb, var(--accent-contraste) 12%, transparent);
+  color: var(--accent-contraste);
+}
+
+.sgtm-modulos__modulo[data-activo='1'] {
+  background: color-mix(in srgb, var(--accent-contraste) 18%, transparent);
+  color: var(--accent-contraste);
+}
+
+/* El rotulo existe para el arbol accesible y no para la vista: 68 px no dan
+   para «Infracciones administrativas». No es `display:none`, que lo sacaria
+   tambien de ahi. */
+.sgtm-modulos__rotulo {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* —— Panel del modulo ——————————————————————————————————————————
+   El segundo nivel. `--nav-alto` lo fija la densidad elegida: 8 | 10 | 13 px.
+   Un cajero trabaja en compacta ocho horas al dia. */
 
 .sgtm-nav {
-  width: 258px;
-  flex: 0 0 258px;
+  width: 246px;
+  flex: 0 0 246px;
   background: var(--bg-elev);
   border-right: 1px solid var(--line);
   display: flex;
@@ -61,61 +159,34 @@
   overflow-y: auto;
 }
 
-/* Es un enlace: la vuelta al inicio que pregunta a quien se atiende (#296). */
+/* Ya no es un enlace: la vuelta al inicio (#296) es la marca del riel, que es
+   lo unico que no cambia al navegar. Aqui queda lo que la cabecera decia
+   ademas de eso —donde se esta y a quien se atiende—. */
 .sgtm-nav__cabecera {
-  color: inherit;
-  text-decoration: none;
   position: sticky;
   top: 0;
   z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 16px 14px;
+  padding: 16px 16px 13px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-elev);
 }
 
-/* Y **se ve que es un enlace**: sin esto, la unica vuelta al inicio (#296) era
-   un bloque de marca que no reaccionaba a nada, asi que nadie lo pulsaba. El
-   anillo va por dentro porque la cabecera es `sticky` y llega a los dos bordes:
-   fuera se lo comeria el borde de la barra. */
-.sgtm-nav__cabecera:hover {
-  background: var(--accent-soft);
+.sgtm-nav__eyebrow--cabecera {
+  margin: 0 0 2px;
+  padding: 0;
 }
 
-.sgtm-nav__cabecera:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.sgtm-nav__marca {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: var(--accent-contraste);
-  display: grid;
-  place-items: center;
+.sgtm-nav__titulo {
+  margin: 0;
   font-family: var(--font-serif);
-  font-size: 16px;
+  font-size: 19px;
   font-weight: 600;
-}
-
-.sgtm-nav__identidad {
+  letter-spacing: -0.01em;
   line-height: 1.2;
-  min-width: 0;
-}
-
-.sgtm-nav__producto {
-  font-family: var(--font-serif);
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
 }
 
 .sgtm-nav__entidad {
+  margin: 5px 0 0;
   font-size: 10px;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -193,9 +264,26 @@
 }
 
 .sgtm-nav__reciente:hover,
-.sgtm-nav__modulo:hover,
 .sgtm-nav__opcion:hover {
   background: var(--accent-soft);
+}
+
+/* El vacio del panel en la portada: dice la causa —no has abierto nada— y la
+   salida —el riel de al lado, o Ctrl K—, como los demas vacios del rediseño. */
+.sgtm-nav__vacio {
+  margin: 4px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
+  text-wrap: pretty;
+}
+
+/* Los grupos ya no se pliegan: el rotulo se queda, el acordeon se va. Lo que
+   los separa es aire, no una linea mas. */
+.sgtm-nav__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .sgtm-nav__reciente-etiqueta {
@@ -212,115 +300,14 @@
   color: var(--ink-4);
 }
 
-.sgtm-nav__divisor {
-  height: 1px;
-  border: 0;
-  background: var(--line);
-  margin: 10px 8px 4px;
-}
-
-.sgtm-nav__modulo {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  width: 100%;
-  padding: calc(var(--nav-alto, 10px) + 2px) 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  text-align: left;
-  color: var(--ink-4);
-}
-
-.sgtm-nav__icono {
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  background: var(--bg-card);
-  border: 1px solid var(--line-2);
-  color: var(--ink-3);
-}
-
-.sgtm-nav__modulo-texto {
-  flex: 1;
-  min-width: 0;
-  line-height: 1.25;
-}
-
-.sgtm-nav__modulo-etiqueta {
-  display: block;
-  font-size: 13.5px;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sgtm-nav__modulo-conteo {
-  display: block;
-  font-size: 10.5px;
-  color: var(--ink-4);
-}
-
-.sgtm-nav__volver {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 8px;
-  border: 0;
-  background: transparent;
-  font-size: 12px;
-  color: var(--ink-3);
-  text-align: left;
-}
-
-.sgtm-nav__volver:hover {
-  color: var(--accent-ink);
-}
-
-.sgtm-nav__modulo-actual {
-  margin: 0;
-  padding: 4px 8px 8px;
-  font-family: var(--font-serif);
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.sgtm-nav__bloque {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
-  margin: 10px 0 2px;
-  padding: 4px 8px;
-  border: 0;
-  background: transparent;
-  text-align: left;
-}
-
-.sgtm-nav__caret,
 .sgtm-seccion__caret {
   display: inline-flex;
   color: var(--ink-4);
   transition: transform 0.15s ease;
 }
 
-.sgtm-nav__caret[data-cerrado='1'],
 .sgtm-seccion__caret[data-cerrada='1'] {
   transform: rotate(-90deg);
-}
-
-.sgtm-nav__bloque-etiqueta {
-  flex: 1;
-  font-size: 10px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--ink-4);
 }
 
 .sgtm-nav__bloque-conteo,
@@ -1931,14 +1918,18 @@
 }
 
 /* —— Responsive ———————————————————————————————————————————————
-   ≤1080px la barra lateral pasa a cajon; ≤760px desaparece lo accesorio. */
+   ≤1080px el panel pasa a cajon; ≤760px desaparece lo accesorio.
+
+   **El riel se queda.** Es lo que hace que en movil siga habiendo navegacion
+   sin abrir nada: el cajon se desliza a su derecha —de ahi el `left: 68px`— y
+   los doce modulos no se van. */
 
 @media (max-width: 1080px) {
   .sgtm-nav {
     position: fixed;
     z-index: 60;
-    inset: 0 auto 0 0;
-    transform: translateX(-101%);
+    inset: 0 auto 0 68px;
+    transform: translateX(-110%);
     transition: transform 0.2s ease;
   }
 
@@ -1968,6 +1959,7 @@
   /* Lo que sale de la municipalidad es la hoja y nada mas (RNF-084). Todo lo que
      es interfaz lleva `data-no-imprimible` y lo esconde `base.css` del design
      system; aqui van las dos piezas del shell que no lo llevan. */
+  .sgtm-modulos,
   .sgtm-nav,
   .sgtm-cabecera {
     display: none !important;
