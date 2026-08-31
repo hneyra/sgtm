@@ -56,6 +56,8 @@ vi.mock('../composicion', () => ({
   memoriaDeSeccion: () => undefined,
   // Ni ningun control anadido (#422): eso lo mira `formulario-controles.test.tsx`.
   controlesDeLaSeccion: () => [],
+  // Ni ninguna tabla prestada (#503 F2).
+  tablasDeLaSeccion: () => [],
 }));
 
 const { Formulario } = await import('./Formulario');
