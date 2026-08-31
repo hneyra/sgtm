@@ -1188,6 +1188,94 @@ const OPERACIONES_ADICIONALES = {
         ' reemplaza.',
     },
     {
+      operationId: 'registrar_titular_del_predio',
+      metodo: 'post',
+      ruta: '/api/v1/catastro/predios/{predioId}/titulares',
+      titulo: 'Alta de una cuota de titularidad',
+      descripcionesDeRuta: {
+        predioId: 'El predio, por el `predioId` que publica cada fila de la consulta de fichas',
+      },
+      descripcion: bloque(`
+        Declara **de quién es** el predio (#490, RF-005): el primer titular, o uno más de una
+        copropiedad. Hasta aquí la titularidad se podía leer y transferir, pero **el primer titular
+        no se podía registrar por HTTP** — sólo se transfiere lo que ya tiene dueño, y lo único que
+        daba el primero era la siembra o el bloque de titular del alta de ficha.
+
+        \`condicion\` decide si hace falta \`porcentaje\`: sólo \`PROPIETARIO_UNICO\` lo es por el
+        total. Declarar una **copropiedad** es registrar dos o más cuotas.
+
+        **Pasarse del 100 % es 409, y lo dice la base.** La suma de cuotas vigentes la vigila un
+        disparador *diferido*, que habla al confirmar; tiene que ser diferido para que una
+        transferencia —cerrar una cuota y abrir otra en la misma transacción— sea posible, porque
+        entre las dos operaciones el total pasa de 100 a propósito.
+
+        No reabre D-12 ([ADR-0019]): una titularidad que no llega al 100 % se registra igual, y
+        determina sólo la porción con titular identificado.
+
+        Exige \`REGISTRO\` sobre \`actualizacion_catastro\` —quien declara de quién es un predio
+        está actualizando el catastro, no consultando el padrón— y la observación del usuario
+        (RNF-052).
+      `),
+    },
+    {
+      operationId: 'inquilinos_del_predio',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/predios/{predioId}/inquilinos',
+      titulo: 'Quién ocupa el predio, a una fecha',
+      descripcionesDeRuta: {
+        predioId: 'El predio, por el `predioId` que publica cada fila de la consulta de fichas',
+      },
+      parametros: [
+        {
+          nombre: 'fecha',
+          ejemplo: '2026-08-30',
+          descripcion:
+            'Fecha a la que se resuelve la ocupacion; si falta, hoy. Quien ocupaba el predio en' +
+            ' marzo no es necesariamente quien lo ocupa hoy, y una determinacion de arbitrios de' +
+            ' marzo se explica con el de marzo (regla 9)',
+        },
+      ],
+      descripcion: bloque(`
+        Los ocupantes del predio vigentes a la fecha (#490, #31). El manual los registra para la
+        cobranza de arbitrios.
+
+        Existe porque terminar una ocupación exige decir **cuál**, y ninguna lectura publicaba ese
+        identificador.
+      `),
+    },
+    {
+      operationId: 'registrar_inquilino',
+      metodo: 'post',
+      ruta: '/api/v1/catastro/predios/{predioId}/inquilinos',
+      titulo: 'Alta de inquilino',
+      descripcionesDeRuta: {
+        predioId: 'El predio, por el `predioId` que publica cada fila de la consulta de fichas',
+      },
+      descripcion: bloque(`
+        Registra a quien ocupa el predio sin ser su dueño (#490, #31). El inquilino entra por su
+        **código de contribuyente** —para cobrarle hay que poder notificarle, y el domicilio cuelga
+        del padrón—, con el documento que sustenta el registro y la observación del usuario.
+      `),
+    },
+    {
+      operationId: 'finalizar_inquilino',
+      metodo: 'put',
+      ruta: '/api/v1/catastro/predios/{predioId}/inquilinos/{inquilinoId}',
+      titulo: 'Fin de la ocupación',
+      descripcionesDeRuta: {
+        predioId: 'El predio, por el `predioId` que publica cada fila de la consulta de fichas',
+        inquilinoId: 'La ocupación abierta que se termina, por el id que publica su listado',
+      },
+      descripcion: bloque(`
+        Termina la ocupación en una fecha (#490). **No borra** (regla 4, RNF-051): una
+        determinación de arbitrios anterior pudo apoyarse en ella, y explicarla exige que la fila
+        siga ahí.
+
+        Una ocupación ya cerrada es 404 — no hay tal ocupación abierta que terminar. Exige
+        \`ELIMINACION\`, el privilegio que el manual reserva para las bajas lógicas.
+      `),
+    },
+    {
       operationId: 'inscribir_predio',
       metodo: 'post',
       ruta: '/api/v1/catastro/predios',

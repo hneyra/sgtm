@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas cincuenta y siete operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas sesenta y una operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -183,8 +183,13 @@ describe('las operaciones generadas son las del contrato', () => {
     //     secundario de `POST /catastro/fichas/…` o de la carga cartografica del
     //     perfil `batch`, asi que registrar un lote recien numerado obligaba a
     //     inventarle una ficha.
+    //   - Las cuatro de la titularidad y la ocupacion (#490):
+    //     `registrar_titular_del_predio`, `inquilinos_del_predio`,
+    //     `registrar_inquilino` y `finalizar_inquilino`. La titularidad se podia
+    //     leer (#366) y transferir (#29), pero EL PRIMER TITULAR no se podia
+    //     registrar por HTTP: solo se transfiere lo que ya tiene dueno.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(191);
+    expect(Object.keys(OPERACIONES)).toHaveLength(195);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

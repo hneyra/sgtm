@@ -712,6 +712,179 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/predios/{predioId}/titulares":
+    post:
+      operationId: registrar_titular_del_predio
+      summary: "Alta de una cuota de titularidad"
+      description: >-
+        Declara **de quién es** el predio (#490, RF-005): el primer titular, o uno más de una
+        copropiedad. Hasta aquí la titularidad se podía leer y transferir, pero **el primer titular
+        no se podía registrar por HTTP** — sólo se transfiere lo que ya tiene dueño, y lo único que
+        daba el primero era la siembra o el bloque de titular del alta de ficha.
+
+        `condicion` decide si hace falta `porcentaje`: sólo `PROPIETARIO_UNICO` lo es por el
+        total. Declarar una **copropiedad** es registrar dos o más cuotas.
+
+        **Pasarse del 100 % es 409, y lo dice la base.** La suma de cuotas vigentes la vigila un
+        disparador *diferido*, que habla al confirmar; tiene que ser diferido para que una
+        transferencia —cerrar una cuota y abrir otra en la misma transacción— sea posible, porque
+        entre las dos operaciones el total pasa de 100 a propósito.
+
+        No reabre D-12 ([ADR-0019]): una titularidad que no llega al 100 % se registra igual, y
+        determina sólo la porción con titular identificado.
+
+        Exige `REGISTRO` sobre `actualizacion_catastro` —quien declara de quién es un predio
+        está actualizando el catastro, no consultando el padrón— y la observación del usuario
+        (RNF-052).
+      tags: ["Catastro"]
+      parameters:
+        - name: predioId
+          in: path
+          required: true
+          description: "El predio, por el `predioId` que publica cada fila de la consulta de fichas"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+    get:
+      operationId: titulares_del_predio
+      summary: "Titulares del predio, con su código de contribuyente"
+      description: "Quién es titular de un predio a una fecha, con el código con el que se entra a su ficha de contribuyente. Es la resolución que la fila de `consulta_fichas` necesita para poder enlazar con la persona: la grilla publica el nombre del titular y no su identificador, y añadirlo allí convertiría «quien puede listar fichas» en «quien puede cosechar la correlación predio→persona de toda la municipalidad» (ADR-0015 §2.4). Por eso se resuelve **al clic, de un predio cada vez**: exige privilegio de lectura sobre `contribuyentes` —el permiso del padrón, no el de la pantalla desde la que se hace clic— y cada resolución deja fila en la bitácora con operación ACCESO, la devuelva o no algún titular. Devuelve la **lista** de cuotas vigentes, no «el» titular: un predio puede tener varios —dos cónyuges, una sucesión, un condominio—, cada uno con su porcentaje. La respuesta dice siempre a qué fecha contesta (regla 9, RNF-075). Del padrón no viaja nada más: ni el identificador interno del contribuyente, ni su documento; y de la titularidad, ni sus fechas ni el documento que la sustenta."
+      tags: ["Rentas · Registro"]
+      parameters:
+        - name: predioId
+          in: path
+          required: true
+          description: "El predio, por el `predioId` que publica cada fila de la consulta de fichas"
+          schema: { type: string }
+        - name: vigenteA
+          in: query
+          required: false
+          description: "Fecha a la que se resuelve la titularidad; si falta, hoy. La titularidad de marzo no es la de setiembre, y la respuesta dice siempre a cuál contesta (regla 9)"
+          schema: { type: string }
+          example: "2026-08-28"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/predios/{predioId}/inquilinos":
+    get:
+      operationId: inquilinos_del_predio
+      summary: "Quién ocupa el predio, a una fecha"
+      description: >-
+        Los ocupantes del predio vigentes a la fecha (#490, #31). El manual los registra para la
+        cobranza de arbitrios.
+
+        Existe porque terminar una ocupación exige decir **cuál**, y ninguna lectura publicaba ese
+        identificador.
+      tags: ["Catastro"]
+      parameters:
+        - name: predioId
+          in: path
+          required: true
+          description: "El predio, por el `predioId` que publica cada fila de la consulta de fichas"
+          schema: { type: string }
+        - name: fecha
+          in: query
+          required: false
+          description: "Fecha a la que se resuelve la ocupacion; si falta, hoy. Quien ocupaba el predio en marzo no es necesariamente quien lo ocupa hoy, y una determinacion de arbitrios de marzo se explica con el de marzo (regla 9)"
+          schema: { type: string }
+          example: "2026-08-30"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+    post:
+      operationId: registrar_inquilino
+      summary: "Alta de inquilino"
+      description: >-
+        Registra a quien ocupa el predio sin ser su dueño (#490, #31). El inquilino entra por su
+        **código de contribuyente** —para cobrarle hay que poder notificarle, y el domicilio cuelga
+        del padrón—, con el documento que sustenta el registro y la observación del usuario.
+      tags: ["Catastro"]
+      parameters:
+        - name: predioId
+          in: path
+          required: true
+          description: "El predio, por el `predioId` que publica cada fila de la consulta de fichas"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/predios/{predioId}/inquilinos/{inquilinoId}":
+    put:
+      operationId: finalizar_inquilino
+      summary: "Fin de la ocupación"
+      description: >-
+        Termina la ocupación en una fecha (#490). **No borra** (regla 4, RNF-051): una
+        determinación de arbitrios anterior pudo apoyarse en ella, y explicarla exige que la fila
+        siga ahí.
+
+        Una ocupación ya cerrada es 404 — no hay tal ocupación abierta que terminar. Exige
+        `ELIMINACION`, el privilegio que el manual reserva para las bajas lógicas.
+      tags: ["Catastro"]
+      parameters:
+        - name: predioId
+          in: path
+          required: true
+          description: "El predio, por el `predioId` que publica cada fila de la consulta de fichas"
+          schema: { type: string }
+        - name: inquilinoId
+          in: path
+          required: true
+          description: "La ocupación abierta que se termina, por el id que publica su listado"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/catastro/predios":
     post:
       operationId: inscribir_predio
@@ -1386,34 +1559,6 @@ paths:
             schema: { type: object }
       responses:
         201:
-          description: Operacion realizada
-          content:
-            application/json:
-              schema: { type: object }
-        "403":
-          $ref: "#/components/responses/SinMunicipalidad"
-        "422":
-          $ref: "#/components/responses/ErrorDeValidacion"
-  "/catastro/predios/{predioId}/titulares":
-    get:
-      operationId: titulares_del_predio
-      summary: "Titulares del predio, con su código de contribuyente"
-      description: "Quién es titular de un predio a una fecha, con el código con el que se entra a su ficha de contribuyente. Es la resolución que la fila de `consulta_fichas` necesita para poder enlazar con la persona: la grilla publica el nombre del titular y no su identificador, y añadirlo allí convertiría «quien puede listar fichas» en «quien puede cosechar la correlación predio→persona de toda la municipalidad» (ADR-0015 §2.4). Por eso se resuelve **al clic, de un predio cada vez**: exige privilegio de lectura sobre `contribuyentes` —el permiso del padrón, no el de la pantalla desde la que se hace clic— y cada resolución deja fila en la bitácora con operación ACCESO, la devuelva o no algún titular. Devuelve la **lista** de cuotas vigentes, no «el» titular: un predio puede tener varios —dos cónyuges, una sucesión, un condominio—, cada uno con su porcentaje. La respuesta dice siempre a qué fecha contesta (regla 9, RNF-075). Del padrón no viaja nada más: ni el identificador interno del contribuyente, ni su documento; y de la titularidad, ni sus fechas ni el documento que la sustenta."
-      tags: ["Rentas · Registro"]
-      parameters:
-        - name: predioId
-          in: path
-          required: true
-          description: "El predio, por el `predioId` que publica cada fila de la consulta de fichas"
-          schema: { type: string }
-        - name: vigenteA
-          in: query
-          required: false
-          description: "Fecha a la que se resuelve la titularidad; si falta, hoy. La titularidad de marzo no es la de setiembre, y la respuesta dice siempre a cuál contesta (regla 9)"
-          schema: { type: string }
-          example: "2026-08-28"
-      responses:
-        200:
           description: Operacion realizada
           content:
             application/json:

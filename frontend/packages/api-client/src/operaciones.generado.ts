@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 191 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 195 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 191 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 195 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 191 operaciones del contrato, por su `operationId`.
+ * Las 195 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 191 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 195 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -156,6 +156,41 @@ export const OPERACIONES = {
     metodo: 'PUT',
     ruta: '/catastro/fichas/bienes-comunes/{codEdificacion}/actualizacion',
     parametrosDeRuta: ['codEdificacion'],
+    parametrosDeConsulta: [],
+  },
+  /** Titulares del predio, con su código de contribuyente — `GET /catastro/predios/{predioId}/titulares` */
+  titulares_del_predio: {
+    metodo: 'GET',
+    ruta: '/catastro/predios/{predioId}/titulares',
+    parametrosDeRuta: ['predioId'],
+    parametrosDeConsulta: ['vigenteA'],
+  },
+  /** Alta de una cuota de titularidad — `POST /catastro/predios/{predioId}/titulares` */
+  registrar_titular_del_predio: {
+    metodo: 'POST',
+    ruta: '/catastro/predios/{predioId}/titulares',
+    parametrosDeRuta: ['predioId'],
+    parametrosDeConsulta: [],
+  },
+  /** Quién ocupa el predio, a una fecha — `GET /catastro/predios/{predioId}/inquilinos` */
+  inquilinos_del_predio: {
+    metodo: 'GET',
+    ruta: '/catastro/predios/{predioId}/inquilinos',
+    parametrosDeRuta: ['predioId'],
+    parametrosDeConsulta: ['fecha'],
+  },
+  /** Alta de inquilino — `POST /catastro/predios/{predioId}/inquilinos` */
+  registrar_inquilino: {
+    metodo: 'POST',
+    ruta: '/catastro/predios/{predioId}/inquilinos',
+    parametrosDeRuta: ['predioId'],
+    parametrosDeConsulta: [],
+  },
+  /** Fin de la ocupación — `PUT /catastro/predios/{predioId}/inquilinos/{inquilinoId}` */
+  finalizar_inquilino: {
+    metodo: 'PUT',
+    ruta: '/catastro/predios/{predioId}/inquilinos/{inquilinoId}',
+    parametrosDeRuta: ['predioId', 'inquilinoId'],
     parametrosDeConsulta: [],
   },
   /** Padrón de predios del catastro — `GET /catastro/predios` */
@@ -283,13 +318,6 @@ export const OPERACIONES = {
     ruta: '/rentas/contribuyentes',
     parametrosDeRuta: [],
     parametrosDeConsulta: [],
-  },
-  /** Titulares del predio, con su código de contribuyente — `GET /catastro/predios/{predioId}/titulares` */
-  titulares_del_predio: {
-    metodo: 'GET',
-    ruta: '/catastro/predios/{predioId}/titulares',
-    parametrosDeRuta: ['predioId'],
-    parametrosDeConsulta: ['vigenteA'],
   },
   /** Corrección o baja del contribuyente — `PUT /rentas/contribuyentes/{id}` */
   modificar_contribuyente: {
@@ -1385,7 +1413,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 191 operaciones. */
+/** El `operationId` de una de las 195 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1503,6 +1531,29 @@ export interface ParametrosPorOperacion {
   readonly actualizar_ficha_bienes: {
     readonly codEdificacion: string;
   };
+  /** `GET /catastro/predios/{predioId}/titulares` */
+  readonly titulares_del_predio: {
+    readonly predioId: string;
+    readonly vigenteA?: string;
+  };
+  /** `POST /catastro/predios/{predioId}/titulares` */
+  readonly registrar_titular_del_predio: {
+    readonly predioId: string;
+  };
+  /** `GET /catastro/predios/{predioId}/inquilinos` */
+  readonly inquilinos_del_predio: {
+    readonly predioId: string;
+    readonly fecha?: string;
+  };
+  /** `POST /catastro/predios/{predioId}/inquilinos` */
+  readonly registrar_inquilino: {
+    readonly predioId: string;
+  };
+  /** `PUT /catastro/predios/{predioId}/inquilinos/{inquilinoId}` */
+  readonly finalizar_inquilino: {
+    readonly predioId: string;
+    readonly inquilinoId: string;
+  };
   /** `GET /catastro/predios` */
   readonly listado_de_predios: {
     readonly codRefCatastral?: string;
@@ -1610,11 +1661,6 @@ export interface ParametrosPorOperacion {
   };
   /** `POST /rentas/contribuyentes` */
   readonly registrar_contribuyente: Readonly<Record<string, never>>;
-  /** `GET /catastro/predios/{predioId}/titulares` */
-  readonly titulares_del_predio: {
-    readonly predioId: string;
-    readonly vigenteA?: string;
-  };
   /** `PUT /rentas/contribuyentes/{id}` */
   readonly modificar_contribuyente: {
     readonly id: string;
@@ -2742,6 +2788,11 @@ export interface CuerpoPorOperacion {
   readonly actualizacion_catastro: CuerpoSinEsquema;
   readonly actualizar_ficha_economica: CuerpoSinEsquema;
   readonly actualizar_ficha_bienes: CuerpoSinEsquema;
+  readonly titulares_del_predio: undefined;
+  readonly registrar_titular_del_predio: CuerpoSinEsquema;
+  readonly inquilinos_del_predio: undefined;
+  readonly registrar_inquilino: CuerpoSinEsquema;
+  readonly finalizar_inquilino: CuerpoSinEsquema;
   readonly listado_de_predios: undefined;
   readonly inscribir_predio: CuerpoSinEsquema;
   readonly dar_de_baja_predio: CuerpoSinEsquema;
@@ -2760,7 +2811,6 @@ export interface CuerpoPorOperacion {
   readonly depreciacion: undefined;
   readonly contribuyentes: undefined;
   readonly registrar_contribuyente: CuerpoSinEsquema;
-  readonly titulares_del_predio: undefined;
   readonly modificar_contribuyente: CuerpoSinEsquema;
   readonly ficha_del_contribuyente: undefined;
   readonly mudar_contribuyente: CuerpoSinEsquema;
@@ -2937,6 +2987,11 @@ export interface RespuestaPorOperacion {
   readonly actualizacion_catastro: CuerpoSinEsquema;
   readonly actualizar_ficha_economica: CuerpoSinEsquema;
   readonly actualizar_ficha_bienes: CuerpoSinEsquema;
+  readonly titulares_del_predio: CuerpoSinEsquema;
+  readonly registrar_titular_del_predio: CuerpoSinEsquema;
+  readonly inquilinos_del_predio: CuerpoSinEsquema;
+  readonly registrar_inquilino: CuerpoSinEsquema;
+  readonly finalizar_inquilino: CuerpoSinEsquema;
   readonly listado_de_predios: CuerpoSinEsquema;
   readonly inscribir_predio: CuerpoSinEsquema;
   readonly dar_de_baja_predio: CuerpoSinEsquema;
@@ -2955,7 +3010,6 @@ export interface RespuestaPorOperacion {
   readonly depreciacion: CuerpoSinEsquema;
   readonly contribuyentes: CuerpoSinEsquema;
   readonly registrar_contribuyente: CuerpoSinEsquema;
-  readonly titulares_del_predio: CuerpoSinEsquema;
   readonly modificar_contribuyente: CuerpoSinEsquema;
   readonly ficha_del_contribuyente: CuerpoSinEsquema;
   readonly mudar_contribuyente: CuerpoSinEsquema;

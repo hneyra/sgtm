@@ -74,6 +74,14 @@ class ContratoDeApiTest {
                     // desde #16 y ningun endpoint la llamaba: un predio solo nacia como efecto
                     // secundario de inscribir su ficha, o por la carga cartografica de #487.
                     "POST /catastro/predios",
+                    // #490 — la titularidad y la ocupacion. `registrarTitularidad`,
+                    // `registrarInquilino` y `finalizarInquilino` existian desde #16 y #31 y
+                    // ninguno se publicaba: el primer titular de un predio no se podia registrar
+                    // por HTTP, solo transferir lo que ya tenia dueno.
+                    "POST /catastro/predios/{predioId}/titulares",
+                    "GET /catastro/predios/{predioId}/inquilinos",
+                    "POST /catastro/predios/{predioId}/inquilinos",
+                    "PUT /catastro/predios/{predioId}/inquilinos/{inquilinoId}",
                     "POST /catastro/predios/{predioId}/baja",
                     "POST /catastro/predios/{predioId}/reactivacion",
                     "GET /catastro/tablas/aranceles",
