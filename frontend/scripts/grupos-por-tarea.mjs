@@ -465,6 +465,30 @@ export const DESTINOS = {
       nota: 'El padrón y sus fichas',
       icono: ['M17.4 11a6.4 6.4 0 1 1-12.8 0 6.4 6.4 0 0 1 12.8 0', 'M15.8 15.8 20.6 20.6'],
     },
+    /* **El unico destino que no es un grupo del catalogo, aparte de la
+       portada** (#500, ADR-0022). No lo puede ser: no tiene ninguna de las 134
+       opciones dentro —las 134 siguen siendo 134— y lo que abre es una ruta del
+       modulo, `/catastro/mapa`, sin id y sin permiso propio (ADR-0014 §5).
+
+       Va detras de «Predios» porque el artboard lo pone ahi, y no al final: el
+       mapa es la otra forma de encontrar un predio —«por manzana y lote, que es
+       como la gente lo piensa»—, asi que su sitio es al lado de la busqueda y
+       no junto a los cuadros del ejercicio.
+
+       La nota es la del artboard, sin cifras, por lo mismo que las demas: la
+       barra se dibuja en todas las pantallas. */
+    mapa: {
+      label: 'Mapa catastral',
+      ranura: 'mapa',
+      tras: 'Predios',
+      /* El permiso que exige es el de **encontrar un predio**, que es lo que el
+         mapa hace: pedir el de actualizar el catastro dejaria sin mapa a quien
+         solo mira (ADR-0022). Sin esto seria la unica entrada del panel que
+         ignora los permisos, igual que la portada antes de #498. */
+      exige: 'consulta_fichas',
+      nota: 'Buscar por manzana y lote',
+      icono: ['M3.5 6.6 9 4.2l6 2.4 5.5-2.4v13.2L15 19.8l-6-2.4-5.5 2.4z', 'M9 4.2v13.2'],
+    },
     Territorio: {
       nota: 'Sectores, manzanas y vías',
       icono: [
@@ -484,6 +508,72 @@ export const DESTINOS = {
 /** Los destinos de un modulo, o `null` si no declara ninguno. */
 export function destinosDe(moduloId, tabla = DESTINOS) {
   return tabla[moduloId] ?? null;
+}
+
+/** La portada del modulo: el unico destino que no es ni grupo ni ruta declarada. */
+const LA_PORTADA = 'panel';
+
+/**
+ * Comprueba los destinos de un modulo contra sus grupos.
+ *
+ * Sin esto, **el sintoma de un destino mal declarado es que no aparece**, que es
+ * exactamente el sintoma de no haberlo declarado: el panel sale con una entrada
+ * menos y nada dice cual falta. La barra lateral reparte por nombre —el destino
+ * de un grupo se busca por el rotulo del grupo—, asi que una letra distinta o
+ * una tilde de mas lo deja mudo.
+ *
+ * Las tres cosas que un destino puede ser, y ninguna mas:
+ *
+ *   `panel`          la portada del modulo, que ya es una ruta (`/:modulo`)
+ *   el nombre de un grupo   se dibuja con las opciones de ese grupo detras
+ *   una ruta del modulo     declara `ranura` y `tras`, y no tiene opciones
+ *                           dentro: es el caso del mapa catastral (#500)
+ */
+export function comprobarDestinos(moduloId, bloques, tabla = DESTINOS) {
+  const destinos = tabla[moduloId];
+  if (!destinos) return;
+  const grupos = new Set(bloques);
+  for (const [clave, destino] of Object.entries(destinos)) {
+    if (clave === LA_PORTADA) continue;
+    if (destino.ranura === undefined) {
+      if (!grupos.has(clave)) {
+        throw new Error(
+          `El destino «${clave}» de ${moduloId} no es ningun grupo del modulo y no declara` +
+            ' `ranura`: un destino es la portada, un grupo o una ruta propia, y no hay cuarta' +
+            ' forma. Si es una ruta, declara `ranura` y `tras`.',
+        );
+      }
+      continue;
+    }
+    // Un destino de ruta que ademas se llame como un grupo dibujaria dos veces
+    // el mismo rotulo, una llevando a la ruta y otra a las opciones del grupo.
+    if (grupos.has(clave)) {
+      throw new Error(
+        `El destino «${clave}» de ${moduloId} declara \`ranura\` y ademas se llama como un grupo` +
+          ' del modulo: seria dos entradas con el mismo rotulo y distinto destino.',
+      );
+    }
+    if (destino.label === undefined) {
+      throw new Error(
+        `El destino de ruta «${clave}» de ${moduloId} no declara \`label\`: su rotulo no puede` +
+          ' salir del nombre de un grupo, porque no es un grupo.',
+      );
+    }
+    if (destino.exige === undefined) {
+      throw new Error(
+        `El destino de ruta «${clave}» de ${moduloId} no declara \`exige\`: sin una opcion cuyo` +
+          ' permiso comprobar seria la unica entrada del panel que se dibuja para todo el mundo' +
+          ' (REQ-03 §5).',
+      );
+    }
+    if (destino.tras === undefined || !grupos.has(destino.tras)) {
+      throw new Error(
+        `El destino de ruta «${clave}» de ${moduloId} declara «tras: ${destino.tras}», que no es` +
+          ' ningun grupo del modulo. El orden del panel es del diseño; sin `tras` la entrada se' +
+          ' iria al final, que es otro panel.',
+      );
+    }
+  }
 }
 
 /**

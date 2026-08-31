@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 198 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 199 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 198 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 199 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 198 operaciones del contrato, por su `operationId`.
+ * Las 199 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 198 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 199 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -136,6 +136,13 @@ export const OPERACIONES = {
     ruta: '/catastro/fichas/conciliacion',
     parametrosDeRuta: [],
     parametrosDeConsulta: ['codRefCatastral', 'contribuyente', 'manzana', 'lote', 'tipo', 'conciliadaConRentas', 'ejercicio', 'fecha', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+  },
+  /** Plano catastral: los lotes de un marco — `GET /catastro/predios/plano` */
+  plano_catastral: {
+    metodo: 'GET',
+    ruta: '/catastro/predios/plano',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: ['bbox', 'codigoDeSector', 'codigoDeManzana', 'limite'],
   },
   /** Actualización del catastro — `PUT /catastro/fichas/{codigo}/actualizacion` */
   actualizacion_catastro: {
@@ -1434,7 +1441,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 198 operaciones. */
+/** El `operationId` de una de las 199 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1535,6 +1542,13 @@ export interface ParametrosPorOperacion {
     readonly tamano?: string;
     readonly ordenarPor?: string;
     readonly direccion?: string;
+  };
+  /** `GET /catastro/predios/plano` */
+  readonly plano_catastral: {
+    readonly bbox?: string;
+    readonly codigoDeSector?: string;
+    readonly codigoDeManzana?: string;
+    readonly limite?: string;
   };
   /** `PUT /catastro/fichas/{codigo}/actualizacion` */
   readonly actualizacion_catastro: {
@@ -2819,6 +2833,7 @@ export interface CuerpoPorOperacion {
   readonly registrar_ficha_rural: CuerpoSinEsquema;
   readonly consulta_fichas: undefined;
   readonly consulta_fichas_conciliacion: undefined;
+  readonly plano_catastral: undefined;
   readonly actualizacion_catastro: CuerpoSinEsquema;
   readonly actualizar_ficha_economica: CuerpoSinEsquema;
   readonly actualizar_ficha_bienes: CuerpoSinEsquema;
@@ -3021,6 +3036,7 @@ export interface RespuestaPorOperacion {
   readonly registrar_ficha_rural: CuerpoSinEsquema;
   readonly consulta_fichas: CuerpoSinEsquema;
   readonly consulta_fichas_conciliacion: CuerpoSinEsquema;
+  readonly plano_catastral: CuerpoSinEsquema;
   readonly actualizacion_catastro: CuerpoSinEsquema;
   readonly actualizar_ficha_economica: CuerpoSinEsquema;
   readonly actualizar_ficha_bienes: CuerpoSinEsquema;

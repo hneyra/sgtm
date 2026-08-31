@@ -84,6 +84,17 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
           "M15.8 15.8 20.6 20.6"
         ]
       },
+      "mapa": {
+        "label": "Mapa catastral",
+        "ranura": "mapa",
+        "tras": "Predios",
+        "exige": "consulta_fichas",
+        "nota": "Buscar por manzana y lote",
+        "icono": [
+          "M3.5 6.6 9 4.2l6 2.4 5.5-2.4v13.2L15 19.8l-6-2.4-5.5 2.4z",
+          "M9 4.2v13.2"
+        ]
+      },
       "Territorio": {
         "nota": "Sectores, manzanas y vías",
         "icono": [

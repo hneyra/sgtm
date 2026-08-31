@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Icono, IconoDeModulo } from '@sgtm/design-system';
 import { bloquesDe, rutaDeModulo, rutaDeOpcion } from '../catalogo';
@@ -204,16 +205,16 @@ export function BarraLateral({
                 onNavegar={onNavegar}
               />
             )}
-            {bloquesDe(abierto).map((bloque) => {
-              // Las opciones de un bloque plegado no se listan: son **una**
-              // entrada que abre su superficie (ADR-0014 §5). Que esa superficie
-              // sea un carril de hojas o las pestanas de una pantalla es cosa de
-              // la pantalla, no del menu: aqui los dos se dibujan igual. Y no
-              // lleva rotulo de grupo encima porque el rotulo **es** la entrada.
-              if (bloque.plegado) {
-                return (
+            {bloquesDe(abierto).map((bloque) => (
+              <Fragment key={bloque.label}>
+                {/* Las opciones de un bloque plegado no se listan: son **una**
+                    entrada que abre su superficie (ADR-0014 §5). Que esa
+                    superficie sea un carril de hojas o las pestanas de una
+                    pantalla es cosa de la pantalla, no del menu: aqui los dos
+                    se dibujan igual. Y no lleva rotulo de grupo encima porque
+                    el rotulo **es** la entrada. */}
+                {bloque.plegado ? (
                   <EntradaPlegada
-                    key={bloque.label}
                     modulo={abierto}
                     bloque={bloque}
                     {...(abierto.destinos?.[bloque.label] === undefined
@@ -221,33 +222,73 @@ export function BarraLateral({
                       : { destino: abierto.destinos[bloque.label] })}
                     onNavegar={onNavegar}
                   />
-                );
-              }
-              return (
-                <div key={bloque.label} className="sgtm-nav__grupo">
-                  <p className="sgtm-nav__eyebrow">{bloque.label}</p>
-                  {bloque.opciones.map((opcion) => (
-                    <NavLink
-                      key={opcion.id}
-                      to={rutaDeOpcion(abierto, opcion)}
-                      className="sgtm-nav__opcion"
-                      onClick={onNavegar}
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <span className="sgtm-nav__opcion-etiqueta">{opcion.label}</span>
-                          <span className="sgtm-nav__opcion-punto">{isActive ? '●' : ''}</span>
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
-                </div>
-              );
-            })}
+                ) : (
+                  <div className="sgtm-nav__grupo">
+                    <p className="sgtm-nav__eyebrow">{bloque.label}</p>
+                    {bloque.opciones.map((opcion) => (
+                      <NavLink
+                        key={opcion.id}
+                        to={rutaDeOpcion(abierto, opcion)}
+                        className="sgtm-nav__opcion"
+                        onClick={onNavegar}
+                      >
+                        {({ isActive }) => (
+                          <>
+                            <span className="sgtm-nav__opcion-etiqueta">{opcion.label}</span>
+                            <span className="sgtm-nav__opcion-punto">{isActive ? '●' : ''}</span>
+                          </>
+                        )}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+                {/* Los destinos que son una RUTA del modulo y no un grupo
+                    (#500): van intercalados donde el diseño los pone, no al
+                    final. `abierto` ya llega filtrado por permisos, asi que
+                    `exige` se resuelve mirando si la opcion que nombra sigue
+                    ahi (REQ-03 §5). */}
+                {destinosDeRutaTras(abierto, bloque.label).map(([clave, destino]) => (
+                  <Destino
+                    key={clave}
+                    destino={destino}
+                    etiqueta={destino.label ?? clave}
+                    a={`${rutaDeModulo(abierto)}/${destino.ranura ?? clave}`}
+                    exacta
+                    onNavegar={onNavegar}
+                  />
+                ))}
+              </Fragment>
+            ))}
           </nav>
         )}
       </aside>
     </>
+  );
+}
+
+/**
+ * Los destinos de ruta que van detras de este grupo, y que este perfil puede ver.
+ *
+ * **Un destino de ruta no tiene id en el catalogo ni permiso propio** —el mapa
+ * catastral es una ruta del modulo, como la portada (ADR-0014 §5)—, asi que lo
+ * que decide si se dibuja es la opcion que su `exige` nombra: `abierto` llega ya
+ * filtrado por `useCatalogoVisible`, de modo que si esa opcion no esta, este
+ * perfil no puede con lo que el destino abre (REQ-03 §5).
+ *
+ * Sin esa comprobacion seria la unica entrada del panel que se dibuja para todo
+ * el mundo, que es el defecto exacto que #498 cerro para la portada.
+ */
+function destinosDeRutaTras(
+  modulo: ModuloDelCatalogo,
+  bloque: string,
+): readonly (readonly [string, DestinoDeModulo])[] {
+  const visibles = new Set(modulo.opciones.map((opcion) => opcion.id));
+  return Object.entries(modulo.destinos ?? {}).filter(
+    ([, destino]) =>
+      destino.ranura !== undefined &&
+      destino.tras === bloque &&
+      destino.exige !== undefined &&
+      visibles.has(destino.exige),
   );
 }
 

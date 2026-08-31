@@ -238,6 +238,31 @@ const HUELLAS = [
  * se compile**, que es exactamente lo que #442 enseño y este archivo ya ha
  * aprendido tres veces.
  *
+ * **Y 149 desde #500**, el mapa catastral, que es la primera dependencia de
+ * terceros con peso del frontend. Lo medido: 146,9 antes y **147,5** despues.
+ * Los 0,6 son enteros del arranque por diseño —el destino «Mapa catastral» en
+ * `navegacion.generado.ts`, la rama de la barra lateral que dibuja un destino de
+ * ruta con su guarda de permiso, y la ruta con su puerta perezosa en
+ * `App.tsx`—: la barra se dibuja en las 134 pantallas y el enrutador es el
+ * enrutador.
+ *
+ * **Leaflet no esta ahi, y esa es la condicion con la que ADR-0022 §4 lo
+ * acepta.** Se carga con `import()` desde el lienzo y sale en la lista de
+ * a-peticion: `leaflet-src` 42,3 KB comprimidos y su hoja 6,3, mas los 4,5 de la
+ * pantalla y los 0,9 de su CSS. Quien entra a mirar un recibo no descarga nada
+ * de eso.
+ *
+ * **Y la hoja de estilos tampoco**, que es lo que hizo falta medir dos veces:
+ * escrita en `estilos/aplicacion.css` —la global, que carga `main.tsx`— dejaba
+ * el arranque en **147,9 de 148**, una decima. Movida a
+ * `pantallas/catastro/mapa.css` e importada desde el componente perezoso, viaja
+ * con su trozo. Es la primera hoja del back-office que vive fuera de la global,
+ * y el mecanismo no es nuevo: la de Leaflet ya salia asi.
+ *
+ * Se sube a 149 y no a 148 por la leccion de #442 por quinta vez: lo medido son
+ * 147,5 y CI mide ~0,3 mas, asi que **148 decidiria en verde o rojo segun donde
+ * se compile**.
+ *
  * **Y #498 F2b gasta 0,6 de ese margen** —no vuelve a subir el numero—: es la
  * reagrupacion de Catastro conforme al artboard, donde el panel deja de listar
  * opciones y pasa a dibujar **destinos** (icono, rotulo y la nota que dice de

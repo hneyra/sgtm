@@ -614,6 +614,66 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/predios/plano":
+    get:
+      operationId: plano_catastral
+      summary: "Plano catastral: los lotes de un marco"
+      description: |
+        Los lotes que caen dentro de un marco, **con su polígono**, para dibujar el plano
+        catastral (ADR-0022). La geometría sale de `predio.geometria` —`geography(MultiPolygon,
+        4326)`, ADR-0021— serializada a GeoJSON tal cual: **ni reproyectada ni simplificada**.
+        Un vértice movido es un lindero movido, y un lindero movido no se ve.
+
+        **Se acota por marco y se niega antes que recortarse.** `bbox` es obligatorio. Si
+        dentro caben más lotes que `limite`, la respuesta es **422** diciendo cuántos hay:
+        una página con los primeros dibujaría un plano al que le faltan lotes, y eso no se
+        lee como «faltan», se lee como «ahí no hay nada». Por lo mismo no pagina.
+
+        **`sinGeometria` cuenta los predios del mismo marco y los mismos filtros que no
+        tienen polígono**, y la interfaz lo dice siempre, incluso cuando es cero. Sin esa
+        cifra el visor afirma algo que no sabe: hoy no hay una sola municipalidad con
+        geometría cargada, así que lo honesto es que el plano vacío diga por qué lo está
+        —la carga cartográfica de ADR-0021— y no que parezca un distrito sin predios.
+
+        Ni un importe y ni un titular, por lo mismo que `GET /catastro/predios`: quién es
+        el propietario se resuelve al clic, de un predio cada vez, en
+        `/catastro/predios/{predioId}/titulares` (ADR-0015 §2.4). Y **ninguna área**: la del
+        polígono no es la imponible, y publicarlas juntas invita a compararlas donde no se
+        decide nada.
+      tags: ["Catastro"]
+      parameters:
+        - name: bbox
+          in: query
+          required: false
+          description: "Marco en grados WGS84, `oeste,sur,este,norte`. Obligatorio: sin él la consulta sería el padrón entero, que es lo que esta operación existe para no hacer"
+          schema: { type: string }
+          example: "-80.71,-4.92,-80.66,-4.87"
+        - name: codigoDeSector
+          in: query
+          required: false
+          description: "Filtro «Sector» de la pantalla, por código"
+          schema: { type: string }
+        - name: codigoDeManzana
+          in: query
+          required: false
+          description: "Filtro «Manzana» de la pantalla, por código"
+          schema: { type: string }
+        - name: limite
+          in: query
+          required: false
+          description: "Cuántos lotes se sirven como máximo. Si el marco contiene más, la respuesta es 422 con la cuenta; nunca los primeros `limite`"
+          schema: { type: string }
+          example: "2000"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/catastro/fichas/{codigo}/actualizacion":
     put:
       operationId: actualizacion_catastro

@@ -3,6 +3,7 @@ import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import { HubDeModulo } from '../pantallas/HubDeModulo';
 import { Pantalla } from '../pantallas/Pantalla';
 import { Atencion } from '../pantallas/atencion/Atencion';
+import { Mapa } from '../pantallas/catastro/Mapa';
 import { Inicio } from '../pantallas/inicio/Inicio';
 import { ProveedorDeEjercicio } from './ejercicio';
 import { ProveedorDePreferencias } from './preferencias';
@@ -67,6 +68,15 @@ export function App() {
                         por encima el segmento estático, y ningún módulo del
                         catálogo se llama «atencion». */}
                     <Route path="/atencion/:codigo" element={<Atencion />} />
+                    {/* El mapa catastral (#500, ADR-0022). Es una **ruta del
+                        módulo** y no una opción del catálogo —las 134 siguen
+                        siendo 134—, igual que la portada: sin id y sin permiso
+                        propio (ADR-0014 §5). Va antes de `/:moduloId/:ranura`
+                        para leerse en el orden en que se navega; React Router
+                        puntúa por encima los dos segmentos estáticos, así que
+                        `Pantalla` no llega a intentar resolver «mapa» como una
+                        de las 134. */}
+                    <Route path="/catastro/mapa" element={<Mapa />} />
                     <Route path="/:moduloId" element={<HubDeModulo />} />
                     <Route path="/:moduloId/:ranura" element={<Pantalla />} />
                     {/* El registro abierto va en la ruta, no en el estado: pegar el

@@ -818,6 +818,71 @@ const OPERACIONES_ADICIONALES = {
       ],
       paginacion: true,
     },
+    // El plano catastral (#500, ADR-0022). Cuelga de `/catastro/predios` porque
+    // el recurso es el predio, y sale de `consulta_fichas` porque **es esa misma
+    // busqueda por otro camino**: el mapa es la forma principal de encontrar un
+    // predio que el diseño promueve, «por manzana y lote, que es como la gente
+    // lo piensa». El acceso que exige es por tanto el de esta pantalla y no el
+    // de actualizar el catastro, que dejaria sin mapa a quien solo mira.
+    //
+    // NO PAGINA, y es lo unico que la distingue de toda otra lectura del
+    // sistema: un plano al que le faltan lotes se lee como un plano donde no
+    // hay lotes, asi que cuando el marco no cabe se **niega** con su cifra
+    // (ADR-0022 §2). Tampoco tiene «pagina 2» que signifique nada: no hay un
+    // orden que convierta una pagina en una porcion del territorio.
+    {
+      operationId: 'plano_catastral',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/predios/plano',
+      titulo: 'Plano catastral: los lotes de un marco',
+      descripcion: literal(`
+        Los lotes que caen dentro de un marco, **con su polígono**, para dibujar el plano
+        catastral (ADR-0022). La geometría sale de \`predio.geometria\` —\`geography(MultiPolygon,
+        4326)\`, ADR-0021— serializada a GeoJSON tal cual: **ni reproyectada ni simplificada**.
+        Un vértice movido es un lindero movido, y un lindero movido no se ve.
+
+        **Se acota por marco y se niega antes que recortarse.** \`bbox\` es obligatorio. Si
+        dentro caben más lotes que \`limite\`, la respuesta es **422** diciendo cuántos hay:
+        una página con los primeros dibujaría un plano al que le faltan lotes, y eso no se
+        lee como «faltan», se lee como «ahí no hay nada». Por lo mismo no pagina.
+
+        **\`sinGeometria\` cuenta los predios del mismo marco y los mismos filtros que no
+        tienen polígono**, y la interfaz lo dice siempre, incluso cuando es cero. Sin esa
+        cifra el visor afirma algo que no sabe: hoy no hay una sola municipalidad con
+        geometría cargada, así que lo honesto es que el plano vacío diga por qué lo está
+        —la carga cartográfica de ADR-0021— y no que parezca un distrito sin predios.
+
+        Ni un importe y ni un titular, por lo mismo que \`GET /catastro/predios\`: quién es
+        el propietario se resuelve al clic, de un predio cada vez, en
+        \`/catastro/predios/{predioId}/titulares\` (ADR-0015 §2.4). Y **ninguna área**: la del
+        polígono no es la imponible, y publicarlas juntas invita a compararlas donde no se
+        decide nada.
+      `),
+      parametros: [
+        {
+          nombre: 'bbox',
+          ejemplo: '-80.71,-4.92,-80.66,-4.87',
+          descripcion:
+            'Marco en grados WGS84, `oeste,sur,este,norte`. Obligatorio: sin él la consulta' +
+            ' sería el padrón entero, que es lo que esta operación existe para no hacer',
+        },
+        {
+          nombre: 'codigoDeSector',
+          descripcion: 'Filtro «Sector» de la pantalla, por código',
+        },
+        {
+          nombre: 'codigoDeManzana',
+          descripcion: 'Filtro «Manzana» de la pantalla, por código',
+        },
+        {
+          nombre: 'limite',
+          ejemplo: '2000',
+          descripcion:
+            'Cuántos lotes se sirven como máximo. Si el marco contiene más, la respuesta es' +
+            ' 422 con la cuenta; nunca los primeros `limite`',
+        },
+      ],
+    },
   ],
   // `declaracion_jurada` declara «GET /rentas/declaraciones/{djNro}» como su
   // endpoint —consultar la DJ ya presentada—, y hasta #365 eso era todo lo que

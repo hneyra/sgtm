@@ -30,6 +30,7 @@ import {
   accionPrimariaDe,
   asignacionPorTarea,
   destinosDe,
+  comprobarDestinos,
   bloquesPlegadosDe,
   centroDeReportesDe,
   nombresDeLosGrupos,
@@ -325,15 +326,19 @@ const modulos = NAV.map((grupo) => {
   const centro = asignacion ? centroDeReportesDe(moduloId) : null;
   const primaria = accionPrimariaDe(moduloId);
   const destinos = destinosDe(moduloId);
+  const bloques = asignacion
+    ? nombresDeLosGrupos(moduloId)
+    : BLOQUES.filter((b) => opciones.some((o) => o.bloque === b));
+  // Antes de escribir nada: un destino que no case con ningun grupo no se
+  // dibuja, y no dibujarse es indistinguible de no haberlo declarado.
+  comprobarDestinos(moduloId, bloques);
   return {
     id: moduloId,
     label: grupo.label,
     icono: ICONOS[grupo.label] ?? ['M4.5 4.5h15v15h-15z'],
     // El orden de los bloques es el de la tabla en un modulo tabulado, y el
     // de FRO-03 §4 en los demas.
-    bloques: asignacion
-      ? nombresDeLosGrupos(moduloId)
-      : BLOQUES.filter((b) => opciones.some((o) => o.bloque === b)),
+    bloques,
     ...(plegados.length === 0 ? {} : { bloquesPlegados: plegados }),
     ...(centro === null ? {} : { centroDeReportes: centro }),
     ...(primaria === null ? {} : { accionPrimaria: primaria }),
