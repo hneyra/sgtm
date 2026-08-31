@@ -43,6 +43,21 @@ export const PAGINA = 'pagina';
  */
 export const NUEVO = 'nuevo';
 
+/**
+ * La pestana abierta de una superficie, en la URL (#498 F4).
+ *
+ * Era un `useState` de `FichaDelPredio`, y con el **el enlace de lo que se esta
+ * mirando no llevaba la pestana**: quien pega la direccion de «la titularidad
+ * del predio 01-1042-0004» abria la ficha en Identificacion, y quien recarga
+ * despues de mirar Valorizacion vuelve al principio. Es la misma regla con la
+ * que el filtro, el orden y la pagina viven en la barra de direcciones
+ * (FRO-04 §5): lo que se esta viendo se puede compartir.
+ *
+ * No es un filtro: `parametrosDeBusqueda` solo manda lo que el contrato
+ * declara, asi que no viaja a ninguna peticion.
+ */
+export const PESTANA = 'pestana';
+
 export type Sentido = 'ASCENDENTE' | 'DESCENDENTE';
 
 export interface EstadoDeBusqueda {

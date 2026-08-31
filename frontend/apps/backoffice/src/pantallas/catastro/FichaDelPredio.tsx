@@ -11,7 +11,7 @@ import { composicionDe, filtrosDe } from '../composicion';
 import { useDatosDeOperacion } from '../useDatosDeOperacion';
 import { NO_DISPONIBLE, SIN_PERMISO, estadoDePantalla, textoDeError } from '../estados';
 import { avisoDe } from '../prosa';
-import { NUEVO, PAGINA, conCambio, leerBusqueda } from '../busqueda';
+import { NUEVO, PAGINA, PESTANA, conCambio, leerBusqueda } from '../busqueda';
 import { useEscritura } from '../escritura';
 import { accionesDeLaBarra } from '../actos';
 import { useFocoEnLaAccion } from '../foco';
@@ -427,9 +427,17 @@ export function FichaDelPredio({ estructura }: { readonly estructura: Estructura
 
   const { consulta, falta } = useDatosDeOperacion(conexionDeLaFicha(opcionQueLee));
 
-  const [pestana, fijarPestana] = useState<Pestana>(
-    PESTANA_INICIAL[estructura.id] ?? 'identificacion',
-  );
+  /* La pestana abierta vive en la URL (#498 F4). Con `useState`, el enlace de
+     «la titularidad de este predio» abria la ficha en Identificacion y recargar
+     la perdia. Una pestana que no existe cae en la inicial de la opcion: la
+     direccion la teclea gente, y `?pestana=titularida` no puede dejar la ficha
+     en blanco. */
+  const pestanaPedida = busqueda.get(PESTANA);
+  const pestana: Pestana = PESTANAS.some((una) => una.id === pestanaPedida)
+    ? (pestanaPedida as Pestana)
+    : (PESTANA_INICIAL[estructura.id] ?? 'identificacion');
+  const fijarPestana = (una: Pestana): void =>
+    fijarBusqueda(conCambio(busqueda, { [PESTANA]: una }), { replace: true });
   const [cerradas, fijarCerradas] = useState<Readonly<Record<string, boolean>>>({});
   /* El alta guiada abierta vive en la URL y no aqui (#498 F2), igual que en el
      renderizador comun. **Hay dos copias de este estado a proposito** —esta
