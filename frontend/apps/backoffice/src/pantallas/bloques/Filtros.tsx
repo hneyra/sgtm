@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Boton, Campo } from '@sgtm/design-system';
+import { Boton, Campo, Icono } from '@sgtm/design-system';
 import type { CampoDePantalla } from '../../catalogo';
 import { filtroBloqueado, widgetDeFiltro } from '../composicion';
 import { motivoDeFiltro } from '../prosa';
@@ -35,9 +35,32 @@ export interface FiltrosProps {
   readonly buscado: Readonly<Record<string, string>>;
   readonly cargando: boolean;
   readonly onBuscar: (valores: Readonly<Record<string, string>>) => void;
+  /**
+   * Si los filtros **de detras del primero** se pliegan tras «Búsqueda
+   * avanzada» (#498 F7).
+   *
+   * «Empieza por encontrar el predio. Un código, un nombre o una dirección
+   * bastan; los filtros de abajo solo hacen falta cuando la búsqueda devuelve
+   * demasiado.» Ese es el encargo, y el primer campo de la pantalla es el que
+   * lo cumple.
+   *
+   * **Va por pantalla y no para las noventa y siete**, por la misma razon por
+   * la que la portada del modulo se hace primero la de Catastro: cuatro filtros
+   * es la norma del catalogo —57 pantallas— y plegarlas todas de golpe cambia
+   * como se busca en el sistema entero. Catastro marca el estandar; las demas
+   * lo declaran cuando les toque.
+   */
+  readonly plegables?: boolean;
 }
 
-export function Filtros({ opcion, campos, buscado, cargando, onBuscar }: FiltrosProps) {
+export function Filtros({
+  opcion,
+  campos,
+  buscado,
+  cargando,
+  onBuscar,
+  plegables = false,
+}: FiltrosProps) {
   const [borrador, fijarBorrador] = useState<Readonly<Record<string, string>>>(() => {
     // El valor que llega de la URL pasa por el mismo embudo que el widget
     // aplica al teclear: lo que se ve y lo que se manda tienen que ser el
@@ -52,6 +75,24 @@ export function Filtros({ opcion, campos, buscado, cargando, onBuscar }: Filtros
     }
     return normalizados;
   });
+
+  /* El primero se queda a la vista y el resto se pliega. «El primero» es el
+     del catalogo, que es el que la pantalla pone delante: en la consulta de
+     fichas, el codigo de referencia catastral. */
+  const [principal, ...avanzados] = campos;
+  const pliega = plegables && avanzados.length > 0 && principal !== undefined;
+
+  /* **Un filtro plegado que trae valor abre el panel solo.** Si no, alguien
+     pega el enlace de una busqueda con «Uso = Comercio» dentro, ve la caja del
+     codigo vacia y no entiende por que salen tres filas: el filtro estaria
+     actuando y escondido. Es la misma razon por la que el contador dice cuantos
+     hay puestos. */
+  const avanzadosConValor = avanzados.filter(
+    (campo) => (buscado[campo.clave] ?? '').trim() !== '',
+  ).length;
+  const [abiertoAMano, fijarAbiertoAMano] = useState(false);
+  const abierto = !pliega || abiertoAMano || avanzadosConValor > 0;
+  const visibles = pliega && !abierto ? [principal] : campos;
 
   return (
     <section className="sgtm-tarjeta sgtm-filtros" aria-label="Búsqueda">
@@ -68,7 +109,7 @@ export function Filtros({ opcion, campos, buscado, cargando, onBuscar }: Filtros
         </Boton>
       </div>
       <div className="sgtm-filtros__rejilla">
-        {campos.map((campo) => {
+        {visibles.map((campo) => {
           const cambiar = (valor: string): void =>
             fijarBorrador((previos) => ({ ...previos, [campo.clave]: valor }));
           // **Un filtro bloqueado se dibuja y no se manda** (`composicion.ts`).
@@ -124,6 +165,30 @@ export function Filtros({ opcion, campos, buscado, cargando, onBuscar }: Filtros
           {cargando ? 'Buscando…' : 'Buscar'}
         </Boton>
       </div>
+
+      {/* «Búsqueda avanzada» (#498 F7). Va **debajo** de la caja principal y no
+          encima: lo primero de la pantalla tiene que ser con lo que se busca.
+
+          El contador no es adorno: dice cuantos de los plegados traen valor, y
+          es lo que impide que una busqueda parezca vacia teniendo filtros
+          puestos. Cuando alguno lo trae, el panel esta abierto y el boton no se
+          dibuja —cerrarlo escondería un filtro que esta actuando—. */}
+      {pliega && avanzadosConValor === 0 && (
+        <button
+          type="button"
+          className="sgtm-filtros__avanzada"
+          aria-expanded={abierto}
+          onClick={() => fijarAbiertoAMano(!abierto)}
+        >
+          <span className="sgtm-filtros__caret" data-abierto={abierto ? '1' : '0'}>
+            <Icono nombre="chevronAbajo" tamano={12} />
+          </span>
+          Búsqueda avanzada
+          <span className="sgtm-filtros__conteo">
+            {avanzados.length === 1 ? '1 criterio más' : `${avanzados.length} criterios más`}
+          </span>
+        </button>
+      )}
     </section>
   );
 }

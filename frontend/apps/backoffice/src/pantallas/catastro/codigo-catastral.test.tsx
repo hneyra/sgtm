@@ -142,8 +142,12 @@ describe('la consulta de fichas compone el codigo en sus tramos', () => {
         busqueda().getByLabelText(`Cod. Ref. Catastral · ${declarado.etiqueta}`),
       ).toBeVisible();
     }
-    // Y el resto de los filtros sigue siendo lo que era: el widget es de un
-    // campo, no del bloque.
+    /* Y el resto de los filtros sigue siendo lo que era: el widget es de un
+       campo, no del bloque. Desde #498 F7 esta pantalla los pliega tras
+       «Búsqueda avanzada» —el codigo es con lo que se busca, los otros cuatro
+       acotan cuando sobran filas—, asi que hay que desplegarlos para mirarlos.
+       Lo que la prueba dice sigue siendo lo mismo. */
+    await userEvent.click(screen.getByRole('button', { name: /Búsqueda avanzada/ }));
     expect(busqueda().getByLabelText('Contribuyente')).toBeVisible();
   });
 

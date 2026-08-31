@@ -1529,6 +1529,45 @@
   color: var(--ink-3);
 }
 
+/* «Búsqueda avanzada» (#498 F7): la fila que despliega los filtros de detrás
+   del primero. Va debajo de la caja principal, porque lo primero de la pantalla
+   tiene que ser con lo que se busca. */
+.sgtm-filtros__avanzada {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 2px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  text-align: left;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.sgtm-filtros__avanzada:hover {
+  color: var(--accent-ink);
+}
+
+.sgtm-filtros__caret {
+  display: inline-flex;
+  color: var(--ink-4);
+  transition: transform 0.15s ease;
+}
+
+.sgtm-filtros__caret[data-abierto='0'] {
+  transform: rotate(-90deg);
+}
+
+.sgtm-filtros__conteo {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-4);
+}
+
 .sgtm-filtros__rejilla {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

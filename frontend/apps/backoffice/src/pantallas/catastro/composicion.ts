@@ -138,6 +138,12 @@ export const COMPOSICION_DE_CATASTRO: Readonly<Record<string, ComposicionDeOpcio
     // Mismo trato que «Conciliar seleccionadas»: se ve, no se puede usar, y dice
     // por que. El motivo se redacta en `prosa-textos.ts`; aqui solo se declara.
     filtrosBloqueados: ['conciliadaConRentas'],
+    /* «Empieza por encontrar el predio. Un código, un nombre o una dirección
+       bastan; los filtros de abajo solo hacen falta cuando la búsqueda devuelve
+       demasiado» (#498 F7). El primero de esta pantalla es el codigo de
+       referencia catastral, que ademas es el unico con control propio: es con
+       el que se busca, y los otros cuatro son para acotar cuando sobran filas. */
+    filtrosPlegables: true,
   },
   // La actualizacion es el **modo de edicion** de la pestana Valorizacion
   // (propuesta A), y sigue teniendo ruta propia: se abre por el codigo del

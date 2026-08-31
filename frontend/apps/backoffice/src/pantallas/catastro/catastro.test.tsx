@@ -424,6 +424,13 @@ describe('la consulta de fichas pagina contra el servidor', () => {
   it('«Conciliada con rentas» se dibuja bloqueada, con su motivo, y no viaja', async () => {
     montarEnRuta('/catastro/consulta-fichas');
 
+    /* Desde #498 F7 esta pantalla pliega tras «Búsqueda avanzada» los filtros
+       de detras del primero, y este es uno de ellos: el codigo de referencia
+       catastral es con lo que se busca y los otros cuatro acotan. Se despliega
+       para mirarlo; lo que la prueba dice —que se ve, que no se puede usar y
+       que no viaja— no cambia. */
+    await userEvent.click(await screen.findByRole('button', { name: /Búsqueda avanzada/ }));
+
     const filtro = await screen.findByLabelText('Conciliada con rentas');
     expect(filtro).toBeDisabled();
     expect(screen.getByText(/todavía no publica si rentas reconoce un predio/)).toBeInTheDocument();

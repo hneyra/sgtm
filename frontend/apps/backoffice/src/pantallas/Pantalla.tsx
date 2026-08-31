@@ -1036,6 +1036,7 @@ function Bloques({
             campos={filtrosDeLaPantalla}
             buscado={busquedaActiva.filtros}
             cargando={consulta.isFetching}
+            {...(composicion.filtrosPlegables === true ? { plegables: true } : {})}
             // Buscar reescribe la URL: es donde vive lo buscado. Y devuelve a la
             // primera pagina, porque la pagina 7 de otra busqueda no es ninguna.
             onBuscar={(valores) => {
