@@ -229,6 +229,31 @@ const MOVIMIENTOS_DE_DEUDA = {
   titulo: 'Movimientos de deuda',
   hojas: ['alta_deuda', 'baja_deuda'],
 } as const;
+
+/**
+ * **Las dos modalidades del mismo acto** (#503 F5).
+ *
+ * Transferir un predio y transferir un vehiculo son el mismo tramite sobre dos
+ * objetos: el mismo expediente, la misma fecha, las mismas dos partes y la misma
+ * consecuencia —el transferente deja de estar afecto y el adquirente empieza—.
+ * El manual las capturo como dos pantallas y el prototipo las dibuja como **una
+ * modalidad**, que es lo que la tira hace aqui.
+ *
+ * Lo que la tira **no** puede arreglar, y por eso se anota: los dos catalogos
+ * llaman de forma distinta al mismo dato —«Nº de expediente» / «Nro. de
+ * expediente», «Fecha del acto» / «Fecha de transferencia», «Partes
+ * intervinientes» / «Partes»— y el documento que sustenta el acto es texto libre
+ * en una (notaria y minuta) y un desplegable de cuatro en la otra. Dibujar el
+ * bloque **una sola vez** —que es lo que #442 B proponia— haria morir esa
+ * divergencia por construccion, y exige antes decidir cual de las dos columnas
+ * gana, porque los rotulos no se reescriben (RNF-080). La tira une las dos
+ * pantallas sin tocar ninguna; unificar sus bloques es otra cosa y no se cuela
+ * aqui.
+ */
+const TRANSFERENCIAS = {
+  titulo: 'Transferencias',
+  hojas: ['transferencia_predio', 'transferencia_vehiculo'],
+} as const;
 export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>> = {
   contribuyentes: {
     ...FICHA_CON_PESTANAS,
@@ -361,6 +386,7 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * objeto del acto y su valor.
    */
   transferencia_predio: {
+    superficie: TRANSFERENCIAS,
     resolutores: {
       codigoPredial: {
         campos: ['predioId', 'valorTransferencia'],
@@ -377,6 +403,7 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * tal cual lo dibujaba antes de declararse aqui.
    */
   transferencia_vehiculo: {
+    superficie: TRANSFERENCIAS,
     resolutores: {
       transferenteDocumento: {
         campos: ['valorTransferencia'],
