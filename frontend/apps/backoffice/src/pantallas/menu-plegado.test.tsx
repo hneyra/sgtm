@@ -46,6 +46,14 @@ const bloqueDeCatastro = (label: string): BloqueDeNavegacion =>
 
 const menuDeCatastro = () => screen.getByRole('navigation', { name: 'Opciones de Catastro' });
 
+const FISCALIZACION = MODULOS.find((m) => m.id === 'fiscalizacion') as ModuloDelCatalogo;
+
+const bloqueDeFiscalizacion = (label: string): BloqueDeNavegacion =>
+  bloquesDe(FISCALIZACION).find((b) => b.label === label) as BloqueDeNavegacion;
+
+const menuDeFiscalizacion = () =>
+  screen.getByRole('navigation', { name: 'Opciones de Fiscalización' });
+
 /**
  * El predio de muestra: el mismo codigo de referencia catastral con el que
  * `catastro.test.tsx` abre sus fichas.
@@ -171,9 +179,14 @@ describe('la tabla decide que se pliega, y si lleva carril', () => {
       if (modulo.centroDeReportes === undefined) continue;
       expect(modulo.bloquesPlegados ?? [], `${modulo.id}`).toContain(modulo.centroDeReportes);
     }
-    // Y al reves no: los dos de Catastro se pliegan sin ser el centro de nada.
+    /* Y al reves no: los dos de Catastro y el de Fiscalizacion se pliegan sin
+       ser el centro de nada. El de Fiscalizacion es de #506 F5, y solo se pudo
+       porque F1 hizo de sus tres opciones una superficie: la tira de hojas es lo
+       que lleva de cualquiera a las otras dos, que es la condicion de FRO-05 §5
+       para plegar un grupo. */
     expect(MODULOS.filter((m) => (m.bloquesPlegados ?? []).length > 0).map((m) => m.id)).toEqual([
       'catastro',
+      'fiscalizacion',
       'transito',
       'infracciones-administrativas',
       'autorizaciones-y-licencias',
@@ -314,5 +327,128 @@ describe('las doce opciones de Catastro siguen alcanzables', () => {
     expect(
       [...(await alcanzablesDesdeLaSuperficie(CATASTRO, bloqueDeCatastro('Valuación')))].sort(),
     ).toEqual(['aranceles', 'depreciacion', 'valores_unitarios']);
+  });
+});
+
+/* ── Fiscalizacion: los cinco destinos del embudo (#506 F5) ────────────── */
+
+describe('el menu de Fiscalizacion pasa de ocho entradas a seis', () => {
+  /**
+   * **El pliegue de «Resultados» sólo se pudo desde #506 F1.**
+   *
+   * FRO-05 §5 pone la condición: un grupo se pliega cuando **su superficie ya
+   * sabe navegar entre sus opciones**. Antes de que las tres fueran una
+   * superficie de tres hojas, plegarlas habría escondido tres pantallas detrás
+   * de una entrada que sólo llevaba a la primera — que es exactamente lo que
+   * #391 se negó a hacer con «Predio» en Catastro.
+   */
+  it('cinco destinos, con «Resultados» plegado y las otras cuatro listadas', async () => {
+    montarEnRuta('/fiscalizacion/fisc-omisos');
+    await screen.findByRole('heading', { level: 1 });
+
+    const entradas = within(menuDeFiscalizacion()).getAllByRole('link');
+    // Ocho opciones, seis entradas: las tres de «Resultados» pasan a ser una.
+    expect(FISCALIZACION.opciones).toHaveLength(8);
+    expect(entradas).toHaveLength(6);
+    expect(entradas.filter((e) => e.textContent?.startsWith('Resultados'))).toHaveLength(1);
+    // Y las tres ya no se listan una a una.
+    /* Las dos que dejan de listarse. **«Resultados» no entra en esta lista**: es
+       el rotulo de la entrada plegada, y esa entrada es justo lo que se dibuja
+       en lugar de las tres. */
+    for (const rotulo of [
+      'Estado de cuenta de fiscalización',
+      'Histórico de fiscalización predial',
+    ]) {
+      expect(within(menuDeFiscalizacion()).queryByText(rotulo)).not.toBeInTheDocument();
+    }
+  });
+
+  it('la entrada plegada dice cuantas hay dentro y abre la primera', async () => {
+    montarEnRuta('/fiscalizacion/fisc-omisos');
+    await screen.findByRole('heading', { level: 1 });
+
+    const resultados = within(menuDeFiscalizacion()).getByRole('link', { name: /^Resultados/ });
+    expect(resultados).toHaveTextContent('Resultados3');
+    expect(resultados).toHaveAttribute('href', '/fiscalizacion/fisc-resultados');
+  });
+
+  /**
+   * SoD-4 en el menú: el fiscalizador de campo no ve `fisc_resultados`, así que
+   * su entrada plegada tiene que abrir la primera que **él** puede ver — un
+   * enlace a la primera del catálogo lo llevaría a un aviso de «no tienes
+   * permiso».
+   */
+  it('sin `fisc_resultados`, la entrada abre la siguiente que el perfil si ve', async () => {
+    entraCon({ fisc_omisos: ['lectura'], fisc_estado_cuenta: ['lectura'] });
+    montarEnRuta('/fiscalizacion/fisc-omisos');
+    await screen.findByRole('heading', { level: 1 });
+
+    const resultados = await within(menuDeFiscalizacion()).findByRole('link', {
+      name: /^Resultados/,
+    });
+    expect(resultados).toHaveTextContent('Resultados1');
+    expect(resultados).toHaveAttribute('href', '/fiscalizacion/fisc-estado-cuenta');
+  });
+});
+
+describe('las ocho opciones de Fiscalizacion siguen alcanzables', () => {
+  it('el menu y la superficie de resultados, entre los dos, llegan a las ocho', async () => {
+    const alcanzables = new Set<string>();
+    for (const bloque of bloquesDe(FISCALIZACION)) {
+      if (!bloque.plegado) {
+        for (const opcion of bloque.opciones) alcanzables.add(opcion.id);
+        continue;
+      }
+      for (const id of await alcanzablesDesdeLaSuperficie(FISCALIZACION, bloque)) {
+        alcanzables.add(id);
+      }
+    }
+
+    expect([...alcanzables].sort()).toEqual(FISCALIZACION.opciones.map((o) => o.id).sort());
+  });
+
+  it('la superficie de resultados lleva a sus tres hojas', async () => {
+    expect(
+      [
+        ...(await alcanzablesDesdeLaSuperficie(FISCALIZACION, bloqueDeFiscalizacion('Resultados'))),
+      ].sort(),
+    ).toEqual(['fisc_estado_cuenta', 'fisc_historico', 'fisc_resultados']);
+  });
+});
+
+describe('el acto con el que se empieza en Fiscalizacion', () => {
+  /**
+   * **Fiscalización no declara acción primaria, y eso se midió.**
+   *
+   * El prototipo pone «Levantar acta» encima de sus destinos. La tabla compone
+   * el destino como `${ruta}?nuevo=1`, así que el botón abriría el acta **sin
+   * fila de la muestra detrás** — y esa acta dice de sí misma que hay que entrar
+   * desde el programa para que traiga su predio y su contribuyente. Un acto del
+   * shell que lleva a una pantalla que contesta «aquí no» no es un comienzo.
+   *
+   * El camino de verdad al acta es el enlace de la fila de la muestra (#506 F3),
+   * que llega con los dos identificadores puestos.
+   */
+  it('no dibuja boton de acto, porque el suyo necesita una fila detras', async () => {
+    entraCon({ fisc_omisos: ['lectura'], fisc_predial: ['lectura', 'registro'] });
+    montarEnRuta('/fiscalizacion/fisc-omisos');
+    await waitFor(() =>
+      expect(within(menuDeFiscalizacion()).getAllByRole('link').length).toBeGreaterThan(0),
+    );
+
+    expect(FISCALIZACION.accionPrimaria).toBeUndefined();
+    expect(screen.queryByRole('link', { name: 'Levantar acta' })).toBeNull();
+  });
+
+  /* El contraste: Catastro **sí** la declara, así que la ausencia de arriba no
+     puede ser que el mecanismo no funcione. */
+  it('y Catastro si lo dibuja, que es lo que hace util la comprobacion de arriba', async () => {
+    entraCon({ consulta_fichas: ['lectura'], ficha_urbana: ['lectura', 'registro'] });
+    montarEnRuta('/catastro/consulta-fichas');
+    await waitFor(() =>
+      expect(within(menuDeCatastro()).getAllByRole('link').length).toBeGreaterThan(0),
+    );
+
+    expect(screen.getByRole('link', { name: 'Registrar predio' })).toBeInTheDocument();
   });
 });

@@ -142,9 +142,15 @@ const GRUPOS_POR_TAREA_ESPERADOS: Readonly<
     ['Territorio', ['calles', 'sectores']],
     ['Valuación', ['aranceles', 'depreciacion', 'valores_unitarios']],
   ],
+  /* Los cinco destinos del embudo (#506 F5): se detecta, se programa, se
+     inspecciona, se determina. «Campaña» juntaba la programación con los omisos
+     —dos momentos distintos: el universo del que sale la muestra, y la muestra
+     ya sorteada— y «Fiscalización» juntaba el acta de campo con el cruce de
+     gabinete. */
   fiscalizacion: [
-    ['Campaña', ['fisc_omisos', 'fisc_programa']],
-    ['Fiscalización', ['fisc_predial', 'fisc_vehicular']],
+    ['Detección', ['fisc_omisos', 'fisc_vehicular']],
+    ['Programas', ['fisc_programa']],
+    ['Actas de inspección', ['fisc_predial']],
     ['Resultados', ['fisc_estado_cuenta', 'fisc_historico', 'fisc_resultados']],
     ['Documentos', ['resolucion_determinacion_fisc']],
   ],
@@ -437,6 +443,12 @@ describe('el centro de reportes se declara en el catalogo, no en el componente',
     ]);
     expect(plegados).toEqual([
       ['catastro', ['Territorio', 'Valuación'], null],
+      /* El cuarto pliegue sin carril, y **sólo se pudo desde #506 F1**: las tres
+         opciones de «Resultados» son una superficie de tres hojas, y su tira
+         lleva de cualquiera a las otras dos. Antes de la superficie, plegarlas
+         habría escondido tres pantallas detrás de una entrada que sólo llevaba a
+         la primera. */
+      ['fiscalizacion', ['Resultados'], null],
       ['transito', ['Reportes'], 'Reportes'],
       ['infracciones-administrativas', ['Reportes'], 'Reportes'],
       ['autorizaciones-y-licencias', ['Reportes'], 'Reportes'],

@@ -258,12 +258,35 @@ export const GRUPOS_POR_TAREA = {
     // tres.
     ['Valuación', ['aranceles', 'valores_unitarios', 'depreciacion'], { plegado: true }],
   ],
+  /* **Los cinco destinos del embudo** (#506 F5). Fiscalizacion no es una lista de
+     pantallas: es una secuencia —se detecta, se programa, se inspecciona, se
+     determina— y el menu la dice en ese orden.
+     Lo que cambia respecto de los cuatro grupos anteriores no es cosmetico:
+     «Campaña» juntaba la programacion con los omisos, que son **dos momentos
+     distintos** —los omisos son el universo del que sale la muestra, y el
+     programa es la muestra ya sorteada—, y «Fiscalizacion» juntaba el acta
+     predial con el cruce vehicular, que son una inspeccion de campo y una
+     deteccion de gabinete. */
   fiscalizacion: [
-    // La campana se programa y se decide a quien alcanza; recien despues se
-    // fiscaliza. Los dos pasos son tareas distintas de la misma persona.
-    ['Campaña', ['fisc_programa', 'fisc_omisos']],
-    ['Fiscalización', ['fisc_predial', 'fisc_vehicular']],
-    ['Resultados', ['fisc_resultados', 'fisc_estado_cuenta', 'fisc_historico']],
+    /* Lo que el cruce encuentra, antes de que sea deuda de nadie: el predial
+       contra el padron de rentas y el vehicular contra los registros. La frase
+       del prototipo lo dice mejor que ninguna glosa: «la diferencia no es deuda
+       todavia: lo es cuando una inspeccion la confirma». */
+    ['Detección', ['fisc_omisos', 'fisc_vehicular']],
+    // Grupos de una, y las dos a proposito: programar y levantar el acta son los
+    // dos momentos que el embudo separa, y juntarlos era lo que hacia «Campaña».
+    ['Programas', ['fisc_programa']],
+    ['Actas de inspección', ['fisc_predial']],
+    /* **Plegado desde #506 F1**, y sólo se puede desde entonces: las tres son una
+       superficie de tres hojas (`fiscalizacion/composicion.ts`), y su tira lleva
+       de cualquiera a las otras dos. Sin carril, por lo mismo que el territorio:
+       la superficie ya es la forma de navegar entre ellas, y un carril al lado
+       seria una segunda. */
+    [
+      'Resultados',
+      ['fisc_resultados', 'fisc_estado_cuenta', 'fisc_historico'],
+      { plegado: true },
+    ],
     ['Documentos', ['resolucion_determinacion_fisc']],
   ],
   'infracciones-administrativas': [
@@ -429,6 +452,20 @@ export const ACCION_PRIMARIA = {
   // se abre por el codigo de referencia catastral, que es lo que el paso 2
   // compone y comprueba.
   catastro: { opcion: 'ficha_urbana', label: 'Registrar predio' },
+  /* **Fiscalizacion no declara ninguna, y se midio antes de decidirlo** (#506 F5).
+     El prototipo pone «Levantar acta» encima de sus destinos, y era lo que iba a
+     entrar aqui. Lo que lo impide es donde lleva: esta tabla compone el destino
+     como `${ruta}?nuevo=1`, asi que el boton abriria el acta **sin fila de la
+     muestra detras** — y esa acta dice de si misma, con todas las letras, que
+     hay que entrar desde el programa para que traiga su predio y su
+     contribuyente. Un acto del shell que lleva a una pantalla que contesta «aqui
+     no, ve a otro sitio» no es un comienzo: es un rodeo con boton.
+     Y no hay otro candidato: el unico acto propio del modulo que podria abrirse
+     en blanco es registrar un programa, y `fisc_programa` no puede escribir
+     —le faltan el codigo y la descripcion, que su catalogo no dibuja (#431)—.
+     El camino de verdad al acta es el enlace de la fila de la muestra (#506 F3),
+     que llega con los dos identificadores puestos. Un modulo sin accion primaria
+     no dibuja boton, que es lo que hacen hoy los otros diez. */
 };
 
 /** La accion primaria de un modulo, o `null` si no declara ninguna. */
