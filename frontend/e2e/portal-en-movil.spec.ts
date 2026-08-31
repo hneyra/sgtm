@@ -117,5 +117,8 @@ test('el ciudadano no descarga el catalogo, y no manda ningun documento', async 
   // que la asercion resolvia a 0 incluso contra el back-office con su barra
   // dibujada — una comprobacion que no podia fallar.
   await expect(page.locator('.sgtm-nav')).toHaveCount(0);
+  // Y el riel de modulos, que desde #498 es la otra mitad del shell del
+  // back-office: mirar solo `.sgtm-nav` dejaria pasar un shell a medias.
+  await expect(page.locator('.sgtm-modulos')).toHaveCount(0);
   await expect(page.getByRole('navigation')).toHaveCount(0);
 });

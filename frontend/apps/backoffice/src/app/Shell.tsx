@@ -16,14 +16,17 @@ import { usePreferencias, variablesDe } from './preferencias';
  * en su estado; aqui la URL es el estado, que es lo que FRO-03 §3 pide al
  * portarlo. Una opcion es una direccion que se puede compartir, marcar y
  * recargar.
+ *
+ * Y desde el rediseño de Catastro, **tampoco el nivel de la navegacion es
+ * estado**: el riel y el panel se dibujan los dos a la vez, asi que el modulo
+ * que ensena la barra sale de la ruta como todo lo demas. La `raizForzada` que
+ * habia aqui era el unico trozo de navegacion que la URL no explicaba —recargar
+ * la perdia, y el enlace de lo que se estaba mirando no la llevaba—.
  */
 export function Shell() {
   const { pathname } = useLocation();
   const { preferencias } = usePreferencias();
 
-  /* La barra lateral vive en el nivel raiz solo mientras el usuario lo pida:
-     «Todos los modulos» no cambia de pantalla, cambia de nivel de navegacion. */
-  const [raizForzada, fijarRaizForzada] = useState(false);
   const [navAbierta, fijarNavAbierta] = useState(false);
   const [paletaAbierta, fijarPaletaAbierta] = useState(false);
   const [recientes, fijarRecientes] = useState<readonly string[]>(() => leerRecientes());
@@ -36,10 +39,9 @@ export function Shell() {
   const operacion = opcion ? operacionDe(opcion.id) : undefined;
   const descriptor = operacion === undefined ? undefined : descriptorDe(operacion);
 
-  /* Navegar cierra la paleta y el cajon movil, y devuelve la barra lateral al
-     modulo de la ruta: es el comportamiento del prototipo al abrir una opcion. */
+  /* Navegar cierra la paleta y el cajon movil: es el comportamiento del
+     prototipo al abrir una opcion. */
   useEffect(() => {
-    fijarRaizForzada(false);
     fijarNavAbierta(false);
     fijarPaletaAbierta(false);
   }, [pathname]);
@@ -66,8 +68,6 @@ export function Shell() {
   const cerrarNav = useCallback(() => fijarNavAbierta(false), []);
   const variables = useMemo(() => variablesDe(preferencias), [preferencias]);
 
-  const moduloVisible = raizForzada ? null : modulo;
-
   return (
     <div className="sgtm-shell" style={variables}>
       <div
@@ -77,10 +77,9 @@ export function Shell() {
         aria-hidden="true"
       />
       <BarraLateral
-        modulo={moduloVisible}
+        modulo={modulo}
         recientes={recientes}
         abierta={navAbierta}
-        onVolverARaiz={() => fijarRaizForzada(true)}
         onNavegar={cerrarNav}
         onAbrirPaleta={() => fijarPaletaAbierta(true)}
       />

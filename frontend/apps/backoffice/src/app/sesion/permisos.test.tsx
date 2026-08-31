@@ -141,12 +141,13 @@ describe('«Recientes» no resucita lo que ya no se puede ver', () => {
     entraCon(CAJERO);
     montarEnRuta('/tesoreria/caja-tributaria');
 
-    // «Recientes» vive en el **nivel raiz** de la barra, y al abrir una opcion
-    // la barra esta en el nivel de su modulo: sin volver a la raiz, esta prueba
-    // miraba la lista de opciones de Tesoreria y no la de recientes, asi que
-    // pasaba sin ejercitar lo que dice ejercitar.
-    await usuario.click(await screen.findByRole('button', { name: /Todos los módulos/ }));
-    const navegacion = screen.getByRole('navigation', { name: 'Módulos del sistema' });
+    // «Recientes» vive en el panel **de la portada**: con el riel dibujando ya
+    // los doce modulos, el panel es del modulo abierto siempre que la ruta este
+    // en uno, y los recientes se quedan con la ruta que no lo esta. Sin ir a la
+    // portada, esta prueba miraba la lista de opciones de Tesoreria y no la de
+    // recientes, asi que pasaba sin ejercitar lo que dice ejercitar.
+    await usuario.click(await screen.findByRole('link', { name: 'Inicio: a quién atiendes' }));
+    const navegacion = screen.getByRole('navigation', { name: 'Lo último que abriste' });
 
     // La que si puede ver sigue en «Recientes» —la lista se dibuja de verdad—,
     // y la que ya no puede, no resucita.

@@ -1,15 +1,18 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * El listado de módulos de la barra lateral (FRO-03 §3).
+ * El riel de módulos y el panel del módulo abierto (FRO-03 §3, #498 F1).
  *
- * La navegación es de dos niveles. **Desde #296 la app ya no aterriza dentro de
- * un módulo**: `/` es la pregunta de a quién se atiende (ADR-0016 §1), que no
- * pertenece a ninguno, así que la barra arranca en el nivel raíz con los doce
- * del manual. El nivel de módulo es donde deja a quien entra en uno, y de ahí se
- * vuelve con «Todos los módulos». Lo que confundió en producción era lo
- * contrario —la barra parecía traer solo dos entradas cuando estaba en el nivel
- * de módulo—, y por eso los dos niveles se siguen recorriendo aquí.
+ * La navegación es de dos niveles y **los dos se dibujan a la vez**: el riel con
+ * los doce del manual, que no se va nunca, y junto a él el panel del módulo
+ * abierto. Hasta el rediseño se turnaban, y se conmutaba con «Todos los
+ * módulos»; lo que confundió en producción era justo eso —la barra parecía
+ * traer solo dos entradas cuando estaba en el nivel de módulo—, y con los dos
+ * niveles delante deja de poder pasar.
+ *
+ * **Desde #296 la app no aterriza dentro de un módulo**: `/` es la pregunta de a
+ * quién se atiende (ADR-0016 §1), que no pertenece a ninguno. Así que al
+ * aterrizar el riel está entero y ninguno de sus doce marcado.
  *
  * **El panel de recaudación no desapareció**: dejó de ser la portada y sigue
  * siendo la opción que siempre fue, dentro de Inicio. El primer caso lo abre.
@@ -35,43 +38,53 @@ const MODULOS: ReadonlyArray<{ label: string; opciones: number }> = [
   { label: 'Seguridad', opciones: 11 },
 ];
 
-test('al aterrizar, la barra está en el nivel raíz; el módulo Inicio está a un clic', async ({
-  page,
-}) => {
+test('al aterrizar, ningún módulo está abierto; el de Inicio está a un clic', async ({ page }) => {
   await page.goto('/');
   // La portada ya no redirige a ninguna opción: es la pregunta (#296).
   await expect(page).toHaveURL(/localhost:4173\/$/);
   await expect(page.getByRole('heading', { name: '¿A quién atiendes?' })).toBeVisible();
 
-  const barra = page.locator('.sgtm-nav');
-  await expect(barra.locator('.sgtm-nav__modulo')).toHaveCount(MODULOS.length);
-  await expect(barra.locator('.sgtm-nav__modulo-actual')).toHaveCount(0);
+  const riel = page.locator('.sgtm-modulos');
+  const panel = page.locator('.sgtm-nav');
 
+  // El riel está entero desde el primer instante, y ninguno marcado: aquí no se
+  // está en ningún módulo, y el riel lo dice sin que haya que abrir nada.
+  await expect(riel.locator('.sgtm-modulos__modulo')).toHaveCount(MODULOS.length);
+  await expect(riel.locator('.sgtm-modulos__modulo[data-activo="1"]')).toHaveCount(0);
+  await expect(panel.locator('.sgtm-nav__titulo')).toHaveText('SGTM');
+  await expect(panel.locator('.sgtm-nav__opcion')).toHaveCount(0);
+
+  /* `exact: true` no es adorno: `getByRole` casa el nombre accesible **por
+     subcadena**, y sin él «Inicio» casaría también con la marca de arriba
+     —«Inicio: a quién atiendes»—, que es otro enlace del mismo riel. */
   // Y el panel de recaudación sigue siendo la opción que siempre fue.
-  await barra.locator('.sgtm-nav__modulo', { hasText: 'Inicio' }).click();
-  await expect(barra.locator('.sgtm-nav__modulo-actual')).toHaveText('Inicio');
-  await barra.getByRole('link', { name: 'Panel de recaudación' }).click();
+  await riel.getByRole('link', { name: 'Inicio', exact: true }).click();
+  await expect(panel.locator('.sgtm-nav__titulo')).toHaveText('Inicio');
+  await panel.getByRole('link', { name: 'Panel de recaudación' }).click();
   await expect(page).toHaveURL(/\/inicio\/inicio$/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Panel de recaudación');
 });
 
-test('«Todos los módulos» lista los doce del manual, con su recuento de opciones', async ({
-  page,
-}) => {
-  // Desde dentro de un módulo, que es donde el botón de volver existe.
+test('el riel lista los doce del manual y no se va al entrar en uno', async ({ page }) => {
+  // Desde dentro de un módulo, que es donde antes había que volver para verlos.
   await page.goto('/inicio/inicio');
-  await page.locator('.sgtm-nav').getByRole('button', { name: 'Todos los módulos' }).click();
 
-  const modulos = page.locator('.sgtm-nav__modulo');
+  const riel = page.locator('.sgtm-modulos');
+  const modulos = riel.locator('.sgtm-modulos__modulo');
   await expect(modulos).toHaveCount(MODULOS.length);
 
+  /* El rótulo de cada uno no se ve —caben 68 px— pero **existe**: es el nombre
+     accesible del enlace, y es lo único que un lector de pantalla anuncia. Se
+     comprueba en el orden del catálogo. */
   for (const [i, modulo] of MODULOS.entries()) {
-    const fila = modulos.nth(i);
-    await expect(fila.locator('.sgtm-nav__modulo-etiqueta')).toHaveText(modulo.label);
-    await expect(fila.locator('.sgtm-nav__modulo-conteo')).toHaveText(
-      `${modulo.opciones} ${modulo.opciones === 1 ? 'opción' : 'opciones'}`,
-    );
+    await expect(modulos.nth(i)).toHaveAccessibleName(modulo.label);
   }
+
+  // Estando en Inicio, el suyo es el único marcado.
+  await expect(riel.locator('.sgtm-modulos__modulo[data-activo="1"]')).toHaveCount(1);
+  await expect(riel.locator('.sgtm-modulos__modulo[data-activo="1"]')).toHaveAccessibleName(
+    'Inicio',
+  );
 
   // Los recuentos suman las 134 opciones del catálogo: si un módulo se cae, el
   // total lo delata aunque el conteo de filas siga cuadrando.
@@ -79,19 +92,24 @@ test('«Todos los módulos» lista los doce del manual, con su recuento de opcio
   expect(total).toBe(134);
 });
 
-test('desde el nivel raíz se entra a un módulo y se vuelve', async ({ page }) => {
-  // El inicio ya deja la barra en el nivel raíz: no hay a qué volver primero.
+test('se cambia de módulo en un clic, sin pasar por ninguna vuelta', async ({ page }) => {
   await page.goto('/');
-  const barra = page.locator('.sgtm-nav');
+  const riel = page.locator('.sgtm-modulos');
+  const panel = page.locator('.sgtm-nav');
 
-  await barra.locator('.sgtm-nav__modulo', { hasText: 'Seguridad' }).click();
+  await riel.getByRole('link', { name: 'Seguridad', exact: true }).click();
   await expect(page).toHaveURL(/\/seguridad$/);
-  await expect(barra.locator('.sgtm-nav__modulo-actual')).toHaveText('Seguridad');
-  // Las once opciones del módulo, repartidas en sus bloques.
-  await expect(barra.locator('.sgtm-nav__opcion')).toHaveCount(11);
+  await expect(panel.locator('.sgtm-nav__titulo')).toHaveText('Seguridad');
+  // Las once opciones del módulo, repartidas en sus bloques y sin desplegar
+  // ninguno: los bloques son rótulos, no acordeones.
+  await expect(panel.locator('.sgtm-nav__opcion')).toHaveCount(11);
 
-  await barra.getByRole('button', { name: 'Todos los módulos' }).click();
-  await expect(barra.locator('.sgtm-nav__modulo')).toHaveCount(MODULOS.length);
+  /* **Esto es lo que el rediseño compra**: irse a otro módulo es un clic, no
+     dos. Antes había que volver a la raíz y entrar; el riel no se ha movido. */
+  await riel.getByRole('link', { name: 'Coactiva', exact: true }).click();
+  await expect(page).toHaveURL(/\/coactiva$/);
+  await expect(panel.locator('.sgtm-nav__titulo')).toHaveText('Coactiva');
+  await expect(riel.locator('.sgtm-modulos__modulo')).toHaveCount(MODULOS.length);
 });
 
 test('la paleta de comandos también llega a cualquier módulo', async ({ page }) => {
