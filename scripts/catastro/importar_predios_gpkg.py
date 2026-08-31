@@ -66,20 +66,30 @@ import tempfile
 
 # ---------------------------------------------------------------- geometria
 
+WKB_LINESTRING = 2
 WKB_POLYGON = 3
+WKB_MULTILINESTRING = 5
 WKB_MULTIPOLYGON = 6
 
 
 class GeometriaNoAdmitida(Exception):
-    """El blob no es un poligono: un punto o una linea no describen un lote."""
+    """El blob no tiene la figura que esa capa necesita.
+
+    Un lote, una manzana y un sector son superficies; una via es un trazado. Pedirle a
+    cada capa la figura que le toca no es formalismo: un punto donde deberia haber un
+    poligono no describe un lindero, y una superficie donde deberia haber un eje no
+    describe por donde pasa la calle.
+    """
 
 
-def wkt_de_blob_gpkg(blob: bytes) -> str:
-    """El poligono del lote en WKT, siempre como MULTIPOLYGON.
+def wkt_de_blob_gpkg(blob: bytes, figura: str = "superficie") -> str:
+    """La geometria en WKT, siempre en su forma Multi.
 
-    La columna de la base es `geography(MultiPolygon, 4326)`, asi que un POLYGON simple se
-    promueve en vez de rechazarse: son la misma figura y partir la carga por eso seria
-    exigirle al GIS de la municipalidad una convencion que no tiene por que tener.
+    `figura` dice que se espera: «superficie» —lotes, manzanas y sectores— o «linea»
+    —el eje vial—. Las columnas de la base son `geography(Multi*, 4326)`, asi que un
+    POLYGON o un LINESTRING simple se **promueve** en vez de rechazarse: son la misma
+    figura, y partir la carga por eso seria exigirle al GIS de la municipalidad una
+    convencion que no tiene por que tener.
     """
     if len(blob) < 8 or blob[0:2] != b"GP":
         raise GeometriaNoAdmitida("el blob no empieza por la cabecera 'GP' de GeoPackage")
@@ -96,12 +106,36 @@ def wkt_de_blob_gpkg(blob: bytes) -> str:
 
     srs_id = struct.unpack_from(orden_cabecera + "i", blob, 4)[0]
     inicio = 8 + dobles * 8
-    wkt = _wkt_de_wkb(blob, inicio)
+    wkt = _wkt_de_wkb(blob, inicio, figura)
     return wkt, srs_id
 
 
-def _wkt_de_wkb(datos: bytes, desplazamiento: int) -> str:
+def _wkt_de_wkb(datos: bytes, desplazamiento: int, figura: str = "superficie") -> str:
     orden, tipo, desplazamiento = _cabecera_wkb(datos, desplazamiento)
+
+    if figura == "linea":
+        if tipo == WKB_LINESTRING:
+            puntos, _ = _leer_linea(datos, desplazamiento, orden)
+            return "MULTILINESTRING(" + _texto_linea(puntos) + ")"
+        if tipo == WKB_MULTILINESTRING:
+            cuantas = struct.unpack_from(orden + "I", datos, desplazamiento)[0]
+            desplazamiento += 4
+            partes = []
+            for _ in range(cuantas):
+                # Cada parte trae SU PROPIA cabecera WKB, con su orden de bytes: no se
+                # hereda la de fuera. Es el mismo detalle que ya cuesta caro en los
+                # multipoligonos, y por el mismo motivo se repite aqui.
+                orden_parte, tipo_parte, desplazamiento = _cabecera_wkb(datos, desplazamiento)
+                if tipo_parte != WKB_LINESTRING:
+                    raise GeometriaNoAdmitida(
+                        f"una multilinea trae una parte de tipo {tipo_parte}, y solo admite lineas"
+                    )
+                puntos, desplazamiento = _leer_linea(datos, desplazamiento, orden_parte)
+                partes.append(_texto_linea(puntos))
+            return "MULTILINESTRING(" + ",".join(partes) + ")"
+        raise GeometriaNoAdmitida(
+            f"tipo de geometria {tipo}: un eje vial es una linea, y esto no lo es"
+        )
 
     if tipo == WKB_POLYGON:
         anillos, _ = _leer_poligono(datos, desplazamiento, orden)
@@ -126,6 +160,21 @@ def _wkt_de_wkb(datos: bytes, desplazamiento: int) -> str:
     raise GeometriaNoAdmitida(
         f"tipo de geometria {tipo}: un lote es un poligono, y esto no lo es"
     )
+
+
+def _leer_linea(datos: bytes, desplazamiento: int, orden: str):
+    cuantos_puntos = struct.unpack_from(orden + "I", datos, desplazamiento)[0]
+    desplazamiento += 4
+    puntos = []
+    for _ in range(cuantos_puntos):
+        x, y = struct.unpack_from(orden + "dd", datos, desplazamiento)
+        desplazamiento += 16
+        puntos.append((x, y))
+    return puntos, desplazamiento
+
+
+def _texto_linea(puntos) -> str:
+    return "(" + ",".join(f"{x:.8f} {y:.8f}" for x, y in puntos) + ")"
 
 
 def _cabecera_wkb(datos: bytes, desplazamiento: int):
@@ -316,6 +365,59 @@ def autoprueba() -> int:
                 fallos.append(f"{self.nombre}: reviento con {tipo.__name__}: {valor}")
                 return True
             return False
+
+    with seccion("eje vial: linea simple y multilinea"):
+        # La via es el otro tipo de figura del plano (#527). Una LINESTRING simple se
+        # promueve a MULTILINESTRING por lo mismo que el poligono: la columna es
+        # `geography(MultiLineString, 4326)` y son la misma figura.
+        recta = [(-80.68, -4.90), (-80.67, -4.91)]
+        linea = struct.pack("<BII", 1, WKB_LINESTRING, len(recta))
+        for x, y in recta:
+            linea += struct.pack("<dd", x, y)
+        blob = b"GP" + bytes([0, 0x01]) + struct.pack("<i", 4326) + linea
+        wkt, srid = wkt_de_blob_gpkg(blob, "linea")
+        afirmar(wkt.startswith("MULTILINESTRING(("), f"una linea simple no se promovio: {wkt}")
+        afirmar(srid == 4326, f"srid inesperado: {srid}")
+
+        # Y una via partida en dos tramos, que es el caso normal. **La segunda parte va
+        # en BIG-endian a proposito**: cada parte de un WKB trae su propia cabecera con
+        # su orden de bytes y no se hereda la de fuera, y con las dos partes en el mismo
+        # orden esta comprobacion pasa en verde aunque el codigo herede —se midio—. Con
+        # ordenes distintos, heredar produce coordenadas absurdas y se ve.
+        otra = [(-80.66, -4.92), (-80.65, -4.93)]
+        segunda = struct.pack(">BII", 0, WKB_LINESTRING, len(otra))
+        for x, y in otra:
+            segunda += struct.pack(">dd", x, y)
+        multi = struct.pack("<BII", 1, WKB_MULTILINESTRING, 2) + linea + segunda
+        blob = b"GP" + bytes([0, 0x01]) + struct.pack("<i", 4326) + multi
+        wkt, _ = wkt_de_blob_gpkg(blob, "linea")
+        afirmar(wkt.count("),(") == 1, f"la multilinea perdio una parte: {wkt}")
+        afirmar("-80.66000000 -4.92000000" in wkt, f"la parte big-endian se leyo mal: {wkt}")
+
+    with seccion("cada capa exige su figura"):
+        """Un poligono donde va un eje, o una linea donde va un lote, se rechazan.
+
+        No es formalismo: una superficie no dice por donde pasa la calle, y una linea
+        no describe un lindero. Aceptarlas dejaria entrar en la columna algo que
+        ninguna consulta podria usar, y sin que nada lo dijera.
+        """
+        recta = struct.pack("<BII", 1, WKB_LINESTRING, 2) + struct.pack("<dddd", 0, 0, 1, 1)
+        como_lote = b"GP" + bytes([0, 0x01]) + struct.pack("<i", 4326) + recta
+        try:
+            wkt_de_blob_gpkg(como_lote)
+            afirmar(False, "una linea se acepto como lote")
+        except GeometriaNoAdmitida:
+            pass
+
+        anillo = struct.pack("<BIII", 1, WKB_POLYGON, 1, 4) + struct.pack(
+            "<dddddddd", 0, 0, 1, 0, 1, 1, 0, 0
+        )
+        como_via = b"GP" + bytes([0, 0x01]) + struct.pack("<i", 4326) + anillo
+        try:
+            wkt_de_blob_gpkg(como_via, "linea")
+            afirmar(False, "un poligono se acepto como eje vial")
+        except GeometriaNoAdmitida:
+            pass
 
     with seccion("poligono simple"):
         # Un poligono simple, little-endian, sin envolvente: se promueve a MULTIPOLYGON.
