@@ -577,6 +577,20 @@ export interface ComposicionDeOpcion {
     readonly parametros: (
       valores: Readonly<Record<string, string>>,
     ) => Readonly<Record<string, string>> | undefined;
+    /**
+     * El **registro** que abre la fila, cuando el destino se abre por la ruta y
+     * no por un filtro (`/:modulo/:opcion/:codigo`).
+     *
+     * Las dos formas existen y no son intercambiables: la muestra de un
+     * programa de fiscalizacion abre el acta con dos filtros, y la consulta de
+     * fichas abre **la ficha de ese predio**, que es un registro en la ruta.
+     * Componerlo como filtro dejaria la ficha sin registro abierto —la pantalla
+     * pide su codigo, no lo busca— y el enlace llevaria a una pantalla vacia.
+     *
+     * Devolver `undefined` es «esta fila no lo trae», igual que en
+     * `parametros`, y entonces no hay enlace.
+     */
+    readonly registro?: (valores: Readonly<Record<string, string>>) => string | undefined;
   };
   /**
    * El bloque de busqueda, para una opcion cuyo catalogo **no declara `filtros`**.

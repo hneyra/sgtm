@@ -144,6 +144,30 @@ export const COMPOSICION_DE_CATASTRO: Readonly<Record<string, ComposicionDeOpcio
        referencia catastral, que ademas es el unico con control propio: es con
        el que se busca, y los otros cuatro son para acotar cuando sobran filas. */
     filtrosPlegables: true,
+    /* **De la fila al predio, en un clic** (#498, artboard de «Predios»).
+       Ahi la fila entera es pulsable y abre la ficha; aqui es un enlace en su
+       propia celda, que es lo mismo para el raton y ademas se alcanza con el
+       tabulador y anuncia a donde lleva (RNF-082).
+       Esta es **la una de quince** que la regla de `accionDeFila` nombra: de las
+       pantallas que abren un registro y traen tabla, la primera columna es ese
+       registro solo aqui —el codigo de referencia catastral—, asi que enlazarla
+       no es una heuristica sobre el texto de una celda.
+       El destino es la ficha urbana porque es la que se abre por ese codigo; de
+       ella el conmutador lleva a las otras modalidades. Y `opcion` trae **su
+       permiso**: quien no puede ver la ficha no ve el enlace (REQ-03 §5). */
+    accionDeFila: {
+      opcion: 'ficha_urbana',
+      etiqueta: 'Abrir el predio',
+      // Sin filtros: lo que la ficha necesita es su registro, no un criterio.
+      parametros: () => ({}),
+      registro: (valores) => {
+        // El valor **crudo** de la fila, no el texto pintado (#332): la celda
+        // sale troquelada y la ruta pide los digitos. Sin codigo no hay ficha
+        // que abrir, y entonces la celda se queda vacia.
+        const codigo = valores['codRefCatastral'];
+        return codigo === undefined || codigo === '' ? undefined : codigo;
+      },
+    },
   },
   // La actualizacion es el **modo de edicion** de la pestana Valorizacion
   // (propuesta A), y sigue teniendo ruta propia: se abre por el codigo del

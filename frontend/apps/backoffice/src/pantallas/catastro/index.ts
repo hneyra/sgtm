@@ -398,6 +398,11 @@ const consulta_fichas = definirConexion({
           { texto: SIN_DATO },
         ],
         'fichas',
+        /* Los valores **crudos** de la fila, para el enlace a la ficha
+           (`accionDeFila`, `composicion.ts`). Van aparte de las celdas a
+           proposito: una celda es texto de presentacion y el codigo se troquela
+           al dibujarlo; lo que la ruta necesita son los digitos (#332). */
+        (ficha) => ({ codRefCatastral: texto(ficha['codRefCatastral']) }),
       ),
     ),
 });

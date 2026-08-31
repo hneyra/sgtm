@@ -631,7 +631,18 @@ function Bloques({
             if (valores === undefined) return undefined;
             const parametros = declaradaDeFila.parametros(valores);
             if (parametros === undefined) return undefined;
-            return `${destinoDeFila.ruta}?${new URLSearchParams(parametros).toString()}`;
+            /* El registro va en la ruta y los filtros en la consulta, que son
+               las dos formas de abrir algo (FRO-04 §5). Una opcion que se abre
+               por su codigo lo necesita en la ruta: como filtro, la pantalla se
+               dibujaria sin registro abierto. */
+            const registro = declaradaDeFila.registro?.(valores);
+            if (declaradaDeFila.registro !== undefined && registro === undefined) return undefined;
+            const base =
+              registro === undefined
+                ? destinoDeFila.ruta
+                : `${destinoDeFila.ruta}/${encodeURIComponent(registro)}`;
+            const consulta = new URLSearchParams(parametros).toString();
+            return consulta === '' ? base : `${base}?${consulta}`;
           },
         };
   /* Una opcion que **compone su propio acto** no tiene impedimento que contar:
@@ -670,7 +681,8 @@ function Bloques({
      Catastro y no haria nada en Rentas, **sin decirlo**. Se abre el primero
      declarado porque un modulo declara una accion primaria, no dos. */
   const flujoAbierto = nuevoEnLaUrl && composicion.flujo !== undefined;
-  const altaPorLaUrl = nuevoEnLaUrl && composicion.flujo === undefined && (composicion.altas ?? []).length > 0;
+  const altaPorLaUrl =
+    nuevoEnLaUrl && composicion.flujo === undefined && (composicion.altas ?? []).length > 0;
 
   const barra = accionesDeLaBarra(
     estructura.id,
@@ -1003,7 +1015,11 @@ function Bloques({
 
       {/* Y lo que hay que saber **de lo que se esta mirando**: que es una copia
           de trabajo y el padron todavia no la recoge (#80). */}
-      {aviso !== undefined && <Aviso titulo={aviso.titulo} detalle={aviso.detalle} />}
+      {/* La nota permanente de esta opcion: `tipo="nota"`, que es una franja
+          compacta y no el bloque centrado del vacio. Con la forma del vacio,
+          las veinte notas del sistema se dibujaban como si la pantalla no
+          tuviera nada que ensenar, encima justo de lo que si tenia. */}
+      {aviso !== undefined && <Aviso tipo="nota" titulo={aviso.titulo} detalle={aviso.detalle} />}
 
       {estructura.kind === 'dash' && (
         <Suspense fallback={<Esqueleto alto={240} />}>

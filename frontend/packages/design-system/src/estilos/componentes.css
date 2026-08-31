@@ -397,6 +397,28 @@ textarea.sgtm-campo__control {
   text-align: center;
 }
 
+/* **La nota permanente**: lo que la pantalla dice con sus datos delante, no en
+   lugar de ellos. Franja compacta y a la izquierda, con el filete de acento —la
+   forma que el artboard le da—, en vez del bloque centrado del vacio. */
+.sgtm-aviso--nota {
+  align-items: flex-start;
+  gap: 4px;
+  padding: 13px 16px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  text-align: left;
+}
+
+.sgtm-aviso--nota .sgtm-aviso__titulo {
+  font-size: 14px;
+  color: var(--accent-ink);
+}
+
+.sgtm-aviso--nota .sgtm-aviso__detalle {
+  max-width: 88ch;
+  color: var(--accent-ink);
+}
+
 .sgtm-aviso__titulo {
   font-family: var(--font-serif);
   font-size: 16px;
