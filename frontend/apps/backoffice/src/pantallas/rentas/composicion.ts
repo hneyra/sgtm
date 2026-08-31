@@ -273,6 +273,36 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
     ...FICHA_CON_PESTANAS,
     gruposDelIndice: APARTADOS_DEL_EXPEDIENTE,
     resumen: ResumenDeContribuyente,
+    /**
+     * **La lista de predios, donde habia seis contadores en blanco** (#503 F2).
+     *
+     * «Unidades afectas del contribuyente» son seis campos de solo lectura
+     * —predios registrados, autovaluo acumulado, vehiculos afectos, licencias,
+     * papeletas, convenios— y `ContribuyenteResource` **no publica ninguno**:
+     * los seis salen «—». El rediseño los sustituye por la lista de verdad, y
+     * la lista ya existe: es la de `predios_rentas`, otra opcion del mismo
+     * destino, con su operacion, su tabla, su permiso y su titulo.
+     *
+     * Los seis contadores **se quedan**: son campos del manual (RNF-080) y lo
+     * que les falta es que el backend los publique, no que alguien los borre.
+     * La tabla va debajo.
+     *
+     * **Y los vehiculos no entran, que es lo que hubo que medir.** Ninguna
+     * lectura de Rentas lista los de un contribuyente: `GET
+     * /rentas/vehiculos/{placa}` pide una placa, y la que si lo hace es
+     * `consulta_vehiculos`, del modulo **Consultas**. Traerla aqui metria el
+     * trozo de Consultas en el de Rentas (#433) y, peor, dejaria a quien tiene
+     * Rentas y no Consultas con un aviso de permiso dentro de su propio
+     * expediente. Lo que lo desbloquea es backend: un `GET /rentas/vehiculos`
+     * que liste por contribuyente.
+     */
+    tablasPrestadas: [
+      {
+        seccion: 'Unidades afectas del contribuyente',
+        opcion: 'predios_rentas',
+        parametros: (codigo: string) => ({ codContribuyente: codigo }),
+      },
+    ],
     altas: [
       {
         accion: 'Nuevo',
