@@ -6,6 +6,7 @@ import { Aviso, Boton, Esqueleto, FechaDeCalculo } from '@sgtm/design-system';
 import { descriptorDe, escribe } from '@sgtm/api-client';
 import type { ValorDeCampo } from '@sgtm/api-client';
 import {
+  entradasDelIndice,
   esHojaDelCentro,
   opcionPorRuta,
   pantallasDelModulo,
@@ -781,6 +782,9 @@ function Bloques({
               ? // El rotulo es el del catalogo, no uno redactado aqui (RNF-080).
                 { previa: { rotulo: estructura.tabla.title, ancla: ANCLA_DE_LA_TABLA } }
               : {})}
+            {...(composicion.gruposDelIndice === undefined
+              ? {}
+              : { grupos: entradasDelIndice(estructura, composicion.gruposDelIndice) })}
           />
         </Suspense>
         <div className="sgtm-conindice__panel">{formulario}</div>

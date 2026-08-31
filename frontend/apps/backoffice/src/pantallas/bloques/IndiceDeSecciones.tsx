@@ -45,6 +45,17 @@ export interface IndiceDeSeccionesProps {
    * catalogo, no uno inventado (RNF-080).
    */
   readonly previa?: { readonly rotulo: string; readonly ancla: string };
+  /**
+   * Las entradas **agrupadas**, cuando la opcion lo declara
+   * (`ComposicionDeOpcion.gruposDelIndice`, #503 F2). Cada una nombra un grupo
+   * de pestanas del manual y lleva a la primera seccion del grupo.
+   *
+   * Sustituyen a las de `secciones`, no se suman a ellas: el indice del padron
+   * de contribuyentes pasa de doce entradas a cinco. `secciones` se sigue
+   * recibiendo porque es lo que dibuja la pagina, y porque sin ella el conteo
+   * de la cabecerilla no sabria de cuantas secciones habla.
+   */
+  readonly grupos?: readonly { readonly rotulo: string; readonly seccion: number }[];
 }
 
 export function IndiceDeSecciones({
@@ -52,6 +63,7 @@ export function IndiceDeSecciones({
   anclaDe,
   haciaLasAcciones = false,
   previa,
+  grupos,
 }: IndiceDeSeccionesProps) {
   const [activa, fijarActiva] = useState(0);
 
@@ -67,7 +79,9 @@ export function IndiceDeSecciones({
      previa. */
   const entradas = [
     ...(previa === undefined ? [] : [{ rotulo: previa.rotulo, ancla: previa.ancla }]),
-    ...secciones.map((seccion, indice) => ({ rotulo: seccion.label, ancla: anclaDe(indice) })),
+    ...(grupos === undefined
+      ? secciones.map((seccion, indice) => ({ rotulo: seccion.label, ancla: anclaDe(indice) }))
+      : grupos.map((grupo) => ({ rotulo: grupo.rotulo, ancla: anclaDe(grupo.seccion) }))),
   ];
 
   const rotulos = entradas.map((entrada) => entrada.rotulo).join('|');
@@ -126,13 +140,7 @@ export function IndiceDeSecciones({
           la palabra no cambia. */}
       <p className="sgtm-indice__eyebrow">
         {entradas.length}{' '}
-        {previa === undefined
-          ? entradas.length === 1
-            ? 'sección'
-            : 'secciones'
-          : entradas.length === 1
-            ? 'bloque'
-            : 'bloques'}
+        {palabraDeLaCabecerilla(entradas.length, previa !== undefined, grupos !== undefined)}
       </p>
       {entradas.map((entrada, indice) => (
         <button
@@ -181,4 +189,22 @@ export function IndiceDeSecciones({
       )}
     </nav>
   );
+}
+
+/**
+ * La palabra de la cabecerilla, que tiene que ser cierta de lo que hay debajo.
+ *
+ *   `secciones`  el caso normal: cada entrada es una seccion de la pagina
+ *   `bloques`    hay `previa` —la tabla—, que no es una seccion (#342, nit 4)
+ *   `apartados`  las entradas son **grupos de pestanas** (#503 F2), y decir
+ *                «5 secciones» donde la pagina dibuja doce seria una
+ *                afirmacion falsa sobre lo que hay debajo. La palabra no la
+ *                pone el manual —no hay rotulo que copiar para un nivel que el
+ *                manual no tiene—, asi que se elige una que no promete ser
+ *                ninguna de las otras dos
+ */
+function palabraDeLaCabecerilla(cuantas: number, conPrevia: boolean, agrupado: boolean): string {
+  if (agrupado) return cuantas === 1 ? 'apartado' : 'apartados';
+  if (conPrevia) return cuantas === 1 ? 'bloque' : 'bloques';
+  return cuantas === 1 ? 'sección' : 'secciones';
 }

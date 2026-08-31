@@ -207,6 +207,50 @@ export function seccionesApiladas(pantalla: EstructuraDePantalla): readonly Secc
   return pantalla.secciones ?? [];
 }
 
+/**
+ * Las entradas del indice cuando la opcion **agrupa** sus pestanas
+ * (`ComposicionDeOpcion.gruposDelIndice`, #503 F2).
+ *
+ * Devuelve un rotulo por grupo y **la posicion de su primera seccion** dentro de
+ * `seccionesApiladas`, que es a donde lleva la entrada. Las secciones no se
+ * tocan: la pagina sigue dibujando las doce del padron de contribuyentes con su
+ * rotulo del manual. Lo que se agrupa es la navegacion.
+ *
+ * Un grupo cuyas pestanas no declaren ni una seccion **no devuelve entrada**: no
+ * hay a donde llevar, y una entrada de indice que no desplaza a ningun sitio es
+ * peor que no tenerla. Ocurre con una pestana de solo tabla.
+ *
+ * El tipo del parametro es estructural a proposito: `GrupoDelIndice` vive en
+ * `pantallas/composicion.ts`, que importa de aqui, y el catalogo no importa de
+ * las pantallas.
+ */
+export function entradasDelIndice(
+  pantalla: EstructuraDePantalla,
+  grupos: readonly { readonly titulo: string; readonly pestanas: readonly string[] }[],
+): readonly { readonly rotulo: string; readonly seccion: number }[] {
+  const pestanas = pantalla.tabs ?? [];
+  const entradas: { readonly rotulo: string; readonly seccion: number }[] = [];
+  for (const grupo of grupos) {
+    // La primera seccion del grupo en el orden APILADO, que es el orden de la
+    // pagina: se recorren las pestanas del catalogo contando secciones, y la
+    // primera que pertenezca al grupo fija el ancla.
+    let contadas = 0;
+    let primera: number | undefined = undefined;
+    for (const pestana of pestanas) {
+      if (
+        primera === undefined &&
+        grupo.pestanas.includes(pestana.label) &&
+        pestana.secciones.length > 0
+      ) {
+        primera = contadas;
+      }
+      contadas += pestana.secciones.length;
+    }
+    if (primera !== undefined) entradas.push({ rotulo: grupo.titulo, seccion: primera });
+  }
+  return entradas;
+}
+
 /** Arrancan cerradas las secciones que el prototipo marca asi (FRO-03 §5). */
 const HINTS_CERRADOS = new Set(['Colapsado', 'Opcional', 'Solo lectura']);
 
