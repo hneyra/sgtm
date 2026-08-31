@@ -12,6 +12,7 @@ import {
   type Arancel,
   type Depreciacion,
   type ValorUnitario,
+  contarFichas,
   listarAranceles,
   listarDepreciacion,
   listarSectores,
@@ -33,12 +34,10 @@ import {
   DEFECTOS_DE_FICHA_NUEVA,
   FILAS_REPORTE,
   GRUPOS,
-  KPIS,
   LOTE_SELECCIONADO,
   MODALIDADES,
   MODOS,
   OPCIONES,
-  PENDIENTES,
   PESTANIAS_DE_VALORES,
   REPORTE_META,
   SECTORES_DEL_MAPA,
@@ -433,11 +432,28 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     dest === 'territorio' || (dest === 'predios' && predio === null),
   );
 
+  /* ── El panel del módulo ──────────────────────────────────────
+     Sus cifras salen de contar con los filtros que el backend ya admite: no
+     hay endpoint de indicadores de catastro, y componer una cifra aquí a
+     partir de varias sería inventarla. */
+  const enPanel = dest === 'panel';
+  const censoActivos = useRecurso((s2) => listarPredios({ estado: 'ACTIVO' }, { tamano: 1 }, s2), [], enPanel);
+  const censoSinFicha = useRecurso((s2) => listarPredios({ fichado: false }, { tamano: 1 }, s2), [], enPanel);
+  const censoDeBaja = useRecurso((s2) => listarPredios({ estado: 'DADO_DE_BAJA' }, { tamano: 1 }, s2), [], enPanel);
+  /* «Sin conciliar» exige el permiso de fiscalización: es la lista de quien
+     tiene ficha y no declara. Si el perfil no lo tiene, sale «—», no un cero. */
+  const censoSinConciliar = useRecurso((s2) => contarFichas({ conciliadaConRentas: 'No' }, s2), [], enPanel);
+  const sectoresDelPanel = useRecurso((s2) => listarSectores(s2), [], enPanel);
+
   /* Las tres tablas de valuación del ejercicio. Devuelven una lista suelta, no
      el sobre paginado, y contestan 404 cuando el ejercicio no tiene conjunto de
      parámetros sellado —que es el estado de hoy (D-02a)—. */
   const anio = Number(pref.ejercicio);
-  const aranceles = useRecurso((s2) => listarAranceles(anio, s2), [anio], dest === 'valores' && valTab === 0);
+  const aranceles = useRecurso(
+    (s2) => listarAranceles(anio, s2),
+    [anio],
+    enPanel || (dest === 'valores' && valTab === 0),
+  );
   const unitarios = useRecurso((s2) => listarValoresUnitarios(anio, s2), [anio], dest === 'valores' && valTab === 1);
   const deprec = useRecurso((s2) => listarDepreciacion(anio, s2), [anio], dest === 'valores' && valTab === 2);
 
@@ -510,6 +526,81 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const conjuntoSinSellar =
     lecturaDeValores.error?.codigo === 'NO_ENCONTRADO' &&
     /conjunto de parametros sellado|conjunto de parámetros sellado/i.test(lecturaDeValores.error.mensaje);
+
+  /**
+   * Los cuatro indicadores. Solo los dos que el backend puede contar llevan
+   * cifra; los otros dos salen «—» diciendo qué falta, porque un indicador
+   * inventado en un panel es indistinguible de uno correcto.
+   */
+  const cifra = (r: { datos: { totalElementos: number } | null; cargando: boolean; error: unknown }) =>
+    r.cargando ? '…' : r.datos ? r.datos.totalElementos.toLocaleString('es-PE') : SIN_DATO;
+
+  /* Lo mismo que `conjuntoSinSellar`, pero preguntado a la lectura del panel:
+     alli no hay pestaña activa de la que deducirlo. */
+  const sinConjuntoSellado = aranceles.error?.codigo === 'NO_ENCONTRADO';
+
+  const kpisDelPanel = [
+    {
+      valor: cifra(censoActivos),
+      etiqueta: 'Predios en el padrón',
+      nota: `Activos. ${cifra(censoDeBaja)} dados de baja, que siguen en determinaciones ya emitidas.`,
+    },
+    {
+      valor: sectoresDelPanel.cargando
+        ? '…'
+        : sectoresDelPanel.datos
+          ? String((sectoresDelPanel.datos.contenido ?? []).reduce((a, x) => a + (x.manzanas ?? 0), 0))
+          : SIN_DATO,
+      etiqueta: `Manzanas en ${sectoresDelPanel.datos?.totalElementos ?? 0} sectores`,
+      nota: 'Un predio sin sector no cuenta en ninguno.',
+    },
+    {
+      valor: cifra(censoSinFicha),
+      etiqueta: 'Predios sin ficha catastral',
+      nota: 'Están en el padrón y no tienen con qué valorizarse. Es la cola de saneamiento.',
+    },
+    {
+      /* El arancel mediano lo componia el prototipo. No se calcula aqui: es una
+         cifra de dinero, y componerla en la pantalla es lo que RNF-083 prohibe.
+         Ademas hoy no hay ningun arancel publicado. */
+      valor: SIN_DATO,
+      etiqueta: 'Arancel mediano por m²',
+      nota: 'Ninguna lectura publica esta cifra, y componerla aquí sería inventarla.',
+    },
+  ];
+
+  /** Las tareas, con su conteo real y su destino. */
+  const pendientesDelPanel = [
+    {
+      tipo: 'Saneamiento',
+      titulo: 'Predios sin ficha catastral',
+      detalle: 'Están en el padrón y no generan autovalúo hasta que se les levante la ficha.',
+      conteo: cifra(censoSinFicha),
+      tono: 'warn' as Tono,
+      dest: 'predios',
+    },
+    {
+      tipo: 'Rentas',
+      titulo: 'Predios sin conciliar con el padrón de rentas',
+      detalle: censoSinConciliar.error
+        ? 'Hace falta el permiso de fiscalización para ver esta lista: es la de quien tiene ficha y no declara.'
+        : 'Tienen ficha catastral y no generan deuda predial. La conciliación se hace desde Rentas.',
+      conteo: censoSinConciliar.error ? SIN_DATO : cifra(censoSinConciliar),
+      tono: 'bad' as Tono,
+      dest: 'predios',
+    },
+    {
+      tipo: 'Valores',
+      titulo: `Tabla de aranceles ${pref.ejercicio}`,
+      detalle: sinConjuntoSellado
+        ? 'El ejercicio no tiene conjunto de parámetros sellado: sin él no hay con qué valorizar.'
+        : 'El ejercicio tiene su conjunto sellado.',
+      conteo: sinConjuntoSellado ? 'Falta' : 'OK',
+      tono: (sinConjuntoSellado ? 'bad' : 'ok') as Tono,
+      dest: 'valores',
+    },
+  ];
+
 
   /* ── Ruta y contexto ────────────────────────────────────────── */
   const etiquetaDelDestino = m.destinos.find((x) => x.k === dest)?.label ?? 'Documentos';
@@ -933,13 +1024,21 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       /* Solo con el padrón sin filtrar: con un filtro puesto, `totalElementos`
          es lo que devuelve la búsqueda, y «6 en el padrón» al lado de un filtro
          se lee como el tamaño del padrón entero. */
+      /* Las notas del carril dejan de decir la cifra del prototipo en cuanto
+         alguna lectura de este módulo la ha contado. Se alimentan de la del
+         destino y, si no, de la del panel: si no, «18,412 en el padrón» convive
+         con los 14,422 que la tabla enseña al lado. */
       notasDeDestino={{
-        ...(totalDelPadron === null ? {} : { predios: totalDelPadron.toLocaleString('es-PE') + ' en el padrón' }),
+        ...(totalDelPadron !== null
+          ? { predios: totalDelPadron.toLocaleString('es-PE') + ' en el padrón' }
+          : censoActivos.datos
+            ? { predios: censoActivos.datos.totalElementos.toLocaleString('es-PE') + ' en el padrón' }
+            : {}),
         ...(sectores.datos && vias.datos
-          ? {
-              territorio: `${sectores.datos.totalElementos} sectores · ${vias.datos.totalElementos.toLocaleString('es-PE')} vías`,
-            }
-          : {}),
+          ? { territorio: `${sectores.datos.totalElementos} sectores · ${vias.datos.totalElementos.toLocaleString('es-PE')} vías` }
+          : sectoresDelPanel.datos
+            ? { territorio: `${sectoresDelPanel.datos.totalElementos} sectores` }
+            : {}),
       }}
       paleta={paleta}
     >
@@ -955,9 +1054,9 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
             <section style={TARJETA}>
               <div style={CABECERA_SECCION}>
                 <h2 style={H2}>Tu trabajo de hoy</h2>
-                <span style={META}>3 tareas</span>
+                <span style={META}>{pendientesDelPanel.length} tareas</span>
               </div>
-              {PENDIENTES.map((p) => (
+              {pendientesDelPanel.map((p) => (
                 <button
                   key={p.titulo}
                   onClick={() => irA(p.dest)}
@@ -989,7 +1088,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
             </section>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(196px,1fr))', gap: 13 }}>
-              {KPIS.map((k) => (
+              {kpisDelPanel.map((k) => (
                 <div key={k.etiqueta} style={{ ...TARJETA, padding: '16px 17px' }}>
                   <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 25, fontWeight: 500, letterSpacing: '-.01em', color: 'var(--accent-ink)' }}>
                     {k.valor}

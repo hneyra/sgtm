@@ -239,3 +239,21 @@ export function listarValoresUnitarios(anio: number, senal?: AbortSignal): Promi
 export function listarDepreciacion(anio: number, senal?: AbortSignal): Promise<Depreciacion[]> {
   return solicitar('/catastro/tablas/depreciacion', { parametros: { anio }, senal });
 }
+
+
+/**
+ * La conciliacion catastro↔rentas (ADR-0015).
+ *
+ * **Vive bajo `/catastro/fichas/conciliacion` y la sirve `rentas`**: el dato que
+ * distingue una ficha conciliada —si el predio declaro— es de rentas, y catastro
+ * no puede depender de el sin cerrar un ciclo de modulos.
+ *
+ * `conciliadaConRentas=No` exige ademas el permiso de fiscalizacion: es la lista
+ * de quien tiene ficha y no declara, y esa lista no la ve cualquiera.
+ */
+export function contarFichas(
+  parametros: { conciliadaConRentas?: 'Si' | 'No' },
+  senal?: AbortSignal,
+): Promise<RespuestaPaginada<unknown>> {
+  return solicitar('/catastro/fichas/conciliacion', { parametros: { ...parametros, tamano: 1 }, senal });
+}
