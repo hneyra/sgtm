@@ -129,6 +129,8 @@ class ContratoDeApiTest {
                     "GET /rentas/predios",
                     "POST /rentas/predial/calculo-individual",
                     "POST /rentas/predial/calculo-masivo",
+                    "GET /rentas/predial/corridas/ultima",
+                    "GET /rentas/predial/corridas/{corridaId}/observados",
                     "POST /rentas/alcabala",
                     "POST /rentas/espectaculos",
                     "GET /consultas/cuenta-corriente/{codigo}",

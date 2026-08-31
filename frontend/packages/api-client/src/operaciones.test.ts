@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas sesenta y dos operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas sesenta y cuatro operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -189,7 +189,7 @@ describe('las operaciones generadas son las del contrato', () => {
     //     leer (#366) y transferir (#29), pero EL PRIMER TITULAR no se podia
     //     registrar por HTTP: solo se transfiere lo que ya tiene dueno.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(196);
+    expect(Object.keys(OPERACIONES)).toHaveLength(198);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {
