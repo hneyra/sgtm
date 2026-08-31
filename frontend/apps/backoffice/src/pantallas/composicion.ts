@@ -47,6 +47,14 @@ import type { CampoDePantalla } from '../catalogo';
 
 /** Lo que recibe una cabecera-resumen: el registro abierto y la respuesta. */
 export interface ResumenDePantallaProps {
+  /**
+   * Si la superficie tiene algo tecleado y sin enviar (#498 F3).
+   *
+   * Derivado del borrador de `useEscritura`, no un estado nuevo. Lo declaran
+   * solo las superficies que escriben; las demas lo dejan sin pasar y su
+   * cabecera no habla de guardar.
+   */
+  readonly sinGuardar?: boolean;
   /** El registro que abre la pantalla, tal como viene de la ruta. */
   readonly codigo?: string;
   readonly datos?: DatosDePantalla;

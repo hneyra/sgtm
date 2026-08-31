@@ -83,6 +83,22 @@ export interface CabeceraDeRegistroProps {
    * ahi el registro esta en la ruta, y sin ruta no hay ficha que resumir.
    */
   readonly vacio?: string;
+  /**
+   * Si hay algo tecleado y sin enviar, para decirlo donde no se pierda de vista
+   * (#498 F3).
+   *
+   * **Responde a un dolor declarado del rediseno: «no se si guarde».** Una ficha
+   * son entre una y once pestanas; quien corrige un campo en la ultima y sube a
+   * mirar otra cosa no tenia como saber si lo suyo seguia sin mandar. La
+   * cabecera es `sticky`, asi que la respuesta esta siempre en pantalla.
+   *
+   * Es un **derivado del borrador de `useEscritura`**, no un estado nuevo: si no
+   * lo fuera, habria dos verdades sobre lo mismo y la que se lee seria la que
+   * nadie recalculo. Una superficie que no escribe no lo declara, y entonces la
+   * cabecera no dice nada de guardar —que es lo correcto: el territorio y el
+   * cuadro de valuacion no tienen borrador que perder—.
+   */
+  readonly sinGuardar?: boolean;
   /** Lo que la cabecera **todavia** no puede decir: guiones con su motivo. */
   readonly children?: ReactNode;
 }
@@ -91,6 +107,7 @@ export function CabeceraDeRegistro({
   rotulo,
   identificador,
   insignias = [],
+  sinGuardar,
   apostilla,
   datos = [],
   cargando = false,
@@ -118,6 +135,22 @@ export function CabeceraDeRegistro({
                   </Insignia>
                 ))}
                 {apostilla !== undefined && <span>{apostilla}</span>}
+              </p>
+            )}
+
+            {/* El estado de guardado, al final de la linea de identidad (#498
+                F3). **Con texto y no solo con color** (FRO-02 §2.1): el punto
+                acompana, no informa. Y es una region viva —`role="status"`—
+                porque cambia sin que el foco se mueva: quien teclea en el
+                ultimo campo de la ultima pestana no esta mirando aqui arriba. */}
+            {sinGuardar !== undefined && (
+              <p
+                className="sgtm-resumen__guardado"
+                data-sin-guardar={sinGuardar ? '1' : '0'}
+                role="status"
+              >
+                <span className="sgtm-resumen__punto" aria-hidden="true" />
+                {sinGuardar ? 'Cambios sin guardar' : 'Sin cambios pendientes'}
               </p>
             )}
           </div>

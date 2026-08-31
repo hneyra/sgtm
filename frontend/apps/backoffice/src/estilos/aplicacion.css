@@ -471,6 +471,36 @@
   background: var(--bg-card);
   border: 1px solid var(--line);
   border-radius: 10px;
+  /* **Se queda a la vista** (#498 F3): una ficha son hasta once pestanas, y
+     quien baja a corregir un campo perdia de vista cual predio estaba tocando y
+     si lo suyo seguia sin mandar. `top` es el alto de la cabecera de la
+     aplicacion, que tambien es `sticky`. */
+  position: sticky;
+  top: 57px;
+  z-index: 30;
+}
+
+/* El estado de guardado. Con texto, no solo con color (FRO-02 §2.1): el punto
+   acompana y el rotulo informa. */
+.sgtm-resumen__guardado {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--ok-fg);
+}
+
+.sgtm-resumen__guardado[data-sin-guardar='1'] {
+  color: var(--warn-fg);
+}
+
+.sgtm-resumen__punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: currentColor;
 }
 
 .sgtm-resumen__identidad {

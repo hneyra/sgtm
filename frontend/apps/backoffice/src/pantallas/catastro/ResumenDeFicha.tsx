@@ -49,7 +49,7 @@ import {
  *                    como la conciliacion: un guion suelto en la rejilla se
  *                    leeria como «la ficha no lo trae»
  */
-export function ResumenDeFicha({ codigo, datos, cargando }: ResumenDePantallaProps) {
+export function ResumenDeFicha({ codigo, datos, cargando, sinGuardar }: ResumenDePantallaProps) {
   // Sin registro abierto no hay ficha que resumir. Lo decide la cabecera y no el
   // renderizador porque «cual es el registro» no es igual en todas: en catastro
   // es el parametro de la ruta y en el padron de contribuyentes es el filtro.
@@ -62,6 +62,10 @@ export function ResumenDeFicha({ codigo, datos, cargando }: ResumenDePantallaPro
     <CabeceraDeRegistro
       rotulo="Resumen de la ficha"
       identificador={formatearCodigoCatastral(codigo)}
+      /* Si hay algo tecleado y sin mandar (#498 F3). Lo declaran solo las
+         superficies que escriben: el territorio y el cuadro de valuacion pasan
+         `undefined` y su cabecera no dice nada de guardar. */
+      {...(sinGuardar === undefined ? {} : { sinGuardar })}
       /* El estado nunca solo por color, y la version que rige va con desde
          cuando y de donde salio: esa apostilla **fecha la ficha entera**, que es
          por que ninguno de los datos de abajo lleva fecha propia —el titular, el
