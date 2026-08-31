@@ -482,6 +482,38 @@ export interface SimulacionDeLaPantalla {
 }
 
 /**
+ * **Una tabla que una seccion toma prestada de otra opcion** (#503 F2).
+ *
+ * El hueco que cierra: la seccion «Unidades afectas del contribuyente» del
+ * padron son **seis contadores de solo lectura** —predios registrados, autovaluo
+ * acumulado, vehiculos afectos…— y `ContribuyenteResource` no publica ninguno,
+ * asi que salen «—» los seis. El rediseño los sustituye por la lista de verdad,
+ * que ya existe: `GET /rentas/predios?contribuyente=`, que es la operacion de
+ * **otra** opcion del mismo destino.
+ *
+ * Se declara por opcion y no se inventa nada: de la opcion prestada salen
+ *
+ *   su **operacion**  lo que se pide, con su adaptador y su conexion ya escritos
+ *   su **tabla**      las columnas del catalogo, con sus rotulos (RNF-080)
+ *   su **permiso**    quien no puede ver esa opcion no ve la tabla; se le nombra
+ *                     la que le falta, en vez de dejarle una tabla vacia que se
+ *                     leeria como «no tiene predios» (ADR-0016 §2)
+ *   su **titulo**     como se llama, sin redactar uno nuevo
+ *
+ * **La opcion prestada tiene que ser del mismo modulo.** Sus conexiones llegan
+ * con el trozo de su modulo (#433), asi que tomar prestada la de otro traeria
+ * ese trozo aqui. La guarda vive en `tabla-de-otra-opcion.test.tsx`.
+ */
+export interface TablaDeOtraOpcion {
+  /** La seccion del catalogo bajo la que se dibuja, por su rotulo. */
+  readonly seccion: string;
+  /** La opcion cuya tabla, operacion, permiso y titulo se toman prestados. */
+  readonly opcion: string;
+  /** Con que se le pregunta por el registro abierto. */
+  readonly parametros: (codigo: string) => Readonly<Record<string, string>>;
+}
+
+/**
  * Un grupo del indice: un rotulo y las pestanas del catalogo que caen en el.
  *
  * `titulo` es el rotulo de la pestana cuando el grupo tiene una sola —y
@@ -657,6 +689,11 @@ export interface ComposicionDeOpcion {
    * inalcanzables salvo rodando la pagina.
    */
   readonly gruposDelIndice?: readonly GrupoDelIndice[];
+  /**
+   * Tablas que las secciones de esta opcion toman prestadas de otras
+   * (#503 F2). Ver {@link TablaDeOtraOpcion}.
+   */
+  readonly tablasPrestadas?: readonly TablaDeOtraOpcion[];
   /**
    * La **tabla** de la pantalla entra en el indice, como su primera entrada.
    *
@@ -891,6 +928,19 @@ export const controlesDe = (opcion: string): readonly ControlDeclarado[] =>
  * cadena de prototipos no tiene por donde entrar. Una seccion llamada
  * `constructor` devuelve la lista vacia, como cualquier otra que nadie declare.
  */
+const SIN_TABLAS: readonly TablaDeOtraOpcion[] = [];
+
+/** Las tablas prestadas que van bajo una seccion, en el orden declarado. */
+export const tablasDeLaSeccion = (
+  opcion: string,
+  seccion: string,
+): readonly TablaDeOtraOpcion[] => {
+  const declaradas = composicionDe(opcion).tablasPrestadas;
+  if (declaradas === undefined) return SIN_TABLAS;
+  const suyas = declaradas.filter((tabla) => tabla.seccion === seccion);
+  return suyas.length === 0 ? SIN_TABLAS : suyas;
+};
+
 export const controlesDeLaSeccion = (
   opcion: string,
   seccion: string,
