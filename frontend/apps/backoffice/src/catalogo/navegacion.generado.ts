@@ -175,17 +175,18 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M9.5 16.5h3.5"
     ],
     "bloques": [
-      "Padrón",
-      "Determinación",
-      "Actos y transferencias",
-      "Beneficios y ajustes"
+      "Contribuyentes",
+      "Determinaciones",
+      "Transferencias",
+      "Movimientos de deuda",
+      "Documentos"
     ],
     "opciones": [
       {
         "id": "contribuyentes",
         "label": "Contribuyentes",
         "ranura": "contribuyentes",
-        "bloque": "Padrón",
+        "bloque": "Contribuyentes",
         "title": "Contribuyentes",
         "resumen": "Padrón único del contribuyente. Su código enlaza predios, vehículos, licencias, papeletas y la cuenta corriente."
       },
@@ -193,7 +194,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "predios_rentas",
         "label": "Predios",
         "ranura": "predios-rentas",
-        "bloque": "Padrón",
+        "bloque": "Contribuyentes",
         "title": "Predios del contribuyente",
         "resumen": "Padrón predial de rentas. Cada predio guarda su autovalúo, condición de propiedad y la fecha desde la que genera obligación."
       },
@@ -201,7 +202,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "predial_individual",
         "label": "Predial — individual",
         "ranura": "predial-individual",
-        "bloque": "Determinación",
+        "bloque": "Determinaciones",
         "title": "Cálculo individual del impuesto predial",
         "resumen": "Determina el impuesto de un contribuyente sobre el autovalúo acumulado de todos sus predios en el distrito, con la escala progresiva acumulativa y el mínimo imponible de 0.6 % de la UIT."
       },
@@ -209,7 +210,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "predial_masivo",
         "label": "Predial — masivo",
         "ranura": "predial-masivo",
-        "bloque": "Determinación",
+        "bloque": "Determinaciones",
         "title": "Cálculo masivo del impuesto predial",
         "resumen": "Proceso batch de emisión anual. Recalcula todo el padrón para el ejercicio seleccionado y deja constancia de los contribuyentes observados que quedan fuera de la emisión."
       },
@@ -217,7 +218,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "declaracion_jurada",
         "label": "Declaración jurada",
         "ranura": "declaracion-jurada",
-        "bloque": "Determinación",
+        "bloque": "Documentos",
         "title": "Declaración jurada — HR, PU y PR",
         "resumen": "Formularios de la declaración: hoja resumen (HR), predio urbano (PU) y predio rústico (PR). Se imprimen para la firma del contribuyente y quedan como sustento del cálculo."
       },
@@ -225,7 +226,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "arbitrios",
         "label": "Arbitrios",
         "ranura": "arbitrios",
-        "bloque": "Determinación",
+        "bloque": "Determinaciones",
         "title": "Arbitrios municipales",
         "resumen": "Limpieza pública, parques y jardines y serenazgo. La tasa depende del uso del predio, la zona, la frecuencia del servicio y los metros de frontis declarados en la ficha."
       },
@@ -233,7 +234,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transferencia_predio",
         "label": "Transferencia de predio",
         "ranura": "transferencia-predio",
-        "bloque": "Actos y transferencias",
+        "bloque": "Transferencias",
         "title": "Transferencia de predio",
         "resumen": "Da de baja al transferente y de alta al adquirente desde la fecha del acto. La obligación del vendedor corre hasta el 31 de diciembre del año de la transferencia."
       },
@@ -241,7 +242,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "alcabala",
         "label": "Alcabala",
         "ranura": "alcabala",
-        "bloque": "Actos y transferencias",
+        "bloque": "Determinaciones",
         "title": "Impuesto de alcabala",
         "resumen": "Grava la transferencia de propiedad con el 3 % sobre el exceso de las primeras 10 UIT, tomando como base el mayor valor entre el de transferencia y el autovalúo ajustado por el IPM."
       },
@@ -249,7 +250,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "vehiculos",
         "label": "Vehículos",
         "ranura": "vehiculos",
-        "bloque": "Padrón",
+        "bloque": "Contribuyentes",
         "title": "Ficha de vehículo",
         "resumen": "Registro del vehículo. La afectación corre tres ejercicios desde el año siguiente a la primera inscripción registral."
       },
@@ -257,7 +258,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "vehicular_calculo",
         "label": "Cálculo vehicular",
         "ranura": "vehicular-calculo",
-        "bloque": "Determinación",
+        "bloque": "Determinaciones",
         "title": "Cálculo del impuesto vehicular",
         "resumen": "Aplica el 1 % sobre la base imponible con un mínimo del 1.5 % de la UIT, por los tres ejercicios en que el vehículo permanece afecto."
       },
@@ -265,7 +266,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "transferencia_vehiculo",
         "label": "Transferencia de vehículo",
         "ranura": "transferencia-vehiculo",
-        "bloque": "Actos y transferencias",
+        "bloque": "Transferencias",
         "title": "Transferencia de vehículo",
         "resumen": "Registra el cambio de titular. El transferente responde por el impuesto hasta el 31 de diciembre del año en que se produce la venta."
       },
@@ -273,7 +274,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "espectaculos",
         "label": "Espectáculos públicos",
         "ranura": "espectaculos",
-        "bloque": "Actos y transferencias",
+        "bloque": "Determinaciones",
         "title": "Espectáculos públicos no deportivos",
         "resumen": "Grava el monto que se abona por presenciar el espectáculo. La tasa depende del tipo de evento y el organizador actúa como agente perceptor."
       },
@@ -281,7 +282,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "beneficios",
         "label": "Beneficios",
         "ranura": "beneficios",
-        "bloque": "Beneficios y ajustes",
+        "bloque": "Contribuyentes",
         "title": "Beneficios y exoneraciones",
         "resumen": "Deducciones, inafectaciones y amnistías. La deducción de 50 UIT para pensionistas y adultos mayores exige predio único destinado a vivienda."
       },
@@ -289,7 +290,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "alta_deuda",
         "label": "Alta de deuda",
         "ranura": "alta-deuda",
-        "bloque": "Beneficios y ajustes",
+        "bloque": "Movimientos de deuda",
         "title": "Alta de deuda",
         "resumen": "Incorpora manualmente una obligación a la cuenta corriente cuando no proviene de la emisión masiva: determinaciones de fiscalización, multas o deuda migrada."
       },
@@ -297,7 +298,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "baja_deuda",
         "label": "Baja de deuda",
         "ranura": "baja-deuda",
-        "bloque": "Beneficios y ajustes",
+        "bloque": "Movimientos de deuda",
         "title": "Baja de deuda",
         "resumen": "Extingue deuda de la cuenta corriente por prescripción, resolución que la deja sin efecto, error material o compensación. Requiere resolución y queda en la bitácora de auditoría."
       }

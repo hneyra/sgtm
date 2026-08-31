@@ -105,44 +105,66 @@ export const GRUPOS_POR_TAREA = {
       { centro: true },
     ],
   ],
-  // Reagrupado por **el hecho que dispara el trabajo** (#393). La agrupacion
-  // anterior seguia siendo, en parte, la taxonomia tecnica de FRO-03 §4:
-  // «Movimientos» mezclaba transferencias del padron con altas y bajas de la
-  // cuenta corriente —dos trabajos de dos personas distintas— y «Tributos y
-  // beneficios» era un cajon de sastre con un tributo de emision masiva
-  // (arbitrios), uno de transferencia (alcabala), uno por evento
-  // (espectaculos) y un registro de resoluciones que **baja la base antes de
-  // determinar** (beneficios).
+  // Reagrupado por **el hecho que dispara el trabajo** (#393), y desde #503 F1
+  // por **el destino**: cada grupo es ahora una superficie o el camino a ella,
+  // no un cajon de opciones parecidas. El nombre dice lo que se hace con ellas,
+  // no como se llama la familia de tributos.
   //
-  // Lo que se midio sobre el catalogo antes de mover nada: una atencion de
-  // predial —contribuyente, predios, DJ, determinacion, arbitrios,
-  // transferencia, alcabala— cruzaba los CUATRO grupos, y ninguno la reunia.
+  // Lo que #393 midio y sigue valiendo: una atencion de predial —contribuyente,
+  // predios, DJ, determinacion, arbitrios, transferencia, alcabala— cruzaba los
+  // CUATRO grupos de entonces y ninguno la reunia. Lo que cambia ahora es que
+  // los grupos coinciden con las superficies que se van a construir.
+  //
+  // Los cuatro movimientos, y su motivo:
+  //
+  //   `beneficios`          sale de «Beneficios y ajustes» y entra con el
+  //                         padron. Es una **seccion del expediente** del
+  //                         contribuyente (F2), no un ajuste de su deuda: baja
+  //                         la base antes de determinar, y se lee al abrir a la
+  //                         persona
+  //   `alcabala`            se queda con las determinaciones, que es lo que
+  //                         hace —liquidar un impuesto—, y ADEMAS la genera la
+  //                         casilla del acto de transferencia (F5). Vive en los
+  //                         dos sitios a proposito (#503, decision 3); el
+  //                         comentario que la ponia solo bajo el acto era de
+  //                         cuando esa casilla iba a ser su unica puerta
+  //   `alta_deuda`          se separan en su propio destino: desde #442 C ya
+  //   `baja_deuda`          SON una superficie de dos hojas, y el grupo que las
+  //                         contenia mezclaba esa superficie con los beneficios
+  //   `declaracion_jurada`  sale de «Determinacion» y pasa a «Documentos». Es
+  //                         el papel que **sustenta** la determinacion, no una
+  //                         forma de determinar, y se abre por su numero de DJ
+  //                         y no por el contribuyente. Mismo movimiento que
+  //                         #498 F2 le hizo al reporte del contribuyente
   'rentas-registro': [
-    // Quien y que esta inscrito. El unico grupo que no cambia.
-    ['Padrón', ['contribuyentes', 'predios_rentas', 'vehiculos']],
-    // La emision anual sobre el padron, en el orden en que se trabaja: el papel
-    // que la sustenta abre el grupo, y arbitrios entra aqui porque tambien es
-    // determinar y emitir cuponera, no un tributo suelto.
+    // El sujeto del modulo, y por eso el grupo se llama como el sujeto y no
+    // «Padron»: las cuatro caen en el expediente (F2) o en la busqueda con la
+    // que se llega a el.
+    ['Contribuyentes', ['contribuyentes', 'predios_rentas', 'vehiculos', 'beneficios']],
+    // Las seis formas de determinar. El orden separa lo que se emite del padron
+    // —las dos del predial y los dos tributos que van con la emision anual— de
+    // lo que se liquida por un hecho suelto: una transferencia o un evento.
     [
-      'Determinación',
+      'Determinaciones',
       [
-        'declaracion_jurada',
         'predial_individual',
         'predial_masivo',
         'arbitrios',
         'vehicular_calculo',
+        'alcabala',
+        'espectaculos',
       ],
     ],
-    // Lo que ocurre una vez y se liquida al momento. Alcabala queda **bajo el
-    // acto que la genera**: «Transferencia de predio» dibuja una casilla
-    // «Genera alcabala» y la pantalla que la liquidaba vivia dos grupos mas
-    // abajo.
-    [
-      'Actos y transferencias',
-      ['transferencia_predio', 'alcabala', 'transferencia_vehiculo', 'espectaculos'],
-    ],
-    // Las tres formas de tocar lo que se debe fuera de la emision.
-    ['Beneficios y ajustes', ['beneficios', 'alta_deuda', 'baja_deuda']],
+    // Las dos modalidades del mismo acto, que F5 dibuja como una superficie de
+    // tres pasos.
+    ['Transferencias', ['transferencia_predio', 'transferencia_vehiculo']],
+    // Ya son una superficie de dos hojas desde #442 C: el grupo se limita a
+    // decirlo en el menu.
+    ['Movimientos de deuda', ['alta_deuda', 'baja_deuda']],
+    // Un grupo de uno agrupa poco, y aqui hace lo mismo que en Catastro: separa
+    // lo que se abre con OTRO identificador. La DJ se abre por su numero, no
+    // por el codigo del contribuyente.
+    ['Documentos', ['declaracion_jurada']],
   ],
   valores: [
     ['Emisión', ['valores_individual', 'valores_masivo']],
