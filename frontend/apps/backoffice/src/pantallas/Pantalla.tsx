@@ -627,19 +627,24 @@ function Bloques({
       ? undefined
       : {
           etiqueta: declaradaDeFila.etiqueta,
+          ...(declaradaDeFila.nombraCon === undefined
+            ? {}
+            : {
+                nombraCon: (valores: Readonly<Record<string, string>> | undefined) =>
+                  valores === undefined ? undefined : declaradaDeFila.nombraCon?.(valores),
+              }),
           rutaDe: (valores: Readonly<Record<string, string>> | undefined) => {
             if (valores === undefined) return undefined;
             const parametros = declaradaDeFila.parametros(valores);
             if (parametros === undefined) return undefined;
-            /* El registro va en la ruta y los filtros en la consulta, que son
-               las dos formas de abrir algo (FRO-04 §5). Una opcion que se abre
-               por su codigo lo necesita en la ruta: como filtro, la pantalla se
-               dibujaria sin registro abierto. */
+            /* El registro va en la RUTA cuando la opcion lo declara: es de donde
+               `Pantalla` lo lee, y lo que hace que la pantalla sepa que hay uno
+               abierto. Con filtro seria una lista de una fila (#503). */
             const registro = declaradaDeFila.registro?.(valores);
-            if (declaradaDeFila.registro !== undefined && registro === undefined) return undefined;
+            if (declaradaDeFila.registro !== undefined && (registro === undefined || registro === ''))
+              return undefined;
             const base =
-              registro === undefined
-                ? destinoDeFila.ruta
+              registro === undefined || registro === ''                ? destinoDeFila.ruta
                 : `${destinoDeFila.ruta}/${encodeURIComponent(registro)}`;
             const consulta = new URLSearchParams(parametros).toString();
             return consulta === '' ? base : `${base}?${consulta}`;
@@ -683,6 +688,20 @@ function Bloques({
   const flujoAbierto = nuevoEnLaUrl && composicion.flujo !== undefined;
   const altaPorLaUrl =
     nuevoEnLaUrl && composicion.flujo === undefined && (composicion.altas ?? []).length > 0;
+
+  /* **Con un registro abierto, la lista y su buscador dan paso** (#503). Es la
+     decision de #391 §3 —«volver a preguntarlo encima de la ficha que se esta
+     leyendo era la sexta forma de buscar lo mismo»— aplicada por el renderizador
+     comun a la unica opcion que hoy la declara. La vuelta la pone su
+     cabecera-resumen, y hay una prueba que la exige: sin ella, esto encerraria a
+     quien atiende dentro de un registro. */
+  const hayRegistroAbierto = codigo !== undefined && codigo !== '';
+  const laListaDaPaso = composicion.listaOExpediente === true && hayRegistroAbierto;
+  /* Y la otra mitad: **sin registro abierto, el expediente no se dibuja**. Sin
+     esto, el padron enseñaba sus doce secciones en blanco al lado de las filas
+     —un formulario que no cuelga de nadie—, que es la mitad de la confusion que
+     este opt-in viene a quitar. */
+  const elExpedienteEspera = composicion.listaOExpediente === true && !hayRegistroAbierto;
 
   const barra = accionesDeLaBarra(
     estructura.id,
@@ -1061,7 +1080,7 @@ function Bloques({
         />
       )}
 
-      {filtrosDeLaPantalla && (
+      {filtrosDeLaPantalla && !laListaDaPaso && (
         <div ref={refDeBusqueda}>
           <Filtros
             opcion={estructura.id}
@@ -1099,7 +1118,7 @@ function Bloques({
         </div>
       )}
 
-      {estructura.tabla && (
+      {estructura.tabla && !laListaDaPaso && (
         <TablaDePantalla
           estructura={estructura.tabla}
           opcion={estructura.id}
@@ -1173,6 +1192,7 @@ function Bloques({
       )}
 
       {secciones.length > 0 &&
+        !elExpedienteEspera &&
         /* El indice **no bifurca el renderizador**: el formulario es el mismo
            componente con los mismos datos, y lo unico que cambia es que se
            dibuja dentro de una rejilla de dos columnas con su indice al lado

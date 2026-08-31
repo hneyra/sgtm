@@ -213,27 +213,32 @@ describe('la tabla decide que se pliega, y si lleva carril', () => {
   });
 });
 
-describe('el menu de Catastro pasa de doce entradas a cinco', () => {
+describe('el menu de Catastro pasa de doce entradas a seis', () => {
   /**
-   * **Cinco, que son los destinos del artboard** (#498 F2b): la portada del
-   * modulo, «Predios», «Territorio», «Valores del ejercicio» y —al pie— el
-   * documento. Falta «Mapa catastral», que no se dibuja porque no tiene
-   * operacion ni geometria servida (#500).
+   * **Los cinco destinos del artboard y el documento** (#498 F2b, #500): la
+   * portada del modulo, «Predios», «Mapa catastral», «Territorio», «Valores del
+   * ejercicio» y —al pie— el documento.
+   *
+   * El mapa entro con #500 y **no es un grupo del catalogo**: es una ruta del
+   * modulo, sin id y sin permiso propio, como la portada (ADR-0014 §5). Va
+   * detras de «Predios» porque el artboard lo pone ahi: es la otra forma de
+   * encontrar un predio, no un cuadro del ejercicio.
    *
    * «Predios» se pudo plegar cuando la chip de la modalidad que **no** deriva
    * del codigo dejo de estar apagada y paso a llevar a su propia busqueda: sin
    * eso, `ficha_rural` no la alcanzaba ninguna superficie y plegar habria
    * escondido una opcion sin retorno. Se midio, no se supuso.
    */
-  it('los cuatro destinos y el documento, y ni una opcion suelta', async () => {
+  it('los cinco destinos y el documento, y ni una opcion suelta', async () => {
     montarEnRuta('/catastro/consulta-fichas');
     await screen.findByRole('heading', { level: 1 });
 
     const entradas = within(menuDeCatastro()).getAllByRole('link');
-    expect(entradas).toHaveLength(5);
+    expect(entradas).toHaveLength(6);
     expect(entradas.map((e) => e.textContent)).toEqual([
       expect.stringContaining('Panel del módulo'),
       expect.stringContaining('Predios'),
+      expect.stringContaining('Mapa catastral'),
       expect.stringContaining('Territorio'),
       expect.stringContaining('Valores del ejercicio'),
       'Reporte de ficha del contribuyente',
@@ -290,9 +295,11 @@ describe('el menu de Catastro pasa de doce entradas a cinco', () => {
     await screen.findByRole('heading', { level: 1 });
 
     await waitFor(() => {
-      // Dos: la portada del modulo —que se dibuja porque queda algo visible en
-      // el— y «Predios», que es donde vive la unica opcion que este perfil ve.
-      expect(within(menuDeCatastro()).getAllByRole('link')).toHaveLength(2);
+      // Tres: la portada del modulo —que se dibuja porque queda algo visible en
+      // el—, «Predios», que es donde vive la unica opcion que este perfil ve, y
+      // el mapa, cuyo `exige` es precisamente `consulta_fichas` (#500): es la
+      // misma busqueda por otro camino, asi que quien puede una puede la otra.
+      expect(within(menuDeCatastro()).getAllByRole('link')).toHaveLength(3);
     });
     expect(within(menuDeCatastro()).queryByText(/^Territorio/)).not.toBeInTheDocument();
     expect(within(menuDeCatastro()).queryByText(/^Valores del ejercicio/)).not.toBeInTheDocument();

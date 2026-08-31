@@ -1,4 +1,4 @@
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Esqueleto, Insignia } from '@sgtm/design-system';
 import type { Celda } from '@sgtm/api-client';
 import type { ResumenDePantallaProps } from '../composicion';
@@ -59,6 +59,18 @@ export function ResumenDeContribuyente({ codigo, datos, cargando }: ResumenDePan
   return (
     <section className="sgtm-resumen" aria-label="Resumen del contribuyente">
       <div className="sgtm-resumen__identidad">
+        {/* **La vuelta al padrón, y no es un adorno** (#503). Con un expediente
+            abierto la lista y su buscador dan paso —volver a preguntar por él
+            encima del que se está leyendo era la sexta forma de buscar lo mismo
+            (#391 §3)—, y sin este enlace eso encerraría a quien atiende dentro
+            de un registro. Va aquí, en la cabecera del registro abierto, porque
+            es el único bloque que sólo existe cuando hay uno.
+
+            Es un enlace y no un botón: lo que se está mirando se puede
+            compartir, y volver al padrón es navegar (FRO-04 §5). */}
+        <Link className="sgtm-resumen__volver" to=".." relative="path">
+          Padrón
+        </Link>
         <p className="sgtm-resumen__codigo">{identificado}</p>
         <p className="sgtm-resumen__vigencia">
           {/* El estado nunca solo por color: la insignia lleva su letra dentro,

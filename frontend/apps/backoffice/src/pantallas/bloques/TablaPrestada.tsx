@@ -34,6 +34,7 @@ export function TablaPrestada({ tabla }: { readonly tabla: TablaDeOtraOpcion }) 
   const puedeVer = catalogo.puedeVer(tabla.opcion);
   const parametros = tabla.parametros(sujeto);
   const operacion = operacionDe(tabla.opcion);
+  const clave = tabla.conexion ?? tabla.opcion;
 
   const estructura = useQuery({
     queryKey: ['pantallas', 'prestada', tabla.opcion],
@@ -49,9 +50,9 @@ export function TablaPrestada({ tabla }: { readonly tabla: TablaDeOtraOpcion }) 
      forma— y su `adaptar` —que compone las celdas con los rotulos del catalogo—.
      Sin conexion se cae al camino comun, que es lo correcto para una opcion que
      todavia contesta la forma compartida. */
-  const conexion = conexionDe(tabla.opcion);
+  const conexion = conexionDe(tabla.conexion ?? tabla.opcion);
   const consulta = useQuery<DatosDePantalla>({
-    queryKey: ['prestada', tabla.opcion, parametros],
+    queryKey: ['prestada', clave, parametros],
     enabled: puedeVer && sujeto !== '' && operacion !== undefined,
     retry: 1,
     queryFn: ({ signal }) =>

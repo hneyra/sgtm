@@ -1302,6 +1302,99 @@ const fichas = (): Paginado =>
     })),
   );
 
+/* ── El plano catastral (#500, ADR-0022) ──────────────────────────────── */
+
+/**
+ * Un lote del plano, con su poligono.
+ *
+ * **Los lotes son los mismos cuatro predios que publica la consulta de fichas**,
+ * con su mismo `predioId` y su mismo codigo: quien encuentra un lote en el mapa
+ * y quien lo encuentra en la grilla tienen que estar mirando el mismo predio, y
+ * si el proxy inventara aqui un padron aparte esa correspondencia —que es toda
+ * la gracia de la superficie— no se podria probar.
+ *
+ * **Lo que el proxy NO hace es inventar un plano.** El artboard dibuja doce
+ * manzanas y ciento veinte lotes generados en un bucle; portar eso pondria en
+ * pantalla el levantamiento de ninguna municipalidad, y un plano se lee como un
+ * levantamiento. Lo que hay aqui son los cuatro predios que el prototipo ya
+ * describe, colocados sobre coordenadas reales de Sullana para que el visor
+ * tenga que resolver de verdad su encuadre, su proyeccion de pantalla y su
+ * escala. Ni un area sale del poligono (ADR-0021) y ni un arancel se pinta
+ * (ADR-0022 §5).
+ *
+ * `02-014-D-14-01` → sector `02`, manzana `014`, lote `14`. La fila cuyo codigo
+ * predial es «—» **no tiene sector, manzana ni lote**, y eso viaja como nulo:
+ * es un predio del padron al que nadie le ha compuesto todavia su codigo, y
+ * rellenarlo aqui seria el «—» de #322 al reves.
+ */
+const PLAZA_DE_SULLANA = { lon: -80.6855, lat: -4.8938 } as const;
+
+/** Un lote de 20 × 30 m, en grados, contado desde la plaza. Sin trigonometria escondida. */
+function loteRectangular(columna: number, fila: number): readonly (readonly number[])[] {
+  // 1° de latitud son ~110 574 m y 1° de longitud a esta latitud ~110 915 m.
+  const ancho = 20 / 110_915;
+  const alto = 30 / 110_574;
+  const oeste = PLAZA_DE_SULLANA.lon + columna * ancho * 1.15;
+  const sur = PLAZA_DE_SULLANA.lat + fila * alto * 1.3;
+  const este = oeste + ancho;
+  const norte = sur + alto;
+  return [
+    [oeste, sur],
+    [este, sur],
+    [este, norte],
+    [oeste, norte],
+    [oeste, sur],
+  ];
+}
+
+/** `02-014-D-14-01` → sector, manzana y lote; `—` → los tres nulos. */
+function ubicacionDelCodigoPredial(codigo: string): {
+  codigoDeSector: string | null;
+  codigoDeManzana: string | null;
+  lote: string | null;
+} {
+  const partes = codigo.split('-');
+  if (partes.length < 5) return { codigoDeSector: null, codigoDeManzana: null, lote: null };
+  return {
+    codigoDeSector: partes[0] ?? null,
+    codigoDeManzana: partes[1] ?? null,
+    lote: partes[3] ?? null,
+  };
+}
+
+/**
+ * El plano: los lotes con geometria, y **cuantos predios no la tienen**.
+ *
+ * `sinGeometria` es la mitad de esta lectura y no un extra. Hoy no hay una sola
+ * municipalidad con un poligono cargado, asi que el estado normal del visor es
+ * el plano vacio; sin esa cifra, un plano vacio se lee como un distrito sin
+ * predios en vez de como un catastro sin levantar (ADR-0022 §3). Aqui vale cero
+ * porque los cuatro del prototipo tienen el suyo, y la pantalla lo dice igual.
+ *
+ * **No pagina, y no es un olvido**: cuando el marco no cabe, la operacion se
+ * niega con su cifra en vez de servir los primeros (ADR-0022 §2). El proxy no
+ * filtra por marco —no filtra por nada, ADR-0010—, asi que devuelve los cuatro
+ * y ese camino lo ejercita la prueba de la pantalla, no este archivo.
+ */
+const planoCatastral = (): Readonly<Record<string, unknown>> => ({
+  marco: '-80.6870,-4.8950,-80.6840,-4.8925',
+  limite: 2000,
+  sinGeometria: 0,
+  lotes: filasDe('consulta_fichas').map(([codRefCatastral, codigoPredial], i) => ({
+    predioId: i + 1,
+    codRefCatastral,
+    ...ubicacionDelCodigoPredial(codigoPredial ?? ''),
+    codigoDeVia: '00001182',
+    via: 'JOSÉ DE LAMA',
+    estado: 'ACTIVO',
+    fichado: true,
+    geometria: {
+      type: 'MultiPolygon',
+      coordinates: [[loteRectangular(i % 3, Math.floor(i / 3))]],
+    },
+  })),
+});
+
 /**
  * Una ficha con su historico.
  *
@@ -2529,6 +2622,7 @@ const SUELTOS: Readonly<Record<string, () => Readonly<Record<string, unknown>>>>
   '/catastro/fichas/economica/{codRefCatastral}': economica,
   '/catastro/fichas/bienes-comunes/{codEdificacion}': bienesComunes,
   '/catastro/fichas/rural/{codUnidad}': rural,
+  '/catastro/predios/plano': planoCatastral,
   '/rentas/vehiculos/{placa}': vehiculo,
   '/rentas/declaraciones/{djNro}': declaracionJurada,
   '/tesoreria/recibos/{nro}/duplicado': duplicadoRecibo,
@@ -4080,6 +4174,11 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/consultas/cuenta-corriente/{codigo}': cuentaCorriente,
   '/consultas/deuda': consultaDeuda,
   '/consultas/vehiculos': consultaVehiculos,
+  // La misma fila, bajo la ruta de Rentas (#524). El recurso es el mismo
+  // `VehiculoEncontradoResource`, asi que el proxy no lo compone dos veces:
+  // dos formas distintas de la misma lectura dirian dos cosas del mismo
+  // vehiculo, y la que se leyera en el expediente seria la que nadie compara.
+  '/rentas/vehiculos': consultaVehiculos,
   '/consultas/altas-bajas': altasBajas,
   '/consultas/pagos': pagos,
   '/consultas/predios': predios,

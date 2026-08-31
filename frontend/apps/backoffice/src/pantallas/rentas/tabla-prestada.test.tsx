@@ -37,9 +37,20 @@ async function abrirLasUnidades(usuario: ReturnType<typeof userEvent.setup>): Pr
 }
 
 const CONTRIBUYENTE = '00000025673';
-const PADRON = `/rentas-registro/contribuyentes?codigo=${CONTRIBUYENTE}`;
+/* En la ruta, no en el filtro: el expediente se abre por el registro (#503). */
+const PADRON = `/rentas-registro/contribuyentes/${CONTRIBUYENTE}`;
 
-beforeEach(() => instalarProxyDeDatos({ latencia: false }));
+let pedidas: string[] = [];
+
+beforeEach(() => {
+  instalarProxyDeDatos({ latencia: false });
+  pedidas = [];
+  const proxy = globalThis.fetch;
+  globalThis.fetch = (entrada, opciones) => {
+    pedidas.push(typeof entrada === 'string' ? entrada : String(entrada));
+    return proxy(entrada, opciones);
+  };
+});
 afterEach(() => {
   limpiarSesion();
   desinstalarProxyDeDatos();
@@ -123,6 +134,103 @@ describe('la tabla, dibujada bajo la seccion', () => {
           n.textContent?.includes('Código predial'),
         ),
       ).toBe(false),
+    );
+  });
+});
+
+/**
+ * **Y los vehículos, desde #524.** Antes no se podían dibujar: la única lectura
+ * que los lista por contribuyente vivía en el módulo Consultas, y prestarla de
+ * otro módulo traería su trozo aquí y dejaría a quien tiene Rentas y no
+ * Consultas con un aviso de permiso ajeno dentro de su propio expediente.
+ *
+ * Lo que hay ahora es `GET /rentas/vehiculos`, detrás del permiso de «Ficha de
+ * vehículo» —la opción de Rentas que ya existía—. Es el primer caso en que la
+ * tabla prestada **nombra su operación**: la de la opción es la ficha por placa,
+ * que no lista nada.
+ */
+describe('la segunda tabla prestada: los vehículos', () => {
+  it(
+    'se dibuja con las columnas del catálogo de «Ficha de vehículo»',
+    { timeout: 20000 },
+    async () => {
+      const usuario = userEvent.setup();
+      montarEnRuta(PADRON);
+      await abrirLasUnidades(usuario);
+
+      const tabla = await waitFor(
+        () => {
+          const encontrada = [...document.querySelectorAll('.sgtm-tabla')].find((nodo) =>
+            nodo.textContent?.includes('Año fab.'),
+          );
+          expect(encontrada).toBeDefined();
+          return encontrada as HTMLElement;
+        },
+        { timeout: 5000 },
+      );
+      // Las ocho del catálogo, sin redactar ninguna (RNF-080).
+      for (const columna of ['Est.', 'Placa', 'Clase', 'Marca', 'Modelo', 'Afectación']) {
+        expect(within(tabla).getByText(columna), columna).toBeInTheDocument();
+      }
+
+      /* **Y con filas dentro, que es la mitad que de verdad protege.** Las
+         cabeceras salen del catálogo y se dibujan con cero filas: una prueba que
+         sólo las mirara pasaría en verde con la tabla vacía, que es exactamente
+         el defecto de #363. Medido: leerla por la operación de la opción —la
+         ficha por placa, que no lista nada— deja las ocho cabeceras y ni una
+         fila. */
+      const filas = tabla.querySelectorAll('tbody tr');
+      expect(filas.length, 'la colección trae vehículos, no sólo cabeceras').toBeGreaterThan(0);
+      expect(filas[0]?.querySelectorAll('td').length).toBe(8);
+
+      /* **Y se pidió a la colección, con su contribuyente.** Es lo único que
+         distingue lo correcto de lo plausible: la operación de la opción es la
+         ficha **por placa**, y en el proxy —que sirve las 134 en la forma
+         común— pedirla por ahí devuelve una tabla con filas igualmente. Con el
+         backend de verdad esa misma confusión daría la forma que no es y la
+         tabla saldría vacía en silencio, que es el defecto de #363. */
+      expect(
+        pedidas.some(
+          (url) => url.includes('/rentas/vehiculos?') && url.includes('contribuyente='),
+        ),
+        `se pidió la colección; lo pedido fue: ${pedidas.filter((u) => u.includes('vehiculos')).join(' | ')}`,
+      ).toBe(true);
+      expect(
+        pedidas.some((url) => /\/rentas\/vehiculos\/[^?]/.test(url)),
+        'y no la ficha por placa, que no lista nada',
+      ).toBe(false);
+    },
+  );
+
+  /**
+   * **La conexión se nombra aparte, y por eso hay dos claves.** La operación de
+   * `vehiculos` es `GET /rentas/vehiculos/{placa}` —la ficha— y no lista nada;
+   * leerla por ahí dejaría la tabla vacía en silencio, que es el defecto de #363.
+   */
+  it('la declaración nombra la operación de la colección, no la de la ficha', () => {
+    const prestadas = COMPOSICION_DE_RENTAS['contribuyentes']?.tablasPrestadas ?? [];
+    const deVehiculos = prestadas.find((tabla) => tabla.opcion === 'vehiculos');
+    expect(deVehiculos?.conexion).toBe('vehiculos_del_contribuyente');
+    // Y la de predios no la necesita: su opción sí lista.
+    expect(prestadas.find((tabla) => tabla.opcion === 'predios_rentas')?.conexion).toBeUndefined();
+  });
+
+  it('sin el permiso de «Ficha de vehículo», nombra la que falta', { timeout: 20000 }, async () => {
+    const usuario = userEvent.setup();
+    entraCon({ contribuyentes: ['lectura'], predios_rentas: ['lectura'] });
+    montarEnRuta(PADRON);
+    await abrirLasUnidades(usuario);
+
+    expect(
+      await screen.findByText(/Falta «Ficha de vehículo»/, undefined, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    // Y la de predios sí se dibuja: un permiso no se lleva por delante al otro.
+    await waitFor(() =>
+      expect(
+        [...document.querySelectorAll('.sgtm-tabla')].some((n) =>
+          n.textContent?.includes('Código predial'),
+        ),
+      ).toBe(true),
     );
   });
 });

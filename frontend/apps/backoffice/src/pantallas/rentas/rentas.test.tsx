@@ -314,7 +314,22 @@ describe('el padron de contribuyentes lee ContribuyenteResource', () => {
       SIN_DATO,
       SIN_DATO,
       SIN_DATO,
+      // Y la columna propia de `accionDeFila` (#503): la fila abre el
+      // expediente de esa persona. Va al final y en su propia columna, no
+      // dentro de una del catálogo — que taparía el dato que esa tiene que
+      // decir.
+      'Abrir el expediente',
     ]);
+
+    /* El nombre accesible lleva **a quién** se abre: once enlaces que dijeran
+       «Abrir el expediente» a secas no se distinguen entre sí, y sin declararlo
+       la tabla lo componía con la primera celda que dice algo — que aquí es la
+       insignia de estado, «A». */
+    const abrir = within(fila as HTMLElement).getByRole('link', {
+      name: 'Abrir el expediente: SUC. RUFINA MEDINA MEDINA',
+    });
+    expect(abrir, 'el registro va en la RUTA, no en un filtro: es de donde lo lee la pantalla')
+      .toHaveAttribute('href', '/rentas-registro/contribuyentes/00000025673');
   });
 
   it('las que faltan siguen sin Conexion propia, y las prediales van por la otra puerta', () => {

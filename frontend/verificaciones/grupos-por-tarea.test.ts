@@ -2,13 +2,19 @@ import { describe, expect, it } from 'vitest';
 // El portador es JavaScript de build y se importa **como se ejecuta**: sin
 // compilarlo, con los tipos que declara `grupos-por-tarea.d.mts` al lado.
 import {
+  DESTINOS,
   GRUPOS_POR_TAREA,
   asignacionPorTarea,
   bloquesPlegadosDe,
   centroDeReportesDe,
+  comprobarDestinos,
   nombresDeLosGrupos,
 } from '../scripts/grupos-por-tarea.mjs';
-import type { ItemDelPrototipo, TablaDeGrupos } from '../scripts/grupos-por-tarea.mjs';
+import type {
+  ItemDelPrototipo,
+  TablaDeDestinos,
+  TablaDeGrupos,
+} from '../scripts/grupos-por-tarea.mjs';
 
 /**
  * Las guardas del portador muerden.
@@ -128,6 +134,87 @@ const GUARDAS: {
 describe('toda guarda de la tabla tiene una tabla que la viola', () => {
   it.each(GUARDAS)('$guarda', ({ tabla, ids, delata }) => {
     expect(() => asignar('transito', ids, tabla)).toThrow(delata);
+  });
+});
+
+/**
+ * **Las guardas de los destinos** (#500).
+ *
+ * Un destino puede ser tres cosas y ninguna mas: la portada del modulo, un grupo
+ * del catalogo, o una **ruta propia** —el mapa catastral, que no tiene ninguna de
+ * las 134 opciones dentro—. Lo que las hace falta comprobar es que el sintoma de
+ * declararlas mal es **que no aparecen**, y eso es indistinguible de no haberlas
+ * declarado: la barra lateral reparte por nombre, asi que una tilde de mas deja
+ * el destino mudo y el panel con una entrada menos.
+ */
+const BLOQUES_DE_CATASTRO = ['Predios', 'Territorio', 'Valores del ejercicio', 'Documentos'];
+
+const GUARDAS_DE_DESTINO: readonly {
+  readonly guarda: string;
+  readonly tabla: TablaDeDestinos;
+  readonly delata: RegExp;
+}[] = [
+  {
+    guarda: 'un destino que no es la portada, ni un grupo, ni una ruta',
+    tabla: { catastro: { Prredios: { nota: 'n', icono: [] } } },
+    delata: /El destino «Prredios» de catastro no es ningun grupo del modulo/,
+  },
+  {
+    guarda: 'una ruta que se llama como un grupo: dos entradas con el mismo rotulo',
+    tabla: {
+      catastro: {
+        Territorio: {
+          label: 'Territorio',
+          ranura: 'territorio',
+          tras: 'Predios',
+          exige: 'x',
+          nota: 'n',
+          icono: [],
+        },
+      },
+    },
+    delata: /se llama como un grupo del modulo/,
+  },
+  {
+    guarda: 'una ruta sin rotulo: no puede tomarlo del nombre de un grupo, porque no lo es',
+    tabla: {
+      catastro: { mapa: { ranura: 'mapa', tras: 'Predios', exige: 'x', nota: 'n', icono: [] } },
+    },
+    delata: /no declara `label`/,
+  },
+  {
+    guarda: 'una ruta sin permiso que comprobar',
+    tabla: {
+      catastro: { mapa: { label: 'M', ranura: 'mapa', tras: 'Predios', nota: 'n', icono: [] } },
+    },
+    delata: /no declara `exige`/,
+  },
+  {
+    guarda: 'una ruta tras un grupo que el modulo no tiene: acabaria al final del panel',
+    tabla: {
+      catastro: {
+        mapa: { label: 'M', ranura: 'mapa', tras: 'Prredios', exige: 'x', nota: 'n', icono: [] },
+      },
+    },
+    delata: /declara «tras: Prredios», que no es ningun grupo del modulo/,
+  },
+];
+
+describe('toda guarda de los destinos tiene una tabla que la viola', () => {
+  it.each(GUARDAS_DE_DESTINO)('$guarda', ({ tabla, delata }) => {
+    expect(() => comprobarDestinos('catastro', BLOQUES_DE_CATASTRO, tabla)).toThrow(delata);
+  });
+
+  it('y la tabla de verdad las pasa: Catastro declara cuatro grupos y una ruta', () => {
+    expect(() => comprobarDestinos('catastro', BLOQUES_DE_CATASTRO, DESTINOS)).not.toThrow();
+    // Sin esto, las cinco de arriba seguirian en verde con la tabla vacia.
+    expect(Object.keys(DESTINOS['catastro'] ?? {})).toEqual([
+      'panel',
+      'Predios',
+      'mapa',
+      'Territorio',
+      'Valores del ejercicio',
+    ]);
   });
 });
 

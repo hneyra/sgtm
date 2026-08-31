@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas sesenta y una operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas sesenta y cinco operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -188,8 +188,14 @@ describe('las operaciones generadas son las del contrato', () => {
     //     `registrar_inquilino` y `finalizar_inquilino`. La titularidad se podia
     //     leer (#366) y transferir (#29), pero EL PRIMER TITULAR no se podia
     //     registrar por HTTP: solo se transfiere lo que ya tiene dueno.
+    //   - `plano_catastral` (#500, ADR-0022): los lotes de un marco con su
+    //     poligono, que dibuja el mapa catastral. No sale de ninguna pantalla
+    //     porque el mapa **no es una opcion del catalogo**: es una ruta del
+    //     modulo, sin id y sin permiso propio, como la portada (ADR-0014 §5).
+    //     Se declara bajo `consulta_fichas` porque es esa misma busqueda por
+    //     otro camino, y ese es el permiso que exige.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(195);
+    expect(Object.keys(OPERACIONES)).toHaveLength(199);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

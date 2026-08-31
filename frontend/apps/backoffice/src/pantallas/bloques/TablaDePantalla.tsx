@@ -100,6 +100,14 @@ export interface TablaDePantallaProps {
     readonly etiqueta: string;
     /** La ruta de esa fila, o nada si esta fila no puede abrir el destino. */
     readonly rutaDe: (valores: Readonly<Record<string, string>> | undefined) => string | undefined;
+    /**
+     * Como se llama la fila, cuando la opcion lo declara. Sin esto se compone
+     * con la primera celda que diga algo, que en una tabla cuya primera columna
+     * es una insignia de estado es una letra suelta.
+     */
+    readonly nombraCon?: (
+      valores: Readonly<Record<string, string>> | undefined,
+    ) => string | undefined;
   };
   /**
    * La tabla **elige filas** (#332), cuando la opcion lo declara
@@ -497,7 +505,9 @@ function AccionDeLaFila({
 }) {
   const ruta = accion.rutaDe(valores);
   if (ruta === undefined) return null;
-  const nombra = fila.find((celda) => celda.texto !== '' && celda.texto !== '—')?.texto;
+  const nombra =
+    accion.nombraCon?.(valores) ??
+    fila.find((celda) => celda.texto !== '' && celda.texto !== '—')?.texto;
   return (
     <Link
       to={ruta}

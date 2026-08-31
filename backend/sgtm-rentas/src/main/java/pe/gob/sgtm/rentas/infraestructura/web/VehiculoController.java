@@ -1,14 +1,21 @@
 package pe.gob.sgtm.rentas.infraestructura.web;
 
+import java.time.Clock;
+import java.time.LocalDate;
+import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Placa;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeVehiculos;
+import pe.gob.sgtm.rentas.dominio.CriterioDeVehiculo;
 import pe.gob.sgtm.web.Api;
+import pe.gob.sgtm.web.ParametrosDePaginacion;
+import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
  * Ficha del vehiculo: {@code GET /api/v1/rentas/vehiculos/{placa}} (RF-024).
@@ -25,16 +32,34 @@ import pe.gob.sgtm.web.Api;
  * <p>El controlador no habla con el repositorio: llama al caso de uso, que es quien abre la
  * transaccion. Sin transaccion no hay {@code SET LOCAL} y la politica RLS no tiene que leer, asi
  * que una lectura «simple» desde aqui no funcionaria nunca.
+ *
+ * <h2>Y la coleccion de un contribuyente: {@code GET /api/v1/rentas/vehiculos} (#524)</h2>
+ *
+ * <p>La consulta ya existia y la sirve este mismo contexto —{@code ConsultaVehiculosController},
+ * {@code GET /consultas/vehiculos}—, pero bajo la opcion <b>del modulo Consultas</b> y su permiso.
+ * El expediente del contribuyente de Rentas (#503 F2) no puede tomarla prestada de ahi: las
+ * conexiones de la interfaz llegan con el trozo de su modulo (#433), y quien tenga Rentas y no
+ * Consultas veria un aviso de permiso ajeno dentro de su propio expediente.
+ *
+ * <p><b>{@code contribuyente} es obligatorio, y esa es la decision que sostiene el endpoint.</b>
+ * Sin el, esto seria una segunda puerta al padron vehicular entero <b>detras de un permiso mas
+ * estrecho</b>: quien solo tiene {@code vehiculos} hoy llega a una ficha por placa —tiene que saber
+ * la placa— y pasaria a poder listarlo todo. Con el criterio exigido, la operacion es lo que dice
+ * ser: los vehiculos de una persona.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/rentas/vehiculos")
 @RequiereAcceso(acceso = "vehiculos", privilegio = Privilegio.LECTURA)
 public class VehiculoController {
 
-    private final ConsultaDeVehiculos consulta;
+    private static final String ORDEN_POR_OMISION = "placa";
 
-    public VehiculoController(ConsultaDeVehiculos consulta) {
+    private final ConsultaDeVehiculos consulta;
+    private final Clock reloj;
+
+    public VehiculoController(ConsultaDeVehiculos consulta, Clock reloj) {
         this.consulta = consulta;
+        this.reloj = reloj;
     }
 
     @GetMapping("/{placa}")
@@ -44,5 +69,45 @@ public class VehiculoController {
         // vehiculo no esta.
         ConsultaDeVehiculos.FichaDeVehiculo ficha = consulta.porPlaca(Placa.de(placa));
         return VehiculoResource.de(ficha.vehiculo(), ficha.historial());
+    }
+
+    /**
+     * Los vehiculos de un contribuyente, con su deuda a la fecha (#524).
+     *
+     * <p>La fila es la misma que publica {@code /consultas/vehiculos} —{@link
+     * VehiculoEncontradoResource}, con su {@code ImporteActualizado}—: dos formas distintas de la
+     * misma lectura dirian dos cosas del mismo vehiculo, y la que se leyera en el expediente seria
+     * la que nadie compara.
+     *
+     * <p>La fecha es la del corte de la deuda (regla 9). Sin ella, la de hoy.
+     */
+    @GetMapping
+    public RespuestaPaginada<VehiculoEncontradoResource> delContribuyente(
+            @RequestParam String contribuyente,
+            @RequestParam(required = false) @Nullable String fecha,
+            ParametrosDePaginacion parametros) {
+
+        // El criterio se compone **solo** con el contribuyente: los otros tres que
+        // `CriterioDeVehiculo` admite —placa, motor, estado— son los de la busqueda del
+        // padron, y esta operacion no es una busqueda. Anadirlos aqui seria devolver por
+        // la puerta estrecha lo que el parametro obligatorio acaba de cerrar.
+        CriterioDeVehiculo criterio = new CriterioDeVehiculo(null, null, contribuyente, null);
+
+        return RespuestaPaginada.de(
+                consulta.buscar(
+                        criterio, fechaDe(fecha), parametros.aPaginacion(ORDEN_POR_OMISION)),
+                VehiculoEncontradoResource::de);
+    }
+
+    private LocalDate fechaDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            return LocalDate.now(reloj);
+        }
+        try {
+            return LocalDate.parse(texto.strip());
+        } catch (java.time.format.DateTimeParseException excepcion) {
+            throw new IllegalArgumentException(
+                    "La fecha debe tener formato AAAA-MM-DD: '" + texto + "'", excepcion);
+        }
     }
 }

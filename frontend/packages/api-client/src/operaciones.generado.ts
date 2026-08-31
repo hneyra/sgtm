@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 195 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 199 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 195 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 199 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 195 operaciones del contrato, por su `operationId`.
+ * Las 199 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 195 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 199 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -136,6 +136,13 @@ export const OPERACIONES = {
     ruta: '/catastro/fichas/conciliacion',
     parametrosDeRuta: [],
     parametrosDeConsulta: ['codRefCatastral', 'contribuyente', 'manzana', 'lote', 'tipo', 'conciliadaConRentas', 'ejercicio', 'fecha', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+  },
+  /** Plano catastral: los lotes de un marco — `GET /catastro/predios/plano` */
+  plano_catastral: {
+    metodo: 'GET',
+    ruta: '/catastro/predios/plano',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: ['bbox', 'codigoDeSector', 'codigoDeManzana', 'limite'],
   },
   /** Actualización del catastro — `PUT /catastro/fichas/{codigo}/actualizacion` */
   actualizacion_catastro: {
@@ -332,6 +339,27 @@ export const OPERACIONES = {
     ruta: '/rentas/contribuyentes/{id}/ficha',
     parametrosDeRuta: ['id'],
     parametrosDeConsulta: ['fecha'],
+  },
+  /** Vehiculos de un contribuyente — `GET /rentas/vehiculos` */
+  vehiculos_del_contribuyente: {
+    metodo: 'GET',
+    ruta: '/rentas/vehiculos',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: ['contribuyente', 'fecha'],
+  },
+  /** Estado de la ultima emision del ejercicio — `GET /rentas/predial/corridas/ultima` */
+  ultima_corrida_predial: {
+    metodo: 'GET',
+    ruta: '/rentas/predial/corridas/ultima',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: ['ejercicio'],
+  },
+  /** Los observados de una corrida — `GET /rentas/predial/corridas/{corridaId}/observados` */
+  observados_de_la_corrida: {
+    metodo: 'GET',
+    ruta: '/rentas/predial/corridas/{corridaId}/observados',
+    parametrosDeRuta: ['corridaId'],
+    parametrosDeConsulta: [],
   },
   /** Mudanza: cierra el domicilio anterior y abre el nuevo — `POST /rentas/contribuyentes/{id}/domicilios` */
   mudar_contribuyente: {
@@ -1413,7 +1441,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 195 operaciones. */
+/** El `operationId` de una de las 199 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1514,6 +1542,13 @@ export interface ParametrosPorOperacion {
     readonly tamano?: string;
     readonly ordenarPor?: string;
     readonly direccion?: string;
+  };
+  /** `GET /catastro/predios/plano` */
+  readonly plano_catastral: {
+    readonly bbox?: string;
+    readonly codigoDeSector?: string;
+    readonly codigoDeManzana?: string;
+    readonly limite?: string;
   };
   /** `PUT /catastro/fichas/{codigo}/actualizacion` */
   readonly actualizacion_catastro: {
@@ -1669,6 +1704,19 @@ export interface ParametrosPorOperacion {
   readonly ficha_del_contribuyente: {
     readonly id: string;
     readonly fecha?: string;
+  };
+  /** `GET /rentas/vehiculos` */
+  readonly vehiculos_del_contribuyente: {
+    readonly contribuyente?: string;
+    readonly fecha?: string;
+  };
+  /** `GET /rentas/predial/corridas/ultima` */
+  readonly ultima_corrida_predial: {
+    readonly ejercicio?: string;
+  };
+  /** `GET /rentas/predial/corridas/{corridaId}/observados` */
+  readonly observados_de_la_corrida: {
+    readonly corridaId: string;
   };
   /** `POST /rentas/contribuyentes/{id}/domicilios` */
   readonly mudar_contribuyente: {
@@ -2785,6 +2833,7 @@ export interface CuerpoPorOperacion {
   readonly registrar_ficha_rural: CuerpoSinEsquema;
   readonly consulta_fichas: undefined;
   readonly consulta_fichas_conciliacion: undefined;
+  readonly plano_catastral: undefined;
   readonly actualizacion_catastro: CuerpoSinEsquema;
   readonly actualizar_ficha_economica: CuerpoSinEsquema;
   readonly actualizar_ficha_bienes: CuerpoSinEsquema;
@@ -2813,6 +2862,9 @@ export interface CuerpoPorOperacion {
   readonly registrar_contribuyente: CuerpoSinEsquema;
   readonly modificar_contribuyente: CuerpoSinEsquema;
   readonly ficha_del_contribuyente: undefined;
+  readonly vehiculos_del_contribuyente: undefined;
+  readonly ultima_corrida_predial: undefined;
+  readonly observados_de_la_corrida: undefined;
   readonly mudar_contribuyente: CuerpoSinEsquema;
   readonly registrar_contacto: CuerpoSinEsquema;
   readonly modificar_contacto: CuerpoSinEsquema;
@@ -2984,6 +3036,7 @@ export interface RespuestaPorOperacion {
   readonly registrar_ficha_rural: CuerpoSinEsquema;
   readonly consulta_fichas: CuerpoSinEsquema;
   readonly consulta_fichas_conciliacion: CuerpoSinEsquema;
+  readonly plano_catastral: CuerpoSinEsquema;
   readonly actualizacion_catastro: CuerpoSinEsquema;
   readonly actualizar_ficha_economica: CuerpoSinEsquema;
   readonly actualizar_ficha_bienes: CuerpoSinEsquema;
@@ -3012,6 +3065,9 @@ export interface RespuestaPorOperacion {
   readonly registrar_contribuyente: CuerpoSinEsquema;
   readonly modificar_contribuyente: CuerpoSinEsquema;
   readonly ficha_del_contribuyente: CuerpoSinEsquema;
+  readonly vehiculos_del_contribuyente: CuerpoSinEsquema;
+  readonly ultima_corrida_predial: CuerpoSinEsquema;
+  readonly observados_de_la_corrida: CuerpoSinEsquema;
   readonly mudar_contribuyente: CuerpoSinEsquema;
   readonly registrar_contacto: CuerpoSinEsquema;
   readonly modificar_contacto: CuerpoSinEsquema;
