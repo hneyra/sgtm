@@ -3413,3 +3413,36 @@
   line-height: 1.55;
   color: var(--ink-3);
 }
+
+/* La columna de «lo que se hace con la fila» (#506 F3). Es la última y no lleva
+   rótulo visible: el rótulo lo dice cada enlace, y una cabecera repetida sobre
+   once enlaces iguales no añade nada. Al papel no va —lo que se imprime de una
+   tabla son sus datos, no sus caminos (RNF-084)—. */
+.sgtm-tabla__accion {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+@media print {
+  .sgtm-tabla__accion {
+    display: none;
+  }
+}
+
+.sgtm-tabla__accion-enlace {
+  display: inline-block;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  padding: 6px 12px;
+  background: var(--bg-card);
+  color: var(--ink);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.sgtm-tabla__accion-enlace:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}

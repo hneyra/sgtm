@@ -1,7 +1,8 @@
 import { Fragment, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Aviso, Boton, Esqueleto, Insignia, TONO_DE_INSIGNIA } from '@sgtm/design-system';
 import { agruparMiles } from '@sgtm/dominio';
-import type { DatosDeTabla, DetalleDeFila } from '@sgtm/api-client';
+import type { Celda, DatosDeTabla, DetalleDeFila } from '@sgtm/api-client';
 import type { EstructuraDeTabla } from '../../catalogo';
 import { Paginacion } from './Paginacion';
 import type { Sentido } from '../busqueda';
@@ -75,6 +76,32 @@ export interface TablaDePantallaProps {
     readonly onAbrir: (clave: string) => void;
   };
   /**
+   * **Lo que se hace CON la fila**, cuando la opcion lo declara
+   * (`composicion.ts`). Sin esto la tabla se dibuja como siempre.
+   *
+   * No es `altaDeFila`, que abre un panel colgando de una fila desplegada: esto
+   * **navega** a otra pantalla del catalogo llevandose lo que identifica la fila.
+   * El caso que lo trajo es la muestra de un programa de fiscalizacion: cada fila
+   * es un predio que hay que ir a visitar, y el acta que se levanta es otra
+   * opcion, con su ruta y su permiso.
+   *
+   * **Va en una columna propia, la ultima.** La tabla del catalogo no declara
+   * ninguna para esto —el prototipo tampoco: dibuja su boton fuera de las seis—,
+   * y meterlo dentro de una de las suyas taparia el dato que esa columna tiene
+   * que decir. Es la misma decision que `seleccion.columnaPropia` (#426).
+   *
+   * **Es un enlace**, no un boton: el permiso lo decide el guardia de `Pantalla`
+   * al entrar por la ruta, y lo que se esta abriendo se puede compartir (FRO-04
+   * §5). Quien compone la ruta ya ha comprobado que este perfil puede ver el
+   * destino; una fila sin ruta —porque a sus valores les falta lo que identifica
+   * el destino— deja la celda vacia en vez de un enlace a ninguna parte.
+   */
+  readonly accionDeFila?: {
+    readonly etiqueta: string;
+    /** La ruta de esa fila, o nada si esta fila no puede abrir el destino. */
+    readonly rutaDe: (valores: Readonly<Record<string, string>> | undefined) => string | undefined;
+  };
+  /**
    * La tabla **elige filas** (#332), cuando la opcion lo declara
    * (`composicion.ts`). Sin esto se dibuja como siempre.
    *
@@ -134,6 +161,7 @@ export function TablaDePantalla({
   hayFiltros = false,
   ancla,
   altaDeFila,
+  accionDeFila,
   seleccion,
 }: TablaDePantallaProps) {
   const numericas = new Set(estructura.num ?? []);
@@ -146,7 +174,11 @@ export function TablaDePantalla({
   // filtrar dejaba abierta «la fila 3», que en la pagina nueva es otro registro
   // —el desplegable seguia abierto ensenando el detalle de otro sector—.
   const [desplegada, fijarDesplegada] = useState<string | null>(null);
-  const columnas = estructura.cols.length + (detalles === undefined ? 0 : 1);
+  const columnas =
+    estructura.cols.length +
+    (detalles === undefined ? 0 : 1) +
+    (seleccion?.columnaPropia === true ? 1 : 0) +
+    (accionDeFila === undefined ? 0 : 1);
   // El pie: el del catalogo, salvo que la prosa lo corrija. `undefined` en el
   // corrector es «esta opcion no declara nada», que es lo que devuelven 133 de
   // las 134; `null` es «suprimido», y no hay que confundirlo con lo anterior.
@@ -254,6 +286,11 @@ export function TablaDePantalla({
                     </th>
                   );
                 })}
+                {accionDeFila !== undefined && (
+                  <th className="sgtm-tabla__accion">
+                    <span className="sgtm-portal__oculto">{accionDeFila.etiqueta}</span>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -266,6 +303,7 @@ export function TablaDePantalla({
                           <Esqueleto alto={12} />
                         </td>
                       ))}
+                      {accionDeFila !== undefined && <td className="sgtm-tabla__accion" />}
                     </tr>
                   ))
                 : filas.map((fila, f) => {
@@ -348,6 +386,15 @@ export function TablaDePantalla({
                               )}
                             </td>
                           ))}
+                          {accionDeFila !== undefined && (
+                            <td className="sgtm-tabla__accion">
+                              <AccionDeLaFila
+                                accion={accionDeFila}
+                                valores={datos?.valores?.[f]}
+                                fila={fila}
+                              />
+                            </td>
+                          )}
                         </tr>
                         {/* **Sin `aria-controls`.** Apuntaba a un `id` que solo
                             existe con la fila desplegada: plegada, el atributo
@@ -422,6 +469,46 @@ function BandaDeSeleccion({
 }
 
 /** La casilla de una fila, con su etiqueta accesible. */
+/**
+ * Lo que se hace **con** una fila: un enlace a otra pantalla del catalogo,
+ * llevandose lo que identifica esa fila.
+ *
+ * La ruta se compone de los **valores crudos** de la fila y no de lo que se
+ * pinto: una celda es texto de presentacion —«1,184.00», «—»— y ningun
+ * identificador interno se dibuja en ninguna columna, que es exactamente por lo
+ * que `DatosDeTabla.valores` existe (#332).
+ *
+ * Una fila sin ruta deja la celda **vacia**, no un enlace apagado: un enlace que
+ * no lleva a ningun sitio se lee como que ahi hay algo y no se puede, y aqui lo
+ * que hay es que a esa fila le falta el dato con el que se abriria.
+ *
+ * El nombre accesible nombra **la fila**, no «abrir»: quien recorre la tabla con
+ * el lector de pantalla oye una fila detras de otra, y once enlaces que dicen
+ * «Levantar acta» no se distinguen entre si.
+ */
+function AccionDeLaFila({
+  accion,
+  valores,
+  fila,
+}: {
+  readonly accion: NonNullable<TablaDePantallaProps['accionDeFila']>;
+  readonly valores: Readonly<Record<string, string>> | undefined;
+  readonly fila: readonly Celda[];
+}) {
+  const ruta = accion.rutaDe(valores);
+  if (ruta === undefined) return null;
+  const nombra = fila.find((celda) => celda.texto !== '' && celda.texto !== '—')?.texto;
+  return (
+    <Link
+      to={ruta}
+      className="sgtm-tabla__accion-enlace"
+      {...(nombra === undefined ? {} : { 'aria-label': `${accion.etiqueta}: ${nombra}` })}
+    >
+      {accion.etiqueta}
+    </Link>
+  );
+}
+
 function Casilla({
   elegida,
   onAlternar,

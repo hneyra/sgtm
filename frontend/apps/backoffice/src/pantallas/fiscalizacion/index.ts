@@ -273,6 +273,15 @@ const fisc_programa = definirConexionEncadenada({
           ];
         }),
         conteo: `${filas.length} predios seleccionados`,
+        /* Los **valores crudos** de cada fila, que es de donde sale el enlace al
+           acta (#506 F3). Ni `programaId` ni `predioId` se dibujan en ninguna
+           columna —un identificador interno bajo el rotulo «Predio» seria otro
+           dato con el mismo nombre—, y por eso viajan aqui y no en una celda:
+           es exactamente para lo que `DatosDeTabla.valores` existe (#332). */
+        valores: filas.map((fila) => ({
+          programaId: identificador(fila['programaId']),
+          predioId: identificador(fila['predioId']),
+        })),
       },
     };
   },
@@ -519,6 +528,17 @@ const resolucion_determinacion_fisc = definirConexion({
     };
   },
 });
+
+/**
+ * Un identificador de la fila, para viajar en una direccion.
+ *
+ * **Vacio cuando falta, no {@link SIN_DATO}.** El «—» es lo que se PINTA cuando
+ * no hay dato, y esto no se pinta: se pone en la URL. Con «—» dentro, el enlace
+ * al acta saldria dibujado y llevaria a `?predio=—`, que es un enlace a ninguna
+ * parte con aspecto de enlace bueno.
+ */
+const identificador = (valor: unknown): string =>
+  typeof valor === 'number' || typeof valor === 'string' ? String(valor) : '';
 
 /* ── El acta de inspeccion (`fisc_predial`, RF-051) ────────────────────── */
 

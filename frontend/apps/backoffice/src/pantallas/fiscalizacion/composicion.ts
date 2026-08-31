@@ -69,6 +69,41 @@ export const COMPOSICION_DE_FISCALIZACION: Readonly<Record<string, ComposicionDe
    */
   fisc_programa: {
     filtrosBloqueados: ['tipo', 'estado'],
+    /**
+     * **De la fila de la muestra al acta que se levanta en ella** (#506 F3).
+     *
+     * Cada fila de «Predios seleccionados» es un predio que hay que ir a
+     * visitar, y lo que se hace con él es levantar su acta —que es otra opcion,
+     * `fisc_predial`, con su ruta y su permiso—. Hasta hoy ese camino no
+     * existia: habia que volver al menu, abrir el acta y teclear a mano dos
+     * identificadores que **la fila ya tiene y no dibuja en ninguna columna**
+     * (un `predioId` bajo el rotulo «Predio» seria otro dato con el mismo
+     * nombre), asi que en la practica no se podian teclear.
+     *
+     * El rotulo dice **lo que hace el acto**, no como se llama la pantalla que
+     * lo aloja: es el criterio que #498 F2 fijo para la accion primaria del
+     * modulo, y el que el prototipo usa en esta misma grilla.
+     *
+     * Los dos identificadores salen de `MuestraResource` por
+     * `DatosDeTabla.valores`. Sin los dos no hay enlace: el acta que no cuelga
+     * de una fila de la muestra no tiene predio ni contribuyente, y abrirla asi
+     * es abrir un formulario vacio con aspecto de estar sobre algo.
+     */
+    accionDeFila: {
+      opcion: 'fisc_predial',
+      etiqueta: 'Levantar acta',
+      parametros: (valores) => {
+        const programa = valores['programaId'];
+        const predio = valores['predioId'];
+        // Vacio es «esta fila no lo trae»: sin los dos, no hay enlace.
+        return programa === undefined ||
+          programa === '' ||
+          predio === undefined ||
+          predio === ''
+          ? undefined
+          : { programa, predio };
+      },
+    },
   },
 
   /**
