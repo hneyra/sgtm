@@ -612,6 +612,16 @@ export interface ComposicionDeOpcion {
    */
   readonly altaDeFila?: AltaEnPanel;
   /** El alta guiada de esta pantalla, cuando no cabe en un panel. */
+  /**
+   * Si los filtros de detras del primero se pliegan tras «Búsqueda avanzada»
+   * (#498 F7).
+   *
+   * Va por pantalla y no para las noventa y siete: cuatro filtros es la norma
+   * del catalogo —57 pantallas— y plegarlas todas de golpe cambia como se busca
+   * en el sistema entero. Catastro marca el estandar; las demas lo declaran
+   * cuando les toque, que es el mismo criterio de la portada del modulo.
+   */
+  readonly filtrosPlegables?: boolean;
   readonly flujo?: FlujoGuiado;
   /** La tabla de esta pantalla elige filas, y lo elegido viaja en el cuerpo. */
   readonly seleccion?: SeleccionDeFilas;
