@@ -167,3 +167,25 @@ export type Sector = {
 export function listarSectores(senal?: AbortSignal): Promise<RespuestaPaginada<Sector>> {
   return solicitar('/catastro/sectores', { parametros: { tamano: 200 }, senal });
 }
+
+
+/** Una via del catalogo. Es `ViaResource`. */
+export type Via = {
+  id: number;
+  codigo: string;
+  tipo: string;
+  nombre: string;
+  ubigeo: string | null;
+  activa: boolean;
+};
+
+/**
+ * El catalogo vial.
+ *
+ * **No acota por sector**: `ViaController` no tiene ese filtro, y una via no
+ * pertenece a un sector en el modelo —es del ubigeo—. La pantalla lo dice en
+ * vez de dibujar un filtro que no filtra.
+ */
+export function listarVias(paginacion: Paginacion, senal?: AbortSignal): Promise<RespuestaPaginada<Via>> {
+  return solicitar('/catastro/vias', { parametros: { ...paginacion }, senal });
+}

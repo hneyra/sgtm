@@ -9,8 +9,9 @@ import {
   darDeBaja,
   inscribirPredio,
   listarPredios,
-  reactivar,
   listarSectores,
+  listarVias,
+  reactivar,
   titularesDelPredio,
   type EstadoDePredio,
   type PredioDelCatastro,
@@ -23,23 +24,19 @@ import {
   CAPAS,
   CODIGO_YA_USADO,
   COLS_REPORTE,
-  COLS_VIAS,
   DEFECTOS_DE_FICHA_NUEVA,
   FILAS_REPORTE,
   GRUPOS,
   KPIS,
   LOTE_SELECCIONADO,
-  MANZANAS_DEL_SECTOR,
   MODALIDADES,
   MODOS,
   OPCIONES,
   PENDIENTES,
   PESTANIAS_DE_VALORES,
   REPORTE_META,
-  SECTORES,
   SECTORES_DEL_MAPA,
   TRAMOS,
-  VIAS,
   tablasDeValores,
   type BloqueDeFicha,
   type CampoDeFicha,
@@ -422,8 +419,22 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     dest === 'predios' && predio === null,
   );
 
-  /* Los sectores del filtro. Se piden una vez y no dependen de la búsqueda. */
-  const sectores = useRecurso((senal) => listarSectores(senal), [], dest === 'predios' && predio === null);
+  /* Los sectores. Los usan el filtro del padrón y el árbol de Territorio, así
+     que se piden en los dos destinos y no dependen de la búsqueda. */
+  const sectores = useRecurso(
+    (senal) => listarSectores(senal),
+    [],
+    dest === 'territorio' || (dest === 'predios' && predio === null),
+  );
+
+  /* El catálogo vial. `ViaController` no acota por sector —una vía es del
+     ubigeo, no de un sector—, así que se trae entero y paginado. */
+  const [paginaVias, setPaginaVias] = useState(0);
+  const vias = useRecurso(
+    (senal) => listarVias({ pagina: paginaVias, tamano: 20 }, senal),
+    [paginaVias],
+    dest === 'territorio',
+  );
 
   const filas = padron.datos?.contenido ?? [];
   const cargando = padron.cargando;
@@ -899,9 +910,14 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       /* Solo con el padrón sin filtrar: con un filtro puesto, `totalElementos`
          es lo que devuelve la búsqueda, y «6 en el padrón» al lado de un filtro
          se lee como el tamaño del padrón entero. */
-      notasDeDestino={
-        totalDelPadron === null ? undefined : { predios: totalDelPadron.toLocaleString('es-PE') + ' en el padrón' }
-      }
+      notasDeDestino={{
+        ...(totalDelPadron === null ? {} : { predios: totalDelPadron.toLocaleString('es-PE') + ' en el padrón' }),
+        ...(sectores.datos && vias.datos
+          ? {
+              territorio: `${sectores.datos.totalElementos} sectores · ${vias.datos.totalElementos.toLocaleString('es-PE')} vías`,
+            }
+          : {}),
+      }}
       paleta={paleta}
     >
       <div style={{ maxWidth: 1240, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -2174,20 +2190,35 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <p style={ENTRADILLA}>
               Sectores, manzanas y vías: la estructura sobre la que se arma el código de referencia catastral. Antes eran dos opciones de
-              menú; aquí son un solo árbol, porque una vía se define dentro de un sector.
+              menú y aquí van juntas, aunque el catálogo vial es del ubigeo entero: una vía atraviesa sectores y no pertenece a ninguno.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,340px) minmax(0,1fr)', gap: 14, alignItems: 'start' }}>
               <section style={TARJETA}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: '1px solid var(--line)' }}>
                   <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>Sectores</h2>
-                  <span style={META}>5 · 418 manzanas</span>
+                  <span style={META}>
+                    {sectores.cargando
+                      ? '…'
+                      : `${sectores.datos?.totalElementos ?? 0} · ${(sectores.datos?.contenido ?? []).reduce((a, x) => a + (x.manzanas ?? 0), 0)} manzanas`}
+                  </span>
                 </div>
-                {SECTORES.map((s) => {
-                  const on = sectorAbierto === s[0];
+                {sectores.error && (
+                  <p style={{ margin: 0, padding: '14px', fontSize: 12.5, lineHeight: 1.5, color: 'var(--error-texto)', textWrap: 'pretty' }}>
+                    No se pudieron leer los sectores: {sectores.error.mensaje}
+                  </p>
+                )}
+                {sectores.cargando &&
+                  [1, 2, 3].map((i) => (
+                    <div key={i} style={{ padding: '13px 14px', borderBottom: '1px solid var(--line)' }}>
+                      <div data-esq="1" style={{ height: 13 }} />
+                    </div>
+                  ))}
+                {(sectores.datos?.contenido ?? []).map((s) => {
+                  const on = sectorAbierto === s.codigo;
                   return (
-                    <div key={s[0]} style={{ borderBottom: '1px solid var(--line)' }}>
+                    <div key={s.codigo} style={{ borderBottom: '1px solid var(--line)' }}>
                       <button
-                        onClick={() => setSectorAbierto(on ? '' : s[0])}
+                        onClick={() => setSectorAbierto(on ? '' : s.codigo)}
                         aria-expanded={on}
                         className="hov-acento"
                         style={{
@@ -2217,57 +2248,112 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                           <Icono d={CARET} tam={12} grosor={2} />
                         </span>
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-ink)', background: 'var(--accent-soft)', borderRadius: 4, padding: '2px 6px', flex: '0 0 auto' }}>
-                          {s[0]}
+                          {s.codigo}
                         </span>
-                        <span style={{ flex: 1, minWidth: 0, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s[1]}</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-4)', flex: '0 0 auto' }}>{s[2]}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {s.nombre}
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-4)', flex: '0 0 auto' }}>
+                          {s.zona ?? SIN_DATO}
+                        </span>
                       </button>
                       {on && (
                         <div style={{ padding: '4px 14px 12px 40px', background: 'var(--bg-elev)' }}>
                           <p style={{ margin: '0 0 8px', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                            {'El sistema todavía no publica la lista de manzanas de un sector, solo su alta. Se ven cuántas hay (' + s[3] + ') y desde aquí se puede añadir una.'}
+                            {`El backend cuenta las manzanas de un sector —${s.manzanas ?? 0}, con ${s.lotes ?? 0} lotes— pero no publica ninguna operación que las liste: de manzanas solo sirve el alta. Hasta que la haya, aquí se dice cuántas hay y no cuáles.`}
                           </p>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                            {MANZANAS_DEL_SECTOR.map((mz) => (
-                              <span key={mz} style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-2)', border: '1px solid var(--line-2)', borderRadius: 4, padding: '3px 7px', background: 'var(--bg-card)' }}>
-                                {mz}
-                              </span>
-                            ))}
-                            <button
-                              onClick={() => toast('Añadiría una manzana al sector ' + s[0] + '.')}
-                              style={{ fontSize: 11, color: 'var(--accent-ink)', border: '1px dashed var(--accent)', borderRadius: 4, padding: '3px 9px', background: 'transparent', cursor: 'pointer' }}
-                            >
-                              + Añadir manzana
-                            </button>
+                          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                              Manzanas <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink)' }}>{s.manzanas ?? 0}</strong>
+                            </span>
+                            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                              Lotes <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink)' }}>{s.lotes ?? 0}</strong>
+                            </span>
+                            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                              Predios <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink)' }}>{s.predios ?? 0}</strong>
+                            </span>
                           </div>
                         </div>
                       )}
                     </div>
                   );
                 })}
-                <div style={{ padding: '11px 14px' }}>
-                  <button
-                    onClick={() => toast('Abriría el alta de un sector.')}
-                    className="hov-linea"
-                    style={{ width: '100%', border: '1px dashed var(--line-2)', borderRadius: 7, padding: 9, background: 'transparent', fontSize: 12.5, color: 'var(--ink-3)', cursor: 'pointer' }}
-                  >
-                    + Nuevo sector
-                  </button>
-                </div>
+                {/* El alta de sector, de manzana y de vía existen en el backend
+                    (`POST /catastro/sectores`, `…/{codigo}/manzanas`, `POST
+                    /catastro/vias`) y las tres exigen observación. No se dibujan
+                    todavía porque el artboard no les dibuja formulario, y un
+                    botón que abre lo que no hay es peor que no tenerlo. */}
+                <p style={{ ...PIE, padding: '11px 14px' }}>
+                  El alta de sectores, manzanas y vías la sirve el backend; su formulario todavía no está dibujado.
+                </p>
               </section>
 
               <section style={TARJETA}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 14px', borderBottom: '1px solid var(--line)' }}>
-                  <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>Vías del sector {sectorAbierto}</h2>
-                  <span style={META}>5 de 2,184</span>
-                  <button onClick={() => toast('Abriría el alta de una vía.')} className="hov-linea" style={BOTON_LINEA}>
-                    Nueva vía
-                  </button>
+                  <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>Catálogo vial</h2>
+                  <span style={META}>
+                    {vias.cargando ? '…' : `${(vias.datos?.contenido ?? []).length} de ${(vias.datos?.totalElementos ?? 0).toLocaleString('es-PE')}`}
+                  </span>
                 </div>
-                <TablaDelArtboard cols={COLS_VIAS} filas={VIAS} min="600px" />
+                {vias.error ? (
+                  <p style={{ margin: 0, padding: '14px', fontSize: 12.5, lineHeight: 1.5, color: 'var(--error-texto)', textWrap: 'pretty' }}>
+                    No se pudo leer el catálogo vial: {vias.error.mensaje}
+                  </p>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
+                      <thead>
+                        <tr>
+                          <th style={TH}>Código</th>
+                          <th style={TH}>Tipo</th>
+                          <th style={TH}>Nombre</th>
+                          <th style={TH}>Ubigeo</th>
+                          <th style={TH}>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(vias.datos?.contenido ?? []).map((v) => (
+                          <tr key={v.id} style={{ borderTop: '1px solid var(--line)' }}>
+                            <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: 12.5, whiteSpace: 'nowrap' }}>{v.codigo}</td>
+                            <td style={TD}>{v.tipo}</td>
+                            <td style={TD}>{v.nombre}</td>
+                            <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{v.ubigeo ?? SIN_DATO}</td>
+                            <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
+                              <span style={INS[v.activa ? 'ok' : 'bad']}>{v.activa ? 'Vigente' : 'De baja'}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {(vias.datos?.totalPaginas ?? 0) > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: '1px solid var(--line)' }}>
+                    <button
+                      onClick={() => setPaginaVias((n) => Math.max(0, n - 1))}
+                      disabled={paginaVias === 0}
+                      className="hov-linea"
+                      style={{ ...BOTON_LINEA, opacity: paginaVias === 0 ? 0.45 : 1, cursor: paginaVias === 0 ? 'not-allowed' : 'pointer' }}
+                    >
+                      Anterior
+                    </button>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
+                      {(vias.datos?.pagina ?? 0) + 1} de {vias.datos?.totalPaginas}
+                    </span>
+                    <button
+                      onClick={() => setPaginaVias((n) => n + 1)}
+                      disabled={!vias.datos?.hayMas}
+                      className="hov-linea"
+                      style={{ ...BOTON_LINEA, opacity: vias.datos?.hayMas ? 1 : 0.45, cursor: vias.datos?.hayMas ? 'pointer' : 'not-allowed' }}
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                )}
                 <p style={{ ...PIE, padding: '11px 14px' }}>
-                  El nombre de una vía viaja al domicilio fiscal de todos los contribuyentes que dan a ella. Cambiarlo aquí los cambia a
-                  todos.
+                  El catálogo es del ubigeo entero y no de un sector: una vía no pertenece a un sector en el modelo, así que esta tabla no
+                  se acota con el árbol de la izquierda. El nombre de una vía viaja al domicilio fiscal de todos los contribuyentes que dan
+                  a ella.
                 </p>
               </section>
             </div>
