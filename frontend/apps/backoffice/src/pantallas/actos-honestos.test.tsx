@@ -517,7 +517,7 @@ describe('la causa se lee de lo que ya se sabe, sin ninguna lista aparte', () =>
  * `catastro/vocabulario-y-buscador.test.tsx`.
  */
 describe('un solo vocabulario de accion, y solo donde se declara', () => {
-  it('las 110 que no declaran nada reciben su lista del catalogo, intacta', async () => {
+  it('las 109 que no declaran nada reciben su lista del catalogo, intacta', async () => {
     const pantallas = await todasLasPantallas();
     let intactas = 0;
     for (const [opcion, estructura] of Object.entries(pantallas)) {
@@ -532,8 +532,8 @@ describe('un solo vocabulario de accion, y solo donde se declara', () => {
     /* Y **cuantas son**, que es lo que convierte el bucle en una comprobacion.
        Sin esta cifra, meter media docena de opciones en cualquiera de las dos
        listas las sacaria del bucle sin que nada lo dijera: el recorrido pasaria
-       igual, con menos vueltas. 134 − 11 − 13. */
-    expect(intactas).toBe(110);
+       igual, con menos vueltas. 134 − 11 − 14. */
+    expect(intactas).toBe(109);
     /* Seis de catastro, **tres de rentas** desde #442 —las tres lecturas del
        padron, que son el mismo caso que las cuatro fichas catastrales— y **dos
        de fiscalizacion** desde #506 F1: las dos hojas de consulta de los
@@ -543,9 +543,12 @@ describe('un solo vocabulario de accion, y solo donde se declara', () => {
        la borraria de la barra llevandose la franja que explica por que esta
        apagada (RNF-082). */
     expect(VOCABULARIO_UNIFORME.size).toBe(11);
-    // Once desde #421, la doceava con #429 y la treceava con #423
-    // (`anulacion_convenio`, cuya primaria del catalogo no es la que anula).
-    expect(Object.keys(LA_QUE_ESCRIBE).length).toBe(13);
+    /* Once desde #421, la doceava con #429, la treceava con #423
+       (`anulacion_convenio`, cuya primaria del catalogo no es la que anula) y la
+       catorceava con #506 F2: el acta de inspeccion, cuya ultima accion nombra
+       **el acto de otra pantalla** —«Generar determinación» es de
+       `fisc_resultados`— y cuyo acto propio es «Cerrar acta». */
+    expect(Object.keys(LA_QUE_ESCRIBE).length).toBe(14);
     // Y las que si lo declaran existen de verdad en el catalogo: sin esto, un
     // identificador mal escrito dejaria la regla sin aplicarse a nada y las
     // pruebas de abajo seguirian en verde.
