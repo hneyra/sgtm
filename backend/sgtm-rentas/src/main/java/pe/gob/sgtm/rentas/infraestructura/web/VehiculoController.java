@@ -43,9 +43,9 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  *
  * <p><b>{@code contribuyente} es obligatorio, y esa es la decision que sostiene el endpoint.</b>
  * Sin el, esto seria una segunda puerta al padron vehicular entero <b>detras de un permiso mas
- * estrecho</b>: quien solo tiene {@code vehiculos} hoy llega a una ficha por placa —tiene que
- * saber la placa— y pasaria a poder listarlo todo. Con el criterio exigido, la operacion es lo que
- * dice ser: los vehiculos de una persona.
+ * estrecho</b>: quien solo tiene {@code vehiculos} hoy llega a una ficha por placa —tiene que saber
+ * la placa— y pasaria a poder listarlo todo. Con el criterio exigido, la operacion es lo que dice
+ * ser: los vehiculos de una persona.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/rentas/vehiculos")

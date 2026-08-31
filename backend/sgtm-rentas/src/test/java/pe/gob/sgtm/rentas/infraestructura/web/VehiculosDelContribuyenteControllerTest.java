@@ -23,6 +23,8 @@ import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.autorizacion.ComprobadorDeAcceso;
 import pe.gob.sgtm.autorizacion.GuardiaDeAcceso;
 import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
 import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
 import pe.gob.sgtm.dominio.Dinero;
@@ -37,8 +39,6 @@ import pe.gob.sgtm.rentas.dominio.VehiculoEncontrado;
 import pe.gob.sgtm.rentas.dominio.VehiculoRepository;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
 import pe.gob.sgtm.web.ManejadorDeErrores;
-import pe.gob.sgtm.compartido.Pagina;
-import pe.gob.sgtm.compartido.Paginacion;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -49,8 +49,8 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>El endpoint existe porque la consulta que ya habia vive bajo la opcion del modulo
  * <b>Consultas</b>, y el expediente de Rentas no puede tomarla prestada de otro modulo (#503 F2).
- * Lo delicado no es publicarla: es <b>que no se convierta en una segunda puerta al padron
- * vehicular entero detras de un permiso mas estrecho</b>, y de eso trata la mitad de este archivo.
+ * Lo delicado no es publicarla: es <b>que no se convierta en una segunda puerta al padron vehicular
+ * entero detras de un permiso mas estrecho</b>, y de eso trata la mitad de este archivo.
  *
  * <p><b>El guardia de verdad esta puesto</b> como interceptor: el 403 no lo simula la prueba, lo
  * produce {@link GuardiaDeAcceso} leyendo la anotacion del controlador.
@@ -241,7 +241,8 @@ class VehiculosDelContribuyenteControllerTest {
     private static final class DeudaDePrueba implements ConsultaDeDeudaPublica {
 
         @Override
-        public List<ObligacionPublica> deTodoElContribuyente(long contribuyenteId, LocalDate fecha) {
+        public List<ObligacionPublica> deTodoElContribuyente(
+                long contribuyenteId, LocalDate fecha) {
             return List.of(
                     new ObligacionPublica(
                             "VEHICULAR",
