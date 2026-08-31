@@ -88,6 +88,23 @@ function elPlanoResponde(cuerpo: unknown): void {
   });
 }
 
+/**
+ * Y la lectura de la ficha del predio elegido **falla**.
+ *
+ * Se instala encima de `elPlanoResponde`, que es lo que la deja delegar el resto
+ * al proxy: el orden importa.
+ */
+function laFichaNoSePuedeLeer(): void {
+  const anterior = globalThis.fetch;
+  vi.stubGlobal('fetch', (entrada: RequestInfo | URL, opciones?: RequestInit) => {
+    const url = typeof entrada === 'string' ? entrada : String(entrada);
+    if (url.includes('/api/v1/catastro/fichas')) {
+      return Promise.resolve(new Response('', { status: 500 }));
+    }
+    return anterior(entrada, opciones);
+  });
+}
+
 const lote = (extra: Partial<LoteDelPlano> = {}): LoteDelPlano => ({
   predioId: 1,
   codRefCatastral: '200601010150010101001',
@@ -305,6 +322,24 @@ describe('el panel del lote no inventa ninguna cifra', () => {
     const arancel = panel.getAllByRole('definition')[8];
     expect(arancel).toHaveTextContent('—');
     expect(panel.getByText(/se consulta con su importe exacto en «Aranceles»/)).toBeInTheDocument();
+  });
+
+  it('si la ficha no se pudo leer, se dice: un «—» que falla no es un «—» que no existe', async () => {
+    elPlanoResponde({ marco: '', limite: 2000, sinGeometria: 0, lotes: [lote()] });
+    laFichaNoSePuedeLeer();
+    await abrirElMapa();
+
+    await userEvent.click(
+      within(await screen.findByLabelText('Lotes de la vista')).getByRole('button'),
+    );
+
+    /* Las cuatro filas de la ficha —contribuyente, uso y las dos areas— salen
+       igual de vacias cuando la ficha no existe y cuando la lectura fallo. Sin
+       esta linea, lo segundo se lee como lo primero, que es una afirmacion sobre
+       el padron que nadie ha comprobado (#331). */
+    const panel = within(screen.getByLabelText('Lote seleccionado'));
+    expect(await screen.findByText(/No se pudo leer la ficha de este predio/)).toBeInTheDocument();
+    expect(panel.getAllByRole('definition')[1]).toHaveTextContent('—');
   });
 
   it('un lote sin codigo predial compuesto no se rellena: sector, manzana y lote van vacios', async () => {

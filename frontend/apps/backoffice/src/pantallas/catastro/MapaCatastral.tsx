@@ -394,6 +394,18 @@ function PanelDelLote({
           </div>
         ))}
       </dl>
+      {/* **Un «—» porque la lectura falló no es el mismo «—» que porque el dato
+          no existe**, y las cuatro filas de la ficha salen iguales en los dos
+          casos. Sin esta línea, un predio cuya ficha no se pudo leer se lee como
+          un predio sin ficha —que es una afirmación sobre el padrón, y no la
+          hemos comprobado—. Es la distinción de #331 entre «no se pudo» y «no
+          hay». */}
+      {ficha.isError && (
+        <p className="sgtm-plano__capa-motivo" role="status">
+          No se pudo leer la ficha de este predio, así que el uso, las áreas y el titular quedan sin
+          dato: no quiere decir que no la tenga.
+        </p>
+      )}
       <p className="sgtm-plano__capa-motivo">
         El arancel es de un tramo de vía y el predio no dice en cuál está: se consulta con su
         importe exacto en «Aranceles».

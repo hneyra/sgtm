@@ -20,6 +20,14 @@ import { expect, test } from '@playwright/test';
  *    equivalente es la lista de lotes, y este camino no da un solo clic.
  */
 test('el plano se dibuja, y se elige un lote sin tocar el ratón', async ({ page }) => {
+  /* **Las teselas se cortan a propósito**, y eso es parte de lo que se mide.
+     El plano son los polígonos y las teselas sólo dicen qué hay alrededor
+     (ADR-0022 §4): si el visor dependiera de ellas, este caso lo diría. Cortarlas
+     además hace la prueba determinista —CI sí tiene salida a internet, y un 429
+     de OpenStreetMap dejaría el resultado a merced de un tercero— y evita que
+     cada corrida de CI pegue a un servicio ajeno que no la ha invitado. */
+  await page.route('**://*.openstreetmap.org/**', (ruta) => ruta.abort());
+
   await page.goto('/catastro/mapa');
 
   await expect(page.getByRole('heading', { level: 1, name: 'Mapa catastral' })).toBeVisible();
